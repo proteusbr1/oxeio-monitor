@@ -38,3 +38,16 @@ as found.
   and request failure. The mobile page has no horizontal document overflow.
 - Preview fixtures are outside the repository and are not in the production build.
 - Live production data and deployment have not been verified or changed.
+
+## Information restored (26 September)
+
+Restored average time, daily target, yesterday comparison, off/no-target count,
+owner-only alert count and title, pace emphasis, and the LIVE/STALE refresh header.
+Hours and designs now have separate weekly charts with totals; the hours chart
+again shows its target guide. Hourly activity is above the table, with designs,
+apps and fewest-hours summaries beside the table on wide screens.
+
+Validation: build, lint and 256 tests pass. Sample-data browser checks confirm
+all nine sections, six owner metrics, hidden manager alerts, and no document
+horizontal overflow at a 390px viewport. Production deployment is recorded in
+studio-deployment.md.
