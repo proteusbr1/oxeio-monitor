@@ -1,3 +1,8 @@
+> **Current release — 26 September 2026, 16:02 UTC:** audit fixes are live in web
+> and API build **407 / 7467f2b**, and the matching source is present on the VPS.
+> All services are healthy; the prior version mismatch is resolved.
+> [Final validation and rollback details](audits/2026-09-26-fix-tracker.md).
+
 > **Follow-up — 26 September 2026:** the system audit fixes and matched source/API/web
 > deployment are tracked in [the repair ledger](audits/2026-09-26-fix-tracker.md).
 > Release notes below describe the preceding Studio-only deployments.

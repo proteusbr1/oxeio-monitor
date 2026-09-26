@@ -1,9 +1,11 @@
-> **Current audit status — 26 September 2026:** A01–A06 are fixed and verified; A07 release synchronization is in progress.
+> **Current audit status — 26 September 2026:** A01–A07 are fixed and verified; application release 407 is live.
 > See the [bug evidence](audits/2026-09-26-system-audit.md) and
 > [fix tracker](audits/2026-09-26-fix-tracker.md) for current status and validation.
 > Earlier dated sections below remain historical records.
 
-## 26 September — audit repair — 26 September 2026
+## 26 September — audit repair
+
+**Completed:** backend 1,230 unit tests (one skipped), 104 PostgreSQL integration tests, and frontend 264 tests pass. Web/API build 407 is live; release source is synchronized and all production services are healthy.
 
 Registered all seven findings before implementation. Restored canonical files and verified backend typecheck. Added a per-employee transactional completion lock, atomic delete eligibility, complete pool stage reset, and idempotent Done. Added an auth session-result boundary with eight web regressions. A temporary PostgreSQL container is isolated from production for integration verification. Exact final counts and deployment details are maintained in [the repair ledger](audits/2026-09-26-fix-tracker.md).
 
