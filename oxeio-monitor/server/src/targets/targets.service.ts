@@ -835,41 +835,31 @@ export class TargetsService {
      * চাপেন (`POST /me/targets/:id/done`)। মালিক বা ম্যানেজারের
      * `update()` পথটা ছোঁয়া হয়নি, নইলে ভুল সংশোধনের রাস্তাই বন্ধ হতো।
      */
-    const cap = await this.capFor(employeeId);
-
-    if (cap !== null) {
-      const doneToday = await this.completedToday(employeeId, now);
-
-      if (doneToday >= cap) {
-        /**
-         * ⚠️ সারিটা **হাতেই থেকে যায়** — মুছে যায় না, পুলেও ফেরে না।
-         * তাই কালকে এটাই আবার চেপে শেষ করা যায়, আর কাজটা হারায় না।
-         */
-        /**
-         * ⚠️⚠️ বার্তাটা **যে সংখ্যাটা গোনা হয়েছে সেটাই বলে**, টার্গেটের
-         * নাম নয়। কারণ ডিজাইনারের Home পাতা একটা **অন্য** সংখ্যা দেখায়
-         * (`design_credits` — কতগুলো ফাইল খোলা হয়েছে), আর মাঠে ওই দুটো
-         * একই দিনে ২৯ বনাম ৩২ হয়েছিল। "টার্গেট শেষ" লিখলে তিনি নিজের
-         * পর্দার সংখ্যার সাথে মেলাতে গিয়ে বিভ্রান্ত হতেন।
-         */
-        throw new ConflictException(
-          `You have already marked ${cap} designs done today, so this one ` +
-            `cannot be marked done — leave it in your list and finish it tomorrow.`,
-        );
+    // Serialize completion decisions per employee across API instances.
+    // Transaction locks are released on commit/rollback; namespace differs from clock drift.
+    const count = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(260926, ${employeeId}::int)::text AS locked`;
+      const cap = await this.capFor(employeeId, tx);
+      if (cap !== null) {
+        const doneToday = await this.completedToday(employeeId, now, tx);
+        if (doneToday >= cap) {
+          throw new ConflictException(
+            `You have already marked ${cap} designs done today, so this one ` +
+              `cannot be marked done — leave it in your list and finish it tomorrow.`,
+          );
+        }
       }
-    }
-
-    const { count } = await this.prisma.designTarget.updateMany({
-      where: { id, assignedToId: employeeId, status: DesignTargetStatus.assigned },
-      data: {
-        status: DesignTargetStatus.done,
-        completedAt: now,
-        completedVia: 'manual',
-        // ⭐ কে চেপেছেন — `completedVia` কেবল "কীভাবে" বলে (২৩ আগস্ট)
-        completedById: userId,
-      },
+      const result = await tx.designTarget.updateMany({
+        where: { id, assignedToId: employeeId, status: DesignTargetStatus.assigned },
+        data: {
+          status: DesignTargetStatus.done,
+          completedAt: now,
+          completedVia: 'manual',
+          completedById: userId,
+        },
+      });
+      return result.count;
     });
-
     if (count > 0) await this.topUp(employeeId, now);
 
     return { ok: count > 0 };
@@ -907,8 +897,11 @@ export class TargetsService {
    * ⚠️ সংখ্যাটা তিন জায়গা থেকে আসে (কর্মীর নিজের ঘর → পলিসি → নেই), আর
    * সেই ক্রমটা `designTargetOf()`-এ একবারই লেখা।
    */
-  private async capFor(employeeId: number): Promise<number | null> {
-    const emp = await this.prisma.employee.findUnique({
+  private async capFor(
+    employeeId: number,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<number | null> {
+    const emp = await db.employee.findUnique({
       where: { id: employeeId },
       select: {
         staffType: true,
@@ -936,8 +929,12 @@ export class TargetsService {
    * ⚠️ গোনা হয় `assignedToId` ধরে, `completedById` ধরে নয় — ড্যাশবোর্ডের
    * সংখ্যাটাও তাই, আর দুটো আলাদা হলে পর্দা ও সীমা দুটো কথা বলত।
    */
-  private async completedToday(employeeId: number, now: Date): Promise<number> {
-    return this.prisma.designTarget.count({
+  private async completedToday(
+    employeeId: number,
+    now: Date,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<number> {
+    return db.designTarget.count({
       where: {
         assignedToId: employeeId,
         completedAt: { gte: localMidnightOf(now), lt: nextLocalMidnight(now) },
@@ -1482,17 +1479,38 @@ export class TargetsService {
              */
             reviewedAt: null,
             reviewedById: null,
+            // A new assignment must pass through the workflow again.
+            checkedAt: null,
+            checkedById: null,
+            errorFoundAt: null,
+            fixedAt: null,
+            fixedById: null,
+            uploadedAt: null,
+            liveAt: null,
+            liveAsin: null,
           }
         : status === DesignTargetStatus.done
           ? { status, completedAt: now, completedVia: 'manual', completedById: userId }
           : { status };
 
     const { count } = await this.prisma.designTarget.updateMany({
-      where: { id },
+      where: {
+        id,
+        // A retry must not move yesterday's completion into today's count.
+        ...(status === DesignTargetStatus.done
+          ? { status: { not: DesignTargetStatus.done } }
+          : {}),
+      },
       data,
     });
-
-    return { ok: count > 0 };
+    if (count > 0) return { ok: true };
+    if (status === DesignTargetStatus.done) {
+      const existing = await this.prisma.designTarget.findUnique({
+        where: { id }, select: { status: true },
+      });
+      return { ok: existing?.status === DesignTargetStatus.done };
+    }
+    return { ok: false };
   }
 
   /**
@@ -1529,40 +1547,27 @@ export class TargetsService {
     const wanted = [...new Set(ids)];
     if (wanted.length === 0) return { deleted: 0, keptDone: 0 };
 
-    const rows = await this.prisma.designTarget.findMany({
-      where: { id: { in: wanted } },
-      select: { id: true, status: true },
+    // Eligibility belongs in the write: a designer may complete work while
+    // this request is in flight. RETURNING also makes audit IDs match actual writes.
+    const deleted = await this.prisma.designTarget.updateManyAndReturn({
+      where: {
+        id: { in: wanted },
+        status: { notIn: [DesignTargetStatus.done, DesignTargetStatus.deleted] },
+      },
+      data: { status: DesignTargetStatus.deleted, dropReason: reason },
+      select: { id: true },
     });
-
-    const keptDone = rows.filter(
-      (r) => r.status === DesignTargetStatus.done,
-    ).length;
-
-    // ⚠️ আগেই মোছা সারি বাদ — নইলে দুবার চাপলে audit-এ দুটো এন্ট্রি বসত
-    const doable = rows
-      .filter(
-        (r) =>
-          r.status !== DesignTargetStatus.done &&
-          r.status !== DesignTargetStatus.deleted,
-      )
-      .map((r) => r.id);
-
-    const { count } =
-      doable.length === 0
-        ? { count: 0 }
-        : await this.prisma.designTarget.updateMany({
-            where: { id: { in: doable } },
-            // ⭐ ডিজাইনারের Skip-এর সাথে **একই ঘর** — "কেন বাদ গেল"
-            //    প্রশ্নটা এক, তাই উত্তরও এক জায়গায় (৩১ আগস্ট)
-            data: { status: DesignTargetStatus.deleted, dropReason: reason },
-          });
+    const count = deleted.length;
+    const keptDone = await this.prisma.designTarget.count({
+      where: { id: { in: wanted }, status: DesignTargetStatus.done },
+    });
 
     if (count > 0) {
       await this.audit.record({
         userId,
         action: 'design_deleted',
         targetType: 'design_targets',
-        targetId: doable.length === 1 ? String(doable[0]) : 'bulk',
+        targetId: deleted.length === 1 ? String(deleted[0].id) : 'bulk',
         ipAddress: ip,
         // ⚠️ ASIN-গুলো নয়, সংখ্যাগুলো — তালিকাটা টেবিলেই আছে (`bulkAdd`-এর একই নিয়ম)
         meta: { deleted: count, keptDone, asked: wanted.length, reason },

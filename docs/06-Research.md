@@ -1,3 +1,12 @@
+> **Current audit status — 26 September 2026:** A01–A06 are fixed and verified; A07 release synchronization is in progress.
+> See the [bug evidence](audits/2026-09-26-system-audit.md) and
+> [fix tracker](audits/2026-09-26-fix-tracker.md) for current status and validation.
+> Earlier dated sections below remain historical records.
+
+## Validation evidence — 26 September 2026
+
+The September 26 audit reproduced four target-service failures with isolated dependencies and a 503/login UI failure in a browser. Repairs now include real PostgreSQL concurrency tests, beyond those original mock reproductions. Test results and remaining verification limits are recorded in [the repair ledger](audits/2026-09-26-fix-tracker.md).
+
 # 06 · Research
 
 সিদ্ধান্তগুলোর পেছনের তথ্য — বাজার, প্রযুক্তি, আইন, খরচ।

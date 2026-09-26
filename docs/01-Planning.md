@@ -1,3 +1,12 @@
+> **Current audit status — 26 September 2026:** A01–A06 are fixed and verified; A07 release synchronization is in progress.
+> See the [bug evidence](audits/2026-09-26-system-audit.md) and
+> [fix tracker](audits/2026-09-26-fix-tracker.md) for current status and validation.
+> Earlier dated sections below remain historical records.
+
+## Audit repair scope — 26 September 2026
+
+A01–A07 cover build reproducibility, daily design limits, lifecycle integrity, session verification and release consistency. Preserve the existing owner/manager completion override and staff privacy rules. Fixes and deployment evidence are tracked in [the repair ledger](audits/2026-09-26-fix-tracker.md).
+
 # 01 · Project Planning
 
 ---

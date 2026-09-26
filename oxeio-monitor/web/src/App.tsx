@@ -48,14 +48,14 @@ function Router() {
    *    হতো — আর পাসওয়ার্ড টাইপ করে সাবমিট না করা পর্যন্ত আসল কারণটা
    *    জানাই যেত না।
    */
-  if (!user && offline) {
+  if (offline) {
     return (
       <div className="grid min-h-full place-items-center p-6 text-center">
         <div className="max-w-xs">
-          <p className="text-sm font-medium text-ink">No connection</p>
+          <p className="text-sm font-medium text-ink">Unable to verify your session</p>
           <p className="mt-2 text-sm text-ink-3">
-            Can’t reach the server. You are still signed in — this page will
-            recover on its own once the connection is back.
+            The server could not confirm your session. Try again in a moment;
+            you do not need to re-enter your password unless your session has expired.
           </p>
           <button
             type="button"

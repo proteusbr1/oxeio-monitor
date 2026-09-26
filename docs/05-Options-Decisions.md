@@ -1,3 +1,12 @@
+> **Current audit status — 26 September 2026:** A01–A06 are fixed and verified; A07 release synchronization is in progress.
+> See the [bug evidence](audits/2026-09-26-system-audit.md) and
+> [fix tracker](audits/2026-09-26-fix-tracker.md) for current status and validation.
+> Earlier dated sections below remain historical records.
+
+## Audit repair decisions — 26 September 2026
+
+Use PostgreSQL transaction-scoped advisory lock namespace 260926 keyed by employee ID for personal completion decisions. The lock covers the count and conditional update; top-up follows commit. Keep the existing explicit administrative cap override. Deletion eligibility is enforced in SQL with RETURNING, so the audit references actual mutations. Pool return starts a fresh workflow; repeated Done is idempotent. HTTP 5xx and network failure mean session state is unknown, not expired.
+
 # 05 · Options & Decisions (ADR)
 
 প্রতিটা গুরুত্বপূর্ণ সিদ্ধান্ত — কী কী বিকল্প ছিল, কেন এটা বেছে নেওয়া হলো, এবং এর দাম কী।
@@ -2052,3 +2061,67 @@ Postgres enum থেকে মান মোছা যায় না। ফি�
 আসতে বাধা দেয়।
 
 সম্পূর্ণ গল্প: [09 § ৩ঞ১৬](09-Build-Log.md)।
+
+---
+
+## ADR-042 · দিনের দুটো সীমা ✅ **সীমা = নিজের টার্গেট, আর টপ-আপ উদ্দেশ্য ধরে**
+
+*৯ সেপ্টেম্বর ২০২৬ · মাঠের ফলসহ হালনাগাদ ১১ সেপ্টেম্বর*
+
+**মালিকের নিয়ম:**
+
+> *"daily 30 ta design distribute korar pore karo jodi complete + skip miliye
+> 30 ta hoy. tar mane tar kache korar moto ar design nei. take tokhon tumi arO
+> kiso design dibe jate se daily target 25 ta hit korte pare. er sathe etaO
+> korbe kono designer daily 25 tar beshi design complete korte parbena."*
+
+### সীমার সংখ্যা কোথা থেকে
+
+| বিকল্প | ফল |
+|---|---|
+| ধ্রুবক ২৫ | ⛔ কারো টার্গেট ৩০ করলে ছোঁয়াই অসম্ভব হতো |
+| **`designTargetOf()`-এর সংখ্যা** ✅ | সীমা আর টার্গেট কখনো আলাদা হয় না; টার্গেট ০ = সীমা নেই; ম্যানেজারের সীমা নেই |
+
+⭐ সীমা খাটে **কেবল ডিজাইনারের নিজের Complete বোতামে** (`markDone`)।
+মালিক/ম্যানেজারের `update()` পথ খোলা — নইলে ভুল সংশোধন আটকাত।
+
+### টপ-আপ কখন
+
+| বিকল্প | ফল |
+|---|---|
+| বাক্য ধরে — *"হাত খালি হলে"* | হাত একেবারে ০ না হওয়া পর্যন্ত কিছুই নয় — হাতে ২টা আছে অথচ দরকার ৩টা, তবু অপেক্ষা |
+| কড়া — *"হাতের সবটা শেষ করলেও টার্গেট ছোঁয়া না গেলে"* | খালি হাতের আগে ধরে, কিন্তু বেছে নেওয়ার জায়গা রাখে না — ⏳ [09 § ৫-এর O16](09-Build-Log.md) |
+| **উদ্দেশ্য ধরে, বেছে নেওয়ার জায়গা রেখে** ✅ | হাত তোলা হয় `ceil((টার্গেট − আজ শেষ) × ৩০ ÷ টার্গেট)` পর্যন্ত — টার্গেট ২৫-এ বাকি কাজের ১.২ গুণ, OX-10-এর ১৫-এ ২ গুণ; দেওয়া হয় কেবল ঘাটতিটুকু। হাতের সবটা শেষ করলে টার্গেট ছোঁয়া গেলেও দেয় — মাঠের ২২টা টপ-আপের সবগুলোই এমন। টার্গেট ছোঁয়া হলে বা টার্গেট ০ হলে কিছুই নয়; খালি হাতের অবস্থাটাও এর ভেতরে |
+| সবসময় ৩০-এ রাখা | হাতে-চালানো বণ্টনের ধাঁচ; যাঁর দরকার নেই তাঁকেও দেওয়া হতো |
+
+⭐ চলে প্রতিটা Complete/Skip-এর পরে, আর ৯:০৫–১৯:০৫ প্রতি ঘণ্টায় (সকালেই
+যিনি কিছু পাননি, তাঁর জন্য — খালি হাতে কিছু চাপাই যায় না)। একজনকে দিনে
+৬০টা দেওয়া হয়ে গেলে টপ-আপ থামে। ⚠️ ছাদটা দেখে কেবল টপ-আপ — হাতে-চালানো
+বণ্টন হাত ৩০-এ তোলে দিনের মোট না দেখেই, তাই কারো ৬০ হয়ে যাওয়ার পরে কেউ
+বোতাম চাপলে সীমা পেরোতে পারে (এখন পর্যন্ত পেরোয়নি)।
+
+⚠️ **সংশোধন (১১ সেপ্টেম্বর):** সিদ্ধান্তের সময় কারণ হিসেবে লেখা হয়েছিল
+*"মাঠে কারো হাত কখনো খালি হয় না, তাই বাক্য ধরে লিখলে নিয়মটা কোনোদিন
+চলত না"* — **ভুল**। মাপটা নেওয়া হয়েছিল রাতের ফেরতের পরে, যখন না-ছোঁয়া
+সারির বরাদ্দ মুছে যায় ([G172](08-Gap-Analysis.md))। মালিকের খবরই ঠিক
+ছিল। ⭐ সিদ্ধান্তটা বদলায়নি — কারণটা বদলেছে।
+
+### দাম — মাঠে মাপা
+
+⚠️ **আটকানো কাজ এক দিন পিছোয় — যদি ফাইলটা খোলা হয়ে থাকে।** ২৬তম ডিজাইনের
+`completed_at` বসে না, তাই বানান-যাচাই বা আপলোডের সারিতে সেদিন ওঠে না। রাত
+১১:৫৫-এর ফেরত সারিটা হাতে রাখে কেবল যদি `started_at` বসা থাকে বা সেদিন ওই
+কর্মীর নামে ওই নম্বরের ফাইল দেখা গিয়ে থাকে (`design_credits`); নইলে পুলে
+ফেরে, বরাদ্দ মুছে, আর পরে এলোমেলোভাবে অন্য কারো হাতে যেতে পারে। মাঠে
+প্রথম: OX-07, ১০ সেপ্টেম্বর — ফাইল খোলা ১৬:৪৮, আটকানো ১৭:৫৭, `started_at`
+বসা, তাই সারিটা রাত পার করে হাতেই থেকেছে।
+
+⚠️⚠️ **Skip এখন বিনামূল্যে আবার টানা।** বাদ দিলেই নতুন আসে (৬০-এর ছাদ
+পর্যন্ত)। প্রথম পুরো দিনে একজনকে ৫০টা দেওয়া হয়, ২৫টা বাদ। ⏳ বাদ দিলে
+ভরপাই হবে কি না — [09 § ৫-এর O15](09-Build-Log.md)।
+
+⚠️ **টার্গেট ০ = সীমা নেই, টপ-আপও নেই।** কারো সীমা তুলতে চেয়ে ০ বসালে
+টপ-আপও নীরবে বন্ধ হয়।
+
+সম্পূর্ণ গল্প: [09 § ৩ঞ৩৫](09-Build-Log.md)।
+

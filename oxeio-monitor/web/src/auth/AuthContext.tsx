@@ -10,7 +10,8 @@ import {
 
 import * as authApi from '../api/auth';
 import type { Me } from '../api/auth';
-import { ApiError, setUnauthorizedHandler } from '../api/client';
+import { setUnauthorizedHandler } from '../api/client';
+import { loadSession } from './session';
 import { IdleWarning } from './IdleWarning';
 import { login as loginRequest, type LoginCredentials } from './twoFactorApi';
 import { useIdleLogout } from './useIdleLogout';
@@ -59,28 +60,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [offline, setOffline] = useState(false);
 
   const refresh = useCallback(async () => {
-    try {
-      setUser(await authApi.me());
+    const result = await loadSession();
+    if (result.kind === 'authenticated') {
+      setUser(result.user);
       setOffline(false);
-    } catch (err) {
-      /**
-       * ⭐ সার্ভার **উত্তর দিয়েছে** কি না — এটাই একমাত্র প্রশ্ন।
-       *
-       * `ApiError` মানে উত্তর এসেছে (৪০১ = সেশন সত্যিই শেষ), তাই
-       * লগইন পর্দাই ঠিক। অন্য যেকোনো ব্যতিক্রম মানে fetch-ই পৌঁছায়নি —
-       * ⚠️ তখন সেশন নিয়ে আমরা **কিছুই জানি না**, তাই `user` ছোঁয়া হয় না;
-       * অ্যাপ শুধু "সংযোগ নেই" বলে, আর নেট ফিরলে নিচের `online` শ্রোতা
-       * নিজে থেকেই আবার চেষ্টা করে।
-       */
-      if (err instanceof ApiError) {
-        setUser(null);
-        setOffline(false);
-      } else {
-        setOffline(true);
-      }
-    } finally {
-      setLoading(false);
+    } else if (result.kind === 'signed-out') {
+      setUser(null);
+      setOffline(false);
+    } else {
+      // A server/network failure cannot establish that a session expired.
+      setOffline(true);
     }
+    setLoading(false);
   }, []);
 
   useEffect(() => {

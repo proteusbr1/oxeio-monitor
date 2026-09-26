@@ -156,6 +156,23 @@ describe('দিনের সীমা — ২৫-এর বেশি "শেষ
     expect(after.completedAt).toBeNull();
   });
 
+  it('serializes concurrent completions when only one daily slot remains', async () => {
+    const now = dhakaNoon();
+    const emp = await person('OX-Q-RACE', 'designer', TARGET);
+    const owner = await h.prisma.user.findFirstOrThrow();
+    await alreadyDone(emp, TARGET - 1, now);
+    const ids = await inHand(emp, 2, now);
+    const results = await Promise.allSettled(
+      ids.map((id) => targets.markDone(emp, id, owner.id, now)),
+    );
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    expect(await h.prisma.designTarget.count({
+      where: { assignedToId: emp, status: 'done' },
+    })).toBe(TARGET);
+    expect(await openCountOf(emp)).toBe(1);
+  });
+
   it('⭐⭐ ২৪-এ থাকলে ২৫তমটা যায়', async () => {
     const now = dhakaNoon();
     const emp = await person('OX-Q2', 'designer', TARGET);

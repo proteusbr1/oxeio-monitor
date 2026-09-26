@@ -1,5 +1,10 @@
 # oXeio Workforce Monitor
 
+> **26 September 2026:** system audit A01–A07 and their regression/deployment
+> results are recorded in [the repair ledger](docs/audits/2026-09-26-fix-tracker.md).
+> Earlier test totals and dated project status below are historical.
+
+
 Self-hosted time tracking and screen monitoring for a small Windows office.
 No SaaS, no per-seat fee, no third party holding your staff's screenshots — it
 runs on one VPS you control.

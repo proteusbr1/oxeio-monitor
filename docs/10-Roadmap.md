@@ -1,3 +1,12 @@
+> **Current audit status — 26 September 2026:** A01–A06 are fixed and verified; A07 release synchronization is in progress.
+> See the [bug evidence](audits/2026-09-26-system-audit.md) and
+> [fix tracker](audits/2026-09-26-fix-tracker.md) for current status and validation.
+> Earlier dated sections below remain historical records.
+
+## Current repair milestone — 26 September 2026
+
+Close A01–A07 with regression evidence and matched source/runtime deployment before returning to feature work. Existing feature gaps such as assignment history and broader target auditing are separate scope. Remaining physical-device and backup-restore checks are not implied by green unit tests.
+
 # 10 · Roadmap — সামনে কী, কোন ক্রমে
 
 **লেখা:** ১৪ আগস্ট ২০২৬ · **ভিত্তি:** Hubstaff · Time Doctor · ActivTrak ·

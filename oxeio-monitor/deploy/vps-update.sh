@@ -49,6 +49,19 @@ GIT_TERMINAL_PROMPT=0 git pull --ff-only \
 
 AFTER="$(git rev-parse HEAD)"
 
+# A07: refuse to rebuild a checkout older than the last verified deployment.
+# Direct deployments must write this marker only after source and health checks pass.
+RELEASE_MARKER="$(git rev-parse --git-path oxeio-deployed-commit)"
+if [ -f "$RELEASE_MARKER" ]; then
+  DEPLOYED_COMMIT="$(cat "$RELEASE_MARKER")"
+  git cat-file -e "$DEPLOYED_COMMIT^{commit}" 2>/dev/null \
+    || die "Deployed source is missing locally. Synchronize it before rebuilding."
+  git merge-base --is-ancestor "$DEPLOYED_COMMIT" HEAD \
+    || die "This checkout is older than, or diverges from, the deployed release."
+fi
+git diff --quiet && git diff --cached --quiet \
+  || die "Tracked source has local changes. Review and commit them before deployment."
+
 if [ "$BEFORE" = "$AFTER" ]; then
   ok "নতুন কিছু নেই — কোড ইতিমধ্যেই সর্বশেষ"
 else
@@ -150,5 +163,11 @@ case "$HEALTH" in
     die "API ৪০ সেকেন্ডেও সাড়া দেয়নি। লগ দেখুন:  docker compose logs api --tail 60"
     ;;
 esac
+
+case "$HEALTH" in
+  *"\"commit\":\"$APP_COMMIT\""*) ;;
+  *) die "API is healthy but is not running the source commit just deployed." ;;
+esac
+git -C "$DIR" rev-parse HEAD > "$(git -C "$DIR" rev-parse --absolute-git-dir)/oxeio-deployed-commit"
 
 printf '\n\033[32m✅ হালনাগাদ শেষ\033[0m — %s\n\n' "$(git -C "$DIR" rev-parse --short HEAD)"

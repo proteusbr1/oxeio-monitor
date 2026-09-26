@@ -1,3 +1,12 @@
+> **Current audit status — 26 September 2026:** A01–A06 are fixed and verified; A07 release synchronization is in progress.
+> See the [bug evidence](audits/2026-09-26-system-audit.md) and
+> [fix tracker](audits/2026-09-26-fix-tracker.md) for current status and validation.
+> Earlier dated sections below remain historical records.
+
+## Regression workflow — 26 September 2026
+
+Run backend typecheck/lint/no-DB tests and frontend build/lint/tests. For A02–A05 use a disposable PostgreSQL instance, never production tables. `design-quota.e2e.spec.ts` contains a concurrent completion test; `target-lifecycle.e2e.spec.ts` checks row-lock deletion, stage reset and idempotent completion. Keep source and runtime release commits aligned; retain rollback images.
+
 # 02 · Workflows
 
 সিস্টেমের ভেতর ও বাইরে সব কিছু কীভাবে চলবে — ডেটা, মানুষ, ডেভেলপমেন্ট, দুর্ঘটনা।

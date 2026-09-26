@@ -1,3 +1,12 @@
+> **Current audit status — 26 September 2026:** A01–A06 are fixed and verified; A07 release synchronization is in progress.
+> See the [bug evidence](audits/2026-09-26-system-audit.md) and
+> [fix tracker](audits/2026-09-26-fix-tracker.md) for current status and validation.
+> Earlier dated sections below remain historical records.
+
+## Target and session invariants — 26 September 2026
+
+`markDone`: acquire transaction advisory lock (260926, employeeId), read the applicable cap and Dhaka-day count through the same transaction, then conditionally update an assigned target. `softDelete`: status must not be done/deleted at mutation time; returned IDs drive audit attribution. `update(pool)`: clear assignment, completion, check, fix, upload and live fields. `update(done)`: do not rewrite an existing completion. `loadSession`: authenticated / signed-out (401) / unavailable; unavailable retains user state and renders a retry screen.
+
 # oXeio Monitoring System — Technical Specification
 ### Phase 0 deliverable · v1
 

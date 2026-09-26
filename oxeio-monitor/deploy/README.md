@@ -1,3 +1,10 @@
+> **26 September 2026 — release consistency:** keep the VPS checkout and runtime
+> on the same commit. `vps-update.sh` now rejects a checkout behind the verified
+> deployment marker `.git/oxeio-deployed-commit`, rejects tracked uncommitted changes,
+> and verifies the API commit before recording success. Source can be transferred
+> by a verified Git bundle when a remote push is unavailable; never reset an ahead
+> VPS checkout to an older remote branch. See [audit fixes](../../docs/audits/2026-09-26-fix-tracker.md).
+
 # oXeio — রোলআউট নির্দেশিকা
 
 অফিসের ১৫টা Windows PC-তে oXeio বসানোর ধাপে ধাপে নির্দেশ।

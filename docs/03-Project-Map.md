@@ -1,3 +1,12 @@
+> **Current audit status — 26 September 2026:** A01–A06 are fixed and verified; A07 release synchronization is in progress.
+> See the [bug evidence](audits/2026-09-26-system-audit.md) and
+> [fix tracker](audits/2026-09-26-fix-tracker.md) for current status and validation.
+> Earlier dated sections below remain historical records.
+
+## Files added or restored — 26 September 2026
+
+Canonical `server/src/summary/*.ts`, `server/src/targets/*.ts` and `web/src/api/{admin,reports,targets}.ts` names are restored. New files: `web/src/auth/session.ts`, `web/test/session.spec.ts`, `server/test/target-lifecycle.e2e.spec.ts`, and `docs/audits/2026-09-26-fix-tracker.md`. `(1)` implementation filenames are not part of the application layout.
+
 # 03 · Project Map
 
 কোথায় কী কোড থাকবে, কোন মডিউল কার উপর নির্ভর করে, কোন ফিচার কোন ফাইলে।
