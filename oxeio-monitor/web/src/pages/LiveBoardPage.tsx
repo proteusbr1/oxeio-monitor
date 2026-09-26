@@ -1,1079 +1,128 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router';
-
+import { useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { getTopUsage } from '../api/activity';
 import { listAlerts } from '../api/alerts';
-import {
-  getLiveBoard,
-  getTeamPulse,
-  getTeamTrend,
-  type LiveCard,
-  type TrendDay,
-} from '../api/dashboard';
-import { usePolling } from '../api/useApi';
+import { getLiveBoard, getTeamPulse, getTeamTrend, type TrendDay } from '../api/dashboard';
+import { usePolling, type ApiResult } from '../api/useApi';
 import { useAuth } from '../auth/AuthContext';
-import { Card, Stat, StatRow } from '../components/Card';
-import { Page } from '../components/Page';
-import { TOPBAR_SLOT_ID } from '../components/Layout';
+import { Card } from '../components/Card';
+import { Button, Page } from '../components/Page';
 import { Empty, ErrorBox, Loading } from '../components/States';
 import { Tabs } from '../components/Tabs';
-import {
-  dhakaHourNow,
-  formatDate,
-  formatDateShort,
-  formatDuration,
-  formatTime,
-  weekdayOf,
-} from '../lib/format';
+import { dhakaHourNow, formatDate, formatDateShort, formatDuration, formatTime, weekdayOf } from '../lib/format';
 import { DayPulse } from './live/DayPulse';
 import { TopApps } from './live/TopApps';
 import { StatusStrip } from './live/TeamBars';
 import { TeamTable } from './live/TeamTable';
-import {
-  FewestHours,
-  MonthCard,
-  TopPerformers,
-  WeekBars,
-} from './live/WeekAndMonth';
+import { FewestHours, MonthCard, TopPerformers } from './live/WeekAndMonth';
 import { isWorking } from './live/onTheClock';
+import { dayDuty } from './live/roster';
 
-/**
- * E01 · E02 · E03 · E12 — ড্যাশবোর্ডের হোম।
- *
- * ⭐ **রিফ্রেশে পুরো পর্দা লোডিং-এ যায় না।** `usePolling` পুরোনো ডেটা ধরে
- *    রাখে, তাই প্রথমবার ছাড়া সংখ্যাগুলো জায়গামতোই থাকে, শুধু নীরবে বদলায়।
- *    উল্টোটা হলে প্রতি ৩০ সেকেন্ডে গোটা বোর্ড ঝিকমিক করত আর কেউ একটা
- *    কার্ডও পড়ে শেষ করতে পারত না।
- *
- * ⭐ **আজকের টার্গেট সামনে, মাসেরটা পেছনে** (`dailyTargetSec`,
- *    `todayIsWorkday`)। মাসের ৭৮/২০৮ দেখে "আজ দিনটা ঠিক যাচ্ছে কি না"
- *    বলা যেত না — ওই উত্তরের জন্য মাসের কত ভাগ পেরিয়েছে জানতে হতো, আর
- *    সেটা ছুটির তালিকার উপর নির্ভরশীল। মাসের হিসাব তবু রয়ে গেছে (কার্ডে
- *    ছোট করে), কারণ **বেতনের ভিত্তি এখনো মাসিক ২০৮ ঘণ্টাই**।
- */
-
-/**
- * E01 — **১৫ সেকেন্ড** *(১৭ আগস্ট, ছিল ৩০)*।
- *
- * ⚠️⚠️ মালিকের অভিযোগ: idle থেকে কাজ শুরু করলে "Working" আসতে অনেক দেরি।
- * দেরিটা আসলে **দুটো**, আর যোগ হয়:
- *
- * ```
- * এজেন্ট → সার্ভার   heartbeat, ০–১৫ সে.  ⭐ এখন প্রায় সাথে সাথেই
- * সার্ভার → ব্রাউজার  এই রিফ্রেশ, ০–৩০ সে.
- * ```
- *
- * ⭐ এজেন্টের দিকটা `HeartbeatUrgency` দিয়ে সারানো হয়েছে — অবস্থা বদলালে
- * খবরটা আর পরের নির্ধারিত beat-এর জন্য অপেক্ষা করে না। তাতে **প্রথম
- * দেরিটা প্রায় শূন্য**, কিন্তু দ্বিতীয়টা তখন গোটা দেরির পুরোটাই হয়ে
- * দাঁড়াত — সর্বোচ্চ ৩০ সেকেন্ড।
- *
- * ⚠️ ১৫ সেকেন্ডের বেশি নামানো হয়নি: এতে রিকোয়েস্ট দ্বিগুণ হয়, আর একটা
- * বোর্ড কজন খুলে রাখেন তার কোনো সীমা নেই। ⭐ মানুষের চোখে "সাথে সাথে"
- * বলতে যা বোঝায়, ১৫ সেকেন্ড তার কাছাকাছি — শূন্যের জন্য পুরো
- * push/SSE ব্যবস্থা লাগত, আর সেটা এই দেরির তুলনায় অসমানুপাতিক।
- */
+// লাইভ অবস্থা ১৫ সেকেন্ডে; ভারী চার্ট/রিপোর্ট দুই মিনিটে। ছবি এখানে আনা হয় না।
 const BOARD_REFRESH_MS = 15_000;
-
-/**
- * ⭐⚠️ স্ক্রিনশট বোর্ডের সাথে **এক তালে রিফ্রেশ হয় না**, আর সেটা ইচ্ছাকৃত:
- *
- *  · ছবির লিঙ্ক **৫ মিনিটে** মরে (I07), তাই ৪ মিনিটে একবার আনলেই কার্ডের
- *    ছবিগুলো কখনো ভাঙা দেখাবে না।
- *  · `GET /screenshots` প্রতিটি কলে **audit সারি লেখে** (I08)। ৩০ সেকেন্ডে
- *    ডাকলে দিনে হাজারখানেক সারি জমত — অথচ এজেন্ট ছবি পাঠায়ই ৫ মিনিট
- *    পরপর, মানে ৮ বারের ৭ বারই হুবহু একই ছবি ফিরত।
- *  · ট্যাব লুকোনো থাকলে `usePolling` টাইমার বন্ধ রাখে, তাই খোলা রেখে
- *    বাড়ি চলে গেলে সারারাত অডিট লগ ভরবে না।
- */
-
-/**
- * ⭐ দিনের ছন্দ **২ মিনিটে** — বোর্ডের ৩০ সেকেন্ডে নয়।
- *
- * ⚠️ বালতিগুলো এক ঘণ্টার। ৩০ সেকেন্ডে ডাকলে একই উত্তর ঘণ্টায় ১২০ বার
- *    আসত, আর প্রতিটাই একটা করে গোটা দিনের সেগমেন্ট-কোয়েরি। চার্টটা
- *    তাতে এক চুলও তাজা হতো না।
- */
-const PULSE_REFRESH_MS = 2 * 60_000;
-
-/**
- * ⭐ Top performers-এর জানালা। **৩০ দিন আগে**, কারণ ওটাই ডিফল্ট — আর
- * `Tabs` প্রথম আইটেমটাকেই সবার বাঁয়ে বসায়।
- *
- * ⚠️ লেবেলে "30 days"/"All time" — সংখ্যাটা নয়, **জানালাটা** বোঝাতে।
- *    "Total"/"Recent" লিখলে কোনটা কত লম্বা তা পর্দা থেকে বোঝা যেত না।
- */
-const LEADER_WINDOWS = [
-  { id: '30d', label: '30 days' },
-  { id: 'all', label: 'All time' },
-] as const;
-
-type LeaderWindow = (typeof LEADER_WINDOWS)[number]['id'];
-
-/**
- * ⭐ উপরের **গাঢ়** বারের বোতাম।
- *
- * ⚠️⚠️ সাধারণ `<Button>` এখানে চলে না: ওটার রং কাগজের পটভূমি ধরে লেখা
- * (`text-ink`, `border-line`), আর উপরের বারটা **দুই থিমেই গাঢ়**
- * (`bg-chrome` — লোগোটা কালোর উপর আঁকা বলে ফিল্ডটা কখনো হালকা হয় না)।
- * লাইট থিমে ওই বোতামগুলো গাঢ় ফিল্ডে গাঢ় লেখা হয়ে কার্যত অদৃশ্য হতো।
- *
- * ⭐ ক্লাসগুলো পাশের `Sign out` বোতামের হুবহু এক — একই সারিতে দু-রকম
- * বোতাম থাকলে চোখে ধরা পড়ত।
- */
-function BarButton({
-  onClick,
-  title,
-  children,
-}: {
-  onClick: () => void;
-  title?: string;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      className="tap rounded-md border border-white/20 px-2.5 py-1.5 text-xs text-white/85 transition hover:border-brand hover:text-white"
-    >
-      {children}
-    </button>
-  );
-}
+const CHART_REFRESH_MS = 120_000;
+const LEADER_WINDOWS = [{ id: '30d', label: '30 days' }, { id: 'all', label: 'All time' }] as const;
+const CHART_METRICS = [{ id: 'designs', label: 'Designs' }, { id: 'hours', label: 'Hours' }] as const;
 
 export function LiveBoardPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
-
-  /**
-   * ⭐⭐ উপরের বারের ঘরটা — মকআপ ক-এ `LIVE` ব্যাজ ও বোতামগুলো লোগোর
-   * সারিতেই থাকে।
-   *
-   * ⚠️ `useState` + `useEffect` দিয়ে নেওয়া হয়, সরাসরি `getElementById`
-   *    দিয়ে নয়: প্রথম render-এ `Layout`-এর div-টা এখনো DOM-এ বসেনি, তাই
-   *    ওই মুহূর্তে খুঁজলে `null` পেত আর ব্যাজটা কোনোদিন উঠত না।
-   */
-  const [slot, setSlot] = useState<HTMLElement | null>(null);
-  useEffect(() => setSlot(document.getElementById(TOPBAR_SLOT_ID)), []);
-
-  /**
-   * ⚠️ `/live` শুধু owner ও manager-এর (live.controller.ts-এ ক্লাস-লেভেল
-   *    `@Roles`)। স্টাফ এখানে এলে ৪০৩ পাবে — সেটা `<ErrorBox>` নিজেই
-   *    "You don't have access" বলে দেখায়। কিন্তু `/screenshots` স্টাফের
-   *    জন্যও খোলা (স্কোপ দিয়ে নিজেরটা), তাই ওটা আলাদা করে আটকাতে হয়:
-   *    নইলে যে পাতাটা সে দেখতেই পাচ্ছে না, তার জন্য প্রতি ৪ মিনিটে "নিজের
-   *    ছবি দেখল" বলে একটা করে মিথ্যা অডিট সারি লেখা হতো।
-   */
   const canViewBoard = user?.role === 'owner' || user?.role === 'manager';
-  // ⚠️ অ্যালার্টে হোস্টনেম ও কর্মীর নাম একসাথে থাকে (§ ৪.৩) — owner-only,
-  //    `Layout.tsx`-এর NAV-এ হুবহু একই নিয়ম।
   const isOwner = user?.role === 'owner';
-
-  const board = usePolling(getLiveBoard, BOARD_REFRESH_MS, []);
-
-  /*
-   * ⚠️⚠️ এখানে `getLatestShots`-এর একটা polling ছিল — কার্ডের থাম্বনেইলের
-   *    জন্য। কার্ড Worklog-এ যাওয়ায় সেটা **তুলে দেওয়া হয়েছে**, আর সেটা
-   *    নিছক পরিচ্ছন্নতা নয়: ⭐ `GET /screenshots`-এর প্রতিটা কল একটা করে
-   *    **audit সারি লেখে** (I08 — "কে আমার স্ক্রিনশট দেখল")। বোর্ডটা
-   *    সারাদিন খোলা থাকে, তাই ছবি না দেখিয়েও সে ওই খাতাটা ভরিয়ে যেত —
-   *    আর স্টাফের বিশ্বাস ঠিক ওই খাতার উপরেই দাঁড়ানো।
-   */
-
-  /**
-   * ⚠️ `/live/pulse`-ও owner + manager (একই ক্লাস-লেভেল `@Roles`), তাই
-   *    `canViewBoard` না দেখলে স্টাফের ব্রাউজার প্রতি দু-মিনিটে একটা করে
-   *    ৪০৩ কুড়াত — কোনো লাভ ছাড়াই।
-   */
-  const pulse = usePolling(
-    (signal) =>
-      canViewBoard ? getTeamPulse(signal) : Promise.resolve(null),
-    PULSE_REFRESH_MS,
-    [canViewBoard],
-  );
-
-  /**
-   * ⭐ সাত দিন ও মাস — একই তালে (`pulse`-এর মতো ধীরে)। দুটোই ১৫ মিনিটের
-   *    rollup জব থেকে আসে, তাই দ্রুত ডাকার কোনো লাভ নেই।
-   */
-  const trend = usePolling(
-    (signal) =>
-      canViewBoard ? getTeamTrend(signal) : Promise.resolve(null),
-    PULSE_REFRESH_MS,
-    [canViewBoard],
-  );
-
-  /**
-   * ⭐ **আজ দলটা কোন অ্যাপে সময় দিয়েছে।** `employeeId` ইচ্ছাকৃতভাবে নেই —
-   *    ওটা না দিলে সার্ভার গোটা দলের হিসাব দেয় (D08)।
-   *
-   * ⚠️⚠️ **`from` ও `to` দুটোই পাঠাতেই হবে।** না পাঠালে `resolveRange()`
-   *    ডিফল্টে ধরে **মাসের ১ তারিখ থেকে আজ** — অর্থাৎ কার্ডের শিরোনাম
-   *    "Where today went" বলত, কিন্তু সংখ্যাটা হতো গোটা মাসের। প্রথম
-   *    খসড়ায় ঠিক এই ভুলটাই ছিল, আর ধরা পড়ত না: সংখ্যাগুলো দেখতে যুক্তিসঙ্গতই
-   *    লাগত, শুধু কয়েক গুণ বড়।
-   *
-   * ⭐ তারিখটা **বোর্ডের নিজের `workDate`** থেকে, ক্লায়েন্টের ঘড়ি থেকে নয় —
-   *    তাহলে কার্ডটা আর উপরের সংখ্যাগুলো কখনো আলাদা দিনের কথা বলতে পারে না।
-   *    ⚠️ বোর্ড আসার আগে কলটা করা হয় না; ওই মুহূর্তে "আজ" কোনটা তা আমরা
-   *    জানিই না, আর অনুমান করলে দিনের সীমানায় ভুল দিন ধরত।
-   *
-   * ⚠️ `limit: 6` — পর্দায় বসে পাঁচটা, ষষ্ঠটা আনা হয় শুধু "everything else"
-   *    সংখ্যাটা যাতে বেশি না দেখায়। ⚠️ ওই সংখ্যাটা `totalSec` থেকে বাদ
-   *    দিয়ে বেরোয়, তালিকা থেকে নয় — নইলে "টপ ৫-ই সব" বলে মিথ্যা হতো।
-   */
+  // ভূমিকার শর্ত একই থাকে; অনুমতি না থাকলে কোনো protected endpoint-এ কল নয়।
+  const board = usePolling((signal) => canViewBoard ? getLiveBoard(signal) : Promise.resolve(null), BOARD_REFRESH_MS, [canViewBoard]);
+  const pulse = usePolling((signal) => canViewBoard ? getTeamPulse(signal) : Promise.resolve(null), CHART_REFRESH_MS, [canViewBoard]);
+  const trend = usePolling((signal) => canViewBoard ? getTeamTrend(signal) : Promise.resolve(null), CHART_REFRESH_MS, [canViewBoard]);
   const workDate = board.data?.workDate;
-  const apps = usePolling(
-    (signal) =>
-      canViewBoard && workDate
-        ? getTopUsage({ from: workDate, to: workDate, limit: 6 }, signal)
-        : Promise.resolve(null),
-    PULSE_REFRESH_MS,
-    [canViewBoard, workDate],
-  );
-
-  /**
-   * ⚠️ অ্যালার্ট **owner-only** — ম্যানেজারকে ব্যাজও দেখানো হয় না
-   *    (`Layout.tsx`-এর NAV-এ একই নিয়ম)। এখানে না দেখলে ম্যানেজারের
-   *    ব্রাউজার প্রতিবার একটা ৪০৩ কুড়াত।
-   * ⚠️ `limit: 3` — বাক্সে তিনটেই বসে; মোট সংখ্যাটা আসে `openCount` থেকে,
-   *    সারি গুনে নয়।
-   */
-  const alerts = usePolling(
-    (signal) =>
-      isOwner ? listAlerts({ limit: 3 }, signal) : Promise.resolve(null),
-    PULSE_REFRESH_MS,
-    [isOwner],
-  );
-
-  /**
-  /**
-   * ⚠️ পছন্দটা মনে রাখা হয় না — উপরের `who`-এর মতোই একই কারণে। বোর্ড
-   *    সারাদিন খোলা থাকে; কেউ একবার "All time" রেখে ভুলে গেলে পরদিন
-   *    খুলে দেখতেন ক্রমটা বদলায়নি, আর ভাবতেন কেউ কাজ করেনি।
-   */
-  const [leaderWindow, setLeaderWindow] = useState<LeaderWindow>('30d');
-
-  const data = board.data;
-  const cards = data?.cards ?? [];
-
-  /*
-   * ⚠️ এখানে `splitBoard(cards)` ছিল — কার্ডের দুই ট্যাবের জন্য। কার্ড
-   *    `Worklog`-এ যাওয়ায় সেটা আর লাগে না।
-   *
-   * ⭐ তবু "Working now" টাইলের সংখ্যাটা Worklog-এর ট্যাবের সাথে কখনো
-   *    আলাদা হবে না: `summarize()` ওই একই `isWorking()` ডাকে
-   *    (`live/onTheClock.ts`), অর্থাৎ নিয়মটার ঘর একটাই।
-   */
-
-  let body: ReactNode;
-
-  if (board.loading && !data) {
-    body = <Loading label="Loading the board…" />;
-  } else if (!data) {
-    body = <ErrorBox error={board.error} retry={board.reload} />;
-  } else if (cards.length === 0) {
-    body = (
-      <Empty
-        title="Nobody on the board yet"
-        hint="No active staff have been added. Add staff, install the agent on their PC, and a card shows up here with the first heartbeat."
-      />
-    );
-  } else {
-    const stats = summarize(cards);
-
-    body = (
-      <>
-        {/*
-          ⭐ বাসি ডেটা মুছে ফেলার চেয়ে বাসি ডেটা + স্পষ্ট বার্তা ভালো।
-             এক দফা নেটওয়ার্ক হোঁচটে গোটা বোর্ড উধাও হলে ব্যবহারকারী ভাবত
-             সবাই একসাথে অফলাইন হয়ে গেছে।
-        */}
-        {board.error && (
-          <p
-            role="status"
-            className="mb-3 rounded-md border border-brand/30 bg-brand-bg px-3 py-2 text-xs text-brand-ink"
-          >
-            Couldn&rsquo;t refresh — the numbers below are from{' '}
-            <span className="num">{formatTime(isoOf(board.updatedAt))}</span>.
-          </p>
-        )}
-
-        {/*
-          ⭐⭐ **ছ-টা টাইল, মকআপ ক-এর ক্রমেই** — কাজ করছেন · আজকের ঘণ্টা ·
-          দলের pace · জনপ্রতি গড় · এজেন্ট সচল · খোলা অ্যালার্ট।
-
-          ⭐ প্রতিটার নিচে **এক লাইনের প্রেক্ষাপট** (`sub`), আর ওটাই এই
-          সারির আসল কাজ: একটা কাঁচা সংখ্যা প্রায়ই দুভাবে পড়া যায়, আর তখন
-          মানুষ যেটা ভয় পান সেটাই ধরে নেন। "pace −৬ঘ" ভয়ংকর শোনায় যতক্ষণ
-          না জানা যায় গোনা শুরুই হয়েছে তিন দিন আগে।
-
-          ⚠️⚠️ **যা জানা নেই তা লেখা হয় না।** মকআপে টাইলের নিচে ছিল
-          "৩ জন ছুটিতে" ও "১ কর্মদিবস পেরিয়েছে" — দুটোর কোনোটাই বোর্ডের
-          ডেটায় নেই (`/live` ছুটি জানে না, `TrendMonth`-এ কর্মদিবসের
-          সংখ্যাও নেই)। ⭐ তাই ওই দুটো জায়গায় **অন্য সত্যি কথা** বসেছে যা
-          একই ভুল-পড়া ঠেকায়: কতজনের আজ টার্গেটই নেই, আর কবে থেকে গোনা হচ্ছে।
-          অনুমান করে লিখলে টাইলটা এমন কিছু দাবি করত যা সে জানে না।
-        */}
-        <StatRow>
-          <Stat
-            label="Working now"
-            value={stats.active}
-            unit={`/${stats.total}`}
-            sub={
-              stats.total - stats.withTarget > 0
-                ? `${stats.total - stats.withTarget} on a day off`
-                : undefined
-            }
-          />
-
-          {/*
-            ⭐ মকআপের "▲ গতকালের চেয়ে ২ঘ ১০মি" — তুলনাটা `trend.days` থেকে,
-               নতুন কোনো কল ছাড়াই।
-
-            ⚠️⚠️ গতকাল **ট্র্যাক করা না থাকলে তুলনা দেখানো হয় না**। ওই দিনের
-               `workedSec` তখন ০, আর "▲ ১৮ঘ বেশি" লিখলে সেটা সরাসরি মিথ্যা —
-               কাল কেউ কম কাজ করেনি, কাল আমরা দেখিইনি।
-            ⚠️ আজকের দিনটা এখনো চলছে, তাই দুপুরে তুলনাটা প্রায় সবসময় ঋণাত্মক।
-               সেটা ভুল নয়, আর সেজন্যই এটা রঙিন নয় — কেবল তথ্য।
-          */}
-          <Stat
-            label="Hours today"
-            value={formatDuration(stats.todaySec)}
-            sub={yesterdayDelta(trend.data?.days, stats.todaySec)}
-          />
-
-          {/*
-            ⭐⭐ **মাসের pace — গোটা অ্যাপের কেন্দ্রীয় সংখ্যাটা।** "আমরা কি
-               পিছিয়ে আছি" প্রশ্নটাই বোর্ড খোলার সবচেয়ে সাধারণ কারণ।
-
-            ⭐ রংটা **লাল** — মকআপ ক-এ ওটাই ছিল *(মালিক: "১০০% same")*।
-            ⚠️ এখানে আগে হলুদ (`behind`) ছিল, যুক্তি ছিল "পর্দায় একটাই লাল
-               টাইল, নইলে লাল রঙের মানেই হারিয়ে যায়"। যুক্তিটা এখনো খাটে,
-               তাই **দামটা লিখে রাখা হলো**: পিছিয়ে থাকা আর এজেন্ট বন্ধ এখন
-               একই রঙে, অথচ একটা মাসজুড়ে সারানো যায়, অন্যটায় ঠিক এই
-               মুহূর্তে ঘণ্টা হারাচ্ছে।
-            ⚠️ `trackedFrom` না থাকলে জানালাটাই খালি, অর্থাৎ **সংখ্যা নেই** —
-               তখন `০` নয়, `—`, নইলে "ঠিক আছে" বলে মিথ্যা দাবি হতো।
-          */}
-          <Stat
-            label={
-              trend.data?.month.paceSec != null && trend.data.month.paceSec < 0
-                ? 'Behind pace'
-                : 'Ahead of pace'
-            }
-            value={
-              trend.data?.month.trackedFrom == null
-                ? '—'
-                : formatDuration(Math.abs(trend.data.month.paceSec))
-            }
-            tone={
-              trend.data?.month.trackedFrom == null
-                ? 'muted'
-                : trend.data.month.paceSec < 0
-                  ? 'attention'
-                  : 'counted'
-            }
-            /**
-             * ⭐⭐ **G111 — সংখ্যাটা কতজনের, সেটা সংখ্যাটার নিচেই।**
-             *
-             * ⚠️⚠️ উপরের pace হলো Σ credited − Σ expected। যাঁর একটাও
-             * শেষ-হওয়া কর্মদিবস দেখা হয়নি তাঁর `expected` ০, তাই তাঁর
-             * **পুরো টার্গেটটাই** হর থেকে নীরবে বাদ — অর্থাৎ **দল যত
-             * পিছিয়ে, বোর্ড তার চেয়ে কম দেখায়**, আর ভুলটা সবসময় একই
-             * দিকে হেলে। নতুন কেউ যোগ দিলে বা এজেন্ট বসাতে দেরি হলে ঠিক
-             * তখনই এটা ঘটে, আর তখনই কেউ খেয়াল করে না।
-             *
-             * ⚠️ ওঁদের টার্গেট যোগফলে ঢুকিয়ে দেওয়া হয়নি — তাতে বোর্ড এমন
-             * ঘাটতির দাবি করত যেটা কেউ করেইনি, অর্থাৎ একটা মিথ্যা সারিয়ে
-             * ঠিক উল্টো মিথ্যা।
-             */
-            sub={
-              <>
-                {trend.data?.month.trackedFrom
-                  ? `counted from ${formatDate(trend.data.month.trackedFrom)}`
-                  : 'no finished day counted yet'}
-                {/* ⚠️ ০ হলে কিছুই নয় — নইলে রোজ একটা অর্থহীন লাইন */}
-                {(trend.data?.month.notObservedStaff ?? 0) > 0 && (
-                  <>
-                    {' · '}
-                    {trend.data!.month.notObservedStaff} not counted yet
-                  </>
-                )}
-              </>
-            }
-          />
-
-          {/*
-            ⚠️ হর `workedToday`, `total` নয় — যাঁরা আজ শুরুই করেননি তাঁদের
-               শূন্য দিয়ে ভাগ করলে গড়টা "দল কেমন করছে" নয়, "কতজন এসেছে"
-               বলত। ⭐ `sub`-এ দৈনিক টার্গেট, কিন্তু **কেবল সবার এক হলে**।
-          */}
-          <Stat
-            label="Average today"
-            value={
-              stats.workedToday === 0
-                ? '—'
-                : formatDuration(stats.todaySec / stats.workedToday)
-            }
-            tone={stats.workedToday === 0 ? 'muted' : 'counted'}
-            sub={
-              commonDailyTarget(cards) != null
-                ? `target ${formatDuration(commonDailyTarget(cards) as number)}`
-                : undefined
-            }
-          />
-
-          {/*
-            ⭐⭐ **আজকের ডিজাইন** *(২৩ আগস্ট ২০২৬, মালিকের চাওয়া)*।
-
-            মালিক Live Board-এ খুঁজেছিলেন, কিন্তু সংখ্যাটা ছিল Worklog-এর
-            টেবিলে — কারণ ওই টেবিলটাই ১৭ আগস্ট বোর্ড থেকে সরানো হয়েছিল।
-
-            ⭐ **বড় সংখ্যাটা "শেষ"** — কেবল ওটাই সত্যিকারের উৎপাদন বোঝায়।
-            "খোলা" নিচে ছোট করে, কারণ একটা ফাইল খোলা আর কাজ শেষ করা এক নয়।
-
-            ⚠️ কর্মীভিত্তিক ভাগটা এখানে **নকল করা হয়নি** — বোর্ড দেয় মোট,
-            আর "কে কতটা" এক ক্লিক দূরে Worklog-এ। দুই জায়গায় একই টেবিল
-            রাখলে একদিন একটা বদলাত আর অন্যটা নয়।
-
-            ⚠️ কেউ ডিজাইন না করলে টাইলটাই ওঠে না — "০" দেখতে ব্যর্থতার
-            মতো লাগে, অথচ গবেষকদের দিনে ওটা কেবল "প্রযোজ্য নয়"।
-          */}
-          {stats.designsFinished > 0 && (
-            <Stat
-              label="Designs Today"
-              value={stats.designsFinished}
-              tone="counted"
-              sub="marked complete"
-            />
-          )}
-
-          {/*
-            ⚠️⚠️ এখানে একটা **"Agents up"** টাইল ছিল, লাল হতো, আর লিখত
-               "hours are being lost"। সেটা তুলে দেওয়া হয়েছে *(১৭ আগস্ট)*
-               কারণ সংখ্যাটা আসত `agent_down` স্ট্যাটাস থেকে, আর ওই
-               স্ট্যাটাসটাই ভুল ছিল — বাড়ি চলে যাওয়া কর্মীকেও গুনত।
-
-            ⭐ একই তথ্য এখন **পাশের প্যানেলেই** আছে, আর সেখানে ঢের ভালো
-               ভাবে: *"Agent silent — BELAL … no shutdown event arrived
-               either"*। টাইলটা কেবল একটা সংখ্যা দিত, অ্যালার্ট দেয় নাম,
-               কারণ আর করণীয়।
-          */}
-
-          {/*
-            ⚠️ owner ছাড়া কেউ অ্যালার্ট দেখেন না (`listAlerts` owner-only),
-               তাই ম্যানেজারের কাছে টাইলটা `—` দেখাত। ⭐ তার বদলে টাইলটাই
-               বসে না — খালি ঘর একটা প্রশ্ন তৈরি করত যার উত্তর তাঁর জন্য নেই।
-          */}
-          {isOwner && (
-            <Stat
-              label="Open alerts"
-              value={alerts.data ? alerts.data.total : '—'}
-              tone={
-                !alerts.data
-                  ? 'muted'
-                  : alerts.data.total > 0
-                    ? 'behind'
-                    : 'counted'
-              }
-              sub={
-                alerts.data && alerts.data.total > 0
-                  ? alerts.data.rows[0]?.title
-                  : undefined
-              }
-            />
-          )}
-        </StatRow>
-
-        {/*
-          ⚠️⚠️ **ফোনে ক্রমটা উল্টে যায়, আর সেটা ইচ্ছাকৃত।** নিচের স্তরগুলো
-             `lg`-এর নিচে এক কলামে নামে, অর্থাৎ আটটা কার্ড উপর-নিচে দাঁড়ায় —
-             তখন মানুষের তালিকাটা ছয়-সাত পর্দা নিচে চলে যেত। কিন্তু মালিকের
-             কথায় বোর্ডের আসল প্রশ্নটাই ওটা: *"Live Board e ami shudhu
-             working staff dekhte cai."* সবচেয়ে চাওয়া জিনিসটা সবচেয়ে দূরে
-             থাকা মানে ফোনে বোর্ডটা কার্যত অকেজো ([G122](../../../docs/08-Gap-Analysis.md))।
-
-          ⭐ সমাধান `order`, DOM নয় — **পড়ার ক্রম ও কি-বোর্ডের ক্রম অক্ষত
-             থাকে**, শুধু ছোট পর্দায় দলটা উপরে ওঠে। সীমা `lg`, `sm` নয়:
-             ঠিক ওখানেই স্তরগুলো দুই কলাম থেকে এক কলামে নামে, তাই সমস্যাটাও
-             ওখান থেকেই শুরু।
-        */}
-        <div className="flex flex-col">
-        {/*
-          ⭐⭐ **cockpit-এর স্তরগুলো, উপর থেকে নিচে একটা প্রশ্নের ক্রমে:**
-            ১· সংখ্যা — "আজ কতটা হয়েছে?"        (উপরের টাইল)
-            ২· ছন্দ  — "দিনটা কেমন গেল?"          (২৪ ঘণ্টার কলাম)
-            ৩· অবস্থা — "এই মুহূর্তে কে কোথায়?"    (স্তরে-ভাগ স্ট্রিপ)
-            ৪· ব্যক্তি — "কে কতদূর?"               (টার্গেট-বার)
-            ৫· মুখ    — "সে আসলে কী করছে?"        (কার্ড ও স্ক্রিনশট)
-
-          ⚠️ ক্রমটা এলোমেলো নয়: প্রতিটা স্তর আগেরটার উত্তর থেকে **জন্ম নেওয়া
-             পরের প্রশ্নটার** উত্তর দেয়। উল্টো সাজালে বোর্ড খুলেই দশটা মুখ
-             দেখা যেত, আর "আজ দিনটা কেমন" জানতে নিচে স্ক্রল করতে হতো।
-        */}
-        {/*
-          ⭐⭐ **মকআপ ক-এর বিন্যাস — হুবহু দুটো সারি।**
-
-          ⚠️⚠️ এখানে আগে **চারটে** সারি ছিল, প্রতিটাই `3fr 2fr`। কার্ডগুলো একই
-          ছিল, শুধু পাতাটা প্রায় দ্বিগুণ লম্বা — আর তাতে মকআপ ক-এর গোটা
-          যুক্তিটাই ("সবচেয়ে বেশি তথ্য এক পর্দায়") মিথ্যা হয়ে যেত।
-
-          ⚠️ মালিক দুটো পাশাপাশি রেখে ধরিয়ে দিয়েছেন। আমি ছ-টা ফারাক গুনে
-          "মিলে গেছে" বলেছিলাম — রং, কলাম আর লেবেল মিলিয়ে। **গ্রিডটা মিলিয়ে
-          দেখিনি**, অথচ পর্দার আকৃতি ওটাই ঠিক করে।
-
-          ⭐ মকআপের `.r-2-1-1` ও `.r-3-2`: সারি ১ `2fr 1fr 1fr`, সারি ২
-          `3fr 2fr` — যার ডান কলামে দুটো কার্ড **খাড়াখাড়ি**।
-        */}
-        <div className="mt-3 grid gap-3 lg:grid-cols-[2fr_1fr_1fr]">
-          <Card
-            title="Shape of the Day"
-            hint="Hours the whole team put in, by hour · Dhaka time"
-            padded={false}
-          >
-            {pulse.data ? (
-              <DayPulse
-                hours={pulse.data.hours}
-                currentHour={dhakaHourNow()}
-              />
-            ) : (
-              /*
-                ⚠️ স্পিনার নয়, **কঙ্কাল** — চার্টের জায়গাটা আগেই দখল করে
-                   রাখে, তাই ডেটা এলে পাতাটা লাফায় না। বোর্ড ৩০ সেকেন্ডে
-                   রিফ্রেশ হয়; প্রতিবার লাফালে পড়াই যেত না।
-              */
-              <div className="px-4 pt-1 pb-3">
-                <div className="mb-2 h-4 w-40 rounded bg-line/70" />
-                <div className="h-24 rounded bg-line/40" />
-              </div>
-            )}
-          </Card>
-
-          <Card
-            title="Right Now"
-            hint="Every card falls in exactly one of these"
-            padded={false}
-          >
-            <StatusStrip cards={cards} />
-          </Card>
-          <Card
-            title="Last 7 Days"
-            hint="Per day · dashed = before tracking"
-            padded={false}
-          >
-            {trend.data ? (
-              <WeekBars days={trend.data.days} />
-            ) : (
-              <div className="px-4 pt-1 pb-3">
-                <div className="h-24 rounded bg-line/40" />
-              </div>
-            )}
-          </Card>
-        </div>
-
-        <div className="mt-3 grid gap-3 lg:grid-cols-[3fr_2fr]">
-          {/*
-            ⭐ ছুটির দিনে কার্ডটার **নামও বদলায়** *(১৫ আগস্ট)*। "Against
-               today's target" যখন কারো কোনো টার্গেটই নেই, তখন শিরোনামটাই
-               একটা স্ববিরোধ। ঘণ্টাগুলো তবু সত্যি — আর বারগুলো তখন
-               **এক কর্মদিবসের** বিপরীতে আঁকা হয়, সবুজ রঙে (`TeamBars`)।
-          */}
-          <Card
-            title={
-              stats.withTarget === 0 ? 'Hours Today' : "Against Today's Target"
-            }
-            hint={
-              stats.withTarget === 0
-                ? 'Day off — green shows today’s hours against a normal working day'
-                : 'Furthest along first · green means the target is met'
-            }
-            padded={false}
-          >
-            <TeamTable cards={cards} />
-          </Card>
-          {/*
-            ⭐ মকআপের ডান কলাম — দুটো কার্ড **খাড়াখাড়ি**, পাশাপাশি নয়।
-            ⚠️ owner ছাড়া "Needs attention" নেই, তখন কলামে একটাই কার্ড থাকে।
-               গ্রিডটা তবু `3fr 2fr` — নইলে ম্যানেজারের পর্দায় টেবিলটা হঠাৎ
-               পুরো চওড়া হয়ে যেত, আর একই বোর্ড দুই ভূমিকায় দু-রকম দেখাত।
-          */}
-          <div className="grid content-start gap-3">
-          {/*
-            ⭐⭐ **শেষ ৭ দিনে রোজ কতগুলো ডিজাইন** *(মালিকের চাওয়া,
-               ৫ সেপ্টেম্বর)* — ইচ্ছাকৃতভাবে "Where Today Went"-এর **উপরে**।
-               ⚠️ ওটা আজকের অ্যাপ-সময়ের কথা বলে, এটা সপ্তাহের ফলের —
-               ফল আগে, ব্যাখ্যা পরে।
-            ⚠️ `trend.data` না এলে কার্ডটাই বসে না; খালি বাক্স দেখিয়ে
-               "শূন্য ডিজাইন" বলে ভুল দাবি করার চেয়ে চুপ থাকা ভালো।
-          */}
-          {trend.data && (
-            <Card
-              title="Designs Finished"
-              hint="Last 7 days · whole team"
-              padded={false}
-            >
-              <DesignsThisWeek days={trend.data.days} />
-            </Card>
-          )}
-          <Card
-            title="Where Today Went"
-            hint="Whole team · counted app time only"
-            padded={false}
-          >
-            {apps.data ? (
-              <TopApps usage={apps.data.apps} />
-            ) : (
-              <div className="px-4 py-8">
-                <div className="h-24 rounded bg-line/40" />
-              </div>
-            )}
-          </Card>
-          {/*
-            ⛔ **"Needs Attention" কার্ডটা সরানো হয়েছে** *(৭ সেপ্টেম্বর ২০২৬,
-               মালিকের সিদ্ধান্ত)* — তিনি বোর্ডে খোলা অ্যালার্টের তালিকা
-               চান না।
-
-            ⭐ **তবু অ্যালার্ট অদৃশ্য হয়নি:** উপরের KPI সারিতে
-               *"Open alerts"* টাইলটা থেকেই যাচ্ছে — সংখ্যা, রং, আর
-               সবচেয়ে নতুন খবরের শিরোনাম। ⚠️ ওটাও তুলে নিলে খোলা
-               অ্যালার্টের কোনো চিহ্নই বোর্ডে থাকত না, আর মালিক Alerts
-               পাতায় নিজে না গেলে কোনোদিন জানতেন না।
-
-            ⚠️ `alerts` ফেচটা তাই **রাখা হয়েছে** — ওই টাইলটা ওটার উপরেই
-               দাঁড়ানো (উপরে দেখুন)।
-          */}
-          {/*
-            ⭐⭐ **সবচেয়ে কম ঘণ্টা** *(মালিকের চাওয়া, ৩০ আগস্ট ২০২৬)* —
-               `Top Performers`-এর উল্টো পিঠ, কিন্তু **এখানে**, নিচের সারিতে
-               নয়। ⚠️ দুটো তালিকা পাশাপাশি বসালে পর্দাটা একটা লিডারবোর্ড
-               হয়ে উঠত — উপরে ভালো, নিচে খারাপ। ⭐ ডান কলামে "দেখে নেওয়ার
-               জিনিস"গুলোর সাথে থাকলে এটা যা, তা-ই থাকে: একটা প্রশ্ন।
-
-            ⚠️ `isOwner` দিয়ে ঢাকা হয়নি — বোর্ডটাই owner ও manager ছাড়া
-               কেউ দেখেন না (`/live`-এর `@Roles`), আর দল কে সামলান সেটা
-               ম্যানেজারের নিজেরই কাজ।
-          */}
-          <Card
-            title="Fewest Hours"
-            hint={
-              trend.data
-                ? `Least counted in the last ${trend.data.laggardDays} days`
-                : 'Least counted recently'
-            }
-            padded={false}
-          >
-            {trend.data ? (
-              <FewestHours
-                people={trend.data.laggards}
-                days={trend.data.laggardDays}
-              />
-            ) : (
-              <div className="px-4 py-8">
-                <div className="h-24 rounded bg-line/40" />
-              </div>
-            )}
-          </Card>
-          </div>
-        </div>
-
-        {/*
-          ⚠️⚠️ **এই সারিটা মকআপ ক-এ নেই।** দুটোই পরে যোগ হওয়া, আর দুটোই
-          মালিকের নিজের চাওয়া: "This month", আর "Top performers" (⭐ শেষ ৩০
-          দিনের জানালা — ওটাও তাঁরই সংশোধন)।
-          ⭐ মুছে ফেললে মকআপের সাথে অক্ষরে অক্ষরে মিলত, কিন্তু তিনি নিজে যা
-          চেয়েছেন তা-ই হারাত। তাই মকআপের দুটো সারির **পরে**, আগে নয়।
-        */}
-        <div className="mt-3 grid gap-3 lg:grid-cols-[3fr_2fr]">
-          {/*
-            ⭐⭐ **দুটো জানালা, একটাই কার্ড।**
-
-            ⚠️ মালিক আগে "আজীবন মোট ঘণ্টা" বেছেছিলেন, পরে ৩০ দিন চেয়েছেন।
-               দুটো আলাদা কার্ড বসালে পাশাপাশি প্রায় একই পাঁচটা নাম দুবার
-               দেখা যেত — জঞ্জাল। তাই একটাই কার্ড, ভেতরে জানালা বদলানোর সুইচ,
-               আর আগের পছন্দটাও কেড়ে নেওয়া হয়নি।
-
-            ⭐ ডিফল্ট **৩০ দিন**, কারণ আজীবনের ক্রমে ঘণ্টা কেবল জমে —
-               যিনি আগে যোগ দিয়েছেন তিনি স্থায়ীভাবে উপরে, আর নতুন কেউ যত
-               ভালোই করুন ধরতে পারেন না। ওই তালিকা "কে ভালো করছে" নয়,
-               "কে বেশিদিন আছে" বলে।
-          */}
-          <Card
-            title="Top Performers"
-            hint={
-              leaderWindow === '30d'
-                ? 'Most hours counted in the last 30 days'
-                : 'Most hours counted, all time'
-            }
-            padded={false}
-            actions={
-              <Tabs
-                items={LEADER_WINDOWS}
-                active={leaderWindow}
-                onChange={setLeaderWindow}
-                label="Top performers window"
-              />
-            }
-          >
-            {trend.data ? (
-              <TopPerformers
-                leaders={
-                  leaderWindow === '30d'
-                    ? trend.data.leaders30
-                    : trend.data.leaders
-                }
-              />
-            ) : (
-              <div className="px-4 py-8">
-                <div className="h-24 rounded bg-line/40" />
-              </div>
-            )}
-          </Card>
-          <Card
-            title="This Month"
-            hint="Counted against the team target"
-            padded={false}
-          >
-            {trend.data ? (
-              <MonthCard month={trend.data.month} />
-            ) : (
-              <div className="px-4 pt-1 pb-3">
-                <div className="h-24 rounded bg-line/40" />
-              </div>
-            )}
-          </Card>
-        </div>
-
-        {/*
-          ⚠️⚠️ **এখানে দলের কার্ডগুলো ছিল, এখন `Worklog` পাতায়**
-             *(১৭ আগস্ট, মালিকের অনুরোধে)*।
-
-          ⭐ কারণটা সরল: কার্ডগুলো ছিল পাতার **সবার নিচে**, ছ-টা টাইল ও
-             চারটে চার্ট পেরিয়ে — অথচ *"এখন কে কাজ করছে?"* প্রশ্নটাই
-             সবচেয়ে বেশিবার করা হয়। এখন সেটা সাইডবারে এক ক্লিক দূরে।
-
-          ⚠️ মার্কআপটা `live/TeamRoster.tsx`-এ **সরানো** হয়েছে, নকল নয় —
-             দুই জায়গায় কপি থাকলে একদিন একটা বদলাত আর অন্যটা নয়।
-
-          ⭐ বোর্ডে "কে কাজ করছে" প্রশ্নের উত্তর তবু আছে: উপরের
-             **Working now** টাইল আর দলের টেবিল — দুটোই একই `isWorking`
-             ব্যবহার করে, তাই সংখ্যাগুলো Worklog-এর সাথে কখনো আলাদা হয় না।
-        */}
-        </div>
-      </>
-    );
-  }
-
-  return (
-    <>
-      {/*
-        ⭐⭐ **মকআপ ক-এর উপরের বার** — `LIVE` ব্যাজ ও বোতামগুলো লোগোর
-        সারিতে, পাতার শিরোনামে নয় *(মালিক দুবার লাল দাগ দিয়েছেন)*।
-
-        ⚠️⚠️ portal দিয়ে বসানো হয় বলেই বারটা মিথ্যা বলে না: ঘরটা `Layout`-এ
-        খালি থাকে, আর কেবল **এই পাতাটা খোলা থাকলেই** ভরে। Settings বা
-        Reports-এ গেলে ব্যাজটা সাথে সাথে উধাও — নইলে সবুজ বিন্দু ওখানেও
-        জ্বলত আর এমন একটা তাজা-ভাব দাবি করত যা ওই পাতার নেই।
-      */}
-      {slot &&
-        createPortal(
-          <>
-            {/*
-              ⭐ মকআপ ক-এর `LIVE` ব্যাজ — এই পাতাটা নিজে থেকেই নতুন হয়, সেটা
-                 বলার জন্য। বাকি পাতাগুলো হয় না, তাই পার্থক্যটা বলার মতো।
-  
-              ⚠️⚠️ **শেষ রিফ্রেশ ব্যর্থ হলে ব্যাজটা নেভে**, আর এটাই এর একমাত্র
-                 শর্ত। সবুজ বিন্দু জ্বলতে থাকলে ওটা দাবি করে "যা দেখছেন তা
-                 এইমাত্রকার" — অথচ নিচের সংখ্যাগুলো তখন কয়েক মিনিটের পুরোনো।
-                 ঠিক ওই মুহূর্তে ব্যাজটাই হতো পর্দার সবচেয়ে বড় মিথ্যা।
-            */}
-            <span
-              className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${
-                board.error
-                  ? 'bg-white/10 text-white/55'
-                  : 'bg-ok/15 text-ok'
-              }`}
-              title={
-                board.error
-                  ? 'The last refresh failed — the numbers below are older'
-                  : 'This page refreshes itself every 30 seconds'
-              }
-            >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  board.error ? 'bg-white/40' : 'animate-pulse bg-ok'
-                }`}
-                aria-hidden
-              />
-              {board.error ? 'STALE' : 'LIVE'}
-            </span>
-            {board.updatedAt && (
-              <span className="text-[11.5px] text-white/55">
-                Updated{' '}
-                <span className="num">{formatTime(isoOf(board.updatedAt))}</span>
-              </span>
-            )}
-            <BarButton
-              onClick={() => {
-                /**
-                 * ⚠️ **তিনটেই** — এখানে `pulse` বাদ পড়েছিল, আর ফাঁকটা নীরব:
-                 * বোতামের নাম "Refresh", কিন্তু দিনের ছন্দের চার্টটা নিজের
-                 * দু-মিনিটের তালেই থাকত। কেউ চার্ট বাসি দেখে Refresh চেপে
-                 * একই ছবি পেতেন আর ভাবতেন ডেটাই আসছে না।
-                 *
-                 * ⭐ নিয়মটা সাধারণ: **যে বোতাম "সব নতুন করে আনো" বলে, তাকে
-                 * পর্দার প্রতিটা উৎস ছুঁতে হয়** — নইলে নামটাই মিথ্যা।
-                 */
-                board.reload();
-                pulse.reload();
-                trend.reload();
-              }}
-              title="Now, without waiting 30 seconds"
-            >
-              Refresh
-            </BarButton>
-            {/*
-              ⭐ মকআপ ক-এর তৃতীয় বোতাম। ⚠️ মকআপে একটা "আজ" বোতামও ছিল —
-                 সেটা বসানো হয়নি, কারণ বোর্ড **কেবল আজকেরই** দেখায়, অন্য
-                 তারিখ বাছার পথ নেই। যে বোতাম কিছু বদলায় না, সেটা পর্দায়
-                 থাকলে ব্যবহারকারী ধরে নিতেন অন্য তারিখও দেখা যায়।
-            */}
-            {canViewBoard && (
-              <BarButton
-                onClick={() => navigate('/reports')}
-                title="Excel and PDF for any date range"
-              >
-                Reports
-              </BarButton>
-            )}
-          </>,
-          slot,
-        )}
-
-      {/*
-        ⭐⭐ **পাতার শিরোনামটা নেই** *(মালিক সরাতে বলেছেন, ১৫ আগস্ট)* —
-        মকআপ ক-এ ওটা ছিলই না, আর এখন থাকার কারণও নেই: নামটা বাঁয়ের
-        সাইডবারে সবুজ হয়ে জ্বলে আছে, আর তারিখ-সময় উপরের বারে
-        (`Dhaka · 15 Aug 2026 · 19:23`)। ⚠️ তিনটে জায়গায় একই কথা লেখা
-        ছিল, আর তার দাম দিচ্ছিল পর্দার প্রথম ৭০ পিক্সেল — ঠিক যেখানে
-        মকআপ ক-এর KPI সারিটা বসে।
-
-        ⚠️ `<Page>` তবু রাখা হয়েছে (শিরোনাম ছাড়া): ওটাই `max-w-7xl` আর
-        মাঝে বসানোর কাজটা করে, বাকি সব পাতার সাথে মিলিয়ে। তুলে দিলে
-        বোর্ডটা একা প্রস্থে অন্য পাতাগুলোর সাথে মিলত না।
-      */}
-      <Page>{body}
-
-        {/*
-          ⚠️ স্ক্রিনশটের লাইটবক্সটা এখানে ছিল — কার্ডগুলোর সাথে সেটাও
-             `Worklog` পাতায় গেছে (`live/TeamRoster.tsx`)। বোর্ডে এখন
-             ছবি খোলার কোনো পথই নেই, তাই রাখলে ওটা মৃত কোড হতো।
-        */}
-      </Page>
-    </>
-    );
-  }
-
-  /**
-   * ⭐ "▲ গতকালের চেয়ে ২ঘ ১০মি" — মকআপ ক-এর টাইলে যা ছিল।
-   *
-   * ⚠️⚠️ **গতকাল ট্র্যাক করা না থাকলে `undefined`**, শূন্য নয়। ওই দিনের
-   * `workedSec` তখনো ০ আসে, আর সেটাকে তুলনায় বসালে টাইল বলত "▲ ১৮ঘ বেশি" —
-   * সরাসরি মিথ্যা: কাল কেউ কম কাজ করেনি, কাল **আমরা দেখিইনি**। এটাই এই
-   * ফাইলের সবচেয়ে পুরোনো নিয়ম (`tracked` ঘরটার জন্মই এই কারণে)।
-   *
-   * ⚠️ শেষ সারিটা আজকের, তাই গতকাল **শেষ থেকে দ্বিতীয়**।
-   */
-  function yesterdayDelta(
-    days: readonly TrendDay[] | undefined,
-    todaySec: number,
-  ): string | undefined {
-    if (!days || days.length < 2) return undefined;
-
-    const yesterday = days[days.length - 2];
-    if (!yesterday.tracked) return undefined;
-
-    /**
-     * ⚠️⚠️ **গতকাল সবার ছুটি হলে তুলনাই হয় না** — আর এটা মাঠে ধরা পড়েছে,
-     * বসানোর কয়েক মিনিট পরেই। শনিবারের বোর্ডে টাইলটা বলছিল
-     * *"▲ ৭১ঘ ৭মি vs yesterday"*, কারণ গতকাল শুক্রবার ছিল: `tracked` সত্যি
-     * (সার্ভার দিনটা দেখেছে), কিন্তু `workedSec` শূন্য (কারো টার্গেটই ছিল না)।
-     *
-     * ⭐ সংখ্যাটা মিথ্যা ছিল না, **তুলনাটা** ছিল — কেউ গতকাল ৭১ ঘণ্টা কম
-     * কাজ করেনি, গতকাল কাজের দিনই ছিল না। `expectedStaff === 0` মানে ঠিক
-     * সেটাই, আর ঘরটা এই কারণেই আছে।
-     */
-    if (yesterday.expectedStaff === 0) return 'yesterday was a day off';
-
-    const delta = todaySec - yesterday.workedSec;
-    // ⚠️ ৫ মিনিটের কম ফারাক দেখানো হয় না — "▲ ২মি" কোনো খবর নয়, কেবল কালি
-    if (Math.abs(delta) < 300) return 'about the same as yesterday';
-
-    return `${delta > 0 ? '▲' : '▼'} ${formatDuration(Math.abs(delta))} vs yesterday`;
-  }
-
-  /**
-   * সবার দৈনিক টার্গেট এক হলে সেই সংখ্যাটা, নইলে `null`।
-   *
-   * ⚠️ আলাদা নীতিতে থাকা দল হলে একটা সংখ্যা বেছে দেখানো যেত না — তখন টাইল
-   * এমন একটা "টার্গেট" দাবি করত যা কারো কারো ক্ষেত্রে ভুল। ⭐ আর ছুটির দিনে
-   * সবার টার্গেট ০, তাই তখনো কিছু দেখানো হয় না।
-   */
-  function commonDailyTarget(cards: readonly LiveCard[]): number | null {
-    const withTarget = cards.filter((c) => c.dailyTargetSec > 0);
-    if (withTarget.length === 0) return null;
-
-    const first = withTarget[0].dailyTargetSec;
-    return withTarget.every((c) => c.dailyTargetSec === first) ? first : null;
-  }
-
-  interface BoardStats {
-    total: number;
-    active: number;
-    /** আজ যাদের কিছু না কিছু গোনা হয়েছে — গড়ের **হর** */
-    workedToday: number;
-    todaySec: number;
-    /** ⚠️ আজ যাদের সত্যিই টার্গেট আছে (ছুটিতে থাকা কেউ এতে নেই) */
-    withTarget: number;
-    metTarget: number;
-    /** ⭐ আজ সারা দলে কতগুলো ডিজাইন **শেষ** হয়েছে (Complete বোতাম) */
-    designsFinished: number;
-  }
-
-  /**
-   * মকআপের `.summary` টাইলগুলো।
-   *
-   * ⭐ আগে এখানে "Behind target" টাইল **ইচ্ছাকৃতভাবে ছিল না**: কে পিছিয়ে
-   *    সেটা বলতে মাসের কত ভাগ কর্মদিবস পেরিয়েছে জানতে হয়, আর `GET /live` ওই
-   *    তথ্য পাঠাত না। এখন সার্ভার `dailyTargetSec` ও `todayIsWorkday` পাঠায়,
-   *    তাই **আজকের** প্রশ্নটার উত্তর আর আন্দাজ নয় — "Met today's target"
-   *    গোনা যায়।
-   *
-   * ⚠️ তবু **মাসের** "পিছিয়ে/এগিয়ে" এখানে নেই, আর কারণটা আগের মতোই: তার
-   *    জন্য মাসের কতগুলো কর্মদিবস পেরিয়েছে জানা দরকার, যেটা `/live`-এ আসে
-   *    না। ক্যালেন্ডারের দিন গুনে আন্দাজ করলে ছুটির পরদিন গোটা টিমকে
-   *    "পিছিয়ে" দেখাত, আর সেই সংখ্যা দিয়েই কেউ কারো জবাবদিহি চাইত।
-   *    আন্দাজ করা সংখ্যার চেয়ে না থাকা ভালো।
-   */
-  function summarize(cards: LiveCard[]): BoardStats {
-    let active = 0;
-    let workedToday = 0;
-    let todaySec = 0;
-    let withTarget = 0;
-    let metTarget = 0;
-    let designsFinished = 0;
-
-    for (const card of cards) {
-      // ⚠️ ট্যাবের ভাগের সাথে **একই** শর্ত — দুই জায়গায় দুবার লিখলে
-      //    একদিন একটা বদলাত আর অন্যটা নয়, আর বোর্ড নিজেই নিজেকে কাটত।
-      if (isWorking(card.status)) active += 1;
-      if (card.todayWorkedSec > 0) workedToday += 1;
-      todaySec += card.todayWorkedSec;
-
-      /**
-       * ⚠️ `dailyTargetSec > 0`-ও দেখা হয়: পুরো মাস ছুটি হলে সার্ভার ০
-       *    পাঠায়, আর তখন "০ সেকেন্ড ≥ ০ টার্গেট" সত্যি হয়ে সবাই টার্গেট
-       *    ছুঁয়ে ফেলত — কেউ এক মিনিটও কাজ না করে।
-       */
-      /**
-       * ⭐⭐ **আজকের ডিজাইন** *(২৩ আগস্ট ২০২৬, মালিকের চাওয়া)* — সংখ্যাটা
-       * Worklog-এর টেবিলে কর্মীভিত্তিক আছে, কিন্তু মালিক বোর্ডেও চেয়েছেন।
-       *
-       * ⚠️ কার্ডেই সংখ্যা দুটো আছে, তাই সার্ভারে নতুন কিছু লাগেনি —
-       * শুধু যোগ করা। ⭐ কর্মীভিত্তিক ভাগটা এখানে **নকল করা হয়নি**;
-       * বোর্ড দেয় মোট, আর "কে কতটা" এক ক্লিক দূরে Worklog-এ।
-       */
-      // ⚠️ কেবল "শেষ" — ফাইল খোলা গোনা হয় না (মালিকের সিদ্ধান্ত, ২৩ আগস্ট)
-      designsFinished += card.designsFinished;
-
-      if (card.todayIsWorkday && card.dailyTargetSec > 0) {
-        withTarget += 1;
-        if (card.todayWorkedSec >= card.dailyTargetSec) metTarget += 1;
-      }
-    }
-
-    return {
-      total: cards.length,
-      active,
-      workedToday,
-      todaySec,
-      withTarget,
-      metTarget,
-      designsFinished,
-    };
-  }
-
-  /** ⚠️ `formatTime` ISO স্ট্রিং চায়, `updatedAt` একটা `Date` */
-  function isoOf(at: Date | null): string | null {
-    return at ? at.toISOString() : null;
-  }
-
-/**
- * ⭐⭐ **শেষ ৭ দিনে রোজ কতগুলো ডিজাইন শেষ হয়েছে** *(মালিকের চাওয়া,
- * ৫ সেপ্টেম্বর ২০২৬)* — *"Where Today Went"*-এর ঠিক উপরে।
- *
- * ⚠️⚠️ **সংখ্যাটা "শেষ", "খোলা" নয়** — মালিকের নিজের বাছাই *(২৩ আগস্ট,
- * ADR-037)*। ফাইল খোলার সংখ্যা মাঠে বিভ্রান্তি তৈরি করেছিল: ম্যানেজার
- * ১৯টা ফাইলে ৪৪ মিনিট দিয়ে "১৬" দেখাচ্ছিলেন। শিরোনামে তাই **Finished**
- * কথাটা লেখা থাকে — নইলে সংখ্যাটা আবার দুভাবে পড়া যেত।
- *
- * ⚠️ ট্র্যাকিং শুরুর আগের দিন **ডটেড**, শূন্য নয় — বোর্ডের বাকি জায়গার
- * হুবহু একই নিয়ম (`TrendDay.tracked`)। "জানি না"-কে "কিছু হয়নি" বলা এই
- * অ্যাপে সর্বত্র নিষিদ্ধ।
- */
-function DesignsThisWeek({ days }: { days: TrendDay[] }) {
-  const total = days.reduce((sum, d) => sum + d.designsFinished, 0);
-
-  /**
-   * ⚠️ বারের উচ্চতা সবচেয়ে বড় দিনটার সাপেক্ষে, কোনো ধ্রুবক টার্গেটের নয় —
-   *    ডিজাইনের দৈনিক টার্গেট কর্মীভেদে আলাদা, আর দলগত কোনো টার্গেট নেই।
-   * ⚠️ `|| 1` — সব শূন্য হলে শূন্য দিয়ে ভাগ হতো।
-   */
-  const peak = Math.max(...days.map((d) => d.designsFinished), 0) || 1;
-
-  return (
-    <div className="px-4 py-3">
-      <div className="flex items-end justify-between gap-2">
-        {days.map((d) => {
-          const height = Math.round((d.designsFinished / peak) * 44);
-
-          return (
-            <div key={d.date} className="flex flex-1 flex-col items-center gap-1">
-              <span
-                className={`num text-[11px] ${
-                  d.designsFinished > 0 ? 'font-semibold text-ink' : 'text-ink-3'
-                }`}
-              >
-                {/* ⚠️ না-দেখা দিনে সংখ্যা নয়, ড্যাশ — ০ একটা দাবি */}
-                {d.tracked ? d.designsFinished : '—'}
-              </span>
-
-              <div
-                title={`${formatDateShort(d.date)} · ${
-                  d.tracked
-                    ? `${d.designsFinished} finished`
-                    : 'not tracked yet'
-                }`}
-                className={
-                  d.tracked
-                    ? 'w-full rounded-[2px] bg-ok'
-                    : 'w-full rounded-[2px] border border-dotted border-line'
-                }
-                style={{ height: `${d.tracked ? Math.max(height, 2) : 8}px` }}
-              />
-
-              <span className="text-[10px] text-ink-3">{weekdayOf(d.date)}</span>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="mt-2 border-t border-line pt-2 text-[11px] text-ink-3">
-        <span className="num font-semibold text-ink">{total}</span> finished in
-        the last 7 days
-      </div>
+  const apps = usePolling((signal) => canViewBoard && workDate ? getTopUsage({ from: workDate, to: workDate, limit: 6 }, signal) : Promise.resolve(null), CHART_REFRESH_MS, [canViewBoard, workDate]);
+  const alerts = usePolling((signal) => isOwner ? listAlerts({ limit: 3 }, signal) : Promise.resolve(null), CHART_REFRESH_MS, [isOwner]);
+  const [leaderWindow, setLeaderWindow] = useState<'30d' | 'all'>('30d');
+  const [metric, setMetric] = useState<'designs' | 'hours'>('designs');
+  const cards = board.data?.cards ?? [];
+  const active = cards.filter((card) => isWorking(card.status)).length;
+  const idle = cards.filter((card) => card.status === 'idle').length;
+  const offline = cards.filter((card) => card.status === 'offline').length;
+  const todaySec = cards.reduce((sum, card) => sum + card.todayWorkedSec, 0);
+  const worked = cards.filter((card) => card.todayWorkedSec > 0).length;
+  const finished = cards.reduce((sum, card) => sum + card.designsFinished, 0);
+  const hasDesigners = cards.some((card) => card.staffType === 'designer');
+  const month = trend.data?.month;
+  const observed = month?.trackedFrom != null;
+  const withTarget = cards.filter((card) => dayDuty(card) === 'target').length;
+  const refresh = () => { board.reload(); pulse.reload(); trend.reload(); apps.reload(); if (isOwner) alerts.reload(); };
+
+  let content: ReactNode;
+  if (!canViewBoard) content = <Empty title="You don't have access" hint="This board is available to owners and managers." />;
+  else if (!board.data && board.loading) content = <Loading label="Loading the board…" />;
+  else if (!board.data) content = <ErrorBox error={board.error} retry={board.reload} />;
+  else if (!cards.length) content = <Empty title="Nobody on the board yet" hint="Add staff and install the agent. Their first heartbeat brings them onto the board." />;
+  else content = <>
+    {board.error && <p role="status" className="rounded-lg border border-brand/30 bg-brand-bg px-4 py-3 text-sm text-brand-ink">Couldn't refresh — showing the last successful snapshot from {formatTime(board.updatedAt?.toISOString() ?? null)}.</p>}
+    <div className="studio-stats">
+      <StudioStat label="Working now" value={active} unit={`/ ${cards.length}`} note={`${idle} idle · ${offline} offline`} />
+      <StudioStat label="Hours today" value={formatDuration(todaySec)} note={`Across ${worked} staff with recorded time`} />
+      {hasDesigners ? <StudioStat label="Designs finished" value={finished} note="Marked complete today" /> : <StudioStat label="Average today" value={worked ? formatDuration(todaySec / worked) : '—'} note="Across staff with recorded time" />}
+      <StudioStat label={!observed ? 'Monthly pace' : month!.paceSec < 0 ? 'Behind monthly pace' : 'Ahead of monthly pace'} value={observed ? formatDuration(Math.abs(month!.paceSec)) : '—'} note={observed ? <>Counted from {formatDate(month!.trackedFrom!)}{month!.notObservedStaff > 0 && ` · ${month!.notObservedStaff} not counted yet`}</> : 'No finished day counted yet'} />
     </div>
-  );
+    <div className="studio-overview">
+      <Card title="The Last 7 Days" hint={metric === 'designs' ? 'Designs marked complete · whole team' : 'Active hours · whole team'} padded={false} actions={<Tabs items={CHART_METRICS} active={metric} onChange={setMetric} label="Chart metric" />}>
+        <DataPanel result={trend}>{trend.data && <StudioWeek days={trend.data.days} metric={metric} />}</DataPanel>
+      </Card>
+      <Card title="Team Right Now" hint="Agent status at the last refresh" padded={false}>
+        <StatusStrip cards={cards} />
+        <p className="studio-connection-note">Offline describes the agent connection, not whether someone worked.</p>
+        {hasDesigners && <div className="studio-secondary-stat"><span>Average today · {worked} staff</span><strong className="num text-ink">{worked ? formatDuration(todaySec / worked) : '—'}</strong></div>}
+        {isOwner && <div className="studio-secondary-stat"><Link to="/alerts" className="underline underline-offset-4">Open alerts ↗</Link><span className="num">{alerts.error ? 'Unavailable' : alerts.data?.total ?? '—'}</span></div>}
+      </Card>
+    </div>
+    <Card title="Team Snapshot" hint={withTarget ? 'Today’s hours and design progress · furthest along first' : 'Day off · recorded hours still count'} actions={<Link className="tap text-xs underline underline-offset-4" to="/worklog">View Worklog ↗</Link>} padded={false}>
+      <TeamTable cards={cards} />
+    </Card>
+    <div className="studio-pair">
+      <Card title="Shape of the Day" hint="Team hours by hour · Dhaka time" padded={false}><DataPanel result={pulse}>{pulse.data && <DayPulse hours={pulse.data.hours} currentHour={dhakaHourNow()} />}</DataPanel></Card>
+      <Card title="Where Today Went" hint="Whole team · counted app time only" padded={false}><DataPanel result={apps}>{apps.data && <TopApps usage={apps.data.apps} />}</DataPanel></Card>
+    </div>
+    <div className="studio-pair">
+      <Card title="Top Performers" hint={leaderWindow === '30d' ? 'Most hours counted in the last 30 days' : 'Most hours counted, all time'} padded={false} actions={<Tabs items={LEADER_WINDOWS} active={leaderWindow} onChange={setLeaderWindow} label="Top performers window" />}><DataPanel result={trend}>{trend.data && <TopPerformers leaders={leaderWindow === '30d' ? trend.data.leaders30 : trend.data.leaders} />}</DataPanel></Card>
+      <Card title="This Month" hint="Counted against the team target" padded={false}><DataPanel result={trend}>{month && <MonthCard month={month} />}</DataPanel></Card>
+    </div>
+    <Card title="Fewest Hours" hint={trend.data ? `Least counted in the last ${trend.data.laggardDays} days` : 'Least counted recently'} padded={false}><DataPanel result={trend}>{trend.data && <FewestHours people={trend.data.laggards} days={trend.data.laggardDays} />}</DataPanel></Card>
+  </>;
+
+  return <Page><div className="studio-board">
+    <div className="studio-board-head">
+      <div><h1>Your team, at a glance.</h1><p>{workDate ? `${formatDate(workDate)} · Asia/Dhaka` : 'Live Board · Asia/Dhaka'}</p></div>
+      {canViewBoard && <div className="studio-actions"><Button onClick={refresh} disabled={board.loading}>{board.loading ? 'Refreshing…' : 'Refresh'}</Button><Link className="tap rounded-md border border-line bg-surface px-3 py-1.5 text-[13px] text-ink" to="/worklog">Open Worklog ↗</Link></div>}
+    </div>
+    {content}
+    <footer className="studio-footer"><span>{board.error ? 'Refresh failed' : board.paused ? 'Updates paused' : board.loading ? 'Refreshing snapshot…' : 'Refreshes every 15 seconds'}{board.updatedAt && ` · Last updated ${formatTime(board.updatedAt.toISOString())}`}</span>{canViewBoard && <Link to="/reports" className="underline underline-offset-4">Open reports ↗</Link>}</footer>
+  </div></Page>;
+}
+
+function StudioStat({ label, value, unit, note }: { label: string; value: ReactNode; unit?: string; note: ReactNode }) {
+  return <div className="studio-stat"><p className="studio-stat-label">{label}</p><div className="studio-stat-value">{value}{unit && <small>{unit}</small>}</div><p className="studio-stat-note">{note}</p></div>;
+}
+
+// প্রতিটা স্বাধীন ডেটা-উৎসের ব্যর্থতা দেখায়; পুরোনো সফল উত্তর মুছে দেয় না।
+function DataPanel({ result, children }: { result: Pick<ApiResult<unknown>, 'data' | 'error' | 'reload'>; children: ReactNode }) {
+  if (!result.data) return <div className="p-5">{result.error ? <ErrorBox error={result.error} retry={result.reload} /> : <Loading label="Loading summary…" />}</div>;
+  return <>{result.error && <p role="status" className="px-5 pb-3 text-xs text-idle-ink">Couldn’t refresh this summary. Showing its last successful update. <button type="button" onClick={result.reload} className="tap underline">Retry</button></p>}{children}</>;
+}
+
+function StudioWeek({ days, metric }: { days: TrendDay[]; metric: 'designs' | 'hours' }) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const valueOf = (day: TrendDay) => metric === 'designs' ? day.designsFinished : day.workedSec;
+  const labelOf = (day: TrendDay) => metric === 'designs' ? `${day.designsFinished}` : formatDuration(day.workedSec);
+  const peak = Math.max(...days.filter((day) => day.tracked).map(valueOf), 1);
+  const shown = days.find((day) => day.date === selected);
+  if (!days.length) return <p className="p-5 text-sm text-ink-2">No daily history yet.</p>;
+  return <div className="studio-chart">
+    <div className="studio-chart-columns" aria-label={metric === 'designs' ? 'Completed designs by day' : 'Active hours by day'}>
+      {days.map((day) => <button type="button" key={day.date} className="studio-chart-day" onMouseEnter={() => setSelected(day.date)} onFocus={() => setSelected(day.date)} onClick={() => setSelected(day.date)} aria-label={`${formatDate(day.date)}: ${day.tracked ? `${labelOf(day)} ${metric === 'designs' ? 'designs finished' : 'active time'}${day.expectedStaff === 0 ? ', day off' : ''}` : 'not tracked yet'}`}>
+        <span className="studio-chart-value">{day.tracked ? labelOf(day) : '—'}</span>
+        <span className={`studio-chart-bar${day.tracked ? '' : ' is-untracked'}`} style={{ height: day.tracked ? `${Math.max(2, valueOf(day) / peak * 135)}px` : '35px' }} />
+      </button>)}
+    </div>
+    <div className="studio-chart-dates" aria-hidden>{days.map((day) => <span key={day.date}>{weekdayOf(day.date).slice(0, 3)}<br />{Number(day.date.slice(-2))}</span>)}</div>
+    <p className="studio-chart-note" aria-live="polite">{shown ? `${formatDateShort(shown.date)} · ${shown.tracked ? `${labelOf(shown)} ${metric === 'designs' ? 'finished' : 'active'}${shown.expectedStaff === 0 ? ' · day off' : ''}` : 'not tracked yet'}` : 'Today is still in progress. Dashed bars mean not tracked yet.'}</p>
+  </div>;
 }

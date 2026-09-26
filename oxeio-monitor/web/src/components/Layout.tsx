@@ -4,7 +4,8 @@ import { listAlerts } from '../api/alerts';
 import type { Role } from '../api/auth';
 import { usePolling } from '../api/useApi';
 import { useAuth } from '../auth/AuthContext';
-import { BrandMark, Wordmark } from './Brand';
+import { Wordmark } from './Brand';
+import '../studio.css';
 import { ErrorBoundary } from './ErrorBoundary';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -322,218 +323,52 @@ export function Layout() {
       )
     : [];
 
+  const currentPage = [...nav].sort((a, b) => b.to.length - a.to.length)
+    .find((item) => item.to === '/' ? pathname === '/' : pathname === item.to || pathname.startsWith(`${item.to}/`))?.label ?? 'Workspace';
+  const initials = user?.fullName.split(/\s+/).slice(0, 2).map((part) => part[0]).join('') ?? '';
+
   return (
-    <div className="flex min-h-full flex-col">
-      {/*
-        লোগোর গাঢ় ফিল্ড — `chrome`, `paper` নয়।
-
-        ⭐ E13 — এটা পটভূমি নয়, **লোগোর ফিল্ড**: লোগোটা কালোর উপরেই আঁকা,
-           তাই থিমের সাথে উল্টে গেলে ব্র্যান্ডটাই বদলে যেত। `chrome`
-           টোকেনটা তাই দুই থিমেই গাঢ় (ডার্কে #000, লাইটে #191c22)।
-        ⚠️ এর উপরের লেখা তাই `text-white`, `text-on-ink` নয় — ফিল্ডটা
-           কখনো হালকা হয় না, তাই উল্টে যাওয়ার কিছু নেই।
-
-        ⚠️ E12 — `flex-wrap` **রাখা হয়েছে**: ফোনে নাম-ভূমিকার ব্লক আর
-           দুটো বোতাম দরকার হলে নিজের সারিতে নামে। লম্বা নামে ৩৭৫px-এ
-           সবকিছু এক সারিতে চেপে গিয়ে অপঠ্য হতো।
-           ⭐ এখানে একসময় গ্লোবাল সার্চের বাক্সও ছিল (E14) — মালিকের
-           পছন্দ হয়নি বলে সরানো হয়েছে; কম্পোনেন্টটা `GlobalSearch.tsx`-এ
-           আছে, কোথাও বসানো নেই ([G127](../../../docs/08-Gap-Analysis.md))।
-      */}
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 bg-chrome px-4 py-2.5 text-white">
-        <div className="flex items-center gap-2.5">
-          <BrandMark />
-          <div className="leading-tight">
-            <Wordmark className="text-[15px]" />
-            <div className="text-[11px] text-white/55">Workforce Monitor</div>
-          </div>
-        </div>
-
-        {/*
-          ⭐ মকআপ ক-এর উপরের বারে **ঢাকার তারিখ ও ঘড়ি**, লোগোর পাশেই।
-
-          ⚠️⚠️ ঘড়িটা **ঢাকার**, ব্রাউজারের নয় — গোটা অ্যাপের প্রতিটা সংখ্যা
-          ঢাকার কর্মদিবস ধরে, তাই এখানে স্থানীয় সময় দেখালে বিদেশ থেকে
-          দেখা কারো কাছে বার আর কার্ড দুটো আলাদা দিনের কথা বলত।
-
-          ⚠️ `LIVE` ব্যাজ ও Refresh/Reports বোতাম এখানে **আনা হয়নি**,
-          যদিও মকআপে ওগুলোও এই সারিতে। কারণ এই বারটা **সব পাতায়** থাকে,
-          আর ওই তিনটে জিনিস কেবল Live Board-এর: Settings বা Reports
-          পাতায় বসে "LIVE" জ্বললে সেটা এমন একটা তাজা-ভাব দাবি করত যা
-          ওই পাতার নেই। তাই ওগুলো বোর্ডের নিজের শিরোনামেই থাকল।
-
-          ⚠️ ফোনে লুকানো (`hidden sm:block`) — ৩৭৫px-এ নাম, ভূমিকা, থিম
-          আর সাইন-আউট এমনিতেই সারিটা ভরে ফেলে।
-        */}
-        <div className="hidden text-[11.5px] text-white/55 sm:block">
-          Dhaka · <span className="num">{dhakaStamp()}</span>
-        </div>
-
-        {/*
-          ⭐⭐ **পাতার নিজস্ব জিনিস উপরের বারে বসানোর ঘর** — মকআপ ক-এ
-          `LIVE` ব্যাজ ও বোতামগুলো এই সারিতেই ছিল।
-
-          ⚠️⚠️ ঘরটা **খালি**, আর ভরে দেয় পাতা নিজে (`TOPBAR_SLOT_ID`-তে
-          portal করে)। এটাই একমাত্র উপায় যাতে মকআপের বিন্যাসটা পাওয়া যায়
-          অথচ বারটা মিথ্যা না বলে: বারটা **সব পাতায়** থাকে, তাই এখানে
-          সরাসরি `LIVE` লিখে দিলে Settings বা Reports পাতায় বসেও সবুজ
-          বিন্দু জ্বলত — এমন একটা তাজা-ভাব দাবি করত যা ওই পাতার নেই।
-
-          ⭐ Live Board ছাড়া অন্য পাতায় কেউ কিছু বসায় না, তাই ঘরটা তখন
-          শূন্য প্রস্থ নেয় — কোনো ফাঁকা জায়গাও দেখা যায় না।
-        */}
-        <div id={TOPBAR_SLOT_ID} className="flex items-center gap-2" />
-
-        <div className="ml-auto flex items-center gap-3">
-          <div className="text-right leading-tight">
-            <div className="text-[12.5px] font-medium">{user?.fullName}</div>
-            <div className="text-[11px] text-white/55">
-              {user ? (ROLE_LABEL[user.role] ?? user.role) : ''}
-            </div>
-          </div>
-          <ThemeToggle />
-          <button
-            type="button"
-            onClick={() => void signOut()}
-            // ⚠️ `tap` — ফোনে ৪৪px (`index.css`)। ছিল ~২৯px, আর টপবারের
-            //    ডান কোণায় থিম-টগলের গা ঘেঁষে — ভুল চাপে লগআউট হয়ে যেত।
-            className="tap rounded-md border border-white/20 px-2.5 py-1.5 text-xs text-white/85 transition hover:border-brand hover:text-white"
-          >
-            Sign out
-          </button>
-        </div>
-      </header>
-
-      {/* ⚠️ E12 — ফোনে সারিটা নিজেই আড়াআড়ি স্ক্রল করে, পুরো পাতা নয় */}
-      {/*
-        ⚠️ `overflow-y-hidden` — `Tabs.tsx`-এর সাথে একই কারণে। Tailwind-এর
-           `overflow-x-auto` দুই অক্ষেই `auto` বসায়, আর ভেতরের লিঙ্ক এক
-           পিক্সেল উঁচু হলেই Windows-এ তীরসহ উল্লম্ব scrollbar বেরিয়ে আসে।
-           এখানে আজ বার নেই, কিন্তু ফাঁদটা হুবহু এক — একই সারিতে একটা লিঙ্ক
-           যোগ হলেই ফিরে আসত।
-      */}
-      <nav className="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-line bg-surface px-2 lg:hidden">
-        {nav.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            // ⚠️ `tap` — ফোনে ৪৪px (`index.css`)। এটাই অ্যাপের প্রধান
-            //    নেভিগেশন, অর্থাৎ ফোনে সবচেয়ে বেশি ছোঁয়া জিনিস।
-            className={({ isActive }) =>
-              `tap whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] transition ${
-                isActive
-                  ? 'border-brand font-semibold text-brand-ink'
-                  : 'border-transparent text-ink-2 hover:text-ink'
-              }`
-            }
-          >
-            {item.label}
-          </NavLink>
-        ))}
-      </nav>
-
-      <div className="flex min-h-0 flex-1">
-        {/*
-          ⭐⭐ **সাইডবার — শুধু `lg`-এর উপরে।**
-
-          ⚠️ উপরের আড়াআড়ি সারিটা মুছে ফেলা হয়নি, `lg:hidden` করা হয়েছে —
-             ফোনে ওটাই থাকে। কারণ সরু পর্দায় সাইডবার মানে হয় সবসময় খোলা
-             (তখন কনটেন্টের জন্য ২০০px কমে যেত), নয় একটা drawer (নতুন
-             অবস্থা, নতুন বোতাম, নতুন ফাঁদ)। দুটোর কোনোটাই ফোনে ভালো নয়,
-             আর ওখানে আড়াআড়ি সারিটা ইতিমধ্যেই কাজ করে ও ছোঁয়ার মাপ ঠিক
-             (G124)। এক জিনিস দু-জায়গায় দু-রকম হওয়াই এখানে সঠিক উত্তর।
-
-          ⚠️ `min-h-0` না দিলে flex সন্তান নিজের কনটেন্টের চেয়ে ছোট হতে
-             পারত না, আর লম্বা টেবিলে সাইডবারটা পর্দার সাথে না থেকে
-             পাতার সাথে লম্বা হয়ে যেত।
-        */}
-        <nav
-          aria-label="Sections"
-          className="hidden w-44 shrink-0 border-r border-line bg-surface p-2 lg:block"
-        >
+    <div className="studio-shell">
+      <aside className="studio-sidebar">
+        <div className="studio-brand"><Wordmark /><small>Workforce<br />Monitor</small></div>
+        <nav className="studio-nav" aria-label="Sections">
+          <div className="studio-nav-label">Workspace</div>
           {nav.map((item) => (
             <div key={item.to}>
-              {/* ⭐ মকআপের `.side .grp` — ৮.৫px, বড় হাতের, ফাঁকা-অক্ষরে */}
-              {item.section && (
-                <div className="mt-3 mb-1 px-2.5 text-[9px] tracking-[0.1em] text-ink-3 uppercase">
-                  {item.section}
-                </div>
-              )}
-              <NavLink
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) =>
-                  `mb-0.5 flex items-center justify-between gap-2 rounded-md py-2 text-[13px] transition ${
-                    // ⚠️ ভেতরের আইটেম ডানে সরে, আর বাঁয়ে একটা সরু রেখা —
-                    //    রেখাটাই বলে দেয় ওরা উপরের শিরোনামের অধীনে
-                    item.child
-                      ? 'ml-2.5 border-l border-line pr-2.5 pl-3'
-                      : 'px-2.5'
-                  } ${
-                    isActive
-                      ? 'bg-ok/10 font-semibold text-ok-ink'
-                      : 'text-ink-2 hover:bg-paper hover:text-ink'
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                {/*
-                  ⭐ মকআপ ক-এর বিন্দু। ⚠️ এটা **সাজসজ্জা নয়, প্রান্তিককরণ**:
-                     বিন্দুগুলো এক খাড়া রেখায় বসে বলে চোখ তালিকাটা এক নজরে
-                     পড়তে পারে, আর সক্রিয় আইটেমটা রং বদলালে সেটা লেখার
-                     আগেই ধরা পড়ে।
-                  ⚠️ `aria-hidden` — স্ক্রিন রিডারের কাছে বিন্দুটার কোনো
-                     মানে নেই, নামটাই যথেষ্ট।
-                */}
-                <span className="flex min-w-0 items-center gap-2">
-                  <span
-                    aria-hidden
-                    className={`size-1.5 shrink-0 rounded-full ${
-                      isActive ? 'bg-ok' : 'bg-ink-3/45'
-                    }`}
-                  />
-                  <span className="truncate">{item.label}</span>
-                </span>
-                {/*
-                  ⚠️ `> 0` — শূন্য হলে ব্যাজ **বসেই না**। "0" লেখা একটা ব্যাজ
-                     চোখ টানে ঠিক যতটা "3" লেখাটা টানে, অথচ বলার মতো কিছু নেই।
-                  ⭐ রংটা **লাল**, মকআপের মতোই। ⚠️ এটা বোর্ডের "একটাই লাল
-                     টাইল" নিয়মের বিরুদ্ধে নয় — ওই নিয়ম **এক পর্দার ভেতরের**
-                     KPI সারির, আর নেভ প্রতিটা পাতায় থাকে। এখানে সংখ্যাটার
-                     একমাত্র কাজই হলো "অ্যালার্ট পাতায় যান" বলা; নিরপেক্ষ
-                     রঙে সেটা আর কারো চোখেই পড়ত না।
-                */}
+              {item.section && <div className="studio-nav-label">{item.section}</div>}
+              <NavLink to={item.to} end={item.end} className="studio-nav-link">
+                <span className="studio-nav-name"><span className="studio-nav-dot" aria-hidden />{item.label}</span>
                 {item.badge != null && item.badge > 0 && (
-                      <span className="num rounded-full bg-brand-bg px-1.5 py-px text-[10.5px] font-semibold text-brand-ink">
-                        {item.badge}
-                      </span>
-                    )}
-                  </>
+                  <span className="num rounded-full bg-brand-bg px-1.5 text-xs text-brand-ink">{item.badge}</span>
                 )}
               </NavLink>
             </div>
           ))}
         </nav>
-
-        {/*
-          ⚠️ `min-w-0` — flex সন্তানের ডিফল্ট `min-width: auto`, অর্থাৎ সে
-             নিজের সবচেয়ে চওড়া কনটেন্টের চেয়ে ছোট হতে চায় না। এটা না দিলে
-             একটা চওড়া টেবিল পুরো লেআউটটাকে ঠেলে বড় করে দিত আর গোটা পাতা
-             আড়াআড়ি স্ক্রল করত — ঠিক যেটা টেবিলের নিজের ফ্রেমে স্ক্রল
-             করানোর পুরো উদ্দেশ্য ছিল ঠেকানো।
-        */}
-        <main className="min-w-0 flex-1 px-4 py-5">
-          {/*
-            ⭐ ভেতরে, বাইরে নয় — কোনো পেজ render-এ ছুড়ে ফেললেও হেডার ও নেভ
-               টিকে থাকে, তাই ব্যবহারকারী অন্য ট্যাবে সরে যেতে পারে। বাইরে
-               বসালে পুরো পর্দা একটা এরর বাক্স হয়ে যেত আর বেরোনোর কোনো পথ
-               থাকত না। `resetKey` রুট — পাতা বদলালেই নিজে থেকে সেরে ওঠে।
-          */}
-          <ErrorBoundary resetKey={pathname}>
-            <Outlet />
-          </ErrorBoundary>
+        <div className="studio-user">
+          <span className="studio-avatar" aria-hidden>{initials}</span>
+          <div className="min-w-0 text-xs"><div>{user?.fullName}</div><div className="mt-1 text-ink-2">{user ? ROLE_LABEL[user.role] : ''}</div></div>
+        </div>
+      </aside>
+      <div className="studio-workspace">
+        <header className="studio-topbar">
+          <div><span className="text-ink-2">Workspace / </span><span>{currentPage}</span></div>
+          <div className="studio-topbar-actions">
+            <span className="studio-topbar-time text-ink-2">Dhaka · {dhakaStamp()}</span>
+            <ThemeToggle />
+            <button type="button" onClick={() => void signOut()} className="tap px-3 py-1.5 text-xs">Sign out</button>
+          </div>
+        </header>
+        <nav className="studio-mobile-nav" aria-label="Mobile sections">
+          {nav.map((item) => (
+            <NavLink key={item.to} to={item.to} end={item.end} className="studio-nav-link">
+              {item.label}
+              {item.badge != null && item.badge > 0 && <span className="num text-brand-ink">{item.badge}</span>}
+            </NavLink>
+          ))}
+        </nav>
+        <main className="studio-main">
+          <ErrorBoundary resetKey={pathname}><Outlet /></ErrorBoundary>
         </main>
       </div>
     </div>
