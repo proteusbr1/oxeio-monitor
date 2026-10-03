@@ -1,0 +1,59 @@
+# Caddyfile do oXeio atras do Traefik do Coolify (usado por coolify/web.Dockerfile no lugar de web/Caddyfile).
+# O Traefik descarta X-Forwarded-For de fora e grava nele o IP de quem conectou.
+# Se quem conectou foi a Cloudflare, o cliente real vem em CF-Connecting-IP;
+# senao (acesso direto a origem), vale o proprio X-Forwarded-For.
+# Faixas da Cloudflare: mesma lista do mu-plugin das lojas (atualizar junto).
+{
+	order rate_limit before reverse_proxy
+	servers {
+		trusted_proxies static private_ranges
+		client_ip_headers X-Forwarded-For
+	}
+}
+
+:8080 {
+	root * /srv
+	encode gzip
+
+	@viacf client_ip 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+	@direto not client_ip 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+	vars @viacf ip_real {header.CF-Connecting-IP}
+	vars @direto ip_real {client_ip}
+
+	handle /api/* {
+		rate_limit {
+			zone login {
+				match {
+					method POST
+					path /api/v1/auth/login
+				}
+				key {vars.ip_real}
+				events 30
+				window 1m
+			}
+		}
+		reverse_proxy api:3000 {
+			header_up X-Forwarded-For {vars.ip_real}
+		}
+	}
+
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+
+	request_body {
+		max_size 25MB
+	}
+
+	header {
+		?Cache-Control "no-cache"
+		-Server
+	}
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	@sw path /sw.js
+	header @sw Cache-Control "no-cache, no-store, must-revalidate"
+	@manifest path /manifest.webmanifest
+	header @manifest Content-Type "application/manifest+json"
+}
