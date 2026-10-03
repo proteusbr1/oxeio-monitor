@@ -226,6 +226,7 @@ internal static class SyncWire
         public int? QueueDepth { get; init; }
         public string? ConfigVersion { get; init; }
         public string? AgentVersion { get; init; }
+        public IReadOnlyDictionary<string, string>? Capabilities { get; init; }
     }
 
     internal static HeartbeatDto Heartbeat(HeartbeatRequest request) => new()
@@ -240,6 +241,7 @@ internal static class SyncWire
         QueueDepth = request.QueueDepth is { } d ? Math.Max(0, d) : null,
         ConfigVersion = request.ConfigVersion,
         AgentVersion = request.AgentVersion,
+        Capabilities = request.Capabilities,
     };
 
     internal sealed record EnrollDto

@@ -196,7 +196,17 @@ function FleetTable({ groups }: { groups: FleetGroup[] }) {
                প্রতি সারিতে একই কথা আবার বসালে সেটা তথ্য নয়, গোলমাল।
           */
           render: (r) =>
-            r.quiet ? <Chip tone="attention">Quiet</Chip> : null,
+            r.quiet || r.issues.length > 0 ? (
+              <span className="inline-flex flex-wrap justify-end gap-1">
+                {r.quiet && <Chip tone="attention">Quiet</Chip>}
+                {/* the agent's own report — see capabilityIssues() */}
+                {r.issues.map((issue) => (
+                  <Chip key={issue} tone="attention">
+                    {issue}
+                  </Chip>
+                ))}
+              </span>
+            ) : null,
         },
       ]}
     />

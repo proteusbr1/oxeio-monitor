@@ -128,6 +128,13 @@ public sealed record HeartbeatRequest
     /// বারবার অফার করা হতো ([G59](../../../../docs/08-Gap-Analysis.md))।
     /// </summary>
     public string? AgentVersion { get; init; }
+
+    /// <summary>
+    /// One state per part of the agent (<see cref="CapabilityReport"/>), e.g.
+    /// <c>{ "browserDomain": "degraded" }</c>. A server older than the field
+    /// ignores it.
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? Capabilities { get; init; }
 }
 
 public sealed record HeartbeatResponse
