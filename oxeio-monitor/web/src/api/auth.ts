@@ -56,6 +56,18 @@ export function me(): Promise<Me> {
   return api('/auth/me', { silent401: true });
 }
 
+export interface CurrencyInfo {
+  /** ISO 4217, e.g. `BDT` */
+  code: string;
+  /** e.g. `৳`, `R$` */
+  symbol: string;
+}
+
+/** The currency salaries and deposits are in. Public, like `session-policy`. */
+export function fetchCurrency(signal?: AbortSignal): Promise<CurrencyInfo> {
+  return api('/auth/currency', { silent401: true, signal });
+}
+
 export function logout(): Promise<void> {
   return api('/auth/logout', { method: 'POST' });
 }

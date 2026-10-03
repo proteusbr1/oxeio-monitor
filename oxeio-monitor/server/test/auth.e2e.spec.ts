@@ -37,6 +37,11 @@ describe('পাবলিক রুট', () => {
 });
 
 describe('লগইন ছাড়া সুরক্ষিত রুট', () => {
+  it('GET /auth/currency is public and defaults to BDT', async () => {
+    const res = await h.http().get('/api/v1/auth/currency').expect(200);
+    expect(res.body).toEqual({ code: 'BDT', symbol: '৳' });
+  });
+
   it('GET /auth/me → 401', async () => {
     await h.http().get('/api/v1/auth/me').expect(401);
   });

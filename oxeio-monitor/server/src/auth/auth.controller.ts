@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 
+import { CURRENCY, type CurrencyInfo } from '../payroll/currency';
 import { IDLE_WARN_BEFORE_SEC, SESSION_TTL_MIN } from './auth.constants';
 import { AuthService, type MeResult } from './auth.service';
 import { AllowWhileMustChangePw, CurrentUser, Public } from './decorators';
@@ -103,6 +104,17 @@ export class AuthController {
       idleTimeoutSec: SESSION_TTL_MIN * 60,
       warnBeforeSec: IDLE_WARN_BEFORE_SEC,
     };
+  }
+
+  /**
+   * The currency amounts are in, so the dashboard puts the right symbol in
+   * front of them. Same reasoning as `session-policy`: a symbol hardcoded in
+   * the frontend would be wrong for any deployment that changes `CURRENCY`.
+   */
+  @Public()
+  @Get('currency')
+  currency(): CurrencyInfo {
+    return CURRENCY;
   }
 
   @AllowWhileMustChangePw()
