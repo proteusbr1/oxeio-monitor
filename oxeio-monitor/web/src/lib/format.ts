@@ -261,6 +261,19 @@ export function formatDate(date: string): string {
 }
 
 /** `'2026-08-10'` → `'10 Aug'` — টেবিলের সরু কলামে */
+/**
+ * `'2026-10-03'` → `'3 Oct 2026'` — the top bar's date. With a display
+ * locale, the same numeric form as `formatDate` (`03/10/2026`).
+ */
+export function formatDateMedium(date: string): string {
+  const parsed = parseWorkDate(date);
+  if (!parsed) return date;
+  if (displayLocale !== null) {
+    return localeDate(parsed, { day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+  return `${parsed.getUTCDate()} ${MONTHS_SHORT[parsed.getUTCMonth()]} ${parsed.getUTCFullYear()}`;
+}
+
 export function formatDateShort(date: string): string {
   const parsed = parseWorkDate(date);
   if (!parsed) return date;

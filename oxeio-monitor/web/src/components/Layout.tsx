@@ -8,6 +8,7 @@ import { Wordmark } from './Brand';
 import '../studio.css';
 import { ErrorBoundary } from './ErrorBoundary';
 import { ThemeToggle } from './ThemeToggle';
+import { formatDateMedium } from '../lib/format';
 
 /**
  * নেভের ব্যাজের তাল — বোর্ডের pulse-এর মতোই ধীরে।
@@ -273,9 +274,8 @@ const NAV: NavItem[] = [
 function dhakaStamp(): string {
   const d = new Date(Date.now() + 6 * 3600_000);
   const iso = d.toISOString();
-  const [y, m, day] = iso.slice(0, 10).split('-');
-  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return `${Number(day)} ${MONTHS[Number(m) - 1]} ${y} · ${iso.slice(11, 16)}`;
+  // through lib/format, so DISPLAY_LOCALE reaches the top bar too
+  return `${formatDateMedium(iso.slice(0, 10))} · ${iso.slice(11, 16)}`;
 }
 
 /**
