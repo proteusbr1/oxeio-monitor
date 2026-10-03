@@ -15,8 +15,14 @@ import { Card } from '../../components/Card';
 import { Button } from '../../components/Page';
 import { Empty, ErrorBox, Loading } from '../../components/States';
 import { Table, type Column } from '../../components/Table';
-import { formatDuration } from '../../lib/format';
+import {
+  formatDuration,
+  formatHours,
+  formatMonth,
+  todayInDhaka,
+} from '../../lib/format';
 import { HolidaysSection } from './HolidaysSection';
+import { targetPreview } from './policy.math';
 import {
   CheckboxField,
   Chip,
@@ -356,6 +362,14 @@ function PolicyForm({
       on ? [...prev, day].sort((a, b) => a - b) : prev.filter((d) => d !== day),
     );
 
+  const thisMonth = todayInDhaka().slice(0, 7);
+  const preview = targetPreview({
+    yearMonth: thisMonth,
+    monthlyTargetHours: Number(form.monthlyTargetHours),
+    expectedWorkdays: Number(form.expectedWorkdays),
+    offDays,
+  });
+
   const { busy, error, run } = useMutation();
   const set = (key: keyof PolicyFormState) => (value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -447,7 +461,8 @@ function PolicyForm({
           />
 
           <FullWidth>
-            <div className="mb-1 text-[12px] font-medium text-ink-2">Weekly off</div>
+            <fieldset>
+            <legend className="mb-1 text-[12px] font-medium text-ink-2">Weekly off</legend>
             <div className="flex flex-wrap gap-x-4 gap-y-1.5">
               {ISO_DAYS.map((day) => (
                 <CheckboxField
@@ -463,8 +478,34 @@ function PolicyForm({
             <p className="mt-1 text-[11.5px] leading-relaxed text-ink-3">
               None ticked = every day is a workday. This is not a block — hours
               worked on a day off still count in full.
+              {offDays.length >= 6 && ' A week keeps at least one workday, so the last day cannot be ticked.'}
             </p>
+            </fieldset>
           </FullWidth>
+
+          {/* what these numbers come to in a real month — see policy.math.ts */}
+          {preview && (
+            <FullWidth>
+              <p className="text-[11.5px] leading-relaxed text-ink-3">
+                {formatMonth(thisMonth)}: {preview.workdays} workdays with these
+                days off (before holidays) → {preview.workdays} ×{' '}
+                {formatHours(preview.dailyHours * 3600)} h ={' '}
+                <b className="text-ink-2">{formatHours(preview.monthHours * 3600)} h</b>.
+              </p>
+              {preview.mismatch && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded-md border border-idle/40 px-2.5 py-1.5 text-[12px] text-idle-ink">
+                  <span>
+                    Expected workdays is {form.expectedWorkdays}, but this month has{' '}
+                    {preview.workdays} — the target would come to{' '}
+                    {formatHours(preview.monthHours * 3600)} h, not {form.monthlyTargetHours} h.
+                  </span>
+                  <MiniButton onClick={() => set('expectedWorkdays')(String(preview.workdays))}>
+                    Use {preview.workdays}
+                  </MiniButton>
+                </div>
+              )}
+            </FullWidth>
+          )}
           <TextField
             label="Office opens"
             type="time"
