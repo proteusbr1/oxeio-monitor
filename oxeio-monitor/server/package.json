@@ -21,7 +21,8 @@
     "prisma:studio": "dotenv -e ../.env -- prisma studio",
     "seed": "dotenv -e ../.env -- tsx prisma/seed.ts",
     "check:staff": "tsx prisma/check-staff.ts",
-    "recover:owner": "dotenv -e ../.env -- tsx src/scripts/recover-owner.ts"
+    "recover:owner": "dotenv -e ../.env -- tsx src/scripts/recover-owner.ts",
+    "holidays:import": "dotenv -e ../.env -- tsx prisma/import-holidays.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

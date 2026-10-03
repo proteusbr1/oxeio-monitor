@@ -20,9 +20,8 @@ import { join } from 'node:path';
 import { hash } from '@node-rs/argon2';
 import { MatchType, PrismaClient, Productivity, UserRole } from '@prisma/client';
 
+import { resolveHolidaySet, type HolidaySet } from './holiday-sets';
 import {
-  BD_HOLIDAYS,
-  HOLIDAY_YEARS,
   dhakaToday,
   gazetteNotes,
   holidayRowName,
@@ -32,10 +31,14 @@ import {
   yearsToSeed,
 } from './holidays.data';
 import { parseStaff, shouldSeedSampleStaff, type StaffRow } from './parse-staff';
+import { seedPolicyFromEnv } from './seed-config';
 
 const prisma = new PrismaClient();
 
 // ── 1 · work policy ─────────────────────────────────────────────────────────
+
+// SEED_POLICY_* — defaults are the numbers below as they always were (seed-config.ts)
+const SEED_POLICY = seedPolicyFromEnv(process.env);
 
 async function seedWorkPolicy(): Promise<number> {
   const policy = await prisma.workPolicy.upsert({
@@ -44,9 +47,9 @@ async function seedWorkPolicy(): Promise<number> {
     create: {
       id: 1,
       name: 'Standard',
-      monthlyTargetHours: 208,
-      expectedWorkdays: 26,
-      weeklyOffDay: 5, // ISO: শুক্রবার। ⚠️ ব্লক নয় — শুক্রবারে কাজ করলেও গোনা হবে
+      monthlyTargetHours: SEED_POLICY.monthlyTargetHours, // default 208
+      expectedWorkdays: SEED_POLICY.expectedWorkdays, // default 26
+      weeklyOffDay: SEED_POLICY.weeklyOffDay, // ISO: শুক্রবার (5)। ⚠️ ব্লক নয় — শুক্রবারে কাজ করলেও গোনা হবে
       screenshotFrom: '07:00',
       screenshotTo: '23:00',
       idleThresholdSec: 60,
@@ -214,7 +217,12 @@ async function seedAppCategories(): Promise<number> {
 //    এখন তালিকাটা `holidays.data.ts`-এ, আর আনুমানিক তারিখ **আনুমানিক বলেই**
 //    যায় — নামের শেষে "(সম্ভাব্য)"। কেন এভাবে, তা ওই ফাইলের মাথায় লেখা।
 
-const HOLIDAY_SEED_KEY = 'seed.holidays';
+/**
+ * SEED_COUNTRY (default BD) — which list to write; `none` writes nothing
+ * (holiday-sets.ts). Resolved once, up front: an unknown country stops the
+ * seed before anything is written.
+ */
+const HOLIDAY_SET: HolidaySet | null = resolveHolidaySet(process.env);
 
 /**
  * ⭐⭐ **চলতি ও অতীত মাসে ছুটি বসানোর স্পষ্ট সম্মতি।**
@@ -238,9 +246,9 @@ interface HolidaySeedState {
   years?: number[];
 }
 
-async function loadSeededYears(): Promise<number[]> {
+async function loadSeededYears(settingKey: string): Promise<number[]> {
   const row = await prisma.setting.findUnique({
-    where: { key: HOLIDAY_SEED_KEY },
+    where: { key: settingKey },
     select: { value: true },
   });
   if (!row || typeof row.value !== 'object' || row.value === null) return [];
@@ -271,14 +279,23 @@ async function seedHolidays(): Promise<{
   standing: string[];
   notes: string[];
 }> {
-  const problems = validateHolidays(BD_HOLIDAYS);
+  if (HOLIDAY_SET === null) {
+    return {
+      summary: 'skipped (SEED_COUNTRY=none) — add them in Settings → Holidays or with prisma/import-holidays.ts',
+      standing: [],
+      notes: [],
+    };
+  }
+  const { entries, years: allYears, pending, settingKey } = HOLIDAY_SET;
+
+  const problems = validateHolidays(entries);
   if (problems.length > 0) {
     // ⚠️ থামানো হয়, কারণ ভুল তারিখ সরাসরি কর্মদিবসের হিসাবে ঢোকে
     throw new Error(`ছুটির তালিকায় ভুল:\n  - ${problems.join('\n  - ')}`);
   }
 
-  const seeded = await loadSeededYears();
-  const years = yearsToSeed(HOLIDAY_YEARS, seeded);
+  const seeded = await loadSeededYears(settingKey);
+  const years = yearsToSeed(allYears, seeded);
 
   // ⚠️ DB **প্রতিবারই** পড়া হয়, বছর বাকি থাক বা না থাক — নইলে বলার মতো
   //    কিছু আছে কি না সেটাই জানা যেত না।
@@ -288,7 +305,7 @@ async function seedHolidays(): Promise<{
 
   // ⭐ পরিকল্পনা হয় **পুরো তালিকার** উপর; `years` শুধু ঠিক করে কী বসবে
   const run = planHolidaySeedRun(
-    BD_HOLIDAYS,
+    entries,
     rows.map((row) => ({
       date: row.holidayDate.toISOString().slice(0, 10),
       name: row.name,
@@ -323,9 +340,9 @@ async function seedHolidays(): Promise<{
   const settledYears = yearsSettled(years, run.needsConsent);
   if (settledYears.length > 0) {
     await prisma.setting.upsert({
-      where: { key: HOLIDAY_SEED_KEY },
+      where: { key: settingKey },
       create: {
-        key: HOLIDAY_SEED_KEY,
+        key: settingKey,
         value: { years: [...seeded, ...settledYears] },
       },
       update: { value: { years: [...seeded, ...settledYears] } },
@@ -374,7 +391,7 @@ async function seedHolidays(): Promise<{
   return {
     summary: parts.join(' · '),
     // ⚠️ তালিকা সম্পর্কে **স্থায়ী** কথা — এই রান কী করল, তার সাথে গুলিয়ে নয়
-    standing: gazetteNotes(BD_HOLIDAYS),
+    standing: gazetteNotes(entries, pending),
     notes: run.notes,
   };
 }
@@ -537,7 +554,9 @@ async function main(): Promise<void> {
   const ownerEmail = await seedOwner();
 
   console.log('✅ seed সম্পূর্ণ');
-  console.log(`   work policy   : #${policyId} · ২০৮ ঘণ্টা/মাস · ছবি ০৭:০০–২৩:০০`);
+  console.log(
+    `   work policy   : #${policyId} · ${SEED_POLICY.monthlyTargetHours.toLocaleString('bn-BD')} ঘণ্টা/মাস · ছবি ০৭:০০–২৩:০০`,
+  );
   console.log(`   app categories: ${rules}টি রুল`);
   console.log(`   holidays      : ${holidays.summary}`);
   console.log(
