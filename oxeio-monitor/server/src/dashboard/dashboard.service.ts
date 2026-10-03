@@ -445,7 +445,7 @@ export class DashboardService {
           //    tray ও এই কার্ডের মধ্যে ফারাকের আসল কারণ।
           select: {
             monthlyTargetHours: true,
-            weeklyOffDay: true,
+            weeklyOffDays: true,
             expectedWorkdays: true,
             // ⭐ ডিজাইনারের দৈনিক টার্গেট (২১ আগস্ট) — ঘণ্টার পাশে
             dailyDesignTarget: true,
@@ -615,7 +615,7 @@ export class DashboardService {
 
       // ⚠️ নীতি আলাদা হলে সাপ্তাহিক ছুটির বারও আলাদা, তাই কর্মদিবস
       //    কর্মীপ্রতি গোনা হয় — সবার জন্য একটাই সংখ্যা ধরে নেওয়া যায় না।
-      const rule = { weeklyOffDay: e.policy?.weeklyOffDay ?? null, holidays };
+      const rule = { weeklyOffDays: e.policy?.weeklyOffDays ?? [], holidays };
 
       /**
        * ⭐⭐ **টার্গেট এখানে নতুন করে গোনা হয় না — `prorate()` ডাকা হয়**,
@@ -636,7 +636,7 @@ export class DashboardService {
         monthEnd: monthLast,
         joinedOn: e.joinedOn,
         leftOn: e.leftOn,
-        weeklyOffDay: rule.weeklyOffDay,
+        weeklyOffDays: rule.weeklyOffDays,
         holidays,
         monthlyTargetSec: targetHours * HOUR,
         policyWorkdays: e.policy?.expectedWorkdays ?? DEFAULT_POLICY_WORKDAYS,
@@ -786,7 +786,7 @@ export class DashboardService {
          */
         joinedOn: true,
         leftOn: true,
-        policy: { select: { weeklyOffDay: true } },
+        policy: { select: { weeklyOffDays: true } },
       },
     });
     const nameOf = new Map(active.map((e) => [e.id, e.fullName]));
@@ -929,7 +929,7 @@ export class DashboardService {
       .filter((e) => dailyTargetOf.has(e.id))
       .map((e) => ({
         employeeId: e.id,
-        weeklyOffDay: e.policy?.weeklyOffDay ?? null,
+        weeklyOffDays: e.policy?.weeklyOffDays ?? [],
         joinedOn: e.joinedOn,
         leftOn: e.leftOn,
         /**
@@ -1225,7 +1225,7 @@ function sumByEmployee(
 export interface TrendStaff {
   employeeId: number;
   /** ISO দিন (শুক্র = ৫)। `null` = প্রতিটি ক্যালেন্ডার দিনই কর্মদিবস। */
-  weeklyOffDay: number | null;
+  weeklyOffDays: readonly number[];
   joinedOn: Date | null;
   leftOn: Date | null;
   /**
@@ -1312,5 +1312,5 @@ function isExpectedOn(
   if (s.joinedOn !== null && ms < s.joinedOn.getTime()) return false;
   if (s.leftOn !== null && ms > s.leftOn.getTime()) return false;
 
-  return isWorkday(day, { weeklyOffDay: s.weeklyOffDay, holidays });
+  return isWorkday(day, { weeklyOffDays: s.weeklyOffDays, holidays });
 }

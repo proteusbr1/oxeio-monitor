@@ -23,7 +23,7 @@ import {
 const NOW = new Date('2026-08-11T06:00:00.000Z');
 
 /** শুক্রবার ছুটি, কোনো সরকারি ছুটি নেই */
-const FRIDAY_OFF: WorkdayRule = { weeklyOffDay: 5, holidays: new Set() };
+const FRIDAY_OFF: WorkdayRule = { weeklyOffDays: [5], holidays: new Set() };
 
 const day = (iso: string): Date => parseWorkDate(iso);
 
@@ -145,14 +145,14 @@ describe('কর্মদিবস ও টার্গেট (§ ২.১-খ)', 
 
   it('ছুটির ক্যালেন্ডারের দিনও কর্মদিবস নয়', () => {
     const rule: WorkdayRule = {
-      weeklyOffDay: 5,
+      weeklyOffDays: [5],
       holidays: new Set([day('2026-08-13').getTime()]),
     };
     expect(isWorkday(day('2026-08-13'), rule)).toBe(false);
   });
 
   it('weeklyOffDay = null হলে প্রতিটি ক্যালেন্ডার দিনই কর্মদিবস', () => {
-    const rule: WorkdayRule = { weeklyOffDay: null, holidays: new Set() };
+    const rule: WorkdayRule = { weeklyOffDays: [], holidays: new Set() };
     expect(countWorkdays(day('2026-08-01'), day('2026-08-31'), rule)).toBe(31);
   });
 
@@ -223,13 +223,13 @@ describe('মাস ও বালতি', () => {
    * দেখত না।
    */
   it('সপ্তাহ শুরু হয় সাপ্তাহিক ছুটির পরের দিনে', () => {
-    expect(weekStartIsoDay(5)).toBe(6); // শুক্র ছুটি → শনিবার শুরু
-    expect(weekStartIsoDay(7)).toBe(1); // রবি ছুটি → সোমবার শুরু
-    expect(weekStartIsoDay(null)).toBe(1);
+    expect(weekStartIsoDay([5])).toBe(6); // শুক্র ছুটি → শনিবার শুরু
+    expect(weekStartIsoDay([7])).toBe(1); // রবি ছুটি → সোমবার শুরু
+    expect(weekStartIsoDay([])).toBe(1);
   });
 
   it('সপ্তাহের বালতি শনিবার শুরু হয়ে শুক্রবারে শেষ', () => {
-    const b = bucketOf(day('2026-08-11'), 'week', weekStartIsoDay(5));
+    const b = bucketOf(day('2026-08-11'), 'week', weekStartIsoDay([5]));
 
     expect(b.key).toBe('2026-08-08'); // শনিবার
     expect(toIsoDate(b.start)).toBe('2026-08-08');
@@ -238,7 +238,7 @@ describe('মাস ও বালতি', () => {
   });
 
   it('একই সপ্তাহের সব দিন একই চাবিতে পড়ে, পরের দিনটি নতুন চাবিতে', () => {
-    const start = weekStartIsoDay(5);
+    const start = weekStartIsoDay([5]);
     for (const iso of ['2026-08-08', '2026-08-11', '2026-08-14']) {
       expect(bucketOf(day(iso), 'week', start).key).toBe('2026-08-08');
     }
@@ -253,7 +253,7 @@ describe('মাস ও বালতি', () => {
   });
 
   it('সপ্তাহের বালতি মাস পেরিয়ে গেলেও অটুট থাকে', () => {
-    const b = bucketOf(day('2026-09-01'), 'week', weekStartIsoDay(5));
+    const b = bucketOf(day('2026-09-01'), 'week', weekStartIsoDay([5]));
     expect(b.key).toBe('2026-08-29');
     expect(toIsoDate(b.end)).toBe('2026-09-04');
   });

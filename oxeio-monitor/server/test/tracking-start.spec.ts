@@ -56,7 +56,7 @@ const BASE: ElapsedInput = {
   today: day('2026-08-20'),
   joinedOn: null,
   leftOn: null,
-  weeklyOffDay: FRIDAY_OFF,
+  weeklyOffDays: [FRIDAY_OFF],
   holidays: NO_HOLIDAYS,
 };
 

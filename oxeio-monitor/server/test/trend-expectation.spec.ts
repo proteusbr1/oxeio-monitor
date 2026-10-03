@@ -30,7 +30,7 @@ const day = (iso: string): Date => new Date(`${iso}T00:00:00.000Z`);
 function staff(over: Partial<TrendStaff> = {}): TrendStaff {
   return {
     employeeId: 1,
-    weeklyOffDay: 5,
+    weeklyOffDays: [5],
     joinedOn: null,
     leftOn: null,
     trackedFrom: day('2026-07-01'),
@@ -65,7 +65,7 @@ describe('trendDayExpectation — ⚠️⚠️ ছুটির দিনে ক�
   });
 
   it('⚠️ `weeklyOffDay: null` মানে প্রতিটি দিনই কর্মদিবস (schema-র নিয়ম)', () => {
-    const everyDay = staff({ weeklyOffDay: null });
+    const everyDay = staff({ weeklyOffDays: [] });
 
     expect(
       trendDayExpectation(day('2026-08-14'), [everyDay], NO_HOLIDAYS)
@@ -127,10 +127,10 @@ describe('trendDayExpectation — কর্মকালের বাইরে �
 describe('trendDayExpectation — দল', () => {
   it('⭐ কর্মীভেদে ছুটির বার আলাদা — যোগফলটাই দলের টার্গেট', () => {
     // শুক্রবার ১৪ আগস্ট: প্রথমজনের ছুটি, দ্বিতীয়জনের নয়
-    const friday = staff({ employeeId: 1, weeklyOffDay: 5 });
+    const friday = staff({ employeeId: 1, weeklyOffDays: [5] });
     const sunday = staff({
       employeeId: 2,
-      weeklyOffDay: 7,
+      weeklyOffDays: [7],
       dailyTargetSec: 6 * 3600,
     });
 
@@ -179,7 +179,7 @@ describe('⭐⭐ ফিতে ও মাসের কার্ড এক নি�
       joinedOn: s.joinedOn,
       leftOn: s.leftOn,
       trackingStartedOn: s.trackedFrom,
-      weeklyOffDay: s.weeklyOffDay,
+      weeklyOffDays: s.weeklyOffDays,
       holidays,
     }) === 1;
 

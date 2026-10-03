@@ -42,7 +42,7 @@ export class NoActivityCheck {
           fullName: true,
           joinedOn: true,
           leftOn: true,
-          policy: { select: { weeklyOffDay: true } },
+          policy: { select: { weeklyOffDays: true } },
         },
       }),
       this.prisma.holiday.findUnique({
@@ -82,7 +82,7 @@ export class NoActivityCheck {
       .filter((e) =>
         shouldFlagNoActivity({
           workedSegments: workedBy.get(e.id) ?? 0,
-          weeklyOffDay: e.policy?.weeklyOffDay ?? null,
+          weeklyOffDays: e.policy?.weeklyOffDays ?? [],
           isHoliday: holiday !== null,
           onLeave: onLeave.has(e.id),
           joinedOn: e.joinedOn,

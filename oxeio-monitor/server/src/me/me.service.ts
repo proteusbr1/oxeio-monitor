@@ -229,7 +229,7 @@ export class MeService {
       }),
       this.prisma.employee.findUnique({
         where: { id: employeeId },
-        select: { policy: { select: { weeklyOffDay: true } } },
+        select: { policy: { select: { weeklyOffDays: true } } },
       }),
       this.prisma.holiday.findMany({
         where: { holidayDate: { gte: first, lte: last } },
@@ -244,7 +244,7 @@ export class MeService {
       adjustments.map((a) => [a.workDate.getTime(), a._sum.deltaSec ?? 0]),
     );
     const holidays = new Set(holidayRows.map((h) => h.holidayDate.getTime()));
-    const off = employee?.policy?.weeklyOffDay ?? null;
+    const off = employee?.policy?.weeklyOffDays ?? [];
 
     const rows: MyDay[] = [];
 

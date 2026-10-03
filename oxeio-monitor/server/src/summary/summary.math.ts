@@ -14,6 +14,7 @@ import { resolve, sep } from 'node:path';
 import type { DayType, SegmentState } from '@prisma/client';
 
 import { dhakaPathParts, workDateOf } from '../agent/util/dhaka-time';
+import { isOffWeekday } from './weekly-off';
 
 const MS_PER_DAY = 86_400_000;
 const SEC_PER_HOUR = 3600;
@@ -288,11 +289,11 @@ export function isoWeekday(workDate: Date): number {
 /** § ২.১-খ — সাপ্তাহিক ছুটি নয়, আর holidays টেবিলেও নেই। */
 export function isWorkday(
   workDate: Date,
-  weeklyOffDay: number | null,
+  weeklyOffDays: readonly number[],
   holidays: ReadonlySet<number>,
 ): boolean {
   // null = প্রতিটি ক্যালেন্ডার দিনই কর্মদিবস (schema-র নিয়ম)
-  if (weeklyOffDay !== null && isoWeekday(workDate) === weeklyOffDay) {
+  if (isOffWeekday(isoWeekday(workDate), weeklyOffDays)) {
     return false;
   }
   // ⚠️ Prisma `@db.Date` সবসময় UTC-মধ্যরাত Date দেয়, আর `workDateOf()`-ও
@@ -304,12 +305,12 @@ export function isWorkday(
 export function countWorkdays(
   from: Date,
   to: Date,
-  weeklyOffDay: number | null,
+  weeklyOffDays: readonly number[],
   holidays: ReadonlySet<number>,
 ): number {
   let count = 0;
   for (let t = from.getTime(); t <= to.getTime(); t += MS_PER_DAY) {
-    if (isWorkday(new Date(t), weeklyOffDay, holidays)) count++;
+    if (isWorkday(new Date(t), weeklyOffDays, holidays)) count++;
   }
   return count;
 }
@@ -412,7 +413,7 @@ export interface ElapsedWindowInput {
 }
 
 export interface ElapsedInput extends ElapsedWindowInput {
-  weeklyOffDay: number | null;
+  weeklyOffDays: readonly number[];
   holidays: ReadonlySet<number>;
 }
 
@@ -516,14 +517,14 @@ export function elapsedWorkdays(
   const days = countWorkdays(
     window.from,
     window.to,
-    input.weeklyOffDay,
+    input.weeklyOffDays,
     input.holidays,
   );
   const onLeave = countLeaveWorkdays(
     leaveDates,
     window.from,
     window.to,
-    input.weeklyOffDay,
+    input.weeklyOffDays,
     input.holidays,
   );
   // ⚠️ ঋণাত্মক নয় — জানালার সব দিনই ছুটি হলে শূন্য
@@ -574,7 +575,7 @@ export function observedWorkdays(
   let count = 0;
   for (let t = window.from.getTime(); t <= window.to.getTime(); t += MS_PER_DAY) {
     if (!observedDates.has(t)) continue;
-    if (!isWorkday(new Date(t), input.weeklyOffDay, input.holidays)) continue;
+    if (!isWorkday(new Date(t), input.weeklyOffDays, input.holidays)) continue;
     if (leaveDates?.has(t)) continue;
     count += 1;
   }
@@ -585,7 +586,7 @@ export function countLeaveWorkdays(
   leaveDates: ReadonlySet<number> | undefined,
   from: Date,
   to: Date,
-  weeklyOffDay: number | null,
+  weeklyOffDays: readonly number[],
   holidays: ReadonlySet<number>,
 ): number {
   if (!leaveDates || leaveDates.size === 0) return 0;
@@ -594,7 +595,7 @@ export function countLeaveWorkdays(
   let count = 0;
   for (const ms of leaveDates) {
     if (ms < from.getTime() || ms > to.getTime()) continue;
-    if (isWorkday(new Date(ms), weeklyOffDay, holidays)) count += 1;
+    if (isWorkday(new Date(ms), weeklyOffDays, holidays)) count += 1;
   }
   return count;
 }

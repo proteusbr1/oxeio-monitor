@@ -63,7 +63,7 @@ const MONTHS: Month[] = [
 ];
 
 const ruleOf = (holidays: ReadonlySet<number>): WorkdayRule => ({
-  weeklyOffDay: FRIDAY,
+  weeklyOffDays: [FRIDAY],
   holidays,
 });
 
@@ -180,7 +180,7 @@ describe('⭐⭐ দুই পথ এক সংখ্যা — proration বন
           monthEnd: month.end,
           joinedOn: c.joinedOn,
           leftOn: c.leftOn,
-          weeklyOffDay: FRIDAY,
+          weeklyOffDays: [FRIDAY],
           holidays: c.holidays,
           monthlyTargetSec: MONTHLY_TARGET_SEC,
           policyWorkdays: POLICY_WORKDAYS,
@@ -226,7 +226,7 @@ describe('⭐⭐ দুই পথ এক সংখ্যা — proration বন
       monthEnd: month.end,
       joinedOn: null,
       leftOn: null,
-      weeklyOffDay: FRIDAY,
+      weeklyOffDays: [FRIDAY],
       holidays,
       monthlyTargetSec,
       policyWorkdays,

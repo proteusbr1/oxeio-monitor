@@ -18,7 +18,7 @@ const SEPT: ProrationInput = {
   monthEnd: d(2026, 9, 30),
   joinedOn: null,
   leftOn: null,
-  weeklyOffDay: 5, // শুক্রবার (O11)
+  weeklyOffDays: [5], // শুক্রবার (O11)
   holidays: new Set<number>(),
   monthlyTargetSec: 208 * 3600,
   policyWorkdays: 26,

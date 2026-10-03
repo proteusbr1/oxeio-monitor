@@ -1,7 +1,9 @@
 import { DeviceStatus, RolloutStage } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
-  ValidateIf,
+  ArrayMaxSize,
+  ArrayUnique,
+  IsArray,
   IsBoolean,
   IsEmail,
   IsEnum,
@@ -16,6 +18,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 
 /**
@@ -251,8 +254,10 @@ export class CreateWorkPolicyDto {
    * ISO দিন — সোম = ১ … রবি = ৭, শুক্র = ৫।
    * ⚠️ এটা ব্লক নয়; ছুটির দিনে কাজ করলেও ঘণ্টা পুরোপুরি গোনা হয়।
    */
-  @IsOptional() @IsInt() @Min(1) @Max(7)
-  weeklyOffDay?: number | null;
+  // ISO days (Fri = 5), unique; at most 6, so a week keeps at least one workday
+  @IsOptional() @IsArray() @ArrayMaxSize(6) @ArrayUnique()
+  @IsInt({ each: true }) @Min(1, { each: true }) @Max(7, { each: true })
+  weeklyOffDays?: number[];
 
   /** ⭐ না দিলে ০৭:০০–২৩:০০ বসে — `null` করে ২৪ ঘণ্টা করা যায় না (ADR-011c) */
   @IsOptional() @Matches(HHMM, { message: "screenshotFrom must be in 'HH:MM' format" })
@@ -299,8 +304,10 @@ export class UpdateWorkPolicyDto {
   @IsOptional() @IsInt() @Min(1) @Max(31)
   expectedWorkdays?: number;
 
-  @IsOptional() @IsInt() @Min(1) @Max(7)
-  weeklyOffDay?: number | null;
+  // ISO days (Fri = 5), unique; at most 6, so a week keeps at least one workday
+  @IsOptional() @IsArray() @ArrayMaxSize(6) @ArrayUnique()
+  @IsInt({ each: true }) @Min(1, { each: true }) @Max(7, { each: true })
+  weeklyOffDays?: number[];
 
   @IsOptional() @Matches(HHMM)
   screenshotFrom?: string;

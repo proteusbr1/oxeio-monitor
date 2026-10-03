@@ -18,6 +18,7 @@ import { Table, type Column } from '../../components/Table';
 import { formatDuration } from '../../lib/format';
 import { HolidaysSection } from './HolidaysSection';
 import {
+  CheckboxField,
   Chip,
   ConfirmDialog,
   FormGrid,
@@ -26,7 +27,6 @@ import {
   Modal,
   Notice,
   RowActions,
-  SelectField,
   ServerError,
   TextField,
   useMutation,
@@ -41,17 +41,8 @@ import {
  * বদলালে কেউ এক মিনিট কাজ না করেও পিছিয়ে বা এগিয়ে যায়।
  */
 
-/** ISO দিন — সোম = ১ … রবি = ৭ (`weeklyOffDay`) */
-const OFF_DAY_OPTIONS = [
-  { value: '', label: 'None — every day is a workday' },
-  { value: '1', label: 'Monday' },
-  { value: '2', label: 'Tuesday' },
-  { value: '3', label: 'Wednesday' },
-  { value: '4', label: 'Thursday' },
-  { value: '5', label: 'Friday' },
-  { value: '6', label: 'Saturday' },
-  { value: '7', label: 'Sunday' },
-];
+/** ISO days, Monday first — the order the checkboxes are shown in */
+const ISO_DAYS = [1, 2, 3, 4, 5, 6, 7];
 
 const OFF_DAY_LABEL: Record<number, string> = {
   1: 'Mon',
@@ -124,10 +115,10 @@ function WorkPoliciesSection() {
       key: 'off',
       header: 'Weekly off',
       render: (policy) =>
-        policy.weeklyOffDay === null ? (
+        policy.weeklyOffDays.length === 0 ? (
           <span className="text-ink-3">None</span>
         ) : (
-          (OFF_DAY_LABEL[policy.weeklyOffDay] ?? String(policy.weeklyOffDay))
+          policy.weeklyOffDays.map((d) => OFF_DAY_LABEL[d] ?? String(d)).join(' + ')
         ),
     },
     {
@@ -326,7 +317,6 @@ interface PolicyFormState {
   name: string;
   monthlyTargetHours: string;
   expectedWorkdays: string;
-  weeklyOffDay: string;
   screenshotFrom: string;
   screenshotTo: string;
   officeFrom: string;
@@ -348,10 +338,6 @@ function PolicyForm({
     name: policy?.name ?? '',
     monthlyTargetHours: String(policy?.monthlyTargetHours ?? 208),
     expectedWorkdays: String(policy?.expectedWorkdays ?? 26),
-    weeklyOffDay:
-      policy?.weeklyOffDay === null || policy?.weeklyOffDay === undefined
-        ? ''
-        : String(policy.weeklyOffDay),
     screenshotFrom: policy?.screenshotFrom ?? '07:00',
     screenshotTo: policy?.screenshotTo ?? '23:00',
     // ⚠️ খালি থাকলে ৯টা–৬টা দেখানো হয়, আর সংরক্ষণে সেটাই বসে যায়।
@@ -363,6 +349,13 @@ function PolicyForm({
     slotMinutes: String(policy?.slotMinutes ?? 10),
   });
 
+  // a list, so kept apart from the all-string form state above
+  const [offDays, setOffDays] = useState<number[]>(policy?.weeklyOffDays ?? []);
+  const toggleOffDay = (day: number) => (on: boolean) =>
+    setOffDays((prev) =>
+      on ? [...prev, day].sort((a, b) => a - b) : prev.filter((d) => d !== day),
+    );
+
   const { busy, error, run } = useMutation();
   const set = (key: keyof PolicyFormState) => (value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -372,9 +365,10 @@ function PolicyForm({
       const body: WorkPolicyBody = {
         monthlyTargetHours: Number(form.monthlyTargetHours),
         expectedWorkdays: Number(form.expectedWorkdays),
-        // ⚠️ `null` = "সাপ্তাহিক ছুটি নেই" — `undefined` হলে সার্ভার মানটায়
-        //    হাতই দিত না, আর ছুটির দিন কখনো তোলা যেত না
-        weeklyOffDay: form.weeklyOffDay === '' ? null : Number(form.weeklyOffDay),
+        // ⚠️ always sent, even empty: `[]` = "no weekly day off". Leaving it
+        //    out would let the server keep the old days, and they could
+        //    never be cleared
+        weeklyOffDays: offDays,
         screenshotFrom: form.screenshotFrom,
         screenshotTo: form.screenshotTo,
         officeFrom: form.officeFrom,
@@ -452,13 +446,25 @@ function PolicyForm({
             hint="How many days of work the month is assumed to hold — used for pace, and it divides the daily target"
           />
 
-          <SelectField
-            label="Weekly off"
-            value={form.weeklyOffDay}
-            onChange={set('weeklyOffDay')}
-            options={OFF_DAY_OPTIONS}
-            hint="This is not a block — hours worked on a day off still count in full"
-          />
+          <FullWidth>
+            <div className="mb-1 text-[12px] font-medium text-ink-2">Weekly off</div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+              {ISO_DAYS.map((day) => (
+                <CheckboxField
+                  key={day}
+                  label={OFF_DAY_LABEL[day]}
+                  checked={offDays.includes(day)}
+                  onChange={toggleOffDay(day)}
+                  // the server keeps at least one workday a week
+                  disabled={!offDays.includes(day) && offDays.length >= 6}
+                />
+              ))}
+            </div>
+            <p className="mt-1 text-[11.5px] leading-relaxed text-ink-3">
+              None ticked = every day is a workday. This is not a block — hours
+              worked on a day off still count in full.
+            </p>
+          </FullWidth>
           <TextField
             label="Office opens"
             type="time"

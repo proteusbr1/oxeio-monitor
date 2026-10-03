@@ -27,6 +27,7 @@ import {
   UNINSTALL_EVENT_TYPES,
   type AlertType,
 } from './alerts.constants';
+import { isOffWeekday } from '../summary/weekly-off';
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 3_600_000;
@@ -219,7 +220,7 @@ export interface OfficeHoursInput {
   officeFrom: string | null;
   officeTo: string | null;
   /** পলিসির সাপ্তাহিক ছুটি (ISO দিন, শুক্র = ৫), না থাকলে null */
-  weeklyOffDay: number | null;
+  weeklyOffDays: readonly number[];
   /** আজ ক্যালেন্ডারে ছুটি কি না */
   isHoliday: boolean;
 }
@@ -241,10 +242,10 @@ export interface OfficeHoursInput {
  * একই কারণে `officeTo <= officeFrom` (উল্টো বা সমান) হলেও খোলা ধরা হয়।
  */
 export function isOfficeOpen(input: OfficeHoursInput): boolean {
-  const { now, officeFrom, officeTo, weeklyOffDay, isHoliday } = input;
+  const { now, officeFrom, officeTo, weeklyOffDays, isHoliday } = input;
 
   if (isHoliday) return false;
-  if (weeklyOffDay !== null && dhakaIsoWeekday(now) === weeklyOffDay) {
+  if (isOffWeekday(dhakaIsoWeekday(now), weeklyOffDays)) {
     return false;
   }
 
@@ -558,7 +559,7 @@ export interface NoActivityInput {
   /** আজ ওই কর্মীর কতগুলো `counts_as_work` সেগমেন্ট আছে */
   workedSegments: number;
   /** কর্মীর পলিসির সাপ্তাহিক ছুটি (ISO দিন), না থাকলে null */
-  weeklyOffDay: number | null;
+  weeklyOffDays: readonly number[];
   /** আজ ক্যালেন্ডারে ছুটি কি না */
   isHoliday: boolean;
   /**
@@ -585,7 +586,7 @@ export interface NoActivityInput {
  *    ঘণ্টা পুরোপুরিই গোনা হয় (§ ২.১-খ, ছুটি কোনো ব্লক নয়)।
  */
 export function shouldFlagNoActivity(input: NoActivityInput): boolean {
-  const { workedSegments, weeklyOffDay, isHoliday, onLeave, joinedOn, leftOn, now } =
+  const { workedSegments, weeklyOffDays, isHoliday, onLeave, joinedOn, leftOn, now } =
     input;
 
   if (workedSegments > 0) return false;
@@ -604,7 +605,7 @@ export function shouldFlagNoActivity(input: NoActivityInput): boolean {
    * দিনেই মালিকের ইনবক্সে এমন খবর যেত যেটা তিনি নিজেই অনুমোদন করেছেন।
    */
   if (onLeave) return false;
-  if (weeklyOffDay !== null && dhakaIsoWeekday(now) === weeklyOffDay) {
+  if (isOffWeekday(dhakaIsoWeekday(now), weeklyOffDays)) {
     return false;
   }
 

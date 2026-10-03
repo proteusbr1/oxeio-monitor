@@ -285,7 +285,7 @@ describe('অফিস সময়ের বাইরে agent_down চুপ',
     isOfficeOpen({
       now: dhaka(iso),
       ...OFFICE,
-      weeklyOffDay: 5,
+      weeklyOffDays: [5],
       isHoliday: false,
       ...extra,
     });
@@ -352,7 +352,7 @@ describe('অফিস সময়ের বাইরে agent_down চুপ',
 
   /** ⭐ সাপ্তাহিক ছুটি না থাকলে (null) শুক্রবারও কর্মদিবস */
   it('সাপ্তাহিক ছুটি null হলে শুক্রবারও খোলা', () => {
-    expect(open('2026-08-28T11:00:00', { weeklyOffDay: null })).toBe(true);
+    expect(open('2026-08-28T11:00:00', { weeklyOffDays: [] })).toBe(true);
   });
 });
 
@@ -369,7 +369,7 @@ describe('অফিস খোলার পর ছাড় — সবার হ�
     isAgentWatchOpen({
       now: dhaka(iso),
       ...OFFICE,
-      weeklyOffDay: 5,
+      weeklyOffDays: [5],
       isHoliday: false,
       ...extra,
     });
@@ -377,7 +377,7 @@ describe('অফিস খোলার পর ছাড় — সবার হ�
   /** ⚠️⚠️ ঠিক ৯:০০ — অফিস খোলা, কিন্তু এখনো কারো হাজির থাকার কথা নয় */
   it('৯:০০-এ অফিস খোলা, তবু পাহারা শুরু হয় না', () => {
     expect(isOfficeOpen({ now: dhaka('2026-08-24T09:00:00'), ...OFFICE,
-      weeklyOffDay: 5, isHoliday: false })).toBe(true);
+      weeklyOffDays: [5], isHoliday: false })).toBe(true);
     expect(watch('2026-08-24T09:00:00')).toBe(false);
   });
 
@@ -412,7 +412,7 @@ describe('অফিস খোলার পর ছাড় — সবার হ�
   it('ছাড় ০ হলে অফিস খোলার সাথে সাথেই পাহারা', () => {
     expect(
       isAgentWatchOpen(
-        { now: dhaka('2026-08-24T09:00:00'), ...OFFICE, weeklyOffDay: 5, isHoliday: false },
+        { now: dhaka('2026-08-24T09:00:00'), ...OFFICE, weeklyOffDays: [5], isHoliday: false },
         0,
       ),
     ).toBe(true);
@@ -724,7 +724,7 @@ describe('G06 — কখন "আজ কেউ কাজ করেনি" বল�
 
   const input = (over: Partial<NoActivityInput> = {}): NoActivityInput => ({
     workedSegments: 0,
-    weeklyOffDay: 5,
+    weeklyOffDays: [5],
     isHoliday: false,
     onLeave: false,
     joinedOn: null,
@@ -753,7 +753,7 @@ describe('G06 — কখন "আজ কেউ কাজ করেনি" বল�
   it('পলিসিতে সাপ্তাহিক ছুটি না থাকলে শুক্রবারেও অ্যালার্ট হয়', () => {
     const friday = dhaka('2026-08-14T19:00:00');
     expect(
-      shouldFlagNoActivity(input({ now: friday, weeklyOffDay: null })),
+      shouldFlagNoActivity(input({ now: friday, weeklyOffDays: [] })),
     ).toBe(true);
   });
 

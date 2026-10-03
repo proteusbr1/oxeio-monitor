@@ -15,6 +15,7 @@ import {
   captureWindowProblem,
   DEFAULT_CAPTURE_WINDOW,
 } from './work-policy.rules';
+import { normaliseOffDays } from '../summary/weekly-off';
 
 export interface WorkPolicyView {
   id: number;
@@ -22,7 +23,7 @@ export interface WorkPolicyView {
   /** ⭐ একমাত্র টার্গেট। টাকা নয়, তাই সংখ্যা হিসেবেই যায়। */
   monthlyTargetHours: number;
   expectedWorkdays: number;
-  weeklyOffDay: number | null;
+  weeklyOffDays: readonly number[];
   screenshotFrom: string | null;
   screenshotTo: string | null;
   /** ⭐ অফিস কখন খোলা — `agent_down` অ্যালার্টের জানালা। null = সারাদিন খোলা */
@@ -91,7 +92,7 @@ export class WorkPoliciesService {
         ...(dto.expectedWorkdays === undefined
           ? {}
           : { expectedWorkdays: dto.expectedWorkdays }),
-        weeklyOffDay: dto.weeklyOffDay ?? null,
+        weeklyOffDays: normaliseOffDays(dto.weeklyOffDays ?? []),
         screenshotFrom,
         screenshotTo,
         // ⚠️ ডিফল্ট বসানো হয় **না** — খালি মানে "সারাদিন খোলা", অর্থাৎ
@@ -164,9 +165,9 @@ export class WorkPoliciesService {
         ...(dto.expectedWorkdays === undefined
           ? {}
           : { expectedWorkdays: dto.expectedWorkdays }),
-        ...(dto.weeklyOffDay === undefined
+        ...(dto.weeklyOffDays === undefined
           ? {}
-          : { weeklyOffDay: dto.weeklyOffDay }),
+          : { weeklyOffDays: normaliseOffDays(dto.weeklyOffDays) }),
         screenshotFrom,
         screenshotTo,
         officeFrom,
@@ -324,7 +325,7 @@ function toView(policy: WorkPolicy, employeeCount: number): WorkPolicyView {
     // দুই রকম হলে ড্যাশবোর্ড আর এজেন্ট আলাদা সংখ্যা দেখাত।
     monthlyTargetHours: Number(policy.monthlyTargetHours),
     expectedWorkdays: policy.expectedWorkdays,
-    weeklyOffDay: policy.weeklyOffDay,
+    weeklyOffDays: policy.weeklyOffDays,
     screenshotFrom: policy.screenshotFrom,
     screenshotTo: policy.screenshotTo,
     officeFrom: policy.officeFrom,

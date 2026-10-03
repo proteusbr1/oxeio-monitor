@@ -1,4 +1,5 @@
 import { workDateOf } from '../agent/util/dhaka-time';
+import { isOffWeekday } from '../summary/weekly-off';
 
 /**
  * রিপোর্টের **খাঁটি** অংশ — তারিখ পার্স, রেঞ্জের সীমা (F08), কর্মদিবস গোনা,
@@ -213,7 +214,7 @@ export function parseReportRange(
 
 export interface WorkdayRule {
   /** ISO দিন (শুক্র = ৫)। null হলে প্রতিটি ক্যালেন্ডার দিনই কর্মদিবস। */
-  weeklyOffDay: number | null;
+  weeklyOffDays: readonly number[];
   /**
    * ছুটির দিনগুলোর `getTime()`।
    * ⚠️ Date অবজেক্ট Set-এ রেফারেন্স ধরে মেলে, মান ধরে নয় — তাই epoch ms।
@@ -227,7 +228,7 @@ export interface WorkdayRule {
  */
 export function isWorkday(date: Date, rule: WorkdayRule): boolean {
   if (rule.holidays.has(date.getTime())) return false;
-  if (rule.weeklyOffDay !== null && isoDayOf(date) === rule.weeklyOffDay) {
+  if (isOffWeekday(isoDayOf(date), rule.weeklyOffDays)) {
     return false;
   }
   return true;
@@ -431,9 +432,31 @@ export interface Bucket {
  * সোমবার ধরে নিলে বাংলাদেশের প্রতিটি কর্মসপ্তাহ মাঝখান থেকে কেটে যেত।
  * ছুটি না থাকলে (null) আন্তর্জাতিক অভ্যাস — সোমবার।
  */
-export function weekStartIsoDay(weeklyOffDay: number | null): number {
-  if (weeklyOffDay === null) return 1;
-  return (weeklyOffDay % 7) + 1;
+export function weekStartIsoDay(weeklyOffDays: readonly number[]): number {
+  if (weeklyOffDays.length === 0 || weeklyOffDays.length >= 7) return 1;
+
+  // With several days off the week starts after the off block, so the block
+  // sits at the end of the week: Fri → Sat (as before), Fri+Sat → Sun,
+  // Sat+Sun → Mon. Days off that are not next to each other (e.g. Wed + Sun)
+  // form more than one block; the longest wins, Monday-first on a tie.
+  const off = new Set(weeklyOffDays);
+  const prev = (d: number): number => ((d + 5) % 7) + 1;
+
+  let best = 1;
+  let bestLength = -1;
+  for (let start = 1; start <= 7; start++) {
+    // `start` must follow an off day without being one
+    if (off.has(start) || !off.has(prev(start))) continue;
+
+    let length = 0;
+    for (let d = prev(start); off.has(d) && length < 7; d = prev(d)) length++;
+
+    if (length > bestLength) {
+      best = start;
+      bestLength = length;
+    }
+  }
+  return bestLength < 0 ? 1 : best;
 }
 
 export function bucketOf(

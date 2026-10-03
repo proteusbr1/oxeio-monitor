@@ -232,7 +232,7 @@ export class ProgressService {
             policy: {
               select: {
                 monthlyTargetHours: true,
-                weeklyOffDay: true,
+                weeklyOffDays: true,
                 expectedWorkdays: true,
               },
             },
@@ -310,7 +310,7 @@ export class ProgressService {
     );
 
     const holidays = new Set(holidayRows.map((h) => h.holidayDate.getTime()));
-    const off = employee?.policy?.weeklyOffDay ?? null;
+    const off = employee?.policy?.weeklyOffDays ?? [];
     const leaveDates = new Set(leaveRows.map((l) => l.leaveDate.getTime()));
 
     /**
@@ -326,7 +326,7 @@ export class ProgressService {
       monthEnd,
       joinedOn: employee?.joinedOn ?? null,
       leftOn: employee?.leftOn ?? null,
-      weeklyOffDay: off,
+      weeklyOffDays: off,
       holidays,
       monthlyTargetSec: monthlyTargetHours * 3600,
       policyWorkdays: employee?.policy?.expectedWorkdays ?? 26,
@@ -357,7 +357,7 @@ export class ProgressService {
       leftOn: employee?.leftOn ?? null,
       // ⚠️⚠️ `?? today` — না-দেখা কর্মীর প্রত্যাশা ০, পুরো মাস নয় (G120)
       trackingStartedOn: firstSeen.get(employeeId) ?? today,
-      weeklyOffDay: off,
+      weeklyOffDays: off,
       holidays,
     }, leaveDates);
 
