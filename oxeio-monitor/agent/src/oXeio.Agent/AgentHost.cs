@@ -228,6 +228,9 @@ internal sealed class AgentHost : IAsyncDisposable
     /// </summary>
     private PendingConfig? _pendingConfig;
 
+    /// <summary>The last good config on disk — <c>null</c> until <see cref="TryStart"/>.</summary>
+    private AgentConfigFile? _configFile;
+
     /// <summary>শেষ কবে বাজেট প্রয়োগ হয়েছে — শুধু সিঙ্ক লুপ ছোঁয়।</summary>
     private DateTimeOffset _lastBudgetSweep = DateTimeOffset.MinValue;
 
@@ -363,6 +366,24 @@ internal sealed class AgentHost : IAsyncDisposable
         catch (Exception ex)
         {
             _log.Error("Could not open the offline queue — no data will be stored", ex);
+        }
+
+        // ── the last good config (kept across reboots) ───────────────────
+        // ⚠️ Before the tracking objects below are built from `_config`: a
+        //    reboot while the server is unreachable must keep the policy the
+        //    server last sent, not fall back to AgentConfig.Default. The
+        //    version goes with it, so the first heartbeat only fetches a new
+        //    config when the server's has actually changed.
+        _configFile = new AgentConfigFile(AgentDataDirectory.Default);
+        if (_configFile.TryLoad() is { } cached)
+        {
+            _config = cached.Config;
+            _configVersion = cached.Version;
+            _log.Info($"Config {cached.Version} restored from disk (received {cached.ReceivedAt:yyyy-MM-dd HH:mm}Z)");
+        }
+        else
+        {
+            _log.Info("No saved config — starting on the defaults until the server answers");
         }
 
         // ── ট্র্যাকিং ───────────────────────────────────────────────────────
@@ -1584,6 +1605,28 @@ internal sealed class AgentHost : IAsyncDisposable
         {
             _log.Warn($"Could not fetch the config — carrying on with the current one ({result.Detail ?? "reason unknown"})");
             return;
+        }
+
+        // ⚠️ A config that is not usable is neither applied nor kept: the
+        //    agent carries on with the current one, and the cache on disk
+        //    stays the last good config.
+        var problems = AgentConfigCheck.Problems(body.Config);
+        if (problems.Count > 0)
+        {
+            _log.Warn($"Config {body.Version} refused — carrying on with the current one: {string.Join("; ", problems)}");
+            return;
+        }
+
+        // Saved here, off the tracking thread; applied by TrackLoop as before
+        if (_configFile is not null &&
+            !_configFile.TrySave(new CachedAgentConfig
+            {
+                Version = body.Version,
+                ReceivedAt = DateTimeOffset.UtcNow,
+                Config = body.Config,
+            }))
+        {
+            _log.Warn($"Config {body.Version} could not be saved — the next boot without network starts on the defaults");
         }
 
         Interlocked.Exchange(
