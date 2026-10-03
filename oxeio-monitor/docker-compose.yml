@@ -259,6 +259,12 @@ services:
       SEED_OWNER_EMAIL: ${SEED_OWNER_EMAIL:-}
       SEED_OWNER_PASSWORD: ${SEED_OWNER_PASSWORD:-}
       SEED_OWNER_NAME: ${SEED_OWNER_NAME:-}
+      # seed outside Bangladesh — empty = the defaults (BD, 208 h, 26 days, Friday)
+      SEED_COUNTRY: ${SEED_COUNTRY:-}
+      SEED_HOLIDAYS: ${SEED_HOLIDAYS:-}
+      SEED_POLICY_MONTHLY_HOURS: ${SEED_POLICY_MONTHLY_HOURS:-}
+      SEED_POLICY_WORKDAYS: ${SEED_POLICY_WORKDAYS:-}
+      SEED_POLICY_WEEKLY_OFF: ${SEED_POLICY_WEEKLY_OFF:-}
     volumes:
       # ⚠️ prisma/ হোস্ট থেকে mount করা হয়, ইমেজে বেক করা নয় — কারণ
       #    `staff.local.json`-এ কর্মীদের **নাম ও বেতন** থাকে। ইমেজে ঢুকলে

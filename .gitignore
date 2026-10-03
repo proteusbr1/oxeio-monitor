@@ -34,6 +34,8 @@ desktop.ini
 # ⚠️ আসল কর্মী তালিকা — নাম ও বেতন। কখনো কমিট হবে না।
 #    seed এটা না পেলে staff.example.json দিয়ে চলে।
 **/staff.local.json
+# a deployment's own holiday calendar, imported with prisma/import-holidays.ts
+**/holidays.local.*
 
 # ⚠️⚠️ .env-এর যেকোনো ব্যাকআপ/কপিও — ১৩ আগস্ট এমন একটা ফাইল
 # (.env.bak-before-trial) ভুল করে কমিট হয়ে গিয়েছিল, কারণ উপরের

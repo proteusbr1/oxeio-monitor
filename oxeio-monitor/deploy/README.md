@@ -429,6 +429,29 @@ seed প্রতিবার এটা মনে করিয়ে দেয�
 `শবে কদর (সম্ভাব্য)` করুন। ⚠️ শুধু নাম — **তারিখ বা সারিটা মুছবেন না**,
 নইলে মার্চের কর্মদিবস বদলে যাবে (উপরের চেইন)।
 
+### ২.১ঘ· Outside Bangladesh
+
+The seed writes Bangladesh's holidays and a 208 h / 26 day / Friday-off
+policy unless told otherwise. Set these in `.env` **before the first seed**
+(they are read only when the database is created):
+
+```bash
+SEED_COUNTRY=none                # no Bangladesh holidays
+SEED_POLICY_MONTHLY_HOURS=176
+SEED_POLICY_WORKDAYS=22
+SEED_POLICY_WEEKLY_OFF=7         # ISO day (Mon = 1 … Sun = 7) or "none"
+```
+
+Then import your own calendar from an official CSV (`date,name,type`) or
+ICS file. It goes through the same rule as the seed: dates in the current or
+a past month are listed and left out unless you pass `--allow-past` (read
+§ ২.১গ first — they change targets and salary).
+
+```bash
+docker compose --profile setup run --rm migrate \
+  npx tsx prisma/import-holidays.ts prisma/holidays.local.csv --dry-run
+```
+
 ### ২.২· স্ট্যাক চালু
 
 ```powershell
