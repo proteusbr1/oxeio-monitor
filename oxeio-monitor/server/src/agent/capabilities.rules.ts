@@ -63,14 +63,6 @@ export function sanitizeCapabilities(raw: unknown): Capabilities | null {
   return Object.keys(out).length === 0 ? null : out;
 }
 
-/** Parts that need attention: `degraded` or `failed`, in the fixed order */
-export function brokenCapabilities(c: Capabilities | null): CapabilityName[] {
-  if (!c) return [];
-  return CAPABILITY_NAMES.filter(
-    (n) => c[n] === 'degraded' || c[n] === 'failed',
-  );
-}
-
 /** Same parts in the same states — then nothing is written */
 export function sameCapabilities(
   a: Capabilities | null,
@@ -80,9 +72,23 @@ export function sameCapabilities(
   return CAPABILITY_NAMES.every((n) => a[n] === b[n]);
 }
 
-/** One line for the alert: `Website domains degraded · Screenshots failed` */
-export function describeBroken(c: Capabilities): string {
-  return brokenCapabilities(c)
-    .map((n) => `${CAPABILITY_LABEL[n]} ${c[n]}`)
-    .join(' · ');
+/**
+ * Parts that are down — `failed` only. These, and only these, raise an alert.
+ *
+ * ⚠️ `degraded` is shown on the dashboard but never alerts: it covers
+ *    passing states — a few seconds of a UAC prompt, one empty screenshot
+ *    slot, an upload with a retry or two (the agent's own SyncHealth calls
+ *    that "not worrying yet"). Alerting on them would page the owner all day
+ *    and teach everyone to ignore the alert that matters.
+ */
+export function failedCapabilities(c: Capabilities | null): CapabilityName[] {
+  if (!c) return [];
+  return CAPABILITY_NAMES.filter((n) => c[n] === 'failed');
+}
+
+/** One line for the alert: `Website domains, Jiggler check` */
+export function describeFailed(c: Capabilities): string {
+  return failedCapabilities(c)
+    .map((n) => CAPABILITY_LABEL[n])
+    .join(', ');
 }

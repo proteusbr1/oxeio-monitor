@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  brokenCapabilities,
-  describeBroken,
+  describeFailed,
+  failedCapabilities,
   sameCapabilities,
   sanitizeCapabilities,
 } from '../src/agent/capabilities.rules';
@@ -37,8 +37,8 @@ describe('sanitizeCapabilities', () => {
   });
 });
 
-describe('what needs attention', () => {
-  it('degraded and failed, not disabled_by_policy', () => {
+describe('what raises an alert', () => {
+  it('failed only — degraded is shown, never alerted; off by policy is a choice', () => {
     const report = sanitizeCapabilities({
       screenCapture: 'disabled_by_policy',
       browserDomain: 'degraded',
@@ -46,19 +46,14 @@ describe('what needs attention', () => {
       sync: 'ok',
     });
 
-    expect(brokenCapabilities(report)).toEqual([
-      'browserDomain',
-      'screenActivity',
-    ]);
-    expect(describeBroken(report!)).toBe(
-      'Website domains degraded · Jiggler check failed',
-    );
+    expect(failedCapabilities(report)).toEqual(['screenActivity']);
+    expect(describeFailed(report!)).toBe('Jiggler check');
   });
 
-  it('nothing broken in a healthy report', () => {
-    expect(brokenCapabilities(sanitizeCapabilities({ sync: 'ok' }))).toEqual(
-      [],
-    );
+  it('a retry or two on upload is degraded, so no alert', () => {
+    expect(
+      failedCapabilities(sanitizeCapabilities({ sync: 'degraded' })),
+    ).toEqual([]);
   });
 });
 

@@ -201,9 +201,9 @@ function FleetTable({ groups }: { groups: FleetGroup[] }) {
                 {r.quiet && <Chip tone="attention">Quiet</Chip>}
                 {/* the agent's own report — see capabilityIssues() */}
                 {r.issues.map((issue) => (
-                  <Chip key={issue} tone="attention">
-                    {issue}
-                  </Chip>
+                  <span key={issue.text} title={issue.hint}>
+                    <Chip tone={issue.tone}>{issue.text}</Chip>
+                  </span>
                 ))}
               </span>
             ) : null,

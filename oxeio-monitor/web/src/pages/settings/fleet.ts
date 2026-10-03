@@ -76,7 +76,9 @@ export function compareVersion(a: string, b: string): number {
  * ⚠️ সব ভার্সন halted থাকলে `null` — তখন কেউ "পিছিয়ে" নয়, কারণ
  * এগোনোর জায়গাই নেই।
  */
-export function newestOffered(versions: readonly AgentVersionView[]): string | null {
+export function newestOffered(
+  versions: readonly AgentVersionView[],
+): string | null {
   return versions.find((v) => v.rolloutStage !== 'halted')?.version ?? null;
 }
 
@@ -131,8 +133,18 @@ export interface FleetRow {
   lastSeenAt: string | null;
   quiet: boolean;
   driftSec: number;
-  /** Parts of the agent that report trouble — `Website domains degraded` */
-  issues: string[];
+  /** Parts of the agent that report trouble (capabilityIssues) */
+  issues: CapabilityIssue[];
+}
+
+/** One part of the agent that reports trouble, ready to show */
+export interface CapabilityIssue {
+  /** e.g. `Website domains: not working` */
+  text: string;
+  /** red when it is down, amber when it only struggles */
+  tone: 'attention' | 'pending';
+  /** what it means and what to do — shown on hover */
+  hint: string;
 }
 
 /** Same names as the server's `CAPABILITY_LABEL` — the alert uses those */
@@ -145,20 +157,43 @@ const CAPABILITY_LABEL: Record<string, string> = {
   sync: 'Upload',
 };
 
+/** What it means for the owner, and the first thing to try */
+const CAPABILITY_HINT: Record<string, string> = {
+  idleProbe:
+    'Windows is not giving the agent the idle time, so active and idle cannot be told apart. Restart the PC; if it stays, reinstall the agent.',
+  appTracking:
+    'App usage is not being recorded on this PC. Check the agent log on that PC: %ProgramData%\\oXeio\\logs\\agent.log.',
+  browserDomain:
+    "The agent cannot read the browser address bar, so websites are missing from this PC's reports. Hours are not affected.",
+  screenCapture:
+    'Screenshots are not being taken on this PC. Hours are still counted; check the display driver and the agent log.',
+  screenActivity:
+    'The agent cannot sample the screen, so a mouse jiggler would go unnoticed on this PC. Hours are still counted.',
+  sync: "Data is waiting on the PC and not reaching the server — nothing is lost, it uploads when the connection is back. Check this PC's network.",
+};
+
 /**
- * What the agent says is not working, one line per part.
+ * What the agent says is not working, one entry per part.
  *
- * Only `degraded` and `failed` — `disabled_by_policy` is a choice, not a
- * fault, and showing it on every row would bury the real ones. Unknown parts
- * (a newer agent) are skipped rather than shown under a raw name.
+ * Only `degraded` (amber, "unreliable") and `failed` (red, "not working") —
+ * `disabled_by_policy` is a choice, not a fault, and showing it on every row
+ * would bury the real ones. Unknown parts (a newer agent) are skipped rather
+ * than shown under a raw name. Failed parts come first.
  */
 export function capabilityIssues(
   capabilities: Record<string, string> | null | undefined,
-): string[] {
+): CapabilityIssue[] {
   if (!capabilities) return [];
-  return Object.keys(CAPABILITY_LABEL)
-    .filter((k) => capabilities[k] === 'degraded' || capabilities[k] === 'failed')
-    .map((k) => `${CAPABILITY_LABEL[k]} ${capabilities[k]}`);
+  const names = Object.keys(CAPABILITY_LABEL);
+  const pick = (state: string): CapabilityIssue[] =>
+    names
+      .filter((k) => capabilities[k] === state)
+      .map((k) => ({
+        text: `${CAPABILITY_LABEL[k]}: ${state === 'failed' ? 'not working' : 'unreliable'}`,
+        tone: state === 'failed' ? 'attention' : 'pending',
+        hint: CAPABILITY_HINT[k],
+      }));
+  return [...pick('failed'), ...pick('degraded')];
 }
 
 export interface FleetGroup {
@@ -210,22 +245,24 @@ export function fleetGroups(
     byVersion.set(key, rows);
   }
 
-  const groups: FleetGroup[] = [...byVersion.entries()].map(([version, rows]) => ({
-    version,
-    lag: lagOf(version, newest),
-    rows: rows.sort((a, b) => {
-      // ⚠️ কর্মীর সাথে যুক্ত নয় এমন ডিভাইস শেষে — নইলে খালি ঘরগুলো
-      //    তালিকার মাথায় বসে পড়ত। ⚠️ শর্তটা **আলাদা করে** লেখা, কোনো
-      //    বড়-অক্ষরের সেন্টিনেল দিয়ে নয়: localeCompare-এর ক্রম লোকেল
-      //    ধরে বদলায়, তাই সেন্টিনেল একদিন মাঝখানে বসে যেতে পারত।
-      if ((a.employee === null) !== (b.employee === null)) {
-        return a.employee === null ? 1 : -1;
-      }
-      return (a.employee?.empCode ?? a.hostname).localeCompare(
-        b.employee?.empCode ?? b.hostname,
-      );
+  const groups: FleetGroup[] = [...byVersion.entries()].map(
+    ([version, rows]) => ({
+      version,
+      lag: lagOf(version, newest),
+      rows: rows.sort((a, b) => {
+        // ⚠️ কর্মীর সাথে যুক্ত নয় এমন ডিভাইস শেষে — নইলে খালি ঘরগুলো
+        //    তালিকার মাথায় বসে পড়ত। ⚠️ শর্তটা **আলাদা করে** লেখা, কোনো
+        //    বড়-অক্ষরের সেন্টিনেল দিয়ে নয়: localeCompare-এর ক্রম লোকেল
+        //    ধরে বদলায়, তাই সেন্টিনেল একদিন মাঝখানে বসে যেতে পারত।
+        if ((a.employee === null) !== (b.employee === null)) {
+          return a.employee === null ? 1 : -1;
+        }
+        return (a.employee?.empCode ?? a.hostname).localeCompare(
+          b.employee?.empCode ?? b.hostname,
+        );
+      }),
     }),
-  }));
+  );
 
   return groups.sort((a, b) => {
     // ⚠️ অজানা ভার্সন সবার শেষে — ওটা কোনো "দল" নয়, একটা ফাঁক

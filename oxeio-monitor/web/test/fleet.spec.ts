@@ -222,8 +222,14 @@ describe('fleetGroups', () => {
   it('দলের ভেতরে empCode ক্রমে', () => {
     const groups = fleetGroups(
       [
-        device({ id: 1, employee: { id: 1, empCode: 'OX-09', fullName: 'Nine' } }),
-        device({ id: 2, employee: { id: 2, empCode: 'OX-04', fullName: 'Four' } }),
+        device({
+          id: 1,
+          employee: { id: 1, empCode: 'OX-09', fullName: 'Nine' },
+        }),
+        device({
+          id: 2,
+          employee: { id: 2, empCode: 'OX-04', fullName: 'Four' },
+        }),
       ],
       '0.4.9',
       NOW,
@@ -240,16 +246,18 @@ describe('fleetGroups', () => {
     const groups = fleetGroups(
       [
         device({ id: 1, employee: null, hostname: 'SPARE' }),
-        device({ id: 2, employee: { id: 2, empCode: 'OX-04', fullName: 'Four' } }),
+        device({
+          id: 2,
+          employee: { id: 2, empCode: 'OX-04', fullName: 'Four' },
+        }),
       ],
       '0.4.9',
       NOW,
     );
 
-    expect(groups[0].rows.map((r) => r.employee?.empCode ?? r.hostname)).toEqual([
-      'OX-04',
-      'SPARE',
-    ]);
+    expect(
+      groups[0].rows.map((r) => r.employee?.empCode ?? r.hostname),
+    ).toEqual(['OX-04', 'SPARE']);
   });
 });
 
@@ -291,18 +299,23 @@ describe('capabilityIssues — what the agent says is not working', () => {
     expect(capabilityIssues(null)).toEqual([]);
   });
 
-  it('degraded and failed parts, by name', () => {
-    expect(
-      capabilityIssues({
-        browserDomain: 'degraded',
-        screenActivity: 'failed',
-        sync: 'ok',
-      }),
-    ).toEqual(['Website domains degraded', 'Jiggler check failed']);
+  it('failed first and red, degraded after and amber, each with a hint', () => {
+    const issues = capabilityIssues({
+      browserDomain: 'degraded',
+      screenActivity: 'failed',
+      sync: 'ok',
+    });
+    expect(issues.map((i) => [i.text, i.tone])).toEqual([
+      ['Jiggler check: not working', 'attention'],
+      ['Website domains: unreliable', 'pending'],
+    ]);
+    expect(issues.every((i) => i.hint.length > 0)).toBe(true);
   });
 
   it('off by policy is a choice, not a fault', () => {
-    expect(capabilityIssues({ screenCapture: 'disabled_by_policy' })).toEqual([]);
+    expect(capabilityIssues({ screenCapture: 'disabled_by_policy' })).toEqual(
+      [],
+    );
   });
 
   it('a part this dashboard does not know is skipped', () => {
@@ -315,7 +328,8 @@ describe('capabilityIssues — what the agent says is not working', () => {
       '0.4.9',
       NOW,
     );
-    expect(group.rows[0].issues).toEqual(['Website domains degraded']);
+    expect(group.rows[0].issues.map((i) => i.text)).toEqual([
+      'Website domains: unreliable',
+    ]);
   });
 });
-
