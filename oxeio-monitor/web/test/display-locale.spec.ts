@@ -4,6 +4,7 @@ import {
   formatBytes,
   formatCount,
   formatDate,
+  formatDateMedium,
   formatDateShort,
   formatDuration,
   formatHours,
@@ -88,4 +89,30 @@ describe('a bad or empty answer keeps the default', () => {
       expect(formatCount(12345)).toBe('12,345');
     },
   );
+});
+
+describe('the top bar and the Months tab go through the same rules', () => {
+  it('formatDateMedium keeps the top bar text by default', () => {
+    expect(formatDateMedium('2026-10-03')).toBe('3 Oct 2026');
+  });
+
+  it('formatDateMedium is numeric with a locale', () => {
+    setDisplayLocale('pt-BR');
+    expect(formatDateMedium('2026-10-03')).toBe('03/10/2026');
+  });
+
+  it('formatMonth gives exactly what the Months tab printed before', () => {
+    for (let m = 1; m <= 12; m++) {
+      const key = `2026-${String(m).padStart(2, '0')}`;
+      const before = new Date(Date.UTC(2026, m - 1, 1)).toLocaleDateString(
+        'en-GB',
+        {
+          month: 'long',
+          year: 'numeric',
+          timeZone: 'UTC',
+        },
+      );
+      expect(formatMonth(key)).toBe(before);
+    }
+  });
 });

@@ -24,7 +24,7 @@ import { Card } from '../components/Card';
 import { Page } from '../components/Page';
 import { ErrorBox, Loading } from '../components/States';
 import { Table, type Column } from '../components/Table';
-import { formatDate, formatDateTime, formatDuration, todayInDhaka } from '../lib/format';
+import { formatCount, formatDate, formatDateTime, formatDuration, todayInDhaka } from '../lib/format';
 import {
   Chip,
   MiniButton,
@@ -457,7 +457,7 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
             <option value="">Added by anyone</option>
             {(adders.data ?? []).map((a) => (
               <option key={a.id} value={a.id}>
-                {a.fullName} · {a.count.toLocaleString()}
+                {a.fullName} · {formatCount(a.count)}
               </option>
             ))}
           </select>

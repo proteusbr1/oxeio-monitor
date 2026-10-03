@@ -9,7 +9,7 @@ import {
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Caveat, ErrorBox, Loading } from '../../components/States';
-import { formatDate, workOffsetMs } from '../../lib/format';
+import { formatDate, formatMonth, workOffsetMs } from '../../lib/format';
 import {
   ConfirmDialog,
   MiniButton,
@@ -223,12 +223,7 @@ function dhakaNow(): string {
   return new Date(Date.now() + workOffsetMs()).toISOString();
 }
 
-/** `2026-08` → `August 2026` */
+/** `2026-08` → `August 2026` — through lib/format, so DISPLAY_LOCALE applies */
 function monthLabel(yearMonth: string): string {
-  const [y, m] = yearMonth.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-GB', {
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
+  return formatMonth(yearMonth);
 }
