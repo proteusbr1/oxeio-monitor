@@ -374,6 +374,12 @@ export interface HealthFacts {
   silentDevices: number;
   /** এখনো কোনো চ্যানেলে যায়নি এমন অ্যালার্ট */
   pendingAlerts: number;
+  /**
+   * Screenshot store, when it is not the local disk (STORAGE_DRIVER=s3):
+   * could the bucket be reached. Absent for the local driver — the disk
+   * figures above already speak for it.
+   */
+  screenshotStore?: { location: string; reachable: boolean };
 }
 
 export interface HealthVerdict {
@@ -406,6 +412,12 @@ export function healthVerdict(facts: HealthFacts): HealthVerdict {
     );
   } else if (facts.diskUsedPct >= 80) {
     problems.push(`Disk ${Math.round(facts.diskUsedPct)}% full`);
+  }
+
+  if (facts.screenshotStore && !facts.screenshotStore.reachable) {
+    problems.push(
+      `Screenshot storage unreachable (${facts.screenshotStore.location}) — new screenshots are being refused`,
+    );
   }
 
   if (facts.backup) {

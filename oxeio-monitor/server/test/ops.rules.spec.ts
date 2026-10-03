@@ -380,6 +380,23 @@ describe('K04 — হেলথ verdict', () => {
       'degraded',
     );
   });
+  it('a screenshot bucket that cannot be reached is a problem', () => {
+    const verdict = healthVerdict({
+      ...healthy,
+      screenshotStore: { location: 's3://shots/', reachable: false },
+    });
+    expect(verdict.status).toBe('degraded');
+    expect(verdict.problems[0]).toMatch(/s3:\/\/shots/);
+  });
+
+  it('a reachable bucket changes nothing', () => {
+    expect(
+      healthVerdict({
+        ...healthy,
+        screenshotStore: { location: 's3://shots/', reachable: true },
+      }),
+    ).toEqual({ status: 'ok', problems: [] });
+  });
 });
 
 // ════════════════════════════════════════════════════════════════════════════

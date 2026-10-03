@@ -9,7 +9,6 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { ConfigService } from '@nestjs/config';
 import { Prisma, type Device } from '@prisma/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -20,6 +19,7 @@ import type {
 import type { ScreenshotMetaDto } from '../src/agent/dto';
 import { ScreenshotIngestService } from '../src/agent/screenshot-ingest.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
+import { LocalScreenshotStorage } from '../src/storage/local.storage';
 
 /**
  * **G81 — "সারি আছে" আর "ফাইল আছে" এক কথা নয়।**
@@ -81,16 +81,14 @@ afterEach(async () => {
 });
 
 function makeService(prisma: Partial<PrismaService>): ScreenshotIngestService {
-  const config = {
-    get: (key: string) => (key === 'STORAGE_ROOT' ? root : undefined),
-  } as unknown as ConfigService;
+  const storage = new LocalScreenshotStorage(root);
 
   // ঘড়ির সংশোধন এখানে অপ্রাসঙ্গিক — যা এল তাই ফেরত
   const clock = {
     correct: (value: string) => new Date(value),
   } as unknown as ClockDriftService;
 
-  return new ScreenshotIngestService(prisma as PrismaService, clock, config);
+  return new ScreenshotIngestService(prisma as PrismaService, clock, storage);
 }
 
 describe('G81 · চালুর সময় storage-এ লেখা যায় কি না', () => {
@@ -101,13 +99,11 @@ describe('G81 · চালুর সময় storage-এ লেখা যায
 
   it('ফোল্ডার না থাকলে বানিয়ে নেয় — এটা ব্যর্থতা নয়', async () => {
     const nested = join(root, 'a', 'b', 'c');
-    const config = {
-      get: (key: string) => (key === 'STORAGE_ROOT' ? nested : undefined),
-    } as unknown as ConfigService;
+    const storage = new LocalScreenshotStorage(nested);
     const svc = new ScreenshotIngestService(
       {} as PrismaService,
       {} as ClockDriftService,
-      config,
+      storage,
     );
 
     await expect(svc.onModuleInit()).resolves.toBeUndefined();
@@ -135,13 +131,11 @@ describe('G81 · চালুর সময় storage-এ লেখা যায
       // dr-xr-xr-x — ঢোকা যায়, লেখা যায় না
       await import('node:fs/promises').then((fs) => fs.chmod(locked, 0o555));
 
-      const config = {
-        get: (key: string) => (key === 'STORAGE_ROOT' ? locked : undefined),
-      } as unknown as ConfigService;
+      const storage = new LocalScreenshotStorage(locked);
       const svc = new ScreenshotIngestService(
         {} as PrismaService,
         {} as ClockDriftService,
-        config,
+        storage,
       );
 
       await expect(svc.onModuleInit()).rejects.toThrow(

@@ -1,18 +1,20 @@
-import { access, mkdir, rm, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { join } from 'node:path';
 
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   OnModuleInit,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Prisma, type Device } from '@prisma/client';
 
-import { storageRoot } from '../common/storage.config';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  SCREENSHOT_STORAGE,
+  type ScreenshotStorage,
+} from '../storage/screenshot-storage';
 import {
   checkThumb,
   thumbPathFor,
@@ -37,17 +39,12 @@ export interface ScreenshotResult {
 @Injectable()
 export class ScreenshotIngestService implements OnModuleInit {
   private readonly logger = new Logger(ScreenshotIngestService.name);
-  private readonly root: string;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly clock: ClockDriftService,
-    config: ConfigService,
-  ) {
-    this.root = resolve(
-      storageRoot(config),
-    );
-  }
+    @Inject(SCREENSHOT_STORAGE) private readonly storage: ScreenshotStorage,
+  ) {}
 
   /**
    * ⭐⭐ **G81 — চালুর সময়ই storage-এ লেখা যায় কি না দেখা।**
@@ -71,21 +68,10 @@ export class ScreenshotIngestService implements OnModuleInit {
    * একমাত্র সত্যিকারের প্রমাণ।
    */
   async onModuleInit(): Promise<void> {
-    const probe = join(this.root, '.write-probe');
-    try {
-      await mkdir(this.root, { recursive: true });
-      await writeFile(probe, 'ok');
-      await rm(probe, { force: true });
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
-      throw new Error(
-        `Screenshot storage is not writable: ${this.root} (${reason}). ` +
-          'Screenshots would be silently lost. On Docker this is almost always ' +
-          'the bind-mounted folder being owned by root while the container runs ' +
-          'as uid 1000 — fix with: chown -R 1000:1000 .data/storage',
-      );
-    }
-    this.logger.log(`Screenshot storage is writable: ${this.root}`);
+    // the probe itself is the driver's (local folder or S3 bucket); the
+    // reasoning above holds for both — fail at startup, not one shot at a time
+    await this.storage.probe();
+    this.logger.log(`Screenshot storage is writable: ${this.storage.location}`);
   }
 
   /**
@@ -140,8 +126,6 @@ export class ScreenshotIngestService implements OnModuleInit {
       emp,
       `${hhmmss}_m${meta.monitorIndex}.webp`,
     ).replace(/\\/g, '/');
-
-    const absPath = join(this.root, relPath);
 
     // ⚠️ `let` — আইডিটা try-র বাইরে দরকার, কারণ থাম্বনেইলের UPDATE-এ
     //    `where` লাগবে। `file_path` unique **নয়** (schema দেখুন), তাই
@@ -199,8 +183,7 @@ export class ScreenshotIngestService implements OnModuleInit {
       throw err;
     }
 
-    await mkdir(dirname(absPath), { recursive: true });
-    await writeFile(absPath, file.buffer);
+    await this.storage.put(relPath, file.buffer, ALLOWED_SCREENSHOT_MIME);
 
     const thumbPath = await this.storeThumb(
       screenshotId,
@@ -286,9 +269,7 @@ export class ScreenshotIngestService implements OnModuleInit {
      * বাইট পড়ে থাকত অন্য ফাইলে — অর্থাৎ ঠিক যে অমিলটা সারাতে বসেছি,
      * সেটাই আবার তৈরি হতো।
      */
-    const absPath = join(this.root, existing.filePath);
-    try {
-      await access(absPath);
+    if ((await this.storage.size(existing.filePath)) !== null) {
       // ফাইল আছে — সত্যিকারের ডুপ্লিকেট, এজেন্ট নিশ্চিন্তে মুছে ফেলুক
       return {
         accepted: 0,
@@ -296,16 +277,14 @@ export class ScreenshotIngestService implements OnModuleInit {
         path: existing.filePath,
         thumbPath: existing.thumbPath,
       };
-    } catch {
-      // ফাইল নেই — সারিটা এতিম। নিচে মেরামত।
     }
+    // ফাইল নেই — সারিটা এতিম। নিচে মেরামত।
 
     this.logger.warn(
       `Screenshot row ${existing.id} had no file on disk (${existing.filePath}) — healing from agent retry`,
     );
 
-    await mkdir(dirname(absPath), { recursive: true });
-    await writeFile(absPath, file.buffer);
+    await this.storage.put(existing.filePath, file.buffer, ALLOWED_SCREENSHOT_MIME);
 
     const thumbPath = await this.storeThumb(
       existing.id,
@@ -360,9 +339,7 @@ export class ScreenshotIngestService implements OnModuleInit {
         return null;
       }
 
-      const thumbAbs = join(this.root, thumbRel);
-      await mkdir(dirname(thumbAbs), { recursive: true });
-      await writeFile(thumbAbs, thumb.buffer);
+      await this.storage.put(thumbRel, thumb.buffer, ALLOWED_SCREENSHOT_MIME);
 
       // ⭐ ফাইলটা ডিস্কে পড়ার পরেই কেবল DB জানল — এর উল্টোটা মানেই
       //    ভাঙা ছবির গ্রিড (উপরে `thumbPath: null`-এর নোট দেখুন)।

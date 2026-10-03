@@ -1,5 +1,3 @@
-import { createReadStream } from 'node:fs';
-
 import {
   Controller,
   Get,
@@ -89,7 +87,7 @@ export class ScreenshotsController {
 
     // ⚠️ পুরো ফাইল মেমরিতে না তুলে stream — ৬০টা ছবির গ্রিড একসাথে লোড
     //    হলে readFile ব্যবহার করলে সার্ভারের RAM-এ ঢেউ উঠত।
-    return new StreamableFile(createReadStream(found.absPath), {
+    return new StreamableFile(found.stream, {
       type: SCREENSHOT_MIME,
       disposition: `inline; filename="${found.downloadName}"`,
       length: found.sizeBytes,

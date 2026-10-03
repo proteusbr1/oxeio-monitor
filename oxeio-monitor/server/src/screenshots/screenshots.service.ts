@@ -1,20 +1,23 @@
-import { stat } from 'node:fs/promises';
-import { resolve, sep } from 'node:path';
+import type { Readable } from 'node:stream';
 
 import {
   BadRequestException,
+  Inject,
   ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Prisma, UserRole } from '@prisma/client';
 
 import { workDateOf } from '../agent/util/dhaka-time';
 import { AuditService } from '../audit/audit.service';
-import { storageRoot } from '../common/storage.config';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  SCREENSHOT_STORAGE,
+  isSafeRelPath,
+  type ScreenshotStorage,
+} from '../storage/screenshot-storage';
 import type { SessionUser } from '../auth/types';
 import type { GalleryQueryDto } from './dto';
 import { formatWorkDate, pageSlice, parseWorkDate } from './gallery.math';
@@ -51,7 +54,8 @@ export interface GalleryPage {
 }
 
 export interface ResolvedScreenshotFile {
-  absPath: string;
+  /** Opened through the screenshot store — a local file or an S3 object */
+  stream: Readable;
   sizeBytes: number;
   downloadName: string;
 }
@@ -62,21 +66,14 @@ export const SCREENSHOT_MIME = 'image/webp';
 @Injectable()
 export class ScreenshotsService {
   private readonly logger = new Logger(ScreenshotsService.name);
-  private readonly root: string;
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly urls: SignedUrlService,
-    config: ConfigService,
-  ) {
-    // ⚠️ ingest-এর (agent/screenshot-ingest.service.ts) সাথে **হুবহু** একই
-    //    হিসাব। এখানে ডিফল্টটা আলাদা হলে আপলোড হতো এক ফোল্ডারে আর খোঁজা
-    //    হতো আরেক ফোল্ডারে — সব ছবি ৪০৪, অথচ DB-তে সারি আছে।
-    this.root = resolve(
-      storageRoot(config),
-    );
-  }
+    // ⚠️ the same store ingest writes to (one global instance, StorageModule)
+    //    — so uploads and reads can never end up in two different places
+    @Inject(SCREENSHOT_STORAGE) private readonly storage: ScreenshotStorage,
+  ) {}
 
   /**
    * E06 — `GET /api/v1/screenshots?employeeId=&date=&page=`
@@ -217,20 +214,20 @@ export class ScreenshotsService {
     const wantsThumb = variant === 'thumb' && shot.thumbPath !== null;
     const relPath = wantsThumb ? shot.thumbPath! : shot.filePath;
 
-    const found = await this.statInsideRoot(shot.id, relPath);
+    const found = await this.openInStorage(shot.id, relPath);
 
     if (found === null && wantsThumb) {
       this.logger.warn(
         `screenshot ${shot.id.toString()}: no thumbnail (${relPath}) — served the full image`,
       );
-      const full = await this.statInsideRoot(shot.id, shot.filePath);
+      const full = await this.openInStorage(shot.id, shot.filePath);
       if (full === null) throw new NotFoundException('Image file not found');
 
       this.logger.debug(
         `screenshot ${shot.id.toString()} (thumb→full) served, token was created by user ${viewerUserId}`,
       );
       return {
-        absPath: full.absPath,
+        stream: full.stream,
         sizeBytes: full.sizeBytes,
         downloadName: `${shot.id.toString()}_${variant}.webp`,
       };
@@ -240,14 +237,14 @@ export class ScreenshotsService {
       throw new NotFoundException('Image file not found');
     }
 
-    const { absPath, sizeBytes } = found;
+    const { stream, sizeBytes } = found;
 
     this.logger.debug(
       `screenshot ${shot.id.toString()} (${variant}) served, token was created by user ${viewerUserId}`,
     );
 
     return {
-      absPath,
+      stream,
       sizeBytes,
       downloadName: `${shot.id.toString()}_${variant}.webp`,
     };
@@ -266,34 +263,26 @@ export class ScreenshotsService {
    *
    * @returns `null` মানে পথ ঠিক আছে, কিন্তু ডিস্কে ফাইলটা নেই
    */
-  private async statInsideRoot(
+  private async openInStorage(
     id: bigint,
     relPath: string,
-  ): Promise<{ absPath: string; sizeBytes: number } | null> {
-    const absPath = resolve(this.root, relPath);
-
-    // ⚠️ পথটা DB থেকে আসে, তবু বিশ্বাস করা হয় না। কোনোভাবে `..` ঢুকে
-    //    গেলে (পুরোনো সারি, ম্যানুয়াল ইনসার্ট) storage-এর বাইরের যেকোনো
-    //    ফাইল সার্ভ হয়ে যেত।
-    if (absPath !== this.root && !absPath.startsWith(this.root + sep)) {
+  ): Promise<{ stream: Readable; sizeBytes: number } | null> {
+    // ⚠️ the path check from before, now the same for both drivers
+    //    (isSafeRelPath); the local driver checks the root again itself
+    if (!isSafeRelPath(relPath)) {
       this.logger.error(
         `screenshot ${id.toString()}: path is outside storage: ${relPath}`,
       );
       throw new NotFoundException('Screenshot does not exist');
     }
 
-    try {
-      const info = await stat(absPath);
-      if (!info.isFile()) throw new Error('not a file');
-      return { absPath, sizeBytes: info.size };
-    } catch {
-      // ingest আগে DB-তে লেখে, পরে ডিস্কে — মাঝখানে ক্র্যাশ হলে সারি থাকে,
-      // ফাইল থাকে না। ৫০০ নয়, এটা সত্যিই "নেই"।
+    const opened = await this.storage.open(relPath);
+    if (opened === null) {
       this.logger.warn(
-        `screenshot ${id.toString()}: row exists in the DB, but no file on disk (${relPath})`,
+        `screenshot ${id.toString()}: row exists in the DB, but no file in storage (${relPath})`,
       );
-      return null;
     }
+    return opened;
   }
 
   private resolveDate(iso?: string): Date {
