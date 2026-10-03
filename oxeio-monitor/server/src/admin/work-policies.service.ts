@@ -25,6 +25,8 @@ export interface WorkPolicyView {
   weeklyOffDay: number | null;
   screenshotFrom: string | null;
   screenshotTo: string | null;
+  /** false = no screenshots for this policy; the jiggler check keeps running */
+  screenshotsEnabled: boolean;
   /** ⭐ অফিস কখন খোলা — `agent_down` অ্যালার্টের জানালা। null = সারাদিন খোলা */
   officeFrom: string | null;
   officeTo: string | null;
@@ -103,6 +105,9 @@ export class WorkPoliciesService {
           ? {}
           : { idleThresholdSec: dto.idleThresholdSec }),
         ...(dto.slotMinutes === undefined ? {} : { slotMinutes: dto.slotMinutes }),
+        ...(dto.screenshotsEnabled === undefined
+          ? {}
+          : { screenshotsEnabled: dto.screenshotsEnabled }),
         ...(dto.dailyDesignTarget === undefined
           ? {}
           : { dailyDesignTarget: dto.dailyDesignTarget }),
@@ -175,6 +180,9 @@ export class WorkPoliciesService {
           ? {}
           : { idleThresholdSec: dto.idleThresholdSec }),
         ...(dto.slotMinutes === undefined ? {} : { slotMinutes: dto.slotMinutes }),
+        ...(dto.screenshotsEnabled === undefined
+          ? {}
+          : { screenshotsEnabled: dto.screenshotsEnabled }),
         ...(dto.dailyDesignTarget === undefined
           ? {}
           : { dailyDesignTarget: dto.dailyDesignTarget }),
@@ -327,6 +335,7 @@ function toView(policy: WorkPolicy, employeeCount: number): WorkPolicyView {
     weeklyOffDay: policy.weeklyOffDay,
     screenshotFrom: policy.screenshotFrom,
     screenshotTo: policy.screenshotTo,
+    screenshotsEnabled: policy.screenshotsEnabled,
     officeFrom: policy.officeFrom,
     officeTo: policy.officeTo,
     idleThresholdSec: policy.idleThresholdSec,

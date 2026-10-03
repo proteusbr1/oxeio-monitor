@@ -57,6 +57,7 @@ public sealed record AgentConfig
         AppTracking = new AppTrackingConfig { Enabled = true, MinDurationSec = 5 },
         Screenshot = new ScreenshotConfig
         {
+            Enabled = true,
             Format = "webp",
             Quality = 70,
             MaxWidth = 1920,
@@ -97,6 +98,20 @@ public sealed record AppTrackingConfig
 
 public sealed record ScreenshotConfig
 {
+    /// <summary>
+    /// <c>false</c> = the work policy turned screenshots off: no image is
+    /// taken, written or sent. <c>null</c> comes from a server older than the
+    /// field and means on, as before.
+    ///
+    /// ⚠️ The jiggler check keeps sampling the screen either way
+    /// (<see cref="oXeio.Core.Capture.CaptureGate.Verdict.DisabledByPolicy"/>).
+    /// </summary>
+    public bool? Enabled { get; init; }
+
+    /// <summary><see cref="Enabled"/>, with "not sent" read as on.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsEnabled => Enabled != false;
+
     /// <summary>সার্ভার শুধু <c>"webp"</c> নেয় — অন্য কিছু হলে ৪১৫।</summary>
     public required string Format { get; init; }
 

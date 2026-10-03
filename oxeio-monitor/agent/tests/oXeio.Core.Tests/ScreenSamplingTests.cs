@@ -127,4 +127,21 @@ public class ScreenSamplingTests
         Assert.True(ScreenSampling.Allowed(
             enrolled: true, revoked: false, insideWindow: true, locked: false));
     }
+
+    /// <summary>
+    /// ⚠️ Turning screenshots off must not turn the jiggler check off: if it
+    /// did, a frozen screen would keep counting as work and hours would change.
+    /// </summary>
+    [Fact]
+    public void Screenshots_off_by_policy_keep_the_screen_sampled()
+    {
+        Assert.Equal(
+            CaptureGate.Verdict.DisabledByPolicy,
+            CaptureGate.Check(SegmentState.Active, enrolled: true, revoked: false,
+                CaptureWindow.Default, Start, screenshotsEnabled: false));
+
+        // the sampling rule does not even take the flag — nothing to switch off
+        Assert.True(ScreenSampling.Allowed(
+            enrolled: true, revoked: false, insideWindow: true, locked: false));
+    }
 }

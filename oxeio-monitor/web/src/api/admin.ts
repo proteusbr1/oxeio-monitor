@@ -286,6 +286,11 @@ export interface WorkPolicyView {
   screenshotFrom: string | null;
   screenshotTo: string | null;
   /**
+   * `false` = no screenshots for this policy. The agent keeps sampling the
+   * screen for the jiggler check, so hours are counted the same way.
+   */
+  screenshotsEnabled: boolean;
+  /**
    * ⭐ `'HH:MM'` — অফিস কখন খোলা। ⚠️ ক্যাপচার উইন্ডো **নয়**: ওটা চওড়া
    * (০৭:০০–২৩:০০) যাতে কেউ আগে-পরে কাজ করলেও ছবি ওঠে, আর এটা সংকীর্ণ
    * (৯টা–৬টা) যাতে অফিস বন্ধ থাকলে "এজেন্ট চুপ" অ্যালার্ট না ওঠে।
@@ -308,6 +313,7 @@ export type WorkPolicyBody = Partial<{
   weeklyOffDay: number | null;
   screenshotFrom: string;
   screenshotTo: string;
+  screenshotsEnabled: boolean;
   officeFrom: string;
   officeTo: string;
   idleThresholdSec: number;
