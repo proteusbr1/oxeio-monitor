@@ -53,7 +53,7 @@ export class AgentDownCheck {
                 select: {
                   officeFrom: true,
                   officeTo: true,
-                  weeklyOffDay: true,
+                  weeklyOffDays: true,
                 },
               },
             },
@@ -71,7 +71,7 @@ export class AgentDownCheck {
        */
       this.prisma.workPolicy.findFirst({
         where: { isActive: true },
-        select: { officeFrom: true, officeTo: true, weeklyOffDay: true },
+        select: { officeFrom: true, officeTo: true, weeklyOffDays: true },
       }),
       /**
        * ⭐⭐⭐ **আজ কে ছুটিতে** *(৬ সেপ্টেম্বর ২০২৬, G157)*।
@@ -119,10 +119,10 @@ export class AgentDownCheck {
             null,
           officeTo:
             d.employee?.policy?.officeTo ?? fallbackPolicy?.officeTo ?? null,
-          weeklyOffDay:
-            d.employee?.policy?.weeklyOffDay ??
-            fallbackPolicy?.weeklyOffDay ??
-            null,
+          weeklyOffDays:
+            d.employee?.policy?.weeklyOffDays ??
+            fallbackPolicy?.weeklyOffDays ??
+            [],
           isHoliday: holiday !== null,
         }),
       );

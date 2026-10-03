@@ -285,32 +285,32 @@ describe('কর্মদিবস গোনা — § ২.১-খ', () => {
   });
 
   it('রবিবার সাপ্তাহিক ছুটি (৭) দিলেও ঠিকমতো বাদ পড়ে', () => {
-    expect(isWorkday(day('2026-02-01'), 7, new Set())).toBe(false);
-    expect(isWorkday(day('2026-02-02'), 7, new Set())).toBe(true);
+    expect(isWorkday(day('2026-02-01'), [7], new Set())).toBe(false);
+    expect(isWorkday(day('2026-02-02'), [7], new Set())).toBe(true);
   });
 
   it('holidays টেবিলের দিন কর্মদিবস নয়', () => {
     const holidays = new Set([day('2026-08-10').getTime()]);
-    expect(isWorkday(day('2026-08-10'), 5, holidays)).toBe(false);
-    expect(isWorkday(day('2026-08-11'), 5, holidays)).toBe(true);
+    expect(isWorkday(day('2026-08-10'), [5], holidays)).toBe(false);
+    expect(isWorkday(day('2026-08-11'), [5], holidays)).toBe(true);
   });
 
   it('weeklyOffDay = null হলে প্রতিটি ক্যালেন্ডার দিনই কর্মদিবস', () => {
-    expect(countWorkdays(day('2026-08-01'), day('2026-08-31'), null, new Set())).toBe(31);
+    expect(countWorkdays(day('2026-08-01'), day('2026-08-31'), [], new Set())).toBe(31);
   });
 
   it('আগস্ট ২০২৬ — শুক্রবার বাদে ২৭ দিন', () => {
-    expect(countWorkdays(day('2026-08-01'), day('2026-08-31'), 5, new Set())).toBe(27);
+    expect(countWorkdays(day('2026-08-01'), day('2026-08-31'), [5], new Set())).toBe(27);
   });
 
   it('"আজ পর্যন্ত" আজকের দিনটাও ধরে', () => {
     // ১–১১ আগস্টে একটাই শুক্রবার (৭ তারিখ)
-    expect(countWorkdays(day('2026-08-01'), day('2026-08-11'), 5, new Set())).toBe(10);
+    expect(countWorkdays(day('2026-08-01'), day('2026-08-11'), [5], new Set())).toBe(10);
   });
 
   it('ছুটি ও সাপ্তাহিক ছুটি একই দিনে পড়লে দুবার বাদ যায় না', () => {
     const holidays = new Set([day('2026-08-07').getTime()]); // ওটা শুক্রবারও
-    expect(countWorkdays(day('2026-08-01'), day('2026-08-31'), 5, holidays)).toBe(27);
+    expect(countWorkdays(day('2026-08-01'), day('2026-08-31'), [5], holidays)).toBe(27);
   });
 });
 

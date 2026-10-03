@@ -34,7 +34,7 @@ interface EmployeePolicy {
   /** পলিসির `expected_workdays` (২৬) — দৈনিক টার্গেট এটা দিয়েই ভাগ হয় */
   policyWorkdays: number;
   /** ISO দিন (শুক্র = ৫), null = প্রতিটি দিনই কর্মদিবস */
-  weeklyOffDay: number | null;
+  weeklyOffDays: readonly number[];
   /** G37 — `null` = আগে থেকেই আছে / এখনো আছে */
   joinedOn: Date | null;
   leftOn: Date | null;
@@ -286,7 +286,7 @@ export class SummaryService {
         adjustmentSec: adjustBy.get(e.id) ?? 0,
         productiveSpans: productiveBy.get(e.id) ?? [],
         unproductiveSpans: unproductiveBy.get(e.id) ?? [],
-        isOffDay: !isWorkday(workDate, e.weeklyOffDay, holidays),
+        isOffDay: !isWorkday(workDate, e.weeklyOffDays, holidays),
       });
 
       // ⚠️ `summarizeDay`-র ভেতরে ঢোকানো হয়নি — ওটা **সময়ের** খাঁটি অঙ্ক,
@@ -586,7 +586,7 @@ export class SummaryService {
         monthEnd: end,
         joinedOn: e.joinedOn,
         leftOn: e.leftOn,
-        weeklyOffDay: e.weeklyOffDay,
+        weeklyOffDays: e.weeklyOffDays,
         holidays,
         monthlyTargetSec: e.targetSec,
         policyWorkdays: e.policyWorkdays,
@@ -631,7 +631,7 @@ export class SummaryService {
            * আগের চেয়েও বেশি ঘাটতি। `today` দিলে জানালা খালি, প্রত্যাশা ০।
            */
           trackingStartedOn: firstSeen.get(e.id) ?? today,
-          weeklyOffDay: e.weeklyOffDay,
+          weeklyOffDays: e.weeklyOffDays,
           holidays,
         }, leaveDates),
         /**
@@ -656,7 +656,7 @@ export class SummaryService {
             joinedOn: e.joinedOn,
             leftOn: e.leftOn,
             trackingStartedOn: firstSeen.get(e.id) ?? today,
-            weeklyOffDay: e.weeklyOffDay,
+            weeklyOffDays: e.weeklyOffDays,
             holidays,
           },
           new Set(rows.map((r) => r.workDate.getTime())),
@@ -719,7 +719,7 @@ export class SummaryService {
         policy: {
           select: {
             monthlyTargetHours: true,
-            weeklyOffDay: true,
+            weeklyOffDays: true,
             expectedWorkdays: true,
           },
         },
@@ -733,7 +733,7 @@ export class SummaryService {
         Number(r.policy?.monthlyTargetHours ?? DEFAULT_TARGET_HOURS),
       ),
       policyWorkdays: r.policy?.expectedWorkdays ?? DEFAULT_POLICY_WORKDAYS,
-      weeklyOffDay: r.policy?.weeklyOffDay ?? null,
+      weeklyOffDays: r.policy?.weeklyOffDays ?? [],
       joinedOn: r.joinedOn,
       leftOn: r.leftOn,
     }));

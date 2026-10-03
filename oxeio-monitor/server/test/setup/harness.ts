@@ -99,7 +99,7 @@ export async function resetDatabase(
       name: 'Standard',
       monthlyTargetHours: 208,
       expectedWorkdays: 26,
-      weeklyOffDay: 5,
+      weeklyOffDays: [5],
       screenshotFrom: '07:00',
       screenshotTo: '23:00',
       idleThresholdSec: 60,

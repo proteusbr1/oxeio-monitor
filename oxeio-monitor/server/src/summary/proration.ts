@@ -35,7 +35,7 @@ export interface ProrationInput {
   leftOn: Date | null;
 
   /** ISO দিন (শুক্র = ৫), `null` = প্রতিটি দিনই কর্মদিবস */
-  weeklyOffDay: number | null;
+  weeklyOffDays: readonly number[];
   /** ওই মাসের ছুটির দিনগুলো, `getTime()` মিলিয়ে */
   holidays: ReadonlySet<number>;
 
@@ -109,7 +109,7 @@ export function prorate(input: ProrationInput): Proration {
     monthEnd,
     joinedOn,
     leftOn,
-    weeklyOffDay,
+    weeklyOffDays,
     holidays,
     monthlyTargetSec,
     policyWorkdays,
@@ -123,7 +123,7 @@ export function prorate(input: ProrationInput): Proration {
     throw new RangeError('The policy workdays cannot be zero or negative');
   }
 
-  const monthWorkdays = countWorkdays(monthStart, monthEnd, weeklyOffDay, holidays);
+  const monthWorkdays = countWorkdays(monthStart, monthEnd, weeklyOffDays, holidays);
 
   // কর্মকালের সাথে মাসের ছেদ
   const from = joinedOn === null ? monthStart : laterOf(joinedOn, monthStart);
@@ -139,7 +139,7 @@ export function prorate(input: ProrationInput): Proration {
   const employeeWorkdays =
     from.getTime() > to.getTime()
       ? 0
-      : countWorkdays(from, to, weeklyOffDay, holidays);
+      : countWorkdays(from, to, weeklyOffDays, holidays);
 
   const dailyTargetSec = monthlyTargetSec / policyWorkdays;
 
@@ -154,7 +154,7 @@ export function prorate(input: ProrationInput): Proration {
     leaveDates,
     from,
     to,
-    weeklyOffDay,
+    weeklyOffDays,
     holidays,
   );
 

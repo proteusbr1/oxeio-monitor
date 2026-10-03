@@ -163,9 +163,11 @@ model WorkPolicy {
   monthlyTargetHours Decimal @default(208) @map("monthly_target_hours") @db.Decimal(6, 2)
   /// fallback মাত্র — আসল হিসাব ক্যালেন্ডার থেকে, § ২.১-খ
   expectedWorkdays   Int     @default(26) @map("expected_workdays")
-  /// ISO দিন (শুক্র = 5)। null হলে প্রতিটি ক্যালেন্ডার দিনই কর্মদিবস।
   /// ⚠️ এটা ব্লক নয় — ছুটির দিনে কাজ করলেও ঘণ্টা পুরোপুরি গোনা হয়।
-  weeklyOffDay       Int?    @map("weekly_off_day") @db.SmallInt
+  /// ISO days off (Fri = 5), several allowed: [5] for Bangladesh, [6, 7] for
+  /// Sat+Sun. Empty = every calendar day is a workday (was `weekly_off_day`
+  /// null).
+  weeklyOffDays      Int[]   @default([]) @map("weekly_off_days") @db.SmallInt
   /// 'HH:MM' — ক্যাপচার উইন্ডো। null হলে ২৪ ঘণ্টা ছবি ওঠে।
   screenshotFrom     String? @map("screenshot_from") @db.VarChar(5)
   screenshotTo       String? @map("screenshot_to") @db.VarChar(5)

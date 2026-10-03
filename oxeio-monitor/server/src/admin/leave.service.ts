@@ -73,7 +73,7 @@ export class LeaveService {
           employee: {
             select: {
               fullName: true,
-              policy: { select: { weeklyOffDay: true } },
+              policy: { select: { weeklyOffDays: true } },
             },
           },
         },
@@ -97,7 +97,7 @@ export class LeaveService {
         createdBy: r.createdBy,
         countsTowardTarget: isWorkday(
           r.leaveDate,
-          r.employee.policy?.weeklyOffDay ?? null,
+          r.employee.policy?.weeklyOffDays ?? [],
           holidays,
         ),
       })),

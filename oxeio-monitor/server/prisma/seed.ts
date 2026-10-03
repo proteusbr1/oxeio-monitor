@@ -46,7 +46,7 @@ async function seedWorkPolicy(): Promise<number> {
       name: 'Standard',
       monthlyTargetHours: 208,
       expectedWorkdays: 26,
-      weeklyOffDay: 5, // ISO: শুক্রবার। ⚠️ ব্লক নয় — শুক্রবারে কাজ করলেও গোনা হবে
+      weeklyOffDays: [5], // ISO: শুক্রবার। ⚠️ ব্লক নয় — শুক্রবারে কাজ করলেও গোনা হবে
       screenshotFrom: '07:00',
       screenshotTo: '23:00',
       idleThresholdSec: 60,

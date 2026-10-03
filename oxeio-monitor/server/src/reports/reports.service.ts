@@ -79,6 +79,7 @@ import {
   type SummaryReport,
   type SummaryRow,
 } from './reports.types';
+import { isOffWeekday } from '../summary/weekly-off';
 
 const HOUR = 3600;
 const DEFAULT_TOP = 25;
@@ -102,7 +103,7 @@ interface ResolvedEmployee {
   joinedOn: Date | null;
   leftOn: Date | null;
   monthlyTargetSec: number;
-  weeklyOffDay: number | null;
+  weeklyOffDays: readonly number[];
   /**
    * ⭐⭐ এক কর্মদিবসের টার্গেট = মাসিক ÷ পলিসির `expected_workdays`।
    *
@@ -412,7 +413,7 @@ export class ReportsService {
     const rows: SummaryRow[] = [];
 
     for (const employee of ctx.employees) {
-      const weekStart = weekStartIsoDay(employee.weeklyOffDay);
+      const weekStart = weekStartIsoDay(employee.weeklyOffDays);
       const rule = ctx.ruleOf(employee);
 
       /** বালতির চাবি → জমতে থাকা হিসাব */
@@ -765,7 +766,7 @@ export class ReportsService {
             select: {
               monthlyTargetHours: true,
               expectedWorkdays: true,
-              weeklyOffDay: true,
+              weeklyOffDays: true,
             },
           },
         },
@@ -777,7 +778,7 @@ export class ReportsService {
         select: {
           monthlyTargetHours: true,
           expectedWorkdays: true,
-          weeklyOffDay: true,
+          weeklyOffDays: true,
         },
       }),
     ]);
@@ -814,7 +815,7 @@ export class ReportsService {
         joinedOn: e.joinedOn,
         leftOn: e.leftOn,
         monthlyTargetSec,
-        weeklyOffDay: policy.weeklyOffDay,
+        weeklyOffDays: policy.weeklyOffDays,
         dailyTargetSec: dailyTargetSec(
           monthlyTargetSec,
           policy.expectedWorkdays,
@@ -846,7 +847,7 @@ export class ReportsService {
     const holidays = new Set(holidayRows.map((h) => h.holidayDate.getTime()));
 
     const ruleOf = (employee: ResolvedEmployee): WorkdayRule => ({
-      weeklyOffDay: employee.weeklyOffDay,
+      weeklyOffDays: employee.weeklyOffDays,
       holidays,
     });
 
@@ -979,7 +980,7 @@ export class ReportsService {
         leaveBy.get(employee.id),
         span.from,
         span.to,
-        employee.weeklyOffDay,
+        employee.weeklyOffDays,
         holidays,
       );
       return (
@@ -1037,7 +1038,7 @@ export class ReportsService {
             leftOn: employee.leftOn,
             // ⚠️⚠️ `?? today` — উপরের `windowBy`-র হুবহু একই ধার (G120)
             trackingStartedOn: trackedFrom.get(employee.id) ?? today,
-            weeklyOffDay: employee.weeklyOffDay,
+            weeklyOffDays: employee.weeklyOffDays,
             holidays,
           },
           leaveBy.get(employee.id),
@@ -1242,7 +1243,7 @@ function itemOf(
  */
 function dayTypeOf(date: Date, rule: WorkdayRule): DayType {
   if (rule.holidays.has(date.getTime())) return 'holiday';
-  if (rule.weeklyOffDay !== null && isoDayOf(date) === rule.weeklyOffDay) {
+  if (isOffWeekday(isoDayOf(date), rule.weeklyOffDays)) {
     return 'weekly_off';
   }
   return 'workday';

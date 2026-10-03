@@ -280,8 +280,8 @@ export interface WorkPolicyView {
   /** ⭐ একমাত্র টার্গেট, ডিফল্ট ২০৮ */
   monthlyTargetHours: number;
   expectedWorkdays: number;
-  /** ISO দিন — সোম = ১ … শুক্র = ৫ … রবি = ৭। `null` হলে প্রতিদিনই কর্মদিবস। */
-  weeklyOffDay: number | null;
+  /** ISO দিন — সোম = ১ … শুক্র = ৫ … রবি = ৭। Several allowed; empty = every day is a workday. */
+  weeklyOffDays: number[];
   /** `'HH:MM'` — ক্যাপচার উইন্ডো, ডিফল্ট ০৭:০০–২৩:০০ */
   screenshotFrom: string | null;
   screenshotTo: string | null;
@@ -310,7 +310,7 @@ export type WorkPolicyBody = Partial<{
   name: string;
   monthlyTargetHours: number;
   expectedWorkdays: number;
-  weeklyOffDay: number | null;
+  weeklyOffDays: number[];
   screenshotFrom: string;
   screenshotTo: string;
   screenshotsEnabled: boolean;

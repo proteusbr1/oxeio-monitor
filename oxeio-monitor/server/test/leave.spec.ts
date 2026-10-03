@@ -36,7 +36,7 @@ const SEPT = {
   monthEnd: day('2026-09-30'),
   joinedOn: null,
   leftOn: null,
-  weeklyOffDay: 5,
+  weeklyOffDays: [5],
   holidays: new Set<number>(),
   monthlyTargetSec: 208 * HOUR,
   policyWorkdays: 26,
@@ -48,28 +48,28 @@ describe('countLeaveWorkdays — কেবল কর্মদিবসই গো
 
   it('কর্মদিবসের ছুটি গোনা হয়', () => {
     const leave = new Set([day('2026-09-01').getTime(), day('2026-09-02').getTime()]);
-    expect(countLeaveWorkdays(leave, from, to, 5, new Set())).toBe(2);
+    expect(countLeaveWorkdays(leave, from, to, [5], new Set())).toBe(2);
   });
 
   it('শুক্রবার (৪ সেপ্টেম্বর) গোনা হয় না', () => {
     const leave = new Set([day('2026-09-04').getTime()]);
-    expect(countLeaveWorkdays(leave, from, to, 5, new Set())).toBe(0);
+    expect(countLeaveWorkdays(leave, from, to, [5], new Set())).toBe(0);
   });
 
   it('সরকারি ছুটির দিন গোনা হয় না', () => {
     const leave = new Set([day('2026-09-07').getTime()]);
     const holidays = new Set([day('2026-09-07').getTime()]);
-    expect(countLeaveWorkdays(leave, from, to, 5, holidays)).toBe(0);
+    expect(countLeaveWorkdays(leave, from, to, [5], holidays)).toBe(0);
   });
 
   it('জানালার বাইরের তারিখ গোনা হয় না', () => {
     const leave = new Set([day('2026-08-31').getTime(), day('2026-10-01').getTime()]);
-    expect(countLeaveWorkdays(leave, from, to, 5, new Set())).toBe(0);
+    expect(countLeaveWorkdays(leave, from, to, [5], new Set())).toBe(0);
   });
 
   it('খালি বা অনুপস্থিত সেটে শূন্য', () => {
-    expect(countLeaveWorkdays(undefined, from, to, 5, new Set())).toBe(0);
-    expect(countLeaveWorkdays(new Set(), from, to, 5, new Set())).toBe(0);
+    expect(countLeaveWorkdays(undefined, from, to, [5], new Set())).toBe(0);
+    expect(countLeaveWorkdays(new Set(), from, to, [5], new Set())).toBe(0);
   });
 });
 
@@ -239,7 +239,7 @@ describe('elapsedWorkdays — ছুটি', () => {
     joinedOn: null,
     leftOn: null,
     trackingStartedOn: null,
-    weeklyOffDay: 5,
+    weeklyOffDays: [5],
     holidays: new Set<number>(),
   };
 
@@ -286,7 +286,7 @@ describe('পুরো শৃঙ্খল — ছুটির পরেও ঘ�
         joinedOn: null,
         leftOn: null,
         trackingStartedOn: null,
-        weeklyOffDay: 5,
+        weeklyOffDays: [5],
         holidays: SEPT.holidays,
       },
       leaveDates,
