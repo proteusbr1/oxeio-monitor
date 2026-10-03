@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 
+import { DISPLAY_LOCALE } from '../common/display-locale';
 import { IDLE_WARN_BEFORE_SEC, SESSION_TTL_MIN } from './auth.constants';
 import { AuthService, type MeResult } from './auth.service';
 import { AllowWhileMustChangePw, CurrentUser, Public } from './decorators';
@@ -103,6 +104,16 @@ export class AuthController {
       idleTimeoutSec: SESSION_TTL_MIN * 60,
       warnBeforeSec: IDLE_WARN_BEFORE_SEC,
     };
+  }
+
+  /**
+   * How the dashboard writes dates and numbers (`DISPLAY_LOCALE`); `null` =
+   * the formats it always had. Same reasoning as `session-policy`.
+   */
+  @Public()
+  @Get('display-locale')
+  displayLocale(): { locale: string | null } {
+    return { locale: DISPLAY_LOCALE };
   }
 
   @AllowWhileMustChangePw()

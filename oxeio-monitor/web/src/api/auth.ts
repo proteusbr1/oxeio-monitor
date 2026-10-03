@@ -56,6 +56,16 @@ export function me(): Promise<Me> {
   return api('/auth/me', { silent401: true });
 }
 
+/**
+ * How dates and numbers are written (`DISPLAY_LOCALE`); `null` = the formats
+ * the dashboard always had. Public, like `session-policy`.
+ */
+export function fetchDisplayLocale(
+  signal?: AbortSignal,
+): Promise<{ locale: string | null }> {
+  return api('/auth/display-locale', { silent401: true, signal });
+}
+
 export function logout(): Promise<void> {
   return api('/auth/logout', { method: 'POST' });
 }
