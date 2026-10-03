@@ -204,10 +204,25 @@ internal sealed class FakeSyncClient : ISyncClient
         ScreenshotRecord meta, string webpPath, CancellationToken ct = default) =>
         throw new NotSupportedException();
 
-    public Task<SyncResult<UpdateOffer>> CheckUpdateAsync(string v, CancellationToken ct = default) =>
-        throw new NotSupportedException();
+    /// <summary>For update tests: what the server offers, and the MSI bytes it serves.</summary>
+    public UpdateOffer? Offer { get; set; }
+    public byte[]? UpdateBytes { get; set; }
 
-    public Task<SyncResult<UpdateDownload>> DownloadUpdateAsync(
-        string v, string dest, CancellationToken ct = default) =>
-        throw new NotSupportedException();
+    public Task<SyncResult<UpdateOffer>> CheckUpdateAsync(string v, CancellationToken ct = default) =>
+        Offer is null
+            ? throw new NotSupportedException()
+            : Task.FromResult(SyncResult<UpdateOffer>.Ok(Offer));
+
+    public async Task<SyncResult<UpdateDownload>> DownloadUpdateAsync(
+        string v, string dest, CancellationToken ct = default)
+    {
+        if (UpdateBytes is null) throw new NotSupportedException();
+        await File.WriteAllBytesAsync(dest, UpdateBytes, ct);
+        return SyncResult<UpdateDownload>.Ok(new UpdateDownload
+        {
+            SavedPath = dest,
+            Bytes = UpdateBytes.Length,
+            Sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(UpdateBytes)).ToLowerInvariant(),
+        });
+    }
 }

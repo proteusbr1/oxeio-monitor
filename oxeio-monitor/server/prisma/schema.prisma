@@ -659,6 +659,9 @@ model AgentVersion {
   version      String       @id
   msiPath      String       @map("msi_path")
   sha256       String
+  /// The owner's ECDSA signature of the MSI (base64 DER), from `<msi>.sig` at
+  /// publish — passed on to agents that check it. null = published unsigned.
+  signature    String?
   releaseNotes String?      @map("release_notes")
   rolloutStage RolloutStage @default(canary) @map("rollout_stage")
   /// ⭐⭐⭐ ধাপটা **শেষ কবে বদলেছে** *(৬ সেপ্টেম্বর ২০২৬)*।

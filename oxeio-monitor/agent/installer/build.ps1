@@ -60,6 +60,12 @@ param(
     #   বিল্ড করাই আটকে যেত।
     [string]$SignWith,
 
+    # The owner's public key for signed updates — a .pem file or its base64
+    # body. Baked into the MSI (UPDATEKEY), so the agent installs only updates
+    # signed with the matching private key. Empty = sha256 only, as before.
+    # deploy/README.md § "Signed agent updates".
+    [string]$UpdatePublicKey,
+
     # ⚠️ টাইমস্ট্যাম্প ছাড়া সই করা। **সাধারণত দেবেন না** — কারণ নিচে।
     [switch]$NoTimestamp,
 
@@ -314,6 +320,17 @@ New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 #    থামত। ঠিক এটাই ঘটেছে ১৮ আগস্ট (agent/ নয়, web/ cwd থেকে চালানো হয়েছিল),
 #    আর ডকের `powershell -File installer\build.ps1`-ও (agent/ cwd) একইভাবে
 #    ভাঙত। bindpath দিলে cwd যেখানেই হোক wix installer/-এ ফাইল খুঁজে পায়।
+# The update key as one line of base64 — a file path or the key itself
+$updateKeyLine = ''
+if ($UpdatePublicKey) {
+    $raw = if (Test-Path $UpdatePublicKey) { Get-Content $UpdatePublicKey -Raw } else { $UpdatePublicKey }
+    $updateKeyLine = ($raw -replace '-----(BEGIN|END) PUBLIC KEY-----', '' -replace '\s', '')
+    if ($updateKeyLine -notmatch '^[A-Za-z0-9+/=]+$') {
+        throw "UpdatePublicKey is not a PEM public key or its base64 body: $UpdatePublicKey"
+    }
+    Write-Host "   update : signed updates only (key $($updateKeyLine.Substring(0, [Math]::Min(16, $updateKeyLine.Length)))…)" -ForegroundColor DarkGray
+}
+
 & wix build `
     (Join-Path $here 'Package.wxs') `
     -arch x64 `
@@ -321,6 +338,7 @@ New-Item -ItemType Directory -Path $outDir -Force | Out-Null
     -d "PublishDir=$publishDir" `
     -d "Version=$Version" `
     -d "ServerUrlDefault=$($ServerUrl.TrimEnd('/'))" `
+    -d "UpdateKeyDefault=$updateKeyLine" `
     -o $msi
 
 if ($LASTEXITCODE -ne 0) { throw 'wix build ব্যর্থ' }

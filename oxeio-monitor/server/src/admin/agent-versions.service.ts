@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto';
+import { createHash, type KeyObject } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
 
 import {
@@ -14,6 +14,11 @@ import { ConfigService } from '@nestjs/config';
 import { RolloutStage } from '@prisma/client';
 
 import { isNewer, pilotNeededFor } from '../agent/rollout';
+import {
+  parseUpdatePublicKey,
+  signatureFromFile,
+  verifyUpdateSignature,
+} from '../agent/update-signature';
 import { AuditService } from '../audit/audit.service';
 import { storageRoot } from '../common/storage.config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -30,6 +35,8 @@ export interface AgentVersionView {
   releasedAt: string;
   /** ⚠️ ফাইলটা সত্যিই ডিস্কে আছে তো? না থাকলে অফার করাই বিপজ্জনক */
   fileMissing: boolean;
+  /** Published with the owner's signature (`<msi>.sig`) — see update-signature.ts */
+  signed: boolean;
   /** এই ভার্সনে কতগুলো ডিভাইস ইতিমধ্যে চলছে */
   devicesOn: number;
   /**
@@ -62,6 +69,7 @@ export interface AgentVersionView {
 export class AgentVersionsService {
   private readonly logger = new Logger(AgentVersionsService.name);
   private readonly root: string;
+  private readonly updateKey: KeyObject | null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -71,6 +79,8 @@ export class AgentVersionsService {
     // ⚠️ `update.service.ts`-এর সাথে হুবহু একই হিসাব — দুই জায়গায় আলাদা
     //    হলে এখানে বসানো পাথ ওখানে "ফাইল নেই" হয়ে যেত।
     this.root = resolve(storageRoot(config));
+    // the owner's public key; set = only signed versions can be published
+    this.updateKey = parseUpdatePublicKey(config.get<string>('AGENT_UPDATE_PUBLIC_KEY'));
   }
 
   /**
@@ -119,6 +129,7 @@ export class AgentVersionsService {
           releaseNotes: r.releaseNotes,
           releasedAt: r.releasedAt.toISOString(),
           fileMissing: file === null,
+          signed: r.signature !== null,
           devicesOn: counts.get(r.version) ?? 0,
           pilotDeviceId: r.pilotDeviceId,
           pilotLabel: await this.pilotLabelOf(r.pilotDeviceId),
@@ -171,6 +182,8 @@ export class AgentVersionsService {
      * `update.service.ts` সেটাকে কখনো অফার করত না (`isNewer` মিথ্যা),
      * আর owner ভাবতেন বিলি হয়ে গেছে — নীরব ব্যর্থতা।
      */
+    const signature = await this.signatureFor(file.abs);
+
     const latest = await this.prisma.agentVersion.findFirst({
       orderBy: { releasedAt: 'desc' },
     });
@@ -199,6 +212,7 @@ export class AgentVersionsService {
         version: dto.version,
         msiPath: dto.msiPath,
         sha256,
+        signature,
         releaseNotes: dto.releaseNotes ?? null,
         rolloutStage: stage,
         isMandatory: dto.isMandatory ?? false,
@@ -216,6 +230,7 @@ export class AgentVersionsService {
       //    সিদ্ধান্ত, আর নীরব সিদ্ধান্ত এই সিস্টেমে রাখা হয় না
       meta: {
         sha256,
+        signed: signature !== null,
         stage: row.rolloutStage,
         sizeBytes: file.size,
         autoPilotDeviceId: autoPilot,
@@ -243,6 +258,7 @@ export class AgentVersionsService {
       releaseNotes: row.releaseNotes,
       releasedAt: row.releasedAt.toISOString(),
       fileMissing: false,
+      signed: signature !== null,
       devicesOn: 0,
       pilotDeviceId: row.pilotDeviceId,
       pilotLabel: await this.pilotLabelOf(row.pilotDeviceId),
@@ -342,6 +358,7 @@ export class AgentVersionsService {
       releaseNotes: updated.releaseNotes,
       releasedAt: updated.releasedAt.toISOString(),
       fileMissing: file === null,
+      signed: updated.signature !== null,
       devicesOn,
       pilotDeviceId: updated.pilotDeviceId,
       pilotLabel: await this.pilotLabelOf(updated.pilotDeviceId),
@@ -400,6 +417,43 @@ export class AgentVersionsService {
    * `readFile()` দিয়ে করলে প্রতিটা publish-এ ওইটুকু RAM লাগত। স্ট্রিম
    * করে হ্যাশ করলে ধ্রুবক মেমরিতেই হয়।
    */
+  /**
+   * The owner's signature for this MSI: `<msi>.sig` next to it, as OpenSSL
+   * writes it. None is fine — unless AGENT_UPDATE_PUBLIC_KEY is set, because
+   * then the PCs carry that key and would refuse an unsigned update.
+   * ⚠️ With the key set the signature is checked here, at publish: a wrong
+   *    one would otherwise be downloaded and thrown away by every PC, forever.
+   */
+  private async signatureFor(abs: string): Promise<string | null> {
+    let content: Buffer | null = null;
+    try {
+      content = await readFile(`${abs}.sig`);
+    } catch {
+      content = null;
+    }
+
+    const signature = content === null ? null : signatureFromFile(content);
+    if (content !== null && signature === null) {
+      throw new BadRequestException(
+        `${abs}.sig is not a signature — make it with: openssl dgst -sha256 -sign <key.pem> -out <msi>.sig <msi>`,
+      );
+    }
+
+    if (this.updateKey === null) return signature;
+
+    if (signature === null) {
+      throw new BadRequestException(
+        'AGENT_UPDATE_PUBLIC_KEY is set, so the PCs only install signed updates — put the signature next to the MSI (<msi>.sig) first. deploy/README.md § "Signed agent updates".',
+      );
+    }
+    if (!(await verifyUpdateSignature(this.updateKey, createReadStream(abs), signature))) {
+      throw new BadRequestException(
+        'The signature in <msi>.sig does not match this MSI and AGENT_UPDATE_PUBLIC_KEY. Every signed PC would refuse it — sign this exact file with the matching private key.',
+      );
+    }
+    return signature;
+  }
+
   private hashFile(abs: string): Promise<string> {
     return new Promise((ok, fail) => {
       const hash = createHash('sha256');

@@ -231,6 +231,8 @@ function VersionTable({
               ) : (
                 <span className="num text-ink-3">
                   {formatBytes(r.sizeBytes)}
+                  {/* PCs with the owner's update key only install signed MSIs */}
+                  {r.signed && <span className="ml-1.5">· signed</span>}
                 </span>
               ),
           },

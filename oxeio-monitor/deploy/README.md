@@ -875,6 +875,45 @@ without a server address"* বলে আটকে যেত — ০.৩.২-এ 
 ⚠️ `-Version` দেওয়ারও দরকার নেই — সংখ্যাটা `agent/Directory.Build.props`
 থেকে আসে। হাতে দিলে MSI এক ভার্সন বসাত আর এজেন্ট heartbeat-এ আরেকটা বলত।
 
+### ৮.১খ· Signed agent updates *(recommended)*
+
+Agents check a downloaded update against the sha256 the server reports —
+which catches a broken download, but not a server that has been taken over:
+whoever controls it can serve another MSI with its own matching hash, and an
+update runs as administrator on every PC. With an update key, a PC installs
+only MSIs signed with a private key that **never sits on the server**.
+
+**Once — make the key pair, on your own machine (keep `update-key.pem` offline):**
+
+```bash
+openssl ecparam -name prime256v1 -genkey -noout -out update-key.pem
+openssl ec -in update-key.pem -pubout -out update-key.pub.pem
+```
+
+**Build MSIs with the public key baked in** — every PC installed from it, and
+every update built the same way, keeps the key:
+
+```powershell
+powershell -File installer\build.ps1 -UpdatePublicKey update-key.pub.pem
+```
+
+**Every release — sign the exact MSI and put the signature next to it:**
+
+```bash
+openssl dgst -sha256 -sign update-key.pem -out oXeioAgent-0.5.0.msi.sig oXeioAgent-0.5.0.msi
+```
+
+Copy both files to the server's `updates/` folder and publish as usual; the
+server stores the signature and passes it to the agents. Set
+`AGENT_UPDATE_PUBLIC_KEY` (the one-line base64 body of `update-key.pub.pem`)
+in `.env` too: the server then refuses to publish an MSI whose signature is
+missing or wrong, instead of letting every PC download and discard it.
+
+- PCs without a key (installed before, or from an MSI built without
+  `-UpdatePublicKey`) keep checking the hash only, as before.
+- A refused update shows in the agent log as `Update … refused — …`, and the
+  file is deleted.
+
 ### ৮.২· প্রতিটা PC-তে
 
 **অ্যাডমিন হিসেবে** MSI-তে ডাবল-ক্লিক। ব্যস।

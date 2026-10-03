@@ -679,6 +679,8 @@ export interface AgentVersionView {
   releasedAt: string;
   /** ⚠️ সারি আছে কিন্তু MSI-টা ডিস্কে নেই — এজেন্ট নামাতে গিয়ে ৪০৪ পাবে */
   fileMissing: boolean;
+  /** Published with the owner's signature (`<msi>.sig`); optional for older servers */
+  signed?: boolean;
   devicesOn: number;
   /**
    * ⭐⭐ **বালতি নির্বিশেষে যে PC-টা আগে পায়** *(১ সেপ্টেম্বর ২০২৬)* —

@@ -67,6 +67,13 @@ internal sealed record AgentSettings
     /// </summary>
     public string? ServerPin { get; init; }
 
+    /// <summary>
+    /// The owner's public key for agent updates (MSI property UPDATEKEY) —
+    /// see <see cref="oXeio.Core.Agent.UpdateSignature"/>. Empty = updates are
+    /// checked by sha256 only, as before.
+    /// </summary>
+    public string? UpdatePublicKey { get; init; }
+
     [JsonIgnore]
     public bool IsUsable => Uri.TryCreate(ServerUrl, UriKind.Absolute, out var u)
                             && (u.Scheme == Uri.UriSchemeHttps || u.Scheme == Uri.UriSchemeHttp);
@@ -161,6 +168,7 @@ internal sealed record AgentSettings
                 PolicyUrl = Trimmed(key, "PolicyUrl"),
                 EnrollmentCode = Trimmed(key, "EnrollmentCode"),
                 ServerPin = Trimmed(key, "ServerPin"),
+                UpdatePublicKey = Trimmed(key, "UpdatePublicKey"),
             };
 
             return settings.IsUsable ? settings : null;
