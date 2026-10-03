@@ -219,6 +219,10 @@ services:
         condition: service_healthy
     environment:
       TZ: Asia/Dhaka
+      # behind another proxy only — empty = Caddy is the edge, as before
+      # (deploy/README.md § ৩খ)
+      CADDY_TRUSTED_PROXIES: ${CADDY_TRUSTED_PROXIES:-}
+      CADDY_CLIENT_IP_HEADERS: ${CADDY_CLIENT_IP_HEADERS:-}
     # ⚠️ VPS-এ `WEB_PORT` কাজে লাগে না — ওখানে Caddy নিজেই ৮০ ও ৪৪৩ ধরে
     #    (Let's Encrypt-এর যাচাই ৮০-তে হয়)। তখন এই দুটো লাইন হবে:
     #        - "80:80"

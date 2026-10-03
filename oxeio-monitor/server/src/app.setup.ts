@@ -60,6 +60,11 @@ export function configureApp(
    * ক্লায়েন্ট তত গভীরে `X-Forwarded-For` জাল করতে পারে — অর্থাৎ নিজের IP
    * নিজেই বেছে নিয়ে তালা এড়াতে পারে। সামনে Cloudflare বসলে **তখন** ২,
    * আর প্রক্সি ছাড়া বেয়ার চালালে `TRUST_PROXY=0`।
+   *
+   * Update: behind Cloudflare or any other proxy, keep 1 and set
+   * `CADDY_TRUSTED_PROXIES` instead (web/Caddyfile). Caddy then decides the
+   * client IP and hands this server a single address, so one hop is still
+   * the whole chain.
    */
   //  ⚠️ `set()` কেবল Express অ্যাডাপ্টারে — নিচের `useBodyParser`-এর মতোই
   //     টাইপটা এখানে সংকীর্ণ করা হয়। Fastify-তে গেলে এটাই প্রথম ভাঙবে,
