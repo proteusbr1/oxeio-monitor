@@ -22,6 +22,7 @@ import { ScreenshotsModule } from './screenshots/screenshots.module';
 import { SummaryModule } from './summary/summary.module';
 import { TargetsModule } from './targets/targets.module';
 import { UsersModule } from './users/users.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -51,6 +52,8 @@ import { UsersModule } from './users/users.module';
       },
     }),
     PrismaModule,
+    // screenshot bytes — local disk or S3 (STORAGE_DRIVER); global, one instance
+    StorageModule,
     AuditModule,
     AuthModule,
     UsersModule,

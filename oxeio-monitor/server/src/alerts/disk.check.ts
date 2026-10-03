@@ -1,10 +1,14 @@
 import { statfs } from 'node:fs/promises';
 import { parse, resolve } from 'node:path';
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { storageRoot } from '../common/storage.config';
+import {
+  SCREENSHOT_STORAGE,
+  type ScreenshotStorage,
+} from '../storage/screenshot-storage';
 import { DISK_CRITICAL_PCT, DISK_WARN_PCT } from './alerts.constants';
 import { diskUsedPct, diskVerdict, humanBytes } from './alerts.rules';
 import { AlertsService } from './alerts.service';
@@ -27,6 +31,7 @@ export class DiskCheck {
   constructor(
     private readonly alerts: AlertsService,
     config: ConfigService,
+    @Inject(SCREENSHOT_STORAGE) private readonly storage: ScreenshotStorage,
   ) {
     this.storageRoot = resolve(
       storageRoot(config),
@@ -61,9 +66,15 @@ export class DiskCheck {
           detail:
             `${this.storageRoot} has ${humanBytes(freeBytes)} free ` +
             `(of ${humanBytes(totalBytes)}). ` +
-            (verdict.severity === 'critical'
-              ? `Past ${DISK_CRITICAL_PCT}% — once space runs out both screenshot upload and ingest will stall. Remove old backups now.`
-              : `Past ${DISK_WARN_PCT}% — check that the retention job is running properly.`),
+            // ⚠️ with screenshots in a bucket this disk holds the database and
+            //    the backups, not the images — the advice has to say so
+            (this.storage.driver === 's3'
+              ? verdict.severity === 'critical'
+                ? `Past ${DISK_CRITICAL_PCT}% — screenshots are in ${this.storage.location}, so this is the database and the backups. Remove old backups now.`
+                : `Past ${DISK_WARN_PCT}% — screenshots are in ${this.storage.location}; check the backups folder and the database size.`
+              : verdict.severity === 'critical'
+                ? `Past ${DISK_CRITICAL_PCT}% — once space runs out both screenshot upload and ingest will stall. Remove old backups now.`
+                : `Past ${DISK_WARN_PCT}% — check that the retention job is running properly.`),
           meta: {
             path: this.storageRoot,
             usedPct: rounded,

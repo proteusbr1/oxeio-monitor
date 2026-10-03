@@ -697,6 +697,40 @@ New-NetFirewallRule -DisplayName "oXeio API (HTTPS)" `
 
 ---
 
+## ৫ক· Screenshots in an S3-compatible bucket *(optional)*
+
+By default screenshots and thumbnails are files under `STORAGE_HOST_PATH`.
+With `STORAGE_DRIVER=s3` they go to a bucket instead — Backblaze B2, MinIO,
+AWS or any S3-compatible store — and this disk keeps only the database, the
+backups and the agent installers.
+
+```bash
+# .env — Backblaze B2 example
+STORAGE_DRIVER=s3
+S3_BUCKET=oxeio-screenshots          # private bucket
+S3_ENDPOINT=https://s3.us-west-004.backblazeb2.com
+S3_REGION=us-west-004
+S3_ACCESS_KEY_ID=…                   # an application key limited to this bucket
+S3_SECRET_ACCESS_KEY=…
+```
+
+What stays the same:
+
+- the bucket stays **private**. The dashboard keeps using the server's own
+  signed links (5 minutes); the server reads the object and streams it, so
+  no public URL, CORS rule or bucket policy is needed;
+- retention (90 days) deletes from the bucket, image and thumbnail;
+- the server writes and deletes a probe object at startup and refuses to
+  start if it cannot — a wrong key shows up at once, not as missing
+  screenshots a week later;
+- Settings → Health shows where screenshots go and whether the bucket
+  answers. The disk alert keeps watching this disk (database, backups).
+
+⚠️ Switching an existing install does not move old screenshots: rows keep
+their paths, and the gallery looks for them in the bucket. Copy the
+`screenshots/` folder to the bucket first (same paths, under `S3_PREFIX` if
+set), e.g. `rclone copy .data/storage/screenshots b2:oxeio-screenshots/screenshots`.
+
 ## ৬· ⭐ এজেন্টে সার্টিফিকেট পিনিং
 
 এই অংশটা এই ডকের সবচেয়ে গুরুত্বপূর্ণ।

@@ -1,12 +1,16 @@
 import { statfs } from 'node:fs/promises';
 import { parse, resolve } from 'node:path';
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { diskUsedPct, humanBytes } from '../alerts/alerts.rules';
 import { storageRoot } from '../common/storage.config';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  SCREENSHOT_STORAGE,
+  type ScreenshotStorage,
+} from '../storage/screenshot-storage';
 import { BackupService } from './backup.service';
 import { BackupStateStore } from './backup.state';
 import { HEALTH_SILENCE_MIN } from './ops.constants';
@@ -26,6 +30,8 @@ export interface OpsHealth {
 
   db: { up: boolean; latencyMs: number | null };
 
+  /** Where screenshots live — `local` (this disk) or `s3` (a bucket) */
+  screenshotStorage: { driver: 'local' | 's3'; location: string; reachable: boolean };
   disk: {
     path: string;
     usedPct: number | null;
@@ -90,6 +96,7 @@ export class OpsHealthService {
     private readonly state: BackupStateStore,
     private readonly backup: BackupService,
     config: ConfigService,
+    @Inject(SCREENSHOT_STORAGE) private readonly storage: ScreenshotStorage,
   ) {
     this.storageRoot = resolve(storageRoot(config));
   }
@@ -105,6 +112,7 @@ export class OpsHealthService {
       : { active: 0, silent: 0, pendingAlerts: 0, openAlerts: 0, awaitingPurge: 0 };
 
     const disk = await this.readDisk();
+    const storeReachable = await this.storage.reachable();
     const snapshot = await this.state.read(this.backup.configured);
     const verdict = backupVerdict(snapshot, now);
 
@@ -115,6 +123,14 @@ export class OpsHealthService {
       activeDevices: counts.active,
       silentDevices: counts.silent,
       pendingAlerts: counts.pendingAlerts,
+      ...(this.storage.driver === 's3'
+        ? {
+            screenshotStore: {
+              location: this.storage.location,
+              reachable: storeReachable,
+            },
+          }
+        : {}),
     });
 
     return {
@@ -123,6 +139,11 @@ export class OpsHealthService {
       checkedAt: now.toISOString(),
       uptimeSec: Math.floor(process.uptime()),
       db,
+      screenshotStorage: {
+        driver: this.storage.driver,
+        location: this.storage.location,
+        reachable: storeReachable,
+      },
       disk: {
         path: this.storageRoot,
         usedPct: disk.usedPct,

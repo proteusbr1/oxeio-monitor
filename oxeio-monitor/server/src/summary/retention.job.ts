@@ -1,14 +1,14 @@
-import { rmdir, unlink } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
-
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 
-import { storageRoot } from '../common/storage.config';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  SCREENSHOT_STORAGE,
+  isSafeRelPath,
+  type ScreenshotStorage,
+} from '../storage/screenshot-storage';
 import { JOB_TIMEZONE, RunLock, SCHEDULING_ENABLED } from './scheduling';
-import { isInsideRoot, retentionCutoff } from './summary.math';
+import { retentionCutoff } from './summary.math';
 
 /** 07 § ১ (locked configuration) — `retention.screenshots_days` */
 export const SCREENSHOT_RETENTION_DAYS = 90;
@@ -64,20 +64,11 @@ export interface RetentionResult {
 export class RetentionJob {
   private readonly logger = new Logger(RetentionJob.name);
   private readonly lock = new RunLock();
-  private readonly root: string;
-
   constructor(
     private readonly prisma: PrismaService,
-    config: ConfigService,
-  ) {
-    // ⚠️ `screenshot-ingest.service.ts`-এর সাথে হুবহু একই হিসাব। দুই জায়গায়
-    //    আলাদা হয়ে গেলে এই জব ভুল ফোল্ডারে খুঁজত — একটাও ফাইল মুছত না,
-    //    অথচ সারি ঠিকই মুছে যেত। এখন সংজ্ঞাটা এক জায়গায় —
-    //    `src/common/storage.config.ts`।
-    this.root = resolve(
-      storageRoot(config),
-    );
-  }
+    // local folder or S3 bucket — retention deletes wherever the bytes are
+    @Inject(SCREENSHOT_STORAGE) private readonly storage: ScreenshotStorage,
+  ) {}
 
   /** ⚠️ `timeZone` ছাড়া UTC-র রাত ২টা = ঢাকার সকাল ৮টা — অফিস-সময়ে ডিস্ক I/O। */
   @Cron('0 0 2 * * *', {
@@ -133,7 +124,7 @@ export class RetentionJob {
       skipped: false,
     };
 
-    const touchedDirs = new Set<string>();
+    const removedPaths: string[] = [];
 
     /**
      * ⚠️ cursor দিয়ে পাতা ওল্টানো হচ্ছে, `take` দিয়ে বারবার প্রথম ব্যাচ
@@ -180,7 +171,7 @@ export class RetentionJob {
           (p): p is string => typeof p === 'string' && p.length > 0,
         );
 
-        if (paths.some((p) => !isInsideRoot(this.root, p))) {
+        if (paths.some((p) => !isSafeRelPath(p))) {
           // ⚠️ সারিটাও মোছা হচ্ছে **না** — মুছে দিলে প্রতিবেদনটা হারিয়ে যেত
           //    আর সমস্যাটা চুপচাপ চাপা পড়ত। প্রতি রানে আবার চেঁচাবে।
           result.unsafePaths++;
@@ -199,7 +190,7 @@ export class RetentionJob {
         result.filesDeleted += outcome.deleted;
         result.filesMissing += outcome.missing;
         deletable.push(row.id);
-        for (const p of paths) touchedDirs.add(dirname(resolve(this.root, p)));
+        removedPaths.push(...paths);
       }
 
       // ── ধাপ ৩ · ফাইল সত্যিই গেছে, এবার সারি ───────────────────────────
@@ -217,7 +208,8 @@ export class RetentionJob {
       }
     }
 
-    await this.pruneEmptyDirs(touchedDirs);
+    // local: prune the folders left empty; S3: nothing to do
+    await this.storage.afterRemove(removedPaths);
 
     this.logger.log(
       `retention · cutoff ${cutoff.toISOString().slice(0, 10)} · ` +
@@ -246,13 +238,12 @@ export class RetentionJob {
 
     for (const rel of paths) {
       try {
-        await unlink(resolve(this.root, rel));
-        deleted++;
-      } catch (error) {
-        if (isMissing(error)) {
+        if ((await this.storage.remove(rel)) === 'missing') {
           missing++;
           continue;
         }
+        deleted++;
+      } catch (error) {
         this.logger.warn(`Could not delete file: ${rel} — ${String(error)}`);
         return 'failed';
       }
@@ -260,47 +251,4 @@ export class RetentionJob {
 
     return { deleted, missing };
   }
-
-  /**
-   * খালি হয়ে যাওয়া তারিখ-ফোল্ডারগুলো সরিয়ে দেয়।
-   *
-   * পাথ `…/YYYY/MM/DD/emp-003/` — বছরে ~৩৬৫ × কর্মীসংখ্যা ফোল্ডার। ফাইল
-   * মুছে ফোল্ডার রেখে দিলে কয়েক বছরে হাজার হাজার খালি ডিরেক্টরি জমত, আর
-   * ব্যাকআপের robocopy প্রতি রাতে সেগুলোই হাঁটত।
-   *
-   * ⭐ A06-এর `…/emp-003/thumb/` এমনিতেই সামলে যায়, আর সেটা কাকতালীয় নয়:
-   * উপরে **প্রতিটা** পাথের `dirname` আলাদা করে `touchedDirs`-এ যোগ হয়
-   * (ফুল ছবিরটাও, থাম্বনেইলেরটাও), আর নিচে গভীরতম ফোল্ডার আগে ধরা হয় —
-   * তাই `thumb/` আগে খালি হয়, তবেই `emp-003` খালি হতে পারে। উল্টো ক্রমে
-   * `emp-003` চিরকাল ENOTEMPTY-তে আটকে থাকত, আর গোটা তারিখ-গাছটা রয়ে যেত।
-   *
-   * ⚠️ `rmdir` (recursive নয়) — ফোল্ডারে কিছু থাকলে নিজেই ব্যর্থ হয়। এখানে
-   * `rm -rf` জাতীয় কিছু ব্যবহার করলে একটা পাথের ভুলে গোটা গাছ যেত।
-   */
-  private async pruneEmptyDirs(dirs: ReadonlySet<string>): Promise<void> {
-    // গভীরতম আগে — emp-003 খালি না হলে DD কখনোই খালি হবে না
-    const ordered = [...dirs].sort((a, b) => b.length - a.length);
-
-    for (const dir of ordered) {
-      let current = dir;
-
-      while (current !== this.root && isInsideRoot(this.root, current)) {
-        try {
-          await rmdir(current);
-        } catch {
-          // ENOTEMPTY বা ENOENT — দুটোই স্বাভাবিক, থেমে যাওয়াই যথেষ্ট
-          break;
-        }
-        current = dirname(current);
-      }
-    }
-  }
-}
-
-function isMissing(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    (error as { code?: unknown }).code === 'ENOENT'
-  );
 }
