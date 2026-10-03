@@ -472,11 +472,15 @@ internal sealed class AgentHost : IAsyncDisposable
 
                 if (!sample.Valid)
                 {
+                    Interlocked.Increment(ref _idleFailStreak);
+
                     // ⚠️ ডিফল্ট বসানো হয় না — এই সেকেন্ডটা বাদ। ভুল সংখ্যা
                     //    বসানোর চেয়ে একটা সেকেন্ড হারানো ভালো।
                     Thread.Sleep(Tick);
                     continue;
                 }
+
+                Volatile.Write(ref _idleFailStreak, 0);
 
                 // ⭐ নতুন কনফিগ এখানেই প্রয়োগ হয়, heartbeat থ্রেডে নয়।
                 //    `_machine` ও `_apps` এই লুপের সম্পত্তি; অন্য থ্রেড থেকে
@@ -613,6 +617,7 @@ internal sealed class AgentHost : IAsyncDisposable
             }
             catch (Exception ex)
             {
+                Interlocked.Increment(ref _screenshotFailStreak);
                 _log.Error("Capture slot failed", ex);
             }
 
@@ -640,6 +645,22 @@ internal sealed class AgentHost : IAsyncDisposable
 
     /// <summary>ছাপ বানানো ব্যর্থ হওয়ার কথা একবারই লগে যায়।</summary>
     private bool _screenSampleFailed;
+
+    /// <summary>
+    /// Consecutive idle-probe readings Windows refused — written by the
+    /// tracking loop, read by the heartbeat for <see cref="CapabilityReport"/>.
+    /// </summary>
+    private int _idleFailStreak;
+
+    /// <summary>
+    /// The last fingerprint attempt failed. Unlike <see cref="_screenSampleFailed"/>
+    /// (which only keeps the log line to one) this goes back to false when a
+    /// later attempt works, so the report does not stay red after recovery.
+    /// </summary>
+    private volatile bool _screenSampleFailing;
+
+    /// <summary>Consecutive screenshot slots with no image — same use.</summary>
+    private int _screenshotFailStreak;
 
     /**
      * ⭐⭐⭐ <b>G46 — পর্দার ছাপ নেওয়া।</b>
@@ -742,7 +763,11 @@ internal sealed class AgentHost : IAsyncDisposable
                 if (print is not null) prints.Add(print);
             }
 
-            if (prints.Count > 0) _screen.Observe(prints, now);
+            if (prints.Count > 0)
+            {
+                _screen.Observe(prints, now);
+                _screenSampleFailing = false;
+            }
         }
         catch (Exception ex)
         {
@@ -753,6 +778,8 @@ internal sealed class AgentHost : IAsyncDisposable
              * মেশিনে লগ ফাইল মিনিটে একটা করে সারি নিয়ে ফুলে উঠত, আর
              * H08-এর ঘূর্ণনে আসল ভুলগুলো মুছে যেত।
              */
+            _screenSampleFailing = true;
+
             if (!_screenSampleFailed)
             {
                 _screenSampleFailed = true;
@@ -789,6 +816,10 @@ internal sealed class AgentHost : IAsyncDisposable
         if (_outbox is null) return;
 
         var results = _capture!.CaptureAll();
+
+        // for the capability report: an empty slot here is a capture failure
+        if (results.Count == 0) Interlocked.Increment(ref _screenshotFailStreak);
+        else Volatile.Write(ref _screenshotFailStreak, 0);
 
         // A07 — ছবির সাথে ওই মুহূর্তের অ্যাপ ও উইন্ডো টাইটেল।
         //
@@ -1124,6 +1155,8 @@ internal sealed class AgentHost : IAsyncDisposable
                         QueueDepth = _worker?.Depth.ForHeartbeat,
                         ConfigVersion = _configVersion,
                         AgentVersion = _version,
+                        Capabilities = CapabilityReport.ToWire(
+                            CapabilityReport.Build(CapabilityFactsNow())),
                     }, ct);
 
                     if (result.IsSuccess && result.Value is { } body)
@@ -1633,6 +1666,23 @@ internal sealed class AgentHost : IAsyncDisposable
         Interlocked.Exchange(
             ref _pendingConfig, new PendingConfig(body.Config, body.Version));
     }
+
+    /// <summary>
+    /// What the agent knows about its own parts right now — the verdicts are
+    /// in <see cref="CapabilityReport"/>, where they can be tested.
+    /// ⚠️ Called from the heartbeat thread; every field read here is either
+    ///    written atomically or a plain bool set once.
+    /// </summary>
+    private CapabilityFacts CapabilityFactsNow() => new()
+    {
+        IdleProbeFailStreak = Volatile.Read(ref _idleFailStreak),
+        AppTrackingEnabledByPolicy = _config.AppTracking.Enabled,
+        AppTrackerRunning = _apps is not null,
+        BrowserDomainGaveUp = _apps?.UrlReadingDisabled == true,
+        ScreenshotFailStreak = Volatile.Read(ref _screenshotFailStreak),
+        ScreenFingerprintFailed = _screenSampleFailing,
+        Sync = _worker?.Health ?? SyncHealth.Ok,
+    };
 
     /// <summary>এনে রাখা কনফিগ — <see cref="TrackLoop"/> তুলে নেয়।</summary>
     private sealed record PendingConfig(AgentConfig Config, string Version);

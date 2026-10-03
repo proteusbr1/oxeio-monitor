@@ -1,6 +1,7 @@
 import { SegmentState } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
+  Allow,
   ArrayMaxSize,
   IsArray,
   IsBoolean,
@@ -121,6 +122,14 @@ export class HeartbeatDto {
    */
   @IsOptional() @IsString() @MaxLength(50)
   agentVersion?: string;
+
+  /**
+   * The agent's report on its own parts. ⚠️ `@Allow()`, no shape checks: a
+   * 400 here would also drop the heartbeat's commands (revoke among them),
+   * so the value is cleaned in `capabilities.rules.ts` instead of refused.
+   */
+  @IsOptional() @Allow()
+  capabilities?: unknown;
 }
 
 // ── segments ────────────────────────────────────────────────────────────────

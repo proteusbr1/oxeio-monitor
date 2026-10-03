@@ -362,6 +362,11 @@ model Device {
   lastStateAt     DateTime?     @map("last_state_at") @db.Timestamptz(3)
   lastDriftSec    Int           @default(0) @map("last_drift_sec")
   maxDriftSec     Int           @default(0) @map("max_drift_sec")
+  /// The agent's own report on its parts — `{ browserDomain: 'degraded', ... }`,
+  /// see `agent/capabilities.rules.ts`. null until an agent that sends it checks in.
+  capabilities    Json?
+  /// When `capabilities` last changed (not every heartbeat — it rarely does)
+  capabilitiesAt  DateTime?     @map("capabilities_at") @db.Timestamptz(3)
   enrolledAt      DateTime      @default(now()) @map("enrolled_at") @db.Timestamptz(3)
 
   employee        Employee?         @relation(fields: [employeeId], references: [id])

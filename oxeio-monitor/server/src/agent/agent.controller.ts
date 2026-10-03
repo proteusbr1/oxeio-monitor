@@ -49,6 +49,7 @@ import {
   type ScreenshotResult,
 } from './screenshot-ingest.service';
 import { UpdateService } from './update.service';
+import { CapabilityHealthService } from './capability-health.service';
 
 type AgentCommand =
   | 'reload_config'
@@ -75,6 +76,7 @@ export class AgentController {
     private readonly rate: DeviceRateLimitService,
     private readonly progress: ProgressService,
     private readonly prisma: PrismaService,
+    private readonly capabilities: CapabilityHealthService,
   ) {}
 
   /** ইনস্টলের সময় একবার — এখানে টোকেন নেই, enrollment code-ই পরিচয় (H05) */
@@ -144,6 +146,7 @@ export class AgentController {
     const runningVersion = dto.agentVersion?.trim() || device.agentVersion;
 
     await this.recordHeartbeatState(device, dto.state, runningVersion);
+    await this.capabilities.record(device, dto.capabilities);
 
     if (runningVersion) {
       const offer = await this.updates.offerFor(

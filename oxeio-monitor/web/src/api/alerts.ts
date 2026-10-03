@@ -21,7 +21,8 @@ export type AlertType =
   | 'clock_drift'
   | 'no_activity_today'
   | 'device_overlap'
-  | 'synthetic_input';
+  | 'synthetic_input'
+  | 'agent_capability';
 
 export type AlertSeverity = 'info' | 'warning' | 'critical';
 
@@ -52,6 +53,7 @@ export const ALERT_TYPE_LABEL: Record<AlertType, string> = {
    * "Fake input" লেখা থাকলে মালিক তালিকাটা খুলেই সিদ্ধান্ত নিয়ে ফেলতেন।
    */
   synthetic_input: 'Unbroken activity',
+  agent_capability: 'Agent part not working',
 };
 
 export const ALERT_SEVERITY_LABEL: Record<AlertSeverity, string> = {

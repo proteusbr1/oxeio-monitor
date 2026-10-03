@@ -15,6 +15,7 @@ import { ProgressService } from './progress.service';
 import { RolloutAdvanceJob } from './rollout-advance.job';
 import { ScreenshotIngestService } from './screenshot-ingest.service';
 import { UpdateService } from './update.service';
+import { CapabilityHealthService } from './capability-health.service';
 
 @Module({
   // ⚠️ `AuthModule` শুধু `AuthService`-এর জন্য — স্টাফের লগইন দিয়ে
@@ -26,6 +27,7 @@ import { UpdateService } from './update.service';
   providers: [
     ProgressService,
     AgentConfigService,
+    CapabilityHealthService,
     RolloutAdvanceJob,
     ClockDriftService,
     DeviceAuthGuard,

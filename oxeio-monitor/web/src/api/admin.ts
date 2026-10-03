@@ -239,6 +239,12 @@ export interface DeviceView {
   /** ঘড়ির হেরফের, সেকেন্ডে — বড় হলে সময়ের হিসাব সন্দেহজনক */
   lastDriftSec: number;
   maxDriftSec: number;
+  /**
+   * The agent's own report on its parts, e.g. `{ browserDomain: 'degraded' }`.
+   * `null`/missing until an agent that sends it checks in.
+   */
+  capabilities?: Record<string, string> | null;
+  capabilitiesAt?: string | null;
   enrolledAt: string;
   /** কোনো কর্মীর সাথে যুক্ত না থাকলে `null` */
   employee: { id: number; empCode: string; fullName: string } | null;

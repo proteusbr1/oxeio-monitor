@@ -131,6 +131,34 @@ export interface FleetRow {
   lastSeenAt: string | null;
   quiet: boolean;
   driftSec: number;
+  /** Parts of the agent that report trouble — `Website domains degraded` */
+  issues: string[];
+}
+
+/** Same names as the server's `CAPABILITY_LABEL` — the alert uses those */
+const CAPABILITY_LABEL: Record<string, string> = {
+  idleProbe: 'Idle detection',
+  appTracking: 'App tracking',
+  browserDomain: 'Website domains',
+  screenCapture: 'Screenshots',
+  screenActivity: 'Jiggler check',
+  sync: 'Upload',
+};
+
+/**
+ * What the agent says is not working, one line per part.
+ *
+ * Only `degraded` and `failed` — `disabled_by_policy` is a choice, not a
+ * fault, and showing it on every row would bury the real ones. Unknown parts
+ * (a newer agent) are skipped rather than shown under a raw name.
+ */
+export function capabilityIssues(
+  capabilities: Record<string, string> | null | undefined,
+): string[] {
+  if (!capabilities) return [];
+  return Object.keys(CAPABILITY_LABEL)
+    .filter((k) => capabilities[k] === 'degraded' || capabilities[k] === 'failed')
+    .map((k) => `${CAPABILITY_LABEL[k]} ${capabilities[k]}`);
 }
 
 export interface FleetGroup {
@@ -177,6 +205,7 @@ export function fleetGroups(
       lastSeenAt: d.lastSeenAt,
       quiet: isQuiet(d.lastSeenAt, now),
       driftSec: d.lastDriftSec,
+      issues: capabilityIssues(d.capabilities),
     });
     byVersion.set(key, rows);
   }

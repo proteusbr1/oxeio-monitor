@@ -157,4 +157,33 @@ public class SyncWireTests
         Assert.Equal(260, dto.ActiveApp!.Length);
         Assert.Equal(1000, dto.ActiveTitle!.Length);
     }
+
+    // ── capability report ───────────────────────────────────────────────────
+
+    [Fact]
+    public void Heartbeat_carries_the_capability_report_as_camelCase_keys()
+    {
+        var dto = SyncWire.Heartbeat(new HeartbeatRequest
+        {
+            State = SegmentState.Active,
+            ActiveSecToday = 60,
+            Capabilities = new Dictionary<string, string> { ["browserDomain"] = "degraded" },
+        });
+
+        var json = SyncJson.Serialize(dto);
+
+        Assert.Contains("\"capabilities\":{\"browserDomain\":\"degraded\"}", json);
+    }
+
+    [Fact]
+    public void Heartbeat_without_a_report_sends_no_field()
+    {
+        var json = SyncJson.Serialize(SyncWire.Heartbeat(new HeartbeatRequest
+        {
+            State = SegmentState.Active,
+            ActiveSecToday = 60,
+        }));
+
+        Assert.DoesNotContain("capabilities", json);
+    }
 }

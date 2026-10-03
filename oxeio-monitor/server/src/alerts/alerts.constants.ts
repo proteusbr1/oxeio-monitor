@@ -20,7 +20,8 @@ export type AlertType =
   | 'clock_drift'
   | 'no_activity_today'
   | 'device_overlap'
-  | 'synthetic_input';
+  | 'synthetic_input'
+  | 'agent_capability';
 
 /** তালিকা আকারে — DTO-র `@IsIn()`-এ লাগে */
 export const ALERT_TYPE_VALUES: readonly AlertType[] = [
@@ -33,6 +34,7 @@ export const ALERT_TYPE_VALUES: readonly AlertType[] = [
   'no_activity_today',
   'device_overlap',
   'synthetic_input',
+  'agent_capability',
 ];
 
 /**

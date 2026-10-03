@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { AgentVersionView, DeviceView } from '../src/api/admin';
 import {
+  capabilityIssues,
   compareVersion,
   fleetGroups,
   fleetTally,
@@ -283,3 +284,38 @@ describe('fleetTally', () => {
     expect(fleetTally([]).total).toBe(0);
   });
 });
+
+describe('capabilityIssues — what the agent says is not working', () => {
+  it('an older agent without a report shows nothing', () => {
+    expect(capabilityIssues(undefined)).toEqual([]);
+    expect(capabilityIssues(null)).toEqual([]);
+  });
+
+  it('degraded and failed parts, by name', () => {
+    expect(
+      capabilityIssues({
+        browserDomain: 'degraded',
+        screenActivity: 'failed',
+        sync: 'ok',
+      }),
+    ).toEqual(['Website domains degraded', 'Jiggler check failed']);
+  });
+
+  it('off by policy is a choice, not a fault', () => {
+    expect(capabilityIssues({ screenCapture: 'disabled_by_policy' })).toEqual([]);
+  });
+
+  it('a part this dashboard does not know is skipped', () => {
+    expect(capabilityIssues({ somethingNew: 'failed' })).toEqual([]);
+  });
+
+  it('fleetGroups carries the issues on the row', () => {
+    const [group] = fleetGroups(
+      [device({ capabilities: { browserDomain: 'degraded' } })],
+      '0.4.9',
+      NOW,
+    );
+    expect(group.rows[0].issues).toEqual(['Website domains degraded']);
+  });
+});
+
