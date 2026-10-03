@@ -1,0 +1,100 @@
+# Deploy do oXeio no Coolify (app Git, branch pericialmed, auto-deploy).
+# So existe na branch pericialmed do fork; nao vai nos PRs para o ownCoder.
+# Dados: banco no volume oxeio-pgdata (alias oxeio-postgres), capturas em /data/apps/oxeio/storage.
+services:
+  postgres:
+    image: postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: Asia/Dhaka
+    volumes:
+      - oxeio-pgdata:/var/lib/postgresql/data
+    networks:
+      default:
+        aliases: [oxeio-postgres]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # prisma migrate deploy a cada deploy; a api so sobe depois. O seed NUNCA roda aqui.
+  migrate:
+    build:
+      context: ./oxeio-monitor/server
+      target: build
+    restart: "no"
+    exclude_from_hc: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      TZ: ${WORK_TIMEZONE}
+      WORK_TIMEZONE: ${WORK_TIMEZONE}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+    command: ["npx", "prisma", "migrate", "deploy"]
+
+  api:
+    build:
+      context: ./oxeio-monitor/server
+      args:
+        APP_BUILD: ${APP_BUILD:-pericialmed}
+        APP_COMMIT: ${SOURCE_COMMIT:-local}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      TZ: ${WORK_TIMEZONE}
+      WORK_TIMEZONE: ${WORK_TIMEZONE}
+      CURRENCY: ${CURRENCY}
+      DISPLAY_LOCALE: ${DISPLAY_LOCALE}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      JWT_SECRET: ${JWT_SECRET}
+      SCREENSHOT_URL_SECRET: ${SCREENSHOT_URL_SECRET}
+      TRUST_PROXY: "1"
+      PORT: "3000"
+      STORAGE_ROOT: /data/storage
+      CORS_ORIGIN: https://${PUBLIC_HOST}
+      ORG_NAME: ${ORG_NAME}
+    volumes:
+      - /data/apps/oxeio/storage:/data/storage
+      - /data/apps/oxeio/backups:/data/backups
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>r.json()).then(j=>process.exit(j.db==='up'?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  web:
+    build:
+      context: .
+      dockerfile: coolify/web.Dockerfile
+      args:
+        APP_BUILD: ${APP_BUILD:-pericialmed}
+        APP_COMMIT: ${SOURCE_COMMIT:-local}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Dhaka
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  oxeio-pgdata:
