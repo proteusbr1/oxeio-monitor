@@ -64,12 +64,12 @@ describe('seedPolicyFromEnv — SEED_POLICY_*', () => {
       seedPolicyFromEnv({
         SEED_POLICY_MONTHLY_HOURS: '176',
         SEED_POLICY_WORKDAYS: '22',
-        SEED_POLICY_WEEKLY_OFF: '7',
+        SEED_POLICY_WEEKLY_OFF: '7,6',
       }),
     ).toEqual({
       monthlyTargetHours: 176,
       expectedWorkdays: 22,
-      weeklyOffDay: 7,
+      weeklyOffDays: [6, 7],
     });
   });
 
