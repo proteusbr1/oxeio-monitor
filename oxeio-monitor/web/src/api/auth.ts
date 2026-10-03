@@ -71,6 +71,18 @@ export function fetchWorkTimeZone(signal?: AbortSignal): Promise<WorkTimeZone> {
   return api('/auth/time-zone', { silent401: true, signal });
 }
 
+export interface CurrencyInfo {
+  /** ISO 4217, e.g. `BDT` */
+  code: string;
+  /** e.g. `৳`, `R$` */
+  symbol: string;
+}
+
+/** The currency salaries and deposits are in. Public, like `session-policy`. */
+export function fetchCurrency(signal?: AbortSignal): Promise<CurrencyInfo> {
+  return api('/auth/currency', { silent401: true, signal });
+}
+
 export function logout(): Promise<void> {
   return api('/auth/logout', { method: 'POST' });
 }

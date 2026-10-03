@@ -443,7 +443,28 @@ export function formatBytes(bytes: number | null | undefined): string {
 }
 
 /**
+ * The currency's symbol — `৳` until the server says otherwise
+ * (`GET /auth/currency`, loaded in `main.tsx` before the first render).
+ * Only the symbol changes; the number keeps the formatting below.
+ */
+let currencySymbolValue = '৳';
+
+export function setCurrency(currency: { code: string; symbol: string }): void {
+  if (typeof currency.symbol === 'string' && currency.symbol.trim() !== '') {
+    currencySymbolValue = currency.symbol.trim();
+  }
+}
+
+/** For labels such as "Monthly salary (৳)" */
+export function currencySymbol(): string {
+  return currencySymbolValue;
+}
+
+/**
  * টাকা — `'13000.50'` → `'৳ 13,000.50'`।
+ *
+ * The symbol is the configured currency's (`currencySymbol()`); with the
+ * default BDT the text is exactly what it always was.
  *
  * ⚠️ সার্ভার টাকা **স্ট্রিং** হিসেবে পাঠায় (Decimal, float নয়)। এখানে
  *    `Number()` করে হিসাব করা হয় **না**, শুধু হাজারের কমা বসানো হয় —
@@ -457,7 +478,7 @@ export function formatTaka(amount: string | null | undefined): string {
   const sign = whole.startsWith('-') ? '-' : '';
   const digits = sign ? whole.slice(1) : whole;
   const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return `৳ ${sign}${grouped}${fraction ? `.${fraction}` : ''}`;
+  return `${currencySymbolValue} ${sign}${grouped}${fraction ? `.${fraction}` : ''}`;
 }
 
 /** সাধারণ সংখ্যা — হাজারের কমা সহ */

@@ -11,6 +11,7 @@ import {
 import type { Response } from 'express';
 
 import { LOCAL_OFFSET_MIN, WORK_TIMEZONE } from '../agent/util/dhaka-time';
+import { CURRENCY, type CurrencyInfo } from '../payroll/currency';
 import { IDLE_WARN_BEFORE_SEC, SESSION_TTL_MIN } from './auth.constants';
 import { AuthService, type MeResult } from './auth.service';
 import { AllowWhileMustChangePw, CurrentUser, Public } from './decorators';
@@ -122,6 +123,17 @@ export class AuthController {
   @Get('time-zone')
   timeZone(): WorkTimeZone {
     return { timeZone: WORK_TIMEZONE, utcOffsetMinutes: LOCAL_OFFSET_MIN };
+  }
+
+  /**
+   * The currency amounts are in, so the dashboard puts the right symbol in
+   * front of them. Same reasoning as `session-policy`: a symbol hardcoded in
+   * the frontend would be wrong for any deployment that changes `CURRENCY`.
+   */
+  @Public()
+  @Get('currency')
+  currency(): CurrencyInfo {
+    return CURRENCY;
   }
 
   @AllowWhileMustChangePw()

@@ -27,7 +27,7 @@ import { Card } from '../../components/Card';
 import { Button } from '../../components/Page';
 import { Empty, ErrorBox, Loading } from '../../components/States';
 import { PersonCell, Table, type Column } from '../../components/Table';
-import { formatDate, formatTaka, todayInDhaka } from '../../lib/format';
+import { currencySymbol, formatDate, formatTaka, todayInDhaka } from '../../lib/format';
 import {
   Chip,
   ConfirmDialog,
@@ -862,7 +862,7 @@ function EmployeeForm({
           {canSeeSalary && (
             <FullWidth>
               <TextField
-                label="Monthly salary (৳)"
+                label={`Monthly salary (${currencySymbol()})`}
                 value={form.monthlySalary}
                 onChange={set('monthlySalary')}
                 mono

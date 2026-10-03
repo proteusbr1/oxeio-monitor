@@ -1,10 +1,10 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { fetchWorkTimeZone } from './api/auth';
+import { fetchCurrency, fetchWorkTimeZone } from './api/auth';
 import { App } from './App';
 import './index.css';
-import { setWorkTimeZone } from './lib/format';
+import { setCurrency, setWorkTimeZone } from './lib/format';
 import { registerServiceWorker } from './pwa';
 
 const root = document.getElementById('root');
@@ -28,7 +28,25 @@ async function loadWorkTimeZone(): Promise<void> {
   }
 }
 
-void loadWorkTimeZone().then(() => {
+/**
+ * The currency symbol comes from the server before the first render, so no
+ * amount is ever drawn with the wrong one. If the request fails or is slow
+ * (older server, offline PWA) the default ৳ stays — as before.
+ */
+async function loadCurrency(): Promise<void> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3000);
+  try {
+    setCurrency(await fetchCurrency(controller.signal));
+  } catch {
+    // keep the default
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// both in parallel — neither waits for the other
+void Promise.all([loadWorkTimeZone(), loadCurrency()]).then(() => {
   createRoot(root).render(
     <StrictMode>
       <App />
