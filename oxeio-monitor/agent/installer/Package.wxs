@@ -95,6 +95,21 @@
     -->
     <Property Id="SERVERPIN" Secure="yes" />
 
+    <!--
+      The owner's public key for agent updates (ECDSA P-256, base64 on one
+      line). With it, the agent installs an update only if the MSI carries the
+      owner's signature, not just a hash from the server. See deploy/README.md
+      § "Signed agent updates".
+
+      Baked in by `build.ps1 -UpdatePublicKey`, so every MSI the owner builds
+      carries it and an update can never drop it. Empty = sha256 only, as before.
+    -->
+<?if $(var.UpdateKeyDefault) = "" ?>
+    <Property Id="UPDATEKEY" Secure="yes" />
+<?else?>
+    <Property Id="UPDATEKEY" Secure="yes" Value="$(var.UpdateKeyDefault)" />
+<?endif?>
+
     <!-- সার্ভারের ঠিকানা ছাড়া ইনস্টল করার কোনো মানে নেই — এজেন্ট বসত,
          চলত, আর কিছুই পাঠাত না। শুরুতেই থামিয়ে দেওয়া ভালো। -->
     <!--
@@ -136,6 +151,7 @@
           <RegistryValue Name="StaffPortalUrl" Type="string" Value="[PORTALURL]" />
           <RegistryValue Name="PolicyUrl" Type="string" Value="[POLICYURL]" />
           <RegistryValue Name="ServerPin" Type="string" Value="[SERVERPIN]" />
+          <RegistryValue Name="UpdatePublicKey" Type="string" Value="[UPDATEKEY]" />
           <RegistryValue Name="InstallDir" Type="string" Value="[INSTALLFOLDER]" />
         </RegistryKey>
       </Component>

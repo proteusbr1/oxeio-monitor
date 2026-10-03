@@ -361,7 +361,7 @@ internal sealed class AgentHost : IAsyncDisposable
         {
             _outbox = SqliteOutboxStore.Open(log: _log.Info);
             _worker = new SyncWorker(_outbox, _sync, _log);
-            _updates = new UpdateStager(_sync, _outbox.Paths, _version, _log);
+            _updates = new UpdateStager(_sync, _outbox.Paths, _version, _log, _settings.UpdatePublicKey);
         }
         catch (Exception ex)
         {
@@ -1425,7 +1425,7 @@ internal sealed class AgentHost : IAsyncDisposable
             Process.Start(new ProcessStartInfo
             {
                 FileName = "msiexec.exe",
-                Arguments = $"/i \"{msi}\" /qb",
+                Arguments = MsiArguments(msi, _settings.UpdatePublicKey),
                 UseShellExecute = true,
             });
         }
@@ -1436,6 +1436,17 @@ internal sealed class AgentHost : IAsyncDisposable
             _log.Warn($"The update did not start: {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// ⚠️ UPDATEKEY is passed on: msiexec rewrites the registry from the MSI's
+    ///    properties, so a key given on the command line at first install would
+    ///    otherwise be wiped by the first update — and with it the signature
+    ///    check, silently. (An MSI built with the key baked in keeps it anyway.)
+    /// </summary>
+    internal static string MsiArguments(string msi, string? updatePublicKey) =>
+        string.IsNullOrWhiteSpace(updatePublicKey) || updatePublicKey.Contains('"')
+            ? $"/i \"{msi}\" /qb"
+            : $"/i \"{msi}\" /qb UPDATEKEY=\"{UpdateSignature.OneLine(updatePublicKey)}\"";
 
     private async Task SignInOnDemandAsync()
     {

@@ -260,6 +260,13 @@ public sealed record UpdateOffer
     public required string Url { get; init; }
 
     public required bool Mandatory { get; init; }
+
+    /// <summary>
+    /// Base64 DER ECDSA signature of the MSI's SHA-256, made with the owner's
+    /// key (<see cref="UpdateSignature"/>). <c>null</c> when the version was
+    /// published unsigned, or the server is older than the field.
+    /// </summary>
+    public string? Signature { get; init; }
 }
 
 /// <summary><c>GET /agent/update/download</c> শেষ হওয়ার পর — MSI ডিস্কে নামানো হয়ে গেছে।</summary>

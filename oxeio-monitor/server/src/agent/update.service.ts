@@ -16,6 +16,8 @@ export interface UpdateOffer {
   url: string;
   mandatory: boolean;
   releaseNotes: string | null;
+  /** The owner's signature (base64 DER) — null when published unsigned */
+  signature: string | null;
 }
 
 @Injectable()
@@ -77,6 +79,8 @@ export class UpdateService {
       url: `/api/v1/agent/update/download?version=${encodeURIComponent(latest.version)}`,
       mandatory: latest.isMandatory,
       releaseNotes: latest.releaseNotes,
+      // the owner's signature, passed on untouched (update-signature.ts)
+      signature: latest.signature,
     };
   }
 

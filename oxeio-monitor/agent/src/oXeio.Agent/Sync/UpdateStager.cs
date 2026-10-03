@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+
 using oXeio.Agent.Storage;
 using oXeio.Core.Agent;
 
@@ -14,8 +16,21 @@ internal sealed class UpdateStager(
     ISyncClient sync,
     OutboxPaths paths,
     string currentVersion,
-    ISyncLog log)
+    ISyncLog log,
+    string? updatePublicKey = null)
 {
+    /// <summary>
+    /// The owner's update key, if this PC has one (<see cref="UpdateSignature"/>).
+    /// </summary>
+    private readonly ECDsa? _updateKey = UpdateSignature.ParsePublicKey(updatePublicKey);
+
+    /// <summary>
+    /// ⚠️ A key is configured but cannot be read. Fail closed: treating it as
+    ///    "no key" would turn the protection off without anyone noticing.
+    /// </summary>
+    private bool KeyUnreadable =>
+        !string.IsNullOrWhiteSpace(updatePublicKey) && _updateKey is null;
+
     /// <summary>
     /// ⚠️ ঘন ঘন নয়। আপডেট রোজকার ঘটনা নয়, আর প্রতিটা চেক একটা নেটওয়ার্ক
     /// কল — ১৫টা PC × দিনে বহুবার মানে অকারণ ভিড়। ৬ ঘণ্টায় একবারই যথেষ্ট,
@@ -101,8 +116,39 @@ internal sealed class UpdateStager(
             return;
         }
 
+        // the owner's signature — only when this PC has the owner's key
+        var signature = KeyUnreadable
+            ? SignatureCheck.Invalid
+            : UpdateSignature.Verify(_updateKey, file.Sha256, offer.Signature);
+
+        if (signature is SignatureCheck.Missing or SignatureCheck.Invalid)
+        {
+            var why = KeyUnreadable
+                ? "the UpdatePublicKey on this PC cannot be read"
+                : signature == SignatureCheck.Missing
+                    ? "the server sent no signature"
+                    : "the signature does not match the owner's key";
+
+            log.Error(
+                $"⛔ Update {offer.Version} refused — {why}. The hash matched, but only " +
+                "the owner's key proves who made the file. The file is being deleted.");
+
+            TryDelete(file.SavedPath);
+
+            _status = _status with
+            {
+                Stage = UpdateStage.Corrupt,
+                MsiPath = null,
+                Detail = signature == SignatureCheck.Missing ? "signature missing" : "signature invalid",
+            };
+            return;
+        }
+
         _status = _status with { Stage = UpdateStage.Verified };
-        log.Info($"✅ Update {offer.Version} verified — waiting to be installed: {file.SavedPath}");
+        log.Info(
+            $"✅ Update {offer.Version} verified" +
+            (signature == SignatureCheck.Valid ? " (hash and owner's signature)" : "") +
+            $" — waiting to be installed: {file.SavedPath}");
 
         // পুরোনো ভার্সনের নামানো MSI আর দরকার নেই
         CleanOldMsi(file.SavedPath);
