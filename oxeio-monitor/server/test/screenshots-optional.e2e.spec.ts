@@ -25,6 +25,7 @@ import {
 
 let h: Harness;
 let device: EnrolledDevice;
+let employeeId: number;
 
 beforeAll(async () => {
   h = await createHarness();
@@ -36,7 +37,9 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await resetDatabase(h.prisma, h.app);
-  const { code } = await createEmployeeWithCode(h.prisma);
+  const created = await createEmployeeWithCode(h.prisma);
+  employeeId = created.employeeId;
+  const code = created.code;
   device = await enrollDevice(h, code);
 });
 
@@ -86,5 +89,24 @@ describe('screenshot.enabled', () => {
       .set('X-CSRF-Token', owner.csrf)
       .send({ screenshotsEnabled: 'no' })
       .expect(400);
+  });
+
+  it('the gallery says why a day is empty when the policy takes no screenshots', async () => {
+    const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
+    const gallery = () =>
+      owner.http
+        .get(`/api/v1/screenshots?employeeId=${employeeId}`)
+        .expect(200);
+
+    expect((await gallery()).body.screenshotsOff).toBe(false);
+
+    const policy = await h.prisma.workPolicy.findFirstOrThrow();
+    await owner.http
+      .patch(`/api/v1/work-policies/${policy.id}`)
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ screenshotsEnabled: false })
+      .expect(200);
+
+    expect((await gallery()).body.screenshotsOff).toBe(true);
   });
 });

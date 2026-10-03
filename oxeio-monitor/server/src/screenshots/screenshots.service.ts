@@ -51,6 +51,11 @@ export interface GalleryPage {
   total: number;
   totalPages: number;
   items: GalleryItem[];
+  /**
+   * The gallery is for one person whose work policy takes no screenshots
+   * (`screenshotsEnabled = false`) — so an empty day is expected, not a fault.
+   */
+  screenshotsOff: boolean;
 }
 
 export interface ResolvedScreenshotFile {
@@ -151,6 +156,8 @@ export class ScreenshotsService {
       total,
       totalPages: slice.totalPages,
       items,
+      screenshotsOff:
+        employeeId === null ? false : !(await this.screenshotsEnabledFor(employeeId)),
     };
   }
 
@@ -283,6 +290,25 @@ export class ScreenshotsService {
       );
     }
     return opened;
+  }
+
+  /**
+   * Does this person's policy take screenshots? Their own policy, or the
+   * active default when they have none — the same rule the agent's config
+   * uses (AgentConfigService.build), so the gallery and the PC agree.
+   */
+  private async screenshotsEnabledFor(employeeId: number): Promise<boolean> {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { policy: { select: { screenshotsEnabled: true } } },
+    });
+    if (employee?.policy) return employee.policy.screenshotsEnabled;
+
+    const fallback = await this.prisma.workPolicy.findFirst({
+      where: { isActive: true },
+      select: { screenshotsEnabled: true },
+    });
+    return fallback?.screenshotsEnabled ?? true;
   }
 
   private resolveDate(iso?: string): Date {

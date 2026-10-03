@@ -51,6 +51,8 @@ export interface GalleryPage {
   total: number;
   totalPages: number;
   items: GalleryItem[];
+  /** One person whose policy takes no screenshots; optional for older servers */
+  screenshotsOff?: boolean;
 }
 
 export interface GalleryQuery {

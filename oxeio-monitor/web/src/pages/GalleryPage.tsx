@@ -130,6 +130,16 @@ export function GalleryPage() {
         <Loading label="Loading screenshots…" />
       ) : error ? (
         <ErrorBox error={error} retry={reload} />
+      ) : items.length === 0 && data?.screenshotsOff ? (
+        <Empty
+          title="Screenshots are off for this person"
+          hint={
+            <>
+              Their work policy does not take screenshots (Settings → Policies).
+              Hours, idle time and the jiggler check are counted as usual.
+            </>
+          }
+        />
       ) : items.length === 0 ? (
         <Empty
           title="No screenshots on this day"

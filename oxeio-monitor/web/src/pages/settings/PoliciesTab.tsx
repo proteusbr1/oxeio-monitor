@@ -558,6 +558,8 @@ function PolicyForm({
             value={form.screenshotFrom}
             onChange={set('screenshotFrom')}
             mono
+            // kept, not cleared: turning screenshots back on restores the window
+            disabled={!screenshotsEnabled}
           />
           <TextField
             label="Screenshots until"
@@ -565,7 +567,12 @@ function PolicyForm({
             value={form.screenshotTo}
             onChange={set('screenshotTo')}
             mono
-            hint="No screenshot is ever taken outside this window"
+            disabled={!screenshotsEnabled}
+            hint={
+              screenshotsEnabled
+                ? 'No screenshot is ever taken outside this window'
+                : 'Not used while screenshots are off — kept for when they are turned back on'
+            }
           />
 
           <TextField
