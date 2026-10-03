@@ -1679,6 +1679,7 @@ internal sealed class AgentHost : IAsyncDisposable
         AppTrackingEnabledByPolicy = _config.AppTracking.Enabled,
         AppTrackerRunning = _apps is not null,
         BrowserDomainGaveUp = _apps?.UrlReadingDisabled == true,
+        ScreenshotsEnabledByPolicy = _config.Screenshot.IsEnabled,
         ScreenshotFailStreak = Volatile.Read(ref _screenshotFailStreak),
         ScreenFingerprintFailed = _screenSampleFailing,
         Sync = _worker?.Health ?? SyncHealth.Ok,
