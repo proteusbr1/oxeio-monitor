@@ -77,18 +77,27 @@ describe('capability report in the heartbeat', () => {
     expect(await alerts()).toHaveLength(0);
   });
 
-  it('a part that degrades raises one alert, however many heartbeats repeat it', async () => {
-    const broken = { ...HEALTHY, browserDomain: 'degraded' };
+  it('degraded is stored for the device list but raises no alert', async () => {
+    await heartbeat({
+      ...HEALTHY,
+      browserDomain: 'degraded',
+      sync: 'degraded',
+    }).expect(200);
+
+    expect(await stored()).toMatchObject({ browserDomain: 'degraded' });
+    expect(await alerts()).toHaveLength(0);
+  });
+
+  it('a part that fails raises one alert, however many heartbeats repeat it', async () => {
+    const broken = { ...HEALTHY, screenActivity: 'failed' };
     await heartbeat(broken).expect(200);
     await heartbeat(broken).expect(200);
-    await heartbeat({ ...broken, screenActivity: 'failed' }).expect(200);
+    await heartbeat({ ...broken, browserDomain: 'failed' }).expect(200);
 
     const rows = await alerts();
     expect(rows).toHaveLength(1);
-    // the open alert follows what is broken now
-    expect(rows[0].detail).toBe(
-      'Website domains degraded · Jiggler check failed',
-    );
+    // the open alert follows what is down now
+    expect(rows[0].detail).toBe('Not working: Website domains, Jiggler check');
     expect(rows[0].resolvedAt).toBeNull();
   });
 
@@ -98,6 +107,32 @@ describe('capability report in the heartbeat', () => {
 
     const [row] = await alerts();
     expect(row.resolvedAt).not.toBeNull();
+  });
+
+  it('flapping reopens the same alert instead of sending a new one', async () => {
+    for (let i = 0; i < 3; i++) {
+      await heartbeat({ ...HEALTHY, sync: 'failed' }).expect(200);
+      await heartbeat(HEALTHY).expect(200);
+    }
+    await heartbeat({ ...HEALTHY, sync: 'failed' }).expect(200);
+
+    const rows = await alerts();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].resolvedAt).toBeNull();
+  });
+
+  it('after the throttle window a new failure is a new alert', async () => {
+    await heartbeat({ ...HEALTHY, sync: 'failed' }).expect(200);
+    await heartbeat(HEALTHY).expect(200);
+    // pretend that alert is from yesterday
+    await h.prisma.alert.updateMany({
+      where: { type: 'agent_capability' },
+      data: { createdAt: new Date(realNow().getTime() - 24 * 3_600_000) },
+    });
+
+    await heartbeat({ ...HEALTHY, sync: 'failed' }).expect(200);
+
+    expect(await alerts()).toHaveLength(2);
   });
 
   it('screenshots off by policy are not a fault', async () => {
