@@ -172,7 +172,7 @@ describe('America/Sao_Paulo (UTC−3)', () => {
     const input = {
       officeFrom: '09:00',
       officeTo: '18:00',
-      weeklyOffDay: 5,
+      weeklyOffDays: [5],
       isHoliday: false,
     };
     // Fri 10:00 local — off day
