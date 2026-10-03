@@ -508,6 +508,39 @@ SPKI, অর্থাৎ **১৫টা এজেন্ট একসাথে �
 
 ---
 
+## ৩খ· Behind a reverse proxy *(Traefik, Nginx, Cloudflare, Coolify …)*
+
+The shipped setup assumes the `web` container (Caddy) is the edge: it holds
+the certificate and the address it sees is the visitor's. Put another proxy
+in front and Caddy sees **that proxy's** address for everyone, which breaks
+two things quietly:
+
+- the login rate limit at the edge (30 a minute) becomes one bucket for the
+  whole world — after 30 attempts nobody can log in for a minute;
+- the API's per-IP lockout (`LOGIN_IP_MAX_FAILS`) and the audit log's IP
+  column record the proxy, not the person.
+
+Tell Caddy which addresses are your proxy. Only requests from those are
+believed about the client's IP; anyone else who sends the header keeps
+their own address, so nobody can choose an IP to dodge the lockout.
+
+```bash
+# .env
+CADDY_SITE=:8080                       # TLS is the proxy's job now
+CADDY_TRUSTED_PROXIES=172.16.0.0/12    # the proxy's address(es), CIDR, space-separated
+# CADDY_CLIENT_IP_HEADERS=CF-Connecting-IP   # only with Cloudflare directly in front
+```
+
+- With a proxy in a docker network on the same host (Traefik, Coolify), its
+  address is in that network's range — `docker network inspect <net>`.
+- With Cloudflare in front, list Cloudflare's ranges
+  (<https://www.cloudflare.com/ips/>) and set `CADDY_CLIENT_IP_HEADERS`.
+- Leave `TRUST_PROXY` (API) at its default `1`: Caddy hands the API one
+  address, already decided, so the API still trusts exactly one hop.
+
+Check: log in from two different networks, then Settings → Audit — the two
+rows must show two different addresses, neither of them the proxy's.
+
 ## ৩ক· সার্টিফিকেট বানানো *(শুধু LAN / self-signed হলে)*
 
 ```powershell
