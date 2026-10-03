@@ -117,6 +117,71 @@ const MONTHS_SHORT = [
 /** Sun = 0 … Sat = 6 (JS-এর `getUTCDay()` ক্রম) */
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+// ── Display locale (DISPLAY_LOCALE on the server) ───────────────────────────
+
+/**
+ * How dates and numbers are written — `null` (the default) keeps every
+ * function below exactly as it was. Set from `GET /auth/display-locale` in
+ * `main.tsx`, before the first render.
+ *
+ * ⚠️ Formatting only, never translation: with a locale, dates are numeric in
+ *    that locale's order and numbers use its separators. No month or weekday
+ *    name changes language — the rest of the screen is English, and a
+ *    Portuguese "agosto" in an English table would be neither.
+ */
+let displayLocale: string | null = null;
+
+/** The locale's thousands and decimal separators, cached per locale */
+let separators: { group: string; decimal: string } = {
+  group: ',',
+  decimal: '.',
+};
+
+export function setDisplayLocale(locale: string | null | undefined): void {
+  const tag = typeof locale === 'string' ? locale.trim() : '';
+  let supported = false;
+  try {
+    supported =
+      tag !== '' && Intl.DateTimeFormat.supportedLocalesOf([tag]).length > 0;
+  } catch {
+    // a malformed tag throws RangeError — treat it as no locale
+  }
+  if (!supported) {
+    displayLocale = null;
+    separators = { group: ',', decimal: '.' };
+    return;
+  }
+  displayLocale = tag;
+  const parts = new Intl.NumberFormat(tag).formatToParts(12345.6);
+  separators = {
+    group: parts.find((p) => p.type === 'group')?.value ?? ',',
+    decimal: parts.find((p) => p.type === 'decimal')?.value ?? '.',
+  };
+}
+
+/**
+ * `'13,000.50'` (the formats below) → the locale's separators, e.g.
+ * `'13.000,50'`. Works on the string, never through `Number()` — the same
+ * rule `formatTaka` keeps for money.
+ */
+function localizeDigits(text: string): string {
+  if (displayLocale === null) return text;
+  return text.replace(/[,.]/g, (c) =>
+    c === ',' ? separators.group : separators.decimal,
+  );
+}
+
+/** Numeric date in the locale's order — only called with a locale set */
+function localeDate(
+  date: Date,
+  parts: Pick<Intl.DateTimeFormatOptions, 'day' | 'month' | 'year'>,
+): string {
+  return new Intl.DateTimeFormat(displayLocale!, {
+    timeZone: 'UTC',
+    ...parts,
+  }).format(date);
+}
+
 // ── কর্মদিবস (`YYYY-MM-DD`) ─────────────────────────────────────────────────
 
 /**
@@ -235,6 +300,13 @@ export function thisMonthRange(now: Date = new Date()): {
 export function formatDate(date: string): string {
   const parsed = parseWorkDate(date);
   if (!parsed) return date;
+  if (displayLocale !== null) {
+    return localeDate(parsed, {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  }
   return `${parsed.getUTCDate()} ${MONTHS[parsed.getUTCMonth()]} ${parsed.getUTCFullYear()}`;
 }
 
@@ -242,6 +314,8 @@ export function formatDate(date: string): string {
 export function formatDateShort(date: string): string {
   const parsed = parseWorkDate(date);
   if (!parsed) return date;
+  if (displayLocale !== null)
+    return localeDate(parsed, { day: '2-digit', month: '2-digit' });
   return `${parsed.getUTCDate()} ${MONTHS_SHORT[parsed.getUTCMonth()]}`;
 }
 
@@ -261,6 +335,12 @@ export function weekdayOf(date: string): string {
 export function formatMonth(monthKey: string): string {
   const month = Number(monthKey.slice(5, 7));
   if (!Number.isFinite(month) || month < 1 || month > 12) return monthKey;
+  if (displayLocale !== null) {
+    const first = new Date(
+      Date.UTC(Number(monthKey.slice(0, 4)), month - 1, 1),
+    );
+    return localeDate(first, { month: '2-digit', year: 'numeric' });
+  }
   return `${MONTHS[month - 1]} ${monthKey.slice(0, 4)}`;
 }
 
@@ -379,7 +459,7 @@ export function formatHours(
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) {
     return '—';
   }
-  return (seconds / HOUR).toFixed(digits);
+  return localizeDigits((seconds / HOUR).toFixed(digits));
 }
 
 /**
@@ -418,7 +498,7 @@ export function formatPct(
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return '—';
   }
-  return `${value.toFixed(digits)}%`;
+  return `${localizeDigits(value.toFixed(digits))}%`;
 }
 
 /** অগ্রগতির শতাংশ — হর শূন্য হলে ০, NaN বা Infinity নয় */
@@ -439,7 +519,7 @@ export function formatBytes(bytes: number | null | undefined): string {
     value /= 1024;
     unit += 1;
   }
-  return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
+  return `${localizeDigits(value.toFixed(value < 10 ? 1 : 0))} ${units[unit]}`;
 }
 
 /**
@@ -478,7 +558,7 @@ export function formatTaka(amount: string | null | undefined): string {
   const sign = whole.startsWith('-') ? '-' : '';
   const digits = sign ? whole.slice(1) : whole;
   const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return `${currencySymbolValue} ${sign}${grouped}${fraction ? `.${fraction}` : ''}`;
+  return `${currencySymbolValue} ${localizeDigits(`${sign}${grouped}${fraction ? `.${fraction}` : ''}`)}`;
 }
 
 /** সাধারণ সংখ্যা — হাজারের কমা সহ */
@@ -486,7 +566,7 @@ export function formatCount(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return '—';
   }
-  return Math.round(value).toLocaleString('en-US');
+  return localizeDigits(Math.round(value).toLocaleString('en-US'));
 }
 
 function pad(n: number): string {

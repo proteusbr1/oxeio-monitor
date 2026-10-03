@@ -71,6 +71,8 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
       # owner's update public key — empty = unsigned updates allowed, as before
       AGENT_UPDATE_PUBLIC_KEY: ${AGENT_UPDATE_PUBLIC_KEY:-}
+      # e.g. pt-BR — empty = the dashboard's own date and number formats
+      DISPLAY_LOCALE: ${DISPLAY_LOCALE:-}
 
       # ⚠️ না দিলে JWT_SECRET থেকেই আলাদা চাবি বানানো হয় (label মিশিয়ে),
       #    তাই খালি রাখা নিরাপদ। আলাদা দিলে স্ক্রিনশটের লিঙ্ক আর সেশন

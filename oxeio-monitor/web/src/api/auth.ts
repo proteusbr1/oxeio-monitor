@@ -83,6 +83,16 @@ export function fetchCurrency(signal?: AbortSignal): Promise<CurrencyInfo> {
   return api('/auth/currency', { silent401: true, signal });
 }
 
+/**
+ * How dates and numbers are written (`DISPLAY_LOCALE`); `null` = the formats
+ * the dashboard always had. Public, like `session-policy`.
+ */
+export function fetchDisplayLocale(
+  signal?: AbortSignal,
+): Promise<{ locale: string | null }> {
+  return api('/auth/display-locale', { silent401: true, signal });
+}
+
 export function logout(): Promise<void> {
   return api('/auth/logout', { method: 'POST' });
 }
