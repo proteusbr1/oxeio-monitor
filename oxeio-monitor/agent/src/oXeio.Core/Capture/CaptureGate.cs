@@ -42,6 +42,16 @@ public static class CaptureGate
         /// (<see cref="oXeio.Core.Agent.TrackingGate"/>)।
         /// </summary>
         NotEnrolled,
+
+        /// <summary>
+        /// The work policy turned screenshots off (<c>screenshot.enabled = false</c>).
+        ///
+        /// ⚠️ Only the screenshot is skipped. The screen fingerprint behind the
+        /// jiggler check (<see cref="ScreenActivity"/>) is taken by
+        /// <see cref="ScreenSampling"/> on its own schedule and never asks this
+        /// gate, so hours are counted exactly as with screenshots on.
+        /// </summary>
+        DisabledByPolicy,
     }
 
     public static Verdict Check(
@@ -49,7 +59,8 @@ public static class CaptureGate
         bool enrolled,
         bool revoked,
         CaptureWindow window,
-        DateTimeOffset fireAt)
+        DateTimeOffset fireAt,
+        bool screenshotsEnabled = true)
     {
         ArgumentNullException.ThrowIfNull(window);
 
@@ -66,6 +77,10 @@ public static class CaptureGate
             default: break;
         }
 
+        // before NotActive/OutsideWindow: when the policy says "never", the
+        // log should say that, not "idle at the time"
+        if (!screenshotsEnabled) return Verdict.DisabledByPolicy;
+
         if (state != SegmentState.Active) return Verdict.NotActive;
         if (!window.Allows(fireAt)) return Verdict.OutsideWindow;
 
@@ -77,6 +92,7 @@ public static class CaptureGate
         bool enrolled,
         bool revoked,
         CaptureWindow window,
-        DateTimeOffset fireAt) =>
-        Check(state, enrolled, revoked, window, fireAt) == Verdict.Allowed;
+        DateTimeOffset fireAt,
+        bool screenshotsEnabled = true) =>
+        Check(state, enrolled, revoked, window, fireAt, screenshotsEnabled) == Verdict.Allowed;
 }

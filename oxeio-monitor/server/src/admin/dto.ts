@@ -280,6 +280,10 @@ export class CreateWorkPolicyDto {
   @IsOptional() @IsInt() @Min(1) @Max(60)
   slotMinutes?: number;
 
+  /** false = no screenshots for this policy (the jiggler check keeps running) */
+  @IsOptional() @IsBoolean()
+  screenshotsEnabled?: boolean;
+
   /**
    * ⭐ ডিজাইনারের দৈনিক টার্গেট (মালিকের চাওয়া ২৫)।
    * ⚠️ ০ **বৈধ** — টার্গেট বন্ধ, কিন্তু সংখ্যা গোনা চলতেই থাকে।
@@ -320,6 +324,10 @@ export class UpdateWorkPolicyDto {
 
   @IsOptional() @IsInt() @Min(1) @Max(60)
   slotMinutes?: number;
+
+  /** false = no screenshots for this policy (the jiggler check keeps running) */
+  @IsOptional() @IsBoolean()
+  screenshotsEnabled?: boolean;
 
   /**
    * ⭐ ডিজাইনারের দৈনিক টার্গেট (মালিকের চাওয়া ২৫)।

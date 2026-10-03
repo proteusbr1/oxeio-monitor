@@ -23,6 +23,12 @@ export interface AgentConfig {
   heartbeatSec: number;
   appTracking: { enabled: boolean; minDurationSec: number };
   screenshot: {
+    /**
+     * false = the policy turned screenshots off. The agent still samples the
+     * screen for the jiggler check; older agents ignore the field and keep
+     * taking screenshots.
+     */
+    enabled: boolean;
     format: 'webp';
     quality: number;
     maxWidth: number;
@@ -61,6 +67,7 @@ export class AgentConfigService {
       heartbeatSec: 30,
       appTracking: { enabled: true, minDurationSec: 5 },
       screenshot: {
+        enabled: policy.screenshotsEnabled,
         format: 'webp',
         quality: 70,
         maxWidth: 1920,

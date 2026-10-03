@@ -169,6 +169,9 @@ model WorkPolicy {
   /// 'HH:MM' — ক্যাপচার উইন্ডো। null হলে ২৪ ঘণ্টা ছবি ওঠে।
   screenshotFrom     String? @map("screenshot_from") @db.VarChar(5)
   screenshotTo       String? @map("screenshot_to") @db.VarChar(5)
+  /// false = no screenshots at all for this policy. ⚠️ The agent still samples
+  /// the screen locally for the jiggler check (G46), so hours are unchanged.
+  screenshotsEnabled Boolean @default(true) @map("screenshots_enabled")
   /**
    * ⭐⭐ **অফিস কখন খোলা** *(২২ আগস্ট ২০২৬)* — মালিকের চাওয়া ৯টা–৬টা।
    *

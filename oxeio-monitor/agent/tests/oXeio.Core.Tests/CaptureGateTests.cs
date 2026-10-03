@@ -107,4 +107,24 @@ public class CaptureGateTests
         Assert.Equal(
             CaptureGate.Verdict.Revoked,
             CaptureGate.Check(SegmentState.Active, NotEnrolled, Revoked, Day, Noon));
+
+    // ── screenshot.enabled ───────────────────────────────────────────────────
+
+    [Fact]
+    public void Screenshots_on_by_default_change_nothing() =>
+        Assert.Equal(
+            CaptureGate.Check(SegmentState.Active, Enrolled, NotRevoked, Day, Noon),
+            CaptureGate.Check(SegmentState.Active, Enrolled, NotRevoked, Day, Noon, screenshotsEnabled: true));
+
+    [Fact]
+    public void Screenshots_off_by_policy_means_no_screenshot_even_when_active() =>
+        Assert.Equal(
+            CaptureGate.Verdict.DisabledByPolicy,
+            CaptureGate.Check(SegmentState.Active, Enrolled, NotRevoked, Day, Noon, screenshotsEnabled: false));
+
+    [Fact]
+    public void Revoked_still_wins_over_the_policy() =>
+        Assert.Equal(
+            CaptureGate.Verdict.Revoked,
+            CaptureGate.Check(SegmentState.Active, Enrolled, Revoked, Day, Noon, screenshotsEnabled: false));
 }

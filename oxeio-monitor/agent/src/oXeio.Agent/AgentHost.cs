@@ -770,7 +770,8 @@ internal sealed class AgentHost : IAsyncDisposable
             _credentials?.IsEnrolled == true,
             _credentials?.IsRevoked == true,
             _window,
-            slot.FireAt);
+            slot.FireAt,
+            _config.Screenshot.IsEnabled);
 
         if (verdict != CaptureGate.Verdict.Allowed)
         {
@@ -1668,6 +1669,14 @@ internal sealed class AgentHost : IAsyncDisposable
         {
             _slots = new SlotScheduler(cfg.SlotMinutes);
             changes.Add($"slot {old.SlotMinutes}m → {cfg.SlotMinutes}m");
+        }
+
+        // read by CaptureSlotAsync at every slot — nothing to rebuild, only to log
+        if (old.Screenshot.IsEnabled != cfg.Screenshot.IsEnabled)
+        {
+            changes.Add(cfg.Screenshot.IsEnabled
+                ? "screenshots on"
+                : "screenshots off by policy (screen sampling for the jiggler check continues)");
         }
 
         if (change.Heartbeat)

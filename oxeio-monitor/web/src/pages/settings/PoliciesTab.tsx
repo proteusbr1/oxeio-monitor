@@ -18,6 +18,7 @@ import { Table, type Column } from '../../components/Table';
 import { formatDuration } from '../../lib/format';
 import { HolidaysSection } from './HolidaysSection';
 import {
+  CheckboxField,
   Chip,
   ConfirmDialog,
   FormGrid,
@@ -146,11 +147,15 @@ function WorkPoliciesSection() {
     {
       key: 'window',
       header: 'Screenshot window',
-      render: (policy) => (
-        <span className="num">
-          {policy.screenshotFrom ?? '07:00'}–{policy.screenshotTo ?? '23:00'}
-        </span>
-      ),
+      render: (policy) =>
+        // `false` only — an older server without the field means on
+        policy.screenshotsEnabled === false ? (
+          <span className="text-ink-3">off</span>
+        ) : (
+          <span className="num">
+            {policy.screenshotFrom ?? '07:00'}–{policy.screenshotTo ?? '23:00'}
+          </span>
+        ),
     },
     {
       key: 'idle',
@@ -363,6 +368,11 @@ function PolicyForm({
     slotMinutes: String(policy?.slotMinutes ?? 10),
   });
 
+  // a boolean, so kept apart from the all-string form state above
+  const [screenshotsEnabled, setScreenshotsEnabled] = useState(
+    policy?.screenshotsEnabled !== false,
+  );
+
   const { busy, error, run } = useMutation();
   const set = (key: keyof PolicyFormState) => (value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -377,6 +387,7 @@ function PolicyForm({
         weeklyOffDay: form.weeklyOffDay === '' ? null : Number(form.weeklyOffDay),
         screenshotFrom: form.screenshotFrom,
         screenshotTo: form.screenshotTo,
+        screenshotsEnabled,
         officeFrom: form.officeFrom,
         officeTo: form.officeTo,
         idleThresholdSec: Number(form.idleThresholdSec),
@@ -485,6 +496,15 @@ function PolicyForm({
             max={3600}
             hint="Seconds. Once the keyboard and mouse have been quiet this long, the time stops counting."
           />
+
+          <FullWidth>
+            <CheckboxField
+              label="Take screenshots"
+              checked={screenshotsEnabled}
+              onChange={setScreenshotsEnabled}
+              hint="Off: no screenshot is taken, stored or sent. Idle and jiggler detection keep working, so hours are counted the same way."
+            />
+          </FullWidth>
 
           <TextField
             label="Screenshots from"
