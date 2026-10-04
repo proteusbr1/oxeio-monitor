@@ -11,6 +11,7 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { UserRole, type Prisma } from '@prisma/client';
 import {
   IsBoolean,
@@ -22,6 +23,7 @@ import {
 } from 'class-validator';
 
 import { parseUpdatePublicKey } from '../agent/update-signature';
+import { BackupCheck } from '../alerts/backup.check';
 import { AuditService } from '../audit/audit.service';
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
@@ -111,6 +113,8 @@ export class SettingsController {
     private readonly audit: AuditService,
     // the store this server started with — compared with what is saved
     @Inject(SCREENSHOT_STORAGE) private readonly store: ScreenshotStorage,
+    // BackupCheck lives in OpsModule, which needs this (global) module first
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   // ── region ────────────────────────────────────────────────────────────
@@ -273,6 +277,8 @@ export class SettingsController {
   ) {
     await this.settings.save(BACKUP_SETTING_KEY, { mode: dto.mode }, actor.userId);
     await this.record(actor, ip, BACKUP_SETTING_KEY, { mode: dto.mode });
+    // switched to external: the old backup alert goes now, not at the next check
+    await this.moduleRef.get(BackupCheck, { strict: false }).closeIfExternal();
     return this.settings.backupMode();
   }
 

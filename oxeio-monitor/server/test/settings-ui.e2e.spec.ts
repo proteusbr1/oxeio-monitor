@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { BackupCheck } from '../src/alerts/backup.check';
 import {
   createHarness,
   loginReady,
@@ -92,6 +93,46 @@ describe('Settings → Storage & backup', () => {
     await patch(owner, '/settings/backup', { mode: 'external' }).expect(200);
     const health = await owner.http.get('/api/v1/ops/health').expect(200);
     expect(health.body.backup.mode).toBe('external');
+  });
+
+  /**
+   * The open "BACKUP_PASSPHRASE is not set" alert closes the moment the
+   * mode is saved — not at the hourly check, which every restart pushes back.
+   */
+  it('switching to external closes the old backup alert at once', async () => {
+    const stale = () =>
+      h.prisma.alert.create({
+        data: {
+          type: 'backup_failed',
+          severity: 'critical',
+          title: 'Backup is not running — BACKUP_PASSPHRASE is not set',
+          detail: 'No passphrase',
+          channelsSent: [],
+        },
+      });
+
+    // still internal: the method the server runs at boot leaves it alone
+    const first = await stale();
+    expect(await h.app.get(BackupCheck).closeIfExternal()).toBe(false);
+    expect(
+      (await h.prisma.alert.findUniqueOrThrow({ where: { id: first.id } }))
+        .resolvedAt,
+    ).toBeNull();
+
+    await patch(owner, '/settings/backup', { mode: 'external' }).expect(200);
+    const closed = await h.prisma.alert.findUniqueOrThrow({
+      where: { id: first.id },
+    });
+    expect(closed.resolvedAt).not.toBeNull();
+    expect(closed.resolvedReason).toMatch(/external/);
+
+    // and from then on, at boot too
+    const second = await stale();
+    expect(await h.app.get(BackupCheck).closeIfExternal()).toBe(true);
+    expect(
+      (await h.prisma.alert.findUniqueOrThrow({ where: { id: second.id } }))
+        .resolvedAt,
+    ).not.toBeNull();
   });
 
   it('screenshots on this disk by default; a bucket without a key is refused', async () => {

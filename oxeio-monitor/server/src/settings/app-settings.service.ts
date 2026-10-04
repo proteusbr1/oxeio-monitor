@@ -32,6 +32,11 @@ import {
 export class AppSettingsService {
   private readonly cache = new Map<string, unknown>();
 
+  /** Drops the cache — for tests that empty the table underneath it */
+  forget(): void {
+    this.cache.clear();
+  }
+
   constructor(private readonly prisma: PrismaService) {}
 
   async region(): Promise<RegionView> {

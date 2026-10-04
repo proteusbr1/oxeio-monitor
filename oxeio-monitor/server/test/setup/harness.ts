@@ -8,6 +8,7 @@ import request from 'supertest';
 
 import { AppCategoryService } from '../../src/activity/app-category.service';
 import { FeaturesService } from '../../src/features/features.service';
+import { AppSettingsService } from '../../src/settings/app-settings.service';
 import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.setup';
 import { DHAKA_OFFSET_MIN, workDateOf } from '../../src/agent/util/dhaka-time';
@@ -96,6 +97,7 @@ export async function resetDatabase(
   app?.get(AppCategoryService).invalidate();
   // the module switches are cached the same way; the row was just truncated
   app?.get(FeaturesService).forget();
+  app?.get(AppSettingsService).forget();
 
   const policy = await prisma.workPolicy.create({
     data: {

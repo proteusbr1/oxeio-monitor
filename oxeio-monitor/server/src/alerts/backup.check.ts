@@ -32,17 +32,27 @@ export class BackupCheck {
     private readonly alerts: AlertsService,
   ) {}
 
+  /**
+   * BACKUP_MODE=external: nothing to watch here — and an alert left open
+   * from before the switch ("backup not configured") is closed.
+   *
+   * Also called at boot and when the mode is saved on screen: the hourly
+   * tick starts over at every restart, so waiting for it kept a stale
+   * "BACKUP_PASSPHRASE is not set" open long after the switch.
+   */
+  async closeIfExternal(now = new Date()): Promise<boolean> {
+    if (!(await this.backup.isExternal())) return false;
+
+    await this.alerts.resolveOpenOfType(
+      'backup_failed',
+      'BACKUP_MODE=external — the database is backed up outside oXeio',
+      now,
+    );
+    return true;
+  }
+
   async runOnce(now = new Date()): Promise<number> {
-    // BACKUP_MODE=external: nothing to watch here — and an alert left open
-    // from before the switch ("backup not configured") is closed
-    if (await this.backup.isExternal()) {
-      await this.alerts.resolveOpenOfType(
-        'backup_failed',
-        'BACKUP_MODE=external — the database is backed up outside oXeio',
-        now,
-      );
-      return 0;
-    }
+    if (await this.closeIfExternal(now)) return 0;
 
     const snapshot = await this.state.read(this.backup.configured);
     const verdict = backupVerdict(snapshot, now);

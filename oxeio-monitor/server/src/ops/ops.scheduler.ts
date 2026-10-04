@@ -43,6 +43,11 @@ export class OpsScheduler implements OnApplicationBootstrap, OnModuleDestroy {
     this.schedule('backup-check', BACKUP_CHECK_TICK_MS, (now) =>
       this.backupCheck.runOnce(now),
     );
+    // external mode: close a leftover backup alert now, not an hour from now
+    void this.tick('backup-close', async (now) => {
+      await this.backupCheck.closeIfExternal(now);
+      return 0;
+    });
 
     /**
      * ⚠️⚠️ **শর্ত ছাড়াই বসানো হয় — ইচ্ছাকৃত।**
