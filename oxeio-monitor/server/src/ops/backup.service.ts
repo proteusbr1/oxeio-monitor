@@ -53,7 +53,7 @@ export interface BackupCopyResult {
 export interface BackupResult {
   ok: boolean;
   /** কেন চালানো হয়নি — চালানো হলে `null` */
-  skipped: 'not_configured' | 'already_running' | null;
+  skipped: 'not_configured' | 'already_running' | 'external' | null;
   fileName: string | null;
   sizeBytes: number | null;
   durationMs: number;
@@ -104,10 +104,17 @@ export class BackupService {
   private readonly dockerDbHost: string;
   private readonly databaseUrl: string;
 
+  /**
+   * `BACKUP_MODE=external` — the database is backed up outside oXeio
+   * (Databasus, a managed Postgres, …). See `parseBackupMode`.
+   */
+  readonly mode: BackupMode;
+
   constructor(
     private readonly config: ConfigService,
     private readonly state: BackupStateStore,
   ) {
+    this.mode = parseBackupMode(config.get<string>('BACKUP_MODE'));
     this.passphrase = (config.get<string>('BACKUP_PASSPHRASE') ?? '').trim();
     /**
      * ⚠️⚠️ **`?.trim() ||`, `??` নয় — আর এই এক অক্ষরের তফাতেই ব্যাকআপ
@@ -145,7 +152,13 @@ export class BackupService {
       config.get<string>('BACKUP_DOCKER_DB_HOST')?.trim() || 'localhost';
     this.databaseUrl = config.get<string>('DATABASE_URL') ?? '';
 
-    if (!this.passphrase) {
+    if (this.mode === 'external') {
+      this.logger.log(
+        'BACKUP_MODE=external — the database is backed up outside oXeio. ' +
+          'The nightly backup, its alerts and its health check are off; ' +
+          'make sure that tool tells you when a backup fails.',
+      );
+    } else if (!this.passphrase) {
       // ⭐ "জোরে বলা" এখান থেকেই শুরু — বুটের সময়েই একবার, তারপর G04 রোজ।
       this.logger.error(
         'No BACKUP_PASSPHRASE — the nightly backup will not run. ' +
@@ -153,7 +166,7 @@ export class BackupService {
           'database on disk without encryption, but you need to know about it (G39).',
       );
     }
-    if (!this.copyTo) {
+    if (this.mode === 'internal' && !this.copyTo) {
       this.logger.warn(
         'No BACKUP_COPY_TO — backups will only live on the server\'s own disk (K03 off). ' +
           'If that disk dies, the backups go with it.',
@@ -163,6 +176,11 @@ export class BackupService {
 
   get configured(): boolean {
     return this.passphrase.length > 0;
+  }
+
+  /** The database is backed up by something else; this server does nothing about it */
+  get external(): boolean {
+    return this.mode === 'external';
   }
 
   /** K03 চালু আছে কি না — `null` মানে এক্সটার্নাল কপি কনফিগারই করা হয়নি */
@@ -180,6 +198,9 @@ export class BackupService {
    * শিডিউলার আর হাতে-চালানো দুটোই এখান দিয়েই যায়।
    */
   async runOnce(now = new Date()): Promise<BackupResult> {
+    // a manual "run now" too — the owner said backups happen elsewhere
+    if (this.external) return emptyResult('external');
+
     const result = await this.lock.run(() => this.execute(now));
 
     if (result === null) {
@@ -627,4 +648,24 @@ async function readDigest(shaPath: string): Promise<string> {
 
 function firstLine(text: string): string {
   return text.split('\n').find((l) => l.trim().length > 0)?.trim() ?? '';
+}
+
+export type BackupMode = 'internal' | 'external';
+
+/**
+ * `BACKUP_MODE` — `internal` (default: oXeio's own nightly, encrypted
+ * pg_dump) or `external` (the database is backed up by something else).
+ *
+ * ⚠️ `external` is a statement, not an absence. Without a passphrase the
+ *    internal backup does not run and that is reported loudly on purpose
+ *    (G39: a missing backup nobody hears about is worse than a noisy
+ *    alert). `external` is how an owner who backs up elsewhere says so —
+ *    and only then does the alarm go quiet.
+ * ⚠️ Anything else stops the server: a typo must not switch the alarm off.
+ */
+export function parseBackupMode(raw: string | undefined): BackupMode {
+  const mode = (raw ?? '').trim().toLowerCase();
+  if (mode === '' || mode === 'internal') return 'internal';
+  if (mode === 'external') return 'external';
+  throw new Error(`BACKUP_MODE="${raw}" — use "internal" (default) or "external"`);
 }

@@ -245,6 +245,23 @@ export class AlertsService {
    * ⚠️ idempotent: আগে-বন্ধ সারি আবার ছোঁয়া হয় না (`resolvedAt: null` শর্ত),
    *    নইলে প্রতি টিকে reason ও সময় নতুন করে বসে যেত।
    */
+  /** Every open alert of one type — for a check that no longer applies */
+  async resolveOpenOfType(
+    type: AlertType,
+    reason: string,
+    now = new Date(),
+  ): Promise<number> {
+    const open = await this.prisma.alert.findMany({
+      where: { type, resolvedAt: null },
+      select: { id: true },
+    });
+    return this.resolveMany(
+      open.map((a) => a.id),
+      reason,
+      now,
+    );
+  }
+
   async resolveMany(
     ids: readonly bigint[],
     reason: string,

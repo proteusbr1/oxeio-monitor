@@ -33,6 +33,17 @@ export class BackupCheck {
   ) {}
 
   async runOnce(now = new Date()): Promise<number> {
+    // BACKUP_MODE=external: nothing to watch here — and an alert left open
+    // from before the switch ("backup not configured") is closed
+    if (this.backup.external) {
+      await this.alerts.resolveOpenOfType(
+        'backup_failed',
+        'BACKUP_MODE=external — the database is backed up outside oXeio',
+        now,
+      );
+      return 0;
+    }
+
     const snapshot = await this.state.read(this.backup.configured);
     const verdict = backupVerdict(snapshot, now);
 

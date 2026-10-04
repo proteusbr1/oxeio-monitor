@@ -42,6 +42,8 @@ export interface OpsHealth {
   };
 
   backup: {
+    /** `external` = backed up outside oXeio; the fields below are then unused */
+    mode: 'internal' | 'external';
     configured: boolean;
     copyConfigured: boolean;
     lastSuccessAt: string | null;
@@ -114,7 +116,8 @@ export class OpsHealthService {
     const disk = await this.readDisk();
     const storeReachable = await this.storage.reachable();
     const snapshot = await this.state.read(this.backup.configured);
-    const verdict = backupVerdict(snapshot, now);
+    // external backups are not this server's to judge (BACKUP_MODE)
+    const verdict = this.backup.external ? null : backupVerdict(snapshot, now);
 
     const verdictSummary = healthVerdict({
       dbUp: db.up,
@@ -153,6 +156,7 @@ export class OpsHealthService {
         total: disk.totalBytes === null ? null : humanBytes(disk.totalBytes),
       },
       backup: {
+        mode: this.backup.mode,
         configured: snapshot.configured,
         copyConfigured: this.backup.copyTarget !== null,
         lastSuccessAt: snapshot.lastSuccessAt?.toISOString() ?? null,

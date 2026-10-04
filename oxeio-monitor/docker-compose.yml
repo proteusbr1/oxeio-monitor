@@ -101,6 +101,8 @@ services:
       # ⚠️ `:?` দিয়ে বাধ্যতামূলক করা হয়নি, কারণ তাতে ডেভ মেশিনে
       #    কনটেইনারই উঠত না।
       BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
+      # `external` = backed up by another tool; empty = oXeio's own nightly backup
+      BACKUP_MODE: ${BACKUP_MODE:-}
       # Postgres এই compose-এ কনটেইনারে, হোস্টে pg_dump নাও থাকতে পারে —
       # তাই ডাম্প কন্টেইনারের ভেতর থেকেই নেওয়া হয়।
       BACKUP_DOCKER_CONTAINER: ${BACKUP_DOCKER_CONTAINER:-}
