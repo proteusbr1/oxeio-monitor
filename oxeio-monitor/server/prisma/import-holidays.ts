@@ -21,7 +21,8 @@ import { basename } from 'node:path';
 
 import { PrismaClient } from '@prisma/client';
 
-import { parseHolidayFile } from './holiday-import';
+// ⚠️ from src/: this script runs in the `migrate` container, which has the source
+import { parseHolidayFile } from '../src/admin/holiday-import';
 import {
   dhakaToday,
   holidayRowName,

@@ -10,6 +10,7 @@ import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { ErrorBox, Loading } from '../../components/States';
 import { formatAgo, workTimeZoneLabel } from '../../lib/format';
+import { DatabaseBackupSection, ScreenshotStorageCard } from './StorageSections';
 import {
   Chip,
   MiniButton,
@@ -34,7 +35,8 @@ import {
  * ⚠️ **পুরো application key এই পর্দায় কোনোদিন আসে না** — সার্ভার শেষ চার
  * অক্ষর ছাড়া কিছু পাঠায় না।
  */
-export function BackupTab() {
+/** oXeio's own backup: the offsite copy and last night's run (author's cards) */
+function OwnBackupCards() {
   const offsite = useApi(getOffsiteSettings, []);
   const health = useApi(getOpsHealth, []);
   const save = useMutation();
@@ -54,26 +56,6 @@ export function BackupTab() {
 
   const backup = health.data?.backup;
 
-  // BACKUP_MODE=external: the offsite copy and the nightly run below are
-  // both about oXeio's own backup, which is off — say so instead
-  if (backup?.mode === 'external') {
-    return (
-      <Card title="Database Backup" hint="Made outside oXeio">
-        <div className="space-y-2 p-4 text-[13px] text-ink-2">
-          <p>
-            This server is set to <b>BACKUP_MODE=external</b>: the database is
-            backed up by another tool, so oXeio's nightly backup, its offsite
-            copy and the backup alert are off.
-          </p>
-          <Notice>
-            oXeio no longer watches the backup. Make sure that tool tells you
-            when a backup fails. Screenshots are files, not database rows —
-            back up the storage folder (or use S3 storage) if you need them.
-          </Notice>
-        </div>
-      </Card>
-    );
-  }
 
   return (
     <div className="space-y-3">
@@ -251,6 +233,23 @@ export function BackupTab() {
           )}
         </div>
       </Card>
+    </div>
+  );
+}
+
+/**
+ * Settings → Storage & backup: two choices, each with what it needs.
+ *   1. Where screenshots are kept — this server's disk, or a bucket.
+ *   2. Who backs up the database — oXeio (the cards above, unchanged), or
+ *      another tool such as Databasus.
+ */
+export function BackupTab() {
+  return (
+    <div className="space-y-6">
+      <ScreenshotStorageCard />
+      <DatabaseBackupSection>
+        <OwnBackupCards />
+      </DatabaseBackupSection>
     </div>
   );
 }

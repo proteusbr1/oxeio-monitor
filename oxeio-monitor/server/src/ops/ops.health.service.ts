@@ -117,7 +117,8 @@ export class OpsHealthService {
     const storeReachable = await this.storage.reachable();
     const snapshot = await this.state.read(this.backup.configured);
     // external backups are not this server's to judge (BACKUP_MODE)
-    const verdict = this.backup.external ? null : backupVerdict(snapshot, now);
+    const backupMode = await this.backup.mode();
+    const verdict = backupMode === 'external' ? null : backupVerdict(snapshot, now);
 
     const verdictSummary = healthVerdict({
       dbUp: db.up,
@@ -156,7 +157,7 @@ export class OpsHealthService {
         total: disk.totalBytes === null ? null : humanBytes(disk.totalBytes),
       },
       backup: {
-        mode: this.backup.mode,
+        mode: backupMode,
         configured: snapshot.configured,
         copyConfigured: this.backup.copyTarget !== null,
         lastSuccessAt: snapshot.lastSuccessAt?.toISOString() ?? null,

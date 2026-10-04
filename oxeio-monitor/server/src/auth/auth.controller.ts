@@ -11,8 +11,8 @@ import {
 import type { Response } from 'express';
 
 import { LOCAL_OFFSET_MIN, WORK_TIMEZONE } from '../agent/util/dhaka-time';
-import { CURRENCY, type CurrencyInfo } from '../payroll/currency';
-import { DISPLAY_LOCALE } from '../common/display-locale';
+import { type CurrencyInfo } from '../payroll/currency';
+import { AppSettingsService } from '../settings/app-settings.service';
 import { IDLE_WARN_BEFORE_SEC, SESSION_TTL_MIN } from './auth.constants';
 import { AuthService, type MeResult } from './auth.service';
 import { AllowWhileMustChangePw, CurrentUser, Public } from './decorators';
@@ -58,6 +58,8 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly tokens: TokenService,
     private readonly twoFactor: TwoFactorService,
+    // currency and date format, as saved on Settings → Region (or the .env)
+    private readonly settings: AppSettingsService,
   ) {}
 
   @Public()
@@ -133,8 +135,9 @@ export class AuthController {
    */
   @Public()
   @Get('currency')
-  currency(): CurrencyInfo {
-    return CURRENCY;
+  async currency(): Promise<CurrencyInfo> {
+    const { code, symbol } = (await this.settings.region()).currency;
+    return { code, symbol };
   }
 
   /**
@@ -143,8 +146,8 @@ export class AuthController {
    */
   @Public()
   @Get('display-locale')
-  displayLocale(): { locale: string | null } {
-    return { locale: DISPLAY_LOCALE };
+  async displayLocale(): Promise<{ locale: string | null }> {
+    return { locale: (await this.settings.region()).displayLocale.value };
   }
 
   @AllowWhileMustChangePw()

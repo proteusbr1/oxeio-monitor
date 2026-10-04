@@ -6,8 +6,11 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { Logger } from 'nestjs-pino';
 
-import { AppModule } from './app.module';
+import { PrismaClient } from '@prisma/client';
+
+import { fixedOffsetMinutes } from './agent/util/fixed-offset';
 import { configureApp } from './app.setup';
+import { REGION_SETTING_KEY } from './settings/region-key';
 
 /**
  * I01 — TLS চালু করার সিদ্ধান্ত।
@@ -68,8 +71,48 @@ function loadTlsOptions(): { key: Buffer; cert: Buffer } | undefined {
   };
 }
 
+/**
+ * The work-day zone saved on Settings → Region, applied before anything
+ * reads WORK_TIMEZONE.
+ *
+ * ⚠️ It has to happen here, before the app is imported: `dhaka-time.ts` and
+ *    the `@Cron({ timeZone })` options read the zone the moment they are
+ *    loaded. That is also why a new zone needs a restart.
+ * ⚠️ Never stops the start: no database yet, no saved zone, or a saved zone
+ *    that fails the check (e.g. a DST rule changed) — the .env value stays,
+ *    and the reason is logged. A bad setting must not lock the server in a
+ *    restart loop with no screen left to fix it from.
+ */
+async function applySavedTimeZone(): Promise<void> {
+  if (!process.env.DATABASE_URL) return;
+  const prisma = new PrismaClient();
+  try {
+    const row = await prisma.setting.findUnique({
+      where: { key: REGION_SETTING_KEY },
+      select: { value: true },
+    });
+    const saved = (row?.value as { timeZone?: unknown } | null)?.timeZone;
+    if (typeof saved !== 'string' || saved.trim() === '') return;
+
+    const zone = saved.trim();
+    fixedOffsetMinutes(zone);
+    process.env.WORK_TIMEZONE = zone;
+    // log timestamps follow it too
+    process.env.TZ = zone;
+  } catch (error) {
+    const why = error instanceof Error ? error.message : String(error);
+    console.warn(`Saved time zone not applied, keeping WORK_TIMEZONE from the environment: ${why}`);
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
 async function bootstrap(): Promise<void> {
   const httpsOptions = loadTlsOptions();
+
+  await applySavedTimeZone();
+  // ⚠️ imported only now, after the zone is known (see applySavedTimeZone)
+  const { AppModule } = await import('./app.module');
 
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,

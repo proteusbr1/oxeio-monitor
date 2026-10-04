@@ -16,6 +16,7 @@ import { Button } from '../../components/Page';
 import { Empty, ErrorBox, Loading } from '../../components/States';
 import { Table } from '../../components/Table';
 import { FleetCard } from './FleetCard';
+import { UpdateKeyCard } from './UpdateKeyCard';
 import { formatBytes, formatDateTime } from '../../lib/format';
 import {
   Chip,
@@ -112,6 +113,7 @@ export function AgentVersionsTab() {
           }}
         />
       )}
+      <UpdateKeyCard />
     </div>
   );
 }

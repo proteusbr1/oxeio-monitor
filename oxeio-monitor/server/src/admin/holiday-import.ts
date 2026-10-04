@@ -1,10 +1,10 @@
 /**
  * Holidays from a file — CSV or ICS — for any country, state or city.
  *
- * The seed only knows Bangladesh (`holiday-sets.ts`). Everyone else takes
- * their calendar from an official source and imports it with
- * `prisma/import-holidays.ts`, which writes through the same planner as the
- * seed — so current and past months are never touched without consent.
+ * The seed only knows Bangladesh (`prisma/holiday-sets.ts`). Everyone else
+ * takes their calendar from an official source and imports it on
+ * Settings → Policies & holidays (or with `prisma/import-holidays.ts`) —
+ * current and past months are never touched without consent.
  *
  * This file only reads text; nothing here touches the database.
  *
@@ -17,7 +17,24 @@
  * becomes one holiday per day. Events with a time of day are skipped: a
  * holiday is a date, and turning a time into a date needs a zone.
  */
-import { isRealDate, type HolidayEntry } from './holidays.data';
+/**
+ * The shape the seed's planner takes (`prisma/holidays.data.ts` › HolidayEntry),
+ * written out here: `src/` cannot import from `prisma/` (it would move
+ * `nest build`'s output, see holidays.data.ts › APPROX_SUFFIX).
+ */
+export interface HolidayEntry {
+  date: string;
+  name: string;
+  nameEn: string;
+  approximate: boolean;
+}
+
+/** A real calendar day as `YYYY-MM-DD` — `2027-02-30` is not one */
+export function isRealDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+}
 
 /** The holiday types the Settings → Holidays screen offers */
 export const HOLIDAY_TYPES = ['public', 'optional', 'company'] as const;
@@ -99,7 +116,7 @@ export function parseHolidayCsv(text: string): ImportResult {
   const problems: string[] = [];
   const rows: ImportedHoliday[] = [];
 
-  const lines = text.replace(/^﻿/, '').split(/\r?\n/);
+  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
   lines.forEach((raw, index) => {
     const line = raw.trim();
     if (line === '' || line.startsWith('#')) return;

@@ -23,6 +23,7 @@ import { SummaryModule } from './summary/summary.module';
 import { TargetsModule } from './targets/targets.module';
 import { UsersModule } from './users/users.module';
 import { StorageModule } from './storage/storage.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -54,6 +55,8 @@ import { StorageModule } from './storage/storage.module';
     PrismaModule,
     // screenshot bytes — local disk or S3 (STORAGE_DRIVER); global, one instance
     StorageModule,
+    // settings the owner edits on screen (region, backup mode, update key)
+    SettingsModule,
     AuditModule,
     AuthModule,
     UsersModule,

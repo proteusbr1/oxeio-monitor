@@ -47,7 +47,7 @@ export class BackupJob implements OnApplicationBootstrap {
     private readonly registry: SchedulerRegistry | null,
   ) {}
 
-  onApplicationBootstrap(): void {
+  async onApplicationBootstrap(): Promise<void> {
     if (!SCHEDULING_ENABLED) return;
 
     const registered = (() => {
@@ -67,8 +67,8 @@ export class BackupJob implements OnApplicationBootstrap {
     }
 
     this.logger.log(
-      this.backup.external
-        ? 'Nightly backup off — BACKUP_MODE=external'
+      (await this.backup.isExternal())
+        ? 'Nightly backup off — the database is backed up by another tool (BACKUP_MODE=external)'
         : `Nightly backup enabled (${BACKUP_CRON}, ${JOB_TIMEZONE})` +
             (this.backup.configured ? '' : ' — but there is no BACKUP_PASSPHRASE, so it will not run'),
     );

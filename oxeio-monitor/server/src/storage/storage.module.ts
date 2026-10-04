@@ -2,13 +2,13 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { storageRoot } from '../common/storage.config';
+import { AppSettingsService } from '../settings/app-settings.service';
 import { LocalScreenshotStorage } from './local.storage';
 import { S3ScreenshotStorage } from './s3.storage';
 import {
   SCREENSHOT_STORAGE,
   type ScreenshotStorage,
 } from './screenshot-storage';
-import { storageSettings } from './storage.config';
 
 /**
  * One screenshot store for the whole app — ingest, gallery, retention and
@@ -19,11 +19,18 @@ import { storageSettings } from './storage.config';
   providers: [
     {
       provide: SCREENSHOT_STORAGE,
-      inject: [ConfigService],
-      useFactory: (config: ConfigService): ScreenshotStorage => {
-        const settings = storageSettings((name) => config.get<string>(name));
-        return settings.driver === 's3'
-          ? new S3ScreenshotStorage(settings.s3)
+      inject: [ConfigService, AppSettingsService],
+      // ⚠️ Read once, at start: saved on Settings → Storage & backup, or
+      //    STORAGE_DRIVER / S3_* from the environment. A change on screen
+      //    takes effect at the next restart — swapping stores under a
+      //    running server would split one day's screenshots across two.
+      useFactory: async (
+        config: ConfigService,
+        settings: AppSettingsService,
+      ): Promise<ScreenshotStorage> => {
+        const { settings: chosen } = await settings.storage();
+        return chosen.driver === 's3'
+          ? new S3ScreenshotStorage(chosen.s3)
           : new LocalScreenshotStorage(storageRoot(config));
       },
     },

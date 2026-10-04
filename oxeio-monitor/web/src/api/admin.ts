@@ -991,3 +991,129 @@ export function saveOffsiteSettings(
 export function testOffsite(): Promise<B2Verdict> {
   return api<B2Verdict>('/settings/offsite/test', { method: 'POST' });
 }
+
+// ── Settings edited on screen instead of the server's .env ──────────────────
+
+/** Where a value came from — saved on screen, the server's .env, or built in */
+export type SettingSource = 'dashboard' | 'environment' | 'default';
+
+export interface RegionSettings {
+  timeZone: { value: string; source: SettingSource };
+  /** the zone this server is running on — differs from `timeZone` until a restart */
+  runningTimeZone: string;
+  currency: { code: string; symbol: string; source: SettingSource };
+  /** `null` = the dashboard's own formats */
+  displayLocale: { value: string | null; source: SettingSource };
+  restartNeeded: boolean;
+}
+
+export function getRegionSettings(signal?: AbortSignal): Promise<RegionSettings> {
+  return api('/settings/region', { signal });
+}
+
+export function saveRegionSettings(body: {
+  timeZone?: string;
+  currency?: string;
+  displayLocale?: string | null;
+}): Promise<RegionSettings> {
+  return api('/settings/region', { method: 'PATCH', body });
+}
+
+/** Stops the server so Docker / Coolify start it again (time zone, storage) */
+export function restartServer(): Promise<{ ok: true }> {
+  return api('/settings/restart', { method: 'POST' });
+}
+
+export interface StorageSettings {
+  driver: 'local' | 's3';
+  provider: 'b2' | 's3';
+  bucket: string;
+  endpoint: string;
+  region: string;
+  prefix: string;
+  forcePathStyle: boolean;
+  useBackupKey: boolean;
+  keyIdHint: string | null;
+  secretSet: boolean;
+  source: SettingSource;
+  running: { driver: 'local' | 's3'; location: string };
+  restartNeeded: boolean;
+}
+
+export type StorageForm = {
+  driver: 'local' | 's3';
+  provider?: 'b2' | 's3';
+  bucket?: string;
+  endpoint?: string;
+  region?: string;
+  accessKeyId?: string;
+  /** empty = keep the one already saved */
+  secretAccessKey?: string;
+  prefix?: string;
+  forcePathStyle?: boolean;
+  useBackupKey?: boolean;
+};
+
+export function getStorageSettings(signal?: AbortSignal): Promise<StorageSettings> {
+  return api('/settings/storage', { signal });
+}
+
+export function testStorageSettings(body: StorageForm): Promise<{ ok: boolean; message: string }> {
+  return api('/settings/storage/test', { method: 'POST', body });
+}
+
+export function saveStorageSettings(body: StorageForm): Promise<StorageSettings> {
+  return api('/settings/storage', { method: 'PATCH', body });
+}
+
+export interface BackupModeSettings {
+  /** `external` = the database is backed up by another tool (Databasus …) */
+  mode: 'internal' | 'external';
+  source: SettingSource;
+}
+
+export function getBackupMode(signal?: AbortSignal): Promise<BackupModeSettings> {
+  return api('/settings/backup', { signal });
+}
+
+export function saveBackupMode(mode: 'internal' | 'external'): Promise<BackupModeSettings> {
+  return api('/settings/backup', { method: 'PATCH', body: { mode } });
+}
+
+export interface UpdateKeySettings {
+  /** one line of base64 — what build.ps1 -UpdatePublicKey takes */
+  publicKey: string | null;
+  source: SettingSource;
+}
+
+export function getUpdateKey(signal?: AbortSignal): Promise<UpdateKeySettings> {
+  return api('/settings/update-key', { signal });
+}
+
+export function saveUpdateKey(publicKey: string | null): Promise<UpdateKeySettings> {
+  return api('/settings/update-key', { method: 'PATCH', body: { publicKey } });
+}
+
+export interface HolidayImportRow {
+  date: string;
+  name: string;
+  type: string;
+}
+
+export interface HolidayImportPlan {
+  add: HolidayImportRow[];
+  existing: (HolidayImportRow & { nameInDb: string })[];
+  pastMonths: HolidayImportRow[];
+  problems: string[];
+  created: number;
+}
+
+/** CSV (`date,name,type`) or ICS — `dryRun` only shows what would happen */
+export function importHolidays(body: {
+  fileName: string;
+  content: string;
+  allowPast: boolean;
+  dryRun: boolean;
+}): Promise<HolidayImportPlan> {
+  return api('/holidays/import', { method: 'POST', body });
+}

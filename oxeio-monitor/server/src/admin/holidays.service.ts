@@ -9,13 +9,34 @@ import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import type { SessionUser } from '../auth/types';
 import { PrismaService } from '../prisma/prisma.service';
+import { workDateOf } from '../agent/util/dhaka-time';
 import { ADMIN_TARGET } from './admin-audit';
+import { parseHolidayFile } from './holiday-import';
 import { parseCalendarDate } from './calendar-date';
 import type {
   CreateHolidayDto,
   HolidayListQueryDto,
   UpdateHolidayDto,
 } from './dto';
+
+export interface HolidayImportRow {
+  date: string;
+  name: string;
+  type: string;
+}
+
+export interface HolidayImportPlan {
+  /** will be (or were) added */
+  add: HolidayImportRow[];
+  /** the date is already a holiday — left as it is */
+  existing: (HolidayImportRow & { nameInDb: string })[];
+  /** current or past month — left out unless allowPast */
+  pastMonths: HolidayImportRow[];
+  /** lines or events the file could not give — never silent */
+  problems: string[];
+  /** rows written (0 on a preview) */
+  created: number;
+}
 
 export interface HolidayView {
   id: number;
@@ -86,6 +107,64 @@ export class HolidaysService {
     });
 
     return toView(row);
+  }
+
+  /**
+   * A calendar from a file (CSV or ICS) — shown first (`dryRun`), then
+   * imported.
+   *
+   * ⚠️ Same rules as the seed (prisma/seed.ts, deploy/README.md § ২.১গ):
+   *    · one holiday per date, and a date already in the table is never
+   *      changed — a different name is only reported;
+   *    · a date in the current or a past month changes that month's
+   *      workdays, targets and prorated salary, so it is left out unless
+   *      `allowPast` says otherwise, in so many words.
+   */
+  async importFile(
+    actor: SessionUser,
+    input: { fileName: string; content: string; allowPast: boolean; dryRun: boolean },
+    ip: string,
+    now = new Date(),
+  ): Promise<HolidayImportPlan> {
+    const { holidays, problems } = parseHolidayFile(input.fileName, input.content);
+
+    const existing = await this.prisma.holiday.findMany({
+      where: { holidayDate: { in: holidays.map((h) => new Date(`${h.entry.date}T00:00:00Z`)) } },
+      select: { holidayDate: true, name: true },
+    });
+    const byDate = new Map(existing.map((r) => [r.holidayDate.toISOString().slice(0, 10), r.name]));
+    const thisMonth = workDateOf(now).toISOString().slice(0, 7);
+
+    const plan: HolidayImportPlan = { add: [], existing: [], pastMonths: [], problems, created: 0 };
+    for (const { entry, type } of holidays) {
+      const row = { date: entry.date, name: entry.name, type };
+      const inDb = byDate.get(entry.date);
+      if (inDb !== undefined) plan.existing.push({ ...row, nameInDb: inDb });
+      else if (entry.date.slice(0, 7) <= thisMonth && !input.allowPast) plan.pastMonths.push(row);
+      else plan.add.push(row);
+    }
+
+    if (input.dryRun || plan.add.length === 0) return plan;
+
+    const { count } = await this.prisma.holiday.createMany({
+      data: plan.add.map((h) => ({
+        holidayDate: new Date(`${h.date}T00:00:00Z`),
+        name: h.name,
+        type: h.type,
+      })),
+      // a row added by someone else meanwhile wins — never overwritten
+      skipDuplicates: true,
+    });
+    plan.created = count;
+
+    await this.record(actor, ip, 0, {
+      op: 'import',
+      file: input.fileName.slice(0, 120),
+      created: count,
+      allowPast: input.allowPast,
+      dates: plan.add.map((h) => h.date),
+    });
+    return plan;
   }
 
   async update(

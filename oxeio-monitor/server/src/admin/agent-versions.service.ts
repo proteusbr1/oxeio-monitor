@@ -1,4 +1,4 @@
-import { createHash, type KeyObject } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
@@ -22,6 +22,7 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { storageRoot } from '../common/storage.config';
 import { PrismaService } from '../prisma/prisma.service';
+import { AppSettingsService } from '../settings/app-settings.service';
 import type { SessionUser } from '../auth/types';
 import type { PublishVersionDto, SetStageDto } from './dto';
 
@@ -69,18 +70,17 @@ export interface AgentVersionView {
 export class AgentVersionsService {
   private readonly logger = new Logger(AgentVersionsService.name);
   private readonly root: string;
-  private readonly updateKey: KeyObject | null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    // the owner's update key — Settings → Agent updates, or the .env
+    private readonly settings: AppSettingsService,
     config: ConfigService,
   ) {
     // ⚠️ `update.service.ts`-এর সাথে হুবহু একই হিসাব — দুই জায়গায় আলাদা
     //    হলে এখানে বসানো পাথ ওখানে "ফাইল নেই" হয়ে যেত।
     this.root = resolve(storageRoot(config));
-    // the owner's public key; set = only signed versions can be published
-    this.updateKey = parseUpdatePublicKey(config.get<string>('AGENT_UPDATE_PUBLIC_KEY'));
   }
 
   /**
@@ -439,14 +439,16 @@ export class AgentVersionsService {
       );
     }
 
-    if (this.updateKey === null) return signature;
+    // the owner's public key; set = only signed versions can be published
+    const updateKey = parseUpdatePublicKey((await this.settings.updateKey()).publicKey);
+    if (updateKey === null) return signature;
 
     if (signature === null) {
       throw new BadRequestException(
         'AGENT_UPDATE_PUBLIC_KEY is set, so the PCs only install signed updates — put the signature next to the MSI (<msi>.sig) first. deploy/README.md § "Signed agent updates".',
       );
     }
-    if (!(await verifyUpdateSignature(this.updateKey, createReadStream(abs), signature))) {
+    if (!(await verifyUpdateSignature(updateKey, createReadStream(abs), signature))) {
       throw new BadRequestException(
         'The signature in <msi>.sig does not match this MSI and AGENT_UPDATE_PUBLIC_KEY. Every signed PC would refuse it — sign this exact file with the matching private key.',
       );

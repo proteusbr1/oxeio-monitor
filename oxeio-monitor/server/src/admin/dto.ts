@@ -347,6 +347,24 @@ export class UpdateWorkPolicyDto {
 
 // ── holidays ────────────────────────────────────────────────────────────────
 
+/** A holiday calendar file, read in the browser and sent as text */
+export class ImportHolidaysDto {
+  @IsString() @MaxLength(255)
+  fileName!: string;
+
+  // a year of national + local holidays is a few KB; this is generous
+  @IsString() @MaxLength(1_000_000)
+  content!: string;
+
+  // true = also current and past months (changes their targets and salary)
+  @IsOptional() @IsBoolean()
+  allowPast?: boolean;
+
+  // default true: show what would happen, write nothing
+  @IsOptional() @IsBoolean()
+  dryRun?: boolean;
+}
+
 export class CreateHolidayDto {
   @Matches(DATE_ONLY, { message: 'holidayDate must be in YYYY-MM-DD format' })
   holidayDate!: string;

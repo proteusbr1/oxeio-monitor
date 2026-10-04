@@ -26,6 +26,7 @@ import {
   TextField,
   useMutation,
 } from './ui';
+import { HolidayImportModal } from './HolidayImport';
 
 /**
  * ছুটি — `CRUD /holidays`।
@@ -55,6 +56,7 @@ export function HolidaysSection() {
 
   const [editing, setEditing] = useState<HolidayView | null>(null);
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [removing, setRemoving] = useState<HolidayView | null>(null);
 
   const rows = holidays.data?.rows ?? [];
@@ -141,9 +143,12 @@ export function HolidaysSection() {
             </div>
           </div>
 
-          <Button tone="primary" onClick={() => setCreating(true)}>
-            Add holiday
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setImporting(true)}>Import file</Button>
+            <Button tone="primary" onClick={() => setCreating(true)}>
+              Add holiday
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -157,9 +162,13 @@ export function HolidaysSection() {
           title={`No holidays are set for ${year}`}
           hint="With no holidays every day counts as a workday, which makes the month's pace look harsh for everyone. It is best to enter the public holidays at the start of the year."
           action={
-            <Button tone="primary" onClick={() => setCreating(true)}>
-              Add holiday
-            </Button>
+            <div className="flex gap-2">
+              {/* a whole year at once, from an official calendar file */}
+              <Button onClick={() => setImporting(true)}>Import file</Button>
+              <Button tone="primary" onClick={() => setCreating(true)}>
+                Add holiday
+              </Button>
+            </div>
           }
         />
       )}
@@ -172,6 +181,10 @@ export function HolidaysSection() {
             rowKey={(holiday) => String(holiday.id)}
           />
         </Card>
+      )}
+
+      {importing && (
+        <HolidayImportModal onClose={() => setImporting(false)} onDone={holidays.reload} />
       )}
 
       {(creating || editing) && (

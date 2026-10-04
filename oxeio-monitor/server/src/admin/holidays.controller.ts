@@ -16,8 +16,17 @@ import { UserRole } from '@prisma/client';
 
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
-import { CreateHolidayDto, HolidayListQueryDto, UpdateHolidayDto } from './dto';
-import { HolidaysService, type HolidayView } from './holidays.service';
+import {
+  CreateHolidayDto,
+  HolidayListQueryDto,
+  ImportHolidaysDto,
+  UpdateHolidayDto,
+} from './dto';
+import {
+  HolidaysService,
+  type HolidayImportPlan,
+  type HolidayView,
+} from './holidays.service';
 
 /**
  * `CRUD /api/v1/holidays` — **owner ও manager** *(মালিকের সিদ্ধান্ত,
@@ -48,6 +57,26 @@ export class HolidaysController {
     @Ip() ip: string,
   ): Promise<HolidayView> {
     return this.holidays.create(actor, dto, ip);
+  }
+
+  /** CSV or ICS calendar — `dryRun` shows what would happen */
+  @Post('import')
+  @HttpCode(HttpStatus.OK)
+  importFile(
+    @CurrentUser() actor: SessionUser,
+    @Body() dto: ImportHolidaysDto,
+    @Ip() ip: string,
+  ): Promise<HolidayImportPlan> {
+    return this.holidays.importFile(
+      actor,
+      {
+        fileName: dto.fileName,
+        content: dto.content,
+        allowPast: dto.allowPast === true,
+        dryRun: dto.dryRun !== false,
+      },
+      ip,
+    );
   }
 
   @Patch(':id')
