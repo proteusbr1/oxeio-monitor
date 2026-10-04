@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { BackupCheck } from '../src/alerts/backup.check';
+import { BackupService } from '../src/ops/backup.service';
 import {
   createHarness,
   loginReady,
@@ -111,7 +112,13 @@ describe('Settings → Storage & backup', () => {
         },
       });
 
-    // still internal: the method the server runs at boot leaves it alone
+    // still internal: no passphrase in tests, so the boot log says so
+    const boot = h.app.get(BackupService);
+    expect((await boot.bootWarnings()).errors.join(' ')).toMatch(
+      /BACKUP_PASSPHRASE/,
+    );
+
+    // and the method the server runs at boot leaves the alert alone
     const first = await stale();
     expect(await h.app.get(BackupCheck).closeIfExternal()).toBe(false);
     expect(
@@ -126,7 +133,10 @@ describe('Settings → Storage & backup', () => {
     expect(closed.resolvedAt).not.toBeNull();
     expect(closed.resolvedReason).toMatch(/external/);
 
-    // and from then on, at boot too
+    // from then on the boot log is quiet about backups
+    expect(await boot.bootWarnings()).toEqual({ errors: [], warnings: [] });
+
+    // and a leftover alert is closed at boot too
     const second = await stale();
     expect(await h.app.get(BackupCheck).closeIfExternal()).toBe(true);
     expect(

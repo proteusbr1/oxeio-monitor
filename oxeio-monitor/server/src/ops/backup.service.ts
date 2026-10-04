@@ -15,7 +15,7 @@ import { join, resolve } from 'node:path';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { storageRoot } from '../common/storage.config';
@@ -92,7 +92,7 @@ export interface BackupResult {
  * ```
  */
 @Injectable()
-export class BackupService {
+export class BackupService implements OnApplicationBootstrap {
   private readonly logger = new Logger(BackupService.name);
   private readonly lock = new RunLock();
 
@@ -148,21 +148,40 @@ export class BackupService {
     this.dockerDbHost =
       config.get<string>('BACKUP_DOCKER_DB_HOST')?.trim() || 'localhost';
     this.databaseUrl = config.get<string>('DATABASE_URL') ?? '';
+  }
+
+  /**
+   * The setup warnings, said once at boot. Not from the constructor: the
+   * backup mode may come from the settings table, which can only be read
+   * once the app is up — and with BACKUP_MODE=external neither warning is
+   * true, the database is backed up elsewhere.
+   */
+  async onApplicationBootstrap(): Promise<void> {
+    const { errors, warnings } = await this.bootWarnings();
+    for (const line of errors) this.logger.error(line);
+    for (const line of warnings) this.logger.warn(line);
+  }
+
+  async bootWarnings(): Promise<{ errors: string[]; warnings: string[] }> {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    if (await this.isExternal()) return { errors, warnings };
 
     if (!this.passphrase) {
       // ⭐ "জোরে বলা" এখান থেকেই শুরু — বুটের সময়েই একবার, তারপর G04 রোজ।
-      this.logger.error(
+      errors.push(
         'No BACKUP_PASSPHRASE — the nightly backup will not run. ' +
           'Leaving backup off is safer than dropping the salary and screenshot ' +
           'database on disk without encryption, but you need to know about it (G39).',
       );
     }
     if (!this.copyTo) {
-      this.logger.warn(
+      warnings.push(
         'No BACKUP_COPY_TO — backups will only live on the server\'s own disk (K03 off). ' +
           'If that disk dies, the backups go with it.',
       );
     }
+    return { errors, warnings };
   }
 
   get configured(): boolean {

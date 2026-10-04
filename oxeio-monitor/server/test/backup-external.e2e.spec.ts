@@ -92,6 +92,15 @@ describe('BACKUP_MODE=external, whole app', () => {
     expect(alert.resolvedReason).toMatch(/BACKUP_MODE=external/);
   });
 
+  /** no passphrase here, yet nothing to warn about: backups happen elsewhere */
+  it('the boot log has no backup warnings', async () => {
+    const { BackupService } = await import('../src/ops/backup.service');
+    expect(await h.app.get(BackupService).bootWarnings()).toEqual({
+      errors: [],
+      warnings: [],
+    });
+  });
+
   it('a manual run says external instead of trying', async () => {
     const res = await owner.http
       .post('/api/v1/ops/backup/run')
