@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 
 import { reportXlsxUrl, type GroupBy } from '../api/reports';
 import { useAuth } from '../auth/AuthContext';
+import { useFeatures } from '../features/FeaturesContext';
 import { DateRange, MonthPicker } from '../components/DatePicker';
 import { EmployeePicker } from '../components/EmployeePicker';
 import { ErrorNote } from '../components/Field';
@@ -75,7 +76,13 @@ export function ReportsPage() {
 }
 
 function ReportsBoard({ isOwner }: { isOwner: boolean }) {
-  const tabs = TABS.filter((tab) => !tab.ownerOnly || isOwner);
+  const { features } = useFeatures();
+  const tabs = TABS.filter(
+    (tab) =>
+      (!tab.ownerOnly || isOwner) &&
+      // payroll switched off in Settings → Modules
+      (tab.id !== 'payroll' || features.payroll),
+  );
 
   const [tab, setTab] = useState<TabId>('attendance');
   // ⚠️ `new Date().toISOString().slice(0,10)` নয় — ঢাকায় রাত ১২টা–ভোর ৬টায়

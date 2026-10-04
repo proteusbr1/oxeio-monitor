@@ -14,6 +14,7 @@ import { UserRole } from '@prisma/client';
 
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
+import { RequiresFeature } from '../features/requires-feature';
 import {
   DepositsService,
   type DepositBalance,
@@ -38,6 +39,7 @@ import {
  * **নিজের** সংখ্যা, আর কারো নয়।
  */
 @Roles(UserRole.owner)
+@RequiresFeature('deposits')
 @Controller('deposits')
 export class DepositsController {
   constructor(private readonly deposits: DepositsService) {}

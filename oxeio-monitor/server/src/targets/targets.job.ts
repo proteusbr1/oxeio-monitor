@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 
 import { workDateOf } from '../agent/util/dhaka-time';
+import { FeaturesService } from '../features/features.service';
 import { JOB_TIMEZONE, RunLock, SCHEDULING_ENABLED } from '../summary/scheduling';
 import { TargetsService } from './targets.service';
 
@@ -31,7 +32,15 @@ export class TargetsJob {
   /** ⚠️ টপ-আপেরও নিজের তালা — ঘণ্টার টিক যেন বণ্টনকে আটকে না রাখে */
   private readonly topUpLock = new RunLock();
 
-  constructor(private readonly targets: TargetsService) {}
+  constructor(
+    private readonly targets: TargetsService,
+    private readonly features: FeaturesService,
+  ) {}
+
+  /** Design targets switched off in Settings → Modules: hand out nothing */
+  private async off(): Promise<boolean> {
+    return !(await this.features.isOn('designTargets'));
+  }
 
   @Cron('0 0 8 * * *', {
     name: 'design-target-distribution',
@@ -100,6 +109,7 @@ export class TargetsJob {
   async topUpOnce(now: Date = new Date()): Promise<void> {
     await this.topUpLock.run(async () => {
       try {
+        if (await this.off()) return;
         await this.targets.topUpAll(now);
       } catch (err) {
         this.logger.error(
@@ -113,6 +123,7 @@ export class TargetsJob {
   async returnOnce(now: Date = new Date()): Promise<void> {
     await this.returnLock.run(async () => {
       try {
+        if (await this.off()) return;
         await this.targets.returnUnworked(workDateOf(now));
       } catch (err) {
         this.logger.error(
@@ -126,6 +137,7 @@ export class TargetsJob {
   async runOnce(now: Date = new Date()): Promise<void> {
     await this.lock.run(async () => {
       try {
+        if (await this.off()) return;
         await this.targets.distribute(now);
       } catch (err) {
         this.logger.error(

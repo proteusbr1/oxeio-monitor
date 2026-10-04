@@ -3,6 +3,7 @@ import { UserRole } from '@prisma/client';
 
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
+import { RequiresFeature } from '../features/requires-feature';
 import { PayrollService, type PayrollSheet } from './payroll.service';
 
 /**
@@ -11,6 +12,7 @@ import { PayrollService, type PayrollSheet } from './payroll.service';
  * মেথডে বসালে নতুন endpoint নীরবে ম্যানেজারের নাগালে চলে যেত।
  */
 @Roles(UserRole.owner)
+@RequiresFeature('payroll')
 @Controller('payroll')
 export class PayrollController {
   constructor(private readonly payroll: PayrollService) {}

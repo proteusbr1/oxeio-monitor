@@ -22,6 +22,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { SecurityPage } from './pages/security/SecurityPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
 import { homePathFor, seesEveryone } from './api/auth';
+import { FeaturesProvider, useFeatures } from './features/FeaturesContext';
 
 /**
  * তিনটি অবস্থা, তিনটি আলাদা রুট-গাছ — তাই "লগইন করেনি অথচ ভেতরের পেজ দেখছে"
@@ -29,8 +30,10 @@ import { homePathFor, seesEveryone } from './api/auth';
  */
 function Router() {
   const { user, loading, offline, refresh } = useAuth();
+  const { features, ready: featuresReady } = useFeatures();
 
-  if (loading) {
+  // the module switches decide the sidebar, so wait for them too
+  if (loading || (user && !user.mustChangePassword && !featuresReady)) {
     return (
       <div className="grid min-h-full place-items-center text-sm text-ink-3">
         Loading…
@@ -134,7 +137,7 @@ function Router() {
    * ⭐ ২৫ আগস্ট রোলটা আলাদা হলো, তাই প্রশ্নটা এখন সরাসরি — আর সূত্রটা
    * `homePathFor`-এ **এক জায়গায়**, "পাওয়া যায়নি" পাতাটাও সেটাই পড়ে।
    */
-  const staffLanding = homePathFor(user.role);
+  const staffLanding = homePathFor(user.role, features.designTargets);
 
   return (
     <Routes>
@@ -186,14 +189,20 @@ function Router() {
              এলে পাতাটা সার্ভারের বার্তাই দেখাবে, আর সেটাই এই কোডবেসের
              নিয়ম — পর্দায় লুকানো প্রথম রক্ষাকবচ, শেষ নয়।
         */}
-        <Route path="targets" element={<TargetsPage />} />
-        <Route path="targets/all" element={<AllTargetsPage />} />
+        {features.designTargets && (
+          <Route path="targets" element={<TargetsPage />} />
+        )}
+        {features.designTargets && (
+          <Route path="targets/all" element={<AllTargetsPage />} />
+        )}
         {/*
           ⚠️ owner + manager — সাইডবার, এই রুট আর সার্ভারের
              `@Roles(owner, manager)` তিন জায়গাতেই এক (G134-এর শিক্ষা:
              তিনটের একটা বদলালে বাকি দুটোও বদলাতে হয়)।
         */}
-        <Route path="targets/review" element={<ReviewPage />} />
+        {features.designTargets && (
+          <Route path="targets/review" element={<ReviewPage />} />
+        )}
 
         <Route path="screenshots" element={<GalleryPage />} />
         <Route path="monthly" element={<MonthlyPage />} />
@@ -228,7 +237,9 @@ function Router() {
              তিনটেই না মিললে ব্যবহারকারী নেভে দেখেন কিন্তু চাপলে "কিছু নেই"।
         */}
         {mayOpenWorklog && <Route path="worklog" element={<WorklogPage />} />}
-        {isOwner && <Route path="deposits" element={<DepositsPage />} />}
+        {isOwner && features.deposits && (
+          <Route path="deposits" element={<DepositsPage />} />
+        )}
 
         {/*
           ⭐ যাঁর অধিকার নেই তাঁর জন্য রুটটা **থাকেই না** — সরাসরি
@@ -251,7 +262,9 @@ export function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Router />
+        <FeaturesProvider>
+          <Router />
+        </FeaturesProvider>
         {/*
           ⭐ রুটার ও Layout-এর **বাইরে**, ইচ্ছাকৃতভাবে — তাই ব্যাজটা
              লগইন পাতা, পাসওয়ার্ড-বদলের পাতা আর ৪০৪-সহ **প্রতিটা** পর্দায়

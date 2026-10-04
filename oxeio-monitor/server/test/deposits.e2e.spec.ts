@@ -329,6 +329,47 @@ describe('পে-রোলের শিটে', () => {
     // নিট = প্রদেয় − ৫০০, আর দুটো সংখ্যাই আলাদা করে থাকে
     expect(Number(row.netPayable)).toBeCloseTo(Number(row.payable) - 500, 2);
   });
+
+  /**
+   * Deposits switched off in Settings → Modules: the sheet holds nothing
+   * back — a deduction nobody can see on screen would be worse — and the
+   * ledger rows stay, ready for when the module is turned back on.
+   */
+  it('deposits switched off → nothing held back, the ledger is kept', async () => {
+    const staff = await addStaff('Payroll Off');
+    await balances();
+    // the sheet only lists people whose month has been rolled up
+    await h.prisma.monthlySummary.create({
+      data: {
+        employeeId: staff.id,
+        yearMonth: thisMonth,
+        workedSec: 100 * 3600,
+        creditedSec: 100 * 3600,
+        expectedWorkdays: 20,
+      },
+    });
+
+    await owner.http
+      .patch('/api/v1/settings/features')
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ deposits: false })
+      .expect(200);
+
+    const res = await owner.http
+      .get(`/api/v1/payroll?month=${thisMonth}`)
+      .expect(200);
+
+    expect(
+      await h.prisma.securityDeposit.count({ where: { employeeId: staff.id } }),
+    ).toBe(1);
+
+    const row = (res.body.rows as Record<string, string | number>[]).find(
+      (r) => r.employeeId === staff.id,
+    );
+    expect(row).toBeDefined();
+    expect(row?.securityDeposit).toBeNull();
+    expect(row?.netPayable).toBe(row?.payable);
+  });
 });
 
 /** '2026-08' → '2026-09' */

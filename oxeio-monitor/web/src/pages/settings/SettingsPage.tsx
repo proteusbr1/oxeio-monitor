@@ -11,6 +11,7 @@ import { NotificationsTab } from './NotificationsTab';
 import { AuditTab } from './AuditTab';
 import { CategoriesTab } from './CategoriesTab';
 import { LeaveTab } from './LeaveTab';
+import { ModulesTab } from './ModulesTab';
 import { MonthsTab } from './MonthsTab';
 import { PoliciesTab } from './PoliciesTab';
 import { RegionTab } from './RegionTab';
@@ -68,6 +69,8 @@ const TABS = [
   //    মনে রাখতে হতো কোনটায় গিয়েছিলেন, আর Devices ট্যাবটা ঠিক এই কারণেই
   //    তুলে দিতে হয়েছিল (G89)।
   { id: 'months', label: 'Months', manager: false },
+  // the owner's call: which parts of the dashboard this company uses
+  { id: 'modules', label: 'Modules', manager: false },
   // ⚠️ audit-এর **আগে**: এটা রোজকার কাজের ট্যাব নয়, কিন্তু audit log
   //    সবার শেষে থাকাটা প্রতিষ্ঠিত (বছরে দু-একবার খোলা হয়)
   // ⭐ G08 — টেলিগ্রামের টোকেন ও চ্যাট আইডি। owner-only, কারণ ওই চ্যাটে
@@ -100,6 +103,7 @@ const SUBTITLE: Record<TabKey, string> = {
   policies: 'Monthly target, screenshot window and days off',
   leave: 'Agreed days off — the hours target drops, the salary does not',
   months: 'Freeze a finished month so its hours and pay stop moving',
+  modules: 'Turn off the parts your company does not use — nothing is deleted',
   notifications: 'Where the weekly summary and alerts are sent',
   region: 'Time zone, currency and how dates and numbers are written',
   backup: 'Where screenshots are kept, and how the database is backed up',
@@ -169,6 +173,7 @@ export function SettingsPage() {
       {active === 'policies' && <PoliciesTab />}
       {active === 'leave' && <LeaveTab />}
       {active === 'months' && <MonthsTab />}
+      {active === 'modules' && <ModulesTab />}
       {active === 'notifications' && <NotificationsTab />}
       {active === 'region' && <RegionTab />}
       {active === 'backup' && <BackupTab />}

@@ -131,7 +131,11 @@ export function seesEveryone(role: Role | undefined | null): boolean {
  * একটাও তাঁর কাজের নয় (২৪ আগস্ট)। ⚠️ ডিজাইনার Design Pool-এ নামলে
  * দেখতেন গোটা দলের কাজ — তাঁর জিনিস নয়।
  */
-export function homePathFor(role: Role | undefined | null): string {
+export function homePathFor(
+  role: Role | undefined | null,
+  // design targets switched off in Settings → Modules: no pool to land on
+  designTargets = true,
+): string {
   if (seesEveryone(role)) return '/';
-  return role === 'researcher' ? '/targets/all' : '/me';
+  return role === 'researcher' && designTargets ? '/targets/all' : '/me';
 }

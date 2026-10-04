@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { AlertMailer, SendOutcome } from '../src/alerts/alerts.mailer';
 import { DigestJob } from '../src/digest/digest.job';
+import type { FeaturesService } from '../src/features/features.service';
 import { DigestService } from '../src/digest/digest.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
 import type { ReportsService } from '../src/reports/reports.service';
@@ -174,7 +175,9 @@ function makeService(
   } as unknown as TelegramChannel;
 
   return {
-    service: new DigestService(prisma, reports, mailer, telegram, config),
+    service: new DigestService(prisma, reports, mailer, telegram, config, {
+      isOn: async () => true,
+    } as unknown as FeaturesService),
     sent,
     calls,
   };

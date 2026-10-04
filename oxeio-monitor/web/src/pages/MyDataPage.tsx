@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { getMyDays, getMyDeposit, getMySummary, type MyDay } from '../api/me';
 import { useApi } from '../api/useApi';
 import { useAuth } from '../auth/AuthContext';
+import { useFeatures } from '../features/FeaturesContext';
 import { MyTargets } from './MyTargets';
 import { Card, Stat, StatRow } from '../components/Card';
 import { Duration } from '../components/Duration';
@@ -42,6 +43,7 @@ import { Adjustments } from './employee/Adjustments';
  */
 export function MyDataPage() {
   const { user } = useAuth();
+  const { features } = useFeatures();
   const today = todayInDhaka();
 
   /**
@@ -78,8 +80,9 @@ export function MyDataPage() {
    * ব্যর্থতা অন্যটাকেও ফাঁকা করে দিত।
    */
   const deposit = useApi(
-    (signal) => (linked ? getMyDeposit(signal) : Promise.resolve(null)),
-    [linked],
+    (signal) =>
+      linked && features.deposits ? getMyDeposit(signal) : Promise.resolve(null),
+    [linked, features.deposits],
   );
 
   const p = summary.data?.progress;
@@ -153,7 +156,7 @@ export function MyDataPage() {
             ⚠️ যাঁর কোনো টার্গেট নেই তাঁর পাতায় কার্ডটা **বসেই না** —
                গবেষকের পাতায় একটা খালি বাক্স বসিয়ে লাভ নেই।
           */}
-          <MyTargets />
+          {features.designTargets && <MyTargets />}
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card

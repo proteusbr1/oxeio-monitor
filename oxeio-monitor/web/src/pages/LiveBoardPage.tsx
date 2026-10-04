@@ -5,6 +5,7 @@ import { listAlerts } from '../api/alerts';
 import { getLiveBoard, getTeamPulse, getTeamTrend, type TrendDay } from '../api/dashboard';
 import { usePolling, type ApiResult } from '../api/useApi';
 import { useAuth } from '../auth/AuthContext';
+import { useFeatures } from '../features/FeaturesContext';
 import { Card } from '../components/Card';
 import { Button, Page } from '../components/Page';
 import { Empty, ErrorBox, Loading } from '../components/States';
@@ -25,6 +26,7 @@ const LEADER_WINDOWS = [{ id: '30d', label: '30 days' }, { id: 'all', label: 'Al
 
 export function LiveBoardPage() {
   const { user } = useAuth();
+  const { features } = useFeatures();
   const canViewBoard = user?.role === 'owner' || user?.role === 'manager';
   const isOwner = user?.role === 'owner';
   // ভূমিকার শর্ত একই থাকে; অনুমতি না থাকলে কোনো protected endpoint-এ কল নয়।
@@ -42,7 +44,8 @@ export function LiveBoardPage() {
   const todaySec = cards.reduce((sum, card) => sum + card.todayWorkedSec, 0);
   const worked = cards.filter((card) => card.todayWorkedSec > 0).length;
   const finished = cards.reduce((sum, card) => sum + card.designsFinished, 0);
-  const hasDesigners = cards.some((card) => card.staffType === 'designer');
+  // design targets switched off in Settings → Modules: no design panels
+  const hasDesigners = features.designTargets && cards.some((card) => card.staffType === 'designer');
   const month = trend.data?.month;
   const observed = month?.trackedFrom != null;
   const withTarget = cards.filter((card) => dayDuty(card) === 'target').length;

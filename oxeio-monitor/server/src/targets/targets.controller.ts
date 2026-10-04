@@ -29,6 +29,7 @@ import {
 
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
+import { RequiresFeature } from '../features/requires-feature';
 import { DROP_REASONS, type DropReason } from './targets.rules';
 import {
   DELETE_MAX,
@@ -209,6 +210,7 @@ class DropReasonDto {
  * `employee` হিসেবে)। পাহারাটা `TargetsService.assertCanSubmit()`-এ,
  * আর সেখানেই তার কারণ লেখা।
  */
+@RequiresFeature('designTargets')
 @Controller('design-targets')
 export class TargetsController {
   constructor(private readonly targets: TargetsService) {}
@@ -445,6 +447,7 @@ export class TargetsController {
  * ⚠️ আলাদা কন্ট্রোলার, কারণ পথটাও আলাদা (`/me/targets`), আর এখানে
  * কোনো রোল-পাহারা লাগে না: প্রত্যেকে **কেবল নিজের** তালিকাই পান।
  */
+@RequiresFeature('designTargets')
 @Controller('me/targets')
 export class MyTargetsController {
   constructor(private readonly targets: TargetsService) {}
