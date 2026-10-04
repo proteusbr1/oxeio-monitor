@@ -13,6 +13,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { DigestModule } from './digest/digest.module';
 import { HealthModule } from './health/health.module';
 import { DepositsModule } from './deposits/deposits.module';
+import { FeaturesModule } from './features/features.module';
 import { MeModule } from './me/me.module';
 import { OpsModule } from './ops/ops.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -53,6 +54,8 @@ import { UsersModule } from './users/users.module';
     PrismaModule,
     AuditModule,
     AuthModule,
+    // after AuthModule: its guards must run before the module switches
+    FeaturesModule,
     UsersModule,
     AgentModule,
     ActivityModule,

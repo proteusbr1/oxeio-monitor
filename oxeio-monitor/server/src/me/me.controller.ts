@@ -2,6 +2,7 @@ import { Controller, Get, Query } from '@nestjs/common';
 
 import { CurrentUser } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
+import { RequiresFeature } from '../features/requires-feature';
 import { MyDaysQuery } from './me.dto';
 import { MeService, type MyDay, type MySummary } from './me.service';
 
@@ -39,6 +40,7 @@ export class MeController {
    *
    * ⚠️ পথে `:id` নেই, বাকি সবের মতোই — কর্মী আসে সেশন থেকে।
    */
+  @RequiresFeature('deposits')
   @Get('deposit')
   deposit(@CurrentUser() actor: SessionUser) {
     return this.me.myDeposit(actor);

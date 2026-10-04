@@ -3,6 +3,7 @@ import { EmployeeStatus } from '@prisma/client';
 
 import { AuditService } from '../audit/audit.service';
 import { DepositsService } from '../deposits/deposits.service';
+import { FeaturesService } from '../features/features.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { proratedExpectedSec } from '../summary/summary.math';
 import { computePayroll, paisaToTaka, salaryForMonth } from './payroll.math';
@@ -130,6 +131,7 @@ export class PayrollService {
      * থাকা দরকার, নইলে কর্মীর পাতা আর শিট দুই সংখ্যা দেখাত।
      */
     private readonly deposits: DepositsService,
+    private readonly features: FeaturesService,
   ) {}
 
   async sheet(
@@ -205,7 +207,10 @@ export class PayrollService {
      * ⭐ R21 — ওই মাসের জামানতের কিস্তি। `depositsFor()` খাতাটা আগে আজকের
      * দিন পর্যন্ত পূর্ণ করে নেয়, তাই শিট খুললেই খাতাও হালনাগাদ।
      */
-    const depositOf = await this.deposits.instalmentsFor(yearMonth);
+    // deposits switched off in Settings → Modules: nothing is held back
+    const depositOf = (await this.features.isOn('deposits'))
+      ? await this.deposits.instalmentsFor(yearMonth)
+      : new Map<number, number>();
 
     const rows: PayrollRow[] = [];
     const missingSalary: string[] = [];

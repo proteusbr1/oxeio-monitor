@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext';
 import { Page } from '../components/Page';
 import { Empty } from '../components/States';
 import { homePathFor } from '../api/auth';
+import { useFeatures } from '../features/FeaturesContext';
 
 /**
  * ৪০৪ — ঠিকানাটা নেই।
@@ -30,12 +31,13 @@ const HOME_WORD: Record<string, string> = {
 
 export function NotFoundPage() {
   const { user } = useAuth();
+  const { features } = useFeatures();
   /**
    * ⚠️ আগে লেখা ছিল `role === 'employee' ? '/screenshots' : '/'` — গবেষক
    *    রোল এলে তিনি `/` (Live Board) পেতেন, আর সেটা তাঁর কাছে ৪০৩।
    * ⭐ এখন সূত্রটা এক জায়গায়, App.tsx-এর অবতরণের সাথে মিলিয়ে।
    */
-  const home = homePathFor(user?.role);
+  const home = homePathFor(user?.role, features.designTargets);
 
   return (
     <Page title="Not found">

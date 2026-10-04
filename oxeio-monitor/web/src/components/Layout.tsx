@@ -2,8 +2,10 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 import { listAlerts } from '../api/alerts';
 import type { Role } from '../api/auth';
+import type { FeatureKey } from '../api/features';
 import { usePolling } from '../api/useApi';
 import { useAuth } from '../auth/AuthContext';
+import { useFeatures } from '../features/FeaturesContext';
 import { Wordmark } from './Brand';
 import '../studio.css';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -40,6 +42,8 @@ interface NavItem {
    * হয় না, নইলে একদিন মেনু দেখা যেত অথচ পাতা ৪০৩ দিত।
    */
   when?: (user: { canAddTargets: boolean }) => boolean;
+  /** Belongs to a module the owner can switch off (Settings → Modules) */
+  feature?: FeatureKey;
   /**
    * ⭐ মকআপ ক-এর ভাগের লেবেল — এই আইটেমটার **ঠিক আগে** বসে।
    *
@@ -138,12 +142,14 @@ const NAV: NavItem[] = [
     roles: ['owner', 'manager', 'researcher'],
     section: 'Targets',
     child: true,
+    feature: 'designTargets',
   },
   {
     to: '/targets/all',
     label: 'Design Pool',
     roles: ['owner', 'manager', 'researcher'],
     child: true,
+    feature: 'designTargets',
   },
   /**
    * ⭐⭐ **Review** *(মালিকের নির্দেশ, ৩১ আগস্ট ২০২৬)* — Design Pool-এর
@@ -157,6 +163,7 @@ const NAV: NavItem[] = [
     label: 'Review',
     roles: ['owner', 'manager'],
     child: true,
+    feature: 'designTargets',
   },
   /**
    * ⭐ **J05** — স্টাফের নিজের পাতা। নামটা tray-র মেনু আইটেমের সাথে
@@ -232,7 +239,7 @@ const NAV: NavItem[] = [
    *
    * ⚠️⚠️ owner-only, ম্যানেজারও নয় — সরাসরি বেতনের অংশ (ADR-023 · ADR-027)।
    */
-  { to: '/deposits', label: 'Deposits', roles: ['owner'] },
+  { to: '/deposits', label: 'Deposits', roles: ['owner'], feature: 'deposits' },
   /**
    * ⚠️ owner-only — অ্যালার্টে হোস্টনেম, কর্মীর নাম আর ডিভাইসের অবস্থা
    * একসাথে থাকে (§ ৪.৩)। ম্যানেজারকে ব্যাজটাও দেখানো হয় না।
@@ -294,6 +301,7 @@ const ROLE_LABEL: Record<Role, string> = {
 
 export function Layout() {
   const { user, signOut } = useAuth();
+  const { features } = useFeatures();
   const { pathname } = useLocation();
   /**
    * ⭐ না-দেখা অ্যালার্টের সংখ্যা — নেভের ব্যাজের জন্য।
@@ -315,7 +323,9 @@ export function Layout() {
   const nav = user
     ? NAV.filter(
         (item) =>
-          item.roles.includes(user.role) && (item.when?.(user) ?? true),
+          item.roles.includes(user.role) &&
+          (item.when?.(user) ?? true) &&
+          (item.feature === undefined || features[item.feature]),
       ).map((item) =>
         item.to === '/alerts'
           ? { ...item, badge: alerts.data?.total }

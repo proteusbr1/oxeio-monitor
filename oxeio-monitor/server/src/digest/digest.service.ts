@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { dhakaClock, workDateOf } from '../agent/util/dhaka-time';
 import { AlertMailer, type SendOutcome } from '../alerts/alerts.mailer';
 import { TelegramChannel } from '../alerts/telegram.channel';
+import { FeaturesService } from '../features/features.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { monthBoundsOf, toIsoDate } from '../reports/reports.range';
 import { ReportsService } from '../reports/reports.service';
@@ -52,6 +53,7 @@ export class DigestService {
     private readonly mailer: AlertMailer,
     private readonly telegram: TelegramChannel,
     config: ConfigService,
+    private readonly features: FeaturesService,
   ) {
     this.orgName = config.get<string>('ORG_NAME')?.trim() || DEFAULT_ORG_NAME;
 
@@ -185,6 +187,9 @@ export class DigestService {
     workDate: string,
   ): Promise<Map<string, DesignView>> {
     const out = new Map<string, DesignView>();
+
+    // design targets switched off in Settings → Modules: no design lines
+    if (!(await this.features.isOn('designTargets'))) return out;
 
     try {
       /**

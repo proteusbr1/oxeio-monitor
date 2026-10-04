@@ -23,6 +23,7 @@ import {
 } from '../../api/admin';
 import { useApi } from '../../api/useApi';
 import { useAuth } from '../../auth/AuthContext';
+import { useFeatures } from '../../features/FeaturesContext';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Page';
 import { Empty, ErrorBox, Loading } from '../../components/States';
@@ -84,7 +85,9 @@ export function StaffTab() {
    * ⚠️ একটাই চলক রাখলে কাল বেতনের নিয়ম বদলালে (বা ম্যানেজার deactivate
    * করতে পারলে) দুটো জিনিস একসাথে নড়ত, আর কেউ খেয়াল করত না।
    */
-  const canSeeSalary = user?.role === 'owner';
+  const { features } = useFeatures();
+  // payroll switched off in Settings → Modules: the salary stays saved, unseen
+  const canSeeSalary = user?.role === 'owner' && features.payroll;
   /** portal অ্যাকাউন্ট · পাসওয়ার্ড রিসেট · deactivate — সার্ভারে owner-only */
   const isOwner = user?.role === 'owner';
 
@@ -610,6 +613,7 @@ function EmployeeForm({
 }) {
   const initial = formOf(employee);
   const [form, setForm] = useState<StaffForm>(initial);
+  const { features } = useFeatures();
   const { busy, error, run } = useMutation();
 
   /**
@@ -773,7 +777,7 @@ function EmployeeForm({
             ⚠️ ধরন বদলে "Designer" থেকে সরালে ঘরটা লুকোবে, কিন্তু বসানো
                মানটা **মুছবে না** — আবার ডিজাইনার করলে সংখ্যাটা ফিরে আসবে।
           */}
-          {form.staffType === 'designer' && (
+          {features.designTargets && form.staffType === 'designer' && (
             <TextField
               label="Daily design target"
               value={form.dailyDesignTarget}
@@ -801,6 +805,7 @@ function EmployeeForm({
                দেখা যায় এমন সতর্কতা, লুকোনো সংশোধন নয়।
           */}
           {employee &&
+            features.designTargets &&
             form.staffType === 'researcher' &&
             employee.portalRole !== null &&
             employee.portalRole !== 'researcher' && (

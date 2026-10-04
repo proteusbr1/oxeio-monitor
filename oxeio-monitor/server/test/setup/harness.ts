@@ -7,6 +7,7 @@ import { PrismaClient, UserRole } from '@prisma/client';
 import request from 'supertest';
 
 import { AppCategoryService } from '../../src/activity/app-category.service';
+import { FeaturesService } from '../../src/features/features.service';
 import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.setup';
 import { workDateOf } from '../../src/agent/util/dhaka-time';
@@ -93,6 +94,8 @@ export async function resetDatabase(
   //    ক্যাশে পুরোনো id বসে থাকলে পরের ingest foreign key ভাঙত — টেস্টে
   //    সেটা '৫০০' হয়ে আসত, আর কারণ খোঁজা কঠিন হতো।
   app?.get(AppCategoryService).invalidate();
+  // the module switches are cached the same way; the row was just truncated
+  app?.get(FeaturesService).forget();
 
   const policy = await prisma.workPolicy.create({
     data: {
