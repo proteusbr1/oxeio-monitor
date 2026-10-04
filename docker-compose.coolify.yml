@@ -61,6 +61,8 @@ services:
       TRUST_PROXY: "1"
       PORT: "3000"
       STORAGE_ROOT: /data/storage
+      # Banco no Databasus (backup + verificacao de restauracao); o backup interno do oXeio fica de lado.
+      BACKUP_MODE: ${BACKUP_MODE:-}
       # Capturas e miniaturas no B2 (bucket privado pericialmed-oxeio); o disco fica so com banco/backups/instaladores.
       STORAGE_DRIVER: ${STORAGE_DRIVER:-}
       S3_BUCKET: ${S3_BUCKET:-}
