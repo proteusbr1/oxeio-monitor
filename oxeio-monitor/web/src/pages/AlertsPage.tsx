@@ -358,9 +358,12 @@ function HealthCard({
             <Stat
               label="Last backup"
               value={
-                data.backup.lastSuccessAt
-                  ? formatAgo(data.backup.lastSuccessAt)
-                  : 'Never'
+                // BACKUP_MODE=external — not this server's to report
+                data.backup.mode === 'external'
+                  ? 'External'
+                  : data.backup.lastSuccessAt
+                    ? formatAgo(data.backup.lastSuccessAt)
+                    : 'Never'
               }
               tone={data.backup.problem ? 'attention' : 'counted'}
             />

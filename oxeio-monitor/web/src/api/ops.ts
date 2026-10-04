@@ -34,6 +34,12 @@ export interface OpsHealth {
   };
 
   backup: {
+    /**
+     * `external` = BACKUP_MODE=external: the database is backed up outside
+     * oXeio and this server neither runs nor watches it. Optional for older
+     * servers (= internal).
+     */
+    mode?: 'internal' | 'external';
     configured: boolean;
     copyConfigured: boolean;
     lastSuccessAt: string | null;

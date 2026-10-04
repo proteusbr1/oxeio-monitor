@@ -67,8 +67,10 @@ export class BackupJob implements OnApplicationBootstrap {
     }
 
     this.logger.log(
-      `Nightly backup enabled (${BACKUP_CRON}, ${JOB_TIMEZONE})` +
-        (this.backup.configured ? '' : ' — but there is no BACKUP_PASSPHRASE, so it will not run'),
+      this.backup.external
+        ? 'Nightly backup off — BACKUP_MODE=external'
+        : `Nightly backup enabled (${BACKUP_CRON}, ${JOB_TIMEZONE})` +
+            (this.backup.configured ? '' : ' — but there is no BACKUP_PASSPHRASE, so it will not run'),
     );
   }
 
