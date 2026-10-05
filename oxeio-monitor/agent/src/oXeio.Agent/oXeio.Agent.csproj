@@ -59,6 +59,16 @@
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
   </PropertyGroup>
 
+  <!--
+    `dotnet publish -p:HideLatestShot=true` (build.ps1 -HideLatestShot): a
+    build whose Today window shows when the last screenshot was taken but
+    not the picture, and keeps no copy of it on the PC. Capture and upload
+    are unchanged. See BuildOptions.cs.
+  -->
+  <PropertyGroup Condition="'$(HideLatestShot)' == 'true'">
+    <DefineConstants>$(DefineConstants);HIDE_LATEST_SHOT</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <!--
       ⚠️⚠️ `ApplicationIcon` **যথেষ্ট নয়** — ওটা exe-র শেল-আইকন ঠিক করে,

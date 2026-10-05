@@ -927,6 +927,12 @@ internal sealed class AgentHost : IAsyncDisposable
     /// </summary>
     private void KeepLatestShot(string? thumbPath, int monitors)
     {
+        if (!BuildOptions.ShowLatestShot)
+        {
+            KeepLatestShotTimeOnly(monitors);
+            return;
+        }
+
         if (thumbPath is null || _outbox is null) return;
 
         try
@@ -948,6 +954,33 @@ internal sealed class AgentHost : IAsyncDisposable
             //    ব্যর্থ হলে চুপচাপ এগোনো, ক্যাপচার যেন না ভাঙে।
             _log.Warn($"Could not keep the last thumbnail for the window: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// A build without the preview (<see cref="BuildOptions.ShowLatestShot"/>):
+    /// the window still learns <i>when</i> the picture was taken, but no copy of
+    /// it is kept — and one left by an earlier build is removed.
+    /// </summary>
+    private void KeepLatestShotTimeOnly(int monitors)
+    {
+        _latestShotThumb = null;
+        _latestShotAt = DateTimeOffset.UtcNow;
+        _latestShotMonitors = monitors;
+
+        if (_outbox is not null)
+        {
+            var stale = Path.Combine(_outbox.Paths.State, "last-shot.webp");
+            try
+            {
+                if (File.Exists(stale)) File.Delete(stale);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _log.Warn($"Could not remove the old preview copy: {ex.Message}");
+            }
+        }
+
+        PublishStatus();
     }
 
     /// <summary>

@@ -66,6 +66,12 @@ param(
     # deploy/README.md § "Signed agent updates".
     [string]$UpdatePublicKey,
 
+    # A build whose Today window does not show the last screenshot — only
+    # when it was taken — and keeps no copy of it on the PC. Pictures are
+    # still taken and sent as before. Fixed in the build, so nobody at the PC
+    # can turn the preview back on. The MSI name ends in -nopreview.
+    [switch]$HideLatestShot,
+
     # ⚠️ টাইমস্ট্যাম্প ছাড়া সই করা। **সাধারণত দেবেন না** — কারণ নিচে।
     [switch]$NoTimestamp,
 
@@ -115,9 +121,14 @@ MSI বসবে $Version দিয়ে, কিন্তু এজেন্ট
   ⭐ এখন প্রতিটা বিল্ড `bin/`-এ আলাদা ফাইল হয়ে থাকে, তাই পাশাপাশি রাখা
   যায় আর ভুল ফাইল বিলি হওয়ার সুযোগ থাকে না।
 #>
-$msi = Join-Path $outDir "oXeioAgent-$Version.msi"
+# ⚠️ the variant is in the name too — same version, different behaviour
+$variant = if ($HideLatestShot) { '-nopreview' } else { '' }
+$msi = Join-Path $outDir "oXeioAgent-$Version$variant.msi"
 
 Write-Host "   version: $Version" -ForegroundColor DarkGray
+if ($HideLatestShot) {
+    Write-Host '   last screenshot preview: hidden (-HideLatestShot)' -ForegroundColor DarkGray
+}
 
 # ⚠️ একই ভার্সন আবার বিল্ড করা মানে দুটো আলাদা বাইনারি এক নামে — ঠিক যে
 #    ভুলটা এই নামকরণটা ঠেকাতে এসেছে। থামানো হয় না (ডেভে বারবার বিল্ড
@@ -290,6 +301,7 @@ foreach ($project in 'oXeio.Agent', 'oXeio.Watchdog') {
     & dotnet publish (Join-Path $agentRoot "src\$project") `
         -c $Configuration -r $Runtime --self-contained true `
         -p:DebugType=none -p:DebugSymbols=false `
+        -p:HideLatestShot=$(if ($HideLatestShot) { 'true' } else { 'false' }) `
         -o $publishDir --nologo -v quiet
     if ($LASTEXITCODE -ne 0) { throw "$project publish ব্যর্থ" }
 }

@@ -140,7 +140,12 @@
       বিদায়ী-ইভেন্টের দেরিটা **চতুর্থবার মেপে** সেকেন্ডে নামলে —
       CI সবুজ হওয়া আর আসল PC-তে শাটডাউন হওয়া এক নয়।
     -->
-    <Version>0.4.11</Version>
+    <!--
+      0.4.12 (fork, 5 Oct 2026): build.ps1 -HideLatestShot. Raised so a build
+      made from here is not mistaken for the 0.4.11 already installed, and so
+      Settings → Agent updates can offer it (it compares version names).
+    -->
+    <Version>0.4.12</Version>
 
     <!--
       ⚠️ AssemblyVersion-এ শুধু তিন অঙ্ক রাখা হয় (SemVer-এর pre-release

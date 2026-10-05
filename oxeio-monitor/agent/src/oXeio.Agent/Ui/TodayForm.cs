@@ -322,6 +322,19 @@ internal sealed class TodayForm : OwnerDrawnForm
             return;
         }
 
+        // a build without the preview (build.ps1 -HideLatestShot): the time
+        // above says a picture was taken; the picture itself is not shown here
+        if (!BuildOptions.ShowLatestShot)
+        {
+            stack.Gap(2);
+            stack.Line(
+                status.LatestShotMonitors > 1
+                    ? $"All {UiText.Number(status.LatestShotMonitors)} screens were captured. The picture is not shown on this PC."
+                    : "The picture is not shown on this PC.",
+                TrayFontRole.Small, Muted);
+            return;
+        }
+
         stack.Gap(4);
 
         if (!stack.Thumbnail(status.LatestShotThumb, ThumbWidth))
