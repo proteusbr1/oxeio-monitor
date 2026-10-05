@@ -22,6 +22,9 @@ class SaveFeaturesDto {
 
   @IsOptional() @IsBoolean()
   designTargets?: boolean;
+
+  @IsOptional() @IsBoolean()
+  staffScreenshots?: boolean;
 }
 
 /** What a module already holds — so the owner sees what a switch hides */
@@ -34,6 +37,8 @@ interface FeatureUsage {
   designTargets: number;
   /** active people whose work type is designer */
   designers: number;
+  /** staff and researcher logins — who a "Screenshots for staff" switch affects */
+  staffLogins: number;
 }
 
 interface FeaturesSettingsView {
@@ -61,7 +66,7 @@ export class FeaturesController {
   @Roles(UserRole.owner)
   @Get('settings/features')
   async settings(): Promise<FeaturesSettingsView> {
-    const [salariedStaff, depositMonths, designTargets, designers] =
+    const [salariedStaff, depositMonths, designTargets, designers, staffLogins] =
       await Promise.all([
         this.prisma.employee.count({
           where: { status: 'active', monthlySalary: { not: null } },
@@ -71,11 +76,14 @@ export class FeaturesController {
         this.prisma.employee.count({
           where: { status: 'active', staffType: 'designer' },
         }),
+        this.prisma.user.count({
+          where: { isActive: true, role: { in: ['employee', 'researcher'] } },
+        }),
       ]);
 
     return {
       features: await this.features.all(),
-      usage: { salariedStaff, depositMonths, designTargets, designers },
+      usage: { salariedStaff, depositMonths, designTargets, designers, staffLogins },
     };
   }
 
@@ -91,6 +99,7 @@ export class FeaturesController {
       payroll: dto.payroll ?? before.payroll,
       deposits: dto.deposits ?? before.deposits,
       designTargets: dto.designTargets ?? before.designTargets,
+      staffScreenshots: dto.staffScreenshots ?? before.staffScreenshots,
     };
 
     const changed = changedFeatures(before, after);

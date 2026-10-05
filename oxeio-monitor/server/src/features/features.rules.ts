@@ -13,7 +13,13 @@
 
 export const FEATURES_SETTING_KEY = 'features';
 
-export const FEATURE_KEYS = ['payroll', 'deposits', 'designTargets'] as const;
+export const FEATURE_KEYS = [
+  'payroll',
+  'deposits',
+  'designTargets',
+  // staff and researcher logins see the screenshots of their own screen
+  'staffScreenshots',
+] as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 

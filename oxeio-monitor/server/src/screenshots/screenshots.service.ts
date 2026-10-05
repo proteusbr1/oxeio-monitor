@@ -12,6 +12,7 @@ import { Prisma, UserRole } from '@prisma/client';
 
 import { workDateOf } from '../agent/util/dhaka-time';
 import { AuditService } from '../audit/audit.service';
+import { FeaturesService } from '../features/features.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   SCREENSHOT_STORAGE,
@@ -78,6 +79,8 @@ export class ScreenshotsService {
     // ⚠️ the same store ingest writes to (one global instance, StorageModule)
     //    — so uploads and reads can never end up in two different places
     @Inject(SCREENSHOT_STORAGE) private readonly storage: ScreenshotStorage,
+    // Settings → Modules › "Screenshots for staff"
+    private readonly features: FeaturesService,
   ) {}
 
   /**
@@ -92,7 +95,7 @@ export class ScreenshotsService {
     ip: string,
   ): Promise<GalleryPage> {
     const workDate = this.resolveDate(query.date);
-    const employeeId = this.resolveEmployeeScope(actor, query.employeeId);
+    const employeeId = await this.scopeFor(actor, query.employeeId);
 
     const where: Prisma.ScreenshotWhereInput = {
       workDate,
@@ -327,6 +330,21 @@ export class ScreenshotsService {
    *
    * @returns `null` মানে ফিল্টার নেই (owner/manager, ওই দিনের সবার ছবি)
    */
+  /**
+   * Whose pictures this person may see — and, for anyone but the owner and
+   * managers, whether staff see their own at all (Settings → Modules ›
+   * "Screenshots for staff"; on unless the owner turned it off).
+   */
+  private async scopeFor(actor: SessionUser, requested?: number): Promise<number | null> {
+    const everyone = actor.role === UserRole.owner || actor.role === UserRole.manager;
+    if (!everyone && !(await this.features.isOn('staffScreenshots'))) {
+      throw new ForbiddenException(
+        'Screenshots are not shown to staff on this system. They are still taken; the owner and managers see them.',
+      );
+    }
+    return this.resolveEmployeeScope(actor, requested);
+  }
+
   private resolveEmployeeScope(
     actor: SessionUser,
     requested?: number,
@@ -407,7 +425,8 @@ export class ScreenshotsService {
      * ⚠️ কর্মী নিজে ডাকলে কেবল নিজেরটা — গ্যালারির হুবহু একই নিয়ম।
      *    এখানে আলাদা করে লিখলে একদিন একটা বদলাত আর অন্যটা নয়।
      */
-    const mine = actor.role === 'employee' ? actor.employeeId : null;
+    // the same rule as the gallery — a researcher sees only their own too
+    const mine = await this.scopeFor(actor);
 
     const where = {
       workDate,

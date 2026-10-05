@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 import { listAlerts } from '../api/alerts';
-import type { Role } from '../api/auth';
+import { seesEveryone, type Role } from '../api/auth';
 import type { FeatureKey } from '../api/features';
 import { usePolling } from '../api/useApi';
 import { useAuth } from '../auth/AuthContext';
@@ -45,6 +45,8 @@ interface NavItem {
   when?: (user: { canAddTargets: boolean }) => boolean;
   /** Belongs to a module the owner can switch off (Settings → Modules) */
   feature?: FeatureKey;
+  /** Like `feature`, but only for staff logins — the owner and managers keep it */
+  staffFeature?: FeatureKey;
   /**
    * ⭐ মকআপ ক-এর ভাগের লেবেল — এই আইটেমটার **ঠিক আগে** বসে।
    *
@@ -223,6 +225,7 @@ const NAV: NavItem[] = [
     to: '/screenshots',
     label: 'Screenshots',
     roles: ['owner', 'manager', 'researcher', 'employee'],
+    staffFeature: 'staffScreenshots',
   },
   /**
    * ⚠️ শুধু "Monthly" — "Monthly progress" নয়। নেভের সব ট্যাব এক-দুই শব্দে,
@@ -325,7 +328,10 @@ export function Layout() {
         (item) =>
           item.roles.includes(user.role) &&
           (item.when?.(user) ?? true) &&
-          (item.feature === undefined || features[item.feature]),
+          (item.feature === undefined || features[item.feature]) &&
+          (item.staffFeature === undefined ||
+            seesEveryone(user.role) ||
+            features[item.staffFeature]),
       ).map((item) =>
         item.to === '/alerts'
           ? { ...item, badge: alerts.data?.total }

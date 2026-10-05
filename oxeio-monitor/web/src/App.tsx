@@ -204,7 +204,10 @@ function Router() {
           <Route path="targets/review" element={<ReviewPage />} />
         )}
 
-        <Route path="screenshots" element={<GalleryPage />} />
+        {/* staff see their own pictures unless the owner turned that off */}
+        {(!isStaff || features.staffScreenshots) && (
+          <Route path="screenshots" element={<GalleryPage />} />
+        )}
         <Route path="monthly" element={<MonthlyPage />} />
         <Route path="reports" element={<ReportsPage />} />
 

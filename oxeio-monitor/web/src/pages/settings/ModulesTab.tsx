@@ -95,6 +95,21 @@ const MODULES: ModuleInfo[] = [
     offWarning: () =>
       'The daily hand-out stops too: jobs already handed out stay with their designer until the module is back on.',
   },
+  {
+    key: 'staffScreenshots',
+    title: 'Screenshots for staff',
+    what: 'Staff and researcher logins can open the pictures taken of their own screen.',
+    hides: [
+      'Screenshots in the menu of staff and researcher logins',
+      'The “see yours” link on their My data',
+    ],
+    holds: (u) =>
+      u.staffLogins > 0
+        ? `${plural(u.staffLogins, 'staff login is', 'staff logins are')} affected — you and managers still see every picture`
+        : null,
+    offWarning: () =>
+      'Pictures are still taken and kept, and you and managers see them as before — only staff stop seeing their own. My data still tells them that screenshots are taken and for how long.',
+  },
 ];
 
 export function ModulesTab() {

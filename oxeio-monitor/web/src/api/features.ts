@@ -8,6 +8,8 @@ export interface Features {
   payroll: boolean;
   deposits: boolean;
   designTargets: boolean;
+  /** staff and researcher logins see the screenshots of their own screen */
+  staffScreenshots: boolean;
 }
 
 export type FeatureKey = keyof Features;
@@ -17,6 +19,7 @@ export const ALL_FEATURES_ON: Features = {
   payroll: true,
   deposits: true,
   designTargets: true,
+  staffScreenshots: true,
 };
 
 /** What each module already holds, so a switch never hides data by surprise */
@@ -25,6 +28,7 @@ export interface FeatureUsage {
   depositMonths: number;
   designTargets: number;
   designers: number;
+  staffLogins: number;
 }
 
 export interface FeatureSettingsView {

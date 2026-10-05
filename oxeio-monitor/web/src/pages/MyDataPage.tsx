@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 
 import { getMyDays, getMyDeposit, getMySummary, type MyDay } from '../api/me';
 import { useApi } from '../api/useApi';
+import { seesEveryone } from '../api/auth';
 import { useAuth } from '../auth/AuthContext';
 import { useFeatures } from '../features/FeaturesContext';
 import { MyTargets } from './MyTargets';
@@ -282,9 +283,13 @@ export function MyDataPage() {
                 <Row term="Screenshots">
                   Kept {summary.data.screenshotRetentionDays} days, then deleted
                   automatically —{' '}
-                  <Link to="/screenshots" className="underline">
-                    see yours
-                  </Link>
+                  {seesEveryone(user?.role) || features.staffScreenshots ? (
+                    <Link to="/screenshots" className="underline">
+                      see yours
+                    </Link>
+                  ) : (
+                    'seen by the owner and managers only'
+                  )}
                 </Row>
                 <Row term="Working hours">
                   Active time only. Idle and locked time is recorded but never

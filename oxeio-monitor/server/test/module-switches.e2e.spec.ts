@@ -60,6 +60,7 @@ describe('defaults', () => {
       payroll: true,
       deposits: true,
       designTargets: true,
+      staffScreenshots: true,
     });
   });
 
@@ -78,6 +79,7 @@ describe('defaults', () => {
       depositMonths: 0,
       designTargets: 0,
       designers: expect.any(Number),
+      staffLogins: expect.any(Number),
     });
   });
 });
@@ -114,6 +116,7 @@ describe('switching off', () => {
       payroll: false,
       deposits: true,
       designTargets: true,
+      staffScreenshots: true,
     });
 
     const blocked = await owner.http
@@ -155,6 +158,7 @@ describe('switching off', () => {
       payroll: true,
       deposits: false,
       designTargets: false,
+      staffScreenshots: true,
     });
   });
 });

@@ -7,7 +7,12 @@ import {
   resolveFeatures,
 } from '../src/features/features.rules';
 
-const ALL_ON = { payroll: true, deposits: true, designTargets: true };
+const ALL_ON = {
+  payroll: true,
+  deposits: true,
+  designTargets: true,
+  staffScreenshots: true,
+};
 
 describe('resolveFeatures', () => {
   it('no saved row → every module on, as before the switches existed', () => {
