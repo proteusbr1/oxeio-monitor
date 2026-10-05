@@ -8,6 +8,7 @@ export interface ErrorReportingView {
   host: string | null;
   environment: string;
   browser: boolean;
+  logErrors: boolean;
   source: SettingSource;
 }
 
@@ -26,6 +27,7 @@ export function saveErrorReporting(body: {
   dsn: string;
   environment: string;
   browser: boolean;
+  logErrors: boolean;
 }): Promise<ErrorReportingView> {
   return api<ErrorReportingView>('/settings/error-reporting', { method: 'PATCH', body });
 }

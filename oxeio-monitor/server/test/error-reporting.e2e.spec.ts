@@ -3,9 +3,12 @@ import type { AddressInfo } from 'node:net';
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { Logger } from '@nestjs/common';
+
 import { HolidaysService } from '../src/admin/holidays.service';
 import { ErrorReporter } from '../src/error-reporting/error-reporter.service';
 import { ERROR_REPORTING_SETTING_KEY } from '../src/error-reporting/error-reporting.rules';
+import { ReportingLogger } from '../src/error-reporting/reporting-logger';
 import {
   createHarness,
   loginReady,
@@ -234,5 +237,53 @@ describe('dashboard crashes', () => {
       .post('/api/v1/error-reports')
       .send({ name: 'x', message: 'y', path: '/' })
       .expect(401);
+  });
+});
+
+describe('errors from the server log', () => {
+  /** what `main.ts` sets up — here around a silent logger */
+  const silent = { log() {}, warn() {}, error() {}, debug() {}, verbose() {} };
+
+  beforeEach(() => {
+    h.app.useLogger(new ReportingLogger(silent, h.app.get(ErrorReporter)));
+  });
+
+  it('off unless ticked — a logged failure stays in the log', async () => {
+    await save({ dsn }).expect(200);
+    new Logger('DigestService').error('Daily digest could not be sent');
+    await flush();
+    expect(received).toHaveLength(0);
+  });
+
+  it('ticked: a job that logs its failure reaches Sentry, emails masked', async () => {
+    await save({ dsn, logErrors: true }).expect(200);
+    new Logger('AlertsDispatcher').error('[Alert · email failed] to owner@studio.com');
+    await flush();
+
+    expect(received).toHaveLength(1);
+    const event = received[0].event;
+    expect(event.tags).toMatchObject({ source: 'log', context: 'AlertsDispatcher' });
+    expect(event.level).toBe('error');
+    expect(JSON.stringify(event)).toContain('email failed] to [email]');
+    expect(JSON.stringify(event)).not.toContain('owner@studio.com');
+  });
+
+  it('the same failure again within the hour is not sent twice', async () => {
+    await save({ dsn, logErrors: true }).expect(200);
+    const log = new Logger('OpsScheduler');
+    log.error('backup-check check failed: timeout after 30000 ms');
+    log.error('backup-check check failed: timeout after 31000 ms');
+    log.error('telegram check failed: 502');
+    await flush();
+    expect(received).toHaveLength(2);
+  });
+
+  it('a 500 is reported once, by the route — not again from the log', async () => {
+    await save({ dsn, logErrors: true }).expect(200);
+    breakHolidays('db exploded');
+    await owner.http.get('/api/v1/holidays').expect(500);
+    await flush();
+    expect(received).toHaveLength(1);
+    expect(received[0].event.tags).toMatchObject({ source: 'server' });
   });
 });

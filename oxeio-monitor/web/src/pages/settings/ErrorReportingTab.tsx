@@ -38,7 +38,7 @@ export function ErrorReportingTab() {
   // remount the form after each save, so it starts from what is saved
   return (
     <ErrorReportingForm
-      key={`${current.source}:${current.dsn ?? ''}:${current.environment}:${current.browser}`}
+      key={`${current.source}:${current.dsn ?? ''}:${current.environment}:${current.browser}:${current.logErrors}`}
       current={current}
       onSaved={view.reload}
     />
@@ -56,12 +56,18 @@ function ErrorReportingForm({
   const [dsn, setDsn] = useState(fromScreen ? (current.dsn ?? '') : '');
   const [environment, setEnvironment] = useState(current.environment);
   const [browser, setBrowser] = useState(current.browser);
+  const [logErrors, setLogErrors] = useState(current.logErrors);
   const [test, setTest] = useState<ErrorReportingTest | null>(null);
 
   const save = useMutation();
   const probe = useMutation();
 
-  const store = (next: { dsn: string; environment: string; browser: boolean }) =>
+  const store = (next: {
+    dsn: string;
+    environment: string;
+    browser: boolean;
+    logErrors: boolean;
+  }) =>
     save.run(async () => {
       await saveErrorReporting(next);
       setTest(null);
@@ -71,7 +77,8 @@ function ErrorReportingForm({
   const changed =
     dsn.trim() !== (fromScreen ? (current.dsn ?? '') : '') ||
     environment.trim() !== current.environment ||
-    browser !== current.browser;
+    browser !== current.browser ||
+    logErrors !== current.logErrors;
 
   return (
     <div className="space-y-3">
@@ -118,6 +125,22 @@ function ErrorReportingForm({
             hint="When a page breaks in someone's browser, the error goes to Sentry too — through this server, so the browser never talks to Sentry."
           />
 
+          <CheckboxField
+            label="Also report errors from the server log"
+            checked={logErrors}
+            onChange={setLogErrors}
+            hint={
+              <>
+                Failures the server caught and only logged — a backup, the
+                daily summary, an email or Telegram delivery, a scheduled job.
+                The same message is sent at most once an hour.{' '}
+                <b>Some of these lines name a staff member or a PC</b> (e.g.
+                &ldquo;alert email failed for &hellip;&rdquo;) — leave it off
+                if that should not leave this server.
+              </>
+            }
+          />
+
           <ServerError error={save.error ?? probe.error} />
 
           {test && (
@@ -137,7 +160,12 @@ function ErrorReportingForm({
             <MiniButton
               disabled={save.busy || !changed}
               onClick={() =>
-                store({ dsn: dsn.trim(), environment: environment.trim(), browser })
+                store({
+                  dsn: dsn.trim(),
+                  environment: environment.trim(),
+                  browser,
+                  logErrors,
+                })
               }
             >
               {save.busy ? 'Saving…' : 'Save'}
@@ -160,7 +188,9 @@ function ErrorReportingForm({
               <MiniButton
                 tone="danger"
                 disabled={save.busy}
-                onClick={() => store({ dsn: '', environment: '', browser: false })}
+                onClick={() =>
+                  store({ dsn: '', environment: '', browser: false, logErrors: false })
+                }
               >
                 Turn off
               </MiniButton>
@@ -174,7 +204,8 @@ function ErrorReportingForm({
           the user&rsquo;s role and the server version.{' '}
           <b>Never sent:</b> request bodies, cookies, IP addresses, names,
           email addresses (masked even inside messages), salaries or
-          screenshots. Expected answers — not found, no access, a wrong
+          screenshots — unless you tick the server log above, whose lines can
+          name a staff member or a PC. Expected answers — not found, no access, a wrong
           password — are not reported. Changes apply immediately, no restart.
         </Caveat>
       </Card>
@@ -204,7 +235,8 @@ function Status({ current }: { current: ErrorReportingView }) {
     <p className="text-[13px] text-ok">
       On · <span className="num">{current.host}</span> ·{' '}
       <span className="num">{current.environment}</span> · {where}
-      {current.browser ? ' · dashboard crashes too' : ' · server only'}
+      {current.browser ? ' · dashboard crashes' : ''}
+      {current.logErrors ? ' · log errors' : ''}
     </p>
   );
 }

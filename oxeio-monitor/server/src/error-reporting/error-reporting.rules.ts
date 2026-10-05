@@ -15,12 +15,15 @@ export interface ErrorReportingSaved {
   environment?: string;
   /** also report crashes in the dashboard (sent through this server) */
   browser?: boolean;
+  /** also report errors written to the server log (jobs, backups, deliveries) */
+  logErrors?: boolean;
 }
 
 export interface ErrorReportingConfig {
   dsn: string | null;
   environment: string;
   browser: boolean;
+  logErrors: boolean;
   source: Source;
 }
 
@@ -62,7 +65,12 @@ const has = (v: unknown): v is string => typeof v === 'string' && v.trim() !== '
 
 export function resolveErrorReporting(
   saved: ErrorReportingSaved | null,
-  env: { SENTRY_DSN?: string; SENTRY_ENVIRONMENT?: string; SENTRY_BROWSER?: string },
+  env: {
+    SENTRY_DSN?: string;
+    SENTRY_ENVIRONMENT?: string;
+    SENTRY_BROWSER?: string;
+    SENTRY_LOG_ERRORS?: string;
+  },
 ): ErrorReportingConfig {
   // the DSN decides on/off and the source; the other two follow the same
   // "screen first" rule on their own, so ticking "dashboard crashes" works
@@ -76,12 +84,19 @@ export function resolveErrorReporting(
       ? env.SENTRY_ENVIRONMENT.trim()
       : DEFAULT_SENTRY_ENVIRONMENT;
 
-  const browser =
-    typeof saved?.browser === 'boolean'
-      ? saved.browser
-      : env.SENTRY_BROWSER?.trim().toLowerCase() === 'true';
+  const flag = (savedValue: boolean | undefined, envValue: string | undefined) =>
+    dsn !== null &&
+    (typeof savedValue === 'boolean'
+      ? savedValue
+      : envValue?.trim().toLowerCase() === 'true');
 
-  return { dsn, environment, browser: dsn !== null && browser, source };
+  return {
+    dsn,
+    environment,
+    browser: flag(saved?.browser, env.SENTRY_BROWSER),
+    logErrors: flag(saved?.logErrors, env.SENTRY_LOG_ERRORS),
+    source,
+  };
 }
 
 /** The DSN host only — what the screen shows next to "on" */

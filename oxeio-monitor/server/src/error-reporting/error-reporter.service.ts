@@ -20,6 +20,9 @@ export interface BrowserReport {
   path: string;
 }
 
+/** A log error repeating sooner than this is not sent again */
+const LOG_REPEAT_MS = 60 * 60_000;
+
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 
 /** Emails out of free text — error messages sometimes quote an address */
@@ -111,6 +114,7 @@ export class ErrorReporter implements OnApplicationBootstrap {
     const old = this.client;
 
     this.config = config;
+    this.logSentAt.clear();
     this.client = null;
     this.scope = null;
 
@@ -159,6 +163,39 @@ export class ErrorReporter implements OnApplicationBootstrap {
 
   get browserEnabled(): boolean {
     return this.enabled && this.config?.browser === true;
+  }
+
+  get logErrorsEnabled(): boolean {
+    return this.enabled && this.config?.logErrors === true;
+  }
+
+  /** when each log message was last sent — see `captureLog()` */
+  private readonly logSentAt = new Map<string, number>();
+
+  /**
+   * An error written to the server log (a job, a backup, a delivery that
+   * caught its own failure). The same message from the same place is sent
+   * at most once an hour: an hourly check failing all night is one problem,
+   * not twelve.
+   */
+  captureLog(message: string, context: string, stack?: string, now = Date.now()): string | null {
+    if (!this.scope || !this.logErrorsEnabled) return null;
+
+    // numbers vary between runs (ids, counts, times); the problem does not
+    // (and the shape is sent as the grouping key, so it is masked too)
+    const shape = `${context}|${redact(message).replace(/\d+/g, '#').slice(0, 300)}`;
+    const last = this.logSentAt.get(shape);
+    if (last !== undefined && now - last < LOG_REPEAT_MS) return null;
+    this.logSentAt.set(shape, now);
+    if (this.logSentAt.size > 500) this.logSentAt.clear();
+
+    return this.scope.captureMessage(redact(message.slice(0, 2000)), 'error', {
+      captureContext: {
+        tags: { source: 'log', context },
+        fingerprint: [shape],
+        extra: stack ? { stack: redact(stack.slice(0, 8000)) } : {},
+      },
+    });
   }
 
   /** A server error — returns the Sentry event id, or null when off */

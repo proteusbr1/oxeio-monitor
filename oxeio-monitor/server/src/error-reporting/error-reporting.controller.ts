@@ -35,6 +35,9 @@ class SaveErrorReportingDto {
 
   @IsOptional() @IsBoolean()
   browser?: boolean;
+
+  @IsOptional() @IsBoolean()
+  logErrors?: boolean;
 }
 
 class BrowserReportDto {
@@ -61,6 +64,7 @@ export interface ErrorReportingView {
   host: string | null;
   environment: string;
   browser: boolean;
+  logErrors: boolean;
   source: Source;
 }
 
@@ -87,6 +91,7 @@ export class ErrorReportingController {
       host: dsnHost(config.dsn),
       environment: config.environment,
       browser: config.browser,
+      logErrors: config.logErrors,
       source: config.source,
     };
   }
@@ -107,10 +112,11 @@ export class ErrorReportingController {
       throw new BadRequestException(err instanceof Error ? err.message : String(err));
     }
     const browser = dto.browser === true;
+    const logErrors = dto.logErrors === true;
 
     await this.settings.replace(
       ERROR_REPORTING_SETTING_KEY,
-      { dsn, environment, browser },
+      { dsn, environment, browser, logErrors },
       actor.userId,
     );
     await this.reporter.reload();
@@ -122,7 +128,7 @@ export class ErrorReportingController {
       targetId: ERROR_REPORTING_SETTING_KEY,
       ipAddress: ip,
       // the host, not the key in the DSN
-      meta: { op: 'error_reporting', host: dsnHost(dsn), environment, browser },
+      meta: { op: 'error_reporting', host: dsnHost(dsn), environment, browser, logErrors },
     });
 
     return this.read();

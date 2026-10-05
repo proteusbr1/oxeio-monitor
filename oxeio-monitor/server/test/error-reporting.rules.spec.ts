@@ -46,6 +46,7 @@ describe('resolveErrorReporting', () => {
       dsn: null,
       environment: 'production',
       browser: false,
+      logErrors: false,
       source: 'default',
     });
   });
@@ -57,7 +58,13 @@ describe('resolveErrorReporting', () => {
         SENTRY_ENVIRONMENT: 'staging',
         SENTRY_BROWSER: 'true',
       }),
-    ).toEqual({ dsn: DSN, environment: 'staging', browser: true, source: 'environment' });
+    ).toEqual({
+      dsn: DSN,
+      environment: 'staging',
+      browser: true,
+      logErrors: false,
+      source: 'environment',
+    });
   });
 
   it('the screen wins; a cleared DSN falls back to the .env', () => {
@@ -76,11 +83,31 @@ describe('resolveErrorReporting', () => {
         { dsn: '', environment: 'staging', browser: true },
         { SENTRY_DSN: DSN },
       ),
-    ).toEqual({ dsn: DSN, environment: 'staging', browser: true, source: 'environment' });
+    ).toEqual({
+      dsn: DSN,
+      environment: 'staging',
+      browser: true,
+      logErrors: false,
+      source: 'environment',
+    });
   });
 
-  it('no DSN anywhere → the dashboard checkbox means nothing', () => {
-    expect(resolveErrorReporting({ browser: true }, {}).browser).toBe(false);
+  it('no DSN anywhere → the checkboxes mean nothing', () => {
+    expect(resolveErrorReporting({ browser: true, logErrors: true }, {})).toMatchObject({
+      browser: false,
+      logErrors: false,
+    });
+  });
+
+  it('log errors: off unless ticked or SENTRY_LOG_ERRORS=true', () => {
+    expect(resolveErrorReporting({ dsn: DSN }, {}).logErrors).toBe(false);
+    expect(resolveErrorReporting({ dsn: DSN, logErrors: true }, {}).logErrors).toBe(true);
+    expect(resolveErrorReporting(null, { SENTRY_DSN: DSN, SENTRY_LOG_ERRORS: 'true' }).logErrors).toBe(true);
+    // the screen's "no" beats the .env's "yes"
+    expect(
+      resolveErrorReporting({ logErrors: false }, { SENTRY_DSN: DSN, SENTRY_LOG_ERRORS: 'true' })
+        .logErrors,
+    ).toBe(false);
   });
 
   it('shows only the host', () => {

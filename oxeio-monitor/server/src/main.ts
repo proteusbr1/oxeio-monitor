@@ -10,6 +10,7 @@ import { PrismaClient } from '@prisma/client';
 
 import { fixedOffsetMinutes } from './agent/util/fixed-offset';
 import { configureApp } from './app.setup';
+import { ReportingLogger } from './error-reporting/reporting-logger';
 import { REGION_SETTING_KEY } from './settings/region-key';
 
 /**
@@ -113,12 +114,15 @@ async function bootstrap(): Promise<void> {
   await applySavedTimeZone();
   // ⚠️ imported only now, after the zone is known (see applySavedTimeZone)
   const { AppModule } = await import('./app.module');
+  // the same goes for anything that reaches the settings (and so the zone)
+  const { ErrorReporter } = await import('./error-reporting/error-reporter.service');
 
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
     httpsOptions,
   });
-  app.useLogger(app.get(Logger));
+  // errors in the log also go to Sentry when the owner turned that on
+  app.useLogger(new ReportingLogger(app.get(Logger), app.get(ErrorReporter)));
 
   const config = app.get(ConfigService);
 
