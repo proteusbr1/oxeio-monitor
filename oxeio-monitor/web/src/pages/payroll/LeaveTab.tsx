@@ -10,7 +10,7 @@ import {
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Caveat, Empty, ErrorBox, Loading } from '../../components/States';
-import { formatDate, todayInDhaka } from '../../lib/format';
+import { formatDate } from '../../lib/format';
 import {
   ConfirmDialog,
   FormGrid,
@@ -24,7 +24,7 @@ import {
   TextField,
   orUndefined,
   useMutation,
-} from './ui';
+} from '../settings/ui';
 
 /** ⚠️ তিনটেই সবেতন — `unpaid` কেন নেই, `schema.prisma`-র নোট দেখুন */
 const TYPES = [
@@ -46,8 +46,8 @@ const TYPES = [
  * পাহারা দেওয়া, আর নিচের ব্যাখ্যাটা পর্দাতেও থাকে — নইলে ছুটি লিখতে
  * গিয়ে কেউ ভাবতেন বেতন কাটছেন।
  */
-export function LeaveTab() {
-  const [month, setMonth] = useState(currentMonth);
+/** Leave for one month — the month is picked on the Payroll page */
+export function LeaveTab({ month }: { month: string }) {
 
   const { data, error, loading, reload } = useApi(
     (signal) => listLeaves(month, signal),
@@ -73,14 +73,6 @@ export function LeaveTab() {
         padded={false}
         actions={
           <RowActions>
-            <input
-              type="month"
-              value={month}
-              max={currentMonth()}
-              onChange={(e) => setMonth(e.target.value || currentMonth())}
-              className="tap rounded border border-line bg-surface px-2 py-1 text-[12px]"
-              aria-label="Month"
-            />
             <MiniButton
               disabled={!staff.data || staff.data.rows.length === 0}
               onClick={() => setAdding(true)}
@@ -332,9 +324,4 @@ function AddLeave({
 
 function labelOf(type: string): string {
   return TYPES.find((t) => t.value === type)?.label ?? type;
-}
-
-/** ⚠️ ঢাকার আজ, ব্রাউজারের নয় — `MonthsTab`-এর একই নোট দেখুন */
-function currentMonth(): string {
-  return todayInDhaka().slice(0, 7);
 }

@@ -1,4 +1,4 @@
-import { useSearchParams } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 
 import { ApiError } from '../../api/client';
 import { useAuth } from '../../auth/AuthContext';
@@ -11,9 +11,7 @@ import { NotificationsTab } from './NotificationsTab';
 import { AuditTab } from './AuditTab';
 import { CategoriesTab } from './CategoriesTab';
 import { ErrorReportingTab } from './ErrorReportingTab';
-import { LeaveTab } from './LeaveTab';
 import { ModulesTab } from './ModulesTab';
-import { MonthsTab } from './MonthsTab';
 import { PoliciesTab } from './PoliciesTab';
 import { RegionTab } from './RegionTab';
 import { StaffTab } from './StaffTab';
@@ -59,17 +57,8 @@ const TABS = [
     managerLabel: 'Holidays',
     manager: true,
   },
-  // ⭐ Policies-এর ঠিক পরে: ছুটির তালিকা মাসের সংখ্যা **বদলায়**, আর এই
-  //    ট্যাবটা সেগুলো **থামায়** — একই প্রশ্নের দুই দিক, তাই পাশাপাশি।
-  // ⚠️ Leave ও Months owner-এর: দুটোই সরাসরি টাকার হিসাব নাড়ায়।
-  { id: 'leave', label: 'Leave', manager: false },
-  // ⚠️⚠️ **Deposits এখানে আর নেই** — সাইডবারের নিজের পাতায় (`/deposits`),
-  //    মালিকের অনুরোধে। সেটিংসে যা থাকে তা একবার বসিয়ে ভুলে যাওয়ার
-  //    জিনিস; জামানতের হিসাবে ঢুকতে হয় বারবার।
-  //    ⚠️ এখানে **ফিরিয়ে আনবেন না** — দুই জায়গায় একই পর্দা থাকলে মালিককে
-  //    মনে রাখতে হতো কোনটায় গিয়েছিলেন, আর Devices ট্যাবটা ঠিক এই কারণেই
-  //    তুলে দিতে হয়েছিল (G89)।
-  { id: 'months', label: 'Months', manager: false },
+  // Leave and Months moved to the Payroll page (pages/payroll), with the
+  // rest of the month's pay; old ?tab=leave|months links are sent there.
   // the owner's call: which parts of the dashboard this company uses
   { id: 'modules', label: 'Modules', manager: false },
   // ⚠️ audit-এর **আগে**: এটা রোজকার কাজের ট্যাব নয়, কিন্তু audit log
@@ -104,8 +93,6 @@ const SUBTITLE: Record<TabKey, string> = {
   staff: 'Add, edit and deactivate people — nothing is ever deleted',
   categories: 'Which apps and sites fall into which category',
   policies: 'Monthly target, screenshot window and days off',
-  leave: 'Agreed days off — the hours target drops, the salary does not',
-  months: 'Freeze a finished month so its hours and pay stop moving',
   modules: 'Turn off the parts your company does not use — nothing is deleted',
   notifications: 'Where the weekly summary and alerts are sent',
   errors: 'Send crashes to Sentry, so bugs are found before anyone reports them',
@@ -131,6 +118,8 @@ export function SettingsPage() {
       );
 
   const raw = params.get('tab');
+  // these two tabs live on the Payroll page now
+  const moved = raw === 'leave' ? 'leave' : raw === 'months' ? 'close' : null;
   /**
    * ⚠️ ট্যাবটা **এই ব্যবহারকারীর জন্য** বৈধ কি না, শুধু "নাম মেলে কি না"
    * নয়। নইলে `?tab=audit` টাইপ করলে ম্যানেজার খালি পাতা দেখতেন —
@@ -138,6 +127,8 @@ export function SettingsPage() {
    */
   const active: TabKey =
     isTabKey(raw) && tabs.some((t) => t.id === raw) ? raw : 'staff';
+
+  if (moved && isOwner) return <Navigate to={`/payroll?tab=${moved}`} replace />;
 
   if (user?.role !== 'owner' && user?.role !== 'manager') {
     return (
@@ -175,8 +166,6 @@ export function SettingsPage() {
       {active === 'staff' && <StaffTab />}
       {active === 'categories' && <CategoriesTab />}
       {active === 'policies' && <PoliciesTab />}
-      {active === 'leave' && <LeaveTab />}
-      {active === 'months' && <MonthsTab />}
       {active === 'modules' && <ModulesTab />}
       {active === 'notifications' && <NotificationsTab />}
       {active === 'errors' && <ErrorReportingTab />}

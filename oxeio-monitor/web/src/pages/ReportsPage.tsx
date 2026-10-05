@@ -2,17 +2,15 @@ import { useState, type ReactNode } from 'react';
 
 import { reportXlsxUrl, type GroupBy } from '../api/reports';
 import { useAuth } from '../auth/AuthContext';
-import { useFeatures } from '../features/FeaturesContext';
-import { DateRange, MonthPicker } from '../components/DatePicker';
+import { DateRange } from '../components/DatePicker';
 import { EmployeePicker } from '../components/EmployeePicker';
 import { ErrorNote } from '../components/Field';
 import { Button, Page } from '../components/Page';
 import { Empty } from '../components/States';
 import { Tabs, type TabItem } from '../components/Tabs';
 import { useXlsxDownload } from '../lib/download';
-import { formatDate, formatMonth, thisMonthRange, todayInDhaka } from '../lib/format';
+import { formatDate, thisMonthRange } from '../lib/format';
 import { AttendanceTab } from './reports/AttendanceTab';
-import { PayrollTab } from './reports/PayrollTab';
 import { ProductivityTab } from './reports/ProductivityTab';
 import { SummaryTab } from './reports/SummaryTab';
 import { MAX_REPORT_DAYS, rangeDays } from './reports/shared';
@@ -23,28 +21,20 @@ import { seesEveryone } from '../api/auth';
  *
  * প্রবাহ: রেঞ্জ বাছুন (F08) → ধরন বাছুন → টেবিল → Excel (F05)।
  *
- * ⭐⚠️ **পে-রোল ট্যাবটা ম্যানেজার দেখতেই পান না।** `TABS` তালিকাটাই
- *    `user.role === 'owner'` দিয়ে ছাঁকা হয়। ৪০৩ ধরে "অনুমতি নেই" দেখানো
- *    যথেষ্ট নয় — তাহলেও ট্যাবের নামটা থেকে যেত, আর **বেতনের ব্যবস্থাটা যে
- *    আছে** সেটুকুই ফাঁস হয়ে যেত (§ ৪.৩, ADR-023)।
+ * The payroll sheet lives on its own page now (pages/payroll), with the
+ * rest of the month's pay.
  *
  * ⭐ রেঞ্জ, স্টাফ, groupBy — সব নিয়ন্ত্রণ এই পেজে থাকে, ট্যাবগুলোতে নয়।
  *    তাই ট্যাব বদলালে বাছাই করা তারিখটা হারায় না, আর ডাউনলোডের লিঙ্কটা
  *    ঠিক যা পর্দায় দেখা যাচ্ছে তারই — দুটো আলাদা হয়ে যাওয়ার পথ নেই।
  */
 
-type TabId = 'attendance' | 'summary' | 'productivity' | 'payroll';
+type TabId = 'attendance' | 'summary' | 'productivity';
 
-interface TabDef extends TabItem<TabId> {
-  /** ⭐ পে-রোল ছাড়া বাকি সব owner + manager দুজনেরই */
-  ownerOnly?: boolean;
-}
-
-const TABS: TabDef[] = [
+const TABS: TabItem<TabId>[] = [
   { id: 'attendance', label: 'Attendance' },
   { id: 'summary', label: 'Summary' },
   { id: 'productivity', label: 'Apps & sites' },
-  { id: 'payroll', label: 'Payroll', ownerOnly: true },
 ];
 
 /** সার্ভারের ডিফল্টও ২৫ — এক রাখা হয়েছে যাতে পর্দা আর Excel এক কথা বলে */
@@ -72,18 +62,10 @@ export function ReportsPage() {
     );
   }
 
-  return <ReportsBoard isOwner={user?.role === 'owner'} />;
+  return <ReportsBoard />;
 }
 
-function ReportsBoard({ isOwner }: { isOwner: boolean }) {
-  const { features } = useFeatures();
-  const tabs = TABS.filter(
-    (tab) =>
-      (!tab.ownerOnly || isOwner) &&
-      // payroll switched off in Settings → Modules
-      (tab.id !== 'payroll' || features.payroll),
-  );
-
+function ReportsBoard() {
   const [tab, setTab] = useState<TabId>('attendance');
   // ⚠️ `new Date().toISOString().slice(0,10)` নয় — ঢাকায় রাত ১২টা–ভোর ৬টায়
   //    ওটা আগের তারিখ দিত, আর রিপোর্ট এক দিন পিছিয়ে খুলত।
@@ -91,23 +73,16 @@ function ReportsBoard({ isOwner }: { isOwner: boolean }) {
   const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [groupBy, setGroupBy] = useState<GroupBy>('month');
   const [limit, setLimit] = useState(TOP_LIMITS[0]);
-  const [month, setMonth] = useState(() => todayInDhaka().slice(0, 7));
 
   const download = useXlsxDownload();
 
-  const isPayroll = tab === 'payroll';
   const days = rangeDays(range.from, range.to);
   // ⚠️ সার্ভার ৩৭০ দিনের বেশি নেয় না। আগেই ধরে ফেলা হয় যাতে একটা
   //    নিশ্চিত-ব্যর্থ রিকোয়েস্ট পাঠাতেই না হয় — বড় রেঞ্জে ওটা কয়েক
   //    সেকেন্ড অপেক্ষার পর ৪০০ হতো।
-  const tooLong = !isPayroll && days > MAX_REPORT_DAYS;
+  const tooLong = days > MAX_REPORT_DAYS;
 
   const startDownload = (): void => {
-    // ⚠️ `isPayroll` দিয়ে নয়, সরাসরি তুলনা — এতে TypeScript নিজেই নিশ্চিত
-    //    করে যে `reportXlsxUrl()`-এ কখনো `'payroll'` যাবে না। ওই endpoint
-    //    সার্ভারে নেই-ই।
-    if (tab === 'payroll') return;
-
     const query = {
       from: range.from,
       to: range.to,
@@ -124,28 +99,20 @@ function ReportsBoard({ isOwner }: { isOwner: boolean }) {
   return (
     <Page
       title="Reports"
-      subtitle={
-        isPayroll
-          ? `${formatMonth(month)} — monthly payroll hours`
-          : `${formatDate(range.from)} — ${formatDate(range.to)} · ${days} days`
-      }
+      subtitle={`${formatDate(range.from)} — ${formatDate(range.to)} · ${days} days`}
       actions={
-        // ⚠️ পে-রোলের কোনো Excel endpoint সার্ভারে নেই — বোতামটা দেখালে
-        //    ওটা নিশ্চিতভাবে ৪০৪ দিত।
-        !isPayroll && (
-          <Button
-            onClick={startDownload}
-            disabled={download.busy || tooLong}
-            tone="primary"
-            title="The file is built on the server first — a long range takes a moment"
-          >
-            {download.busy ? 'Preparing…' : 'Download Excel'}
-          </Button>
-        )
+        <Button
+          onClick={startDownload}
+          disabled={download.busy || tooLong}
+          tone="primary"
+          title="The file is built on the server first — a long range takes a moment"
+        >
+          {download.busy ? 'Preparing…' : 'Download Excel'}
+        </Button>
       }
     >
       <Tabs
-        items={tabs}
+        items={TABS}
         active={tab}
         label="Report type"
         onChange={(next) => {
@@ -156,10 +123,7 @@ function ReportsBoard({ isOwner }: { isOwner: boolean }) {
       />
 
       <div className="mt-3 flex flex-wrap items-end gap-3">
-        {isPayroll ? (
-          <MonthPicker value={month} onChange={setMonth} />
-        ) : (
-          <>
+        <>
             <DateRange
               from={range.from}
               to={range.to}
@@ -198,8 +162,7 @@ function ReportsBoard({ isOwner }: { isOwner: boolean }) {
                 }))}
               />
             )}
-          </>
-        )}
+        </>
       </div>
 
       {download.error && (
@@ -224,16 +187,13 @@ function ReportsBoard({ isOwner }: { isOwner: boolean }) {
             employeeId={employeeId}
             groupBy={groupBy}
           />
-        ) : tab === 'productivity' ? (
+        ) : (
           <ProductivityTab
             from={range.from}
             to={range.to}
             employeeId={employeeId}
             limit={limit}
           />
-        ) : (
-          // ⭐ এখানে পৌঁছানোর একমাত্র পথ owner-এর বাছাই করা ট্যাব
-          <PayrollTab month={month} />
         )}
       </div>
     </Page>

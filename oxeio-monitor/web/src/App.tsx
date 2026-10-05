@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from './auth/AuthContext';
 import { Layout } from './components/Layout';
 import { VersionBadge } from './components/VersionBadge';
 import { AlertsPage } from './pages/AlertsPage';
-import { DepositsPage } from './pages/DepositsPage';
+import { PayrollPage } from './pages/payroll/PayrollPage';
 import { WorklogPage } from './pages/WorklogPage';
 import { ChangePasswordPage } from './pages/ChangePasswordPage';
 import { EmployeeDetailPage } from './pages/EmployeeDetailPage';
@@ -240,8 +240,10 @@ function Router() {
              তিনটেই না মিললে ব্যবহারকারী নেভে দেখেন কিন্তু চাপলে "কিছু নেই"।
         */}
         {mayOpenWorklog && <Route path="worklog" element={<WorklogPage />} />}
+        {isOwner && <Route path="payroll" element={<PayrollPage />} />}
+        {/* deposits are a tab of the Payroll page now */}
         {isOwner && features.deposits && (
-          <Route path="deposits" element={<DepositsPage />} />
+          <Route path="deposits" element={<Navigate to="/payroll?tab=deposits" replace />} />
         )}
 
         {/*

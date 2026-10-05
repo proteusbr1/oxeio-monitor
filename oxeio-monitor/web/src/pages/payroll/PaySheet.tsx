@@ -1,5 +1,5 @@
-import { getPayroll, type PayrollRow } from '../../api/reports';
-import { useApi } from '../../api/useApi';
+import type { PayrollRow, PayrollSheet } from '../../api/reports';
+import type { ApiResult } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Hours } from '../../components/Duration';
 import { ProgressBar } from '../../components/ProgressRing';
@@ -28,11 +28,19 @@ import {
  *    হয় না — `formatTaka()` শুধু কমা বসায়, নইলে ১৩০০০.১০ পর্দায়
  *    ১৩০০০.০৯৯৯… হয়ে যেত।
  */
-export function PayrollTab({ month }: { month: string }) {
-  const { data, error, loading, reload } = useApi(
-    (signal) => getPayroll(month, signal),
-    [month],
-  );
+/**
+ * The sheet itself, from a result someone else loaded — the Payroll page
+ * loads it once for both its checklist and this table, since every load of
+ * the sheet is written to the audit log.
+ */
+export function PayrollSheetView({
+  month,
+  result,
+}: {
+  month: string;
+  result: ApiResult<PayrollSheet | null>;
+}) {
+  const { data, error, loading, reload } = result;
 
   if (loading && !data) return <Loading label="Loading payroll…" />;
   if (error) return <ErrorBox error={error} retry={reload} />;

@@ -41,7 +41,7 @@ const MODULES: ModuleInfo[] = [
     title: 'Payroll',
     what: 'Monthly pay sheet worked out from salaries, hours and leave.',
     hides: [
-      'Reports → Payroll',
+      'The Pay sheet and Salaries tabs of Payroll (the page becomes “Leave & months”)',
       'The salary column and field in Staff',
     ],
     holds: (u) =>
@@ -54,7 +54,7 @@ const MODULES: ModuleInfo[] = [
     title: 'Security deposits',
     what: 'A monthly instalment held back from pay, refunded or kept when someone leaves.',
     hides: [
-      'The Deposits page',
+      'The Deposits tab of Payroll',
       'The deposit card on each person’s My data',
       'The deposit line on the payroll sheet',
     ],
@@ -68,7 +68,7 @@ const MODULES: ModuleInfo[] = [
         : null,
     onWarning: (u) =>
       u.depositMonths > 0
-        ? 'Months that are still open get their instalment the next time the deposits ledger is opened, including months that passed while this was off. Close finished months first (Settings → Months) if they should stay as they are.'
+        ? 'Months that are still open get their instalment the next time the deposits ledger is opened, including months that passed while this was off. Close finished months first (Payroll → Close month) if they should stay as they are.'
         : null,
   },
   {

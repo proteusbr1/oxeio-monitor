@@ -19,7 +19,7 @@ import {
   TextField,
   orUndefined,
   useMutation,
-} from './ui';
+} from '../settings/ui';
 
 /**
  * R1 — **মাস বন্ধ করা।** owner-only (রুটটাও, `App.tsx`-এ)।
