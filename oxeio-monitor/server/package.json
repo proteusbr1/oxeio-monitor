@@ -36,6 +36,7 @@
     "@nestjs/schedule": "^5.0.0",
     "@node-rs/argon2": "^2.0.0",
     "@prisma/client": "^6.2.0",
+    "@sentry/node": "^11.4.0",
     "@types/nodemailer": "^8.0.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",

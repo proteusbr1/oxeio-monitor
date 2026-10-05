@@ -1,5 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 
+import { sendCrash } from '../lib/crash-reports';
+
 /**
  * শেষ জাল — কোনো পেজ render করতে গিয়ে ছুড়ে ফেললে **পুরো অ্যাপটা মুছে যাওয়া**
  * ঠেকায়।
@@ -42,6 +44,8 @@ export class ErrorBoundary extends Component<Props, State> {
    */
   componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error('[oXeio] Error while rendering the page:', error, info.componentStack);
+    // on to Sentry, when the owner turned it on (Settings → Error reporting)
+    sendCrash(error, info.componentStack);
   }
 
   /**

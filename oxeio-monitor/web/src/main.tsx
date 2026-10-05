@@ -8,6 +8,7 @@ import {
 } from './api/auth';
 import { App } from './App';
 import './index.css';
+import { installCrashReports } from './lib/crash-reports';
 import { setCurrency, setDisplayLocale, setWorkTimeZone } from './lib/format';
 import { registerServiceWorker } from './pwa';
 
@@ -65,6 +66,9 @@ async function loadDisplayLocale(): Promise<void> {
     clearTimeout(timer);
   }
 }
+
+// crashes outside React's render go to the server too (Settings → Error reporting)
+installCrashReports();
 
 // all in parallel — none waits for another
 void Promise.all([

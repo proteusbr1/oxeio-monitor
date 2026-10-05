@@ -2,6 +2,11 @@ import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 
 import { WORK_TIMEZONE } from '../agent/util/dhaka-time';
+import {
+  ERROR_REPORTING_SETTING_KEY,
+  resolveErrorReporting,
+  type ErrorReportingSaved,
+} from '../error-reporting/error-reporting.rules';
 import { OFFSITE_SETTING_KEY, resolveOffsite, type OffsiteSettings } from '../ops/offsite.settings';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -47,6 +52,12 @@ export class AppSettingsService {
   async backupMode() {
     const saved = await this.read<{ mode?: string }>(BACKUP_SETTING_KEY);
     return resolveBackupMode(saved, process.env.BACKUP_MODE);
+  }
+
+  /** Sentry — Settings → Error reporting, or SENTRY_DSN in the .env */
+  async errorReporting() {
+    const saved = await this.read<ErrorReportingSaved>(ERROR_REPORTING_SETTING_KEY);
+    return resolveErrorReporting(saved, process.env);
   }
 
   async updateKey() {

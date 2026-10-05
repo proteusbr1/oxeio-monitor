@@ -10,6 +10,7 @@ import { BackupTab } from './BackupTab';
 import { NotificationsTab } from './NotificationsTab';
 import { AuditTab } from './AuditTab';
 import { CategoriesTab } from './CategoriesTab';
+import { ErrorReportingTab } from './ErrorReportingTab';
 import { LeaveTab } from './LeaveTab';
 import { ModulesTab } from './ModulesTab';
 import { MonthsTab } from './MonthsTab';
@@ -76,6 +77,8 @@ const TABS = [
   // ⭐ G08 — টেলিগ্রামের টোকেন ও চ্যাট আইডি। owner-only, কারণ ওই চ্যাটে
   //    কর্মীর নাম ও ঘণ্টা যায়; কে সেটা পাবে তা ম্যানেজারের সিদ্ধান্ত নয়।
   { id: 'notifications', label: 'Notifications', manager: false },
+  // Sentry — where crashes are sent; owner-only like the other credentials
+  { id: 'errors', label: 'Error reporting', manager: false },
   // time zone, currency, date format — what used to need the server's .env
   { id: 'region', label: 'Region', manager: false },
   // ⭐ R5 — অফসাইট ব্যাকআপের কী। owner-only: এটা পরিকাঠামোর ক্রেডেনশিয়াল,
@@ -105,6 +108,7 @@ const SUBTITLE: Record<TabKey, string> = {
   months: 'Freeze a finished month so its hours and pay stop moving',
   modules: 'Turn off the parts your company does not use — nothing is deleted',
   notifications: 'Where the weekly summary and alerts are sent',
+  errors: 'Send crashes to Sentry, so bugs are found before anyone reports them',
   region: 'Time zone, currency and how dates and numbers are written',
   backup: 'Where screenshots are kept, and how the database is backed up',
   agent: 'Which build each PC is offered — and how widely',
@@ -175,6 +179,7 @@ export function SettingsPage() {
       {active === 'months' && <MonthsTab />}
       {active === 'modules' && <ModulesTab />}
       {active === 'notifications' && <NotificationsTab />}
+      {active === 'errors' && <ErrorReportingTab />}
       {active === 'region' && <RegionTab />}
       {active === 'backup' && <BackupTab />}
       {active === 'agent' && <AgentVersionsTab />}
