@@ -13,6 +13,10 @@ Built for one real company (12 staff, Dhaka) and running in production since
 August 2026. Open-sourced because the interesting part isn't the code — it's
 the **hundred small decisions** about what a monitoring tool should refuse to do.
 
+> **Maintaining this fork?** Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+> — where every module lives, how settings and module switches work, and how
+> production is deployed.
+
 > **A note on language.** Code comments and the ten documents in `docs/` are
 > written in **Bengali**. The user interface, commit subjects and this README are
 > English. That's deliberate: the comments explain *why* a line exists, and they
