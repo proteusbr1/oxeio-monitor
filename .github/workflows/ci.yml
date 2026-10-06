@@ -160,7 +160,7 @@ jobs:
         run: dotnet test -warnaserror --no-build
 
   installer:
-    name: MSI — শুধু ট্যাগে বা হাতে চালালে
+    name: MSI — only on tags or manual runs
     # Note: not run on every push. The self-contained publish is ~200 MB and
     #    cab compression takes several minutes; in everyday CI that is plain waste.
     #    It is verified before a release (tag) or by running it by hand.

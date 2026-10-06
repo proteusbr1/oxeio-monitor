@@ -116,7 +116,7 @@ item); routes are in `App.tsx`.
 | Project | What it holds |
 |---|---|
 | `src/oXeio.Core` | platform-free logic (time, tracking, capture rules) — builds and tests on Linux |
-| `src/oXeio.Agent` | the Windows tray app: capture, sync, local outbox, UI |
+| `src/oXeio.Agent` | the Windows tray app: capture, sync, local outbox, UI. `AgentHost` (the app's core) is one partial class split by concern: `AgentHost.cs` (fields, start, shutdown) and `AgentHost.Tracking/Capture/Sync/Account/Updates/Config/Events/Status/Session.cs` |
 | `src/oXeio.Watchdog` | restarts the agent; installed as a logon task |
 | `installer/` | WiX MSI (`build.ps1`) |
 | `tests/` | xUnit tests for both |
@@ -136,7 +136,13 @@ CI (`.github/workflows/ci.yml`) runs all of them plus the Docker builds. The
 MSI job fails because WiX v7 needs its EULA accepted — a known CI issue, not
 a code problem.
 
+All code, comments and messages are in English. Bengali remains only where it
+is data: Bangladesh holiday names, the `(সম্ভাব্য)` ("probable") marker stored
+with holiday names, the search box's Bengali date aliases, Chrome's Bengali
+incognito marker, and test inputs.
+
 ## Docs
 
-Product decisions and history from the original project are in `docs/`
-(in Bengali, as the original author wrote them).
+[docs/README.md](README.md) lists every document: the original project's
+design history (mostly Bengali) and what each is still useful for. The
+deployment manual is `oxeio-monitor/deploy/README.md` (English).
