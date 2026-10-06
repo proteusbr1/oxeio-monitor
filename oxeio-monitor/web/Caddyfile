@@ -1,27 +1,28 @@
-# ⭐ ড্যাশবোর্ড ও API **একই origin**-এ — এটাই এই ফাইলের পুরো কারণ।
+# The dashboard and the API share ONE origin: that is the whole reason for this file.
 #
-# ⚠️ ব্রাউজারের কাছে `/api/v1/...` একটা আপেক্ষিক পথ (`web/src/api/client.ts`),
-#    আর সেশন cookie-তে `SameSite=Strict`। দুটো আলাদা origin হলে (যেমন
-#    ড্যাশবোর্ড :8080, API :3000) লগইন সফল দেখাত কিন্তু পরের রিকোয়েস্টেই
-#    ৪০১ — ঠিক যে ফাঁদে ডেভ মোডে একবার পড়া হয়েছিল, আর যেটার জন্য Vite-এ
-#    proxy বসাতে হয়েছিল ([09 § ৩.৫](../../docs/09-Build-Log.md))।
+# Careful: to the browser `/api/v1/...` is a relative path (`web/src/api/client.ts`),
+#    and the session cookie is `SameSite=Strict`. With two different origins (say
+#    dashboard :8080, API :3000) login would look successful but the very next request
+#    would be a 401. We fell into exactly this trap once in dev mode, and it is why a
+#    proxy had to be set up in Vite ([09 § ৩.৫](../../docs/09-Build-Log.md)).
 #
-# ⭐ এতে CORS-এর প্রশ্নই ওঠে না। `CORS_ORIGIN` তখন শুধু অন্য কোনো
-#    ক্লায়েন্টের জন্য থাকে, ড্যাশবোর্ডের জন্য নয়।
+# CORS never comes up. `CORS_ORIGIN` then only exists for some other client, not
+#    for the dashboard.
 
-# ⭐⭐ সাইটের ঠিকানাটা **পরিবেশ-চলক থেকে** — ফাইল বদলাতে হয় না।
+# The site address comes from an ENVIRONMENT VARIABLE: no need to edit the file.
 #
-#   কিছু না দিলে `:8080` — অফিসের LAN ও ডেভের আচরণ আগের মতোই।
-#   `CADDY_SITE=monitor.oxeio.com` দিলে Caddy নিজেই ৮০ ও ৪৪৩ ধরে, আর
-#   **Let's Encrypt থেকে সার্ট নিয়ে নবায়নও করে** — certbot লাগে না।
+#   With nothing set it is `:8080`: the office LAN and dev behave as before.
+#   With `CADDY_SITE=monitor.oxeio.com`, Caddy itself listens on 80 and 443 and
+#   **gets and renews the Let's Encrypt certificate** too: no certbot needed.
 #
-# ⚠️ ডোমেইন দিলে DNS আগে বসাতে হবে (A রেকর্ড → VPS-এর IP)। না বসালে
-#   Let's Encrypt যাচাই করতে পারে না, আর Caddy বারবার চেষ্টা করে ব্যর্থ হয়।
+# Careful: with a domain, DNS must be set up first (A record -> the VPS's IP).
+#   Without it Let's Encrypt cannot validate, and Caddy keeps trying and failing.
 
-# ⚠️ `rate_limit` Caddy-র **স্ট্যান্ডার্ড ডিরেক্টিভ নয়** (প্লাগইন, দেখুন
-#    `Dockerfile`)। স্ট্যান্ডার্ড না হলে Caddy জানে না সে কোন ক্রমে চলবে,
-#    তাই ক্রমটা এখানে বলে দিতে হয় — নইলে চালুর সময় সোজা error।
-#    `reverse_proxy`-র আগে, যাতে সীমা ছাড়ানো রিকোয়েস্ট API পর্যন্ত না পৌঁছায়।
+# Careful: `rate_limit` is NOT a standard Caddy directive (it is a plugin, see
+#    `Dockerfile`). For a non-standard directive Caddy does not know in what order to
+#    run it, so the order must be stated here, otherwise there is a plain error at
+#    startup. It goes before `reverse_proxy`, so requests over the limit never reach
+#    the API.
 {
 	order rate_limit before reverse_proxy
 
@@ -47,32 +48,32 @@
 	encode gzip
 
 	# ── API ───────────────────────────────────────────────────────────────
-	# ⚠️ `api` নামটা docker compose-এর সার্ভিসের নাম — একই নেটওয়ার্কের
-	#    ভেতরে DNS হিসেবে কাজ করে। ট্রাফিক হোস্টের বাইরে যায় না।
+	# Careful: the name `api` is the docker compose service name; it works as DNS
+	#    inside the same network. Traffic never leaves the host.
 	handle /api/* {
-		#  ⭐⭐ **R6 / G116 — লগইনের বন্যা প্রান্তেই থামে।**
+		#  R6 / G116: a login flood is stopped at the edge.
 		#
-		#  ⚠️⚠️ সীমাটা **কেবল `POST /api/v1/auth/login`**-এ, গোটা `/auth/*`-এ নয়।
-		#     ওই পথের নিচে `GET /auth/me` ও `GET /auth/session-policy`-ও পড়ে,
-		#     আর ওগুলো **প্রতিটা পাতা লোডে** ডাকা হয় — পুরো প্রিফিক্সে সীমা
-		#     বসালে অফিস নিজেই ৪২৯ খেয়ে আটকে যেত। এটা লেখার আগে রুটগুলো গুনে
-		#     দেখা হয়েছে (`auth.controller.ts` — ১১টা রুট, দুটো GET সবচেয়ে ব্যস্ত)।
+		#  Careful: the limit is ONLY on `POST /api/v1/auth/login`, not on all of `/auth/*`.
+		#     `GET /auth/me` and `GET /auth/session-policy` also live under that path,
+		#     and they are called on EVERY page load; a limit on the whole prefix would
+		#     get the office itself stuck on 429s. The routes were counted before this
+		#     was written (`auth.controller.ts`: 11 routes, the two GETs the busiest).
 		#
-		#  ⚠️ **৩০/মিনিট ইচ্ছাকৃতভাবে ঢিলে** — গোটা অফিস একটাই IP-র পেছনে।
-		#     পাসওয়ার্ড রিসেটের দিনে সাতজন মিলে এক মিনিটে ২০+ চেষ্টা করতেই
-		#     পারেন; ২০ দিলে ওই দিনটাই অচল হতো।
+		#  Careful: 30/minute is deliberately loose: the whole office is behind one IP.
+		#     On a password-reset day seven people can easily make 20+ attempts in a
+		#     minute; with 20 that day would grind to a halt.
 		#
-		#  ⭐ দুটো স্তর দুটো আলাদা জিনিস ঠেকায়, আর সেটাই নকশা:
-		#       · এখানে (প্রান্তে) — **হার**: মিনিটে ৩০-এর বেশি নয়, CPU বাঁচে
-		#       · অ্যাপে (`login-throttle.service.ts`) — **অনুমান**: ৫০টা ভুল
-		#         হলে ওই IP তালাবন্ধ, ইমেইল যাই হোক (G116)
-		#     একটা ছাড়া অন্যটা অসম্পূর্ণ: প্রান্তের সীমা ভুল পাসওয়ার্ড **গোনে
-		#     না**, আর অ্যাপের গোনা রিকোয়েস্টটাকে **ঢুকতে দেয়**।
+		#  The two layers stop two different things, and that is the design:
+		#       - here (the edge): RATE, no more than 30 a minute, saves CPU
+		#       - in the app (`login-throttle.service.ts`): COUNTING, after 50 wrong
+		#         attempts that IP is locked out, whatever the email (G116)
+		#     Neither is complete without the other: the edge limit does NOT count
+		#     wrong passwords, and the app's count LETS the request in.
 		#
-		#  ⚠️ `{remote_host}` = সরাসরি ক্লায়েন্টের IP। কোনোদিন সামনে
-		#     Cloudflare বা অন্য প্রক্সি বসালে এটা **তাদের** IP হয়ে যাবে, আর
-		#     তখন গোটা দুনিয়া একটাই বালতিতে পড়বে — তখন `trusted_proxies` ও
-		#     `X-Forwarded-For` বসাতে হবে।
+		#  Careful: `{remote_host}` = the client's direct IP. If Cloudflare or another
+		#     proxy is ever put in front, it becomes THEIR IP, and then the whole world
+		#     falls into one bucket; then `trusted_proxies` and `X-Forwarded-For`
+		#     must be set up.
 		#
 		#  Update: the key is now `{client_ip}` — the same as `{remote_host}`
 		#  unless CADDY_TRUSTED_PROXIES is set (top of this file), and the
@@ -97,9 +98,10 @@
 			# trusted proxies this is {remote_host}, as Caddy sent before.
 			header_up X-Forwarded-For {client_ip}
 
-			# ⚠️ API-তে TLS চালু করলে (deploy/README § ৬) এই ব্লকটা খুলুন —
-			#    নইলে Caddy প্লেইন HTTP পাঠাবে আর প্রতিটা রিকোয়েস্ট মরবে।
-			#    সার্টটা self-signed, তাই যাচাই বাদ; সংযোগটা হোস্টের ভেতরেই।
+			# Careful: if you turn on TLS in the API (deploy/README § ৬), uncomment this
+			#    block, otherwise Caddy will send plain HTTP and every request dies.
+			#    The certificate is self-signed, so verification is skipped; the
+			#    connection stays inside the host.
 			# transport http {
 			# 	tls
 			# 	tls_insecure_skip_verify
@@ -108,22 +110,22 @@
 	}
 
 	# ── SPA ───────────────────────────────────────────────────────────────
-	# ⚠️ try_files বাধ্যতামূলক: রুটিং ক্লায়েন্টে (react-router), তাই
-	#    `/monthly` বা `/staff/7` সরাসরি খুললে ডিস্কে ওই ফাইল নেই।
-	#    এটা না থাকলে refresh চাপলেই ৪০৪ — আর সেটা ধরা পড়ত রোলআউটের দিনে।
+	# Careful: try_files is mandatory: routing is on the client (react-router), so
+	#    opening `/monthly` or `/staff/7` directly finds no such file on disk.
+	#    Without it a refresh would give a 404, and that would be found on rollout day.
 	handle {
 		try_files {path} /index.html
 		file_server
 	}
 
-	# ⚠️ ছবি ও রিপোর্ট বড় হতে পারে; ডিফল্ট সীমা আটকে দিত।
+	# Careful: images and reports can be large; the default limit would block them.
 	request_body {
 		max_size 25MB
 	}
 
 	header {
-		# ক্যাশ: index.html কখনো নয় (নইলে আপডেটের পরেও পুরোনো অ্যাপ চলত),
-		# hash-করা asset চিরকাল।
+		# Caching: never for index.html (otherwise the old app would keep running after
+		# an update), forever for hashed assets.
 		?Cache-Control "no-cache"
 		-Server
 	}
@@ -132,35 +134,36 @@
 	header @assets Cache-Control "public, max-age=31536000, immutable"
 
 	# ── PWA ───────────────────────────────────────────────────────────────
-	# ⭐⭐ সার্ভিস ওয়ার্কারটা **কখনো ক্যাশ হবে না** — এটা এই ফাইলের সবচেয়ে
-	#    জরুরি লাইন, আর ভুল হলে সবচেয়ে দেরিতে ধরা পড়ে।
+	# The service worker must NEVER be cached: this is the most important line in
+	#    this file, and the one whose mistake is found last.
 	#
-	# ⚠️ ব্রাউজার নতুন সংস্করণ আছে কি না জানে **কেবল `/sw.js` আবার নামিয়ে**।
-	#    ফাইলটা ক্যাশ হয়ে গেলে সে পুরোনো কপি পড়ত, দেখত "একই তো", আর
-	#    আপডেট **কোনোদিন** পৌঁছাত না — ডিপ্লয় সফল দেখাত, অথচ ফোনে মাসের
-	#    পর মাস পুরোনো অ্যাপ চলত। ⚠️ এই ফাঁদ থেকে বেরোনোর একমাত্র উপায়
-	#    ব্যবহারকারীর ফোনে হাতে সাইট-ডেটা মোছা।
+	# Careful: the browser learns whether a new version exists ONLY by downloading
+	#    `/sw.js` again. If the file were cached it would read the old copy, see "same
+	#    as before", and the update would NEVER arrive: the deploy would look
+	#    successful while phones ran the old app for months. The only way out of this
+	#    trap is wiping the site data by hand on the user's phone.
 	#
-	# ⭐ উপরের `?Cache-Control "no-cache"` এমনিতেই এটা দিত (`?` = "কেউ না
-	#    দিলে তবেই")। তবু আলাদা করে লেখা: `no-store` যোগ হয়, আর পরের জন
-	#    ডিফল্টটা বদলালে এই নিয়মটা টিকে থাকে।
-	# ⚠️ `/assets/*`-এর immutable নিয়মটা `/sw.js`-এ লাগে না — ওয়ার্কার
-	#    ইচ্ছাকৃতভাবে সাইটের **মূলে** বসে (`assets/`-এ থাকলে তার scope
-	#    হতো `/assets/`, আর নেভিগেশন কখনো ধরত না)।
+	# The `?Cache-Control "no-cache"` above would already give this (`?` = "only if
+	#    nobody else did"). It is still written separately: `no-store` is added, and
+	#    if someone later changes the default this rule survives.
+	# Careful: the `/assets/*` immutable rule does not apply to `/sw.js`: the worker
+	#    deliberately sits at the site ROOT (in `assets/` its scope would be
+	#    `/assets/` and it would never catch navigations).
 	@sw path /sw.js
 	header @sw Cache-Control "no-cache, no-store, must-revalidate"
 
-	# ⚠️ manifest ও আইকনগুলোও ডিফল্ট `no-cache`-এই থাকে (`?` নিয়মটা)। এরা
-	#    hash পায় না — নাম বদলায় না, শুধু ভেতরটা বদলায়। immutable করলে
-	#    লোগো বদলানোর পরেও পুরোনো আইকন বসে থাকত, আর হোমস্ক্রিনে ওটাই।
-	#    ফাইলগুলো ছোট, revalidate-এ ৩০৪ ফেরে — খরচ প্রায় শূন্য।
+	# Careful: the manifest and icons also stay on the default `no-cache` (the `?`
+	#    rule). They get no hash: the name does not change, only the content does.
+	#    Making them immutable would leave the old icon in place after a logo change,
+	#    and that is what the home screen shows. The files are small and revalidation
+	#    returns a 304, so the cost is almost zero.
 
-	# ⚠️⚠️ `.webmanifest`-এর MIME **হাতে** বসাতে হয়। Caddy টাইপ নেয় Go-র
-	#    `mime.TypeByExtension` থেকে, আর Go-র builtin তালিকায় ওই এক্সটেনশন
-	#    নেই; `caddy:2-alpine`-এ `/etc/mime.types`-ও নেই। ফলে ফাইলটা sniff
-	#    হয়ে `text/plain` যেত। Chrome আজ MIME যাচাই করে না বলে তাতেও
-	#    ইনস্টল হয়, কিন্তু সেটা ভরসা করার মতো জিনিস নয় — এক লাইনে নিশ্চিত।
-	#    ডিপ্লয়ের পর: `curl -I https://hub.oxeio.com/manifest.webmanifest`
+	# Careful: the MIME type of `.webmanifest` must be set BY HAND. Caddy takes types
+	#    from Go's `mime.TypeByExtension`, and Go's built-in list does not have that
+	#    extension; `caddy:2-alpine` has no `/etc/mime.types` either. So the file would
+	#    be sniffed as `text/plain`. Chrome does not check the MIME type today, so it
+	#    installs anyway, but that is not something to rely on: one line makes it certain.
+	#    After a deploy: `curl -I https://hub.oxeio.com/manifest.webmanifest`
 	@manifest path /manifest.webmanifest
 	header @manifest Content-Type "application/manifest+json"
 }

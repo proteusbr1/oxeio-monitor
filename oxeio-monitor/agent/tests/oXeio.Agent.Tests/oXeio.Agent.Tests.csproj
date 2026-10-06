@@ -1,9 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- ⚠️ oXeio.Core.Tests net8.0-তে চলে, তাই সেটা oXeio.Agent-কে রেফার করতে
-         পারে না (net8.0-windows)। Win32-নির্ভর মডিউলগুলোর টেস্টের জন্য এই
-         আলাদা প্রজেক্টটাই একমাত্র পথ। CI-তে এটা শুধু windows job-এ চলে। -->
+    <!-- Careful: oXeio.Core.Tests runs on net8.0, so it cannot reference
+         oXeio.Agent (net8.0-windows). This separate project is the only way to
+         test the Win32-dependent modules. In CI it runs only on the windows job. -->
     <TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <ImplicitUsings>enable</ImplicitUsings>

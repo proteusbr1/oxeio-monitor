@@ -1,63 +1,63 @@
 ﻿<#
 .SYNOPSIS
-  oXeio এজেন্টের MSI বানায় (H03)।
+  Builds the oXeio agent's MSI (H03).
 
 .DESCRIPTION
-  তিনটে ধাপ:
-    ১· দুটো প্রজেক্ট **একই ফোল্ডারে** self-contained publish
-    ২· wix build — ফাইলের তালিকা WiX নিজেই <Files Include> দিয়ে বানায়
+  Steps:
+    1. Self-contained publish of both projects into the SAME folder
+    2. wix build: WiX builds the file list itself via <Files Include>
 
-  ⚠️ দুটো প্রজেক্ট একই ফোল্ডারে publish করা হয় ইচ্ছাকৃতভাবে — আলাদা করলে
-     .NET রানটাইম দুবার বসত (৩৭৯ MB বনাম ১৯৯ MB)।
+  Careful: both projects are published into one folder on purpose. Separate folders
+  would install the .NET runtime twice (379 MB vs 199 MB).
 
 .EXAMPLE
   powershell -File installer\build.ps1
   powershell -File installer\build.ps1 -Version 0.3.0
 
 .NOTES
-  ⚠️⚠️ এই ফাইলটা **UTF-8 BOM সহ** সংরক্ষিত। BOM মুছে ফেলবেন না।
+  Careful: this file is saved WITH a UTF-8 BOM. Do not remove the BOM.
 
-  Windows PowerShell 5.1 (স্টক উইন্ডোজে যেটা থাকে) BOM ছাড়া ফাইলকে ANSI
-  ধরে, আর তখন নিচের বাংলা মন্তব্যগুলো ভেঙে গিয়ে স্ক্রিপ্টটা **পার্সই হয়
-  না** — `Unexpected token` ধরনের তিন-চারটে এরর দিয়ে থেমে যায়।
+  Windows PowerShell 5.1 (the one on stock Windows) treats a file without a BOM as
+  ANSI, and then the non-ASCII text below (the Bengali messages) is garbled and the
+  script does not even parse: it stops with three or four `Unexpected token` errors.
 
-  ⚠️ ফাইলটা প্রথম দিন থেকে BOM ছাড়াই ছিল, আর ধরা পড়েনি কারণ আগের বিল্ডটা
-  `pwsh` (PowerShell 7) দিয়ে হয়েছিল — সে BOM ছাড়াই UTF-8 ধরে নেয়।
-  ⚠️ অর্থাৎ যে মেশিনে PowerShell 7 নেই (যেমন অফিসের সার্ভার PC), সেখানে
-  MSI বানানোই যেত না। `deploy/*.ps1` দুটোতে নিয়মটা আগেই লেখা ছিল
-  ([deploy/README](../../deploy/README.md) § স্ক্রিপ্ট সম্পর্কে দুটো কথা) —
-  শুধু এই ফাইলটাতেই বসানো হয়নি।
+  Careful: the file had no BOM from day one, and this went unnoticed because the
+  previous build ran under `pwsh` (PowerShell 7), which assumes UTF-8 without a BOM.
+  So on a machine without PowerShell 7 (such as the office's server PC) the MSI could
+  not be built at all. The two `deploy/*.ps1` scripts already had this rule written
+  down ([deploy/README](../../deploy/README.md), section "Two notes about the
+  scripts"); only this file had missed it.
 #>
 [CmdletBinding()]
 param(
-    # ⚠️ ডিফল্ট **হার্ডকোড করা নয়** — Directory.Build.props থেকে পড়া হয়
-    #    (নিচে)। আগে এখানে '0.1.0' লেখা ছিল আর Program.cs-এও আলাদা করে
-    #    একই সংখ্যা; দুটো আলাদা হলে MSI এক ভার্সন বসাত আর এজেন্ট
-    #    heartbeat-এ আরেকটা বলত, ফলে H04 চিরকাল একই আপডেট অফার করত।
+    # Careful: the default is NOT hardcoded; it is read from Directory.Build.props
+    # (below). It used to say '0.1.0' here and the same number separately in
+    # Program.cs; when the two differed the MSI installed one version and the agent
+    # reported another in its heartbeat, so H04 offered the same update forever.
     [string]$Version,
 
-    # ⭐ ঠিকানাটা MSI-র ভেতরেই বসে যায়, আর তখন **ডাবল-ক্লিকেই ইনস্টল হয়** —
-    #   অফিসের ১৫টা PC-তে লম্বা কমান্ড টাইপ করতে হয় না।
+    # The address is baked into the MSI, which then **installs on a double-click**:
+    # no long command to type on the office's 15 PCs.
     #
-    # ⚠️⚠️ ডিফল্টটা ইচ্ছাকৃতভাবে **বসানো আছে**, খালি নয়। আগে খালি ছিল আর
-    #   `-ServerUrl` না দিলে চুপচাপ এমন MSI বেরোত যেটা ডাবল-ক্লিকে
-    #   "This MSI was built without a server address" বলে আটকে যেত। ঠিক
-    #   সেটাই ০.৩.২-এ ঘটেছে — বিল্ড সফল, সতর্কবাণী DarkGray-তে এক লাইন,
-    #   আর ভুলটা ধরা পড়েছে মালিকের ইনস্টল করার সময় ([09 § ৩ন]।
+    # Careful: the default is deliberately SET, not empty. It used to be empty, and
+    # without `-ServerUrl` the build silently produced an MSI that stopped on
+    # double-click with "This MSI was built without a server address". That is exactly
+    # what happened with 0.3.2: build succeeded, the warning was one DarkGray line,
+    # and the mistake was found when the owner installed it ([09 § ৩ন]).
     #
-    #   এই প্রোডাক্টের ঠিকানা একটাই, তাই ডিফল্টই ঠিক আচরণ। ব্যতিক্রম
-    #   চাইলে সেটা এখন **স্পষ্ট করে** চাইতে হয় — `-NoServerUrl`।
-    #   ⭐ ১৩ আগস্ট: `oxeio.office.local` → `hub.oxeio.com` (ADR-026)।
-    #   এখন এটাই আসল ঠিকানা — VPS, Let's Encrypt-এর সার্ট, পাবলিক DNS।
+    # This product has a single address, so the default is the right behaviour. An
+    # exception must now be requested explicitly with `-NoServerUrl`.
+    # 13 Aug: `oxeio.office.local` -> `hub.oxeio.com` (ADR-026). This is now the real
+    # address: VPS, Let's Encrypt certificate, public DNS.
     [string]$ServerUrl = 'https://hub.oxeio.com',
 
-    # ⚠️ ঠিকানা ছাড়া MSI — শুধু তখনই, যখন একাধিক অফিসে আলাদা ঠিকানায়
-    #   `msiexec /qn SERVERURL=...` দিয়ে বসানো হবে।
+    # Careful: an MSI without an address, only for when several offices will install
+    # with `msiexec /qn SERVERURL=...` and different addresses.
     [switch]$NoServerUrl,
 
-    # ⭐ ADR-014 — নিজে সই করা সার্টের thumbprint (make-code-cert.ps1 ছাপে)।
-    #   না দিলে বিল্ড আগের মতোই চলে, কোনো ভুল ছাড়া — নইলে ডেভ মেশিনে
-    #   বিল্ড করাই আটকে যেত।
+    # ADR-014: thumbprint of the self-made signing certificate (make-code-cert.ps1
+    # prints it). Without it the build runs as before, with no error; otherwise
+    # building on a dev machine would be blocked.
     [string]$SignWith,
 
     # The owner's public key for signed updates — a .pem file or its base64
@@ -72,7 +72,7 @@ param(
     # can turn the preview back on. The MSI name ends in -nopreview.
     [switch]$HideLatestShot,
 
-    # ⚠️ টাইমস্ট্যাম্প ছাড়া সই করা। **সাধারণত দেবেন না** — কারণ নিচে।
+    # Sign without a timestamp. **Do not normally pass this**; see below for why.
     [switch]$NoTimestamp,
 
     [string]$TimestampUrl = 'http://timestamp.digicert.com',
@@ -87,11 +87,11 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $agentRoot = Split-Path -Parent $here
 $publishDir = Join-Path $here 'obj\publish'
 $outDir = Join-Path $here 'bin'
-# ⚠️ ফাইলের নামেই ভার্সন — নিচে $msi বসে ভার্সন ঠিক হওয়ার পর
+# Careful: the version is in the file name; $msi is set below, once the version is known
 
-# ── ভার্সন — একমাত্র উৎস Directory.Build.props ───────────────────────────────
-# ⚠️ হাতে -Version দিলে সেটাই জেতে (হটফিক্স বিল্ডের জন্য), কিন্তু তখন
-#    assembly-র ভার্সন আর MSI-র ভার্সন আলাদা হয়ে যাবে — নিচে সতর্ক করা হয়।
+# ── Version: single source is Directory.Build.props ──────────────────────────
+# Careful: an explicit -Version wins (for hotfix builds), but then the assembly's
+#    version and the MSI's version differ; a warning is shown below.
 $propsPath = Join-Path $agentRoot 'Directory.Build.props'
 $propsVersion = ([xml](Get-Content $propsPath)).Project.PropertyGroup.Version
 
@@ -111,15 +111,15 @@ MSI বসবে $Version দিয়ে, কিন্তু এজেন্ট
 }
 
 <#
-  ⭐⭐ ফাইলের নামেই ভার্সন — `oXeioAgent-0.3.0.msi`।
+  The version is in the file name: `oXeioAgent-0.3.0.msi`.
 
-  ⚠️⚠️ আগে নাম ছিল স্থির `oXeioAgent.msi`, আর ১২ আগস্ট ঠিক সেটাই কামড়ে
-  দিয়েছে: একই দিনে **তিনটে আলাদা বাইনারি** বেরিয়ে গেছে একই নামে ও একই
-  ভার্সনে (০৯:৪৮ · ১৫:৫৩ · ১৬:৪৩)। মালিক পুরোনোটা চালিয়ে ভাবছিলেন নতুন
-  ফিচারটা আসেইনি, আর কোনটা কোনটা বলার কোনো উপায় ছিল না।
+  Careful: the name used to be the fixed `oXeioAgent.msi`, and on 12 August exactly
+  that bit us: three different binaries went out the same day under the same name
+  and version (09:48, 15:53, 16:43). The owner ran the old one and thought the new
+  feature had not arrived, and there was no way to tell which was which.
 
-  ⭐ এখন প্রতিটা বিল্ড `bin/`-এ আলাদা ফাইল হয়ে থাকে, তাই পাশাপাশি রাখা
-  যায় আর ভুল ফাইল বিলি হওয়ার সুযোগ থাকে না।
+  Now every build stays as a separate file in `bin/`, so they can sit side by side
+  and the wrong file cannot be handed out by mistake.
 #>
 # ⚠️ the variant is in the name too — same version, different behaviour
 $variant = if ($HideLatestShot) { '-nopreview' } else { '' }
@@ -130,9 +130,9 @@ if ($HideLatestShot) {
     Write-Host '   last screenshot preview: hidden (-HideLatestShot)' -ForegroundColor DarkGray
 }
 
-# ⚠️ একই ভার্সন আবার বিল্ড করা মানে দুটো আলাদা বাইনারি এক নামে — ঠিক যে
-#    ভুলটা এই নামকরণটা ঠেকাতে এসেছে। থামানো হয় না (ডেভে বারবার বিল্ড
-#    করতেই হয়), কিন্তু চোখে পড়ার মতো করে বলা হয়।
+# Careful: building the same version again means two different binaries under one
+#    name, exactly the mistake this naming scheme exists to prevent. It does not stop
+#    (dev needs to rebuild repeatedly), but says so in a way that is hard to miss.
 if (Test-Path $msi) {
     Write-Warning @"
 $Version আগে থেকেই আছে — ঢেকে দেওয়া হচ্ছে।
@@ -142,40 +142,42 @@ $Version আগে থেকেই আছে — ঢেকে দেওয়া
 "@
 }
 
-# ⚠️ -NoServerUrl জেতে — সুইচটার পুরো উদ্দেশ্যই ডিফল্ট ঠিকানাটা ফেলে দেওয়া
+# Careful: -NoServerUrl wins; the whole point of the switch is to drop the default address
 if ($NoServerUrl) { $ServerUrl = '' }
 
 if ($ServerUrl) {
-    # ⚠️ আকৃতিটা এখানেই যাচাই — ভুল ঠিকানা MSI-তে বেক হয়ে গেলে সেটা ধরা
-    #    পড়ত ১৫টা PC-তে বসানোর পর, "সার্ভারে পৌঁছাচ্ছে না" দিয়ে।
+    # Careful: the shape is checked right here. A wrong address baked into the MSI
+    #    would only be noticed after installing on 15 PCs, as "not reaching the server".
     if ($ServerUrl -notmatch '^https?://[^/\s]+/?$') {
         throw "ServerUrl-টা এরকম হওয়া উচিত: https://oxeio.office.local (পথ বা শেষে স্ল্যাশ ছাড়া) — পাওয়া গেল: $ServerUrl"
     }
     Write-Host "   server : $ServerUrl (MSI-তে বেক করা — ডাবল-ক্লিকেই ইনস্টল হবে)" -ForegroundColor DarkGray
 } else {
-    # ⚠️ DarkGray নয় — এই MSI ডাবল-ক্লিকে **চলবে না**, আর ঠিক এই এক লাইন
-    #    চোখ এড়িয়ে যাওয়াতেই ০.৩.২ ভুলভাবে বেরিয়েছিল।
+    # Careful: not DarkGray. This MSI will NOT work on double-click, and 0.3.2 came
+    #    out wrong precisely because this one line was easy to miss.
     Write-Host "   server : ⚠️ বেক করা হয়নি (-NoServerUrl) — ডাবল-ক্লিকে ইনস্টল হবে না," -ForegroundColor Yellow
     Write-Host "            msiexec-এ SERVERURL= দিতে হবে" -ForegroundColor Yellow
 }
 
 Write-Host '── ১· publish ────────────────────────────────' -ForegroundColor Cyan
 
-# ⚠️⚠️ চলন্ত এজেন্ট obj\publish-এর DLL-গুলো **লক করে রাখে**, আর তখন নিচের
-#    Remove-Item "Access denied" দিয়ে থামে। বার্তাটা Accessibility.dll নিয়ে,
-#    তাই আসল কারণটা ("তুমি নিজেই ওটা চালাচ্ছ") কোথাও লেখা থাকে না।
+# Careful: a running agent LOCKS the DLLs in obj\publish, and then the Remove-Item
+#    below stops with "Access denied". The message names Accessibility.dll, so the real
+#    cause ("you are running it yourself") is written nowhere.
 #
-# ⚠️ এটা নিছক অসুবিধা নয় — বিল্ড থেমে গেলেও bin/-এ **আগের** MSI পড়ে থাকে,
-#    আর obj\publish-এ **আগের** exe। ১২ আগস্ট রাতে ঠিক এই ফাঁদে পড়ে দুবার
-#    পুরোনো বাইনারি মেপে "ফিক্স কাজ করছে" ভাবা হয়েছিল।
-# ⚠️ শর্তটা "oXeio চলছে" নয়, "**obj\publish থেকে** চলছে"। ইনস্টল করা এজেন্ট
-#    (Program Files) বা পরীক্ষার আলাদা কপি এই ফোল্ডারের কিছুই লক করে না —
-#    ওগুলোতেও থামালে বিল্ড করতে হলে প্রতিবার নিজের ইনস্টলেশন বন্ধ করতে হতো।
+# Careful: this is not just an inconvenience. Even when the build stops, the PREVIOUS
+#    MSI stays in bin/ and the PREVIOUS exe in obj\publish. On the night of 12 August
+#    exactly this trap led to measuring the old binary twice and concluding "the fix
+#    works".
+# Careful: the condition is not "oXeio is running" but "running from **obj\publish**".
+#    The installed agent (Program Files) or a separate test copy locks nothing in this
+#    folder; stopping for those too would force closing your own installation on every
+#    build.
 $locking = @(
     Get-Process -Name 'oXeio.Agent', 'oXeio.Watchdog' -ErrorAction SilentlyContinue |
         Where-Object {
-            # ⚠️ Path পড়তে গিয়ে ছুড়তে পারে (অন্য ইউজারের প্রসেস) — তখন
-            #    ধরে নেওয়া হয় এটা আমাদের ফোল্ডারের নয়, নইলে বিল্ড অকারণে আটকাত
+            # Careful: reading Path can throw (another user's process); then assume
+            #    it is not from our folder, otherwise the build would be blocked for nothing
             $p = try { $_.Path } catch { $null }
             $p -and $p.StartsWith($publishDir, [StringComparison]::OrdinalIgnoreCase)
         }
@@ -193,10 +195,10 @@ publish ফোল্ডারের ফাইল লক করা, তাই ব
 }
 
 # ══════════════════════════════════════════════════════════════════════════
-#  সই করা (ADR-014)
+#  Signing (ADR-014)
 #
-#  ⚠️⚠️ সার্টটা **আগে** খুঁজে নেওয়া হয়, publish শুরুর আগেই। thumbprint ভুল
-#     হলে সেটা এখনই জানা দরকার — নইলে ৬২ MB বিল্ড শেষ করে তবে ভুল ধরা পড়ত।
+#  Careful: the certificate is looked up FIRST, before publish starts. If the
+#     thumbprint is wrong we need to know now, not after a 62 MB build finishes.
 # ══════════════════════════════════════════════════════════════════════════
 $signCert = $null
 if ($SignWith) {
@@ -236,7 +238,7 @@ else {
 
 <#
 .SYNOPSIS
-    একটা ফাইলে Authenticode সই বসায় আর ফল যাচাই করে।
+    Applies an Authenticode signature to one file and verifies the result.
 #>
 function Invoke-Sign {
     param([Parameter(Mandatory)][string]$Path)
@@ -245,28 +247,29 @@ function Invoke-Sign {
 
     $args = @{ FilePath = $Path; Certificate = $signCert; HashAlgorithm = 'SHA256' }
 
-    # ⚠️⚠️ টাইমস্ট্যাম্প **থাকা চাই**। ছাড়া সই করলে সার্টের মেয়াদ শেষ হওয়ার
-    #    দিন আগের সব বিল্ডের সই একসাথে অচল হয়ে যায় — অর্থাৎ ৫ বছর পর
-    #    পুরোনো MSI দিয়ে কোনো মেশিন আর ঠিক করা যেত না। টাইমস্ট্যাম্প থাকলে
-    #    "সই করার সময় সার্টটা বৈধ ছিল" — সেটাই যথেষ্ট, চিরকাল।
+    # Careful: a timestamp is REQUIRED. Without one, every earlier build's signature
+    #    becomes invalid on the day the certificate expires, so in 5 years no machine
+    #    could be repaired with an old MSI. With a timestamp, "the certificate was valid
+    #    when it was signed" is enough, forever.
     if (-not $NoTimestamp) { $args.TimestampServer = $TimestampUrl }
 
     $result = Set-AuthenticodeSignature @args
     $name = Split-Path $Path -Leaf
 
-    # ⚠️⚠️ **`Status` মানে "এই মেশিন সইটা যাচাই করতে পারল কি না", "সই বসেছে
-    #    কি না" নয়** — আর এই দুটো self-signed সার্টে আলাদা।
+    # Careful: **`Status` means "could this machine verify the signature", NOT "was a
+    #    signature applied"**, and the two differ for a self-signed certificate.
     #
-    #    বিল্ড-মেশিন নিজের সার্টটা Trusted Root-এ না বসালে Windows বলে
-    #    `UnknownError` — "chain terminated in a root certificate which is
-    #    not trusted"। অথচ ফাইলে সই **বসে গেছে**, টাইমস্ট্যাম্পও হয়েছে, আর
-    #    যে PC-গুলোতে trust-publisher.ps1 চলেছে সেখানে সেটা পুরোপুরি বৈধ।
+    #    If the build machine has not put its own certificate in Trusted Root, Windows
+    #    says `UnknownError` ("chain terminated in a root certificate which is not
+    #    trusted"). Yet the signature WAS applied, the timestamp too, and on the PCs
+    #    where trust-publisher.ps1 has run it is fully valid.
     #
-    #    ⚠️ প্রথমে এখানে `Status -ne 'Valid'` হলেই throw করা ছিল, আর তাতে
-    #    সার্ট বানানোর পরেই বিল্ড আটকে যেত — সই করা **অসম্ভব** হয়ে যেত,
-    #    অথচ আসল সমস্যা কিছুই ছিল না। (মাপতে গিয়ে ধরা পড়েছে, ১২ আগস্ট।)
+    #    Careful: at first this threw whenever `Status -ne 'Valid'`, so right after
+    #    creating the certificate the build stopped and signing became IMPOSSIBLE, with
+    #    no real problem. (Found while measuring, 12 August.)
     #
-    #    তাই আসল প্রশ্নটা করা হয়: **আমাদের সার্ট দিয়ে সই বসেছে তো?**
+    #    So the real question is asked: **was the signature applied with OUR
+    #    certificate?**
     $signed = Get-AuthenticodeSignature $Path
     $mine = $signed.SignerCertificate -and
             $signed.SignerCertificate.Thumbprint -eq $signCert.Thumbprint
@@ -280,8 +283,8 @@ function Invoke-Sign {
         throw "সই ব্যর্থ ($name): $($result.Status) — $($result.StatusMessage)$hint"
     }
 
-    # ⚠️ টাইমস্ট্যাম্প চাওয়া হয়েছিল অথচ বসেনি — এটা নীরবে যেতে দেওয়া যাবে না।
-    #    সার্টের মেয়াদ শেষ হলে তখন সব পুরোনো বিল্ডের সই একসাথে অচল হতো।
+    # Careful: a timestamp was requested but not applied; this must not pass silently.
+    #    When the certificate expired, all the old builds' signatures would go invalid at once.
     if (-not $NoTimestamp -and -not $signed.TimeStamperCertificate) {
         throw "সই হয়েছে কিন্তু টাইমস্ট্যাম্প বসেনি ($name) — $TimestampUrl-এ পৌঁছানো যায়নি।"
     }
@@ -296,8 +299,8 @@ New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
 
 foreach ($project in 'oXeio.Agent', 'oXeio.Watchdog') {
     Write-Host "   $project"
-    # ⚠️ DebugType=none — নইলে libSkiaSharp.pdb একাই ৮৬ MB যোগ করে।
-    #    ডিবাগ সিম্বল স্টাফের PC-তে যাওয়ার কোনো কারণ নেই।
+    # Careful: DebugType=none, otherwise libSkiaSharp.pdb alone adds 86 MB.
+    #    There is no reason for debug symbols to reach the staff PCs.
     & dotnet publish (Join-Path $agentRoot "src\$project") `
         -c $Configuration -r $Runtime --self-contained true `
         -p:DebugType=none -p:DebugSymbols=false `
@@ -312,12 +315,12 @@ $size = [math]::Round((Get-ChildItem $publishDir -Recurse | Measure-Object Lengt
 $count = (Get-ChildItem $publishDir -Recurse -File).Count
 Write-Host "   $count ফাইল · $size MB"
 
-# ⚠️⚠️ exe-তে সই **wix build-এর আগে**, ইচ্ছাকৃতভাবে। পরে করলে MSI-র ভেতরে
-#    সই-ছাড়া কপিটাই বসে থাকত, আর ইনস্টলের পর ডিস্কে যেত সই-ছাড়া exe —
-#    অথচ MSI-তে সই দেখে মনে হতো সব ঠিক আছে।
+# Careful: the exes are signed BEFORE wix build, on purpose. Signed afterwards, the MSI
+#    would contain the unsigned copy and the unsigned exe would land on disk after install,
+#    while the MSI's signature made everything look fine.
 #
-# ⭐ ADR-014: AV মোড়কের চেয়ে ভেতরের oXeio.Agent.exe-কেই বেশি সন্দেহ করে,
-#    তাই দুটো exe-তেই সই দরকার — শুধু MSI-তে নয়।
+# ADR-014: AV is more suspicious of the inner oXeio.Agent.exe than of the wrapper,
+#    so both exes need a signature, not only the MSI.
 foreach ($exe in 'oXeio.Agent.exe', 'oXeio.Watchdog.exe') {
     Invoke-Sign (Join-Path $publishDir $exe)
 }
@@ -326,12 +329,12 @@ Write-Host '── ২· wix build ───────────────
 
 New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 
-# ⚠️⚠️ -bindpath — Package.wxs-এ `oxeio.ico` **আপেক্ষিক** পথে লেখা। এটা ছাড়া
-#    wix ফাইলটা cwd থেকে খোঁজে, Package.wxs-এর পাশ থেকে নয় — তাই installer/
-#    বাদে অন্য কোনো ফোল্ডার থেকে বিল্ড করলে `Cannot find oxeio.ico` দিয়ে
-#    থামত। ঠিক এটাই ঘটেছে ১৮ আগস্ট (agent/ নয়, web/ cwd থেকে চালানো হয়েছিল),
-#    আর ডকের `powershell -File installer\build.ps1`-ও (agent/ cwd) একইভাবে
-#    ভাঙত। bindpath দিলে cwd যেখানেই হোক wix installer/-এ ফাইল খুঁজে পায়।
+# Careful: -bindpath. `oxeio.ico` is written as a RELATIVE path in Package.wxs. Without
+#    it wix looks for the file from the cwd, not next to Package.wxs, so building from any
+#    folder other than installer/ would stop with `Cannot find oxeio.ico`. Exactly this
+#    happened on 18 August (it was run from web/, not agent/), and the documented
+#    `powershell -File installer\build.ps1` (cwd agent/) would have broken the same way.
+#    With bindpath, wix finds the file in installer/ wherever the cwd is.
 # The update key as one line of base64 — a file path or the key itself
 $updateKeyLine = ''
 if ($UpdatePublicKey) {
@@ -355,8 +358,8 @@ if ($UpdatePublicKey) {
 
 if ($LASTEXITCODE -ne 0) { throw 'wix build ব্যর্থ' }
 
-# ⚠️ MSI-তে সই **wix build-এর পরে** — মোড়কটা তৈরি হওয়ার পর। এটাই সেই সই
-#    যেটা ডাবল-ক্লিকের UAC ডায়ালগে "Verified publisher" দেখায়।
+# Careful: the MSI is signed AFTER wix build, once the wrapper exists. This is the
+#    signature that shows "Verified publisher" in the double-click UAC dialog.
 Invoke-Sign $msi
 
 $msiName = Split-Path $msi -Leaf
@@ -364,16 +367,16 @@ $msiSize = [math]::Round((Get-Item $msi).Length / 1MB, 1)
 Write-Host ''
 Write-Host "✅ $msi · $msiSize MB" -ForegroundColor Green
 
-# ⭐ সই হয়েছে কি না সেটা **ফাইল থেকে পড়ে** বলা হয়, "আমরা সই করেছি" ধরে
-#    নিয়ে নয়। ঠিক এই ধরনের অনুমানেই ১২ আগস্ট তিনবার ভুল বিল্ড বেরিয়েছিল।
+# Whether it is signed is reported by READING THE FILE, not by assuming "we signed it".
+#    This kind of assumption is what let three wrong builds out on 12 August.
 $sig = Get-AuthenticodeSignature $msi
 if ($sig.SignerCertificate) {
     $stamped = if ($sig.TimeStamperCertificate) { 'টাইমস্ট্যাম্প সহ' } else { '⚠️ টাইমস্ট্যাম্প ছাড়া' }
     Write-Host "   ✍ সই: $($sig.SignerCertificate.Subject) · $stamped" -ForegroundColor Green
 
-    # ⚠️ এই মেশিন সইটা যাচাই করতে পারেনি — প্রায় সবসময়ই এর মানে বিল্ড-মেশিনে
-    #    নিজের সার্টটা Trusted Root-এ বসানো নেই। MSI-তে দোষ নেই; স্টাফের
-    #    PC-তে (যেখানে trust-publisher.ps1 চলেছে) এটা বৈধই দেখাবে।
+    # Careful: this machine could not verify the signature. Almost always it means the
+    #    build machine has not put its own certificate in Trusted Root. The MSI is fine;
+    #    on a staff PC (where trust-publisher.ps1 has run) it will show as valid.
     if ($script:LocalTrustWarning) {
         Write-Host ''
         Write-Host '   ⚠️ এই মেশিন সইটা যাচাই করতে পারছে না — সার্টটা এখানে' -ForegroundColor Yellow
@@ -396,7 +399,7 @@ if ($ServerUrl) {
     Write-Host "  msiexec /i $msiName /qn SERVERURL=`"https://oxeio.office.local`""
 }
 
-# ⭐ bin/-এ যা যা আছে — কোনটা নতুন, কোনটা পুরোনো, এক নজরে
+# Everything in bin/, so it is clear at a glance which build is new and which is old
 $all = Get-ChildItem $outDir -Filter 'oXeioAgent-*.msi' | Sort-Object LastWriteTime -Descending
 if ($all.Count -gt 1) {
     Write-Host ''

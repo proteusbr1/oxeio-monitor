@@ -20,9 +20,9 @@ export default tseslint.config(
       globals: { ...globals.node },
     },
     rules: {
-      // NestJS-এর DI কনস্ট্রাক্টরে খালি ক্লাস (মডিউল) স্বাভাবিক
+      // An empty class (module) in NestJS DI constructors is normal
       '@typescript-eslint/no-extraneous-class': 'off',
-      // ইচ্ছাকৃতভাবে ব্যবহার না করা প্যারামিটার `_` দিয়ে শুরু হলে ছাড়
+      // Intentionally unused parameters are exempt when they start with `_`
       '@typescript-eslint/no-unused-vars': [
         'error',
         {
@@ -35,8 +35,8 @@ export default tseslint.config(
   },
 
   {
-    // টেস্টে any/non-null assertion ব্যবহার করা স্বাভাবিক —
-    // supertest-এর body টাইপহীন, আর fixture-এ মান নিশ্চিত জানা থাকে
+    // any / non-null assertions are normal in tests: supertest's body is untyped,
+    // and fixtures have values that are known for sure
     files: ['test/**/*.ts'],
     rules: {
       '@typescript-eslint/no-unsafe-member-access': 'off',
@@ -47,31 +47,30 @@ export default tseslint.config(
 
   {
     /**
-     * ⭐⭐ G140 — স্পেক ফাইলে আসল ঘড়ি নিষিদ্ধ।
+     * G140: the real clock is forbidden in spec files.
      *
-     * ⚠️⚠️ তারিখ-নির্ভর টেস্ট এই রিপোতে **তিনবার** ভেঙেছে, তিনটে আলাদা
-     * ফাইলে (G62 · adjustments.e2e · agent-recovery.e2e)। প্রতিবারই সময়
-     * ইনজেক্ট করার ব্যবস্থা কোডে ছিল, শুধু টেস্ট সেটা ব্যবহার করেনি —
-     * অর্থাৎ ভুলটা মনে রাখার উপর দাঁড়িয়ে ছিল, আর তিনবার পরে সেটা আর
-     * দুর্ঘটনা নয়।
+     * Careful: date-dependent tests broke THREE times in this repo, in three different
+     * files (G62, adjustments.e2e, agent-recovery.e2e). Each time the code already had a
+     * way to inject time and the test just did not use it. The rule rested on someone
+     * remembering, and after three times that is no longer an accident.
      *
-     * ⭐ বদলে হারনেসের দুটো দরজা: `dhakaNoon()` (দুই সীমানা থেকেই ১২
-     * ঘণ্টা দূরে একটা ফিক্সচার-মুহূর্ত) আর `uniqueSuffix()` (অনন্য নামের
-     * জন্য, ঘড়ি ছাড়াই)।
+     * Use the harness's two doors instead: `dhakaNoon()` (a fixture moment 12 hours
+     * from both day boundaries) and `uniqueSuffix()` (for unique names, no clock).
      *
-     * ⚠️ `test/setup/**` ইচ্ছাকৃতভাবে ছাড়া — ওখানেই একমাত্র জায়গা যেখানে
-     * আসল ঘড়ি পড়া হয়, আর সেটাই হেল্পারগুলোর কাজ। ছাড়টা সরু রাখা হয়েছে
-     * বলেই নিয়মটা টেকে: চওড়া ছাড় মানে নিয়ম না থাকা।
+     * Careful: `test/setup/**` is deliberately exempt: it is the only place where the
+     * real clock is read, which is the helpers' job. The rule holds because the
+     * exemption is kept narrow: a wide exemption means no rule.
      */
     files: ['test/**/*.ts'],
     /**
-     * ⚠️ `test/setup/**` — হেল্পারগুলো নিজেই আসল ঘড়ি ছোঁয়, ওটাই তাদের কাজ।
+     * Careful: `test/setup/**`: the helpers touch the real clock themselves; that is
+     * their job.
      *
-     * ⚠️⚠️ `test/clock.spec.ts` — **নিয়মটার নিজের পাহারা**। ওই ফাইলের গোটা
-     *    দাবিটাই হলো "`dhakaNoon()` আসল ঘড়ির সাপেক্ষে ঠিক জায়গায় বসে",
-     *    আর সেটা প্রমাণ করতে আসল ঘড়ির সাথে **তুলনা করতেই হয়**। ছাড় না
-     *    দিলে দুটোর একটা হতো: হয় নিয়মটা suppress করে লেখা, নয়তো পাহারাটাই
-     *    না লেখা — আর দুটোই খারাপ।
+     * Careful: `test/clock.spec.ts` is the rule's own guard. The whole claim of that
+     *    file is "`dhakaNoon()` lands in the right place relative to the real clock",
+     *    and proving it requires comparing against the real clock. Without the
+     *    exemption one of two things would happen: the rule suppressed inline, or the
+     *    guard never written, and both are bad.
      */
     ignores: ['test/setup/**', 'test/clock.spec.ts'],
     rules: {

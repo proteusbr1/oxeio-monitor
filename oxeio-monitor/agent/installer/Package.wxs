@@ -1,24 +1,24 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
-  oXeio এজেন্টের MSI (H03)।
+  MSI for the oXeio agent (H03).
 
-  সাইলেন্ট ইনস্টল — ১৫টা PC-তে একে একে হাতে ক্লিক করার প্রশ্নই ওঠে না:
+  Silent install: clicking through 15 PCs one by one is out of the question:
 
     msiexec /i oXeioAgent-0.3.0.msi /qn SERVERURL="https://oxeio.office.local" ^
             ENROLLCODE="OXEIO-XXXXXXXX"
 
-  আনইনস্টল:
+  Uninstall:
 
     msiexec /x oXeioAgent-0.3.0.msi /qn
 
-  ⚠️ আনইনস্টলে %ProgramData%\oXeio **মুছে ফেলা হয় না**। ওখানে এমন ডেটা
-     থাকতে পারে যা এখনো সার্ভারে যায়নি — এজেন্ট সরানোর মানে কারো গত
-     সপ্তাহের ঘণ্টা মুছে ফেলা নয়। ফোল্ডারটা হাতে মুছতে হবে, জেনেবুঝে।
+  Careful: uninstalling does NOT delete %ProgramData%\oXeio. It may hold data that
+  has not reached the server yet; removing the agent must not mean deleting
+  someone's hours from last week. Delete the folder by hand, knowingly.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
 
-  <!-- ⚠️ Codepage 65001 (UTF-8) না দিলে নিচের বাংলা বার্তাগুলো MSI-র ডিফল্ট
-       1252 কোডপেজে ধরে না আর বিল্ডই থেমে যায় (WIX0311)। -->
+  <!-- Careful: without Codepage 65001 (UTF-8), the Bengali messages below do not fit
+       the MSI default codepage 1252 and the build stops (WIX0311). -->
   <Package
       Name="oXeio Agent"
       Manufacturer="oXeio"
@@ -30,8 +30,8 @@
 
       Codepage="65001">
 
-    <!-- একই ভার্সন বা পুরোনো ভার্সন দিয়ে ঢেকে দেওয়া আটকানো। নইলে rollout
-         স্ক্রিপ্ট ভুল করে পুরোনো MSI চালালে ফ্লিটের কিছু PC পিছিয়ে যেত। -->
+    <!-- Block upgrades by the same or an older version. Otherwise a rollout script
+         that mistakenly ran an old MSI would leave some PCs in the fleet behind. -->
     <MajorUpgrade
         AllowSameVersionUpgrades="yes"
         DowngradeErrorMessage="oXeio Agent-এর নতুন ভার্সন ইতিমধ্যেই বসানো আছে।" />
@@ -39,34 +39,33 @@
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <!--
-      ⭐ "Add or remove programs"-এর তালিকায় ব্র্যান্ড আইকন।
+      Brand icon in the "Add or remove programs" list.
 
-      ⚠️ আগে কিছুই বসানো ছিল না, তাই Windows ওখানে একটা সাদা ফাঁকা কাগজ
-         দেখাত — ১৫টা PC-র মালিক তালিকায় খুঁজে পেতেন নাম দিয়ে, চেহারা
-         দিয়ে নয়।
+      Nothing was set before, so Windows showed a blank white page there. The owner of
+      the 15 PCs could only find the entry by name, not by look.
 
-      ⚠️⚠️ `Icon` উপাদানের `Id`-তে **`.ico` এক্সটেনশন থাকতেই হবে**, নইলে
-         Windows Installer ফাইলটাকে আইকন হিসেবে চেনে না — নীরবে ফাঁকা
-         দেখায়, কোনো বিল্ড এরর ছাড়াই।
+      Careful: the `Id` of the `Icon` element MUST have the `.ico` extension, otherwise
+      Windows Installer does not recognise the file as an icon and silently shows a
+      blank one, with no build error.
     -->
     <Icon Id="oxeio.ico" SourceFile="oxeio.ico" />
     <Property Id="ARPPRODUCTICON" Value="oxeio.ico" />
 
-    <!-- ── ইনস্টলের সময় দেওয়া মান ─────────────────────────────────────────
-         ⚠️ Secure="yes" না দিলে elevated অংশে মানগুলো পৌঁছাত না — সাইলেন্ট
-            ইনস্টলে নীরবে ফাঁকা রেজিস্ট্রি লেখা হতো, আর এজেন্ট "কনফিগার করা
-            হয়নি" বলে বসে থাকত। -->
+    <!-- ── Values passed at install time ─────────────────────────────────────
+         Careful: without Secure="yes" the values would not reach the elevated part.
+            A silent install would write empty registry values, and the agent would
+            sit there saying "not configured". -->
     <!--
-      ⭐⭐ <b>সার্ভারের ঠিকানাটা বিল্ডের সময়ই MSI-তে বসিয়ে দেওয়া যায়</b>
-      (`build.ps1 -ServerUrl https://oxeio.office.local`)। তখন
-      **ডাবল-ক্লিকেই ইনস্টল হয়** — কমান্ড লাইন লাগে না।
+      <b>The server address can be baked into the MSI at build time</b>
+      (`build.ps1 -ServerUrl https://oxeio.office.local`). Then it
+      **installs on a double-click**, no command line needed.
 
-      ⚠️ কেন এটা দরকার হলো: অফিসের ১৫টা PC-তে ইনস্টল করতে গিয়ে প্রতিবার
-      একটা লম্বা `msiexec` কমান্ড টাইপ করা মানে একটা টাইপো = একটা অচল
-      মেশিন, আর ভুলটা ধরা পড়ত সপ্তাহখানেক পরে "ওর ডেটা আসছে না" দিয়ে।
+      Why this was needed: installing on the office's 15 PCs meant typing a long
+      `msiexec` command each time, so one typo = one dead machine, and the mistake
+      showed up a week later as "its data is not coming in".
 
-      ⚠️ কমান্ড লাইনে `SERVERURL=` দিলে সেটাই জেতে (Property-র Value শুধু
-      ডিফল্ট) — তাই স্ক্রিপ্টেড রোলআউটের পথটা অক্ষত।
+      Careful: `SERVERURL=` on the command line wins (the Property's Value is only a
+      default), so the scripted rollout path is intact.
     -->
 <?if $(var.ServerUrlDefault) = "" ?>
     <Property Id="SERVERURL" Secure="yes" />
@@ -75,23 +74,24 @@
 <?endif?>
 
     <!--
-      ⚠️ ENROLLCODE-এর কোনো ডিফল্ট **নেই, আর থাকা উচিতও নয়**। কোড
-      একবার-ব্যবহার্য; MSI-তে বেক করলে দ্বিতীয় PC-তে সেটা এমনিতেই অচল
-      হয়ে যেত। কোড ছাড়া ইনস্টল করলে এজেন্ট নিজেই স্টাফকে সাইন-ইন
-      জানালা দেখায় (`SignInForm`) — সেটাই এখন সাধারণ পথ।
+      Careful: ENROLLCODE has no default, and should not have one. The code is
+      single-use; baked into the MSI it would already be dead on the second PC.
+      Installing without a code makes the agent show the staff member the sign-in
+      window (`SignInForm`), which is now the normal path.
     -->
     <Property Id="ENROLLCODE" Secure="yes" />
     <Property Id="PORTALURL" Secure="yes" />
     <Property Id="POLICYURL" Secure="yes" />
 
     <!--
-      **I01** — সার্ভারের সার্টের SPKI হ্যাশ (base64), কমা দিয়ে ভাগ করা।
-      `deploy/make-cert.ps1` মানটা ছাপে।
+      **I01**: SPKI hash (base64) of the server certificate, comma-separated.
+      `deploy/make-cert.ps1` prints the value.
 
-      ⚠️ একাধিক পিন দেওয়া যায়, আর নবায়নের দিন দিতেই হবে — পুরোনো ও নতুন
-         দুটোই কিছুক্ষণ বৈধ না থাকলে সার্ট বদলানোর মুহূর্তে ফ্লিট সংযোগ
-         হারাত (deploy/README § ৭.১)।
-      ⚠️ না দিলে পিনিং বন্ধ থাকে, আর এজেন্ট লগে সেটা স্পষ্ট করে বলে।
+      Careful: several pins can be given, and on renewal day you must give them. If
+      the old and the new one are not both valid for a while, the fleet loses its
+      connection the moment the certificate is replaced (deploy/README § 7.1).
+      Careful: if none is given, pinning is off, and the agent says so clearly in its
+      log.
     -->
     <Property Id="SERVERPIN" Secure="yes" />
 
@@ -110,39 +110,39 @@
     <Property Id="UPDATEKEY" Secure="yes" Value="$(var.UpdateKeyDefault)" />
 <?endif?>
 
-    <!-- সার্ভারের ঠিকানা ছাড়া ইনস্টল করার কোনো মানে নেই — এজেন্ট বসত,
-         চলত, আর কিছুই পাঠাত না। শুরুতেই থামিয়ে দেওয়া ভালো। -->
+    <!-- Installing without a server address makes no sense: the agent would be
+         installed, run, and send nothing. Better to stop right at the start. -->
     <!--
-      ⚠️ `Installed OR` বাদ দেওয়া যাবে না।
+      Careful: `Installed OR` must not be removed.
 
-      মেজর আপগ্রেডে MSI **দুটো** সেশন চালায় — নতুনটা বসানো, আর পুরোনোটা
-      `REMOVE=ALL` দিয়ে সরানো। দ্বিতীয় সেশনে SERVERURL থাকার কথাই নয়,
-      তাই শর্তটা ওখানে ব্যর্থ হয়ে **পুরো লেনদেন** ১৬০৩ দিয়ে ফেলে দিত।
-      একই কারণে সাধারণ `msiexec /x`-ও আটকে যেত — অর্থাৎ প্রোডাক্টটা
-      কোনোদিন আনইনস্টলই করা যেত না।
+      On a major upgrade MSI runs TWO sessions: installing the new one, and removing the
+      old one with `REMOVE=ALL`. The second session has no SERVERURL, so the condition
+      would fail there and abort the whole transaction with 1603. For the same reason a
+      plain `msiexec /x` would also be blocked, so the product could never be uninstalled.
 
-      আসল মেশিনে আপগ্রেড করতে গিয়ে ধরা পড়েছে ([G58](../../../docs/08-Gap-Analysis.md))।
+      Found while upgrading on a real machine ([G58](../../../docs/08-Gap-Analysis.md)).
     -->
     <Launch
         Condition="Installed OR SERVERURL"
         Message="This MSI was built without a server address. Install it with: msiexec /i oXeioAgent-&lt;version&gt;.msi /qn SERVERURL=&quot;https://oxeio.office.local&quot; — or rebuild it with build.ps1 -ServerUrl &quot;https://oxeio.office.local&quot; so it installs on a double-click." />
 
-    <!-- Windows 10 1809 (build 17763) — এজেন্টের সর্বনিম্ন লক্ষ্য -->
+    <!-- Windows 10 1809 (build 17763): the agent's minimum target -->
     <Launch
         Condition="Installed OR (VersionNT &gt;= 603)"
         Message="oXeio Agent-এর জন্য Windows 10 বা নতুন সংস্করণ দরকার।" />
 
-    <!-- ── ফাইল ও ফোল্ডার ─────────────────────────────────────────────── -->
+    <!-- ── Files and folders ─────────────────────────────────────────────── -->
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="oXeio" />
     </StandardDirectory>
 
-    <!-- ── কনফিগ রেজিস্ট্রিতে, ফাইলে নয় ────────────────────────────────────
-         কারণ: আনইনস্টলে Windows নিজেই মুছে দেয়, আর ফাইলের ACL নিয়ে ভাবতে
-         হয় না। এখানে গোপন কিছু নেই — ডিভাইস টোকেন DPAPI দিয়ে আলাদা ফাইলে।
-         ⚠️ enrollment কোডটা একবার-ব্যবহার্য, তাই enroll হয়ে যাওয়ার পর ওটা
-            পড়ে থাকলেও কাজে লাগে না। -->
+    <!-- ── Configuration lives in the registry, not in a file ───────────────
+         Because Windows removes it itself on uninstall, and there are no file ACLs to
+         worry about. Nothing secret is here: the device token is in a separate file
+         protected with DPAPI.
+         Careful: the enrollment code is single-use, so once enrolled it is useless
+            even if it stays behind. -->
     <ComponentGroup Id="Configuration" Directory="INSTALLFOLDER">
       <Component Id="SettingsRegistry" Guid="3D9B6C12-8E44-4FA0-9035-5C7E9B4DAF86">
         <RegistryKey Root="HKLM" Key="SOFTWARE\oXeio\Agent" ForceDeleteOnUninstall="yes">
@@ -157,13 +157,15 @@
       </Component>
     </ComponentGroup>
 
-    <!-- ── .NET রানটাইম ও নেটিভ লাইব্রেরি ──────────────────────────────────
-         দুটো exe self-contained, তাই সাথে ~২৬৭টা ফাইল যায় (রানটাইম,
-         SkiaSharp-এর নেটিভ DLL, WinForms)। হাতে তালিকা লেখা অসম্ভব — একটা
-         DLL বাদ পড়লে এজেন্ট চালুই হতো না, আর ভুলটা ধরা পড়ত স্টাফের PC-তে।
+    <!-- ── .NET runtime and native libraries ────────────────────────────────
+         Both exes are self-contained, so ~267 files go with them (runtime,
+         SkiaSharp's native DLL, WinForms). Writing the list by hand is impossible: if
+         one DLL were missed the agent would not start, and the mistake would only show
+         up on a staff PC.
 
-         ⚠️ দুটো exe-ও এখানেই আসে। কাস্টম অ্যাকশনগুলো সেগুলোকে FileRef দিয়ে নয়,
-         [INSTALLFOLDER] ধরে পথ দিয়ে ডাকে — নইলে একই ফাইল দুবার ঘোষণা করতে হতো। -->
+         Careful: both exes come in here too. The custom actions call them by path via
+         [INSTALLFOLDER], not by FileRef; otherwise the same file would be declared
+         twice. -->
     <ComponentGroup Id="RuntimeFiles" Directory="INSTALLFOLDER">
       <Files Include="$(var.PublishDir)\**" />
     </ComponentGroup>
@@ -173,18 +175,19 @@
       <ComponentGroupRef Id="RuntimeFiles" />
     </Feature>
 
-    <!-- ══ কাস্টম অ্যাকশন ════════════════════════════════════════════════ -->
+    <!-- ══ Custom actions ═══════════════════════════════════════════════════ -->
 
     <!--
-      ⭐ ডেটা ফোল্ডারটা **এজেন্ট নিজেই** বানায়।
+      The data folder is created by the agent itself.
 
-      ProgramData-র ডিফল্ট ACL-এ সাধারণ ইউজার শুধু নিজের বানানো ফাইল বদলাতে
-      পারে। ইনস্টলার (অ্যাডমিন) ফোল্ডারটা বানিয়ে রেখে গেলে স্টাফের অ্যাকাউন্টে
-      চলা এজেন্ট ওখানে SQLite কিউ লিখতেই পারত না — প্রতিটা INSERT-এ
-      SQLITE_READONLY, আর এজেন্ট চুপচাপ কিছুই জমাত না।
+      With ProgramData's default ACL, a normal user can only modify files they created
+      themselves. If the installer (running as admin) created the folder, the agent
+      running under the staff account could not write its SQLite queue there at all:
+      every INSERT would fail with SQLITE_READONLY and the agent would quietly store
+      nothing.
 
-      ACL-এর নিয়ম AgentDataDirectory.Ensure()-এ একবারই লেখা আছে। এখানে WiX-এ
-      আবার লিখলে দুটো সংজ্ঞা একদিন আলাদা হয়ে যেত।
+      The ACL rules are written once, in AgentDataDirectory.Ensure(). Writing them again
+      here in WiX would let the two definitions drift apart one day.
     -->
     <CustomAction Id="PrepareDataDir"
                   Directory="INSTALLFOLDER"
@@ -193,9 +196,9 @@
                   Impersonate="no"
                   Return="check" />
 
-    <!-- H02 — লগঅনে watchdog চালু। ⚠️ এজেন্ট নয়, watchdog — দুই জায়গা থেকে
-         এজেন্ট চালু হলে এক মেশিনে দুটো এজেন্ট চলত আর একই ঘণ্টা দুবার গোনা
-         হতো (Deployment/WatchdogTask.xml দেখুন)। -->
+    <!-- H02: start the watchdog at logon. Careful: the watchdog, not the agent. If the
+         agent were started from two places, one machine would run two agents and count
+         the same hours twice (see Deployment/WatchdogTask.xml). -->
     <CustomAction Id="InstallLogonTask"
                   Directory="INSTALLFOLDER"
                   ExeCommand="&quot;[INSTALLFOLDER]oXeio.Watchdog.exe&quot; --install-task"
@@ -211,32 +214,30 @@
                   Return="ignore" />
 
     <!--
-      ⭐⭐ ইনস্টল শেষে watchdog **চালু করা**।
+      Start the watchdog after install finishes.
 
-      ⚠️ এটা না থাকায় ০.৩.১ বসানোর পরেও কিছুই চলত না। টাস্কটা তৈরি হতো
-      ঠিকই, কিন্তু তার ট্রিগার **লগঅন** — তাই মালিক ডাবল-ক্লিক করে ইনস্টল
-      শেষ করার পর পরের লগঅন বা রিবুট পর্যন্ত কোনো জানালা আসত না, কোনো
-      ঘণ্টা গোনা হতো না। ইনস্টলার সফল বলত, অথচ কিছুই হতো না।
+      Careful: without this, nothing ran even after installing 0.3.1. The task was
+      created fine, but its trigger is logon, so after the owner finished a double-click
+      install no window appeared and no hours were counted until the next logon or
+      reboot. The installer said success while nothing happened.
 
-      ⚠️ `schtasks /Run` দিয়ে টাস্কটা চালানো যায় **না** — principal
-      Group=Users (H02, যাতে যে-ই লগইন করুক তার জন্য চলে)। Group টাস্কের
-      কোনো একক ইউজার নেই, তাই Task Scheduler on-demand চালাতে অস্বীকার
-      করে ("The system cannot find the file specified" — যাচাই করা হয়েছে)।
-      exe সরাসরি চালানোই একমাত্র পথ।
+      Careful: the task cannot be started with `schtasks /Run`. Its principal is
+      Group=Users (H02, so it runs for whoever logs in). A Group task has no single
+      user, so Task Scheduler refuses to run it on demand ("The system cannot find the
+      file specified", verified). Running the exe directly is the only way.
 
-      ⚠️ Execute="immediate" ইচ্ছাকৃত, deferred নয়। deferred অ্যাকশন
-      SYSTEM হিসেবে সেশন ০-তে চলে — সেখান থেকে চালালে সাইন-ইন জানালা কেউ
-      দেখতেই পেত না, আর স্ক্রিনও ধরা পড়ত না। immediate অ্যাকশন চলে msiexec-এর
-      client প্রসেসে, অর্থাৎ যিনি ইনস্টল করছেন তাঁর ডেস্কটপ সেশনে।
+      Careful: Execute="immediate" is deliberate, not deferred. Deferred actions run as
+      SYSTEM in session 0; started from there, nobody would see the sign-in window and
+      the screen could not be captured. Immediate actions run in msiexec's client
+      process, i.e. in the desktop session of whoever is installing.
 
-      ⚠️⚠️ Return="asyncNoWait" **বাদ দেওয়া যাবে না**। watchdog কোনোদিন
-      নিজে থেকে বেরোয় না, তাই check বা ignore দিলে ইনস্টলার তার শেষের
-      অপেক্ষায় চিরকাল ঝুলে থাকত।
+      Careful: Return="asyncNoWait" must NOT be removed. The watchdog never exits on its
+      own, so with check or ignore the installer would hang forever waiting for it.
 
-      ⚠️ অ্যাডমিন নিজের অ্যাকাউন্টে ইনস্টল করলে জানালাটা তাঁর সেশনে ওঠে,
-      স্টাফের নয়। ক্ষতি নেই — ProgramData-র ACL-এ Users = Modify আর
-      ObjectInherit আছে (AgentDataDirectory), তাই অ্যাডমিনের তৈরি ফাইলও
-      পরে স্টাফ লিখতে পারে; আর স্টাফের লগঅনে টাস্কটা এমনিতেই চালু হবে।
+      Careful: if an admin installs from their own account, the window opens in their
+      session, not the staff member's. No harm: ProgramData's ACL has Users = Modify and
+      ObjectInherit (AgentDataDirectory), so staff can later write files the admin
+      created, and the task starts at the staff member's logon anyway.
     -->
     <CustomAction Id="StartWatchdog"
                   Directory="INSTALLFOLDER"
@@ -245,8 +246,9 @@
                   Impersonate="yes"
                   Return="asyncNoWait" />
 
-    <!-- ⚠️ Return="ignore" — প্রসেস না চললে taskkill অশূন্য ফেরত দেয়, আর
-         সেটা এখানে স্বাভাবিক। check দিলে "চলছিল না" কারণেই আনইনস্টল ব্যর্থ হতো। -->
+    <!-- Careful: Return="ignore". When the process is not running, taskkill returns
+         non-zero, which is normal here. With check, uninstall would fail just because
+         "it was not running". -->
     <CustomAction Id="StopAgent"
                   Directory="INSTALLFOLDER"
                   ExeCommand="&quot;[System64Folder]taskkill.exe&quot; /IM oXeio.Agent.exe /F"
@@ -262,25 +264,25 @@
                   Return="ignore" />
 
     <InstallExecuteSequence>
-      <!-- আপগ্রেডেও দরকার: পুরোনো exe চলতে থাকলে ফাইল লক থাকে আর MSI
-           রিবুট চায়। ১৫টা PC-তে রিবুট চাওয়া মানে রোলআউট আটকে যাওয়া।
+      <!-- Needed on upgrades too: if the old exe keeps running, its files stay locked
+           and MSI asks for a reboot. Asking 15 PCs to reboot means the rollout stalls.
 
-           ⚠️ deferred অ্যাকশন **অবশ্যই** InstallInitialize আর InstallFinalize-এর
-           মাঝে বসাতে হয়। আগে এগুলো InstallValidate-এর আগে ছিল, যেটা
-           InstallInitialize-এরও আগে — MSI বিল্ডই থেমে যেত (ICE77)। -->
+           Careful: deferred actions MUST sit between InstallInitialize and
+           InstallFinalize. These used to be placed before InstallValidate, which comes
+           even before InstallInitialize, and the MSI build stopped (ICE77). -->
       <Custom Action="StopAgent" After="InstallInitialize" Condition="1" />
       <Custom Action="StopWatchdog" After="StopAgent" Condition="1" />
 
       <Custom Action="UninstallLogonTask" Before="RemoveFiles"
               Condition="REMOVE=&quot;ALL&quot;" />
 
-      <!-- ফাইল বসার পরে — না হলে ডাকার মতো exe-ই থাকত না -->
+      <!-- After the files are in place, otherwise there would be no exe to call -->
       <Custom Action="PrepareDataDir" After="InstallFiles" Condition="NOT Installed OR REINSTALL" />
       <Custom Action="InstallLogonTask" After="PrepareDataDir" Condition="NOT Installed OR REINSTALL" />
 
-      <!-- ⚠️ InstallFinalize-এর **পরে** — তার আগে ফাইলগুলো এখনো চূড়ান্ত
-           হয়নি, আর StopWatchdog-এর taskkill সবে-চালু প্রসেসটাকেই মেরে ফেলত।
-           আনইনস্টলে চলে না: তখন Installed সত্য, REINSTALL মিথ্যা। -->
+      <!-- Careful: AFTER InstallFinalize. Before it the files are not final yet, and
+           StopWatchdog's taskkill would kill the freshly started process.
+           Does not run on uninstall: then Installed is true and REINSTALL is false. -->
       <Custom Action="StartWatchdog" After="InstallFinalize"
               Condition="NOT Installed OR REINSTALL" />
     </InstallExecuteSequence>

@@ -1,18 +1,18 @@
 /* eslint-disable */
 /**
- * স্ক্রিনশট দেখানোর জন্য নমুনা ডেটা — **সাময়িক**।
+ * Sample data for taking screenshots: **temporary**.
  *
- * ⚠️ এটা seed নয়, আর কখনো প্রোডাকশনে চালানোর জিনিস নয়। উদ্দেশ্য একটাই:
- * খালি ড্যাশবোর্ডে থিম আর লেআউট বিচার করা যায় না, তাই কিছুক্ষণের জন্য
- * বাস্তবের মতো ডেটা বসানো।
+ * Careful: this is not a seed, and must never be run in production. It has one purpose:
+ * an empty dashboard cannot be judged for theme and layout, so for a while realistic
+ * data is put in.
  *
- * ⭐ **যা বসায় তার প্রতিটা সারির id একটা manifest ফাইলে লিখে রাখে**, আর
- * `--undo` দিলে ঠিক সেগুলোই মোছে। "আজকের সব ডেটা মুছে দাও" জাতীয় ঝাড়ু
- * চালানো হয় না — তাতে আসল ডেটাও চলে যেত, আর এই ডাটাবেসে ইতিমধ্যেই
- * আসল এজেন্টের পরীক্ষার ডেটা আছে।
+ * **It writes the id of every row it inserts into a manifest file**, and `--undo`
+ * deletes exactly those. No "delete all of today's data" sweep is run: that would
+ * remove real data too, and this database already holds real test data from the
+ * actual agent.
  *
- *   node scripts/sample-data.cjs          # বসাও
- *   node scripts/sample-data.cjs --undo   # ঠিক সেগুলোই মোছো
+ *   node scripts/sample-data.cjs          # insert
+ *   node scripts/sample-data.cjs --undo   # delete exactly those
  */
 
 const fs = require('node:fs');
@@ -25,13 +25,13 @@ const MANIFEST = path.join(__dirname, '.sample-data.json');
 const DHAKA_MS = 6 * 3600_000;
 const HOUR = 3600;
 
-/** `storageRoot()`-এর ডিফল্টের সাথে মিলিয়ে — STORAGE_ROOT সেট না থাকলে */
+/** Matches the default of `storageRoot()`, used when STORAGE_ROOT is not set */
 const STORAGE =
   process.env.STORAGE_ROOT ?? path.join(process.cwd(), '..', '.data', 'storage');
 
 const { SAMPLE_WEBP } = require('./sample-shot.cjs');
 
-/** ⚠️ বীজ দেওয়া PRNG — প্রতিবার একই ডেটা, নইলে দুটো স্ক্রিনশট মেলানো যেত না */
+/** Careful: seeded PRNG: the same data every time, otherwise two screenshots could not be compared */
 let seed = 20260811;
 const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
 
@@ -39,15 +39,15 @@ const workDateOf = (d) => {
   const s = new Date(d.getTime() + DHAKA_MS);
   return new Date(Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate()));
 };
-/** ঢাকার ওই তারিখে ওই ঘণ্টা, UTC instant হিসেবে */
+/** That hour on that date in Dhaka, as a UTC instant */
 const at = (workDate, hour, min = 0) =>
   new Date(workDate.getTime() - DHAKA_MS + hour * 3600_000 + min * 60_000);
 
-/** ⚠️ শুক্রবার সাপ্তাহিক ছুটি (policy.weeklyOffDay = 5) */
+/** Careful: Friday is the weekly day off (policy.weeklyOffDay = 5) */
 const isFriday = (workDate) => workDate.getUTCDay() === 5;
 
-// প্রতিটি কর্মীর চরিত্র — কেউ এগিয়ে, কেউ পিছিয়ে। সব একরকম হলে
-// রঙের তারতম্য দেখাই যেত না, আর হিটম্যাপ বিচার করা যেত না।
+// Each employee's character: some ahead, some behind. If all were alike the colour
+// variation could not be shown, and the heatmap could not be judged.
 const PROFILE = {
   'OX-01': { hours: 8.4, today: 6.4, state: 'active' },
   'OX-02': { hours: 7.6, today: 5.1, state: 'active' },
@@ -80,9 +80,9 @@ async function insert() {
     process.exit(1);
   }
 
-  // ⚠️ আগের কোনো রান মাঝপথে ভেঙে থাকলে তার সারি পড়ে থাকে, আর তখন
-  //    unique constraint-এ পরের রানও ভাঙে। `sample-` চিহ্ন ধরে সেগুলো
-  //    আগেই সরিয়ে নেওয়া হয় — শুধু নিজের বানানো, আসল কিছু নয়।
+  // Careful: if an earlier run broke halfway, its rows stay behind, and then the next
+  //    run also breaks on the unique constraint. Those are removed first by the
+  //    `sample-` marker: only our own, nothing real.
   const stale = await prisma.device.findMany({
     where: { machineGuid: { startsWith: "sample-" } },
     select: { id: true },
@@ -108,7 +108,7 @@ async function insert() {
   const now = new Date();
   const today = workDateOf(now);
 
-  // গত ১৪ দিন (আজসহ)
+  // The last 14 days (including today)
   const days = [];
   for (let i = 13; i >= 0; i--) {
     days.push(new Date(today.getTime() - i * 86_400_000));
@@ -117,9 +117,9 @@ async function insert() {
   for (const e of staff) {
     const p = PROFILE[e.empCode];
 
-    // ── ডিভাইস ─────────────────────────────────────────────────────────
-    // ⚠️ স্ট্যাটাসের বৈচিত্র্য আসে lastSeenAt থেকে: ৯০ সে.-এর বেশি চুপ →
-    //    offline, ১০ মি.-এর বেশি → agent_down (dashboard.math.ts)
+    // ── Device ─────────────────────────────────────────────────────
+    // Careful: the status variety comes from lastSeenAt: silent for over 90 s ->
+    //    offline, over 10 min -> agent_down (dashboard.math.ts)
     const seenAgo =
       p.state === 'agent_down' ? 42 * 60_000
       : p.state === 'offline' ? 6 * 60_000
@@ -142,7 +142,7 @@ async function insert() {
     });
     made.devices.push(device.id);
 
-    // ── প্রতিদিন ────────────────────────────────────────────────────────
+    // ── Each day ───────────────────────────────────────────────────
     for (const day of days) {
       if (isFriday(day)) continue;
 
@@ -151,9 +151,9 @@ async function insert() {
       if (target < 0.2) continue;
 
       const workedSec = Math.round(target * HOUR);
-      // ⚠️ আজকের কাজ **অতীতে** হতে হবে। ভোরে চালালে "৯টায় শুরু" মানে
-      //    ভবিষ্যতের সেগমেন্ট — টাইমলাইনে সেটা অদ্ভুত দেখাত, আর স্ক্রিনশটের
-      //    স্লটও ভবিষ্যতে পড়ে বলে একটাও ছবি বসত না।
+      // Careful: today's work must be in the PAST. Run early in the morning, "starts at 9"
+      //    would be a future segment: odd on the timeline, and the screenshot slots
+      //    would also fall in the future, so not a single picture would be inserted.
       const dhakaHourNow = new Date(now.getTime() + DHAKA_MS).getUTCHours();
       const startHour = isToday
         ? Math.max(7, Math.min(9, dhakaHourNow - Math.ceil(target) - 1))
@@ -172,7 +172,7 @@ async function insert() {
       });
       made.sessions.push(session.id.toString());
 
-      // ⚠️ সেগমেন্ট ৫ মিনিটের টুকরোয় — এজেন্ট এভাবেই পাঠায় (G53)
+      // Careful: segments are in 5-minute pieces: that is how the agent sends them (G53)
       let cursor = startedAt;
       let left = workedSec;
       let idleSec = 0;
@@ -198,7 +198,7 @@ async function insert() {
         cursor = new Date(cursor.getTime() + chunk * 1000);
         left -= chunk;
 
-        // মাঝেমধ্যে নিষ্ক্রিয়তা — টাইমলাইনে রঙের তারতম্য দেখাতে
+        // Occasional idleness, to show colour variation on the timeline
         if (left > 0 && rnd() > 0.78) {
           const gap = 120 + Math.floor(rnd() * 600);
           const idle = await prisma.activitySegment.create({
@@ -222,16 +222,16 @@ async function insert() {
       }
 
       // ── daily_summary ───────────────────────────────────────────────
-      // ⚠️ রিপোর্ট ও মাসিক হিটম্যাপ **এখান থেকেই** পড়ে, সেগমেন্ট থেকে নয়।
-      //    তাই সংখ্যাগুলো উপরের সেগমেন্টের সাথে মিলিয়ে বসানো — নইলে দুই
-      //    পাতা দুই কথা বলত, আর সেটাই তো গতকাল বাগ হিসেবে ধরা পড়েছে।
+      // Careful: reports and the monthly heatmap read **from here**, not from segments.
+      //    So the numbers are set to match the segments above; otherwise two pages
+      //    would say two things, which is exactly the bug caught yesterday.
       const productive = Math.round(workedSec * (0.55 + rnd() * 0.35));
       const unproductive = Math.round(workedSec * (0.05 + rnd() * 0.15));
 
-      // ⚠️ `create` নয় — K06 rollup জব প্রতি ১৫ মিনিটে চলে আর নিজেই
-      //    সারি বানায়, ফলে দ্বিতীয়বার চালালে unique constraint ভাঙত।
-      //    undo-তে এগুলো মুছে দিলেই হয়: জব পরের রানে সেগমেন্ট থেকে
-      //    আবার সঠিক সারি বানিয়ে নেবে।
+      // Careful: not `create`: the K06 rollup job runs every 15 minutes and builds the
+      //    row itself, so a second run would break the unique constraint.
+      //    Undo only has to delete these: on its next run the job rebuilds the correct
+      //    row from the segments.
       const figures = {
         firstActivityAt: startedAt,
         lastActivityAt: cursor,
@@ -256,10 +256,10 @@ async function insert() {
       });
       made.summaries.push([s.employeeId, s.workDate.toISOString().slice(0, 10)]);
 
-      // ── স্ক্রিনশট (শুধু আজ — staff পাতার গ্রিড দেখাতে) ──────────────
-      // ⚠️ নতুন ছবি বানানো হয় না; আগের এজেন্ট-পরীক্ষার আসল .webp কপি
-      //    করা হয়। ⚠️ অর্থাৎ থাম্বনেইলে **আপনার নিজের ৯ আগস্টের ডেস্কটপ**
-      //    দেখাবে — এটা নমুনা, কারো আসল কাজ নয়।
+      // ── Screenshots (today only: to show the staff page's grid) ──────
+      // Careful: no new image is made; the real .webp from earlier agent tests is
+      //    copied. Careful: so the thumbnails would show **your own desktop from
+      //    9 August**: this is sample data, not anyone's real work.
       if (isToday) {
         for (let k = 0; k < 8; k++) {
           const slot = at(day, startHour + k, (k * 7) % 60);
@@ -291,7 +291,7 @@ async function insert() {
         }
       }
 
-      // ── app_usage (শুধু শেষ ৩ দিন — টপ ১০ প্যানেল ভরাতে যথেষ্ট) ─────
+      // ── app_usage (last 3 days only: enough to fill the top-10 panel) ──
       if (day.getTime() >= today.getTime() - 2 * 86_400_000) {
         let apCursor = startedAt;
         for (let i = 0; i < 6; i++) {
@@ -336,7 +336,7 @@ async function undo() {
   }
   const m = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
 
-  // ⚠️ ক্রমটা নির্ভরতার উল্টো দিকে — নইলে foreign key আটকাবে
+  // Careful: the order is the reverse of the dependencies, otherwise foreign keys block it
   const sh = await prisma.screenshot.deleteMany({
     where: { id: { in: (m.shots ?? []).map(BigInt) } },
   });

@@ -17,50 +17,48 @@ FROM node:24-alpine AS runtime
 ENV NODE_ENV=production
 ENV TZ=Asia/Dhaka
 
-# ⭐ একই ভার্সন ওয়েবের সাথে — `/health` এটা ফেরত দেয়, আর ড্যাশবোর্ড দুটো
-#    মিলিয়ে দেখে। ⚠️ অর্ধেক ডিপ্লয় (নতুন ওয়েব, পুরোনো api) নইলে সম্পূর্ণ
-#    নীরব থাকত, আর "ফিক্সটা তো বসিয়েছি, কাজ করছে না কেন" প্রশ্নের উত্তর
-#    খুঁজতে ঘণ্টা যেত।
+# Same version as the web: `/health` returns it, and the dashboard compares the two.
+# Careful: otherwise a half deploy (new web, old api) would be completely silent, and
+# answering "I put the fix in, why is it not working" would cost hours.
 ARG APP_BUILD=dev
 ARG APP_COMMIT=local
 ENV APP_BUILD=$APP_BUILD
 ENV APP_COMMIT=$APP_COMMIT
 WORKDIR /app
 
-# ⭐⭐ `postgresql16-client` — রাতের ব্যাকআপের `pg_dump` (K02)।
+# `postgresql16-client`: `pg_dump` for the nightly backup (K02).
 #
-# ⚠️⚠️ এটা না থাকায় ব্যাকআপ **কোনোদিন একবারও চলেনি**, আর ব্যর্থতাটা ছিল
-# প্রায় নীরব: অ্যালার্ট উঠত ঠিকই, কিন্তু ৪৬টা খোলা অ্যালার্টের ভিড়ে
-# "The nightly backup failed" আলাদা করে কেউ পড়েনি (১৫ আগস্ট ধরা পড়ে)।
+# Careful: without it the backup NEVER ran even once, and the failure was almost
+# silent: the alert was raised, but among 46 open alerts nobody singled out
+# "The nightly backup failed" (found on 15 August).
 #
-# ⚠️ **মেজর ভার্সন মিলতে হবে** — সার্ভার Postgres ১৬, তাই ক্লায়েন্টও ১৬।
-# পুরোনো `pg_dump` নতুন সার্ভার দেখলে সরাসরি অস্বীকার করে ("server version
-# mismatch"), আর তখন ব্যর্থতাটা আবার রোজ রাতে ফিরে আসত।
+# Careful: the MAJOR version must match. The server is Postgres 16, so the client is
+# too. An older `pg_dump` flatly refuses a newer server ("server version mismatch"),
+# and the failure would come back every night.
 #
-# ⭐ বিকল্প ছিল হোস্টের docker সকেট api কনটেইনারে খুলে দেওয়া
-# (`BACKUP_DOCKER_CONTAINER`) — নেওয়া হয়নি: ওটা কার্যত হোস্টে root-সমান
-# ক্ষমতা, আর এখানে দরকার কেবল একটা ক্লায়েন্ট বাইনারি (~২ MB) যা
-# নেটওয়ার্ক দিয়েই ডাম্প নিতে পারে।
+# The alternative was to expose the host's docker socket to the api container
+# (`BACKUP_DOCKER_CONTAINER`). Not taken: that is effectively root on the host, while
+# all that is needed here is a client binary (~2 MB) that can dump over the network.
 RUN apk add --no-cache tzdata dumb-init postgresql16-client
 
 COPY package*.json ./
 COPY prisma ./prisma
 RUN npm ci --omit=dev && npm cache clean --force
 
-# generated prisma client + query engine (prisma CLI নেই prod deps-এ)
+# generated prisma client + query engine (the prisma CLI is not in the prod deps)
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/dist ./dist
 
-# স্ক্রিনশট ও রাতের ডাম্প এখানে mount হয় — node ইউজারের লেখার অধিকার লাগবে
+# Screenshots and nightly dumps are mounted here; the node user needs write access.
 #
-# ⚠️⚠️ **ইমেজের এই `chown` bind mount-এ কাজে আসে না** — হোস্টের ফোল্ডারের
-# মালিকানাই জেতে (`deploy/README.md § ১০.৪-এ পুরো গল্পটা)। এটা কেবল
-# named volume ও প্রথমবার তৈরি হওয়া ফোল্ডারের জন্য।
+# Careful: this image `chown` does NOT help on a bind mount: the host folder's
+# ownership wins (the whole story is in `deploy/README.md § ১০.৪`). It only applies to
+# named volumes and to folders created for the first time.
 #
-# ⚠️ `/data/backups`-এ ঠিক এই ফাঁদেই পড়া হয়েছে (১৫ আগস্ট): docker
-# ফোল্ডারটা **root-এর নামে** বানিয়েছিল, আর api চলে uid ১০০০-এ, তাই
-# `EACCES`। storage-এর বেলায় একই ঘটনা আগেই ঘটেছিল — তাই দুটোই এখানে,
-# পাশাপাশি, যাতে পরেরজন একটা করে ভুলে না যায়।
+# Careful: `/data/backups` fell into exactly this trap (15 August): docker created the
+# folder owned by root, and the api runs as uid 1000, hence `EACCES`. The same thing had
+# happened with storage earlier, so both are here, side by side, so the next person
+# does not forget one.
 RUN mkdir -p /data/storage /data/backups \
  && chown -R node:node /data/storage /data/backups
 USER node

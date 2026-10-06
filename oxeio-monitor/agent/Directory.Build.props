@@ -1,146 +1,101 @@
 ﻿<Project>
 
   <!--
-    ⭐⭐ এজেন্টের ভার্সনের **একমাত্র উৎস**।
+    The single source of truth for the agent's version.
 
-    ⚠️ আগে ভার্সন ছিল তিন জায়গায়, আর তিনটের মধ্যে কোনো যোগ ছিল না:
-      · Program.cs-এ  `const string Version = "0.1.0"`  ← সার্ভারকে যা বলা হতো
-      · installer/build.ps1-এ  `$Version = '0.1.0'`      ← MSI-তে যা বসত
-      · কোথাও `<Version>` না থাকায় assembly হতো 1.0.0.0
+    Careful: the version used to live in three places with nothing tying them together:
+      - Program.cs: `const string Version = "0.1.0"`  (what the server was told)
+      - installer/build.ps1: `$Version = '0.1.0'`      (what went into the MSI)
+      - no `<Version>` anywhere, so the assembly was 1.0.0.0
 
-    ⚠️⚠️ ফলটা নীরব কিন্তু গুরুতর: MSI ০.২.০ বানিয়ে ১৫টা PC-তে বিলি করলেও
-    এজেন্ট heartbeat-এ নিজেকে **০.১.০** বলত। সার্ভার সেই স্টেল মান দেখে
-    ঠিক করত আপডেট অফার করবে কি না (G59), তাই আপডেট হয়ে যাওয়া মেশিনকেও
-    **একই আপডেট বারবার** অফার করা হতো — H04-এর ধাপে ধাপে রোলআউট কোনোদিন
-    শেষই হতো না।
+    The result was silent but serious: after building MSI 0.2.0 and rolling it out to
+    15 PCs, the agent still reported itself as 0.1.0 in its heartbeat. The server used
+    that stale value to decide whether to offer an update, so machines that had already
+    updated were offered the same update again and again, and the staged rollout never
+    finished.
 
-    এখন এখানে একবার বদলালেই তিন জায়গায় পৌঁছায়:
-      · assembly-র InformationalVersion  (Program.cs রানটাইমে পড়ে)
-      · MSI-র ProductVersion             (build.ps1 এখান থেকেই পড়ে)
+    Now a single change here reaches all three places:
+      - the assembly's InformationalVersion  (Program.cs reads it at runtime)
+      - the MSI's ProductVersion             (build.ps1 reads it from here)
   -->
   <PropertyGroup>
     <!--
-      ⚠️ ০.১.০ → ০.২.০ (১২ আগস্ট ২০২৬)। এজেন্টে চারটে সত্যিকারের বদল
-      হয়েছে: H06 (revoke করলে ক্যাপচার থামে) · A05 (কিউয়ের ডিস্ক-বাজেট
-      সত্যিই প্রয়োগ হয়) · H08 (`logs\agent.log`) · কনফিগ লুপ।
+      Version history. The rule behind every bump: raise the number BEFORE a binary is
+      handed out by hand, not after the code changes. Two different binaries with the
+      same name and version cannot be told apart, and signing changes the bytes too.
 
-      ⚠️⚠️ সংখ্যাটা না বাড়ালে **আপডেট বিলি করা যেত না**: `rollout.ts`
-      SemVer তুলনা করে, তাই ০.১.০ চালানো PC-কে ০.১.০ অফার করা হতো না
-      (G59)। MSI নিজে `AllowSameVersionUpgrades="yes"` দিয়ে বসত, কিন্তু
-      সেটা হাতে গিয়ে বসানো — H04-এর পুরো ব্যবস্থাটাই অচল থাকত।
-    -->
-    <!--
-      ⚠️⚠️ ০.২.০ → ০.৩.০ (১২ আগস্ট, দ্বিতীয় দফা)। কোডে নতুন কিছু আছে
-      বটে (সাইন-ইন জানালা · enroll-login · সার্ট পিনিং), কিন্তু বাড়ানোর
-      **আসল কারণ আলাদা**: ০.২.০ নামে **তিনটে আলাদা বাইনারি** বেরিয়ে গেছে —
-      ০৯:৪৮ (সাইন-ইন জানালা ছাড়া), ১৫:৫৩ (জানালা সহ), ১৬:৪৩ (পিনিং সহ)।
+      0.1.0 -> 0.2.0: four real agent changes: capture stops when the device is revoked,
+      the queue's disk budget is actually enforced, `logs\agent.log`, and the config
+      loop. Without the bump no update could be rolled out: `rollout.ts` compares
+      SemVer, so a PC running 0.1.0 would not be offered 0.1.0. The MSI itself is
+      installed with `AllowSameVersionUpgrades="yes"`, but that only helps when
+      installing by hand, and the whole staged-rollout mechanism would have stalled.
 
-      ⚠️ ফাইলের নাম এক, ভার্সনও এক — কোনটা কোনটা সেটা বলার কোনো উপায়
-      ছিল না, আর মালিক পুরোনোটা চালিয়ে ভাবছিলেন ফিচারটা আসেনি। সংখ্যাটা
-      বাড়ানোই একমাত্র উপায় যাতে দুটো বিল্ড আলাদা করে চেনা যায়।
+      0.2.0 -> 0.3.0: new code (sign-in window, enroll-login, certificate pinning), but
+      the real reason for the bump was different: three different binaries had gone out
+      under the name 0.2.0 (without the sign-in window, with it, and with pinning). The
+      file name and version were identical, so there was no way to tell which was which,
+      and the owner ran an old one and thought the feature was missing.
 
-      ⭐ শিক্ষা: **বাইনারি হাতে বিলি করার আগেই ভার্সন বাড়াও** — কোডে
-      বদল আসার পরে নয়।
-    -->
-    <!--
-      ০.৩.০ → ০.৩.১ (১২ আগস্ট সন্ধ্যা)। ০.৩.০ মালিককে দিয়ে দেওয়ার **পরে**
-      একটা বাগ ধরা পড়েছে (লগে UTF-8 BOM নেই, তাই Get-Content ভাঙা হরফ
-      দেখায়) — তাই নতুন নম্বর।
+      0.3.0 -> 0.3.1: a bug found AFTER 0.3.0 was handed to the owner (the log had no
+      UTF-8 BOM, so Get-Content showed garbled characters).
 
-      ⭐ এটাই উপরের নিয়মটা মেনে চলার প্রথম উদাহরণ: বাইনারি বেরিয়ে গেলে
-      কোড বদলানোর সাথে সাথে নম্বরও বাড়ে।
-    -->
-    <!--
-      ⭐⭐ ০.৩.১ → ০.৩.২ (১২ আগস্ট রাত)। এবারের বদলটা এজেন্টে নয়,
-      **ইনস্টলারে** — কিন্তু নম্বরটা এজেন্টের সাথেই বাঁধা, তাই একসাথেই বাড়ে।
+      0.3.1 -> 0.3.2: the change was in the installer, not the agent, but the number is
+      tied to the agent. The installer created the logon task but did not start it, and
+      the task's trigger is logon, so the installer reported success and nothing ran
+      until the next reboot. The binary itself was fine: running it by hand showed the
+      sign-in window.
 
-      ⚠️ মালিক ০.৩.১ বসিয়ে জানালেন "install korar pore run hoyna"। বাইনারি
-      নিখুঁত ছিল — হাতে চালালে সাইন-ইন জানালা আসত। ইনস্টলার লগঅন-টাস্কটা
-      বানাত, কিন্তু **চালু করত না**, আর টাস্কের ট্রিগার লগঅন। ফলে ইনস্টলার
-      "সফল" বলে বেরিয়ে যেত আর পরের রিবুট পর্যন্ত কিছুই হতো না।
-    -->
-    <!--
-      ০.৩.২ → ০.৩.৩ (একই রাত)। এবার কোডে কিছুই বদলায়নি — ০.৩.২ **বিল্ড
-      করা হয়েছিল ভুলভাবে**: `-ServerUrl` ছাড়া, তাই ঠিকানাটা MSI-তে বসেনি
-      আর ডাবল-ক্লিকে "This MSI was built without a server address" এসে
-      আটকে গেছে।
+      0.3.2 -> 0.3.3: no code change. 0.3.2 was built wrongly, without `-ServerUrl`, so
+      the address was not baked into the MSI and double-clicking it stopped with "This
+      MSI was built without a server address". The bump keeps two different MSIs from
+      circulating under one name; the default in build.ps1 was changed so the mistake
+      cannot happen again.
 
-      ⭐ একই নামে দুটো আলাদা MSI যাতে না ঘোরে, সেজন্যই নতুন নম্বর —
-      নিয়মটা কোড বদলের নয়, **বিলি করা বাইনারির**। সাথে build.ps1-এর
-      ডিফল্ট বদলানো হয়েছে যাতে ভুলটা আর করা না যায়।
-    -->
-    <!--
-      ⭐⭐ ০.৩.৩ → ০.৩.৪ (১২ আগস্ট, রাত)। মালিক ধরেছেন: সাইন ইন **না** করেও
-      tray-তে সবুজ "Working", আর আউটবক্সে ৭টা সারি জমে গেছে।
+      0.3.3 -> 0.3.4: the owner noticed a green "Working" in the tray without being
+      signed in, and 7 rows piled up in the outbox. Not just a display error: the time
+      before sign-in stayed in the outbox, and once staff signed in the device was bound
+      to them and that time went into their record, e.g. half an hour of admin work
+      counted as someone else's attendance.
 
-      ⚠️ নিছক দেখানোর ভুল নয় — সাইন ইনের আগের সময়টুকু আউটবক্সে জমে থাকত,
-      আর স্টাফ সাইন ইন করামাত্র ডিভাইসটা তার নামে বাঁধা পড়ে ওই সময়টুকুও
-      তার খাতায় চলে যেত। অর্থাৎ অ্যাডমিনের আধঘণ্টা অন্যের হাজিরায়।
-    -->
-    <!--
-      ⭐⭐ ০.৩.৪ → ০.৩.৫। G79-এর ফিক্সটা কাজ করেছে (মালিকের পর্দায় "Not
-      signed in", QUEUED ০), কিন্তু সাথে সাথে নতুন প্রশ্ন: "sign in korar
-      option nei"।
+      0.3.4 -> 0.3.5: the previous fix worked ("Not signed in", QUEUED 0), but raised a
+      new question: there was no option to sign in. True: the window appeared only once,
+      at startup. After closing it the only way back was logging off and on again, while
+      the screen said "Sign in to start counting your hours". The task was announced but
+      there was no door to do it.
 
-      ⚠️ ঠিকই — জানালাটা আসত **শুধু চালু হওয়ার সময়**, একবার। বন্ধ করে
-      দিলে ফেরার একমাত্র পথ ছিল লগ-অফ করে আবার লগ-ইন। অথচ পর্দায় বড় করে
-      লেখা "Sign in to start counting your hours"। কাজটা বলা হচ্ছিল,
-      করার দরজা ছিল না।
-    -->
-    <!--
-      ০.৩.৫ → ০.৩.৬। কোডে কিছুই বদলায়নি — এবার MSI ও দুটো exe **সই করা**
-      (ADR-014)। ⚠️ সই মানে বাইট বদলে যাওয়া, আর ০.৩.৫ মালিকের হাতে চলে
-      গেছে; একই নামে দুটো আলাদা বাইনারি যাতে না ঘোরে, তাই নতুন নম্বর।
-    -->
-    <!--
-      ০.৩.৬ → ০.৩.৭। কোডে কিছুই বদলায়নি — MSI-তে বেক করা **সার্ভারের
-      ঠিকানা** বদলেছে: `oxeio.office.local` → `hub.oxeio.com` (VPS)।
-      ⚠️ ০.৩.৬ মালিকের হাতে গেছে, আর সেটায় পুরোনো ঠিকানা।
-    -->
-    <!--
-      ০.৩.৮ → ০.৪.১। **আচরণ বদলেছে**, তাই minor বাড়ানো হলো:
-        · ০.৪.০ — G46: পর্দা ১০ মিনিট এক চুলও না বদলালে সময় গোনা বন্ধ
-        · ০.৪.১ — ট্রে-তে "Install update…" — স্টাফ নিজেই নতুন ভার্সন বসাতে পারেন
+      0.3.5 -> 0.3.6: no code change. The MSI and both exes are now signed (ADR-014).
 
-      ⚠️⚠️ **এই সংখ্যাটা `build.ps1 -Version`-এর সাথে মেলাতেই হবে।** না
-      মেলালে বিল্ড সতর্ক করে, আর মিলিয়ে না দিলে যা ঘটত: MSI বলত ০.৪.১,
-      অথচ এজেন্ট সার্ভারকে বলত ০.৩.৮ — ফলে আপডেট-চেক **চিরকাল একই ভার্সন
-      অফার করত**, আর ড্যাশবোর্ডে ভুল ভার্সন দেখাত। ঠিক এই মিসম্যাচটা
-      ০.৪.১ বানানোর সময় ধরা পড়েছে (১৬ আগস্ট)।
-    -->
-    <!--
-      ⚠️⚠️ **০.৪.১০ — বানানো হয়েছে, কিন্তু এখনো প্রকাশ করা হয়নি** *(১৮ আগস্ট)*।
+      0.3.6 -> 0.3.7: no code change. The server address baked into the MSI changed from
+      `oxeio.office.local` to `hub.oxeio.com` (VPS). 0.3.6 had gone to the owner with
+      the old address.
 
-      দুটো বদল এতে জমা: **R22a** (idle অবস্থাতেও অ্যাপ দেখা) আর হিরো
-      সংখ্যার **সেকেন্ড অর্ধেক মাপে**।
+      0.3.8 -> 0.4.1: behaviour changed, so the minor version went up:
+        - 0.4.0: time counting stops when the screen has not changed at all for 10 minutes
+        - 0.4.1: tray item "Install update...", so staff can install a new version themselves
 
-      ⚠️ প্রকাশ করা হয়নি ইচ্ছাকৃতভাবে: `UpdateService.offerFor` কেবল
-      **সবচেয়ে নতুন non-halted** ভার্সনটাই অফার করে, তাই ০.৪.১০ প্রকাশ
-      করলেই ০.৪.৯-এর চলতি `partial` রোলআউট **থেমে যেত** — আর ০.৪.৯-এ
-      shutdown-এর goodbye সারানো আছে, যেটার মাপ এখনো নেওয়া হচ্ছে (R29)।
-      ⭐ প্রকাশের সিদ্ধান্তটা মালিকের, Settings → Agent updates → Publish।
+      Careful: this number MUST match `build.ps1 -Version`. The build warns when they
+      differ. Without the match the MSI would say 0.4.1 while the agent told the server
+      0.3.8, so the update check would offer the same version forever and the dashboard
+      would show the wrong version. Exactly this mismatch was caught while building 0.4.1.
 
-      ⚠️ তবু সংখ্যাটা **এখনই** বাড়ানো হলো: নইলে HEAD থেকে বানানো MSI-ও
-      "০.৪.৯" বলত, অথচ ভেতরে অন্য কোড — আর H04 ভার্সনের নাম ধরেই ঠিক করে
-      কার কী দরকার। একই নামে দুই বিল্ড থাকলে সেটা নীরবে ভুল করত।
+      0.4.10: built but deliberately NOT published at the time. It bundles two changes:
+      seeing the app even when idle, and measuring the second half of the hero number.
+      `UpdateService.offerFor` offers only the newest non-halted version, so publishing
+      0.4.10 would have halted the running `partial` rollout of 0.4.9, whose shutdown
+      goodbye fix was still being measured. Publishing is the owner's decision (Settings
+      -> Agent updates -> Publish). The number was still raised right away: otherwise an
+      MSI built from HEAD would also say "0.4.9" with different code inside, and the
+      update logic decides who needs what by version name alone. This number must match
+      `build.ps1 -Version` here too (see the note above).
 
-      ⚠️⚠️ **এই সংখ্যাটা `build.ps1 -Version`-এর সাথে মেলাতেই হবে** — নিচের
-      নোটটা দেখুন।
-    -->
-    <!--
-      ⚠️⚠️ **০.৪.১১ — R29-B** *(৪–৫ সেপ্টেম্বর)*। `WM_ENDSESSION`-এই
-      বাঁধা-সময়ের বিদায়ী-ইভেন্ট পাঠানো (`TryFlushGoodbye`, মোট ছাদ ২ সে.)।
+      0.4.11: sends the time-bounded goodbye event on `WM_ENDSESSION` (`TryFlushGoodbye`,
+      2 s total ceiling). Raised right away for the same reason as 0.4.10. Publishing and
+      rollout are separate decisions, and they belong to the owner (Settings -> Agent
+      updates). The shutdown-goodbye work is only closed once the goodbye delay has been
+      measured a fourth time after the rollout and has dropped to seconds: green CI is
+      not the same as a real PC shutting down.
 
-      ⭐ কেন সংখ্যাটা এখনই বাড়ানো: ০.৪.১০-এর নোটে লেখা একই কারণে — নইলে
-      HEAD থেকে বানানো MSI "০.৪.১০" বলত অথচ ভেতরে অন্য কোড, আর H04
-      ভার্সনের **নাম ধরেই** ঠিক করে কার কী দরকার।
-
-      ⚠️⚠️ **প্রকাশ ও রোলআউট আলাদা সিদ্ধান্ত, আর সেটা মালিকের**
-      (Settings → Agent updates)। ⭐ R29 বন্ধ হবে কেবল রোলআউটের পর
-      বিদায়ী-ইভেন্টের দেরিটা **চতুর্থবার মেপে** সেকেন্ডে নামলে —
-      CI সবুজ হওয়া আর আসল PC-তে শাটডাউন হওয়া এক নয়।
-    -->
-    <!--
       0.4.12 (fork, 5 Oct 2026): build.ps1 -HideLatestShot. Raised so a build
       made from here is not mistaken for the 0.4.11 already installed, and so
       Settings → Agent updates can offer it (it compares version names).
@@ -148,9 +103,8 @@
     <Version>0.4.12</Version>
 
     <!--
-      ⚠️ AssemblyVersion-এ শুধু তিন অঙ্ক রাখা হয় (SemVer-এর pre-release
-      অংশ ছাড়া) — Windows-এর ভার্সন রিসোর্স `1.2.3-beta` মানে না, আর
-      বসাতে গেলে বিল্ডই ভাঙে।
+      AssemblyVersion keeps only three numbers (no SemVer pre-release part): the Windows
+      version resource does not accept `1.2.3-beta`, and trying to set it breaks the build.
     -->
     <AssemblyVersion>$(Version).0</AssemblyVersion>
     <FileVersion>$(Version).0</FileVersion>

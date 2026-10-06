@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-16"?>
 <!--
-  H02 — লগঅনে স্বয়ংক্রিয় চালু।
+  H02: automatic start at logon.
 
-  ⚠️ এই টাস্ক **watchdog**-কে চালু করে, এজেন্টকে নয়। এজেন্টকে চালু করার
-  একমাত্র লোক watchdog। দুই জায়গা থেকে চালু হলে এক মেশিনে দুটো এজেন্ট চলত
-  আর একই ঘণ্টা দুবার গোনা হতো — পে-রোল নষ্ট, আর কেউ টেরও পেত না।
+  Careful: this task starts the WATCHDOG, not the agent. The watchdog is the only one
+  that starts the agent. If it were started from two places, one machine would run two
+  agents and count the same hours twice: ruined payroll, and nobody would notice.
 
-  {EXE} আর {DIR} ইনস্টল করার সময় বদলে দেওয়া হয় (Deployment/TaskInstaller.cs)।
+  {EXE} and {DIR} are replaced at install time (Deployment/TaskInstaller.cs).
 -->
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
@@ -18,47 +18,48 @@
   <Triggers>
     <LogonTrigger>
       <Enabled>true</Enabled>
-      <!-- লগঅনের ভিড় একটু কমার পর — সাথে সাথে চালু হলে ডিস্ক আর CPU-র
-           প্রতিযোগিতায় প্রথম কয়েকটা টিক এমনিতেই ব্যর্থ হতো। -->
+      <!-- After the logon rush has eased a little: started immediately, the first few
+           ticks would fail anyway because of disk and CPU contention. -->
       <Delay>PT15S</Delay>
     </LogonTrigger>
   </Triggers>
 
   <Principals>
     <Principal id="Author">
-      <!-- S-1-5-32-545 = BUILTIN\Users। যে-ই লগঅন করুক, তার নিজের সেশনেই চলবে।
-           ⚠️ SYSTEM হিসেবে চালানো যাবে না: তাহলে এটা Session 0-তে যেত, আর
-           সেখান থেকে চালু করা এজেন্টও Session 0-তে গিয়ে সাথে সাথে বন্ধ হতো। -->
+      <!-- S-1-5-32-545 = BUILTIN\Users. It runs in the session of whoever logs on.
+           Careful: it cannot run as SYSTEM: it would go to Session 0, and an agent
+           started from there would also land in Session 0 and be shut down at once. -->
       <GroupId>S-1-5-32-545</GroupId>
       <RunLevel>LeastPrivilege</RunLevel>
     </Principal>
   </Principals>
 
   <Settings>
-    <!-- ⚠️ IgnoreNew — ফাস্ট ইউজার সুইচিং বা দ্রুত পরপর লগঅনে দ্বিতীয় একটা
-         watchdog যেন চালু না হয়। দুটো পাহারাদার একে অপরের চালু করা এজেন্টকে
-         মারতে শুরু করত। -->
+    <!-- Careful: IgnoreNew, so that fast user switching or quick successive logons do
+         not start a second watchdog. Two watchdogs would start killing each other's
+         agent. -->
     <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
 
-    <!-- ⚠️ ডিফল্ট দুটোই true। ল্যাপটপ প্লাগ খুললেই পাহারা নীরবে বন্ধ হয়ে যেত। -->
+    <!-- Careful: both defaults are true. Unplugging a laptop would silently switch the
+         watch off. -->
     <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
 
-    <!-- ⚠️ সবচেয়ে বড় ফাঁদ। ডিফল্ট PT72H — অর্থাৎ তিন দিন পর Task Scheduler
-         নিজেই watchdog-কে মেরে ফেলত, আর তারপর মেশিনটা পাহারাহীন চলত।
-         এই প্রসেস সপ্তাহের পর সপ্তাহ চলার কথা, তাই কোনো সীমা নেই। -->
+    <!-- Careful: the biggest trap. The default is PT72H: after three days Task
+         Scheduler itself would kill the watchdog, and the machine would run
+         unwatched. This process is meant to run for weeks, so there is no limit. -->
     <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
 
-    <!-- ⚠️ ডিফল্ট RunOnlyIfIdle=false হলেও StopOnIdleEnd=true — মেশিন idle
-         থেকে ফিরলে টাস্ক থামত। idle ট্র্যাক করাই যেখানে কাজ, সেখানে এটা
-         আত্মঘাতী। -->
+    <!-- Careful: the default RunOnlyIfIdle=false, but StopOnIdleEnd=true would stop the
+         task when the machine returns from idle. Self-defeating for a tool whose job is
+         tracking idle. -->
     <IdleSettings>
       <StopOnIdleEnd>false</StopOnIdleEnd>
       <RestartOnIdle>false</RestartOnIdle>
     </IdleSettings>
     <RunOnlyIfIdle>false</RunOnlyIfIdle>
 
-    <!-- পাহারাদার নিজে মরে গেলে দ্বিতীয় জাল। -->
+    <!-- A second safety net, in case the watchdog itself dies. -->
     <RestartOnFailure>
       <Interval>PT1M</Interval>
       <Count>3</Count>
@@ -69,8 +70,8 @@
     <AllowStartOnDemand>true</AllowStartOnDemand>
     <AllowHardTerminate>true</AllowHardTerminate>
     <Enabled>true</Enabled>
-    <!-- ⚠️ Hidden=false ইচ্ছাকৃত। tray আইকনের মতোই — লুকিয়ে ইনস্টল করা হচ্ছে না,
-         আর সেটা প্রমাণযোগ্য থাকা দরকার। -->
+    <!-- Careful: Hidden=false is deliberate. Like the tray icon: it is not installed
+         in hiding, and that must be provable. -->
     <Hidden>false</Hidden>
     <WakeToRun>false</WakeToRun>
     <DisallowStartOnRemoteAppSession>false</DisallowStartOnRemoteAppSession>

@@ -1,21 +1,21 @@
 /**
- * ⭐⭐⭐ **এক-দফার ইতিহাস সংশোধন — G163** *(৭ সেপ্টেম্বর ২০২৬, চালানো হয়ে গেছে)*।
+ * One-off history correction: G163 *(7 September 2026, already run)*.
  *
- * ⚠️ এটা কোনো নিয়মিত জব নয়, আর আবার চালানোর কথাও নয় — রাখা হয়েছে
- * **নথি হিসেবে**: প্রোডাকশনের ডেটায় ঠিক কী বদলানো হয়েছিল আর কীভাবে।
- * পুরো গল্পটা [09 § ৩ঞ৩১.১৩](../../../docs/09-Build-Log.md)।
+ * Careful: this is not a regular job and is not meant to be run again. It is kept
+ * **as a record** of exactly what was changed in production data and how.
+ * The whole story is in [09 § ৩ঞ৩১.১৩](../../../docs/09-Build-Log.md).
  *
- * ⚠️⚠️ **নিয়মটা এখানে নতুন করে লেখা হয়নি** — কন্টেইনারের
- * `/app/dist/summary/design.rules.js` থেকে **আসল `designIdOf()`** ডাকা হয়।
- * SQL-এ regex অনুবাদ করলে দুটো সংজ্ঞা তৈরি হতো, আর দুই সংজ্ঞা আলাদা হয়ে
- * যাওয়াই তো এই বাগটার (আর G112 · G162-র) জন্ম।
+ * Careful: **the rule is not rewritten here.** The container's
+ * `/app/dist/summary/design.rules.js` is used to call the **real `designIdOf()`**.
+ * Translating the regex into SQL would create two definitions, and two definitions
+ * drifting apart is exactly what produced this bug (and G112 and G162).
  *
- * চালানোর নিয়ম (VPS-এ):
+ * How to run (on the VPS):
  *   docker cp backfill-g163-started-at.cjs oxeio-api:/app/backfill.js
- *   docker exec -e DRY=1 -w /app oxeio-api node /app/backfill.js   # শুকনো
- *   docker exec -e DRY=0 -w /app oxeio-api node /app/backfill.js   # সত্যিই
+ *   docker exec -e DRY=1 -w /app oxeio-api node /app/backfill.js   # dry run
+ *   docker exec -e DRY=0 -w /app oxeio-api node /app/backfill.js   # for real
  *
- * ফল: ৭১১টা সারি, আলাদা ঘড়ি-মান ১ → ৭০৩, `started_at < assigned_at` ৭১১ → ০।
+ * Result: 711 rows, distinct clock values 1 -> 703, `started_at < assigned_at` 711 -> 0.
  */
 const { PrismaClient } = require('@prisma/client');
 const { designIdOf } = require('/app/dist/summary/design.rules');
@@ -30,7 +30,7 @@ const iso = (d) => (d === null || d === undefined ? null : new Date(d).toISOStri
   const prisma = new PrismaClient();
 
   try {
-    // ── ১· যেসব টার্গেটে চিহ্ন বসানো আছে ──────────────────────────────
+    // ── 1. Targets that have the marker set ────────────────────────────
     const targets = await prisma.$queryRawUnsafe(`
       SELECT dt.id, dt.job_number, dt.assigned_to_id, dt.started_at,
              dt.assigned_at, dt.completed_at, dc.first_work_date
@@ -41,14 +41,14 @@ const iso = (d) => (d === null || d === undefined ? null : new Date(d).toISOStri
       ORDER BY dt.id
     `);
 
-    // ── ২· ডিজাইন-অ্যাপের সব সারি, আসল নিয়মে বাছা ─────────────────────
+    // ── 2. All rows of the design apps, picked by the real rule ─────────
     const usage = await prisma.$queryRawUnsafe(`
       SELECT employee_id, work_date, process_name, window_title, started_at
       FROM app_usage
       WHERE process_name IN ('Illustrator.exe','Photoshop.exe')
     `);
 
-    /** `কর্মী|দিন|নম্বর` → ওই দিনে সবচেয়ে আগের মুহূর্ত */
+    /** `employee|day|number` -> the earliest moment on that day */
     const firstSeen = new Map();
 
     for (const r of usage) {
@@ -61,7 +61,7 @@ const iso = (d) => (d === null || d === undefined ? null : new Date(d).toISOStri
       if (known === undefined || at < known) firstSeen.set(key, at);
     }
 
-    // ── ৩· মেলানো ─────────────────────────────────────────────────────
+    // ── 3. Matching ─────────────────────────────────────────────────────
     const updates = [];
     const missing = [];
     const unchanged = [];
@@ -83,14 +83,14 @@ const iso = (d) => (d === null || d === undefined ? null : new Date(d).toISOStri
         continue;
       }
 
-      // ⚠️ পাহারা: নতুন মানটা ওই ঢাকা-দিনের ভেতরেই থাকতে হবে
+      // Guard: the new value must stay inside that Dhaka day
       const dayStart = dayMs - DHAKA_OFFSET_MS;
       if (want < dayStart || want >= dayStart + DAY_MS) {
         suspect.push({ t, want, why: 'outside its own Dhaka day' });
         continue;
       }
 
-      // ⚠️ পাহারা: "শুরু" কখনো "শেষ"-এর পরে নয়
+      // Guard: "start" is never after "end"
       if (t.completed_at !== null && want > new Date(t.completed_at).getTime()) {
         suspect.push({ t, want, why: 'after completed_at' });
         continue;
@@ -123,7 +123,7 @@ const iso = (d) => (d === null || d === undefined ? null : new Date(d).toISOStri
       console.log('  ', String(u.id), iso(u.from), '→', iso(u.to));
     }
 
-    // ⭐ ব্যাকআপ — পুরোনো মানগুলো stdout-এ, স্থানীয় ফাইলে ধরা হবে
+    // Backup: the old values go to stdout, to be captured in a local file
     console.log('NEW_JSON_START');
     console.log(JSON.stringify(
       updates.map((u) => [String(u.id), new Date(u.to).toISOString()]),
@@ -141,7 +141,7 @@ const iso = (d) => (d === null || d === undefined ? null : new Date(d).toISOStri
       return;
     }
 
-    // ── ৪· লেখা — একটাই ট্রানজেকশনে ───────────────────────────────────
+    // ── 4. Writing, in a single transaction ─────────────────────────────
     const written = await prisma.$transaction(
       updates.map((u) =>
         prisma.$executeRawUnsafe(

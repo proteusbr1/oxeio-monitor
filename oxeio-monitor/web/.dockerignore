@@ -1,6 +1,6 @@
-# ⚠️ node_modules বাদ — না দিলে হোস্টের (Windows) বাইনারিগুলো ইমেজে
-#    কপি হতো, আর `npm ci` তার উপরে বসে alpine-এ ভুল প্ল্যাটফর্মের
-#    esbuild/rollup নিয়ে ভাঙত।
+# Careful: node_modules must be excluded. Otherwise the host's (Windows)
+# binaries would be copied into the image, and `npm ci` would run on top of
+# them and break on alpine with the wrong platform's esbuild/rollup.
 node_modules
 dist
 *.tsbuildinfo

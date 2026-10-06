@@ -7,7 +7,7 @@
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
     <security>
       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
-        <!-- কখনোই admin চাওয়া হবে না — এজেন্ট স্টাফের সাধারণ অ্যাকাউন্টেই চলে -->
+        <!-- Never ask for admin: the agent runs under the staff member's normal account -->
         <requestedExecutionLevel level="asInvoker" uiAccess="false" />
       </requestedPrivileges>
     </security>
@@ -21,13 +21,13 @@
   </compatibility>
 
   <!--
-    DPI: ম্যানিফেস্টেই দিতে হয়, কোডে নয়।
-    কারণ tray আইকন বা যেকোনো লাইব্রেরি Main-এর আগেই একটা HWND বানিয়ে ফেলতে পারে,
-    তারপর SetProcessDpiAwarenessContext নীরবে ব্যর্থ হয় এবং প্রসেস DPI-unaware থেকে যায়।
+    DPI: this must be set in the manifest, not in code.
+    A tray icon or any library can create an HWND before Main runs; after that
+    SetProcessDpiAwarenessContext fails silently and the process stays DPI-unaware.
 
-    PerMonitorV2 ছাড়া ১৫০% স্কেলের 4K মনিটর 2560×1440 বলে জানায় আর Windows ছোট করা
-    ছবি দেয় — অর্থাৎ প্রতিটি স্ক্রিনশট ঝাপসা, আর ছোট হরফের লেখা পড়াই যায় না।
-    অথচ স্ক্রিনশটের পুরো উদ্দেশ্যই ওই লেখা দেখা।
+    Without PerMonitorV2, a 4K monitor at 150% scaling reports 2560x1440 and Windows
+    hands back a downscaled image, so every screenshot is blurry and small text is
+    unreadable. Reading that text is the whole point of the screenshots.
   -->
   <asmv3:application>
     <asmv3:windowsSettings>

@@ -1,18 +1,17 @@
 /* eslint-disable */
 /**
- * নমুনা স্ক্রিনশটের ছবি — **কৃত্রিম**, কারো আসল ডেস্কটপ নয়।
+ * Sample screenshot image: **synthetic**, not anyone's real desktop.
  *
- * ⭐ কেন হাতে বানানো: ডিস্কে যে `.webp`গুলো ছিল সেগুলো টেস্টের ১২-বাইটের
- * স্টাব (RIFF হেডার মাত্র) — ব্রাউজার ওগুলো আঁকতেই পারে না। আর আসল ছবি
- * তুলতে গেলে মালিকের ডেস্কটপ ক্যাপচার করতে হতো, যেটা নমুনা ডেটার জন্য
- * অপ্রয়োজনীয়।
+ * Why hand-made: the `.webp` files on disk were the tests' 12-byte stubs (just a
+ * RIFF header), which a browser cannot draw. Taking a real capture would mean
+ * grabbing the owner's desktop, which sample data does not need.
  *
- * ⚠️ ছবিটা ব্রাউজারের canvas দিয়ে একবার বানিয়ে base64 করে এখানে বসানো —
- * Node-এ কোনো WebP এনকোডার নেই, আর শুধু নমুনার জন্য একটা নেটিভ
- * dependency (sharp) যোগ করা যায় না।
+ * The image was rendered once with a browser canvas and pasted here as base64:
+ * Node has no WebP encoder, and a native dependency (sharp) cannot be added just
+ * for sample data.
  *
- * ছবিতে লেখা আছে "sample capture — not a real desktop", যাতে স্ক্রিনশটে
- * এটা দেখে কেউ ভুল না বোঝে।
+ * The image says "sample capture — not a real desktop", so nobody mistakes it
+ * for a real screenshot.
  */
 
 const SAMPLE_WEBP_BASE64 =

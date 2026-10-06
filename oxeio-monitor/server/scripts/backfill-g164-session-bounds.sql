@@ -1,19 +1,20 @@
--- ⭐⭐ এক-দফার ইতিহাস সংশোধন — G164 · G165 (৭ সেপ্টেম্বর ২০২৬, চালানো হয়ে গেছে)
+-- One-off history correction: G164 · G165 (7 September 2026, already run)
 --
--- ⚠️ নিয়মিত জব নয়; রাখা হয়েছে নথি হিসেবে। গল্প: docs/09-Build-Log.md § ৩ঞ৩১.১৩
--- চালানো হয়েছিল:
---   ssh oxeio-new "docker exec -i oxeio-postgres psql -U oxeio -d oxeio" < এই ফাইল
--- ফল: UPDATE 7 · খামের বাইরে পড়া সেগমেন্ট ৫২ → ০
+-- Careful: not a regular job; kept as a record. Story: docs/09-Build-Log.md § ৩ঞ৩১.১৩
+-- It was run with:
+--   ssh oxeio-new "docker exec -i oxeio-postgres psql -U oxeio -d oxeio" < this file
+-- Result: UPDATE 7 · segments falling outside the envelope 52 -> 0
 --
 \set ON_ERROR_STOP on
 BEGIN;
 
--- G164 ব্যাকফিল — সেশনের সীমা তার নিজের সেগমেন্টগুলোকে ধরুক।
+-- G164 backfill: a session's bounds must cover its own segments.
 --
--- ⚠️ ঠিক যা `widen()` করত: শুরু কেবল **পিছোয়**, শেষ কেবল **এগোয়**।
--- ⚠️⚠️ খোলা সেশনে (`ended_at IS NULL`) শেষ বসানো হয় না — CASE সেটা ধরে,
---     আর ওটা জরুরি: খোলা সেশনই দিন-ক্লোজ ও logoff-ক্লোজের ইনপুট।
--- ⚠️ `end_reason` ছোঁয়া হয় না — `widen()`-ও ছোঁয় না।
+-- Careful: exactly what `widen()` did: the start only MOVES BACK, the end only MOVES
+-- FORWARD.
+-- Careful: an open session (`ended_at IS NULL`) gets no end set; the CASE handles
+--     that, and it matters: open sessions are the input to day-close and logoff-close.
+-- Careful: `end_reason` is not touched; `widen()` does not touch it either.
 
 UPDATE work_sessions s
 SET started_at = LEAST(s.started_at, b.min_start),
@@ -25,7 +26,7 @@ WHERE b.session_id = s.id
   AND (s.started_at > b.min_start
        OR (s.ended_at IS NOT NULL AND s.ended_at < b.max_end));
 
--- ⭐ পাহারা: এখন একটাও সেগমেন্ট নিজের সেশনের বাইরে থাকতে পারবে না
+-- Guard: from now on not a single segment may lie outside its own session
 DO $$
 DECLARE bad int; neg int;
 BEGIN

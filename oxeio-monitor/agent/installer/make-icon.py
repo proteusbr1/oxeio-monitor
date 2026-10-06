@@ -1,17 +1,17 @@
 """
-oXeio ব্র্যান্ড আইকন → Windows `.ico`
+oXeio brand icon -> Windows `.ico`
 
-⭐ জ্যামিতিটা `web/public/favicon.svg`-এর **হুবহু** — লাল টাইল (rx ১১২/৫১২),
-   সাদা X, ৫১২ বাক্সে। ওই ফাইলটাই সব আইকনের একমাত্র উৎস, তাই সংখ্যাগুলো
-   এখানে আবার "সুন্দর করে" লেখা হয়নি; স্কেল করে নেওয়া হয়েছে।
+The geometry is EXACTLY that of `web/public/favicon.svg`: a red tile (rx 112/512),
+a white X, in a 512 box. That file is the single source for all icons, so the
+numbers were not rewritten "nicely" here; they are just scaled.
 
-⚠️⚠️ **SVG parse করা হয় না — ইচ্ছাকৃত।** cairosvg/Inkscape এই মেশিনে নেই,
-   আর একটা নতুন নির্ভরতা যোগ করলে বিল্ডটা অন্য কারো মেশিনে ভাঙত। আকৃতিটা
-   মাত্র তিনটে path, তাই সরাসরি আঁকাই নিরাপদ।
+Careful: the SVG is deliberately NOT parsed. cairosvg/Inkscape are not on this machine,
+and a new dependency would break the build on anyone else's machine. The shape is only
+three paths, so drawing it directly is safe.
 
-⚠️ প্রতিটা মাপ **আলাদা করে ৮× সুপারস্যাম্পল করে** আঁকা হয়, একটা বড় ছবি
-   ছোট করে নয়। ১৬px-এ পার্থক্যটা স্পষ্ট: ছোট করে নিলে X-এর ডাঁটি ধূসর
-   হয়ে মিলিয়ে যায়।
+Careful: every size is drawn SEPARATELY with 8x supersampling, not by shrinking one big
+image. The difference is clear at 16px: when shrunk, the strokes of the X turn grey and
+fade away.
 """
 
 import io
@@ -21,50 +21,50 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-# ── favicon.svg-এর সংখ্যা, ৫১২ বাক্সে ──────────────────────────────────────
+# ── numbers from favicon.svg, in the 512 box ────────────────────────────────
 BOX = 512.0
-CORNER = 112.0 / BOX          # টাইলের কোণার ব্যাসার্ধ
+CORNER = 112.0 / BOX          # corner radius of the tile
 RED = (237, 28, 36, 255)      # #ed1c24
 WHITE = (255, 255, 255, 255)
 
-# X-এর দুটো ডাঁটি — SVG-র path দুটো হুবহু
+# The two strokes of the X: exactly the two SVG paths
 STROKES = (
     ((102, 102), (196, 102), (410, 410), (316, 410)),
     ((316, 102), (410, 102), (196, 410), (102, 410)),
 )
 
-SS = 8  # সুপারস্যাম্পল গুণক
+SS = 8  # supersampling factor
 
-#: ⚠️ ২৫৬ থাকতেই হবে — Windows ১০/১১-এর বড় আইকন ভিউ ওটাই চায়, আর না
-#: থাকলে ৪৮px-টা টেনে বড় করে ঝাপসা দেখায়।
+#: Careful: 256 must be there. The large-icon view of Windows 10/11 asks for it, and
+#: without it the 48px one is stretched and looks blurry.
 SIZES = (16, 20, 24, 32, 40, 48, 64, 128, 256)
 
 
 def render(px: int) -> Image.Image:
-    """এক মাপের আইকন — নিজের মাপেই আঁকা, তারপর একবার নামানো।"""
+    """One icon size: drawn at its own size, then downscaled once."""
     n = px * SS
     k = n / BOX
 
     img = Image.new("RGBA", (n, n), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
 
-    # টাইল — কোণা পর্যন্ত ভরাট, মাঝে কোনো স্বচ্ছতা নেই
+    # The tile: filled right to the corners, no transparency inside
     d.rounded_rectangle((0, 0, n - 1, n - 1), radius=CORNER * n, fill=RED)
 
     for stroke in STROKES:
         d.polygon([(x * k, y * k) for x, y in stroke], fill=WHITE)
 
-    # ⚠️ LANCZOS — BILINEAR-এ ছোট মাপে ডাঁটির কিনারা নরম হয়ে যায়
+    # Careful: LANCZOS. With BILINEAR the stroke edges go soft at small sizes
     return img.resize((px, px), Image.LANCZOS)
 
 
 def write_ico(path: Path, images: list[Image.Image]) -> None:
     """
-    ICO ফাইল নিজে হাতে লেখা।
+    Writes the ICO file by hand.
 
-    ⚠️⚠️ Pillow-র `save(format='ICO')` ২৫৬-র বেশি মাপ ফেলে দেয় **আর**
-    ছোট মাপগুলো নিজে থেকে resize করে বানায় — অর্থাৎ আমাদের আলাদা করে
-    আঁকা ১৬px-টা ব্যবহারই করত না, আর পুরো কষ্টটা বৃথা যেত।
+    Careful: Pillow's `save(format='ICO')` drops sizes above 256 AND resizes the small
+    sizes itself, so it would not use our separately drawn 16px at all and all the
+    effort would be wasted.
     """
     blobs = []
     for img in images:
@@ -88,8 +88,8 @@ def write_ico(path: Path, images: list[Image.Image]) -> None:
 
 
 def main() -> int:
-    # ⚠️ Windows কনসোল ডিফল্টে cp1252 — ইউনিকোড ছাপাতে গেলে স্ক্রিপ্টটা
-    #    ফাইল লেখার **পরে** ক্র্যাশ করত, আর বিল্ড ভুল করে ব্যর্থ দেখাত।
+    # Careful: the Windows console defaults to cp1252; printing Unicode made the script
+    #    crash AFTER writing the file, and the build wrongly looked failed.
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -99,8 +99,8 @@ def main() -> int:
 
     print(f"✅ {out} · {', '.join(str(s) for s in SIZES)} · {out.stat().st_size:,} bytes")
 
-    # ⭐ চোখে দেখার জন্য একটা PNG-ও — ছোট মাপে পড়া যাচ্ছে কি না সেটা
-    #    কোড পড়ে বোঝা যায় না, তাকিয়ে দেখতে হয়।
+    # Also a PNG to look at: whether it reads well at small sizes cannot be judged
+    #    from the code, you have to look.
     preview = out.with_suffix(".preview.png")
     strip = Image.new("RGBA", (sum(SIZES) + 8 * len(SIZES), 256), (13, 17, 23, 255))
     x = 0

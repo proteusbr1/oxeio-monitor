@@ -7,7 +7,7 @@ build/
 *.log
 coverage/
 
-# টেস্ট চলার সময় তৈরি হওয়া স্ক্রিনশট
+# Screenshots created while tests run
 server/.tmp-test-storage/
 
 # .NET (agent, phase 2)

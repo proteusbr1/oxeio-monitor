@@ -1,30 +1,30 @@
 <!--
-  oXeio ব্র্যান্ড মার্ক — লাল টাইল, সাদা X। বাকি সব আইকন এই ফাইল থেকেই তৈরি।
+  oXeio brand mark: red tile, white X. All the other icons are made from this file.
 
-  ⭐ **কেন শুধু X, পুরো "oX" নয়** — Brand.tsx-এর মার্কে "oX" আছে (o কালো,
-     X লাল), কিন্তু ওটা টপবারে ২৮px-এ বসে। লঞ্চারে ৪৮px আর ট্যাবে ১৬px-এ
-     দুটো অক্ষর মানে প্রতিটার উচ্চতা ৫-৬px — "o" তখন একটা দাগ, আর পুরো
-     জিনিসটা চেনা যায় না। oXeio-র আলাদা করা অক্ষরটাই X (ওয়ার্ডমার্কে ওটাই
-     লাল), তাই ছোট মাপে ওই একটাই রাখা হলো।
+  Why only the X, not the whole "oX": the mark in Brand.tsx has "oX" (o black, X red),
+     but that sits in the top bar at 28px. At 48px in a launcher and 16px in a tab,
+     two letters means each is only 5-6px tall; the "o" becomes a smudge and the whole
+     thing is unrecognizable. The distinctive letter of oXeio is the X (it is the red
+     one in the wordmark), so only that one is kept at small sizes.
 
-  ⭐ **রংটা উল্টানো — টাইল লাল, X সাদা** (Brand.tsx-এ টাইল সাদা, X লাল)।
-     হোমস্ক্রিনে ৩০টা আইকনের ভিড়ে রংই সবচেয়ে দ্রুত চেনার সূত্র; সাদা টাইল
-     ওয়ালপেপারের উপর মিলিয়ে যায়। ⚠️ কালো টাইল + সাদা X ইচ্ছাকৃতভাবে বাদ —
-     ওটা হুবহু X (সাবেক Twitter) অ্যাপের আইকন।
+  The colours are INVERTED: red tile, white X (in Brand.tsx the tile is white and the X
+     red). Among 30 icons on a home screen, colour is the fastest way to recognise one;
+     a white tile blends into the wallpaper. Careful: a black tile + white X is
+     deliberately excluded, as it is exactly the icon of the X (formerly Twitter) app.
 
-  ⚠️ **অক্ষরটার মাথা-পা সমান্তরালে কাটা** (আনুভূমিক), ডাঁটির সাথে ৯০° কোণে
-     নয়। "বন্ধ করুন"/ভুল চিহ্নের X-এ কাটা থাকে ডাঁটির লম্বে — এই একটা
-     পার্থক্যই মার্কটাকে বোতাম নয়, **অক্ষর** বলে চেনায়।
+  Careful: the letter's ends are cut PARALLEL (horizontally), not at 90 degrees to the
+     stroke. The X of a "close"/error mark is cut perpendicular to the stroke; this one
+     difference is what makes the mark read as a LETTER, not a button.
 
-  ⚠️ **লেখাটা <text> নয়, হাতে আঁকা path** — <text> হলে ফন্ট নির্ভর করত
-     ডিভাইসের উপর, আর প্রতিটা ফোনে আইকনের চেহারা আলাদা হতো।
+  Careful: the letter is a hand-drawn path, not <text>: with <text> the font would depend
+     on the device, and the icon would look different on every phone.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="oXeio">
-  <!-- টাইল কোণা পর্যন্ত ভরাট — মাঝে কোনো স্বচ্ছতা নেই -->
+  <!-- The tile is filled right to the corners, no transparency inside -->
   <rect width="512" height="512" rx="112" fill="#ed1c24"/>
-  <!-- X: দুটো সমান পুরুত্বের ডাঁটি, ৩০৮×৩০৮ বাক্সে (টাইলের ৬০%)।
-       ডাঁটির লম্ব-পুরুত্ব ৬৬.৫ = টাইলের ১৩%, অর্থাৎ ১৬px favicon-এ ২px —
-       এর চেয়ে সরু করলে ট্যাবে ডাঁটিটা ধূসর হয়ে মিলিয়ে যেত। -->
+  <!-- X: two strokes of equal thickness, in a 308x308 box (60% of the tile).
+       The stroke's perpendicular thickness is 66.5 = 13% of the tile, i.e. 2px in a 16px
+       favicon; any thinner and the stroke would turn grey and fade away in a tab. -->
   <path fill="#fff" d="M102 102h94L410 410h-94z"/>
   <path fill="#fff" d="M316 102h94L196 410H102z"/>
 </svg>

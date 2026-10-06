@@ -1,138 +1,140 @@
 @import 'tailwindcss';
 
-/* ── থিম: **Midnight** — oXeio LLC-র লোগো: কালো · সাদা · লাল ──────────────
-   মালিক তিনটে মকআপ থেকে এটাই বেছেছেন, আর **গাঢ়টাই ডিফল্ট**। হালকাটা
-   টগলের জন্য থাকে, OS-এর পছন্দের জন্য নয় (কারণ নিচে `color-scheme`-এ)।
+/* ── Theme: **Midnight**: the oXeio LLC logo: black, white, red ──────────────
+   The owner picked this one from three mockups, and **dark is the default**. The light
+   theme exists for the toggle, not for the OS preference (reason below, at
+   `color-scheme`).
 
-   ⭐ **লালের দুটো অর্থ আলাদা, ওজন দিয়ে** — এটাই পুরোনো থিমের আসল সমস্যা
-   ছিল, তাই নিয়মটা এখানে লেখা থাকল:
-     · আউটলাইন/সরু লাল (`border-brand`, `ring-brand`) → **ব্র্যান্ড**:
-       সক্রিয় ট্যাব, ফোকাস রিং। "এদিকে তাকাও" নয়, "এটা আমরা"।
-     · সলিড ভরাট লাল (`bg-attention`) → **মনোযোগ দরকার**: এজেন্ট বন্ধ,
-       ভুল, ঘাটতি।
-   ⚠️ **কাজ করছেন = সবুজ, লাল নয়।** সবাই ঠিকঠাক কাজ করলে পর্দায় একটাও
-   সলিড লাল থাকবে না — লাল দেখলেই যেন হাত থামে। রোজকার অবস্থাকে লাল
-   দেখালে দু-দিনেই লাল মানে "কিছু না" হয়ে যেত।
+   Red has TWO distinct meanings, told apart by weight. This was the real problem with
+   the old theme, so the rule is written down here:
+     - outline / thin red (`border-brand`, `ring-brand`) -> **brand**:
+       active tab, focus ring. Not "look here", but "this is us".
+     - solid filled red (`bg-attention`) -> **needs attention**: agent down,
+       error, shortfall.
+   Careful: **working = green, not red.** When everyone is working normally there is
+   not a single solid red on screen, so that seeing red makes you stop. Showing the
+   everyday state in red would make red mean "nothing" within two days.
 
-   ⭐ প্রতিটা টোকেনের **দুটো মান একই লাইনে**, `light-dark()`-এ: বাঁয়েরটা
-   লাইট, ডানেরটা ডার্ক। আলাদা `@media`/ক্লাস ব্লকে ডার্ক প্যালেট রাখলে দুটো
-   তালিকা মেনটেইন করতে হতো, আর একদিন কেউ একটায় রং বদলে অন্যটা বদলাতে ভুলত —
-   নিজের থিমে সেটা তার চোখেই পড়ত না।
+   Each token has **both values on one line**, in `light-dark()`: left is light, right
+   is dark. Keeping a dark palette in a separate `@media`/class block would mean
+   maintaining two lists, and one day someone would change a colour in one and forget the
+   other; in their own theme they would not even notice.
 
-   ⚠️ গাঢ় থিমে **খাঁটি কালো (#000) পটভূমি নয়** (টপবার ছাড়া)। স্ক্রিনশটের
-   থাম্বনেইলগুলোর নিজেদের কোনো সীমানা নেই — #000-এর উপরে বসালে ছবিগুলো
-   কার্ডের বাইরে ভাসতে থাকা মনে হতো। paper #0e1116 → surface #161b22,
-   অর্থাৎ কার্ড পটভূমির চেয়ে এক ধাপ উপরে, ঠিক লাইট থিমের মতোই।
+   Careful: in the dark theme the background is **not pure black (#000)** (except the top
+   bar). The screenshot thumbnails have no border of their own; on #000 the images would
+   look like they float outside the card. paper #0e1116 -> surface #161b22, so a card
+   sits one step above the background, just like the light theme.
 
-   কনট্রাস্ট (WCAG, ডার্ক surface #161b22-এর উপরে · লাইটে সাদার উপরে):
+   Contrast (WCAG, on the dark surface #161b22 / on white in light):
      ink 14.6:1 / 15.3:1 · ink-2 7.9:1 / 8.0:1 · brand-ink 6.3:1 / 6.1:1
-     ok-ink 9.0:1 / 5.7:1 · idle-ink 8.9:1 / 5.3:1        → সবই AA
-     brand 5.3:1 / 4.4:1 আর ok/idle ~3.3:1 — বিন্দু, বার, রিং, বর্ডারে
-       (UI উপাদানের সীমা ৩:১), **লেখায় নয়** — লেখার জন্য `-ink` জোড়াটা
-     ⚠️ ink-3 3.9:1 / 3.1:1 — মালিকের বাছা ধূসর AA পেরোয় না। তাই এটা
-       ম্লান মেটা-লেখার (টাইমস্ট্যাম্প, "গোনা হয়নি") রং, কোনো পাতার
-       মূল লেখা এতে বসানো যাবে না। মূল লেখা `ink`, দ্বিতীয় সারি `ink-2`।
+     ok-ink 9.0:1 / 5.7:1 · idle-ink 8.9:1 / 5.3:1        -> all AA
+     brand 5.3:1 / 4.4:1 and ok/idle ~3.3:1 for dots, bars, rings and borders
+       (the limit for UI components is 3:1), **not for text**; for text use the
+       `-ink` pair
+     Careful: ink-3 3.9:1 / 3.1:1: the owner's chosen grey does not clear AA. So it
+       is the colour for dim meta text (timestamps, "not counted"); no page's main text
+       may use it. Main text is `ink`, second rows `ink-2`.
 */
 /**
- * ⚠️ **`static` ছাড়া নয়।** ডিফল্টে Tailwind v4 যে টোকেনটা কোনো ক্লাসে
- *    ব্যবহার হয়নি সেটাকে CSS থেকে ছেঁটে ফেলে। তাতে দুটো জিনিস নীরবে
- *    ভাঙত:
- *      · `--color-offline`/`--color-attention` অন্য টোকেনকে `var()` দিয়ে
- *        দেখায় — লক্ষ্যটা ছেঁটে গেলে রংটা কিছুই হতো না
- *      · ইনলাইন `style={{ stroke: 'var(--color-ok)' }}` (রিং, চার্ট, বার)
- *        — Tailwind ওই ব্যবহারটা দেখতেই পায় না, তাই ক্লাসে না থাকলে
- *        টোকেনটা উধাও, আর SVG-টা কালো হয়ে যেত
- *    পুরো প্যালেটটা ২০টার মতো ভেরিয়েবল, সবগুলো রাখলেও gzip-এ ৩০০ বাইটও নয়।
+ * Careful: `static` is required. By default Tailwind v4 prunes from the CSS any token
+ *    that no class uses. Two things would then break silently:
+ *      - `--color-offline`/`--color-attention` point at other tokens via `var()`; if
+ *        the target were pruned the colour would be nothing
+ *      - inline `style={{ stroke: 'var(--color-ok)' }}` (rings, charts, bars):
+ *        Tailwind cannot see that usage, so if it is in no class the token
+ *        vanishes and the SVG turns black
+ *    The whole palette is about 20 variables; even keeping all of them is under
+ *    300 bytes in gzip.
  */
 @theme static {
-  /* ব্র্যান্ড লাল — সরু হলে পরিচয়, ভরাট হলে সতর্কতা */
+  /* Brand red: identity when thin, warning when filled */
   --color-brand: light-dark(#ed1c24, #ff4d54);
-  /** লাল **লেখা** — গাঢ় পটভূমিতে #c4121a ৩:১-ও পেরোত না, তাই ডার্কে হালকা */
+  /** Red **text**: #c4121a on a dark background would not even reach 3:1, so lighter in dark */
   --color-brand-ink: light-dark(#c4121a, #ff6b71);
-  /** লালের ম্লান আভা — সতর্ক ব্যানার/সারির পটভূমি */
+  /** Faint red tint: background of warning banners/rows */
   --color-brand-bg: light-dark(#fdeaeb, #2a1416);
   /**
-   * ⭐ ভরাট লালের **উপরে** কী রঙে লেখা বসবে। ডার্কের #ff4d54 উজ্জ্বল —
-   * তার উপরে সাদা লেখা মাত্র ৩.৩:১, অথচ চিপের লেখা ১১px। গাঢ় লেখা বসিয়ে
-   * ৫.৮:১। লাইটে আগের মতোই সাদা।
+   * What colour text takes ON a solid red fill. Dark's #ff4d54 is bright: white text
+   * on it is only 3.3:1, yet chip text is 11px. Dark text there gives
+   * 5.8:1. In light it is white, as before.
    */
   --color-on-brand: light-dark(#ffffff, #0e1116);
 
   /**
-   * ⭐ `ink` **উল্টে যায়** — "গোনা হওয়া কাজ" মানে পটভূমির উল্টো প্রান্ত:
-   * লাইটে কালো, ডার্কে সাদা। ধূসর (`ink-3`) দুই থিমেই মাঝখানে, তাই
-   * "গোনা হয়নি" সবসময় ম্লানই দেখায়।
+   * `ink` **flips**: "counted work" means the opposite end from the background:
+   * black in light, white in dark. Grey (`ink-3`) is in the middle in both themes, so
+   * "not counted" always looks dim.
    */
   --color-ink: light-dark(#14171c, #e8ecf1);
   --color-ink-2: light-dark(#4e5661, #a6b0bd);
   --color-ink-3: light-dark(#8b93a0, #6e7885);
   /**
-   * ⭐ `ink`-এর **জোড়া** দুটো টোকেন। `bg-ink` ভরাটের উপরে কী রঙে লেখা বসবে
-   * সেটা থিমভেদে উল্টো — লাইটে সাদা, ডার্কে গাঢ়। জোড়াটা টোকেন না করে
-   * `text-white` হার্ডকোড করলে ডার্কে সাদা বোতামে সাদা লেখা বসত।
+   * The two tokens that **pair** with `ink`. What colour text takes on a `bg-ink` fill
+   * is inverted per theme: white in light, dark in dark. If the pair were not a token
+   * and `text-white` were hardcoded, dark would get white text on a white button.
    */
   --color-on-ink: light-dark(#ffffff, #0e1116);
-  /** `bg-ink`-এর hover — `ink`-এর চেয়ে **এক ধাপ চরম** প্রান্ত */
+  /** hover of `bg-ink`: **one step more extreme** than `ink` */
   --color-ink-strong: light-dark(#000000, #ffffff);
 
   --color-paper: light-dark(#f4f5f7, #0e1116);
   --color-surface: light-dark(#ffffff, #161b22);
   --color-line: light-dark(#e4e6ea, #242b35);
   /**
-   * ⭐ টপবার/লোগোর ফিল্ড — **দুই থিমেই গাঢ়**, তাই এটা `paper`-এর মতো
-   * উল্টায় না। লোগোটা কালোর উপরেই আঁকা; থিমের সাথে উল্টে গেলে ব্র্যান্ডটাই
-   * বদলে যেত। ডার্কে খাঁটি #000 (paper #0e1116-এর চেয়ে এক ধাপ গাঢ়, তাই
-   * কিনারাটা থাকে), লাইটে #191c22 — খাঁটি কালো নয়, নইলে সাদা পাতার উপরে
-   * কালির দাগের মতো ভারী লাগত।
-   * ⚠️ এর উপরে লেখা **সবসময় সাদা** (`text-white`, `text-white/55`) —
-   *    দুই থিমেই ফিল্ড গাঢ়, তাই এখানে টোকেন উল্টানোর কিছু নেই।
+   * Field for the top bar / logo: **dark in both themes**, so unlike `paper` it
+   * does not flip. The logo is drawn on black; if it flipped with the theme the brand
+   * itself would change. In dark it is pure #000 (one step darker than paper #0e1116,
+   * so the edge stays), in light #191c22: not pure black, which would look as heavy as
+   * an ink blot on a white page.
+   * Careful: text on it is **always white** (`text-white`, `text-white/55`): the field
+   *    is dark in both themes, so there is no token to flip here.
    */
   --color-chrome: light-dark(#191c22, #000000);
 
-  /* ── অবস্থার চারটে রং ────────────────────────────────────────────────
-     ⚠️ পাতাগুলো যেন হেক্স হার্ডকোড না করে — অবস্থার রং **এখানেই**:
-       · `bg-ok`        কাজ করছেন   (সবুজ)
-       · `bg-idle`      নিষ্ক্রিয়    (হলুদ)
-       · `bg-offline`   অফলাইন      (ধূসর — স্বাভাবিক, কারো দোষ নয়)
-       · `bg-attention` এজেন্ট বন্ধ / ভুল / ঘাটতি (সলিড লাল)
-     ⭐⚠️ **`offline` আর `attention` কখনো এক রঙে নয়।** offline = কর্মী
-        চলে গেছেন (স্বাভাবিক), attention = এজেন্ট মরে গেছে (IT-র কাজ)।
-        একটাকে আরেকটার রঙে দেখালে হয় মিথ্যা অভিযোগ হয়, নয় আসল সমস্যা
-        চাপা পড়ে — আর এই দুটো ভুল ঠেকানোই ফিচারটার কারণ।
-     ⭐ ভরাট/বিন্দুতে `ok`·`idle`, **লেখায়** `ok-ink`·`idle-ink` (নিচের
-        সেতুটা `text-ok`/`text-idle`-কেও পড়ার মতো রঙে পাঠায়)।
-     ⭐ আভা লাগলে টোকেনেরই স্বচ্ছতা: `bg-ok/10`, `border-ok/40` — নতুন
-        টোকেন লাগে না। */
+  /* ── The four state colours ───────────────────────────────────────────
+     Careful: pages must not hardcode hex; the state colours live **here**:
+       - `bg-ok`        working      (green)
+       - `bg-idle`      idle         (yellow)
+       - `bg-offline`   offline      (grey: normal, nobody's fault)
+       - `bg-attention` agent down / error / shortfall (solid red)
+     Careful: **`offline` and `attention` are never the same colour.** offline = the
+        employee has left (normal), attention = the agent has died (IT's job).
+        Showing one in the other's colour either makes a false accusation or buries a
+        real problem, and preventing those two mistakes is the reason for the feature.
+     For fills/dots use `ok`/`idle`, for **text** `ok-ink`/`idle-ink` (the bridge below
+        also sends `text-ok`/`text-idle` to a readable colour).
+     For a tint use the token's own opacity: `bg-ok/10`, `border-ok/40`; no new
+        token needed. */
   --color-ok: light-dark(#1f9d55, #3fb950);
   --color-ok-ink: light-dark(#177544, #56d364);
   --color-idle: light-dark(#b8860b, #d9a406);
   --color-idle-ink: light-dark(#8a6508, #e3b341);
-  /** ⭐ offline = ঠিক সেই ধূসর যেটা "গোনা হয়নি" বোঝায় — দুটো মান নয়,
-      একটাই। `ink-3` বদলালে অফলাইনও সাথে সাথে বদলাবে, এটাই চাওয়া। */
+  /** offline = exactly the grey that means "not counted": one value, not two.
+      Changing `ink-3` changes offline with it, which is intended. */
   --color-offline: var(--color-ink-3);
-  /** ⭐ ব্র্যান্ডের সাথে **একই লাল, আলাদা কাজ**। নাম দুটো আলাদা রাখা হয়েছে
-      যাতে পাতা পড়েই বোঝা যায় ওটা পরিচয় না সতর্কতা — আর একদিন সতর্কতার লাল
-      সরাতে হলে ব্র্যান্ডকে না ছুঁয়েই সরানো যায়। */
+  /** **The same red as the brand, a different job.** The two names are kept separate
+      so that reading a page tells you whether it is identity or warning, and if the
+      warning red ever has to go it can be removed without touching the brand. */
   --color-attention: var(--color-brand);
 
-  /* ── ⭐⭐ পরিচয়ের রং — অবস্থার রং নয় ─────────────────────────────────
-     উপরের `ok`·`idle`·`attention` তিনটেই **অবস্থা** বোঝায়। কিন্তু কিছু
-     চার্টে রং দিয়ে বোঝাতে হয় **কোনটা কী** (কোন অ্যাপ, কোন ভাগ) — সেখানে
-     অবস্থার রং ব্যবহার করলে অ্যালার্টের লাল আর চার্টের লাল এক হয়ে যেত,
-     আর তখন লাল দেখে বোঝা যেত না এখনই হাত দিতে হবে কি না।
+  /* ── Identity colours, not state colours ─────────────────────────────
+     The three above (`ok`, `idle`, `attention`) all mean a **state**. But some charts
+     must use colour to say **which is which** (which app, which part); using the state
+     colours there would make the alert red and the chart red the same, and then
+     seeing red would not tell you whether to act right now.
 
-     ⚠️ কোন হিউ নিরাপদ, সেটা চোখে বাছা হয়নি — **মাপা হয়েছে** (CVD
-     সিমুলেশন, OKLab ΔE, `dataviz` ভ্যালিডেটর):
-       নীল ↔ বেগুনি   ΔE ১.৪–৫.৫  ✗ কালার-ব্লাইন্ড চোখে কার্যত একই
-       নীল ↔ কমলা     ΔE ২৪–৩১    ✓ নিরাপদ
-     অর্থাৎ অবস্থার তিনটে রং সরিয়ে রাখলে পরিচয়ের জন্য কার্যত **দুটোই স্লট**
-     খোলা থাকে — তাই চার-পাঁচ স্লাইসের রঙিন চার্ট এই অ্যাপে সৎভাবে করা যায়
-     না, আর করার দরকারও নেই: ক্রম বোঝাতে **এক হিউর স্বচ্ছতার ধাপ**, আর
-     পরিচয় বোঝাতে **নামসহ সাজানো তালিকা** — দুটোই বেশি পড়া যায়।
+     Careful: which hues are safe was not picked by eye, it was **measured** (CVD
+     simulation, OKLab delta E, the `dataviz` validator):
+       blue <-> purple   delta E 1.4-5.5  (bad) practically the same to colour-blind eyes
+       blue <-> orange   delta E 24-31    (good) safe
+     So with the three state colours set aside, only **two slots** are practically
+     open for identity. A four- or five-slice coloured chart cannot honestly be done in
+     this app, and does not need to be: **steps of opacity of one hue** show order, and a
+     **named, sorted list** shows identity; both read better.
 
-     ⚠️ দুটো মান আলাদা করে যাচাই করা: `#1f6feb` সাদা পটভূমিতে, `#3d8fe0`
-     গাঢ়তে — একটাই মান দু-জায়গায় দিলে কনট্রাস্ট বা lightness ব্যান্ডের
-     একটা ফেল করত। */
+     Careful: the two values were checked separately: `#1f6feb` on a white background,
+     `#3d8fe0` on dark. Using one value in both places would fail either the contrast or
+     the lightness band. */
   --color-data: light-dark(#1f6feb, #3d8fe0);
   --color-data-2: light-dark(#b45309, #dd9446);
 
@@ -141,24 +143,23 @@
 }
 
 /**
- * ⭐ `color-scheme`-ই থিমের একমাত্র সুইচ — `light-dark()` এটাই দেখে।
+ * `color-scheme` is the theme's only switch: `light-dark()` follows it.
  *
- * ⭐ **ডিফল্ট `dark`, `light dark` নয়** — অর্থাৎ `prefers-color-scheme`
- *    ইচ্ছে করেই দেখা হয় না। মালিক Midnight বেছেছেন; যার উইন্ডোজ লাইট মোডে
- *    তারও অ্যাপটা গাঢ়ই খুলবে, আর হালকা চাইলে টগল আছে। OS দেখলে একই
- *    অফিসের দুজন দুই রকম পর্দা দেখত, আর "আমার এখানে অন্যরকম দেখাচ্ছে"
- *    বলে ধরা কঠিন হতো।
+ * The default is `dark`, NOT `light dark`: `prefers-color-scheme` is deliberately not
+ *    consulted. The owner chose Midnight; even someone whose Windows is in light mode
+ *    gets the app opening dark, and the toggle is there for light. If we followed the OS,
+ *    two people in the same office would see different screens, and "it looks different
+ *    on mine" would be hard to pin down.
  *
- * ⭐ এর **দ্বিতীয়** কাজটা আসলে বেশি জরুরি: `<input type="date">`,
- *    `<input type="month">`, `<select>`-এর ড্রপডাউন আর স্ক্রলবার ব্রাউজার
- *    নিজে আঁকে, আমাদের ক্লাস ওদের ভেতরে পৌঁছায় না। `color-scheme` না
- *    দিলে গাঢ় পর্দায় ক্যালেন্ডার আর ড্রপডাউনগুলো ঝকঝকে সাদা বাক্স হয়ে
- *    থাকত — আর তারিখ বাছাই এই অ্যাপের প্রায় প্রতিটা পাতায় আছে।
+ * Its **second** job is actually more important: `<input type="date">`,
+ *    `<input type="month">`, the `<select>` dropdown and scrollbars are drawn by the
+ *    browser itself, and our classes do not reach inside them. Without `color-scheme`
+ *    the calendar and dropdowns would be glaring white boxes on a dark screen, and
+ *    date picking is on nearly every page of this app.
  *
- * ⚠️ JS চালু হওয়ার আগেই প্রথম রংটা এখান থেকেই ঠিক হয়, তাই কেউ এক ঝলক
- *    সাদা পর্দা দেখে না। `ThemeToggle` পরে `data-theme` বসায়, আর সেটা
- *    দুই দিকেই ছাপিয়ে যায় — শুধু `[data-theme='dark']` লিখলে "আমি লাইট
- *    চাই" কাজ করত না।
+ * Careful: the first colour is decided here before JS even starts, so nobody sees a
+ *    flash of white. `ThemeToggle` later sets `data-theme`, which overrides in both
+ *    directions: writing only `[data-theme='dark']` would break "I want light".
  */
 :root {
   color-scheme: dark;
@@ -171,18 +172,19 @@
 }
 
 /**
- * `dark:` ভ্যারিয়েন্টটা আমাদের সুইচের সাথেই বাঁধা।
+ * The `dark:` variant is tied to our switch.
  *
- * ⚠️ Tailwind-এর ডিফল্ট `dark:` শুধু `prefers-color-scheme` দেখে — অর্থাৎ
- *    টোকেনগুলো গাঢ় থাকত কিন্তু `dark:` ক্লাসগুলো লাইট OS-এ ঘুমিয়ে থাকত,
- *    আর পর্দায় দুটো থিম মিশে যেত।
- * ⚠️ শর্তটা **উল্টো করে লেখা** ("লাইট নয়" = ডার্ক), কারণ ডিফল্ট গাঢ় আর
- *    `data-theme` বসার আগে (প্রথম রেন্ডারের আগের মুহূর্ত, বা JS বন্ধ থাকলে)
- *    অ্যাট্রিবিউটটাই থাকে না। `[data-theme='dark']` খুঁজলে ওই অবস্থায়
- *    টোকেন গাঢ় হতো অথচ `dark:` ক্লাসগুলো নয়।
+ * Careful: Tailwind's default `dark:` looks only at `prefers-color-scheme`, so the
+ *    tokens would be dark but the `dark:` classes would sleep on a light OS, and the
+ *    two themes would blend on screen.
+ * Careful: the condition is **written inverted** ("not light" = dark), because the
+ *    default is dark and before `data-theme` is set (the moment before the first
+ *    render, or with JS off) the attribute is not there at all. Looking for
+ *    `[data-theme='dark']` would make the tokens dark but the `dark:` classes not,
+ *    in that state.
  *
- * ⚠️ তবু `dark:` কম ব্যবহার করুন — রং টোকেন থেকেই আসা উচিত। এটা
- *    ছায়া/অস্বচ্ছতার মতো যা টোকেনে ধরে না, শুধু তার জন্য।
+ * Careful: still use `dark:` sparingly: colour should come from tokens. It is only for
+ *    things tokens do not capture, such as shadows/opacity.
  */
 @custom-variant dark (&:where(:root:not([data-theme='light']), :root:not([data-theme='light']) *));
 
@@ -196,26 +198,25 @@ body {
   @apply bg-paper text-ink antialiased;
 }
 
-/* ── ফোনে ইনপুটের লেখা কখনো ১৬px-এর ছোট নয় ─────────────────────────────
-   ⚠️⚠️ iOS Safari-র নিয়ম: যে ইনপুটে ফোকাস পড়ল তার `font-size` ১৬px-এর কম
-   হলে ব্রাউজার **নিজে থেকে পুরো পাতাটা জুম করে দেয়** — আর জুমটা ফোকাস
-   সরলেও ফেরত যায় না। একবার হলে পাতা আড়াআড়ি স্ক্রল করতে থাকে, হেডার আর
-   নেভ পর্দার বাইরে চলে যায়, আর পরের ঘরটা খুঁজতে আঙুলে টেনে বেড়াতে হয়।
+/* ── Input text on phones is never smaller than 16px ───────────────────────
+   Careful: iOS Safari rule: when the focused input's `font-size` is under 16px the
+   browser **zooms the whole page by itself**, and the zoom does not return even when
+   focus leaves. Once it happens the page scrolls sideways, the header and nav go off
+   screen, and you have to drag with a finger to find the next field.
 
-   ⚠️ অ্যাপের **প্রতিটা** ইনপুটই ১৩–১৫px (`Field.tsx` ১৫, `DatePicker`
-      ১৩, `GlobalSearch` ১৩, সেটিংসের `INPUT` ১৩.৫) — অর্থাৎ লগইনের ইমেইল
-      ঘরে প্রথম আঙুল ছোঁয়ানোর মুহূর্তেই ব্যাপারটা ঘটত।
+   Careful: **every** input in the app is 13-15px (`Field.tsx` 15, `DatePicker` 13,
+      `GlobalSearch` 13, the settings `INPUT` 13.5), so it would happen on the first
+      touch of the login email field.
 
-   ⭐ ঠেকানোর একটাই ভদ্র উপায় — লেখাটা ১৬px করা। `maximum-scale=1` দিয়েও
-      জুম আটকানো যেত, কিন্তু সেটা **সবার** চিমটি-জুম কেড়ে নিত; যন্ত্রের
-      একটা খুঁত সারাতে গিয়ে কম-দেখা মানুষের কাছে অ্যাপটা পড়ার অযোগ্য করা
-      চলে না।
+   The only gentle fix is making the text 16px. `maximum-scale=1` would also stop the
+      zoom, but it would take away **everyone's** pinch-zoom; fixing a device quirk must
+      not make the app unreadable for people with poor eyesight.
 
-   ⚠️ শুধু সরু পর্দায়। ডেস্কটপে ১৩px ইনপুটগুলো মালিকের অনুমোদিত ঘনত্ব —
-      সেটা এক চুলও বদলায় না, আর এই ব্লকটা ওখানে বসেই না।
-   ⚠️ লেয়ারের বাইরে ইচ্ছাকৃতভাবে: Tailwind-এর `text-[13px]` থাকে
-      `@layer utilities`-এ, আর লেয়ারবিহীন CSS সবসময় লেয়ার করা CSS-কে
-      ছাপিয়ে যায় — নইলে প্রতিটা ইনপুটের ক্লাস আলাদা করে বদলাতে হতো। */
+   Careful: narrow screens only. On desktop the 13px inputs are the density the owner
+      approved: it does not change at all, and this block does not even apply there.
+   Careful: deliberately outside any layer: Tailwind's `text-[13px]` lives in
+      `@layer utilities`, and unlayered CSS always beats layered CSS; otherwise every
+      input's class would have to be changed separately. */
 @media (max-width: 640px) {
   input,
   select,
@@ -224,23 +225,23 @@ body {
   }
 }
 
-/* ── ছোঁয়ার লক্ষ্য — `.tap` (G124) ─────────────────────────────────────
-   ⚠️ অ্যাপের বোতামগুলো ছিল ২৮–৩৮px উঁচু: `Button` ~৩৪, `MiniButton` ~২৮,
-      তারিখের ◀▶ ~৩০, ট্যাব ~৩৮, Sign out ~২৯। কোনোটাই অসম্ভব নয়, কিন্তু
-      সবকটাই সুপারিশকৃত সর্বনিম্ন ৪৪px-এর নিচে — আর `MiniButton`-গুলো
-      সেটিংসের ঘন সারিতে পাশাপাশি বসে, যেখানে ভুল বোতামে চাপ পড়া সহজ।
-   ⚠️⚠️ ভুলটা এখানে **নীরব নয়, কিন্তু ফেরানোও যায় না** — সেটিংসে ভুল
-      বোতাম মানে ভুল কাজ হয়ে যাওয়া।
+/* ── Touch targets: `.tap` (G124) ──────────────────────────────────────
+   Careful: the app's buttons were 28-38px tall: `Button` ~34, `MiniButton` ~28, the date
+      arrows ~30, tabs ~38, Sign out ~29. None is impossible, but all are under the
+      recommended minimum of 44px, and the `MiniButton`s sit side by side in the dense
+      rows of Settings, where pressing the wrong button is easy.
+   Careful: here the mistake is **not silent, but also cannot be undone**: in Settings
+      the wrong button means the wrong action is done.
 
-   ⭐ একটাই ইউটিলিটি, ছ-জায়গায় বসানো — নইলে ছয় রকম মাপ হয়ে যেত, আর পরের
-      বোতামটা কোন মাপে হবে তা কেউ বলতে পারত না।
+   One utility, applied in six places; otherwise there would be six different sizes
+      and nobody could say what size the next button should be.
 
-   ⚠️ `min-height`-এর সাথে `inline-flex` লাগে: শুধু উচ্চতা বাড়ালে লেখাটা
-      উপরে আটকে থাকত আর বোতামটা দেখতে ফাঁপা লাগত। `inline-flex` বোতামকে
-      প্রবাহে আগের মতোই রাখে (`inline-block`-এর মতো), তাই পাশের জিনিস নড়ে না।
+   Careful: `min-height` needs `inline-flex`: raising only the height would leave the
+      text stuck at the top and the button looking hollow. `inline-flex` keeps the
+      button in the flow as before (like `inline-block`), so neighbours do not move.
 
-   ⚠️ শুধু সরু পর্দায়। ডেস্কটপের ঘনত্ব মালিকের অনুমোদিত — এই ব্লকটা
-      ওখানে বসেই না, তাই সেখানে এক পিক্সেলও বদলায় না। */
+   Careful: narrow screens only. The desktop density is what the owner approved; this
+      block does not apply there, so not a single pixel changes. */
 @media (max-width: 640px) {
   .tap {
     min-height: 44px;
@@ -250,35 +251,36 @@ body {
   }
 }
 
-/* সংখ্যা সবসময় সমান প্রস্থে — ঘণ্টার হিসাব লাফালাফি করবে না */
+/* Numbers always have equal width, so the hours do not jump around */
 .num {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
-/* ── ভরাট রঙের উপরে লেখা ───────────────────────────────────────────────
-   এখানে একসময় একটা **সেতু-ব্লক** ছিল: কয়েকটা পাতায় রং টোকেন নয়, হার্ডকোড
-   করা ছিল (`bg-ink text-white`, `hover:bg-black`, ইনপুটে `bg-white`,
-   টপবারে `bg-black`), আর ফাইলগুলো তখন যে যার আওতার বাইরে ছিল বলে CSS
-   থেকে সেগুলো ঢেকে দেওয়া হচ্ছিল।
+/* ── Text on solid fills ─────────────────────────────────────────────
+   There used to be a **bridge block** here: a few pages hardcoded colours instead of
+   tokens (`bg-ink text-white`, `hover:bg-black`, `bg-white` on inputs, `bg-black` on the
+   top bar), and those files were out of scope at the time, so the CSS was covering for
+   them.
 
-   ⭐ **হার্ডকোডগুলো আর নেই** — `text-on-ink`, `hover:bg-ink-strong`,
-   ইনপুটে `bg-surface`, টপবারে `bg-chrome` বসে গেছে। তাই নিয়মগুলোও সরানো
-   হলো: ওগুলো আর কোনো এলিমেন্টেই বসত না, শুধু পরের জনকে ভুল বলত যে
-   Page.tsx / Field.tsx / IdleWarning.tsx-এ এখনো হার্ডকোড আছে।
+   **The hardcodes are gone**: `text-on-ink`, `hover:bg-ink-strong`, `bg-surface` on
+   inputs and `bg-chrome` on the top bar are in. So those rules were removed too: they
+   no longer matched any element, they would only tell the next person wrongly that
+   Page.tsx / Field.tsx / IdleWarning.tsx still hardcode.
 
-   নিচের যে দুটো টিকে আছে সেগুলো সেতু নয়, **ইচ্ছাকৃত নকশা** — টোকেন দিয়ে
-   লেখা যায় না, কারণ এগুলো একক রং নয়, "পটভূমির উপরে লেখা"-র সম্পর্ক।
+   The two below that remain are not a bridge but **deliberate design**: they cannot be
+   written with tokens, because they are not a single colour but the relationship
+   "text on a background".
 
-   ⚠️ সিলেক্টরগুলো **দুটো করে ক্লাস** ধরে, তাই শুধু ওই জোড়াগুলোতেই বসে:
-   ব্র্যান্ড-মার্কের `bg-white` বা থাম্বনেইলের `bg-black/55` লেবেলগুলো
-   (আলাদা ক্লাস) ছোঁয়া যায় না — ওগুলো ছবির উপরের স্বচ্ছ ঢাকনা, দুই থিমেই
-   একই থাকা উচিত। */
+   Careful: the selectors match **two classes at once**, so they apply only to those
+   pairs: the brand mark's `bg-white` or the thumbnails' `bg-black/55` labels (separate
+   classes) cannot be touched; those are translucent covers over images, and should
+   stay the same in both themes. */
 
 /**
- * সলিড লালের উপরে সাদা লেখা ডার্কে ৩.৩:১ — ১১px চিপের জন্য যথেষ্ট নয়।
- * ⚠️ দ্বিতীয় নিয়মটা ওই চিপের **ভেতরের সাদা বিন্দুটার** জন্য: লেখা গাঢ়
- *    হয়ে গেলে পাশে সাদা বিন্দু বসে থাকলে ওটাকে ভুল মনে হতো।
+ * White text on solid red is 3.3:1 in dark, not enough for an 11px chip.
+ * Careful: the second rule is for the **white dot inside** that chip: once the text
+ *    turns dark, a white dot beside it would look wrong.
  */
 .bg-brand.text-white,
 .bg-attention.text-white {
@@ -290,10 +292,10 @@ body {
 }
 
 /**
- * ⭐ `text-ok`/`text-idle` → **`-ink` জোড়াটা**। বিন্দুর সবুজ-হলুদ লাইট
- *    থিমে লেখার জন্য মাত্র ~৩.৩:১, অথচ নাম দুটো এতই স্বাভাবিক যে পাতা
- *    লেখার সময় হাত ওগুলোতেই যায়। ভরাট (`bg-ok`) মালিকের বাছা রংটাই
- *    থাকে — শুধু **লেখা** পড়ার মতো রঙে সরে।
+ * `text-ok`/`text-idle` -> **the `-ink` pair**. The dot's green-yellow is only ~3.3:1 for
+ *    text in the light theme, yet the two names are so natural that a hand writing a
+ *    page reaches for them. Fills (`bg-ok`) keep the owner's chosen colour; only
+ *    **text** moves to a readable colour.
  */
 .text-ok {
   color: var(--color-ok-ink);
