@@ -5,6 +5,7 @@ import { listEmployees, type EmployeeView } from '../api/staff';
 import { useApi } from '../api/useApi';
 import { useAuth } from '../auth/AuthContext';
 import {
+  compareNames,
   formatDate,
   isValidWorkDate,
   shiftWorkDate,
@@ -52,13 +53,13 @@ export interface ParsedQuery {
 /**
  * Splits the text into "one date + the rest".
  *
- * Both can be written together: "Rashid 2026-08-01" means "Rashid's day on 1
+ * Both can be written together: "Alex 2026-08-01" means "Alex's day on 1
  * August". This is the most useful form, because a manager usually knows whose
  * day they want to see.
  *
- * Careful: although the screen language is English, names stay in Bengali (as
- * written in the DB), so the search text will be Bengali too. That is why the NFC
- * normalization in `fold()` below stays.
+ * Careful: although the screen language is English, names stay as written in
+ * the DB, in whatever script, so the search text may be in that script too.
+ * That is why the NFC normalization in `fold()` below stays.
  */
 export function parseSearchQuery(raw: string, today: string): ParsedQuery {
   const tokens = raw.trim().split(/\s+/).filter((t) => t !== '');
@@ -93,24 +94,19 @@ export function parseSearchQuery(raw: string, today: string): ParsedQuery {
 /**
  * Whether a word is a date.
  *
- * The screen language is English, so `today` / `yesterday` are recognised, but
- * the Bengali words are kept. For people used to typing the Bengali word for
- * "yesterday", it suddenly not working would look simply broken, and recognising
- * it harms nobody.
+ * The screen language is English, so `today` / `yesterday` are recognised.
  *
- * Careful: the Bengali word "kal" alone is not accepted; in Bengali it means both
- * yesterday and tomorrow. Not recognising a word beats opening the timeline of the
- * wrong day: if it is not recognised the user will type the date, and nobody
- * would ever notice the wrong day. For the same reason there is no "tomorrow" in
- * English: a future day has nothing to look at here.
+ * Careful: words that are ambiguous between days are not accepted (some
+ * languages use one word for both yesterday and tomorrow). Not recognising a
+ * word beats opening the timeline of the wrong day: if it is not recognised the
+ * user will type the date, and nobody would ever notice the wrong day. For the
+ * same reason there is no "tomorrow": a future day has nothing to look at here.
  */
 function parseDateToken(token: string, today: string): string | null {
   // Careful: `toLowerCase()` so that "Today" at the start of a sentence is recognised too
   const word = token.toLowerCase();
-  if (word === 'today' || token === 'আজ' || token === 'আজকে') return today;
-  if (word === 'yesterday' || token === 'গতকাল') {
-    return shiftWorkDate(today, -1);
-  }
+  if (word === 'today') return today;
+  if (word === 'yesterday') return shiftWorkDate(today, -1);
 
   const m = /^(\d{1,4})[-/.](\d{1,2})[-/.](\d{1,4})$/.exec(token);
   if (m === null) return null;
@@ -136,9 +132,10 @@ function parseDateToken(token: string, today: string): string | null {
 }
 
 /**
- * Careful: NFC normalization is applied because the text is Bengali. The vowel
- * signs O and AU (U+09CB, U+09CC) can be written in Unicode in two ways: as one
- * code point, or as two combined. Keyboards produce either. Without normalizing,
+ * Careful: NFC normalization is applied because names may be in any script.
+ * Many characters (accented Latin letters, some Indic vowel signs) can be
+ * written in Unicode in two ways: as one code point, or as two combined.
+ * Keyboards produce either. Without normalizing,
  * typing a name would fail to find that very name, while the two texts look
  * identical on screen, a mistake nobody could ever catch.
  */
@@ -165,8 +162,8 @@ function rankOf(emp: EmployeeView, needle: string): number | null {
   if (code === needle) rank = 0;
   else if (code.startsWith(needle)) rank = 1;
   /**
-   * Careful: given name first, family name after. Typing "Rashid" puts "Rashidul
-   * Islam" on top and "Mamunur Rashid" below it: both are there, but the order is
+   * Careful: given name first, family name after. Typing "Alex" puts "Alexandra
+   * Silva" on top and "Maria Alex" below it: both are there, but the order is
    * predictable. With both at the same level the tie would break alphabetically,
    * and whose page Enter lands on would depend on name spelling, which looks
    * random to the user.
@@ -198,7 +195,7 @@ export function matchEmployees(
     .filter((row): row is { emp: EmployeeView; rank: number } => row.rank !== null)
     .sort(
       (a, b) =>
-        a.rank - b.rank || a.emp.fullName.localeCompare(b.emp.fullName, 'bn'),
+        a.rank - b.rank || compareNames(a.emp.fullName, b.emp.fullName),
     )
     .slice(0, limit)
     .map((row) => row.emp);
@@ -441,8 +438,8 @@ function Panel({
       {parsed.date !== null && (
         <p className="border-b border-line px-3 py-2 text-[11.5px] text-ink-3">
           {/*
-            Careful: `weekdayOf()` now returns `Mon`, so the Bengali word for "day"
-               is no longer appended after it; doing so would give "Mon" + that word.
+            Careful: `weekdayOf()` returns `Mon`, complete by itself; no word
+               for "day" is appended after it.
           */}
           {formatDate(parsed.date)} · {weekdayOf(parsed.date)} —{' '}
           {parsed.text === '' ? 'whose day?' : "that day's timeline"}

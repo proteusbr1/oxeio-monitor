@@ -273,7 +273,7 @@ describe('digestBody', () => {
   const digest = buildDigest(
     source({
       today: [
-        day({ employeeId: 1, empCode: 'OX-001', fullName: 'মামুনুর রশিদ', creditedHours: 7.5 }),
+        day({ employeeId: 1, empCode: 'OX-001', fullName: '山田太郎', creditedHours: 7.5 }),
         day({ employeeId: 2, empCode: 'OX-002', fullName: 'Jane Doe', creditedHours: 0, status: 'no_activity' }),
       ],
       month: [
@@ -285,12 +285,12 @@ describe('digestBody', () => {
   );
   const body = digestBody(digest, 'oXeio Office');
 
-  it('Bengali names are intact — email is UTF-8, no limit like a PDF', () => {
-    expect(body).toContain('মামুনুর রশিদ');
+  it('non-Latin names are intact — email is UTF-8, no limit like a PDF', () => {
+    expect(body).toContain('山田太郎');
   });
 
   it('everyone\'s hours today and target are present', () => {
-    expect(body).toContain('মামুনুর রশিদ (OX-001) — 7.50h · 8.00 target');
+    expect(body).toContain('山田太郎 (OX-001) — 7.50h · 8.00 target');
   });
 
   it('the behind line has both the counted and the expected', () => {
@@ -318,7 +318,7 @@ describe('digestBody', () => {
   });
 
   it('no mention of money — salary is owner-only and audited (ADR-023)', () => {
-    expect(body).not.toMatch(/\$|salary|বেতন/i);
+    expect(body).not.toMatch(/\$|salary|salário/i);
   });
 
   it('when nobody is behind it says "Nobody", not an empty section', () => {

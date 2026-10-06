@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   workHourNow,
@@ -14,30 +14,42 @@ import {
   workTimeZoneLabel,
   workWallOf,
 } from '../src/lib/format';
+import { TEST_WORK_ZONE } from './setup';
 
 /**
  * The work-day zone comes from the server (`GET /auth/time-zone`, called in
  * `main.tsx` before the first render). These tests check that:
- *  1. without that answer every helper is exactly what it was with the
- *     hardcoded UTC+6 — `format.spec.ts` already runs that way;
+ *  1. without that answer the zone is UTC (the server's own default); the
+ *     tests themselves run pinned to UTC+6 (`test/setup.ts`), which is how
+ *     `format.spec.ts` runs;
  *  2. a negative offset (America/Sao_Paulo, UTC−3) cuts days at its own
  *     midnight, across month and year boundaries;
  *  3. daylight saving (Europe/Lisbon) uses the offset in force at each
  *     instant, the same answers the server's own tests check.
  */
 
-const WORK_ZONE = { timeZone: 'Asia/Dhaka', utcOffsetMinutes: 360 };
 const SAO_PAULO = { timeZone: 'America/Sao_Paulo', utcOffsetMinutes: -180 };
 const LISBON = { timeZone: 'Europe/Lisbon', utcOffsetMinutes: 60 };
 const hoursOf = (date: string): number =>
   (startOfWorkDate(shiftWorkDate(date, 1)).getTime() - startOfWorkDate(date).getTime()) / 3_600_000;
 
-afterEach(() => setWorkTimeZone(WORK_ZONE));
+afterEach(() => setWorkTimeZone(TEST_WORK_ZONE));
 
-describe('default — Asia/Dhaka, as before', () => {
-  it('is Dhaka, +6 h', () => {
-    expect(workTimeZone()).toBe('Asia/Dhaka');
-    expect(workTimeZoneLabel()).toBe('Dhaka');
+describe('product default — UTC', () => {
+  it('a fresh module starts on UTC, +0 h', async () => {
+    vi.resetModules();
+    const fresh = await import('../src/lib/format');
+    expect(fresh.workTimeZone()).toBe('UTC');
+    expect(fresh.workTimeZoneLabel()).toBe('UTC');
+    expect(fresh.startOfWorkDate('2026-08-11').toISOString()).toBe('2026-08-11T00:00:00.000Z');
+    expect(fresh.todayInWorkZone(new Date('2026-08-11T23:59:00Z'))).toBe('2026-08-11');
+  });
+});
+
+describe('the test zone — Etc/GMT-6 (UTC+6)', () => {
+  it('is GMT-6, +6 h', () => {
+    expect(workTimeZone()).toBe('Etc/GMT-6');
+    expect(workTimeZoneLabel()).toBe('GMT-6');
     expect(workWallOf(new Date('2026-08-11T00:00:00Z')).toISOString()).toBe('2026-08-11T06:00:00.000Z');
     expect(startOfWorkDate('2026-08-11').toISOString()).toBe('2026-08-10T18:00:00.000Z');
   });
@@ -61,7 +73,7 @@ describe('America/Sao_Paulo (UTC−3)', () => {
     setWorkTimeZone(SAO_PAULO);
     expect(todayInWorkZone(new Date('2026-08-11T02:59:00Z'))).toBe('2026-08-10');
     expect(todayInWorkZone(new Date('2026-08-11T03:00:00Z'))).toBe('2026-08-11');
-    // 15:00 local — where the Dhaka offset used to turn the day
+    // 15:00 local — where a UTC+6 zone turns the day
     expect(workDateOf('2026-08-11T18:00:00Z')).toBe('2026-08-11');
   });
 
@@ -90,7 +102,7 @@ describe('America/Sao_Paulo (UTC−3)', () => {
 
   it('ignores a malformed answer and keeps the previous zone', () => {
     setWorkTimeZone({ timeZone: 'Broken', utcOffsetMinutes: Number.NaN });
-    expect(workTimeZone()).toBe('Asia/Dhaka');
+    expect(workTimeZone()).toBe('Etc/GMT-6');
     expect(formatTime('2026-08-11T12:30:00Z')).toBe('18:30');
   });
 });

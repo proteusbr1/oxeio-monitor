@@ -85,9 +85,8 @@ export async function api<T>(
     } | null;
 
     /**
-     * Careful: `p.message` is the server's message, and the server still speaks
-     * Bengali, so it reaches the screen in Bengali (see `<ErrorBox>`). It is not
-     * translated here: a translation table would let new server messages slip
+     * Careful: `p.message` is the server's message, and it reaches the screen in
+     * the server's own wording (see `<ErrorBox>`). It is not translated here: a translation table would let new server messages slip
      * through untranslated without anyone noticing. The fallback below is our own
      * text, so it is in English.
      */

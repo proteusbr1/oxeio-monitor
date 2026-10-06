@@ -32,7 +32,7 @@ export class MeController {
    * `GET /api/v1/me/days?from=2026-08-01&to=2026-08-12`
    *
    * Careful: off days are in the list too (`isOffDay: true`); without them the
-   * page could not answer "where is Friday?".
+   * page could not answer "where is my day off?".
    */
   /**
    * `GET /api/v1/me/deposit` — **R21**, how much of their own deposit has built up.

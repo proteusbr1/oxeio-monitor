@@ -23,7 +23,7 @@ import {
  *
  * Careful: **red is used very sparingly**: only for zero hours on a workday (light
  *    `brand-bg`) and in the "behind" column (`brand-ink`). Zero hours on a day off is
- *    not slacking; red there would turn the whole screen red every Friday and red
+ *    not slacking; red there would turn the whole screen red every weekend and red
  *    would lose its meaning.
  */
 
@@ -523,7 +523,7 @@ function MonthTarget({ row }: { row: EmployeeGridRow }) {
   /**
    * Careful: **0 and "none" are different**, and 0 can now really happen.
    *
-   * This cell used to show the policy's flat 208, which was never 0. Now the number
+   * This cell used to show the policy's flat monthly target, which was never 0. Now the number
    * is counted by office days, so 0 arrives legitimately when someone was on leave
    * the whole time or joined at the very end of the month.
    *

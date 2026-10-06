@@ -134,7 +134,7 @@ interface ReportContext {
   expectedHours: Record<number, number>;
   /**
    * Per employee, **the total target of this span**, in hours: office days ×
-   * daily target, minus Fridays, public holidays and their own leave. The
+   * daily target, minus weekly days off, public holidays and their own leave. The
    * definition is in the note on `ReportMeta.targetHoursInRange`.
    */
   targetHoursInRange: Record<number, number>;
@@ -834,10 +834,8 @@ export class ReportsService {
           lte: months[months.length - 1].last,
         },
       },
-      // `name` is fetched too, because the uncertainty marker ("(সম্ভাব্য)",
-      // "probable") is in the name, not a separate column (see the top of
-      // `prisma/holidays.data.ts`).
-      select: { holidayDate: true, name: true },
+      // `approximate` feeds the "dates not final yet" note (`approximateHolidayDates()`)
+      select: { holidayDate: true, approximate: true },
     });
     const holidays = new Set(holidayRows.map((h) => h.holidayDate.getTime()));
 
@@ -1053,10 +1051,10 @@ export class ReportsService {
 
     /**
      * **Their total target in this span**, the owner's rule: 8 hours a day,
-     * excluding holidays and Fridays, counting office days, not months.
+     * excluding holidays and weekly days off, counting office days, not months.
      *
      * So **office days are counted, not the month**: the span's work days ×
-     * the daily target, Fridays and public holidays excluded.
+     * the daily target, weekly days off and public holidays excluded.
      *
      * This fixed G117: the policy's **flat 208** used to go here, yet in
      * October there are 24 office days (= 192h). The report showed a **phantom
@@ -1117,7 +1115,7 @@ export class ReportsService {
        * range or filter changed a little) they would say different things.
        */
       approximateHolidayDates: approximateHolidayDates(
-        holidayRows.map((h) => ({ date: h.holidayDate, name: h.name })),
+        holidayRows.map((h) => ({ date: h.holidayDate, approximate: h.approximate })),
       ),
       ruleOf,
       employedOn: (employee, date) =>

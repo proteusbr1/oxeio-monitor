@@ -22,7 +22,7 @@ function card(over: Partial<LiveCard> = {}): LiveCard {
   return {
     employeeId: 1,
     empCode: 'OX-01',
-    fullName: 'Rakib Hasan',
+    fullName: 'Alex Silva',
     designation: 'Coordinator',
     // The task target: does not apply to someone who does not receive tasks
     receivesTasks: false,
@@ -227,7 +227,7 @@ describe('G130 — what is expected today, and why not', () => {
   /**
    * **This whole describe exists for this one test.**
    *
-   * Careful: `todayIsWorkday` is the **office** calendar: Fridays and public
+   * Careful: `todayIsWorkday` is the **office** calendar: weekly days off and public
    * holidays. Personal leave is not in it, so the card of someone on leave
    * would show **"0h / 8h" and an empty meter**, looking exactly like a person
    * slacking. Yet the numbers (target, expectation, pace) had excused them
@@ -241,11 +241,11 @@ describe('G130 — what is expected today, and why not', () => {
 
   /**
    * Careful: **the order is deliberate.** If someone's leave is written on a
-   * Friday, the card should still say "day off": on that day **nobody** has a
+   * weekly day off, the card should still say "day off": on that day **nobody** has a
    * target, so singling one person out is meaningless, and reading "on leave"
    * someone would think the others are working.
    */
-  it('leave written on a Friday: still "day off", not "on leave"', () => {
+  it('leave written on a weekly day off: still "day off", not "on leave"', () => {
     expect(dayDuty(card({ todayIsWorkday: false, onLeaveToday: true }))).toBe(
       'off',
     );

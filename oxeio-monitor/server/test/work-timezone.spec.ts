@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * WORK_TIMEZONE — the work-day zone is configurable, Asia/Dhaka by default,
+ * WORK_TIMEZONE — the work-day zone is configurable, UTC by default,
  * and daylight saving is supported (Europe/Lisbon, America/Santiago below).
  *
  * The zone is read from `process.env` when `work-time.ts` is imported
@@ -9,13 +9,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
  * re-imports the modules under a stubbed env instead of calling a setter.
  *
  * Two promises are checked:
- *  1. With nothing set, every value is exactly what it was when the offset
- *     was the constant 360 — the rest of the suite already runs that way.
+ *  1. With nothing set, the zone is UTC; a fixed zone ahead of UTC (the
+ *     suite's own `Etc/GMT-6`) gives exactly the values of a constant +360.
  *  3. With daylight saving, each instant uses the offset in force then: one
  *     day a year has 23 hours, one has 25, and a skipped midnight is handled.
  *  2. A negative offset (America/Sao_Paulo, UTC−3) cuts days at its own
- *     midnight, including across month and year boundaries. Before, the
- *     Brazilian work day turned over at 15:00 local time.
+ *     midnight, including across month and year boundaries. Before, with a
+ *     fixed +6 offset, the Brazilian work day turned over at 15:00 local time.
  */
 
 async function load(timeZone?: string) {
@@ -47,7 +47,7 @@ const day = (d: Date): string => d.toISOString().slice(0, 10);
 describe('assertKnownZone', () => {
   it('accepts any IANA zone, daylight saving or not', async () => {
     const { time } = await load();
-    for (const z of ['Asia/Dhaka', 'America/Sao_Paulo', 'Europe/London', 'Australia/Sydney', 'UTC']) {
+    for (const z of ['Asia/Kolkata', 'America/Sao_Paulo', 'Europe/London', 'Australia/Sydney', 'UTC']) {
       expect(() => time.assertKnownZone(z)).not.toThrow();
     }
   });
@@ -62,21 +62,39 @@ describe('assertKnownZone', () => {
   });
 });
 
-describe('default (WORK_TIMEZONE unset) — unchanged', () => {
-  it('is Asia/Dhaka, +360 all year', async () => {
+describe('default (WORK_TIMEZONE unset)', () => {
+  it('is UTC, 0 all year', async () => {
     const { time, scheduling } = await load();
-    expect(time.WORK_TIMEZONE).toBe('Asia/Dhaka');
+    expect(time.WORK_TIMEZONE).toBe('UTC');
+    expect(time.workOffsetMinutesAt(at('2026-01-15T12:00:00Z'))).toBe(0);
+    expect(time.workOffsetMinutesAt(at('2026-07-15T12:00:00Z'))).toBe(0);
+    expect(time.WORK_TIMEZONE_LABEL).toBe('UTC');
+    expect(scheduling.JOB_TIMEZONE).toBe('UTC');
+  });
+
+  it('the day turns at UTC midnight', async () => {
+    const { time } = await load();
+    expect(day(time.workDateOf(at('2026-08-11T23:59:59Z')))).toBe('2026-08-11');
+    expect(day(time.workDateOf(at('2026-08-12T00:00:00Z')))).toBe('2026-08-12');
+  });
+});
+
+describe('a fixed zone ahead of UTC (Etc/GMT-6 = UTC+6, the suite\'s zone)', () => {
+  const PLUS6 = 'Etc/GMT-6';
+
+  it('+360 all year, no transitions', async () => {
+    const { time, scheduling } = await load(PLUS6);
     expect(time.workOffsetMinutesAt(at('2026-01-15T12:00:00Z'))).toBe(360);
     expect(time.workOffsetMinutesAt(at('2026-07-15T12:00:00Z'))).toBe(360);
     expect(time.workZoneTransitions(at('2026-01-01T00:00:00Z'), at('2027-01-01T00:00:00Z'))).toEqual([
       { at: at('2026-01-01T00:00:00Z'), offsetMinutes: 360 },
     ]);
-    expect(time.WORK_TIMEZONE_LABEL).toBe('Dhaka');
-    expect(scheduling.JOB_TIMEZONE).toBe('Asia/Dhaka');
+    expect(time.WORK_TIMEZONE_LABEL).toBe('GMT-6');
+    expect(scheduling.JOB_TIMEZONE).toBe(PLUS6);
   });
 
-  it('the Dhaka day still turns at 18:00 UTC', async () => {
-    const { time } = await load();
+  it('the day turns at 18:00 UTC', async () => {
+    const { time } = await load(PLUS6);
     expect(day(time.workDateOf(at('2026-08-11T17:59:59Z')))).toBe('2026-08-11');
     expect(day(time.workDateOf(at('2026-08-11T18:00:00Z')))).toBe('2026-08-12');
     expect(time.localMidnightOf(at('2026-08-12T03:00:00Z')).toISOString()).toBe(
@@ -84,10 +102,10 @@ describe('default (WORK_TIMEZONE unset) — unchanged', () => {
     );
   });
 
-  it('human-facing text still says Dhaka', async () => {
-    const { pdf } = await load();
+  it('human-facing text names the zone', async () => {
+    const { pdf } = await load(PLUS6);
     expect(pdf.workStamp(at('2026-08-11T12:30:00Z'))).toBe(
-      '2026-08-11 18:30 (Asia/Dhaka)',
+      '2026-08-11 18:30 (Etc/GMT-6)',
     );
   });
 });
@@ -106,7 +124,7 @@ describe('America/Sao_Paulo (UTC−3)', () => {
     const { time } = await load(SP);
     expect(day(time.workDateOf(at('2026-08-11T02:59:59Z')))).toBe('2026-08-10');
     expect(day(time.workDateOf(at('2026-08-11T03:00:00Z')))).toBe('2026-08-11');
-    // 15:00 local, where the Dhaka offset used to cut the day
+    // 15:00 local, where a fixed +6 offset used to cut the day
     expect(day(time.workDateOf(at('2026-08-11T18:00:00Z')))).toBe('2026-08-11');
     expect(
       time.sameWorkDate(at('2026-08-11T03:00:00Z'), at('2026-08-12T02:59:59Z')),

@@ -30,7 +30,7 @@ let employeeId: number;
 let otherId: number;
 let deviceId: number;
 
-const STAFF_EMAIL = 'rakib@test.local';
+const STAFF_EMAIL = 'alex@test.local';
 const STAFF_PASSWORD = 'staff-password-123';
 
 const now = workNoon();
@@ -89,7 +89,7 @@ beforeEach(async () => {
   const employee = await h.prisma.employee.create({
     data: {
       empCode: 'OX-001',
-      fullName: 'Rakib Hasan',
+      fullName: 'Alex Silva',
       designation: 'Developer',
       policyId: policy.id,
       joinedOn: new Date('2026-01-05T00:00:00Z'),
@@ -105,7 +105,7 @@ beforeEach(async () => {
   const device = await h.prisma.device.create({
     data: {
       hostname: 'PC-07',
-      windowsUsername: 'rakib',
+      windowsUsername: 'alex',
       employeeId,
       machineGuid: randomUUID(),
       tokenHash: randomUUID(),
@@ -118,7 +118,7 @@ beforeEach(async () => {
     data: {
       email: STAFF_EMAIL,
       passwordHash: await hashPassword(STAFF_PASSWORD),
-      fullName: 'Rakib Hasan',
+      fullName: 'Alex Silva',
       role: UserRole.employee,
       employeeId,
       mustChangePw: false,
@@ -133,12 +133,12 @@ describe('GET /me', () => {
     const s = await staffSession();
     const res = await s.http.get('/api/v1/me').expect(200);
 
-    expect(res.body.employee.fullName).toBe('Rakib Hasan');
+    expect(res.body.employee.fullName).toBe('Alex Silva');
     expect(res.body.employee.empCode).toBe('OX-001');
     expect(res.body.employee.designation).toBe('Developer');
     expect(res.body.progress.todayActiveSec).toBe(3 * 3600);
     /**
-     * G37, ADR-025 — the target is no longer a flat 208, it is work days x 8.
+     * G37, ADR-025 — the target is no longer a flat monthly figure (208 in this fixture), it is work days x 8.
      * So it varies by month (Feb 192, Sep 208, Aug 216), and writing down a
      * fixed number would break the test whenever the month changed.
      *
@@ -279,7 +279,7 @@ describe('GET /me/days', () => {
         workDate,
         deltaSec: 1800,
         cause: 'agent_down',
-        reason: 'এজেন্ট বন্ধ ছিল',
+        reason: 'The agent was down',
         createdById: owner.id,
       },
     });

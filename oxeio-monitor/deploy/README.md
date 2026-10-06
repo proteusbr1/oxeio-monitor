@@ -255,11 +255,11 @@ The `seed` service creates the owner, the first work policy and holidays from
 docker compose --profile seed run --rm seed
 ```
 
-Read the `SEED_*` comments in `.env.example` first. The seed's built-in
-defaults are those of the original deployment (Bangladesh holidays, 208 hours
-over 26 workdays, Friday off), so set `SEED_COUNTRY` (`none` for no holidays)
-and the `SEED_POLICY_*` lines explicitly. The `SEED_*` values are read only
-when the database is first seeded.
+Read the `SEED_*` comments in `.env.example` first. Without them the seed
+writes no holidays and a 176-hour, 22-workday policy with Saturday and Sunday
+off (the same as the setup wizard's starting point). `SEED_COUNTRY` (a
+two-letter code) fetches that country's public holidays. The `SEED_*` values
+are read only when the database is first seeded.
 
 ---
 

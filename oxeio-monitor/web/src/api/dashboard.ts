@@ -53,14 +53,14 @@ export interface LiveCard {
 
   /**
    * One workday's target. The live board ring is now measured against this
-   * (`todayWorkedSec / dailyTargetSec`), not against the monthly 208 hours.
+   * (`todayWorkedSec / dailyTargetSec`), not against the monthly target.
    *
    * Careful: 8 hours is not a constant, it is a derived number: monthly target
    * divided by the month's workdays (`dashboard.service.ts`, `dailyTargetSec` in
-   * `reports.range.ts`). In August 2026 that is 208 / 26 = 8 hours, but in a month
+   * `reports.range.ts`). With 208 h over 26 days that is 8 hours, but in a month
    * with 27 workdays it is 7h 42m. Hard-coding 8 on the client would silently show
    * the wrong target in some months; this exact mistake was caught on the monthly
-   * page (208 vs 216). Always take the number from this field.
+   * page (a month target 8 hours too high). Always take the number from this field.
    *
    * It differs per employee: the weekly day off and the monthly target are tied to
    * the policy, so one number cannot be assumed for everyone on the board.
@@ -97,7 +97,7 @@ export interface LiveCard {
   /**
    * G130: whether the employee is on approved leave today.
    *
-   * Careful: `todayIsWorkday` above reflects the office calendar (Friday, public
+   * Careful: `todayIsWorkday` above reflects the office calendar (weekly days off, public
    * holidays), not personal leave. So an employee on leave showed "0h / 8h" on the
    * card, which looks exactly like someone slacking, while the numbers (target,
    * pace) had excused them long ago.

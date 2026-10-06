@@ -12,8 +12,9 @@ import { isOffWeekday, normaliseOffDays } from '../src/summary/weekly-off';
 /**
  * Several weekly days off per policy.
  *
- * Bangladesh keeps one (Friday, `[5]`) and every number stays as it was —
- * the existing suites prove that with their fixtures moved from `5` to `[5]`.
+ * A single day off (Friday, `[5]`, say) keeps every number as it was with the
+ * old single-day column — the existing suites prove that with their fixtures
+ * moved from `5` to `[5]`.
  * These cases add the two-day weeks most other countries use: Sat + Sun and
  * Fri + Sat, on a 31-day month (August 2026, starts on a Saturday) and a
  * 30-day month (September 2026, starts on a Tuesday).
@@ -116,7 +117,7 @@ describe('alerts follow every day off', () => {
     weeklyOffDays: SAT_SUN,
     isHoliday: false,
   };
-  // 12:00 Dhaka = 06:00 UTC
+  // 12:00 in the work zone (UTC+6) = 06:00 UTC
   const noon = (iso: string): Date => new Date(`${iso}T06:00:00Z`);
 
   it('closed on Saturday and on Sunday, open on Monday', () => {

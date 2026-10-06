@@ -22,12 +22,7 @@ import { PrismaClient } from '@prisma/client';
 
 // ⚠️ from src/: this script runs in the `migrate` container, which has the source
 import { parseHolidayFile } from '../src/calendar/holiday-import';
-import {
-  workToday,
-  holidayRowName,
-  planHolidaySeedRun,
-  yearOf,
-} from './holidays.data';
+import { planHolidaySeedRun, workToday, yearOf } from './holiday-seed';
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -80,7 +75,8 @@ async function main(): Promise<void> {
         await prisma.holiday.create({
           data: {
             holidayDate: new Date(`${entry.date}T00:00:00.000Z`),
-            name: holidayRowName(entry),
+            name: entry.name,
+            approximate: entry.approximate,
             type: typeOf.get(entry.date) ?? 'public',
           },
         });

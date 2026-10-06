@@ -62,7 +62,7 @@ beforeEach(async () => {
   });
 
   const employee = await h.prisma.employee.create({
-    data: { empCode: `DS-${uniqueSuffix()}`, fullName: 'Belal Hossain' },
+    data: { empCode: `DS-${uniqueSuffix()}`, fullName: 'Bruno Costa' },
   });
   employeeId = employee.id;
 });

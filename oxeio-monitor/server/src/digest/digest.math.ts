@@ -218,7 +218,7 @@ export function buildDigest(source: DigestSource): Digest {
  * Careful: no one's name in the subject.
  *
  * The email subject floats on the phone lock screen, in the preview pane and
- * at the top of forwarded threads — "Karim 3 hours behind" there means one
+ * at the top of forwarded threads — "Sam 3 hours behind" there means one
  * employee's figures in front of someone who did not open the email.
  * Numbers are safe, names are not.
  */
@@ -232,7 +232,7 @@ export function digestSubject(digest: Digest): string {
  * The plain-text body.
  *
  * Careful: no attempt is made to lay out printed-style columns (`padEnd`
- * etc.). Bengali (and other non-Latin) glyph widths differ from font to font and conjuncts are
+ * etc.). Non-Latin glyph widths differ from font to font and conjuncts are
  * several code units — so aligned columns would look straight in some clients
  * and ragged in others. Simple bullets read the same everywhere.
  */

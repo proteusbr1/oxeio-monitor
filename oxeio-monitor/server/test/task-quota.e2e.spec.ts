@@ -241,11 +241,11 @@ describe('daily limit — cannot finish more than 25', () => {
    * The last hour of the work day is still today — by UTC it would fall on
    * tomorrow.
    *
-   * 11 PM in Dhaka is 5 PM UTC of the same day; but if the `workDateOf()`
+   * 11 PM in the work zone (UTC+6) is 5 PM UTC of the same day; but if the `workDateOf()`
    * label were used directly as the boundary, the day would start at 6 AM and
    * work done at 11 PM would fall on the next day.
    */
-  it('work at 11 PM Dhaka time falls within today\'s limit', async () => {
+  it('work at 11 PM work-zone time falls within today\'s limit', async () => {
     const now = workNoon();
     const lateTonight = new Date(nextLocalMidnight(now).getTime() - 3600_000);
     const emp = await person('OX-Q6', TARGET);
@@ -383,13 +383,13 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
   /**
    * Early morning — the hours when the limit would silently switch off.
    *
-   * `workDateOf()` writes the Dhaka day as a UTC midnight, i.e. 6 AM Dhaka
-   * time. Using that as the boundary, between 12 AM and 6 AM the start of the
+   * `workDateOf()` writes the work-zone day as a UTC midnight, i.e. 6 AM
+   * work-zone time. Using that as the boundary, between 12 AM and 6 AM the start of the
    * count would fall in the future, the number would come out zero, and the
    * limit would be completely off — anyone could finish as many as they liked
    * in those six hours.
    */
-  it('the count for today is still right at 3 AM Dhaka time', async () => {
+  it('the count for today is still right at 3 AM work-zone time', async () => {
     const now = workNoon();
     const at3am = new Date(localMidnightOf(now).getTime() + 3 * 3600_000);
     const emp = await person('OX-QF', TARGET);

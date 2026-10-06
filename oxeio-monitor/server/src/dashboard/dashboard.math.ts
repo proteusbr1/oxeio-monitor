@@ -490,7 +490,7 @@ export function parseWorkDate(raw: string): Date | null {
  * Work day → `YYYY-MM-DD`.
  *
  * Careful: sending `@db.Date` straight into JSON would give
- * `2026-08-10T00:00:00.000Z`. In Asia/Dhaka that instant is 6 am on the 10th — a
+ * `2026-08-10T00:00:00.000Z`. In a UTC+6 zone that instant is 6 am on the 10th — a
  * browser converting it to local time showed the previous day for some
  * people. So dates always travel as strings, never as Date.
  */

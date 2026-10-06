@@ -14,8 +14,8 @@ import {
  *
  * **The PDF's language is English**; the reason and the only alternative are
  * written at the top of [reports.pdf.text.ts](./reports.pdf.text.ts). In one
- * sentence: pdfkit's built-in font prints Bengali **silently blank**, and the
- * repo has no Bengali font.
+ * sentence: pdfkit's built-in font prints non-Latin scripts **silently blank**,
+ * and the repo embeds no other font.
  *
  * No database or HTTP here, only input → Buffer. So changing how the PDF looks
  * does not touch the query code.

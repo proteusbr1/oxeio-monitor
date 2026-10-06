@@ -23,7 +23,7 @@ export interface LeaveView {
    * Whether that date was a workday for that employee at all.
    *
    * Careful: there is a reason this goes all the way to the screen: a leave
-   * written on a Friday or a public holiday **reduces nothing of the target**
+   * written on a weekly day off or a public holiday **reduces nothing of the target**
    * (`countLeaveWorkdays` filters it out). The row still stays in the
    * register, and showing it like any other would make the register lie
    * ("this day got relief"). So the row stays, but says itself that it changed nothing.

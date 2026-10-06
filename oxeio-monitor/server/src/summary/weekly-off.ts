@@ -2,7 +2,7 @@
  * The weekly days off of a work policy — the one place that answers "is this
  * weekday off?".
  *
- * A policy used to have one day off (`weekly_off_day`, Friday in Bangladesh);
+ * A policy used to have one day off (`weekly_off_day`, e.g. Friday);
  * most countries have two (Sat + Sun, or Fri + Sat). The check lived inline in
  * five places as `day !== null && iso === day`; with a list, writing it five
  * times again would let one copy drift, and workdays, targets, pace and

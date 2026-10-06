@@ -50,7 +50,7 @@ beforeEach(async () => {
     data: {
       email: START,
       passwordHash: await hashPassword('whatever-123'),
-      fullName: 'Rakib Hasan',
+      fullName: 'Alex Silva',
       role: 'employee',
       employeeId,
     },
@@ -66,21 +66,21 @@ const patch = (id: number, email: string) =>
 
 describe('PATCH /users/:id/email', () => {
   it('changes the email', async () => {
-    const res = await patch(userId, 'rakib@oxeio.local').expect(200);
+    const res = await patch(userId, 'alex@oxeio.local').expect(200);
 
-    expect(res.body.email).toBe('rakib@oxeio.local');
+    expect(res.body.email).toBe('alex@oxeio.local');
     const row = await h.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    expect(row.email).toBe('rakib@oxeio.local');
+    expect(row.email).toBe('alex@oxeio.local');
   });
 
   /**
    * Login should be case-insensitive, so storage is lowercase too. Otherwise
-   * an account opened with `Rakib@…` could not log in by typing `rakib@…`,
+   * an account opened with `Alex@…` could not log in by typing `alex@…`,
    * and the reason would not be written anywhere on screen.
    */
   it('stores it lowercase', async () => {
-    const res = await patch(userId, 'Rakib@OXeio.Local').expect(200);
-    expect(res.body.email).toBe('rakib@oxeio.local');
+    const res = await patch(userId, 'Alex@OXeio.Local').expect(200);
+    expect(res.body.email).toBe('alex@oxeio.local');
   });
 
   /**
@@ -90,7 +90,7 @@ describe('PATCH /users/:id/email', () => {
    * happens everywhere. The screen has no problem — it sends `email.trim()`.
    */
   it('sending with spaces gives 400 — like the repo\'s other routes', async () => {
-    await patch(userId, '  rakib@oxeio.local  ').expect(400);
+    await patch(userId, '  alex@oxeio.local  ').expect(400);
   });
 
   /**
@@ -102,7 +102,7 @@ describe('PATCH /users/:id/email', () => {
   it('the password stays unchanged', async () => {
     const before = await h.prisma.user.findUniqueOrThrow({ where: { id: userId } });
 
-    await patch(userId, 'rakib@oxeio.local').expect(200);
+    await patch(userId, 'alex@oxeio.local').expect(200);
 
     const after = await h.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     expect(after.passwordHash).toBe(before.passwordHash);
@@ -144,7 +144,7 @@ describe('PATCH /users/:id/email', () => {
   it('both the old and the new value appear in audit_log', async () => {
     await h.prisma.auditLog.deleteMany({});
 
-    await patch(userId, 'rakib@oxeio.local').expect(200);
+    await patch(userId, 'alex@oxeio.local').expect(200);
 
     const [row] = await h.prisma.auditLog.findMany({
       where: { action: 'change_login_email' },
@@ -152,17 +152,17 @@ describe('PATCH /users/:id/email', () => {
     const meta = row.meta as { from: string; to: string };
 
     expect(meta.from).toBe(START);
-    expect(meta.to).toBe('rakib@oxeio.local');
+    expect(meta.to).toBe('alex@oxeio.local');
   });
 
   /** After the change, logging in with the new email works — this is the real claim */
   it('logging in with the new email really works', async () => {
-    await patch(userId, 'rakib@oxeio.local').expect(200);
+    await patch(userId, 'alex@oxeio.local').expect(200);
 
     await h
       .http()
       .post('/api/v1/auth/login')
-      .send({ email: 'rakib@oxeio.local', password: 'whatever-123' })
+      .send({ email: 'alex@oxeio.local', password: 'whatever-123' })
       .expect(200);
   });
 });

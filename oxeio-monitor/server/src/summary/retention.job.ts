@@ -69,7 +69,7 @@ export class RetentionJob {
     private readonly privacy: PrivacyService,
   ) {}
 
-  /** Careful: without `timeZone`, 3 am UTC = 9 am in Asia/Dhaka (UTC+6), disk I/O during office hours. */
+  /** Careful: without `timeZone`, 3 am UTC = 9 am in a UTC+6 zone, disk I/O during office hours. */
   @Cron('0 0 3 * * *', {
     name: 'screenshot-retention',
     timeZone: JOB_TIMEZONE,

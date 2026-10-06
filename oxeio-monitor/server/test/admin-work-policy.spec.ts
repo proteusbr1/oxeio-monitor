@@ -45,7 +45,7 @@ describe('capture window: the ADR-011c limits', () => {
 
   it('on a bad format it also says which one is wrong', () => {
     expect(captureWindowProblem('7:00', '23:00')).toContain('window start');
-    expect(captureWindowProblem('07:00', '২৩:০০')).toContain('window end');
+    expect(captureWindowProblem('07:00', '２３:００')).toContain('window end');
     expect(captureWindowProblem('07:00', '25:00')).toContain('window end');
   });
 

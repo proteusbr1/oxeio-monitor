@@ -61,8 +61,8 @@ export interface EmployeeProgress {
    * `credited_sec - expected_sec` (§ 2.1-b).
    *
    * **If this is not sent, the agent guesses by itself**: it does not know the
-   * `holidays` table, so it counts workdays by excluding only Fridays and labels
-   * the window "pace (approx.)". In Eid week that guess would show a few hours
+   * `holidays` table, so it counts workdays by excluding only the weekly days off and labels
+   * the window "pace (approx.)". In a holiday week that guess would show a few hours
    * behind the dashboard's number, i.e. the holidays themselves were counted as the
    * employee's deficit. Once the server supplies the number, the agent removes
    * "approx." from the label by itself.
@@ -80,7 +80,7 @@ export interface EmployeeProgress {
    * because the rule is "any day counts" (§ 4).
    *
    * There is deliberately no daily-target column in the DB: the only contract is
-   * 208 hours a month (O8). This is a number for **display**, not for deductions.
+   * the policy's period target (O8). This is a number for **display**, not for deductions.
    */
   dailyTargetSec: number;
 
@@ -154,7 +154,7 @@ export class ProgressService {
      * Careful: the holiday list must cover **the 7-day window too, not just the
      * start of the month.** On the 1st to 6th of a month the 7-day window reaches into
      * the previous month; fetching only this month's holidays would count last month's
-     * Eid days as "workdays" and the 7-day target would look too high.
+     * holidays as "workdays" and the 7-day target would look too high.
      */
     const holidayFrom = week7Start < monthStart ? week7Start : monthStart;
 
@@ -302,7 +302,7 @@ export class ProgressService {
     const monthCreditedSec = monthActiveSec + (adjustmentRow._sum.deltaSec ?? 0);
     const week7ActiveSec = (week7PastRow._sum.workedSec ?? 0) + todayActiveSec;
     // per month, per week, per day or none — as seconds over workdays
-    // (no policy: the original 208 h over 26 days)
+    // (no policy: DEFAULT_SPREAD in work-regime.ts)
     const spread = targetSpreadOf(employee?.policy);
 
     const holidays = new Set(holidayRows.map((h) => h.holidayDate.getTime()));

@@ -32,7 +32,7 @@ public class ShutdownBudgetTests
         Assert.True(
             AgentHost.EndSessionTotalBudget < WindowsKillTimeout / 2,
             $"EndSessionTotalBudget ({AgentHost.EndSessionTotalBudget}) " +
-            $"Windows-এর {WindowsKillTimeout}-এর অর্ধেকের কম হতে হবে");
+            $"must be under half of Windows' {WindowsKillTimeout}");
 
     /// <summary>
     /// Careful: the outer ceiling must equal the sum of the two inner steps. If it is
@@ -89,8 +89,8 @@ public class ShutdownBudgetTests
             sequential + DisposeOverhead <= Program.ShutdownBudget,
             $"enqueue ({AgentHost.StopEnqueueBudget}) + goodbye ({AgentHost.GoodbyeBudget}) " +
             $"+ final ({AgentHost.FinalDrainBudget}) = {sequential}; " +
-            $"বাজেটহীন কাজের জন্য {DisposeOverhead} রেখে " +
-            $"ShutdownBudget ({Program.ShutdownBudget})-এর ভেতরে থাকতে হবে");
+            $"leaving {DisposeOverhead} for the unbudgeted work, " +
+            $"it must stay inside ShutdownBudget ({Program.ShutdownBudget})");
     }
 
     /// <summary>Careful: the whole DisposeAsync is also below Windows' limit.</summary>

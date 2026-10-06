@@ -255,12 +255,12 @@ describe('signed URL: wrong secret', () => {
 
 describe('signed URL: malformed shape', () => {
   it.each([
-    ['খালি', ''],
-    ['অংশ কম', 'v1.f.42.999'],
-    ['অংশ বেশি', `${make()}.extra`],
-    ['ডট নেই', 'garbage'],
-    ['অজানা সংস্করণ', make().replace(/^v1\./, 'v2.')],
-    ['অজানা variant', make().replace(/^v1\.f\./, 'v1.x.')],
+    ['empty', ''],
+    ['too few parts', 'v1.f.42.999'],
+    ['too many parts', `${make()}.extra`],
+    ['no dots', 'garbage'],
+    ['unknown version', make().replace(/^v1\./, 'v2.')],
+    ['unknown variant', make().replace(/^v1\.f\./, 'v1.x.')],
   ])('%s → malformed', (_label, token) => {
     const result = verifyScreenshotToken(token, KEY, NOW);
     expect(result.ok).toBe(false);

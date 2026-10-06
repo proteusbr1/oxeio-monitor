@@ -4,7 +4,7 @@
 #    and the session cookie is `SameSite=Strict`. With two different origins (say
 #    dashboard :8080, API :3000) login would look successful but the very next request
 #    would be a 401. We fell into exactly this trap once in dev mode, and it is why a
-#    proxy had to be set up in Vite ([09 § ৩.৫](../../docs/09-Build-Log.md)).
+#    proxy had to be set up in Vite ([09 § 3.5](../../docs/09-Build-Log.md)).
 #
 # CORS never comes up. `CORS_ORIGIN` then only exists for some other client, not
 #    for the dashboard.

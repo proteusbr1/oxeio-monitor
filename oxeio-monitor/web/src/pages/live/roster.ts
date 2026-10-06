@@ -34,7 +34,7 @@ export function meterKind(card: LiveCard): MeterKind {
  * Whether they have a target today, and if not, why.
  *
  * Careful: **a day off used to be invisible on the card.** `todayIsWorkday` says
- * whether the day is a workday in the **office** calendar: Fridays and public
+ * whether the day is a workday in the **office** calendar: weekly days off and public
  * holidays. Personal leave is not in it, so the card of someone on leave showed
  * **"0h / 8h" and an empty meter**, which looks exactly like someone slacking.
  * Yet the numbers (target, expected, pace) had excused them long ago; only the
@@ -56,7 +56,7 @@ export type DayDuty = 'target' | 'leave' | 'off' | 'none';
 export function dayDuty(card: LiveCard): DayDuty {
   /**
    * Careful: **leave is checked first, and the order is intentional.** If someone's
-   * leave is entered on a Friday or a public holiday, the card should still say
+   * leave is entered on a weekly day off or a public holiday, the card should still say
    * "day off": nobody has a target that day, so singling them out would be
    * meaningless. Hence the condition sits **inside** `todayIsWorkday`.
    */

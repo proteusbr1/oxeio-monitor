@@ -1,10 +1,11 @@
 /**
  * Holidays from a file — CSV or ICS — for any country, state or city.
  *
- * The seed only knows Bangladesh (`prisma/holiday-sets.ts`). Everyone else
- * takes their calendar from an official source and imports it on
- * Settings → Policies & holidays (or with `prisma/import-holidays.ts`) —
- * current and past months are never touched without consent.
+ * For a calendar the public one (public-holidays.ts) does not cover — a
+ * state's, a city's, the company's own — take it from an official source and
+ * import it on Settings → Policies & holidays (or with
+ * `prisma/import-holidays.ts`) — current and past months are never touched
+ * without consent.
  *
  * This file only reads text; nothing here touches the database.
  *
@@ -18,14 +19,21 @@
  * holiday is a date, and turning a time into a date needs a zone.
  */
 /**
- * The shape the seed's planner takes (`prisma/holidays.data.ts` › HolidayEntry),
- * written out here: `src/` cannot import from `prisma/` (it would move
- * `nest build`'s output, see holidays.data.ts › APPROX_SUFFIX).
+ * One holiday, as the importers produce it and the seed's planner
+ * (`prisma/holiday-seed.ts`) takes it. Defined here because `src/` cannot
+ * import from `prisma/` (it would move `nest build`'s output).
  */
 export interface HolidayEntry {
+  /** `YYYY-MM-DD`, a calendar date (not a clock reading) */
   date: string;
   name: string;
   nameEn: string;
+  /**
+   * `true` = the date is an estimate that may still move (a holiday that
+   * depends on a lunar calendar or an announcement). Stored in
+   * `holidays.approximate`; reports and payroll list such dates beside the
+   * figures they affect.
+   */
   approximate: boolean;
 }
 

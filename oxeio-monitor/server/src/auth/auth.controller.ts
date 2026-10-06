@@ -47,7 +47,7 @@ interface SessionPolicy {
 }
 
 interface WorkTimeZone {
-  /** IANA name, e.g. `Asia/Dhaka` */
+  /** IANA name, e.g. `Europe/Lisbon` */
   timeZone: string;
   /**
    * Minutes east of UTC right now. The dashboard computes with the zone name

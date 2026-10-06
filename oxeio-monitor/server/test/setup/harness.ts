@@ -111,7 +111,7 @@ export async function resetDatabase(
       screenshotTo: '23:00',
       idleThresholdSec: 60,
       slotMinutes: 5,
-      timezone: 'Asia/Dhaka',
+      timezone: 'Etc/GMT-6',
     },
   });
 
@@ -226,7 +226,7 @@ export async function createEmployeeWithCode(
   const employee = await prisma.employee.create({
     data: {
       empCode,
-      fullName: 'Rakib Hasan',
+      fullName: 'Alex Silva',
       policyId: policy.id,
       joinedOn: new Date('2026-01-05T00:00:00Z'),
     },
@@ -256,7 +256,7 @@ export async function enrollDevice(
     .send({
       enrollmentCode: code,
       hostname: 'PC-07',
-      windowsUsername: 'rakib',
+      windowsUsername: 'alex',
       machineGuid: 'guid-test-001',
       osVersion: 'Windows 11',
       agentVersion: '1.0.0',

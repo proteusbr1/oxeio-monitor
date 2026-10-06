@@ -39,8 +39,6 @@ export interface WorkRules {
 /** A sensible starting point for a country: 8-hour days, its usual weekend */
 export function defaultWorkRules(country: string | null): WorkRules {
   const code = country?.toUpperCase() ?? '';
-  // Bangladesh keeps the numbers this system was built with
-  if (code === 'BD') return { monthlyTargetHours: 208, expectedWorkdays: 26, weeklyOffDays: [FRIDAY] };
   const off = WEEKEND_BY_COUNTRY[code] ?? [SATURDAY, SUNDAY];
   const workdays = Math.round(((7 - off.length) * 52) / 12);
   return { monthlyTargetHours: workdays * 8, expectedWorkdays: workdays, weeklyOffDays: off };

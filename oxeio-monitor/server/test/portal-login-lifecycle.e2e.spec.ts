@@ -55,7 +55,7 @@ async function staffWithLogin(code: string) {
     data: {
       email,
       passwordHash: await hashPassword(PASSWORD),
-      fullName: 'Rafiq Alam',
+      fullName: 'Sam Rivera',
       role: 'employee',
       employeeId,
       mustChangePw: false,

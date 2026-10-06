@@ -74,15 +74,15 @@ describe('thumbnail path', () => {
    * and the file write would not fail, so no error would be raised either.
    */
   it.each([
-    ['ট্রাভার্সাল', 'screenshots/../../etc/passwd.webp'],
-    ['লুকোনো ট্রাভার্সাল', 'screenshots/2026/../../../x.webp'],
+    ['traversal', 'screenshots/../../etc/passwd.webp'],
+    ['hidden traversal', 'screenshots/2026/../../../x.webp'],
     ['absolute', '/etc/shadow.webp'],
-    ['ড্রাইভ লেটার', 'C:/Windows/System32/x.webp'],
-    ['ব্যাকস্ল্যাশে ড্রাইভ', 'C:\\Windows\\x.webp'],
-    ['ডাবল স্ল্যাশ', 'screenshots//emp-003/x.webp'],
-    ['একক ডট', 'screenshots/./x.webp'],
-    ['খালি', ''],
-    ['শুধু ফাঁকা', '   '],
+    ['drive letter', 'C:/Windows/System32/x.webp'],
+    ['backslash drive', 'C:\\Windows\\x.webp'],
+    ['double slash', 'screenshots//emp-003/x.webp'],
+    ['single dot', 'screenshots/./x.webp'],
+    ['empty', ''],
+    ['whitespace-only', '   '],
   ])('thumbnail is not made for a %s path', (_label, path) => {
     expect(thumbPathFor(path)).toBeNull();
   });

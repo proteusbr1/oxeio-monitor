@@ -38,17 +38,18 @@ export interface ReportMeta {
 
   /**
    * Each employee's monthly target hours as written in the policy (`employeeId` to
-   * hours), i.e. "hours in 26 ideal workdays" (208).
+   * hours), i.e. "hours in the policy's ideal workdays" (e.g. 22 x 8 = 176).
    *
    * Careful: do not compute this yourself. It used to be computed on the client, and
-   * because future public holidays were missed it showed 216 instead of 208.
+   * because future public holidays were missed it showed 8 hours too many.
    *
-   * Office days x 8h: Fridays, public holidays and the employee's own leave are
+   * Office days x 8h: weekly days off, public holidays and the employee's own leave are
    * excluded (the owner's rule). It is counted per office day, not per month, so
    * asking for half a month returns the half-month number.
    *
-   * Careful: this used to be the policy's flat 208 (G117). In October there are 24
-   * office days, i.e. 192h, so the page showed a phantom 16-hour shortfall.
+   * Careful: this used to be the policy's flat monthly number (G117). In a month
+   * with two office days fewer than the policy's ideal, the page showed a phantom
+   * 16-hour shortfall.
    *
    * Careful: 0 is a valid answer: "this employee has no office days in this range"
    * (on leave the whole time, or joined right at the end). It is not a failure.
@@ -148,7 +149,7 @@ export interface AttendanceRow {
   adjustmentHours: number;
   creditedHours: number;
   /**
-   * That day's target: 208 / 26 = 8 hours on a workday, 0 on a day off.
+   * That day's target: monthly target / expected workdays (176 / 22 = 8 hours) on a workday, 0 on a day off.
    * Careful: the denominator is the policy constant, not that month's workdays, so
    * the number does not vary by month and matches the tray exactly.
    */

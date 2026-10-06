@@ -23,11 +23,11 @@ import {
 
 interface EmployeePolicy {
   id: number;
-  /** The policy's monthly target (208 h). Careful: since G37 this is not `target_sec` itself. */
+  /** The policy's monthly target. Careful: since G37 this is not `target_sec` itself. */
   targetSec: number;
   /** The policy's `expected_workdays` (26); the daily target is divided by this. */
   policyWorkdays: number;
-  /** ISO weekdays (Friday = 5); null = every day is a workday. */
+  /** ISO weekdays (Mon = 1 … Sun = 7); null = every day is a workday. */
   weeklyOffDays: readonly number[];
   /** G37: `null` = has been there from before / still there. */
   joinedOn: Date | null;

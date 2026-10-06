@@ -140,7 +140,7 @@ public class MonthlyMilestoneTests
     public void An_unreadable_memory_does_not_throw()
     {
         var memory = new MilestoneMemory(
-            Path.Combine(Path.GetTempPath(), "oXeio-নেই-" + Guid.NewGuid().ToString("N")));
+            Path.Combine(Path.GetTempPath(), "oXeio-missing-" + Guid.NewGuid().ToString("N")));
 
         Assert.Null(memory.LastCelebrated());
     }

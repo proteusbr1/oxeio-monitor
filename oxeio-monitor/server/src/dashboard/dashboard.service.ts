@@ -106,7 +106,7 @@ export interface LiveCard {
    * while the person was on leave.
    *
    * Careful: not merged with `todayIsWorkday`: that is the **office**
-   * calendar (Friday, public holidays), and this is **that one person's**.
+   * calendar (weekly days off, public holidays), and this is **that one person's**.
    * Merged, "how many are on leave today" could no longer be counted, and the
    * holiday message would be wrong too.
    *
@@ -857,13 +857,13 @@ export class DashboardService {
        *
        * Careful: **`first` and `today` are labels, not instants** —
        * `workDateOf()` stores the work day as **UTC midnight**, while the real
-       * local midnight is **the zone's offset earlier** (6 hours for Asia/Dhaka).
+       * local midnight is **the zone's offset earlier** (6 hours for a UTC+6 zone).
        * This difference is a recurring source of bugs in this repo, so both
        * boundaries are worked out by hand (offset = `WORK_OFFSET_MS`):
        *      start = local midnight of `first`       → `first − offset`
        *      end   = local midnight after `today`    → `today + 24h − offset`
        *    Careful: get it wrong and the window slides **late by the offset**: work
-       *    from local midnight to the offset hour (6 am for Asia/Dhaka) on the
+       *    from local midnight to the offset hour (6 am in a UTC+6 zone) on the
        *    ribbon's first day would be lost, and the same hours of tomorrow
        *    would come in instead — a slot
        *    the ribbon does not have, so it would be silently dropped. Someone
@@ -1193,7 +1193,7 @@ export class DashboardService {
 
   /**
    * Careful: without `date`, today in the work zone — not the server's. If the server runs
-   *    in UTC, between local midnight and the zone's offset hour (6 am for Asia/Dhaka)
+   *    in UTC, between local midnight and the zone's offset hour (6 am in a UTC+6 zone)
    *    the date of `new Date()` would show the previous day.
    */
   private resolveWorkDate(raw?: string): Date {
@@ -1237,7 +1237,7 @@ function sumByEmployee(
  */
 export interface TrendStaff {
   employeeId: number;
-  /** ISO weekday (Friday = 5). `null` = every calendar day is a work day. */
+  /** ISO weekday (Mon = 1 … Sun = 7). `null` = every calendar day is a work day. */
   weeklyOffDays: readonly number[];
   joinedOn: Date | null;
   leftOn: Date | null;

@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { APPROX_HOLIDAY_SUFFIX } from '../src/reports/reports.range';
 import { ReportsService } from '../src/reports/reports.service';
 import { SummaryService } from '../src/summary/summary.service';
 import {
@@ -79,7 +78,7 @@ async function makeEmployee(opts: {
 /**
  * Runs the rollup with a day in August, "now" at the end of the month.
  *
- * `now` = noon UTC on 31 August, which is that same day's evening in Dhaka,
+ * `now` = noon UTC on 31 August, which is that same day's evening in the work zone (UTC+6),
  * so `today` = 31 August. The expectation window therefore stops on 30 August
  * (today is not counted, `elapsedWindow()` in `summary.math.ts`).
  */
@@ -661,9 +660,9 @@ describe('G120: tracking start: a real session, not an empty row', () => {
  *
  * Lunar holiday dates move after the moon is sighted. When they move, that
  * month's workdays change, i.e. the denominator D changes, and with it every
- * employee's prorated salary. Until now this uncertainty lived only in the
- * holiday's name (`(approximate)`); whoever opened payroll and released salary
- * did not know the number could still move.
+ * employee's prorated salary. Until now this uncertainty lived only on the
+ * holiday itself; whoever opened payroll and released salary did not know the
+ * number could still move.
  *
  * An e2e is needed here because the risk is not in the arithmetic but at the
  * joint: does `sheet()` read the month's holiday rows at all, and does it put
@@ -675,12 +674,12 @@ describe('G108: payroll says which dates are not final yet', () => {
       .body as { approximateHolidayDates: string[] };
 
   /** Wednesday 26 August: not a Friday, so this really takes away a workday */
-  const addHoliday = (day: number, name: string) =>
-    h.prisma.holiday.create({ data: { holidayDate: utc(day), name } });
+  const addHoliday = (day: number, name: string, approximate = false) =>
+    h.prisma.holiday.create({ data: { holidayDate: utc(day), name, approximate } });
 
   it('with an approximate holiday, the date goes into the response', async () => {
     await makeEmployee({ empCode: 'G108-PAY' });
-    await addHoliday(26, `Eid-e-Miladunnabi${APPROX_HOLIDAY_SUFFIX}`);
+    await addHoliday(26, 'Harvest Festival', true);
     await rollup();
 
     expect((await payrollBody()).approximateHolidayDates).toEqual(['2026-08-26']);
@@ -714,7 +713,7 @@ describe('G108: payroll says which dates are not final yet', () => {
    */
   it('the holiday named in the warning is the one that reduces D', async () => {
     await makeEmployee({ empCode: 'G108-D', monthlySalary: 20000 });
-    await addHoliday(26, `Eid-e-Miladunnabi${APPROX_HOLIDAY_SUFFIX}`);
+    await addHoliday(26, 'Harvest Festival', true);
     await rollup();
 
     const body = (await owner.http
@@ -740,7 +739,8 @@ describe('G108: payroll says which dates are not final yet', () => {
     await h.prisma.holiday.create({
       data: {
         holidayDate: new Date(Date.UTC(2026, 8, 15)),
-        name: `Next month${APPROX_HOLIDAY_SUFFIX}`,
+        name: 'Next month',
+        approximate: true,
       },
     });
     await rollup();

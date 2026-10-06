@@ -47,7 +47,7 @@ public class DomainParserTests
     /// server would effectively get a search history, which is just another form of keylogging.
     /// </summary>
     [Theory]
-    [InlineData("কীভাবে excel pivot table বানায়")]
+    [InlineData("エクセル pivot table の作り方")]
     [InlineData("best laptop 2026")]
     [InlineData("")]
     [InlineData("   ")]

@@ -148,7 +148,7 @@ public class LiveDurationTests
 
             Assert.True(
                 shown > previous,
-                $"{second} সেকেন্ডে ঘড়ি আটকে গেছে ({previous} → {shown})");
+                $"the clock stuck at second {second} ({previous} → {shown})");
 
             previous = shown;
         }

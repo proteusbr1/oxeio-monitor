@@ -20,7 +20,7 @@ import { buildMonthGrid } from '../src/pages/monthly/heatmap';
  * nearly all of the page's rules live there.
  */
 
-/** August 2026: Fridays are the 7th, 14th, 21st, 28th */
+/** August 2026: Sundays are the 2nd, 9th, 16th, 23rd, 30th */
 const MONTH = '2026-08';
 const TRACKED_FROM = '2026-08-13';
 
@@ -46,7 +46,7 @@ function row(over: Partial<AttendanceRow> & { date: string }): AttendanceRow {
   return {
     employeeId: 1,
     empCode: 'OX-01',
-    fullName: 'Rakib Hasan',
+    fullName: 'Alex Silva',
     department: 'Operations',
     dayType: 'workday',
     status: 'no_activity',
@@ -80,17 +80,17 @@ function report(
   };
 }
 
-/** A row for every day from 1 to 20 August: the Fridays are the weekly day off */
+/** A row for every day from 1 to 20 August: Sunday is the weekly day off */
 function wholeRange(): AttendanceRow[] {
   const rows: AttendanceRow[] = [];
   for (let d = 1; d <= 20; d += 1) {
     const date = `2026-08-${String(d).padStart(2, '0')}`;
-    const friday = d === 7 || d === 14;
+    const sunday = d === 2 || d === 9 || d === 16;
     rows.push(
       row({
         date,
-        dayType: friday ? 'weekly_off' : 'workday',
-        targetHours: friday ? 0 : 8,
+        dayType: sunday ? 'weekly_off' : 'workday',
+        targetHours: sunday ? 0 : 8,
       }),
     );
   }
@@ -166,12 +166,12 @@ describe('G110 — the days before tracking began', () => {
   });
 
   it('a day off stays a day off: its look was already right', () => {
-    // Careful: Friday 7 August, and even before tracking began. Still not `untracked`:
+    // Careful: Sunday 9 August, and even before tracking began. Still not `untracked`:
     //    a day off's own look never makes anyone seem a slacker, so there is no
     //    reason to change it. Changing it would lose information.
     const grid = buildMonthGrid(report(wholeRange()), MONTH);
-    expect(cellOn(grid, '2026-08-07').kind).toBe('day');
-    expect(cellOn(grid, '2026-08-07').dayType).toBe('weekly_off');
+    expect(cellOn(grid, '2026-08-09').kind).toBe('day');
+    expect(cellOn(grid, '2026-08-09').dayType).toBe('weekly_off');
   });
 
   it('on an unobserved day, if the owner enters hours the day is no longer unobserved', () => {
@@ -282,8 +282,8 @@ describe('G111 — someone not yet observed', () => {
         wholeRange().map((r) =>
           r.dayType === 'workday' ? { ...r, creditedHours: 8, workedHours: 8 } : r,
         ),
-        // 18 workdays in 1-20 August (the 7th and 14th are Fridays) x 8h = 144: exactly met
-        { observed: { 1: true }, expectedHours: { 1: 144 } },
+        // 17 workdays in 1-20 August (the 2nd, 9th and 16th are Sundays) x 8h = 136: exactly met
+        { observed: { 1: true }, expectedHours: { 1: 136 } },
       ),
       MONTH,
     );

@@ -61,7 +61,7 @@ export function targetText(targetSec: number): string {
  * Day-off marker in place of the ring, when `todayIsWorkday === false`.
  *
  * Careful: why the text is not "Weekly off"/"Holiday": `GET /live` sends only
- *    `todayIsWorkday` (a bool), **not the reason**. Writing "Holiday" for a Friday
+ *    `todayIsWorkday` (a bool), **not the reason**. Writing "Holiday" for a
  *    weekly off, or "Weekly off" for a public holiday, would be the wrong word half
  *    the time, and nobody would notice. Once the server sends
  *    `'weekly_off' | 'holiday'` (reports already have `DayType`), the exact word

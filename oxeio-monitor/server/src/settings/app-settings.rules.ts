@@ -45,7 +45,7 @@ export function resolveRegion(
     ? { value: saved.timeZone, source: 'dashboard' as const }
     : has(env.WORK_TIMEZONE)
       ? { value: env.WORK_TIMEZONE.trim(), source: 'environment' as const }
-      : { value: 'Asia/Dhaka', source: 'default' as const };
+      : { value: 'UTC', source: 'default' as const };
 
   const currencyRaw = has(saved?.currency)
     ? { value: saved.currency, source: 'dashboard' as const }

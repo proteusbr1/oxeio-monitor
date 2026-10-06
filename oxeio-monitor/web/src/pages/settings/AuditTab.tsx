@@ -94,7 +94,7 @@ const PAGE_SIZE = 50;
 /**
  * Careful: `from`/`to` here are **instants**, not plain dates (`@IsISO8601()`). The
  *    work-zone day is converted explicitly: `?from=2026-08-10` would be read by the
- *    server as UTC midnight, so events before the offset hour (6am in Asia/Dhaka) would fall on the
+ *    server as UTC midnight, so events before the offset hour (6am at UTC+6) would fall on the
  *    previous day, and who looked at what in the early morning could not be found.
  */
 function dayStart(date: string): string {

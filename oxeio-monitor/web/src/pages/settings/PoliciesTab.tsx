@@ -252,7 +252,7 @@ function WorkPoliciesSection() {
       {!policies.loading && !policies.error && rows.length === 0 && (
         <Empty
           title="No work policy yet"
-          hint="At least one policy is needed — without it nobody has a monthly target and the progress ring never fills. Create one with the default 208 hours."
+          hint="At least one policy is needed — without it nobody has a monthly target and the progress ring never fills. Create one with the default 176 hours."
           action={
             <Button tone="primary" onClick={() => setCreating(true)}>
               New policy
@@ -359,8 +359,8 @@ function PolicyForm({
 }) {
   const [form, setForm] = useState<PolicyFormState>({
     name: policy?.name ?? '',
-    monthlyTargetHours: String(policy?.monthlyTargetHours ?? 208),
-    expectedWorkdays: String(policy?.expectedWorkdays ?? 26),
+    monthlyTargetHours: String(policy?.monthlyTargetHours ?? 176),
+    expectedWorkdays: String(policy?.expectedWorkdays ?? 22),
     screenshotFrom: policy?.screenshotFrom ?? '07:00',
     screenshotTo: policy?.screenshotTo ?? '23:00',
     // Careful: when empty, 9-6 is shown and that is what gets saved. Deliberate:
@@ -385,7 +385,8 @@ function PolicyForm({
   );
 
   // a list, so kept apart from the all-string form state above
-  const [offDays, setOffDays] = useState<number[]>(policy?.weeklyOffDays ?? []);
+  // a new policy starts on Sat + Sun off, matching the default 176 h / 22 days
+  const [offDays, setOffDays] = useState<number[]>(policy?.weeklyOffDays ?? [6, 7]);
   const toggleOffDay = (day: number) => (on: boolean) =>
     setOffDays((prev) =>
       on ? [...prev, day].sort((a, b) => a - b) : prev.filter((d) => d !== day),
@@ -494,7 +495,7 @@ function PolicyForm({
             min={1}
             max={744}
             step="0.01"
-            hint="The only target that is stored. The daily target is derived from this — monthly target ÷ workdays. Default 208."
+            hint="The only target that is stored. The daily target is derived from this — monthly target ÷ workdays. Default 176."
           />
           <TextField
             label="Expected workdays"

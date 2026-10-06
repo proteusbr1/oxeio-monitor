@@ -269,7 +269,7 @@ describe('telegramDigest', () => {
    */
   it('someone without a target shows a number, but with no mould', () => {
     const text = telegramDigest(
-      digestOf([row({ empCode: 'OX-01', fullName: 'Belal', todayHours: 5 })]),
+      digestOf([row({ empCode: 'OX-01', fullName: 'Bruno', todayHours: 5 })]),
       'oXeio',
       {
         ...EXTRAS,
@@ -279,7 +279,7 @@ describe('telegramDigest', () => {
 
     expect(text).toContain('43');
     expect(text).not.toContain('43/');
-    const line = text.split('\n').find((l) => l.includes('43') && l.includes('Belal'));
+    const line = text.split('\n').find((l) => l.includes('43') && l.includes('Bruno'));
     expect(line).toBeDefined();
     expect(line).not.toContain('✅');
   });

@@ -45,7 +45,7 @@ public class BatchNarrowingTests
         {
             n.OnPermanent();
             steps++;
-            Assert.True(steps < 20, "কোথাও আটকে গেছে — অর্ধেক হচ্ছে না");
+            Assert.True(steps < 20, "stuck somewhere — it is not halving");
         }
 
         Assert.Equal(1, n.Current);

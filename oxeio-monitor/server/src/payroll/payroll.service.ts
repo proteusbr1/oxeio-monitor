@@ -398,15 +398,14 @@ export class PayrollService {
 
     /**
      * G108: exactly this month's holiday rows, and the decision is made by the
-     * **same function** as the report. The marker sits in the holiday *name*
-     * (`(সম্ভাব্য)`, "probable"), so writing a `LIKE` here would be the second definition.
+     * **same function** as the report, so there is one definition of "approximate".
      */
     const monthEnd = new Date(
       Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 0),
     );
     const holidayRows = await this.prisma.holiday.findMany({
       where: { holidayDate: { gte: monthStart, lte: monthEnd } },
-      select: { holidayDate: true, name: true },
+      select: { holidayDate: true, approximate: true },
     });
 
     return {
@@ -416,7 +415,7 @@ export class PayrollService {
       missingSummary,
       depositExceedsPayable,
       approximateHolidayDates: approximateHolidayDates(
-        holidayRows.map((h) => ({ date: h.holidayDate, name: h.name })),
+        holidayRows.map((h) => ({ date: h.holidayDate, approximate: h.approximate })),
       ),
     };
   }

@@ -1,9 +1,9 @@
 /**
  * oXeio — seed data
  *
- *   1. Work policy    — 208 hours a month, Friday weekly off, screenshots 07:00–23:00
+ *   1. Work policy    — SEED_POLICY_* (default 176 hours a month, Sat+Sun off), screenshots 07:00–23:00
  *   2. App categories — productive / neutral / unproductive rules
- *   3. Holidays       — public holidays for 2026–27 (`holidays.data.ts`)
+ *   3. Holidays       — only with SEED_COUNTRY: that country's public holidays, this year and next
  *   4. Staff          — from `prisma/staff.local.json`
  *   5. Owner account  — from SEED_OWNER_* in .env
  *
@@ -22,25 +22,24 @@ import { join } from 'node:path';
 import { hash } from '@node-rs/argon2';
 import { PrismaClient, UserRole } from '@prisma/client';
 
+import type { ImportedHoliday } from '../src/calendar/holiday-import';
+import { publicHolidays } from '../src/calendar/public-holidays';
 import { DEFAULT_APP_CATEGORIES } from '../src/setup/default-categories';
-import { resolveHolidaySet, type HolidaySet } from './holiday-sets';
 import {
-  workToday,
-  gazetteNotes,
-  holidayRowName,
   planHolidaySeedRun,
-  validateHolidays,
+  workToday,
+  yearOf,
   yearsSettled,
   yearsToSeed,
-} from './holidays.data';
+} from './holiday-seed';
 import { parseStaff, shouldSeedSampleStaff, type StaffRow } from './parse-staff';
-import { seedPolicyFromEnv } from './seed-config';
+import { seedHolidayCountry, seedPolicyFromEnv } from './seed-config';
 
 const prisma = new PrismaClient();
 
 // ── 1 · work policy ─────────────────────────────────────────────────────────
 
-// SEED_POLICY_* — defaults are the numbers below as they always were (seed-config.ts)
+// SEED_POLICY_* — defaults in seed-config.ts (the setup wizard's starting point)
 const SEED_POLICY = seedPolicyFromEnv(process.env);
 
 async function seedWorkPolicy(): Promise<number> {
@@ -50,15 +49,16 @@ async function seedWorkPolicy(): Promise<number> {
     create: {
       id: 1,
       name: 'Standard',
-      monthlyTargetHours: SEED_POLICY.monthlyTargetHours, // default 208
-      expectedWorkdays: SEED_POLICY.expectedWorkdays, // default 26
-      weeklyOffDays: SEED_POLICY.weeklyOffDays, // ISO: Friday ([5]); not a block, Friday work still counts
+      monthlyTargetHours: SEED_POLICY.monthlyTargetHours,
+      expectedWorkdays: SEED_POLICY.expectedWorkdays,
+      // ISO days; not a block — work on a day off still counts
+      weeklyOffDays: SEED_POLICY.weeklyOffDays,
       screenshotFrom: '07:00',
       screenshotTo: '23:00',
       idleThresholdSec: 60,
       slotMinutes: 5,
-      // Same zone the server runs on (WORK_TIMEZONE, default Asia/Dhaka)
-      timezone: process.env.WORK_TIMEZONE?.trim() || 'Asia/Dhaka',
+      // Same zone the server runs on (WORK_TIMEZONE, default UTC)
+      timezone: process.env.WORK_TIMEZONE?.trim() || 'UTC',
       isActive: true,
     },
   });
@@ -91,20 +91,13 @@ async function seedAppCategories(): Promise<number> {
 
 // ── 3 · holidays ────────────────────────────────────────────────────────────
 //
-// This used to hold only 7 **fixed-date** holidays; the lunar ones (Eid, Ashura,
-// Shab-e-Barat, Durga Puja…) were left out because they "can't be predicted".
-// But leaving them out counts those days as **workdays**, which quietly says
-// "no holiday" and is an active error: everyone's target and pace looked too
-// high. The list now lives in `holidays.data.ts`, and estimated dates are
-// stored **as estimates**, with a Bengali "probable" marker at the end of the
-// name. The reasoning is in the header of that file.
+// Only when `SEED_COUNTRY` names a country: its nationwide public holidays for
+// this year and next, from the same public calendar the setup wizard uses
+// (src/calendar/public-holidays.ts). No country, no holidays — a guessed list
+// would take workdays out of months that have none.
 
-/**
- * SEED_COUNTRY (default BD) — which list to write; `none` writes nothing
- * (holiday-sets.ts). Resolved once, up front: an unknown country stops the
- * seed before anything is written.
- */
-const HOLIDAY_SET: HolidaySet | null = resolveHolidaySet(process.env);
+/** SEED_COUNTRY — resolved once, up front: a malformed value stops the seed before anything is written */
+const HOLIDAY_COUNTRY: string | null = seedHolidayCountry(process.env);
 
 /**
  * Explicit consent to insert holidays in the current and past months.
@@ -143,15 +136,11 @@ async function loadSeededYears(settingKey: string): Promise<number[]> {
  * Seeds the holiday calendar.
  *
  * Important: **the seed never changes or deletes anything here; it only
- * inserts missing rows.** When the government announces a change, the owner
- * fixes the date or name in Settings → Holidays, and the next `db seed` does
- * not revert it. The old code did `update: { name }`, which wiped every manual
- * correction on the next seed.
+ * inserts missing rows.** When a date changes, the owner fixes it in
+ * Settings → Holidays, and the next `db seed` does not revert it.
  *
- * Important: **the notes are printed on every run, whether or not anything was
- * inserted.** It used to return early once a year was seeded, so the
- * `unlisted`/`renamed` notes went silent for good after the first run. Saying
- * nothing is not a decision, it is hiding the issue.
+ * Important: **each year is seeded once** (`yearsToSeed`): a holiday the owner
+ * deleted (a day the company works anyway) never comes back by itself.
  *
  * Important: **the seed does not insert anything in the current or past months
  * by itself.** Those months' figures are already out, so adding a holiday
@@ -159,45 +148,58 @@ async function loadSeededYears(settingKey: string): Promise<number[]> {
  * `SEED_HOLIDAYS_PAST=true` (see the note on `ALLOW_PAST_HOLIDAYS`). Otherwise
  * the dates are printed **by name**.
  */
-async function seedHolidays(): Promise<{
-  summary: string;
-  standing: string[];
-  notes: string[];
-}> {
-  if (HOLIDAY_SET === null) {
+async function seedHolidays(): Promise<{ summary: string; notes: string[] }> {
+  if (HOLIDAY_COUNTRY === null) {
     return {
-      summary: 'skipped (SEED_COUNTRY=none) — add them in Settings → Holidays or with prisma/import-holidays.ts',
-      standing: [],
+      summary:
+        'none (SEED_COUNTRY is not set) — add them on Settings → Policies & holidays, or with prisma/import-holidays.ts',
       notes: [],
     };
   }
-  const { entries, years: allYears, pending, settingKey } = HOLIDAY_SET;
-
-  const problems = validateHolidays(entries);
-  if (problems.length > 0) {
-    // Stop here: a wrong date goes straight into the workday count.
-    throw new Error(`Errors in the holiday list:\n  - ${problems.join('\n  - ')}`);
-  }
+  const settingKey = `seed.holidays.${HOLIDAY_COUNTRY}`;
+  // "Today" is the work-zone date, not the machine's local clock (see `workToday()`).
+  const today = workToday(new Date());
+  const thisYear = yearOf(today);
 
   const seeded = await loadSeededYears(settingKey);
-  const years = yearsToSeed(allYears, seeded);
+  const wanted = yearsToSeed([thisYear, thisYear + 1], seeded);
+  if (wanted.length === 0) {
+    return {
+      summary: `${HOLIDAY_COUNTRY}: all years already seeded (${[...seeded].sort((a, b) => a - b).join(', ')})`,
+      notes: [],
+    };
+  }
 
-  // The DB is read on **every** run, whether or not a year is left to seed;
-  // otherwise we could not tell whether there is anything to report.
+  // Fetched per year: a year the calendar could not give stays open, so the
+  // next seed tries again.
+  const entries: ImportedHoliday[] = [];
+  const fetched: number[] = [];
+  const notes: string[] = [];
+  for (const year of wanted) {
+    try {
+      const { holidays, problems } = await publicHolidays(HOLIDAY_COUNTRY, year);
+      entries.push(...holidays);
+      notes.push(...problems.map((p) => `⚠️ ${p}`));
+      fetched.push(year);
+    } catch (err) {
+      notes.push(
+        `⚠️ ${year}: ${err instanceof Error ? err.message : String(err)} — not seeded, the next seed tries again`,
+      );
+    }
+  }
+
   const rows = await prisma.holiday.findMany({
     select: { holidayDate: true, name: true },
   });
-
-  // The plan covers the **whole list**; `years` only decides what gets inserted.
+  const typeOf = new Map(entries.map((h) => [h.entry.date, h.type]));
   const run = planHolidaySeedRun(
-    entries,
+    entries.map((h) => h.entry),
     rows.map((row) => ({
       date: row.holidayDate.toISOString().slice(0, 10),
       name: row.name,
     })),
-    years,
-    // "Today" is the work-zone date, not the machine's local clock (see `workToday()`).
-    { today: workToday(new Date()), allowPast: ALLOW_PAST_HOLIDAYS },
+    fetched,
+    { today, allowPast: ALLOW_PAST_HOLIDAYS },
   );
 
   for (const entry of run.create) {
@@ -206,10 +208,9 @@ async function seedHolidays(): Promise<{
         // `@db.Date` columns use UTC midnight; local time would shift the
         // holiday to the previous day in the work zone (same trap as in `parse-staff.ts`).
         holidayDate: new Date(`${entry.date}T00:00:00.000Z`),
-        name: holidayRowName(entry),
-        // The screen's Type picker only offers public/optional/company; any
-        // other value would silently change when the owner hits Edit → Save.
-        type: 'public',
+        name: entry.name,
+        approximate: entry.approximate,
+        type: typeOf.get(entry.date) ?? 'public',
       },
     });
   }
@@ -218,68 +219,35 @@ async function seedHolidays(): Promise<{
    * A year that still has rows waiting for consent is not "done"; otherwise
    * `SEED_HOLIDAYS_PAST=true` would do nothing on the next run (the reason and
    * its cost are in the note on `yearsSettled`).
-   *
-   * `settings` is only touched when a year was really completed; otherwise
-   * every run would rewrite the same value and `updated_at` would be wrong.
    */
-  const settledYears = yearsSettled(years, run.needsConsent);
+  const settledYears = yearsSettled(fetched, run.needsConsent);
   if (settledYears.length > 0) {
+    const years = [...new Set([...seeded, ...settledYears])].sort((a, b) => a - b);
     await prisma.setting.upsert({
       where: { key: settingKey },
-      create: {
-        key: settingKey,
-        value: { years: [...seeded, ...settledYears] },
-      },
-      update: { value: { years: [...seeded, ...settledYears] } },
+      create: { key: settingKey, value: { years } },
+      update: { value: { years } },
     });
   }
 
   /**
-   * The summary reports **each bucket separately**. It used to print only how
-   * many were inserted; now it also counts the ones that were **not**, because
-   * "0 inserted" could mean two very different things: "everything was already
-   * correct" or "18 dates are held back".
+   * The summary reports **each bucket separately**: "0 inserted" could mean
+   * "everything was already there" or "18 dates are held back".
    */
-  const approx = run.create.filter((h) => h.approximate).length;
   const parts = [
-    `${run.create.length} inserted (${approx} approximate dates)`,
+    `${HOLIDAY_COUNTRY}: ${run.create.length} inserted`,
     `${run.kept} already existed`,
   ];
   if (run.needsConsent.length > 0) {
     parts.push(`${run.needsConsent.length} held back (current/past month)`);
   }
-  if (run.heldBack.length > 0) {
-    parts.push(`${run.heldBack.length} in a closed year (not inserted)`);
-  }
-  /**
-   * Three states are reported separately. "No year completed" and "all years
-   * already completed" both mean nothing new was closed, but the first means
-   * something is held back and the second means everything is fine.
-   */
-  if (years.length === 0) {
-    const done = [...seeded].sort((a, b) => a - b).join(', ');
-    parts.push(`all years already complete (${done})`);
-  } else if (settledYears.length > 0) {
+  if (settledYears.length > 0) {
     parts.push(`years completed: ${settledYears.join(', ')}`);
-  } else {
+  } else if (fetched.length > 0) {
     parts.push('no year completed — rows are waiting for consent');
   }
 
-  /**
-   * Old or unrecognised rows are **never deleted**, only reported. For
-   * example, 17 March and 15 August were dropped from the 2024 public holidays,
-   * yet an earlier seed inserted them, and in existing databases they still
-   * reduce the workdays. We cannot tell a wrong row from a holiday the owner
-   * added themselves, so the decision is theirs. But saying nothing is not a
-   * decision, it is hiding the issue, so `run.notes` is returned on every run,
-   * even when `run.create` is empty.
-   */
-  return {
-    summary: parts.join(' · '),
-    // **Standing** facts about the list, kept apart from what this run did.
-    standing: gazetteNotes(entries, pending),
-    notes: run.notes,
-  };
+  return { summary: parts.join(' · '), notes: [...notes, ...run.notes] };
 }
 
 // ── 4 · staff list ──────────────────────────────────────────────────────────
@@ -446,11 +414,7 @@ async function main(): Promise<void> {
   );
   console.log(`   app categories: ${rules} rules`);
   console.log(`   holidays      : ${holidays.summary}`);
-  console.log(
-    '                   ⚠️ dates marked "(সম্ভাব্য)" depend on the moon/tithi — fix them when the announcement comes',
-  );
-  // Standing facts about the list first, then what this run did.
-  for (const note of [...holidays.standing, ...holidays.notes]) {
+  for (const note of holidays.notes) {
     console.log(`                   ${note}`);
   }
   console.log(`   staff         : ${staff} — nobody has signed the policy yet, needed before rollout`);

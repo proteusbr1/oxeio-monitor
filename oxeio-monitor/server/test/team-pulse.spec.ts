@@ -15,7 +15,7 @@ import {
 /**
  * The working day is in Prisma's `@db.Date` shape — a UTC-midnight `Date`.
  *
- * But Dhaka's **local** midnight is six hours **before** that
+ * But the work zone's (UTC+6) **local** midnight is six hours **before** that
  * (`dayStartUtcMs = workDate − 6h`). I first forgot this subtraction when
  * writing the helper, and six tests failed at once — all the work had
  * shifted by exactly six hours.

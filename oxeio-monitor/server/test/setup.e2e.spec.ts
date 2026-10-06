@@ -12,7 +12,8 @@ describe('defaultWorkRules — a starting point per country', () => {
 
   it('the local weekend where it differs', () => {
     expect(defaultWorkRules('SA').weeklyOffDays).toEqual([5, 6]);
-    expect(defaultWorkRules('bd')).toEqual({ monthlyTargetHours: 208, expectedWorkdays: 26, weeklyOffDays: [5] });
+    // a one-day weekend: six 8-hour days a week, in any case of the code
+    expect(defaultWorkRules('ir')).toEqual({ monthlyTargetHours: 208, expectedWorkdays: 26, weeklyOffDays: [5] });
   });
 
   it('refuses a week without a working day', () => {
@@ -65,7 +66,7 @@ describe('first-run setup wizard', () => {
   it('sets everything up and signs the owner in', async () => {
     const agent = request.agent(h.app.getHttpServer());
     const res = await agent.post('/api/v1/setup').send(body()).expect(200);
-    expect(res.body.restartNeeded).toBe(true); // tests run on Asia/Dhaka
+    expect(res.body.restartNeeded).toBe(true); // tests run on Etc/GMT-6
 
     const me = await agent.get('/api/v1/auth/me').expect(200);
     expect(me.body).toMatchObject({ email: 'ana@example.com', role: 'owner', mustChangePassword: false });

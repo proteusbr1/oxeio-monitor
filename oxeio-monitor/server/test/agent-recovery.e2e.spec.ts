@@ -36,7 +36,7 @@ async function seedDevice(
   const d = await h.prisma.device.create({
     data: {
       hostname,
-      windowsUsername: 'rakib',
+      windowsUsername: 'alex',
       employeeId,
       machineGuid: randomUUID(),
       tokenHash: randomUUID(),
@@ -60,11 +60,11 @@ async function seedDevice(
  * correct behaviour (it was added after six false alerts on 23 August). So
  * instead of loosening the rule, the test is pinned to a known moment.
  *
- * Wednesday was chosen on purpose: Friday is the weekly holiday, when
- * `isOfficeOpen()` would say closed anyway and the test would depend on time
- * again.
+ * Wednesday was chosen on purpose: Friday is the fixture policy's weekly day
+ * off, when `isOfficeOpen()` would say closed anyway and the test would depend
+ * on time again.
  */
-const NOW = new Date('2026-09-02T05:00:00.000Z'); // Wednesday, 11:00 in Dhaka
+const NOW = new Date('2026-09-02T05:00:00.000Z'); // Wednesday, 11:00 in the work zone (UTC+6)
 
 /** Relative to `NOW`; note `harness`'s `minutesAgo` uses the real clock, so not that */
 const before = (minutes: number): Date =>
@@ -89,7 +89,7 @@ beforeEach(async () => {
   await resetDatabase(h.prisma, h.app);
   const policy = await h.prisma.workPolicy.findFirstOrThrow();
   const emp = await h.prisma.employee.create({
-    data: { empCode: 'OX-DOWN', fullName: 'Rakib Hasan', policyId: policy.id },
+    data: { empCode: 'OX-DOWN', fullName: 'Alex Silva', policyId: policy.id },
   });
   employeeId = emp.id;
 });

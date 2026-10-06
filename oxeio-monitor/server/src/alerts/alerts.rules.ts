@@ -585,9 +585,9 @@ export interface NoActivityInput {
  * The real job of this function is to say **no**.
  *
  * The plain answer to "did nobody work today?" is often correct but
- * meaningless: Friday, an Eid holiday, or someone who joined yesterday.
- * Careful: without excluding holidays, twelve false alerts would go out every
- * Friday, four times a month. That habit is how people end up leaving the
+ * meaningless: a weekly day off, a public holiday, or someone who joined yesterday.
+ * Careful: without excluding days off, twelve false alerts would go out on
+ * every weekly day off, four or more times a month. That habit is how people end up leaving the
  * alert folder unread.
  *
  * Careful: "excluding" a holiday only means not raising the alert. If someone

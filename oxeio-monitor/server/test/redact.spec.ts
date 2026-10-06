@@ -17,8 +17,8 @@ function row(overrides: Partial<EmployeeRow> = {}): EmployeeRow {
   return {
     id: 3,
     empCode: 'EMP-003',
-    fullName: 'রুমানা হক',
-    email: 'rumana@example.com',
+    fullName: 'Maria Souza',
+    email: 'maria@example.com',
     designation: 'Designer',
     department: 'Creative',
     // work type, next to designation, not a replacement for it

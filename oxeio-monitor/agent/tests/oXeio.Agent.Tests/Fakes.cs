@@ -158,7 +158,7 @@ internal sealed class FakeSyncClient : ISyncClient
         }
 
         if (segments.Any(s => PoisonUuids.Contains(s.ClientUuid)))
-            return Task.FromResult(SyncResult<IngestAck>.Permanent(400, "বেঠিক রেকর্ড"));
+            return Task.FromResult(SyncResult<IngestAck>.Permanent(400, "bad record"));
 
         AcceptedSegments += segments.Count;
         return Task.FromResult(SyncResult<IngestAck>.Ok(
@@ -167,9 +167,9 @@ internal sealed class FakeSyncClient : ISyncClient
 
     private static SyncResult<T> Fail<T>(SyncOutcome o) where T : class => o switch
     {
-        SyncOutcome.Transient => SyncResult<T>.Transient(503, "নকল সাময়িক ত্রুটি"),
-        SyncOutcome.Permanent => SyncResult<T>.Permanent(400, "নকল স্থায়ী ত্রুটি"),
-        _ => SyncResult<T>.Revoked("নকল revoke"),
+        SyncOutcome.Transient => SyncResult<T>.Transient(503, "fake transient error"),
+        SyncOutcome.Permanent => SyncResult<T>.Permanent(400, "fake permanent error"),
+        _ => SyncResult<T>.Revoked("fake revoke"),
     };
 
     // ── not used by these tests ───────────────────────────────────────────

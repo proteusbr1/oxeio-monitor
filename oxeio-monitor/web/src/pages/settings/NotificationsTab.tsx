@@ -134,7 +134,7 @@ export function NotificationsTab() {
 
             {/*
               Important: the test button is the **most useful part**. Without it the
-                 owner would save, wait until Friday, and only realise something was
+                 owner would save, wait for the next scheduled message, and only realise something was
                  wrong if nothing arrived, with no way to tell what was wrong.
             */}
             <MiniButton

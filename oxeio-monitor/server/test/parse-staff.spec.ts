@@ -13,7 +13,7 @@ import { parseStaff, shouldSeedSampleStaff } from '../prisma/parse-staff';
  * So the messages are tested too: "it stopped" is not enough, it must say
  * where.
  */
-const ROW = ['OX-01', 'Rakib Hasan', 'Accountant', 25000] as const;
+const ROW = ['OX-01', 'Alex Silva', 'Accountant', 25000] as const;
 
 const one = (row: unknown) => () => parseStaff([row]);
 
@@ -22,7 +22,7 @@ describe('parseStaff: happy path', () => {
     expect(parseStaff([[...ROW]])).toEqual([
       {
         empCode: 'OX-01',
-        fullName: 'Rakib Hasan',
+        fullName: 'Alex Silva',
         designation: 'Accountant',
         monthlySalary: 25000,
       },
@@ -47,7 +47,7 @@ describe('parseStaff: happy path', () => {
   });
 
   /**
-   * Dhaka is UTC+6. If `new Date('2026-01-01')` were read as local time it
+   * In a zone ahead of UTC (UTC+6, say), if `new Date('2026-01-01')` were read as local time it
    * would become 31 December, and someone who joined on the 1st would land in
    * the previous month: full salary this month, one day's pay in the last.
    */
@@ -57,8 +57,8 @@ describe('parseStaff: happy path', () => {
   });
 
   it('trims whitespace', () => {
-    const [row] = parseStaff([[' OX-01 ', ' Rakib ', ' Accountant ', 25000]]);
-    expect(row).toMatchObject({ empCode: 'OX-01', fullName: 'Rakib' });
+    const [row] = parseStaff([[' OX-01 ', ' Alex ', ' Accountant ', 25000]]);
+    expect(row).toMatchObject({ empCode: 'OX-01', fullName: 'Alex' });
   });
 
   it('an empty list works', () => {
@@ -73,7 +73,7 @@ describe('parseStaff: catching mistakes', () => {
 
   /** Three cells means salary `undefined`, which gives an unclear Prisma error. */
   it('stops when there are too few cells', () => {
-    expect(one(['OX-01', 'Rakib', 'Accountant'])).toThrow(/four or five cells/);
+    expect(one(['OX-01', 'Alex', 'Accountant'])).toThrow(/four or five cells/);
   });
 
   it('also stops when there are too many cells', () => {
@@ -82,16 +82,16 @@ describe('parseStaff: catching mistakes', () => {
 
   /** Putting quotes around a number in JSON is a very common mistake. */
   it('stops when the salary is written as a string', () => {
-    expect(one(['OX-01', 'Rakib', 'Accountant', '25000'])).toThrow(/without quotes/);
+    expect(one(['OX-01', 'Alex', 'Accountant', '25000'])).toThrow(/without quotes/);
   });
 
   /** The column is `Int`: a fraction would silently lose the cents. */
   it('stops on a fractional salary', () => {
-    expect(one(['OX-01', 'Rakib', 'Accountant', 25000.5])).toThrow(/fraction/);
+    expect(one(['OX-01', 'Alex', 'Accountant', 25000.5])).toThrow(/fraction/);
   });
 
   it('stops on a negative salary', () => {
-    expect(one(['OX-01', 'Rakib', 'Accountant', -1])).toThrow(/negative/);
+    expect(one(['OX-01', 'Alex', 'Accountant', -1])).toThrow(/negative/);
   });
 
   it('stops when the name is empty', () => {
@@ -104,7 +104,7 @@ describe('parseStaff: catching mistakes', () => {
    * take their place. Easy to do when the list is built by copy-paste.
    */
   it('stops when the same code appears twice', () => {
-    const rows = [[...ROW], ['OX-01', 'Onno Keu', 'Manager', 40000]];
+    const rows = [[...ROW], ['OX-01', 'Someone Else', 'Manager', 40000]];
     expect(() => parseStaff(rows)).toThrow(/this code appears earlier/);
   });
 
@@ -136,7 +136,7 @@ describe('parseStaff: catching mistakes', () => {
    * search a 12-row file for the one to fix.
    */
   it('the message says which row and which employee', () => {
-    const rows = [[...ROW], ['OX-02', 'Karim', 'Intern', 'oops']];
+    const rows = [[...ROW], ['OX-02', 'Sam', 'Intern', 'oops']];
     expect(() => parseStaff(rows)).toThrow(/Row 2 \(OX-02\)/);
   });
 });

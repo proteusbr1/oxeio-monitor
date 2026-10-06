@@ -56,7 +56,7 @@ public class SlotSchedulerTests
         }
 
         // if it could be predicted the whole scheme would be pointless (A01)
-        Assert.True(gaps.Distinct().Count() > 25, "ব্যবধানগুলো যথেষ্ট আলাদা নয়");
+        Assert.True(gaps.Distinct().Count() > 25, "the gaps are not different enough");
     }
 
     [Fact]

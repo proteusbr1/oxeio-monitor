@@ -15,7 +15,7 @@ describe('parseCalendarDate — a calendar date, not an instant', () => {
 
   /**
    * The real trap: `new Date('2026-08-10T00:00:00')` (no trailing `Z`) is read
-   * in the server's local time. If the server is in Dhaka that is 18:00 of the
+   * in the server's local time. If the server is in a zone at UTC+6 that is 18:00 of the
    * previous day in UTC, so the holiday calendar would silently shift a day back.
    */
   it('does not slip in a local timezone', () => {

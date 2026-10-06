@@ -63,7 +63,7 @@ FROM caddy:2-alpine AS runtime
 #    stay unrecognized and Caddy would NOT START at all ("unrecognized directive").
 COPY --from=caddy-build /usr/bin/caddy /usr/bin/caddy
 
-ENV TZ=Asia/Dhaka
+ENV TZ=UTC
 RUN apk add --no-cache tzdata
 
 # The PWA files go along with this one line too, nothing extra is needed:

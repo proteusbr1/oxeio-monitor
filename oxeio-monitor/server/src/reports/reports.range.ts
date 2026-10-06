@@ -213,7 +213,7 @@ export function parseReportRange(
 // ── Work days and the target (§ 2.1-b) ──────────────────────────────────────
 
 export interface WorkdayRule {
-  /** ISO days (Friday = 5). If null, every calendar day is a work day. */
+  /** ISO days (Mon = 1 … Sun = 7). If null, every calendar day is a work day. */
   weeklyOffDays: readonly number[];
   /**
    * The `getTime()` of the holidays.
@@ -334,46 +334,16 @@ export function targetSecIn(
 
 // ── Approximate holidays: carrying uncertainty down to the number ───────────
 
-/**
- * The tail at the end of an approximate holiday's DB name; the seed writes exactly this.
- *
- * Yes, the string is written in two places (here and `APPROX_SUFFIX` in
- * `prisma/holidays.data.ts`), and that is deliberate, because an import breaks
- * both ways:
- *    - If `src/` imported `prisma/`, `nest build`'s rootDir would move and the
- *      output would land in `dist/src/main.js` instead of `dist/main.js`;
- *      `start:prod` (`node dist/main.js`) would then not find the file at all
- *      (`tsconfig.build.json`'s note excludes prisma/ for exactly this reason).
- *    - The other way, if `prisma/` imported `src/`, the seed would break in the
- *      **runtime image**: it has `prisma/` and `dist/` but no `src/`
- *      (`server/Dockerfile`).
- *    So there are two copies, and a test in `test/holidays.spec.ts` guards that
- *    they stay the same. If the copy silently drifted, the report would say "no
- *    probable dates" forever, so the uncertainty would vanish quietly, the
- *    biggest sin of this file. (The Bengali word means "probable".)
- */
-export const APPROX_HOLIDAY_SUFFIX = ' (সম্ভাব্য)';
-
-/**
- * Whether the holiday's name in the DB carries the uncertainty marker.
- *
- * The marker lives **in the name**, not in a separate column (the reason is
- * written at the top of `prisma/holidays.data.ts`). That has a nice side
- * effect: when the government announces the date, the owner removes the marker
- * in Settings → Holidays, and this function says `false` **from that moment**.
- * So the report and the holidays page never disagree; reading a list file
- * would have disagreed.
- */
-export function isApproximateHoliday(name: string): boolean {
-  return name.trim().endsWith(APPROX_HOLIDAY_SUFFIX.trim());
-}
-
 /** One holiday row, with just what is needed to count uncertainty */
 export interface NamedHoliday {
   /** UTC-midnight: exactly how `holidays.holiday_date` comes back */
   date: Date;
-  /** The name as written in the DB; the marker is read from here */
-  name: string;
+  /**
+   * `holidays.approximate`: the date is an estimate that may still move. The
+   * owner clears it on Settings → Holidays once the date is confirmed, and
+   * from that moment the reports and payroll stop listing it.
+   */
+  approximate: boolean;
 }
 
 /**
@@ -388,11 +358,11 @@ export interface NamedHoliday {
  * **Why it is needed:** when a holiday date moves, whether that day is a work
  * day changes, so **how many days** the report's target covers changes (not the
  * denominator; that is the policy constant), and payroll's `d ÷ D` fraction
- * changes too, i.e. **directly the money**. Eid-e-Milad-un-Nabi on 26 August
- * 2026 is exactly such a date: it depends on moon sighting, yet once it is
- * fixed August's work days drop and everyone's `target_sec` changes. The marker
- * used to be only in the **name**, not beside the number, so the target rested
- * on an assumption with no warning.
+ * changes too, i.e. **directly the money**. A holiday on a lunar calendar is
+ * exactly such a date: it depends on moon sighting, yet once it is fixed the
+ * month's work days drop and everyone's `target_sec` changes. Without this
+ * list the uncertainty would sit only on the holidays page, not beside the
+ * number, so the target would rest on an assumption with no warning.
  *
  * It does not say "how wrong", it says "where it could be wrong". An empty list
  * means every holiday in these months is final, not "no holidays".
@@ -410,7 +380,7 @@ export function approximateHolidayDates(
   // then be counted twice and say "2 probable dates" when there is only one.
   const out = new Set<string>();
   for (const row of rows) {
-    if (isApproximateHoliday(row.name)) out.add(toIsoDate(row.date));
+    if (row.approximate) out.add(toIsoDate(row.date));
   }
   return [...out].sort();
 }
@@ -431,7 +401,7 @@ export interface Bucket {
  *
  * Not hardcoded. If the off day is Friday (ISO 5) the week starts on Saturday,
  * so the off day falls at the end of the week and a work week is not split
- * across two buckets. Assuming Monday would cut every work week that ends on a Friday (as in Bangladesh) in
+ * across two buckets. Assuming Monday would cut every work week that ends on a Friday (a Saturday-to-Thursday week) in
  * the middle. With no off day (null), the international habit: Monday.
  */
 export function weekStartIsoDay(weeklyOffDays: readonly number[]): number {

@@ -55,7 +55,7 @@ const attendance: AttendanceReport = {
     {
       employeeId: 1,
       empCode: 'OX-001',
-      fullName: 'মামুনুর রশিদ',
+      fullName: '山田太郎',
       receivesTasks: false,
     department: null,
       date: '2026-08-11',
@@ -89,7 +89,7 @@ const summary: SummaryReport = {
     {
       employeeId: 1,
       empCode: 'OX-001',
-      fullName: 'মামুনুর রশিদ',
+      fullName: '山田太郎',
       bucket: '2026-08',
       bucketStart: '2026-08-01',
       bucketEnd: '2026-08-11',
@@ -181,7 +181,7 @@ function makeService(
   };
 }
 
-/** UTC 12:30 = 6:30 PM in Dhaka — the job runs at exactly this time */
+/** UTC 12:30 = 6:30 PM in the work zone (UTC+6) — the job runs at exactly this time */
 const AT_6_30_PM = new Date('2026-08-11T12:30:00.000Z');
 
 describe('DigestService — which range is requested', () => {
@@ -195,8 +195,8 @@ describe('DigestService — which range is requested', () => {
     ]);
   });
 
-  it('"today" means Dhaka\'s today — even when it is still yesterday in UTC', async () => {
-    // UTC 11 August 20:00 = 2:00 AM on 12 August in Dhaka
+  it('"today" means the work zone\'s today — even when it is still yesterday in UTC', async () => {
+    // UTC 11 August 20:00 = 2:00 AM on 12 August in the work zone
     const { service, calls } = makeService();
     await service.runOnce(new Date('2026-08-11T20:00:00.000Z'));
 

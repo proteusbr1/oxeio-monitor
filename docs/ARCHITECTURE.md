@@ -179,8 +179,10 @@ and per-service scope rules); the dashboard only hides what a role cannot use.
 | `health/` | `GET /health` |
 | `prisma/`, `common/`, `scripts/` | database client, shared helpers and validation patterns, one-off scripts |
 
-Database schema and migrations: `server/prisma/`. Seed and holiday data:
-`server/prisma/seed.ts`, `holiday-sets.ts`.
+Database schema and migrations: `server/prisma/`. Seed: `server/prisma/seed.ts`
+(`seed-config.ts` for its settings; with `SEED_COUNTRY` it fetches that
+country's public holidays like the setup wizard does). Holiday file import:
+`server/prisma/import-holidays.ts`; both plan inserts with `holiday-seed.ts`.
 
 ## Dashboard — `oxeio-monitor/web/src`
 
@@ -220,13 +222,15 @@ CI (`.github/workflows/ci.yml`) runs all of them plus the Docker builds. The
 MSI job fails because WiX v7 needs its EULA accepted — a known CI issue, not
 a code problem.
 
-All code, comments and messages are in English. Bengali remains only where it
-is data: Bangladesh holiday names, the `(সম্ভাব্য)` ("probable") marker stored
-with holiday names, the search box's Bengali date aliases, Chrome's Bengali
-incognito marker, and test inputs.
+All code, comments and messages are in English, and nothing is tied to one
+country: the time zone, currency, locale, weekly days off and public holidays
+come from settings, from the setup wizard's per-country starting points, or
+from the public holiday calendar. A holiday whose date is not final yet is
+flagged in `holidays.approximate`. Old migrations are kept exactly as they
+ran.
 
 ## Docs
 
 [docs/README.md](README.md) lists every document: the original project's
-design history (mostly Bengali) and what each is still useful for. The
+design history (mostly not in English) and what each is still useful for. The
 deployment manual is `oxeio-monitor/deploy/README.md` (English).

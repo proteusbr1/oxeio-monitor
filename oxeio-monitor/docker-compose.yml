@@ -148,7 +148,7 @@ services:
       #    without them someone setting WEEKLY_DIGEST_DAY=1 in `.env` would wait
       #    for Monday while the message arrived on Friday - and there would be no
       #    way to tell that "the setting is not working".
-      # Day: 1=Mon ... 5=Fri ... 7=Sun. Hour: 0-23 (Dhaka).
+      # Day: 1=Mon ... 5=Fri ... 7=Sun. Hour: 0-23 (work zone, WORK_TIMEZONE).
       WEEKLY_DIGEST_DAY: ${WEEKLY_DIGEST_DAY:-5}
       WEEKLY_DIGEST_HOUR: ${WEEKLY_DIGEST_HOUR:-18}
       # Careful: the default is empty, i.e. the guard is **on**: if the chat id is

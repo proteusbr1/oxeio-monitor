@@ -79,7 +79,7 @@ function serviceWorkerPlugin(): Plugin {
      *
      * Careful: Vite keeps HTML comments (unlike JS/CSS, it does not strip them).
      *    The explanations in this file are long; unstripped, about 5 KB of
-     *    Bengali comments would be sent **every time**, and `index.html` is
+     *    comments would be sent **every time**, and `index.html` is
      *    deliberately `no-cache` (Caddyfile), i.e. on every dashboard open.
      *    The owner and managers open it on phone data.
      * So the comments stay in the source at full length; they are just not sent.

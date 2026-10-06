@@ -13,10 +13,15 @@ import { defineConfig } from 'vitest/config';
  * Careful: `environment: 'node'`: jsdom was deliberately not brought in. None
  * of the tests here need a DOM, and jsdom would add several seconds to every
  * run. It can be added the day component tests are written.
+ *
+ * Careful: `setupFiles` pins the work zone to a nameless UTC+6 (`Etc/GMT-6`,
+ * see `test/setup.ts`). The product default is UTC; the specs' fixed instants
+ * were written for a zone ahead of UTC, and that is the case worth testing.
  */
 export default defineConfig({
   test: {
     environment: 'node',
     include: ['test/**/*.spec.ts'],
+    setupFiles: ['test/setup.ts'],
   },
 });

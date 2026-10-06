@@ -16,7 +16,7 @@ const policy = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('targetSpreadOf — every basis becomes hours per workday', () => {
-  it('per month: the original 208 h over 26 days = 8 h', () => {
+  it('per month: 208 h over 26 days = 8 h', () => {
     expect(dailyTargetSecOf(policy())).toBe(8 * H);
   });
   it('per week: 40 h over the 5 working days = 8 h', () => {

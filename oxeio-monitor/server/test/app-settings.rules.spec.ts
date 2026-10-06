@@ -19,9 +19,9 @@ import {
  * behaviour the server always had.
  */
 describe('resolveRegion', () => {
-  it('nothing saved, nothing in .env → Dhaka, USD, own formats', () => {
-    const r = resolveRegion(null, {}, 'Asia/Dhaka');
-    expect(r.timeZone).toEqual({ value: 'Asia/Dhaka', source: 'default' });
+  it('nothing saved, nothing in .env → UTC, USD, own formats', () => {
+    const r = resolveRegion(null, {}, 'UTC');
+    expect(r.timeZone).toEqual({ value: 'UTC', source: 'default' });
     expect(r.currency).toMatchObject({
       code: 'USD',
       symbol: '$',
@@ -48,7 +48,7 @@ describe('resolveRegion', () => {
     const r = resolveRegion(
       { currency: 'EUR', displayLocale: null },
       { CURRENCY: 'BRL', DISPLAY_LOCALE: 'pt-BR' },
-      'Asia/Dhaka',
+      'UTC',
     );
     expect(r.currency).toMatchObject({
       code: 'EUR',

@@ -50,7 +50,7 @@ async function makeDevice(hostname: string): Promise<number> {
   const device = await h.prisma.device.create({
     data: {
       hostname,
-      windowsUsername: 'rakib',
+      windowsUsername: 'alex',
       employeeId,
       machineGuid: randomUUID(),
       tokenHash: randomUUID(),
@@ -129,7 +129,7 @@ beforeEach(async () => {
   await resetDatabase(h.prisma, h.app);
 
   const employee = await h.prisma.employee.create({
-    data: { empCode: `SI-${uniqueSuffix()}`, fullName: 'Belal Hossain' },
+    data: { empCode: `SI-${uniqueSuffix()}`, fullName: 'Bruno Costa' },
   });
   employeeId = employee.id;
   deviceId = await makeDevice('PC-SI');
@@ -150,7 +150,7 @@ describe('G46 — catching fake input', () => {
     expect(row.employeeId).toBe(employeeId);
     expect(row.deviceId).toBe(deviceId);
     expect(row.severity).toBe('warning');
-    expect(row.title).toContain('Belal Hossain');
+    expect(row.title).toContain('Bruno Costa');
   });
 
   /** `meta` holds the information needed to verify the incident */

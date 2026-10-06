@@ -129,11 +129,11 @@ describe('toPdfText: which text can be printed at all', () => {
     });
   });
 
-  it('Bengali letters become ? and it reports lossy', () => {
-    const out = toPdfText('মামুন');
+  it('non-Latin letters (CJK) become ? and it reports lossy', () => {
+    const out = toPdfText('山田太郎');
     expect(out.lossy).toBe(true);
     // not removed: an empty string would look the same as "no name"
-    expect(out.text).toBe(UNPRINTABLE.repeat('মামুন'.length));
+    expect(out.text).toBe(UNPRINTABLE.repeat('山田太郎'.length));
     expect(out.text.length).toBeGreaterThan(0);
   });
 
@@ -157,7 +157,7 @@ describe('toPdfText: which text can be printed at all', () => {
   });
 });
 
-describe('personLabel: what goes in the cell for a Bengali name', () => {
+describe('personLabel: what goes in the cell for a non-Latin name', () => {
   it('a printable name stays as it is', () => {
     expect(personLabel('Jane Doe', 'OX-001')).toEqual({
       text: 'Jane Doe',
@@ -165,17 +165,17 @@ describe('personLabel: what goes in the cell for a Bengali name', () => {
     });
   });
 
-  it('a Bengali name is replaced by the employee code, not a row of question marks', () => {
+  it('a non-Latin name is replaced by the employee code, not a row of question marks', () => {
     // Nobody could recognise an employee from ???????; the code is in the
     // next column anyway and everybody knows it
-    expect(personLabel('মামুনুর রশিদ', 'OX-004')).toEqual({
+    expect(personLabel('山田太郎', 'OX-004')).toEqual({
       text: 'OX-004',
       lossy: true,
     });
   });
 
   it('if even the code cannot be printed, a marker is used, not blank', () => {
-    const out = personLabel('মামুন', 'কোড');
+    const out = personLabel('山田太郎', 'コード');
     expect(out.lossy).toBe(true);
     expect(out.text).toContain(UNPRINTABLE);
   });
@@ -216,16 +216,16 @@ describe('hoursText and workStamp', () => {
   });
 
   it('creation time is in the work-zone clock, not the server timezone', () => {
-    // 12:34 UTC = 18:34 in Dhaka
+    // 12:34 UTC = 18:34 in the test work zone (UTC+6)
     expect(workStamp(new Date('2026-08-11T12:34:56.000Z'))).toBe(
-      '2026-08-11 18:34 (Asia/Dhaka)',
+      '2026-08-11 18:34 (Etc/GMT-6)',
     );
   });
 
-  it('around the UTC date change the Dhaka date is a day ahead', () => {
-    // 20:00 UTC on 11 August = 02:00 on 12 August in Dhaka
+  it('around the UTC date change the work-zone date is a day ahead', () => {
+    // 20:00 UTC on 11 August = 02:00 on 12 August in the work zone
     expect(workStamp(new Date('2026-08-11T20:00:00.000Z'))).toBe(
-      '2026-08-12 02:00 (Asia/Dhaka)',
+      '2026-08-12 02:00 (Etc/GMT-6)',
     );
   });
 });
@@ -260,18 +260,18 @@ describe('attendanceLines: report to print lines', () => {
     });
   });
 
-  it('a Bengali name sets lossy, otherwise the footnote would never appear', () => {
+  it('a non-Latin name sets lossy, otherwise the footnote would never appear', () => {
     const report = attendance();
-    report.rows[0].fullName = 'মামুনুর রশিদ';
+    report.rows[0].fullName = '山田太郎';
 
     const { lines, lossy } = attendanceLines(report);
     expect(lossy).toBe(true);
     expect(lines[0].name).toBe('OX-001');
   });
 
-  it('a Bengali department alone also sets lossy', () => {
+  it('a non-Latin department alone also sets lossy', () => {
     const report = attendance();
-    report.rows[0].department = 'প্রকৌশল';
+    report.rows[0].department = '技術部';
 
     const { lines, lossy } = attendanceLines(report);
     expect(lossy).toBe(true);

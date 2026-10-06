@@ -34,7 +34,7 @@ const POLICY = {
   screenshotTo: '23:00',
   idleThresholdSec: 60,
   slotMinutes: 5,
-  timezone: 'Asia/Dhaka',
+  timezone: 'Etc/GMT-6',
   isActive: false,
 };
 

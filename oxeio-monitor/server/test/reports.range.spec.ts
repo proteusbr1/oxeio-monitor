@@ -19,10 +19,10 @@ import {
   type WorkdayRule,
 } from '../src/reports/reports.range';
 
-/** 11 August 2026 in Dhaka, noon: used as "today" */
+/** 11 August 2026 at noon in the work zone (UTC+6): used as "today" */
 const NOW = new Date('2026-08-11T06:00:00.000Z');
 
-/** Friday is the day off, no public holidays */
+/** The fixture's weekly off day is Friday, no public holidays */
 const FRIDAY_OFF: WorkdayRule = { weeklyOffDays: [5], holidays: new Set() };
 
 const day = (iso: string): Date => parseWorkDate(iso);
@@ -121,10 +121,10 @@ describe('range validation (F08)', () => {
   });
 
   /**
-   * Dhaka is UTC+6. 9pm UTC on 10 August is 3am on 11 August in Dhaka, so
+   * The test work zone is UTC+6. 9pm UTC on 10 August is 3am on 11 August there, so
    * "today" is the 11th. Writing the offset arithmetic by hand would lose a day right here.
    */
-  it('"today" is the Dhaka date, not the server\'s UTC date', () => {
+  it('"today" is the work-zone date, not the server\'s UTC date', () => {
     const r = parseReportRange('2026-08-01', '2026-08-31', {
       now: new Date('2026-08-10T21:00:00.000Z'),
     });
@@ -220,8 +220,8 @@ describe('months and buckets', () => {
   });
 
   /**
-   * If weeks started on Monday, every working week that ends on Friday (Saturday to
-   * Thursday, as in Bangladesh) would be split across two buckets, and the weekly summary would
+   * If weeks started on Monday, every working week that ends on a Friday off (Saturday to
+   * Thursday, with Friday off) would be split across two buckets, and the weekly summary would
    * never show anyone a whole week.
    */
   it('the week starts the day after the weekly day off', () => {

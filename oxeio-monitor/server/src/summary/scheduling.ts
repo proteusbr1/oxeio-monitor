@@ -25,7 +25,7 @@ export const SCHEDULING_ENABLED = process.env.NODE_ENV !== 'test';
  * night" would really be 6:15 pm, and the day-close job would run in the
  * middle of the day and mark an incomplete day as "final".
  */
-// Same zone as every work date (`WORK_TIMEZONE`, default Asia/Dhaka)
+// Same zone as every work date (`WORK_TIMEZONE`, default UTC)
 export const JOB_TIMEZONE = WORK_TIMEZONE;
 
 /** A job runs only once at a time, within the same process. */

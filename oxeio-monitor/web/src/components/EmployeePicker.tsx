@@ -16,8 +16,8 @@ import { useApi } from '../api/useApi';
  * left, use `includeInactive`; "(Inactive)" then appears beside the name,
  * otherwise nobody would understand why their hours today are zero.
  *
- * Careful: "Inactive" is not "Idle". In Bengali both were the same word; in
- * English they are not. This one is employment status (has left), while the
+ * Careful: "Inactive" is not "Idle". Some languages use one word for both; in
+ * English they are not the same. This one is employment status (has left), while the
  * "Idle" of `StatusDot` means keyboard and mouse are quiet right now. Mixing
  * them up could make someone read a working person as "has left".
  */

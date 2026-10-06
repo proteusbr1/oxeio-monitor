@@ -35,7 +35,7 @@ import {
  *
  * **No pinned date in this file** (G140): `teamTrend()` picks the current
  * month itself, so all fixtures are relative to "today". The window stops
- * **yesterday**, and yesterday may be a Friday or Eid — so to prove "was
+ * **yesterday**, and yesterday may be a weekly off day or a holiday — so to prove "was
  * seen", sessions are placed over the last 20 days, not one. Relying on one
  * day would turn the test red one day a week, with nobody able to find the cause.
  */
@@ -186,7 +186,7 @@ describe("G111 — the board's card says how many people the total covers", () =
  * **G130 (R2) — "on leave" on the card.**
  *
  * `LiveCard.todayIsWorkday` says whether the day is a working day in the
- * **office** calendar — Fridays and public holidays. **Personal leave is not
+ * **office** calendar — weekly off days and public holidays. **Personal leave is not
  * in it**, so an employee on leave showed "0h / 8h" and an empty meter on the
  * card: exactly like someone skipping work. Yet their target and pace had
  * long since excused them.
@@ -242,7 +242,7 @@ describe('G130 — the card says they are on leave today', () => {
     await makeEmployee('G130-T-NO');
 
     // A bunch of days, so that at least a few fall on working days — relying on
-    //    whether yesterday was a Friday would turn the test red one day a week (G140)
+    //    whether yesterday was a Friday (the fixture's off day) would turn the test red one day a week (G140)
     const base = today().getTime();
     await h.prisma.leave.createMany({
       data: Array.from({ length: 10 }, (_, i) => ({

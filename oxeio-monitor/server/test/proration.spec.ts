@@ -150,9 +150,9 @@ describe('salaryFraction: the salary fraction', () => {
   });
 
   /**
-   * The whole month is a holiday (D = 0). This is possible when Eid and public
-   * holidays fall together. Then nobody has any workday, so a shortfall is
-   * impossible; owner's decision: full salary. Treating 0/0 as 0 would give
+   * The whole month is a holiday (D = 0). This is possible when a long holiday
+   * and other public holidays fall together. Then nobody has any workday, so a
+   * shortfall is impossible; owner's decision: full salary. Treating 0/0 as 0 would give
    * everyone zero salary that month through no fault of their own.
    */
   it('a month that is all holiday gets full salary, not zero', () => {

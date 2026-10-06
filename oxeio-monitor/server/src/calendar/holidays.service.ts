@@ -25,6 +25,7 @@ export interface HolidayImportRow {
   date: string;
   name: string;
   type: string;
+  approximate: boolean;
 }
 
 export interface HolidayImportPlan {
@@ -46,6 +47,8 @@ export interface HolidayView {
   holidayDate: string;
   name: string;
   type: string;
+  /** the date is an estimate that may still move */
+  approximate: boolean;
 }
 
 /**
@@ -96,6 +99,7 @@ export class HolidaysService {
           holidayDate,
           name: dto.name,
           ...(dto.type === undefined ? {} : { type: dto.type }),
+          ...(dto.approximate === undefined ? {} : { approximate: dto.approximate }),
         },
       })
       .catch((err: unknown) => {
@@ -209,7 +213,7 @@ export class HolidaysService {
 
     const plan: HolidayImportPlan = { add: [], existing: [], pastMonths: [], problems, created: 0 };
     for (const { entry, type } of holidays) {
-      const row = { date: entry.date, name: entry.name, type };
+      const row = { date: entry.date, name: entry.name, type, approximate: entry.approximate };
       const inDb = byDate.get(entry.date);
       if (inDb !== undefined) plan.existing.push({ ...row, nameInDb: inDb });
       else if (entry.date.slice(0, 7) <= thisMonth && !input.allowPast) plan.pastMonths.push(row);
@@ -223,6 +227,7 @@ export class HolidaysService {
         holidayDate: new Date(`${h.date}T00:00:00Z`),
         name: h.name,
         type: h.type,
+        approximate: h.approximate,
       })),
       // a row added by someone else meanwhile wins — never overwritten
       skipDuplicates: true,
@@ -257,6 +262,7 @@ export class HolidaysService {
             : { holidayDate: this.parse(dto.holidayDate) }),
           ...(dto.name === undefined ? {} : { name: dto.name }),
           ...(dto.type === undefined ? {} : { type: dto.type }),
+          ...(dto.approximate === undefined ? {} : { approximate: dto.approximate }),
         },
       })
       .catch((err: unknown) => {
@@ -344,12 +350,13 @@ export class HolidaysService {
  * Prisma's `InputJsonValue` wants an index signature, which an interface does
  * not have. So it is flattened into a plain `Record`.
  */
-function toAuditMeta(view: HolidayView): Record<string, string | number> {
+function toAuditMeta(view: HolidayView): Record<string, string | number | boolean> {
   return {
     id: view.id,
     holidayDate: view.holidayDate,
     name: view.name,
     type: view.type,
+    approximate: view.approximate,
   };
 }
 
@@ -358,6 +365,7 @@ function toView(holiday: {
   holidayDate: Date;
   name: string;
   type: string;
+  approximate: boolean;
 }): HolidayView {
   return {
     id: holiday.id,
@@ -365,5 +373,6 @@ function toView(holiday: {
     holidayDate: holiday.holidayDate.toISOString().slice(0, 10),
     name: holiday.name,
     type: holiday.type,
+    approximate: holiday.approximate,
   };
 }

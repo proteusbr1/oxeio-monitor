@@ -1,6 +1,6 @@
 -- One-off history correction: G164 · G165 (7 September 2026, already run)
 --
--- Careful: not a regular job; kept as a record. Story: docs/09-Build-Log.md § ৩ঞ৩১.১৩
+-- Careful: not a regular job; kept as a record. Story: docs/09-Build-Log.md (G164)
 -- It was run with:
 --   ssh oxeio-new "docker exec -i oxeio-postgres psql -U oxeio -d oxeio" < this file
 -- Result: UPDATE 7 · segments falling outside the envelope 52 -> 0

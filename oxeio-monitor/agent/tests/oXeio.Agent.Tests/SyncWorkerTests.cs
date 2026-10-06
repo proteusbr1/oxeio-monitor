@@ -105,7 +105,7 @@ public class SyncWorkerTests
         Assert.Contains(1, client.SegmentBatchSizes);
         Assert.True(
             client.SegmentBatchSizes.Count >= 4,
-            "ব্যাচ ছোট না করেই ফেলে দেওয়া হয়েছে?");
+            "was the batch dropped without narrowing it first?");
     }
 
     [Fact]
@@ -152,7 +152,7 @@ public class SyncWorkerTests
             ClientUuid = Guid.NewGuid(),
             Kind = OutboundKind.Segment,
             EnqueuedAt = T0,
-            Payload = "{ এটা বৈধ JSON নয়",
+            Payload = "{ this is not valid JSON",
             SizeBytes = 20,
         });
 
@@ -179,7 +179,7 @@ public class SyncWorkerTests
                 CapturedAt = T0,
                 MonitorIndex = 0,
             },
-            webpPath: Path.Combine(Path.GetTempPath(), "oxeio-নেই.webp"),
+            webpPath: Path.Combine(Path.GetTempPath(), "oxeio-missing.webp"),
             fileBytes: 1000,
             now: T0));
         await box.EnqueueAsync(OutboxCodec.Item(Segment(1), T0));

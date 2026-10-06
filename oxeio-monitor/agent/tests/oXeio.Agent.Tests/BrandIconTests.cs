@@ -187,7 +187,7 @@ public class BrandIconTests
 
         // Careful: `Icon` being set is **not proof**. If ShowIcon is false, Windows
         // sees no icon at all for the window.
-        Assert.True(form.ShowIcon, "ShowIcon=false হলে বসানো Icon-ও মুছে যায়");
+        Assert.True(form.ShowIcon, "ShowIcon=false also wipes the Icon that was set");
     }
 
     /// <summary>

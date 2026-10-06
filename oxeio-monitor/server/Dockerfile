@@ -15,7 +15,7 @@ RUN npx prisma generate && npm run build
 # ── runtime ─────────────────────────────────────────────────────────────────
 FROM node:24-alpine AS runtime
 ENV NODE_ENV=production
-ENV TZ=Asia/Dhaka
+ENV TZ=UTC
 
 # Same version as the web: `/health` returns it, and the dashboard compares the two.
 # Careful: otherwise a half deploy (new web, old api) would be completely silent, and

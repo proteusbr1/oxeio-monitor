@@ -35,8 +35,8 @@ const HOUR = 3600;
 const num = (v: number | { toString(): string } | null | undefined): number =>
   v === null || v === undefined ? 0 : Number(v.toString());
 
-/** Defaults when a person has no policy: the original 208 h over 26 days */
-export const DEFAULT_SPREAD: TargetSpread = { periodTargetSec: 208 * HOUR, periodWorkdays: 26 };
+/** Defaults when a person has no policy: 176 h over 22 days (8-hour days, Mon–Fri) */
+export const DEFAULT_SPREAD: TargetSpread = { periodTargetSec: 176 * HOUR, periodWorkdays: 22 };
 
 export function targetSpreadOf(policy: RegimePolicy | null | undefined): TargetSpread {
   if (!policy) return DEFAULT_SPREAD;

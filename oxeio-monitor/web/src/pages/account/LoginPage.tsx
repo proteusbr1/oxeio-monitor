@@ -62,7 +62,7 @@ export function LoginPage() {
     } catch (err) {
       /**
        * Careful: `err.message` is the server's message (e.g. "wrong email or
-       * password"), and the server still speaks Bengali, so it is shown as it comes.
+       * password"), in the server's own wording, so it is shown as it comes.
        * The network-failure sentence below is our own, so it is in English.
        */
       setError(
@@ -186,8 +186,8 @@ export function LoginPage() {
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   /*
-                   * Careful: English digits in the placeholder. Bengali digits used to be there,
-                   * yet the authenticator app gives the code in English digits. Seeing the two not
+                   * Careful: ASCII digits in the placeholder, never localised digits: the
+                   * authenticator app gives the code in ASCII digits. Seeing the two not
                    * match, someone might think they are typing in the wrong field.
                    */
                   placeholder="123456"

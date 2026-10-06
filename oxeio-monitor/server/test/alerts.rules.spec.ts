@@ -41,7 +41,7 @@ import {
 const MIN = 60_000;
 const HOUR = 60 * MIN;
 
-/** Builds a specific instant in Dhaka: UTC+6, no DST */
+/** Builds a specific instant in the test work zone: UTC+6, no DST */
 function work(iso: string): Date {
   return new Date(`${iso}+06:00`);
 }
@@ -114,9 +114,9 @@ describe('throttle: one per device per cause in 6 hours', () => {
  * each of 13 (device, employee) pairs got exactly 4, six hours apart.
  */
 describe('G166: day-scoped alerts fire only once a day', () => {
-  /** 2 pm in Dhaka = 08:00 UTC */
+  /** 2 pm in the work zone (UTC+6) = 08:00 UTC */
   const noon = new Date('2026-09-07T08:00:00Z');
-  /** Start of that Dhaka day = 18:00 UTC the day before */
+  /** Start of that work-zone day = 18:00 UTC the day before */
   const dayStart = new Date('2026-09-06T18:00:00Z');
 
   it('the types are exactly these two', () => {
@@ -129,17 +129,17 @@ describe('G166: day-scoped alerts fire only once a day', () => {
   /**
    * This guards the mistake made most often in this project. `workDateOf()`
    * is a label, i.e. UTC midnight. Treating it as an instant would put the
-   * boundary at 06:00 Dhaka, and a repeat of an alert raised between
+   * boundary at 06:00 work-zone time, and a repeat of an alert raised between
    * midnight and 06:00 would slip out just as before.
    */
-  it('the floor is Dhaka midnight, not 06:00', () => {
+  it('the floor is work-zone midnight, not 06:00', () => {
     expect(alertFloor('device_overlap', noon).toISOString()).toBe(
       dayStart.toISOString(),
     );
   });
 
   it('an alert from 19 hours ago still blocks if it is the same day', () => {
-    // 01:00 in Dhaka: far outside the 6-hour window, yet the same day
+    // 01:00 in the work zone: far outside the 6-hour window, yet the same day
     const earlier = new Date('2026-09-06T19:00:00Z');
 
     expect(isThrottled(earlier, noon)).toBe(false);
@@ -149,7 +149,7 @@ describe('G166: day-scoped alerts fire only once a day', () => {
 
   /** Not silent forever: a new work day means a new event */
   it('yesterday\'s alert does not block today\'s', () => {
-    // Last night at 11 pm in Dhaka
+    // Last night at 11 pm in the work zone
     const lastNight = new Date('2026-09-06T17:00:00Z');
 
     expect(isThrottledFor('device_overlap', lastNight, noon)).toBe(false);
@@ -162,9 +162,9 @@ describe('G166: day-scoped alerts fire only once a day', () => {
    * two.
    */
   it('the 6-hour window survives right after midnight', () => {
-    // 00:10 in Dhaka
+    // 00:10 in the work zone
     const justAfter = new Date('2026-09-06T18:10:00Z');
-    // 23:50 the night before in Dhaka
+    // 23:50 the night before in the work zone
     const justBefore = new Date('2026-09-06T17:50:00Z');
 
     expect(alertFloor('device_overlap', justAfter).getTime()).toBe(
@@ -247,7 +247,7 @@ describe('suppressFlood: filtering one round\'s candidates', () => {
 
 describe('work-zone time', () => {
   it('local hour, not UTC', () => {
-    // 20:30 Dhaka = 14:30 UTC
+    // 20:30 in the work zone (UTC+6) = 14:30 UTC
     expect(workHourOf(new Date('2026-08-11T14:30:00Z'))).toBe(20);
   });
 
@@ -266,8 +266,8 @@ describe('work-zone time', () => {
     expect(workIsoWeekday(work('2026-08-16T12:00:00'))).toBe(7); // Sunday
   });
 
-  it('the Dhaka day is counted even when UTC is on the previous day', () => {
-    // 05:00 Friday in Dhaka = 23:00 Thursday in UTC
+  it('the work-zone day is counted even when UTC is on the previous day', () => {
+    // 05:00 Friday in the work zone = 23:00 Thursday in UTC
     expect(workIsoWeekday(new Date('2026-08-13T23:00:00Z'))).toBe(5);
   });
 });
@@ -748,7 +748,7 @@ describe('G06: when "nobody worked today" is declared', () => {
 
   /**
    * Without excluding the weekly day off, there would be twelve false alerts
-   * every Friday, four times a month. That habit is how people stop reading
+   * on every weekly off day (Friday in this fixture), four times a month. That habit is how people stop reading
    * alerts.
    */
   it('quiet on the weekly day off', () => {

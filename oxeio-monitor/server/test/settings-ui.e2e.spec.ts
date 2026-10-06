@@ -69,11 +69,11 @@ describe('Settings → Region', () => {
       value: 'America/Sao_Paulo',
       source: 'dashboard',
     });
-    expect(res.body.runningTimeZone).toBe('Asia/Dhaka');
+    expect(res.body.runningTimeZone).toBe('Etc/GMT-6');
     expect(res.body.restartNeeded).toBe(true);
     // still the running zone until then
     const tz = await h.http().get('/api/v1/auth/time-zone').expect(200);
-    expect(tz.body.timeZone).toBe('Asia/Dhaka');
+    expect(tz.body.timeZone).toBe('Etc/GMT-6');
   });
 
   it('takes a zone with daylight saving time, and refuses an unknown one', async () => {

@@ -12,15 +12,15 @@ import { Zone, type ZoneTransition } from './zone';
 
 /**
  * The work-day time zone, from the `WORK_TIMEZONE` env var (IANA name).
- * Default `Asia/Dhaka`, so a deployment that sets nothing behaves exactly
- * as before. (main.ts puts the zone saved on Settings → Company & region
- * into the env before this module loads.)
+ * Default `UTC`, the same default the agent uses; a company sets its own on
+ * Settings → Company & region (main.ts puts the saved zone into the env
+ * before this module loads) or in `.env`.
  *
  * Read from `process.env` at import time, not through `ConfigService`: the
  * `@Cron({ timeZone })` options in `summary/scheduling.ts` are evaluated
  * when the class is defined, before Nest's DI container exists.
  */
-export const WORK_TIMEZONE = process.env.WORK_TIMEZONE?.trim() || 'Asia/Dhaka';
+export const WORK_TIMEZONE = process.env.WORK_TIMEZONE?.trim() || 'UTC';
 
 /** Refuses to start on a zone name the tz database does not know */
 const ZONE = new Zone(WORK_TIMEZONE);
@@ -38,8 +38,8 @@ export function workZoneTransitions(from: Date, to: Date): ZoneTransition[] {
 }
 
 /**
- * Short place name for human-facing text ("… (Dhaka)", say, in the digest).
- * For example `Asia/Dhaka` → `Dhaka`, `America/Sao_Paulo` → `Sao Paulo`, `UTC` → `UTC`.
+ * Short place name for human-facing text ("… (Lisbon)", say, in the digest).
+ * For example `Europe/Lisbon` → `Lisbon`, `America/Sao_Paulo` → `Sao Paulo`, `UTC` → `UTC`.
  */
 export const WORK_TIMEZONE_LABEL = (
   WORK_TIMEZONE.split('/').pop() ?? WORK_TIMEZONE

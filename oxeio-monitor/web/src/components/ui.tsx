@@ -26,9 +26,8 @@ const INPUT =
 // ── Messages ────────────────────────────────────────────────────────────────
 
 /**
- * Careful: the server's messages are written in Bengali (`dto.ts`,
- * `*.service.ts`), so they are shown verbatim, not translated into our own
- * wording. A message like "salary must be given in the form '13000'" is a
+ * Careful: the server's messages (`dto.ts`, `*.service.ts`) are shown
+ * verbatim, not translated into our own wording. A message like "salary must be given in the form '13000'" is a
  * thousand times more useful than "could not save", and it is what lets the owner
  * fix the mistake.
  *

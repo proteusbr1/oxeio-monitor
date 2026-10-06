@@ -26,6 +26,11 @@ public static class DomainParser
         "private browsing", // Firefox
         "private window",   // Safari-style
         "ছদ্মবেশী",          // Chrome (bn)
+        "incógnito",        // Chrome (es, pt)
+        "navegação privativa", // Firefox (pt)
+        "navegación privada",  // Firefox (es)
+        "navigation privée",   // Firefox (fr)
+        "privates fenster",    // Firefox (de)
     ];
 
     /// <summary>

@@ -109,7 +109,7 @@ export interface LeaveView {
    * Whether that day was a workday for that employee.
    *
    * Careful: `false` means the row is in the ledger but reduced none of the target:
-   * leave written on a Friday or a public holiday. If the screen does not show this
+   * leave written on a weekly day off or a public holiday. If the screen does not show this
    * separately, the ledger would claim an exemption it did not give.
    */
   countsTowardTarget: boolean;
@@ -249,7 +249,7 @@ export interface PayrollRow {
    *
    * Careful: the deduction is against this, not against `targetHours`. This is the
    * owner's decision: "no deduction for days we did not observe". Both are shown
-   * separately; otherwise the screen could not answer "the target is 208 hours, so
+   * separately; otherwise the screen could not answer "the target is 176 hours, so
    * why is the shortfall only 2 hours?".
    */
   observedTargetHours: string;

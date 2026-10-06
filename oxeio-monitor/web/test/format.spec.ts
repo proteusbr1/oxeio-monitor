@@ -39,18 +39,18 @@ import {
 
 describe('todayInWorkZone — the browser timezone is not assumed', () => {
   /**
-   * The most important test in this file. Between midnight and 6 am in Dhaka,
+   * The most important test in this file. Between midnight and 6 am in a UTC+6 zone,
    * UTC is still on the **previous day**. Writing `toISOString().slice(0,10)`
    * would make someone working then unable to find today's hours at all, yet
    * working at night is normal in this system (§ 2.1a).
    */
-  it('2 am in Dhaka = new day, even though it is still the previous day in UTC', () => {
-    const utc = new Date('2026-08-11T20:00:00Z'); // 2 am on 12 August in Dhaka
+  it('2 am at UTC+6 = new day, even though it is still the previous day in UTC', () => {
+    const utc = new Date('2026-08-11T20:00:00Z'); // 2 am on 12 August at UTC+6
     expect(utc.toISOString().slice(0, 10)).toBe('2026-08-11');
     expect(todayInWorkZone(utc)).toBe('2026-08-12');
   });
 
-  it('11:59 pm in Dhaka is still the same day', () =>
+  it('11:59 pm at UTC+6 is still the same day', () =>
     expect(todayInWorkZone(new Date('2026-08-12T17:59:00Z'))).toBe('2026-08-12'));
 
   it('workDateOf takes both an ISO string and a Date', () => {
@@ -79,7 +79,7 @@ describe('shifting dates', () => {
     expect(shiftWorkDate('2026-08-01', -1)).toBe('2026-07-31'));
 
   it('on a bad date, what was given comes back', () =>
-    expect(shiftWorkDate('গতকাল', -1)).toBe('গতকাল'));
+    expect(shiftWorkDate('yesterday', -1)).toBe('yesterday'));
 
   it('last day of the month: leap years work out by themselves', () => {
     expect(monthEndOf('2026-02')).toBe('2026-02-28');
@@ -113,7 +113,7 @@ describe('showing dates', () => {
     expect(formatTime('2026-08-11T08:32:00Z')).toBe('14:32'));
 
   it('dash when there is no time', () => expect(formatTime(null)).toBe('—'));
-  it('dash on a broken ISO', () => expect(formatTime('আজ দুপুর')).toBe('—'));
+  it('dash on a broken ISO', () => expect(formatTime('today at noon')).toBe('—'));
 });
 
 describe('formatAgo — singular/plural', () => {
@@ -187,7 +187,7 @@ describe('formatHoursAsDuration — the two API formats on one screen', () => {
   /** Careful: payroll sends hours as a **string** (Decimal) */
   it('string', () => expect(formatHoursAsDuration('7.53')).toBe('7h 32m'));
   it('dash on null', () => expect(formatHoursAsDuration(null)).toBe('—'));
-  it('dash on a junk string', () => expect(formatHoursAsDuration('অনেক')).toBe('—'));
+  it('dash on a junk string', () => expect(formatHoursAsDuration('lots')).toBe('—'));
 });
 
 // ── Percent, bytes, money ───────────────────────────────────────────────────

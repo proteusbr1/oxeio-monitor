@@ -114,7 +114,7 @@ export class EmployeesController {
    * been switched off.
    *
    * Careful: it works per employee, not per device. The owner thinks of
-   * "Belal's PC", not "device #61".
+   * "Bruno's PC", not "device #61".
    */
   @Post(':id/agent/turn-on')
   @HttpCode(HttpStatus.OK)

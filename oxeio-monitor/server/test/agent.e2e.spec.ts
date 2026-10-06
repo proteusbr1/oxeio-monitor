@@ -75,7 +75,7 @@ describe('enrollment (H05)', () => {
       .send({
         enrollmentCode: code,
         hostname: 'PC-07',
-        windowsUsername: 'rakib',
+        windowsUsername: 'alex',
         machineGuid: 'guid-test-001',
       })
       .expect(401);
@@ -114,13 +114,13 @@ describe('device auth', () => {
     expect(res.body.config.idleThresholdSec).toBe(60);
   });
 
-  it('carries the work-day zone and its fixed offset (default Dhaka)', async () => {
+  it('carries the work-day zone and its fixed offset', async () => {
     const res = await asAgent(
       h.http().get('/api/v1/agent/config'),
       device.token,
     ).expect(200);
 
-    expect(res.body.config.timezone).toBe('Asia/Dhaka');
+    expect(res.body.config.timezone).toBe('Etc/GMT-6');
     expect(res.body.config.utcOffsetMinutes).toBe(360);
   });
 
@@ -251,8 +251,8 @@ describe('heartbeat', () => {
      * Careful: the work-zone date, not UTC's. This repeats G62 exactly.
      *
      * Today's date used to be built here with `getUTCFullYear/Month/Date`. In
-     * the daytime the two agree, so the test passed. But between Dhaka
-     * midnight and 06:00 UTC is still on the previous day, so the holiday
+     * the daytime the two agree, so the test passed. But between work-zone
+     * (UTC+6) midnight and 06:00, UTC is still on the previous day, so the holiday
      * landed on yesterday's slot, the server saw today as a working day, and
      * the target came out 28,800 instead of 0. Caught at exactly 00:22.
      */
@@ -588,7 +588,7 @@ describe('split at midnight (section 2.1a)', () => {
           {
             clientUuid: randomUUID(),
             state: 'active',
-            // 17:50Z = 23:50 in Dhaka, 18:10Z = 00:10 the next day
+            // 17:50Z = 23:50 in the work zone (UTC+6), 18:10Z = 00:10 the next day
             startedAt: '2026-08-08T17:50:00.000Z',
             endedAt: '2026-08-08T18:10:00.000Z',
             durationSec: 1200,
@@ -872,7 +872,7 @@ describe('app usage and events', () => {
             endedAt: iso(used.endedAt),
             durationSec: used.durationSec,
             processName: 'chrome.exe',
-            windowTitle: 'কিছু একটা — YouTube',
+            windowTitle: 'Something — YouTube',
             domain: 'music.youtube.com',
             isBrowser: true,
           },

@@ -79,7 +79,11 @@ export function HolidaysSection() {
       key: 'type',
       header: 'Type',
       render: (holiday) => (
-        <Chip>{TYPE_LABEL[holiday.type] ?? holiday.type}</Chip>
+        <span className="flex flex-wrap gap-1">
+          <Chip>{TYPE_LABEL[holiday.type] ?? holiday.type}</Chip>
+          {/* the date can still move — pay and targets of that month may change with it */}
+          {holiday.approximate && <Chip tone="pending">Date may change</Chip>}
+        </span>
       ),
     },
     {
@@ -262,9 +266,8 @@ function HolidayForm({
 
   // Careful: `weekdayOf()` returns `''` for an unrecognised date, so the hint is not
   //    rendered when empty; otherwise an empty line would hang under the heading.
-  // Careful: a Bengali suffix used to be appended to this; in the English UI the
-  //    weekday name alone is enough, and it would have become "Mon<suffix>" once
-  //    `format.ts` went English.
+  // Careful: nothing is appended to this; the weekday name alone is enough,
+  //    and a suffix would make it "Mon<suffix>".
   const weekday = weekdayOf(holidayDate);
 
   return (

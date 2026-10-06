@@ -41,7 +41,7 @@ enum SegmentState {
 /// Careful: adding a new value is NOT fail-closed everywhere. `@Roles()` and the
 /// sidebar's `roles[]` run on allowlists, so they are safe. But a hand-written
 /// `role !== employee` condition **opens the wrong way**; those are now written as
-/// `owner || manager` (09 § ৩ঞ১০).
+/// `owner || manager`.
 enum UserRole {
   owner
   manager
@@ -165,7 +165,7 @@ model WorkPolicy {
   name               String
   /// The only target
   targetBasis        TargetBasis @default(month) @map("target_basis")
-  monthlyTargetHours Decimal @default(208) @map("monthly_target_hours") @db.Decimal(6, 2)
+  monthlyTargetHours Decimal @default(176) @map("monthly_target_hours") @db.Decimal(6, 2)
   /// basis = week: hours per week (e.g. 40)
   weeklyTargetHours  Decimal? @map("weekly_target_hours") @db.Decimal(5, 2)
   /// basis = day: hours per workday (e.g. 8)
@@ -177,11 +177,11 @@ model WorkPolicy {
   /// monthly salaries: missing hours are deducted from pay (the original rule)
   deductShortfall    Boolean  @default(true) @map("deduct_shortfall")
   /// Fallback only: the real count comes from the calendar, § 2.1-b
-  expectedWorkdays   Int     @default(26) @map("expected_workdays")
+  expectedWorkdays   Int     @default(22) @map("expected_workdays")
   /// Careful: this is not a block: hours worked on a day off are still counted in full.
-  /// ISO days off (Fri = 5), several allowed: [5] for Bangladesh, [6, 7] for
-  /// Sat+Sun. Empty = every calendar day is a workday (was `weekly_off_day`
-  /// null).
+  /// ISO days off (Mon = 1 … Sun = 7), several allowed: [6, 7] for Sat+Sun,
+  /// [5] for a Friday-only weekend. Empty = every calendar day is a workday
+  /// (was `weekly_off_day` null).
   weeklyOffDays      Int[]   @default([]) @map("weekly_off_days") @db.SmallInt
   /// 'HH:MM': the capture window. When null, pictures are taken 24 hours a day.
   screenshotFrom     String? @map("screenshot_from") @db.VarChar(5)
@@ -219,8 +219,8 @@ model WorkPolicy {
   dailyTaskTarget    Int     @default(25) @map("daily_task_target")
   idleThresholdSec   Int     @default(60) @map("idle_threshold_sec")
   slotMinutes        Int     @default(5) @map("slot_minutes")
-  /// Asia/Dhaka = GMT+6 (UTC+06:00), no DST, so work_date can always be derived without doubt
-  timezone           String  @default("Asia/Dhaka")
+  /// IANA zone the work day is cut in (the server's `WORK_TIMEZONE`); daylight saving is handled
+  timezone           String  @default("UTC")
   isActive           Boolean @default(true) @map("is_active")
 
   employees Employee[]
@@ -432,7 +432,7 @@ model WorkSession {
   id         BigInt            @id @default(autoincrement())
   employeeId Int               @map("employee_id")
   deviceId   Int               @map("device_id")
-  /// According to Asia/Dhaka
+  /// The work-zone date (`WORK_TIMEZONE`)
   workDate   DateTime          @map("work_date") @db.Date
   startedAt  DateTime          @map("started_at") @db.Timestamptz(3)
   endedAt    DateTime?         @map("ended_at") @db.Timestamptz(3)
@@ -458,7 +458,7 @@ model ActivitySegment {
   deviceId     Int          @map("device_id")
   /// An id given by the agent: stops duplicates on retry (§ 2.1-d)
   clientUuid   String       @unique @map("client_uuid") @db.Uuid
-  /// The Asia/Dhaka date of startedAt
+  /// The work-zone date of startedAt
   workDate     DateTime     @map("work_date") @db.Date
   state        SegmentState
   startedAt    DateTime     @map("started_at") @db.Timestamptz(3)
@@ -651,6 +651,10 @@ model Holiday {
   holidayDate DateTime @unique @map("holiday_date") @db.Date
   name        String
   type        String   @default("public")
+  /// The date is an estimate that may still move (a lunar-calendar holiday,
+  /// one awaiting an official announcement). Reports and payroll list these
+  /// dates beside the figures they affect; the owner clears it once confirmed.
+  approximate Boolean  @default(false)
 
   @@map("holidays")
 }
@@ -1030,8 +1034,8 @@ model MonthlySummary {
   adjustmentSec    Int       @default(0) @map("adjustment_sec")
   /// worked + adjustment: this is what is matched against the target
   creditedSec      Int       @default(0) @map("credited_sec")
-  /// 208 hours
-  targetSec        Int       @default(748800) @map("target_sec")
+  /// The month's target (176 hours = 633600 by default; the real value is always written)
+  targetSec        Int       @default(633600) @map("target_sec")
   /// How much should have been done up to today (§ 2.1-b)
   expectedSec      Int       @default(0) @map("expected_sec")
   /// credited - expected · positive = ahead
@@ -1105,7 +1109,7 @@ model MonthlySummary {
 /// active employees for that day at once, so a per-employee marker would repeat the
 /// same work.
 model SummaryDirty {
-  /// The Dhaka workday, written as UTC midnight (`workDateOf()`)
+  /// The work-zone workday, written as UTC midnight (`workDateOf()`)
   workDate DateTime @id @map("work_date") @db.Date
   /// When it was first marked: this is the drain order (oldest first)
   markedAt DateTime @default(now()) @map("marked_at") @db.Timestamptz(3)
@@ -1146,7 +1150,7 @@ model MonthClosure {
 model Leave {
   id         Int      @id @default(autoincrement())
   employeeId Int      @map("employee_id")
-  /// The Dhaka workday: UTC midnight, just like `holidays.holiday_date`
+  /// The work-zone workday: UTC midnight, just like `holidays.holiday_date`
   leaveDate  DateTime @map("leave_date") @db.Date
   /// `casual` · `sick` · `annual`: **all three are paid**
   ///

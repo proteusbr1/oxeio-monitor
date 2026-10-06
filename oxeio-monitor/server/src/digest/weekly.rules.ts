@@ -85,7 +85,7 @@ function round2(value: number): number {
  */
 export const WEEKLY_WINDOW_DAYS = 7;
 
-/** Careful: default Friday (ISO 5) — the weekly off day in Bangladesh (the default), the end of the week */
+/** Careful: default Friday (ISO 5) — the end of a Monday-to-Friday week */
 export const WEEKLY_DIGEST_DEFAULT_DAY = 5;
 /** 6 pm (work zone) — just before the daily digest's 6:30, so the two do not arrive together */
 export const WEEKLY_DIGEST_DEFAULT_HOUR = 18;
@@ -363,7 +363,7 @@ export interface Weekly {
   onTrack: WeeklyRow[];
   /** Careful: we know nothing about these people — not "zero hours" */
   noRecords: WeeklyRow[];
-  /** There was not a single work day in the whole window (Eid holidays and the like) */
+  /** There was not a single work day in the whole window (a long holiday and the like) */
   off: WeeklyRow[];
   /**
    * Careful: people who did not appear in the report at all — `status=inactive`
@@ -648,7 +648,7 @@ function coverageOf(source: WeeklySource): Map<number, Coverage> {
 /**
  * Careful: the order matters.
  *
- * 1. **There was no work day at all** (the whole window is Eid holidays +
+ * 1. **There was no work day at all** (the whole window is public holidays +
  *    weekly off days) → `off`. Calling these "no record" would put the whole
  *    team's names in that group in a holiday week, and the owner would think
  *    the agent had died on every machine.
@@ -691,8 +691,8 @@ const PACE_TOLERANCE_HOURS = 0.05;
  * the whole call is HTTP 400, i.e. **nothing arrives**.
  *
  * Careful: the measure is in UTF-16 code units, and JS `String.length` counts
- * exactly that. So `Buffer.byteLength()` must not be used: a Bengali (or other
- * non-Latin) letter is 3 bytes in UTF-8, so counting bytes would treat a team with Bengali names as
+ * exactly that. So `Buffer.byteLength()` must not be used: a letter of many
+ * non-Latin scripts is 3 bytes in UTF-8, so counting bytes would treat a team with non-Latin names as
  * "over the limit" at a third of the size and cut half the names.
  */
 export const TELEGRAM_TEXT_LIMIT = 4096;

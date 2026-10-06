@@ -70,7 +70,7 @@ export function PayrollSheetView({
       header: 'Target',
       align: 'right',
       /**
-       * Target is now **the employee's workdays x 8**, not a flat 208.
+       * Target is now **the employee's workdays x 8**, not the policy's flat monthly number.
        *
        * Careful: when the employee was not there for the whole month, the day count
        * is shown below (`13 / 27 days`). Without it the owner would see one person's

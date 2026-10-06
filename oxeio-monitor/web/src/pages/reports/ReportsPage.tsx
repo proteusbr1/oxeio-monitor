@@ -79,7 +79,7 @@ function ReportsBoard() {
   const tab: TabId =
     picked === 'productivity' && !features.appTracking ? 'attendance' : picked;
   // Careful: not `new Date().toISOString().slice(0,10)`; between midnight and the offset hour in
-  //    zones ahead of UTC (6am in Asia/Dhaka) that gives the previous date and the report would open a day behind.
+  //    zones ahead of UTC (6am at UTC+6) that gives the previous date and the report would open a day behind.
   const [range, setRange] = useState(() => thisMonthRange());
   const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [groupBy, setGroupBy] = useState<GroupBy>('month');

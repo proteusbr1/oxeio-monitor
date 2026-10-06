@@ -23,7 +23,7 @@ export class CreateWorkPolicyDto {
   @IsString() @MinLength(1) @MaxLength(120)
   name!: string;
 
-  /** The only target; default 208 hours (ADR-011b) */
+  /** The only target; default 176 hours (the column default) */
   @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(1) @Max(744)
   monthlyTargetHours?: number;
 
@@ -217,6 +217,10 @@ export class CreateHolidayDto {
   /** public | optional | company: left open, and the schema column is TEXT too */
   @IsOptional() @IsString() @MaxLength(32)
   type?: string;
+
+  /** the date is an estimate that may still move (default false) */
+  @IsOptional() @IsBoolean()
+  approximate?: boolean;
 }
 export class UpdateHolidayDto {
   @IsOptional() @Matches(DATE_ONLY)
@@ -227,6 +231,10 @@ export class UpdateHolidayDto {
 
   @IsOptional() @IsString() @MaxLength(32)
   type?: string;
+
+  /** false once the date is confirmed */
+  @IsOptional() @IsBoolean()
+  approximate?: boolean;
 }
 export class HolidayListQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(2000) @Max(2100)

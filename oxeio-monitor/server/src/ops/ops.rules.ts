@@ -39,7 +39,7 @@ const DAY_MS = 86_400_000;
  * restoring a file changes `mtime`; a six-month-old backup would then look like
  * "today's" and never rotate out. The name does not change.
  *
- * Careful: the date is work-zone time. In Asia/Dhaka the 03:30 dump is 21:30 the previous day in
+ * Careful: the date is work-zone time. In a zone at UTC+6 the 03:30 dump is 21:30 the previous day in
  * UTC; building the name from UTC would shift the file's date, and "which
  * night's backup", by one day.
  *

@@ -42,8 +42,8 @@ export function saveTelegramSettings(
   });
 }
 /**
- * A test message. Without it the owner would save and then wait until Friday, and
- * if nothing arrived would know something was wrong but not what.
+ * A test message. Without it the owner would save and then wait for the next
+ * scheduled message, and if nothing arrived would know something was wrong but not what.
  */
 export function testTelegram(): Promise<{ outcome: string }> {
   return api<{ outcome: string }>('/settings/telegram/test', { method: 'PATCH' });

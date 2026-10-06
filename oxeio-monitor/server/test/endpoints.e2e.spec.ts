@@ -257,7 +257,7 @@ describe('a full URL or window title never appears in a report', () => {
         endedAt: now,
         durationSec: 60,
         processName: 'chrome.exe',
-        windowTitle: 'গোপন-ফাইলের-নাম.xlsx',
+        windowTitle: 'confidential-payroll-plan.xlsx',
         domain: 'github.com',
         isBrowser: true,
       },
@@ -271,7 +271,7 @@ describe('a full URL or window title never appears in a report', () => {
     ]) {
       const res = await s.http.get(url);
       expect(res.status, url).toBeLessThan(400);
-      expect(JSON.stringify(res.body), url).not.toContain('গোপন-ফাইলের-নাম');
+      expect(JSON.stringify(res.body), url).not.toContain('confidential-payroll-plan');
     }
   });
 });

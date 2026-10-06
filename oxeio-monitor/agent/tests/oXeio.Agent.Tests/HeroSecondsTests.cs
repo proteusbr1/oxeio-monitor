@@ -120,7 +120,7 @@ public class HeroSecondsTests
         var big = InkRows(canvas, 0, 200);
         var small = InkRows(canvas, 210, 390);
 
-        Assert.True(big.HasValue && small.HasValue, "দুটোরই কালি পড়ার কথা");
+        Assert.True(big.HasValue && small.HasValue, "both should leave ink");
 
         var bigHeight = big!.Value.Bottom - big.Value.Top;
         var smallHeight = small!.Value.Bottom - small.Value.Top;

@@ -45,7 +45,7 @@ const HOUR = 3600;
 const AUG_START = day('2026-08-01');
 const AUG_END = day('2026-08-31');
 
-/** Friday off (ISO 5) — the spec's default policy */
+/** Friday off (ISO 5) — this fixture's policy */
 const FRIDAY_OFF = 5;
 
 const NO_HOLIDAYS: ReadonlySet<number> = new Set<number>();

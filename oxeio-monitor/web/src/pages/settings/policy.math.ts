@@ -5,8 +5,8 @@
  * The daily target is `monthly hours ÷ expected workdays`, and a month's
  * target is that times the month's actual workdays. When "Expected workdays"
  * does not match the weekly days off, the month quietly lands somewhere else:
- * Sat + Sun off with the default 26 gives 8 h/day × 22 days = 176 h, not the
- * 208 h on the form. Nothing would say so until the reports looked wrong.
+ * 208 h over 26 expected workdays with Sat + Sun off gives 8 h/day × 22 days
+ * = 176 h, not the 208 h on the form. Nothing would say so until the reports looked wrong.
  *
  * ⚠️ Holidays are not counted here (the form does not load them), so the
  *    real month can come out a few days shorter. The preview says so.

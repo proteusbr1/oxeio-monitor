@@ -26,18 +26,18 @@ describe('gallery date parsing', () => {
    * (workDateOf); otherwise rows exist but the gallery is empty and nobody would know why.
    */
   it('matches exactly what ingest\'s workDateOf sets', () => {
-    // 9am Dhaka on 10 August = 03:00 UTC
+    // 9am in the work zone (UTC+6) on 10 August = 03:00 UTC
     const captured = new Date('2026-08-10T03:00:00.000Z');
     expect(parseWorkDate('2026-08-10')?.getTime()).toBe(
       workDateOf(captured).getTime(),
     );
   });
 
-  it('a screenshot at 11pm Dhaka is still that day, though it is the next day in UTC', () => {
-    // 11pm Dhaka on 10 August = 17:00 UTC on 10 August (same day)
-    // 00:30 Dhaka on 11 August = 18:30 UTC on 10 August; but the capture
+  it('a screenshot at 11pm work-zone time is still that day, though it is the next day in UTC', () => {
+    // 11pm work-zone time on 10 August = 17:00 UTC on 10 August (same day)
+    // 00:30 work-zone time on 11 August = 18:30 UTC on 10 August; but the capture
     // window is 07:00-23:00, so this does not happen in practice. Still, the boundary is matched.
-    const late = new Date('2026-08-10T16:59:00.000Z'); // 22:59 Dhaka
+    const late = new Date('2026-08-10T16:59:00.000Z'); // 22:59 work-zone time
     expect(formatWorkDate(workDateOf(late))).toBe('2026-08-10');
   });
 
@@ -47,12 +47,12 @@ describe('gallery date parsing', () => {
    * screenshots would get March ones, with no error.
    */
   it.each([
-    ['2026-02-30', 'ফেব্রুয়ারিতে ৩০ তারিখ নেই'],
-    ['2026-13-01', '১৩তম মাস নেই'],
-    ['2026-00-10', '০ নম্বর মাস নেই'],
-    ['2026-08-00', '০ তারিখ নেই'],
-    ['2026-08-32', '৩২ তারিখ নেই'],
-    ['2025-02-29', '২০২৫ লিপ ইয়ার নয়'],
+    ['2026-02-30', 'February has no 30th'],
+    ['2026-13-01', 'there is no 13th month'],
+    ['2026-00-10', 'there is no month 0'],
+    ['2026-08-00', 'there is no day 0'],
+    ['2026-08-32', 'there is no 32nd'],
+    ['2025-02-29', '2025 is not a leap year'],
   ])('%s rejected: %s', (iso) => {
     expect(parseWorkDate(iso)).toBeNull();
   });
@@ -63,7 +63,7 @@ describe('gallery date parsing', () => {
     );
   });
 
-  it.each(['2026-8-10', '10-08-2026', '2026/08/10', '', 'আজ'])(
+  it.each(['2026-8-10', '10-08-2026', '2026/08/10', '', 'today'])(
     'null when the format is wrong: %s',
     (iso) => {
       expect(parseWorkDate(iso)).toBeNull();

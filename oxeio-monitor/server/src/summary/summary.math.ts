@@ -7,7 +7,7 @@
  * DB queries, mistakes would show up only in real data, at month end.
  *
  * Source of the rules: [07-Technical-Spec section 2.1](../../../docs/07-Technical-Spec.md).
- * (The spec lettered its sub-sections in Bengali; here they are written a, b, c, d, e in order.)
+ * (Its sub-sections are referred to here as a, b, c, d, e, in order.)
  */
 
 import { resolve, sep } from 'node:path';
@@ -280,7 +280,7 @@ export function workHourOf(instant: Date): number {
  * ISO weekday: Monday = 1 ... Sunday = 7.
  *
  * Careful: `getUTCDay()` cannot be used directly: there Sunday is **0**,
- * while `work_policies.weekly_off_day` follows ISO (Friday = 5). If someone
+ * while `work_policies.weekly_off_day` follows ISO (Mon = 1 … Sun = 7). If someone
  * set Sunday (7) as the weekly off day, a direct comparison would never
  * match, the off day would silently be counted as a workday, and everyone's
  * pace would lag all month.
@@ -550,7 +550,7 @@ export function elapsedWorkdays(
  * Leave days that fell on **workdays** within a window.
  *
  * Careful: filtering with `isWorkday` is this function's whole reason for
- * existing. A leave written on a Friday or public holiday, if not filtered,
+ * existing. A leave written on a weekly day off or public holiday, if not filtered,
  * would cut eight hours from the target although there was no target that
  * day. The failure would be silent: the number drops and nobody finds why.
  *

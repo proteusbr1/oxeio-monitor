@@ -48,7 +48,7 @@ async function makeDevice(hostname: string): Promise<number> {
   const device = await h.prisma.device.create({
     data: {
       hostname,
-      windowsUsername: 'rakib',
+      windowsUsername: 'alex',
       employeeId,
       machineGuid: randomUUID(),
       tokenHash: randomUUID(),
@@ -96,7 +96,7 @@ beforeEach(async () => {
 
   const policy = await h.prisma.workPolicy.findFirstOrThrow();
   const employee = await h.prisma.employee.create({
-    data: { empCode: 'OX-32', fullName: 'Rakib Hasan', policyId: policy.id },
+    data: { empCode: 'OX-32', fullName: 'Alex Silva', policyId: policy.id },
   });
 
   employeeId = employee.id;
@@ -116,7 +116,7 @@ describe('device_overlap — producer', () => {
     expect(alert.employeeId).toBe(employeeId);
     // The device is null — the event belongs to two devices, not one
     expect(alert.deviceId).toBeNull();
-    expect(alert.title).toContain('Rakib Hasan');
+    expect(alert.title).toContain('Alex Silva');
 
     const meta = alert.meta as { overlapSec: number; deviceCount: number };
     expect(meta.overlapSec).toBe(30 * 60);

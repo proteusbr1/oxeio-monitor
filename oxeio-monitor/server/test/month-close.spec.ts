@@ -81,11 +81,11 @@ describe('MonthCloseService', () => {
   describe('closing', () => {
     it('a finished month is closed', async () => {
       const { svc, audit } = makeService();
-      const row = await svc.close(OWNER, '2026-08', 'বেতন ৩ সেপ্টেম্বর দেওয়া', '1.2.3.4');
+      const row = await svc.close(OWNER, '2026-08', 'Salary paid on 3 September', '1.2.3.4');
 
       expect(row.yearMonth).toBe('2026-08');
       expect(row.closedBy).toBe('owner@example.com');
-      expect(row.note).toBe('বেতন ৩ সেপ্টেম্বর দেওয়া');
+      expect(row.note).toBe('Salary paid on 3 September');
       expect(audit.record).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'month_closed', targetId: '2026-08' }),
       );

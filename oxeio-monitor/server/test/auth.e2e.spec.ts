@@ -37,9 +37,10 @@ describe('public routes', () => {
 });
 
 describe('protected routes without login', () => {
-  it('GET /auth/time-zone is public and defaults to Dhaka', async () => {
+  it('GET /auth/time-zone is public and gives the running zone', async () => {
     const res = await h.http().get('/api/v1/auth/time-zone').expect(200);
-    expect(res.body).toEqual({ timeZone: 'Asia/Dhaka', utcOffsetMinutes: 360 });
+    // the suite runs on Etc/GMT-6 (vitest.config.ts)
+    expect(res.body).toEqual({ timeZone: 'Etc/GMT-6', utcOffsetMinutes: 360 });
   });
 
   it('GET /auth/currency is public and defaults to USD', async () => {

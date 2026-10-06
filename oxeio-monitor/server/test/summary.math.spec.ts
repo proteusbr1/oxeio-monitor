@@ -26,7 +26,7 @@ import {
 const TARGET = 208 * 3600;
 const HOUR = 3600;
 
-/** Write Dhaka time, get a UTC instant — makes the tests easier to read */
+/** Write work-zone time (UTC+6 in the tests), get a UTC instant — makes the tests easier to read */
 function work(iso: string): Date {
   return new Date(`${iso}+06:00`);
 }
@@ -333,10 +333,10 @@ describe('monthBounds and previousWorkDate', () => {
   });
 
   /**
-   * The main assurance for K05. The job runs at 00:15 Dhaka time, which in UTC is
+   * The main assurance for K05. The job runs at 00:15 work-zone time, which in UTC is
    * still the evening of the **previous day** — computing in UTC would close the wrong day.
    */
-  it('running at 00:15 Dhaka closes the previous day', () => {
+  it('running at 00:15 work-zone time closes the previous day', () => {
     expect(previousWorkDate(work('2026-08-12T00:15:00'))).toEqual(day('2026-08-11'));
   });
 
@@ -353,8 +353,8 @@ describe('monthBounds and previousWorkDate', () => {
 });
 
 describe('workHourOf', () => {
-  it('gives the Dhaka hour, not the UTC one', () => {
-    expect(workHourOf(new Date('2026-08-11T18:15:00Z'))).toBe(0); // 00:15 on the 12th in Dhaka
+  it('gives the work-zone hour, not the UTC one', () => {
+    expect(workHourOf(new Date('2026-08-11T18:15:00Z'))).toBe(0); // 00:15 on the 12th in the work zone
     expect(workHourOf(new Date('2026-08-11T01:00:00Z'))).toBe(7);
   });
 });
@@ -485,8 +485,8 @@ describe('retentionCutoff — the most dangerous number in K01', () => {
     expect(day('2026-05-12') < cutoff).toBe(true); // goes
   });
 
-  it('is computed on the Dhaka date, not UTC', () => {
-    // 2 a.m. on the 12th in Dhaka = 8 p.m. on the 11th in UTC
+  it('is computed on the work-zone date, not UTC', () => {
+    // 2 a.m. on the 12th in the work zone = 8 p.m. on the 11th in UTC
     expect(retentionCutoff(work('2026-08-12T02:00:00'), 90)).toEqual(day('2026-05-14'));
   });
 
@@ -541,14 +541,14 @@ describe('RunLock — the same job never twice at once', () => {
 
     const first = lock.run(async () => {
       await gate;
-      return 'প্রথম';
+      return 'first';
     });
-    const second = await lock.run(async () => 'দ্বিতীয়');
+    const second = await lock.run(async () => 'second');
 
     expect(second).toBeNull();
 
     release();
-    expect(await first).toBe('প্রথম');
+    expect(await first).toBe('first');
   });
 
   it('when the previous one finishes, the next one runs', async () => {
@@ -563,9 +563,9 @@ describe('RunLock — the same job never twice at once', () => {
     const lock = new RunLock();
 
     await expect(
-      lock.run(() => Promise.reject(new Error('ডাটাবেস নেই'))),
-    ).rejects.toThrow('ডাটাবেস নেই');
+      lock.run(() => Promise.reject(new Error('no database'))),
+    ).rejects.toThrow('no database');
 
-    expect(await lock.run(async () => 'পরেরবার চলল')).toBe('পরেরবার চলল');
+    expect(await lock.run(async () => 'ran next time')).toBe('ran next time');
   });
 });

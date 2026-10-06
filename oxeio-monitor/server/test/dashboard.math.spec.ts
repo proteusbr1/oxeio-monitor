@@ -16,10 +16,10 @@ import {
   type LiveStatus,
 } from '../src/dashboard/dashboard.math';
 
-/** 10 August 2026 in Dhaka — a work day is always a UTC-midnight Date */
+/** 10 August 2026 in the work zone — a work day is always a UTC-midnight Date */
 const WORK_DATE = new Date(Date.UTC(2026, 7, 10));
 
-/** `HH:MM` on that Dhaka day as a UTC instant (Dhaka = UTC+6, no DST) */
+/** `HH:MM` on that work-zone day as a UTC instant (test zone = UTC+6, no DST) */
 function work(hh: number, mm = 0, ss = 0): Date {
   return new Date(Date.UTC(2026, 7, 10, hh - 6, mm, ss));
 }
@@ -565,9 +565,9 @@ describe('revoked devices are left out of the calculation', () => {
  */
 describe('rankLaggards — fewest hours', () => {
   const names = new Map([
-    [1, 'Ayesha'],
-    [2, 'Belal'],
-    [3, 'Chowdhury'],
+    [1, 'Ana'],
+    [2, 'Bruno'],
+    [3, 'Carla'],
   ]);
 
   it('a worker with zero days worked is also listed, and at the top', () => {
@@ -579,7 +579,7 @@ describe('rankLaggards — fewest hours', () => {
 
     const out = rankLaggards(names, worked);
 
-    expect(out.map((r) => r.fullName)).toEqual(['Chowdhury', 'Ayesha', 'Belal']);
+    expect(out.map((r) => r.fullName)).toEqual(['Carla', 'Ana', 'Bruno']);
     expect(out[0]).toMatchObject({ creditedSec: 0, daysCounted: 0 });
   });
 
@@ -591,9 +591,9 @@ describe('rankLaggards — fewest hours', () => {
     ]);
 
     expect(rankLaggards(names, worked).map((r) => r.fullName)).toEqual([
-      'Belal',
-      'Chowdhury',
-      'Ayesha',
+      'Bruno',
+      'Carla',
+      'Ana',
     ]);
   });
 
@@ -605,9 +605,9 @@ describe('rankLaggards — fewest hours', () => {
     const worked = new Map<number, { creditedSec: number; daysCounted: number }>();
 
     expect(rankLaggards(names, worked).map((r) => r.fullName)).toEqual([
-      'Ayesha',
-      'Belal',
-      'Chowdhury',
+      'Ana',
+      'Bruno',
+      'Carla',
     ]);
   });
 
@@ -626,9 +626,9 @@ describe('rankLaggards — fewest hours', () => {
     ]);
 
     expect(rankLaggards(names, worked).map((r) => r.fullName)).toEqual([
-      'Ayesha',
-      'Belal',
-      'Chowdhury',
+      'Ana',
+      'Bruno',
+      'Carla',
     ]);
   });
 

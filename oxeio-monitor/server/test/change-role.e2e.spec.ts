@@ -48,7 +48,7 @@ async function staffWithLogin(code: string, role: 'employee' | 'manager' = 'empl
     data: {
       email,
       passwordHash: await hashPassword(PASSWORD),
-      fullName: 'Rafiq Alam',
+      fullName: 'Sam Rivera',
       role,
       employeeId,
       mustChangePw: false,

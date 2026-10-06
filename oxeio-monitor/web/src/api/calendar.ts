@@ -8,7 +8,6 @@ import { qs } from './query';
 export interface WorkPolicyView {
   id: number;
   name: string;
-  /** The only target; default 208. */
   /** how the hours target is stated (server: calendar/work-regime.ts) */
   targetBasis: TargetBasis;
   monthlyTargetHours: number;
@@ -118,6 +117,8 @@ export interface HolidayView {
   name: string;
   /** `public` | `optional` | `company`; left open-ended. */
   type: string;
+  /** the date may still move (a holiday set by the moon, not yet announced) */
+  approximate: boolean;
 }
 export function listHolidays(
   year?: number,

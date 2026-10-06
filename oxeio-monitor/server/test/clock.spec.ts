@@ -16,7 +16,7 @@ import { workDateOf } from '../src/agent/util/work-time';
  * time, so they give the same answer whenever they run.
  */
 describe('workNoon — a safe instant for fixtures', () => {
-  it('Dhaka noon is 06:00 UTC', () => {
+  it('work-zone noon (UTC+6) is 06:00 UTC', () => {
     expect(workNoon().toISOString().slice(11)).toBe('06:00:00.000Z');
   });
 
@@ -63,11 +63,11 @@ describe('workNoon — a safe instant for fixtures', () => {
   });
 
   /**
-   * Dhaka is UTC+6, so the old UTC-based formula returned the previous day
-   * between 00:00 and 06:00 Dhaka time. That six-hour window every day was
+   * The test work zone is UTC+6, so the old UTC-based formula returned the
+   * previous day between 00:00 and 06:00 work-zone time. That six-hour window every day was
    * the original bug.
    */
-  it('Dhaka date, not the UTC date', () => {
+  it('work-zone date, not the UTC date', () => {
     const utcDate = new Date().toISOString().slice(0, 10);
     const workDate = workTodayIso();
     const hourUtc = new Date().getUTCHours();

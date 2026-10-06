@@ -22,7 +22,19 @@ const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 const MANIFEST = path.join(__dirname, '.sample-data.json');
-const DHAKA_MS = 6 * 3600_000;
+/** The work zone (WORK_TIMEZONE, default UTC), as a fixed offset for this run — sample data, DST edges ignored */
+const ZONE = (process.env.WORK_TIMEZONE || '').trim() || 'UTC';
+const ZONE_MS = (() => {
+  const now = new Date();
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: ZONE, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    }).formatToParts(now).map((x) => [x.type, x.value]),
+  );
+  const wall = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+  return Math.round((wall - now.getTime()) / 60_000) * 60_000;
+})();
 const HOUR = 3600;
 
 /** Matches the default of `storageRoot()`, used when STORAGE_ROOT is not set */
@@ -36,15 +48,15 @@ let seed = 20260811;
 const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
 
 const workDateOf = (d) => {
-  const s = new Date(d.getTime() + DHAKA_MS);
+  const s = new Date(d.getTime() + ZONE_MS);
   return new Date(Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate()));
 };
-/** That hour on that date in Dhaka, as a UTC instant */
+/** That hour on that date in the work zone, as a UTC instant */
 const at = (workDate, hour, min = 0) =>
-  new Date(workDate.getTime() - DHAKA_MS + hour * 3600_000 + min * 60_000);
+  new Date(workDate.getTime() - ZONE_MS + hour * 3600_000 + min * 60_000);
 
-/** Careful: Friday is the weekly day off (policy.weeklyOffDay = 5) */
-const isFriday = (workDate) => workDate.getUTCDay() === 5;
+/** The employee's policy's weekly days off (ISO 1 = Mon … 7 = Sun) */
+const isOffDay = (workDate, offDays) => offDays.includes(workDate.getUTCDay() || 7);
 
 // Each employee's character: some ahead, some behind. If all were alike the colour
 // variation could not be shown, and the heatmap could not be judged.
@@ -76,7 +88,7 @@ const APPS = [
 
 async function insert() {
   if (fs.existsSync(MANIFEST)) {
-    console.error('⚠ আগের নমুনা ডেটা এখনো বসানো আছে। আগে --undo চালান।');
+    console.error('⚠ Earlier sample data is still in place. Run --undo first.');
     process.exit(1);
   }
 
@@ -94,7 +106,7 @@ async function insert() {
     await prisma.activitySegment.deleteMany({ where: { deviceId: { in: ids } } });
     await prisma.workSession.deleteMany({ where: { deviceId: { in: ids } } });
     await prisma.device.deleteMany({ where: { id: { in: ids } } });
-    console.log(`(আগের অসম্পূর্ণ রানের ${ids.length}টি ডিভাইস সরানো হলো)`);
+    console.log(`(removed ${ids.length} devices left by an earlier, unfinished run)`);
   }
 
   const made = { devices: [], sessions: [], segments: [], summaries: [], appUsage: [], shots: [], files: [] };
@@ -102,8 +114,9 @@ async function insert() {
   const staff = await prisma.employee.findMany({
     where: { empCode: { in: Object.keys(PROFILE) } },
     orderBy: { empCode: 'asc' },
+    include: { policy: { select: { weeklyOffDays: true } } },
   });
-  if (staff.length === 0) throw new Error('কোনো কর্মী পাওয়া গেল না — seed চালানো আছে তো?');
+  if (staff.length === 0) throw new Error('No staff found — has the seed been run?');
 
   const now = new Date();
   const today = workDateOf(now);
@@ -144,7 +157,7 @@ async function insert() {
 
     // ── Each day ───────────────────────────────────────────────────
     for (const day of days) {
-      if (isFriday(day)) continue;
+      if (isOffDay(day, e.policy?.weeklyOffDays ?? [])) continue;
 
       const isToday = day.getTime() === today.getTime();
       const target = isToday ? p.today : Math.max(0, p.hours + (rnd() - 0.5) * 2.4);
@@ -154,9 +167,9 @@ async function insert() {
       // Careful: today's work must be in the PAST. Run early in the morning, "starts at 9"
       //    would be a future segment: odd on the timeline, and the screenshot slots
       //    would also fall in the future, so not a single picture would be inserted.
-      const dhakaHourNow = new Date(now.getTime() + DHAKA_MS).getUTCHours();
+      const zoneHourNow = new Date(now.getTime() + ZONE_MS).getUTCHours();
       const startHour = isToday
-        ? Math.max(7, Math.min(9, dhakaHourNow - Math.ceil(target) - 1))
+        ? Math.max(7, Math.min(9, zoneHourNow - Math.ceil(target) - 1))
         : 9 + Math.floor(rnd() * 2);
       const startedAt = at(day, startHour, Math.floor(rnd() * 50));
 
@@ -321,17 +334,17 @@ async function insert() {
 
   fs.writeFileSync(MANIFEST, JSON.stringify(made, null, 1));
   console.log(
-    `✅ নমুনা ডেটা বসানো হলো — ${made.devices.length} ডিভাইস · ` +
-      `${made.sessions.length} সেশন · ${made.segments.length} সেগমেন্ট · ` +
-      `${made.summaries.length} দৈনিক সারাংশ · ${made.appUsage.length} অ্যাপ-ব্যবহার`,
+    `✅ sample data inserted — ${made.devices.length} devices · ` +
+      `${made.sessions.length} sessions · ${made.segments.length} segments · ` +
+      `${made.summaries.length} daily summaries · ${made.appUsage.length} app-usage rows`,
   );
   console.log(`   manifest: ${MANIFEST}`);
-  console.log('   মুছতে: node scripts/sample-data.cjs --undo');
+  console.log('   to remove: node scripts/sample-data.cjs --undo');
 }
 
 async function undo() {
   if (!fs.existsSync(MANIFEST)) {
-    console.log('manifest নেই — মোছার কিছু নেই।');
+    console.log('No manifest — nothing to remove.');
     return;
   }
   const m = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
@@ -362,8 +375,8 @@ async function undo() {
 
   fs.unlinkSync(MANIFEST);
   console.log(
-    `🧹 মুছে ফেলা হলো — ${dev.count} ডিভাইস · ${ses.count} সেশন · ${sh.count} স্ক্রিনশট · ` +
-      `${seg.count} সেগমেন্ট · ${m.summaries.length} সারাংশ · ${au.count} অ্যাপ-ব্যবহার`,
+    `🧹 removed — ${dev.count} devices · ${ses.count} sessions · ${sh.count} screenshots · ` +
+      `${seg.count} segments · ${m.summaries.length} summaries · ${au.count} app-usage rows`,
   );
 }
 

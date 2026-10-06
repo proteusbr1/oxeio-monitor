@@ -33,7 +33,7 @@ export function ChangePasswordPage() {
       await changePassword(current, next);
       await refresh();
     } catch (err) {
-      // Careful: `err.message` is the server's message; it still comes in Bengali,
+      // Careful: `err.message` is the server's message, in its own wording,
       // and is passed on as is
       setError(err instanceof ApiError ? err.message : "Couldn't change it");
       setBusy(false);

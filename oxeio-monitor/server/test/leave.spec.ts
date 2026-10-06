@@ -30,7 +30,7 @@ const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
  * file do not match numbers, they match invariant relationships.
  */
 
-/** September 2026 — Friday is the weekly holiday, 26 work days */
+/** September 2026 — the fixture's weekly day off is Friday, 26 work days */
 const SEPT = {
   monthStart: day('2026-09-01'),
   monthEnd: day('2026-09-30'),
@@ -56,7 +56,7 @@ describe('countLeaveWorkdays — counts work days only', () => {
     expect(countLeaveWorkdays(leave, from, to, [5], new Set())).toBe(0);
   });
 
-  it('a government holiday is not counted', () => {
+  it('a public holiday is not counted', () => {
     const leave = new Set([day('2026-09-07').getTime()]);
     const holidays = new Set([day('2026-09-07').getTime()]);
     expect(countLeaveWorkdays(leave, from, to, [5], holidays)).toBe(0);

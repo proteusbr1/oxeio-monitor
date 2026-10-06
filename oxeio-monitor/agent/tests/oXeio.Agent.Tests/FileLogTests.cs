@@ -130,9 +130,9 @@ public class FileLogTests : IDisposable
     public void The_BOM_is_written_only_once()
     {
         var log = new FileLog(_dir);
-        log.Info("এক");
-        log.Info("দুই");
-        log.Info("তিন");
+        log.Info("一");
+        log.Info("二");
+        log.Info("三");
 
         var raw = System.IO.File.ReadAllBytes(Path.Combine(_dir, FileLog.CurrentFileName));
         var count = 0;

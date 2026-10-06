@@ -97,7 +97,7 @@ const balances = async () => {
 
 describe('the deposit ledger', () => {
   it('a person gets exactly one instalment in the current month', async () => {
-    const staff = await addStaff('Jomanot Ek');
+    const staff = await addStaff('Deposit One');
 
     const { rows, policy } = await balances();
     const row = rows.find((r) => r.employeeId === staff.id);
@@ -112,7 +112,7 @@ describe('the deposit ledger', () => {
    * by a cron job, so "opened twice, deducted twice" could happen right here.
    */
   it('opening the ledger repeatedly does not increase the balance', async () => {
-    const staff = await addStaff('Bar Bar');
+    const staff = await addStaff('Opened Twice');
 
     await balances();
     await balances();
@@ -126,7 +126,7 @@ describe('the deposit ledger', () => {
   it('no instalment is created for a month before the person joined', async () => {
     // The rule starts this month and this person joins next month — none at all
     const nextMonthDate = `${nextMonthOf(thisMonth)}-05`;
-    const staff = await addStaff('Pore Joge Diyechen', nextMonthDate);
+    const staff = await addStaff('Joins Later', nextMonthDate);
 
     const { rows } = await balances();
     const row = rows.find((r) => r.employeeId === staff.id);
@@ -142,7 +142,7 @@ describe('the deposit ledger', () => {
    * money nobody ever paid.
    */
   it('changing the amount leaves earlier months\' instalments intact', async () => {
-    const staff = await addStaff('Purono Kisti');
+    const staff = await addStaff('Old Instalment');
     await balances(); // the current month's instalment is now fixed at 500
 
     await owner.http
@@ -160,7 +160,7 @@ describe('the deposit ledger', () => {
   });
 
   it('switching the rule off adds no new instalments and keeps old deposits', async () => {
-    const staff = await addStaff('Bondho Niyom');
+    const staff = await addStaff('Rule Off');
     await balances();
 
     await owner.http
@@ -176,7 +176,7 @@ describe('the deposit ledger', () => {
 
 describe('settlement — refund or forfeit', () => {
   it('with 30 days\' notice it is refunded, and the calculation is stored in the row', async () => {
-    const staff = await addStaff('Niyom Mene');
+    const staff = await addStaff('Rule Followed');
     await balances();
 
     const res = await owner.http
@@ -201,7 +201,7 @@ describe('settlement — refund or forfeit', () => {
    * Exceptions always exist, and no `if` can capture them.
    */
   it('the owner may refund even if the rule is not met — the calculation is just recorded', async () => {
-    const staff = await addStaff('Byatikrom');
+    const staff = await addStaff('Exception');
     await balances();
 
     const res = await owner.http
@@ -211,17 +211,17 @@ describe('settlement — refund or forfeit', () => {
         outcome: 'refunded',
         noticeGivenOn: '2026-08-25',
         lastWorkingDay: '2026-08-30',
-        note: 'হাসপাতালে ভর্তি ছিলেন',
+        note: 'Was in hospital',
       })
       .expect(201);
 
     expect(res.body.outcome).toBe('refunded');
     expect(res.body.noticeDaysGiven).toBe(5);
-    expect(res.body.note).toBe('হাসপাতালে ভর্তি ছিলেন');
+    expect(res.body.note).toBe('Was in hospital');
   });
 
   it('a second settlement is not allowed — 409', async () => {
-    const staff = await addStaff('Dubar Noy');
+    const staff = await addStaff('Not Twice');
     await balances();
 
     await owner.http
@@ -238,7 +238,7 @@ describe('settlement — refund or forfeit', () => {
   });
 
   it('no new instalments are created after settlement', async () => {
-    const staff = await addStaff('Khata Bondho');
+    const staff = await addStaff('Ledger Closed');
     await balances();
 
     await owner.http
@@ -255,7 +255,7 @@ describe('settlement — refund or forfeit', () => {
   });
 
   it('anything else as outcome gives 400', async () => {
-    const staff = await addStaff('Bhul Outcome');
+    const staff = await addStaff('Wrong Outcome');
 
     await owner.http
       .post(`/api/v1/deposits/${staff.id}/settle`)
@@ -285,19 +285,19 @@ describe('who can see it', () => {
    * amount is their own money, not part of the pay calculation.
    */
   it('staff see their own deposit, month by month', async () => {
-    const staff = await addStaff('Nijer Jomma');
+    const staff = await addStaff('Own Deposit');
     await balances();
 
     // The server generates the password and returns it only once — it cannot be guessed
     const account = await owner.http
       .post(`/api/v1/employees/${staff.id}/portal-account`)
       .set('X-CSRF-Token', owner.csrf)
-      .send({ email: 'nijer.jomma@oxeio.test' })
+      .send({ email: 'own.deposit@oxeio.test' })
       .expect(201);
 
     const session = await loginReady(
       h,
-      'nijer.jomma@oxeio.test',
+      'own.deposit@oxeio.test',
       account.body.tempPassword as string,
     );
 
@@ -311,7 +311,7 @@ describe('who can see it', () => {
 
 describe('on the payroll sheet', () => {
   it('shows net after deducting 500 from payable, and both numbers are present', async () => {
-    const staff = await addStaff('Payroll Kata');
+    const staff = await addStaff('Payroll Deducted');
     await balances();
 
     const res = await owner.http
@@ -409,7 +409,7 @@ function nextMonthOf(ym: string): string {
  */
 describe('a closed month does not move the ledger', () => {
   it('no new instalment is created in a closed month', async () => {
-    const staff = await addStaff('Bondho Mash');
+    const staff = await addStaff('Closed Month');
     await balances();
 
     const months = (await owner.http
@@ -438,7 +438,7 @@ describe('a closed month does not move the ledger', () => {
    * green even if `ensureLedger()` were switched off completely.
    */
   it('in an open month it is created as before', async () => {
-    const staff = await addStaff('Khola Mash');
+    const staff = await addStaff('Open Month');
     await balances();
 
     await h.prisma.securityDeposit.deleteMany({ where: { employeeId: staff.id } });
@@ -456,7 +456,7 @@ describe('a closed month does not move the ledger', () => {
    * job — money written on the pay slip would vanish from the ledger.
    */
   it('a closed month\'s row survives when the start month moves forward', async () => {
-    const staff = await addStaff('Bondho Mochha');
+    const staff = await addStaff('Closed Survives');
     await balances();
 
     /**
@@ -491,7 +491,7 @@ describe('correcting an instalment amount', () => {
     employeeId: number,
     yearMonth: string,
     amountMinor: number,
-    reason = 'হিসাবের ভুল',
+    reason = 'Calculation error',
   ) =>
     owner.http
       .patch(`/api/v1/deposits/${employeeId}/instalment`)
@@ -499,7 +499,7 @@ describe('correcting an instalment amount', () => {
       .send({ yearMonth, amountMinor, reason });
 
   it('the amount changes, and the total shows it', async () => {
-    const staff = await addStaff('Songshodhon Ek');
+    const staff = await addStaff('Correction One');
     await balances();
 
     await correct(staff.id, thisMonth, 30_000).expect(200);
@@ -523,7 +523,7 @@ describe('correcting an instalment amount', () => {
    * stopped here first — otherwise the message would be a raw Postgres error.
    */
   it('zero cannot be set — waiving and 0 are not the same', async () => {
-    const staff = await addStaff('Songshodhon Shunno');
+    const staff = await addStaff('Correction Zero');
     await balances();
 
     await correct(staff.id, thisMonth, 0).expect(400);
@@ -533,7 +533,7 @@ describe('correcting an instalment amount', () => {
   });
 
   it('a negative amount is not allowed either', async () => {
-    const staff = await addStaff('Songshodhon Rin');
+    const staff = await addStaff('Correction Negative');
     await balances();
 
     await correct(staff.id, thisMonth, -100).expect(400);
@@ -545,7 +545,7 @@ describe('correcting an instalment amount', () => {
    * as `time_adjustments`.
    */
   it('no correction without a reason', async () => {
-    const staff = await addStaff('Songshodhon Karon');
+    const staff = await addStaff('Correction Reason');
     await balances();
 
     await correct(staff.id, thisMonth, 30_000, '   ').expect(400);
@@ -558,7 +558,7 @@ describe('correcting an instalment amount', () => {
    * came from no rule.
    */
   it('cannot set a month that has no instalment', async () => {
-    const staff = await addStaff('Songshodhon Nei');
+    const staff = await addStaff('Correction Missing');
     await balances();
 
     await correct(staff.id, '2020-01', 30_000).expect(404);
@@ -570,7 +570,7 @@ describe('correcting an instalment amount', () => {
    * would make paper and ledger say different things, unnoticed.
    */
   it('correction in a closed month is blocked', async () => {
-    const staff = await addStaff('Songshodhon Bondho');
+    const staff = await addStaff('Correction Closed');
     await balances();
 
     await h.prisma.monthClosure.create({
@@ -582,7 +582,7 @@ describe('correcting an instalment amount', () => {
 
   /** After settlement the ledger is closed — exactly the same condition as `setStartMonth` */
   it('no more corrections after settlement', async () => {
-    const staff = await addStaff('Songshodhon Nishpotti');
+    const staff = await addStaff('Correction Settled');
     await balances();
 
     await owner.http
@@ -600,10 +600,10 @@ describe('correcting an instalment amount', () => {
    * what to what" could not be answered from the audit log.
    */
   it('the audit log records the before and after amounts and the reason', async () => {
-    const staff = await addStaff('Songshodhon Audit');
+    const staff = await addStaff('Correction Audit');
     await balances();
 
-    await correct(staff.id, thisMonth, 25_000, 'জুলাইয়ের আংশিক বেতন').expect(200);
+    await correct(staff.id, thisMonth, 25_000, 'Partial salary for July').expect(200);
 
     const row = await h.prisma.auditLog.findFirstOrThrow({
       where: { targetType: 'employee', targetId: String(staff.id) },
@@ -615,7 +615,7 @@ describe('correcting an instalment amount', () => {
       yearMonth: thisMonth,
       fromMinor: 50_000,
       toMinor: 25_000,
-      why: 'জুলাইয়ের আংশিক বেতন',
+      why: 'Partial salary for July',
     });
   });
 
@@ -628,7 +628,7 @@ describe('correcting an instalment amount', () => {
    * because there is no error on screen, only the number going back.
    */
   it('the correction survives the next refresh', async () => {
-    const staff = await addStaff('Songshodhon Tike');
+    const staff = await addStaff('Correction Survives');
     await balances();
 
     await correct(staff.id, thisMonth, 30_000).expect(200);
@@ -654,7 +654,7 @@ describe('correcting an instalment amount', () => {
    * guards the new CHECK, bypassing the DTO entirely.
    */
   it('the database itself refuses a 0 instalment', async () => {
-    const staff = await addStaff('Songshodhon DB');
+    const staff = await addStaff('Correction DB');
     await balances();
 
     await expect(
@@ -678,7 +678,7 @@ describe('correcting an instalment amount', () => {
    * was wrong.
    */
   it('the owner can see the ledger month by month', async () => {
-    const staff = await addStaff('Songshodhon Mash');
+    const staff = await addStaff('Correction Months');
     await balances();
     await correct(staff.id, thisMonth, 30_000).expect(200);
 

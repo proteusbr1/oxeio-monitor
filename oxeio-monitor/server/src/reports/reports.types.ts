@@ -37,7 +37,7 @@ export interface ReportMeta {
    *
    * ```
    * target      = office days x daily target (8 h)
-   * office days = days in range - Fridays - public holidays - their own leave
+   * office days = days in range - weekly days off - public holidays - their own leave
    * ```
    *
    * **Counted by office days, not by month.** So one month, half a month or
@@ -103,12 +103,11 @@ export interface ReportMeta {
    * The holiday dates **not yet final** in the months whose working days this
    * report's target rests on: 'YYYY-MM-DD', sorted.
    *
-   * Careful: lunar and tithi-based holiday dates change after the moon is
-   * sighted. When one changes, that month's working days change, and with
-   * them the denominator of the daily target and payroll's `d / D` fraction,
-   * i.e. **money**. Eid-e-Miladunnabi on 26 August 2026 is exactly such a
-   * date. The mark used to exist only in the holiday's **name**, so these
-   * numbers rested on a guess and nobody knew.
+   * Careful: holidays on a lunar calendar can move once the moon is sighted
+   * or the date is announced. When one moves, that month's working days
+   * change, and with them the denominator of the daily target and payroll's
+   * `d / D` fraction, i.e. **money**. The mark used to live only on the
+   * holiday itself, so these numbers rested on a guess and nobody knew.
    *
    * Careful: an empty list means "all holiday dates in these months are
    * final", not "no holidays".
@@ -239,7 +238,7 @@ export interface AttendanceRow {
   tasksDone: number | null;
   /**
    * That day's target: on a workday `monthly_target / expected_workdays`
-   * (208 / 26 = 8 hours), 0 on weekly off days and public holidays.
+   * (176 / 22 = 8 hours, say), 0 on weekly off days and public holidays.
    *
    * Careful: the denominator is the **policy's constant**, not that month's
    * calendar workdays; why is in `dailyTargetSec()` in `reports.range.ts`.

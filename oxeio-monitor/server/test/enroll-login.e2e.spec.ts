@@ -38,12 +38,12 @@ const THROTTLE = resolveThrottle({
 let h: Harness;
 let employeeId: number;
 
-const STAFF_EMAIL = 'rakib@test.local';
+const STAFF_EMAIL = 'alex@test.local';
 const STAFF_PASSWORD = 'staff-password-123';
 
 const facts = (overrides: Record<string, unknown> = {}) => ({
   hostname: 'PC-07',
-  windowsUsername: 'rakib',
+  windowsUsername: 'alex',
   machineGuid: randomUUID(),
   osVersion: 'Windows 11',
   agentVersion: '0.2.0',
@@ -67,7 +67,7 @@ beforeEach(async () => {
 
   const policy = await h.prisma.workPolicy.findFirstOrThrow();
   const employee = await h.prisma.employee.create({
-    data: { empCode: 'OX-001', fullName: 'Rakib Hasan', policyId: policy.id },
+    data: { empCode: 'OX-001', fullName: 'Alex Silva', policyId: policy.id },
   });
   employeeId = employee.id;
 
@@ -75,7 +75,7 @@ beforeEach(async () => {
     data: {
       email: STAFF_EMAIL,
       passwordHash: await hashPassword(STAFF_PASSWORD),
-      fullName: 'Rakib Hasan',
+      fullName: 'Alex Silva',
       role: UserRole.employee,
       employeeId,
       mustChangePw: false,
@@ -317,7 +317,7 @@ describe('POST /agent/enroll-login — safeguards', () => {
   it('400 when it is not an email', async () => {
     const res = await enrollLogin({
       ...facts(),
-      email: 'rakib',
+      email: 'alex',
       password: STAFF_PASSWORD,
     });
     expect(res.status).toBe(400);

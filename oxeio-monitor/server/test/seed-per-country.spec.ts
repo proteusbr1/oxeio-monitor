@@ -5,72 +5,71 @@ import {
   parseHolidayFile,
   parseHolidayIcs,
 } from '../src/calendar/holiday-import';
-import { HOLIDAY_SETS, resolveHolidaySet } from '../prisma/holiday-sets';
-import { BD_HOLIDAYS, HOLIDAY_YEARS } from '../prisma/holidays.data';
-import { DEFAULT_SEED_POLICY, seedPolicyFromEnv } from '../prisma/seed-config';
+import {
+  DEFAULT_SEED_POLICY,
+  seedHolidayCountry,
+  seedPolicyFromEnv,
+} from '../prisma/seed-config';
+import { defaultWorkRules } from '../src/setup/setup.rules';
 
 /**
- * Seed and holidays for countries other than Bangladesh.
+ * Seed settings for any country, and holiday files.
  *
- * The default stays exactly what the seed always did — Bangladesh's list,
- * 208 h, 26 days, Friday off — and that is the first thing each block checks.
+ * Nothing is assumed about the country: no holidays unless SEED_COUNTRY names
+ * one, and the same starting policy as the setup wizard when no country is given.
  */
 
-describe('resolveHolidaySet — SEED_COUNTRY', () => {
-  it('unset → Bangladesh, the same list and settings key as before', () => {
-    const set = resolveHolidaySet({});
-    expect(set?.code).toBe('BD');
-    expect(set?.entries).toBe(BD_HOLIDAYS);
-    expect(set?.years).toBe(HOLIDAY_YEARS);
-    expect(set?.settingKey).toBe('seed.holidays');
+describe('seedHolidayCountry — SEED_COUNTRY', () => {
+  it('unset or empty → no holidays (no default country)', () => {
+    expect(seedHolidayCountry({})).toBeNull();
+    expect(seedHolidayCountry({ SEED_COUNTRY: '  ' })).toBeNull();
   });
 
-  it('BD in any case', () => {
-    expect(resolveHolidaySet({ SEED_COUNTRY: ' bd ' })?.code).toBe('BD');
+  it('a two-letter code, in any case', () => {
+    expect(seedHolidayCountry({ SEED_COUNTRY: ' br ' })).toBe('BR');
+    expect(seedHolidayCountry({ SEED_COUNTRY: 'PT' })).toBe('PT');
   });
 
   it('none → no holidays', () => {
-    expect(resolveHolidaySet({ SEED_COUNTRY: 'none' })).toBeNull();
+    expect(seedHolidayCountry({ SEED_COUNTRY: 'none' })).toBeNull();
   });
 
   it('SEED_HOLIDAYS=false → no holidays, only for exactly "false"', () => {
-    expect(resolveHolidaySet({ SEED_HOLIDAYS: 'false' })).toBeNull();
-    expect(resolveHolidaySet({ SEED_HOLIDAYS: 'no' })?.code).toBe('BD');
+    expect(seedHolidayCountry({ SEED_COUNTRY: 'BR', SEED_HOLIDAYS: 'false' })).toBeNull();
+    expect(seedHolidayCountry({ SEED_COUNTRY: 'BR', SEED_HOLIDAYS: 'no' })).toBe('BR');
   });
 
-  it('a country without a list stops the seed, never falls back to Bangladesh', () => {
-    expect(() => resolveHolidaySet({ SEED_COUNTRY: 'BR' })).toThrow(
-      /import-holidays/,
-    );
-  });
-
-  it('only Bangladesh ships with the code', () => {
-    expect(Object.keys(HOLIDAY_SETS)).toEqual(['BD']);
+  it('anything else stops the seed instead of silently writing no holidays', () => {
+    expect(() => seedHolidayCountry({ SEED_COUNTRY: 'Brazil' })).toThrow(/two-letter/);
+    expect(() => seedHolidayCountry({ SEED_COUNTRY: 'B1' })).toThrow(/two-letter/);
   });
 });
 
 describe('seedPolicyFromEnv — SEED_POLICY_*', () => {
-  it('nothing set → 208 h, 26 days, Friday, as before', () => {
+  it('nothing set → 176 h, 22 days, Sat + Sun — the wizard\'s default with no country', () => {
     expect(seedPolicyFromEnv({})).toEqual({
-      monthlyTargetHours: 208,
-      expectedWorkdays: 26,
-      weeklyOffDays: [5],
+      monthlyTargetHours: 176,
+      expectedWorkdays: 22,
+      weeklyOffDays: [6, 7],
     });
-    expect(DEFAULT_SEED_POLICY.weeklyOffDays).toEqual([5]);
+    expect(DEFAULT_SEED_POLICY).toEqual(defaultWorkRules(null));
   });
 
   it('another week', () => {
     expect(
       seedPolicyFromEnv({
-        SEED_POLICY_MONTHLY_HOURS: '176',
-        SEED_POLICY_WORKDAYS: '22',
-        SEED_POLICY_WEEKLY_OFF: '7,6',
+        SEED_POLICY_MONTHLY_HOURS: '208',
+        SEED_POLICY_WORKDAYS: '26',
+        SEED_POLICY_WEEKLY_OFF: '5',
       }),
     ).toEqual({
-      monthlyTargetHours: 176,
-      expectedWorkdays: 22,
-      weeklyOffDays: [6, 7],
+      monthlyTargetHours: 208,
+      expectedWorkdays: 26,
+      weeklyOffDays: [5],
     });
+    expect(
+      seedPolicyFromEnv({ SEED_POLICY_WEEKLY_OFF: '7,6' }).weeklyOffDays,
+    ).toEqual([6, 7]);
   });
 
   it('"none" → no weekly day off', () => {
@@ -87,6 +86,7 @@ describe('seedPolicyFromEnv — SEED_POLICY_*', () => {
     ['SEED_POLICY_WEEKLY_OFF', '8'],
     ['SEED_POLICY_WEEKLY_OFF', 'sunday'],
     ['SEED_POLICY_WEEKLY_OFF', '6,x'],
+    ['SEED_POLICY_WEEKLY_OFF', '6,'],
   ])('%s=%s stops the seed instead of falling back', (name, value) => {
     expect(() => seedPolicyFromEnv({ [name]: value })).toThrow(name);
   });

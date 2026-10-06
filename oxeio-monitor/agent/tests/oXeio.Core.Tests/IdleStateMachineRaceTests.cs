@@ -61,14 +61,14 @@ public class IdleStateMachineRaceTests
         {
             Assert.True(
                 sorted[i].EndedAt >= sorted[i].StartedAt,
-                $"সেগমেন্ট #{i} উল্টো: {sorted[i].StartedAt:O} → {sorted[i].EndedAt:O}");
+                $"segment #{i} backwards: {sorted[i].StartedAt:O} → {sorted[i].EndedAt:O}");
 
             if (i == 0) continue;
 
             Assert.True(
                 sorted[i].StartedAt >= sorted[i - 1].EndedAt,
-                $"ওভারল্যাপ #{i}: আগেরটা শেষ {sorted[i - 1].EndedAt:O}, " +
-                $"এটা শুরু {sorted[i].StartedAt:O} — ওই সময়টা দুবার গোনা হতো");
+                $"overlap #{i}: the previous one ends {sorted[i - 1].EndedAt:O}, " +
+                $"this one starts {sorted[i].StartedAt:O} — that time would be counted twice");
         }
     }
 
@@ -111,8 +111,8 @@ public class IdleStateMachineRaceTests
 
         tracker.Start();
         pump.Start();
-        Assert.True(tracker.Join(TimeSpan.FromMinutes(2)), "ট্র্যাকার থ্রেড আটকে গেছে");
-        Assert.True(pump.Join(TimeSpan.FromMinutes(2)), "পাম্প থ্রেড আটকে গেছে");
+        Assert.True(tracker.Join(TimeSpan.FromMinutes(2)), "the tracker thread is stuck");
+        Assert.True(pump.Join(TimeSpan.FromMinutes(2)), "the pump thread is stuck");
 
         Assert.NotEmpty(all);
         AssertNoOverlap(all);
@@ -145,8 +145,8 @@ public class IdleStateMachineRaceTests
 
         tracker.Start();
         closer.Start();
-        Assert.True(tracker.Join(TimeSpan.FromMinutes(2)), "ট্র্যাকার থ্রেড আটকে গেছে");
-        Assert.True(closer.Join(TimeSpan.FromMinutes(2)), "বন্ধ করার থ্রেড আটকে গেছে");
+        Assert.True(tracker.Join(TimeSpan.FromMinutes(2)), "the tracker thread is stuck");
+        Assert.True(closer.Join(TimeSpan.FromMinutes(2)), "the closing thread is stuck");
 
         Assert.NotEmpty(all);
         AssertNoOverlap(all);

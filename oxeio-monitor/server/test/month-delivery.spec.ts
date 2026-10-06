@@ -69,7 +69,7 @@ describe('monthCaption — what can be written on Telegram', () => {
       people: 3,
       totalHours: 100,
     });
-    expect(c).not.toMatch(/[A-Z][a-z]+ [A-Z][a-z]+/); // like "Rakib Hasan"
+    expect(c).not.toMatch(/[A-Z][a-z]+ [A-Z][a-z]+/); // like "Alex Silva"
   });
 
   it('the caption is within Telegram\'s limit', () => {
@@ -193,7 +193,7 @@ describe('TelegramChannel.sendDocument', () => {
     const channel = channelWith({ botToken: 'TOKEN', chatId: '42' });
     await channel.sendDocument(
       { bytes: Buffer.from('x'), filename: 'a.xlsx' },
-      'ক'.repeat(TELEGRAM_CAPTION_MAX + 500),
+      '漢'.repeat(TELEGRAM_CAPTION_MAX + 500),
     );
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -221,7 +221,7 @@ describe('TelegramChannel.sendDocument', () => {
     const channel = channelWith({ botToken: 'TOKEN', chatId: '42' });
     await channel.sendDocument({
       bytes: Buffer.from('x'),
-      filename: 'বেতন "2026".xlsx\n',
+      filename: '給料 "2026".xlsx\n',
     });
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];

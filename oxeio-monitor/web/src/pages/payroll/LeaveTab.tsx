@@ -109,7 +109,7 @@ export function LeaveTab({ month }: { month: string }) {
                   )}
                   {/*
                     Careful: this line is the most important part of the screen. Leave
-                       entered on a Friday or a public holiday reduces the target by
+                       entered on a weekly day off or a public holiday reduces the target by
                        nothing, yet the row stays in the ledger. Without the note the
                        owner would assume that day was excused, with no way to check
                        it from the numbers.

@@ -108,8 +108,8 @@ export function GalleryPage() {
             <EmployeePicker
               value={employeeId}
               onChange={changeEmployee}
-              // Careful: `label`/`allLabel` are explicit because the component's two
-              //    defaults are still Bengali, and they live in another owner's file
+              // Careful: `label`/`allLabel` are explicit so this page's wording does
+              //    not change if the component's defaults ever do
               label="Staff"
               allowAll
               allLabel="Everyone"

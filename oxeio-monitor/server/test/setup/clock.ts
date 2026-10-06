@@ -54,7 +54,7 @@ export function workNoon(dayOffset = 0): Date {
  * this exact formula was written assuming UTC and broke.
  *
  * The name deliberately differs from `workToday(now)` in
- * `prisma/holidays.data.ts`: that one is a production function and takes an
+ * `prisma/holiday-seed.ts`: that one is a production function and takes an
  * argument, and with the same name the import would not show which is which.
  */
 export function workTodayIso(): string {

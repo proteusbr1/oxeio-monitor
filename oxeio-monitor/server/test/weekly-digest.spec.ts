@@ -66,8 +66,8 @@ const TODAY_DATE = '2026-08-14';
  * target" rule actually gets tested. If the day off fell on today, 0 hours
  * would be left out, and every test would stay green even if the rule were broken.
  *
- * Bangladesh's real default (Friday off) is tested separately in the "first
- * message" block below — because that layout is where the bug was most dangerous.
+ * A Friday-off policy is tested separately in the "first message" block
+ * below — because that layout is where the bug was most dangerous.
  */
 const OFF_DATE = '2026-08-09';
 
@@ -181,9 +181,9 @@ function staff(
     week({
       employeeId: i + 1,
       empCode: `OX-${String(i + 1).padStart(3, '0')}`,
-      // A realistic long Bengali name — testing length with ASCII "Jane Doe"
-      //    would miss the most important case (a team with Bengali names)
-      fullName: `মোহাম্মদ আব্দুর রহমান চৌধুরী ${i + 1}`,
+      // A long non-Latin name — testing length with ASCII "Jane Doe"
+      //    would miss the most important case (a team with non-Latin names)
+      fullName: `山田太郎・ガルシア・ロドリゲス・フェルナンデス・ゴンサレス ${i + 1}`,
       ...over(i),
     }),
   );
@@ -236,15 +236,15 @@ describe('weeklyScheduleOf — day and hour from env', () => {
   });
 });
 
-describe('weeklyWindow — the last 7 days, by Dhaka reckoning', () => {
+describe('weeklyWindow — the last 7 days, by work-zone reckoning', () => {
   it('7 days back including today', () => {
     const w = weeklyWindow(new Date('2026-08-14T12:00:00Z'));
 
     expect(w).toEqual({ from: '2026-08-08', to: '2026-08-14', days: 7 });
   });
 
-  it('"today" means today in Dhaka — even if it is still yesterday in UTC', () => {
-    // 12:30 a.m. on 15 August in Dhaka, still 6:30 p.m. on 14 August in UTC
+  it('"today" means today in the work zone — even if it is still yesterday in UTC', () => {
+    // 12:30 a.m. on 15 August in the work zone (UTC+6), still 6:30 p.m. on 14 August in UTC
     const w = weeklyWindow(new Date('2026-08-14T18:30:00Z'));
 
     expect(w.to).toBe('2026-08-15');
@@ -381,8 +381,8 @@ describe('buildWeekly — days before tracking start are not in the expectation'
    *
    * Tracking began on 13 August 2026, the default schedule is Friday 6 p.m.,
    * and 14 August is a Friday. So the first window is 8–14 August, of which
-   * the 8th–12th nobody observed. Here the weekly day off is **Friday** (the
-   * spec's default), so today's target is 0 — before the fix, exactly that zero
+   * the 8th–12th nobody observed. Here the weekly day off is **Friday** (as in
+   * the original installation's policy), so today's target is 0 — before the fix, exactly that zero
    * was what got left out, and the expectation came to the full 48 hours.
    * Against 8 hours of work the message would say **"40 hours behind"**, by
    * name, in the owner's Telegram — for days when the agent was not even
@@ -610,7 +610,7 @@ describe('buildWeekly — "no row" and "0 hours" are not the same', () => {
     expect(w.noRecords).toHaveLength(0);
   });
 
-  it('"off" if there is no working day in the whole window (Eid holiday)', () => {
+  it('"off" if there is no working day in the whole window (a long public holiday)', () => {
     const holidays = WINDOW_DATES.map((date) =>
       att({ date, dayType: 'holiday', targetHours: 0, creditedHours: 0 }),
     );
@@ -693,14 +693,14 @@ describe('buildWeekly — totals and order', () => {
 describe('buildWeekly / weeklyMessage — employees who were dropped', () => {
   it('names go in the message — they do not quietly vanish', () => {
     const w = buildWeekly(
-      source({ excludedEmployees: ['Karim Uddin', 'রহিম মিয়া'] }),
+      source({ excludedEmployees: ['Jordan Lee', '山田花子'] }),
     );
     const m = weeklyMessage(w, 'Acme');
 
     expect(w.totals.excluded).toBe(2);
     expect(m.text).toContain('Not in this report (2)');
-    expect(m.text).toContain('Karim Uddin');
-    expect(m.text).toContain('রহিম মিয়া');
+    expect(m.text).toContain('Jordan Lee');
+    expect(m.text).toContain('山田花子');
     // Both why they were dropped and what to do to bring them back are written
     expect(m.text).toContain('inactive with no leaving date');
   });
@@ -712,14 +712,14 @@ describe('buildWeekly / weeklyMessage — employees who were dropped', () => {
         week: [],
         daily: [],
         observed: [],
-        excludedEmployees: ['Karim Uddin', 'Rahim Mia'],
+        excludedEmployees: ['Jordan Lee', 'Sam Rivera'],
       }),
     );
     const m = weeklyMessage(w, 'Acme');
 
     expect(m.text).toContain('Nobody was on the payroll');
     expect(m.text).toContain('Not in this report (2)');
-    expect(m.text).toContain('Karim Uddin');
+    expect(m.text).toContain('Jordan Lee');
   });
 
   it('when nobody is dropped the box does not exist', () => {
@@ -787,7 +787,7 @@ describe('weeklyMessage — one employee', () => {
     const m = weeklyMessage(buildWeekly(source()), 'Acme');
 
     expect(m.text).toContain('Acme — Weekly summary');
-    expect(m.text).toContain('2026-08-08 → 2026-08-14 (Dhaka, 7 days)');
+    expect(m.text).toContain('2026-08-08 → 2026-08-14 (GMT-6, 7 days)');
     expect(m.text).toContain('48.00h recorded · 1 of 1 staff have data');
     expect(m.text).toContain('On track (1)');
     expect(m.text).toContain('Jane Doe (OX-001) — 48.00h · +8.00 · 6/6 days');
@@ -851,7 +851,7 @@ describe('weeklyMessage — one employee', () => {
 
 describe('weeklyMessage — trimming', () => {
   /**
-   * 15 people **do not normally exceed 4096** — even with long Bengali names
+   * 15 people **do not normally exceed 4096** — even with long non-Latin names
    * the message stays around two thousand. So the trimming machinery is tested
    * here with a small limit; the real 4096 test is in the big-team tests below.
    * Without the limit being a parameter, there would be no way to verify this behaviour.
@@ -906,7 +906,7 @@ describe('weeklyMessage — the length limit is never exceeded', () => {
    * would show only in the server log. So the limit is verified for teams of every size.
    *
    * It is measured in `String.length`, not bytes — Telegram counts UTF-16 code
-   *    units, and a Bengali character is 3 bytes in UTF-8. Counting bytes would
+   *    units, and a CJK character is 3 bytes in UTF-8. Counting bytes would
    *    needlessly cut two thirds of the names.
    */
   for (const n of [1, 15, 40, 120, 500]) {
@@ -934,7 +934,7 @@ describe('weeklyMessage — the length limit is never exceeded', () => {
           ),
           excludedEmployees: Array.from(
             { length: Math.min(n, 5) },
-            (_, i) => `বাদ পড়া কর্মী ${i}`,
+            (_, i) => `報告から除外された従業員 ${i}`,
           ),
         }),
       );
@@ -948,7 +948,7 @@ describe('weeklyMessage — the length limit is never exceeded', () => {
 
   it('even if someone puts a novel in ORG_NAME, the limit is not exceeded', () => {
     const w = buildWeekly(source(fullyObserved(staff(20))));
-    const m = weeklyMessage(w, 'গ'.repeat(5000));
+    const m = weeklyMessage(w, '漢'.repeat(5000));
 
     expect(m.text.length).toBeLessThanOrEqual(TELEGRAM_TEXT_LIMIT);
   });
@@ -1100,7 +1100,7 @@ function makeService(
   };
 }
 
-/** UTC 12:00 = 6:00 p.m. in Dhaka, Friday — the job runs at exactly this time */
+/** UTC 12:00 = 6:00 p.m. in the work zone (UTC+6), Friday — the job runs at exactly this time */
 const AT_6_PM_FRIDAY = new Date('2026-08-14T12:00:00.000Z');
 
 describe('WeeklyDigestService — which ranges are requested', () => {
@@ -1134,9 +1134,9 @@ describe('WeeklyDigestService — which ranges are requested', () => {
     );
   });
 
-  it('"today" means today in Dhaka — even if it is still yesterday in UTC', async () => {
+  it('"today" means today in the work zone — even if it is still yesterday in UTC', async () => {
     const { service, calls, observedQueries } = makeService();
-    // UTC 14 August 20:00 = 2 a.m. on 15 August in Dhaka
+    // UTC 14 August 20:00 = 2 a.m. on 15 August in the work zone
     await service.runOnce(new Date('2026-08-14T20:00:00.000Z'));
 
     expect(calls[0].from).toBe('2026-08-09');
@@ -1161,13 +1161,13 @@ describe('WeeklyDigestService — which ranges are requested', () => {
 
   it("a dropped employee's name reaches the message from `meta`", async () => {
     const { service, sent } = makeService({
-      excludedEmployees: ['Karim Uddin'],
+      excludedEmployees: ['Jordan Lee'],
     });
     const result = await service.runOnce(AT_6_PM_FRIDAY);
 
     expect(result.excluded).toBe(1);
     expect(sent[0]).toContain('Not in this report (1)');
-    expect(sent[0]).toContain('Karim Uddin');
+    expect(sent[0]).toContain('Jordan Lee');
   });
 });
 

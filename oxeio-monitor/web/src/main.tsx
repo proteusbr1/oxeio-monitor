@@ -19,7 +19,7 @@ if (!root) throw new Error('#root not found');
  * The work-day zone comes from the server before the first render: pages
  * compute "today" once, in `useState` initialisers. If the request fails or
  * is slow (older server without the endpoint, offline PWA), the default
- * Asia/Dhaka stays — the same behaviour as before the zone was configurable.
+ * UTC stays — the server's own default when `WORK_TIMEZONE` is not set.
  */
 async function loadWorkTimeZone(): Promise<void> {
   const controller = new AbortController();

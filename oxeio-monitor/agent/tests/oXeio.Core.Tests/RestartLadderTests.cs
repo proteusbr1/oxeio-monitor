@@ -262,7 +262,7 @@ public class RestartLadderTests
 
         for (var i = 0; i < RestartPolicy.Default.GiveUpAfter; i++)
         {
-            Assert.True(ladder.MayLaunch(now), $"{i + 1} নম্বর চেষ্টা আটকে গেছে");
+            Assert.True(ladder.MayLaunch(now), $"attempt {i + 1} was blocked");
             ladder.RecordLaunch(now);
             now += ladder.DelayAfter(ladder.Failures);
             ladder.Observe(healthy: false, now);

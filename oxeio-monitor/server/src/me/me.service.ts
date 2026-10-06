@@ -284,8 +284,8 @@ export class MeService {
         adjustmentSec: adjustment,
         creditedSec: worked + adjustment,
         // `isWorkday()` is the same function used to compute the month's target.
-        // Writing a separate "is it Friday?" check would skip the `holidays`
-        // table, and Eid days would show up as ordinary work days.
+        // Writing a separate "is it the weekly day off?" check would skip the
+        // `holidays` table, and public holidays would show up as ordinary work days.
         isOffDay: !isWorkday(date, off, holidays),
       });
     }

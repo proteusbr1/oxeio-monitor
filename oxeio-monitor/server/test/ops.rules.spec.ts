@@ -28,7 +28,7 @@ import {
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
 
-/** A fixed moment in Dhaka: UTC+6, no DST */
+/** A fixed moment in the test work zone: UTC+6, no DST */
 function work(iso: string): Date {
   return new Date(`${iso}+06:00`);
 }
@@ -43,8 +43,8 @@ function nightlyName(now: Date, daysAgo: number): string {
 // ════════════════════════════════════════════════════════════════════════════
 
 describe('backup names', () => {
-  it('the date is in Dhaka time, not UTC', () => {
-    // 20:30 on the 10th in UTC = 02:30 on the 11th in Dhaka
+  it('the date is in work-zone time, not UTC', () => {
+    // 20:30 on the 10th in UTC = 02:30 on the 11th in the work zone (UTC+6)
     expect(backupFileName(new Date('2026-08-10T20:30:00Z'))).toBe(
       'oxeio-2026-08-11-0230.dump.enc',
     );
@@ -441,7 +441,7 @@ describe('Telegram message', () => {
 
   it('odd characters in the hostname are filtered out', () => {
     expect(safeHostname('PC-07')).toBe('PC-07');
-    expect(safeHostname('<b>রহিম</b>-PC')).toBe('bb-PC');
+    expect(safeHostname('<b>山田</b>-PC')).toBe('bb-PC');
     expect(safeHostname('   ')).toBeNull();
     expect(safeHostname(null)).toBeNull();
     expect(safeHostname('x'.repeat(80))).toHaveLength(32);
@@ -449,7 +449,7 @@ describe('Telegram message', () => {
 
   it('does not break on an unknown type', () => {
     const line = telegramLine(
-      { type: 'কিছু-একটা', severity: 'info', createdAt: now },
+      { type: 'something-else', severity: 'info', createdAt: now },
       now,
     );
     expect(line).toContain('Alert');
@@ -496,7 +496,7 @@ describe('parsing DATABASE_URL', () => {
 
   it('null for junk or a URL with another scheme', () => {
     expect(parsePgUrl('mysql://u:p@localhost/x')).toBeNull();
-    expect(parsePgUrl('একদম-URL-নয়')).toBeNull();
+    expect(parsePgUrl('not-a-URL-at-all')).toBeNull();
     expect(parsePgUrl('postgres://u:p@localhost/')).toBeNull();
     expect(parsePgUrl(undefined)).toBeNull();
   });

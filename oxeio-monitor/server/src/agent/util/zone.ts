@@ -24,7 +24,7 @@ export function assertKnownZone(timeZone: string): void {
     new Intl.DateTimeFormat('en-US', { timeZone });
   } catch {
     throw new Error(
-      `"${timeZone}" is not a known IANA time zone (examples: America/Sao_Paulo, Europe/Lisbon, Asia/Dhaka)`,
+      `"${timeZone}" is not a known IANA time zone (examples: America/Sao_Paulo, Europe/Lisbon, Asia/Kolkata)`,
     );
   }
 }

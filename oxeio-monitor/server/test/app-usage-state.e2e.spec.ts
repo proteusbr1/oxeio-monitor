@@ -125,7 +125,7 @@ describe('POST /agent/app-usage: segment state', () => {
      * Careful: the work-zone date, not UTC's. This repeats G62 exactly, and was
      * another sleeping time bomb (it went off at 00:03 on 22 August).
      *
-     * `new Date().toISOString()` gives UTC, and Dhaka is UTC+6, so between
+     * `new Date().toISOString()` gives UTC, and the test work zone is UTC+6, so between
      * midnight and 06:00 the UTC date is the previous day. The query then went
      * to the wrong day, the `zoom` row was not found, and the test broke
      * though the code had no bug. Ingest itself picks the day with

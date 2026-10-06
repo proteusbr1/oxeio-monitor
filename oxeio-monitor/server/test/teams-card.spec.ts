@@ -12,7 +12,7 @@ import { teamsCard, trimForTeams } from '../src/alerts/teams.card';
  * This cannot be caught at the HTTP level, so the shape is pinned here.
  */
 describe('teamsCard', () => {
-  const card = teamsCard('oXeio — সাপ্তাহিক', 'Belal: 38h · Ali: 41h');
+  const card = teamsCard('oXeio — 週報', 'Bruno: 38h · Ali: 41h');
 
   /**
    * All three names must be spelled exactly like this. If any is changed,
@@ -42,8 +42,8 @@ describe('teamsCard', () => {
   it('both the title and the text are in the card', () => {
     const body = card.attachments[0].content.body as { text: string }[];
 
-    expect(body[0].text).toBe('oXeio — সাপ্তাহিক');
-    expect(body[1].text).toContain('Belal: 38h');
+    expect(body[0].text).toBe('oXeio — 週報');
+    expect(body[1].text).toContain('Bruno: 38h');
   });
 
   /** Without `wrap`, long lines would be cut off and a name would show half */
@@ -61,7 +61,7 @@ describe('teamsCard', () => {
 
 describe('trimForTeams', () => {
   it('short text is left intact', () => {
-    expect(trimForTeams('ছোট')).toBe('ছোট');
+    expect(trimForTeams('短い')).toBe('短い');
   });
 
   /**
@@ -70,20 +70,20 @@ describe('trimForTeams', () => {
    * arriving, silently, the day the team grows.
    */
   it('very long text is trimmed', () => {
-    const trimmed = trimForTeams('ক'.repeat(30_000));
+    const trimmed = trimForTeams('漢'.repeat(30_000));
 
     expect(trimmed.length).toBeLessThanOrEqual(20_000);
   });
 
   /** Say in the message itself that it was trimmed — otherwise people would think the figures are just low */
   it('when trimmed, that is stated', () => {
-    const trimmed = trimForTeams('ক'.repeat(30_000));
+    const trimmed = trimForTeams('漢'.repeat(30_000));
 
     expect(trimmed).toContain('has been trimmed');
   });
 
   it('it is not trimmed exactly at the limit', () => {
-    const exact = 'ক'.repeat(20_000);
+    const exact = '漢'.repeat(20_000);
 
     expect(trimForTeams(exact)).toBe(exact);
   });

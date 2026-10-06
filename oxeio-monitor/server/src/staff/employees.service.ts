@@ -485,7 +485,7 @@ export class EmployeesService {
   /**
    * **Turn this employee's agent back on**: restore devices that were switched off.
    *
-   * Careful: why per employee, not per device: the owner thinks of "Belal's
+   * Careful: why per employee, not per device: the owner thinks of "Bruno's
    * PC", not "device #61". A separate Devices screen would mean looking in two
    * places for the answer to one question, and make the whole system more complicated.
    *

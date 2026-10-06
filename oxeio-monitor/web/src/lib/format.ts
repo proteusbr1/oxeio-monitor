@@ -13,17 +13,17 @@
  */
 
 /**
- * The work-day zone, which the server may run on something other than
- * Asia/Dhaka (`WORK_TIMEZONE`). Starts as that default, so a server that does not
- * send the zone (older version, request failed) behaves exactly as before.
+ * The work-day zone, set on the server (`WORK_TIMEZONE`). Starts as UTC, the
+ * server's own default, so a server that does not send the zone (older
+ * version, request failed) still gets one consistent answer.
  *
  * Every helper below reads the wall clock through `Intl` with this zone, so
  * daylight saving is handled: the offset is the one in force at each instant,
  * exactly as the server's `zone.ts` computes it. `utcOffsetMinutes` is only
  * the fallback for a browser whose `Intl` does not know the zone.
  */
-let workZone = { timeZone: 'Asia/Dhaka', utcOffsetMinutes: 360 };
-let zoneFormat: Intl.DateTimeFormat | null = makeZoneFormat('Asia/Dhaka');
+let workZone = { timeZone: 'UTC', utcOffsetMinutes: 0 };
+let zoneFormat: Intl.DateTimeFormat | null = makeZoneFormat('UTC');
 /** offset per UTC minute; the board asks about the same minutes over and over */
 const offsetCache = new Map<number, number>();
 
@@ -63,12 +63,12 @@ export function setWorkTimeZone(zone: {
   offsetCache.clear();
 }
 
-/** IANA name of the work-day zone — `Asia/Dhaka` by default */
+/** IANA name of the work-day zone — `UTC` by default */
 export function workTimeZone(): string {
   return workZone.timeZone;
 }
 
-/** Short place name for labels, e.g. `Asia/Dhaka` → `Dhaka`, `America/Sao_Paulo` → `Sao Paulo` */
+/** Short place name for labels, e.g. `Europe/Lisbon` → `Lisbon`, `America/Sao_Paulo` → `Sao Paulo` */
 export function workTimeZoneLabel(): string {
   return (workZone.timeZone.split('/').pop() ?? workZone.timeZone).replace(
     /_/g,
@@ -141,15 +141,14 @@ const MONTHS = [
  * Hand-written short forms of the months, for narrow columns.
  *
  * In English `MONTHS[i].slice(0, 3)` would work, yet the list stays hand-written:
- * with a Bengali list that same `slice()` silently broke the text. JS `slice()`
- * counts UTF-16 units; it does not know conjuncts or vowel signs.
- *   - October in Bengali, sliced to 3, ends in a hasanta (virama): broken text
- *   - December in Bengali, sliced to 3, comes out right, but by coincidence
- *   - February in Bengali, sliced to 3, ends in a hasanta again
- * So at least three months a year would look broken on every row of attendance,
- * summary and the audit log, with no error. If Bengali (or any other Indic
- * script) ever returns, the trap must not be set again, so the two lists are
- * kept separate.
+ * with month names in a script that has conjuncts or vowel signs (an Indic
+ * script, say) that same `slice()` silently breaks the text. JS `slice()`
+ * counts UTF-16 units; it does not know conjuncts or vowel signs, so a cut can
+ * end on a virama or split a vowel sign from its consonant — some months come
+ * out broken, others right only by coincidence. That would look broken on every
+ * row of attendance, summary and the audit log, with no error. If such month
+ * names are ever hand-written here, the trap must not be set, so the two lists
+ * are kept separate.
  */
 const MONTHS_SHORT = [
   'Jan',
@@ -188,6 +187,15 @@ let separators: { group: string; decimal: string } = {
   group: ',',
   decimal: '.',
 };
+
+/**
+ * Alphabetical order for people's names. Collated in the display locale when
+ * one is set, otherwise the browser's own: names are stored as written, in any
+ * script, so a fixed collation would sort some of them oddly.
+ */
+export function compareNames(a: string, b: string): number {
+  return a.localeCompare(b, displayLocale ?? undefined);
+}
 
 export function setDisplayLocale(locale: string | null | undefined): void {
   const tag = typeof locale === 'string' ? locale.trim() : '';
@@ -239,7 +247,7 @@ function localeDate(
 /**
  * Today's workday in the work zone: the browser's timezone is not assumed.
  *
- * `new Date().toISOString().slice(0, 10)` would give the UTC date, and in a zone ahead of UTC (Dhaka, say)
+ * `new Date().toISOString().slice(0, 10)` would give the UTC date, and in a zone ahead of UTC (UTC+6, say)
  * between midnight and the offset hour (6 a.m.) that shows the previous day, so an employee working
  * at night (normal per section 2.1-a) could not find their own hours for today.
  * In the other direction, in a browser in Bangkok `toLocaleDateString()` would run
@@ -387,9 +395,9 @@ export function formatDateShort(date: string): string {
 /**
  * `'2026-08-10'` to `'Mon'`
  *
- * Careful: in Bengali the word for "day" used to be appended (Sun + that word).
- * Do not do that in English: `Mon` is complete by itself, and appending would
- * give something like "Mon" glued to a Bengali suffix.
+ * Careful: some languages append a word for "day" to the weekday name. Do not
+ * do that in English: `Mon` is complete by itself, and appending would give
+ * "Mon" glued to a foreign suffix.
  */
 export function weekdayOf(date: string): string {
   const parsed = parseWorkDate(date);
@@ -440,7 +448,7 @@ export function formatDateTime(iso: string | null): string {
  * (clock skew) gives `'Just now'`; showing a negative number would look as if the
  * system had broken.
  *
- * Careful: English needs singular/plural agreement (Bengali did not):
+ * Careful: English needs singular/plural agreement:
  * `1 minute ago`, `2 minutes ago`. Seeing "1 minutes ago" makes the text sound
  * mechanical and lowers trust in the numbers.
  */

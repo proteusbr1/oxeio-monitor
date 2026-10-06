@@ -14,7 +14,7 @@ import { countLeaveWorkdays, countWorkdays } from './summary.math';
  * D = workdays in that month       (excluding weekly off days and holidays)
  * d = the employee's own workdays  (those falling within joined_on ... left_on)
  *
- * daily target     = monthly_target / policy_workdays   (208 / 26 = 8 hours)
+ * daily target     = monthly_target / policy_workdays   (176 / 22 = 8 hours, say)
  * target           = d x daily target
  * applicable salary = monthly salary x d / D
  * ```
@@ -36,7 +36,7 @@ export interface ProrationInput {
   /** The employee's last day; `null` = still here. */
   leftOn: Date | null;
 
-  /** ISO weekdays (Friday = 5); `null` = every day is a workday. */
+  /** ISO weekdays (Mon = 1 … Sun = 7); `null` = every day is a workday. */
   weeklyOffDays: readonly number[];
   /** The holidays in that month, matched by `getTime()`. */
   holidays: ReadonlySet<number>;
@@ -54,7 +54,7 @@ export interface ProrationInput {
    */
   leaveDates?: ReadonlySet<number>;
 
-  /** The policy's monthly target, in seconds (208 hours). */
+  /** The policy's monthly target, in seconds. */
   monthlyTargetSec: number;
   /**
    * The policy's `expected_workdays` column (26).
@@ -76,7 +76,7 @@ export interface Proration {
   /**
    * How many of the d days the employee was on leave.
    * Careful: only leave that falls on a **workday** counts. Even if someone
-   * marks leave on a Friday or a public holiday, there was no target that day anyway.
+   * marks leave on a weekly day off or a public holiday, there was no target that day anyway.
    */
   leaveWorkdays: number;
   /** (d - leave) x daily target; goes into `monthly_summary.target_sec`. */
@@ -149,7 +149,7 @@ export function prorate(input: ProrationInput): Proration {
   /**
    * Number of leave days that fall within the employment period **on workdays**.
    *
-   * Careful: filtered with `isWorkday`, otherwise a leave written on a Friday
+   * Careful: filtered with `isWorkday`, otherwise a leave written on a weekly day off
    * would cut eight hours from the target although there was no target that
    * day. The failure would be silent: the number drops and nobody finds why.
    */
@@ -181,8 +181,8 @@ export function prorate(input: ProrationInput): Proration {
  * using d and D itself. Rounding in two places would make someone's salary
  * differ by a few cents, caught only when reconciling at month end.
  *
- * **If D = 0 the result is 1**: the whole month is off (possible when Eid and
- * public holidays fall together). Nobody has any workday, so a shortfall is
+ * **If D = 0 the result is 1**: the whole month is off (possible when a long
+ * festival and other public holidays fall together). Nobody has any workday, so a shortfall is
  * impossible, and the owner's decision (O9) is **full salary**. Treating 0/0
  * as 0 would give everyone zero salary that month through no fault of theirs.
  */

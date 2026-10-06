@@ -24,7 +24,7 @@ let h: Harness;
 let employeeId: number;
 
 const today = (): string => {
-  // today's date in Dhaka (UTC+6, no DST)
+  // today's date in the work zone (UTC+6 in the tests, no DST)
   const work = workNoon();
   return work.toISOString().slice(0, 10);
 };

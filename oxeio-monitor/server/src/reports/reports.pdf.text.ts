@@ -8,29 +8,29 @@ import { WORK_TIMEZONE, workPathParts } from '../agent/util/work-time';
  *
  * The 14 fonts that come with pdfkit (Helvetica, Times, Courier ...) are
  * encoded in **WinAnsi**, so they have no glyph for any character outside
- * Latin-1. Writing Bengali (or any other non-Latin script) raises no error; the spot is just left **blank** or
+ * Latin-1. Writing any non-Latin script (Devanagari, Arabic, CJK ...) raises no error; the spot is just left **blank** or
  * a box appears. So the failure is silent: the server returns 200, the file
  * downloads, and when opened the name column is empty.
  *
- * Printing Bengali would mean embedding a TTF. That was not done, because:
+ * Printing them would mean embedding a TTF per script. That was not done, because:
  *
- * 1. The repo has **no Bengali font file**: putting a licensed binary font in
+ * 1. The repo has **no such font file**: putting a licensed binary font in
  *    the repo means licensing, size and build-copy rules, three separate
  *    decisions. Nobody took them.
- * 2. Bengali needs not just glyphs but **shaping** (conjuncts, the vowel sign
- *    that sits before the consonant, reph). fontkit has an Indic shaper, but it
- *    cannot be trusted without checking by eye with the real font. A PDF with
+ * 2. Many scripts need not just glyphs but **shaping** (Indic conjuncts,
+ *    Arabic joining forms). fontkit has shapers, but they cannot be trusted
+ *    without checking by eye with the real font. A PDF with
  *    broken conjuncts is worse than an English one: it looks right and reads wrong.
  * 3. The real substance of a PDF is numbers (hours, dates, employee codes),
- *    which are ASCII anyway. Bengali would only be in the labels.
+ *    which are ASCII anyway. Non-Latin text would only be in the labels.
  *
- * A gap still remains: **employee names may be in a non-Latin script (Bengali, in the first deployment) in the database**. If
+ * A gap still remains: **employee names may be in a non-Latin script in the database**. If
  * those were printed silently blank, a reader would think the data was missing.
  * So [personLabel()](#) checks whether the name can be printed and, if not,
  * puts in the **employee code** and reports `lossy`, and the PDF footnote
  * states the reason based on that flag.
  *
- * If a Bengali name is needed there is Excel (F05): UTF-8, no problem at all.
+ * If a non-Latin name is needed there is Excel (F05): UTF-8, no problem at all.
  */
 
 /** What goes in when it cannot be printed; leaving it blank with nothing is the worst */
@@ -77,7 +77,7 @@ export interface PdfText {
  * Makes any text fit for printing.
  *
  * Characters that cannot be printed are **not deleted**, `?` goes in. Deleted,
- * a Bengali name would become an empty string, which would look the same as
+ * a non-Latin name would become an empty string, which would look the same as
  * "no name". A `?` at least says something was here.
  */
 export function toPdfText(value: string | null | undefined): PdfText {

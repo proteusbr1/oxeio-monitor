@@ -409,7 +409,7 @@ describe('pattern validation: stopping rules that would be silently dropped', ()
   it('a full URL in place of a domain is rejected', () => {
     expect(patternProblem('domain', 'https://youtube.com/watch')).not.toBeNull();
     expect(patternProblem('domain', 'youtube.com/feed')).not.toBeNull();
-    expect(patternProblem('domain', 'ভিডিও দেখা')).not.toBeNull();
+    expect(patternProblem('domain', 'watching videos')).not.toBeNull();
     expect(patternProblem('domain', 'youtube')).not.toBeNull();
   });
 

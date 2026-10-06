@@ -110,7 +110,7 @@ describe('GET /employees/next-code', () => {
     const res = await owner.http
       .post('/api/v1/employees')
       .set('X-CSRF-Token', owner.csrf)
-      .send({ fullName: 'Notun Kormi' });
+      .send({ fullName: 'New Hire' });
 
     expect(res.status).toBe(201);
     expect(res.body.empCode).toBe(code);
@@ -142,7 +142,7 @@ describe('employee code: in the system\'s hands', () => {
     const res = await owner.http
       .post('/api/v1/employees')
       .set('X-CSRF-Token', owner.csrf)
-      .send({ fullName: 'Kono Code Chara' });
+      .send({ fullName: 'No Code Given' });
 
     expect(res.status).toBe(201);
     expect(res.body.empCode).toMatch(/^[A-Za-z0-9_-]+$/);
@@ -158,7 +158,7 @@ describe('employee code: in the system\'s hands', () => {
     const res = await owner.http
       .post('/api/v1/employees')
       .set('X-CSRF-Token', owner.csrf)
-      .send({ empCode: 'MY-OWN-99', fullName: 'Nijer Code' });
+      .send({ empCode: 'MY-OWN-99', fullName: 'Own Code' });
 
     expect(res.status).toBe(400);
   });
@@ -167,7 +167,7 @@ describe('employee code: in the system\'s hands', () => {
     const created = await owner.http
       .post('/api/v1/employees')
       .set('X-CSRF-Token', owner.csrf)
-      .send({ fullName: 'Age Jini Chilen' })
+      .send({ fullName: 'Code Kept' })
       .expect(201);
 
     const before: string = created.body.empCode;
@@ -175,7 +175,7 @@ describe('employee code: in the system\'s hands', () => {
     await owner.http
       .patch(`/api/v1/employees/${created.body.id}`)
       .set('X-CSRF-Token', owner.csrf)
-      .send({ empCode: 'BODLE-DILAM' })
+      .send({ empCode: 'CHANGED-IT' })
       .expect(400);
 
     const after = await owner.http
@@ -189,7 +189,7 @@ describe('employee code: in the system\'s hands', () => {
   it('three added in a row get three different codes', async () => {
     const codes: string[] = [];
 
-    for (const name of ['Ek', 'Dui', 'Tin']) {
+    for (const name of ['One', 'Two', 'Three']) {
       const res = await owner.http
         .post('/api/v1/employees')
         .set('X-CSRF-Token', owner.csrf)
@@ -262,7 +262,7 @@ describe('GET /employees: setup state', () => {
       data: {
         email: 'su-login@test.local',
         passwordHash: await hashPassword('whatever-123'),
-        fullName: 'Rakib Hasan',
+        fullName: 'Alex Silva',
         role: 'employee',
         employeeId,
       },
@@ -393,7 +393,7 @@ describe('manager access', () => {
     const res = await manager.http
       .post('/api/v1/employees')
       .set('X-CSRF-Token', manager.csrf)
-      .send({ fullName: 'Manager Joge Korlen' });
+      .send({ fullName: 'Added By Manager' });
 
     expect(res.status).toBe(201);
     // the salary field is not in the response at all: redact.ts
@@ -404,13 +404,13 @@ describe('manager access', () => {
     const created = await manager.http
       .post('/api/v1/employees')
       .set('X-CSRF-Token', manager.csrf)
-      .send({ fullName: 'Age Naam' })
+      .send({ fullName: 'Name Before' })
       .expect(201);
 
     await manager.http
       .patch(`/api/v1/employees/${created.body.id}`)
       .set('X-CSRF-Token', manager.csrf)
-      .send({ fullName: 'Pore Naam', department: 'Finance' })
+      .send({ fullName: 'Name After', department: 'Finance' })
       .expect(200);
   });
 
@@ -421,7 +421,7 @@ describe('manager access', () => {
     await manager.http
       .post('/api/v1/holidays')
       .set('X-CSRF-Token', manager.csrf)
-      .send({ holidayDate: '2026-12-25', name: 'Boro Din' })
+      .send({ holidayDate: '2026-12-25', name: 'Christmas Day' })
       .expect(201);
 
     await manager.http
@@ -441,13 +441,13 @@ describe('manager access', () => {
     const created = await manager.http
       .post('/api/v1/employees')
       .set('X-CSRF-Token', manager.csrf)
-      .send({ fullName: 'Keu Ekjon' })
+      .send({ fullName: 'Someone' })
       .expect(201);
 
     await manager.http
       .post(`/api/v1/employees/${created.body.id}/deactivate`)
       .set('X-CSRF-Token', manager.csrf)
-      .send({ reason: 'cheshta korchi' })
+      .send({ reason: 'just trying' })
       .expect(403);
 
     await manager.http.get('/api/v1/audit-log').expect(403);
@@ -457,14 +457,14 @@ describe('manager access', () => {
     const res = await manager.http
       .post('/api/v1/employees')
       .set('X-CSRF-Token', manager.csrf)
-      .send({ fullName: 'Beton Soho', monthlySalary: '99000' });
+      .send({ fullName: 'With Salary', monthlySalary: '99000' });
 
     expect(res.status).toBe(403);
     // the employee was not created either: it does not save quietly with the salary dropped
     const list = await owner.http.get('/api/v1/employees').expect(200);
     expect(
       (list.body.rows as { fullName: string }[]).some(
-        (r) => r.fullName === 'Beton Soho',
+        (r) => r.fullName === 'With Salary',
       ),
     ).toBe(false);
   });
@@ -473,7 +473,7 @@ describe('manager access', () => {
     const created = await owner.http
       .post('/api/v1/employees')
       .set('X-CSRF-Token', owner.csrf)
-      .send({ fullName: 'Beton Ache', monthlySalary: '15000' })
+      .send({ fullName: 'Has Salary', monthlySalary: '15000' })
       .expect(201);
 
     await manager.http

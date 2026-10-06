@@ -2,10 +2,7 @@ import { Workbook } from 'exceljs';
 import { describe, expect, it } from 'vitest';
 
 import { notesFor } from '../src/reports/reports.pages';
-import {
-  APPROX_HOLIDAY_SUFFIX,
-  approximateHolidayDates,
-} from '../src/reports/reports.range';
+import { approximateHolidayDates } from '../src/reports/reports.range';
 import { summaryWorkbook } from '../src/reports/reports.sheets';
 import {
   approximateHolidayNote,
@@ -18,8 +15,7 @@ import {
  * where the decision is made?
  *
  * This file is the real deliverable of G108, not the wiring. `approximateHolidayDates()`
- * had long returned the right numbers and had its own unit test
- * (`holidays.spec.ts`); the problem was that nobody read it. Nothing in the
+ * had long returned the right numbers and had its own unit test; the problem was that nobody read it. Nothing in the
  * repo asserted on that value, so the warning could vanish from Excel or PDF
  * and every test would stay green. G117 caught exactly this gap (09-Build-Log
  * section 3).
@@ -169,7 +165,7 @@ describe('G108: reaches the PDF footnote', () => {
 
   it('it survives next to other warnings: one does not suppress another', () => {
     // Clipping, excluded employees and uncertain holidays can all happen
-    // together (late in the Eid month). It looks trivial because the code
+    // together (late in a month with a long holiday). It looks trivial because the code
     // `push`es, but if someone wrote `notes = [...]`, one would silently
     // disappear.
     const notes = notesFor(
@@ -222,27 +218,29 @@ describe('G108: one text on every path', () => {
 });
 
 describe('G108: the denominator and the warning come from the same rows', () => {
-  it('the name marker on the rows used for counting workdays decides uncertainty', () => {
-    // The marker lives in the DB row's name, not in a separate column: as soon
-    // as the owner removes the marker in Settings > Holidays, the report goes
-    // quiet.
-    //
-    // The marker is not hand-written here, it comes from the constant: the
-    // seed writes it and the report reads it. Hand-writing it would let the
-    // seed and the report drift apart on the day the constant changes, while
-    // the test stayed green.
+  it('the approximate flag on the rows used for counting workdays decides uncertainty', () => {
+    // The flag lives on the DB row (`holidays.approximate`): as soon as the
+    // owner clears it in Settings > Holidays, the report goes quiet.
+    const at = (date: string, approximate: boolean) => ({
+      date: new Date(`${date}T00:00:00.000Z`),
+      approximate,
+    });
     const dates = approximateHolidayDates([
-      {
-        date: new Date('2026-08-26T00:00:00.000Z'),
-        name: `Eid-e-Miladunnabi${APPROX_HOLIDAY_SUFFIX}`,
-      },
-      {
-        date: new Date('2026-08-15T00:00:00.000Z'),
-        name: 'National Mourning Day',
-      },
+      at('2026-09-15', true),
+      at('2026-08-15', false),
+      at('2026-08-26', true),
+      // joining several months' ranges may send the same row twice — counted once
+      at('2026-08-26', true),
     ]);
 
-    expect(dates).toEqual([APPROX]);
+    expect(dates).toEqual([APPROX, APPROX_2]);
     expect(approximateHolidayNote(dates)).toContain(APPROX);
+  });
+
+  it('empty when every date is final — "none is approximate", not "no holidays"', () => {
+    expect(
+      approximateHolidayDates([{ date: new Date('2026-12-16T00:00:00.000Z'), approximate: false }]),
+    ).toEqual([]);
+    expect(approximateHolidayDates([])).toEqual([]);
   });
 });

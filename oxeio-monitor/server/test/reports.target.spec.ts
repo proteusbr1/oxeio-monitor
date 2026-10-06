@@ -59,9 +59,9 @@ interface Month {
  * target will differ across the three months and the tests below go red at once.
  */
 const MONTHS: Month[] = [
-  { name: 'আগস্ট ২০২৬', start: d(2026, 8, 1), end: d(2026, 8, 31), workdays: 27 },
-  { name: 'সেপ্টেম্বর ২০২৬', start: d(2026, 9, 1), end: d(2026, 9, 30), workdays: 26 },
-  { name: 'ফেব্রুয়ারি ২০২৮', start: d(2028, 2, 1), end: d(2028, 2, 29), workdays: 25 },
+  { name: 'August 2026', start: d(2026, 8, 1), end: d(2026, 8, 31), workdays: 27 },
+  { name: 'September 2026', start: d(2026, 9, 1), end: d(2026, 9, 30), workdays: 26 },
+  { name: 'February 2028', start: d(2028, 2, 1), end: d(2028, 2, 29), workdays: 25 },
 ];
 
 const ruleOf = (holidays: ReadonlySet<number>): WorkdayRule => ({
@@ -111,7 +111,7 @@ describe('one rate: the denominator is always the policy expected_workdays', () 
     const perDay = dailyTargetSec(MONTHLY_TARGET_SEC, POLICY_WORKDAYS);
 
     const noHoliday = ruleOf(new Set<number>());
-    // Wednesday 26 August (Eid-e-Miladunnabi, not final yet), Monday 17 August
+    // Wednesday 26 August (a public holiday, date not final yet), Monday 17 August
     const twoHolidays = ruleOf(holidaysOn(d(2026, 8, 26), d(2026, 8, 17)));
 
     const span = { from: month.start, to: month.end };
@@ -150,21 +150,21 @@ describe('two paths, one number: proration vs reports', () => {
     joinedOn: Date | null;
     leftOn: Date | null;
   }[] = [
-    { label: 'ছুটিহীন, পুরো মাস', holidays: new Set(), joinedOn: null, leftOn: null },
+    { label: 'no holidays, full month', holidays: new Set(), joinedOn: null, leftOn: null },
     {
-      label: 'দুটো সরকারি ছুটি',
+      label: 'two public holidays',
       holidays: holidaysOn(d(2026, 8, 17), d(2026, 8, 26)),
       joinedOn: null,
       leftOn: null,
     },
     {
-      label: 'মাসের মাঝে যোগ দিয়েছেন',
+      label: 'joined mid-month',
       holidays: holidaysOn(d(2026, 8, 26)),
       joinedOn: d(2026, 8, 13),
       leftOn: null,
     },
     {
-      label: 'মাসের মাঝে চলে গেছেন',
+      label: 'left mid-month',
       holidays: new Set(),
       joinedOn: null,
       leftOn: d(2026, 8, 20),

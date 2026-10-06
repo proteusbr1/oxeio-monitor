@@ -34,7 +34,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
  *
  * Careful: `@db.Date` columns use UTC midnight (so does `countWorkdays`).
  * Building the date in local time would turn `2026-01-05` into the **previous
- * day** in any zone east of UTC (Asia/Dhaka, say), and someone who joined on the 1st of a month would land in
+ * day** in any zone east of UTC (UTC+6, say), and someone who joined on the 1st of a month would land in
  * the previous month.
  */
 function parseDate(where: string, value: string): Date {

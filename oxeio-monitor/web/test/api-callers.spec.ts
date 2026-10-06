@@ -71,8 +71,8 @@ describe('G167 — does the API function have a caller', () => {
 
         expect(
           callers.length,
-          `${file}-এর ${name}() কোথাও ডাকা হয় না — চুক্তি লেখা আছে, ` +
-            'কলার লেখা হয়নি। হয় কলারটা লিখুন, নয় ফাংশনটা সরান।',
+          `${file}: ${name}() is never called — the contract is written, ` +
+            'the caller is not. Write the caller or remove the function.',
         ).toBeGreaterThan(0);
       });
     }

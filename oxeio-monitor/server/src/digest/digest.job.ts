@@ -9,7 +9,7 @@ import { DigestService, type DigestResult } from './digest.service';
  *
  * Careful: without `timeZone` the cron would run in the server's own time zone
  * (almost always UTC in Docker) — "6:30 pm" would then really be 12:30 am in
- * a UTC+6 zone such as Asia/Dhaka, so the email would arrive in the early hours of the next day and
+ * a UTC+6 zone, so the email would arrive in the early hours of the next day and
  * "today's hours" would really be yesterday's.
  *
  * Careful: `disabled` **and** the `if` below — two locks, both needed (see the

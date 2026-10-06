@@ -29,7 +29,7 @@ let h: Harness;
 let dashboard: DashboardService;
 
 const HOUR_MS = 3600_000;
-/** Dhaka is UTC+6 — subtract this to go from the label (`workDateOf`) to the real moment */
+/** The test work zone is UTC+6 — subtract this to go from the label (`workDateOf`) to the real moment */
 const WORK_OFFSET_MS = 6 * HOUR_MS;
 
 beforeAll(async () => {
@@ -53,7 +53,7 @@ const today = () => workDateOf(workNoon());
  *
  * This function is the centre of the file. `dayLabel` is a **label** — the
  * work day written as UTC midnight. That day's local midnight starts **6
- * hours before the label** (for the Asia/Dhaka zone the tests run in). Getting this wrong would silently shift every
+ * hours before the label** (for the UTC+6 work zone the tests run in). Getting this wrong would silently shift every
  * boundary test the wrong way, and they would stay green.
  */
 function atWorkHour(dayLabel: Date, hour: number): Date {
@@ -104,22 +104,22 @@ describe('seven-day strip — how many tasks were finished', () => {
   /**
    * **The most important test of this file — both sides of local midnight.**
    *
-   * 23:30 in Dhaka is **17:30 the same day** in UTC; 00:30 in Dhaka is **18:30
+   * 23:30 in the work zone is **17:30 the same day** in UTC; 00:30 there is **18:30
    * the previous day** in UTC. If someone bucketed by the UTC day, every task
-   * finished between **Dhaka midnight and 6 a.m.** would fall in **the previous
+   * finished between **work-zone midnight and 6 a.m.** would fall in **the previous
    * day's slot** — work finished late at night would be added to yesterday's
    * book. The number would be wrong, but no error would be raised.
    *
    * That six-hour window sounds small, but in many offices tasks often finish
    *    after midnight — and exactly those rows would go to the wrong day.
    */
-  it("Dhaka 11:30 p.m. goes in today's slot, 12:30 a.m. in tomorrow's", async () => {
+  it("work-zone 11:30 p.m. goes in today's slot, 12:30 a.m. in tomorrow's", async () => {
     const t = today();
     const yesterday = new Date(t.getTime() - 86_400_000);
 
-    // Yesterday's Dhaka 11:30 p.m. → yesterday's slot
+    // Yesterday's 11:30 p.m. in the work zone → yesterday's slot
     await finishedAt(atWorkHour(yesterday, 23.5));
-    // Today's Dhaka 12:30 a.m. → today's slot
+    // Today's 12:30 a.m. in the work zone → today's slot
     await finishedAt(atWorkHour(t, 0.5));
 
     const days = await daysOf();

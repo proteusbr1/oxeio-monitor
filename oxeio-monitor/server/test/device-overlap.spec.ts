@@ -14,7 +14,7 @@ import { overlapSec, type DeviceSpans } from '../src/summary/summary.math';
  */
 
 const at = (hh: number, mm = 0): Date =>
-  new Date(Date.UTC(2026, 7, 12, hh - 6, mm)); // Dhaka -> UTC
+  new Date(Date.UTC(2026, 7, 12, hh - 6, mm)); // work zone (UTC+6) -> UTC
 
 const span = (fromH: number, toH: number) => ({
   startedAt: at(fromH),

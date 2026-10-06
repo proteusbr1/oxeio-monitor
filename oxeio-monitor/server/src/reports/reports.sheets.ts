@@ -271,7 +271,7 @@ function infoRows(title: string, meta: ReportMeta): [string, string][] {
    * G108: the uncertainty goes **inside the file**, not only in JSON.
    *
    * The numbers are not wrong, but they **rest on an assumption**, and until
-   * now that was only in the holiday's *name* (`(সম্ভাব্য)`, "probable"), not in
+   * now that was only on the holidays page (`holidays.approximate`), not in
    * the report. Whoever downloads the sheet and sends it to accounts would not
    * know that the month's work days, and so `d ÷ D`, can still move.
    *

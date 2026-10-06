@@ -1,5 +1,5 @@
 import type { AttendanceReport, AttendanceRow, DayType } from '../../api/reports';
-import { monthEndOf, parseWorkDate } from '../../lib/format';
+import { compareNames, monthEndOf, parseWorkDate } from '../../lib/format';
 
 /**
  * Arranges the flat rows of `GET /reports/attendance` into a staff x date grid.
@@ -63,7 +63,7 @@ export interface DayCell {
   /**
    * 0-4: steps of the grey-to-black ramp.
    * Important: the steps are **relative to that employee's daily target**, not
-   *   absolute hours. If policy changes from 208 to 180, the ramp adjusts at once;
+   *   absolute hours. If policy changes from 176 to 160, the ramp adjusts at once;
    *   hardcoded absolute numbers would silently falsify "black = a full day".
    */
   level: 0 | 1 | 2 | 3 | 4;
@@ -93,7 +93,7 @@ export interface EmployeeGridRow {
 
   /** One workday's target; constant across the month. `null` if unknown */
   dailyTargetHours: number | null;
-  /** The whole month's target (usually 208). `null` if it cannot be worked out */
+  /** The whole month's target (e.g. 176). `null` if it cannot be worked out */
   targetHoursInRange: number | null;
   /** Careful: when true the number is an estimate; show it with `≈` on screen */
   monthTargetEstimated: boolean;
@@ -254,12 +254,12 @@ export function buildMonthGrid(
       });
     }
 
-    // The server **knows** the whole month's target, the number written in policy
-    //    (208). It used to be guessed here: sum of elapsed days + the daily target of
-    //    the remaining days. Careful: counting the remaining days excluded only weekly
-    //    offs, **not public holidays**, so in August 2026 it showed 216 instead of
-    //    208, as if everyone were 8 hours further behind. Payroll meanwhile used 208;
-    //    when dashboard and pay say two different numbers, neither is believable.
+    // The server **knows** the whole month's target. It used to be guessed here:
+    //    sum of elapsed days + the daily target of the remaining days. Careful:
+    //    counting the remaining days excluded only weekly offs, **not public
+    //    holidays**, so a month with a holiday showed 8 hours more than payroll, as
+    //    if everyone were 8 hours further behind. When dashboard and pay say two
+    //    different numbers, neither is believable.
     const monthTarget = report.meta.targetHoursInRange[employeeId] ?? null;
 
     /**
@@ -326,7 +326,7 @@ export function buildMonthGrid(
 
   rows.sort(
     sort === 'name'
-      ? (a, b) => a.fullName.localeCompare(b.fullName, 'bn')
+      ? (a, b) => compareNames(a.fullName, b.fullName)
       : (a, b) => a.paceHours - b.paceHours,
   );
 
@@ -382,7 +382,7 @@ function blankCell(date: string, kind: CellKind): DayCell {
 /**
  * The dates on which **every** employee is off; used to grey the column header.
  * Careful: if only some are off, the column must not be greyed: with different
- *    policies one person's Friday is another's workday, and a grey column would
+ *    policies one person's day off is another's workday, and a grey column would
  *    mislead.
  */
 function officeOffDaysOf(

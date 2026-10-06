@@ -15,7 +15,7 @@ export interface AgentConfig {
   screenshotTo: string | null;
   timezone: string;
   /**
-   * Minutes east of UTC for `timezone` **right now** (e.g. Asia/Dhaka = 360).
+   * Minutes east of UTC for `timezone` **right now** (e.g. Asia/Kolkata = 330).
    * Agents before 0.5 know only this number. It is part of the config hash, so
    * when daylight saving changes it those agents are told to reload.
    */

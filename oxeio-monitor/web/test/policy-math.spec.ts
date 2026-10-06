@@ -10,7 +10,7 @@ import {
  * August 2026 starts on a Saturday (31 days); September 2026 on a Tuesday (30).
  */
 describe('workdaysInMonth', () => {
-  it('Friday off — 27 in August, 26 in September', () => {
+  it('one day off a week (Fri) — 27 in August, 26 in September', () => {
     expect(workdaysInMonth('2026-08', [5])).toBe(27);
     expect(workdaysInMonth('2026-09', [5])).toBe(26);
   });
@@ -26,7 +26,7 @@ describe('workdaysInMonth', () => {
 });
 
 describe('targetPreview', () => {
-  it('the Bangladesh default matches its calendar month', () => {
+  it('a six-day week of 26 days matches its calendar month', () => {
     const p = targetPreview({
       yearMonth: '2026-09',
       monthlyTargetHours: 208,
@@ -41,7 +41,7 @@ describe('targetPreview', () => {
     });
   });
 
-  it('Sat + Sun with the default 26 — the month would land at 176 h', () => {
+  it('Sat + Sun with 26 expected workdays — the month would land at 176 h', () => {
     const p = targetPreview({
       yearMonth: '2026-09',
       monthlyTargetHours: 208,

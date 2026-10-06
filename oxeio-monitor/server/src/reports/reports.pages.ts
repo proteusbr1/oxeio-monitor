@@ -14,15 +14,15 @@ import type {
  * `reports.sheets.ts` is separate from `reports.excel.ts`: "add a column" should
  * not mean touching the query code.
  *
- * **Labels are in English** (Bengali in Excel). The reason is written in one
- * place: the note at the top of [reports.pdf.text.ts](./reports.pdf.text.ts).
- * Only the result matters here: pdfkit's built-in font prints Bengali
- * **silently blank**, so a Bengali label would mean an empty header.
+ * **Labels are in English**. The reason is written in one place: the note at
+ * the top of [reports.pdf.text.ts](./reports.pdf.text.ts). Only the result
+ * matters here: pdfkit's built-in font prints non-Latin text **silently
+ * blank**, so a non-Latin label would mean an empty header.
  *
  * The report → **print lines** conversion is pure (`attendanceLines`,
  * `summaryLines`) and entirely separate from pdfkit. Two reasons:
  *
- * 1. Where Bengali characters get replaced is decided here, and can be tested
+ * 1. Where non-Latin characters get replaced is decided here, and can be tested
  *    without the DB or the PDF engine; a mistake would otherwise show up as a
  *    silent empty cell, not an error.
  * 2. The `lossy` flag must be known **before printing starts**, because whether
@@ -47,7 +47,7 @@ const DAY_STATUS_EN: Record<DayStatus, string> = {
  * read, nobody would read it on the day it really matters.
  */
 const LOSSY_NOTE =
-  'Some Bangla text (names, departments) cannot be rendered with this PDF ' +
+  'Some non-Latin text (names, departments) cannot be rendered with this PDF ' +
   'font. Names are shown as employee codes and other characters as "?". ' +
   'The Excel (xlsx) export carries the original text.';
 

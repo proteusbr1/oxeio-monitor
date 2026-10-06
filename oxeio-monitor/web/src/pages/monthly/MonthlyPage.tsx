@@ -31,7 +31,7 @@ import { buildMonthGrid, type GridSort } from './heatmap';
  *
  * Careful: **the data comes from `GET /reports/attendance`, which trims to today**
  *   (`meta.clampedToToday`). So "expected by now" and "month target" are two different
- *   numbers, and both must be shown. Only showing 208 would make everyone look
+ *   numbers, and both must be shown. Only showing the month target would make everyone look
  *   terribly behind on the 11th; only "so far" would hide where the month is heading.
  *
  * Careful: reports are open to both owner and manager, so nothing here is

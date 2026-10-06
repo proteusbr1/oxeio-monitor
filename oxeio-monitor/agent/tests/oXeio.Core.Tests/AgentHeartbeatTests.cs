@@ -59,7 +59,7 @@ public class AgentHeartbeatTests
     [InlineData("v=1 pid=-3 unbiased=5000")]
     [InlineData("v=1 pid=4242 unbiased=-1")]
     [InlineData("v=1 pid=abc unbiased=5000")]
-    [InlineData("এলোমেলো লেখা")]
+    [InlineData("καθόλου αριθμός")]
     [InlineData("=====")]
     public void A_malformed_line_returns_null(string? line)
     {

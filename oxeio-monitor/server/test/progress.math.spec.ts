@@ -37,10 +37,10 @@ describe('expectedSecOf: how much should be done by today', () => {
   });
 
   it('with more holidays the daily expectation rises, the total target does not', () => {
-    const eid = { ...BASE, expectedWorkdays: 20, workdaysElapsed: 20 };
-    expect(expectedSecOf(eid)).toBe(208 * 3600);
+    const manyHolidays = { ...BASE, expectedWorkdays: 20, workdaysElapsed: 20 };
+    expect(expectedSecOf(manyHolidays)).toBe(208 * 3600);
     // 208 hours in 20 days is 10.4 hours a day
-    expect(expectedSecOf({ ...eid, workdaysElapsed: 1 })).toBe(
+    expect(expectedSecOf({ ...manyHolidays, workdaysElapsed: 1 })).toBe(
       Math.round((208 * 3600) / 20),
     );
   });

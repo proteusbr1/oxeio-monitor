@@ -54,7 +54,7 @@ async function makeShot(opts: {
    *
    * The job's cutoff `retentionCutoff()` = `workDateOf(now) - 90 days`, i.e.
    * it uses the work day. The fixture used to take the UTC date from
-   * `Date.now()`, and between midnight and 6am (Dhaka is UTC+6) the UTC date
+   * `Date.now()`, and between midnight and 6am (the test work zone is UTC+6) the UTC date
    * is a day behind. So `daysAgo: 90` really built a row 91 work days old,
    * and the boundary test failed every night in those six hours.
    *
