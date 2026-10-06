@@ -16,7 +16,8 @@ import { UserRole } from '@prisma/client';
 
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
-import { CreateHolidayDto, HolidayListQueryDto, ImportHolidaysDto, UpdateHolidayDto } from './calendar.dto';
+import { CreateHolidayDto, HolidayListQueryDto, ImportHolidaysDto, ImportPublicHolidaysDto, UpdateHolidayDto } from './calendar.dto';
+import type { PublicHolidayCountry } from './public-holidays';
 import {
   HolidaysService,
   type HolidayImportPlan,
@@ -52,6 +53,32 @@ export class HolidaysController {
     @Ip() ip: string,
   ): Promise<HolidayView> {
     return this.holidays.create(actor, dto, ip);
+  }
+
+  /** The countries the public holiday calendar covers */
+  @Get('public/countries')
+  countries(): Promise<PublicHolidayCountry[]> {
+    return this.holidays.countries();
+  }
+
+  /** A country's public holidays for a year — `dryRun` shows what would happen */
+  @Post('public')
+  @HttpCode(HttpStatus.OK)
+  importPublic(
+    @CurrentUser() actor: SessionUser,
+    @Body() dto: ImportPublicHolidaysDto,
+    @Ip() ip: string,
+  ): Promise<HolidayImportPlan> {
+    return this.holidays.importPublic(
+      actor,
+      {
+        country: dto.country,
+        year: dto.year,
+        allowPast: dto.allowPast === true,
+        dryRun: dto.dryRun !== false,
+      },
+      ip,
+    );
   }
 
   /** CSV or ICS calendar — `dryRun` shows what would happen */

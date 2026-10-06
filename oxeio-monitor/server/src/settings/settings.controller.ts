@@ -39,6 +39,17 @@ import { AppSettingsService } from './app-settings.service';
 import { checkStorage, type StorageForm } from './storage-check';
 import { STORAGE_SETTING_KEY, storageView, type StorageView } from './storage.settings';
 import { SCREENSHOT_STORAGE, type ScreenshotStorage } from '../storage/screenshot-storage';
+import { checkCountry, checkOrganizationName } from '../setup/setup.rules';
+import { ORGANIZATION_SETTING_KEY } from './organization';
+
+class SaveOrganizationDto {
+  @IsString() @MaxLength(80)
+  name!: string;
+
+  /** two-letter country code, or '' for none */
+  @IsOptional() @IsString() @MaxLength(2)
+  country?: string;
+}
 
 class SaveRegionDto {
   @IsOptional() @IsString() @MaxLength(64)
@@ -123,6 +134,30 @@ export class SettingsController {
   async region(): Promise<RegionView & { restartNeeded: boolean }> {
     const view = await this.settings.region();
     return { ...view, restartNeeded: view.timeZone.value !== view.runningTimeZone };
+  }
+
+  @Get('organization')
+  organization() {
+    return this.settings.organization();
+  }
+
+  @Patch('organization')
+  async saveOrganization(
+    @CurrentUser() actor: SessionUser,
+    @Body() dto: SaveOrganizationDto,
+    @Ip() ip: string,
+  ) {
+    let name: string;
+    let country: string | null;
+    try {
+      name = checkOrganizationName(dto.name);
+      country = checkCountry(dto.country);
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : String(error));
+    }
+    await this.settings.save(ORGANIZATION_SETTING_KEY, { name, country }, actor.userId);
+    await this.record(actor, ip, ORGANIZATION_SETTING_KEY, { name, country });
+    return this.settings.organization();
   }
 
   @Patch('region')

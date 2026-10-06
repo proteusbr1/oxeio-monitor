@@ -9,6 +9,7 @@ import {
   fixedOffsetZones,
   LOCALE_CHOICES,
   twoDecimalCurrencies,
+  supportedValues,
 } from './region.math';
 import {
   ConfirmDialog,
@@ -25,17 +26,6 @@ const SOURCE_LABEL: Record<SettingSource, string> = {
   default: 'built-in default',
 };
 
-/** Intl's lists, when the browser has them (all current ones do) */
-function supported(kind: 'timeZone' | 'currency'): string[] {
-  try {
-    return (
-      Intl as unknown as { supportedValuesOf(k: string): string[] }
-    ).supportedValuesOf(kind);
-  } catch {
-    return [];
-  }
-}
-
 /**
  * Settings → Region: time zone, currency and how dates and numbers are
  * written — what used to need the server's .env (WORK_TIMEZONE, CURRENCY,
@@ -46,9 +36,9 @@ export function RegionTab() {
   const region = useApi(getRegionSettings, []);
   const save = useMutation();
 
-  const zones = useMemo(() => fixedOffsetZones(supported('timeZone')), []);
+  const zones = useMemo(() => fixedOffsetZones(supportedValues('timeZone')), []);
   const currencies = useMemo(
-    () => twoDecimalCurrencies(supported('currency')),
+    () => twoDecimalCurrencies(supportedValues('currency')),
     [],
   );
 

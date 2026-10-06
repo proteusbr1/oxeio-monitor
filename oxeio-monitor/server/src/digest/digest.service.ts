@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import {
@@ -19,6 +19,7 @@ import {
   type DesignView,
 } from '../summary/design.rules';
 import { asPreBlock, telegramDigest } from './digest.telegram';
+import { AppSettingsService } from '../settings/app-settings.service';
 
 /** In the letterhead and email title — the same env as `reports.service.ts` */
 const DEFAULT_ORG_NAME = 'oXeio Monitoring';
@@ -50,6 +51,10 @@ export interface DigestResult {
 export class DigestService {
   private readonly logger = new Logger(DigestService.name);
   private readonly orgName: string;
+
+  private async organizationName(): Promise<string> {
+    return this.settings ? (await this.settings.organization()).name : this.orgName;
+  }
   private readonly explicitRecipients: string[];
 
   constructor(
@@ -59,6 +64,8 @@ export class DigestService {
     private readonly telegram: TelegramChannel,
     config: ConfigService,
     private readonly features: FeaturesService,
+    // the company name saved by the setup wizard / Settings wins over ORG_NAME
+    @Optional() private readonly settings?: AppSettingsService,
   ) {
     this.orgName = config.get<string>('ORG_NAME')?.trim() || DEFAULT_ORG_NAME;
 
@@ -77,7 +84,7 @@ export class DigestService {
     const recipients = await this.recipients();
 
     const subject = digestSubject(digest);
-    const body = digestBody(digest, this.orgName);
+    const body = digestBody(digest, (await this.organizationName()));
 
     const outcome = await this.mailer.send(recipients, subject, body);
 
@@ -104,7 +111,7 @@ export class DigestService {
      * media, two looks, but the numbers come from the same `Digest`, so the
      * two never say different things.
      */
-    const plain = telegramDigest(digest, this.orgName, {
+    const plain = telegramDigest(digest, (await this.organizationName()), {
       silentPcs: await this.silentPcsToday(now),
       atTime: workClock(now),
       designs: await this.designsToday(digest.workDate),

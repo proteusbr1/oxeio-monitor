@@ -5,6 +5,9 @@ import { Layout } from './components/Layout';
 import { VersionBadge } from './components/VersionBadge';
 import { AlertsPage } from './pages/alerts/AlertsPage';
 import { PayrollPage } from './pages/payroll/PayrollPage';
+import { SetupPage } from './pages/setup/SetupPage';
+import { getSetupStatus } from './api/setup';
+import { useApi } from './api/useApi';
 import { WorklogPage } from './pages/worklog/WorklogPage';
 import { ChangePasswordPage } from './pages/account/ChangePasswordPage';
 import { EmployeeDetailPage } from './pages/staff/EmployeeDetailPage';
@@ -72,13 +75,7 @@ function Router() {
     );
   }
 
-  if (!user) {
-    return (
-      <Routes>
-        <Route path="*" element={<LoginPage />} />
-      </Routes>
-    );
-  }
+  if (!user) return <SignedOut />;
 
   if (user.mustChangePassword) {
     return (
@@ -278,5 +275,25 @@ export function App() {
         <VersionBadge />
       </AuthProvider>
     </BrowserRouter>
+  );
+}
+
+/**
+ * Nobody signed in: the login — or, on an install that has no owner yet, the
+ * first-run setup wizard. If the check fails the login is shown, as before.
+ */
+function SignedOut() {
+  const status = useApi((signal) => getSetupStatus(signal), []);
+  if (status.loading && !status.data && !status.error) {
+    return (
+      <div className="grid min-h-full place-items-center text-sm text-ink-3">
+        Loading…
+      </div>
+    );
+  }
+  return (
+    <Routes>
+      <Route path="*" element={status.data?.needed ? <SetupPage /> : <LoginPage />} />
+    </Routes>
   );
 }

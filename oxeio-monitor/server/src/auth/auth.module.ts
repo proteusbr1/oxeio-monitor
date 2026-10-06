@@ -38,6 +38,6 @@ import { TwoFactorService } from './two-factor.service';
     { provide: APP_GUARD, useClass: MustChangePasswordGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
-  exports: [AuthService, TokenService],
+  exports: [AuthService, TokenService, PasswordService],
 })
 export class AuthModule {}

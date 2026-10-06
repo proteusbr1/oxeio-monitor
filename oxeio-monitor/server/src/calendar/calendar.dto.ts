@@ -142,6 +142,21 @@ export class ImportHolidaysDto {
   @IsOptional() @IsBoolean()
   dryRun?: boolean;
 }
+/** A country's public holidays for one year (Nager.Date) */
+export class ImportPublicHolidaysDto {
+  @Matches(/^[A-Za-z]{2}$/, { message: 'country must be a two-letter code, e.g. BR' })
+  country!: string;
+
+  @IsInt() @Min(2000) @Max(2100)
+  year!: number;
+
+  @IsOptional() @IsBoolean()
+  allowPast?: boolean;
+
+  @IsOptional() @IsBoolean()
+  dryRun?: boolean;
+}
+
 export class CreateHolidayDto {
   @Matches(DATE_ONLY, { message: 'holidayDate must be in YYYY-MM-DD format' })
   holidayDate!: string;

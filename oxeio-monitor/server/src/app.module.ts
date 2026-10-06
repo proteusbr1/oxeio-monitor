@@ -26,6 +26,7 @@ import { SummaryModule } from './summary/summary.module';
 import { TargetsModule } from './targets/targets.module';
 import { StorageModule } from './storage/storage.module';
 import { SettingsModule } from './settings/settings.module';
+import { SetupModule } from './setup/setup.module';
 import { StaffModule } from './staff/staff.module';
 
 @Module({
@@ -66,6 +67,7 @@ import { StaffModule } from './staff/staff.module';
     // after AuthModule: its guards must run before the module switches
     FeaturesModule,
     StaffModule,
+    SetupModule,
     AgentModule,
     ActivityModule,
     CalendarModule,

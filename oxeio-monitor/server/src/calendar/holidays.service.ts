@@ -11,7 +11,13 @@ import type { SessionUser } from '../auth/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { workDateOf } from '../agent/util/work-time';
 import { ADMIN_TARGET } from '../audit/admin-audit';
-import { parseHolidayFile } from './holiday-import';
+import { parseHolidayFile, type ImportResult } from './holiday-import';
+import {
+  publicHolidayCountries,
+  publicHolidays,
+  PublicHolidaysError,
+  type PublicHolidayCountry,
+} from './public-holidays';
 import { parseCalendarDate } from './calendar-date';
 import type { CreateHolidayDto, HolidayListQueryDto, UpdateHolidayDto } from './calendar.dto';
 
@@ -122,7 +128,62 @@ export class HolidaysService {
     ip: string,
     now = new Date(),
   ): Promise<HolidayImportPlan> {
-    const { holidays, problems } = parseHolidayFile(input.fileName, input.content);
+    return this.importParsed(
+      actor,
+      parseHolidayFile(input.fileName, input.content),
+      { source: input.fileName.slice(0, 120), allowPast: input.allowPast, dryRun: input.dryRun },
+      ip,
+      now,
+    );
+  }
+
+  /**
+   * A country's nationwide public holidays for one year, from the public
+   * calendar (public-holidays.ts) — same preview and past-month rules as a
+   * file.
+   */
+  async importPublic(
+    actor: SessionUser,
+    input: { country: string; year: number; allowPast: boolean; dryRun: boolean },
+    ip: string,
+    now = new Date(),
+    fetchImpl: typeof fetch = fetch,
+  ): Promise<HolidayImportPlan> {
+    let parsed: ImportResult;
+    try {
+      parsed = await publicHolidays(input.country, input.year, fetchImpl);
+    } catch (err) {
+      if (err instanceof PublicHolidaysError) throw new BadRequestException(err.message);
+      throw err;
+    }
+    return this.importParsed(
+      actor,
+      parsed,
+      {
+        source: `public holidays ${input.country.toUpperCase()} ${input.year}`,
+        allowPast: input.allowPast,
+        dryRun: input.dryRun,
+      },
+      ip,
+      now,
+    );
+  }
+
+  /** The countries the public calendar covers — for the country picker */
+  countries(fetchImpl: typeof fetch = fetch): Promise<PublicHolidayCountry[]> {
+    return publicHolidayCountries(fetchImpl).catch((err: unknown) => {
+      if (err instanceof PublicHolidaysError) throw new BadRequestException(err.message);
+      throw err;
+    });
+  }
+
+  private async importParsed(
+    actor: SessionUser,
+    { holidays, problems }: ImportResult,
+    input: { source: string; allowPast: boolean; dryRun: boolean },
+    ip: string,
+    now: Date,
+  ): Promise<HolidayImportPlan> {
 
     const existing = await this.prisma.holiday.findMany({
       where: { holidayDate: { in: holidays.map((h) => new Date(`${h.entry.date}T00:00:00Z`)) } },
@@ -155,7 +216,7 @@ export class HolidaysService {
 
     await this.record(actor, ip, 0, {
       op: 'import',
-      file: input.fileName.slice(0, 120),
+      file: input.source,
       created: count,
       allowPast: input.allowPast,
       dates: plan.add.map((h) => h.date),

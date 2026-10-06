@@ -1,12 +1,26 @@
 import { useState } from 'react';
 
-import { importHolidays, type HolidayImportPlan } from '../../api/calendar';
+import {
+  importHolidays,
+  importPublicHolidays,
+  listHolidayCountries,
+  type HolidayImportPlan,
+} from '../../api/calendar';
+import { useApi } from '../../api/useApi';
 import { Button } from '../../components/Page';
-import { formatDate } from '../../lib/format';
-import { CheckboxField, Modal, Notice, ServerError, useMutation } from '../../components/ui';
+import { formatDate, todayInWorkZone } from '../../lib/format';
+import {
+  CheckboxField,
+  Modal,
+  Notice,
+  SelectField,
+  ServerError,
+  useMutation,
+} from '../../components/ui';
 
 /**
- * Holidays from a calendar file — any country, state or city.
+ * Holidays from the public calendar (a country's nationwide holidays, from
+ * date.nager.at) or from a calendar file — any country, state or city.
  *
  * Two steps on purpose: the file is shown first (what goes in, what is
  * already there, what falls in a month already counted), and only then
@@ -20,6 +34,11 @@ export function HolidayImportModal({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const [source, setSource] = useState<'public' | 'file'>('public');
+  const thisYear = Number(todayInWorkZone().slice(0, 4));
+  const [country, setCountry] = useState('');
+  const [year, setYear] = useState(thisYear);
+  const countries = useApi((signal) => listHolidayCountries(signal), []);
   const [file, setFile] = useState<{ name: string; content: string } | null>(
     null,
   );
@@ -36,15 +55,25 @@ export function HolidayImportModal({
     setFile({ name: picked.name, content: await picked.text() });
   };
 
+  const ready = source === 'public' ? country !== '' : file !== null;
+
   const run = (dryRun: boolean, past = allowPast) =>
     (dryRun ? preview : write).run(async () => {
-      if (!file) return;
-      const result = await importHolidays({
-        fileName: file.name,
-        content: file.content,
-        allowPast: past,
-        dryRun,
-      });
+      if (!ready) return;
+      const result =
+        source === 'public'
+          ? await importPublicHolidays({
+              country,
+              year,
+              allowPast: past,
+              dryRun,
+            })
+          : await importHolidays({
+              fileName: file!.name,
+              content: file!.content,
+              allowPast: past,
+              dryRun,
+            });
       setPlan(result);
       if (!dryRun) {
         setDone(result.created);
@@ -55,7 +84,7 @@ export function HolidayImportModal({
   return (
     <Modal
       title="Import holidays"
-      hint="A CSV (date,name,type) or ICS calendar from an official source"
+      hint="A country's public holidays, or a calendar file"
       onClose={onClose}
       footer={
         done !== null ? (
@@ -81,32 +110,96 @@ export function HolidayImportModal({
       }
     >
       <div className="space-y-3 text-[13px]">
-        <input
-          type="file"
-          accept=".csv,.ics,text/csv,text/calendar"
-          onChange={(e) =>
-            void load(e.target.files?.[0]).then(() => setPlan(null))
-          }
-          className="block text-[12.5px]"
-        />
-        <p className="text-[11.5px] text-ink-3">
-          CSV, one per line:{' '}
-          <span className="num">2027-04-21,Tiradentes,public</span> — type is
-          public, optional or company (public if left out). ICS: all-day events,
-          as calendar apps export them.
-        </p>
+        <div className="flex gap-2" role="radiogroup" aria-label="Source">
+          {(['public', 'file'] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              role="radio"
+              aria-checked={source === s}
+              onClick={() => {
+                setSource(s);
+                setPlan(null);
+              }}
+              className={`rounded-md border px-3 py-1.5 text-[12.5px] transition ${
+                source === s
+                  ? 'border-brand bg-brand-bg text-brand-ink'
+                  : 'border-line text-ink-2 hover:text-ink'
+              }`}
+            >
+              {s === 'public' ? 'Public calendar' : 'File'}
+            </button>
+          ))}
+        </div>
+
+        {source === 'public' ? (
+          <div className="flex flex-wrap items-end gap-2">
+            <SelectField
+              label="Country"
+              value={country}
+              onChange={(v) => {
+                setCountry(v);
+                setPlan(null);
+              }}
+              options={[
+                { value: '', label: countries.data ? 'Choose…' : 'Loading…' },
+                ...(countries.data ?? []).map((c) => ({
+                  value: c.code,
+                  label: c.name,
+                })),
+              ]}
+            />
+            <SelectField
+              label="Year"
+              value={String(year)}
+              onChange={(v) => {
+                setYear(Number(v));
+                setPlan(null);
+              }}
+              options={[thisYear, thisYear + 1, thisYear + 2].map((y) => ({
+                value: String(y),
+                label: String(y),
+              }))}
+            />
+          </div>
+        ) : (
+          <>
+            <input
+              type="file"
+              accept=".csv,.ics,text/csv,text/calendar"
+              onChange={(e) =>
+                void load(e.target.files?.[0]).then(() => setPlan(null))
+              }
+              className="block text-[12.5px]"
+            />
+            <p className="text-[11.5px] text-ink-3">
+              CSV, one per line:{' '}
+              <span className="num">2027-04-21,Tiradentes,public</span> — type
+              is public, optional or company (public if left out). ICS: all-day
+              events, as calendar apps export them.
+            </p>
+          </>
+        )}
+        {source === 'public' && (
+          <p className="text-[11.5px] text-ink-3">
+            Nationwide public holidays only — regional or company days are added
+            by hand.
+            {countries.error &&
+              ' The public calendar could not be reached; use a file instead.'}
+          </p>
+        )}
 
         <CheckboxField
           label="Also the current and past months"
           checked={allowPast}
           onChange={(v) => {
             setAllowPast(v);
-            if (file) run(true, v);
+            if (ready) run(true, v);
           }}
           hint="A holiday there lowers that month's workdays — its targets and prorated salary change. Leave off unless you mean it."
         />
 
-        {file && !plan && (
+        {ready && !plan && (
           <Button onClick={() => run(true)} disabled={preview.busy}>
             {preview.busy ? 'Reading…' : 'Preview'}
           </Button>
@@ -129,7 +222,7 @@ export function HolidayImportModal({
               rows={plan.existing.map((h) =>
                 h.nameInDb === h.name
                   ? `${formatDate(h.date)} · ${h.name}`
-                  : `${formatDate(h.date)} · "${h.nameInDb}" here, "${h.name}" in the file`,
+                  : `${formatDate(h.date)} · "${h.nameInDb}" here, "${h.name}" in the ${source === 'public' ? 'calendar' : 'file'}`,
               )}
             />
             <Section

@@ -10,6 +10,11 @@ import {
 import { OFFSITE_SETTING_KEY, resolveOffsite, type OffsiteSettings } from '../ops/offsite.settings';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  ORGANIZATION_SETTING_KEY,
+  resolveOrganization,
+  type OrganizationSaved,
+} from './organization';
+import {
   BACKUP_SETTING_KEY,
   REGION_SETTING_KEY,
   UPDATE_KEY_SETTING_KEY,
@@ -52,6 +57,12 @@ export class AppSettingsService {
   async backupMode() {
     const saved = await this.read<{ mode?: string }>(BACKUP_SETTING_KEY);
     return resolveBackupMode(saved, process.env.BACKUP_MODE);
+  }
+
+  /** The company's name and country — setup wizard / Settings → Region, or ORG_NAME */
+  async organization() {
+    const saved = await this.read<OrganizationSaved>(ORGANIZATION_SETTING_KEY);
+    return resolveOrganization(saved, process.env);
   }
 
   /** Sentry — Settings → Error reporting, or SENTRY_DSN in the .env */

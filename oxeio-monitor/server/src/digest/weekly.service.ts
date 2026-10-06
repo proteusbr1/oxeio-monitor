@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import {
@@ -23,6 +23,7 @@ import {
   type WeeklyMessage,
   type WeeklyWindow,
 } from './weekly.rules';
+import { AppSettingsService } from '../settings/app-settings.service';
 
 /** What is on the letterhead and in the email subject; same env as `digest.service.ts` */
 const DEFAULT_ORG_NAME = 'oXeio Monitoring';
@@ -93,6 +94,10 @@ export interface WeeklyDigestResult {
 export class WeeklyDigestService {
   private readonly logger = new Logger(WeeklyDigestService.name);
   private readonly orgName: string;
+
+  private async organizationName(): Promise<string> {
+    return this.settings ? (await this.settings.organization()).name : this.orgName;
+  }
   /**
    * `TELEGRAM_CHAT_ID` is read here a **second time** (`TelegramChannel` reads
    * it too), on purpose: guarding the destination requires knowing it, but the
@@ -113,6 +118,8 @@ export class WeeklyDigestService {
     private readonly teams: TeamsChannel,
     private readonly mailer: AlertMailer,
     config: ConfigService,
+    // the company name saved by the setup wizard / Settings wins over ORG_NAME
+    @Optional() private readonly settings?: AppSettingsService,
   ) {
     this.orgName = config.get<string>('ORG_NAME')?.trim() || DEFAULT_ORG_NAME;
     this.digestEmailTo = config.get<string>('DIGEST_EMAIL_TO');
@@ -151,12 +158,12 @@ export class WeeklyDigestService {
     // is no point writing it twice.
     if (to.length === 0) return 'not_configured';
 
-    return this.mailer.send(to, `${this.orgName} — weekly summary`, text);
+    return this.mailer.send(to, `${(await this.organizationName())} — weekly summary`, text);
   }
 
   async runOnce(now: Date = new Date()): Promise<WeeklyDigestResult> {
     const weekly = await this.collect(now);
-    const message = weeklyMessage(weekly, this.orgName);
+    const message = weeklyMessage(weekly, (await this.organizationName()));
 
     /**
      * **The guard is here, after the numbers are counted.** Placed earlier, in
@@ -179,7 +186,7 @@ export class WeeklyDigestService {
      * risks, and one's penalty cannot be put on the other.
      */
     const teamsOutcome = await this.teams.send(
-      `${this.orgName} — weekly summary`,
+      `${(await this.organizationName())} — weekly summary`,
       message.text,
     );
 

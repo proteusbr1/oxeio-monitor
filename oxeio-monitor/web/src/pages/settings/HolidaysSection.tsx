@@ -139,7 +139,7 @@ export function HolidaysSection() {
           </div>
 
           <div className="flex gap-2">
-            <Button onClick={() => setImporting(true)}>Import file</Button>
+            <Button onClick={() => setImporting(true)}>Import holidays</Button>
             <Button tone="primary" onClick={() => setCreating(true)}>
               Add holiday
             </Button>
@@ -159,7 +159,7 @@ export function HolidaysSection() {
           action={
             <div className="flex gap-2">
               {/* a whole year at once, from an official calendar file */}
-              <Button onClick={() => setImporting(true)}>Import file</Button>
+              <Button onClick={() => setImporting(true)}>Import holidays</Button>
               <Button tone="primary" onClick={() => setCreating(true)}>
                 Add holiday
               </Button>

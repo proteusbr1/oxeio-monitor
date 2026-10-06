@@ -180,3 +180,17 @@ export function getUpdateKey(signal?: AbortSignal): Promise<UpdateKeySettings> {
 export function saveUpdateKey(publicKey: string | null): Promise<UpdateKeySettings> {
   return api('/settings/update-key', { method: 'PATCH', body: { publicKey } });
 }
+
+/** The company using this install — name and country */
+export interface Organization {
+  name: string;
+  country: string | null;
+}
+
+export function getOrganization(signal?: AbortSignal): Promise<Organization> {
+  return api('/settings/organization', { signal });
+}
+
+export function saveOrganization(body: { name: string; country: string }): Promise<Organization> {
+  return api('/settings/organization', { method: 'PATCH', body });
+}

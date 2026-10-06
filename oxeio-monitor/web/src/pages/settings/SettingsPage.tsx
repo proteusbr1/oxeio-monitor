@@ -12,6 +12,7 @@ import { CategoriesTab } from './CategoriesTab';
 import { ErrorReportingTab } from './ErrorReportingTab';
 import { ModulesTab } from './ModulesTab';
 import { PoliciesTab } from './PoliciesTab';
+import { OrganizationCard } from './OrganizationCard';
 import { RegionTab } from './RegionTab';
 
 /**
@@ -62,9 +63,9 @@ const SECTIONS: { title: string; tabs: TabDef[] }[] = [
     tabs: [
       {
         id: 'region',
-        label: 'Region',
+        label: 'Company & region',
         manager: false,
-        subtitle: 'Time zone, currency and how dates and numbers are written',
+        subtitle: 'Company name, country, time zone, currency and formats',
       },
       {
         id: 'modules',
@@ -222,7 +223,12 @@ export function SettingsPage() {
           {active.id === 'modules' && <ModulesTab />}
           {active.id === 'notifications' && <NotificationsTab />}
           {active.id === 'errors' && <ErrorReportingTab />}
-          {active.id === 'region' && <RegionTab />}
+          {active.id === 'region' && (
+            <div className="space-y-4">
+              <OrganizationCard />
+              <RegionTab />
+            </div>
+          )}
           {active.id === 'backup' && <BackupTab />}
           {active.id === 'agent' && <AgentVersionsTab />}
           {active.id === 'audit' && <AuditTab />}

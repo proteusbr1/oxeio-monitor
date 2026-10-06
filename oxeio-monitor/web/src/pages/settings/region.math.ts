@@ -82,3 +82,49 @@ export const LOCALE_CHOICES: readonly { value: string; label: string }[] = [
   { value: 'fr-FR', label: 'France — 10/08/2026 · 13 000,50' },
   { value: 'de-DE', label: 'Germany — 10.08.2026 · 13.000,50' },
 ];
+
+/** Intl's lists, when the browser has them (all current ones do) */
+export function supportedValues(kind: 'timeZone' | 'currency'): string[] {
+  try {
+    return (Intl as unknown as { supportedValuesOf(k: string): string[] }).supportedValuesOf(kind);
+  } catch {
+    return [];
+  }
+}
+
+/** Countries by ISO code, named in the browser's language — for country pickers */
+export const COUNTRY_CODES = (
+  'AD AE AF AG AL AM AO AR AT AU AZ BA BB BD BE BF BG BH BI BJ BN BO BR BS BT BW BY BZ CA CD CF CG CH CI CL CM CN CO CR CU CV CY CZ DE DJ DK DM DO DZ EC EE EG ER ES ET FI FJ FR GA GB GD GE GH GM GN GQ GR GT GW GY HK HN HR HT HU ID IE IL IN IQ IR IS IT JM JO JP KE KG KH KM KN KR KW KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MG MK ML MM MN MR MT MU MV MW MX MY MZ NA NE NG NI NL NO NP NZ OM PA PE PG PH PK PL PR PS PT PY QA RO RS RU RW SA SB SC SD SE SG SI SK SL SM SN SO SR SS SV SY SZ TD TG TH TJ TL TM TN TO TR TT TW TZ UA UG US UY UZ VA VC VE VN VU WS YE ZA ZM ZW'
+).split(' ');
+
+export function countryOptions(): { value: string; label: string }[] {
+  let names: Intl.DisplayNames | null = null;
+  try {
+    names = new Intl.DisplayNames(undefined, { type: 'region' });
+  } catch {
+    names = null;
+  }
+  return COUNTRY_CODES.map((code) => ({ value: code, label: names?.of(code) ?? code })).sort((a, b) =>
+    a.label.localeCompare(b.label),
+  );
+}
+
+/** The usual currency of a country — a suggestion only, the owner picks */
+const COUNTRY_CURRENCY: Record<string, string> = {
+  US: 'USD', CA: 'CAD', MX: 'MXN', BR: 'BRL', AR: 'ARS', CL: 'CLP', CO: 'COP', PE: 'PEN', UY: 'UYU',
+  GB: 'GBP', IE: 'EUR', PT: 'EUR', ES: 'EUR', FR: 'EUR', DE: 'EUR', IT: 'EUR', NL: 'EUR', BE: 'EUR',
+  AT: 'EUR', FI: 'EUR', GR: 'EUR', CH: 'CHF', SE: 'SEK', NO: 'NOK', DK: 'DKK', PL: 'PLN', CZ: 'CZK',
+  IN: 'INR', BD: 'BDT', PK: 'PKR', LK: 'LKR', NP: 'NPR', CN: 'CNY', HK: 'HKD', SG: 'SGD', MY: 'MYR',
+  ID: 'IDR', PH: 'PHP', TH: 'THB', VN: 'VND', AU: 'AUD', NZ: 'NZD', ZA: 'ZAR', NG: 'NGN', KE: 'KES',
+  EG: 'EGP', AE: 'AED', SA: 'SAR', TR: 'TRY', IL: 'ILS',
+};
+
+export function currencyOf(country: string): string | null {
+  return COUNTRY_CURRENCY[country] ?? null;
+}
+
+/** The format closest to a country, among the ones offered */
+export function localeOf(country: string): string {
+  const byCountry: Record<string, string> = { BR: 'pt-BR', US: 'en-US', GB: 'en-GB', IN: 'en-IN', ES: 'es-ES', PT: 'pt-PT', FR: 'fr-FR', DE: 'de-DE' };
+  return byCountry[country] ?? '';
+}

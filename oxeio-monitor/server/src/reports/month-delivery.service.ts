@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { AlertMailer } from '../alerts/alerts.mailer';
@@ -13,6 +13,7 @@ import {
 } from './month-delivery.rules';
 import { ReportsService } from './reports.service';
 import { summaryWorkbook } from './reports.sheets';
+import { AppSettingsService } from '../settings/app-settings.service';
 
 /**
  * **R26: when a month is closed, the figures file goes out by itself.**
@@ -39,6 +40,10 @@ import { summaryWorkbook } from './reports.sheets';
 export class MonthDeliveryService {
   private readonly logger = new Logger(MonthDeliveryService.name);
   private readonly orgName: string;
+
+  private async organizationName(): Promise<string> {
+    return this.settings ? (await this.settings.organization()).name : this.orgName;
+  }
   private readonly digestEmailTo: string | undefined;
 
   constructor(
@@ -47,6 +52,8 @@ export class MonthDeliveryService {
     private readonly telegram: TelegramChannel,
     private readonly mailer: AlertMailer,
     config: ConfigService,
+    // the company name saved by the setup wizard / Settings wins over ORG_NAME
+    @Optional() private readonly settings?: AppSettingsService,
   ) {
     this.orgName = config.get<string>('ORG_NAME')?.trim() || 'oXeio Monitoring';
     this.digestEmailTo = config.get<string>('DIGEST_EMAIL_TO')?.trim();
@@ -93,7 +100,7 @@ export class MonthDeliveryService {
       const filename = monthReportName(yearMonth, 'xlsx');
 
       const caption = monthCaption({
-        orgName: this.orgName,
+        orgName: (await this.organizationName()),
         yearMonth,
         people: new Set(report.rows.map((r) => r.employeeId)).size,
         totalHours: report.rows.reduce((sum, r) => sum + r.creditedHours, 0),
@@ -149,7 +156,7 @@ export class MonthDeliveryService {
 
     return this.mailer.send(
       to,
-      `${this.orgName} — ${yearMonth} closed`,
+      `${(await this.organizationName())} — ${yearMonth} closed`,
       body,
       [{ filename, content: bytes, contentType: XLSX_MIME }],
     );

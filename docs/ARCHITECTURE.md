@@ -26,6 +26,18 @@ only thing that talks to the database.
   Databasus (`BACKUP_MODE=external`).
 - New environment variables are registered in Coolify by the infra side.
 
+## First run
+
+An install without an owner shows a **setup wizard** instead of the login
+(`server/src/setup/`, `web/src/pages/setup/`): company name and country, time
+zone, currency and formats, the owner's account, the work week. It creates the
+owner, the default work policy and app categories, imports the country's
+public holidays (this year and next), and restarts the server if the time
+zone changed. The wizard link carries a one-time token printed in the server
+log at start (`SETUP_TOKEN` to set your own), so a stranger cannot claim a
+fresh install. New installs start with the design-target and deposit modules
+off. The CLI seed (`server/prisma/seed.ts`) still works for scripted installs.
+
 ## Settings: screen first, then the environment
 
 Most configuration can be changed on **Settings** in the dashboard. Each
@@ -35,7 +47,8 @@ built-in default. The screen shows where each value comes from.
 
 | Screen | `settings` key | Overrides env |
 |---|---|---|
-| Settings → Region | `region` | `WORK_TIMEZONE`, `CURRENCY`, `DISPLAY_LOCALE` |
+| Settings → Company & region | `organization` | `ORG_NAME` (company name; country) |
+| Settings → Company & region | `region` | `WORK_TIMEZONE`, `CURRENCY`, `DISPLAY_LOCALE` |
 | Settings → Storage & backup | `storage`, `ops.backup`, `ops.offsite` | `STORAGE_DRIVER`, `S3_*`, `BACKUP_MODE`, `B2_*` |
 | Settings → Notifications | `telegram` | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
 | Settings → Error reporting | `errorReporting` | `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_BROWSER`, `SENTRY_LOG_ERRORS` |
@@ -80,7 +93,8 @@ and per-service scope rules); the dashboard only hides what a role cannot use.
 | `targets/` | design targets: pool, hand-out jobs, review, file trace |
 | `adjustments/` | hour corrections made by the owner |
 | `staff/` | the people, their portal logins and roles, staff codes |
-| `calendar/` | holidays (and their import), work policies, agreed leave, closing a month |
+| `calendar/` | holidays (import from a file or from the public calendar — `public-holidays.ts`, date.nager.at, ~200 countries), work policies, agreed leave, closing a month |
+| `setup/` | the first-run wizard and the defaults it starts from (`default-categories.ts`, work week by country) |
 | `devices/` | the owner's side of the PCs: enrolment codes, revoke/restore, agent builds and rollout stages |
 | `me/` | "My data" for the signed-in person |
 | `auth/` | login, sessions (JWT cookie + CSRF), 2FA, role guard |

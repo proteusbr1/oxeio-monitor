@@ -151,3 +151,23 @@ export function importHolidays(body: {
 }): Promise<HolidayImportPlan> {
   return api('/holidays/import', { method: 'POST', body });
 }
+
+export interface HolidayCountry {
+  code: string;
+  name: string;
+}
+
+/** The countries the public holiday calendar covers */
+export function listHolidayCountries(signal?: AbortSignal): Promise<HolidayCountry[]> {
+  return api('/holidays/public/countries', { signal });
+}
+
+/** A country's nationwide public holidays for a year — `dryRun` only shows */
+export function importPublicHolidays(body: {
+  country: string;
+  year: number;
+  allowPast: boolean;
+  dryRun: boolean;
+}): Promise<HolidayImportPlan> {
+  return api('/holidays/public', { method: 'POST', body });
+}

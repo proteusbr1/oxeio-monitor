@@ -24,5 +24,7 @@ import { WorkPoliciesService } from './work-policies.service';
     MonthCloseController,
   ],
   providers: [HolidaysService, WorkPoliciesService, LeaveService, MonthCloseService],
+  // the setup wizard imports the country's public holidays
+  exports: [HolidaysService],
 })
 export class CalendarModule {}
