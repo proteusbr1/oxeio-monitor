@@ -8,6 +8,11 @@ on:
     branches: [main, develop]
   # For building the installer by hand - see the installer job below
   workflow_dispatch:
+    inputs:
+      server_url:
+        description: "Bake this server address into the MSI (e.g. https://monitor.example.com); empty = none"
+        required: false
+        default: ""
 
 # A new push to the same branch cancels the earlier run, so runners are not held up needlessly
 concurrency:
@@ -178,14 +183,23 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      # WiX 5: our Package.wxs uses the v4 schema, which 5 builds as is. WiX 6
+      # and later come under the Open Source Maintenance Fee (a paid sponsorship
+      # for companies earning over US$10,000 a year; v7 refuses to run until its
+      # EULA is accepted) — pinning 5 keeps the build free and reproducible.
       - name: Install WiX
-        run: dotnet tool install --global wix
+        run: dotnet tool install --global wix --version 5.0.2
 
       - name: Build MSI
         shell: pwsh
-        # No address baked in: the CI MSI is for any installation, installed
-        # with `msiexec /i … SERVERURL=https://…`. build.ps1 has no default.
-        run: ./installer/build.ps1 -NoServerUrl
+        # A manual run may bake a server address in (installs on a double-click
+        # and can be published as an update); otherwise no address, for
+        # `msiexec /i … SERVERURL=https://…`. build.ps1 has no default.
+        env:
+          SERVER_URL: ${{ inputs.server_url }}
+        run: |
+          if ($env:SERVER_URL) { ./installer/build.ps1 -ServerUrl $env:SERVER_URL }
+          else { ./installer/build.ps1 -NoServerUrl }
 
       - uses: actions/upload-artifact@v4
         with:
