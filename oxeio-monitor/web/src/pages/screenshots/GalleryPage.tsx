@@ -1,18 +1,18 @@
 import { useCallback, useMemo, useState } from 'react';
 
-import { getGallery, type GalleryQuery } from '../api/screenshots';
-import { useApi } from '../api/useApi';
-import { Card } from '../components/Card';
-import { DatePicker } from '../components/DatePicker';
-import { EmployeePicker } from '../components/EmployeePicker';
-import { Button, Page } from '../components/Page';
-import { Empty, ErrorBox, Loading } from '../components/States';
-import { useAuth } from '../auth/AuthContext';
-import { formatCount, formatDate, todayInDhaka } from '../lib/format';
-import { Lightbox } from './gallery/Lightbox';
-import { ShotGrid } from './gallery/ShotGrid';
-import { useFreshUrls } from './gallery/useFreshUrls';
-import { seesEveryone } from '../api/auth';
+import { getGallery, type GalleryQuery } from '../../api/screenshots';
+import { useApi } from '../../api/useApi';
+import { Card } from '../../components/Card';
+import { DatePicker } from '../../components/DatePicker';
+import { EmployeePicker } from '../../components/EmployeePicker';
+import { Button, Page } from '../../components/Page';
+import { Empty, ErrorBox, Loading } from '../../components/States';
+import { useAuth } from '../../auth/AuthContext';
+import { formatCount, formatDate, todayInDhaka } from '../../lib/format';
+import { Lightbox } from './Lightbox';
+import { ShotGrid } from './ShotGrid';
+import { useFreshUrls } from './useFreshUrls';
+import { seesEveryone } from '../../api/auth';
 
 /**
  * E06 · I07 · I08 · J05 — স্ক্রিনশট গ্যালারি (`/screenshots`)।

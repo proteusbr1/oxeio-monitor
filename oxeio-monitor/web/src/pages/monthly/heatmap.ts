@@ -1,8 +1,4 @@
-import type {
-  AttendanceReport,
-  AttendanceRow,
-  DayType,
-} from '../../api/reports';
+import type { AttendanceReport, AttendanceRow, DayType } from '../../api/reports';
 import { monthEndOf, parseWorkDate } from '../../lib/format';
 
 /**

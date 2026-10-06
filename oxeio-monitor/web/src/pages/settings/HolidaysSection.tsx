@@ -1,12 +1,6 @@
 import { useState } from 'react';
 
-import {
-  createHoliday,
-  deleteHoliday,
-  listHolidays,
-  updateHoliday,
-  type HolidayView,
-} from '../../api/admin';
+import { createHoliday, deleteHoliday, listHolidays, updateHoliday, type HolidayView } from '../../api/calendar';
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Page';
@@ -25,7 +19,7 @@ import {
   ServerError,
   TextField,
   useMutation,
-} from './ui';
+} from '../../components/ui';
 import { HolidayImportModal } from './HolidayImport';
 
 /**

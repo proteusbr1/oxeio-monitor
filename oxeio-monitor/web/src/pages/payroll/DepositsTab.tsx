@@ -1,14 +1,6 @@
 import { useState } from 'react';
 
-import {
-  correctDepositInstalment,
-  depositMonths,
-  listDeposits,
-  setDepositStart,
-  settleDeposit,
-  updateDepositPolicy,
-  type DepositBalance,
-} from '../../api/admin';
+import { correctDepositInstalment, depositMonths, listDeposits, setDepositStart, settleDeposit, updateDepositPolicy, type DepositBalance } from '../../api/payroll';
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Caveat, Empty, ErrorBox, Loading } from '../../components/States';
@@ -24,7 +16,7 @@ import {
   TextField,
   orUndefined,
   useMutation,
-} from '../settings/ui';
+} from '../../components/ui';
 
 /**
  * ⭐⭐ **R21 — সিকিউরিটি মানি (জামানত)।**

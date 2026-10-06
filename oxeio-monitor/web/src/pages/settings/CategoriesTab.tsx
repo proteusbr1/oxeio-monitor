@@ -30,7 +30,7 @@ import {
   ServerError,
   TextField,
   useMutation,
-} from './ui';
+} from '../../components/ui';
 
 /**
  * D06 — ক্যাটাগরির নিয়ম (owner-only)।

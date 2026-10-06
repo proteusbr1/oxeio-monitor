@@ -1,26 +1,8 @@
 import { useEffect, useState } from 'react';
 
-import { STAFF_TYPE_LABEL, type StaffType } from '../../api/admin';
-import {
-  createEmployee,
-  changeLoginEmail,
-  changeUserRole,
-  createPortalAccount,
-  nextEmployeeCode,
-  resetUserPassword,
-  deactivateEmployee,
-  listEmployees,
-  listWorkPolicies,
-  reactivateEmployee,
-  turnAgentOn,
-  updateEmployee,
-  type AssignableRole,
-  type Role,
-  type CreateEmployeeBody,
-  type EmployeeStatus,
-  type EmployeeView,
-  type UpdateEmployeeBody,
-} from '../../api/admin';
+import { STAFF_TYPE_LABEL, type StaffType } from '../../api/staff';
+import { createEmployee, changeLoginEmail, changeUserRole, createPortalAccount, nextEmployeeCode, resetUserPassword, deactivateEmployee, listEmployees, reactivateEmployee, turnAgentOn, updateEmployee, type AssignableRole, type Role, type CreateEmployeeBody, type EmployeeStatus, type EmployeeView, type UpdateEmployeeBody } from '../../api/staff';
+import { listWorkPolicies } from '../../api/calendar';
 import { useApi } from '../../api/useApi';
 import { useAuth } from '../../auth/AuthContext';
 import { useFeatures } from '../../features/FeaturesContext';
@@ -46,7 +28,7 @@ import {
   orUndefined,
   useDebounced,
   useMutation,
-} from './ui';
+} from '../../components/ui';
 
 /**
  * E10 · স্টাফ — `CRUD /employees`।

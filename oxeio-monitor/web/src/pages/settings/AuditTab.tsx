@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
-import { listAuditLog, type AuditLogRow, type Role } from '../../api/admin';
+import { listAuditLog, type AuditLogRow } from '../../api/audit';
+import { type Role } from '../../api/staff';
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { DateRange } from '../../components/DatePicker';
@@ -16,7 +17,7 @@ import {
   workDateOf,
   workOffsetIso,
 } from '../../lib/format';
-import { Chip, FilterChip, MiniButton, Notice } from './ui';
+import { Chip, FilterChip, MiniButton, Notice } from '../../components/ui';
 
 /**
  * E11 — audit log ভিউয়ার (owner-only)।

@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { SettingSource } from './admin';
+import type { SettingSource } from './settings';
 
 /** Settings → Error reporting (Sentry, or a self-hosted GlitchTip) */
 export interface ErrorReportingView {

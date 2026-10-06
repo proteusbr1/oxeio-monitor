@@ -1,12 +1,7 @@
 import { useState } from 'react';
 
-import {
-  createLeave,
-  deleteLeave,
-  listEmployees,
-  listLeaves,
-  type LeaveView,
-} from '../../api/admin';
+import { createLeave, deleteLeave, listLeaves, type LeaveView } from '../../api/payroll';
+import { listEmployees } from '../../api/staff';
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Caveat, Empty, ErrorBox, Loading } from '../../components/States';
@@ -24,7 +19,7 @@ import {
   TextField,
   orUndefined,
   useMutation,
-} from '../settings/ui';
+} from '../../components/ui';
 
 /** ⚠️ তিনটেই সবেতন — `unpaid` কেন নেই, `schema.prisma`-র নোট দেখুন */
 const TYPES = [

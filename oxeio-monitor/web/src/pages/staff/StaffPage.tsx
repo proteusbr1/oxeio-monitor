@@ -1,12 +1,12 @@
 import { useNavigate } from 'react-router';
 
-import { getLiveBoard, type LiveCard } from '../api/dashboard';
-import { usePolling } from '../api/useApi';
-import { Page } from '../components/Page';
-import { ErrorBox, Empty, Loading } from '../components/States';
-import { StatusChip } from '../components/StatusDot';
-import { PersonCell, Table, type Column } from '../components/Table';
-import { formatDuration, formatTime } from '../lib/format';
+import { getLiveBoard, type LiveCard } from '../../api/dashboard';
+import { usePolling } from '../../api/useApi';
+import { Page } from '../../components/Page';
+import { ErrorBox, Empty, Loading } from '../../components/States';
+import { StatusChip } from '../../components/StatusDot';
+import { PersonCell, Table, type Column } from '../../components/Table';
+import { formatDuration, formatTime } from '../../lib/format';
 
 /** বোর্ডের মতোই ৩০ সেকেন্ড — দুটো পর্দা একই সংখ্যা দেখায়, একই তালে */
 const REFRESH_MS = 30_000;

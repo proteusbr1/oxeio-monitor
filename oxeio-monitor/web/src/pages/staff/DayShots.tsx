@@ -5,8 +5,8 @@ import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Empty, ErrorBox, Loading } from '../../components/States';
 import { formatTime } from '../../lib/format';
-import { Lightbox } from '../gallery/Lightbox';
-import { useFreshUrls, type FreshUrls } from '../gallery/useFreshUrls';
+import { Lightbox } from '../screenshots/Lightbox';
+import { useFreshUrls, type FreshUrls } from '../screenshots/useFreshUrls';
 
 /**
  * ওই দিনের স্ক্রিনশট, কর্মীর নিজের পাতায় ([07 § ৫](../../../../docs/07-Technical-Spec.md))।

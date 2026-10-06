@@ -6,14 +6,14 @@ import {
   REJECT_TEXT,
   targetStats,
   type BulkResult,
-} from '../api/targets';
-import { useApi } from '../api/useApi';
-import { Card } from '../components/Card';
-import { Button, Page } from '../components/Page';
-import { ErrorBox, Loading } from '../components/States';
-import { useAuth } from '../auth/AuthContext';
-import { Chip, Notice, ServerError, useMutation } from './settings/ui';
-import { Table } from '../components/Table';
+} from '../../api/targets';
+import { useApi } from '../../api/useApi';
+import { Card } from '../../components/Card';
+import { Button, Page } from '../../components/Page';
+import { ErrorBox, Loading } from '../../components/States';
+import { useAuth } from '../../auth/AuthContext';
+import { Chip, Notice, ServerError, useMutation } from '../../components/ui';
+import { Table } from '../../components/Table';
 
 /**
  * **ডিজাইন-টার্গেট জমা** *(২২ আগস্ট ২০২৬)* — সাইডবারে "Add Design Targets"।

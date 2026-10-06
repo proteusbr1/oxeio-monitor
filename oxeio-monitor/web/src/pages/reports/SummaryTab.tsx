@@ -1,8 +1,4 @@
-import {
-  getSummaryReport,
-  type GroupBy,
-  type SummaryRow,
-} from '../../api/reports';
+import { getSummaryReport, type GroupBy, type SummaryRow } from '../../api/reports';
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Hours } from '../../components/Duration';

@@ -1,8 +1,4 @@
-import {
-  getProductivityReport,
-  type ProductivityEmployeeRow,
-  type ProductivityItem,
-} from '../../api/reports';
+import { getProductivityReport, type ProductivityEmployeeRow, type ProductivityItem } from '../../api/reports';
 import { useApi } from '../../api/useApi';
 import { Card, Stat, StatRow } from '../../components/Card';
 import { Hours } from '../../components/Duration';

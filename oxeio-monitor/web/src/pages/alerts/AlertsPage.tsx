@@ -8,17 +8,17 @@ import {
   listAlerts,
   type AlertRow,
   type AlertType,
-} from '../api/alerts';
-import { getOpsHealth, runBackupNow, runRetentionNow } from '../api/ops';
-import { usePolling, useApi } from '../api/useApi';
-import { useAuth } from '../auth/AuthContext';
-import { ApiError } from '../api/client';
-import { Card, Stat, StatRow } from '../components/Card';
-import { Page } from '../components/Page';
-import { Empty, ErrorBox, Loading } from '../components/States';
-import { Table } from '../components/Table';
-import { formatAgo, formatDateTime } from '../lib/format';
-import { Chip, MiniButton, Notice, ServerError, useMutation } from './settings/ui';
+} from '../../api/alerts';
+import { getOpsHealth, runBackupNow, runRetentionNow } from '../../api/ops';
+import { usePolling, useApi } from '../../api/useApi';
+import { useAuth } from '../../auth/AuthContext';
+import { ApiError } from '../../api/client';
+import { Card, Stat, StatRow } from '../../components/Card';
+import { Page } from '../../components/Page';
+import { Empty, ErrorBox, Loading } from '../../components/States';
+import { Table } from '../../components/Table';
+import { formatAgo, formatDateTime } from '../../lib/format';
+import { Chip, MiniButton, Notice, ServerError, useMutation } from '../../components/ui';
 
 /**
  * **G01–G07 · K04** — অ্যালার্ট ও সার্ভারের হেলথ।
@@ -272,7 +272,7 @@ function HealthCard({
   error,
   reload,
 }: {
-  data: import('../api/ops').OpsHealth | null;
+  data: import('../../api/ops').OpsHealth | null;
   loading: boolean;
   error: Error | null;
   reload: () => void;

@@ -13,7 +13,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { Card } from '../../components/Card';
 import { ErrorBox, Loading } from '../../components/States';
 import { Button, Page, SectionHead } from '../../components/Page';
-import { Modal, Notice, ServerError, useMutation } from '../settings/ui';
+import { Modal, Notice, ServerError, useMutation } from '../../components/ui';
 import { RecoveryCodesModal } from './RecoveryCodesModal';
 
 /**

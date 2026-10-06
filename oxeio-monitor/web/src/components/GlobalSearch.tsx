@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { listEmployees, type EmployeeView } from '../api/admin';
+import { listEmployees, type EmployeeView } from '../api/staff';
 import { useApi } from '../api/useApi';
 import { useAuth } from '../auth/AuthContext';
 import {

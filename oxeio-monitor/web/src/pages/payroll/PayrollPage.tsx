@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
-import { listLeaves, listMonthClosures } from '../../api/admin';
+import { listLeaves, listMonthClosures } from '../../api/payroll';
 import { ApiError } from '../../api/client';
-import { getPayroll, type PayrollSheet } from '../../api/reports';
+import { getPayroll, type PayrollSheet } from '../../api/payroll';
 import { useApi } from '../../api/useApi';
 import { useAuth } from '../../auth/AuthContext';
 import { MonthPicker } from '../../components/DatePicker';

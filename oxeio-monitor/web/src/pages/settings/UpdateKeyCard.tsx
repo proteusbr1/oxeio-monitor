@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { getUpdateKey, saveUpdateKey } from '../../api/admin';
+import { getUpdateKey, saveUpdateKey } from '../../api/settings';
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { ErrorBox, Loading } from '../../components/States';
@@ -10,7 +10,7 @@ import {
   ServerError,
   TextAreaField,
   useMutation,
-} from './ui';
+} from '../../components/ui';
 
 /**
  * The owner's public key for signed agent updates (deploy/README § ৮.১খ).

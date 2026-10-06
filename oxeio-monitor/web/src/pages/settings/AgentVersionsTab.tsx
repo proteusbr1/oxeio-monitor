@@ -1,15 +1,6 @@
 import { useState } from 'react';
 
-import {
-  listAgentVersions,
-  listDevices,
-  publishAgentVersion,
-  setAgentRollout,
-  STAGE_LABEL,
-  type AgentVersionView,
-  type DeviceView,
-  type RolloutStage,
-} from '../../api/admin';
+import { listAgentVersions, listDevices, publishAgentVersion, setAgentRollout, STAGE_LABEL, type AgentVersionView, type DeviceView, type RolloutStage } from '../../api/agent';
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Page';
@@ -29,7 +20,7 @@ import {
   TextAreaField,
   TextField,
   useMutation,
-} from './ui';
+} from '../../components/ui';
 
 /**
  * **H04 · G59** — এজেন্টের নতুন ভার্সন বিলি করা।

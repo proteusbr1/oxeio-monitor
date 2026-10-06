@@ -1,11 +1,6 @@
 import { useState } from 'react';
 
-import {
-  closeMonth,
-  listMonthClosures,
-  reopenMonth,
-  type MonthClosureView,
-} from '../../api/admin';
+import { closeMonth, listMonthClosures, reopenMonth, type MonthClosureView } from '../../api/payroll';
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Caveat, ErrorBox, Loading } from '../../components/States';
@@ -19,7 +14,7 @@ import {
   TextField,
   orUndefined,
   useMutation,
-} from '../settings/ui';
+} from '../../components/ui';
 
 /**
  * R1 — **মাস বন্ধ করা।** owner-only (রুটটাও, `App.tsx`-এ)।

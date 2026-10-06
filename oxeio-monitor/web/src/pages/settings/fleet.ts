@@ -1,4 +1,4 @@
-import type { AgentVersionView, DeviceView } from '../../api/admin';
+import type { AgentVersionView, DeviceView } from '../../api/agent';
 
 /**
  * **ফ্লিটের ভার্সন — কে কোথায় দাঁড়িয়ে।**

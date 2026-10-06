@@ -1,10 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import {
-  getRegionSettings,
-  saveRegionSettings,
-  type SettingSource,
-} from '../../api/admin';
+import { getRegionSettings, saveRegionSettings, type SettingSource } from '../../api/settings';
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { ErrorBox, Loading } from '../../components/States';
@@ -21,7 +17,7 @@ import {
   SelectField,
   ServerError,
   useMutation,
-} from './ui';
+} from '../../components/ui';
 
 const SOURCE_LABEL: Record<SettingSource, string> = {
   dashboard: 'set here',

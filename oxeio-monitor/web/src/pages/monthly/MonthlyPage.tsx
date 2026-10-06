@@ -1,14 +1,14 @@
 import { useMemo, useState, type ReactNode } from 'react';
 
-import { getAttendanceReport, reportXlsxUrl } from '../api/reports';
-import { useApi } from '../api/useApi';
-import { useAuth } from '../auth/AuthContext';
-import { Card, Stat, StatRow } from '../components/Card';
-import { MonthPicker } from '../components/DatePicker';
-import { Button, Page, SectionHead } from '../components/Page';
-import { Caveat, Empty, ErrorBox, Loading } from '../components/States';
-import { ErrorNote } from '../components/Field';
-import { useXlsxDownload } from '../lib/download';
+import { getAttendanceReport, reportXlsxUrl } from '../../api/reports';
+import { useApi } from '../../api/useApi';
+import { useAuth } from '../../auth/AuthContext';
+import { Card, Stat, StatRow } from '../../components/Card';
+import { MonthPicker } from '../../components/DatePicker';
+import { Button, Page, SectionHead } from '../../components/Page';
+import { Caveat, Empty, ErrorBox, Loading } from '../../components/States';
+import { ErrorNote } from '../../components/Field';
+import { useXlsxDownload } from '../../lib/download';
 import {
   formatDate,
   formatHoursAsDuration,
@@ -16,10 +16,10 @@ import {
   monthEndOf,
   monthKeyOf,
   todayInDhaka,
-} from '../lib/format';
-import { seesEveryone } from '../api/auth';
-import { HeatGrid } from './monthly/HeatGrid';
-import { buildMonthGrid, type GridSort } from './monthly/heatmap';
+} from '../../lib/format';
+import { seesEveryone } from '../../api/auth';
+import { HeatGrid } from './HeatGrid';
+import { buildMonthGrid, type GridSort } from './heatmap';
 
 /**
  * E07 — মাসিক অগ্রগতি (`/monthly`)।

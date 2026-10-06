@@ -1,23 +1,23 @@
 import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 
-import { getEmployee } from '../api/admin';
-import { useApi } from '../api/useApi';
-import { DatePicker } from '../components/DatePicker';
-import { Button, Page } from '../components/Page';
-import { Empty, ErrorBox, Loading } from '../components/States';
+import { getEmployee } from '../../api/staff';
+import { useApi } from '../../api/useApi';
+import { DatePicker } from '../../components/DatePicker';
+import { Button, Page } from '../../components/Page';
+import { Empty, ErrorBox, Loading } from '../../components/States';
 import {
   formatDate,
   isValidWorkDate,
   todayInDhaka,
   weekdayOf,
-} from '../lib/format';
-import { Adjustments } from './employee/Adjustments';
-import { HourlyChart } from './employee/HourlyChart';
-import { DayShots } from './employee/DayShots';
-import { ScoreCard } from './employee/ScoreCard';
-import { TimelineBar } from './employee/TimelineBar';
-import { TopUsage } from './employee/TopUsage';
+} from '../../lib/format';
+import { Adjustments } from './Adjustments';
+import { HourlyChart } from './HourlyChart';
+import { DayShots } from './DayShots';
+import { ScoreCard } from './ScoreCard';
+import { TimelineBar } from './TimelineBar';
+import { TopUsage } from './TopUsage';
 
 /**
  * E04 · E05 · D07 · D08 — একজন কর্মীর একটা দিন (`/staff/:id`)।

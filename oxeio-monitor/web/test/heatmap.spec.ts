@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type {
-  AttendanceReport,
-  AttendanceRow,
-  ReportMeta,
-} from '../src/api/reports';
+import type { AttendanceReport, AttendanceRow, ReportMeta } from '../src/api/reports';
 import { buildMonthGrid } from '../src/pages/monthly/heatmap';
 
 /**

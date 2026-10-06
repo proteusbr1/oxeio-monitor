@@ -17,7 +17,7 @@ import {
   ServerError,
   TextField,
   useMutation,
-} from './ui';
+} from '../../components/ui';
 
 /**
  * Settings → Error reporting: crashes go to Sentry (or a self-hosted

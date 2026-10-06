@@ -1,10 +1,10 @@
-import type { PayrollRow, PayrollSheet } from '../../api/reports';
+import type { PayrollRow, PayrollSheet } from '../../api/payroll';
 import type { ApiResult } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Hours } from '../../components/Duration';
 import { ProgressBar } from '../../components/ProgressRing';
 import { Caveat, Empty, ErrorBox, Loading } from '../../components/States';
-import { STAFF_TYPE_LABEL } from '../../api/admin';
+import { STAFF_TYPE_LABEL } from '../../api/staff';
 import { PersonCell, Table, type Column } from '../../components/Table';
 import {
   formatDate,

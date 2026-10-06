@@ -28,7 +28,7 @@ import {
   ServerError,
   TextField,
   useMutation,
-} from '../settings/ui';
+} from '../../components/ui';
 
 /**
  * **B14 · J08 · ADR-011e** — ঘণ্টা সংশোধন।

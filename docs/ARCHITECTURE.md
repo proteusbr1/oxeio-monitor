@@ -101,11 +101,11 @@ Database schema and migrations: `server/prisma/`. Seed and holiday data:
 
 | Folder | What it holds |
 |---|---|
-| `api/` | one file per subject, typed calls to the API |
+| `api/` | typed calls to the API, one file per module: `staff`, `payroll`, `calendar` (holidays, work policies), `agent` (devices, agent builds), `settings`, `audit`, `reports`, `targets`, `screenshots`, `dashboard`, `activity`, `alerts`, `me`, `features`, `errorReporting`, `auth` |
 | `auth/`, `features/` | session and module-switch contexts |
-| `components/` | layout, tables, cards and other shared pieces |
+| `components/` | layout, tables, cards; `ui.tsx` has the shared form pieces (fields, modals, confirm dialogs, notices) |
 | `lib/` | formatting (time zone, currency, locale), downloads, crash reports |
-| `pages/` | one page per menu item; bigger pages have a folder (`live/`, `payroll/`, `settings/`, `reports/`, …) |
+| `pages/<module>/` | one folder per menu item: `live`, `worklog`, `targets`, `me`, `staff`, `screenshots`, `monthly`, `reports`, `payroll`, `alerts`, `account` (login, password, 2FA), `settings` |
 
 The menu is built in `components/Layout.tsx` (roles and module switches per
 item); routes are in `App.tsx`.

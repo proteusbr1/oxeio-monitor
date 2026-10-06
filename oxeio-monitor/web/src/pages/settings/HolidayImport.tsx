@@ -1,9 +1,9 @@
 import { useState } from 'react';
 
-import { importHolidays, type HolidayImportPlan } from '../../api/admin';
+import { importHolidays, type HolidayImportPlan } from '../../api/calendar';
 import { Button } from '../../components/Page';
 import { formatDate } from '../../lib/format';
-import { CheckboxField, Modal, Notice, ServerError, useMutation } from './ui';
+import { CheckboxField, Modal, Notice, ServerError, useMutation } from '../../components/ui';
 
 /**
  * Holidays from a calendar file — any country, state or city.

@@ -7,14 +7,14 @@ import {
   undoTarget,
   type DropReason,
   type MyTarget,
-} from '../api/targets';
-import { useApi } from '../api/useApi';
-import { Card } from '../components/Card';
-import { ErrorBox, Loading } from '../components/States';
-import { formatAgo } from '../lib/format';
-import { blockedNotice, openInTabs } from '../lib/popups';
-import { DropReasonPicker } from './targets/DropReason';
-import { Chip, MiniButton, Notice, ServerError, useMutation } from './settings/ui';
+} from '../../api/targets';
+import { useApi } from '../../api/useApi';
+import { Card } from '../../components/Card';
+import { ErrorBox, Loading } from '../../components/States';
+import { formatAgo } from '../../lib/format';
+import { blockedNotice, openInTabs } from '../../lib/popups';
+import { DropReasonPicker } from './DropReason';
+import { Chip, MiniButton, Notice, ServerError, useMutation } from '../../components/ui';
 
 /**
  * **ডিজাইনারের নিজের টার্গেট** *(২২ আগস্ট ২০২৬)* — `/me` পাতায়।

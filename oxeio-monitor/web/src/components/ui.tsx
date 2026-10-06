@@ -7,8 +7,8 @@ import {
   type ReactNode,
 } from 'react';
 
-import { ApiError } from '../../api/client';
-import { Button } from '../../components/Page';
+import { ApiError } from '../api/client';
+import { Button } from './Page';
 
 /**
  * সেটিংস পর্দার নিজস্ব ছোট যন্ত্রপাতি — মোডাল, ফর্মের ঘর, নিশ্চিতকরণ,

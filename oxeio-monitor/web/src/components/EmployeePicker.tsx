@@ -1,4 +1,4 @@
-import { listEmployees, type EmployeeView } from '../api/admin';
+import { listEmployees, type EmployeeView } from '../api/staff';
 import { useApi } from '../api/useApi';
 
 /**

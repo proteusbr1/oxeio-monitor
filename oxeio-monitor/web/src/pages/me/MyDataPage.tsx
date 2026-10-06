@@ -1,17 +1,17 @@
 import { Link } from 'react-router-dom';
 
-import { getMyDays, getMyDeposit, getMySummary, type MyDay } from '../api/me';
-import { useApi } from '../api/useApi';
-import { seesEveryone } from '../api/auth';
-import { useAuth } from '../auth/AuthContext';
-import { useFeatures } from '../features/FeaturesContext';
-import { MyTargets } from './MyTargets';
-import { Card, Stat, StatRow } from '../components/Card';
-import { Duration } from '../components/Duration';
-import { Page } from '../components/Page';
-import { ProgressBar, ProgressRing } from '../components/ProgressRing';
-import { Empty, ErrorBox, Loading } from '../components/States';
-import { Table } from '../components/Table';
+import { getMyDays, getMyDeposit, getMySummary, type MyDay } from '../../api/me';
+import { useApi } from '../../api/useApi';
+import { seesEveryone } from '../../api/auth';
+import { useAuth } from '../../auth/AuthContext';
+import { useFeatures } from '../../features/FeaturesContext';
+import { MyTargets } from '../targets/MyTargets';
+import { Card, Stat, StatRow } from '../../components/Card';
+import { Duration } from '../../components/Duration';
+import { Page } from '../../components/Page';
+import { ProgressBar, ProgressRing } from '../../components/ProgressRing';
+import { Empty, ErrorBox, Loading } from '../../components/States';
+import { Table } from '../../components/Table';
 import {
   formatDate,
   formatDateShort,
@@ -19,8 +19,8 @@ import {
   shiftWorkDate,
   todayInDhaka,
   weekdayOf,
-} from '../lib/format';
-import { Adjustments } from './employee/Adjustments';
+} from '../../lib/format';
+import { Adjustments } from '../staff/Adjustments';
 
 /**
  * **J05 · J08 · ADR-011e** — স্টাফের নিজের পাতা।

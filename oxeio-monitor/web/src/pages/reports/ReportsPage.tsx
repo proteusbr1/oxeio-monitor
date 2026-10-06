@@ -1,20 +1,20 @@
 import { useState, type ReactNode } from 'react';
 
-import { reportXlsxUrl, type GroupBy } from '../api/reports';
-import { useAuth } from '../auth/AuthContext';
-import { DateRange } from '../components/DatePicker';
-import { EmployeePicker } from '../components/EmployeePicker';
-import { ErrorNote } from '../components/Field';
-import { Button, Page } from '../components/Page';
-import { Empty } from '../components/States';
-import { Tabs, type TabItem } from '../components/Tabs';
-import { useXlsxDownload } from '../lib/download';
-import { formatDate, thisMonthRange } from '../lib/format';
-import { AttendanceTab } from './reports/AttendanceTab';
-import { ProductivityTab } from './reports/ProductivityTab';
-import { SummaryTab } from './reports/SummaryTab';
-import { MAX_REPORT_DAYS, rangeDays } from './reports/shared';
-import { seesEveryone } from '../api/auth';
+import { reportXlsxUrl, type GroupBy } from '../../api/reports';
+import { useAuth } from '../../auth/AuthContext';
+import { DateRange } from '../../components/DatePicker';
+import { EmployeePicker } from '../../components/EmployeePicker';
+import { ErrorNote } from '../../components/Field';
+import { Button, Page } from '../../components/Page';
+import { Empty } from '../../components/States';
+import { Tabs, type TabItem } from '../../components/Tabs';
+import { useXlsxDownload } from '../../lib/download';
+import { formatDate, thisMonthRange } from '../../lib/format';
+import { AttendanceTab } from './AttendanceTab';
+import { ProductivityTab } from './ProductivityTab';
+import { SummaryTab } from './SummaryTab';
+import { MAX_REPORT_DAYS, rangeDays } from './shared';
+import { seesEveryone } from '../../api/auth';
 
 /**
  * F01 · F02 · F03 · F04 · F05 · F08 — রিপোর্ট।

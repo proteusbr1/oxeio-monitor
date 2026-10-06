@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { Button } from '../../components/Page';
-import { Modal, Notice } from '../settings/ui';
+import { Modal, Notice } from '../../components/ui';
 
 /**
  * ⭐⚠️ রিকভারি কোড **এই একটিবারই** দেখা যাবে — সার্ভারে শুধু sha256 জমা।

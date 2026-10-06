@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
-import { restartServer } from '../../api/admin';
-import { ConfirmDialog, MiniButton, Notice, useMutation } from './ui';
+import { restartServer } from '../../api/settings';
+import { ConfirmDialog, MiniButton, Notice, useMutation } from '../../components/ui';
 
 /**
  * "Saved — takes effect after a restart", with the button that does it.

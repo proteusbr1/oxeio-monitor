@@ -3,7 +3,7 @@ import {
   DROP_REASON_LABEL,
   type DropReason,
 } from '../../api/targets';
-import { Chip, MiniButton } from '../settings/ui';
+import { Chip, MiniButton } from '../../components/ui';
 
 /**
  * ⭐⭐ **"কেন বাদ দিলেন?" — আর বোতামটাই উত্তর** *(মালিকের চাওয়া, ৩১ আগস্ট

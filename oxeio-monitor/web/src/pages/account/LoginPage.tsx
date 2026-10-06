@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react';
 
-import { ApiError } from '../api/client';
-import { useAuth } from '../auth/AuthContext';
-import { Wordmark } from '../components/Brand';
-import { ErrorNote, Field, SubmitButton } from '../components/Field';
+import { ApiError } from '../../api/client';
+import { useAuth } from '../../auth/AuthContext';
+import { Wordmark } from '../../components/Brand';
+import { ErrorNote, Field, SubmitButton } from '../../components/Field';
 
 /**
  * ⭐ দুটো ধাপ, কিন্তু **একটাই ফর্ম state** — ইমেইল/পাসওয়ার্ড মুছে ফেলা হয় না।

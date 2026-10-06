@@ -10,7 +10,7 @@ import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { ErrorBox, Loading } from '../../components/States';
 import { useFeatures } from '../../features/FeaturesContext';
-import { Chip, ConfirmDialog, Notice, ServerError, useMutation } from './ui';
+import { Chip, ConfirmDialog, Notice, ServerError, useMutation } from '../../components/ui';
 
 /**
  * Settings → Modules: switch off the parts of the dashboard a company does

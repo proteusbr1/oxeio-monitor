@@ -1,10 +1,6 @@
 import { useState } from 'react';
 
-import {
-  getOffsiteSettings,
-  saveOffsiteSettings,
-  testOffsite,
-} from '../../api/admin';
+import { getOffsiteSettings, saveOffsiteSettings, testOffsite } from '../../api/settings';
 import { getOpsHealth } from '../../api/ops';
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
@@ -18,7 +14,7 @@ import {
   ServerError,
   TextField,
   useMutation,
-} from './ui';
+} from '../../components/ui';
 
 /**
  * **R5 · G39 — অফসাইট ব্যাকআপের কনফিগ, পর্দা থেকে।**

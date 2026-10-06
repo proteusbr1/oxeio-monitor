@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { AgentVersionView, DeviceView } from '../src/api/admin';
+import type { AgentVersionView, DeviceView } from '../src/api/agent';
 import {
   capabilityIssues,
   compareVersion,

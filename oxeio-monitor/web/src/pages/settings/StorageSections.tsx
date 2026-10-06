@@ -1,14 +1,6 @@
 import { useState, type ReactNode } from 'react';
 
-import {
-  getBackupMode,
-  getStorageSettings,
-  saveBackupMode,
-  saveStorageSettings,
-  testStorageSettings,
-  type SettingSource,
-  type StorageForm,
-} from '../../api/admin';
+import { getBackupMode, getStorageSettings, saveBackupMode, saveStorageSettings, testStorageSettings, type SettingSource, type StorageForm } from '../../api/settings';
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { ErrorBox, Loading } from '../../components/States';
@@ -20,7 +12,7 @@ import {
   ServerError,
   TextField,
   useMutation,
-} from './ui';
+} from '../../components/ui';
 
 const SOURCE_NOTE: Record<SettingSource, string> = {
   dashboard: 'Set on this screen.',

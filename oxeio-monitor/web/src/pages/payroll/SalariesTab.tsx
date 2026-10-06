@@ -1,11 +1,6 @@
 import { useState } from 'react';
 
-import {
-  listEmployees,
-  STAFF_TYPE_LABEL,
-  updateEmployee,
-  type EmployeeView,
-} from '../../api/admin';
+import { listEmployees, STAFF_TYPE_LABEL, updateEmployee, type EmployeeView } from '../../api/staff';
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Page';
@@ -19,7 +14,7 @@ import {
   ServerError,
   TextField,
   useMutation,
-} from '../settings/ui';
+} from '../../components/ui';
 
 /**
  * Everyone's monthly salary in one list — what the pay sheet starts from.

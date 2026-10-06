@@ -1,5 +1,5 @@
-import type { AgentVersionView } from '../../api/admin';
-import { listDevices } from '../../api/admin';
+import type { AgentVersionView } from '../../api/agent';
+import { listDevices } from '../../api/agent';
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Empty, ErrorBox, Loading } from '../../components/States';
@@ -12,7 +12,7 @@ import {
   type FleetGroup,
   type FleetRow,
 } from './fleet';
-import { Chip } from './ui';
+import { Chip } from '../../components/ui';
 
 /**
  * **কোন PC কোন বিল্ডে** *(১৮ আগস্ট ২০২৬)*।

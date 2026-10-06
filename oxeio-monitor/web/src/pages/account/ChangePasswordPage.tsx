@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react';
 
-import { changePassword } from '../api/auth';
-import { ApiError } from '../api/client';
-import { useAuth } from '../auth/AuthContext';
-import { Wordmark } from '../components/Brand';
-import { ErrorNote, Field, SubmitButton } from '../components/Field';
+import { changePassword } from '../../api/auth';
+import { ApiError } from '../../api/client';
+import { useAuth } from '../../auth/AuthContext';
+import { Wordmark } from '../../components/Brand';
+import { ErrorNote, Field, SubmitButton } from '../../components/Field';
 
 const MIN_LENGTH = 10;
 

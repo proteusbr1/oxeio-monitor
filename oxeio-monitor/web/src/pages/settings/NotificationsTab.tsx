@@ -1,10 +1,6 @@
 import { useState } from 'react';
 
-import {
-  getTelegramSettings,
-  saveTelegramSettings,
-  testTelegram,
-} from '../../api/admin';
+import { getTelegramSettings, saveTelegramSettings, testTelegram } from '../../api/settings';
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Caveat, ErrorBox, Loading } from '../../components/States';
@@ -14,7 +10,7 @@ import {
   ServerError,
   TextField,
   useMutation,
-} from './ui';
+} from '../../components/ui';
 
 /**
  * **G08 — টেলিগ্রামের কনফিগ, পর্দা থেকে।**

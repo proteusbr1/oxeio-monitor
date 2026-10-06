@@ -1,14 +1,6 @@
 import { useState } from 'react';
 
-import {
-  createWorkPolicy,
-  deactivateWorkPolicy,
-  listWorkPolicies,
-  reactivateWorkPolicy,
-  updateWorkPolicy,
-  type WorkPolicyBody,
-  type WorkPolicyView,
-} from '../../api/admin';
+import { createWorkPolicy, deactivateWorkPolicy, listWorkPolicies, reactivateWorkPolicy, updateWorkPolicy, type WorkPolicyBody, type WorkPolicyView } from '../../api/calendar';
 import { useApi } from '../../api/useApi';
 import { useAuth } from '../../auth/AuthContext';
 import { Card } from '../../components/Card';
@@ -36,7 +28,7 @@ import {
   ServerError,
   TextField,
   useMutation,
-} from './ui';
+} from '../../components/ui';
 
 /**
  * work policy ও ছুটি — দুটো একসাথে, কারণ এরা একই প্রশ্নের উত্তর দেয়:

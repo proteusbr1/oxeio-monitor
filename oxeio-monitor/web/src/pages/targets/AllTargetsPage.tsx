@@ -17,14 +17,14 @@ import {
   type TargetRow,
   type TargetStatus,
   updateTarget,
-} from '../api/targets';
-import { useApi } from '../api/useApi';
-import { useAuth } from '../auth/AuthContext';
-import { Card } from '../components/Card';
-import { Page } from '../components/Page';
-import { ErrorBox, Loading } from '../components/States';
-import { Table, type Column } from '../components/Table';
-import { formatCount, formatDate, formatDateTime, formatDuration, todayInDhaka } from '../lib/format';
+} from '../../api/targets';
+import { useApi } from '../../api/useApi';
+import { useAuth } from '../../auth/AuthContext';
+import { Card } from '../../components/Card';
+import { Page } from '../../components/Page';
+import { ErrorBox, Loading } from '../../components/States';
+import { Table, type Column } from '../../components/Table';
+import { formatCount, formatDate, formatDateTime, formatDuration, todayInDhaka } from '../../lib/format';
 import {
   Chip,
   MiniButton,
@@ -32,7 +32,7 @@ import {
   Notice,
   ServerError,
   useMutation,
-} from './settings/ui';
+} from '../../components/ui';
 import {
   dropdownValueOf,
   FILTERS,
@@ -40,8 +40,8 @@ import {
   STATUS_OPTIONS,
   type FilterKey,
   type Stage,
-} from './targets/filters';
-import { DropReasonPicker, DropReasonTag } from './targets/DropReason';
+} from './filters';
+import { DropReasonPicker, DropReasonTag } from './DropReason';
 
 /**
  * **সব ডিজাইন-টার্গেট** *(২৩ আগস্ট, মালিকের চাওয়া)* — সাইডবারে
