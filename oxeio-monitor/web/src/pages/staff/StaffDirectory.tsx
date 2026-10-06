@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import { STAFF_TYPE_LABEL, type StaffType } from '../../api/staff';
 import { createEmployee, changeLoginEmail, changeUserRole, createPortalAccount, nextEmployeeCode, resetUserPassword, deactivateEmployee, listEmployees, reactivateEmployee, turnAgentOn, updateEmployee, type AssignableRole, type Role, type CreateEmployeeBody, type EmployeeStatus, type EmployeeView, type UpdateEmployeeBody } from '../../api/staff';
@@ -58,7 +59,7 @@ const STATUS_OPTIONS = [
 
 type StatusFilter = EmployeeStatus | 'all';
 
-export function StaffTab() {
+export function StaffDirectory() {
   const { user } = useAuth();
   /**
    * Important: two different questions, so two different names, even though today
@@ -136,6 +137,8 @@ export function StaffTab() {
        *    person looking is the owner.
        */
       render: (emp) => (
+        // the name opens the person's own page (hours, screenshots, corrections)
+        <Link to={`/staff/${emp.id}`} className="hover:underline">
         <PersonCell
           fullName={emp.fullName}
           empCode={emp.empCode}
@@ -148,6 +151,7 @@ export function StaffTab() {
           accent={emp.portalRole === 'manager'}
           accentTitle="Manager — sees everyone's Live Board and reports"
         />
+        </Link>
       ),
     },
     {

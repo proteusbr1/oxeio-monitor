@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 
 import { getLiveBoard, type LiveCard } from '../../api/dashboard';
 import { usePolling } from '../../api/useApi';
@@ -6,28 +6,21 @@ import { Page } from '../../components/Page';
 import { ErrorBox, Empty, Loading } from '../../components/States';
 import { StatusChip } from '../../components/StatusDot';
 import { PersonCell, Table, type Column } from '../../components/Table';
+import { Tabs } from '../../components/Tabs';
 import { formatDuration, formatTime } from '../../lib/format';
+import { StaffDirectory } from './StaffDirectory';
 
 /** 30 seconds like the board: both screens show the same numbers, in step */
 const REFRESH_MS = 30_000;
 
 /**
- * **Staff: everyone in one list.**
- *
- * Careful: **this is not a copy of Settings → Staff, and that difference is
- * the reason this page exists.** There staff are **edited**: pay, policy,
- * portal account, enabling the agent. Here they are only **viewed**: who is
- * doing what now, how much today, whether the agent is talking.
- *
- * Careful: the sidebar used to have a `/staff` tab that was **removed** because
- * the page did not exist and the tab ended in "not found". Mockup A has it, and
- * the owner asked for a **real page** rather than a fake.
- *
- * The data comes from `/live`, with no new endpoint. So the board and this
- * page can never report two different numbers (G88); a new query would
- * reopen exactly that door.
+ * Staff — one page for the people: **Today** (who is doing what now, hours
+ * today and this month, when the agent last spoke — read-only, from `/live`,
+ * the same numbers as the board) and **Directory** (adding and editing
+ * people, their portal logins, agent setup, deactivating). Each person's own
+ * page opens from either tab.
  */
-export function StaffPage() {
+function StaffToday() {
   const navigate = useNavigate();
   const board = usePolling((signal) => getLiveBoard(signal), REFRESH_MS, []);
 
@@ -100,14 +93,12 @@ export function StaffPage() {
   ];
 
   return (
-    <Page
-      title="Staff"
-      subtitle={
-        board.data
+    <>
+      <p className="mb-3 text-xs text-ink-3">
+        {board.data
           ? `${cards.length} active · updated every 30 seconds`
-          : 'Everyone on the board'
-      }
-    >
+          : 'Everyone on the board'}
+      </p>
       {board.loading && !board.data ? (
         <Loading label="Loading staff…" />
       ) : !board.data ? (
@@ -115,7 +106,7 @@ export function StaffPage() {
       ) : cards.length === 0 ? (
         <Empty
           title="No active staff yet"
-          hint="Add people in Settings → Staff, then install the agent on their PC."
+          hint="Add people in the Directory tab, then install the agent on their PC."
         />
       ) : (
         <Table
@@ -129,6 +120,39 @@ export function StaffPage() {
           onRowClick={(c) => navigate(`/staff/${c.employeeId}`)}
         />
       )}
+    </>
+  );
+}
+
+type TabId = 'today' | 'directory';
+
+const TABS: { id: TabId; label: string }[] = [
+  { id: 'today', label: 'Today' },
+  { id: 'directory', label: 'Directory' },
+];
+
+export function StaffPage() {
+  const [params, setParams] = useSearchParams();
+  const active: TabId = params.get('tab') === 'directory' ? 'directory' : 'today';
+
+  return (
+    <Page
+      title="Staff"
+      subtitle={
+        active === 'today'
+          ? 'Who is working now, and how much today'
+          : 'Add and edit people, their logins and their PCs — nothing is ever deleted'
+      }
+    >
+      <Tabs
+        items={TABS}
+        active={active}
+        onChange={(tab) => setParams(tab === 'today' ? {} : { tab }, { replace: true })}
+        label="Staff"
+      />
+      <div className="mt-4">
+        {active === 'today' ? <StaffToday /> : <StaffDirectory />}
+      </div>
     </Page>
   );
 }
