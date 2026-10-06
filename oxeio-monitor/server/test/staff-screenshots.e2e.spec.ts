@@ -88,9 +88,9 @@ const ids = (body: { items: { employeeId: number }[] }) =>
 
 const setStaffScreenshots = (on: boolean) =>
   owner.http
-    .patch('/api/v1/settings/features')
+    .patch('/api/v1/settings/privacy')
     .set('X-CSRF-Token', owner.csrf)
-    .send({ staffScreenshots: on })
+    .send({ staffSeeOwnScreenshots: on })
     .expect(200);
 
 beforeEach(async () => {

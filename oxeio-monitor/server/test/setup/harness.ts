@@ -8,6 +8,7 @@ import request from 'supertest';
 
 import { AppCategoryService } from '../../src/activity/app-category.service';
 import { FeaturesService } from '../../src/features/features.service';
+import { PrivacyService } from '../../src/privacy/privacy.service';
 import { AppSettingsService } from '../../src/settings/app-settings.service';
 import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.setup';
@@ -98,6 +99,7 @@ export async function resetDatabase(
   // the module switches are cached the same way; the row was just truncated
   app?.get(FeaturesService).forget();
   app?.get(AppSettingsService).forget();
+  app?.get(PrivacyService).forget();
 
   const policy = await prisma.workPolicy.create({
     data: {

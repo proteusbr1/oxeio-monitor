@@ -17,6 +17,7 @@ import {
   type GalleryItem,
   type GalleryPage,
 } from './screenshots.service';
+import { RequiresFeature } from '../features/requires-feature';
 
 /**
  * `/api/v1/screenshots` (the global prefix is set in app.setup.ts).
@@ -27,6 +28,7 @@ import {
  * Writing `@Roles(owner, manager, employee)` here would look like protection
  * while meaning nothing more than "everyone may enter".
  */
+@RequiresFeature('screenshots')
 @Controller('screenshots')
 export class ScreenshotsController {
   constructor(private readonly screenshots: ScreenshotsService) {}

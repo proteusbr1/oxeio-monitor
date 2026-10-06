@@ -12,6 +12,7 @@ import {
 import { getOpsHealth, runBackupNow, runRetentionNow } from '../../api/ops';
 import { usePolling, useApi } from '../../api/useApi';
 import { useAuth } from '../../auth/AuthContext';
+import { useFeatures } from '../../features/FeaturesContext';
 import { ApiError } from '../../api/client';
 import { Card, Stat, StatRow } from '../../components/Card';
 import { Page } from '../../components/Page';
@@ -280,6 +281,9 @@ function HealthCard({
 }) {
   const jobs = useMutation();
   const [ran, setRan] = useState<string | null>(null);
+  // no screenshot module, no screenshot cleanup button (the nightly job still
+  // clears the pictures taken before it was switched off)
+  const { features } = useFeatures();
 
   return (
     <Card
@@ -290,7 +294,8 @@ function HealthCard({
           {/*
             Both buttons are for "seeing with your own eyes": a backup that has never
             been tested is not a backup, it is a guess. The same reasoning applies to
-            retention: staff are told in the policy that "screenshots are deleted after 90 days".
+            retention: staff are told on My data how many days screenshots are kept
+            (the number set in Settings → Privacy).
           */}
           <MiniButton
             disabled={jobs.busy}
@@ -308,22 +313,25 @@ function HealthCard({
           >
             Back up now
           </MiniButton>
-          <MiniButton
-            disabled={jobs.busy}
-            onClick={() =>
-              jobs.run(async () => {
-                const r = await runRetentionNow();
-                setRan(
-                  r.skipped
-                    ? 'A cleanup was already running'
-                    : `Cleanup done — ${r.rowsDeleted} old screenshots removed`,
-                );
-                reload();
-              })
-            }
-          >
-            Delete old screenshots
-          </MiniButton>
+          {features.screenshots && (
+            <MiniButton
+              disabled={jobs.busy}
+              title="Deletes the screenshots older than the retention period set in Settings → Privacy — the same as the nightly cleanup"
+              onClick={() =>
+                jobs.run(async () => {
+                  const r = await runRetentionNow();
+                  setRan(
+                    r.skipped
+                      ? 'A cleanup was already running'
+                      : `Cleanup done — ${r.rowsDeleted} old screenshots removed`,
+                  );
+                  reload();
+                })
+              }
+            >
+              Delete old screenshots
+            </MiniButton>
+          )}
         </div>
       }
     >

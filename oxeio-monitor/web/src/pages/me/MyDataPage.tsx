@@ -60,6 +60,15 @@ export function MyDataPage() {
   );
 
   /**
+   * "See yours" on What Is Recorded: only when the Screenshots route exists
+   * for this login (`canSeeScreenshots`, from the server) — and, for staff,
+   * when Settings → Privacy lets them see their own.
+   */
+  const seesOwnShots =
+    user?.canSeeScreenshots === true &&
+    (seesEveryone(user.role) || summary.data?.canSeeOwnScreenshots === true);
+
+  /**
    * Careful: **rolling 30 days, not "the current month".** Showing the current
    * month on the 1st would leave one row in the list, and that is exactly when
    * people want to cross-check the last days of last month. The numbers above are
@@ -296,16 +305,40 @@ export function MyDataPage() {
 
             <Card title="What Is Recorded" hint="And for how long">
               <dl className="space-y-2.5 text-[13px]">
+                {/*
+                  Every line here comes from the server (`/me`): whether pictures
+                  are taken depends on the Screenshots module *and* their own work
+                  policy, and the days on Settings → Privacy. Written by hand it
+                  would turn into a promise nobody keeps.
+                */}
                 <Row term="Screenshots">
-                  Kept {summary.data.screenshotRetentionDays} days, then deleted
-                  automatically —{' '}
-                  {seesEveryone(user?.role) || features.staffScreenshots ? (
-                    <Link to="/screenshots" className="underline">
-                      see yours
-                    </Link>
-                  ) : (
+                  {summary.data.screenshotsTaken
+                    ? `Kept ${summary.data.screenshotRetentionDays} days, then deleted automatically — `
+                    : 'Not taken — no pictures of your screen are recorded.'}
+                  {/* the link only where the route exists (`canSeeScreenshots`) */}
+                  {seesOwnShots ? (
+                    summary.data.screenshotsTaken ? (
+                      <Link to="/screenshots" className="underline">
+                        see yours
+                      </Link>
+                    ) : (
+                      <>
+                        {' '}
+                        Any taken earlier are deleted after{' '}
+                        {summary.data.screenshotRetentionDays} days —{' '}
+                        <Link to="/screenshots" className="underline">
+                          see them
+                        </Link>
+                      </>
+                    )
+                  ) : summary.data.screenshotsTaken ? (
                     'seen by the owner and managers only'
-                  )}
+                  ) : null}
+                </Row>
+                <Row term="Apps & websites">
+                  {summary.data.appsTracked
+                    ? 'Which app is in front and its window title; for websites, the site name only — never the full address.'
+                    : 'Not recorded — only whether the keyboard and mouse are in use.'}
                 </Row>
                 <Row term="Working hours">
                   Active time only. Idle and locked time is recorded but never

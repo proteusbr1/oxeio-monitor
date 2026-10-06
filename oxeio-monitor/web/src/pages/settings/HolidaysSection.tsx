@@ -20,6 +20,7 @@ import {
   TextField,
   useMutation,
 } from '../../components/ui';
+import { HolidayAutoUpdate } from './HolidayAutoUpdate';
 import { HolidayImportModal } from './HolidayImport';
 
 /**
@@ -146,6 +147,8 @@ export function HolidaysSection() {
           </div>
         </div>
       </div>
+
+      <HolidayAutoUpdate onUpdated={holidays.reload} />
 
       {holidays.loading && !holidays.data && <Loading />}
       {holidays.error && (

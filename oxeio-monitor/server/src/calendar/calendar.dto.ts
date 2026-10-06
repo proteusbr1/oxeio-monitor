@@ -272,3 +272,9 @@ export class CloseMonthDto {
   @MaxLength(280)
   note?: string;
 }
+
+/** PATCH /holidays/auto — the automatic public-holiday update */
+export class HolidayAutoDto {
+  @IsBoolean()
+  enabled!: boolean;
+}

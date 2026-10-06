@@ -16,8 +16,10 @@ import { UserRole } from '@prisma/client';
 
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
-import { CreateHolidayDto, HolidayListQueryDto, ImportHolidaysDto, ImportPublicHolidaysDto, UpdateHolidayDto } from './calendar.dto';
+import { CreateHolidayDto, HolidayAutoDto, HolidayListQueryDto, ImportHolidaysDto, ImportPublicHolidaysDto, UpdateHolidayDto } from './calendar.dto';
 import type { PublicHolidayCountry } from './public-holidays';
+import { AuditService } from '../audit/audit.service';
+import { HOLIDAY_SYNC_SETTING_KEY, HolidaySyncService, type HolidaySyncView } from './holiday-sync.service';
 import {
   HolidaysService,
   type HolidayImportPlan,
@@ -37,7 +39,11 @@ import {
 @Roles(UserRole.owner, UserRole.manager)
 @Controller('holidays')
 export class HolidaysController {
-  constructor(private readonly holidays: HolidaysService) {}
+  constructor(
+    private readonly holidays: HolidaysService,
+    private readonly sync: HolidaySyncService,
+    private readonly audit: AuditService,
+  ) {}
 
   /** `GET /api/v1/holidays?year=2026` */
   @Get()
@@ -59,6 +65,44 @@ export class HolidaysController {
   @Get('public/countries')
   countries(): Promise<PublicHolidayCountry[]> {
     return this.holidays.countries();
+  }
+
+  /** The automatic update: on or off, which years are done, what the last run did */
+  @Get('auto')
+  autoStatus(): Promise<HolidaySyncView> {
+    return this.sync.view();
+  }
+
+  /**
+   * Turns the automatic update on or off — the owner's decision, since it
+   * adds holidays (and so changes targets) without anyone pressing a button.
+   */
+  @Roles(UserRole.owner)
+  @Patch('auto')
+  async setAuto(
+    @CurrentUser() actor: SessionUser,
+    @Body() dto: HolidayAutoDto,
+    @Ip() ip: string,
+  ): Promise<HolidaySyncView> {
+    const before = await this.sync.view();
+    if (before.enabled !== dto.enabled) {
+      await this.audit.record({
+        userId: actor.userId,
+        action: 'change_setting',
+        targetType: 'setting',
+        targetId: HOLIDAY_SYNC_SETTING_KEY,
+        ipAddress: ip,
+        meta: { op: 'holidays_auto', enabled: dto.enabled },
+      });
+    }
+    return this.sync.setEnabled(dto.enabled, actor.userId);
+  }
+
+  /** "Update now": fills this year and next if they are not done yet */
+  @Post('auto/run')
+  @HttpCode(HttpStatus.OK)
+  async runAuto(): Promise<HolidaySyncView> {
+    return (await this.sync.runOnce()) ?? this.sync.view();
   }
 
   /** A country's public holidays for a year — `dryRun` shows what would happen */

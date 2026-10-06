@@ -15,6 +15,7 @@ import { AuditService } from '../audit/audit.service';
 import { PasswordService } from '../auth/password.service';
 import type { SessionUser } from '../auth/types';
 import { HolidaysService } from '../calendar/holidays.service';
+import { HolidaySyncService } from '../calendar/holiday-sync.service';
 import { FeaturesService } from '../features/features.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { validateRegion } from '../settings/app-settings.rules';
@@ -54,6 +55,7 @@ export class SetupService implements OnApplicationBootstrap {
     private readonly passwords: PasswordService,
     private readonly settings: AppSettingsService,
     private readonly holidays: HolidaysService,
+    private readonly holidaySync: HolidaySyncService,
     private readonly audit: AuditService,
     private readonly features: FeaturesService,
   ) {}
@@ -181,6 +183,7 @@ export class SetupService implements OnApplicationBootstrap {
     const holidayNotes: string[] = [];
     if (country && dto.importHolidays !== false) {
       const year = now.getUTCFullYear();
+      const imported: number[] = [];
       for (const y of [year, year + 1]) {
         try {
           const plan = await this.holidays.importPublic(
@@ -191,12 +194,16 @@ export class SetupService implements OnApplicationBootstrap {
           );
           holidaysAdded += plan.created;
           holidayNotes.push(...plan.problems);
+          imported.push(y);
         } catch (err) {
           // holidays are a convenience here — the install must not fail for them
           holidayNotes.push(err instanceof Error ? err.message : String(err));
           break;
         }
       }
+      // from now on the nightly update keeps the calendar current; the years
+      // just imported are not imported again (a deleted day stays deleted)
+      await this.holidaySync.markImported(imported, owner.id);
     }
 
     await this.audit.record({

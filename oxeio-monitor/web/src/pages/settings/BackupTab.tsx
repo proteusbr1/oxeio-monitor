@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { getOffsiteSettings, saveOffsiteSettings, testOffsite } from '../../api/settings';
 import { getOpsHealth } from '../../api/ops';
 import { useApi } from '../../api/useApi';
+import { useFeatures } from '../../features/FeaturesContext';
 import { Card } from '../../components/Card';
 import { ErrorBox, Loading } from '../../components/States';
 import { formatAgo, workTimeZoneLabel } from '../../lib/format';
@@ -240,9 +241,12 @@ function OwnBackupCards() {
  *      another tool such as Databasus.
  */
 export function BackupTab() {
+  const { features } = useFeatures();
   return (
     <div className="space-y-6">
-      <ScreenshotStorageCard />
+      {/* Screenshots switched off: nothing new is stored, so there is no
+          storage choice to make (the saved one is kept for when it is back on) */}
+      {features.screenshots && <ScreenshotStorageCard />}
       <DatabaseBackupSection>
         <OwnBackupCards />
       </DatabaseBackupSection>

@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 
 import { getEmployee } from '../../api/staff';
 import { useApi } from '../../api/useApi';
+import { useFeatures } from '../../features/FeaturesContext';
 import { DatePicker } from '../../components/DatePicker';
 import { Button, Page } from '../../components/Page';
 import { Empty, ErrorBox, Loading } from '../../components/States';
@@ -46,6 +47,9 @@ import { TopUsage } from './TopUsage';
 export function EmployeeDetailPage() {
   const { id } = useParams();
   const [params, setParams] = useSearchParams();
+  // a switched-off module's sections are not mounted at all: their endpoints
+  // answer 404, and an error box would read as something broken
+  const { features } = useFeatures();
   /** Refresh button: asks all four sections to fetch again */
   const [nonce, setNonce] = useState(0);
 
@@ -151,8 +155,12 @@ export function EmployeeDetailPage() {
       <div className="space-y-6">
         <TimelineBar employeeId={employeeId} date={date} nonce={nonce} />
         <HourlyChart employeeId={employeeId} date={date} nonce={nonce} />
-        <ScoreCard employeeId={employeeId} date={date} nonce={nonce} />
-        <TopUsage employeeId={employeeId} date={date} nonce={nonce} />
+        {features.appTracking && (
+          <>
+            <ScoreCard employeeId={employeeId} date={date} nonce={nonce} />
+            <TopUsage employeeId={employeeId} date={date} nonce={nonce} />
+          </>
+        )}
 
         {/* The hours-adjustment section goes **before** the pictures: it explains the
             numbers, and right after reading the numbers above the question "was the
@@ -163,7 +171,9 @@ export function EmployeeDetailPage() {
             hour, which site) should be read first; with pictures earlier the eye
             would stick to them, and this system's decisions rest on the numbers,
             not the pictures. Pictures are evidence, not the main measure. */}
-        <DayShots employeeId={employeeId} date={date} nonce={nonce} />
+        {features.screenshots && (
+          <DayShots employeeId={employeeId} date={date} nonce={nonce} />
+        )}
       </div>
     </Page>
   );

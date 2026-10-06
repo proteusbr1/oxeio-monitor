@@ -10,6 +10,7 @@ import { PersonCell, Table, type Column } from '../../components/Table';
 import { Caveat } from '../../components/States';
 import { formatAgo, formatDuration, formatHours } from '../../lib/format';
 import type { GalleryItem } from '../../api/screenshots';
+import { useFeatures } from '../../features/FeaturesContext';
 import { getLatestShots, NO_SHOTS } from './latestShots';
 import { isWorking } from './onTheClock';
 import { DesignCell } from './DesignCell';
@@ -75,11 +76,19 @@ export function TeamRoster({
   withTarget: number;
 }) {
   const [openFor, setOpenFor] = useState<number | null>(null);
+  /**
+   * Screenshots switched off in Settings → Modules: no Screen column and no
+   * call — the endpoint answers 404 then, and an empty column would read as
+   * "the agent stopped sending pictures".
+   */
+  const { features } = useFeatures();
+  const withShots = features.screenshots;
 
   const shots = usePolling(
-    (signal) => (canView ? getLatestShots(signal) : Promise.resolve(NO_SHOTS)),
+    (signal) =>
+      canView && withShots ? getLatestShots(signal) : Promise.resolve(NO_SHOTS),
     SHOT_REFRESH_MS,
-    [canView],
+    [canView, withShots],
   );
 
   const byEmployee = shots.data?.byEmployee ?? null;
@@ -149,19 +158,23 @@ export function TeamRoster({
       className: 'hidden min-w-[150px] sm:table-cell',
       render: (c) => <MonthCell card={c} />,
     },
-    {
-      key: 'screen',
-      header: 'Screen',
-      /* Careful: this goes first on small screens; nothing is readable in a 64px image anyway */
-      className: 'hidden w-[84px] lg:table-cell',
-      render: (c) => (
-        <ShotThumb
-          card={c}
-          shot={byEmployee?.get(c.employeeId) ?? null}
-          onOpen={() => setOpenFor(c.employeeId)}
-        />
-      ),
-    },
+    ...(withShots
+      ? [
+          {
+            key: 'screen',
+            header: 'Screen',
+            /* Careful: this goes first on small screens; nothing is readable in a 64px image anyway */
+            className: 'hidden w-[84px] lg:table-cell',
+            render: (c: LiveCard) => (
+              <ShotThumb
+                card={c}
+                shot={byEmployee?.get(c.employeeId) ?? null}
+                onOpen={() => setOpenFor(c.employeeId)}
+              />
+            ),
+          },
+        ]
+      : []),
     {
       key: 'seen',
       header: 'Last seen',
@@ -242,13 +255,13 @@ export function TeamRoster({
       </Caveat>
 
       {/* Failing to fetch images is not the page breaking, so it is small and separate */}
-      {shots.error && !shots.data && (
+      {withShots && shots.error && !shots.data && (
         <p className="mt-2 text-xs text-ink-3">
           Screenshots couldn&rsquo;t be loaded — the Screen column stays empty.
         </p>
       )}
 
-      {openCard && (
+      {withShots && openCard && (
         <ShotLightbox
           card={openCard}
           shot={openShot}

@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  effectiveFeatures,
   FEATURES_SETTING_KEY,
   resolveFeatures,
   type FeatureKey,
@@ -19,7 +21,8 @@ export class FeaturesService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async all(): Promise<Features> {
+  /** The owner's switches, as saved */
+  async switches(): Promise<Features> {
     if (this.cached) return this.cached;
 
     const row = await this.prisma.setting.findUnique({
@@ -29,18 +32,31 @@ export class FeaturesService {
     return this.cached;
   }
 
+  /** What is actually on: a child module is off while its parent is */
+  async all(): Promise<Features> {
+    return effectiveFeatures(await this.switches());
+  }
+
   async isOn(feature: FeatureKey): Promise<boolean> {
     return (await this.all())[feature];
   }
 
   async save(features: Features, userId: number): Promise<Features> {
+    // keys this version does not know are kept: the old `staffScreenshots`
+    // switch is still read from here until Settings → Privacy is saved
+    const row = await this.prisma.setting.findUnique({ where: { key: FEATURES_SETTING_KEY } });
+    const kept =
+      row?.value && typeof row.value === 'object' && !Array.isArray(row.value)
+        ? (row.value as Record<string, unknown>)
+        : {};
+    const value = { ...kept, ...features } as Prisma.InputJsonObject;
     await this.prisma.setting.upsert({
       where: { key: FEATURES_SETTING_KEY },
-      update: { value: features, updatedById: userId },
-      create: { key: FEATURES_SETTING_KEY, value: features, updatedById: userId },
+      update: { value, updatedById: userId },
+      create: { key: FEATURES_SETTING_KEY, value, updatedById: userId },
     });
     this.cached = { ...features };
-    return this.cached;
+    return effectiveFeatures(this.cached);
   }
 
   /** Drops the cache — for tests that write the row directly */

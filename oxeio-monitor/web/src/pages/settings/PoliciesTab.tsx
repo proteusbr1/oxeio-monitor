@@ -80,6 +80,10 @@ function WorkPoliciesSection() {
   const [reopening, setReopening] = useState<WorkPolicyView | null>(null);
 
   const rows = policies.data?.rows ?? [];
+  // Screenshots switched off in Settings → Modules: the window means nothing,
+  // so it is not shown (the saved values stay on the policy)
+  const { features } = useFeatures();
+  const withShots = features.screenshots;
 
   const columns: Column<WorkPolicyView>[] = [
     {
@@ -123,19 +127,23 @@ function WorkPoliciesSection() {
           <span className="text-ink-3">all day</span>
         ),
     },
-    {
-      key: 'window',
-      header: 'Screenshot window',
-      render: (policy) =>
-        // `false` only — an older server without the field means on
-        policy.screenshotsEnabled === false ? (
-          <span className="text-ink-3">off</span>
-        ) : (
-          <span className="num">
-            {policy.screenshotFrom ?? '07:00'}–{policy.screenshotTo ?? '23:00'}
-          </span>
-        ),
-    },
+    ...(withShots
+      ? [
+          {
+            key: 'window',
+            header: 'Screenshot window',
+            render: (policy: WorkPolicyView) =>
+              // `false` only — an older server without the field means on
+              policy.screenshotsEnabled === false ? (
+                <span className="text-ink-3">off</span>
+              ) : (
+                <span className="num">
+                  {policy.screenshotFrom ?? '07:00'}–{policy.screenshotTo ?? '23:00'}
+                </span>
+              ),
+          },
+        ]
+      : []),
     {
       key: 'idle',
       header: 'Idle threshold',
@@ -214,8 +222,10 @@ function WorkPoliciesSection() {
             Work policies
           </h2>
           <p className="mt-0.5 text-xs text-ink-3">
-            Monthly target, screenshot window and idle threshold — everything
-            about a person's day comes from here
+            {withShots
+              ? 'Hours target, screenshot window and idle threshold'
+              : 'Hours target and idle threshold'}{' '}
+            — everything about a person's day comes from here
           </p>
         </div>
         <Button tone="primary" onClick={() => setCreating(true)}>
@@ -229,8 +239,8 @@ function WorkPoliciesSection() {
       */}
       <Notice>
         Change a number here and the next config sync changes{' '}
-        <strong>how every PC behaves</strong> — when idle starts counting, when
-        screenshots are taken. Change the monthly target and everyone's progress
+        <strong>how every PC behaves</strong> — when idle starts counting
+        {withShots && ', when screenshots are taken'}. Change the monthly target and everyone's progress
         percentage moves with it.
       </Notice>
 
@@ -642,37 +652,46 @@ function PolicyForm({
             hint="Seconds. Once the keyboard and mouse have been quiet this long, the time stops counting."
           />
 
-          <FullWidth>
-            <CheckboxField
-              label="Take screenshots"
-              checked={screenshotsEnabled}
-              onChange={setScreenshotsEnabled}
-              hint="Off: no screenshot is taken, stored or sent. Idle and jiggler detection keep working, so hours are counted the same way."
-            />
-          </FullWidth>
+          {/*
+            Hidden while the Screenshots module is off — nothing is taken then,
+            whatever the policy says. The saved values are still sent back
+            unchanged, so turning the module on restores them.
+          */}
+          {features.screenshots && (
+            <>
+              <FullWidth>
+                <CheckboxField
+                  label="Take screenshots"
+                  checked={screenshotsEnabled}
+                  onChange={setScreenshotsEnabled}
+                  hint="Off: no screenshot is taken, stored or sent. Idle and jiggler detection keep working, so hours are counted the same way."
+                />
+              </FullWidth>
 
-          <TextField
-            label="Screenshots from"
-            type="time"
-            value={form.screenshotFrom}
-            onChange={set('screenshotFrom')}
-            mono
-            // kept, not cleared: turning screenshots back on restores the window
-            disabled={!screenshotsEnabled}
-          />
-          <TextField
-            label="Screenshots until"
-            type="time"
-            value={form.screenshotTo}
-            onChange={set('screenshotTo')}
-            mono
-            disabled={!screenshotsEnabled}
-            hint={
-              screenshotsEnabled
-                ? 'No screenshot is ever taken outside this window'
-                : 'Not used while screenshots are off — kept for when they are turned back on'
-            }
-          />
+              <TextField
+                label="Screenshots from"
+                type="time"
+                value={form.screenshotFrom}
+                onChange={set('screenshotFrom')}
+                mono
+                // kept, not cleared: turning screenshots back on restores the window
+                disabled={!screenshotsEnabled}
+              />
+              <TextField
+                label="Screenshots until"
+                type="time"
+                value={form.screenshotTo}
+                onChange={set('screenshotTo')}
+                mono
+                disabled={!screenshotsEnabled}
+                hint={
+                  screenshotsEnabled
+                    ? 'No screenshot is ever taken outside this window'
+                    : 'Not used while screenshots are off — kept for when they are turned back on'
+                }
+              />
+            </>
+          )}
 
           <TextField
             label="Slot (minutes)"

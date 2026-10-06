@@ -50,6 +50,7 @@ import {
 } from './screenshot-ingest.service';
 import { UpdateService } from './update.service';
 import { CapabilityHealthService } from './capability-health.service';
+import { FeaturesService } from '../features/features.service';
 
 type AgentCommand =
   | 'reload_config'
@@ -77,6 +78,8 @@ export class AgentController {
     private readonly progress: ProgressService,
     private readonly prisma: PrismaService,
     private readonly capabilities: CapabilityHealthService,
+    // Settings → Modules: uploads of a switched-off capture module are dropped
+    private readonly features: FeaturesService,
   ) {}
 
   /** Once, at install time. No token yet; the enrollment code is the identity (H05). */
@@ -236,12 +239,19 @@ export class AgentController {
   @UseGuards(DeviceAuthGuard)
   @Post('app-usage')
   @HttpCode(HttpStatus.OK)
-  appUsage(
+  async appUsage(
     @CurrentDevice() device: Device,
     @CurrentDrift() drift: Drift,
     @Body() dto: AppUsageBatchDto,
   ): Promise<IngestResult> {
     this.rate.hit(device.id, 'ingest');
+    /**
+     * Apps & websites switched off: an agent that has not reloaded its config
+     * yet may still send what it queued. Answered as received (so it is not
+     * queued forever) and not stored. Not a 404 like the dashboard routes: an
+     * agent would retry that for ever.
+     */
+    if (!(await this.features.isOn('appTracking'))) return { accepted: 0, duplicates: 0, split: 0 };
     return this.ingest.ingestAppUsage(device, drift, dto.items);
   }
 
@@ -294,6 +304,11 @@ export class AgentController {
 
     const full = files?.file?.[0];
     if (!full) throw new BadRequestException('The `file` part is missing');
+
+    // Screenshots switched off: received, not stored (see `appUsage` above)
+    if (!(await this.features.isOn('screenshots'))) {
+      return { accepted: 0, duplicate: false, path: '', thumbPath: null };
+    }
 
     const meta = await this.parseMeta(metaRaw);
     return this.screenshots.ingest(

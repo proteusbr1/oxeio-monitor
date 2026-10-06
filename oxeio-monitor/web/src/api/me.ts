@@ -58,8 +58,14 @@ export interface MySummary {
   };
   progress: MyProgress;
   policySignedAt: string | null;
-  /** Comes from the server; hand-written text on screen would lie if the policy changed. */
+  /** Comes from the server (Settings → Privacy); hand-written text would lie once it changed. */
   screenshotRetentionDays: number;
+  /** whether pictures of their screen are taken at all (module on and their policy takes them) */
+  screenshotsTaken: boolean;
+  /** whether the apps and websites they use are recorded (Apps & websites module) */
+  appsTracked: boolean;
+  /** whether they can open the pictures of their own screen (Settings → Privacy) */
+  canSeeOwnScreenshots: boolean;
 }
 
 export interface MyDay {

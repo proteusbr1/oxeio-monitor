@@ -1,21 +1,29 @@
 import { useState, type ReactNode } from 'react';
 
 import {
+  FEATURE_PARENT,
   getFeatureSettings,
   saveFeatures,
   type FeatureKey,
+  type Features,
   type FeatureUsage,
 } from '../../api/features';
 import { useApi } from '../../api/useApi';
+import { useAuth } from '../../auth/AuthContext';
 import { Card } from '../../components/Card';
 import { ErrorBox, Loading } from '../../components/States';
 import { useFeatures } from '../../features/FeaturesContext';
 import { Chip, ConfirmDialog, Notice, ServerError, useMutation } from '../../components/ui';
 
 /**
- * Settings → Modules: switch off the parts of the dashboard a company does
- * not use. Off hides the screens and the server blocks the endpoints; no
- * table is dropped, so switching back on brings everything back as it was.
+ * Settings → Modules: switch off the parts of the product a company does not
+ * use. Off hides the screens, the server blocks the endpoints and, for the
+ * capture modules, the agents stop collecting. No table is dropped, so
+ * switching back on brings everything back as it was.
+ *
+ * ⚠️ Whole modules only. A choice *inside* a module (who sees screenshots,
+ *    how long they are kept) belongs on that module's own settings page —
+ *    Settings → Privacy — never as a switch here.
  */
 
 interface ModuleInfo {
@@ -35,18 +43,20 @@ interface ModuleInfo {
 const plural = (n: number, one: string, many: string) =>
   `${n} ${n === 1 ? one : many}`;
 
+/** In screen order; a child module (`FEATURE_PARENT`) is drawn under its parent */
 const MODULES: ModuleInfo[] = [
   {
     key: 'payroll',
     title: 'Payroll',
-    what: 'Monthly pay sheet worked out from salaries, hours and leave.',
+    what: 'The monthly pay sheet, worked out from salaries or hourly rates, hours, overtime and leave.',
     hides: [
       'Payroll’s Pay sheet and each person’s pay terms (the page becomes “Leave & months”)',
-      'The salary column and field in Staff',
+      'The pay column and fields in Staff',
+      'The pay rules on work policies',
     ],
     holds: (u) =>
-      u.salariedStaff > 0
-        ? `${plural(u.salariedStaff, 'person has', 'people have')} a salary set — it stays saved`
+      u.paidStaff > 0
+        ? `${plural(u.paidStaff, 'person has', 'people have')} pay terms set — they stay saved`
         : null,
   },
   {
@@ -72,9 +82,45 @@ const MODULES: ModuleInfo[] = [
         : null,
   },
   {
+    key: 'screenshots',
+    title: 'Screenshots',
+    what: 'Pictures of each person’s screen through the day, inside their work policy’s window.',
+    hides: [
+      'The Screenshots page, for everyone',
+      'The Screen column of the Worklog',
+      'The day’s pictures on each person’s Staff page',
+      'Settings › Privacy, the screenshot storage choice and the screenshot window on work policies',
+    ],
+    holds: (u) =>
+      u.hasScreenshots
+        ? 'Pictures are stored — the nightly cleanup keeps deleting them as they pass the retention period'
+        : null,
+    offWarning: () =>
+      'The agents stop taking pictures for everyone. Idle detection keeps working, so hours are counted exactly as before. Pictures already stored stay until the retention period (Settings › Privacy) removes them.',
+    onWarning: () =>
+      'The agents start taking pictures again at their next sync, inside each work policy’s window. Staff see their own only if Settings › Privacy allows it.',
+  },
+  {
+    key: 'appTracking',
+    title: 'Apps & websites',
+    what: 'Which app or website is in front and for how long — for productivity, the top apps and the category rules.',
+    hides: [
+      '“Where today went” on the Live Board',
+      'Productivity and top apps on each person’s Staff page',
+      'Reports › Apps & sites',
+      'Settings › Apps & sites',
+    ],
+    holds: (u) =>
+      u.hasAppUsage ? 'App and website history is stored — it stays saved' : null,
+    offWarning: () =>
+      'The agents stop recording which apps and sites are used. Counted hours do not change — they come from keyboard and mouse activity. The jiggler check (synthetic input) reads app data too, so it goes quiet.',
+    onWarning: () =>
+      'Recording starts again at the agents’ next sync. The time while it was off stays without app data.',
+  },
+  {
     key: 'designTargets',
     title: 'Design targets',
-    what: 'A pool of design jobs handed out to designers each day, with review and progress.',
+    what: 'A pool of design jobs handed out to designers each day, with review and progress — the design apps’ window titles show which jobs were started and for how long.',
     hides: [
       'Add target design, Design Pool and Review',
       'The design panels on the Live Board and in the daily summary',
@@ -95,26 +141,21 @@ const MODULES: ModuleInfo[] = [
     offWarning: () =>
       'The daily hand-out stops too: jobs already handed out stay with their designer until the module is back on.',
   },
-  {
-    key: 'staffScreenshots',
-    title: 'Screenshots for staff',
-    what: 'Staff and researcher logins can open the pictures taken of their own screen.',
-    hides: [
-      'Screenshots in the menu of staff and researcher logins',
-      'The “see yours” link on their My data',
-    ],
-    holds: (u) =>
-      u.staffLogins > 0
-        ? `${plural(u.staffLogins, 'staff login is', 'staff logins are')} affected — you and managers still see every picture`
-        : null,
-    offWarning: () =>
-      'Pictures are still taken and kept, and you and managers see them as before — only staff stop seeing their own. My data still tells them that screenshots are taken and for how long.',
-  },
 ];
+
+const TITLE = Object.fromEntries(MODULES.map((m) => [m.key, m.title])) as Record<
+  FeatureKey,
+  string
+>;
+
+/** the modules that sit inside `key` */
+const childrenOf = (key: FeatureKey) =>
+  MODULES.filter((m) => FEATURE_PARENT[m.key] === key);
 
 export function ModulesTab() {
   const view = useApi((signal) => getFeatureSettings(signal), []);
   const { setFeatures } = useFeatures();
+  const { refresh } = useAuth();
 
   const [asking, setAsking] = useState<{
     module: ModuleInfo;
@@ -129,19 +170,21 @@ export function ModulesTab() {
   }
   if (!view.data) return null;
 
-  const { features, usage } = view.data;
+  const { features, effective, usage } = view.data;
 
   const apply = (module: ModuleInfo, on: boolean) =>
     run(async () => {
       const next = await saveFeatures({ [module.key]: on });
       view.reload();
       // the sidebar and routes follow at once — no reload needed
-      setFeatures(next.features);
+      setFeatures(next.effective);
+      // the Screenshots entry also reads `canSeeScreenshots` from `/auth/me`
+      if (module.key === 'screenshots') await refresh();
       setAsking(null);
       setSaved(
         on
-          ? `${module.title} is back on — it is in the menu again.`
-          : `${module.title} is off — it is gone from the menu. Nothing was deleted.`,
+          ? `${module.title} is back on.`
+          : `${module.title} is off. Nothing was deleted.`,
       );
     });
 
@@ -154,12 +197,30 @@ export function ModulesTab() {
     else apply(module, on);
   };
 
+  const card = (module: ModuleInfo) => (
+    <ModuleCard
+      module={module}
+      switches={features}
+      effective={effective}
+      holds={module.holds(usage)}
+      busy={busy}
+      onToggle={() => toggle(module)}
+    />
+  );
+
+  // the children that go off with the module being switched off
+  const goingWith = asking
+    ? childrenOf(asking.module.key).filter((child) => effective[child.key])
+    : [];
+
   return (
     <div className="space-y-4">
       <Notice>
-        Turn off the parts your company does not use. Off only hides them —
-        nothing is deleted, and turning a module back on brings everything back
-        exactly as it was.
+        Modules switch whole parts of the product on or off. Settings inside a
+        module are on that module&rsquo;s own page — who sees screenshots and
+        how long they are kept is under Settings › Privacy. Turning a module
+        off deletes nothing; turning it back on brings everything back as it
+        was.
       </Notice>
 
       {saved && (
@@ -170,16 +231,22 @@ export function ModulesTab() {
       {!asking && <ServerError error={error} />}
 
       <div className="grid gap-3">
-        {MODULES.map((module) => (
-          <ModuleCard
-            key={module.key}
-            module={module}
-            on={features[module.key]}
-            holds={module.holds(usage)}
-            busy={busy}
-            onToggle={() => toggle(module)}
-          />
-        ))}
+        {MODULES.filter((m) => !FEATURE_PARENT[m.key]).map((module) => {
+          const kids = childrenOf(module.key);
+          return (
+            <div key={module.key} className="space-y-2">
+              {card(module)}
+              {kids.length > 0 && (
+                // nested under the parent: it only works inside it
+                <div className="ml-4 space-y-2 border-l-2 border-line pl-3 sm:ml-6 sm:pl-4">
+                  {kids.map((child) => (
+                    <div key={child.key}>{card(child)}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {asking && (
@@ -197,6 +264,11 @@ export function ModulesTab() {
                   {asking.module.hides.map((line) => (
                     <li key={line}>{line}</li>
                   ))}
+                  {goingWith.map((child) => (
+                    <li key={child.key}>
+                      {child.title} — it needs {asking.module.title}
+                    </li>
+                  ))}
                 </ul>
               </>
             )
@@ -209,7 +281,10 @@ export function ModulesTab() {
           extra={
             asking.on ? undefined : (
               <Notice>
-                Nothing is deleted. You can turn it back on here at any time.
+                Nothing is deleted.
+                {goingWith.length > 0 &&
+                  ` ${goingWith.map((c) => c.title).join(' and ')} keeps its own switch and comes back with ${asking.module.title}.`}{' '}
+                You can turn it back on here at any time.
               </Notice>
             )
           }
@@ -230,18 +305,32 @@ export function ModulesTab() {
 
 function ModuleCard({
   module,
-  on,
+  switches,
+  effective,
   holds,
   busy,
   onToggle,
 }: {
   module: ModuleInfo;
-  on: boolean;
+  /** the owner's switches, as saved */
+  switches: Features;
+  /** what is actually on */
+  effective: Features;
   holds: string | null;
   busy: boolean;
   onToggle: () => void;
 }) {
   const labelId = `module-${module.key}`;
+  const saved = switches[module.key];
+  const on = effective[module.key];
+  const parent = FEATURE_PARENT[module.key];
+  /**
+   * The parent is off, so this one is off whatever its own switch says. The
+   * switch is shown as saved but locked: changing it would change nothing
+   * now, and it is what comes back when the parent is turned on.
+   */
+  const blocked = parent !== undefined && !effective[parent];
+  const parentTitle = parent ? TITLE[parent] : '';
 
   return (
     <Card>
@@ -251,18 +340,30 @@ function ModuleCard({
             <h3 id={labelId} className="text-[14px] font-semibold tracking-tight">
               {module.title}
             </h3>
-            <Chip tone={on ? 'counted' : 'muted'}>{on ? 'On' : 'Off'}</Chip>
+            {blocked ? (
+              <Chip>Needs {parentTitle}</Chip>
+            ) : (
+              <Chip tone={on ? 'counted' : 'muted'}>{on ? 'On' : 'Off'}</Chip>
+            )}
           </div>
           <p className="text-[13px] text-ink-2">{module.what}</p>
-          <Detail label={on ? 'Turning it off hides' : 'Hidden now'}>
-            {module.hides.join(' · ')}
-          </Detail>
+          {blocked ? (
+            <Detail label="Unavailable">
+              Off while {parentTitle} is off. Its own switch is kept (
+              {saved ? 'on' : 'off'}) and applies again when {parentTitle} is
+              back on.
+            </Detail>
+          ) : (
+            <Detail label={on ? 'Turning it off hides' : 'Hidden now'}>
+              {module.hides.join(' · ')}
+            </Detail>
+          )}
           {holds && <Detail label="Stored">{holds}</Detail>}
         </div>
 
         <Switch
-          on={on}
-          disabled={busy}
+          on={saved}
+          disabled={busy || blocked}
           labelledBy={labelId}
           onClick={onToggle}
         />

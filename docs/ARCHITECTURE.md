@@ -54,22 +54,44 @@ built-in default. The screen shows where each value comes from.
 | Settings → Error reporting | `errorReporting` | `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_BROWSER`, `SENTRY_LOG_ERRORS` |
 | Settings → Agent updates | `agent.updateKey` | `AGENT_UPDATE_PUBLIC_KEY` |
 | Settings → Modules | `features` | — (screen only) |
+| Settings → Privacy | `privacy` | — (screen only) |
+| Settings → Policies & holidays › Public holidays | `holidays.auto` | — (screen only) |
 
 Server side: `server/src/settings/app-settings.service.ts` reads them (cached,
 cleared on save); each subject has a `resolve…()` rule next to it.
 
 ## Modules that can be switched off
 
-Settings → Modules (`server/src/features/`). All on by default. Off hides the
-screens and makes the endpoints answer 404 (`@RequiresFeature(...)`); nothing
-is deleted.
+Settings → Modules (`server/src/features/`). A module is a whole part of the
+product; all are on by default. Off hides the screens and makes the
+endpoints answer 404 (`@RequiresFeature(...)`); nothing is deleted.
 
-| Key | Module |
-|---|---|
-| `payroll` | pay sheet and salaries (the Payroll page becomes "Leave & months") |
-| `deposits` | security deposits; payroll stops holding them back |
-| `designTargets` | design target pool, review, hand-out jobs, digest lines |
-| `staffScreenshots` | staff and researcher logins see their own screenshots |
+| Key | Module | Off also… |
+|---|---|---|
+| `payroll` | pay sheet and pay terms (the Payroll page becomes "Leave & months") | |
+| `deposits` | security deposits, held back from pay — **needs payroll** | payroll holds nothing back |
+| `screenshots` | pictures of the screen, gallery, Live Board screen column | agents stop taking pictures (screen sampling for idle detection goes on); uploads in flight are dropped |
+| `appTracking` | apps & websites, productivity, Settings › Apps & sites | agents stop recording apps; counted hours do not change |
+| `designTargets` | design target pool, review, hand-out jobs — **needs appTracking** (design-app window titles show which jobs were started) | |
+
+A child module is off while its parent is, and keeps its own switch
+(`FEATURE_PARENT`, `effectiveFeatures`). `GET /features` answers what is
+actually on; the settings view also has the saved switches.
+
+⚠️ Only whole modules go here. A choice inside a module is a setting on that
+module's own page: **Settings → Privacy** (`server/src/privacy/`) holds "staff
+see their own screenshots" and how many days screenshots are kept (retention
+job, nightly). `/auth/me` answers `canSeeScreenshots`, so the menu and the
+server never disagree.
+
+## Public holidays
+
+Imported from the country's public calendar (`calendar/public-holidays.ts`:
+BrasilAPI for Brazil, Nager.Date for the rest) by the setup wizard or by
+hand. `calendar/holiday-sync.service.ts` keeps them up to date every night
+(04:15): this year and next, each year imported once (a deleted day stays
+deleted), never into the current or a past month. On after the wizard;
+otherwise the owner switches it on in Settings → Policies & holidays.
 
 ## Work regimes
 

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 
 import { reportXlsxUrl, type GroupBy } from '../../api/reports';
 import { useAuth } from '../../auth/AuthContext';
+import { useFeatures } from '../../features/FeaturesContext';
 import { DateRange } from '../../components/DatePicker';
 import { EmployeePicker } from '../../components/EmployeePicker';
 import { ErrorNote } from '../../components/Field';
@@ -65,7 +66,18 @@ export function ReportsPage() {
 }
 
 function ReportsBoard() {
-  const [tab, setTab] = useState<TabId>('attendance');
+  const { features } = useFeatures();
+  const [picked, setPicked] = useState<TabId>('attendance');
+  /**
+   * Apps & websites switched off (Settings → Modules): no "Apps & sites" tab —
+   * `/reports/productivity` answers 404 then. If it goes off while the tab is
+   * open, the page falls back to Attendance rather than showing an error.
+   */
+  const tabs = features.appTracking
+    ? TABS
+    : TABS.filter((t) => t.id !== 'productivity');
+  const tab: TabId =
+    picked === 'productivity' && !features.appTracking ? 'attendance' : picked;
   // Careful: not `new Date().toISOString().slice(0,10)`; between midnight and the offset hour in
   //    zones ahead of UTC (6am in Asia/Dhaka) that gives the previous date and the report would open a day behind.
   const [range, setRange] = useState(() => thisMonthRange());
@@ -111,11 +123,11 @@ function ReportsBoard() {
       }
     >
       <Tabs
-        items={TABS}
+        items={tabs}
         active={tab}
         label="Report type"
         onChange={(next) => {
-          setTab(next);
+          setPicked(next);
           // The previous tab's download error must not linger on the new tab
           download.clear();
         }}

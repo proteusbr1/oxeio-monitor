@@ -15,7 +15,10 @@ interface FeaturesState {
   features: Features;
   /** false until the server answered (or failed) — see `FeaturesProvider` */
   ready: boolean;
-  /** Settings → Modules hands back the saved switches; the sidebar follows at once */
+  /**
+   * Settings → Modules hands back what is now on (`effective` — a child module
+   * is off while its parent is); the sidebar follows at once
+   */
   setFeatures: (features: Features) => void;
 }
 
@@ -26,7 +29,8 @@ const FeaturesContext = createContext<FeaturesState>({
 });
 
 /**
- * Loads the module switches once per sign-in (the endpoint needs a session,
+ * Loads which modules are on (`GET /features` — the effective state, not the
+ * owner's raw switches) once per sign-in (the endpoint needs a session,
  * so nothing is asked while signed out or before the password is changed).
  *
  * ⚠️ If the request fails every module stays on — the dashboard as it always

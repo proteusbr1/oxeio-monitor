@@ -200,8 +200,13 @@ function Router() {
           <Route path="targets/review" element={<ReviewPage />} />
         )}
 
-        {/* staff see their own pictures unless the owner turned that off */}
-        {(!isStaff || features.staffScreenshots) && (
+        {/*
+          The server's answer (`canSeeScreenshots`: module on, and staff only
+          while Settings → Privacy lets them) — the same one the nav reads.
+          `features.screenshots` too, so switching the module off takes the
+          route away at once, before `/auth/me` is asked again.
+        */}
+        {user.canSeeScreenshots && features.screenshots && (
           <Route path="screenshots" element={<GalleryPage />} />
         )}
         <Route path="monthly" element={<MonthlyPage />} />

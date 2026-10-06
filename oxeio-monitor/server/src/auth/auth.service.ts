@@ -8,6 +8,8 @@ import {
 import { UserRole } from '@prisma/client';
 
 import { AuditService } from '../audit/audit.service';
+import { FeaturesService } from '../features/features.service';
+import { PrivacyService } from '../privacy/privacy.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginThrottleService } from './login-throttle.service';
 import { PasswordService } from './password.service';
@@ -55,6 +57,12 @@ export interface MeResult {
   /** their own choices (theme), applied by the dashboard at sign-in */
   preferences: UserPreferences;
   /**
+   * Whether the Screenshots page is theirs to open: the module is on, and
+   * they are owner or manager — or staff while Settings → Privacy lets staff
+   * see their own. Decided here so the menu and the server never disagree.
+   */
+  canSeeScreenshots: boolean;
+  /**
    * **Whether this user may submit design targets.** (22 August)
    *
    * Careful: **why a ready-made answer and not the raw `staffType`.** The rule
@@ -81,6 +89,8 @@ export class AuthService {
     private readonly passwords: PasswordService,
     private readonly throttle: LoginThrottleService,
     private readonly audit: AuditService,
+    private readonly features: FeaturesService,
+    private readonly privacy: PrivacyService,
   ) {}
 
   /**
@@ -227,6 +237,7 @@ export class AuthService {
       lastLoginAt: user.lastLoginAt,
       twoFactorEnabled: decodeEnvelope(user.totpSecret)?.enabled === true,
       preferences: preferencesOf(user.preferences),
+      canSeeScreenshots: await this.canSeeScreenshots(user.role),
       /**
        * Careful: the formula for both is **the same today**, yet there are two
        * names, deliberately. On screen they cover two different things (a menu
@@ -238,6 +249,12 @@ export class AuthService {
       canAddTargets: canUseTargets(user.role),
       canProofread: canUseTargets(user.role),
     };
+  }
+
+  private async canSeeScreenshots(role: UserRole): Promise<boolean> {
+    if (!(await this.features.isOn('screenshots'))) return false;
+    if (role === UserRole.owner || role === UserRole.manager) return true;
+    return (await this.privacy.get()).staffSeeOwnScreenshots;
   }
 
   async changePassword(

@@ -31,6 +31,12 @@ export interface Me {
    * researchers the owner has explicitly ticked get to review spelling.
    */
   canProofread: boolean;
+  /**
+   * Whether the Screenshots page is theirs to open: the module is on, and they
+   * are owner or manager — or staff while Settings → Privacy lets staff see
+   * their own. Decided by the server so the menu and the endpoint never disagree.
+   */
+  canSeeScreenshots: boolean;
 }
 
 export function login(

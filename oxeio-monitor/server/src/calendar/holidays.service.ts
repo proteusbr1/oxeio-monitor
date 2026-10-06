@@ -177,11 +177,26 @@ export class HolidaysService {
     });
   }
 
+  /**
+   * The nightly automatic update (holiday-sync.service.ts): the same import,
+   * done by the system — never into the current or a past month.
+   */
+  async importPublicAutomatically(country: string, year: number, now = new Date(), fetchImpl: typeof fetch = fetch): Promise<HolidayImportPlan> {
+    const parsed = await publicHolidays(country, year, fetchImpl);
+    return this.importParsed(
+      null,
+      parsed,
+      { source: `automatic update ${country.toUpperCase()} ${year}`, allowPast: false, dryRun: false },
+      null,
+      now,
+    );
+  }
+
   private async importParsed(
-    actor: SessionUser,
+    actor: SessionUser | null,
     { holidays, problems }: ImportResult,
     input: { source: string; allowPast: boolean; dryRun: boolean },
-    ip: string,
+    ip: string | null,
     now: Date,
   ): Promise<HolidayImportPlan> {
 
@@ -306,14 +321,15 @@ export class HolidaysService {
     return err;
   }
 
+  /** `actor` null = done by the system (the automatic holiday update) */
   private async record(
-    actor: SessionUser,
-    ip: string,
+    actor: SessionUser | null,
+    ip: string | null,
     id: number,
     meta: Prisma.InputJsonValue,
   ): Promise<void> {
     await this.audit.record({
-      userId: actor.userId,
+      userId: actor?.userId ?? null,
       action: 'change_setting',
       targetType: ADMIN_TARGET.holiday,
       targetId: id,

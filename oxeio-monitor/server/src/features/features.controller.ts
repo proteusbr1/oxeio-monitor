@@ -21,28 +21,36 @@ class SaveFeaturesDto {
   deposits?: boolean;
 
   @IsOptional() @IsBoolean()
-  designTargets?: boolean;
+  screenshots?: boolean;
 
   @IsOptional() @IsBoolean()
-  staffScreenshots?: boolean;
+  appTracking?: boolean;
+
+  @IsOptional() @IsBoolean()
+  designTargets?: boolean;
 }
 
 /** What a module already holds — so the owner sees what a switch hides */
 interface FeatureUsage {
-  /** active people with a salary set */
-  salariedStaff: number;
+  /** active people with pay terms set (a salary or an hourly rate) */
+  paidStaff: number;
   /** monthly deposit rows ever held, settled or not */
   depositMonths: number;
+  /** whether any screenshot is stored (a count would scan a large table) */
+  hasScreenshots: boolean;
+  /** whether any app or website usage is stored */
+  hasAppUsage: boolean;
   /** design targets ever added */
   designTargets: number;
   /** active people whose work type is designer */
   designers: number;
-  /** staff and researcher logins — who a "Screenshots for staff" switch affects */
-  staffLogins: number;
 }
 
 interface FeaturesSettingsView {
+  /** the owner's switches, as saved */
   features: Features;
+  /** what is actually on — a child module is off while its parent is */
+  effective: Features;
   usage: FeatureUsage;
 }
 
@@ -66,24 +74,34 @@ export class FeaturesController {
   @Roles(UserRole.owner)
   @Get('settings/features')
   async settings(): Promise<FeaturesSettingsView> {
-    const [salariedStaff, depositMonths, designTargets, designers, staffLogins] =
+    const [paidStaff, depositMonths, shot, usage, designTargets, designers] =
       await Promise.all([
         this.prisma.employee.count({
-          where: { status: 'active', monthlySalary: { not: null } },
+          where: {
+            status: 'active',
+            OR: [{ monthlySalary: { not: null } }, { hourlyRate: { not: null } }],
+          },
         }),
         this.prisma.securityDeposit.count(),
+        this.prisma.screenshot.findFirst({ select: { id: true } }),
+        this.prisma.appUsage.findFirst({ select: { id: true } }),
         this.prisma.designTarget.count(),
         this.prisma.employee.count({
           where: { status: 'active', staffType: 'designer' },
         }),
-        this.prisma.user.count({
-          where: { isActive: true, role: { in: ['employee', 'researcher'] } },
-        }),
       ]);
 
     return {
-      features: await this.features.all(),
-      usage: { salariedStaff, depositMonths, designTargets, designers, staffLogins },
+      features: await this.features.switches(),
+      effective: await this.features.all(),
+      usage: {
+        paidStaff,
+        depositMonths,
+        hasScreenshots: shot !== null,
+        hasAppUsage: usage !== null,
+        designTargets,
+        designers,
+      },
     };
   }
 
@@ -94,12 +112,13 @@ export class FeaturesController {
     @Body() dto: SaveFeaturesDto,
     @Ip() ip: string,
   ): Promise<FeaturesSettingsView> {
-    const before = await this.features.all();
+    const before = await this.features.switches();
     const after: Features = {
       payroll: dto.payroll ?? before.payroll,
       deposits: dto.deposits ?? before.deposits,
+      screenshots: dto.screenshots ?? before.screenshots,
+      appTracking: dto.appTracking ?? before.appTracking,
       designTargets: dto.designTargets ?? before.designTargets,
-      staffScreenshots: dto.staffScreenshots ?? before.staffScreenshots,
     };
 
     const changed = changedFeatures(before, after);

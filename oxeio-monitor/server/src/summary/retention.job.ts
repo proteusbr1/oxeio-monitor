@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { PrivacyService } from '../privacy/privacy.service';
 import {
   SCREENSHOT_STORAGE,
   isSafeRelPath,
@@ -10,8 +11,6 @@ import {
 import { JOB_TIMEZONE, RunLock, SCHEDULING_ENABLED } from './scheduling';
 import { retentionCutoff } from './summary.math';
 
-/** 07 section 1 (locked configuration): `retention.screenshots_days`. */
-export const SCREENSHOT_RETENTION_DAYS = 90;
 
 /** Rows per pass; a bigger batch loses more work on a single failure. */
 const BATCH = 500;
@@ -67,6 +66,7 @@ export class RetentionJob {
     private readonly prisma: PrismaService,
     // local folder or S3 bucket — retention deletes wherever the bytes are
     @Inject(SCREENSHOT_STORAGE) private readonly storage: ScreenshotStorage,
+    private readonly privacy: PrivacyService,
   ) {}
 
   /** Careful: without `timeZone`, 3 am UTC = 9 am in Asia/Dhaka (UTC+6), disk I/O during office hours. */
@@ -104,7 +104,10 @@ export class RetentionJob {
   }
 
   private async purge(now: Date): Promise<RetentionResult> {
-    const cutoff = retentionCutoff(now, SCREENSHOT_RETENTION_DAYS);
+    // Settings → Privacy (90 days unless the owner changed it). Kept running
+    // while the Screenshots module is off: pictures already stored still age out.
+    const days = (await this.privacy.get()).screenshotRetentionDays;
+    const cutoff = retentionCutoff(now, days);
 
     // -- Step 1: mark ------------------------------------------------------
     const { count: marked } = await this.prisma.screenshot.updateMany({

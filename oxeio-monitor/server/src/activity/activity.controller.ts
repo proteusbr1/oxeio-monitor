@@ -9,6 +9,7 @@ import {
   type TopReport,
 } from './activity.service';
 import { EmployeeRangeQueryDto, TeamQueryDto, TopQueryDto } from './dto';
+import { RequiresFeature } from '../features/requires-feature';
 
 /**
  * Activity reports (`/api/v1/activity/…`).
@@ -24,6 +25,7 @@ import { EmployeeRangeQueryDto, TeamQueryDto, TopQueryDto } from './dto';
  * the whole team's data. A self-service view belongs in a separate controller.
  */
 @Roles(UserRole.owner, UserRole.manager)
+@RequiresFeature('appTracking')
 @Controller('activity')
 export class ActivityController {
   constructor(private readonly activity: ActivityService) {}

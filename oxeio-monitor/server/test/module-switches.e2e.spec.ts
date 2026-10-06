@@ -1,9 +1,16 @@
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { randomUUID } from 'node:crypto';
+
 import { FEATURES_SETTING_KEY } from '../src/features/features.rules';
+import { PrivacyService } from '../src/privacy/privacy.service';
 import {
+  createEmployeeWithCode,
   createHarness,
+  enrollDevice,
+  realNow,
+  todayWindow,
   loginReady,
   MANAGER_EMAIL,
   MANAGER_PASSWORD,
@@ -15,9 +22,13 @@ import {
 } from './setup/harness';
 
 /**
- * Module switches: payroll, security deposits and design targets can be
- * hidden by the owner. Off = the endpoints answer 404; nothing is deleted,
+ * Module switches: payroll, security deposits, screenshots, apps & websites
+ * and design targets can be switched off by the owner. Off = the endpoints
+ * answer 404 (and the capture modules stop the agents); nothing is deleted,
  * and an install that never touches the switches behaves as before.
+ *
+ * A setting inside a module (who sees screenshots, how long they are kept)
+ * is not a switch: it lives on Settings → Privacy, tested at the end.
  */
 let h: Harness;
 let owner: Session;
@@ -59,8 +70,9 @@ describe('defaults', () => {
     expect(res.body).toEqual({
       payroll: true,
       deposits: true,
+      screenshots: true,
+      appTracking: true,
       designTargets: true,
-      staffScreenshots: true,
     });
   });
 
@@ -75,11 +87,12 @@ describe('defaults', () => {
 
     expect(res.body.features.payroll).toBe(true);
     expect(res.body.usage).toEqual({
-      salariedStaff: expect.any(Number),
+      paidStaff: expect.any(Number),
       depositMonths: 0,
+      hasScreenshots: false,
+      hasAppUsage: false,
       designTargets: 0,
       designers: expect.any(Number),
-      staffLogins: expect.any(Number),
     });
   });
 });
@@ -112,19 +125,16 @@ describe('who can do what', () => {
 describe('switching off', () => {
   it('payroll off → /payroll is 404, the other modules carry on', async () => {
     const res = await save({ payroll: false }).expect(200);
-    expect(res.body.features).toEqual({
-      payroll: false,
-      deposits: true,
-      designTargets: true,
-      staffScreenshots: true,
-    });
+    expect(res.body.features).toMatchObject({ payroll: false, deposits: true });
+    // deposits live inside payroll: the switch is kept, but it is off for now
+    expect(res.body.effective).toMatchObject({ payroll: false, deposits: false });
 
     const blocked = await owner.http
       .get('/api/v1/payroll?month=2026-08')
       .expect(404);
     expect(blocked.body.message).toMatch(/Settings → Modules/);
 
-    await owner.http.get('/api/v1/deposits').expect(200);
+    await owner.http.get('/api/v1/deposits').expect(404);
     await owner.http.get('/api/v1/design-targets').expect(200);
   });
 
@@ -157,8 +167,9 @@ describe('switching off', () => {
     expect(res.body.features).toEqual({
       payroll: true,
       deposits: false,
+      screenshots: true,
+      appTracking: true,
       designTargets: false,
-      staffScreenshots: true,
     });
   });
 });
@@ -174,5 +185,101 @@ describe('audit', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].action).toBe('change_setting');
     expect(rows[0].meta).toEqual({ op: 'features', payroll: false });
+  });
+});
+
+describe('capture modules — the agents stop collecting', () => {
+  const agentConfig = async (token: string) =>
+    (
+      await h
+        .http()
+        .get('/api/v1/agent/config')
+        .set('Authorization', `Bearer ${token}`)
+        .set('X-Client-Time', realNow().toISOString())
+        .expect(200)
+    ).body.config;
+
+  it('screenshots off → no pictures in the agent config, the gallery is 404, /auth/me hides it', async () => {
+    const { code } = await createEmployeeWithCode(h.prisma);
+    const device = await enrollDevice(h, code);
+    expect((await agentConfig(device.token)).screenshot.enabled).toBe(true);
+    expect((await owner.http.get('/api/v1/auth/me').expect(200)).body.canSeeScreenshots).toBe(true);
+
+    await save({ screenshots: false }).expect(200);
+
+    expect((await agentConfig(device.token)).screenshot.enabled).toBe(false);
+    await owner.http.get('/api/v1/screenshots').expect(404);
+    await owner.http.get('/api/v1/screenshots/latest').expect(404);
+    expect((await owner.http.get('/api/v1/auth/me').expect(200)).body.canSeeScreenshots).toBe(false);
+  });
+
+  it('apps & websites off → no app tracking, usage sent anyway is dropped, design targets go with it', async () => {
+    const { code } = await createEmployeeWithCode(h.prisma);
+    const device = await enrollDevice(h, code);
+
+    const res = await save({ appTracking: false }).expect(200);
+    expect(res.body.features.designTargets).toBe(true);
+    expect(res.body.effective.designTargets).toBe(false);
+
+    expect((await agentConfig(device.token)).appTracking.enabled).toBe(false);
+    await owner.http.get('/api/v1/categories').expect(404);
+    await owner.http.get('/api/v1/activity/top').expect(404);
+    await owner.http.get('/api/v1/design-targets').expect(404);
+
+    const used = todayWindow(600);
+    const sent = await h
+      .http()
+      .post('/api/v1/agent/app-usage')
+      .set('Authorization', `Bearer ${device.token}`)
+      .set('X-Client-Time', realNow().toISOString())
+      .send({
+        items: [
+          {
+            clientUuid: randomUUID(),
+            startedAt: used.startedAt.toISOString(),
+            endedAt: used.endedAt.toISOString(),
+            durationSec: used.durationSec,
+            processName: 'chrome.exe',
+            appName: 'Google Chrome',
+            windowTitle: 'GitHub',
+            domain: 'github.com',
+            isBrowser: true,
+          },
+        ],
+      })
+      .expect(200);
+    expect(sent.body.accepted).toBe(0);
+    expect(await h.prisma.appUsage.count()).toBe(0);
+  });
+});
+
+describe('Settings → Privacy (a setting inside Screenshots, not a module)', () => {
+  const savePrivacy = (body: Record<string, unknown>) =>
+    owner.http.patch('/api/v1/settings/privacy').set('X-CSRF-Token', owner.csrf).send(body);
+
+  it('defaults, and the old "screenshots for staff" switch carries over', async () => {
+    let res = await owner.http.get('/api/v1/settings/privacy').expect(200);
+    expect(res.body.settings).toEqual({ staffSeeOwnScreenshots: true, screenshotRetentionDays: 90 });
+
+    await h.prisma.setting.create({ data: { key: FEATURES_SETTING_KEY, value: { staffScreenshots: false } } });
+    h.app.get(PrivacyService).forget();
+    res = await owner.http.get('/api/v1/settings/privacy').expect(200);
+    expect(res.body.settings.staffSeeOwnScreenshots).toBe(false);
+  });
+
+  it('saves, audits and validates', async () => {
+    const res = await savePrivacy({ staffSeeOwnScreenshots: false, screenshotRetentionDays: 30 }).expect(200);
+    expect(res.body.settings).toEqual({ staffSeeOwnScreenshots: false, screenshotRetentionDays: 30 });
+    await savePrivacy({ screenshotRetentionDays: 3 }).expect(400);
+
+    const rows = await h.prisma.auditLog.findMany({ where: { targetId: 'privacy' } });
+    expect(rows).toHaveLength(1);
+  });
+
+  it('is 404 while the Screenshots module is off, and owner-only', async () => {
+    const manager = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
+    await manager.http.get('/api/v1/settings/privacy').expect(403);
+    await save({ screenshots: false }).expect(200);
+    await owner.http.get('/api/v1/settings/privacy').expect(404);
   });
 });

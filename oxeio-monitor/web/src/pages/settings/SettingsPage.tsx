@@ -2,6 +2,7 @@ import { Navigate, useSearchParams } from 'react-router-dom';
 
 import { ApiError } from '../../api/client';
 import { useAuth } from '../../auth/AuthContext';
+import { useFeatures } from '../../features/FeaturesContext';
 import { Page } from '../../components/Page';
 import { ErrorBox } from '../../components/States';
 import { AgentVersionsTab } from './AgentVersionsTab';
@@ -12,115 +13,24 @@ import { CategoriesTab } from './CategoriesTab';
 import { ErrorReportingTab } from './ErrorReportingTab';
 import { ModulesTab } from './ModulesTab';
 import { PoliciesTab } from './PoliciesTab';
+import { PrivacyTab } from './PrivacyTab';
 import { OrganizationCard } from './OrganizationCard';
 import { RegionTab } from './RegionTab';
+import { settingsSections } from './sections';
 
 /**
  * Settings, grouped into sections (Work · Company · Integrations · System ·
  * Records) with a side menu; on a phone the menu becomes a grouped select.
  *
  * Managers get in too, but only to the Work section (categories and
- * holidays). Hiding a tab here is the first safeguard, not the last: the
- * real guard is `@Roles` on the server.
+ * holidays); a tab of a switched-off module is left out (`sections.ts`).
+ * Hiding a tab here is the first safeguard, not the last: the real guard is
+ * `@Roles` on the server.
  *
  * Tabs are `?tab=` (linkable, survive a refresh). Old links to tabs that
  * moved elsewhere are redirected: Staff → /staff (Directory), Leave and
  * Months → /payroll.
  */
-
-interface TabDef {
-  id: string;
-  label: string;
-  /** a manager gets it too — written on every row so adding one forces the decision */
-  manager: boolean;
-  managerLabel?: string;
-  subtitle: string;
-  managerSubtitle?: string;
-}
-
-const SECTIONS: { title: string; tabs: TabDef[] }[] = [
-  {
-    title: 'Work',
-    tabs: [
-      {
-        id: 'categories',
-        label: 'Apps & sites',
-        manager: true,
-        subtitle: 'Which apps and sites count as work, and in which category',
-      },
-      {
-        id: 'policies',
-        label: 'Policies & holidays',
-        managerLabel: 'Holidays',
-        manager: true,
-        subtitle: 'Monthly target, screenshot window, days off and holidays',
-        managerSubtitle: 'Days off — the hours target moves with them',
-      },
-    ],
-  },
-  {
-    title: 'Company',
-    tabs: [
-      {
-        id: 'region',
-        label: 'Company & region',
-        manager: false,
-        subtitle: 'Company name, country, time zone, currency and formats',
-      },
-      {
-        id: 'modules',
-        label: 'Modules',
-        manager: false,
-        subtitle: 'Turn off the parts your company does not use — nothing is deleted',
-      },
-    ],
-  },
-  {
-    title: 'Integrations',
-    tabs: [
-      {
-        id: 'notifications',
-        label: 'Notifications',
-        manager: false,
-        subtitle: 'Where the weekly summary and alerts are sent',
-      },
-      {
-        id: 'errors',
-        label: 'Error reporting',
-        manager: false,
-        subtitle: 'Send crashes to Sentry, so bugs are found before anyone reports them',
-      },
-    ],
-  },
-  {
-    title: 'System',
-    tabs: [
-      {
-        id: 'backup',
-        label: 'Storage & backup',
-        manager: false,
-        subtitle: 'Where screenshots are kept, and how the database is backed up',
-      },
-      {
-        id: 'agent',
-        label: 'Agent updates',
-        manager: false,
-        subtitle: 'Which agent build each PC is offered — and how widely',
-      },
-    ],
-  },
-  {
-    title: 'Records',
-    tabs: [
-      {
-        id: 'audit',
-        label: 'Audit log',
-        manager: false,
-        subtitle: 'Who looked at what, and who changed what',
-      },
-    ],
-  },
-];
 
 /** tabs that moved to other pages: old links still land in the right place */
 const MOVED: Record<string, string> = {
@@ -132,14 +42,10 @@ const MOVED: Record<string, string> = {
 export function SettingsPage() {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
+  const { features } = useFeatures();
 
   const isOwner = user?.role === 'owner';
-  const sections = SECTIONS.map((section) => ({
-    ...section,
-    tabs: section.tabs
-      .filter((t) => isOwner || t.manager)
-      .map((t) => (isOwner ? t : { ...t, label: t.managerLabel ?? t.label })),
-  })).filter((section) => section.tabs.length > 0);
+  const sections = settingsSections(user?.role, features);
   const tabs = sections.flatMap((section) => section.tabs);
 
   const raw = params.get('tab');
@@ -159,10 +65,9 @@ export function SettingsPage() {
   }
 
   const open = (id: string) => setParams({ tab: id }, { replace: true });
-  const subtitle = (!isOwner && active.managerSubtitle) || active.subtitle;
 
   return (
-    <Page title="Settings" subtitle={subtitle}>
+    <Page title="Settings" subtitle={active.subtitle}>
       <div className="lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-6">
         <nav aria-label="Settings sections">
           {/* phone: one grouped select instead of a long row of tabs */}
@@ -221,6 +126,7 @@ export function SettingsPage() {
           {active.id === 'categories' && <CategoriesTab />}
           {active.id === 'policies' && <PoliciesTab />}
           {active.id === 'modules' && <ModulesTab />}
+          {active.id === 'privacy' && <PrivacyTab />}
           {active.id === 'notifications' && <NotificationsTab />}
           {active.id === 'errors' && <ErrorReportingTab />}
           {active.id === 'region' && (

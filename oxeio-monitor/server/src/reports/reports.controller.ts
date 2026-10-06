@@ -11,6 +11,7 @@ import type {
   ReportFile,
   SummaryReport,
 } from './reports.types';
+import { RequiresFeature } from '../features/requires-feature';
 
 /**
  * F01 · F02 · F04 · F05 · F08: reports and Excel export.
@@ -69,6 +70,7 @@ export class ReportsController {
    * Careful: no `pdf` here. `ProductivityQuery` blocks it in the DTO itself, so
    * `?format=pdf` gets a clear 400, not quietly JSON.
    */
+  @RequiresFeature('appTracking')
   @Get('productivity')
   async productivity(
     @CurrentUser() actor: SessionUser,

@@ -10,7 +10,8 @@ import {
 import { DepositsService } from '../deposits/deposits.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { parseWorkDate, toIsoDate } from '../reports/reports.range';
-import { SCREENSHOT_RETENTION_DAYS } from '../summary/retention.job';
+import { FeaturesService } from '../features/features.service';
+import { PrivacyService } from '../privacy/privacy.service';
 import { isWorkday } from '../summary/summary.math';
 import type { SessionUser } from '../auth/types';
 
@@ -30,6 +31,12 @@ export interface MySummary {
   policySignedAt: string | null;
   /** "How long screenshots are kept": the promise, with the number, on the page itself */
   screenshotRetentionDays: number;
+  /** whether pictures of their screen are taken at all (module on and their policy takes them) */
+  screenshotsTaken: boolean;
+  /** whether the apps and websites they use are recorded (Apps & websites module) */
+  appsTracked: boolean;
+  /** whether they can open the pictures of their own screen (Settings → Privacy) */
+  canSeeOwnScreenshots: boolean;
   /**
    * **Today's designs**: `null` when there is nothing to show.
    *
@@ -80,6 +87,8 @@ export class MeService {
     private readonly prisma: PrismaService,
     private readonly progress: ProgressService,
     private readonly deposits: DepositsService,
+    private readonly features: FeaturesService,
+    private readonly privacy: PrivacyService,
   ) {}
 
   /**
@@ -114,6 +123,7 @@ export class MeService {
   async summary(actor: SessionUser, now = new Date()): Promise<MySummary> {
     const employeeId = this.employeeIdOf(actor);
 
+    const [features, privacy] = await Promise.all([this.features.all(), this.privacy.get()]);
     const [employee, progress, designsDone] = await Promise.all([
       this.prisma.employee.findUniqueOrThrow({
         where: { id: employeeId },
@@ -125,7 +135,7 @@ export class MeService {
           policySignedAt: true,
           staffType: true,
           dailyDesignTarget: true,
-          policy: { select: { dailyDesignTarget: true } },
+          policy: { select: { dailyDesignTarget: true, screenshotsEnabled: true } },
         },
       }),
       this.progress.forEmployee(employeeId, now),
@@ -144,7 +154,10 @@ export class MeService {
       },
       progress,
       policySignedAt: isoDate(employee.policySignedAt),
-      screenshotRetentionDays: SCREENSHOT_RETENTION_DAYS,
+      screenshotRetentionDays: privacy.screenshotRetentionDays,
+      screenshotsTaken: features.screenshots && employee.policy?.screenshotsEnabled !== false,
+      appsTracked: features.appTracking,
+      canSeeOwnScreenshots: features.screenshots && privacy.staffSeeOwnScreenshots,
       /**
        * The rule lives in one place (`designView`) and has three states: with a
        * target, a bare count without a target, and nothing. All four screens call

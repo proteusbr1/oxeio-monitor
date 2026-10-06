@@ -115,7 +115,7 @@ export function ScreenshotStorageCard() {
             {
               value: 'local',
               label: "This server's disk",
-              hint: 'As it always was. Screenshots fill the disk until retention removes them after 90 days.',
+              hint: 'As it always was. Screenshots fill the disk until the retention period set in Settings → Privacy removes them.',
             },
             {
               value: 's3',

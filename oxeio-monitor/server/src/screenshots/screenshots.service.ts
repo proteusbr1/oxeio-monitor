@@ -12,7 +12,7 @@ import { Prisma, UserRole } from '@prisma/client';
 
 import { workDateOf } from '../agent/util/work-time';
 import { AuditService } from '../audit/audit.service';
-import { FeaturesService } from '../features/features.service';
+import { PrivacyService } from '../privacy/privacy.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   SCREENSHOT_STORAGE,
@@ -79,8 +79,8 @@ export class ScreenshotsService {
     // ⚠️ the same store ingest writes to (one global instance, StorageModule)
     //    — so uploads and reads can never end up in two different places
     @Inject(SCREENSHOT_STORAGE) private readonly storage: ScreenshotStorage,
-    // Settings → Modules › "Screenshots for staff"
-    private readonly features: FeaturesService,
+    // Settings → Privacy › "Staff see their own screenshots"
+    private readonly privacy: PrivacyService,
   ) {}
 
   /**
@@ -334,12 +334,12 @@ export class ScreenshotsService {
    */
   /**
    * Whose pictures this person may see — and, for anyone but the owner and
-   * managers, whether staff see their own at all (Settings → Modules ›
-   * "Screenshots for staff"; on unless the owner turned it off).
+   * managers, whether staff see their own at all (Settings → Privacy; on
+   * unless the owner turned it off).
    */
   private async scopeFor(actor: SessionUser, requested?: number): Promise<number | null> {
     const everyone = actor.role === UserRole.owner || actor.role === UserRole.manager;
-    if (!everyone && !(await this.features.isOn('staffScreenshots'))) {
+    if (!everyone && !(await this.privacy.get()).staffSeeOwnScreenshots) {
       throw new ForbiddenException(
         'Screenshots are not shown to staff on this system. They are still taken; the owner and managers see them.',
       );

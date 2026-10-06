@@ -36,7 +36,9 @@ export function LiveBoardPage() {
   const pulse = usePolling((signal) => canViewBoard ? getTeamPulse(signal) : Promise.resolve(null), CHART_REFRESH_MS, [canViewBoard]);
   const trend = usePolling((signal) => canViewBoard ? getTeamTrend(signal) : Promise.resolve(null), CHART_REFRESH_MS, [canViewBoard]);
   const workDate = board.data?.workDate;
-  const apps = usePolling((signal) => canViewBoard && workDate ? getTopUsage({ from: workDate, to: workDate, limit: 6 }, signal) : Promise.resolve(null), CHART_REFRESH_MS, [canViewBoard, workDate]);
+  // Apps & websites switched off: the endpoint answers 404, so it is not asked at all
+  const tracksApps = features.appTracking;
+  const apps = usePolling((signal) => canViewBoard && tracksApps && workDate ? getTopUsage({ from: workDate, to: workDate, limit: 6 }, signal) : Promise.resolve(null), CHART_REFRESH_MS, [canViewBoard, tracksApps, workDate]);
   const alerts = usePolling((signal) => isOwner ? listAlerts({ limit: 3 }, signal) : Promise.resolve(null), CHART_REFRESH_MS, [isOwner]);
   const [leaderWindow, setLeaderWindow] = useState<'30d' | 'all'>('30d');
   const cards = board.data?.cards ?? [];
@@ -59,7 +61,7 @@ export function LiveBoardPage() {
   const dailyTarget = targets.length && targets.every((card) => card.dailyTargetSec === targets[0].dailyTargetSec) ? targets[0].dailyTargetSec : null;
   const yesterday = trend.data?.days.at(-2);
   const delta = yesterday?.tracked ? yesterday.expectedStaff === 0 ? 'Yesterday was a day off' : Math.abs(todaySec - yesterday.workedSec) < 300 ? 'About the same as yesterday' : `${todaySec > yesterday.workedSec ? '▲' : '▼'} ${formatDuration(Math.abs(todaySec - yesterday.workedSec))} vs yesterday` : null;
-  const refresh = () => { board.reload(); pulse.reload(); trend.reload(); apps.reload(); if (isOwner) alerts.reload(); };
+  const refresh = () => { board.reload(); pulse.reload(); trend.reload(); if (tracksApps) apps.reload(); if (isOwner) alerts.reload(); };
 
   let content: ReactNode;
   if (!canViewBoard) content = <Empty title="You don't have access" hint="This board is available to owners and managers." />;
@@ -90,7 +92,7 @@ export function LiveBoardPage() {
       </Card>
       <div className="studio-detail-side">
         {hasDesigners && <Card title="Designs Finished · Last 7 Days" hint="Whole team · today is still in progress" padded={false}><DataPanel result={trend}>{trend.data && <StudioWeek days={trend.data.days} metric="designs" />}</DataPanel></Card>}
-        <Card title="Where Today Went" hint="Whole team · counted app time only" padded={false}><DataPanel result={apps}>{apps.data && <TopApps usage={apps.data.apps} />}</DataPanel></Card>
+        {tracksApps && <Card title="Where Today Went" hint="Whole team · counted app time only" padded={false}><DataPanel result={apps}>{apps.data && <TopApps usage={apps.data.apps} />}</DataPanel></Card>}
         <Card title="Fewest Hours" hint={trend.data ? `Least counted in the last ${trend.data.laggardDays} days` : 'Least counted recently'} padded={false}><DataPanel result={trend}>{trend.data && <FewestHours people={trend.data.laggards} days={trend.data.laggardDays} />}</DataPanel></Card>
       </div>
     </div>

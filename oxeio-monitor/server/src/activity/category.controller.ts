@@ -21,6 +21,7 @@ import {
   type DeleteResult,
 } from './category.service';
 import { CreateCategoryDto, RecategorizeDto, UpdateCategoryDto } from './dto';
+import { RequiresFeature } from '../features/requires-feature';
 
 /**
  * D06 - the owner's category rules (`/api/v1/categories`, spec § 4.2).
@@ -37,6 +38,7 @@ import { CreateCategoryDto, RecategorizeDto, UpdateCategoryDto } from './dto';
  * So every change is written to `audit_log` with the actor's name.
  */
 @Roles(UserRole.owner, UserRole.manager)
+@RequiresFeature('appTracking')
 @Controller('categories')
 export class CategoryController {
   constructor(private readonly categories: CategoryService) {}

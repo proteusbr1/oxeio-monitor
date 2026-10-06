@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Device } from '@prisma/client';
 
+import { FeaturesService } from '../features/features.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WORK_TIMEZONE, workOffsetMinutesAt, workZoneTransitions } from './util/work-time';
 
@@ -45,7 +46,11 @@ export interface AgentConfig {
 
 @Injectable()
 export class AgentConfigService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // Settings → Modules: Screenshots and Apps & websites stop the capture itself
+    private readonly features: FeaturesService,
+  ) {}
 
   /**
    * The config the agent runs with. It comes from the work policy, so a
@@ -60,6 +65,7 @@ export class AgentConfigService {
       : await this.prisma.workPolicy.findFirst({ where: { isActive: true } });
 
     if (!policy) throw new NotFoundException('No active work policy found');
+    const modules = await this.features.all();
 
     const config: AgentConfig = {
       idleThresholdSec: policy.idleThresholdSec,
@@ -73,9 +79,10 @@ export class AgentConfigService {
       zoneTransitions: transitionWindow(new Date()),
       monthlyTargetHours: Number(policy.monthlyTargetHours),
       heartbeatSec: 30,
-      appTracking: { enabled: true, minDurationSec: 5 },
+      appTracking: { enabled: modules.appTracking, minDurationSec: 5 },
       screenshot: {
-        enabled: policy.screenshotsEnabled,
+        // the agent still samples the screen (idle detection needs it); only pictures stop
+        enabled: modules.screenshots && policy.screenshotsEnabled,
         format: 'webp',
         quality: 70,
         maxWidth: 1920,

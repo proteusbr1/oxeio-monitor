@@ -188,3 +188,26 @@ export function importPublicHolidays(body: {
 }): Promise<HolidayImportPlan> {
   return api('/holidays/public', { method: 'POST', body });
 }
+
+/** The automatic public-holiday update — server `calendar/holiday-sync.service.ts` */
+export interface HolidayAutoView {
+  enabled: boolean;
+  /** the company's country; null = nothing to update from */
+  country: string | null;
+  /** years already imported (each year is imported only once) */
+  years: number[];
+  lastRunAt: string | null;
+  lastResult: string | null;
+}
+
+export function getHolidayAuto(signal?: AbortSignal): Promise<HolidayAutoView> {
+  return api<HolidayAutoView>('/holidays/auto', { signal });
+}
+
+export function setHolidayAuto(enabled: boolean): Promise<HolidayAutoView> {
+  return api<HolidayAutoView>('/holidays/auto', { method: 'PATCH', body: { enabled } });
+}
+
+export function runHolidayAuto(): Promise<HolidayAutoView> {
+  return api<HolidayAutoView>('/holidays/auto/run', { method: 'POST' });
+}

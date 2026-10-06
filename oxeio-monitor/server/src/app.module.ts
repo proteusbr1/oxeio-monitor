@@ -16,6 +16,7 @@ import { DepositsModule } from './deposits/deposits.module';
 import { DevicesModule } from './devices/devices.module';
 import { ErrorReportingModule } from './error-reporting/error-reporting.module';
 import { FeaturesModule } from './features/features.module';
+import { PrivacyModule } from './privacy/privacy.module';
 import { MeModule } from './me/me.module';
 import { OpsModule } from './ops/ops.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -66,6 +67,7 @@ import { StaffModule } from './staff/staff.module';
     AuthModule,
     // after AuthModule: its guards must run before the module switches
     FeaturesModule,
+    PrivacyModule,
     StaffModule,
     SetupModule,
     AgentModule,

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { ReportsModule } from '../reports/reports.module';
+import { HolidaySyncService } from './holiday-sync.service';
 import { HolidaysController } from './holidays.controller';
 import { HolidaysService } from './holidays.service';
 import { LeaveController } from './leave.controller';
@@ -23,8 +24,8 @@ import { WorkPoliciesService } from './work-policies.service';
     LeaveController,
     MonthCloseController,
   ],
-  providers: [HolidaysService, WorkPoliciesService, LeaveService, MonthCloseService],
-  // the setup wizard imports the country's public holidays
-  exports: [HolidaysService],
+  providers: [HolidaysService, HolidaySyncService, WorkPoliciesService, LeaveService, MonthCloseService],
+  // the setup wizard imports the country's public holidays and switches the update on
+  exports: [HolidaysService, HolidaySyncService],
 })
 export class CalendarModule {}

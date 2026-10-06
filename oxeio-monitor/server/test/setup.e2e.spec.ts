@@ -78,7 +78,7 @@ describe('first-run setup wizard', () => {
     expect(await h.prisma.appCategory.count()).toBeGreaterThan(50);
     // the original company's own modules start off on a new install
     const features = await agent.get('/api/v1/features').expect(200);
-    expect(features.body).toMatchObject({ payroll: true, deposits: false, designTargets: false, staffScreenshots: true });
+    expect(features.body).toMatchObject({ payroll: true, deposits: false, screenshots: true, appTracking: true, designTargets: false });
     const status = await request(h.app.getHttpServer()).get('/api/v1/setup/status').expect(200);
     expect(status.body).toEqual({ needed: false, organizationName: 'Clínica Exemplo' });
   });

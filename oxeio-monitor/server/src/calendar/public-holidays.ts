@@ -1,16 +1,22 @@
 import { isRealDate, type ImportResult } from './holiday-import';
 
 /**
- * Public holidays for any country, from Nager.Date (https://date.nager.at) —
- * a free, keyless calendar covering about 120 countries. Used by the setup
- * wizard and by Settings → Policies & holidays › "Public holidays".
+ * Public holidays for any country, from free, keyless calendars. Used by the
+ * setup wizard, Settings → Policies & holidays › "Public holidays" and the
+ * nightly automatic update (holiday-sync.service.ts).
  *
- * Only nationwide public holidays are taken (`global` and type `Public`):
- * regional ones (a state's own holiday) would wrongly shorten everyone's
- * month. The owner adds regional or company days by hand.
+ * · Every country: Nager.Date (https://date.nager.at), about 120 countries.
+ *   Only nationwide public holidays are taken (`global` and type `Public`):
+ *   regional ones (a state's own holiday) would wrongly shorten everyone's
+ *   month. The owner adds regional or company days by hand.
+ * · Brazil: BrasilAPI (https://brasilapi.com.br) first — the national
+ *   calendar as Brazilian companies use it, Carnaval included (Nager.Date
+ *   lists Carnaval only as "optional", so it would be left out). Nager.Date
+ *   is the fallback when BrasilAPI is down.
  */
 
 const BASE = process.env.PUBLIC_HOLIDAYS_URL?.trim() || 'https://date.nager.at/api/v3';
+const BRASIL_API = process.env.BRASIL_API_URL?.trim() || 'https://brasilapi.com.br/api';
 const TIMEOUT_MS = 10_000;
 
 export interface PublicHolidayCountry {
@@ -28,10 +34,10 @@ interface NagerHoliday {
 
 export class PublicHolidaysError extends Error {}
 
-async function get<T>(path: string, fetchImpl: typeof fetch): Promise<T | null> {
+async function get<T>(path: string, fetchImpl: typeof fetch, base = BASE): Promise<T | null> {
   let res: Response;
   try {
-    res = await fetchImpl(`${BASE}${path}`, {
+    res = await fetchImpl(`${base}${path}`, {
       signal: AbortSignal.timeout(TIMEOUT_MS),
       headers: { accept: 'application/json' },
     });
@@ -72,6 +78,11 @@ export async function publicHolidays(
   if (!/^[A-Z]{2}$/.test(code)) throw new PublicHolidaysError('The country must be a two-letter code, e.g. BR');
   if (!Number.isInteger(year) || year < 2000 || year > 2100) throw new PublicHolidaysError('The year must be between 2000 and 2100');
 
+  if (code === 'BR') {
+    const brazil = await brasilApiHolidays(year, fetchImpl).catch(() => null);
+    if (brazil && brazil.holidays.length > 0) return brazil;
+  }
+
   const rows = (await get<NagerHoliday[]>(`/PublicHolidays/${year}/${code}`, fetchImpl)) ?? [];
   const problems: string[] = [];
   const seen = new Set<string>();
@@ -100,6 +111,33 @@ export async function publicHolidays(
 
   if (rows.length === 0) {
     problems.push(`The calendar has no public holidays for ${code} in ${year}.`);
+  }
+  return { holidays, problems };
+}
+
+interface BrasilApiHoliday {
+  date: string;
+  name: string;
+  type: string;
+}
+
+/** Brazil's national holidays from BrasilAPI — null-free: throws when unreachable */
+async function brasilApiHolidays(year: number, fetchImpl: typeof fetch): Promise<ImportResult> {
+  const rows = (await get<BrasilApiHoliday[]>(`/feriados/v1/${year}`, fetchImpl, BRASIL_API)) ?? [];
+  const problems: string[] = [];
+  const seen = new Set<string>();
+  const holidays: ImportResult['holidays'] = [];
+
+  for (const r of rows) {
+    if (r.type !== 'national') continue;
+    if (!isRealDate(r.date)) {
+      problems.push(`${r.date}: not a date — skipped`);
+      continue;
+    }
+    if (seen.has(r.date)) continue;
+    seen.add(r.date);
+    const name = r.name.trim().slice(0, 120);
+    holidays.push({ entry: { date: r.date, name, nameEn: name, approximate: false }, type: 'public' });
   }
   return { holidays, problems };
 }
