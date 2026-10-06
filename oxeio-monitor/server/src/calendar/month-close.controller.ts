@@ -11,7 +11,7 @@ import { UserRole } from '@prisma/client';
 
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
-import { CloseMonthDto } from './dto';
+import { CloseMonthDto } from './calendar.dto';
 import {
   MonthCloseService,
   type MonthClosureView,

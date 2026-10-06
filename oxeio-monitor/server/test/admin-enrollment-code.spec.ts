@@ -10,7 +10,7 @@ import {
   enrollmentCodeExpiry,
   formatEnrollmentCode,
   hashEnrollmentCode,
-} from '../src/admin/enrollment-code';
+} from '../src/devices/enrollment-code';
 
 describe('enrollment code — বর্ণমালা', () => {
   /**

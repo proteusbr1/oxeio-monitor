@@ -3,7 +3,7 @@ import { UserRole } from '@prisma/client';
 
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
-import { EmployeeListQueryDto } from './dto';
+import { EmployeeListQueryDto } from './staff.dto';
 import { EmployeesService } from './employees.service';
 import type { EmployeeView } from './redact';
 

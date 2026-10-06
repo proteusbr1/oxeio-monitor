@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
-import type { AuditLogQueryDto } from './dto';
+import type { AuditLogQueryDto } from './audit-log.dto';
 
 const DEFAULT_PAGE_SIZE = 50;
 

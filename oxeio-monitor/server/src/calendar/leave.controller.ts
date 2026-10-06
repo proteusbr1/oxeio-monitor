@@ -14,7 +14,7 @@ import { UserRole } from '@prisma/client';
 
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
-import { CreateLeaveDto } from './dto';
+import { CreateLeaveDto } from './calendar.dto';
 import { LeaveService, type LeaveView } from './leave.service';
 
 /**

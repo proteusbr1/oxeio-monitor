@@ -6,7 +6,7 @@ import {
   captureWindowProblem,
   DEFAULT_CAPTURE_WINDOW,
   hhmmToMinutes,
-} from '../src/admin/work-policy.rules';
+} from '../src/calendar/work-policy.rules';
 
 describe('ক্যাপচার উইন্ডো — ADR-011c-র সীমা', () => {
   it('০৭:০০–২৩:০০ মেনে নেয়', () => {

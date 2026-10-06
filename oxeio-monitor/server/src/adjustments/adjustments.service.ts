@@ -9,7 +9,7 @@ import {
 import { UserRole } from '@prisma/client';
 
 import { workDateOf } from '../agent/util/dhaka-time';
-import { parseCalendarDate } from '../admin/calendar-date';
+import { parseCalendarDate } from '../calendar/calendar-date';
 import { AuditService } from '../audit/audit.service';
 import type { SessionUser } from '../auth/types';
 import { PrismaService } from '../prisma/prisma.service';

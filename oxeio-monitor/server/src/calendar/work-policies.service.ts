@@ -9,8 +9,8 @@ import type { WorkPolicy } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import type { SessionUser } from '../auth/types';
 import { PrismaService } from '../prisma/prisma.service';
-import { ADMIN_TARGET } from './admin-audit';
-import type { CreateWorkPolicyDto, UpdateWorkPolicyDto } from './dto';
+import { ADMIN_TARGET } from '../audit/admin-audit';
+import type { CreateWorkPolicyDto, UpdateWorkPolicyDto } from './calendar.dto';
 import {
   captureWindowProblem,
   DEFAULT_CAPTURE_WINDOW,

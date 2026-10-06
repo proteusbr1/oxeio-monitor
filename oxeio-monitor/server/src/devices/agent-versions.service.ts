@@ -24,7 +24,7 @@ import { storageRoot } from '../common/storage.config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppSettingsService } from '../settings/app-settings.service';
 import type { SessionUser } from '../auth/types';
-import type { PublishVersionDto, SetStageDto } from './dto';
+import type { PublishVersionDto, SetStageDto } from './devices.dto';
 
 export interface AgentVersionView {
   version: string;

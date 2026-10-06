@@ -22,7 +22,7 @@ import { basename } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 
 // ⚠️ from src/: this script runs in the `migrate` container, which has the source
-import { parseHolidayFile } from '../src/admin/holiday-import';
+import { parseHolidayFile } from '../src/calendar/holiday-import';
 import {
   dhakaToday,
   holidayRowName,

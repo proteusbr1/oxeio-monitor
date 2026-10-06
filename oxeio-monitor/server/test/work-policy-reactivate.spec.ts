@@ -2,7 +2,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AuditService } from '../src/audit/audit.service';
-import { WorkPoliciesService } from '../src/admin/work-policies.service';
+import { WorkPoliciesService } from '../src/calendar/work-policies.service';
 import type { SessionUser } from '../src/auth/types';
 import type { PrismaService } from '../src/prisma/prisma.service';
 

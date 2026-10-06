@@ -10,14 +10,10 @@ import { AuditService } from '../audit/audit.service';
 import type { SessionUser } from '../auth/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { workDateOf } from '../agent/util/dhaka-time';
-import { ADMIN_TARGET } from './admin-audit';
+import { ADMIN_TARGET } from '../audit/admin-audit';
 import { parseHolidayFile } from './holiday-import';
 import { parseCalendarDate } from './calendar-date';
-import type {
-  CreateHolidayDto,
-  HolidayListQueryDto,
-  UpdateHolidayDto,
-} from './dto';
+import type { CreateHolidayDto, HolidayListQueryDto, UpdateHolidayDto } from './calendar.dto';
 
 export interface HolidayImportRow {
   date: string;

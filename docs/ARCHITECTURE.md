@@ -79,8 +79,9 @@ and per-service scope rules); the dashboard only hides what a role cannot use.
 | `deposits/` | security deposits ledger and settlements |
 | `targets/` | design targets: pool, hand-out jobs, review, file trace |
 | `adjustments/` | hour corrections made by the owner |
-| `admin/` | staff (employees), holidays, leave, month closing, work policies, devices, agent versions, audit log |
-| `users/` | portal logins |
+| `staff/` | the people, their portal logins and roles, staff codes |
+| `calendar/` | holidays (and their import), work policies, agreed leave, closing a month |
+| `devices/` | the owner's side of the PCs: enrolment codes, revoke/restore, agent builds and rollout stages |
 | `me/` | "My data" for the signed-in person |
 | `auth/` | login, sessions (JWT cookie + CSRF), 2FA, role guard |
 | `alerts/` | alert rules (agent down, tamper, no activity, disk, backup), dispatch to email / Telegram / Teams |
@@ -90,9 +91,9 @@ and per-service scope rules); the dashboard only hides what a role cannot use.
 | `features/` | module switches (see above) |
 | `error-reporting/` | Sentry |
 | `storage/` | where screenshots are stored: local disk or S3/B2 |
-| `audit/` | the audit log writer |
+| `audit/` | the audit log: the writer every module uses, and the screen that reads it |
 | `health/` | `GET /health` |
-| `prisma/`, `common/`, `scripts/` | database client, shared helpers, one-off scripts |
+| `prisma/`, `common/`, `scripts/` | database client, shared helpers and validation patterns, one-off scripts |
 
 Database schema and migrations: `server/prisma/`. Seed and holiday data:
 `server/prisma/seed.ts`, `holiday-sets.ts`.

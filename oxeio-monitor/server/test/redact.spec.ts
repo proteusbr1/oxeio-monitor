@@ -6,7 +6,7 @@ import {
   toEmployeeViews,
   type EmployeeRow,
   type OwnerEmployeeView,
-} from '../src/admin/redact';
+} from '../src/staff/redact';
 
 /**
  * ⚠️ `monthlySalary`-তে সাধারণ `number` বসানো হয়েছে — `Decimalish`-এর

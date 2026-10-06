@@ -3,7 +3,7 @@ import { UserRole } from '@prisma/client';
 
 import { Roles } from '../auth/decorators';
 import { type AuditLogPage, AuditLogService } from './audit-log.service';
-import { AuditLogQueryDto } from './dto';
+import { AuditLogQueryDto } from './audit-log.dto';
 
 /**
  * E11 — `GET /api/v1/audit-log`, **owner-only** (স্পেক § ৪.৩)।

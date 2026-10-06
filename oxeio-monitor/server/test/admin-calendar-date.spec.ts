@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseCalendarDate } from '../src/admin/calendar-date';
+import { parseCalendarDate } from '../src/calendar/calendar-date';
 
 describe('parseCalendarDate — ক্যালেন্ডার তারিখ, instant নয়', () => {
   /**

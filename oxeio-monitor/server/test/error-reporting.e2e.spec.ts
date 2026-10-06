@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { Logger } from '@nestjs/common';
 
-import { HolidaysService } from '../src/admin/holidays.service';
+import { HolidaysService } from '../src/calendar/holidays.service';
 import { ErrorReporter } from '../src/error-reporting/error-reporter.service';
 import { ERROR_REPORTING_SETTING_KEY } from '../src/error-reporting/error-reporting.rules';
 import { ReportingLogger } from '../src/error-reporting/reporting-logger';

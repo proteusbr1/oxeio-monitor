@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { nextEmployeeCode } from '../src/admin/next-code';
+import { nextEmployeeCode } from '../src/staff/next-code';
 
 /**
  * পরের কর্মী-কোডের পরামর্শ।

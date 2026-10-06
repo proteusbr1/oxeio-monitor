@@ -16,12 +16,7 @@ import { UserRole } from '@prisma/client';
 
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
-import {
-  CreateHolidayDto,
-  HolidayListQueryDto,
-  ImportHolidaysDto,
-  UpdateHolidayDto,
-} from './dto';
+import { CreateHolidayDto, HolidayListQueryDto, ImportHolidaysDto, UpdateHolidayDto } from './calendar.dto';
 import {
   HolidaysService,
   type HolidayImportPlan,

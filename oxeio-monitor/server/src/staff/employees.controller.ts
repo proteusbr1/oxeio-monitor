@@ -14,12 +14,7 @@ import { UserRole } from '@prisma/client';
 
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
-import {
-  CreateEmployeeDto,
-  DeactivateEmployeeDto,
-  PolicySignedDto,
-  UpdateEmployeeDto,
-} from './dto';
+import { CreateEmployeeDto, DeactivateEmployeeDto, PolicySignedDto, UpdateEmployeeDto } from './staff.dto';
 import { EmployeesService } from './employees.service';
 import type { EmployeeView } from './redact';
 

@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MonthCloseService } from '../src/admin/month-close.service';
+import { MonthCloseService } from '../src/calendar/month-close.service';
 import type { AuditService } from '../src/audit/audit.service';
 import type { SessionUser } from '../src/auth/types';
 import type { PrismaService } from '../src/prisma/prisma.service';

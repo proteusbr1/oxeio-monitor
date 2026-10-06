@@ -14,7 +14,7 @@ import { UserRole } from '@prisma/client';
 
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
-import { CreateWorkPolicyDto, UpdateWorkPolicyDto } from './dto';
+import { CreateWorkPolicyDto, UpdateWorkPolicyDto } from './calendar.dto';
 import {
   WorkPoliciesService,
   type WorkPolicyView,

@@ -20,7 +20,7 @@ import {
 } from './agent-versions.service';
 import { AuditService } from '../audit/audit.service';
 import { UpdateService } from '../agent/update.service';
-import { PublishVersionDto, SetStageDto } from './dto';
+import { PublishVersionDto, SetStageDto } from './devices.dto';
 
 /**
  * **H04 · G59** — এজেন্টের নতুন ভার্সন বিলি করা।

@@ -19,12 +19,7 @@ import {
   DevicesService,
   type EnrollmentCodeResult,
 } from './devices.service';
-import {
-  CreateEnrollmentCodeDto,
-  DeviceListQueryDto,
-  RestoreDeviceDto,
-  RevokeDeviceDto,
-} from './dto';
+import { CreateEnrollmentCodeDto, DeviceListQueryDto, RestoreDeviceDto, RevokeDeviceDto } from './devices.dto';
 
 /**
  * ডিভাইস ম্যানেজমেন্ট (E10 · H05 · H06) — পুরো ক্লাসটাই owner-only।

@@ -14,14 +14,9 @@ import type { SessionUser } from '../auth/types';
 import { supersededThrough } from '../payroll/payroll.math';
 import { PrismaService } from '../prisma/prisma.service';
 import { nextEmployeeCode } from './next-code';
-import { ADMIN_TARGET } from './admin-audit';
-import { parseCalendarDate } from './calendar-date';
-import type {
-  CreateEmployeeDto,
-  DeactivateEmployeeDto,
-  EmployeeListQueryDto,
-  UpdateEmployeeDto,
-} from './dto';
+import { ADMIN_TARGET } from '../audit/admin-audit';
+import { parseCalendarDate } from '../calendar/calendar-date';
+import type { CreateEmployeeDto, DeactivateEmployeeDto, EmployeeListQueryDto, UpdateEmployeeDto } from './staff.dto';
 import {
   canSeeSalary,
   toEmployeeView,

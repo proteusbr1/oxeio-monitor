@@ -4,15 +4,16 @@ import { LoggerModule } from 'nestjs-pino';
 
 import { ActivityModule } from './activity/activity.module';
 import { AdjustmentsModule } from './adjustments/adjustments.module';
-import { AdminModule } from './admin/admin.module';
 import { AgentModule } from './agent/agent.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
+import { CalendarModule } from './calendar/calendar.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DigestModule } from './digest/digest.module';
 import { HealthModule } from './health/health.module';
 import { DepositsModule } from './deposits/deposits.module';
+import { DevicesModule } from './devices/devices.module';
 import { ErrorReportingModule } from './error-reporting/error-reporting.module';
 import { FeaturesModule } from './features/features.module';
 import { MeModule } from './me/me.module';
@@ -23,9 +24,9 @@ import { ReportsModule } from './reports/reports.module';
 import { ScreenshotsModule } from './screenshots/screenshots.module';
 import { SummaryModule } from './summary/summary.module';
 import { TargetsModule } from './targets/targets.module';
-import { UsersModule } from './users/users.module';
 import { StorageModule } from './storage/storage.module';
 import { SettingsModule } from './settings/settings.module';
+import { StaffModule } from './staff/staff.module';
 
 @Module({
   imports: [
@@ -64,10 +65,11 @@ import { SettingsModule } from './settings/settings.module';
     AuthModule,
     // after AuthModule: its guards must run before the module switches
     FeaturesModule,
-    UsersModule,
+    StaffModule,
     AgentModule,
     ActivityModule,
-    AdminModule,
+    CalendarModule,
+    DevicesModule,
     AdjustmentsModule,
     DashboardModule,
     PayrollModule,

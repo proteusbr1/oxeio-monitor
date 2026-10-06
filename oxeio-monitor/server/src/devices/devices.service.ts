@@ -12,13 +12,8 @@ import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import type { SessionUser } from '../auth/types';
 import { PrismaService } from '../prisma/prisma.service';
-import { ADMIN_TARGET } from './admin-audit';
-import type {
-  CreateEnrollmentCodeDto,
-  DeviceListQueryDto,
-  RestoreDeviceDto,
-  RevokeDeviceDto,
-} from './dto';
+import { ADMIN_TARGET } from '../audit/admin-audit';
+import type { CreateEnrollmentCodeDto, DeviceListQueryDto, RestoreDeviceDto, RevokeDeviceDto } from './devices.dto';
 import {
   enrollmentCodeExpiry,
   formatEnrollmentCode,

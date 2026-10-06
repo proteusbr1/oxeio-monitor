@@ -4,7 +4,7 @@ import {
   parseHolidayCsv,
   parseHolidayFile,
   parseHolidayIcs,
-} from '../src/admin/holiday-import';
+} from '../src/calendar/holiday-import';
 import { HOLIDAY_SETS, resolveHolidaySet } from '../prisma/holiday-sets';
 import { BD_HOLIDAYS, HOLIDAY_YEARS } from '../prisma/holidays.data';
 import { DEFAULT_SEED_POLICY, seedPolicyFromEnv } from '../prisma/seed-config';

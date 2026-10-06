@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
-import { hashEnrollmentCode } from '../admin/enrollment-code';
+import { hashEnrollmentCode } from '../devices/enrollment-code';
 import { AuthService } from '../auth/auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AgentConfigService, type AgentConfig } from './agent-config.service';
