@@ -183,12 +183,14 @@ jobs:
 
       - name: Build MSI
         shell: pwsh
-        run: ./installer/build.ps1
+        # No address baked in: the CI MSI is for any installation, installed
+        # with `msiexec /i … SERVERURL=https://…`. build.ps1 has no default.
+        run: ./installer/build.ps1 -NoServerUrl
 
       - uses: actions/upload-artifact@v4
         with:
           name: oXeioAgent-msi
-          path: oxeio-monitor/agent/installer/bin/oXeioAgent.msi
+          path: oxeio-monitor/agent/installer/bin/oXeioAgent-*.msi
           retention-days: 30
 
   docker:

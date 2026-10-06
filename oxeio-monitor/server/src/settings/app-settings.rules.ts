@@ -1,4 +1,4 @@
-import { fixedOffsetMinutes } from '../agent/util/fixed-offset';
+import { assertKnownZone } from '../agent/util/zone';
 import { checkDisplayLocale } from '../common/display-locale';
 import { parseBackupMode, type BackupMode } from '../ops/backup-mode';
 import { checkCurrency, type CurrencyInfo } from '../payroll/currency';
@@ -72,14 +72,14 @@ export function resolveRegion(
 
 /**
  * What the owner sent, checked with the same rules as the environment
- * variables — a zone with DST, a three-decimal currency or a malformed
+ * variables — an unknown zone, a three-decimal currency or a malformed
  * locale is refused here instead of breaking the next start.
  */
 export function validateRegion(input: RegionSaved): RegionSaved {
   const out: RegionSaved = {};
   if (input.timeZone !== undefined) {
     const tz = input.timeZone.trim();
-    fixedOffsetMinutes(tz); // throws with a readable message
+    assertKnownZone(tz); // throws with a readable message
     out.timeZone = tz;
   }
   if (input.currency !== undefined) out.currency = checkCurrency(input.currency).code;

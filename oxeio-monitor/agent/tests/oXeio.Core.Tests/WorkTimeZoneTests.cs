@@ -150,3 +150,87 @@ public sealed class WorkTimeZoneTests : IDisposable
         Assert.Equal(TimeSpan.FromHours(6), WorkTime.Offset);
     }
 }
+
+/// <summary>
+/// Daylight saving: the server sends its zone's offset changes and the agent cuts
+/// days with them. Europe/Lisbon 2026: UTC+0 until 29 Mar 01:00 UTC, UTC+1 until
+/// 25 Oct 01:00 UTC — the same table the server's own tests check.
+/// </summary>
+[Collection(WorkTimeZoneCollection.Name)]
+public sealed class WorkTimeDaylightSavingTests : IDisposable
+{
+    private static readonly ZoneTransition[] Lisbon2026 =
+    [
+        new() { At = Utc(2026, 1, 1, 0), OffsetMinutes = 0 },
+        new() { At = Utc(2026, 3, 29, 1), OffsetMinutes = 60 },
+        new() { At = Utc(2026, 10, 25, 1), OffsetMinutes = 0 },
+    ];
+
+    public WorkTimeDaylightSavingTests()
+    {
+        WorkTime.Reset();
+        Assert.True(WorkTime.TrySet("Europe/Lisbon", 60, Lisbon2026));
+    }
+
+    public void Dispose() => WorkTime.Reset();
+
+    private static DateTimeOffset Utc(int y, int mo, int d, int h, int mi = 0) =>
+        new(y, mo, d, h, mi, 0, TimeSpan.Zero);
+
+    [Fact]
+    public void Each_instant_uses_the_offset_in_force_then()
+    {
+        Assert.Equal(TimeSpan.Zero, WorkTime.OffsetAt(Utc(2026, 1, 15, 12)));
+        Assert.Equal(TimeSpan.FromHours(1), WorkTime.OffsetAt(Utc(2026, 7, 15, 12)));
+        Assert.Equal(TimeSpan.FromHours(1), WorkTime.OffsetAt(Utc(2026, 3, 29, 1)));
+        Assert.Equal(TimeSpan.Zero, WorkTime.OffsetAt(Utc(2026, 3, 29, 0, 59)));
+
+        // 23:30 UTC: the same day in winter, already the next in summer
+        Assert.Equal(new DateOnly(2026, 1, 1), WorkTime.WorkDateOf(Utc(2026, 1, 1, 23, 30)));
+        Assert.Equal(new DateOnly(2026, 7, 2), WorkTime.WorkDateOf(Utc(2026, 7, 1, 23, 30)));
+        Assert.Equal(new TimeOnly(11, 0), WorkTime.LocalTimeOf(Utc(2026, 7, 1, 10)));
+    }
+
+    [Fact]
+    public void Days_of_23_and_25_hours_end_at_the_right_moment()
+    {
+        // 29 Mar starts at 00:00 UTC (winter) and ends at 23:00 UTC (summer)
+        Assert.Equal(Utc(2026, 3, 29, 23), WorkTime.NextLocalMidnight(Utc(2026, 3, 29, 12)));
+        // 25 Oct starts at 23:00 UTC the day before and ends at 00:00 UTC on the 26th
+        Assert.Equal(Utc(2026, 10, 26, 0), WorkTime.NextLocalMidnight(Utc(2026, 10, 25, 12)));
+        Assert.Equal(Utc(2026, 7, 2, 23), WorkTime.NextLocalMidnight(Utc(2026, 7, 2, 12)));
+    }
+
+    [Fact]
+    public void The_table_survives_a_restart()
+    {
+        var line = WorkTime.ToMemoryLine();
+        Assert.StartsWith("Europe/Lisbon|60|", line);
+
+        WorkTime.Reset();
+        Assert.True(WorkTime.TryRestore(line));
+        Assert.Equal(3, WorkTime.TransitionCount);
+        Assert.Equal(TimeSpan.FromHours(1), WorkTime.OffsetAt(Utc(2026, 7, 15, 12)));
+        Assert.Equal(line, WorkTime.ToMemoryLine());
+    }
+
+    [Fact]
+    public void A_table_out_of_order_or_out_of_range_is_refused()
+    {
+        ZoneTransition[] backwards = [Lisbon2026[1], Lisbon2026[0]];
+        Assert.False(WorkTime.TrySet("Europe/Lisbon", 0, backwards));
+        ZoneTransition[] wild = [new() { At = Utc(2026, 1, 1, 0), OffsetMinutes = 9999 }];
+        Assert.False(WorkTime.TrySet("Europe/Lisbon", 0, wild));
+        // the earlier table is still in force
+        Assert.Equal(3, WorkTime.TransitionCount);
+    }
+
+    [Fact]
+    public void An_older_server_without_a_table_keeps_one_offset()
+    {
+        Assert.True(WorkTime.TrySet("Asia/Dhaka", 360));
+        Assert.Equal(0, WorkTime.TransitionCount);
+        Assert.Equal(TimeSpan.FromHours(6), WorkTime.OffsetAt(Utc(2026, 7, 15, 12)));
+        Assert.Equal("Asia/Dhaka|360", WorkTime.ToMemoryLine());
+    }
+}

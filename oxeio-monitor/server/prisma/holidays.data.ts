@@ -1,4 +1,4 @@
-import { fixedOffsetMinutes } from '../src/agent/util/fixed-offset';
+import { Zone } from '../src/agent/util/zone';
 
 /**
  * Bangladesh public holidays 2026–27: the list and its validation.
@@ -7,8 +7,8 @@ import { fixedOffsetMinutes } from '../src/agent/util/fixed-offset';
  *
  * Why this exists: the seed only had 7 fixed-date holidays. Eid, Ashura,
  * Shab-e-Barat and Durga Puja were all missing, so those days counted as
- * **workdays** and everyone's target and pace looked too high (deploy/README.md
- * section 2.1b). The two Eids of 2026 alone put 11 days on the wrong side.
+ * **workdays** and everyone's target and pace looked too high. The two Eids of
+ * 2026 alone put 11 days on the wrong side.
  *
  * --- The most important decision in this file: `approximate` ---
  *
@@ -673,15 +673,13 @@ export function monthKey(date: string): string {
  * owner's laptop in any time zone, and "today" would then differ per machine.
  *
  * The day is cut in the work time zone (`WORK_TIMEZONE`, default Asia/Dhaka) —
- * the same rule the server uses. Zones are fixed-offset (the server refuses
- * daylight saving), so adding the offset is enough.
+ * the same rule the server uses (daylight saving included).
  */
 export function workToday(
   now: Date,
   timeZone = process.env.WORK_TIMEZONE?.trim() || 'Asia/Dhaka',
 ): string {
-  const offsetMs = fixedOffsetMinutes(timeZone) * 60_000;
-  return new Date(now.getTime() + offsetMs).toISOString().slice(0, 10);
+  return new Zone(timeZone).dateOf(now.getTime()).toISOString().slice(0, 10);
 }
 
 /**
@@ -998,7 +996,7 @@ export function planHolidaySeedRun(
             `target_sec · expected_sec · pace_sec and the payroll d÷D fraction would all change (real money). ` +
             `The current month moves to the new figures by itself within 15 minutes; ` +
             `a past month stays fixed, then jumps suddenly the day any time adjustment for that month is approved. ` +
-            `To insert them on purpose: SEED_HOLIDAYS_PAST=true — first read deploy/README.md § 2.1c.`,
+            `To insert them on purpose: SEED_HOLIDAYS_PAST=true.`,
         ]
       : []),
     ...plan.unlisted.map(

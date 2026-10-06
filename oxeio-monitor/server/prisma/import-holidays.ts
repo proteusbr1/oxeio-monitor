@@ -11,8 +11,7 @@
  * ⚠️⚠️ Same rule as the seed (seed.ts, `SEED_HOLIDAYS_PAST`): a holiday in the
  *    current or a past month changes that month's workdays, its targets and
  *    the prorated salary. Those dates are listed and left out unless you
- *    pass `--allow-past` (or `SEED_HOLIDAYS_PAST=true`) on purpose — read
- *    deploy/README.md section 2.1c first.
+ *    pass `--allow-past` (or `SEED_HOLIDAYS_PAST=true`) on purpose.
  * ⚠️ Nothing already in the table is changed or deleted: an existing date is
  *    kept as it is, a different name for it is only reported.
  */

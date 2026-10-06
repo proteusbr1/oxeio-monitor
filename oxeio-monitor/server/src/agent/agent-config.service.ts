@@ -4,7 +4,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Device } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
-import { LOCAL_OFFSET_MIN, WORK_TIMEZONE } from './util/work-time';
+import { WORK_TIMEZONE, workOffsetMinutesAt, workZoneTransitions } from './util/work-time';
 
 export interface AgentConfig {
   idleThresholdSec: number;
@@ -14,11 +14,18 @@ export interface AgentConfig {
   screenshotTo: string | null;
   timezone: string;
   /**
-   * Minutes east of UTC for `timezone` (e.g. Asia/Dhaka = 360). Sent as a number
-   * so the agent does not need a tz database: the server only accepts zones
-   * without DST, so one fixed offset is the whole story.
+   * Minutes east of UTC for `timezone` **right now** (e.g. Asia/Dhaka = 360).
+   * Agents before 0.5 know only this number. It is part of the config hash, so
+   * when daylight saving changes it those agents are told to reload.
    */
   utcOffsetMinutes: number;
+  /**
+   * The offset in force from the start of last month, then each change for
+   * about a year ahead: newer agents cut days exactly where the server does,
+   * daylight saving included, without the PC's own time-zone data. Changes
+   * once a month (the window moves), which is one config reload a month.
+   */
+  zoneTransitions: { at: string; offsetMinutes: number }[];
   monthlyTargetHours: number;
   heartbeatSec: number;
   appTracking: { enabled: boolean; minDurationSec: number };
@@ -62,7 +69,8 @@ export class AgentConfigService {
       // The server's zone, not `policy.timezone`: every work date the server
       // computes uses WORK_TIMEZONE, and the agent must cut days the same way
       timezone: WORK_TIMEZONE,
-      utcOffsetMinutes: LOCAL_OFFSET_MIN,
+      utcOffsetMinutes: workOffsetMinutesAt(new Date()),
+      zoneTransitions: transitionWindow(new Date()),
       monthlyTargetHours: Number(policy.monthlyTargetHours),
       heartbeatSec: 30,
       appTracking: { enabled: true, minDurationSec: 5 },
@@ -102,4 +110,18 @@ export class AgentConfigService {
       .digest('hex')
       .slice(0, 16);
   }
+}
+
+/**
+ * From the first day of last month (UTC) to 13 months after it. Anchored to
+ * the month, not to "now", so the config hash — and with it the agents'
+ * reload — changes once a month instead of on every request.
+ */
+export function transitionWindow(now: Date): { at: string; offsetMinutes: number }[] {
+  const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 12, 1));
+  return workZoneTransitions(from, to).map((t) => ({
+    at: t.at.toISOString(),
+    offsetMinutes: t.offsetMinutes,
+  }));
 }

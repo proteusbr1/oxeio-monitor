@@ -99,8 +99,11 @@
       0.4.12 (fork, 5 Oct 2026): build.ps1 -HideLatestShot. Raised so a build
       made from here is not mistaken for the 0.4.11 already installed, and so
       Settings → Agent updates can offer it (it compares version names).
+      0.5.0 (fork, 6 Oct 2026): daylight-saving time zones (the server's table of
+      offset changes, `zoneTransitions`) and work policies with no hours target
+      (the tray shows hours only instead of hanging on "Loading…").
     -->
-    <Version>0.4.12</Version>
+    <Version>0.5.0</Version>
 
     <!--
       AssemblyVersion keeps only three numbers (no SemVer pre-release part): the Windows

@@ -13,20 +13,39 @@
  */
 
 /**
- * The default, Asia/Dhaka, is UTC+06:00 with no DST; exactly the same constant as the server's
- * `work-time.ts`. With two numbers in two places, one would eventually change.
- */
-let WORK_OFFSET_MS = 6 * 60 * 60 * 1000;
-
-/**
  * The work-day zone, which the server may run on something other than
  * Asia/Dhaka (`WORK_TIMEZONE`). Starts as that default, so a server that does not
  * send the zone (older version, request failed) behaves exactly as before.
+ *
+ * Every helper below reads the wall clock through `Intl` with this zone, so
+ * daylight saving is handled: the offset is the one in force at each instant,
+ * exactly as the server's `zone.ts` computes it. `utcOffsetMinutes` is only
+ * the fallback for a browser whose `Intl` does not know the zone.
  */
 let workZone = { timeZone: 'Asia/Dhaka', utcOffsetMinutes: 360 };
+let zoneFormat: Intl.DateTimeFormat | null = makeZoneFormat('Asia/Dhaka');
+/** offset per UTC minute; the board asks about the same minutes over and over */
+const offsetCache = new Map<number, number>();
+
+function makeZoneFormat(timeZone: string): Intl.DateTimeFormat | null {
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+    });
+  } catch {
+    return null;
+  }
+}
 
 /**
- * Replaces the offset used by every helper in this file. Called once from
+ * Replaces the zone used by every helper in this file. Called once from
  * `main.tsx` with the answer of `GET /auth/time-zone`, before the first
  * render — components read "today" in `useState` initialisers, so a value
  * that changed after mounting would leave them on the wrong day.
@@ -40,7 +59,8 @@ export function setWorkTimeZone(zone: {
     timeZone: zone.timeZone,
     utcOffsetMinutes: zone.utcOffsetMinutes,
   };
-  WORK_OFFSET_MS = zone.utcOffsetMinutes * 60 * 1000;
+  zoneFormat = makeZoneFormat(zone.timeZone);
+  offsetCache.clear();
 }
 
 /** IANA name of the work-day zone — `Asia/Dhaka` by default */
@@ -56,16 +76,48 @@ export function workTimeZoneLabel(): string {
   );
 }
 
-/** Offset of the work-day zone in ms (6 h for the default Asia/Dhaka) — for the few callers that cut days by hand */
-export function workOffsetMs(): number {
-  return WORK_OFFSET_MS;
+/** Milliseconds to add to that instant to read the work-zone wall clock */
+function offsetMsAt(t: number): number {
+  if (!zoneFormat) return workZone.utcOffsetMinutes * 60_000;
+  const minute = Math.floor(t / 60_000);
+  const hit = offsetCache.get(minute);
+  if (hit !== undefined) return hit;
+
+  const at = minute * 60_000;
+  const p: Record<string, number> = {};
+  for (const part of zoneFormat.formatToParts(new Date(at))) {
+    if (part.type !== 'literal') p[part.type] = Number(part.value);
+  }
+  const offset = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - at;
+  if (offsetCache.size > 20_000) offsetCache.clear();
+  offsetCache.set(minute, offset);
+  return offset;
 }
 
-/** The offset as an ISO-8601 suffix, e.g. `+06:00`, `-03:00` */
-export function workOffsetIso(): string {
-  const min = workZone.utcOffsetMinutes;
-  const abs = Math.abs(min);
-  return `${min < 0 ? '-' : '+'}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
+/**
+ * The work-zone wall clock at that instant, written as if it were UTC — read
+ * it with `getUTC*` or `toISOString()`, never the local getters.
+ */
+export function workWallOf(instant: Date): Date {
+  return new Date(instant.getTime() + offsetMsAt(instant.getTime()));
+}
+
+/**
+ * The first instant of a work day (`YYYY-MM-DD`). Usually its 00:00; on a day
+ * whose midnight daylight saving skips, the moment the clock jumps. Found by
+ * bisection, as on the server, because the offset to subtract is the one in
+ * force at the answer.
+ */
+export function startOfWorkDate(date: string): Date {
+  const label = parseWorkDate(date)?.getTime() ?? Date.parse(`${date}T00:00:00Z`);
+  let lo = label - 16 * 3_600_000;
+  let hi = label + 14 * 3_600_000;
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (workDateOf(new Date(mid)) >= date) hi = mid;
+    else lo = mid;
+  }
+  return new Date(hi);
 }
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR = 3600;
@@ -191,10 +243,10 @@ function localeDate(
  * between midnight and the offset hour (6 a.m.) that shows the previous day, so an employee working
  * at night (normal per section 2.1-a) could not find their own hours for today.
  * In the other direction, in a browser in Bangkok `toLocaleDateString()` would run
- * a day ahead. So the offset is stated explicitly here.
+ * a day ahead. So the work zone is named explicitly here.
  */
 export function todayInWorkZone(now: Date = new Date()): string {
-  return isoDateOf(new Date(now.getTime() + WORK_OFFSET_MS));
+  return isoDateOf(workWallOf(now));
 }
 
 /**
@@ -203,16 +255,16 @@ export function todayInWorkZone(now: Date = new Date()): string {
  * Careful: `new Date().getHours()` cannot be used; that is the browser's hour. If
  * the owner opened the board from abroad, the marker would sit under the wrong
  * column, and a hard-to-spot error: the chart would be right, only the mark moved.
- * The offset is explicit here, as in `todayInWorkZone`.
+ * The work zone is explicit here, as in `todayInWorkZone`.
  */
 export function workHourNow(now: Date = new Date()): number {
-  return new Date(now.getTime() + WORK_OFFSET_MS).getUTCHours();
+  return workWallOf(now).getUTCHours();
 }
 
 /** Which work day an instant falls in: `YYYY-MM-DD`. */
 export function workDateOf(instant: Date | string): string {
   const date = typeof instant === 'string' ? new Date(instant) : instant;
-  return isoDateOf(new Date(date.getTime() + WORK_OFFSET_MS));
+  return isoDateOf(workWallOf(date));
 }
 
 /** `YYYY-MM-DD` from the UTC parts; no local getter. */
@@ -367,8 +419,9 @@ export function formatMonth(monthKey: string): string {
  */
 export function formatTime(iso: string | null): string {
   if (!iso) return '—';
-  const shifted = new Date(new Date(iso).getTime() + WORK_OFFSET_MS);
-  if (Number.isNaN(shifted.getTime())) return '—';
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return '—';
+  const shifted = workWallOf(at);
   return `${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`;
 }
 

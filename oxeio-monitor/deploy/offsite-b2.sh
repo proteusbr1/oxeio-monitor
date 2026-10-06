@@ -31,11 +31,11 @@ say()  { printf '   %s✓%s %s\n' "$c_ok" "$c_off" "$1"; }
 warn() { printf '   %s⚠%s %s\n' "$c_warn" "$c_off" "$1"; }
 die()  { printf '\n%s❌ %s%s\n\n' "$c_err" "$1" "$c_off" >&2; exit 1; }
 
-printf '\n%s── R5 · Backblaze B2 রিমোট%s\n' "$c_dim" "$c_off"
+printf '\n%s── Backblaze B2 remote%s\n' "$c_dim" "$c_off"
 
-[ "$(id -u)" -eq 0 ] || die "root হিসেবে চালান (sudo -i)"
+[ "$(id -u)" -eq 0 ] || die "Run as root (sudo -i)"
 command -v rclone >/dev/null 2>&1 || die \
-  'rclone নেই। বসান: curl https://rclone.org/install.sh | sudo bash'
+  'rclone is missing. Install it: curl https://rclone.org/install.sh | sudo bash'
 
 has_remote() { rclone listremotes 2>/dev/null | grep -qx "${REMOTE_NAME}:"; }
 
@@ -56,17 +56,17 @@ works() {
 #    changed again** - the script kept saying "already exists" and failing at the
 #    same place every time. (Happened in the field.)
 if has_remote && works; then
-  say "রিমোট '${REMOTE_NAME}' আগে থেকেই আছে আর কাজ করছে"
+  say "remote '${REMOTE_NAME}' already exists and works"
 elif has_remote; then
-  warn "রিমোট '${REMOTE_NAME}' আছে, কিন্তু B2 তাকে মানছে না — কী দুটো আবার নেওয়া হবে"
-  printf '   %sB2 যা বলল:%s\n' "$c_dim" "$c_off"
+  warn "remote '${REMOTE_NAME}' exists, but B2 rejects it — asking for the two keys again"
+  printf '   %sB2 said:%s\n' "$c_dim" "$c_off"
   rclone lsd "${REMOTE_NAME}:${BUCKET}" 2>&1 | tail -2 | sed 's/^/     /'
   rclone config delete "${REMOTE_NAME}" >/dev/null 2>&1 || true
 fi
 
 # ── 1. Bind anew if needed ─────────────────────────────────────────────────
 if ! has_remote; then
-  printf '\n   Backblaze-এর Application Key দুটো লাগবে।\n'
+  printf '\n   The two parts of a Backblaze Application Key are needed.\n'
   printf '   %s(backblaze.com → B2 → Application Keys → Add a New Application Key)%s\n\n' "$c_dim" "$c_off"
 
   # Careful: `read -s` shows nothing on screen while typing, so nobody can read
@@ -74,51 +74,51 @@ if ! has_remote; then
   read -rp '   keyID          : ' B2_ID
   read -rsp '   applicationKey : ' B2_KEY; echo
 
-  [ -n "${B2_ID}" ] && [ -n "${B2_KEY}" ] || die 'দুটোই লাগবে — কিছু বসানো হয়নি'
+  [ -n "${B2_ID}" ] && [ -n "${B2_KEY}" ] || die 'both are needed — nothing was configured'
 
   # Note: **length only, never the key** - B2's keyID is 25 characters and the
   #    applicationKey 31.
   #    Careful: if a paste into a hidden prompt is partial (this happens in
   #    cmd.exe), nothing would show it, and the mistake would surface much later
   #    as a mysterious 401.
-  printf '   %sপাওয়া গেল: keyID %d অক্ষর (আশা ২৫), applicationKey %d অক্ষর (আশা ৩১)%s\n' \
+  printf '   %sreceived: keyID %d characters (expected 25), applicationKey %d characters (expected 31)%s\n' \
     "$c_dim" "${#B2_ID}" "${#B2_KEY}" "$c_off"
-  [ "${#B2_ID}" -eq 25 ] || warn 'keyID-র দৈর্ঘ্য অস্বাভাবিক — পুরোটা কপি হয়েছে তো?'
-  [ "${#B2_KEY}" -eq 31 ] || warn 'applicationKey-র দৈর্ঘ্য অস্বাভাবিক — পুরোটা কপি হয়েছে তো?'
+  [ "${#B2_ID}" -eq 25 ] || warn 'unusual keyID length — was all of it copied?'
+  [ "${#B2_KEY}" -eq 31 ] || warn 'unusual applicationKey length — was all of it copied?'
 
   # Careful: output suppressed - on success rclone prints the whole config, key included.
   rclone config create "$REMOTE_NAME" b2 \
       account="$B2_ID" key="$B2_KEY" hard_delete=false >/dev/null 2>&1 \
-    || die 'rclone config create ব্যর্থ'
+    || die 'rclone config create failed'
 
   unset B2_ID B2_KEY
-  say "রিমোট '${REMOTE_NAME}' বাঁধা হলো"
+  say "remote '${REMOTE_NAME}' configured"
 fi
 
 # ── 2. Can it really be reached ────────────────────────────────────────────
 #
 # Careful: this step must not be skipped. `config create` **succeeds** even with
 #    a wrong key - it only writes the file and does not verify. Stopping there
-#    would look fine, and the mistake would surface on Saturday night, after
+#    would look fine, and the mistake would surface days later, after
 #    the timer fails.
 if rclone lsd "${REMOTE_NAME}:${BUCKET}" >/dev/null 2>&1; then
-  say "B2-তে পৌঁছানো যাচ্ছে (bucket '${BUCKET}')"
+  say "B2 reachable (bucket '${BUCKET}')"
 elif rclone lsd "${REMOTE_NAME}:" >/dev/null 2>&1; then
-  say 'B2-তে পৌঁছানো যাচ্ছে (অ্যাকাউন্ট-স্তরে)'
+  say 'B2 reachable (account level)'
 else
-  printf '   %sB2 যা বলল:%s\n' "$c_dim" "$c_off"
+  printf '   %sB2 said:%s\n' "$c_dim" "$c_off"
   rclone lsd "${REMOTE_NAME}:${BUCKET}" 2>&1 | tail -2 | sed 's/^/     /'
-  die "B2 কী-জোড়া মানছে না। ⚠️ '401 bad_auth_token' সাধারণত মানে applicationKey ভুল বা অসম্পূর্ণ — ওটা একবারই দেখানো হয়, তাই হাতে না থাকলে নতুন key বানিয়ে আবার চালান"
+  die "B2 rejects the key pair. ⚠️ '401 bad_auth_token' usually means the applicationKey is wrong or incomplete — B2 shows it only once, so if you no longer have it, create a new key and run this again"
 fi
 
 # ── 3. bucket ──────────────────────────────────────────────────────────────
 if rclone lsd "${REMOTE_NAME}:${BUCKET}" >/dev/null 2>&1; then
-  say "bucket '${BUCKET}' পাওয়া গেল"
+  say "bucket '${BUCKET}' found"
 else
-  warn "bucket '${BUCKET}' নেই — বানানো হচ্ছে"
+  warn "bucket '${BUCKET}' does not exist — creating it"
   rclone mkdir "${REMOTE_NAME}:${BUCKET}" \
-    || die "bucket বানানো গেল না — key-টার কি ওই bucket-এ write আছে?"
-  say "bucket '${BUCKET}' বানানো হলো"
+    || die "could not create the bucket — does the key have write access to it?"
+  say "bucket '${BUCKET}' created"
 fi
 
 # ── 4. What the timer reads ────────────────────────────────────────────────
@@ -135,15 +135,15 @@ say "${ENV_FILE}: RCLONE_REMOTE=${REMOTE_NAME}:${BUCKET}"
 
 # ── 5. Do one upload right now ─────────────────────────────────────────────
 #
-# We do not wait for Saturday. "I configured it" and "the backup is really
+# We do not wait for the weekly timer. "I configured it" and "the backup is really
 #    offsite" are not the same thing, and the worst time to learn the
 #    difference is the day the server is lost.
-printf '\n%s── প্রথম আপলোড%s\n' "$c_dim" "$c_off"
+printf '\n%s── First upload%s\n' "$c_dim" "$c_off"
 set -a; . "$ENV_FILE"; set +a
 bash "$(dirname "$0")/offsite-backup.sh"
 
-printf '\n%s── রিমোটে যা আছে%s\n' "$c_dim" "$c_off"
+printf '\n%s── What is on the remote%s\n' "$c_dim" "$c_off"
 rclone ls "${REMOTE_NAME}:${BUCKET}" | tail -20
-printf '\n   মোট: %s\n' "$(rclone size "${REMOTE_NAME}:${BUCKET}" 2>/dev/null | tr '\n' ' ')"
+printf '\n   Total: %s\n' "$(rclone size "${REMOTE_NAME}:${BUCKET}" 2>/dev/null | tr '\n' ' ')"
 
-printf '\n%s✅ B2 অফসাইট ব্যাকআপ চালু%s — শনিবার ০৪:০০-এ নিজে থেকেই যাবে\n\n' "$c_ok" "$c_off"
+printf '\n%s✅ B2 offsite backup configured%s — the weekly timer (deploy/README.md) uploads by itself from now on\n\n' "$c_ok" "$c_off"

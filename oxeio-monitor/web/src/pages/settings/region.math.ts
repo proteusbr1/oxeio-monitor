@@ -29,10 +29,11 @@ export function offsetLabel(minutes: number): string {
 }
 
 /**
- * Zones without daylight saving — the only ones the server takes (every
- * date is cut with one fixed offset). `year` defaults to now.
+ * Every zone the browser knows, labelled with its offset — both offsets when
+ * the zone has daylight saving (`Europe/Lisbon (UTC+00:00 / +01:00)`). The
+ * server handles both kinds. `year` defaults to now.
  */
-export function fixedOffsetZones(
+export function timeZoneOptions(
   all: readonly string[],
   year = new Date().getUTCFullYear(),
 ): { value: string; label: string }[] {
@@ -40,11 +41,13 @@ export function fixedOffsetZones(
   const jul = new Date(Date.UTC(year, 6, 1, 12));
   return all
     .map((zone) => ({ zone, a: offsetOn(zone, jan), b: offsetOn(zone, jul) }))
-    .filter((z) => z.a !== null && z.a === z.b)
-    .map((z) => ({
-      value: z.zone,
-      label: `${z.zone.replace(/_/g, ' ')} (UTC${offsetLabel(z.a!)})`,
-    }));
+    .filter((z) => z.a !== null && z.b !== null)
+    .map((z) => {
+      const lo = Math.min(z.a!, z.b!);
+      const hi = Math.max(z.a!, z.b!);
+      const offsets = lo === hi ? `UTC${offsetLabel(lo)}` : `UTC${offsetLabel(lo)} / ${offsetLabel(hi)}`;
+      return { value: z.zone, label: `${z.zone.replace(/_/g, ' ')} (${offsets})` };
+    });
 }
 
 /** Currencies with two decimal places — amounts are stored in hundredths */

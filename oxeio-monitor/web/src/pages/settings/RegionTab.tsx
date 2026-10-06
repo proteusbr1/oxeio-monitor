@@ -6,7 +6,7 @@ import { Card } from '../../components/Card';
 import { ErrorBox, Loading } from '../../components/States';
 import { RestartNotice } from './RestartNotice';
 import {
-  fixedOffsetZones,
+  timeZoneOptions,
   LOCALE_CHOICES,
   twoDecimalCurrencies,
   supportedValues,
@@ -36,7 +36,7 @@ export function RegionTab() {
   const region = useApi(getRegionSettings, []);
   const save = useMutation();
 
-  const zones = useMemo(() => fixedOffsetZones(supportedValues('timeZone')), []);
+  const zones = useMemo(() => timeZoneOptions(supportedValues('timeZone')), []);
   const currencies = useMemo(
     () => twoDecimalCurrencies(supportedValues('currency')),
     [],
@@ -105,8 +105,8 @@ export function RegionTab() {
             hint={
               <>
                 Where midnight falls, when the nightly jobs run, the dates on
-                reports ({SOURCE_LABEL[current.timeZone.source]}). Only zones
-                without daylight saving time are listed. Running now:{' '}
+                reports ({SOURCE_LABEL[current.timeZone.source]}). Daylight
+                saving is followed automatically. Running now:{' '}
                 <b>{current.runningTimeZone}</b>.
               </>
             }

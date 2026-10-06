@@ -20,7 +20,7 @@
 # Careful: **safe to run repeatedly** - `rclone copy` only uploads missing files.
 #
 # Run:    bash deploy/offsite-backup.sh
-# Setup:  deploy/README.md § R5
+# Setup:  deploy/README.md, "Offsite copy"
 set -euo pipefail
 
 COMPOSE_DIR="${COMPOSE_DIR:-/opt/oxeio/oxeio-monitor}"
@@ -51,11 +51,11 @@ notify() {
     -d "chat_id=${chat}" --data-urlencode "text=${text}" >/dev/null 2>&1 || true
 }
 
-printf '\n%s── R5 · অফসাইট ব্যাকআপ%s\n' "$c_dim" "$c_off"
+printf '\n%s── Offsite backup%s\n' "$c_dim" "$c_off"
 
 # ── 0. Config set on screen ───────────────────────────────────────────────
 #
-# The B2 key now lives **in the database** (Settings -> Backup), so there is no
+# The B2 key now lives **in the database** (Settings -> Storage & backup), so there is no
 #    need to SSH into the VPS and run `rclone config`. Careful: the old path
 #    still works: if `RCLONE_REMOTE` is already set, the database is not touched.
 #
@@ -79,18 +79,18 @@ if [[ -z "${REMOTE}" ]] && command -v docker >/dev/null 2>&1; then
     export RCLONE_CONFIG_B2_HARD_DELETE=false
     REMOTE="b2:${db_bucket}"
     unset db_id db_key db_bucket cfg
-    say 'কনফিগ পর্দা থেকে (Settings → Backup)'
+    say 'config from the screen (Settings → Storage & backup)'
   fi
 fi
 
 # ── 1. What it cannot run without ─────────────────────────────────────────────
 command -v rclone >/dev/null 2>&1 || die \
-  'rclone নেই। বসান: curl https://rclone.org/install.sh | sudo bash'
+  'rclone is missing. Install it: curl https://rclone.org/install.sh | sudo bash'
 
 [[ -n "$REMOTE" ]] || die \
-  'কোনো অফসাইট গন্তব্য বসানো নেই — ড্যাশবোর্ডে Settings → Backup-এ B2-র কী বসান (অথবা RCLONE_REMOTE দিন)'
+  'no offsite destination set — enter the B2 key in the dashboard under Settings → Storage & backup (or set RCLONE_REMOTE)'
 
-[[ -d "$BACKUP_DIR" ]] || die "ব্যাকআপ ফোল্ডার নেই: $BACKUP_DIR"
+[[ -d "$BACKUP_DIR" ]] || die "backup folder not found: $BACKUP_DIR"
 
 # Careful: **the folder existing and the folder containing dumps are two
 #    different things.** Exiting with "success" on an empty folder would make the
@@ -98,16 +98,16 @@ command -v rclone >/dev/null 2>&1 || die \
 #    silent failure in this project.
 count=$(find "$BACKUP_DIR" -maxdepth 1 -name '*.dump.enc' -type f | wc -l)
 [[ "$count" -gt 0 ]] || die \
-  "$BACKUP_DIR-এ একটাও ডাম্প নেই — রাতের ব্যাকআপ (K02) কি চলছে?"
-say "$count টা ডাম্প পাওয়া গেল"
+  "not a single dump in $BACKUP_DIR — is the nightly backup running (BACKUP_PASSPHRASE set)?"
+say "$count dump(s) found"
 
 # ── 2. Can the remote really be reached ────────────────────────────────────────
 #
 # Careful: verify first, because `rclone copy` can look **successful** even
 #    against a wrong remote (it creates a new folder). "Reached" and "reached the right place" differ.
 rclone lsd "$REMOTE" >/dev/null 2>&1 || rclone mkdir "$REMOTE" >/dev/null 2>&1 || die \
-  "রিমোটে পৌঁছানো যাচ্ছে না: $REMOTE (rclone config দিয়ে যাচাই করুন)"
-say "রিমোট পৌঁছানো যাচ্ছে — $REMOTE"
+  "cannot reach the remote: $REMOTE (check it with rclone config)"
+say "remote reachable — $REMOTE"
 
 # ── 3. Upload ──────────────────────────────────────────────────────────────────
 #
@@ -121,10 +121,10 @@ before=$(rclone size "$REMOTE" --json 2>/dev/null | grep -o '"count":[0-9]*' | c
 rclone copy "$BACKUP_DIR" "$REMOTE" \
   --include '*.dump.enc' --include '*.sha256' --include 'README-restore.txt' \
   --transfers 2 --retries 3 --stats-one-line --stats 30s \
-  || die 'rclone copy ব্যর্থ'
+  || die 'rclone copy failed'
 
 after=$(rclone size "$REMOTE" --json 2>/dev/null | grep -o '"count":[0-9]*' | cut -d: -f2 || echo 0)
-say "রিমোটে ফাইল: $before → $after"
+say "files on the remote: $before → $after"
 
 # ── 4. Prune old copies ────────────────────────────────────────────────────────
 #
@@ -132,7 +132,7 @@ say "রিমোটে ফাইল: $before → $after"
 #    folder - the `sync` trap above would come back here.
 age_days=$(( KEEP_WEEKS * 7 ))
 rclone delete "$REMOTE" --min-age "${age_days}d" --include '*.dump.enc*' 2>/dev/null || true
-say "$KEEP_WEEKS সপ্তাহের পুরোনো কপি ছাঁটা হলো"
+say "copies older than $KEEP_WEEKS weeks pruned"
 
 # ── 5. Report ─────────────────────────────────────────────────────────────────
 newest=$(find "$BACKUP_DIR" -maxdepth 1 -name '*.dump.enc' -type f -printf '%f\n' \
@@ -142,4 +142,4 @@ size=$(du -sh "$BACKUP_DIR" | cut -f1)
 notify "$(printf 'oXeio — offsite backup ok\n%s\nRemote: %s (%s files)\nLocal: %s' \
   "$newest" "$REMOTE" "$after" "$size")"
 
-printf '\n%s✅ অফসাইট ব্যাকআপ শেষ%s — %s\n\n' "$c_ok" "$c_off" "$newest"
+printf '\n%s✅ Offsite backup done%s — %s\n\n' "$c_ok" "$c_off" "$newest"

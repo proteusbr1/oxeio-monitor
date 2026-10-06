@@ -1,15 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * WORK_TIMEZONE — the work-day zone is configurable, Asia/Dhaka by default.
+ * WORK_TIMEZONE — the work-day zone is configurable, Asia/Dhaka by default,
+ * and daylight saving is supported (Europe/Lisbon, America/Santiago below).
  *
- * The offset is read from `process.env` when `work-time.ts` is imported
+ * The zone is read from `process.env` when `work-time.ts` is imported
  * (the `@Cron` options need it before Nest exists), so each case here
  * re-imports the modules under a stubbed env instead of calling a setter.
  *
  * Two promises are checked:
  *  1. With nothing set, every value is exactly what it was when the offset
  *     was the constant 360 — the rest of the suite already runs that way.
+ *  3. With daylight saving, each instant uses the offset in force then: one
+ *     day a year has 23 hours, one has 25, and a skipped midnight is handled.
  *  2. A negative offset (America/Sao_Paulo, UTC−3) cuts days at its own
  *     midnight, including across month and year boundaries. Before, the
  *     Brazilian work day turned over at 15:00 local time.
@@ -28,6 +31,8 @@ async function load(timeZone?: string) {
     scheduling: await import('../src/summary/scheduling'),
     digest: await import('../src/digest/digest.math'),
     pdf: await import('../src/reports/reports.pdf.text'),
+    dash: await import('../src/dashboard/dashboard.math'),
+    agentConfig: await import('../src/agent/agent-config.service'),
   };
 }
 
@@ -39,48 +44,33 @@ afterEach(() => {
 const at = (iso: string): Date => new Date(iso);
 const day = (d: Date): string => d.toISOString().slice(0, 10);
 
-describe('fixedOffsetMinutes', () => {
-  it('reads the offset of zones without DST', async () => {
+describe('assertKnownZone', () => {
+  it('accepts any IANA zone, daylight saving or not', async () => {
     const { time } = await load();
-    expect(time.fixedOffsetMinutes('Asia/Dhaka')).toBe(360);
-    expect(time.fixedOffsetMinutes('America/Sao_Paulo')).toBe(-180);
-    expect(time.fixedOffsetMinutes('Asia/Kolkata')).toBe(330);
-    expect(time.fixedOffsetMinutes('UTC')).toBe(0);
-  });
-
-  it('refuses a zone with DST, in either hemisphere', async () => {
-    const { time } = await load();
-    expect(() => time.fixedOffsetMinutes('Europe/London')).toThrow(/daylight/);
-    expect(() => time.fixedOffsetMinutes('Australia/Sydney')).toThrow(
-      /daylight/,
-    );
-  });
-
-  it('refuses Sao Paulo in a year it still had DST', async () => {
-    const { time } = await load();
-    // Brazil dropped DST in 2019 — the check is about the rules, not the name
-    expect(() => time.fixedOffsetMinutes('America/Sao_Paulo', 2018)).toThrow(
-      /daylight/,
-    );
+    for (const z of ['Asia/Dhaka', 'America/Sao_Paulo', 'Europe/London', 'Australia/Sydney', 'UTC']) {
+      expect(() => time.assertKnownZone(z)).not.toThrow();
+    }
   });
 
   it('refuses an unknown name', async () => {
     const { time } = await load();
-    expect(() => time.fixedOffsetMinutes('Mars/Olympus')).toThrow(/IANA/);
+    expect(() => time.assertKnownZone('Mars/Olympus')).toThrow(/IANA/);
   });
 
-  it('a DST zone in WORK_TIMEZONE stops the import, not a silent fallback', async () => {
-    await expect(load('Europe/Berlin')).rejects.toThrow(/daylight/);
+  it('an unknown WORK_TIMEZONE stops the import, not a silent fallback', async () => {
+    await expect(load('Mars/Olympus')).rejects.toThrow(/IANA/);
   });
 });
 
 describe('default (WORK_TIMEZONE unset) — unchanged', () => {
-  it('is Asia/Dhaka, +360, +06:00', async () => {
+  it('is Asia/Dhaka, +360 all year', async () => {
     const { time, scheduling } = await load();
     expect(time.WORK_TIMEZONE).toBe('Asia/Dhaka');
-    expect(time.LOCAL_OFFSET_MIN).toBe(360);
-    expect(time.LOCAL_OFFSET_MIN).toBe(360);
-    expect(time.LOCAL_OFFSET_ISO).toBe('+06:00');
+    expect(time.workOffsetMinutesAt(at('2026-01-15T12:00:00Z'))).toBe(360);
+    expect(time.workOffsetMinutesAt(at('2026-07-15T12:00:00Z'))).toBe(360);
+    expect(time.workZoneTransitions(at('2026-01-01T00:00:00Z'), at('2027-01-01T00:00:00Z'))).toEqual([
+      { at: at('2026-01-01T00:00:00Z'), offsetMinutes: 360 },
+    ]);
     expect(time.WORK_TIMEZONE_LABEL).toBe('Dhaka');
     expect(scheduling.JOB_TIMEZONE).toBe('Asia/Dhaka');
   });
@@ -105,10 +95,9 @@ describe('default (WORK_TIMEZONE unset) — unchanged', () => {
 describe('America/Sao_Paulo (UTC−3)', () => {
   const SP = 'America/Sao_Paulo';
 
-  it('exposes −180 and -03:00', async () => {
+  it('exposes −180', async () => {
     const { time, scheduling } = await load(SP);
-    expect(time.LOCAL_OFFSET_MIN).toBe(-180);
-    expect(time.LOCAL_OFFSET_ISO).toBe('-03:00');
+    expect(time.workOffsetMinutesAt(at('2026-08-11T12:00:00Z'))).toBe(-180);
     expect(time.WORK_TIMEZONE_LABEL).toBe('Sao Paulo');
     expect(scheduling.JOB_TIMEZONE).toBe(SP);
   });
@@ -220,5 +209,87 @@ describe('America/Sao_Paulo (UTC−3)', () => {
       'oXeio',
     );
     expect(body).toContain('2026-08-11 (Sao Paulo)');
+  });
+});
+
+describe('Europe/Lisbon (daylight saving: UTC+0 in winter, UTC+1 in summer)', () => {
+  const LX = 'Europe/Lisbon';
+
+  it('uses the offset in force at each instant', async () => {
+    const { time } = await load(LX);
+    expect(time.workOffsetMinutesAt(at('2026-01-15T12:00:00Z'))).toBe(0);
+    expect(time.workOffsetMinutesAt(at('2026-07-15T12:00:00Z'))).toBe(60);
+    // 23:30 UTC is still the same day in winter, already the next in summer
+    expect(day(time.workDateOf(at('2026-01-01T23:30:00Z')))).toBe('2026-01-01');
+    expect(day(time.workDateOf(at('2026-07-01T23:30:00Z')))).toBe('2026-07-02');
+    expect(time.localMidnightOf(at('2026-07-02T12:00:00Z')).toISOString()).toBe('2026-07-01T23:00:00.000Z');
+    expect(time.workHourOf(at('2026-07-01T10:00:00Z'))).toBe(11);
+  });
+
+  it('the spring day has 23 hours and the autumn day 25', async () => {
+    const { time } = await load(LX);
+    const hours = (d: string): number => {
+      const start = time.startOfWorkDate(at(`${d}T00:00:00Z`));
+      return (time.nextLocalMidnight(start).getTime() - start.getTime()) / 3_600_000;
+    };
+    expect(hours('2026-03-29')).toBe(23);
+    expect(hours('2026-10-25')).toBe(25);
+    expect(hours('2026-07-02')).toBe(24);
+  });
+
+  it('lists the two changes of the year for the agent', async () => {
+    const { time } = await load(LX);
+    expect(time.workZoneTransitions(at('2026-01-01T00:00:00Z'), at('2027-01-01T00:00:00Z'))).toEqual([
+      { at: at('2026-01-01T00:00:00Z'), offsetMinutes: 0 },
+      { at: at('2026-03-29T01:00:00Z'), offsetMinutes: 60 },
+      { at: at('2026-10-25T01:00:00Z'), offsetMinutes: 0 },
+    ]);
+  });
+
+  it('the agent config carries the window anchored to the month', async () => {
+    const { agentConfig } = await load(LX);
+    const window = agentConfig.transitionWindow(at('2026-10-05T12:00:00Z'));
+    expect(window[0]).toEqual({ at: '2026-09-01T00:00:00.000Z', offsetMinutes: 60 });
+    expect(window).toContainEqual({ at: '2026-10-25T01:00:00.000Z', offsetMinutes: 0 });
+    expect(window).toContainEqual({ at: '2027-03-28T01:00:00.000Z', offsetMinutes: 60 });
+    // the same all month long, so the config hash moves once a month
+    expect(agentConfig.transitionWindow(at('2026-10-31T23:00:00Z'))).toEqual(window);
+  });
+
+  it('hour buckets follow the wall clock on the 25-hour day', async () => {
+    const { dash } = await load(LX);
+    const date = at('2026-10-25T00:00:00Z');
+    // 01:30 local happens twice: 00:30 UTC (summer) and 01:30 UTC (winter)
+    const buckets = dash.spreadIntoHourBuckets(
+      [
+        { startedAt: at('2026-10-25T00:30:00Z'), endedAt: at('2026-10-25T00:40:00Z'), durationSec: 600 },
+        { startedAt: at('2026-10-25T01:30:00Z'), endedAt: at('2026-10-25T01:40:00Z'), durationSec: 600 },
+        // 22:00–23:00 local, the last hour of the day
+        { startedAt: at('2026-10-25T22:00:00Z'), endedAt: at('2026-10-25T23:00:00Z'), durationSec: 3600 },
+      ],
+      date,
+    );
+    expect(buckets[1]).toBe(1200);
+    expect(buckets[22]).toBe(3600);
+    expect(buckets.reduce((a, b) => a + b, 0)).toBe(4800);
+  });
+
+  it('backup names round-trip in summer and in winter', async () => {
+    const { ops } = await load(LX);
+    for (const iso of ['2026-07-01T01:30:00Z', '2026-12-01T02:30:00Z']) {
+      const name = ops.backupFileName(at(iso));
+      expect(ops.parseBackupName(name)?.toISOString()).toBe(at(iso).toISOString());
+    }
+    expect(ops.backupFileName(at('2026-07-01T01:30:00Z'))).toContain('2026-07-01-0230');
+  });
+});
+
+describe('America/Santiago (midnight is skipped when daylight saving starts)', () => {
+  it('the day starts at 01:00 when 00:00 does not exist', async () => {
+    const { time } = await load('America/Santiago');
+    const start = time.startOfWorkDate(at('2026-09-06T00:00:00Z'));
+    expect(start.toISOString()).toBe('2026-09-06T04:00:00.000Z');
+    expect(time.workHourOf(start)).toBe(1);
+    expect(day(time.workDateOf(new Date(start.getTime() - 1)))).toBe('2026-09-05');
   });
 });

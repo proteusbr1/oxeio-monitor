@@ -32,11 +32,17 @@ public sealed record AgentConfig
     public required string Timezone { get; init; }
 
     /// <summary>
-    /// Minutes east of UTC for <see cref="Timezone"/> (for example Asia/Dhaka = 360). The
-    /// server only accepts zones without DST, so this one number is enough.
+    /// Minutes east of UTC for <see cref="Timezone"/> right now (for example Asia/Dhaka = 360).
     /// <c>null</c> from a server older than the field — keep the current offset.
     /// </summary>
     public int? UtcOffsetMinutes { get; init; }
+
+    /// <summary>
+    /// The zone's offset changes (daylight saving) for about a year ahead, see
+    /// <see cref="oXeio.Core.Time.WorkTime"/>. <c>null</c> from an older server — then
+    /// <see cref="UtcOffsetMinutes"/> alone is used.
+    /// </summary>
+    public IReadOnlyList<oXeio.Core.Time.ZoneTransition>? ZoneTransitions { get; init; }
 
     public required double MonthlyTargetHours { get; init; }
 

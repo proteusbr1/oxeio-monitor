@@ -94,7 +94,7 @@ export interface ManualBackupResult {
 
 /**
  * Why it exists: a backup that has never been tested is not a backup, it is a
- * guess. This lets you verify on install day instead of waiting for 02:30.
+ * guess. This lets you verify on install day instead of waiting for 03:30.
  */
 export function runBackupNow(): Promise<ManualBackupResult> {
   return api<ManualBackupResult>('/ops/backup/run', { method: 'POST' });

@@ -15,7 +15,7 @@ import { AlertsService } from './alerts.service';
  *
  * The check is **separate** from the backup job, and that is its main value.
  * The job can report a failure only if it runs. The most dangerous state is
- * the job not running at all: the server was down at 2:30 AM, the scheduler
+ * the job not running at all: the server was down at 3:30 AM, the scheduler
  * was not registered, or the container is in a crash loop. The only way to
  * catch that silence is to look at the clock from outside: "how many hours
  * ago was the last successful backup?"

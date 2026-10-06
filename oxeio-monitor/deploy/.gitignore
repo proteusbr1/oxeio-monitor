@@ -1,5 +1,5 @@
 # Careful: the server's private key is generated here (make-cert.ps1).
 #    Once committed, it is almost impossible to erase from git history, and then
-#    the only fix is to replace the key - i.e. hand out a new pin to all 15 PCs
-#    (README § 7.2). So the whole folder is excluded.
+#    the only fix is to replace the key - i.e. hand out a new pin to every PC
+#    (deploy/README.md, "Changing the key"). So the whole folder is excluded.
 certs/

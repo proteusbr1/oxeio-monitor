@@ -14,7 +14,7 @@
  * reduces that month's workdays, changes targets and pace, and changes the
  * payroll `d ÷ D` fraction. So the seed **does not insert anything** in those
  * months by itself; it only prints the dates by name. To insert them, set
- * `SEED_HOLIDAYS_PAST=true` (deploy/README.md section 2.1c).
+ * `SEED_HOLIDAYS_PAST=true`.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -402,9 +402,9 @@ async function seedEmployees(policyId: number): Promise<number> {
 // ── 5 · owner account ───────────────────────────────────────────────────────
 
 async function seedOwner(): Promise<string> {
-  const email = process.env.SEED_OWNER_EMAIL ?? 'owner@oxeio.local';
+  const email = process.env.SEED_OWNER_EMAIL?.trim() || 'owner@oxeio.local';
   const password = process.env.SEED_OWNER_PASSWORD;
-  const fullName = process.env.SEED_OWNER_NAME ?? 'oXeio Owner';
+  const fullName = process.env.SEED_OWNER_NAME?.trim() || 'oXeio Owner';
 
   if (!password) {
     throw new Error(

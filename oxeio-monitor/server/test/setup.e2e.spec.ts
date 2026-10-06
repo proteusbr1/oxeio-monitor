@@ -102,9 +102,9 @@ describe('first-run setup wizard', () => {
     expect(await h.prisma.user.count({ where: { role: 'owner' } })).toBe(1);
   });
 
-  it('refuses a time zone with daylight saving, a short password, a bad country', async () => {
-    const res = await request(h.app.getHttpServer()).post('/api/v1/setup').send(body({ timeZone: 'Europe/Berlin' })).expect(400);
-    expect(JSON.stringify(res.body)).toMatch(/daylight|DST|offset/i);
+  it('refuses an unknown time zone, a short password, a bad country', async () => {
+    const res = await request(h.app.getHttpServer()).post('/api/v1/setup').send(body({ timeZone: 'Mars/Base' })).expect(400);
+    expect(JSON.stringify(res.body)).toMatch(/IANA/);
     await request(h.app.getHttpServer()).post('/api/v1/setup').send(body({ ownerPassword: 'short' })).expect(400);
     await request(h.app.getHttpServer()).post('/api/v1/setup').send(body({ country: 'Brazil' })).expect(400);
     expect(await h.prisma.user.count()).toBe(0);

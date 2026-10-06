@@ -61,7 +61,7 @@ export class SetupService implements OnApplicationBootstrap {
   async onApplicationBootstrap(): Promise<void> {
     if (!(await this.needed())) return;
     this.token = process.env.SETUP_TOKEN?.trim() || randomBytes(24).toString('base64url');
-    const base = (process.env.PUBLIC_URL ?? process.env.CORS_ORIGIN ?? '').trim().replace(/\/$/, '');
+    const base = (process.env.PUBLIC_URL?.trim() || process.env.CORS_ORIGIN?.trim() || '').replace(/\/$/, '');
     this.logger.warn(
       `First run — no owner yet. Open ${base || '<this server>'}/setup?token=${this.token} to set up oXeio.`,
     );

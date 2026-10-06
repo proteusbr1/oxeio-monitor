@@ -52,7 +52,8 @@ COPY --from=build /app/dist ./dist
 # Screenshots and nightly dumps are mounted here; the node user needs write access.
 #
 # Careful: this image `chown` does NOT help on a bind mount: the host folder's
-# ownership wins (the whole story is in `deploy/README.md § 10.4`). It only applies to
+# ownership wins (see `deploy/README.md` › "Screenshot rows exist, but the images are
+# broken"). It only applies to
 # named volumes and to folders created for the first time.
 #
 # Careful: `/data/backups` fell into exactly this trap (15 August): docker created the

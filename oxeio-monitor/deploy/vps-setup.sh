@@ -1,24 +1,32 @@
 #!/usr/bin/env bash
 #
-# oXeio - first-time VPS setup (ADR-026)
+# oXeio - first-time VPS setup
 #
 # Run (as root on the VPS):
-#     bash /opt/oxeio/oxeio-monitor/deploy/vps-setup.sh hub.oxeio.com
+#     bash /opt/oxeio/oxeio-monitor/deploy/vps-setup.sh monitor.example.com
 #
 # Careful: do not drop the `oxeio-monitor/` part of the path - this script is
 #    not at the repo root, it is one level inside.
 #
-# What it does: Docker - firewall - generating secrets - DNS check - starting the stack.
+# What it does: Docker - firewall - code - DNS check - generating secrets -
+#    starting the stack - printing the first-run setup link.
 # **Safe to run repeatedly** - it does not touch what is already done, and once
 #    `.env` exists it never touches it again (the secrets would change).
 #
-# Careful: this script prints no secret values, except one: the owner password
-#    generated on the first run - it is shown only once.
+# There is no owner account yet when this finishes: the owner is created in the
+#    web setup wizard, through the one-time link printed at the end.
+#
+# Careful: this script prints no secret values, except the setup link (its
+#    token is only good until the wizard has been completed).
+#
+# Environment overrides:
+#     OXEIO_REPO   git URL to clone   (default: the public GitHub repo)
+#     OXEIO_DIR    where to clone it  (default: /opt/oxeio)
 
 set -euo pipefail
 
 PUBLIC_HOST="${1:-}"
-REPO="${OXEIO_REPO:-https://github.com/ownCoder/oxeio-monitor.git}"
+REPO="${OXEIO_REPO:-https://github.com/proteusbr1/oxeio-monitor.git}"
 DIR="${OXEIO_DIR:-/opt/oxeio}"
 
 die() { printf '\n\033[31m✗ %s\033[0m\n\n' "$*" >&2; exit 1; }
@@ -26,21 +34,21 @@ say() { printf '\033[36m── %s\033[0m\n' "$*"; }
 ok()  { printf '   \033[32m✓\033[0m %s\n' "$*"; }
 warn(){ printf '   \033[33m⚠️  %s\033[0m\n' "$*"; }
 
-[ -n "$PUBLIC_HOST" ] || die "ডোমেইন দিন:  bash deploy/vps-setup.sh hub.oxeio.com"
-[ "$(id -u)" -eq 0 ] || die "root হিসেবে চালান (sudo -i)"
+[ -n "$PUBLIC_HOST" ] || die "Give the domain:  bash deploy/vps-setup.sh monitor.example.com"
+[ "$(id -u)" -eq 0 ] || die "Run as root (sudo -i)"
 
 # ── 1. Docker ────────────────────────────────────────────────────────────
-say "১· Docker"
+say "1· Docker"
 if command -v docker >/dev/null 2>&1; then
-  ok "আগে থেকেই আছে — $(docker --version | cut -d, -f1)"
+  ok "already installed — $(docker --version | cut -d, -f1)"
 else
   curl -fsSL https://get.docker.com | sh
-  ok "বসানো হলো"
+  ok "installed"
 fi
-docker compose version >/dev/null 2>&1 || die "docker compose প্লাগইন নেই"
+docker compose version >/dev/null 2>&1 || die "the docker compose plugin is missing"
 
 # ── 2. Firewall ──────────────────────────────────────────────────────────
-say "২· ফায়ারওয়াল"
+say "2· Firewall"
 
 # Careful: this used to say: if ufw is missing, just print a warning.
 #    A port scan from outside showed the VPS had **no firewall running at all** -
@@ -57,89 +65,62 @@ if command -v ufw >/dev/null 2>&1; then
   # Careful: SSH first - the other way round, your own connection is cut the
   #    moment `ufw enable` runs, and then there is no way into the VPS (except the console).
   ufw allow 22/tcp  >/dev/null
-  # 2222 - the alternative SSH door. Many ISPs (e.g. AmberIT, Bangladesh) silently
-  #    block outbound port 22, and then the server runs fine but cannot be reached.
+  # 2222 - an alternative SSH port. Some ISPs silently block outbound port 22,
+  #    and then the server runs fine but cannot be reached.
   #    Careful: opening it here does not **create** the door - sshd has to be told
-  #    to listen there (deploy/README § 12.4c). It is opened ahead of time so ufw
-  #    is no obstacle on the day it is needed, because that day there is no time.
+  #    to listen there (deploy/README.md, "SSH times out"). It is opened ahead of
+  #    time so ufw is no obstacle on the day it is needed.
   ufw allow 2222/tcp >/dev/null
   ufw allow 80/tcp  >/dev/null
   ufw allow 443/tcp >/dev/null
   ufw --force enable >/dev/null
-  ok "২২ · ২২২২ · ৮০ · ৪৪৩ খোলা"
+  ok "22 · 2222 · 80 · 443 open"
   # Careful: 5432 and 3000 are deliberately closed - compose binds them to
   #    127.0.0.1, so there is no reason to reach them from outside.
 else
   # Careful: it could not even be installed - this can no longer be allowed to pass quietly.
-  warn "ufw বসানো গেল না — প্রোভাইডারের ফায়ারওয়ালে ২২/২২২২/৮০/৪৪৩ খুলে"
-  warn "বাকি সব বন্ধ করুন, নইলে হোস্ট সম্পূর্ণ অরক্ষিত থাকবে"
+  warn "could not install ufw — open 22/2222/80/443 in your provider's firewall"
+  warn "and close everything else, or the host stays completely unprotected"
 fi
 
 # **Verify** what was installed - "was run" and "is running" are not the same.
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi '^Status: active'; then
-  ok "ফায়ারওয়াল সক্রিয়"
+  ok "firewall active"
 else
   # Careful: a quote, not a backtick - a backtick inside double quotes runs a command.
-  warn '⚠️ ফায়ারওয়াল সক্রিয় নয় — "ufw status verbose" দিয়ে দেখুন'
+  warn 'firewall NOT active — check with "ufw status verbose"'
 fi
 
 # ── 3. Code ──────────────────────────────────────────────────────────────
-say "৩· কোড"
+say "3· Code"
 
-# Careful: `GIT_TERMINAL_PROMPT=0` - without it **the script hangs**.
-#
-#    The repo is private, so cloning over HTTPS makes git silently sit at
-#    `Username for 'https://github.com':` - and inside a script that looks
-#    odd, as if something is stuck.
-#    This is exactly what happened on the owner's first attempt.
-#
-#    Now it fails immediately instead of hanging, and what to do is printed below.
+# Careful: `GIT_TERMINAL_PROMPT=0` - without it a wrong or private repo URL makes
+#    git silently sit at `Username for 'https://github.com':`, which inside a
+#    script looks as if something is stuck. Now it fails at once instead.
 export GIT_TERMINAL_PROMPT=0
 
-clone_help() {
-  cat <<EOF
-
-রিপোটা **private**, তাই বেনামে clone করা যায় না। deploy key বসান —
-শুধু-পড়ার অনুমতি, শুধু এই রিপোর জন্য:
-
-  ১· চাবি বানান ও দেখুন:
-       ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -C "oxeio-vps" <<< y
-       ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
-       cat ~/.ssh/id_ed25519.pub
-
-  ২· GitHub → রিপো → Settings → Deploy keys → Add deploy key
-     (⚠️ "Allow write access" টিক দেবেন না)
-
-  ৩· তারপর SSH ঠিকানা দিয়ে আবার:
-       OXEIO_REPO=git@github.com:ownCoder/oxeio-monitor.git \
-         bash $DIR/oxeio-monitor/deploy/vps-setup.sh $PUBLIC_HOST
-EOF
-}
-
 if [ -d "$DIR/.git" ]; then
-  git -C "$DIR" pull --ff-only || die "pull ব্যর্থ — নেট বা অনুমতি দেখুন"
-  ok "হালনাগাদ"
+  git -C "$DIR" pull --ff-only || die "git pull failed — check the network and $DIR"
+  ok "updated"
 else
-  if ! git clone --depth 1 "$REPO" "$DIR" 2>&1; then
-    clone_help
-    die "clone করা গেল না ($REPO)"
-  fi
-  ok "ক্লোন হলো → $DIR"
+  git clone --depth 1 "$REPO" "$DIR" 2>&1 \
+    || die "could not clone $REPO — check the URL and the network (a private fork needs OXEIO_REPO=git@github.com:<you>/<repo>.git and a deploy key)"
+  ok "cloned → $DIR"
 fi
 
 # Careful: the compose files are **not at the repo root**, they are inside `oxeio-monitor/`.
 #
 #    This is where it got stuck once: the clone succeeded, but the script did
 #    `cd` to the root and called `docker compose` - and there is no
-#    docker-compose.yml there. (The run command also had the wrong path.)
+#    docker-compose.yml there.
 #
 #    Both layouts work, so a change in the repo structure will not break it.
 COMPOSE_DIR="$DIR/oxeio-monitor"
 [ -f "$COMPOSE_DIR/docker-compose.yml" ] || COMPOSE_DIR="$DIR"
-[ -f "$COMPOSE_DIR/docker-compose.yml" ]   || die "docker-compose.yml পাওয়া গেল না ($DIR-এর ভেতরে খোঁজা হয়েছে)"
+[ -f "$COMPOSE_DIR/docker-compose.yml" ]   || die "docker-compose.yml not found (looked inside $DIR)"
 
 cd "$COMPOSE_DIR"
-ok "compose ফোল্ডার → $COMPOSE_DIR"
+ok "compose folder → $COMPOSE_DIR"
 
 # ── 4. DNS - **before bringing the stack up** ────────────────────────────
 #
@@ -150,23 +131,22 @@ ok "compose ফোল্ডার → $COMPOSE_DIR"
 #    Careful: LE also limits failed attempts (5 per hour) - past the limit the
 #    domain is **locked out for an hour**, and even after fixing DNS you cannot
 #    get a certificate right away.
-say "৪· DNS যাচাই"
+say "4· DNS check"
 resolved="$(getent hosts "$PUBLIC_HOST" 2>/dev/null | awk '{print $1}' | head -1 || true)"
 myip="$(curl -fsS --max-time 10 https://api.ipify.org 2>/dev/null || true)"
 
-[ -n "$resolved" ] || die "$PUBLIC_HOST কোথাও দেখাচ্ছে না। DNS ছড়াতে সময় লাগে (TTL ৭২০০ = ২ ঘণ্টা পর্যন্ত)। একটু পরে আবার চালান।"
+[ -n "$resolved" ] || die "$PUBLIC_HOST does not resolve yet. DNS can take a while to propagate (up to the record's TTL). Run this again a little later."
 ok "$PUBLIC_HOST → $resolved"
 
 if [ -n "$myip" ] && [ "$resolved" != "$myip" ]; then
-  die "DNS দেখাচ্ছে $resolved, কিন্তু এই সার্ভারের IP $myip — A রেকর্ডটা মিলিয়ে নিন।"
+  die "DNS points to $resolved, but this server's IP is $myip — fix the A record."
 fi
-[ -n "$myip" ] && ok "এই সার্ভারের IP-র সাথে মিলেছে"
+[ -n "$myip" ] && ok "matches this server's IP"
 
 # ── 5. .env ──────────────────────────────────────────────────────────────
-say "৫· .env"
-OWNER_PW=""
+say "5· .env"
 if [ -f .env ]; then
-  ok ".env আগে থেকেই আছে — ছোঁয়া হয়নি"
+  ok ".env already exists — left untouched"
 else
   cp .env.example .env
 
@@ -177,70 +157,112 @@ else
   JWT="$(gen 64 48)"
   SHOT="$(gen 48 32)"
   BACKUP="$(gen 48 32)"
-  OWNER_PW="$(gen 24 16)"
+  SETUP="$(gen 48 32)"
 
   set_env() {
     # Careful: `|` as the delimiter - base64 can contain `/`, which would break `sed s/.../.../`
-    sed -i "s|^$1=.*|$1=$2|" .env
+    if grep -qE "^$1=" .env; then
+      sed -i "s|^$1=.*|$1=$2|" .env
+    else
+      printf '%s=%s\n' "$1" "$2" >> .env
+    fi
   }
   set_env POSTGRES_PASSWORD "$PG_PW"
   set_env JWT_SECRET "$JWT"
   set_env SCREENSHOT_URL_SECRET "$SHOT"
   set_env BACKUP_PASSPHRASE "$BACKUP"
-  set_env SEED_OWNER_PASSWORD "$OWNER_PW"
+  # The token of the first-run setup link. Chosen here (instead of the random
+  #    one the api would print in its log) so this script can print the link.
+  set_env SETUP_TOKEN "$SETUP"
   set_env CORS_ORIGIN "https://$PUBLIC_HOST"
 
   # Careful: the password must be set again in DATABASE_URL - otherwise the sample
-  #    password from .env.example would remain and the api could not log in to the database.
+  #    password from .env.example would remain there.
   pg_user="$(grep -E '^POSTGRES_USER=' .env | cut -d= -f2-)"
   pg_db="$(grep -E '^POSTGRES_DB=' .env | cut -d= -f2-)"
   set_env DATABASE_URL "postgresql://$pg_user:$PG_PW@postgres:5432/$pg_db?schema=public"
 
   {
     echo ""
-    echo "# ── VPS (vps-setup.sh বসিয়েছে) ──"
+    echo "# ── VPS (written by vps-setup.sh) ──"
     echo "PUBLIC_HOST=$PUBLIC_HOST"
     echo "COMPOSE_FILE=docker-compose.yml:docker-compose.vps.yml"
   } >> .env
 
   chmod 600 .env
-  ok "তৈরি — সব গোপন মান নতুন করে বানানো"
+  ok "created — every secret freshly generated"
+  warn "BACKUP_PASSPHRASE is in .env — keep a copy OFF this server (password manager)."
+  warn "Without it no backup can ever be decrypted."
 fi
+
+# The host folders for screenshots and backups, owned by the api's user.
+#
+# Careful: if docker creates a missing bind-mount folder itself, it is owned by
+#    root, while the api runs as `node` (uid 1000) - every write then fails with
+#    EACCES: screenshot rows without files, a nightly backup that never lands.
+#    The image's own `chown` does not help: the host folder's ownership wins.
+env_val() { grep -E "^$1=" .env | tail -1 | cut -d= -f2- || true; }
+storage_dir="$(env_val STORAGE_HOST_PATH)"
+backup_dir="$(env_val BACKUP_HOST_PATH)"
+# the same defaults as docker-compose.yml
+for d in "${storage_dir:-./.data/storage}" "${backup_dir:-./.data/backups}"; do
+  mkdir -p "$d"
+  chown 1000:1000 "$d"
+done
+ok "storage and backup folders ready (owner uid 1000)"
 
 # ── 6. Stack ─────────────────────────────────────────────────────────────
-say "৬· স্কিমা ও seed"
-docker compose --profile setup run --rm migrate
-ok "মাইগ্রেশন ও seed হয়ে গেছে"
+# `up -d` builds the images on the first run, brings the database schema up to
+#    date (the `migrate` service, which the api waits for), then starts the api
+#    and the web. No separate migration or seed step is needed.
+say "6· Starting the stack (the first build takes a few minutes)"
+docker compose up -d \
+  || die "the stack did not start — see:  docker compose logs migrate api --tail 60"
 
-say "৭· স্ট্যাক তোলা"
-docker compose up -d
-ok "উঠছে — Caddy এখন Let's Encrypt থেকে সার্ট নেবে"
+# Careful: the API takes a few seconds to answer. Checking only once would call
+#    a healthy stack "broken".
+HEALTH=""
+for _ in $(seq 1 30); do
+  HEALTH="$(curl -fsS --max-time 3 http://127.0.0.1:3000/api/v1/health 2>/dev/null || true)"
+  case "$HEALTH" in *'"status":"ok"'*) break ;; esac
+  sleep 2
+done
+case "$HEALTH" in
+  *'"status":"ok"'*) ok "API is answering" ;;
+  *) docker compose ps
+     die "the API did not answer within 60 seconds. Logs:  docker compose logs api --tail 60" ;;
+esac
+ok "Caddy now fetches the certificate from Let's Encrypt"
 
-# ── 8. Result ────────────────────────────────────────────────────────────
-printf '\n\033[32m✅ হয়ে গেছে\033[0m\n\n'
-echo "   ড্যাশবোর্ড : https://$PUBLIC_HOST"
-owner_email="$(grep -E '^SEED_OWNER_EMAIL=' .env | cut -d= -f2-)"
-if [ -n "$OWNER_PW" ]; then
-  printf '
-   [33m⚠️  owner লগইন — এটা একবারই দেখানো হচ্ছে:[0m
-'
-  echo "      $owner_email"
-  echo "      $OWNER_PW"
-  echo "   (প্রথম লগইনেই বদলাতে বলবে — সেটা ঠিক আচরণ)"
-else
-  # Careful: if `.env` already existed, no new password is generated, so there
-  #    is nothing to print - and the owner then gets a **running system** with no
-  #    known way to log in. This is exactly what happened once: an earlier attempt
-  #    had created .env, the next attempt succeeded, but did not print the login.
-  #
-  #    The password is deliberately **not** printed here - it would stay in logs,
-  #    screenshots or terminal scrollback. Instead it says where to find it.
-  printf '
-   [33mowner লগইন: %s[0m
-' "$owner_email"
-  echo "   পাসওয়ার্ড দেখতে:"
-  echo "      grep '^SEED_OWNER_PASSWORD=' $COMPOSE_DIR/.env"
-fi
-printf '\n   সার্ট এলো কি না দেখতে:  docker compose logs -f web\n'
-printf '   অবস্থা দেখতে        :  docker compose ps\n\n'
-printf '   \033[33m⚠️ সার্ট আসতে ১০–৬০ সেকেন্ড লাগে। তার আগে ব্রাউজারে ভুল দেখাবে।\033[0m\n\n'
+# ── 7. Result ────────────────────────────────────────────────────────────
+printf '\n\033[32m✅ Done\033[0m\n\n'
+echo "   Dashboard : https://$PUBLIC_HOST"
+
+# Whether the wizard is still needed - asked of the API, not guessed: on a
+#    re-run after the setup was completed there is nothing to open.
+setup_status="$(curl -fsS --max-time 5 http://127.0.0.1:3000/api/v1/setup/status 2>/dev/null || true)"
+setup_token="$(grep -E '^SETUP_TOKEN=' .env | cut -d= -f2- || true)"
+
+case "$setup_status" in
+  *'"needed":false'*)
+    echo "   Setup     : already completed — sign in with the owner account."
+    ;;
+  *)
+    if [ -n "$setup_token" ]; then
+      printf '\n   \033[33mFirst run — open this link to create the owner account:\033[0m\n'
+      echo "      https://$PUBLIC_HOST/setup?token=$setup_token"
+    else
+      # Careful: an older `.env` (made before SETUP_TOKEN existed) has no token,
+      #    so the api made a random one and printed it in its log.
+      printf '\n   \033[33mFirst run — the setup link is in the api log:\033[0m\n'
+      echo "      docker compose logs api | grep setup"
+    fi
+    echo "   (The wizard asks for the company, time zone, currency, the owner"
+    echo "    account and the work week. The link stops working once it is done.)"
+    ;;
+esac
+
+printf '\n   Certificate progress :  docker compose logs -f web\n'
+printf '   Status               :  docker compose ps\n'
+printf '   Next                 :  bash %s/deploy/vps-harden.sh\n\n' "$COMPOSE_DIR"
+printf '   \033[33m⚠️ The certificate takes 10–60 seconds. Until then the browser shows an error.\033[0m\n\n'

@@ -9,7 +9,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-oxeio}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-oxeio}
-      TZ: Asia/Dhaka # GMT+6 (UTC+06:00), no DST
+      # display only (psql, logs): every timestamp column is timestamptz
+      TZ: UTC
     # bound to loopback only — the database is never reachable from the LAN
     ports:
       - "127.0.0.1:5432:5432"
@@ -35,12 +36,19 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      # the schema is brought up to date before every start
+      migrate:
+        condition: service_completed_successfully
     environment:
       NODE_ENV: production
-      TZ: ${WORK_TIMEZONE:-Asia/Dhaka} # default GMT+6 (UTC+06:00), no DST
-      # Work-day zone for every date, cron job and report. Only zones without
-      # DST are accepted; the server refuses to start otherwise.
-      WORK_TIMEZONE: ${WORK_TIMEZONE:-Asia/Dhaka}
+      TZ: ${WORK_TIMEZONE:-UTC}
+      # Work-day zone for every date, cron job and report. Usually left empty:
+      # the setup wizard (Settings → Company & region later) saves the real one.
+      WORK_TIMEZONE: ${WORK_TIMEZONE:-UTC}
+      # The first-run setup link is printed in this container's log; with
+      # PUBLIC_URL it is a full link. SETUP_TOKEN = choose the token yourself.
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      SETUP_TOKEN: ${SETUP_TOKEN:-}
       DATABASE_URL: postgresql://${POSTGRES_USER:-oxeio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-oxeio}?schema=public
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       # Careful: these variables must be passed **explicitly** here. Compose does not
@@ -56,7 +64,8 @@ services:
       PORT: 3000
       STORAGE_ROOT: /data/storage
       # screenshots in an S3-compatible bucket instead of STORAGE_ROOT
-      # (deploy/README.md § 5a) - empty = local disk, as before
+      # (deploy/README.md › "Screenshots in an S3-compatible bucket")
+      # - empty = local disk, as before
       STORAGE_DRIVER: ${STORAGE_DRIVER:-}
       S3_BUCKET: ${S3_BUCKET:-}
       S3_ENDPOINT: ${S3_ENDPOINT:-}
@@ -160,7 +169,8 @@ services:
       #    it silently fell back to HTTP, one typo would send the agents' device
       #    tokens in plaintext over the LAN for months while everything looked
       #    fine from outside.
-      # Making the cert: deploy/make-cert.ps1 (details in deploy/README.md § 6)
+      # Making the cert: deploy/make-cert.ps1 (details in deploy/README.md ›
+      #    "LAN install with a self-signed certificate")
       # TLS_CERT: /certs/oxeio-cert.pem
       # TLS_KEY: /certs/oxeio-key.pem
     # Careful: **do not remove the `127.0.0.1:` part.**
@@ -241,17 +251,15 @@ services:
       api:
         condition: service_healthy
     environment:
-      TZ: Asia/Dhaka
+      TZ: UTC
       # behind another proxy only — empty = Caddy is the edge, as before
-      # (deploy/README.md § 3b)
+      # (deploy/README.md › "Behind a reverse proxy")
       CADDY_TRUSTED_PROXIES: ${CADDY_TRUSTED_PROXIES:-}
       CADDY_CLIENT_IP_HEADERS: ${CADDY_CLIENT_IP_HEADERS:-}
-    # Careful: `WEB_PORT` is not used on the VPS - there Caddy itself takes 80 and
-    #    443 (Let's Encrypt validation happens on 80). The two lines then become:
-    #        - "80:80"
-    #        - "443:443"
-    #    and `web/Caddyfile` gets the domain in place of `:8080`.
-    #    Details in deploy/README § 3.
+    # Careful: `WEB_PORT` is not used in domain mode - there Caddy itself takes 80
+    #    and 443 (Let's Encrypt validation happens on 80). docker-compose.vps.yml
+    #    replaces these ports and puts PUBLIC_HOST in place of `:8080`.
+    #    Details in deploy/README.md › "Domain mode (Caddy is the edge, automatic HTTPS)".
     ports:
       - "${WEB_PORT:-8080}:8080"
     healthcheck:
@@ -260,36 +268,42 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── One-off job: schema and seed ────────────────────────────────────────
-  # Careful: **without this, `docker compose up -d` leaves the database with no tables.**
-  #    The runbook did not have this step, and the api runtime image has neither
-  #    the prisma CLI nor tsx (Dockerfile § runtime), so the container could not
-  #    run it itself either.
-  #
-  # `target: build` - that stage has both the source and the full node_modules.
-  # A profile is set, so it does not run on `up -d`. Deliberate: a migration is
-  #    a conscious step, not something to run by itself on every restart.
-  #
-  #     docker compose --profile setup run --rm migrate
-  #
+  # Brings the schema up to date, then exits; the api waits for it.
   migrate:
     build:
       context: ./server
       dockerfile: Dockerfile
       target: build
-    profiles: ["setup"]
+    restart: "no"
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      TZ: ${WORK_TIMEZONE:-Asia/Dhaka}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-oxeio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-oxeio}?schema=public
+    command: ["npx", "prisma", "migrate", "deploy"]
+
+  # Optional, for scripted installs that skip the setup wizard:
+  #     docker compose --profile seed run --rm seed
+  # Creates the owner, the first work policy and holidays from the SEED_*
+  # lines in .env (see .env.example). With an owner in place the wizard no
+  # longer appears.
+  seed:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: build
+    profiles: ["seed"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      TZ: ${WORK_TIMEZONE:-UTC}
       # the seed writes it into work_policies.timezone
-      WORK_TIMEZONE: ${WORK_TIMEZONE:-Asia/Dhaka}
+      WORK_TIMEZONE: ${WORK_TIMEZONE:-UTC}
       DATABASE_URL: postgresql://${POSTGRES_USER:-oxeio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-oxeio}?schema=public
       SEED_OWNER_EMAIL: ${SEED_OWNER_EMAIL:-}
       SEED_OWNER_PASSWORD: ${SEED_OWNER_PASSWORD:-}
       SEED_OWNER_NAME: ${SEED_OWNER_NAME:-}
-      # seed outside Bangladesh — empty = the defaults (BD, 208 h, 26 days, Friday)
       SEED_COUNTRY: ${SEED_COUNTRY:-}
       SEED_HOLIDAYS: ${SEED_HOLIDAYS:-}
       SEED_POLICY_MONTHLY_HOURS: ${SEED_POLICY_MONTHLY_HOURS:-}
@@ -297,13 +311,12 @@ services:
       SEED_POLICY_WEEKLY_OFF: ${SEED_POLICY_WEEKLY_OFF:-}
     volumes:
       # Careful: prisma/ is mounted from the host, not baked into the image -
-      #    `staff.local.json` holds the staff's **names and salaries**. In the
-      #    image it would spread with every layer copy ([09 § ৩ঊ](../docs/09-Build-Log.md)).
+      #    `staff.local.json` may hold staff names and salaries, and in the
+      #    image it would spread with every layer copy.
       - ./server/prisma:/app/prisma:ro
     # Careful: not `npm run seed` - it is wrapped in `dotenv -e ../.env`, and
     #    the container has no such file. The variables come from compose.
-    command: >
-      sh -c "npx prisma migrate deploy && npx tsx prisma/seed.ts"
+    command: ["npx", "tsx", "prisma/seed.ts"]
 
 volumes:
   pgdata:

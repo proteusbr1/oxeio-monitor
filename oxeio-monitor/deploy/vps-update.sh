@@ -5,15 +5,13 @@
 # Run (as root on the VPS):
 #     bash /opt/oxeio/oxeio-monitor/deploy/vps-update.sh
 #
-# What it does: git pull -> migration if needed -> rebuild -> health check.
+# What it does: git pull -> build the new images -> migration if needed ->
+#    restart on the new images -> health check.
 # **Safe to run repeatedly.** With nothing new it does almost nothing.
 #
-# Careful: **the seed is not run - deliberately.** Compose's `migrate` service
-#    is `migrate deploy && tsx prisma/seed.ts` - so calling it runs the seed too,
-#    and the seed **upserts the staff's names, salaries and joining dates**.
-#    Run during an update, it would overwrite data entered by hand in the
-#    dashboard with the file's old values - silently, and straight into the
-#    payroll figures. So only `migrate deploy` is called here, overriding the command.
+# Careful: **the seed is never run here.** Compose's `migrate` service runs only
+#    `prisma migrate deploy`; the seed is a separate, opt-in service (profile
+#    `seed`) for scripted first installs, and has no business in an update.
 #
 # Careful: this script prints no secret values.
 
@@ -26,26 +24,26 @@ say() { printf '\n\033[36m── %s\033[0m\n' "$*"; }
 ok()  { printf '   \033[32m✓\033[0m %s\n' "$*"; }
 warn(){ printf '   \033[33m⚠️  %s\033[0m\n' "$*"; }
 
-[ "$(id -u)" -eq 0 ] || die "root হিসেবে চালান (sudo -i)"
-[ -d "$DIR/.git" ]   || die "$DIR-এ রিপো নেই — প্রথমবার হলে vps-setup.sh চালান"
+[ "$(id -u)" -eq 0 ] || die "Run as root (sudo -i)"
+[ -d "$DIR/.git" ]   || die "No repo in $DIR — for a first install run vps-setup.sh"
 
 # Careful: the compose file is **not at the repo root**, it is inside `oxeio-monitor/`.
-#    The same mistake once happened in vps-setup.sh (09 § ৩শ, trap 5).
+#    The same mistake once happened in vps-setup.sh.
 COMPOSE_DIR="$DIR/oxeio-monitor"
 [ -f "$COMPOSE_DIR/docker-compose.yml" ] || COMPOSE_DIR="$DIR"
-[ -f "$COMPOSE_DIR/docker-compose.yml" ] || die "docker-compose.yml পাওয়া গেল না"
+[ -f "$COMPOSE_DIR/docker-compose.yml" ] || die "docker-compose.yml not found"
 
 # ── 1. New code ─────────────────────────────────────────────────────────────
-say "১· নতুন কোড আনা"
+say "1· Fetching new code"
 
 cd "$DIR"
 BEFORE="$(git rev-parse HEAD)"
 
-# Careful: on a private repo git **hangs** asking for a password, and the script
-#    then sits stuck without any message (09 § ৩শ, trap 4). With this it does
-#    not hang, it fails - and the reason can be stated.
+# Careful: when git needs credentials it **hangs** asking for them, and the
+#    script then sits stuck without any message. With this it does not hang,
+#    it fails - and the reason can be stated.
 GIT_TERMINAL_PROMPT=0 git pull --ff-only \
-  || die "git pull ব্যর্থ — deploy key ঠিক আছে কি না দেখুন (ssh -T git@github.com)"
+  || die "git pull failed — check the network and the remote (git -C $DIR remote -v)"
 
 AFTER="$(git rev-parse HEAD)"
 
@@ -63,13 +61,12 @@ git diff --quiet && git diff --cached --quiet \
   || die "Tracked source has local changes. Review and commit them before deployment."
 
 if [ "$BEFORE" = "$AFTER" ]; then
-  ok "নতুন কিছু নেই — কোড ইতিমধ্যেই সর্বশেষ"
+  ok "nothing new — the code is already up to date"
 else
-  ok "$(git rev-list --count "$BEFORE..$AFTER")টি নতুন কমিট"
+  ok "$(git rev-list --count "$BEFORE..$AFTER") new commit(s)"
   git --no-pager log --oneline "$BEFORE..$AFTER" | sed 's/^/     /'
 fi
 
-# ── 2. Migration ────────────────────────────────────────────────────────────
 # ── Version ──────────────────────────────────────────────────────────────
 # The version comes **from git**, not written by hand.
 #
@@ -83,11 +80,22 @@ fi
 export APP_BUILD="$(git rev-list --count HEAD 2>/dev/null || echo dev)"
 export APP_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo local)"
 export APP_BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-ok "ভার্সন #$APP_BUILD · $APP_COMMIT"
+ok "version #$APP_BUILD · $APP_COMMIT"
 
-say "২· ডাটাবেসের গড়ন"
+# ── 2. Build ────────────────────────────────────────────────────────────────
+say "2· Building the images"
 
 cd "$COMPOSE_DIR"
+
+# Careful: build **before** migrating. The `migrate` service runs the migrations
+#    baked into its image; run against the old image it would see no new
+#    migration at all. Building first also means a failed build leaves the
+#    running stack untouched.
+docker compose build || die "build failed — the stack is still running the old code"
+ok "images built"
+
+# ── 3. Migration ────────────────────────────────────────────────────────────
+say "3· Database schema"
 
 # **The question is asked of the database, not of git.**
 #
@@ -101,31 +109,32 @@ cd "$COMPOSE_DIR"
 #         migration was still pending in the database
 #
 # Both mistakes share one root: **git history does not know "what has been
-#    applied to the database".** So the condition was dropped - now it asks
-#    `migrate status` directly, and applies anything pending. One extra
-#    container runs (a few seconds), and in exchange the trap is gone.
-if docker compose --profile setup run --rm migrate      npx prisma migrate status >/dev/null 2>&1; then
-  ok "নতুন migration নেই"
+#    applied to the database".** So now it asks `migrate status` directly, and
+#    applies anything pending - before the new api starts.
+if docker compose run --rm migrate npx prisma migrate status >/dev/null 2>&1; then
+  ok "no pending migration"
 else
-  warn "migration বাকি আছে — প্রয়োগ করা হচ্ছে"
+  warn "migration pending — applying it"
 
-  # Careful: **override** the command - otherwise compose's own command would
-  #    run the seed too, and the staff's names/salaries/dates would be overwritten by the file's values.
-  docker compose --profile setup run --rm migrate     npx prisma migrate deploy     || die "migration ব্যর্থ — স্ট্যাক পুরোনো কোডেই চলছে, ডেটা অক্ষত"
+  docker compose run --rm migrate npx prisma migrate deploy \
+    || die "migration failed — the stack is still running the old code, data untouched"
 
   # Careful: ask **again** after applying. "Was run" and "nothing pending" are
   #    not the same - if `migrate deploy` partly succeeds and returns 0, it
   #    will be caught right here, before the app breaks.
-  docker compose --profile setup run --rm migrate     npx prisma migrate status >/dev/null 2>&1     || die "প্রয়োগের পরেও migration বাকি — অ্যাপ চালু করা হয়নি"
+  docker compose run --rm migrate npx prisma migrate status >/dev/null 2>&1 \
+    || die "a migration is still pending after applying — the app was not restarted"
 
-  ok "migration প্রয়োগ হয়েছে"
+  ok "migration applied"
 fi
 
-# ── 3. Rebuild ──────────────────────────────────────────────────────────────
-say "৩· ইমেজ তৈরি ও চালু"
+# ── 4. Restart ──────────────────────────────────────────────────────────────
+say "4· Restarting on the new images"
 
-# Careful: without `--build` the old image would keep running - the code arrives but does not run.
-#    This is the easiest mistake to make: "I did pull, so why has nothing changed?"
+# Careful: `--build` stays even though the images were just built - without it
+#    a stale image could keep running: the code arrives but does not run. This
+#    is the easiest mistake to make: "I did pull, so why has nothing changed?"
+#    (The build cache makes this second pass almost free.)
 docker compose up -d --build
 
 # Careful: **prune the build cache - otherwise the disk fills up silently.**
@@ -141,10 +150,10 @@ docker compose up -d --build
 #    images, and then no old image would be at hand for a rollback.
 docker builder prune -f --keep-storage 5GB >/dev/null 2>&1 || true
 
-ok "কনটেইনার চালু"
+ok "containers running"
 
-# ── 4. Is it really running ─────────────────────────────────────────────────
-say "৪· স্বাস্থ্য পরীক্ষা"
+# ── 5. Is it really running ─────────────────────────────────────────────────
+say "5· Health check"
 
 # Careful: the API takes a few seconds to come up. Checking immediately would
 #    call a healthy stack "broken", and someone might roll back over that false message.
@@ -157,11 +166,11 @@ done
 
 case "$HEALTH" in
   *'"status":"ok"'*)
-    ok "API সাড়া দিচ্ছে — $HEALTH"
+    ok "API is answering — $HEALTH"
     ;;
   *)
     docker compose ps
-    die "API ৪০ সেকেন্ডেও সাড়া দেয়নি। লগ দেখুন:  docker compose logs api --tail 60"
+    die "API did not answer within 40 seconds. Logs:  docker compose logs api --tail 60"
     ;;
 esac
 
@@ -171,4 +180,4 @@ case "$HEALTH" in
 esac
 git -C "$DIR" rev-parse HEAD > "$(git -C "$DIR" rev-parse --absolute-git-dir)/oxeio-deployed-commit"
 
-printf '\n\033[32m✅ হালনাগাদ শেষ\033[0m — %s\n\n' "$(git -C "$DIR" rev-parse --short HEAD)"
+printf '\n\033[32m✅ Update complete\033[0m — %s\n\n' "$(git -C "$DIR" rev-parse --short HEAD)"

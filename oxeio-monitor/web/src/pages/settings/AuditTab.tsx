@@ -12,10 +12,11 @@ import {
   formatDateShort,
   formatDateTime,
   formatTime,
+  shiftWorkDate,
+  startOfWorkDate,
   monthStartOf,
   todayInWorkZone,
   workDateOf,
-  workOffsetIso,
 } from '../../lib/format';
 import { Chip, FilterChip, MiniButton, Notice } from '../../components/ui';
 
@@ -78,17 +79,17 @@ const PAGE_SIZE = 50;
 
 /**
  * Careful: `from`/`to` here are **instants**, not plain dates (`@IsISO8601()`). The
- *    work-zone offset is added explicitly: `?from=2026-08-10` would be read by the
+ *    work-zone day is converted explicitly: `?from=2026-08-10` would be read by the
  *    server as UTC midnight, so events before the offset hour (6am in Asia/Dhaka) would fall on the
  *    previous day, and who looked at what in the early morning could not be found.
  */
 function dayStart(date: string): string {
-  return `${date}T00:00:00.000${workOffsetIso()}`;
+  return startOfWorkDate(date).toISOString();
 }
 
 /** Careful: the server's `lte` is inclusive, so this runs to the last millisecond of the day. */
 function dayEnd(date: string): string {
-  return `${date}T23:59:59.999${workOffsetIso()}`;
+  return new Date(startOfWorkDate(shiftWorkDate(date, 1)).getTime() - 1).toISOString();
 }
 
 export function AuditTab() {

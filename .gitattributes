@@ -11,8 +11,9 @@
 #    stores LF and checkouts also produce LF, so both sides have the same bytes.
 #
 # Careful: `.ps1` files stay fine with this - PowerShell accepts LF, and what it
-#    really needs is the **BOM**, not the line ending (deploy/README § "About the
-#    scripts"). The BOM is a byte inside the file, so this rule does not touch it.
+#    really needs is the **BOM**, not the line ending (deploy/README.md › "The
+#    scripts in this folder"). The BOM is a byte inside the file, so this rule
+#    does not touch it.
 * text=auto eol=lf
 
 # Careful: `.sh` files run under bash on the VPS. If CRLF sneaks in, `\r` becomes

@@ -66,7 +66,7 @@ export interface BackupResult {
 }
 
 /**
- * **K02 + K03**: the 02:30 `pg_dump`, encryption, copy to the external drive,
+ * **K02 + K03**: the 03:30 `pg_dump`, encryption, copy to the external drive,
  * and rotation of old backups.
  *
  * **Encryption is not optional (G39).** This dump holds 15 people's activity
@@ -445,7 +445,7 @@ export class BackupService implements OnApplicationBootstrap {
            *
            * Writing `PGPASSWORD=<value>` would put the database password in the
            * `docker` process's argv, and **any** user running `ps aux` on the
-           * host could read it, at 02:30, every day. argv is readable by
+           * host could read it, at 03:30, every day. argv is readable by
            * everyone, env is not; the difference is not cosmetic. (The risk is
            * not imaginary: members of the docker group or monitoring agents list
            * processes.)

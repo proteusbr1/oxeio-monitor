@@ -10,7 +10,7 @@
  * and disk, and testable.
  */
 
-import { LOCAL_OFFSET_MIN } from '../agent/util/work-time';
+import { instantOfWorkWall, workWallOf } from '../agent/util/work-time';
 import {
   BACKUP_CRITICAL_DAYS,
   BACKUP_EXT,
@@ -27,7 +27,6 @@ import {
 const MINUTE_MS = 60_000;
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
-const OFFSET_MS = LOCAL_OFFSET_MIN * MINUTE_MS;
 
 // ════════════════════════════════════════════════════════════════════════════
 // 1. Backup names: the name is the only metadata
@@ -40,7 +39,7 @@ const OFFSET_MS = LOCAL_OFFSET_MIN * MINUTE_MS;
  * restoring a file changes `mtime`; a six-month-old backup would then look like
  * "today's" and never rotate out. The name does not change.
  *
- * Careful: the date is work-zone time. For Asia/Dhaka the 02:30 dump is 20:30 the previous day in
+ * Careful: the date is work-zone time. In Asia/Dhaka the 03:30 dump is 21:30 the previous day in
  * UTC; building the name from UTC would shift the file's date, and "which
  * night's backup", by one day.
  *
@@ -48,7 +47,7 @@ const OFFSET_MS = LOCAL_OFFSET_MIN * MINUTE_MS;
  * backup run by hand on the same day would silently overwrite the first.
  */
 export function backupFileName(now: Date): string {
-  const s = new Date(now.getTime() + OFFSET_MS);
+  const s = workWallOf(now);
   const pad = (n: number): string => String(n).padStart(2, '0');
   const stamp =
     `${s.getUTCFullYear()}-${pad(s.getUTCMonth() + 1)}-${pad(s.getUTCDate())}` +
@@ -82,7 +81,7 @@ export function parseBackupName(name: string): Date | null {
     Number(hh),
     Number(mm),
   );
-  const at = new Date(localUtc - OFFSET_MS);
+  const at = instantOfWorkWall(new Date(localUtc));
 
   // Careful: `2026-13-45` would pass the regex (two digits each), but Date.UTC
   // would silently roll it into the next month. A junk name would then count as
@@ -347,7 +346,7 @@ export function backupAlertText(verdict: BackupVerdict): {
     case 'stale':
       return {
         title: 'Backup has stopped',
-        detail: `${age}. Check whether the job runs at all — was the server up at 2:30 AM?`,
+        detail: `${age}. Check whether the job runs at all — was the server up at 3:30 AM?`,
       };
     case 'copy_failed':
       return {

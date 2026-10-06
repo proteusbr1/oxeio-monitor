@@ -10,7 +10,7 @@ import { Wordmark } from './Brand';
 import '../studio.css';
 import { ErrorBoundary } from './ErrorBoundary';
 import { ThemeToggle } from './ThemeToggle';
-import { formatDateMedium, workOffsetMs, workTimeZoneLabel } from '../lib/format';
+import { formatDateMedium, workTimeZoneLabel, workWallOf } from '../lib/format';
 
 /**
  * Pace of the nav badge: slow, like the board's pulse.
@@ -266,13 +266,13 @@ const NAV: NavItem[] = [
 /**
  * Work-zone date and time: `15 Aug 2026 · 18:40`.
  *
- * Careful: it adds the work zone's offset and cuts from the ISO string rather than using
+ * Careful: it reads the work zone's wall clock and cuts from the ISO string rather than using
  * `toLocaleString`, so the result is the same whatever the machine's timezone or locale.
  * Careful: no seconds: a number changing every second draws the eye, yet the
  * board refreshes every 30 seconds, so the clock would look fresher than the data.
  */
 function workStamp(): string {
-  const d = new Date(Date.now() + workOffsetMs());
+  const d = workWallOf(new Date());
   const iso = d.toISOString();
   // through lib/format, so DISPLAY_LOCALE reaches the top bar too
   return `${formatDateMedium(iso.slice(0, 10))} · ${iso.slice(11, 16)}`;

@@ -9,7 +9,7 @@ import { CheckboxField, SelectField } from '../../components/ui';
 import {
   countryOptions,
   currencyOf,
-  fixedOffsetZones,
+  timeZoneOptions,
   LOCALE_CHOICES,
   localeOf,
   supportedValues,
@@ -69,7 +69,7 @@ const STEPS: { id: StepId; title: string }[] = [
 export function SetupPage() {
   const token = new URLSearchParams(window.location.search).get('token') ?? '';
 
-  const zones = useMemo(() => fixedOffsetZones(supportedValues('timeZone')), []);
+  const zones = useMemo(() => timeZoneOptions(supportedValues('timeZone')), []);
   const currencies = useMemo(() => twoDecimalCurrencies(supportedValues('currency')), []);
   const countries = useMemo(() => countryOptions(), []);
 
@@ -244,9 +244,6 @@ export function SetupPage() {
               onChange={(v) => set('timeZone', v)}
               options={[{ value: '', label: 'Choose…' }, ...zones]}
             />
-            <p className="-mt-2 text-[11.5px] text-ink-3">
-              Zones with daylight saving time are not supported yet.
-            </p>
             <SelectField
               label="Currency"
               value={form.currency}

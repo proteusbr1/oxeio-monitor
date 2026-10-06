@@ -14,10 +14,10 @@
  * `admin-enrollment-code`) cannot import it. Keeping the helpers separate lets
  * both kinds of spec share the same clock and the same rule.
  */
-import { LOCAL_OFFSET_MIN, workDateOf } from '../../src/agent/util/work-time';
+import { instantOfWorkWall, workDateOf } from '../../src/agent/util/work-time';
 
 /**
- * A safe moment for fixtures: 12:00 noon of today's Dhaka day.
+ * A safe moment for fixtures: 12:00 noon of today's work day.
  *
  * Why noon, and why this is the heart of the rule:
  *
@@ -31,19 +31,17 @@ import { LOCAL_OFFSET_MIN, workDateOf } from '../../src/agent/util/work-time';
  *
  * What this does not cover: if the suite runs at exactly 23:59 and the day
  * rolls over midway, a narrow gap remains. The window used to be six hours a
- * day (Dhaka is UTC+6, so UTC-based fixtures broke between 00:00 and 06:00);
- * now it is under a minute. Not zero, but no longer "CI is red every night".
+ * day (UTC-based fixtures broke between local 00:00 and 06:00 in a UTC+6
+ * zone); now it is under a minute. Not zero, but no longer "CI is red every night".
  *
  * @param dayOffset how many days from today (negative = past)
  */
 export function workNoon(dayOffset = 0): Date {
-  // `workDateOf` returns the Dhaka day as UTC midnight; adding 6h gives 12:00 Dhaka
+  // the work day's label (UTC midnight) + 12 h is "12:00" on the wall clock;
+  // the zone turns that into the instant, daylight saving included
   const day = workDateOf(new Date());
-  // (12h − offset) instead of a hardcoded 6h, so it is local noon in any WORK_TIMEZONE
-  return new Date(
-    day.getTime() +
-      dayOffset * 86_400_000 +
-      (12 * 60 - LOCAL_OFFSET_MIN) * 60_000,
+  return instantOfWorkWall(
+    new Date(day.getTime() + dayOffset * 86_400_000 + 12 * 3_600_000),
   );
 }
 

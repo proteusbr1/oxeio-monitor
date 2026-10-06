@@ -4,7 +4,7 @@ import { closeMonth, listMonthClosures, reopenMonth, type MonthClosureView } fro
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Caveat, ErrorBox, Loading } from '../../components/States';
-import { formatDate, formatMonth, workOffsetMs } from '../../lib/format';
+import { formatDate, formatMonth, workWallOf } from '../../lib/format';
 import {
   ConfirmDialog,
   MiniButton,
@@ -213,9 +213,9 @@ function lastMonths(n: number): string[] {
   return out;
 }
 
-/** Careful: the work zone has a fixed offset; this keeps the same day as the server */
+/** The work-zone wall clock, so this keeps the same day as the server */
 function workNow(): string {
-  return new Date(Date.now() + workOffsetMs()).toISOString();
+  return workWallOf(new Date()).toISOString();
 }
 
 /** `2026-08` → `August 2026` — through lib/format, so DISPLAY_LOCALE applies */

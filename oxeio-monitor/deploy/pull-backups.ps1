@@ -1,5 +1,5 @@
 ﻿<#
-    Backup **pull to the office PC**.
+    Backup **pull to an office PC** (or any Windows machine you keep).
 
     Why this second path: `offsite-backup.sh` (rclone) is best, but it needs a
     cloud account and its credentials. This script needs **nothing new** - the
@@ -7,8 +7,8 @@
     copy, on one machine" risk is removed today, without waiting for the cloud
     to be sorted out.
 
-    Careful: **this complements rclone, it does not replace it.** The office PC
-    and the server are in the same city; fire, flood or theft could take both.
+    Careful: **this complements rclone, it does not replace it.** If the office
+    PC and the server are in the same city, fire, flood or theft could take both.
     It can be kept running even after a cloud remote is set up - having copies in
     two places is never bad.
 
@@ -19,14 +19,14 @@
     outside this script.
 
     Run:
-        powershell -ExecutionPolicy Bypass -File deploy\pull-backups.ps1
+        powershell -ExecutionPolicy Bypass -File deploy\pull-backups.ps1 -ServerHost monitor.example.com
 
-    To run it by itself every day - **already set up**:
+    To run it by itself every day, register a scheduled task, for example:
         task name : "oXeio backup pull"
-        time      : every day at 9:30 pm
+        time      : every day in the evening
         log       : %USERPROFILE%\oXeio-backups\pull-log.txt
 
-    Careful: the task is set up with `-Command` + try/catch, not with `-File`.
+    Careful: set the task up with `-Command` + try/catch, not with `-File`.
        The reason: this script has `$ErrorActionPreference = 'Stop'`, so when
        ssh fails the error becomes **terminating** and jumps out past the `*>>`
        redirect - the log would then say only "started", not why it stopped.
@@ -36,20 +36,20 @@
         Get-ScheduledTaskInfo 'oXeio backup pull' |
             Select LastRunTime, LastTaskResult   # 0 = success
 
-    Careful: if the PC is off at 9:30 pm the run is not lost - `StartWhenAvailable`
-       is set, so it runs the next time the PC is on.
+    Careful: tick "run as soon as possible after a scheduled start is missed"
+       (`StartWhenAvailable`), so a run is not lost when the PC was off.
 #>
 
 [CmdletBinding()]
 param(
-    # Careful: the defaults are for this server - pass parameters if running elsewhere
-    #
-    # Careful: the server was changed (USA -> BDIX, ADR-034), so this line had
-    #    to be edited by hand. Worth remembering: if the script goes to a wrong
-    #    address it **makes no noise** - the daily third copy simply stops
-    #    arriving. Change this again the next time the server changes.
-    [string]$ServerHost = '165.101.189.253',
-    [int]$Port = 2222,
+    # Your server's name or IP. Required: there is no sensible default.
+    # Careful: if the script goes to a wrong address it **makes no noise** in a
+    #    scheduled task - the daily copy simply stops arriving. Update the task
+    #    when the server changes.
+    [Parameter(Mandatory = $true)]
+    [string]$ServerHost,
+    # 2222 if sshd also listens there (deploy/README.md, "SSH times out")
+    [int]$Port = 22,
     [string]$User = 'root',
     [string]$KeyPath = "$HOME\.ssh\oxeio",
     [string]$RemoteDir = '/opt/oxeio/oxeio-monitor/.data/backups',
@@ -69,17 +69,17 @@ function Say  { param($m) Write-Host "   [ok] $m" -ForegroundColor Green }
 function Warn { param($m) Write-Host "   [!] $m" -ForegroundColor Yellow }
 function Die  { param($m) Write-Host "`n[x] $m`n" -ForegroundColor Red; exit 1 }
 
-Write-Host "`n-- R5 - backup pull --" -ForegroundColor Cyan
+Write-Host "`n-- oXeio backup pull --" -ForegroundColor Cyan
 
 # ── 1. What it cannot run without ───────────────────────────────────────────
 if (-not (Get-Command ssh -ErrorAction SilentlyContinue)) {
-    Die 'ssh পাওয়া গেল না (Windows-এ OpenSSH ক্লায়েন্ট চালু করুন)'
+    Die 'ssh not found (enable the OpenSSH Client feature in Windows)'
 }
-if (-not (Test-Path $KeyPath)) { Die "SSH কী নেই: $KeyPath" }
+if (-not (Test-Path $KeyPath)) { Die "SSH key not found: $KeyPath" }
 
 if (-not (Test-Path $LocalDir)) {
     New-Item -ItemType Directory -Path $LocalDir | Out-Null
-    Say "ফোল্ডার তৈরি: $LocalDir"
+    Say "folder created: $LocalDir"
 }
 
 $ssh = @('-i', $KeyPath, '-p', "$Port", '-o', 'ConnectTimeout=20',
@@ -90,13 +90,13 @@ $ssh = @('-i', $KeyPath, '-p', "$Port", '-o', 'ConnectTimeout=20',
 # Careful: `find -printf`, not `ls` - `ls` output would break if a name contained
 #    spaces. The names are safe here, but keep the habit right.
 $remoteList = & ssh @ssh "find '$RemoteDir' -maxdepth 1 -type f -printf '%f\n' | sort" 2>&1
-if ($LASTEXITCODE -ne 0) { Die "সার্ভারে পৌঁছানো গেল না — $remoteList" }
+if ($LASTEXITCODE -ne 0) { Die "could not reach the server — $remoteList" }
 
 $remote = @($remoteList | Where-Object { $_ -match '\.(dump\.enc|sha256|txt)$' })
-if ($remote.Count -eq 0) { Die "সার্ভারে একটাও ব্যাকআপ ফাইল নেই ($RemoteDir)" }
+if ($remote.Count -eq 0) { Die "not a single backup file on the server ($RemoteDir)" }
 
 $dumps = @($remote | Where-Object { $_ -like '*.dump.enc' })
-Say "সার্ভারে $($dumps.Count) টা ডাম্প, মোট $($remote.Count) টা ফাইল"
+Say "$($dumps.Count) dump(s) on the server, $($remote.Count) file(s) in all"
 
 # ── 3. Only what is not here yet ────────────────────────────────────────────
 #
@@ -105,16 +105,16 @@ Say "সার্ভারে $($dumps.Count) টা ডাম্প, মোট 
 $missing = @($remote | Where-Object { -not (Test-Path (Join-Path $LocalDir $_)) })
 
 if ($missing.Count -eq 0) {
-    Say 'নতুন কিছু নেই — সব কপি ইতিমধ্যেই এখানে'
+    Say 'nothing new — every copy is already here'
 } else {
-    Write-Host "   নামানো হচ্ছে: $($missing.Count) টা ফাইল" -ForegroundColor DarkGray
+    Write-Host "   downloading: $($missing.Count) file(s)" -ForegroundColor DarkGray
     foreach ($f in $missing) {
         # Careful: the remote path for scp is quoted - otherwise a path with spaces would break
         & scp -i $KeyPath -P $Port -o ConnectTimeout=20 -o BatchMode=yes `
               "${User}@${ServerHost}:${RemoteDir}/${f}" (Join-Path $LocalDir $f) | Out-Null
-        if ($LASTEXITCODE -ne 0) { Die "নামানো ব্যর্থ: $f" }
+        if ($LASTEXITCODE -ne 0) { Die "download failed: $f" }
     }
-    Say "$($missing.Count) টা নতুন ফাইল নামানো হয়েছে"
+    Say "$($missing.Count) new file(s) downloaded"
 }
 
 # ── 4. Verification - a backup that has not been tested is not a backup, it is a guess
@@ -143,10 +143,10 @@ foreach ($d in $dumps) {
 }
 
 if ($bad.Count -gt 0) {
-    Warn "$($bad.Count) টা ফাইলের হ্যাশ মেলেনি — মুছে ফেলা হয়েছে, পরের রানে আবার নামবে:"
+    Warn "$($bad.Count) file(s) failed the hash check — deleted, the next run downloads them again:"
     $bad | ForEach-Object { Write-Host "       $_" -ForegroundColor Yellow }
 }
-Say "$verified টা ডাম্পের হ্যাশ মিলেছে"
+Say "$verified dump(s) passed the hash check"
 
 # ── 5. Prune old local copies ───────────────────────────────────────────────
 #
@@ -160,7 +160,7 @@ if ($KeepWeeks -gt 0) {
              Where-Object { $_.LastWriteTime -lt $cutoff -and $_.Name -like '*.dump.enc*' })
     if ($old.Count -gt 0) {
         $old | Remove-Item -Force
-        Say "$($old.Count) টা পুরোনো ফাইল ছাঁটা হয়েছে ($KeepWeeks সপ্তাহের বেশি)"
+        Say "$($old.Count) old file(s) pruned (older than $KeepWeeks weeks)"
     }
 }
 
@@ -170,9 +170,9 @@ $size = [math]::Round((($localDumps | Measure-Object Length -Sum).Sum / 1MB), 1)
 $newest = $localDumps | Sort-Object Name | Select-Object -Last 1
 
 Write-Host ''
-Write-Host "[ok] এখানে $($localDumps.Count) টা ডাম্প - $size MB" -ForegroundColor Green
-if ($newest) { Write-Host "     সবশেষ: $($newest.Name)" -ForegroundColor Green }
-Write-Host "     ঘর: $LocalDir" -ForegroundColor DarkGray
+Write-Host "[ok] $($localDumps.Count) dump(s) here - $size MB" -ForegroundColor Green
+if ($newest) { Write-Host "     newest: $($newest.Name)" -ForegroundColor Green }
+Write-Host "     folder: $LocalDir" -ForegroundColor DarkGray
 Write-Host ''
 
 # Careful: a hash mismatch gives a non-zero exit code - so the failure is

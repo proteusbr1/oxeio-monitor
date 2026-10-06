@@ -9,9 +9,9 @@ import {
 import { DesignTargetStatus, Prisma, UserRole } from '@prisma/client';
 
 import {
-  LOCAL_OFFSET_ISO,
   localMidnightOf,
   nextLocalMidnight,
+  startOfWorkDate,
   workDateOf,
 } from '../agent/util/work-time';
 import { AuditService } from '../audit/audit.service';
@@ -46,9 +46,9 @@ import {
  * has had bugs precisely because the same formula was written in two places.
  */
 const workStart = (day: string): Date =>
-  new Date(`${day}T00:00:00${LOCAL_OFFSET_ISO}`);
+  startOfWorkDate(new Date(`${day}T00:00:00Z`));
 const nextDay = (day: string): Date =>
-  new Date(workStart(day).getTime() + 86_400_000);
+  startOfWorkDate(new Date(new Date(`${day}T00:00:00Z`).getTime() + 86_400_000));
 
 /**
  * The later of two `'YYYY-MM-DD'` strings.

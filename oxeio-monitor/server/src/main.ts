@@ -8,7 +8,7 @@ import { Logger } from 'nestjs-pino';
 
 import { PrismaClient } from '@prisma/client';
 
-import { fixedOffsetMinutes } from './agent/util/fixed-offset';
+import { assertKnownZone } from './agent/util/zone';
 import { configureApp } from './app.setup';
 import { ReportingLogger } from './error-reporting/reporting-logger';
 import { REGION_SETTING_KEY } from './settings/region-key';
@@ -96,7 +96,7 @@ async function applySavedTimeZone(): Promise<void> {
     if (typeof saved !== 'string' || saved.trim() === '') return;
 
     const zone = saved.trim();
-    fixedOffsetMinutes(zone);
+    assertKnownZone(zone);
     process.env.WORK_TIMEZONE = zone;
     // log timestamps follow it too
     process.env.TZ = zone;

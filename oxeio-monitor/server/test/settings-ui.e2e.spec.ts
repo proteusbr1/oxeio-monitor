@@ -76,11 +76,12 @@ describe('Settings → Region', () => {
     expect(tz.body.timeZone).toBe('Asia/Dhaka');
   });
 
-  it('refuses a zone with daylight saving time', async () => {
+  it('takes a zone with daylight saving time, and refuses an unknown one', async () => {
+    await patch(owner, '/settings/region', { timeZone: 'Europe/London' }).expect(200);
     const res = await patch(owner, '/settings/region', {
-      timeZone: 'Europe/London',
+      timeZone: 'Mars/Base',
     }).expect(400);
-    expect(String(res.body.message)).toMatch(/daylight/);
+    expect(String(res.body.message)).toMatch(/IANA/);
   });
 
   it("is the owner's alone", async () => {

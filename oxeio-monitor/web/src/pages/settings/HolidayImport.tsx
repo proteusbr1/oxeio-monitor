@@ -25,7 +25,7 @@ import {
  * Two steps on purpose: the file is shown first (what goes in, what is
  * already there, what falls in a month already counted), and only then
  * written. Current and past months change targets and salary, so they are
- * left out unless ticked — the same rule as the seed (deploy/README.md, holidays).
+ * left out unless ticked — the same rule as the seed (server/prisma/seed.ts).
  */
 export function HolidayImportModal({
   onClose,

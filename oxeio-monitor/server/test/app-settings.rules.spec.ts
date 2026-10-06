@@ -75,8 +75,11 @@ describe('validateRegion', () => {
     });
   });
 
+  it('accepts a zone with daylight saving time', () => {
+    expect(validateRegion({ timeZone: 'Europe/London' })).toEqual({ timeZone: 'Europe/London' });
+  });
+
   it.each([
-    [{ timeZone: 'Europe/London' }, /daylight/],
     [{ timeZone: 'Mars/Base' }, /IANA/],
     [{ currency: 'JPY' }, /decimal places/],
     [{ displayLocale: 'pt_BR!!' }, /DISPLAY_LOCALE/],

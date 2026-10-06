@@ -59,6 +59,26 @@ public sealed class WorkZoneTests : IDisposable
     }
 
     [Fact]
+    public void The_config_carries_the_daylight_saving_table()
+    {
+        var json = ConfigJson.Replace(
+            "\"utcOffsetMinutes\": -180,",
+            "\"utcOffsetMinutes\": 60, \"zoneTransitions\": [" +
+            "{ \"at\": \"2026-09-01T00:00:00.000Z\", \"offsetMinutes\": 60 }," +
+            "{ \"at\": \"2026-10-25T01:00:00.000Z\", \"offsetMinutes\": 0 }],");
+        var res = SyncJson.TryDeserialize<ConfigResponse>(json);
+
+        Assert.NotNull(res);
+        var table = res!.Config.ZoneTransitions;
+        Assert.NotNull(table);
+        Assert.Equal(2, table!.Count);
+        Assert.Equal(new DateTimeOffset(2026, 10, 25, 1, 0, 0, TimeSpan.Zero), table[1].At);
+        Assert.Equal(0, table[1].OffsetMinutes);
+        Assert.True(WorkTime.TrySet(res.Config.Timezone, 60, table));
+        Assert.Equal(new DateOnly(2026, 10, 25), WorkTime.WorkDateOf(new DateTimeOffset(2026, 10, 24, 23, 30, 0, TimeSpan.Zero)));
+    }
+
+    [Fact]
     public void An_older_server_without_the_field_gives_null_not_zero()
     {
         // null keeps the current zone; 0 would move every day to UTC

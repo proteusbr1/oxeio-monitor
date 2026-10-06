@@ -9,8 +9,8 @@
 
 // ── K02 · nightly pg_dump ───────────────────────────────────────────────────
 
-/** Spec § 6.4: 02:30 (after the K01 retention job finishes at 02:00) */
-export const BACKUP_CRON = '0 30 2 * * *';
+/** 03:30, after the retention job (03:00). Not 02:xx: on daylight-saving nights that hour is skipped or repeated in Europe and the US */
+export const BACKUP_CRON = '0 30 3 * * *';
 
 /**
  * The only prefix of a backup's name; rotation relies on exactly this pattern.
@@ -48,7 +48,7 @@ export const BACKUP_KEEP_MIN = 2;
 /**
  * After this long, "last night's backup did not happen" is assumed.
  *
- * 26 hours, not 24: the job runs at 02:30 and the check a little later. At
+ * 26 hours, not 24: the job runs at 03:30 and the check a little later. At
  * exactly 24, an alert would fire for "stale" 24 hours and 1 minute after a
  * successful backup, when the next one is not due yet.
  */

@@ -115,7 +115,7 @@ export class HolidaysService {
    * A calendar from a file (CSV or ICS) — shown first (`dryRun`), then
    * imported.
    *
-   * Careful: same rules as the seed (prisma/seed.ts, deploy/README.md § 2.1c):
+   * Careful: same rules as the seed (prisma/seed.ts):
    *    · one holiday per date, and a date already in the table is never
    *      changed — a different name is only reported;
    *    · a date in the current or a past month changes that month's

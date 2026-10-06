@@ -180,16 +180,16 @@ internal sealed partial class AgentHost
         if (cfg.UtcOffsetMinutes is not { } minutes) return;
 
         var before = WorkTime.ToMemoryLine();
-        if (!WorkTime.TrySet(cfg.Timezone, minutes))
+        if (!WorkTime.TrySet(cfg.Timezone, minutes, cfg.ZoneTransitions))
         {
-            _log.Warn($"Ignoring work-day zone {cfg.Timezone} ({minutes} min) — out of range");
+            _log.Warn($"Ignoring work-day zone {cfg.Timezone} ({minutes} min, {cfg.ZoneTransitions?.Count ?? 0} changes) — out of range or out of order");
             return;
         }
 
         if (WorkTime.ToMemoryLine() == before) return;
 
         _zoneMemory.Remember();
-        changes.Add($"work-day zone {before} → {WorkTime.ToMemoryLine()}");
+        changes.Add($"work-day zone {WorkTime.TimeZoneName} ({(int)WorkTime.Offset.TotalMinutes} min now, {WorkTime.TransitionCount} offset changes known)");
     }
 
     private void ApplyAppTracking(

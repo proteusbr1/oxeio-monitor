@@ -2,9 +2,9 @@
 <!--
   MSI for the oXeio agent (H03).
 
-  Silent install: clicking through 15 PCs one by one is out of the question:
+  Silent install: clicking through every PC one by one is out of the question:
 
-    msiexec /i oXeioAgent-0.3.0.msi /qn SERVERURL="https://oxeio.office.local" ^
+    msiexec /i oXeioAgent-0.3.0.msi /qn SERVERURL="https://monitor.example.com" ^
             ENROLLCODE="OXEIO-XXXXXXXX"
 
   Uninstall:
@@ -17,8 +17,9 @@
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
 
-  <!-- Careful: without Codepage 65001 (UTF-8), the Bengali messages below do not fit
-       the MSI default codepage 1252 and the build stops (WIX0311). -->
+  <!-- Careful: Codepage 65001 (UTF-8) lets the messages below use any character.
+       With the MSI default codepage 1252, a character outside it (such as a
+       non-Latin translation) stops the build (WIX0311). -->
   <Package
       Name="oXeio Agent"
       Manufacturer="oXeio"
@@ -34,15 +35,15 @@
          that mistakenly ran an old MSI would leave some PCs in the fleet behind. -->
     <MajorUpgrade
         AllowSameVersionUpgrades="yes"
-        DowngradeErrorMessage="oXeio Agent-এর নতুন ভার্সন ইতিমধ্যেই বসানো আছে।" />
+        DowngradeErrorMessage="A newer version of oXeio Agent is already installed." />
 
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <!--
       Brand icon in the "Add or remove programs" list.
 
-      Nothing was set before, so Windows showed a blank white page there. The owner of
-      the 15 PCs could only find the entry by name, not by look.
+      Nothing was set before, so Windows showed a blank white page there. An admin
+      could only find the entry by name, not by look.
 
       Careful: the `Id` of the `Icon` element MUST have the `.ico` extension, otherwise
       Windows Installer does not recognise the file as an icon and silently shows a
@@ -57,10 +58,10 @@
             sit there saying "not configured". -->
     <!--
       <b>The server address can be baked into the MSI at build time</b>
-      (`build.ps1 -ServerUrl https://oxeio.office.local`). Then it
+      (`build.ps1 -ServerUrl https://monitor.example.com`). Then it
       **installs on a double-click**, no command line needed.
 
-      Why this was needed: installing on the office's 15 PCs meant typing a long
+      Why this was needed: installing on every PC meant typing a long
       `msiexec` command each time, so one typo = one dead machine, and the mistake
       showed up a week later as "its data is not coming in".
 
@@ -87,9 +88,10 @@
       **I01**: SPKI hash (base64) of the server certificate, comma-separated.
       `deploy/make-cert.ps1` prints the value.
 
-      Careful: several pins can be given, and on renewal day you must give them. If
+      Careful: several pins can be given, and when the key changes you must. If
       the old and the new one are not both valid for a while, the fleet loses its
-      connection the moment the certificate is replaced (deploy/README § 7.1).
+      connection the moment the certificate is replaced (deploy/README.md ›
+      "LAN install with a self-signed certificate", "Changing the key").
       Careful: if none is given, pinning is off, and the agent says so clearly in its
       log.
     -->
@@ -99,7 +101,7 @@
       The owner's public key for agent updates (ECDSA P-256, base64 on one
       line). With it, the agent installs an update only if the MSI carries the
       owner's signature, not just a hash from the server. See deploy/README.md
-      § "Signed agent updates".
+      › "Signed agent updates".
 
       Baked in by `build.ps1 -UpdatePublicKey`, so every MSI the owner builds
       carries it and an update can never drop it. Empty = sha256 only, as before.
@@ -124,12 +126,12 @@
     -->
     <Launch
         Condition="Installed OR SERVERURL"
-        Message="This MSI was built without a server address. Install it with: msiexec /i oXeioAgent-&lt;version&gt;.msi /qn SERVERURL=&quot;https://oxeio.office.local&quot; — or rebuild it with build.ps1 -ServerUrl &quot;https://oxeio.office.local&quot; so it installs on a double-click." />
+        Message="This MSI was built without a server address. Install it with: msiexec /i oXeioAgent-&lt;version&gt;.msi /qn SERVERURL=&quot;https://monitor.example.com&quot; — or rebuild it with build.ps1 -ServerUrl &quot;https://monitor.example.com&quot; so it installs on a double-click." />
 
     <!-- Windows 10 1809 (build 17763): the agent's minimum target -->
     <Launch
         Condition="Installed OR (VersionNT &gt;= 603)"
-        Message="oXeio Agent-এর জন্য Windows 10 বা নতুন সংস্করণ দরকার।" />
+        Message="oXeio Agent requires Windows 10 or later." />
 
     <!-- ── Files and folders ─────────────────────────────────────────────── -->
 
@@ -265,7 +267,7 @@
 
     <InstallExecuteSequence>
       <!-- Needed on upgrades too: if the old exe keeps running, its files stay locked
-           and MSI asks for a reboot. Asking 15 PCs to reboot means the rollout stalls.
+           and MSI asks for a reboot. Asking a whole fleet to reboot means the rollout stalls.
 
            Careful: deferred actions MUST sit between InstallInitialize and
            InstallFinalize. These used to be placed before InstallValidate, which comes

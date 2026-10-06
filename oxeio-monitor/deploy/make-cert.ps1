@@ -4,7 +4,7 @@
     Creates a self-signed TLS certificate for the oXeio API.
 
 .DESCRIPTION
-    The office LAN has no public domain, so Let's Encrypt cannot be used. This
+    An office LAN has no public domain, so Let's Encrypt cannot be used. This
     script creates a self-signed certificate and its private key - in a form
     Node can read directly (TLS_CERT / TLS_KEY).
 
@@ -31,13 +31,13 @@
     Extra DNS names (aliases, FQDN).
 
 .PARAMETER Days
-    Validity. Default 825 days - for the reason see README § 7.
+    Validity. Default 825 days - for the reason see deploy/README.md (LAN certificate).
 
 .PARAMETER ReuseKey
     Builds the new certificate from the **same private key** as the previous
     oxeio.pfx.
     Use this for renewals - with the same key the SPKI pin stays the same too,
-    so none of the 15 PCs needs touching.
+    so no PC needs touching.
 
 .PARAMETER Force
     Permission to overwrite existing files. Careful: a new key means a new pin.
@@ -268,15 +268,15 @@ try {
     $fqdn = [System.Net.Dns]::GetHostEntry($env:COMPUTERNAME).HostName
     if ($fqdn -and $dnsNames -notcontains $fqdn) { $dnsNames += $fqdn }
 }
-catch { Write-Verbose "FQDN পাওয়া গেল না — সমস্যা নেই" }
+catch { Write-Verbose "FQDN not found - no problem" }
 
 # localhost - for smoke-testing from the server machine itself
 if ($dnsNames -notcontains 'localhost') { $dnsNames += 'localhost' }
 $ipList = @($IpAddress) + @('127.0.0.1') | Select-Object -Unique
 
 if ($ipList.Count -le 1) {
-    Write-Warning 'কোনো LAN IP পাওয়া যায়নি — শুধু 127.0.0.1 বসছে।'
-    Write-Warning 'এজেন্টগুলো IP দিয়ে সংযোগ করলে -IpAddress দিয়ে হাতে বলে দিন।'
+    Write-Warning 'No LAN IP found - only 127.0.0.1 goes in.'
+    Write-Warning 'If the agents connect by IP, give it by hand with -IpAddress.'
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -294,19 +294,19 @@ $pinPath = Join-Path $OutDir 'oxeio-pin.txt'
 
 if ($ReuseKey) {
     if (-not (Test-Path $pfxPath)) {
-        throw "-ReuseKey দেওয়া হয়েছে, কিন্তু $pfxPath নেই। প্রথমবার -ReuseKey ছাড়া চালান।"
+        throw "-ReuseKey was given, but $pfxPath does not exist. The first time, run without -ReuseKey."
     }
 }
 elseif ((Test-Path $keyPath) -and -not $Force) {
     # Careful: this guard is the most useful part of the script.
-    #    A new key = a new pin = the agents on 15 PCs stop connecting, and that
+    #    A new key = a new pin = the pinned agents on every PC stop connecting, and that
     #    would be noticed much later (agents quietly keep queuing).
     #    To renew use -ReuseKey; if you really want a new key, use -Force.
     throw @"
-$keyPath ইতিমধ্যেই আছে।
+$keyPath already exists.
 
-  নবায়ন করতে চান?          -ReuseKey  দিন (পিন এক থাকে, PC-তে হাত দিতে হবে না)
-  সত্যিই নতুন কী চান?      -Force     দিন (⚠️ পিন বদলাবে — README § ৭.২ পড়ুন)
+  Renewing?                  pass -ReuseKey  (the pin stays the same, no PC needs touching)
+  Really want a new key?     pass -Force     (⚠️ the pin changes - read deploy/README.md, "Changing the key")
 "@
 }
 
@@ -315,7 +315,7 @@ $keyPath ইতিমধ্যেই আছে।
 # ══════════════════════════════════════════════════════════════════════════
 
 Write-Host ''
-Write-Host '── সার্টিফিকেট বানানো হচ্ছে ─────────────────' -ForegroundColor Cyan
+Write-Host '── Creating the certificate ─────────────────' -ForegroundColor Cyan
 
 $rsa = $null
 $oldPfx = $null
@@ -354,17 +354,17 @@ try {
         #    the file stays the same. So on renewal there is no risk of
         #    rewriting the secret file.
         $rsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($oldPfx)
-        if (-not $rsa) { throw "$pfxPath-এ প্রাইভেট কী নেই।" }
+        if (-not $rsa) { throw "$pfxPath holds no private key." }
 
         if (-not (Test-Path $keyPath)) {
-            throw "$keyPath নেই। -ReuseKey কী-র ফাইলটা নতুন করে লেখে না, তাই ওটা থাকতেই হবে।"
+            throw "$keyPath does not exist. -ReuseKey does not rewrite the key file, so it must be there."
         }
 
-        Write-Host '   কী: আগেরটাই — পিন বদলাবে না, PC-তে হাত দিতে হবে না' -ForegroundColor Green
+        Write-Host '   key: the same as before - the pin does not change, no PC needs touching' -ForegroundColor Green
     }
     else {
         $rsa = [System.Security.Cryptography.RSA]::Create($KeySize)
-        Write-Host "   কী: নতুন RSA-$KeySize"
+        Write-Host "   key: new RSA-$KeySize"
     }
 
     $req = New-Object System.Security.Cryptography.X509Certificates.CertificateRequest(
@@ -378,7 +378,7 @@ try {
     foreach ($ip in $ipList) {
         $parsed = [System.Net.IPAddress]::Any
         if (-not [System.Net.IPAddress]::TryParse($ip, [ref]$parsed)) {
-            throw "'$ip' একটা বৈধ IP নয়।"
+            throw "'$ip' is not a valid IP address."
         }
         $san.AddIpAddress($parsed)
     }
@@ -425,7 +425,7 @@ try {
     #
     # Careful: yet **this script file itself** must have a UTF-8 BOM - the
     #    opposite rule. Windows PowerShell 5.1 treats a file without a BOM as
-    #    ANSI, and then the Bengali text below breaks and the script does not even parse.
+    #    ANSI, and then the non-ASCII text (⚠️, —, ✅) breaks and the script may not even parse.
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($certPath, $certPem, $utf8NoBom)
 
@@ -443,22 +443,22 @@ try {
     $thumb = Get-Sha256Hex -Bytes $cert.RawData
 
     $pinText = @"
-oXeio TLS — এজেন্টে বসানোর তথ্য
-================================
+oXeio TLS - details for the agent
+=================================
 
-SPKI পিন (এটাই MSI-র SERVERPIN):
+SPKI pin (this is the MSI's SERVERPIN):
   $pin
 
-সার্টিফিকেটের SHA-256 (ব্রাউজারে মিলিয়ে দেখার জন্য):
+Certificate SHA-256 (to compare in the browser):
   $thumb
 
-নাম (SAN):  $($dnsNames -join ', ')
-IP  (SAN):  $($ipList -join ', ')
-মেয়াদ:      $($notBefore.ToLocalTime().ToString('yyyy-MM-dd')) থেকে $($notAfter.ToLocalTime().ToString('yyyy-MM-dd'))
-বানানো:     $([DateTimeOffset]::Now.ToString('yyyy-MM-dd HH:mm'))
+Names (SAN):  $($dnsNames -join ', ')
+IP    (SAN):  $($ipList -join ', ')
+Valid:        $($notBefore.ToLocalTime().ToString('yyyy-MM-dd')) to $($notAfter.ToLocalTime().ToString('yyyy-MM-dd'))
+Created:      $([DateTimeOffset]::Now.ToString('yyyy-MM-dd HH:mm'))
 
-⚠️ SPKI পিন গোপন নয় — এটা পাবলিক কী-র হ্যাশ। নির্ভয়ে ইমেইলে পাঠানো যায়।
-⚠️ oxeio-key.pem আর oxeio.pfx **গোপন** — কখনো git-এ বা ইমেইলে নয়।
+⚠️ The SPKI pin is not secret - it is the hash of the public key. Safe to email.
+⚠️ oxeio-key.pem and oxeio.pfx are SECRET - never in git, never by email.
 "@
     [System.IO.File]::WriteAllText($pinPath, $pinText, $utf8NoBom)
 
@@ -487,8 +487,8 @@ IP  (SAN):  $($ipList -join ', ')
             (Get-Item -LiteralPath $secret).SetAccessControl($acl)
         }
         catch {
-            Write-Warning "$secret-এর অনুমতি শক্ত করা গেল না: $($_.Exception.Message)"
-            Write-Warning 'ফাইলটা হাতে দেখে নিন — সাধারণ ইউজার যেন পড়তে না পারে।'
+            Write-Warning "Could not tighten the permissions of ${secret}: $($_.Exception.Message)"
+            Write-Warning 'Check the file by hand - ordinary users must not be able to read it.'
         }
     }
 
@@ -497,30 +497,30 @@ IP  (SAN):  $($ipList -join ', ')
     # ══════════════════════════════════════════════════════════════════════
 
     Write-Host ''
-    Write-Host '✅ তৈরি' -ForegroundColor Green
+    Write-Host '✅ Created' -ForegroundColor Green
     Write-Host "   $certPath"
     if ($ReuseKey) {
-        Write-Host "   $keyPath      (অপরিবর্তিত — আগের কী-ই)"
+        Write-Host "   $keyPath      (unchanged - the same key)"
     }
     else {
-        Write-Host "   $keyPath      ⚠️ গোপন"
+        Write-Host "   $keyPath      ⚠️ secret"
     }
-    Write-Host "   $pfxPath          ⚠️ গোপন"
+    Write-Host "   $pfxPath          ⚠️ secret"
     Write-Host "   $pinPath"
     Write-Host ''
-    Write-Host '── সার্টিফিকেটে যা আছে ──────────────────────' -ForegroundColor Cyan
-    Write-Host "   নাম : $($dnsNames -join ', ')"
-    Write-Host "   IP  : $($ipList -join ', ')"
-    Write-Host "   মেয়াদ: $($notAfter.ToLocalTime().ToString('yyyy-MM-dd')) পর্যন্ত ($Days দিন)"
+    Write-Host '── What the certificate covers ──────────────' -ForegroundColor Cyan
+    Write-Host "   Names : $($dnsNames -join ', ')"
+    Write-Host "   IP    : $($ipList -join ', ')"
+    Write-Host "   Valid : until $($notAfter.ToLocalTime().ToString('yyyy-MM-dd')) ($Days days)"
     Write-Host ''
-    Write-Host '   ⚠️ উপরের তালিকাটা মিলিয়ে দেখুন। এজেন্ট বা ব্রাউজার যে ঠিকানা' -ForegroundColor Yellow
-    Write-Host '      ব্যবহার করবে সেটা এখানে না থাকলে সংযোগ হবে না।' -ForegroundColor Yellow
+    Write-Host '   ⚠️ Check the list above. If the address the agent or browser will' -ForegroundColor Yellow
+    Write-Host '      use is not in it, the connection will fail.' -ForegroundColor Yellow
     Write-Host ''
-    Write-Host '── SPKI পিন (MSI-র SERVERPIN) ───────────────' -ForegroundColor Cyan
+    Write-Host '── SPKI pin (the MSI''s SERVERPIN) ──────────' -ForegroundColor Cyan
     Write-Host "   $pin" -ForegroundColor Green
     Write-Host ''
-    Write-Host '── পরের ধাপ ─────────────────────────────────' -ForegroundColor Cyan
-    Write-Host '   deploy/README.md § ৩ থেকে এগোন।'
+    Write-Host '── Next steps ───────────────────────────────' -ForegroundColor Cyan
+    Write-Host '   Continue with deploy/README.md, "LAN install with a self-signed certificate".'
     Write-Host ''
 }
 finally {

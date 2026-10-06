@@ -36,7 +36,7 @@
 	# so nobody can pick an IP by sending the header themselves.
 	#   CADDY_TRUSTED_PROXIES=172.16.0.0/12          # e.g. a docker network
 	#   CADDY_CLIENT_IP_HEADERS=CF-Connecting-IP     # Cloudflare in front
-	# deploy/README.md § "Behind a reverse proxy".
+	# deploy/README.md › "Behind a reverse proxy".
 	servers {
 		trusted_proxies static {$CADDY_TRUSTED_PROXIES}
 		client_ip_headers {$CADDY_CLIENT_IP_HEADERS:X-Forwarded-For}
@@ -98,7 +98,8 @@
 			# trusted proxies this is {remote_host}, as Caddy sent before.
 			header_up X-Forwarded-For {client_ip}
 
-			# Careful: if you turn on TLS in the API (deploy/README § 6), uncomment this
+			# Careful: if you turn on TLS in the API (deploy/README.md › "LAN install
+			#    with a self-signed certificate"), uncomment this
 			#    block, otherwise Caddy will send plain HTTP and every request dies.
 			#    The certificate is self-signed, so verification is skipped; the
 			#    connection stays inside the host.

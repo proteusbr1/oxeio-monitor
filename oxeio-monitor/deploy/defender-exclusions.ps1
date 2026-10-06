@@ -114,7 +114,7 @@ function Get-AgentInstallDir {
         }
         finally { $base.Dispose() }
     }
-    catch { Write-Verbose "রেজিস্ট্রি পড়া গেল না: $($_.Exception.Message)" }
+    catch { Write-Verbose "Could not read the registry: $($_.Exception.Message)" }
     return $null
 }
 
@@ -122,11 +122,11 @@ if (-not $InstallDir) {
     $InstallDir = Get-AgentInstallDir
     if (-not $InstallDir) {
         $InstallDir = Join-Path $env:ProgramFiles 'oXeio'
-        $installSource = 'ডিফল্ট (রেজিস্ট্রিতে পাওয়া যায়নি — এজেন্ট কি বসানো হয়েছে?)'
+        $installSource = 'default (not found in the registry - is the agent installed?)'
     }
     else { $installSource = 'HKLM\SOFTWARE\oXeio\Agent\InstallDir' }
 }
-else { $installSource = '-InstallDir দিয়ে দেওয়া' }
+else { $installSource = 'given with -InstallDir' }
 
 if (-not $DataDir) { $DataDir = Join-Path $env:ProgramData 'oXeio' }
 
@@ -147,34 +147,34 @@ $processExclusions = @('oXeio.Agent.exe', 'oXeio.Watchdog.exe')
 #  2. What we are about to do - always printed, with -WhatIf too
 # ══════════════════════════════════════════════════════════════════════════
 
-$action = if ($Remove) { 'তুলে নেওয়া হবে' } else { 'যোগ করা হবে' }
+$action = if ($Remove) { 'remove' } else { 'add' }
 
 Write-Host ''
 Write-Host '════════════════════════════════════════════════════════════' -ForegroundColor Cyan
-Write-Host ' oXeio — Microsoft Defender ছাড় (H09)' -ForegroundColor Cyan
+Write-Host ' oXeio — Microsoft Defender exclusions' -ForegroundColor Cyan
 Write-Host '════════════════════════════════════════════════════════════' -ForegroundColor Cyan
 Write-Host ''
-Write-Host " কাজ          : $action"
-Write-Host " ইনস্টল ফোল্ডার: $InstallDir"
+Write-Host " Action        : $action"
+Write-Host " Install folder: $InstallDir"
 Write-Host "                ($installSource)"
 Write-Host ''
-Write-Host ' ফোল্ডার:' -ForegroundColor Yellow
+Write-Host ' Folders:' -ForegroundColor Yellow
 foreach ($p in $pathExclusions) { Write-Host "   · $p" }
-Write-Host ' প্রসেস:' -ForegroundColor Yellow
+Write-Host ' Processes:' -ForegroundColor Yellow
 foreach ($p in $processExclusions) { Write-Host "   · $p" }
 Write-Host ''
 
 if (-not $Remove) {
-    Write-Host ' ⚠️  এগুলো Defender-এর পাহারার বাইরে চলে যাবে।' -ForegroundColor Red
+    Write-Host ' ⚠️  These will no longer be scanned by Defender.' -ForegroundColor Red
     if ($IncludeDataFolder) {
         Write-Host ''
-        Write-Host " ⚠️⚠️ -IncludeDataFolder দেওয়া হয়েছে।" -ForegroundColor Red
-        Write-Host "      $DataDir-এ সাধারণ ইউজারের লেখার অধিকার আছে," -ForegroundColor Red
-        Write-Host '      অর্থাৎ যে কেউ ওখানে ফাইল রাখলে সেটাও আর স্ক্যান হবে না।' -ForegroundColor Red
-        Write-Host '      সত্যিই দরকার না হলে এই সুইচটা বাদ দিন।' -ForegroundColor Red
+        Write-Host " ⚠️⚠️ -IncludeDataFolder was given." -ForegroundColor Red
+        Write-Host "      Ordinary users can write to $DataDir," -ForegroundColor Red
+        Write-Host '      so any file anyone puts there would no longer be scanned either.' -ForegroundColor Red
+        Write-Host '      Leave this switch out unless you really need it.' -ForegroundColor Red
     }
     else {
-        Write-Host "      ($DataDir বাদ রাখা হয়েছে — ভালো। -IncludeDataFolder দেখুন।)" -ForegroundColor DarkGray
+        Write-Host "      ($DataDir is left out - good. See -IncludeDataFolder.)" -ForegroundColor DarkGray
     }
     Write-Host ''
 }
@@ -187,13 +187,13 @@ function Write-NoDefenderHelp {
     param([string]$Detail)
 
     Write-Host ''
-    Write-Host '── এই মেশিনে Defender দিয়ে কিছু করার নেই ────' -ForegroundColor Yellow
-    Write-Host ' Microsoft Defender চলছে না বা নিষ্ক্রিয় করা আছে।'
-    Write-Host ' প্রায় সবসময় এর মানে অন্য একটা অ্যান্টিভাইরাস বসানো আছে।'
+    Write-Host '── Nothing to do with Defender on this machine ──' -ForegroundColor Yellow
+    Write-Host ' Microsoft Defender is not running or has been disabled.'
+    Write-Host ' This almost always means another antivirus is installed.'
     Write-Host ''
-    Write-Host ' করণীয়: সেই AV-র নিজের কনসোল খুলে উপরের ফোল্ডার ও'
-    Write-Host '        প্রসেসগুলো তার ছাড়ের (exclusion) তালিকায় দিন।'
-    if ($Detail) { Write-Host ''; Write-Host " বিস্তারিত: $Detail" -ForegroundColor DarkGray }
+    Write-Host ' What to do: open that antivirus console and add the folders and'
+    Write-Host '             processes above to its exclusion list.'
+    if ($Detail) { Write-Host ''; Write-Host " Detail: $Detail" -ForegroundColor DarkGray }
     Write-Host ''
 }
 
@@ -204,12 +204,12 @@ function Write-NoDefenderHelp {
 #    service itself is off. That is exactly what happens when a third-party AV is
 #    installed, and then the real call blows up with `0x800106ba`. With
 #    `$ErrorActionPreference='Stop'` the script would die showing that cryptic
-#    HRESULT - on exactly those of the office's 15 PCs that have another AV.
+#    HRESULT - on exactly those PCs that have another AV.
 #
 #    So the real call is attempted, and when it fails the script says clearly
-#    (in Bengali) what to do.
+#    what to do.
 if (-not (Get-Command -Name Add-MpPreference -ErrorAction SilentlyContinue)) {
-    Write-NoDefenderHelp -Detail 'Defender-এর PowerShell মডিউলই নেই।'
+    Write-NoDefenderHelp -Detail 'The Defender PowerShell module is not present.'
     return
 }
 
@@ -226,12 +226,12 @@ catch {
 try {
     $status = Get-MpComputerStatus
     if ($status -and -not $status.RealTimeProtectionEnabled) {
-        Write-Warning 'Defender-এর real-time protection বন্ধ (সম্ভবত অন্য AV চলছে)।'
-        Write-Warning 'ছাড় বসানো যাবে, কিন্তু আসল স্ক্যানার অন্য কেউ হলে কাজে আসবে না।'
+        Write-Warning 'Defender real-time protection is off (probably another AV is running).'
+        Write-Warning 'Exclusions can be added, but they do not help if another product is the real scanner.'
         Write-Host ''
     }
 }
-catch { Write-Verbose "Get-MpComputerStatus পাওয়া গেল না: $($_.Exception.Message)" }
+catch { Write-Verbose "Get-MpComputerStatus not available: $($_.Exception.Message)" }
 
 # ══════════════════════════════════════════════════════════════════════════
 #  4. Admin is required - but only when something is really being changed
@@ -244,7 +244,7 @@ $isAdmin = ([Security.Principal.WindowsPrincipal] `
 ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 if (-not $isAdmin -and -not $WhatIfPreference) {
-    throw 'অ্যাডমিন হিসেবে চালাতে হবে। (PowerShell-এ ডান-ক্লিক → "Run as administrator")'
+    throw 'Must be run as administrator. (Right-click PowerShell → "Run as administrator")'
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -266,33 +266,33 @@ function Set-Exclusion {
     )
 
     $already = $Existing -contains $Value
-    $label = if ($Kind -eq 'Path') { 'ফোল্ডার' } else { 'প্রসেস' }
+    $label = if ($Kind -eq 'Path') { 'folder' } else { 'process' }
 
     if ($Remove) {
         if (-not $already) {
-            Write-Host "   — $label $Value  (তালিকায় নেই, কিছু করার নেই)" -ForegroundColor DarkGray
+            Write-Host "   — $label $Value  (not in the list, nothing to do)" -ForegroundColor DarkGray
             return
         }
-        if ($PSCmdlet.ShouldProcess($Value, "Defender ছাড় থেকে $label তুলে নেওয়া")) {
+        if ($PSCmdlet.ShouldProcess($Value, "Remove $label from Defender exclusions")) {
             if ($Kind -eq 'Path') { Remove-MpPreference -ExclusionPath $Value }
             else { Remove-MpPreference -ExclusionProcess $Value }
-            Write-Host "   ✔ তোলা হলো: $label $Value" -ForegroundColor Green
+            Write-Host "   ✔ removed: $label $Value" -ForegroundColor Green
         }
     }
     else {
         if ($already) {
-            Write-Host "   — $label $Value  (আগে থেকেই আছে)" -ForegroundColor DarkGray
+            Write-Host "   — $label $Value  (already present)" -ForegroundColor DarkGray
             return
         }
-        if ($PSCmdlet.ShouldProcess($Value, "Defender ছাড়ে $label যোগ করা")) {
+        if ($PSCmdlet.ShouldProcess($Value, "Add $label to Defender exclusions")) {
             if ($Kind -eq 'Path') { Add-MpPreference -ExclusionPath $Value }
             else { Add-MpPreference -ExclusionProcess $Value }
-            Write-Host "   ✔ যোগ হলো: $label $Value" -ForegroundColor Green
+            Write-Host "   ✔ added: $label $Value" -ForegroundColor Green
         }
     }
 }
 
-Write-Host '── কাজ চলছে ─────────────────────────────────' -ForegroundColor Cyan
+Write-Host '── Working ──────────────────────────────────' -ForegroundColor Cyan
 
 foreach ($p in $pathExclusions) {
     Set-Exclusion -Kind 'Path' -Value $p -Existing $currentPaths
@@ -307,22 +307,22 @@ foreach ($p in $processExclusions) {
 
 if ($WhatIfPreference) {
     Write-Host ''
-    Write-Host '-WhatIf ছিল — কিছুই বদলানো হয়নি।' -ForegroundColor Yellow
-    Write-Host 'সত্যিই বসাতে চাইলে -WhatIf ছাড়া, অ্যাডমিন হিসেবে চালান।' -ForegroundColor Yellow
+    Write-Host '-WhatIf was given - nothing was changed.' -ForegroundColor Yellow
+    Write-Host 'To apply it, run without -WhatIf, as administrator.' -ForegroundColor Yellow
     Write-Host ''
     return
 }
 
 $after = Get-MpPreference
 Write-Host ''
-Write-Host '── এখন Defender-এর ছাড়ের তালিকা ─────────────' -ForegroundColor Cyan
-Write-Host ' ফোল্ডার:'
-if (@($after.ExclusionPath).Count -eq 0) { Write-Host '   (খালি)' -ForegroundColor DarkGray }
+Write-Host '── Defender exclusion list now ──────────────' -ForegroundColor Cyan
+Write-Host ' Folders:'
+if (@($after.ExclusionPath).Count -eq 0) { Write-Host '   (empty)' -ForegroundColor DarkGray }
 else { foreach ($p in $after.ExclusionPath) { Write-Host "   · $p" } }
-Write-Host ' প্রসেস:'
-if (@($after.ExclusionProcess).Count -eq 0) { Write-Host '   (খালি)' -ForegroundColor DarkGray }
+Write-Host ' Processes:'
+if (@($after.ExclusionProcess).Count -eq 0) { Write-Host '   (empty)' -ForegroundColor DarkGray }
 else { foreach ($p in $after.ExclusionProcess) { Write-Host "   · $p" } }
 Write-Host ''
-Write-Host '⚠️ উপরে oXeio-র বাইরের কিছু দেখলে থামুন — ওগুলো অন্য কারো বসানো,' -ForegroundColor Yellow
-Write-Host '   আর এই স্ক্রিপ্ট সেগুলোতে হাত দেয়নি।' -ForegroundColor Yellow
+Write-Host '⚠️ Anything above that is not oXeio was added by someone else -' -ForegroundColor Yellow
+Write-Host '   this script did not touch it.' -ForegroundColor Yellow
 Write-Host ''

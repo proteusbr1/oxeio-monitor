@@ -7,7 +7,8 @@ namespace oXeio.Agent.Storage;
 
 /// <summary>
 /// The last work-day zone the server sent — one line on disk
-/// (<c>America/Sao_Paulo|-180</c>), read at startup.
+/// (<c>America/Sao_Paulo|-180</c>, plus the daylight-saving changes when the zone
+/// has them), read at startup.
 ///
 /// ⚠️ Without it, a PC that boots while the server is unreachable would count
 /// in Asia/Dhaka until the first config arrives, and on a server in another zone
@@ -23,8 +24,8 @@ internal sealed class WorkZoneMemory
 {
     private const string FileName = "work-zone.txt";
 
-    /// <summary>An IANA name plus an offset never comes near this.</summary>
-    private const int MaxLineLength = 80;
+    /// <summary>An IANA name, an offset and a year of offset changes never come near this.</summary>
+    private const int MaxLineLength = 4096;
 
     private readonly string _path;
 

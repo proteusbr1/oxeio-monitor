@@ -6,8 +6,9 @@ import {
 import type { SegmentState } from '@prisma/client';
 
 import {
-  LOCAL_OFFSET_MIN,
+  localMidnightOf,
   nextLocalMidnight,
+  startOfWorkDate,
   workDateOf,
 } from '../agent/util/work-time';
 import { REGIME_SELECT, targetSpreadOf } from '../calendar/work-regime';
@@ -167,13 +168,6 @@ export interface HourlyBucket {
 }
 
 /** One day of the seven-day chart (`GET /live/trend`) */
-/**
- * Careful: the work zone has a fixed offset (no DST). It is used only to translate
- * **label → instant**: `workDateOf()` returns the work day as UTC midnight,
- * and the real local midnight is this many milliseconds earlier.
- */
-const WORK_OFFSET_MS = LOCAL_OFFSET_MIN * 60_000;
-
 export interface TrendDay {
   /** Work day in the work zone, `YYYY-MM-DD` */
   date: string;
@@ -552,7 +546,7 @@ export class DashboardService {
         where: {
           assignedToId: { in: ids },
           completedAt: {
-            gte: new Date(nextLocalMidnight(now).getTime() - 86_400_000),
+            gte: localMidnightOf(now),
             lt: nextLocalMidnight(now),
           },
         },
@@ -883,8 +877,8 @@ export class DashboardService {
       this.prisma.designTarget.findMany({
         where: {
           completedAt: {
-            gte: new Date(first.getTime() - WORK_OFFSET_MS),
-            lt: new Date(today.getTime() + 86_400_000 - WORK_OFFSET_MS),
+            gte: startOfWorkDate(first),
+            lt: startOfWorkDate(new Date(today.getTime() + 86_400_000)),
           },
         },
         select: { completedAt: true },

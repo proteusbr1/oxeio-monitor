@@ -11,22 +11,24 @@
   would install the .NET runtime twice (379 MB vs 199 MB).
 
 .EXAMPLE
-  powershell -File installer\build.ps1
-  powershell -File installer\build.ps1 -Version 0.3.0
+  powershell -File installer\build.ps1 -ServerUrl https://monitor.example.com
+  powershell -File installer\build.ps1 -ServerUrl https://monitor.example.com -Version 0.3.0
+  powershell -File installer\build.ps1 -NoServerUrl
 
 .NOTES
   Careful: this file is saved WITH a UTF-8 BOM. Do not remove the BOM.
 
   Windows PowerShell 5.1 (the one on stock Windows) treats a file without a BOM as
-  ANSI, and then the non-ASCII text below (the Bengali messages) is garbled and the
-  script does not even parse: it stops with three or four `Unexpected token` errors.
+  ANSI, and then the non-ASCII text below (the ⚠️ marks, dashes and box-drawing
+  lines in the messages) is garbled and the script does not even parse: it stops
+  with three or four `Unexpected token` errors.
 
   Careful: the file had no BOM from day one, and this went unnoticed because the
   previous build ran under `pwsh` (PowerShell 7), which assumes UTF-8 without a BOM.
-  So on a machine without PowerShell 7 (such as the office's server PC) the MSI could
-  not be built at all. The two `deploy/*.ps1` scripts already had this rule written
-  down ([deploy/README](../../deploy/README.md), section "Two notes about the
-  scripts"); only this file had missed it.
+  So on a machine without PowerShell 7 (stock Windows) the MSI could not be built at
+  all. The `deploy/*.ps1` scripts already had this rule written down
+  ([deploy/README.md](../../deploy/README.md) › "The scripts in this folder");
+  only this file had missed it.
 #>
 [CmdletBinding()]
 param(
@@ -36,23 +38,23 @@ param(
     # reported another in its heartbeat, so H04 offered the same update forever.
     [string]$Version,
 
-    # The address is baked into the MSI, which then **installs on a double-click**:
-    # no long command to type on the office's 15 PCs.
+    # The address agents connect to, e.g. https://monitor.example.com. It is baked
+    # into the MSI, which then **installs on a double-click**: no long command to
+    # type on every PC.
     #
-    # Careful: the default is deliberately SET, not empty. It used to be empty, and
-    # without `-ServerUrl` the build silently produced an MSI that stopped on
-    # double-click with "This MSI was built without a server address". That is exactly
-    # what happened with 0.3.2: build succeeded, the warning was one DarkGray line,
-    # and the mistake was found when the owner installed it ([09 § ৩ন]).
+    # Careful: there is deliberately NO default. It used to be empty, and without
+    # `-ServerUrl` the build silently produced an MSI that stopped on double-click
+    # with "This MSI was built without a server address". That is exactly what
+    # happened with 0.3.2: the build succeeded, the warning was one DarkGray line,
+    # and the mistake was found only when the owner installed it.
     #
-    # This product has a single address, so the default is the right behaviour. An
-    # exception must now be requested explicitly with `-NoServerUrl`.
-    # 13 Aug: `oxeio.office.local` -> `hub.oxeio.com` (ADR-026). This is now the real
-    # address: VPS, Let's Encrypt certificate, public DNS.
-    [string]$ServerUrl = 'https://hub.oxeio.com',
+    # A built-in address is no fix either: every installation has its own server.
+    # So the build now fails loudly (below) unless you pass `-ServerUrl`, or ask
+    # for an MSI without an address explicitly with `-NoServerUrl`.
+    [string]$ServerUrl,
 
-    # Careful: an MSI without an address, only for when several offices will install
-    # with `msiexec /qn SERVERURL=...` and different addresses.
+    # An MSI without an address, for rollouts that pass it at install time
+    # (`msiexec /qn SERVERURL=...`), e.g. several sites with different servers.
     [switch]$NoServerUrl,
 
     # ADR-014: thumbprint of the self-made signing certificate (make-code-cert.ps1
@@ -63,7 +65,7 @@ param(
     # The owner's public key for signed updates — a .pem file or its base64
     # body. Baked into the MSI (UPDATEKEY), so the agent installs only updates
     # signed with the matching private key. Empty = sha256 only, as before.
-    # deploy/README.md § "Signed agent updates".
+    # deploy/README.md › "Signed agent updates".
     [string]$UpdatePublicKey,
 
     # A build whose Today window does not show the last screenshot — only
@@ -96,17 +98,17 @@ $propsPath = Join-Path $agentRoot 'Directory.Build.props'
 $propsVersion = ([xml](Get-Content $propsPath)).Project.PropertyGroup.Version
 
 if (-not $propsVersion) {
-    throw "Directory.Build.props-এ <Version> পাওয়া গেল না: $propsPath"
+    throw "No <Version> found in Directory.Build.props: $propsPath"
 }
 
 if (-not $Version) {
     $Version = $propsVersion
 } elseif ($Version -ne $propsVersion) {
     Write-Warning @"
-MSI বসবে $Version দিয়ে, কিন্তু এজেন্টের assembly বলবে $propsVersion।
-⚠️ সার্ভার heartbeat-এর ভার্সন দেখেই আপডেট অফার করবে কি না ঠিক করে (G59) —
-   দুটো আলাদা হলে ওই মেশিনকে একই আপডেট বারবার অফার করা হবে।
-   Directory.Build.props-এ <Version> বদলে আবার চালানোই ঠিক পথ।
+The MSI will install as $Version, but the agent's assembly will report $propsVersion.
+⚠️ The server decides whether to offer an update from the version in the heartbeat (G59) —
+   when the two differ, that machine is offered the same update again and again.
+   The right fix is to change <Version> in Directory.Build.props and run again.
 "@
 }
 
@@ -135,31 +137,38 @@ if ($HideLatestShot) {
 #    (dev needs to rebuild repeatedly), but says so in a way that is hard to miss.
 if (Test-Path $msi) {
     Write-Warning @"
-$Version আগে থেকেই আছে — ঢেকে দেওয়া হচ্ছে।
-⚠️ ফাইলটা যদি ইতিমধ্যে কাউকে দিয়ে থাকেন, Directory.Build.props-এ
-   <Version> বাড়িয়ে নিন। এক নম্বরে দুটো বাইনারি = কোনটা কোথায় চলছে
-   সেটা আর জানা যাবে না।
+$Version already exists — it is being overwritten.
+⚠️ If you have already handed that file out, raise <Version> in
+   Directory.Build.props. Two binaries under one number = no way to
+   tell any more which one is running where.
 "@
 }
 
-# Careful: -NoServerUrl wins; the whole point of the switch is to drop the default address
-if ($NoServerUrl) { $ServerUrl = '' }
+# Careful: fail loudly without an address. There is no default on purpose (see the
+#    -ServerUrl parameter): an MSI silently built without one stops on double-click,
+#    and a built-in address would point it at somebody else's server.
+if ($ServerUrl -and $NoServerUrl) {
+    throw "Pass either -ServerUrl or -NoServerUrl, not both."
+}
+if (-not $ServerUrl -and -not $NoServerUrl) {
+    throw "No server address. Pass -ServerUrl https://monitor.example.com (the address agents connect to), or -NoServerUrl for an MSI installed with msiexec SERVERURL=..."
+}
 
 if ($ServerUrl) {
     # Careful: the shape is checked right here. A wrong address baked into the MSI
-    #    would only be noticed after installing on 15 PCs, as "not reaching the server".
+    #    would only be noticed after installing on every PC, as "not reaching the server".
     if ($ServerUrl -notmatch '^https?://[^/\s]+/?$') {
-        throw "ServerUrl-টা এরকম হওয়া উচিত: https://oxeio.office.local (পথ বা শেষে স্ল্যাশ ছাড়া) — পাওয়া গেল: $ServerUrl"
+        throw "ServerUrl should look like https://monitor.example.com (scheme and host, no path) — got: $ServerUrl"
     }
-    Write-Host "   server : $ServerUrl (MSI-তে বেক করা — ডাবল-ক্লিকেই ইনস্টল হবে)" -ForegroundColor DarkGray
+    Write-Host "   server : $ServerUrl (baked into the MSI — installs on a double-click)" -ForegroundColor DarkGray
 } else {
     # Careful: not DarkGray. This MSI will NOT work on double-click, and 0.3.2 came
     #    out wrong precisely because this one line was easy to miss.
-    Write-Host "   server : ⚠️ বেক করা হয়নি (-NoServerUrl) — ডাবল-ক্লিকে ইনস্টল হবে না," -ForegroundColor Yellow
-    Write-Host "            msiexec-এ SERVERURL= দিতে হবে" -ForegroundColor Yellow
+    Write-Host "   server : ⚠️ not baked in (-NoServerUrl) — will NOT install on a double-click," -ForegroundColor Yellow
+    Write-Host "            msiexec needs SERVERURL=" -ForegroundColor Yellow
 }
 
-Write-Host '── ১· publish ────────────────────────────────' -ForegroundColor Cyan
+Write-Host '── 1· publish ────────────────────────────────' -ForegroundColor Cyan
 
 # Careful: a running agent LOCKS the DLLs in obj\publish, and then the Remove-Item
 #    below stops with "Access denied". The message names Accessibility.dll, so the real
@@ -184,13 +193,13 @@ $locking = @(
 )
 if ($locking) {
     throw @"
-oXeio চলছে ($(($locking | ForEach-Object { "$($_.Name)#$($_.Id)" }) -join ', ')) —
-publish ফোল্ডারের ফাইল লক করা, তাই বিল্ড করা যাবে না।
+oXeio is running ($(($locking | ForEach-Object { "$($_.Name)#$($_.Id)" }) -join ', ')) —
+the files in the publish folder are locked, so the build cannot continue.
 
     Stop-Process -Name oXeio.Agent, oXeio.Watchdog -Force
 
-⚠️ পরীক্ষার জন্য এজেন্ট চালাতে হলে obj\publish থেকে **নয়** — আগে অন্য
-   ফোল্ডারে কপি করে নিন, নইলে পরের বিল্ডটা চুপচাপ পুরোনো বাইনারি রেখে দেবে।
+⚠️ To run the agent for testing, do **not** run it from obj\publish — copy it to
+   another folder first, or the next build will quietly leave the old binary behind.
 "@
 }
 
@@ -208,32 +217,32 @@ if ($SignWith) {
 
     if (-not $signCert) {
         throw @"
-এই thumbprint-এর সার্ট পাওয়া যায়নি: $SignWith
+No certificate found with this thumbprint: $SignWith
 
-⚠️ সার্টটা **এই ইউজারের** স্টোরে থাকতে হয় (প্রাইভেট কী সহ)। যে মেশিনে
-   make-code-cert.ps1 চালানো হয়েছে, সই করাও সেখানেই হবে।
+⚠️ The certificate must be in **this user's** store (with its private key). Sign on
+   the same machine where make-code-cert.ps1 was run.
 
-   অন্য মেশিনে সই করতে হলে .pfx ইমপোর্ট করুন:
+   To sign on another machine, import the .pfx:
        Import-PfxCertificate -FilePath deploy\certs\oxeio-code.pfx ``
            -CertStoreLocation Cert:\CurrentUser\My
 "@
     }
 
     if (-not $signCert.HasPrivateKey) {
-        throw "সার্টটা আছে কিন্তু প্রাইভেট কী নেই — .cer ইমপোর্ট করা হয়েছে, .pfx নয়।"
+        throw "The certificate is there but has no private key — the .cer was imported, not the .pfx."
     }
 
     if ($signCert.NotAfter -lt (Get-Date)) {
-        throw "সার্টের মেয়াদ শেষ ($($signCert.NotAfter.ToString('yyyy-MM-dd'))) — নতুন সার্ট বানান।"
+        throw "The certificate expired ($($signCert.NotAfter.ToString('yyyy-MM-dd'))) — make a new one."
     }
 
-    Write-Host "   সই     : $($signCert.Subject) ($($signCert.NotAfter.ToString('yyyy-MM-dd')) পর্যন্ত)" -ForegroundColor DarkGray
+    Write-Host "   signing: $($signCert.Subject) (valid until $($signCert.NotAfter.ToString('yyyy-MM-dd')))" -ForegroundColor DarkGray
     if ($NoTimestamp) {
-        Write-Host '   ⚠️ টাইমস্ট্যাম্প ছাড়া — সার্টের মেয়াদ শেষ হলে সইগুলোও অচল হবে' -ForegroundColor Yellow
+        Write-Host '   ⚠️ no timestamp — the signatures stop being valid when the certificate expires' -ForegroundColor Yellow
     }
 }
 else {
-    Write-Host '   সই     : করা হবে না (-SignWith দিলে হবে)' -ForegroundColor DarkGray
+    Write-Host '   signing: off (pass -SignWith to sign)' -ForegroundColor DarkGray
 }
 
 <#
@@ -276,17 +285,17 @@ function Invoke-Sign {
 
     if (-not $mine) {
         $hint = if (-not $NoTimestamp) {
-            "`n⚠️ টাইমস্ট্যাম্প সার্ভারে পৌঁছাতে না পারলেও এটা হয় ($TimestampUrl)।" +
-            "`n   অফলাইনে বিল্ড করতে হলে -NoTimestamp, কিন্তু উপরের সতর্কবাণীটা পড়ুন।"
+            "`n⚠️ This also happens when the timestamp server cannot be reached ($TimestampUrl)." +
+            "`n   To build offline pass -NoTimestamp, but then the signatures expire with the certificate."
         } else { '' }
 
-        throw "সই ব্যর্থ ($name): $($result.Status) — $($result.StatusMessage)$hint"
+        throw "Signing failed ($name): $($result.Status) — $($result.StatusMessage)$hint"
     }
 
     # Careful: a timestamp was requested but not applied; this must not pass silently.
     #    When the certificate expired, all the old builds' signatures would go invalid at once.
     if (-not $NoTimestamp -and -not $signed.TimeStamperCertificate) {
-        throw "সই হয়েছে কিন্তু টাইমস্ট্যাম্প বসেনি ($name) — $TimestampUrl-এ পৌঁছানো যায়নি।"
+        throw "Signed, but no timestamp was applied ($name) — could not reach $TimestampUrl."
     }
 
     $script:LocalTrustWarning = $script:LocalTrustWarning -or ($signed.Status -ne 'Valid')
@@ -306,14 +315,14 @@ foreach ($project in 'oXeio.Agent', 'oXeio.Watchdog') {
         -p:DebugType=none -p:DebugSymbols=false `
         -p:HideLatestShot=$(if ($HideLatestShot) { 'true' } else { 'false' }) `
         -o $publishDir --nologo -v quiet
-    if ($LASTEXITCODE -ne 0) { throw "$project publish ব্যর্থ" }
+    if ($LASTEXITCODE -ne 0) { throw "$project publish failed" }
 }
 
 Get-ChildItem $publishDir -Filter *.pdb | Remove-Item -Force
 
 $size = [math]::Round((Get-ChildItem $publishDir -Recurse | Measure-Object Length -Sum).Sum / 1MB, 1)
 $count = (Get-ChildItem $publishDir -Recurse -File).Count
-Write-Host "   $count ফাইল · $size MB"
+Write-Host "   $count files · $size MB"
 
 # Careful: the exes are signed BEFORE wix build, on purpose. Signed afterwards, the MSI
 #    would contain the unsigned copy and the unsigned exe would land on disk after install,
@@ -325,7 +334,7 @@ foreach ($exe in 'oXeio.Agent.exe', 'oXeio.Watchdog.exe') {
     Invoke-Sign (Join-Path $publishDir $exe)
 }
 
-Write-Host '── ২· wix build ─────────────────────────────' -ForegroundColor Cyan
+Write-Host '── 2· wix build ─────────────────────────────' -ForegroundColor Cyan
 
 New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 
@@ -356,7 +365,7 @@ if ($UpdatePublicKey) {
     -d "UpdateKeyDefault=$updateKeyLine" `
     -o $msi
 
-if ($LASTEXITCODE -ne 0) { throw 'wix build ব্যর্থ' }
+if ($LASTEXITCODE -ne 0) { throw 'wix build failed' }
 
 # Careful: the MSI is signed AFTER wix build, once the wrapper exists. This is the
 #    signature that shows "Verified publisher" in the double-click UAC dialog.
@@ -371,39 +380,39 @@ Write-Host "✅ $msi · $msiSize MB" -ForegroundColor Green
 #    This kind of assumption is what let three wrong builds out on 12 August.
 $sig = Get-AuthenticodeSignature $msi
 if ($sig.SignerCertificate) {
-    $stamped = if ($sig.TimeStamperCertificate) { 'টাইমস্ট্যাম্প সহ' } else { '⚠️ টাইমস্ট্যাম্প ছাড়া' }
-    Write-Host "   ✍ সই: $($sig.SignerCertificate.Subject) · $stamped" -ForegroundColor Green
+    $stamped = if ($sig.TimeStamperCertificate) { 'timestamped' } else { '⚠️ no timestamp' }
+    Write-Host "   ✍ signed: $($sig.SignerCertificate.Subject) · $stamped" -ForegroundColor Green
 
     # Careful: this machine could not verify the signature. Almost always it means the
     #    build machine has not put its own certificate in Trusted Root. The MSI is fine;
     #    on a staff PC (where trust-publisher.ps1 has run) it will show as valid.
     if ($script:LocalTrustWarning) {
         Write-Host ''
-        Write-Host '   ⚠️ এই মেশিন সইটা যাচাই করতে পারছে না — সার্টটা এখানে' -ForegroundColor Yellow
-        Write-Host '      Trusted Root-এ বসানো নেই। MSI ঠিক আছে; যে PC-তে' -ForegroundColor Yellow
-        Write-Host '      trust-publisher.ps1 চলেছে সেখানে বৈধ দেখাবে।' -ForegroundColor Yellow
-        Write-Host '      এখানেও যাচাই করতে চাইলে এই মেশিনেও ওটা একবার চালান।' -ForegroundColor Yellow
+        Write-Host '   ⚠️ This machine cannot verify the signature — the certificate is not in' -ForegroundColor Yellow
+        Write-Host '      Trusted Root here. The MSI is fine; it shows as valid on every PC where' -ForegroundColor Yellow
+        Write-Host '      trust-publisher.ps1 has run.' -ForegroundColor Yellow
+        Write-Host '      To verify it here too, run that script once on this machine as well.' -ForegroundColor Yellow
     }
 }
 else {
-    Write-Host '   ⚠️ সই করা হয়নি — ইনস্টলে "Unknown publisher" আসবে' -ForegroundColor Yellow
-    Write-Host '      (সই করতে: -SignWith <thumbprint>, দেখুন deploy/make-code-cert.ps1)' -ForegroundColor Yellow
+    Write-Host '   ⚠️ Not signed — installing will show "Unknown publisher"' -ForegroundColor Yellow
+    Write-Host '      (to sign: -SignWith <thumbprint>, see deploy/make-code-cert.ps1)' -ForegroundColor Yellow
 }
 
 Write-Host ''
 if ($ServerUrl) {
-    Write-Host 'ইনস্টল — স্টাফ নিজের ইমেইল-পাসওয়ার্ড দিয়ে সাইন ইন করবে:' -ForegroundColor Yellow
-    Write-Host "  ডাবল-ক্লিক, অথবা:  msiexec /i $msiName /qn"
+    Write-Host 'Install — staff sign in with their own email and password:' -ForegroundColor Yellow
+    Write-Host "  double-click, or:  msiexec /i $msiName /qn"
 } else {
-    Write-Host 'সাইলেন্ট ইনস্টল:' -ForegroundColor Yellow
-    Write-Host "  msiexec /i $msiName /qn SERVERURL=`"https://oxeio.office.local`""
+    Write-Host 'Silent install:' -ForegroundColor Yellow
+    Write-Host "  msiexec /i $msiName /qn SERVERURL=`"https://monitor.example.com`""
 }
 
 # Everything in bin/, so it is clear at a glance which build is new and which is old
 $all = Get-ChildItem $outDir -Filter 'oXeioAgent-*.msi' | Sort-Object LastWriteTime -Descending
 if ($all.Count -gt 1) {
     Write-Host ''
-    Write-Host "bin/-এ $($all.Count)টা বিল্ড:" -ForegroundColor DarkGray
+    Write-Host "$($all.Count) builds in bin/:" -ForegroundColor DarkGray
     foreach ($f in $all) {
         $mark = if ($f.Name -eq $msiName) { '→' } else { ' ' }
         Write-Host ("  {0} {1,-28} {2,6:N1} MB  {3}" -f $mark, $f.Name, ($f.Length/1MB), $f.LastWriteTime)

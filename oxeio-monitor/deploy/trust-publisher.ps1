@@ -60,11 +60,11 @@ if (-not $CerPath) { $CerPath = Join-Path $here 'certs\oxeio-code.cer' }
 
 if (-not (Test-Path $CerPath)) {
     throw @"
-সার্ট ফাইলটা পাওয়া যায়নি: $CerPath
+Certificate file not found: $CerPath
 
-⚠️ এটা সার্ভার-PC-তে make-code-cert.ps1 চালিয়ে তৈরি হয় (deploy\certs\)।
-   ওই .cer ফাইলটা এই মেশিনে কপি করে আনুন — MSI-র সাথেই আনতে পারেন।
-   ⚠️ .pfx আনবেন না, ওতে প্রাইভেট কী আছে আর এখানে ওটার দরকার নেই।
+⚠️ It is created by running make-code-cert.ps1 on the build machine (deploy\certs\).
+   Copy that .cer file to this machine - it can travel with the MSI.
+   ⚠️ Do NOT copy the .pfx: it holds the private key, and it is not needed here.
 "@
 }
 
@@ -72,34 +72,34 @@ $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate
 
 # Careful: both stores are needed - the doc above says why
 $stores = @(
-    @{ Name = 'Root';             Label = 'Trusted Root  ("সার্টটা আসল")' },
-    @{ Name = 'TrustedPublisher'; Label = 'Trusted Publishers ("সই মানে ঠিক আছে")' }
+    @{ Name = 'Root';             Label = 'Trusted Root  ("the certificate is genuine")' },
+    @{ Name = 'TrustedPublisher'; Label = 'Trusted Publishers ("its signature is fine")' }
 )
 
 # ── 1. What we are about to do - always printed, with -WhatIf too ───────
 
 Write-Host ''
-Write-Host '── সার্টিফিকেট ──────────────────────────────' -ForegroundColor Cyan
+Write-Host '── Certificate ──────────────────────────────' -ForegroundColor Cyan
 Write-Host "   Subject    : $($cert.Subject)"
 Write-Host "   Thumbprint : $($cert.Thumbprint)"
-Write-Host "   মেয়াদ শেষ  : $($cert.NotAfter.ToString('yyyy-MM-dd'))"
-Write-Host "   ফাইল       : $CerPath"
+Write-Host "   Expires    : $($cert.NotAfter.ToString('yyyy-MM-dd'))"
+Write-Host "   File       : $CerPath"
 Write-Host ''
 
 if ($cert.NotAfter -lt (Get-Date)) {
-    Write-Host '   ⚠️⚠️ এই সার্টের মেয়াদ শেষ। বসানো যাবে, কিন্তু নতুন সই আর' -ForegroundColor Yellow
-    Write-Host '        গ্রহণযোগ্য হবে না — সার্ভার-PC-তে নতুন সার্ট বানান।' -ForegroundColor Yellow
+    Write-Host '   ⚠️⚠️ This certificate has expired. It can be installed, but new signatures' -ForegroundColor Yellow
+    Write-Host '        made with it will not be accepted - make a new one on the build machine.' -ForegroundColor Yellow
     Write-Host ''
 }
 
-$verb = if ($Remove) { 'তুলে নেওয়া হবে' } else { 'বসানো হবে' }
-Write-Host "── যা $verb ────────────────────" -ForegroundColor Cyan
+$verb = if ($Remove) { 'to be removed' } else { 'to be installed' }
+Write-Host "── What is $verb ────────────────────" -ForegroundColor Cyan
 foreach ($s in $stores) {
     $present = @(Get-ChildItem "Cert:\LocalMachine\$($s.Name)" -ErrorAction SilentlyContinue |
         Where-Object { $_.Thumbprint -eq $cert.Thumbprint }).Count -gt 0
 
-    $state = if ($present) { 'আছে' } else { 'নেই' }
-    Write-Host ("   {0,-42} — এখন {1}" -f $s.Label, $state)
+    $state = if ($present) { 'present' } else { 'absent' }
+    Write-Host ("   {0,-42} — now {1}" -f $s.Label, $state)
 }
 Write-Host ''
 
@@ -110,16 +110,16 @@ $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIden
 
 if (-not $isAdmin -and -not $WhatIfPreference) {
     throw @"
-অ্যাডমিন অধিকার লাগবে — LocalMachine-এর সার্ট স্টোরে লিখতে হয়।
+Administrator rights are needed - this writes to the LocalMachine certificate stores.
 
-PowerShell-টা "Run as administrator" দিয়ে খুলে আবার চালান।
-(আগে দেখে নিতে চাইলে -WhatIf দিয়ে চালান, তাতে অ্যাডমিন লাগে না।)
+Open PowerShell with "Run as administrator" and run it again.
+(To look first, run it with -WhatIf - that needs no admin.)
 "@
 }
 
 # ── 2. Do it ────────────────────────────────────────────────────────────
 
-Write-Host '── কাজ চলছে ─────────────────────────────────' -ForegroundColor Cyan
+Write-Host '── Working ──────────────────────────────────' -ForegroundColor Cyan
 
 foreach ($s in $stores) {
     $storePath = "Cert:\LocalMachine\$($s.Name)"
@@ -128,12 +128,12 @@ foreach ($s in $stores) {
 
     if ($Remove) {
         if (-not $found) {
-            Write-Host "   $($s.Name)  — ছিলই না, কিছু করার নেই"
+            Write-Host "   $($s.Name)  — was not there, nothing to do"
             continue
         }
-        if ($PSCmdlet.ShouldProcess($s.Name, 'সার্ট তুলে নেওয়া')) {
+        if ($PSCmdlet.ShouldProcess($s.Name, 'Remove certificate')) {
             $found | Remove-Item -Force
-            Write-Host "   $($s.Name)  — তুলে নেওয়া হয়েছে" -ForegroundColor Green
+            Write-Host "   $($s.Name)  — removed" -ForegroundColor Green
         }
         continue
     }
@@ -141,11 +141,11 @@ foreach ($s in $stores) {
     # Safe to run repeatedly - if it is already there, nothing is done. Running
     #    it twice on the same PC during a rollout is very common.
     if ($found) {
-        Write-Host "   $($s.Name)  — আগে থেকেই আছে"
+        Write-Host "   $($s.Name)  — already present"
         continue
     }
 
-    if ($PSCmdlet.ShouldProcess($s.Name, 'সার্ট বসানো')) {
+    if ($PSCmdlet.ShouldProcess($s.Name, 'Install certificate')) {
         # Careful: Import-Certificate is not used - it belongs to the PKI module,
         #    and some Windows versions lack that module. X509Store is part of .NET
         #    itself, so it works on every machine.
@@ -154,7 +154,7 @@ foreach ($s in $stores) {
         try {
             $store.Open('ReadWrite')
             $store.Add($cert)
-            Write-Host "   $($s.Name)  — বসানো হয়েছে" -ForegroundColor Green
+            Write-Host "   $($s.Name)  — installed" -ForegroundColor Green
         }
         finally { $store.Close() }
     }
@@ -162,7 +162,7 @@ foreach ($s in $stores) {
 
 if ($WhatIfPreference) {
     Write-Host ''
-    Write-Host '   (-WhatIf — কিছুই বদলানো হয়নি)' -ForegroundColor Yellow
+    Write-Host '   (-WhatIf — nothing was changed)' -ForegroundColor Yellow
     Write-Host ''
     return
 }
@@ -170,7 +170,7 @@ if ($WhatIfPreference) {
 # ── 3. Verification ─────────────────────────────────────────────────────
 
 Write-Host ''
-Write-Host '── যাচাই ────────────────────────────────────' -ForegroundColor Cyan
+Write-Host '── Verification ─────────────────────────────' -ForegroundColor Cyan
 
 $ok = $true
 foreach ($s in $stores) {
@@ -186,16 +186,16 @@ foreach ($s in $stores) {
 
 Write-Host ''
 if (-not $ok) {
-    throw 'সার্ট স্টোরের অবস্থা প্রত্যাশিত নয় — উপরের তালিকা দেখুন।'
+    throw 'The certificate stores are not in the expected state - see the list above.'
 }
 
 if ($Remove) {
-    Write-Host '✅ তুলে নেওয়া হয়েছে' -ForegroundColor Green
+    Write-Host '✅ Removed' -ForegroundColor Green
 }
 else {
-    Write-Host '✅ এই PC এখন oXeio-র সই চেনে' -ForegroundColor Green
+    Write-Host '✅ This PC now recognises the oXeio signature' -ForegroundColor Green
     Write-Host ''
-    Write-Host '   MSI-তে ডাবল-ক্লিক করলে "Unknown publisher" আর আসবে না।'
-    Write-Host "   Publisher দেখাবে: $($cert.Subject -replace '^CN=', '')"
+    Write-Host '   Double-clicking the MSI no longer shows "Unknown publisher".'
+    Write-Host "   Publisher shown: $($cert.Subject -replace '^CN=', '')"
 }
 Write-Host ''

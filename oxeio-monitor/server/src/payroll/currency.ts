@@ -9,7 +9,7 @@
  * ⚠️ Only currencies with two minor digits are accepted. Every amount is
  *    stored in hundredths (`amount_paisa`, `PAISA_PER_TAKA = 100`); a
  *    currency with none (JPY) or three (KWD) would be off by a factor of 100
- *    or 10 in every stored row, silently. Like a time zone with DST, it is
+ *    or 10 in every stored row, silently. Like an unknown time zone, it is
  *    refused at startup instead.
  */
 

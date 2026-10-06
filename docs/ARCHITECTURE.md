@@ -93,6 +93,20 @@ month's workdays — by `server/src/calendar/work-regime.ts`
 formula. A `none` policy sets `noTarget`: screens and the tray show hours
 only, and a target of 0 does not read as a day off.
 
+## Time zone
+
+The work day is counted in one IANA zone (setup wizard, then Settings →
+Company & region; `WORK_TIMEZONE` before that). Daylight saving is
+supported: `server/src/agent/util/zone.ts` asks the tz database for the
+offset in force at each instant, so a day can be 23 or 25 hours long and a
+skipped midnight is handled. Everything goes through `work-time.ts`
+(`workDateOf`, `startOfWorkDate`, `nextLocalMidnight`, …) — never add or
+subtract an offset by hand. The agent gets the zone's offset changes for a
+year ahead in its config (`zoneTransitions`) and cuts days with them
+(`agent/src/oXeio.Core/Time/WorkTime.cs`); the dashboard uses `Intl` with the
+zone name (`web/src/lib/format.ts`). Nightly jobs run at 03:00 and 03:30,
+never in the 02:00 hour that daylight saving skips or repeats.
+
 ## Account page
 
 Every signed-in person has **Account** (`/account`; the old `/security`

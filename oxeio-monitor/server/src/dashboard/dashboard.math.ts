@@ -8,11 +8,10 @@
  */
 import type { SegmentState } from '@prisma/client';
 
-import { LOCAL_OFFSET_MIN } from '../agent/util/work-time';
+import { startOfWorkDate, workHourOf } from '../agent/util/work-time';
 
 const MS = 1000;
 const HOUR_MS = 3600 * MS;
-const OFFSET_MS = LOCAL_OFFSET_MIN * 60 * MS;
 
 export const HOURS_PER_DAY = 24;
 
@@ -291,9 +290,29 @@ function secondsSince(then: Date, now: Date): number {
   return (now.getTime() - then.getTime()) / MS;
 }
 
-/** Local midnight in the work zone for that date, as a UTC instant. */
-function dayStartUtcMs(workDate: Date): number {
-  return workDate.getTime() - OFFSET_MS;
+interface HourSlot {
+  start: number;
+  end: number;
+  /** the local hour (0-23) the slot is shown under */
+  hour: number;
+}
+
+/**
+ * The real hours of one work day, each with the local hour it belongs to.
+ *
+ * Careful: a day is not always 24 hours. With daylight saving one day has 23
+ * (an hour is skipped — that bucket stays empty) and one has 25 (an hour comes
+ * twice — both land in the same bucket). Stepping 24 × 1 h from midnight would
+ * put the evening into the wrong buckets on those two days.
+ */
+function hourSlotsOf(workDate: Date): HourSlot[] {
+  const dayStart = startOfWorkDate(workDate).getTime();
+  const dayEnd = startOfWorkDate(new Date(workDate.getTime() + 24 * HOUR_MS)).getTime();
+  const slots: HourSlot[] = [];
+  for (let t = dayStart; t < dayEnd; t += HOUR_MS) {
+    slots.push({ start: t, end: Math.min(t + HOUR_MS, dayEnd), hour: workHourOf(new Date(t)) });
+  }
+  return slots;
 }
 
 export interface HourSpreadInput {
@@ -323,8 +342,9 @@ export function spreadIntoHourBuckets(
   workDate: Date,
 ): number[] {
   const buckets = new Array<number>(HOURS_PER_DAY).fill(0);
-  const dayStart = dayStartUtcMs(workDate);
-  const dayEnd = dayStart + HOURS_PER_DAY * HOUR_MS;
+  const slots = hourSlotsOf(workDate);
+  const dayStart = slots[0].start;
+  const dayEnd = slots[slots.length - 1].end;
 
   for (const seg of segments) {
     if (seg.durationSec <= 0) continue;
@@ -339,7 +359,7 @@ export function spreadIntoHourBuckets(
       // The wall-clock span is zero or negative (clock went back) — no
       // proportion can be computed, so the whole duration goes to the starting
       // hour. Better in one bucket than lost, since the day's total stays right.
-      const hour = hourIndexOf(seg.startedAt.getTime(), dayStart);
+      const hour = hourIndexOf(seg.startedAt.getTime(), slots);
       if (hour !== null) buckets[hour] += seg.durationSec;
       continue;
     }
@@ -352,15 +372,13 @@ export function spreadIntoHourBuckets(
     let coveredMs = 0;
     let assignedSec = 0;
 
-    for (let h = 0; h < HOURS_PER_DAY; h++) {
-      const hourStart = dayStart + h * HOUR_MS;
-      const overlap =
-        Math.min(end, hourStart + HOUR_MS) - Math.max(start, hourStart);
+    for (const slot of slots) {
+      const overlap = Math.min(end, slot.end) - Math.max(start, slot.start);
       if (overlap > 0) coveredMs += overlap;
       if (coveredMs === 0) continue;
 
       const targetSec = Math.round((seg.durationSec * coveredMs) / span);
-      buckets[h] += targetSec - assignedSec;
+      buckets[slot.hour] += targetSec - assignedSec;
       assignedSec = targetSec;
 
       if (coveredMs >= span) break;
@@ -438,10 +456,9 @@ export function spreadTeamIntoHourBuckets(
   }));
 }
 
-function hourIndexOf(instantMs: number, dayStartMs: number): number | null {
-  const hour = Math.floor((instantMs - dayStartMs) / HOUR_MS);
-  if (hour < 0 || hour >= HOURS_PER_DAY) return null;
-  return hour;
+function hourIndexOf(instantMs: number, slots: readonly HourSlot[]): number | null {
+  const slot = slots.find((s) => instantMs >= s.start && instantMs < s.end);
+  return slot ? slot.hour : null;
 }
 
 /**

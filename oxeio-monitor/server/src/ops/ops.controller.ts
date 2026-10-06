@@ -53,7 +53,7 @@ export class OpsController {
    * `POST /api/v1/ops/backup/run`: take a backup right now.
    *
    * It exists because a backup that was never tested is not a backup, it is a
-   * guess. Instead of waiting for 02:30, it can be verified on install day:
+   * guess. Instead of waiting for 03:30, it can be verified on install day:
    * is pg_dump found, is the passphrase right, is the external drive writable.
    *
    * `RunLock` prevents two dumps at the same time, even if the button is pressed repeatedly.
@@ -88,7 +88,7 @@ export class OpsController {
    * **K01**: `POST /api/v1/ops/retention/run`, delete screenshots older than
    * 90 days right now.
    *
-   * **It exists for the same reason as the backup one:** the 02:00 cron is
+   * **It exists for the same reason as the backup one:** the 03:00 cron is
    * there, but a job nobody has ever seen run is a promise, not a mechanism. For
    * this job it matters even more: the policy tells staff in writing that
    * "screenshots delete themselves after 90 days". If that did not happen it

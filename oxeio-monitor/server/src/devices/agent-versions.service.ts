@@ -445,7 +445,7 @@ export class AgentVersionsService {
 
     if (signature === null) {
       throw new BadRequestException(
-        'AGENT_UPDATE_PUBLIC_KEY is set, so the PCs only install signed updates — put the signature next to the MSI (<msi>.sig) first. deploy/README.md § "Signed agent updates".',
+        'AGENT_UPDATE_PUBLIC_KEY is set, so the PCs only install signed updates — put the signature next to the MSI (<msi>.sig) first. deploy/README.md › "Signed agent updates".',
       );
     }
     if (!(await verifyUpdateSignature(updateKey, createReadStream(abs), signature))) {

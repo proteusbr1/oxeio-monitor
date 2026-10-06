@@ -168,7 +168,7 @@ internal sealed class HttpSyncClient : ISyncClient, IDisposable
             // checklist, and if it is not set the admin should be able to learn that from the log.
             log.Warn(
                 "No SERVERPIN configured — the agent trusts whatever certificate Windows accepts. " +
-                "On a self-signed office certificate that is weaker than it sounds (deploy/README § 6).");
+                "On a self-signed office certificate that is weaker than it sounds (deploy/README.md › \"Certificate pinning on the agent\").");
             return null;
         }
 

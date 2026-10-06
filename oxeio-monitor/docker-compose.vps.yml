@@ -21,7 +21,6 @@ services:
       # Careful: set `PUBLIC_HOST=monitor.oxeio.com` in `.env`. It is deliberately
       #    not hardcoded here, so a domain change touches only one place.
       CADDY_SITE: ${PUBLIC_HOST:?PUBLIC_HOST is not set — put the domain in .env}
-      TZ: Asia/Dhaka
 
     # Careful: both 80 **and** 443 are needed.
     #
@@ -85,6 +84,8 @@ services:
       #    really needed. It is set anyway - the starting point if another
       #    client is added.
       CORS_ORIGIN: https://${PUBLIC_HOST}
+      # so the first-run setup link in the log is a full, clickable one
+      PUBLIC_URL: https://${PUBLIC_HOST}
 
 volumes:
   caddy-data:

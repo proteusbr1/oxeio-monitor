@@ -16,7 +16,7 @@ import { BACKUP_CRON } from './ops.constants';
 const JOB_NAME = 'db-backup';
 
 /**
- * **K02 · K03** — the 02:30 nightly backup (spec § 6.4).
+ * **K02 · K03** — the 03:30 nightly backup (spec § 6.4).
  *
  * Careful: `ScheduleModule.forRoot()` is deliberately **not** added here.
  * `SummaryModule` already does it, and forRoot is **global**: its explorer
@@ -75,7 +75,7 @@ export class BackupJob implements OnApplicationBootstrap {
   }
 
   /**
-   * Without `timeZone`, 02:30 UTC is 08:30 in Asia/Dhaka (UTC+6): a dump over the whole
+   * Without `timeZone`, 03:30 UTC is 09:30 in Asia/Dhaka (UTC+6): a dump over the whole
    * database right as the office starts. The heaviest job at the busiest time.
    */
   @Cron(BACKUP_CRON, {

@@ -967,7 +967,6 @@ describe('planHolidaySeedRun — current/past months', () => {
     expect(howTo).toBeDefined();
     expect(howTo).toContain('d÷D');
     expect(howTo).toContain('past month');
-    expect(howTo).toContain('§ 2.1c');
   });
 
   it('with consent all are inserted, and there is no complaint either', () => {

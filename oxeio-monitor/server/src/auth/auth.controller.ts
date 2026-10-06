@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 
-import { LOCAL_OFFSET_MIN, WORK_TIMEZONE } from '../agent/util/work-time';
+import { WORK_TIMEZONE, workOffsetMinutesAt } from '../agent/util/work-time';
 import { type CurrencyInfo } from '../payroll/currency';
 import { AppSettingsService } from '../settings/app-settings.service';
 import { IDLE_WARN_BEFORE_SEC, SESSION_TTL_MIN } from './auth.constants';
@@ -49,7 +49,10 @@ interface SessionPolicy {
 interface WorkTimeZone {
   /** IANA name, e.g. `Asia/Dhaka` */
   timeZone: string;
-  /** Minutes east of UTC — fixed, the server refuses zones with DST */
+  /**
+   * Minutes east of UTC right now. The dashboard computes with the zone name
+   * (daylight saving included); kept for a page loaded before that change.
+   */
   utcOffsetMinutes: number;
 }
 
@@ -128,7 +131,7 @@ export class AuthController {
   @Public()
   @Get('time-zone')
   timeZone(): WorkTimeZone {
-    return { timeZone: WORK_TIMEZONE, utcOffsetMinutes: LOCAL_OFFSET_MIN };
+    return { timeZone: WORK_TIMEZONE, utcOffsetMinutes: workOffsetMinutesAt(new Date()) };
   }
 
   /**

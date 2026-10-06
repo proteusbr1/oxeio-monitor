@@ -56,7 +56,7 @@ RUN xcaddy build \
 
 # ── runtime ─────────────────────────────────────────────────────────────────
 # Caddy was chosen over nginx: the config is small, the SPA fallback and gzip come by
-#    default, and TLS is one line when needed (deploy/README § 6).
+#    default, and TLS is one line when needed (deploy/README.md › "TLS").
 FROM caddy:2-alpine AS runtime
 
 # Careful: the default binary is replaced, otherwise the `rate_limit` directive would

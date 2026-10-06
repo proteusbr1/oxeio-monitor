@@ -52,7 +52,7 @@ export function me(): Promise<Me> {
 export interface WorkTimeZone {
   /** IANA name, e.g. `Asia/Dhaka` */
   timeZone: string;
-  /** Minutes east of UTC — fixed, the server refuses zones with DST */
+  /** Minutes east of UTC right now — a fallback; the zone name is what is used */
   utcOffsetMinutes: number;
 }
 

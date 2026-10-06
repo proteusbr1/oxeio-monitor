@@ -17,8 +17,8 @@
 # Careful: this script **does not touch** sshd - it does not change the port,
 #    does not disable password login, does not delete firewall rules. Deliberate:
 #    locking your own door in the name of "hardening" has nearly happened in
-#    this project once (README § 12.4 - port 22 closed, the only way back was
-#    the web console).
+#    this project once (port 22 closed, the only way back was the provider's
+#    web console - deploy/README.md, "SSH times out").
 #
 # Careful: this script prints no secret values.
 
@@ -54,8 +54,8 @@ say() { printf '\n\033[36m── %s\033[0m\n' "$*"; }
 ok()  { printf '   \033[32m✓\033[0m %s\n' "$*"; }
 warn(){ printf '   \033[33m⚠️  %s\033[0m\n' "$*"; }
 
-[ "$(id -u)" -eq 0 ] || die "root হিসেবে চালান (sudo -i)"
-command -v apt-get >/dev/null 2>&1 || die "apt-get নেই — এই স্ক্রিপ্টটা Debian/Ubuntu-র জন্য লেখা"
+[ "$(id -u)" -eq 0 ] || die "Run as root (sudo -i)"
+command -v apt-get >/dev/null 2>&1 || die "apt-get not found — this script is written for Debian/Ubuntu"
 
 # Careful: without this apt **hangs** midway asking "which version to keep?",
 #    and inside a script that question is not even visible.
@@ -79,7 +79,7 @@ install_if_changed() {  # $1 = temp file with the new content, $2 = destination
 }
 
 # ── 1. Packages ───────────────────────────────────────────────────────────
-say "১· প্যাকেজ"
+say "1· Packages"
 
 need=()
 for p in fail2ban unattended-upgrades; do
@@ -88,14 +88,14 @@ done
 
 if [ "${#need[@]}" -gt 0 ]; then
   apt-get update -qq >/dev/null 2>&1 \
-    || warn "apt-get update ব্যর্থ — ক্যাশে থাকা তালিকা দিয়ে চেষ্টা চলছে"
+    || warn "apt-get update failed — trying with the cached package lists"
   if ! apt-get install -y -qq "${need[@]}" >"$TMPDIR_OX/apt.log" 2>&1; then
     sed 's/^/     /' "$TMPDIR_OX/apt.log" >&2 || true
-    die "বসানো গেল না: ${need[*]} — উপরের বার্তা দেখুন"
+    die "could not install: ${need[*]} — see the messages above"
   fi
-  ok "বসানো হলো — ${need[*]}"
+  ok "installed — ${need[*]}"
 else
-  ok "fail2ban ও unattended-upgrades আগে থেকেই আছে"
+  ok "fail2ban and unattended-upgrades already installed"
 fi
 
 # Careful: fail2ban's systemd backend does not work without Python's `systemd`
@@ -108,7 +108,7 @@ if ! python3 -c 'import systemd.journal' >/dev/null 2>&1; then
 fi
 
 # ── 2. Where the log is - choosing the backend ────────────────────────────
-say "২· sshd-র লগ কোথায়"
+say "2· Where sshd logs"
 
 # Careful: skipping this step would make the jail look "enabled" while it
 #    **reads nothing**. There are two realities, and which one holds varies by host:
@@ -128,12 +128,12 @@ else
   # Careful: neither could be confirmed. This is not "no log", it is "don't know" -
   #    so we go on assuming systemd, and the check in § 6 will tell the truth.
   F2B_BACKEND="systemd"
-  warn "auth.log নেই, python3-systemd-ও পাওয়া গেল না — systemd ধরে এগোনো হচ্ছে"
-  warn "§ ৬-এর যাচাইয়ে জেল না দাঁড়ালে এখানেই কারণ"
+  warn "no auth.log and no python3-systemd — going on with the systemd backend"
+  warn "if the jail does not come up in step 6, this is the reason"
 fi
 
 # ── 3. Jail ───────────────────────────────────────────────────────────────
-say "৩· SSH জেল"
+say "3· SSH jail"
 
 IGNOREIP="127.0.0.1/8 ::1"
 # Careful: `if`, not `[ ... ] && ...` - with an empty IGNORE_EXTRA the `&&`
@@ -144,30 +144,24 @@ fi
 
 mkdir -p "$(dirname "$JAIL_FILE")"
 
-# Careful: in the file below, Bengali appears only on `#` comment lines - **never
-#    in a value**. This rule is mandatory, because the jail file is read by
-#    fail2ban, through Python's configparser, and without an explicit encoding
-#    that depends on the locale. Three cases were checked by hand:
-#      - utf-8   -> reads fine
-#      - latin-1 -> the Bengali characters come out garbled, yet `port`/`backend`
-#                   still come through - their lines are pure ASCII
-#      - ascii   -> UnicodeDecodeError, i.e. it fails **loudly**
-#    So there is no path to a "silently wrong config", and a loud failure is
-#    caught by `fail2ban-client -t` in § 4 **before** the restart.
-#    Careful: but if Bengali ever enters a value (not a comment, say in
-#    `action`), the latin-1 case would silently produce a wrong value - so don't.
+# Careful: keep every **value** in the file below pure ASCII. The jail file is
+#    read by fail2ban through Python's configparser, without an explicit
+#    encoding, so how non-ASCII text is read depends on the locale: under
+#    latin-1 it would come out garbled - silently - and under ascii it fails.
+#    Non-ASCII in a `#` comment line is harmless (a value line stays intact);
+#    in a value (say in `action`) it could silently produce a wrong setting.
 
 {
   cat <<EOF
-# ⚠️ এই ফাইলটা deploy/vps-harden.sh লেখে — হাতে বদলালে পরের বার চালানোয়
-#    বদলটা মুছে যাবে। স্থায়ী বদল দরকার হলে স্ক্রিপ্টটাই বদলান।
+# Written by deploy/vps-harden.sh - a change made here by hand is overwritten
+#    the next time it runs. For a permanent change, change the script.
 
 [DEFAULT]
-# ⚠️⚠️ ব্যান **স্থায়ী নয়**, ইচ্ছাকৃতভাবে। \`bantime = -1\` লিখলে নিজের
-#    ভুল টাইপ করা IP-ও চিরকালের জন্য আটকে যেত — আর তখন ফেরার একমাত্র পথ
-#    প্রোভাইডারের ওয়েব কনসোল, যেটা ঠিক সেই মুহূর্তেই খুঁজতে হয় যখন হাতে
-#    সময় নেই (README § ১২.৪খ)। এক ঘণ্টা ব্রুট-ফোর্স থামানোর জন্য যথেষ্ট,
-#    আর নিজের ভুলের শাস্তি হিসেবে সহনীয়।
+# Bans are deliberately NOT permanent. With \`bantime = -1\` your own IP,
+#    after a few mistyped passwords, would be locked out forever - and the
+#    only way back would be the provider's web console, which you then have
+#    to find at exactly the moment you have no time. One hour is enough to
+#    stop brute force, and a bearable penalty for your own mistake.
 bantime  = $BANTIME
 findtime = 10m
 maxretry = 5
@@ -176,13 +170,13 @@ ignoreip = $IGNOREIP
 [sshd]
 enabled  = true
 
-# ⚠️⚠️ **এই একটা লাইনই এই ফাইলের মূল কারণ।**
-#    fail2ban-এর ডিফল্ট sshd জেলে লেখা থাকে \`port = ssh\`, আর \`ssh\`
-#    /etc/services অনুযায়ী **কেবল ২২**। এই সার্ভারে sshd ২২২২-এও শোনে
-#    (README § ১২.৪গ — ISP ২২ আটকায় বলে বিকল্প দরজা)। ডিফল্টে ছেড়ে দিলে
-#    হার্ডেনিংটা **নীরবে অর্ধেক** হতো: ২২-এ ব্রুট-ফোর্স থামত, আর ২২২২-এ
-#    যত খুশি চেষ্টা চলত — অথচ \`fail2ban-client status sshd\` দিব্যি
-#    "সক্রিয়" দেখাত। ভুল আশ্বাস কোনো আশ্বাস না থাকার চেয়ে খারাপ।
+# This one line is the main reason this file exists.
+#    fail2ban's default sshd jail says \`port = ssh\`, and \`ssh\` is ONLY 22
+#    according to /etc/services. sshd may also listen on 2222 (an alternative
+#    port for networks whose ISP blocks 22). Left at the default the hardening
+#    would be SILENTLY half done: brute force stopped on 22, unlimited tries on
+#    2222 - while \`fail2ban-client status sshd\` happily showed "active".
+#    False reassurance is worse than none.
 port     = $SSH_PORTS
 
 backend  = $F2B_BACKEND
@@ -194,9 +188,9 @@ EOF
 
 if install_if_changed "$TMPDIR_OX/jail" "$JAIL_FILE"; then
   CHANGED_JAIL=1
-  ok "লেখা হলো → $JAIL_FILE  (পোর্ট $SSH_PORTS)"
+  ok "written → $JAIL_FILE  (ports $SSH_PORTS)"
 else
-  ok "আগের মতোই আছে → $JAIL_FILE  (পোর্ট $SSH_PORTS)"
+  ok "unchanged → $JAIL_FILE  (ports $SSH_PORTS)"
 fi
 
 # ── 3a. What Docker keeps out of this jail's reach ───────────────────────
@@ -220,26 +214,26 @@ fi
 #    decision, a separate ADR.)
 
 # ── 4. Start ──────────────────────────────────────────────────────────────
-say "৪· fail2ban চালু"
+say "4· Starting fail2ban"
 
 # Check the config before the restart - with a bad config fail2ban **cannot
 #    start**, and the jail that was running would be lost too. Checking first
 #    means a bad config breaks nothing.
 if f2b_test="$(fail2ban-client -t 2>&1)"; then
-  ok "কনফিগ পরীক্ষা পাশ"
+  ok "config test passed"
 else
   case "$f2b_test" in
     *"no such option"*|*"Usage:"*|*"unrecognized"*)
       # Careful: this fail2ban has no `-t` - that is not "bad config", it is
       #    "could not verify". Conflating the two would stop the script even on a good config.
-      warn "এই সংস্করণে 'fail2ban-client -t' নেই — কনফিগ যাচাই করা গেল না"
+      warn "this version has no 'fail2ban-client -t' — the config could not be verified"
       ;;
     *)
       printf '%s\n' "$f2b_test" | sed 's/^/     /' >&2
       # Careful: the message must not overstate: the jail file has **already been
       #    written** ($JAIL_FILE). What has not happened is the restart - so the
       #    running fail2ban still has its old config, and sshd was not touched.
-      die "fail2ban কনফিগে ভুল — উপরের বার্তা দেখুন। restart করা হয়নি, চলতি fail2ban ও SSH অপরিবর্তিত। ঠিক করে আবার চালান, বা $JAIL_FILE মুছে দিন।"
+      die "fail2ban config error — see the messages above. Nothing was restarted: the running fail2ban and SSH are unchanged. Fix it and run again, or delete $JAIL_FILE."
       ;;
   esac
 fi
@@ -248,67 +242,66 @@ systemctl enable fail2ban >/dev/null 2>&1 || true
 
 if [ "$CHANGED_JAIL" -eq 1 ]; then
   systemctl restart fail2ban || true
-  ok "জেল বদলেছে — সার্ভিস restart করা হলো"
+  ok "jail changed — service restarted"
 elif ! systemctl is-active --quiet fail2ban; then
   systemctl start fail2ban || true
-  ok "সার্ভিস চলছিল না — চালু করা হলো"
+  ok "service was not running — started"
 else
-  ok "সার্ভিস আগে থেকেই চলছে, কনফিগও অপরিবর্তিত — restart করা হয়নি"
+  ok "service already running, config unchanged — not restarted"
 fi
 
 # ── 5. Automatic security updates ─────────────────────────────────────────
-say "৫· স্বয়ংক্রিয় নিরাপত্তা আপডেট"
+say "5· Automatic security updates"
 
 cat > "$TMPDIR_OX/apt-periodic" <<'CONF'
-// ⚠️ এই ফাইলটা deploy/vps-harden.sh লেখে।
-// ⭐ কেবল কনফিগ থাকলেই চলে না — নিচের দুটো মান ১ না হলে
-//    unattended-upgrades বসানো থাকা সত্ত্বেও **কখনো চলে না**।
+// Written by deploy/vps-harden.sh.
+// Having the config is not enough: unless the two values below are 1,
+//    unattended-upgrades NEVER runs, even though it is installed.
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 APT::Periodic::AutocleanInterval "7";
 CONF
 
 cat > "$TMPDIR_OX/apt-uu" <<'CONF'
-// ⚠️ এই ফাইলটা deploy/vps-harden.sh লেখে — হাতে বদলালে পরের বার মুছে যাবে।
+// Written by deploy/vps-harden.sh - a change made here by hand is overwritten next time.
 
-// ⚠️⚠️ `#clear` বাদ দেওয়া যাবে না। apt-এর কনফিগে তালিকা **যোগ হয়**,
-//    প্রতিস্থাপিত হয় না — অর্থাৎ এটা ছাড়া নিচের তালিকাটা ডিস্ট্রোর
-//    50unattended-upgrades-এর তালিকার সাথে জুড়ে বসত, আর কেউ সেখানে
-//    `-updates` চালু করে রাখলে আমরা অজান্তেই **সব** আপডেট টেনে আনতাম।
+// Do not remove `#clear`. apt config lists are APPENDED, not replaced - without
+//    it the list below would be merged with the one in the distro's
+//    50unattended-upgrades, and if someone enabled `-updates` there we would
+//    unknowingly pull in ALL updates.
 #clear Unattended-Upgrade::Allowed-Origins;
 #clear Unattended-Upgrade::Origins-Pattern;
 
-// ⭐ শুধু security — ইচ্ছাকৃতভাবে। এই হোস্টে ১৫ জনের কাজের হিসাব চলে;
-//    রাত ৩টায় নিজে থেকে একটা ফিচার-আপগ্রেড এসে কিছু ভাঙার চেয়ে
-//    নিরাপত্তা-প্যাচগুলো নীরবে বসে যাওয়াই বেশি দরকারি।
+// Security only - deliberately. This host keeps everyone's work hours; a
+//    feature upgrade arriving by itself at 3 am and breaking something is a
+//    worse risk than security patches going in quietly.
 Unattended-Upgrade::Allowed-Origins {
     "${distro_id}:${distro_codename}-security";
     "${distro_id}ESMApps:${distro_codename}-apps-security";
     "${distro_id}ESM:${distro_codename}-infra-security";
 };
 
-// ⚠️⚠️ রিবুট **কখনো নিজে থেকে নয়**। সার্ভার রিবুট মানে এজেন্টদের সব
-//    আপলোড কয়েক মিনিট আটকে থাকা, আর সেটা যদি অফিস-সময়ে হয় তবে কেউ
-//    বুঝতেই পারবে না কেন ছবি আসছে না। কার্নেল আপডেটের পর রিবুট
-//    দরকার হলে সেটা মালিক বেছে নেওয়া সময়ে করবেন —
-//    `cat /var/run/reboot-required` দেখলেই জানা যায়।
+// NEVER reboot by itself. A reboot stalls every agent's uploads for a few
+//    minutes, and during working hours nobody would understand why
+//    screenshots stop arriving. If a kernel update needs a reboot, do it at a
+//    time you choose - `cat /var/run/reboot-required` tells you.
 Unattended-Upgrade::Automatic-Reboot "false";
 
-// ⭐ পুরোনো কার্নেল ছাঁটাই — নইলে /boot ভরে যায়, আর তখন **পরের
-//    আপডেটগুলোই ব্যর্থ হতে থাকে**, নীরবে।
+// Remove old kernels - otherwise /boot fills up, and then the NEXT updates
+//    start failing, silently.
 Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
 CONF
 
 if install_if_changed "$TMPDIR_OX/apt-periodic" "$APT_PERIODIC"; then
-  ok "লেখা হলো → $APT_PERIODIC"
+  ok "written → $APT_PERIODIC"
 else
-  ok "আগের মতোই আছে → $APT_PERIODIC"
+  ok "unchanged → $APT_PERIODIC"
 fi
 
 if install_if_changed "$TMPDIR_OX/apt-uu" "$APT_FILE"; then
-  ok "লেখা হলো → $APT_FILE  (শুধু security)"
+  ok "written → $APT_FILE  (security only)"
 else
-  ok "আগের মতোই আছে → $APT_FILE  (শুধু security)"
+  ok "unchanged → $APT_FILE  (security only)"
 fi
 
 # Careful: Docker itself is outside this list - docker-ce comes from Docker's own
@@ -322,15 +315,15 @@ systemctl enable --now unattended-upgrades >/dev/null 2>&1 || true
 #    in vps-setup.sh for the firewall (the script printed a warning, nobody read
 #    it, and no firewall was running on the VPS). So below it is the
 #    **live state** that is read, not the config files.
-say '৬· যাচাই — "চালানো হয়েছে" আর "চালু আছে" এক নয়'
+say '6· Verification — "was run" and "is running" are not the same'
 
 FAIL=0
 
 if systemctl is-active --quiet fail2ban; then
-  ok "fail2ban সার্ভিস চলছে"
+  ok "fail2ban service running"
 else
   journalctl -u fail2ban -n 20 --no-pager 2>/dev/null | sed 's/^/     /' || true
-  die "fail2ban চলছে না — উপরের লগ দেখুন (systemctl status fail2ban)"
+  die "fail2ban is not running — see the log above (systemctl status fail2ban)"
 fi
 
 # Careful: after a restart it takes a few seconds for fail2ban's socket to
@@ -347,10 +340,10 @@ done
 #    are different things. With a wrong backend the service runs fine, only the jail is missing.
 if jail_status="$(fail2ban-client status sshd 2>&1)"; then
   printf '%s\n' "$jail_status" | sed 's/^/     /'
-  ok "sshd জেল দাঁড়িয়েছে"
+  ok "sshd jail is up"
 else
   printf '%s\n' "$jail_status" | sed 's/^/     /' >&2
-  die "sshd জেল দাঁড়ায়নি — উপরের বার্তা দেখুন (journalctl -u fail2ban -n 40)"
+  die "the sshd jail did not come up — see the messages above (journalctl -u fail2ban -n 40)"
 fi
 
 # ── 6a. Are the ports really guarded ──────────────────────────────────────
@@ -398,8 +391,8 @@ fi
 if [ -z "$rule_ports" ]; then
   # Careful: "could not verify" - not "not working". Showing the two as one is
   #    forbidden in this project; a missing observation is not a failure.
-  warn "চলতি ফায়ারওয়াল নিয়মে পোর্টের তালিকা পড়া গেল না — এর মানে জেল কাজ"
-  warn "করছে না তা নয়, মানে যাচাই করা গেল না। হাতে দেখুন:"
+  warn "could not read the port list from the live firewall rules — this does"
+  warn "not mean the jail is not working, only that it could not be verified. Check by hand:"
   warn "    iptables -S INPUT | grep f2b-sshd"
 else
   missing=""
@@ -411,10 +404,10 @@ else
     if [ "$found" -eq 0 ]; then missing="$missing $p"; fi
   done
   if [ -n "$missing" ]; then
-    warn "ফায়ারওয়ালে পাহারায় আছে: $rule_ports — কিন্তু নেই:$missing"
+    warn "guarded in the firewall: $rule_ports — but NOT:$missing"
     FAIL=1
   else
-    ok "ফায়ারওয়ালে সত্যিই পাহারায়: $rule_ports"
+    ok "really guarded in the firewall: $rule_ports"
   fi
 fi
 
@@ -430,9 +423,9 @@ fi
 
 if [ -z "$ssh_listen" ]; then
   # Careful: again: not known != nothing there.
-  warn "sshd কোন পোর্টে শুনছে জানা গেল না (ss পাওয়া যায়নি?) — 'ss -ltnp | grep sshd'"
+  warn "could not tell which ports sshd listens on (no ss?) — 'ss -ltnp | grep sshd'"
 else
-  ok "sshd শুনছে: $ssh_listen"
+  ok "sshd listening on: $ssh_listen"
   uncovered=""
   for p in ${ssh_listen//,/ }; do
     found=0
@@ -442,8 +435,8 @@ else
     if [ "$found" -eq 0 ]; then uncovered="$uncovered $p"; fi
   done
   if [ -n "$uncovered" ]; then
-    warn "জেলের বাইরে থাকা SSH পোর্ট:$uncovered — ওখানে ব্রুট-ফোর্স আটকাবে না"
-    warn "    যোগ করুন:  OXEIO_SSH_PORTS=$SSH_PORTS$(printf '%s' "$uncovered" | tr ' ' ',') bash $0"
+    warn "SSH ports outside the jail:$uncovered — brute force is not stopped there"
+    warn "    add them:  OXEIO_SSH_PORTS=$SSH_PORTS$(printf '%s' "$uncovered" | tr ' ' ',') bash $0"
     FAIL=1
   fi
   # Careful: the opposite direction is not a failure: 2222 in the jail while
@@ -457,31 +450,31 @@ uu_on="$(apt-config dump APT::Periodic::Unattended-Upgrade 2>/dev/null | head -1
 #    and reading it you could not tell what was wanted and what was found.
 uu_val="$(printf '%s' "$uu_on" | sed -n 's/.*"\([^"]*\)".*/\1/p')"
 case "$uu_val" in
-  1) ok "unattended-upgrade চালু (APT::Periodic::Unattended-Upgrade = 1)" ;;
-  *) warn "APT::Periodic::Unattended-Upgrade = ${uu_val:-জানা যায়নি}, চাই 1 — আপডেট চলবে না"
+  1) ok "unattended-upgrade on (APT::Periodic::Unattended-Upgrade = 1)" ;;
+  *) warn "APT::Periodic::Unattended-Upgrade = ${uu_val:-unknown}, expected 1 — updates will not run"
      FAIL=1 ;;
 esac
 
 origins="$(apt-config dump Unattended-Upgrade::Allowed-Origins 2>/dev/null || true)"
 if [ -z "$origins" ]; then
-  warn "Allowed-Origins পড়া গেল না — 'apt-config dump Unattended-Upgrade' দেখুন"
+  warn "could not read Allowed-Origins — check 'apt-config dump Unattended-Upgrade'"
 else
   printf '%s\n' "$origins" | sed 's/^/     /'
   # Careful: if `-updates` or `-proposed` slip in, it is no longer "security only".
   if printf '%s' "$origins" | grep -qE '\-(updates|proposed|backports)'; then
-    warn "security-র বাইরের origin ঢুকেছে — 50unattended-upgrades দেখুন"
+    warn "a non-security origin got in — check 50unattended-upgrades"
     FAIL=1
   else
-    ok "শুধু security origin"
+    ok "security origins only"
   fi
 fi
 
 # The timers - even with a perfect config, if the timer is off **nothing will ever run**.
 for t in apt-daily.timer apt-daily-upgrade.timer; do
   if systemctl is-active --quiet "$t"; then
-    ok "$t চলছে"
+    ok "$t running"
   else
-    warn "$t চলছে না — কনফিগ ঠিক থাকলেও আপডেট কখনো চলবে না"
+    warn "$t not running — updates will never run, however right the config"
     warn "    systemctl enable --now $t"
     FAIL=1
   fi
@@ -489,19 +482,19 @@ done
 
 # ── 7. Result ─────────────────────────────────────────────────────────────
 if [ "$FAIL" -eq 0 ]; then
-  printf '\n\033[32m✅ শক্ত করা হয়ে গেছে\033[0m\n\n'
+  printf '\n\033[32m✅ Hardening done\033[0m\n\n'
 else
-  printf '\n\033[33m⚠️  আংশিক — উপরের সতর্কবার্তাগুলো পড়ুন\033[0m\n\n'
+  printf '\n\033[33m⚠️  Partial — read the warnings above\033[0m\n\n'
 fi
 
-echo "   জেলের অবস্থা   :  fail2ban-client status sshd"
-echo "   ব্যান তোলা      :  fail2ban-client set sshd unbanip <IP>"
-echo "   আপডেট মহড়া     :  unattended-upgrade --dry-run -v"
+echo "   Jail status     :  fail2ban-client status sshd"
+echo "   Lift a ban      :  fail2ban-client set sshd unbanip <IP>"
+echo "   Update dry run  :  unattended-upgrade --dry-run -v"
 printf '\n'
-printf '   \033[33m⚠️ ৮০/৪৪৩ (Caddy) এই জেলের বাইরে — Docker-এর প্রকাশিত পোর্ট\033[0m\n'
-printf '   \033[33m   DNAT হয়ে FORWARD/DOCKER চেইন দিয়ে যায়, INPUT দিয়ে নয়।\033[0m\n'
-printf '   \033[32m   ✓ ওই দিকটা Caddy-তেই সামলানো — লগইনে ৩০/মিনিট প্রতি IP\033[0m\n'
-printf '   \033[32m     (web/Caddyfile-এর rate_limit · G116)। এই জেল শুধু SSH-এর।\033[0m\n\n'
+printf '   \033[33m⚠️ 80/443 (Caddy) are outside this jail — Docker-published ports\033[0m\n'
+printf '   \033[33m   are DNAT-ed through the FORWARD/DOCKER chain, not INPUT.\033[0m\n'
+printf '   \033[32m   ✓ That side is handled in Caddy — login limited to 30/minute per IP\033[0m\n'
+printf '   \033[32m     (rate_limit in web/Caddyfile). This jail is for SSH only.\033[0m\n\n'
 
 # Careful: exit 0 even on FAIL - deliberate. What was installed stays installed,
 #    and treating an incomplete verification as failure would make people afraid

@@ -19,8 +19,9 @@ export class HealthController {
   ///
   /// So external monitoring must check the **keyword, not the status code**:
   /// a "Keyword" monitor in UptimeRobot with keyword `"db":"up"`
-  /// (`deploy/README.md § R4`). Watching only the status code would show "UP"
-  /// forever even with the database dead, the blind spot R4 exists to cover.
+  /// (`deploy/README.md` › "External uptime monitoring"). Watching only the
+  /// status code would show "UP" forever even with the database dead, the
+  /// blind spot that outside monitor exists to cover.
   @Public()
   @Get()
   async check(): Promise<{

@@ -15,8 +15,8 @@ import {
   formatCount,
   formatDuration,
   formatTime,
-  parseWorkDate,
-  workOffsetMs,
+  shiftWorkDate,
+  startOfWorkDate,
 } from '../../lib/format';
 
 /**
@@ -37,8 +37,6 @@ import {
  * from the old theme. So the text says "Solid / grey", not a colour name.
  */
 
-/** Careful: the work zone has a fixed offset (no DST); the same constant as in `lib/format.ts` */
-const MINUTES_PER_DAY = 24 * 60;
 
 /**
  * Minimum width of the bar, in minutes.
@@ -83,6 +81,8 @@ interface DeviceRow {
 }
 
 interface View {
+  /** the instant the day began — tick labels read the wall clock from it */
+  dayStartMs: number;
   rows: DeviceRow[];
   winFrom: number;
   winTo: number;
@@ -277,7 +277,7 @@ function TimelineBody({ timeline }: { timeline: Timeline }) {
                             : 'translateX(-50%)',
                     }}
                   >
-                    {clockOf(m)}
+                    {clockOf(view.dayStartMs, m)}
                   </span>
                 ))}
               </div>
@@ -344,9 +344,11 @@ function TimelineBody({ timeline }: { timeline: Timeline }) {
  *    `new Date()` it has no side effects.
  */
 function buildView(t: Timeline): View {
-  // Careful: `parseWorkDate` gives UTC midnight; moving back by the offset gives 00:00 in the work zone
-  const parsed = parseWorkDate(t.date);
-  const dayStartMs = (parsed?.getTime() ?? 0) - workOffsetMs();
+  // Careful: a day is not always 1440 minutes — daylight saving makes one 23 hours
+  //    long and one 25. The axis runs from this day's start to the next one's.
+  const dayStartMs = startOfWorkDate(t.date).getTime();
+  const dayMinutes = (startOfWorkDate(shiftWorkDate(t.date, 1)).getTime() - dayStartMs) / 60000;
+  const clampTo = (minutes: number): number => Math.min(dayMinutes, Math.max(0, minutes));
   const minuteOf = (iso: string): number =>
     (new Date(iso).getTime() - dayStartMs) / 60000;
 
@@ -359,7 +361,7 @@ function buildView(t: Timeline): View {
     //    server allows for it too); drawing a negative width would spread the bar backwards
     const toMin = Math.max(fromMin, minuteOf(seg.endedAt));
 
-    if (fromMin < 0 || toMin > MINUTES_PER_DAY) clipped = true;
+    if (fromMin < 0 || toMin > dayMinutes) clipped = true;
 
     const span: Span = { seg, fromMin, toMin, device: 0 };
     const list = byDevice.get(seg.deviceId);
@@ -375,7 +377,7 @@ function buildView(t: Timeline): View {
       return { deviceId, label: index + 1, spans };
     });
 
-  let lo = MINUTES_PER_DAY;
+  let lo = dayMinutes;
   let hi = 0;
   for (const row of rows) {
     for (const s of row.spans) {
@@ -390,7 +392,7 @@ function buildView(t: Timeline): View {
   let winTo = clampTo(Math.ceil(hi / 60) * 60);
 
   if (winTo - winFrom < MIN_WINDOW_MIN) {
-    winTo = Math.min(MINUTES_PER_DAY, winFrom + MIN_WINDOW_MIN);
+    winTo = Math.min(dayMinutes, winFrom + MIN_WINDOW_MIN);
     winFrom = Math.max(0, winTo - MIN_WINDOW_MIN);
   }
 
@@ -409,6 +411,7 @@ function buildView(t: Timeline): View {
   const nowMin = (Date.now() - dayStartMs) / 60000;
 
   return {
+    dayStartMs,
     rows,
     winFrom,
     winTo,
@@ -419,15 +422,11 @@ function buildView(t: Timeline): View {
   };
 }
 
-function clampTo(minutes: number): number {
-  return Math.min(MINUTES_PER_DAY, Math.max(0, minutes));
-}
-
-/** Minutes to `'14:00'`. 1440 becomes `'24:00'` (the mockup's axis does the same). */
-function clockOf(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = Math.round(minutes % 60);
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+/** Minutes into the day to `'14:00'`. The day's end becomes `'24:00'` (the mockup's axis does the same). */
+function clockOf(dayStartMs: number, minutes: number): string {
+  // the wall clock at that instant, so the labels stay right on a 23- or 25-hour day
+  const label = formatTime(new Date(dayStartMs + minutes * 60000).toISOString());
+  return label === '00:00' && minutes > 0 ? '24:00' : label;
 }
 
 function describe(s: Span, multiDevice: boolean): string {
