@@ -509,7 +509,7 @@ internal sealed class TodayForm : OwnerDrawnForm
     /// (18 August): "work in progress = green".
     ///
     /// Careful: it used to be neutral <c>ink</c> while running, green only when the target was
-    /// full ([09 § 3u](../../../../docs/09-Build-Log.md)). The owner wanted the fill green,
+    /// full ([09 § 3u](../../../../docs/history/09-Build-Log.md)). The owner wanted the fill green,
     /// first on the web and then in this window too, so that the two screens match.
     /// (Even earlier it was <c>#4A6FA5</c>, a blue that appears nowhere in oXeio.)
     /// </summary>

@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { Trans } from 'react-i18next';
 
 import {
   deleteTask,
@@ -24,6 +25,7 @@ import { Card } from '../../components/Card';
 import { Page } from '../../components/Page';
 import { ErrorBox, Loading } from '../../components/States';
 import { Table, type Column } from '../../components/Table';
+import { useT } from '../../i18n';
 import { formatCount, formatDate, formatDateTime, formatDuration, todayInWorkZone } from '../../lib/format';
 import {
   Chip,
@@ -55,8 +57,9 @@ import { DropReasonPicker, DropReasonTag } from './DropReason';
  * one page every paste of 500 lines would also load the whole list.
  */
 export function TaskPoolPage() {
+  const t = useT();
   return (
-    <Page title="Task pool" subtitle="Every task, and where it stands">
+    <Page title={t('Task pool')} subtitle={t('Every task, and where it stands')}>
       <TaskList />
     </Page>
   );
@@ -91,6 +94,7 @@ function workToday(): string {
  * with copies in two places, one day one changes and the other does not.
  */
 export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
+  const t = useT();
   const [filter, setFilter] = useState<FilterKey>(lockedStage ?? 'all');
   /** Careful: the locked page does not show the controls for switching queues */
   const showQueues = lockedStage === undefined;
@@ -229,7 +233,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
             <input
               type="checkbox"
               className="tap"
-              aria-label="Select every row on this page"
+              aria-label={t('Select every row on this page')}
               checked={allPicked}
               onChange={toggleAll}
             />
@@ -238,7 +242,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
             <input
               type="checkbox"
               className="tap"
-              aria-label={'Select ' + r.reference}
+              aria-label={t('Select {{reference}}', { reference: r.reference })}
               checked={picked.has(r.id)}
               onChange={() => toggleOne(r.id)}
             />
@@ -266,7 +270,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
 
   return (
     <Card
-      title="Every Task"
+      title={t('Every Task')}
       /*
         Careful: "Newest activity first" used to be a separate label in the
            filter row; it took a whole control's space and did nothing.
@@ -274,8 +278,8 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
       */
       hint={
         data.data
-          ? `${data.data.total} in total · newest activity first`
-          : 'Loading…'
+          ? t('{{n}} in total · newest activity first', { n: data.data.total })
+          : t('Loading…')
       }
       padded={false}
     >
@@ -286,14 +290,14 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
             key={f.key}
             type="button"
             onClick={() => change(() => setFilter(f.key))}
-            title={f.hint}
+            title={t(f.hint)}
             className={`rounded-full border px-3 py-1 text-[12.5px] transition ${
               filter === f.key
                 ? 'border-brand bg-brand-bg font-semibold text-brand-ink'
                 : 'border-line text-ink-2 hover:border-brand'
             }`}
           >
-            {f.label}
+            {t(f.label)}
             {/*
               The count is on the chip itself: you need to know whether there is
                  work today **before** clicking. Careful: it is shown even at 0,
@@ -352,7 +356,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
         >
             {statusOptions(detection).map((s) => (
               <option key={s.value} value={s.value}>
-                {s.label}
+                {t(s.label, { context: 'list' })}
               </option>
             ))}
           </select>
@@ -379,7 +383,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
               : 'border-line text-ink-2 hover:border-brand'
           }`}
         >
-          Filters
+          {t('Filters')}
           {activeFilters > 0 && <span className="num ml-1.5">{activeFilters}</span>}
           <span className="ml-1 text-ink-3">{showFilters ? '▴' : '▾'}</span>
         </button>
@@ -391,8 +395,8 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
         <input
           value={q}
           onChange={(e) => change(() => setQ(e.target.value))}
-          aria-label="Search by reference or task number"
-          placeholder="Reference or task no…"
+          aria-label={t('Search by reference or task number')}
+          placeholder={t('Reference or task no…')}
           className="num ml-auto w-full max-w-[260px] rounded-md border border-line bg-paper px-2.5 py-1 text-[12.5px] text-ink"
         />
       </div>
@@ -404,7 +408,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
             onChange={(e) => change(() => setStaffId(e.target.value))}
             className="rounded-md border border-line bg-paper px-2 py-1 text-[12.5px] text-ink"
           >
-            <option value="">Any assignee</option>
+            <option value="">{t('Any assignee')}</option>
             {(assignees.data ?? []).map((d) => (
               <option key={d.id} value={d.id}>
                 {d.empCode} · {d.fullName}
@@ -424,7 +428,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
             onChange={(e) => change(() => setAddedById(e.target.value))}
             className="rounded-md border border-line bg-paper px-2 py-1 text-[12.5px] text-ink"
           >
-            <option value="">Added by anyone</option>
+            <option value="">{t('Added by anyone')}</option>
             {(adders.data ?? []).map((a) => (
               <option key={a.id} value={a.id}>
                 {a.fullName} · {formatCount(a.count)}
@@ -433,7 +437,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
           </select>
 
           <label className="flex items-center gap-1.5 text-[12px] text-ink-3">
-            From
+            {t('From')}
             <input
               type="date"
               value={from}
@@ -443,7 +447,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
           </label>
 
           <label className="flex items-center gap-1.5 text-[12px] text-ink-3">
-            to
+            {t('to')}
             <input
               type="date"
               value={to}
@@ -465,7 +469,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
               }
               className="text-[12px] text-data hover:underline"
             >
-              Clear filters
+              {t('Clear filters')}
             </button>
           )}
         </div>
@@ -487,18 +491,18 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
       {filter === 'no_file' && (
         <div className="px-4 pb-1">
           <Notice>
-            These were marked <b>done</b>, but no window whose title starts
-            with the task number was ever in front in the apps set for start
-            detection. <b>That is a question, not a verdict</b> — work saved
-            under another name, or never saved at all, leaves no trace either.
+            <Trans
+              i18nKey="These were marked <b>done</b>, but no window whose title starts with the task number was ever in front in the apps set for start detection. <b>That is a question, not a verdict</b> — work saved under another name, or never saved at all, leaves no trace either."
+              components={{ b: <b /> }}
+            />
             {data.data?.traceSince ? (
               <>
                 {' '}
-                Window titles are kept from{' '}
-                <span className="num">
-                  {formatDate(data.data.traceSince)}
-                </span>{' '}
-                onward, so nothing older is listed.
+                <Trans
+                  i18nKey="Window titles are kept from <n>{{date}}</n> onward, so nothing older is listed."
+                  values={{ date: formatDate(data.data.traceSince) }}
+                  components={{ n: <span className="num" /> }}
+                />
               </>
             ) : null}
           </Notice>
@@ -510,7 +514,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
 
       {data.data && data.data.rows.length === 0 && (
         <div className="px-4 py-6 text-[13px] text-ink-3">
-          Nothing matches that.
+          {t('Nothing matches that.')}
         </div>
       )}
 
@@ -525,21 +529,25 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
           {mayDelete && picked.size > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-paper px-4 py-2.5">
               <span className="text-[12.5px] text-ink-2">
-                <span className="num font-semibold">{picked.size}</span> selected
+                <Trans
+                  i18nKey="<n>{{n}}</n> selected"
+                  values={{ n: picked.size }}
+                  components={{ n: <span className="num font-semibold" /> }}
+                />
               </span>
               <span className="flex gap-2">
                 <MiniButton
                   disabled={edit.busy}
                   onClick={() => setPicked(new Set())}
                 >
-                  Clear
+                  {t('Clear')}
                 </MiniButton>
                 <MiniButton
                   tone="danger"
                   disabled={edit.busy}
                   onClick={() => setConfirmingBulk(true)}
                 >
-                  Delete
+                  {t('Delete')}
                 </MiniButton>
               </span>
             </div>
@@ -554,10 +562,11 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
           {kept > 0 && (
             <div className="px-4 pt-3">
               <Notice tone="attention">
-                <span className="num font-semibold">{kept}</span> finished{' '}
-                {kept === 1 ? 'task was' : 'tasks were'} left alone — deleting
-                those would take away work that was really done. Undo them first
-                if they must go.
+                <Trans
+                  i18nKey="<n>{{count}}</n> finished tasks were left alone — deleting those would take away work that was really done. Undo them first if they must go."
+                  count={kept}
+                  components={{ n: <span className="num font-semibold" /> }}
+                />
               </Notice>
             </div>
           )}
@@ -572,11 +581,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
           */}
           {confirmingBulk && (
             <Modal
-              title={
-                picked.size === 1
-                  ? 'Delete 1 task?'
-                  : 'Delete ' + picked.size + ' tasks?'
-              }
+              title={t('Delete {{count}} tasks?', { count: picked.size })}
               onClose={() => setConfirmingBulk(false)}
               footer={
                 <DropReasonPicker
@@ -597,7 +602,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
             >
               <div className="space-y-3">
                 <p className="text-[13px] text-ink-2">
-                  Use this for tasks that should not be done at all.
+                  {t('Use this for tasks that should not be done at all.')}
                 </p>
                 {/*
                   Careful: the consequence is stated **both ways**: it will never go to
@@ -605,9 +610,9 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
                      second is the whole reason a delete keeps the row, so it must not be hidden.
                 */}
                 <Notice tone="attention">
-                  They stay in the list as Deleted, never go to anyone again, and
-                  the same reference can never be added back to the pool.
-                  Finished tasks in the selection are left alone.
+                  {t(
+                    'They stay in the list as Deleted, never go to anyone again, and the same reference can never be added back to the pool. Finished tasks in the selection are left alone.',
+                  )}
                 </Notice>
                 <ServerError error={edit.error} />
               </div>
@@ -630,7 +635,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
               */
               {
                 key: 'task',
-                header: 'Task',
+                header: t('Task'),
                 render: (r) => (
                   <span className="block">
                     {/* a task may be only a reference; then there is nothing to open */}
@@ -654,7 +659,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
                     */}
                     {r.taskNumber !== null && (
                       <span className="num block text-[11.5px] text-ink-3">
-                        Task {r.taskNumber}
+                        {t('Task {{number}}', { number: r.taskNumber })}
                       </span>
                     )}
                   </span>
@@ -662,7 +667,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
               },
               {
                 key: 'stage',
-                header: 'Stage',
+                header: t('Stage'),
                 render: (r) => (
                   <span className="block">
                     {/*
@@ -679,7 +684,9 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
                       */}
                       {r.reviewedAt !== null && (
                         <Chip tone="counted">
-                          Reviewed{r.reviewedBy ? ` · ${r.reviewedBy.fullName}` : ''}
+                          {r.reviewedBy
+                            ? t('Reviewed · {{name}}', { name: r.reviewedBy.fullName })
+                            : t('Reviewed')}
                         </Chip>
                       )}
                     </span>
@@ -704,7 +711,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
                 ? [
                     {
                       key: 'onscreen',
-                      header: 'On screen',
+                      header: t('On screen'),
                       className: 'hidden sm:table-cell',
                       render: (r: TaskRow) => <OnScreenCell sec={r.onScreenSec} />,
                     },
@@ -712,7 +719,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
                 : []),
               {
                 key: 'people',
-                header: 'People',
+                header: t('People'),
                 /*
                   **"Added by → doing it"**: the whole story of a row.
 
@@ -800,20 +807,20 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
 
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-2.5 text-[12.5px] text-ink-3">
             <span className="num">
-              Page {data.data.page} of {data.data.pages}
+              {t('Page {{page}} of {{pages}}', { page: data.data.page, pages: data.data.pages })}
             </span>
             <span className="flex gap-2">
               <MiniButton
                 disabled={data.data.page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
-                Previous
+                {t('Previous')}
               </MiniButton>
               <MiniButton
                 disabled={data.data.page >= data.data.pages}
                 onClick={() => setPage((p) => p + 1)}
               >
-                Next
+                {t('Next')}
               </MiniButton>
             </span>
           </div>
@@ -829,6 +836,7 @@ export function TaskList({ lockedStage }: { lockedStage?: Stage } = {}) {
  * but the trust is not.
  */
 function StatusChip({ row }: { row: TaskRow }) {
+  const t = useT();
   if (row.status === 'done') {
     /*
       Careful: imported rows are labelled separately: their number is true,
@@ -836,7 +844,7 @@ function StatusChip({ row }: { row: TaskRow }) {
     */
     return (
       <Chip tone="counted">
-        {row.completedVia === 'import' ? 'Done (imported)' : 'Done'}
+        {row.completedVia === 'import' ? t('Done (imported)') : t('Done')}
       </Chip>
     );
   }
@@ -844,20 +852,20 @@ function StatusChip({ row }: { row: TaskRow }) {
   //    touched and which are lying idle (only start detection can tell)
   if (row.status === 'assigned') {
     return row.startedAt ? (
-      <Chip tone="pending">Started</Chip>
+      <Chip tone="pending">{t('Started')}</Chip>
     ) : (
-      <Chip tone="muted">In hand</Chip>
+      <Chip tone="muted">{t('In hand')}</Chip>
     );
   }
-  if (row.status === 'skipped') return <Chip tone="attention">Skipped</Chip>;
+  if (row.status === 'skipped') return <Chip tone="attention">{t('Skipped')}</Chip>;
   /**
    * Careful: grey, not red. A deleted row is not a **problem**, it is a settled
    * matter. With red, the list would fill with red chips and the real red
    * (`Skipped`) would go unnoticed (the same rule as in `Notice`).
    */
-  if (row.status === 'deleted') return <Chip tone="muted">Deleted</Chip>;
+  if (row.status === 'deleted') return <Chip tone="muted">{t('Deleted')}</Chip>;
 
-  return <Chip>Waiting</Chip>;
+  return <Chip>{t('Waiting')}</Chip>;
 }
 
 /**
@@ -880,11 +888,12 @@ function StatusChip({ row }: { row: TaskRow }) {
  * exactly this cell too.
  */
 function OnScreenCell({ sec }: { sec: number | null }) {
+  const t = useT();
   if (sec === null) {
     return (
       <span
         className="num text-[12px] text-ink-3"
-        title="Nothing to say yet — either this is not marked done, or no window titles were kept from back then"
+        title={t('Nothing to say yet — either this is not marked done, or no window titles were kept from back then')}
       >
         —
       </span>
@@ -895,9 +904,11 @@ function OnScreenCell({ sec }: { sec: number | null }) {
     return (
       <span
         className="text-[11.5px] text-ink-3 italic"
-        title="Marked done, but no window whose title starts with this task number was ever in front in the apps set for start detection. Work saved under another name leaves no trace either."
+        title={t(
+          'Marked done, but no window whose title starts with this task number was ever in front in the apps set for start detection. Work saved under another name leaves no trace either.',
+        )}
       >
-        never
+        {t('never')}
       </span>
     );
   }
@@ -905,7 +916,7 @@ function OnScreenCell({ sec }: { sec: number | null }) {
   return (
     <span
       className="num text-[12px] whitespace-nowrap text-ink-2"
-      title="How long a window whose title starts with this task number was in front, in the apps set for start detection"
+      title={t('How long a window whose title starts with this task number was in front, in the apps set for start detection')}
     >
       {sec < 60 ? `${sec}s` : formatDuration(sec)}
     </span>
@@ -921,19 +932,21 @@ function OnScreenCell({ sec }: { sec: number | null }) {
  * start or the hand-out, and the chip does not tell those apart.
  */
 function WhenCell({ row }: { row: TaskRow }) {
+  const t = useT();
   const when = row.completedAt ?? row.startedAt ?? row.assignedAt ?? row.addedAt;
 
-  const what = row.completedAt
-    ? 'done'
+  const at = formatDateTime(when);
+  const text = row.completedAt
+    ? t('{{when}} · done', { when: at })
     : row.startedAt
-      ? 'started'
+      ? t('{{when}} · started', { when: at })
       : row.assignedAt
-        ? 'given'
-        : 'added';
+        ? t('{{when}} · given', { when: at })
+        : t('{{when}} · added', { when: at });
 
   return (
     <span className="num mt-0.5 block text-[11.5px] whitespace-nowrap text-ink-3">
-      {formatDateTime(when)} · {what}
+      {text}
     </span>
   );
 }
@@ -946,6 +959,7 @@ function WhenCell({ row }: { row: TaskRow }) {
  * makes it a **sentence**: where the work came from and who it went to.
  */
 function PeopleCell({ row }: { row: TaskRow }) {
+  const t = useT();
   return (
     <span className="block">
       <span className="whitespace-nowrap">
@@ -962,7 +976,7 @@ function PeopleCell({ row }: { row: TaskRow }) {
           */
           <span className="num text-[12px] text-ink-3">{row.sourceNote}</span>
         ) : (
-          <span className="text-ink-3">nobody yet</span>
+          <span className="text-ink-3">{t('nobody yet')}</span>
         )}
       </span>
 
@@ -975,7 +989,7 @@ function PeopleCell({ row }: { row: TaskRow }) {
       */}
       {row.completedBy && (
         <span className="block text-[11.5px] text-ink-3">
-          ✓ marked by {row.completedBy.fullName}
+          {t('✓ marked by {{name}}', { name: row.completedBy.fullName })}
         </span>
       )}
     </span>
@@ -1032,6 +1046,7 @@ function RowActions({
    */
   mayCheck: boolean;
 }) {
+  const t = useT();
   const [confirming, setConfirming] = useState(false);
   /**
    * **Whether the other buttons are open.**
@@ -1091,11 +1106,11 @@ function RowActions({
         */}
         {mayDelete && row.dropReason !== null && row.reviewedAt === null && (
           <MiniButton tone="good" disabled={busy} onClick={onReviewed}>
-            Reviewed
+            {t('Reviewed')}
           </MiniButton>
         )}
         <MiniButton disabled={busy} onClick={() => onChange('pool')}>
-          {row.status === 'deleted' ? 'Undelete' : 'Un-skip'}
+          {row.status === 'deleted' ? t('Undelete') : t('Un-skip')}
         </MiniButton>
       </span>
     );
@@ -1116,17 +1131,17 @@ function RowActions({
   const next: ReactNode =
     mayCheck && broken ? (
       <MiniButton tone="good" disabled={busy} onClick={onFixed}>
-        Fixed
+        {t('Fixed')}
       </MiniButton>
     ) : mayCheck && row.completedAt !== null && row.checkedAt === null ? (
       <CheckButtons busy={busy} onChecked={onChecked} />
     ) : row.completedAt !== null && row.deliveredAt === null && !broken ? (
       <MiniButton disabled={busy} onClick={onDelivered}>
-        Delivered
+        {t('Delivered')}
       </MiniButton>
     ) : row.deliveredAt !== null && row.publishedAt === null ? (
       <MiniButton tone="good" disabled={busy} onClick={onPublished}>
-        Published
+        {t('Published')}
       </MiniButton>
     ) : row.status !== 'done' ? (
       /*
@@ -1137,7 +1152,7 @@ function RowActions({
            the mark** (Done · Skipped).
       */
       <MiniButton tone="good" disabled={busy} onClick={() => onChange('done')}>
-        Complete
+        {t('Complete')}
       </MiniButton>
     ) : null;
 
@@ -1165,12 +1180,12 @@ function RowActions({
       {/* Taking it out of someone's hands: ownership is released too */}
       {row.status !== 'pool' && (
         <MiniButton disabled={busy} onClick={() => onChange('pool')}>
-          To pool
+          {t('To pool')}
         </MiniButton>
       )}
       {row.status !== 'done' && (
         <MiniButton tone="good" disabled={busy} onClick={() => onChange('done')}>
-          Complete
+          {t('Complete')}
         </MiniButton>
       )}
       {mayCheck && row.completedAt !== null && row.checkedAt === null && (
@@ -1178,7 +1193,7 @@ function RowActions({
       )}
       {mayCheck && broken && (
         <MiniButton tone="good" disabled={busy} onClick={onFixed}>
-          Fixed
+          {t('Fixed')}
         </MiniButton>
       )}
       {/*
@@ -1189,12 +1204,12 @@ function RowActions({
       */}
       {row.completedAt !== null && row.deliveredAt === null && !broken && (
         <MiniButton disabled={busy} onClick={onDelivered}>
-          Delivered
+          {t('Delivered')}
         </MiniButton>
       )}
       {row.deliveredAt !== null && row.publishedAt === null && (
         <MiniButton tone="good" disabled={busy} onClick={onPublished}>
-          Published
+          {t('Published')}
         </MiniButton>
       )}
       {/*
@@ -1213,7 +1228,7 @@ function RowActions({
         row.deliveredAt === null &&
         row.publishedAt === null && (
           <MiniButton disabled={busy} onClick={onUndo}>
-            Undo complete
+            {t('Undo complete')}
           </MiniButton>
         )}
       {/*
@@ -1221,7 +1236,7 @@ function RowActions({
            above, a `skipped` row never reaches here.
       */}
       <MiniButton tone="danger" disabled={busy} onClick={() => onChange('skipped')}>
-        Skip
+        {t('Skip')}
       </MiniButton>
       {/*
         Careful: coordinators do not get Delete: one wrong delete among
@@ -1229,7 +1244,7 @@ function RowActions({
       */}
       {mayDelete && (
         <MiniButton tone="danger" disabled={busy} onClick={() => setConfirming(true)}>
-          Delete
+          {t('Delete')}
         </MiniButton>
       )}
       <MiniButton disabled={busy} onClick={() => setOpen(false)}>
@@ -1250,13 +1265,14 @@ function CheckButtons({
   busy: boolean;
   onChecked: (ok: boolean) => void;
 }) {
+  const t = useT();
   return (
     <>
       <MiniButton tone="good" disabled={busy} onClick={() => onChecked(true)}>
-        Checked
+        {t('Checked')}
       </MiniButton>
       <MiniButton tone="danger" disabled={busy} onClick={() => onChecked(false)}>
-        Needs fix
+        {t('Needs fix')}
       </MiniButton>
     </>
   );

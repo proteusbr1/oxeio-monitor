@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Trans } from 'react-i18next';
 
 import { listAuditLog, type AuditLogRow } from '../../api/audit';
 import { type Role } from '../../api/staff';
@@ -19,6 +20,7 @@ import {
   workDateOf,
 } from '../../lib/format';
 import { Chip, FilterChip, MiniButton, Notice } from '../../components/ui';
+import { useT } from '../../i18n';
 
 /**
  * Audit log viewer (owner-only).
@@ -86,7 +88,7 @@ const ROLE_LABEL: Record<Role, string> = {
   owner: 'Owner',
   manager: 'Manager',
   coordinator: 'Coordinator',
-  employee: 'Staff',
+  employee: 'Staff member',
 };
 
 const PAGE_SIZE = 50;
@@ -107,6 +109,7 @@ function dayEnd(date: string): string {
 }
 
 export function AuditTab() {
+  const t = useT();
   const today = todayInWorkZone();
   const [range, setRange] = useState({ from: monthStartOf(today), to: today });
   const [action, setAction] = useState('');
@@ -143,7 +146,7 @@ export function AuditTab() {
   const columns: Column<AuditLogRow>[] = [
     {
       key: 'time',
-      header: 'When',
+      header: t('When'),
       render: (row) => (
         // Careful: the time is work-zone time; `formatTime()` adds the offset explicitly.
         //    With `toLocaleTimeString()`, someone on a VPN would see the wrong time and
@@ -159,13 +162,13 @@ export function AuditTab() {
     },
     {
       key: 'user',
-      header: 'Who',
+      header: t('Who'),
       render: (row) => {
         const actor = row.user;
         // Careful: the row stays even if the user was deleted; the log is evidence, so
         //    it is never blanked
         if (!actor) {
-          return <span className="text-ink-3">Deleted account</span>;
+          return <span className="text-ink-3">{t('Deleted account')}</span>;
         }
 
         return (
@@ -175,12 +178,12 @@ export function AuditTab() {
               setUser({ id: actor.id, name: actor.fullName });
               setPage(1);
             }}
-            title="Show only this user's events"
+            title={t("Show only this user's events")}
             className="min-w-0 text-left transition hover:text-brand-ink"
           >
             <span className="block truncate font-medium">{actor.fullName}</span>
             <span className="block truncate text-[11px] text-ink-3">
-              {ROLE_LABEL[actor.role] ?? actor.role} · {actor.email}
+              {t(ROLE_LABEL[actor.role] ?? actor.role)} · {actor.email}
             </span>
           </button>
         );
@@ -188,19 +191,19 @@ export function AuditTab() {
     },
     {
       key: 'action',
-      header: 'What',
+      header: t('What'),
       // Important: red **only** for failed logins. If viewing screenshots or pay were
       //    red too, the whole table would be red under that filter and the real
       //    problem (someone repeatedly entering a wrong password) would go unseen.
       render: (row) => (
         <Chip tone={row.action === 'login_failed' ? 'attention' : 'counted'}>
-          {ACTION_LABEL[row.action] ?? row.action}
+          {t(ACTION_LABEL[row.action] ?? row.action)}
         </Chip>
       ),
     },
     {
       key: 'target',
-      header: 'On whom / what',
+      header: t('On whom / what'),
       render: (row) =>
         row.targetType === null ? (
           <span className="text-ink-3">—</span>
@@ -222,7 +225,7 @@ export function AuditTab() {
     },
     {
       key: 'meta',
-      header: 'Details',
+      header: t('Details'),
       render: (row) => <Meta meta={row.meta} />,
     },
   ];
@@ -230,9 +233,10 @@ export function AuditTab() {
   return (
     <div className="space-y-3">
       <Notice>
-        This log is read-only — there is no way to edit or delete it. Viewing a
-        screenshot and viewing a salary are both written here, which means{' '}
-        <strong>whoever is watching is watched too</strong>.
+        <Trans
+          i18nKey="This log is read-only — there is no way to edit or delete it. Viewing a screenshot and viewing a salary are both written here, which means <strong>whoever is watching is watched too</strong>."
+          components={{ strong: <strong /> }}
+        />
       </Notice>
 
       <div className="flex flex-wrap items-end justify-between gap-2">
@@ -246,7 +250,7 @@ export function AuditTab() {
             }}
           />
           <label className="block">
-            <span className="mb-1 block text-[11.5px] text-ink-3">Event</span>
+            <span className="mb-1 block text-[11.5px] text-ink-3">{t('Event')}</span>
             <select
               value={action}
               onChange={(e) => changeAction(e.target.value)}
@@ -254,7 +258,7 @@ export function AuditTab() {
             >
               {ACTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
+                  {t(option.label)}
                 </option>
               ))}
             </select>
@@ -264,9 +268,9 @@ export function AuditTab() {
         {/* The most important question on this page is one click away */}
         <MiniButton
           onClick={() => changeAction('view_screenshot')}
-          title="Only the screenshot-viewing events"
+          title={t('Only the screenshot-viewing events')}
         >
-          Who viewed whose screenshots
+          {t('Who viewed whose screenshots')}
         </MiniButton>
       </div>
 
@@ -278,7 +282,7 @@ export function AuditTab() {
               setPage(1);
             }}
           >
-            User: {user.name}
+            {t('User: {{name}}', { name: user.name })}
           </FilterChip>
         </div>
       )}
@@ -288,29 +292,29 @@ export function AuditTab() {
 
       {!log.loading && !log.error && rows.length === 0 && (
         <Empty
-          title="No events match this filter"
-          hint="Try widening the date range, or pick 'All events'. On a new system the log holds nothing but sign-ins for the first few days."
+          title={t('No events match this filter')}
+          hint={t("Try widening the date range, or pick 'All events'. On a new system the log holds nothing but sign-ins for the first few days.")}
         />
       )}
 
       {rows.length > 0 && (
         <Card
           padded={false}
-          title={`${formatCount(total)} Events`}
-          hint={`Page ${page} of ${lastPage} · newest first`}
+          title={t('{{total}} Events', { count: total, total: formatCount(total) })}
+          hint={t('Page {{page}} of {{last}} · newest first', { page, last: lastPage })}
           actions={
             <div className="flex gap-1.5">
               <MiniButton
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1 || log.loading}
               >
-                ← Previous
+                {t('← Previous')}
               </MiniButton>
               <MiniButton
                 onClick={() => setPage((p) => p + 1)}
                 disabled={!log.data?.hasMore || log.loading}
               >
-                Next →
+                {t('Next →')}
               </MiniButton>
             </div>
           }
@@ -337,6 +341,7 @@ export function AuditTab() {
  *    many, which date, and with it expanded on every row the table could not be read.
  */
 function Meta({ meta }: { meta: unknown }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
 
   if (meta === null || meta === undefined) {
@@ -348,7 +353,7 @@ function Meta({ meta }: { meta: unknown }) {
   if (!open) {
     return (
       <MiniButton onClick={() => setOpen(true)} title={text}>
-        Show
+        {t('Show')}
       </MiniButton>
     );
   }
@@ -363,7 +368,7 @@ function Meta({ meta }: { meta: unknown }) {
         onClick={() => setOpen(false)}
         className="mt-1 text-[11px] text-ink-3 transition hover:text-ink"
       >
-        Hide
+        {t('Hide')}
       </button>
     </div>
   );

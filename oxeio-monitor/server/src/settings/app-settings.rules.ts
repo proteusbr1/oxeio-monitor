@@ -2,6 +2,7 @@ import { assertKnownZone } from '../agent/util/zone';
 import { checkDisplayLocale } from '../common/display-locale';
 import { parseBackupMode, type BackupMode } from '../ops/backup-mode';
 import { checkCurrency, type CurrencyInfo } from '../payroll/currency';
+import { isLanguage, LANGUAGES, type Language } from './languages';
 
 /**
  * Settings the owner can change from the dashboard — pure rules, no I/O.
@@ -22,6 +23,8 @@ export interface RegionSaved {
   timeZone?: string;
   currency?: string;
   displayLocale?: string | null;
+  /** the dashboard's language for anyone who has not chosen their own */
+  language?: string;
 }
 
 export interface RegionView {
@@ -32,13 +35,15 @@ export interface RegionView {
   currency: CurrencyInfo & { source: Source };
   /** `null` = the dashboard's own formats */
   displayLocale: { value: string | null; source: Source };
+  /** the dashboard's default language (each person may pick their own) */
+  language: { value: Language; source: Source };
 }
 
 const has = (v: string | undefined): v is string => typeof v === 'string' && v.trim() !== '';
 
 export function resolveRegion(
   saved: RegionSaved | null,
-  env: { WORK_TIMEZONE?: string; CURRENCY?: string; DISPLAY_LOCALE?: string },
+  env: { WORK_TIMEZONE?: string; CURRENCY?: string; DISPLAY_LOCALE?: string; DEFAULT_LANGUAGE?: string },
   runningTimeZone: string,
 ): RegionView {
   const tz = has(saved?.timeZone)
@@ -62,11 +67,18 @@ export function resolveRegion(
         ? { value: checkDisplayLocale(env.DISPLAY_LOCALE), source: 'environment' as const }
         : { value: null, source: 'default' as const };
 
+  const language = isLanguage(saved?.language)
+    ? { value: saved.language, source: 'dashboard' as const }
+    : isLanguage(env.DEFAULT_LANGUAGE?.trim())
+      ? { value: env.DEFAULT_LANGUAGE.trim() as Language, source: 'environment' as const }
+      : { value: 'en' as const, source: 'default' as const };
+
   return {
     timeZone: tz,
     runningTimeZone,
     currency: { ...checkCurrency(currencyRaw.value), source: currencyRaw.source },
     displayLocale: locale,
+    language,
   };
 }
 
@@ -88,6 +100,12 @@ export function validateRegion(input: RegionSaved): RegionSaved {
       input.displayLocale === null || input.displayLocale.trim() === ''
         ? null
         : checkDisplayLocale(input.displayLocale);
+  }
+  if (input.language !== undefined) {
+    if (!isLanguage(input.language)) {
+      throw new Error(`The language must be one of: ${LANGUAGES.join(', ')}`);
+    }
+    out.language = input.language;
   }
   return out;
 }

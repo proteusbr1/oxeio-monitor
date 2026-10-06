@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Trans } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
 import { listEmployees, type EmployeeView } from '../api/staff';
@@ -13,6 +14,7 @@ import {
   weekdayOf,
 } from '../lib/format';
 import { seesEveryone } from '../api/auth';
+import { translate, useT } from '../i18n';
 
 /**
  * E14: the header's global search. Pressing `/` focuses it.
@@ -105,8 +107,11 @@ export function parseSearchQuery(raw: string, today: string): ParsedQuery {
 function parseDateToken(token: string, today: string): string | null {
   // Careful: `toLowerCase()` so that "Today" at the start of a sentence is recognised too
   const word = token.toLowerCase();
-  if (word === 'today') return today;
-  if (word === 'yesterday') return shiftWorkDate(today, -1);
+  // the English words always work; the on-screen language's words too
+  if (word === 'today' || word === translate('today').toLowerCase()) return today;
+  if (word === 'yesterday' || word === translate('yesterday').toLowerCase()) {
+    return shiftWorkDate(today, -1);
+  }
 
   const m = /^(\d{1,4})[-/.](\d{1,2})[-/.](\d{1,4})$/.exec(token);
   if (m === null) return null;
@@ -211,6 +216,7 @@ const NO_ROWS: EmployeeView[] = [];
 const NOT_FETCHED = { rows: NO_ROWS, total: 0 };
 
 function SearchBox() {
+  const t = useT();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -343,8 +349,8 @@ function SearchBox() {
         aria-controls="gs-list"
         aria-autocomplete="list"
         aria-activedescendant={activeId}
-        aria-label="Search staff or a date"
-        placeholder="Name, code or date  ( / )"
+        aria-label={t('Search staff or a date')}
+        placeholder={t('Name, code or date  ( / )')}
         onFocus={() => {
           setArmed(true);
           setOpen(true);
@@ -395,12 +401,13 @@ function Panel({
   onHover: (index: number) => void;
   onPick: (emp: EmployeeView) => void;
 }) {
-  if (loading) return <Note>Loading the staff list…</Note>;
+  const t = useT();
+  if (loading) return <Note>{t('Loading the staff list…')}</Note>;
 
   if (error !== null) {
     return (
       <Note tone="brand">
-        Couldn't load the staff list — try again in a moment.
+        {t("Couldn't load the staff list — try again in a moment.")}
       </Note>
     );
   }
@@ -408,8 +415,11 @@ function Panel({
   if (parsed.future) {
     return (
       <Note>
-        <b>{formatDate(parsed.date ?? '')}</b> hasn't happened yet. Try today or
-        any earlier day.
+        <Trans
+          i18nKey="<b>{{date}}</b> hasn't happened yet. Try today or any earlier day."
+          values={{ date: formatDate(parsed.date ?? '') }}
+          components={{ b: <b /> }}
+        />
       </Note>
     );
   }
@@ -417,9 +427,10 @@ function Panel({
   if (parsed.text === '' && parsed.date === null) {
     return (
       <Note>
-        Type a staff <b>name</b> or <b>code</b>. Add a date (
-        <span className="num">2026-08-01</span>, <span className="num">01/08/2026</span>,{' '}
-        <b>yesterday</b>) to open that day's timeline.
+        <Trans
+          i18nKey="Type a staff <b>name</b> or <b>code</b>. Add a date (<num>2026-08-01</num>, <num>01/08/2026</num>, <b>yesterday</b>) to open that day's timeline."
+          components={{ b: <b />, num: <span className="num" /> }}
+        />
       </Note>
     );
   }
@@ -427,8 +438,7 @@ function Panel({
   if (people.length === 0) {
     return (
       <Note>
-        Nothing matched. Try part of a name, an empCode or a date — people who
-        have left show up here too.
+        {t('Nothing matched. Try part of a name, an empCode or a date — people who have left show up here too.')}
       </Note>
     );
   }
@@ -442,7 +452,7 @@ function Panel({
                for "day" is appended after it.
           */}
           {formatDate(parsed.date)} · {weekdayOf(parsed.date)} —{' '}
-          {parsed.text === '' ? 'whose day?' : "that day's timeline"}
+          {parsed.text === '' ? t('whose day?') : t("that day's timeline")}
         </p>
       )}
 
@@ -461,7 +471,7 @@ function Panel({
           >
             <span className="min-w-0 flex-1 truncate">{emp.fullName}</span>
             {emp.status === 'inactive' && (
-              <span className="flex-none text-[11px] text-ink-3">Inactive</span>
+              <span className="flex-none text-[11px] text-ink-3">{t('Inactive')}</span>
             )}
             <span className="num flex-none text-[11.5px] text-ink-3">
               {emp.empCode}

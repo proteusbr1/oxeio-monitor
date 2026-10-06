@@ -7,7 +7,7 @@ namespace oXeio.Agent.Platform.Capture;
 
 /// <summary>
 /// GDI <c>BitBlt</c>: works on every machine, hence the fallback
-/// ([ADR-012b](../../../../docs/05-Options-Decisions.md)).
+/// ([ADR-012b](../../../../docs/history/05-Options-Decisions.md)).
 ///
 /// Limits: hardware-accelerated video, exclusive-fullscreen games and DRM-protected windows may
 /// come out black. No attempt is made to prevent it; it is flagged with

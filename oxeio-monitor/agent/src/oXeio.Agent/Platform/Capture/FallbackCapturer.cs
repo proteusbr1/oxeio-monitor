@@ -5,7 +5,7 @@ using oXeio.Core.Capture;
 namespace oXeio.Agent.Platform.Capture;
 
 /// <summary>
-/// DXGI first, GDI if that fails ([ADR-012c](../../../../docs/05-Options-Decisions.md)).
+/// DXGI first, GDI if that fails ([ADR-012c](../../../../docs/history/05-Options-Decisions.md)).
 ///
 /// The two engines do not know about each other; the decision of which to use when is here, and
 /// <b>how long before trying again</b> is in <see cref="EngineFallbackPolicy"/> (pure logic, unit

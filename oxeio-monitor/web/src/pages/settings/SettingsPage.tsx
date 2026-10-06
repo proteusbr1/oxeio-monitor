@@ -4,6 +4,7 @@ import { ApiError } from '../../api/client';
 import { useAuth } from '../../auth/AuthContext';
 import { useFeatures } from '../../features/FeaturesContext';
 import { Page } from '../../components/Page';
+import { useT } from '../../i18n';
 import { ErrorBox } from '../../components/States';
 import { AgentVersionsTab } from './AgentVersionsTab';
 import { BackupTab } from './BackupTab';
@@ -44,6 +45,7 @@ export function SettingsPage() {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const { features } = useFeatures();
+  const t = useT();
 
   const isOwner = user?.role === 'owner';
   const sections = settingsSections(user?.role, features);
@@ -52,15 +54,15 @@ export function SettingsPage() {
   const raw = params.get('tab');
   // valid for THIS user, not just a known name — a manager typing ?tab=audit
   // gets their first tab, not an empty page
-  const active = tabs.find((t) => t.id === raw) ?? tabs[0];
+  const active = tabs.find((tab) => tab.id === raw) ?? tabs[0];
 
   if (raw && MOVED[raw]) return <Navigate to={MOVED[raw]} replace />;
 
   if (!isOwner && user?.role !== 'manager') {
     return (
-      <Page title="Settings">
+      <Page title={t('Settings')}>
         {/* the same 403 box as everywhere else (it hides its useless retry) */}
-        <ErrorBox error={new ApiError(403, "You don't have access")} />
+        <ErrorBox error={new ApiError(403, t("You don't have access"))} />
       </Page>
     );
   }
@@ -68,12 +70,12 @@ export function SettingsPage() {
   const open = (id: string) => setParams({ tab: id }, { replace: true });
 
   return (
-    <Page title="Settings" subtitle={active.subtitle}>
+    <Page title={t('Settings')} subtitle={active.subtitle}>
       <div className="lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-6">
-        <nav aria-label="Settings sections">
+        <nav aria-label={t('Settings sections')}>
           {/* phone: one grouped select instead of a long row of tabs */}
           <label className="mb-4 block lg:hidden">
-            <span className="sr-only">Section</span>
+            <span className="sr-only">{t('Section')}</span>
             <select
               value={active.id}
               onChange={(e) => open(e.target.value)}
@@ -81,9 +83,9 @@ export function SettingsPage() {
             >
               {sections.map((section) => (
                 <optgroup key={section.title} label={section.title}>
-                  {section.tabs.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label}
+                  {section.tabs.map((tab) => (
+                    <option key={tab.id} value={tab.id}>
+                      {tab.label}
                     </option>
                   ))}
                 </optgroup>
@@ -98,21 +100,21 @@ export function SettingsPage() {
                   {section.title}
                 </p>
                 <ul className="space-y-0.5">
-                  {section.tabs.map((t) => {
-                    const selected = t.id === active.id;
+                  {section.tabs.map((tab) => {
+                    const selected = tab.id === active.id;
                     return (
-                      <li key={t.id}>
+                      <li key={tab.id}>
                         <button
                           type="button"
                           aria-current={selected ? 'page' : undefined}
-                          onClick={() => open(t.id)}
+                          onClick={() => open(tab.id)}
                           className={`w-full rounded-md px-2.5 py-1.5 text-left text-[13px] transition focus:outline-none focus:ring-2 focus:ring-brand/30 ${
                             selected
                               ? 'bg-brand-bg font-semibold text-brand-ink'
                               : 'text-ink-2 hover:bg-surface hover:text-ink'
                           }`}
                         >
-                          {t.label}
+                          {tab.label}
                         </button>
                       </li>
                     );

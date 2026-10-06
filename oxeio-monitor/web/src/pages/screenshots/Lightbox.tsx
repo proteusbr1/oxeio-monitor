@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Trans } from 'react-i18next';
 
 import type { GalleryItem } from '../../api/screenshots';
 import {
@@ -8,6 +9,7 @@ import {
   formatTime,
   workDateOf,
 } from '../../lib/format';
+import { useT } from '../../i18n';
 import type { FreshUrls } from './useFreshUrls';
 
 /**
@@ -44,6 +46,7 @@ export function Lightbox({
   onClose: () => void;
   urls: FreshUrls;
 }) {
+  const t = useT();
   const item = items[index];
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -113,7 +116,10 @@ export function Lightbox({
       ref={dialogRef}
       role="dialog"
       aria-modal="true"
-      aria-label={`${item.fullName}, screenshot at ${formatTime(item.capturedAt)}`}
+      aria-label={t('{{name}}, screenshot at {{time}}', {
+        name: item.fullName,
+        time: formatTime(item.capturedAt),
+      })}
       tabIndex={-1}
       className="fixed inset-0 z-50 flex flex-col bg-black/85 outline-none"
     >
@@ -139,10 +145,10 @@ export function Lightbox({
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close"
+          aria-label={t('Close')}
           className="ml-auto rounded-md border border-white/20 px-2.5 py-1.5 text-xs text-white/85 transition hover:border-brand hover:text-white focus:outline-none focus:ring-2 focus:ring-brand/40"
         >
-          Close ✕
+          {t('Close')} ✕
         </button>
       </header>
 
@@ -157,10 +163,9 @@ export function Lightbox({
       >
         {dead ? (
           <p className="max-w-sm text-center text-[13px] text-white/70">
-            Image no longer available
+            {t('Image no longer available')}
             <span className="mt-1 block text-[11.5px] text-white/45">
-              The expired link was fetched again, but the file still wasn't
-              there.
+              {t("The expired link was fetched again, but the file still wasn't there.")}
             </span>
           </p>
         ) : (
@@ -177,7 +182,10 @@ export function Lightbox({
               //    loaded, and ← → would seem to do nothing.
               key={src}
               src={src}
-              alt={`${item.fullName}, screenshot at ${formatTime(item.capturedAt)}`}
+              alt={t('{{name}}, screenshot at {{time}}', {
+                name: item.fullName,
+                time: formatTime(item.capturedAt),
+              })}
               decoding="async"
               onLoad={() => {
                 setLoadedSrc(src);
@@ -220,7 +228,7 @@ export function Lightbox({
           disabled={!hasPrev}
           className={NAV_BUTTON}
         >
-          ◀ Previous
+          ◀ {t('Previous')}
         </button>
         <button
           type="button"
@@ -228,7 +236,7 @@ export function Lightbox({
           disabled={!hasNext}
           className={NAV_BUTTON}
         >
-          Next ▶
+          {t('Next')} ▶
         </button>
 
         <span className="num text-[11.5px] text-white/55">
@@ -239,13 +247,22 @@ export function Lightbox({
           {/* Show slot and capture time separately; this conveys that the shot was
               taken at a **random moment** within the 5-minute slot, not on the clock */}
           <span>
-            Slot <span className="num">{formatTime(item.slotStart)}</span> ·
-            captured{' '}
-            <span className="num">{formatTime(item.capturedAt)}</span>
+            <Trans
+              i18nKey="Slot <n>{{slot}}</n> · captured <n>{{captured}}</n>"
+              values={{
+                slot: formatTime(item.slotStart),
+                captured: formatTime(item.capturedAt),
+              }}
+              components={{ n: <span className="num" /> }}
+            />
           </span>
           {item.monitorIndex > 0 && (
             <span>
-              Monitor <span className="num">{item.monitorIndex + 1}</span>
+              <Trans
+                i18nKey="Monitor <n>{{number}}</n>"
+                values={{ number: item.monitorIndex + 1 }}
+                components={{ n: <span className="num" /> }}
+              />
             </span>
           )}
           {/* Careful: resolutions get no thousands comma; `formatCount` would give
@@ -266,7 +283,7 @@ export function Lightbox({
           {item.activeApp ?? '—'}
           {item.activeTitle ? ` · ${item.activeTitle}` : ''}
           <span className="ml-2 hidden sm:inline">
-            ← → previous/next · Esc to close
+            {t('← → previous/next · Esc to close')}
           </span>
         </p>
       </footer>

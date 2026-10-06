@@ -1,7 +1,7 @@
 namespace oXeio.Core.Apps;
 
 /// <summary>
-/// Only the domain from a URL, and recognizing private browsing ([ADR-013](../../../../docs/05-Options-Decisions.md)).
+/// Only the domain from a URL, and recognizing private browsing ([ADR-013](../../../../docs/history/05-Options-Decisions.md)).
 ///
 /// <b>A full URL is never stored anywhere</b>, neither on disk nor over the network.
 /// <c>youtube.com</c> shows where the time went; <c>/watch?v=…</c> shows exactly what was

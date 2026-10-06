@@ -10,7 +10,7 @@ import type { MatchType, Productivity } from '@prisma/client';
  * it were mixed with the database.
  *
  * Careful: **categories never enter pay calculations.** Money depends only on
- * seconds ([09 § 4](../../../../docs/09-Build-Log.md)). Someone who is
+ * seconds ([09 § 4](../../../../docs/history/09-Build-Log.md)). Someone who is
  * "unproductive" all day still has no hours deducted; this is information, not
  * punishment.
  */

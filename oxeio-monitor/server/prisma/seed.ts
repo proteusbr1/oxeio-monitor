@@ -1,7 +1,7 @@
 /**
  * oXeio — seed data
  *
- *   1. Work policy    — SEED_POLICY_* (default 176 hours a month, Sat+Sun off), screenshots 07:00–23:00
+ *   1. Work policy    — SEED_POLICY_* (default 176 hours a month, Sat+Sun off), screenshots whenever in use
  *   2. App categories — productive / neutral / unproductive rules
  *   3. Holidays       — only with SEED_COUNTRY: that country's public holidays, this year and next
  *   4. Staff          — from `prisma/staff.local.json`
@@ -53,8 +53,9 @@ async function seedWorkPolicy(): Promise<number> {
       expectedWorkdays: SEED_POLICY.expectedWorkdays,
       // ISO days; not a block — work on a day off still counts
       weeklyOffDays: SEED_POLICY.weeklyOffDays,
-      screenshotFrom: '07:00',
-      screenshotTo: '23:00',
+      // whenever the computer is in use
+      screenshotFrom: null,
+      screenshotTo: null,
       idleThresholdSec: 60,
       slotMinutes: 5,
       // Same zone the server runs on (WORK_TIMEZONE, default UTC)
@@ -258,7 +259,7 @@ async function seedHolidays(): Promise<{ summary: string; notes: string[] }> {
 // policy yet. Filling it in must be a precondition of the rollout, so it is not
 // pre-filled, which would make the condition meaningless.
 //
-// Salary is visible to the **owner only** ([ADR-023](../../docs/05-Options-Decisions.md)).
+// Salary is visible to the **owner only** ([ADR-023](../../docs/history/05-Options-Decisions.md)).
 // It is needed to compute the shortfall amount. Manager reports do not include
 // this column either.
 
@@ -410,7 +411,7 @@ async function main(): Promise<void> {
 
   console.log('✅ seed complete');
   console.log(
-    `   work policy   : #${policyId} · ${SEED_POLICY.monthlyTargetHours.toLocaleString('en-US')} hours/month · screenshots 07:00–23:00`,
+    `   work policy   : #${policyId} · ${SEED_POLICY.monthlyTargetHours.toLocaleString('en-US')} hours/month · screenshots whenever in use`,
   );
   console.log(`   app categories: ${rules} rules`);
   console.log(`   holidays      : ${holidays.summary}`);

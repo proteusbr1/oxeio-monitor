@@ -11,6 +11,7 @@ import { Page } from '../../components/Page';
 import { ErrorBox } from '../../components/States';
 import { Tabs } from '../../components/Tabs';
 import { useFeatures } from '../../features/FeaturesContext';
+import { useT } from '../../i18n';
 import { formatDate, formatMonth, todayInWorkZone } from '../../lib/format';
 import { DepositsTab } from './DepositsTab';
 import { LeaveTab } from './LeaveTab';
@@ -31,6 +32,7 @@ import { SalariesTab } from './SalariesTab';
 type TabId = 'sheet' | 'salaries' | 'leave' | 'deposits' | 'close';
 
 export function PayrollPage() {
+  const t = useT();
   const { user } = useAuth();
   const { features } = useFeatures();
   const [params, setParams] = useSearchParams();
@@ -43,16 +45,16 @@ export function PayrollPage() {
   const tabs: { id: TabId; label: string }[] = [
     ...(features.payroll
       ? [
-          { id: 'sheet' as const, label: 'Pay sheet' },
-          { id: 'salaries' as const, label: 'Pay' },
+          { id: 'sheet' as const, label: t('Pay sheet') },
+          { id: 'salaries' as const, label: t('Pay') },
         ]
       : []),
-    { id: 'leave', label: 'Leave' },
-    ...(features.deposits ? [{ id: 'deposits' as const, label: 'Deposits' }] : []),
-    { id: 'close', label: 'Close month' },
+    { id: 'leave', label: t('Leave') },
+    ...(features.deposits ? [{ id: 'deposits' as const, label: t('Deposits') }] : []),
+    { id: 'close', label: t('Close month') },
   ];
   const raw = params.get('tab');
-  const active: TabId = tabs.some((t) => t.id === raw) ? (raw as TabId) : tabs[0].id;
+  const active: TabId = tabs.some((tab) => tab.id === raw) ? (raw as TabId) : tabs[0].id;
 
   const go = (next: { tab?: TabId; month?: string }) =>
     setParams(
@@ -68,12 +70,12 @@ export function PayrollPage() {
   const leave = useApi((signal) => listLeaves(month, signal), [month]);
   const closures = useApi(listMonthClosures, []);
 
-  const title = features.payroll ? 'Payroll' : 'Leave & months';
+  const title = features.payroll ? t('Payroll') : t('Leave & months');
 
   if (user?.role !== 'owner') {
     return (
       <Page title={title}>
-        <ErrorBox error={new ApiError(403, "You don't have access")} />
+        <ErrorBox error={new ApiError(403, t("You don't have access"))} />
       </Page>
     );
   }
@@ -85,8 +87,8 @@ export function PayrollPage() {
       title={title}
       subtitle={
         features.payroll
-          ? 'Everything that goes into the month’s pay, in the order it is done'
-          : 'Agreed days off, and freezing a finished month'
+          ? t('Everything that goes into the month’s pay, in the order it is done')
+          : t('Agreed days off, and freezing a finished month')
       }
       actions={
         // always shown: the checklist is about this month on every tab
@@ -106,7 +108,7 @@ export function PayrollPage() {
         />
       )}
 
-      <Tabs items={tabs} active={active} onChange={(tab) => go({ tab })} label="Payroll" />
+      <Tabs items={tabs} active={active} onChange={(tab) => go({ tab })} label={t('Payroll')} />
 
       <div className="mt-4">
         {active === 'sheet' && <PayrollSheetView month={month} result={sheet} />}
@@ -139,36 +141,37 @@ function Checklist({
   deposits: boolean;
   onOpen: (tab: TabId) => void;
 }) {
+  const t = useT();
   const names = (list: string[]) =>
     list.length <= 3 ? list.join(', ') : `${list.slice(0, 3).join(', ')} +${list.length - 3}`;
 
   const steps: { tab: TabId; label: string; tone: Tone; text: ReactNode }[] = [
     {
       tab: 'salaries',
-      label: 'Pay',
+      label: t('Pay'),
       tone: !sheet ? 'info' : sheet.missingSalary.length > 0 ? 'problem' : 'done',
       text: !sheet
         ? '…'
         : sheet.missingSalary.length > 0
-          ? `Missing for ${names(sheet.missingSalary)}`
-          : 'Everyone has pay terms',
+          ? t('Missing for {{names}}', { names: names(sheet.missingSalary) })
+          : t('Everyone has pay terms'),
     },
     {
       tab: 'leave',
-      label: 'Leave',
+      label: t('Leave'),
       tone: 'info',
       text:
         leaveDays === null
           ? '…'
           : leaveDays === 0
-            ? 'None recorded — anyone away counts as short'
-            : `${leaveDays} day${leaveDays === 1 ? '' : 's'} recorded`,
+            ? t('None recorded — anyone away counts as short')
+            : t('{{count}} days recorded', { count: leaveDays }),
     },
     ...(deposits
       ? [
           {
             tab: 'deposits' as const,
-            label: 'Deposits',
+            label: t('Deposits'),
             tone: (!sheet
               ? 'info'
               : sheet.depositExceedsPayable.length > 0
@@ -177,39 +180,39 @@ function Checklist({
             text: !sheet
               ? '…'
               : sheet.depositExceedsPayable.length > 0
-                ? `Larger than pay for ${names(sheet.depositExceedsPayable)}`
-                : 'Nothing unusual',
+                ? t('Larger than pay for {{names}}', { names: names(sheet.depositExceedsPayable) })
+                : t('Nothing unusual'),
           },
         ]
       : []),
     {
       tab: 'sheet',
-      label: 'Hours',
+      label: t('Hours'),
       tone: !sheet ? 'info' : sheet.missingSummary.length > 0 ? 'todo' : 'done',
       text: !sheet
         ? '…'
         : sheet.missingSummary.length > 0
-          ? `Not totalled yet for ${sheet.missingSummary.length} — the nightly run adds them`
-          : 'Totalled for everyone',
+          ? t('Not totalled yet for {{n}} — the nightly run adds them', { n: sheet.missingSummary.length })
+          : t('Totalled for everyone'),
     },
     {
       tab: 'close',
-      label: 'Month',
+      label: t('Month'),
       tone: closed ? 'done' : 'todo',
       text: closed
-        ? `Closed ${formatDate(closed.at.slice(0, 10))} by ${closed.by}`
-        : 'Open — close it once the sheet is reviewed',
+        ? t('Closed {{date}} by {{name}}', { date: formatDate(closed.at.slice(0, 10)), name: closed.by })
+        : t('Open — close it once the sheet is reviewed'),
     },
   ];
 
   return (
     <section
-      aria-label={`${formatMonth(month)} checklist`}
+      aria-label={t('{{month}} checklist', { month: formatMonth(month) })}
       className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5"
     >
       {steps.map((step) => (
         <button
-          key={step.label}
+          key={step.tab}
           type="button"
           onClick={() => onOpen(step.tab)}
           className="rounded-lg border border-line bg-surface px-3 py-2.5 text-left transition hover:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
@@ -226,13 +229,14 @@ function Checklist({
 }
 
 function Mark({ tone }: { tone: Tone }) {
+  const t = useT();
   const [symbol, style, label] =
     tone === 'done'
-      ? ['✓', 'text-ok', 'done']
+      ? ['✓', 'text-ok', t('done')]
       : tone === 'problem'
-        ? ['!', 'text-brand', 'needs attention']
+        ? ['!', 'text-brand', t('needs attention')]
         : tone === 'todo'
-          ? ['○', 'text-idle', 'to do']
+          ? ['○', 'text-idle', t('to do')]
           : ['•', 'text-ink-3', ''];
   return (
     <span aria-label={label || undefined} className={`w-3 text-center ${style}`}>

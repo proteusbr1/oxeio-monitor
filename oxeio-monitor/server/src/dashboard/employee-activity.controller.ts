@@ -2,11 +2,8 @@ import { Controller, Get, Param, ParseIntPipe, Query } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 
 import { Roles } from '../auth/decorators';
-import {
-  DashboardService,
-  type HourlyChart,
-  type Timeline,
-} from './dashboard.service';
+import { DashboardDayService } from './dashboard.day.service';
+import type { HourlyChart, Timeline } from './dashboard.types';
 import { WorkDateQueryDto } from './dto';
 
 /**
@@ -23,7 +20,7 @@ import { WorkDateQueryDto } from './dto';
 @Roles(UserRole.owner, UserRole.manager)
 @Controller('employees')
 export class EmployeeActivityController {
-  constructor(private readonly dashboard: DashboardService) {}
+  constructor(private readonly dashboard: DashboardDayService) {}
 
   /** `GET /api/v1/employees/3/timeline?date=2026-08-10` */
   @Get(':id/timeline')

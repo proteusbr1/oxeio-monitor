@@ -109,7 +109,7 @@ export interface PayrollSheet {
 const HOUR = 3600;
 
 /**
- * F03: the monthly payroll sheet ([ADR-023](../../../docs/05-Options-Decisions.md)).
+ * F03: the monthly payroll sheet ([ADR-023](../../../docs/history/05-Options-Decisions.md)).
  *
  * This service is the only place `monthly_salary` is read. No other endpoint
  * selects that column, so there is no way a manager's or staff member's

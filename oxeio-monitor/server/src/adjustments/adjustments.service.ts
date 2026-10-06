@@ -339,7 +339,7 @@ type AdjustmentRow = {
 /**
  * Careful: `id` becomes a string. `BigInt` makes `JSON.stringify` throw, which
  * used to turn the whole response into a 500
- * ([09 § 3a.12](../../../docs/09-Build-Log.md)).
+ * ([09 § 3a.12](../../../docs/history/09-Build-Log.md)).
  */
 function toView(row: AdjustmentRow): AdjustmentView {
   return {

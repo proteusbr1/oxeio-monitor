@@ -34,7 +34,7 @@ public class IdleStateMachineTests
     /// This test used to say "no segment closes while the person keeps working", and
     /// that was the bug: the continuous working time stayed open in memory instead of
     /// going to the queue, and would be lost on a power cut
-    /// ([G53](../../../../docs/08-Gap-Analysis.md)).
+    /// ([G53](../../../../docs/history/08-Gap-Analysis.md)).
     /// Now the state does not change, but records come out regularly.
     /// </summary>
     [Fact]

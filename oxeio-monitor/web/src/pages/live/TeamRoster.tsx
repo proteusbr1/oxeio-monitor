@@ -22,6 +22,7 @@ import {
   rosterRows,
 } from './roster';
 import { ShotLightbox } from './ShotLightbox';
+import { translate, useT } from '../../i18n';
 
 /**
  * **Team roster: everyone on one screen.**
@@ -75,6 +76,7 @@ export function TeamRoster({
    */
   withTarget: number;
 }) {
+  const t = useT();
   const [openFor, setOpenFor] = useState<number | null>(null);
   /**
    * Screenshots switched off in Settings → Modules: no Screen column and no
@@ -104,7 +106,7 @@ export function TeamRoster({
   const columns: Column<LiveCard>[] = [
     {
       key: 'person',
-      header: `Staff · ${rows.length}`,
+      header: `${t('Staff')} · ${rows.length}`,
       className: 'min-w-[190px]',
       render: (c) => (
         <Link
@@ -117,7 +119,7 @@ export function TeamRoster({
     },
     {
       key: 'today',
-      header: 'Today',
+      header: t('Today'),
       align: 'right',
       className: 'min-w-[140px]',
       render: (c) => <TodayCell card={c} />,
@@ -138,9 +140,9 @@ export function TeamRoster({
              * One word, one number counted (ADR-037): finished, not started.
              *
              * Careful: when the cell's number changes, the heading must change
-             * with it ([Build Log](../../../../docs/09-Build-Log.md)).
+             * with it ([Build Log](../../../../docs/history/09-Build-Log.md)).
              */
-            header: 'Tasks',
+            header: t('Tasks'),
             align: 'right' as const,
             className: 'hidden min-w-[92px] md:table-cell',
             render: (c: LiveCard) => <TaskCell card={c} />,
@@ -151,7 +153,7 @@ export function TeamRoster({
       key: 'month',
       /* Careful: "/ 208h" must not go in the header: the target differs per employee
          and depends on proration (G37), so the number must appear in every row */
-      header: 'This month',
+      header: t('This month'),
       align: 'right',
       className: 'hidden min-w-[150px] sm:table-cell',
       render: (c) => <MonthCell card={c} />,
@@ -160,7 +162,7 @@ export function TeamRoster({
       ? [
           {
             key: 'screen',
-            header: 'Screen',
+            header: t('Screen'),
             /* Careful: this goes first on small screens; nothing is readable in a 64px image anyway */
             className: 'hidden w-[84px] lg:table-cell',
             render: (c: LiveCard) => (
@@ -175,7 +177,7 @@ export function TeamRoster({
       : []),
     {
       key: 'seen',
-      header: 'Last seen',
+      header: t('Last seen'),
       className: 'hidden whitespace-nowrap md:table-cell',
       render: (c) => (
         <span className="text-[12px] text-ink-3">{heartbeatLabel(c)}</span>
@@ -194,11 +196,11 @@ export function TeamRoster({
   return (
     <div className="space-y-3">
       <SectionHead
-        title="Who is on the clock"
+        title={t('Who is on the clock')}
         hint={
           withTarget === 0
-            ? 'A day off for everyone — anything done today still counts toward the month'
-            : "Ordered by employee code — never by hours. This is not a ranking."
+            ? t('A day off for everyone — anything done today still counts toward the month')
+            : t('Ordered by employee code — never by hours. This is not a ranking.')
         }
       />
 
@@ -219,7 +221,7 @@ export function TeamRoster({
           i === restingAt && restingAt > 0 ? (
             <div>
               <div className="text-[11px] font-medium uppercase tracking-wider text-ink-3">
-                Not working · {restingCount}
+                {t('Not working')} · {restingCount}
               </div>
               {/*
                 Careful: this sentence is not decoration. Without it the grey rows
@@ -227,7 +229,7 @@ export function TeamRoster({
                    PC and going home is normal and there is nothing to fix.
               */}
               <div className="text-[12px] text-ink-3">
-                Off the clock is normal — the agent is healthy, nothing to fix.
+                {t('Off the clock is normal — the agent is healthy, nothing to fix.')}
               </div>
             </div>
           ) : null
@@ -236,7 +238,7 @@ export function TeamRoster({
 
       {rows.length === 0 && (
         <p className="py-8 text-center text-sm text-ink-3">
-          Nobody has been added to the team yet.
+          {t('Nobody has been added to the team yet.')}
         </p>
       )}
 
@@ -247,15 +249,13 @@ export function TeamRoster({
            seconds are a **sum**, not a UNION.
       */}
       <Caveat>
-        When one person runs more than one PC at the same time, that stretch is
-        counted twice, so hours can read a little high. An overlap longer than
-        15 minutes raises its own alert.
+        {t('When one person runs more than one PC at the same time, that stretch is counted twice, so hours can read a little high. An overlap longer than 15 minutes raises its own alert.')}
       </Caveat>
 
       {/* Failing to fetch images is not the page breaking, so it is small and separate */}
       {withShots && shots.error && !shots.data && (
         <p className="mt-2 text-xs text-ink-3">
-          Screenshots couldn&rsquo;t be loaded — the Screen column stays empty.
+          {t('Screenshots couldn’t be loaded — the Screen column stays empty.')}
         </p>
       )}
 
@@ -292,6 +292,7 @@ function CountsStrip({
   resting: number;
   cards: readonly LiveCard[];
 }) {
+  const t = useT();
   const noAgent = cards.filter(
     (c) => c.agentPresence !== 'installed',
   ).length;
@@ -299,16 +300,15 @@ function CountsStrip({
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-ink-3">
       <span>
-        <span className="num font-medium text-ink-2">{working}</span> working
+        <span className="num font-medium text-ink-2">{working}</span> {t('working')}
       </span>
       <span className="text-line">·</span>
       <span>
-        <span className="num font-medium text-ink-2">{resting}</span> not
-        working
+        <span className="num font-medium text-ink-2">{resting}</span> {t('not working')}
       </span>
       <span className="text-line">·</span>
       <span>
-        <span className="num font-medium text-ink-2">{total}</span> on the team
+        <span className="num font-medium text-ink-2">{total}</span> {t('on the team')}
       </span>
       {/* Careful: at zero the line is absent; writing "0 problems" would give a
           non-news item a place among the news every day */}
@@ -316,8 +316,7 @@ function CountsStrip({
         <>
           <span className="text-line">·</span>
           <span className="text-idle-ink">
-            <span className="num font-medium">{noAgent}</span> without a working
-            agent
+            <span className="num font-medium">{noAgent}</span> {t('without a working agent')}
           </span>
         </>
       )}
@@ -332,6 +331,7 @@ function CountsStrip({
  *    27-workday month it automatically shows "7h 42m", and it differs per employee.
  */
 function TodayCell({ card }: { card: LiveCard }) {
+  const t = useT();
   const kind = meterKind(card);
   /**
    * The condition is no longer written here (`dayDuty()` in `roster.ts`).
@@ -364,10 +364,10 @@ function TodayCell({ card }: { card: LiveCard }) {
           {hasTarget
             ? `/ ${targetText(card.dailyTargetSec)}`
             : duty === 'leave'
-              ? 'on leave'
+              ? t('on leave')
               : duty === 'none'
-                ? 'no target'
-                : 'day off'}
+                ? t('no target')
+                : t('day off')}
         </span>
       </div>
 
@@ -388,6 +388,7 @@ function TodayCell({ card }: { card: LiveCard }) {
  * would turn every row into an accusation. The month is context here, not a verdict.
  */
 function MonthCell({ card }: { card: LiveCard }) {
+  const t = useT();
   /**
    * Careful: the same honesty rule applies to the month cell. Writing `0m / 208h`
    * for an employee whose agent was never installed would read "did nothing this
@@ -419,14 +420,14 @@ function MonthCell({ card }: { card: LiveCard }) {
           kind="unknown"
           value={0}
           max={card.monthTargetSec}
-          ariaLabel="This month"
+          ariaLabel={t('This month')}
           className="mt-1.5"
         />
       ) : (
         <ProgressBar
           value={card.monthWorkedSec}
           max={card.monthTargetSec}
-          ariaLabel="This month"
+          ariaLabel={t('This month')}
           className="mt-1.5 opacity-70"
         />
       )}
@@ -449,11 +450,12 @@ function ShotThumb({
   shot: GalleryItem | null;
   onOpen: () => void;
 }) {
+  const t = useT();
   if (!shot) {
     return (
       <div
         className="h-10 w-16 rounded border border-dashed border-line"
-        title="No screenshot yet today"
+        title={t('No screenshot yet today')}
       />
     );
   }
@@ -462,7 +464,7 @@ function ShotThumb({
     <button
       type="button"
       onClick={onOpen}
-      title={`Latest screenshot of ${card.fullName}`}
+      title={t('Latest screenshot of {{name}}', { name: card.fullName })}
       className="block h-10 w-16 overflow-hidden rounded border border-line transition hover:border-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
     >
       <img
@@ -493,11 +495,11 @@ function heartbeatLabel(card: LiveCard): string {
 
   switch (card.agentPresence) {
     case 'switched_off':
-      return 'Agent switched off';
+      return translate('Agent switched off');
     case 'never_installed':
-      return 'No agent yet';
+      return translate('No agent yet');
     default:
-      return 'Never checked in';
+      return translate('Never checked in');
   }
 }
 

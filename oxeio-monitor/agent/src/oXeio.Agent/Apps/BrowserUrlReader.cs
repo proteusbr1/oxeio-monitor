@@ -8,7 +8,7 @@ namespace oXeio.Agent.Apps;
 
 /// <summary>
 /// Reading the address from the browser's address bar (D03,
-/// [ADR-013](../../../../docs/05-Options-Decisions.md)).
+/// [ADR-013](../../../../docs/history/05-Options-Decisions.md)).
 ///
 /// <b>Only the domain of what is read survives:</b>
 /// <see cref="oXeio.Core.Apps.DomainParser"/> trims the path, query and credentials. Even if a full

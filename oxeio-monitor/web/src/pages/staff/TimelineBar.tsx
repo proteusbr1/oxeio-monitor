@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Trans } from 'react-i18next';
 
 import {
   getTimeline,
@@ -11,6 +12,7 @@ import { Card, Stat, StatRow } from '../../components/Card';
 import { Duration } from '../../components/Duration';
 import { SectionHead } from '../../components/Page';
 import { Caveat, Empty, ErrorBox, Loading } from '../../components/States';
+import { translate, useT } from '../../i18n';
 import {
   formatCount,
   formatDuration,
@@ -104,6 +106,7 @@ export function TimelineBar({
   /** Increments when the page's refresh button is pressed */
   nonce: number;
 }) {
+  const t = useT();
   const { data, error, loading, reload } = useApi(
     (signal) => getTimeline(employeeId, date, signal),
     [employeeId, date, nonce],
@@ -112,8 +115,8 @@ export function TimelineBar({
   return (
     <section>
       <SectionHead
-        title="Day timeline"
-        hint="Hour scale · hover a segment for its times and length"
+        title={t('Day timeline')}
+        hint={t('Hour scale · hover a segment for its times and length')}
       />
 
       {loading && !data ? (
@@ -122,8 +125,8 @@ export function TimelineBar({
         <ErrorBox error={error} retry={reload} />
       ) : !data || data.segments.length === 0 ? (
         <Empty
-          title="No segments on this day"
-          hint="The PC was off, it was a day off, or the agent wasn't running — this screen alone can't tell you which. Try another date, or check when that day's last heartbeat arrived."
+          title={t('No segments on this day')}
+          hint={t("The PC was off, it was a day off, or the agent wasn't running — this screen alone can't tell you which. Try another date, or check when that day's last heartbeat arrived.")}
         />
       ) : (
         <TimelineBody
@@ -138,6 +141,7 @@ export function TimelineBar({
 }
 
 function TimelineBody({ timeline }: { timeline: Timeline }) {
+  const t = useT();
   const [hover, setHover] = useState<Span | null>(null);
   const view = useMemo(() => buildView(timeline), [timeline]);
 
@@ -157,16 +161,16 @@ function TimelineBody({ timeline }: { timeline: Timeline }) {
     <>
       <StatRow>
         <Stat
-          label="Counted work"
+          label={t('Counted work')}
           value={<Duration seconds={totals.activeSec} />}
         />
         <Stat
-          label="Idle"
+          label={t('Idle')}
           value={<Duration seconds={totals.idleSec} tone="muted" />}
           tone="muted"
         />
         <Stat
-          label="Screen locked"
+          label={t('Screen locked')}
           value={<Duration seconds={totals.lockedSec} tone="muted" />}
           tone="muted"
         />
@@ -176,7 +180,7 @@ function TimelineBody({ timeline }: { timeline: Timeline }) {
              spelled out in a full sentence in the warning below.
         */}
         <Stat
-          label={view.multiDevice ? 'Devices' : 'Segments'}
+          label={view.multiDevice ? t('Devices') : t('Segments')}
           value={formatCount(
             view.multiDevice ? view.rows.length : segments.length,
           )}
@@ -198,9 +202,9 @@ function TimelineBody({ timeline }: { timeline: Timeline }) {
                   {view.multiDevice && (
                     <span
                       className="w-8 flex-none truncate text-[11px] text-ink-3 sm:w-16"
-                      title={`Device ID ${row.deviceId}`}
+                      title={t('Device ID {{id}}', { id: row.deviceId })}
                     >
-                      <span className="hidden sm:inline">Device </span>
+                      <span className="hidden sm:inline">{t('Device')} </span>
                       <span className="num">{row.label}</span>
                     </span>
                   )}
@@ -250,7 +254,7 @@ function TimelineBody({ timeline }: { timeline: Timeline }) {
                     {view.nowMin !== null && (
                       <div
                         aria-hidden
-                        title="Now"
+                        title={t('Now')}
                         className="absolute top-0 bottom-0 w-0.5 bg-ink/45"
                         style={{ left: `${leftPct(view.nowMin)}%` }}
                       />
@@ -294,8 +298,7 @@ function TimelineBody({ timeline }: { timeline: Timeline }) {
                 <span className="num">{describe(hover, view.multiDevice)}</span>
               ) : (
                 <span className="text-ink-3">
-                  Hover or tap a segment — its start, end and length appear
-                  here
+                  {t('Hover or tap a segment — its start, end and length appear here')}
                 </span>
               )}
             </div>
@@ -307,11 +310,11 @@ function TimelineBody({ timeline }: { timeline: Timeline }) {
                     aria-hidden
                     className={`size-2.5 flex-none rounded-[2px] ${SEG_CLASS[state]}`}
                   />
-                  {SEG_LABEL[state]}
+                  {t(SEG_LABEL[state])}
                 </span>
               ))}
               {/* Not a colour name: in Midnight `ink` is almost white (see file header) */}
-              <span>Solid = counted work · grey = not counted</span>
+              <span>{t('Solid = counted work · grey = not counted')}</span>
             </div>
           </div>
         </Card>
@@ -319,18 +322,21 @@ function TimelineBody({ timeline }: { timeline: Timeline }) {
 
       {view.multiDevice && (
         <Caveat>
-          <span className="num">{view.rows.length}</span> devices were running
-          on this day, so each one gets its own row. Where two rows are filled
-          at the same moment, that time is counted <b>twice</b> in the totals
-          above.
+          <Trans
+            i18nKey="<n>{{devices}}</n> devices were running on this day, so each one gets its own row. Where two rows are filled at the same moment, that time is counted <b>twice</b> in the totals above."
+            values={{ devices: view.rows.length }}
+            components={{ n: <span className="num" />, b: <b /> }}
+          />
         </Caveat>
       )}
 
       {view.clipped && (
         <Caveat>
-          A segment crossed midnight. The bar draws only the part that falls on{' '}
-          <span className="num">{timeline.date}</span> — the totals above still
-          cover the whole segment.
+          <Trans
+            i18nKey="A segment crossed midnight. The bar draws only the part that falls on <n>{{date}}</n> — the totals above still cover the whole segment."
+            values={{ date: timeline.date }}
+            components={{ n: <span className="num" /> }}
+          />
         </Caveat>
       )}
     </>
@@ -432,9 +438,9 @@ function clockOf(dayStartMs: number, minutes: number): string {
 function describe(s: Span, multiDevice: boolean): string {
   const parts = [
     `${formatTime(s.seg.startedAt)}–${formatTime(s.seg.endedAt)}`,
-    SEG_LABEL[s.seg.state],
+    translate(SEG_LABEL[s.seg.state]),
     formatDuration(s.seg.durationSec),
   ];
-  if (multiDevice) parts.push(`Device ${s.device}`);
+  if (multiDevice) parts.push(translate('Device {{number}}', { number: s.device }));
   return parts.join(' · ');
 }

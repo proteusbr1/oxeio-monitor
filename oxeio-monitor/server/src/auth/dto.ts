@@ -87,7 +87,7 @@ export class CreatePortalAccountDto {
    *
    * Careful: optional. If omitted, the system generates a random password
    * (shown to the owner once), but **in no case is a change demanded**
-   * ([ADR-033](../../../docs/05-Options-Decisions.md)).
+   * ([ADR-033](../../../docs/history/05-Options-Decisions.md)).
    */
   @IsOptional()
   @MinLength(MIN_PASSWORD_LENGTH, {

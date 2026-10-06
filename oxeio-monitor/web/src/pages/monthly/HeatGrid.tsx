@@ -10,6 +10,7 @@ import {
   type EmployeeGridRow,
   type MonthGrid,
 } from './heatmap';
+import { translate, useT } from '../../i18n';
 
 /**
  * Staff x date heatmap.
@@ -57,14 +58,7 @@ const DAY_TYPE_LABEL = {
  *    11-13 are handled separately, or it would read "11st".
  */
 function ordinal(day: number): string {
-  const tens = day % 100;
-  if (tens >= 11 && tens <= 13) return `${day}th`;
-
-  const ones = day % 10;
-  if (ones === 1) return `${day}st`;
-  if (ones === 2) return `${day}nd`;
-  if (ones === 3) return `${day}rd`;
-  return `${day}th`;
+  return translate('{{count}}th', { count: day, ordinal: true });
 }
 
 export function HeatGrid({
@@ -75,6 +69,7 @@ export function HeatGrid({
   /** Today in the work zone, so the column can be marked */
   today: string;
 }) {
+  const t = useT();
   // Careful: keep only the keys, not the cell objects; holding old objects after the
   //    month changes would leave a piece of data on screen that matches no new grid.
   const [picked, setPicked] = useState<{ employeeId: number; date: string } | null>(
@@ -94,7 +89,7 @@ export function HeatGrid({
                 scope="col"
                 className="sticky left-0 z-10 bg-surface px-3 py-2 text-left font-medium text-ink-3"
               >
-                Staff
+                {t('Staff')}
               </th>
 
               {grid.days.map((date) => (
@@ -115,20 +110,20 @@ export function HeatGrid({
               ))}
 
               <th scope="col" className="px-3 py-2 pl-5 text-right font-medium text-ink-3">
-                Counted
+                {t('Counted')}
               </th>
               <th
                 scope="col"
-                title="How much should have been done by today"
+                title={t('How much should have been done by today')}
                 className="px-3 py-2 text-right font-medium text-ink-3"
               >
-                Expected
+                {t('Expected')}
               </th>
               <th scope="col" className="px-3 py-2 text-right font-medium text-ink-3">
-                Behind / Ahead
+                {t('Behind / Ahead')}
               </th>
               <th scope="col" className="px-3 py-2 text-right font-medium text-ink-3">
-                Monthly target
+                {t('Monthly target')}
               </th>
             </tr>
           </thead>
@@ -162,7 +157,7 @@ export function HeatGrid({
                              shortfall number.
                         */}
                         {row.partial &&
-                          ` · since the ${ordinal(Number(row.partial.from.slice(8, 10)))}`}
+                          ` · ${t('since the {{day}}', { day: ordinal(Number(row.partial.from.slice(8, 10))) })}`}
                       </>
                     }
                   />
@@ -208,7 +203,7 @@ export function HeatGrid({
           <tfoot className="border-t border-line bg-paper font-medium">
             <tr>
               <td className="sticky left-0 z-10 border-r border-line bg-paper px-3 py-2 text-[12px] text-ink-2">
-                Everyone
+                {t('Everyone')}
                 {/*
                   Who the total is **about**, right beside the total.
                   Careful: those not yet observed have expectation 0, so their whole
@@ -220,7 +215,7 @@ export function HeatGrid({
                 */}
                 {grid.totals.notObserved > 0 && (
                   <div className="mt-0.5 text-[11px] font-normal text-ink-3">
-                    {grid.totals.notObserved} not observed yet
+                    {t('{{count}} not observed yet', { count: grid.totals.notObserved })}
                   </div>
                 )}
               </td>
@@ -352,15 +347,15 @@ function Cell({
 function cellLabel(cell: DayCell, fullName: string): string {
   const when = `${fullName} · ${formatDate(cell.date)} (${weekdayOf(cell.date)})`;
 
-  if (cell.kind === 'future') return `${when} · day has not arrived yet`;
-  if (cell.kind === 'outside') return `${when} · outside their time here`;
+  if (cell.kind === 'future') return translate('{{when}} · day has not arrived yet', { when });
+  if (cell.kind === 'outside') return translate('{{when}} · outside their time here', { when });
   /**
    * Careful: it says not "0 hours" but **"was not being counted"**. Important: phones
    * have no hover, so this text is the only explanation for many, and this is where
    * misreading happens.
    */
   if (cell.kind === 'untracked')
-    return `${when} · not being tracked yet — this day is not counted against them`;
+    return translate('{{when}} · not being tracked yet — this day is not counted against them', { when });
 
   /**
    * Careful: phones have no hover, so the reason for leave must also be in the
@@ -368,16 +363,21 @@ function cellLabel(cell: DayCell, fullName: string): string {
    *    *"why is this day different"*.
    */
   const type = cell.onLeave
-    ? 'on approved leave'
+    ? translate('on approved leave')
     : cell.dayType
-      ? DAY_TYPE_LABEL[cell.dayType]
+      ? translate(DAY_TYPE_LABEL[cell.dayType])
       : '';
   const target =
     cell.targetHours > 0
-      ? `target ${formatHoursAsDuration(cell.targetHours)}`
-      : 'no target';
+      ? translate('target {{hours}}', { hours: formatHoursAsDuration(cell.targetHours) })
+      : translate('no target');
 
-  return `${when} · ${type} · counted ${formatHoursAsDuration(cell.creditedHours)} · ${target}`;
+  return translate('{{when}} · {{type}} · counted {{counted}} · {{target}}', {
+    when,
+    type,
+    counted: formatHoursAsDuration(cell.creditedHours),
+    target,
+  });
 }
 
 // ── The full breakdown of the chosen cell (on a phone the only way) ───────────
@@ -389,12 +389,13 @@ function CellDetail({
   row: EmployeeGridRow | null;
   cell: DayCell | null;
 }) {
+  const t = useT();
   // Careful: the height is always the same; otherwise tapping a cell would make the
   //    whole grid jump and the cell under the finger would move.
   if (!row || !cell) {
     return (
       <p className="border-t border-line px-4 py-2.5 text-xs text-ink-3">
-        Tap any cell — that day's full breakdown appears here.
+        {t("Tap any cell — that day's full breakdown appears here.")}
       </p>
     );
   }
@@ -407,21 +408,21 @@ function CellDetail({
       </span>
 
       {cell.kind === 'future' && (
-        <span className="text-ink-3">This day has not arrived yet</span>
+        <span className="text-ink-3">{t('This day has not arrived yet')}</span>
       )}
       {cell.kind === 'outside' && (
-        <span className="text-ink-3">They were not with the office that day</span>
+        <span className="text-ink-3">{t('They were not with the office that day')}</span>
       )}
 
       {cell.kind === 'day' && (
         <>
           <span className="text-ink-3">
-            {cell.dayType ? DAY_TYPE_LABEL[cell.dayType] : ''}
+            {cell.dayType ? t(DAY_TYPE_LABEL[cell.dayType]) : ''}
           </span>
-          <Field label="Worked" value={<Hours hours={cell.workedHours} />} />
+          <Field label={t('Worked')} value={<Hours hours={cell.workedHours} />} />
           {cell.adjustmentHours !== 0 && (
             <Field
-              label="Owner adjustment"
+              label={t('Owner adjustment')}
               value={
                 <span className="num">
                   {cell.adjustmentHours > 0 ? '+' : '−'}
@@ -431,16 +432,16 @@ function CellDetail({
             />
           )}
           <Field
-            label="Counted"
+            label={t('Counted')}
             value={<Hours hours={cell.creditedHours} className="font-semibold" />}
           />
           <Field
-            label="Target"
+            label={t('Target')}
             value={
               cell.targetHours > 0 ? (
                 <Hours hours={cell.targetHours} tone="muted" />
               ) : (
-                <span className="text-ink-3">None</span>
+                <span className="text-ink-3">{t('None')}</span>
               )
             }
           />
@@ -482,19 +483,20 @@ function Pace({
    */
   observed?: boolean;
 }) {
+  const t = useT();
   if (!observed) {
     return (
       <span
         className="text-ink-3"
-        title="No finished workday has been seen for them yet, so there is nothing to be on track with"
+        title={t('No finished workday has been seen for them yet, so there is nothing to be on track with')}
       >
-        Not observed yet
+        {t('Not observed yet')}
       </span>
     );
   }
 
   if (Math.abs(hours) <= PACE_EPSILON) {
-    return <span className="num text-ink-3">On track</span>;
+    return <span className="num text-ink-3">{t('On track')}</span>;
   }
 
   const behind = hours < 0;
@@ -503,17 +505,18 @@ function Pace({
   // Careful: in a narrow column many people miss the `-`/`+` sign, so it is spelled out in words
   return (
     <span className={`num ${behind ? 'font-semibold text-brand-ink' : 'text-ink'}`}>
-      {compact ? `${behind ? 'Behind' : 'Ahead'} ${amount}` : `${behind ? '−' : '+'}${amount}`}
+      {compact ? (behind ? t('Behind {{amount}}', { amount }) : t('Ahead {{amount}}', { amount })) : `${behind ? '−' : '+'}${amount}`}
     </span>
   );
 }
 
 function MonthTarget({ row }: { row: EmployeeGridRow }) {
+  const t = useT();
   if (row.targetHoursInRange === null) {
     return (
       <span
         className="num text-ink-3"
-        title="This person's target for these dates cannot be worked out yet"
+        title={t("This person's target for these dates cannot be worked out yet")}
       >
         —
       </span>
@@ -534,9 +537,9 @@ function MonthTarget({ row }: { row: EmployeeGridRow }) {
     return (
       <span
         className="num text-ink-3"
-        title="No office days for this person in these dates — on leave throughout, or joined at the very end"
+        title={t('No office days for this person in these dates — on leave throughout, or joined at the very end')}
       >
-        No target
+        {t('No target')}
       </span>
     );
   }
@@ -547,13 +550,13 @@ function MonthTarget({ row }: { row: EmployeeGridRow }) {
         value={row.creditedHours}
         max={row.targetHoursInRange}
         className="w-14"
-        ariaLabel="This month"
+        ariaLabel={t('This month')}
       />
       <span
         className="num text-ink-3"
         title={
           row.monthTargetEstimated
-            ? 'The month is not over — the target drops if a new holiday is declared on a remaining day'
+            ? t('The month is not over — the target drops if a new holiday is declared on a remaining day')
             : undefined
         }
       >
@@ -572,27 +575,28 @@ function MonthTarget({ row }: { row: EmployeeGridRow }) {
  *    make up their own meaning.
  */
 function Legend() {
+  const t = useT();
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line px-4 py-3 text-[11px] text-ink-3">
       <span className="flex items-center gap-1.5">
-        Less
+        {t('Less')}
         {RAMP.map((tone) => (
           <i key={tone} className={`size-3 rounded-[3px] ${tone}`} />
         ))}
-        Day's target met
+        {t("Day's target met")}
       </span>
 
       <span className="flex items-center gap-1.5">
         <i className="size-3 rounded-[3px] bg-brand-bg ring-1 ring-brand/25 ring-inset" />
-        Workday, <span className="num">0</span> hours
+        {t('Workday, 0 hours')}
       </span>
       <span className="flex items-center gap-1.5">
         <i className="size-3 rounded-[3px] border border-line" style={OFF_PATTERN} />
-        Weekly off / holiday
+        {t('Weekly off / holiday')}
       </span>
       <span className="flex items-center gap-1.5">
         <i className="size-3 rounded-[3px] bg-ink/45 ring-1 ring-brand ring-inset" />
-        Worked on a day off
+        {t('Worked on a day off')}
       </span>
       {/*
         Important: without the row in the legend the cell's look would be a puzzle,
@@ -600,15 +604,15 @@ function Legend() {
       */}
       <span className="flex items-center gap-1.5">
         <i className="size-3 rounded-[3px] border border-dotted border-line" />
-        Not tracked yet
+        {t('Not tracked yet')}
       </span>
       <span className="flex items-center gap-1.5">
         <i className="size-3 rounded-[3px] border border-dashed border-line" />
-        Not here yet
+        {t('Not here yet')}
       </span>
       <span className="flex items-center gap-1.5">
         <i className="size-3 rounded-[3px] border border-dotted border-line/60 opacity-50" />
-        Outside their time here
+        {t('Outside their time here')}
       </span>
     </div>
   );

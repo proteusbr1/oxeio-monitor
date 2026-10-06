@@ -25,9 +25,9 @@ export interface DayCloseResult {
  * Since shifts were abolished, work after 11 pm is normal, so finalising the
  * day at 23:30 would leave out the last half hour of exactly the people who
  * work at night, every day.
- * Sources: [07 section 2.1-a and 6.4](../../../docs/07-Technical-Spec.md),
- * [08 G30](../../../docs/08-Gap-Analysis.md),
- * [02 daily layout](../../../docs/02-Workflow.md).
+ * Sources: [07 section 2.1-a and 6.4](../../../docs/history/07-Technical-Spec.md),
+ * [08 G30](../../../docs/history/08-Gap-Analysis.md),
+ * [02 daily layout](../../../docs/history/02-Workflow.md).
  *
  * Careful: "close" does **not** mean accumulating hours. Work time comes
  * only from `activity_segments`; closing sessions is bookkeeping so that

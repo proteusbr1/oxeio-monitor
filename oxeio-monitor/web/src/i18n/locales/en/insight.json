@@ -1,0 +1,22 @@
+{
+  "<n>{{count}}</n> holiday dates in this range are not final yet (<b>{{dates}}</b>)._one": "<n>{{count}}</n> holiday date in this range is not final yet (<b>{{dates}}</b>).",
+  "<n>{{count}}</n> holiday dates in this range are not final yet (<b>{{dates}}</b>)._other": "<n>{{count}}</n> holiday dates in this range are not final yet (<b>{{dates}}</b>).",
+  "<n>{{from}}</n> — <n>{{to}}</n> · <n>{{count}}</n> days · generated <n>{{at}}</n>_one": "<n>{{from}}</n> — <n>{{to}}</n> · <n>{{count}}</n> day · generated <n>{{at}}</n>",
+  "<n>{{from}}</n> — <n>{{to}}</n> · <n>{{count}}</n> days · generated <n>{{at}}</n>_other": "<n>{{from}}</n> — <n>{{to}}</n> · <n>{{count}}</n> days · generated <n>{{at}}</n>",
+  "Any taken earlier are deleted after {{count}} days — <a>see them</a>_one": "Any taken earlier are deleted after {{count}} day — <a>see them</a>",
+  "Any taken earlier are deleted after {{count}} days — <a>see them</a>_other": "Any taken earlier are deleted after {{count}} days — <a>see them</a>",
+  "Held from your salary · {{count}} months_one": "Held from your salary · {{count}} month",
+  "Held from your salary · {{count}} months_other": "Held from your salary · {{count}} months",
+  "Kept {{count}} days, then deleted automatically — <a>see yours</a>_one": "Kept {{count}} day, then deleted automatically — <a>see yours</a>",
+  "Kept {{count}} days, then deleted automatically — <a>see yours</a>_other": "Kept {{count}} days, then deleted automatically — <a>see yours</a>",
+  "Kept {{count}} days, then deleted automatically — seen by the owner and managers only_one": "Kept {{count}} day, then deleted automatically — seen by the owner and managers only",
+  "Kept {{count}} days, then deleted automatically — seen by the owner and managers only_other": "Kept {{count}} days, then deleted automatically — seen by the owner and managers only",
+  "These <n>{{count}}</n> could not be included (inactive, with no last working day on file): {{names}}_one": "<n>{{count}}</n> person could not be included (inactive, with no last working day on file): {{names}}",
+  "These <n>{{count}}</n> could not be included (inactive, with no last working day on file): {{names}}_other": "These <n>{{count}}</n> could not be included (inactive, with no last working day on file): {{names}}",
+  "This is your money, held back each month. You get all of it when you leave, as long as you give at least {{count}} days' notice._one": "This is your money, held back each month. You get all of it when you leave, as long as you give at least {{count}} day's notice.",
+  "This is your money, held back each month. You get all of it when you leave, as long as you give at least {{count}} days' notice._other": "This is your money, held back each month. You get all of it when you leave, as long as you give at least {{count}} days' notice.",
+  "{{date}} · {{total}} images_one": "{{date}} · {{total}} image",
+  "{{date}} · {{total}} images_other": "{{date}} · {{total}} images",
+  "{{from}} — {{to}} · {{count}} days_one": "{{from}} — {{to}} · {{count}} day",
+  "{{from}} — {{to}} · {{count}} days_other": "{{from}} — {{to}} · {{count}} days"
+}

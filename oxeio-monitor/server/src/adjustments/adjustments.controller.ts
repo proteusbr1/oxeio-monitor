@@ -27,7 +27,7 @@ import { AdjustmentsService, type AdjustmentView } from './adjustments.service';
  * by three controllers (`employees`, `employees-read`, `employee-activity`).
  * When Express sees the same path twice it calls **the first one** and the
  * second stays silently dead forever
- * ([09 § 3a.12](../../../docs/09-Build-Log.md)). So the sub-path
+ * ([09 § 3a.12](../../../docs/history/09-Build-Log.md)). So the sub-path
  * (`time-adjustments`) exists nowhere else; `endpoints.e2e` guards it.
  */
 @Controller('employees')

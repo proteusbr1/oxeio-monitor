@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 import { shiftWorkDate, todayInWorkZone } from '../lib/format';
 
 /**
@@ -14,7 +15,7 @@ import { shiftWorkDate, todayInWorkZone } from '../lib/format';
 export function DatePicker({
   value,
   onChange,
-  label = 'Date',
+  label,
   max = todayInWorkZone(),
   min,
   /** Previous/next day with the arrows; very useful on the timeline page. */
@@ -27,15 +28,16 @@ export function DatePicker({
   min?: string;
   withArrows?: boolean;
 }) {
+  const t = useT();
   const atMax = max !== undefined && value >= max;
 
   return (
     <label className="block">
-      <span className="mb-1 block text-[11.5px] text-ink-3">{label}</span>
+      <span className="mb-1 block text-[11.5px] text-ink-3">{label ?? t('Date')}</span>
       <span className="flex items-center gap-1">
         {withArrows && (
           <ArrowButton
-            label="Previous day"
+            label={t('Previous day')}
             onClick={() => onChange(shiftWorkDate(value, -1))}
             disabled={min !== undefined && value <= min}
           >
@@ -58,7 +60,7 @@ export function DatePicker({
 
         {withArrows && (
           <ArrowButton
-            label="Next day"
+            label={t('Next day')}
             onClick={() => onChange(shiftWorkDate(value, 1))}
             disabled={atMax}
           >
@@ -92,16 +94,17 @@ export function DateRange({
   onChange: (range: { from: string; to: string }) => void;
   max?: string;
 }) {
+  const t = useT();
   return (
     <div className="flex flex-wrap items-end gap-2">
       <DatePicker
-        label="From"
+        label={t('From')}
         value={from}
         max={max}
         onChange={(next) => onChange({ from: next, to: next > to ? next : to })}
       />
       <DatePicker
-        label="To"
+        label={t('To')}
         value={to}
         min={from}
         max={max}
@@ -120,7 +123,7 @@ export function DateRange({
 export function MonthPicker({
   value,
   onChange,
-  label = 'Month',
+  label,
   max = todayInWorkZone().slice(0, 7),
 }: {
   value: string;
@@ -128,9 +131,10 @@ export function MonthPicker({
   label?: string;
   max?: string;
 }) {
+  const t = useT();
   return (
     <label className="block">
-      <span className="mb-1 block text-[11.5px] text-ink-3">{label}</span>
+      <span className="mb-1 block text-[11.5px] text-ink-3">{label ?? t('Month')}</span>
       <input
         type="month"
         value={value}

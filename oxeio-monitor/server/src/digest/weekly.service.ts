@@ -311,7 +311,7 @@ export class WeeklyDigestService {
    *
    * `ReportsService` cannot answer this one question, so the DB is read
    * directly here. F01 calls both "no row" and "row exists, 0 hours"
-   * `no_activity` (`reports.service.ts`), yet that difference is the most
+   * `no_activity` (`reports.attendance.service.ts`), yet that difference is the most
    * important fact in this message: `refreshDate()` writes a row for every
    * active employee every day, so a row existing = that day was measured.
    *

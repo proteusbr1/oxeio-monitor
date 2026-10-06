@@ -152,7 +152,7 @@ export function attendanceLines(
      * `status`, those hours would vanish from the paper.
      *
      * In JSON the two fields stay separate (`onLeave`); this merging is purely a
-     * **print** decision, so it lives here, not in `reports.service.ts`.
+     * **print** decision, so it lives here, not in `reports.attendance.service.ts`.
      */
     dayType: r.onLeave ? 'On leave' : DAY_TYPE_EN[r.dayType],
     status: DAY_STATUS_EN[r.status],

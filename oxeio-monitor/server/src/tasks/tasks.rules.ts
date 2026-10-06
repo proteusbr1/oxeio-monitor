@@ -1,5 +1,6 @@
 import { UserRole } from '@prisma/client';
 
+import { startOfWorkDate, workDateOf } from '../agent/util/work-time';
 import { hasTaskTarget } from '../summary/task-start.rules';
 
 /**
@@ -363,3 +364,28 @@ export function dropReasonOf(raw: string | null): DropReason | null {
   if (isDropReason(raw)) return raw;
   return LEGACY_DROP_REASONS[raw] ?? 'other';
 }
+
+// ── Work-day boundaries (shared by the list filters and the assignee's Undo) ──
+
+/**
+ * 'YYYY-MM-DD' becomes the local midnight of that day.
+ *
+ * Careful: this sits at module level on purpose. The `list()` filter and the
+ * `stats()` count must use exactly the same date. If a chip says 132 and
+ * clicking it shows 90, nobody will trust any number again.
+ */
+export const workStart = (day: string): Date =>
+  startOfWorkDate(new Date(`${day}T00:00:00Z`));
+export const nextDay = (day: string): Date =>
+  startOfWorkDate(new Date(new Date(`${day}T00:00:00Z`).getTime() + 86_400_000));
+
+/**
+ * Which work day an instant falls on, as `'YYYY-MM-DD'`.
+ *
+ * Careful: `toISOString().slice(0,10)` would give the UTC day, which is a
+ * different day for part of every day in most zones. Someone who pressed
+ * Complete late in the evening and spotted a mistake would then find Undo
+ * blocked as "yesterday's work".
+ */
+export const workDateStr = (at: Date): string =>
+  workDateOf(at).toISOString().slice(0, 10);

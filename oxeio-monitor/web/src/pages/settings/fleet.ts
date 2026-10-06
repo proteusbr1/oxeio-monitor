@@ -1,4 +1,5 @@
 import type { AgentVersionView, DeviceView } from '../../api/agent';
+import { translate } from '../../i18n';
 
 /**
  * **Fleet versions: who stands where.**
@@ -189,9 +190,12 @@ export function capabilityIssues(
     names
       .filter((k) => capabilities[k] === state)
       .map((k) => ({
-        text: `${CAPABILITY_LABEL[k]}: ${state === 'failed' ? 'not working' : 'unreliable'}`,
+        text:
+          state === 'failed'
+            ? translate('{{part}}: not working', { part: translate(CAPABILITY_LABEL[k]) })
+            : translate('{{part}}: unreliable', { part: translate(CAPABILITY_LABEL[k]) }),
         tone: state === 'failed' ? 'attention' : 'pending',
-        hint: CAPABILITY_HINT[k],
+        hint: translate(CAPABILITY_HINT[k]),
       }));
   return [...pick('failed'), ...pick('degraded')];
 }

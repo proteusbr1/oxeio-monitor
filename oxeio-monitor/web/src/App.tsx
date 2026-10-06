@@ -26,12 +26,14 @@ import { AccountPage } from './pages/account/AccountPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
 import { homePathFor, seesEveryone } from './api/auth';
 import { FeaturesProvider, useFeatures } from './features/FeaturesContext';
+import { useT } from './i18n';
 
 /**
  * Three states, three separate route trees — so "not logged in but looking at
  * an inner page" or "wandering around without changing the password" cannot happen.
  */
 function Router() {
+  const t = useT();
   const { user, loading, offline, refresh } = useAuth();
   const { features, ready: featuresReady } = useFeatures();
 
@@ -39,7 +41,7 @@ function Router() {
   if (loading || (user && !user.mustChangePassword && !featuresReady)) {
     return (
       <div className="grid min-h-full place-items-center text-sm text-ink-3">
-        Loading…
+        {t('Loading…')}
       </div>
     );
   }
@@ -58,17 +60,16 @@ function Router() {
     return (
       <div className="grid min-h-full place-items-center p-6 text-center">
         <div className="max-w-xs">
-          <p className="text-sm font-medium text-ink">Unable to verify your session</p>
+          <p className="text-sm font-medium text-ink">{t('Unable to verify your session')}</p>
           <p className="mt-2 text-sm text-ink-3">
-            The server could not confirm your session. Try again in a moment;
-            you do not need to re-enter your password unless your session has expired.
+            {t('The server could not confirm your session. Try again in a moment; you do not need to re-enter your password unless your session has expired.')}
           </p>
           <button
             type="button"
             onClick={() => void refresh()}
             className="mt-4 rounded-md border border-line px-3 py-2 text-sm text-ink-2 hover:bg-surface-2"
           >
-            Try again
+            {t('Try again')}
           </button>
         </div>
       </div>
@@ -290,11 +291,12 @@ export function App() {
  * first-run setup wizard. If the check fails the login is shown, as before.
  */
 function SignedOut() {
+  const t = useT();
   const status = useApi((signal) => getSetupStatus(signal), []);
   if (status.loading && !status.data && !status.error) {
     return (
       <div className="grid min-h-full place-items-center text-sm text-ink-3">
-        Loading…
+        {t('Loading…')}
       </div>
     );
   }

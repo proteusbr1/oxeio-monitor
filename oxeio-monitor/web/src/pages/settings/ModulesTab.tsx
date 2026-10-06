@@ -14,6 +14,7 @@ import { Card } from '../../components/Card';
 import { ErrorBox, Loading } from '../../components/States';
 import { useFeatures } from '../../features/FeaturesContext';
 import { Chip, ConfirmDialog, Notice, ServerError, useMutation } from '../../components/ui';
+import { currentLanguage, translate, useT } from '../../i18n';
 
 /**
  * Settings → Modules: switch off the parts of the product a company does not
@@ -26,6 +27,11 @@ import { Chip, ConfirmDialog, Notice, ServerError, useMutation } from '../../com
  *    Settings → Privacy — never as a switch here.
  */
 
+/**
+ * `title`, `what` and `hides` are the English text and the translation keys:
+ * translated where they are shown. `holds` and the warnings are called at
+ * render time, so they translate themselves.
+ */
 interface ModuleInfo {
   key: FeatureKey;
   title: string;
@@ -40,9 +46,6 @@ interface ModuleInfo {
   onWarning?: (usage: FeatureUsage) => string | null;
 }
 
-const plural = (n: number, one: string, many: string) =>
-  `${n} ${n === 1 ? one : many}`;
-
 /** In screen order; a child module (`FEATURE_PARENT`) is drawn under its parent */
 const MODULES: ModuleInfo[] = [
   {
@@ -56,7 +59,7 @@ const MODULES: ModuleInfo[] = [
     ],
     holds: (u) =>
       u.paidStaff > 0
-        ? `${plural(u.paidStaff, 'person has', 'people have')} pay terms set — they stay saved`
+        ? translate('{{count}} people have pay terms set — they stay saved', { count: u.paidStaff })
         : null,
   },
   {
@@ -70,15 +73,15 @@ const MODULES: ModuleInfo[] = [
     ],
     holds: (u) =>
       u.depositMonths > 0
-        ? `${plural(u.depositMonths, 'monthly instalment', 'monthly instalments')} on record — they stay saved`
+        ? translate('{{count}} monthly instalments on record — they stay saved', { count: u.depositMonths })
         : null,
     offWarning: (u) =>
       u.depositMonths > 0
-        ? 'While deposits are off, the payroll sheet holds nothing back — net pay equals payable. The instalments already on record are kept.'
+        ? translate('While deposits are off, the payroll sheet holds nothing back — net pay equals payable. The instalments already on record are kept.')
         : null,
     onWarning: (u) =>
       u.depositMonths > 0
-        ? 'Months that are still open get their instalment the next time the deposits ledger is opened, including months that passed while this was off. Close finished months first (Payroll → Close month) if they should stay as they are.'
+        ? translate('Months that are still open get their instalment the next time the deposits ledger is opened, including months that passed while this was off. Close finished months first (Payroll → Close month) if they should stay as they are.')
         : null,
   },
   {
@@ -93,12 +96,12 @@ const MODULES: ModuleInfo[] = [
     ],
     holds: (u) =>
       u.hasScreenshots
-        ? 'Pictures are stored — the nightly cleanup keeps deleting them as they pass the retention period'
+        ? translate('Pictures are stored — the nightly cleanup keeps deleting them as they pass the retention period')
         : null,
     offWarning: () =>
-      'The agents stop taking pictures for everyone. Idle detection keeps working, so hours are counted exactly as before. Pictures already stored stay until the retention period (Settings › Privacy) removes them.',
+      translate('The agents stop taking pictures for everyone. Idle detection keeps working, so hours are counted exactly as before. Pictures already stored stay until the retention period (Settings › Privacy) removes them.'),
     onWarning: () =>
-      'The agents start taking pictures again at their next sync, inside each work policy’s window. Staff see their own only if Settings › Privacy allows it.',
+      translate('The agents start taking pictures again at their next sync, inside each work policy’s window. Staff see their own only if Settings › Privacy allows it.'),
   },
   {
     key: 'appTracking',
@@ -111,11 +114,11 @@ const MODULES: ModuleInfo[] = [
       'Settings › Apps & sites',
     ],
     holds: (u) =>
-      u.hasAppUsage ? 'App and website history is stored — it stays saved' : null,
+      u.hasAppUsage ? translate('App and website history is stored — it stays saved') : null,
     offWarning: () =>
-      'The agents stop recording which apps and sites are used. Counted hours do not change — they come from keyboard and mouse activity. The jiggler check (synthetic input) reads app data too, so it goes quiet.',
+      translate('The agents stop recording which apps and sites are used. Counted hours do not change — they come from keyboard and mouse activity. The jiggler check (synthetic input) reads app data too, so it goes quiet.'),
     onWarning: () =>
-      'Recording starts again at the agents’ next sync. The time while it was off stays without app data.',
+      translate('Recording starts again at the agents’ next sync. The time while it was off stays without app data.'),
   },
   /**
    * Not nested under Apps & websites: the tasks work on their own. Only start
@@ -135,17 +138,17 @@ const MODULES: ModuleInfo[] = [
     ],
     holds: (u) => {
       const parts = [
-        u.tasks > 0 ? plural(u.tasks, 'task', 'tasks') : null,
+        u.tasks > 0 ? translate('{{count}} tasks', { count: u.tasks }) : null,
         u.taskReceivers > 0
-          ? plural(u.taskReceivers, 'person receives tasks', 'people receive tasks')
+          ? translate('{{count}} people receive tasks', { count: u.taskReceivers })
           : null,
       ].filter(Boolean);
       return parts.length > 0
-        ? `${parts.join(' · ')} — nothing is deleted`
+        ? translate('{{parts}} — nothing is deleted', { parts: parts.join(' · ') })
         : null;
     },
     offWarning: () =>
-      'The daily hand-out stops too: tasks already handed out stay with their assignee until the module is back on.',
+      translate('The daily hand-out stops too: tasks already handed out stay with their assignee until the module is back on.'),
   },
 ];
 
@@ -159,6 +162,7 @@ const childrenOf = (key: FeatureKey) =>
   MODULES.filter((m) => FEATURE_PARENT[m.key] === key);
 
 export function ModulesTab() {
+  const t = useT();
   const view = useApi((signal) => getFeatureSettings(signal), []);
   const { setFeatures } = useFeatures();
   const { refresh } = useAuth();
@@ -189,8 +193,8 @@ export function ModulesTab() {
       setAsking(null);
       setSaved(
         on
-          ? `${module.title} is back on.`
-          : `${module.title} is off. Nothing was deleted.`,
+          ? t('{{module}} is back on.', { module: t(module.title) })
+          : t('{{module}} is off. Nothing was deleted.', { module: t(module.title) }),
       );
     });
 
@@ -222,11 +226,7 @@ export function ModulesTab() {
   return (
     <div className="space-y-4">
       <Notice>
-        Modules switch whole parts of the product on or off. Settings inside a
-        module are on that module&rsquo;s own page — who sees screenshots and
-        how long they are kept is under Settings › Privacy. Turning a module
-        off deletes nothing; turning it back on brings everything back as it
-        was.
+        {t('Modules switch whole parts of the product on or off. Settings inside a module are on that module’s own page — who sees screenshots and how long they are kept is under Settings › Privacy. Turning a module off deletes nothing; turning it back on brings everything back as it was.')}
       </Notice>
 
       {saved && (
@@ -259,20 +259,23 @@ export function ModulesTab() {
         <ConfirmDialog
           title={
             asking.on
-              ? `Turn ${asking.module.title.toLowerCase()} back on?`
-              : `Turn off ${asking.module.title.toLowerCase()}?`
+              ? t('Turn {{module}} back on?', { module: t(asking.module.title).toLowerCase() })
+              : t('Turn off {{module}}?', { module: t(asking.module.title).toLowerCase() })
           }
           intro={
             asking.on ? undefined : (
               <>
-                This hides:
+                {t('This hides:')}
                 <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
                   {asking.module.hides.map((line) => (
-                    <li key={line}>{line}</li>
+                    <li key={line}>{t(line)}</li>
                   ))}
                   {goingWith.map((child) => (
                     <li key={child.key}>
-                      {child.title} — it needs {asking.module.title}
+                      {t('{{child}} — it needs {{parent}}', {
+                        child: t(child.title),
+                        parent: t(asking.module.title),
+                      })}
                     </li>
                   ))}
                 </ul>
@@ -287,14 +290,19 @@ export function ModulesTab() {
           extra={
             asking.on ? undefined : (
               <Notice>
-                Nothing is deleted.
+                {t('Nothing is deleted.')}
                 {goingWith.length > 0 &&
-                  ` ${goingWith.map((c) => c.title).join(' and ')} keeps its own switch and comes back with ${asking.module.title}.`}{' '}
-                You can turn it back on here at any time.
+                  ` ${t('{{modules}} keeps its own switch and comes back with {{parent}}.', {
+                    modules: new Intl.ListFormat(currentLanguage(), { type: 'conjunction' }).format(
+                      goingWith.map((c) => t(c.title)),
+                    ),
+                    parent: t(asking.module.title),
+                  })}`}{' '}
+                {t('You can turn it back on here at any time.')}
               </Notice>
             )
           }
-          confirmLabel={asking.on ? 'Turn on' : 'Turn off'}
+          confirmLabel={asking.on ? t('Turn on') : t('Turn off')}
           tone="primary"
           busy={busy}
           error={error}
@@ -326,6 +334,7 @@ function ModuleCard({
   busy: boolean;
   onToggle: () => void;
 }) {
+  const t = useT();
   const labelId = `module-${module.key}`;
   const saved = switches[module.key];
   const on = effective[module.key];
@@ -336,7 +345,7 @@ function ModuleCard({
    * now, and it is what comes back when the parent is turned on.
    */
   const blocked = parent !== undefined && !effective[parent];
-  const parentTitle = parent ? TITLE[parent] : '';
+  const parentTitle = parent ? t(TITLE[parent]) : '';
 
   return (
     <Card>
@@ -344,27 +353,27 @@ function ModuleCard({
         <div className="min-w-0 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
             <h3 id={labelId} className="text-[14px] font-semibold tracking-tight">
-              {module.title}
+              {t(module.title)}
             </h3>
             {blocked ? (
-              <Chip>Needs {parentTitle}</Chip>
+              <Chip>{t('Needs {{parent}}', { parent: parentTitle })}</Chip>
             ) : (
-              <Chip tone={on ? 'counted' : 'muted'}>{on ? 'On' : 'Off'}</Chip>
+              <Chip tone={on ? 'counted' : 'muted'}>{on ? t('On') : t('Off')}</Chip>
             )}
           </div>
-          <p className="text-[13px] text-ink-2">{module.what}</p>
+          <p className="text-[13px] text-ink-2">{t(module.what)}</p>
           {blocked ? (
-            <Detail label="Unavailable">
-              Off while {parentTitle} is off. Its own switch is kept (
-              {saved ? 'on' : 'off'}) and applies again when {parentTitle} is
-              back on.
+            <Detail label={t('Unavailable')}>
+              {saved
+                ? t('Off while {{parent}} is off. Its own switch is kept (on) and applies again when {{parent}} is back on.', { parent: parentTitle })
+                : t('Off while {{parent}} is off. Its own switch is kept (off) and applies again when {{parent}} is back on.', { parent: parentTitle })}
             </Detail>
           ) : (
-            <Detail label={on ? 'Turning it off hides' : 'Hidden now'}>
-              {module.hides.join(' · ')}
+            <Detail label={on ? t('Turning it off hides') : t('Hidden now')}>
+              {module.hides.map((line) => t(line)).join(' · ')}
             </Detail>
           )}
-          {holds && <Detail label="Stored">{holds}</Detail>}
+          {holds && <Detail label={t('Stored')}>{holds}</Detail>}
         </div>
 
         <Switch

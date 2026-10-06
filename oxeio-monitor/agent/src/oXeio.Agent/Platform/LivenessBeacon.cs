@@ -20,7 +20,7 @@ namespace oXeio.Agent.Platform;
 /// <b>What happened without this:</b> after install and start, the watchdog saw nobody holding
 /// <c>agent.lock</c>, thought the agent had died, and <b>started another agent</b>. Again after 30
 /// seconds. Two agents counted the same hour twice, and from the server's side that looked like
-/// nothing but "someone is working very hard" ([G57](../../../../docs/08-Gap-Analysis.md)).
+/// nothing but "someone is working very hard" ([G57](../../../../docs/history/08-Gap-Analysis.md)).
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class LivenessBeacon : IDisposable

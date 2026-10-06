@@ -1,3 +1,4 @@
+import { Trans } from 'react-i18next';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 
 import { listAlerts } from '../api/alerts';
@@ -5,6 +6,7 @@ import type { Role } from '../api/auth';
 import { usePolling } from '../api/useApi';
 import { useAuth } from '../auth/AuthContext';
 import { useFeatures } from '../features/FeaturesContext';
+import { useT } from '../i18n';
 import { Wordmark } from './Brand';
 import '../studio.css';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -60,10 +62,11 @@ const ROLE_LABEL: Record<Role, string> = {
   owner: 'Owner',
   manager: 'Manager',
   coordinator: 'Coordinator',
-  employee: 'Staff',
+  employee: 'Staff member',
 };
 
 export function Layout() {
+  const t = useT();
   const { user, signOut } = useAuth();
   const { features } = useFeatures();
   const { pathname } = useLocation();
@@ -92,19 +95,20 @@ export function Layout() {
 
   const currentPage = [...nav].sort((a, b) => b.to.length - a.to.length)
     .find((item) => item.to === '/' ? pathname === '/' : pathname === item.to || pathname.startsWith(`${item.to}/`))?.label ?? 'Workspace';
+  // nav labels and role names are English keys, translated where they show
   const initials = user?.fullName.split(/\s+/).slice(0, 2).map((part) => part[0]).join('') ?? '';
 
   return (
     <div className="studio-shell">
       <aside className="studio-sidebar">
-        <div className="studio-brand"><Wordmark /><small>Workforce<br />Monitor</small></div>
-        <nav className="studio-nav" aria-label="Sections">
-          <div className="studio-nav-label">Workspace</div>
+        <div className="studio-brand"><Wordmark /><small><Trans i18nKey="Workforce<br/>Monitor" /></small></div>
+        <nav className="studio-nav" aria-label={t('Sections')}>
+          <div className="studio-nav-label">{t('Workspace')}</div>
           {nav.map((item) => (
             <div key={item.to}>
-              {item.section && <div className="studio-nav-label">{item.section}</div>}
+              {item.section && <div className="studio-nav-label">{t(item.section)}</div>}
               <NavLink to={item.to} end={item.end} className="studio-nav-link">
-                <span className="studio-nav-name"><span className="studio-nav-dot" aria-hidden />{item.label}</span>
+                <span className="studio-nav-name"><span className="studio-nav-dot" aria-hidden />{t(item.label)}</span>
                 {item.badge != null && item.badge > 0 && (
                   <span className="num rounded-full bg-brand-bg px-1.5 text-xs text-brand-ink">{item.badge}</span>
                 )}
@@ -112,24 +116,24 @@ export function Layout() {
             </div>
           ))}
         </nav>
-        <Link to="/account" className="studio-user" title="Your account">
+        <Link to="/account" className="studio-user" title={t('Your account')}>
           <span className="studio-avatar" aria-hidden>{initials}</span>
-          <div className="min-w-0 text-xs"><div>{user?.fullName}</div><div className="mt-1 text-ink-2">{user ? ROLE_LABEL[user.role] : ''}</div></div>
+          <div className="min-w-0 text-xs"><div>{user?.fullName}</div><div className="mt-1 text-ink-2">{user ? t(ROLE_LABEL[user.role]) : ''}</div></div>
         </Link>
       </aside>
       <div className="studio-workspace">
         <header className="studio-topbar">
-          <div><span className="text-ink-2">Workspace / </span><span>{currentPage}</span></div>
+          <div><span className="text-ink-2">{t('Workspace')} / </span><span>{t(currentPage)}</span></div>
           <div className="studio-topbar-actions">
             <span className="studio-topbar-time text-ink-2">{workTimeZoneLabel()} · {workStamp()}</span>
             <ThemeToggle />
-            <button type="button" onClick={() => void signOut()} className="tap px-3 py-1.5 text-xs">Sign out</button>
+            <button type="button" onClick={() => void signOut()} className="tap px-3 py-1.5 text-xs">{t('Sign out')}</button>
           </div>
         </header>
-        <nav className="studio-mobile-nav" aria-label="Mobile sections">
+        <nav className="studio-mobile-nav" aria-label={t('Mobile sections')}>
           {nav.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end} className="studio-nav-link">
-              {item.label}
+              {t(item.label)}
               {item.badge != null && item.badge > 0 && <span className="num text-brand-ink">{item.badge}</span>}
             </NavLink>
           ))}

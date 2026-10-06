@@ -9,7 +9,7 @@ import type { Harness } from './setup/harness';
  * only shows up with Nest, Prisma and Postgres together: the raw SQL that
  * cuts days with `AT TIME ZONE`, the config the agent and the dashboard
  * read, and the one place that still added 6 hours by hand
- * (`workDateStr` in tasks.service.ts — Undo near midnight was refused
+ * (`workDateStr` in tasks.rules.ts — Undo near midnight was refused
  * as "not today's work").
  *
  * The env is stubbed before the app modules are imported, because the
@@ -23,8 +23,8 @@ let h: Harness;
 let mod: {
   time: typeof import('../src/agent/util/work-time');
   harness: typeof import('./setup/harness');
-  tasks: typeof import('../src/tasks/tasks.service');
-  dashboard: typeof import('../src/dashboard/dashboard.service');
+  tasks: typeof import('../src/tasks/tasks.person.service');
+  dashboard: typeof import('../src/dashboard/dashboard.trend.service');
   reports: typeof import('../src/reports/reports.service');
   agentConfig: typeof import('../src/agent/agent-config.service');
 };
@@ -35,8 +35,8 @@ beforeAll(async () => {
   mod = {
     time: await import('../src/agent/util/work-time'),
     harness: await import('./setup/harness'),
-    tasks: await import('../src/tasks/tasks.service'),
-    dashboard: await import('../src/dashboard/dashboard.service'),
+    tasks: await import('../src/tasks/tasks.person.service'),
+    dashboard: await import('../src/dashboard/dashboard.trend.service'),
     reports: await import('../src/reports/reports.service'),
     agentConfig: await import('../src/agent/agent-config.service'),
   };
@@ -98,7 +98,7 @@ describe('WORK_TIMEZONE=America/Sao_Paulo, whole app', () => {
     const id = await taskDone(atLocalHour(day, 23.5), employeeId);
 
     const result = await h.app
-      .get(mod.tasks.TasksService)
+      .get(mod.tasks.TasksPersonService)
       .undoMine(employeeId, id, atLocalHour(day, 23.75), {
         userId: (await h.prisma.user.findFirstOrThrow()).id,
         ip: null,
@@ -120,7 +120,7 @@ describe('WORK_TIMEZONE=America/Sao_Paulo, whole app', () => {
     await taskDone(atLocalHour(today, 0.5));
 
     const { days } = await h.app
-      .get(mod.dashboard.DashboardService)
+      .get(mod.dashboard.DashboardTrendService)
       .teamTrend();
     expect(days.at(-2)!.tasksDone).toBe(1);
     expect(days.at(-1)!.tasksDone).toBe(1);

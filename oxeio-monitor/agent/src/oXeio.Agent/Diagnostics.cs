@@ -84,7 +84,8 @@ internal static class Diagnostics
             ? "power notifications  : ✅ registered"
             : $"power notifications  : ❌ failed (Win32 {powerErr})");
 
-        Line($"capture window       : {(Capture.Allows(DateTimeOffset.UtcNow) ? "open" : "closed")} (07:00–23:00)");
+        // the real window comes from the work policy; this standalone check uses the built-in fallback
+        Line($"capture window       : {(Capture.Allows(DateTimeOffset.UtcNow) ? "open" : "closed")} (fallback 07:00–23:00; the work policy decides)");
         Line("");
 
         TestCapture();
@@ -117,7 +118,7 @@ internal static class Diagnostics
     /// works, only the site name is missing.
     ///
     /// Careful: here <b>the domain is printed, not the full URL</b>; the rule is the same in the
-    /// console ([ADR-013](../../../docs/05-Options-Decisions.md)).
+    /// console ([ADR-013](../../../docs/history/05-Options-Decisions.md)).
     /// </summary>
     private static void TestAppTracking()
     {

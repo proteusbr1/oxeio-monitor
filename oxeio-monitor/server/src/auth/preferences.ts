@@ -6,12 +6,16 @@
  * unknown key or a bad value is dropped, not passed to the screen.
  */
 
+import { isLanguage, type Language } from '../settings/languages';
+
 export const THEMES = ['light', 'dark'] as const;
 export type Theme = (typeof THEMES)[number];
 
 export interface UserPreferences {
   /** unset = the browser's own choice (the toggle in the top bar) */
   theme?: Theme;
+  /** unset = the company's default language (Settings → Company & region) */
+  language?: Language;
 }
 
 export function preferencesOf(raw: unknown): UserPreferences {
@@ -21,6 +25,8 @@ export function preferencesOf(raw: unknown): UserPreferences {
     if (typeof theme === 'string' && (THEMES as readonly string[]).includes(theme)) {
       out.theme = theme as Theme;
     }
+    const language = (raw as Record<string, unknown>).language;
+    if (isLanguage(language)) out.language = language;
   }
   return out;
 }
@@ -34,7 +40,7 @@ export function mergePreferences(
   for (const key of Object.keys(patch) as (keyof UserPreferences)[]) {
     const value = patch[key];
     if (value === null) delete next[key];
-    else if (value !== undefined) next[key] = value;
+    else if (value !== undefined) (next as Record<string, unknown>)[key] = value;
   }
   return preferencesOf(next);
 }

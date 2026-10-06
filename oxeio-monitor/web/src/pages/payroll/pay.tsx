@@ -1,5 +1,6 @@
 import type { EmployeeView, PayBasis } from '../../api/staff';
 import { SelectField, TextField } from '../../components/ui';
+import { translate, useT } from '../../i18n';
 import { currencySymbol, formatMoney } from '../../lib/format';
 
 /**
@@ -17,9 +18,9 @@ export const PAY_BASIS_OPTIONS: { value: PayBasis; label: string }[] = [
 /** "R$ 5,000.00 / month", "R$ 30.00 / hour", "Not paid here", or null when not set */
 export function payText(emp: Pick<EmployeeView, 'payBasis' | 'monthlySalary' | 'hourlyRate'>): string | null {
   const basis = emp.payBasis ?? 'monthly';
-  if (basis === 'none') return 'Not paid here';
-  if (basis === 'hourly') return emp.hourlyRate ? `${formatMoney(emp.hourlyRate)} / hour` : null;
-  return emp.monthlySalary ? `${formatMoney(emp.monthlySalary)} / month` : null;
+  if (basis === 'none') return translate('Not paid here');
+  if (basis === 'hourly') return emp.hourlyRate ? translate('{{amount}} / hour', { amount: formatMoney(emp.hourlyRate) }) : null;
+  return emp.monthlySalary ? translate('{{amount}} / month', { amount: formatMoney(emp.monthlySalary) }) : null;
 }
 
 /** A pay amount as typed: digits with at most two decimals, or empty */
@@ -43,30 +44,40 @@ export function PayFields({
   onSalary: (value: string) => void;
   onRate: (value: string) => void;
 }) {
+  const t = useT();
   return (
     <>
-      <SelectField label="Paid by" value={basis} onChange={(v) => onBasis(v as PayBasis)} options={PAY_BASIS_OPTIONS} />
+      <SelectField
+        label={t('Paid by')}
+        value={basis}
+        onChange={(v) => onBasis(v as PayBasis)}
+        options={PAY_BASIS_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
+      />
       {basis === 'monthly' && (
         <TextField
-          label={`Monthly salary (${currencySymbol()})`}
+          label={t('Monthly salary ({{currency}})', { currency: currencySymbol() })}
           value={salary}
           onChange={onSalary}
           mono
           placeholder="5000"
-          hint={validAmount(salary) ? 'Numbers only — e.g. 5000 or 5000.50. Leave empty to clear it.' : 'Numbers only, at most two decimals.'}
+          hint={
+            validAmount(salary)
+              ? t('Numbers only — e.g. 5000 or 5000.50. Leave empty to clear it.')
+              : t('Numbers only, at most two decimals.')
+          }
         />
       )}
       {basis === 'hourly' && (
         <TextField
-          label={`Rate per hour (${currencySymbol()})`}
+          label={t('Rate per hour ({{currency}})', { currency: currencySymbol() })}
           value={rate}
           onChange={onRate}
           mono
           placeholder="30"
           hint={
             validAmount(rate)
-              ? 'Hours counted × rate, plus paid leave. Overtime follows the work policy.'
-              : 'Numbers only, at most two decimals.'
+              ? t('Hours counted × rate, plus paid leave. Overtime follows the work policy.')
+              : t('Numbers only, at most two decimals.')
           }
         />
       )}

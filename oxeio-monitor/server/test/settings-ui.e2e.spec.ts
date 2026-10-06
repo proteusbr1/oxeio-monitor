@@ -58,7 +58,7 @@ describe('Settings → Region', () => {
       .http()
       .get('/api/v1/auth/display-locale')
       .expect(200);
-    expect(locale.body).toEqual({ locale: 'pt-BR' });
+    expect(locale.body).toEqual({ locale: 'pt-BR', language: 'en' });
   });
 
   it('a new time zone waits for a restart, and says so', async () => {
@@ -220,5 +220,56 @@ describe('Holiday import from a file', () => {
       allowPast: true,
     }).expect(200);
     expect(res.body.created).toBe(1);
+  });
+});
+
+describe('Settings → "Use the .env value"', () => {
+  const back = (s: Session, subject: string) =>
+    s.http.delete(`/api/v1/settings/env/${subject}`).set('X-CSRF-Token', s.csrf);
+
+  it('forgets what was saved on screen, so the .env or default applies again', async () => {
+    await patch(owner, '/settings/region', { currency: 'EUR' }).expect(200);
+    let region = await owner.http.get('/api/v1/settings/region').expect(200);
+    expect(region.body.currency).toMatchObject({ code: 'EUR', source: 'dashboard' });
+
+    const res = await back(owner, 'region').expect(200);
+    expect(res.body).toMatchObject({ subject: 'region', removed: true });
+
+    region = await owner.http.get('/api/v1/settings/region').expect(200);
+    expect(region.body.currency.source).not.toBe('dashboard');
+    expect(await h.prisma.setting.count({ where: { key: 'region' } })).toBe(0);
+
+    const audit = await h.prisma.auditLog.findMany({ where: { targetId: 'region' } });
+    expect(audit.some((a) => (a.meta as { op?: string } | null)?.op === 'back_to_env')).toBe(true);
+  });
+
+  it('nothing saved: nothing removed, nothing audited', async () => {
+    const res = await back(owner, 'notifications').expect(200);
+    expect(res.body.removed).toBe(false);
+  });
+
+  it('an unknown subject is refused, and it is the owner\'s alone', async () => {
+    await back(owner, 'features').expect(400);
+    const manager = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
+    await back(manager, 'region').expect(403);
+  });
+});
+
+describe('Dashboard language', () => {
+  it('the company default is saved on Region and served to everyone, signed in or not', async () => {
+    await patch(owner, '/settings/region', { language: 'pt-BR' }).expect(200);
+    const region = await owner.http.get('/api/v1/settings/region').expect(200);
+    expect(region.body.language).toEqual({ value: 'pt-BR', source: 'dashboard' });
+    const pub = await h.http().get('/api/v1/auth/display-locale').expect(200);
+    expect(pub.body.language).toBe('pt-BR');
+    await patch(owner, '/settings/region', { language: 'klingon' }).expect(400);
+  });
+
+  it("a person's own language is kept on their account and comes back on /auth/me", async () => {
+    await owner.http.patch('/api/v1/account').set('X-CSRF-Token', owner.csrf).send({ language: 'es' }).expect(200);
+    expect((await owner.http.get('/api/v1/auth/me').expect(200)).body.preferences.language).toBe('es');
+    await owner.http.patch('/api/v1/account').set('X-CSRF-Token', owner.csrf).send({ language: null }).expect(200);
+    expect((await owner.http.get('/api/v1/auth/me').expect(200)).body.preferences.language).toBeUndefined();
+    await owner.http.patch('/api/v1/account').set('X-CSRF-Token', owner.csrf).send({ language: 'xx' }).expect(400);
   });
 });

@@ -119,6 +119,14 @@ export class AccountService {
       }
     }
 
+    if (dto.language !== undefined) {
+      const preferences = mergePreferences(data.preferences ? (data.preferences as UserPreferences) : before.preferences, { language: dto.language });
+      if (preferences.language !== before.preferences.language) {
+        data.preferences = preferences as Prisma.InputJsonObject;
+        changed.language = dto.language;
+      }
+    }
+
     if (Object.keys(changed).length === 0) return before;
 
     await this.prisma.user.update({ where: { id: userId }, data });

@@ -4,7 +4,7 @@ import type { EmployeeStatus, UserRole } from '@prisma/client';
  * Turns an employee DB row into an API response.
  *
  * This file has one hard duty: **`monthlySalary` must never reach anyone but
- * the owner** ([ADR-023](../../../docs/05-Options-Decisions.md), spec
+ * the owner** ([ADR-023](../../../docs/history/05-Options-Decisions.md), spec
  * section 4.3).
  *
  * It is kept pure (no I/O) because "can a manager see salary?" needs to be

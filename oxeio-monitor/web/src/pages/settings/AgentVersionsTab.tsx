@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Trans } from 'react-i18next';
 
 import { listAgentVersions, listDevices, publishAgentVersion, setAgentRollout, STAGE_LABEL, type AgentVersionView, type DeviceView, type RolloutStage } from '../../api/agent';
 import { useApi } from '../../api/useApi';
@@ -21,6 +22,7 @@ import {
   TextField,
   useMutation,
 } from '../../components/ui';
+import { useT } from '../../i18n';
 
 /**
  * Rolling out new agent versions.
@@ -35,6 +37,7 @@ import {
  * trigger) is here; copying the MSI to the server is a separate job.
  */
 export function AgentVersionsTab() {
+  const t = useT();
   const { data, loading, error, reload } = useApi(
     (signal) => listAgentVersions(signal),
     [],
@@ -60,23 +63,24 @@ export function AgentVersionsTab() {
         "Everyone" should know in advance.
       */}
       <Notice tone="attention">
-        There is no automatic rollback. If a build turns out to be bad, you
-        can stop it here — but the PCs that already took it have to be fixed by
-        hand. Start with <strong>a few PCs first</strong> and wait a day.
+        <Trans
+          i18nKey="There is no automatic rollback. If a build turns out to be bad, you can stop it here — but the PCs that already took it have to be fixed by hand. Start with <strong>a few PCs first</strong> and wait a day."
+          components={{ strong: <strong /> }}
+        />
       </Notice>
 
       <Card
-        title="Agent Versions"
-        hint="Which build each PC is offered, and how widely"
+        title={t('Agent Versions')}
+        hint={t('Which build each PC is offered, and how widely')}
         padded={false}
-        actions={<Button onClick={() => setPublishing(true)}>Publish</Button>}
+        actions={<Button onClick={() => setPublishing(true)}>{t('Publish')}</Button>}
       >
         {loading && <Loading />}
         {error && <ErrorBox error={error} retry={reload} />}
         {!loading && !error && rows.length === 0 && (
           <Empty
-            title="Nothing published yet"
-            hint="Agents keep running on whatever was installed by hand — they just never get offered an update."
+            title={t('Nothing published yet')}
+            hint={t('Agents keep running on whatever was installed by hand — they just never get offered an update.')}
           />
         )}
         {rows.length > 0 && <VersionTable
@@ -119,6 +123,7 @@ function VersionTable({
   devices: DeviceView[];
   onChanged: () => void;
 }) {
+  const t = useT();
   const { busy, error, run } = useMutation();
 
   return (
@@ -130,14 +135,14 @@ function VersionTable({
         columns={[
           {
             key: 'version',
-            header: 'Version',
+            header: t('Version'),
             render: (r) => (
               <span className="num font-semibold">{r.version}</span>
             ),
           },
           {
             key: 'stage',
-            header: 'Given to',
+            header: t('Given to'),
             render: (r) => (
               <select
                 value={r.rolloutStage}
@@ -157,7 +162,7 @@ function VersionTable({
                   ['canary', 'partial', 'all', 'halted'] as const
                 ).map((stage) => (
                   <option key={stage} value={stage}>
-                    {STAGE_LABEL[stage]}
+                    {t(STAGE_LABEL[stage])}
                   </option>
                 ))}
               </select>
@@ -176,12 +181,12 @@ function VersionTable({
              *    the screen's good intentions.
              */
             key: 'pilot',
-            header: 'First to',
+            header: t('First to'),
             render: (r) => (
               <select
                 value={r.pilotDeviceId ?? ''}
                 disabled={busy}
-                title="This PC gets the build no matter what the rollout says"
+                title={t('This PC gets the build no matter what the rollout says')}
                 onChange={(e) =>
                   run(async () => {
                     await setAgentRollout(
@@ -195,7 +200,7 @@ function VersionTable({
                 className="rounded-md border border-line bg-surface px-2 py-1 text-[12.5px]"
               >
                 {/* Careful: an empty value means "nobody"; so a blank looks intentional */}
-                <option value="">Nobody</option>
+                <option value="">{t('Nobody')}</option>
                 {devices.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.employee?.fullName ?? d.hostname}
@@ -206,13 +211,13 @@ function VersionTable({
           },
           {
             key: 'devices',
-            header: 'PCs on it',
+            header: t('PCs on it'),
             align: 'right',
             render: (r) => <span className="num">{r.devicesOn}</span>,
           },
           {
             key: 'size',
-            header: 'Size',
+            header: t('Size'),
             align: 'right',
             render: (r) =>
               /*
@@ -221,12 +226,12 @@ function VersionTable({
                    is shown in red.
               */
               r.fileMissing ? (
-                <Chip tone="attention">MSI missing</Chip>
+                <Chip tone="attention">{t('MSI missing')}</Chip>
               ) : (
                 <span className="num text-ink-3">
                   {formatBytes(r.sizeBytes)}
                   {/* PCs with the owner's update key only install signed MSIs */}
-                  {r.signed && <span className="ml-1.5">· signed</span>}
+                  {r.signed && <span className="ml-1.5">· {t('signed')}</span>}
                 </span>
               ),
           },
@@ -253,13 +258,13 @@ function VersionTable({
                   download
                   className="rounded-md border border-line px-2 py-1 text-[12px] text-ink-2 transition hover:border-brand hover:text-ink"
                 >
-                  Download MSI
+                  {t('Download MSI')}
                 </a>
               ),
           },
           {
             key: 'released',
-            header: 'Published',
+            header: t('Published'),
             render: (r) => (
               <span className="num text-ink-3">
                 {formatDateTime(r.releasedAt)}
@@ -270,7 +275,7 @@ function VersionTable({
             key: 'notes',
             header: '',
             render: (r) =>
-              r.isMandatory ? <Chip tone="pending">Mandatory</Chip> : null,
+              r.isMandatory ? <Chip tone="pending">{t('Mandatory')}</Chip> : null,
           },
         ]}
       />
@@ -290,6 +295,7 @@ function PublishDialog({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const t = useT();
   const { busy, error, run } = useMutation();
 
   const [version, setVersion] = useState('');
@@ -301,12 +307,12 @@ function PublishDialog({
 
   return (
     <Modal
-      title="Publish an agent version"
+      title={t('Publish an agent version')}
       onClose={onClose}
       footer={
         <div className="flex justify-end gap-2">
           <Button onClick={onClose} disabled={busy}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button
             tone="primary"
@@ -323,7 +329,7 @@ function PublishDialog({
               })
             }
           >
-            Publish
+            {t('Publish')}
           </Button>
         </div>
       }
@@ -331,41 +337,42 @@ function PublishDialog({
       <ServerError error={error} />
 
       <Notice>
-        Copy the built <code>oXeioAgent.msi</code> into the server&apos;s
-        storage folder first — this only records where it is. The checksum is
-        read from the file itself.
+        <Trans
+          i18nKey="Copy the built <code>oXeioAgent.msi</code> into the server's storage folder first — this only records where it is. The checksum is read from the file itself."
+          components={{ code: <code /> }}
+        />
       </Notice>
 
       <FormGrid>
         <TextField
-          label="Version"
+          label={t('Version')}
           value={version}
           onChange={setVersion}
           placeholder="0.2.0"
-          hint="Must be newer than the last one, or no agent would be offered it"
+          hint={t('Must be newer than the last one, or no agent would be offered it')}
           mono
           required
           autoFocus
         />
 
         <SelectField
-          label="Give it to"
+          label={t('Give it to')}
           value={stage}
           onChange={(v) => setStage(v as RolloutStage)}
           options={[
-            { value: 'canary', label: STAGE_LABEL.canary },
-            { value: 'partial', label: STAGE_LABEL.partial },
-            { value: 'all', label: STAGE_LABEL.all },
+            { value: 'canary', label: t(STAGE_LABEL.canary) },
+            { value: 'partial', label: t(STAGE_LABEL.partial) },
+            { value: 'all', label: t(STAGE_LABEL.all) },
           ]}
-          hint="Start small — a bad build cannot be rolled back automatically"
+          hint={t('Start small — a bad build cannot be rolled back automatically')}
         />
 
         <FullWidth>
           <TextField
-            label="Path on the server"
+            label={t('Path on the server')}
             value={msiPath}
             onChange={setMsiPath}
-            hint="Inside the storage folder, e.g. updates/oXeioAgent-0.2.0.msi"
+            hint={t('Inside the storage folder, e.g. updates/oXeioAgent-0.2.0.msi')}
             mono
             required
           />
@@ -373,10 +380,10 @@ function PublishDialog({
 
         <FullWidth>
           <TextAreaField
-            label="What changed"
+            label={t('What changed')}
             value={notes}
             onChange={setNotes}
-            hint="Optional — but a month later this is the only record of why"
+            hint={t('Optional — but a month later this is the only record of why')}
           />
         </FullWidth>
       </FormGrid>

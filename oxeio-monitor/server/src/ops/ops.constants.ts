@@ -160,7 +160,7 @@ export const TELEGRAM_MAX_ATTEMPTS = 3;
  * type of alert.
  *
  * This is exactly the flood that led to dropping the real-time idle alert
- * ([10-Roadmap](../../../docs/10-Roadmap.md): "then nobody would read any
+ * ([10-Roadmap](../../../docs/history/10-Roadmap.md): "then nobody would read any
  * message"); this time it just came through another door.
  *
  * **The alert is not deleted**: this is only a **channel** filter. The row is

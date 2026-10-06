@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { restartServer } from '../../api/settings';
 import { ConfirmDialog, MiniButton, Notice, useMutation } from '../../components/ui';
+import { useT } from '../../i18n';
 
 /**
  * "Saved — takes effect after a restart", with the button that does it.
@@ -12,6 +13,7 @@ import { ConfirmDialog, MiniButton, Notice, useMutation } from '../../components
  * answers.
  */
 export function RestartNotice({ what }: { what: string }) {
+  const t = useT();
   const [asking, setAsking] = useState(false);
   const [waiting, setWaiting] = useState(false);
   const restart = useMutation();
@@ -41,22 +43,22 @@ export function RestartNotice({ what }: { what: string }) {
         <span className="flex flex-wrap items-center gap-2">
           <span>
             {waiting
-              ? 'Restarting — the page reloads when the server is back (usually under a minute)…'
-              : `Saved. ${what} takes effect after the server restarts.`}
+              ? t('Restarting — the page reloads when the server is back (usually under a minute)…')
+              : t('Saved. {{what}} takes effect after the server restarts.', { what })}
           </span>
           {!waiting && (
             <MiniButton onClick={() => setAsking(true)}>
-              Restart server now
+              {t('Restart server now')}
             </MiniButton>
           )}
         </span>
       </Notice>
       {asking && (
         <ConfirmDialog
-          title="Restart the server?"
-          intro="The dashboard and the agents lose the server for a few seconds; agents keep counting and send what they queued once it is back."
-          warning="It starts again by itself under Docker / Coolify (restart: unless-stopped). On a server started by hand, it stays off until you start it."
-          confirmLabel="Restart now"
+          title={t('Restart the server?')}
+          intro={t('The dashboard and the agents lose the server for a few seconds; agents keep counting and send what they queued once it is back.')}
+          warning={t('It starts again by itself under Docker / Coolify (restart: unless-stopped). On a server started by hand, it stays off until you start it.')}
+          confirmLabel={t('Restart now')}
           tone="primary"
           busy={restart.busy}
           error={restart.error}

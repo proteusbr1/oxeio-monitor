@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { workDateOf } from '../src/agent/util/work-time';
-import { DashboardService } from '../src/dashboard/dashboard.service';
+import { DashboardTrendService } from '../src/dashboard/dashboard.trend.service';
 import {
   createHarness,
   workNoon,
@@ -26,7 +26,7 @@ import {
  * work day. Most tests in this file check both sides of exactly that boundary.
  */
 let h: Harness;
-let dashboard: DashboardService;
+let dashboard: DashboardTrendService;
 
 const HOUR_MS = 3600_000;
 /** The test work zone is UTC+6 — subtract this to go from the label (`workDateOf`) to the real moment */
@@ -34,7 +34,7 @@ const WORK_OFFSET_MS = 6 * HOUR_MS;
 
 beforeAll(async () => {
   h = await createHarness();
-  dashboard = h.app.get(DashboardService);
+  dashboard = h.app.get(DashboardTrendService);
 });
 
 afterAll(async () => {

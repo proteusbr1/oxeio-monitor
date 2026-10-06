@@ -20,6 +20,7 @@ import { Empty, ErrorBox, Loading } from '../../components/States';
 import { Table } from '../../components/Table';
 import { formatAgo, formatDateTime } from '../../lib/format';
 import { Chip, MiniButton, Notice, ServerError, useMutation } from '../../components/ui';
+import { useT } from '../../i18n';
 
 /**
  * G01-G07, K04: alerts and server health.
@@ -34,6 +35,7 @@ import { Chip, MiniButton, Notice, ServerError, useMutation } from '../../compon
  * broken?" were split across two places, people would open neither.
  */
 export function AlertsPage() {
+  const t = useT();
   const { user } = useAuth();
   const [showAll, setShowAll] = useState(false);
 
@@ -53,8 +55,8 @@ export function AlertsPage() {
 
   if (user?.role !== 'owner') {
     return (
-      <Page title="Alerts">
-        <ErrorBox error={new ApiError(403, "You don't have access")} />
+      <Page title={t('Alerts')}>
+        <ErrorBox error={new ApiError(403, t("You don't have access"))} />
       </Page>
     );
   }
@@ -63,15 +65,15 @@ export function AlertsPage() {
 
   return (
     <Page
-      title="Alerts"
+      title={t('Alerts')}
       subtitle={
         alerts.data
-          ? `${alerts.data.openCount} still open`
-          : 'What the server noticed on its own'
+          ? t('{{count}} still open', { count: alerts.data.openCount })
+          : t('What the server noticed on its own')
       }
       actions={
         <MiniButton onClick={() => setShowAll((v) => !v)}>
-          {showAll ? 'Show only open' : 'Show all'}
+          {showAll ? t('Show only open') : t('Show all')}
         </MiniButton>
       }
     >
@@ -84,8 +86,8 @@ export function AlertsPage() {
         />
 
         <Card
-          title={showAll ? 'All Alerts' : 'Open Alerts'}
-          hint="Nothing is ever deleted — acknowledging just marks it seen"
+          title={showAll ? t('All Alerts') : t('Open Alerts')}
+          hint={t('Nothing is ever deleted — acknowledging just marks it seen')}
           padded={false}
           actions={
             /*
@@ -106,7 +108,7 @@ export function AlertsPage() {
                 onClick={() =>
                   ackAll.run(async () => {
                     const n = alerts.data?.openCount ?? 0;
-                    if (!window.confirm(`Mark all ${n} open alerts as seen?`)) {
+                    if (!window.confirm(t('Mark all {{count}} open alerts as seen?', { count: n }))) {
                       return;
                     }
                     await acknowledgeAllAlerts();
@@ -114,7 +116,7 @@ export function AlertsPage() {
                   })
                 }
               >
-                {ackAll.busy ? 'Marking…' : 'Seen all'}
+                {ackAll.busy ? t('Marking…') : t('Seen all')}
               </MiniButton>
             ) : undefined
           }
@@ -125,11 +127,11 @@ export function AlertsPage() {
           )}
           {alerts.data && rows.length === 0 && (
             <Empty
-              title={showAll ? 'No alerts at all' : 'Nothing open'}
+              title={showAll ? t('No alerts at all') : t('Nothing open')}
               hint={
                 showAll
-                  ? 'The server has not raised a single alert yet.'
-                  : 'Everything raised so far has been acknowledged.'
+                  ? t('The server has not raised a single alert yet.')
+                  : t('Everything raised so far has been acknowledged.')
               }
             />
           )}
@@ -149,6 +151,7 @@ function AlertTable({
   rows: AlertRow[];
   onChanged: () => void;
 }) {
+  const t = useT();
   const { busy, error, run } = useMutation();
 
   return (
@@ -175,17 +178,17 @@ function AlertTable({
                       : 'muted'
                 }
               >
-                {ALERT_SEVERITY_LABEL[r.severity] ?? r.severity}
+                {t(ALERT_SEVERITY_LABEL[r.severity] ?? r.severity)}
               </Chip>
             ),
           },
           {
             key: 'what',
-            header: 'What',
+            header: t('What'),
             render: (r) => (
               <div className="min-w-0">
                 <div className="font-medium">
-                  {ALERT_TYPE_LABEL[r.type as AlertType] ?? r.type}
+                  {t(ALERT_TYPE_LABEL[r.type as AlertType] ?? r.type)}
                 </div>
                 {/* The title carries the name/hostname: that is the useful information */}
                 <div className="text-[12.5px] text-ink-2">{r.title}</div>
@@ -199,7 +202,7 @@ function AlertTable({
           },
           {
             key: 'when',
-            header: 'When',
+            header: t('When'),
             render: (r) => (
               <span
                 className="num text-[12.5px] text-ink-3"
@@ -211,7 +214,7 @@ function AlertTable({
           },
           {
             key: 'sent',
-            header: 'Sent',
+            header: t('Sent'),
             render: (r) =>
               r.channelsSent.length > 0 ? (
                 <span className="text-[12px] text-ink-3">
@@ -230,7 +233,9 @@ function AlertTable({
             render: (r) =>
               r.acknowledgedAt ? (
                 <span className="text-[12px] text-ink-3">
-                  Seen{r.acknowledgedBy ? ` by ${r.acknowledgedBy}` : ''}
+                  {r.acknowledgedBy
+                    ? t('Seen by {{name}}', { name: r.acknowledgedBy })
+                    : t('Seen')}
                 </span>
               ) : r.resolvedAt ? (
                 /*
@@ -240,9 +245,11 @@ function AlertTable({
                  */
                 <span
                   className="text-[12px] text-ink-3"
-                  title={`Resolved on its own — ${formatDateTime(r.resolvedAt)}`}
+                  title={t('Resolved on its own — {{time}}', {
+                    time: formatDateTime(r.resolvedAt),
+                  })}
                 >
-                  Resolved
+                  {t('Resolved')}
                 </span>
               ) : (
                 <MiniButton
@@ -254,7 +261,7 @@ function AlertTable({
                     })
                   }
                 >
-                  Seen
+                  {t('Seen')}
                 </MiniButton>
               ),
           },
@@ -279,6 +286,7 @@ function HealthCard({
   error: Error | null;
   reload: () => void;
 }) {
+  const t = useT();
   const jobs = useMutation();
   const [ran, setRan] = useState<string | null>(null);
   // no screenshot module, no screenshot cleanup button (the nightly job still
@@ -287,8 +295,8 @@ function HealthCard({
 
   return (
     <Card
-      title="Server Health"
-      hint={data ? `Checked ${formatAgo(data.checkedAt)}` : undefined}
+      title={t('Server Health')}
+      hint={data ? t('Checked {{ago}}', { ago: formatAgo(data.checkedAt) }) : undefined}
       actions={
         <div className="flex gap-2">
           {/*
@@ -304,32 +312,38 @@ function HealthCard({
                 const r = await runBackupNow();
                 setRan(
                   r.ok
-                    ? `Backup done${r.fileName ? ` — ${r.fileName}` : ''}`
-                    : `Backup failed — ${r.error ?? r.skipped ?? 'unknown'}`,
+                    ? r.fileName
+                      ? t('Backup done — {{file}}', { file: r.fileName })
+                      : t('Backup done')
+                    : t('Backup failed — {{reason}}', {
+                        reason: r.error ?? r.skipped ?? t('unknown'),
+                      }),
                 );
                 reload();
               })
             }
           >
-            Back up now
+            {t('Back up now')}
           </MiniButton>
           {features.screenshots && (
             <MiniButton
               disabled={jobs.busy}
-              title="Deletes the screenshots older than the retention period set in Settings → Privacy — the same as the nightly cleanup"
+              title={t('Deletes the screenshots older than the retention period set in Settings → Privacy — the same as the nightly cleanup')}
               onClick={() =>
                 jobs.run(async () => {
                   const r = await runRetentionNow();
                   setRan(
                     r.skipped
-                      ? 'A cleanup was already running'
-                      : `Cleanup done — ${r.rowsDeleted} old screenshots removed`,
+                      ? t('A cleanup was already running')
+                      : t('Cleanup done — {{count}} old screenshots removed', {
+                          count: r.rowsDeleted,
+                        }),
                   );
                   reload();
                 })
               }
             >
-              Delete old screenshots
+              {t('Delete old screenshots')}
             </MiniButton>
           )}
         </div>
@@ -350,14 +364,14 @@ function HealthCard({
 
           <StatRow>
             <Stat
-              label="Status"
-              value={data.status === 'ok' ? 'Healthy' : data.status === 'degraded' ? 'Degraded' : 'Down'}
+              label={t('Status')}
+              value={data.status === 'ok' ? t('Healthy') : data.status === 'degraded' ? t('Degraded') : t('Down')}
               tone={data.status === 'ok' ? 'counted' : 'attention'}
             />
             <Stat
-              label="Disk used"
+              label={t('Disk used')}
               value={data.disk.usedPct === null ? '—' : `${Math.round(data.disk.usedPct)}%`}
-              unit={data.disk.free ? `${data.disk.free} free` : undefined}
+              unit={data.disk.free ? t('{{size}} free', { size: data.disk.free }) : undefined}
               tone={
                 data.disk.usedPct !== null && data.disk.usedPct >= 85
                   ? 'attention'
@@ -365,21 +379,21 @@ function HealthCard({
               }
             />
             <Stat
-              label="Last backup"
+              label={t('Last backup')}
               value={
                 // BACKUP_MODE=external — not this server's to report
                 data.backup.mode === 'external'
-                  ? 'External'
+                  ? t('External')
                   : data.backup.lastSuccessAt
                     ? formatAgo(data.backup.lastSuccessAt)
-                    : 'Never'
+                    : t('Never')
               }
               tone={data.backup.problem ? 'attention' : 'counted'}
             />
             <Stat
-              label="Agents quiet"
+              label={t('Agents quiet')}
               value={data.devices.silent}
-              unit={`of ${data.devices.active}`}
+              unit={t('of {{total}}', { total: data.devices.active })}
               // Careful: not red: everyone being silent at night is normal, and it does not
               // make the status bad either (a server rule)
               tone={data.devices.silent > 0 ? 'muted' : 'counted'}

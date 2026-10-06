@@ -147,7 +147,7 @@ export class AgentController {
     // an update offer. Reversed, an agent that has just updated would be treated
     // as still on the old version and offered the same update again; it would
     // update and send another heartbeat, an infinite loop
-    // ([G59](../../../docs/08-Gap-Analysis.md)).
+    // ([G59](../../../docs/history/08-Gap-Analysis.md)).
     const runningVersion = dto.agentVersion?.trim() || device.agentVersion;
 
     await this.recordHeartbeatState(device, dto.state, runningVersion);

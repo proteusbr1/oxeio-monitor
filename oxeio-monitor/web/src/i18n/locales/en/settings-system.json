@@ -1,0 +1,14 @@
+{
+  "<strong>{{newest}}</strong> of <num>{{count}}</num> PCs are on <ver>{{version}}</ver>_one": "<strong>{{newest}}</strong> of <num>{{count}}</num> PC is on <ver>{{version}}</ver>",
+  "<strong>{{newest}}</strong> of <num>{{count}}</num> PCs are on <ver>{{version}}</ver>_other": "<strong>{{newest}}</strong> of <num>{{count}}</num> PCs are on <ver>{{version}}</ver>",
+  "Cleanup done — {{count}} old screenshots removed_one": "Cleanup done — {{count}} old screenshot removed",
+  "Cleanup done — {{count}} old screenshots removed_other": "Cleanup done — {{count}} old screenshots removed",
+  "Mark all {{count}} open alerts as seen?_one": "Mark the open alert as seen?",
+  "Mark all {{count}} open alerts as seen?_other": "Mark all {{count}} open alerts as seen?",
+  "{{count}} PCs_one": "{{count}} PC",
+  "{{count}} PCs_other": "{{count}} PCs",
+  "{{count}} still open_one": "{{count}} still open",
+  "{{count}} still open_other": "{{count}} still open",
+  "{{total}} Events_one": "{{total}} Event",
+  "{{total}} Events_other": "{{total}} Events"
+}

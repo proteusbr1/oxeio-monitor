@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { Trans } from 'react-i18next';
 
 import { reportXlsxUrl, type GroupBy } from '../../api/reports';
 import { useAuth } from '../../auth/AuthContext';
@@ -16,6 +17,7 @@ import { ProductivityTab } from './ProductivityTab';
 import { SummaryTab } from './SummaryTab';
 import { MAX_REPORT_DAYS, rangeDays } from './shared';
 import { seesEveryone } from '../../api/auth';
+import { useT } from '../../i18n';
 
 /**
  * Reports.
@@ -43,6 +45,7 @@ const TOP_LIMITS = [25, 50, 100, 200];
 
 export function ReportsPage() {
   const { user } = useAuth();
+  const t = useT();
 
   /**
    * Careful: for staff both `/reports/*` **and** `/employees` return 403 (both have a
@@ -53,10 +56,10 @@ export function ReportsPage() {
    */
   if (!seesEveryone(user?.role)) {
     return (
-      <Page title="Reports">
+      <Page title={t('Reports')}>
         <Empty
-          title="You don't have access"
-          hint="Reports and exports are for the owner and managers only."
+          title={t("You don't have access")}
+          hint={t('Reports and exports are for the owner and managers only.')}
         />
       </Page>
     );
@@ -66,6 +69,7 @@ export function ReportsPage() {
 }
 
 function ReportsBoard() {
+  const t = useT();
   const { features } = useFeatures();
   const [picked, setPicked] = useState<TabId>('attendance');
   /**
@@ -73,9 +77,11 @@ function ReportsBoard() {
    * `/reports/productivity` answers 404 then. If it goes off while the tab is
    * open, the page falls back to Attendance rather than showing an error.
    */
-  const tabs = features.appTracking
-    ? TABS
-    : TABS.filter((t) => t.id !== 'productivity');
+  const tabs = (
+    features.appTracking
+      ? TABS
+      : TABS.filter((item) => item.id !== 'productivity')
+  ).map((item) => ({ ...item, label: t(item.label) }));
   const tab: TabId =
     picked === 'productivity' && !features.appTracking ? 'attendance' : picked;
   // Careful: not `new Date().toISOString().slice(0,10)`; between midnight and the offset hour in
@@ -109,23 +115,27 @@ function ReportsBoard() {
 
   return (
     <Page
-      title="Reports"
-      subtitle={`${formatDate(range.from)} — ${formatDate(range.to)} · ${days} days`}
+      title={t('Reports')}
+      subtitle={t('{{from}} — {{to}} · {{count}} days', {
+        from: formatDate(range.from),
+        to: formatDate(range.to),
+        count: days,
+      })}
       actions={
         <Button
           onClick={startDownload}
           disabled={download.busy || tooLong}
           tone="primary"
-          title="The file is built on the server first — a long range takes a moment"
+          title={t('The file is built on the server first — a long range takes a moment')}
         >
-          {download.busy ? 'Preparing…' : 'Download Excel'}
+          {download.busy ? t('Preparing…') : t('Download Excel')}
         </Button>
       }
     >
       <Tabs
         items={tabs}
         active={tab}
-        label="Report type"
+        label={t('Report type')}
         onChange={(next) => {
           setPicked(next);
           // The previous tab's download error must not linger on the new tab
@@ -144,7 +154,7 @@ function ReportsBoard() {
               value={employeeId}
               onChange={setEmployeeId}
               allowAll
-              allLabel="Everyone"
+              allLabel={t('Everyone')}
               // Careful: a departed employee's old months are needed in reports, so
               //    inactive staff stay in the list
               includeInactive
@@ -152,19 +162,19 @@ function ReportsBoard() {
 
             {tab === 'summary' && (
               <SelectField
-                label="Group by"
+                label={t('Group by')}
                 value={groupBy}
                 onChange={(next) => setGroupBy(next as GroupBy)}
                 options={[
-                  { value: 'month', label: 'Month' },
-                  { value: 'week', label: 'Week' },
+                  { value: 'month', label: t('Month') },
+                  { value: 'week', label: t('Week') },
                 ]}
               />
             )}
 
             {tab === 'productivity' && (
               <SelectField
-                label="Top how many"
+                label={t('Top how many')}
                 value={String(limit)}
                 onChange={(next) => setLimit(Number(next))}
                 options={TOP_LIMITS.map((n) => ({
@@ -245,13 +255,16 @@ function SelectField({
  *    request is never sent, so the user does not have to wait either.
  */
 function RangeTooLong({ days }: { days: number }): ReactNode {
+  const t = useT();
   return (
     <div className="rounded-xl border border-dashed border-line bg-surface px-6 py-12 text-center">
-      <p className="text-sm font-medium text-ink-2">That range is too long</p>
+      <p className="text-sm font-medium text-ink-2">{t('That range is too long')}</p>
       <p className="mx-auto mt-1.5 max-w-md text-xs text-ink-3">
-        One report covers at most <span className="num">{MAX_REPORT_DAYS}</span>{' '}
-        days; you asked for <span className="num">{days}</span>. Move the start
-        date closer.
+        <Trans
+          i18nKey="One report covers at most <n>{{max}}</n> days; you asked for <n>{{days}}</n>. Move the start date closer."
+          values={{ max: MAX_REPORT_DAYS, days }}
+          components={{ n: <span className="num" /> }}
+        />
       </p>
     </div>
   );

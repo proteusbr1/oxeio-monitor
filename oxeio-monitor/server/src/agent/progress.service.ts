@@ -316,7 +316,7 @@ export class ProgressService {
      * joined on the 15th would see "x / 208h" on the tray, while the dashboard and the
      * payroll sheet show "x / 112h". Two numbers in two places means one is lying, and
      * the whole purpose of this feature is trust
-     * ([§ 2.1-e](../../../docs/07-Technical-Spec.md)).
+     * ([§ 2.1-e](../../../docs/history/07-Technical-Spec.md)).
      */
     const p = prorate({
       monthStart,

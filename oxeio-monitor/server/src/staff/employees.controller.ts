@@ -49,7 +49,7 @@ export class EmployeesController {
    * rollout day.
    *
    * Careful: salary is still owner-only. `EmployeesService` blocks it
-   * separately ([ADR-023](../../../docs/05-Options-Decisions.md)). If the
+   * separately ([ADR-023](../../../docs/history/05-Options-Decisions.md)). If the
    * role were relaxed here without that block, a manager could **write** a
    * field that they cannot even **read**, which is worse than either option.
    */
@@ -134,7 +134,7 @@ export class EmployeesController {
    * work-zone date is used.
    *
    * Careful: this is the only place to record the one rollout precondition
-   * ([01 § Rollout](../../../docs/01-Planning.md)). The column existed and was
+   * ([01 § Rollout](../../../docs/history/01-Planning.md)). The column existed and was
    * read, but there was no way to set it.
    */
   @Post(':id/policy-signed')

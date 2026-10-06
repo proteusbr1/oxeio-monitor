@@ -1,0 +1,18 @@
+{
+  "<n>{{formatted}}</n> apps in total_one": "<n>{{formatted}}</n> app in total",
+  "<n>{{formatted}}</n> apps in total_other": "<n>{{formatted}}</n> apps in total",
+  "<n>{{formatted}}</n> domains in total_one": "<n>{{formatted}}</n> domain in total",
+  "<n>{{formatted}}</n> domains in total_other": "<n>{{formatted}}</n> domains in total",
+  "counted in total, from {{count}} corrections_one": "counted in total, from {{count}} correction",
+  "counted in total, from {{count}} corrections_other": "counted in total, from {{count}} corrections",
+  "{{count}} active · updated every 30 seconds_one": "{{count}} active · updated every 30 seconds",
+  "{{count}} active · updated every 30 seconds_other": "{{count}} active · updated every 30 seconds",
+  "{{count}} agents switched off_one": "{{count}} agent switched off",
+  "{{count}} agents switched off_other": "{{count}} agents switched off",
+  "{{count}} ready for the agent_one": "{{count}} ready for the agent",
+  "{{count}} ready for the agent_other": "{{count}} ready for the agent",
+  "{{count}} still need a portal account_one": "{{count}} still needs a portal account",
+  "{{count}} still need a portal account_other": "{{count}} still need a portal account",
+  "{{label}} · {{category}} · {{pct}} of time · {{rows}} rows_one": "{{label}} · {{category}} · {{pct}} of time · {{rows}} row",
+  "{{label}} · {{category}} · {{pct}} of time · {{rows}} rows_other": "{{label}} · {{category}} · {{pct}} of time · {{rows}} rows"
+}

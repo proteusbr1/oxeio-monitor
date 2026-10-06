@@ -7,7 +7,7 @@ namespace oXeio.Agent.Platform.Capture;
 
 /// <summary>
 /// DXGI Desktop Duplication: the primary capture engine
-/// ([ADR-012c](../../../../docs/05-Options-Decisions.md)).
+/// ([ADR-012c](../../../../docs/history/05-Options-Decisions.md)).
 ///
 /// <b>What it gives over GDI:</b> hardware-accelerated video and exclusive-fullscreen windows come
 /// out as the real image, not black. Also the OS itself says whether DRM content was excluded

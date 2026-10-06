@@ -105,6 +105,8 @@ export interface RegionSettings {
   currency: { code: string; symbol: string; source: SettingSource };
   /** `null` = the dashboard's own formats */
   displayLocale: { value: string | null; source: SettingSource };
+  /** the dashboard's default language; each person may pick their own */
+  language: { value: 'en' | 'pt-BR' | 'es'; source: SettingSource };
   restartNeeded: boolean;
 }
 export function getRegionSettings(signal?: AbortSignal): Promise<RegionSettings> {
@@ -114,6 +116,7 @@ export function saveRegionSettings(body: {
   timeZone?: string;
   currency?: string;
   displayLocale?: string | null;
+  language?: 'en' | 'pt-BR' | 'es';
 }): Promise<RegionSettings> {
   return api('/settings/region', { method: 'PATCH', body });
 }
@@ -193,4 +196,21 @@ export function getOrganization(signal?: AbortSignal): Promise<Organization> {
 
 export function saveOrganization(body: { name: string; country: string }): Promise<Organization> {
   return api('/settings/organization', { method: 'PATCH', body });
+}
+
+/** The settings cards that can go back to the server's `.env` (or default) */
+export type EnvSubject =
+  | 'region'
+  | 'storage'
+  | 'backup'
+  | 'offsite'
+  | 'notifications'
+  | 'errorReporting'
+  | 'updateKey';
+
+/** Forgets what was saved on screen for one card — `DELETE /settings/env/:subject` */
+export function backToEnvironment(
+  subject: EnvSubject,
+): Promise<{ subject: EnvSubject; removed: boolean; restartNeeded: boolean }> {
+  return api(`/settings/env/${subject}`, { method: 'DELETE' });
 }

@@ -4,6 +4,7 @@ import { closeMonth, listMonthClosures, reopenMonth, type MonthClosureView } fro
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Caveat, ErrorBox, Loading } from '../../components/States';
+import { useT } from '../../i18n';
 import { formatDate, formatMonth, workWallOf } from '../../lib/format';
 import {
   ConfirmDialog,
@@ -31,6 +32,7 @@ import {
  * forbidden in this project.
  */
 export function MonthsTab() {
+  const t = useT();
   const { data, error, loading, reload } = useApi(listMonthClosures, []);
   const mutation = useMutation();
 
@@ -38,7 +40,7 @@ export function MonthsTab() {
   const [note, setNote] = useState('');
   const [reopening, setReopening] = useState<MonthClosureView | null>(null);
 
-  if (loading && !data) return <Loading label="Loading months…" />;
+  if (loading && !data) return <Loading label={t('Loading months…')} />;
   if (!data) return <ErrorBox error={error} retry={reload} />;
 
   const closed = new Map(data.rows.map((r) => [r.yearMonth, r]));
@@ -49,8 +51,8 @@ export function MonthsTab() {
       <ServerError error={mutation.error} />
 
       <Card
-        title="Closing the Month"
-        hint="Once closed, that month's hours and targets stop moving"
+        title={t('Closing the Month')}
+        hint={t("Once closed, that month's hours and targets stop moving")}
         padded={false}
       >
         <ul className="divide-y divide-line">
@@ -75,23 +77,23 @@ export function MonthsTab() {
                 <span className="min-w-0 flex-1 text-[12px] text-ink-3">
                   {row ? (
                     <>
-                      <span className="text-ok-ink">Closed</span>{' '}
+                      <span className="text-ok-ink">{t('Closed')}</span>{' '}
                       {formatDate(row.closedAt.slice(0, 10))} · {row.closedBy}
                       {row.note && (
                         <span className="block text-ink-2">{row.note}</span>
                       )}
                     </>
                   ) : isCurrent ? (
-                    'Still running — can be closed once the month is over'
+                    t('Still running — can be closed once the month is over')
                   ) : (
-                    'Open — figures can still move'
+                    t('Open — figures can still move')
                   )}
                 </span>
 
                 <RowActions>
                   {row ? (
                     <MiniButton tone="danger" onClick={() => setReopening(row)}>
-                      Reopen
+                      {t('Reopen')}
                     </MiniButton>
                   ) : (
                     !isCurrent && (
@@ -101,7 +103,7 @@ export function MonthsTab() {
                           setClosing(ym);
                         }}
                       >
-                        Close
+                        {t('Close')}
                       </MiniButton>
                     )
                   )}
@@ -116,33 +118,32 @@ export function MonthsTab() {
              is deleted or the screen is closing.
         */}
         <Caveat>
-          Closing a month freezes its totals: the daily rollup stops
-          recalculating it, and time corrections for those dates are refused.
-          Screenshots, reports and everything else stay exactly as they are.
-          Payroll reads the frozen numbers, so a holiday edited later can no
-          longer change a month you have already paid.
+          {t(
+            'Closing a month freezes its totals: the daily rollup stops recalculating it, and time corrections for those dates are refused. Screenshots, reports and everything else stay exactly as they are. Payroll reads the frozen numbers, so a holiday edited later can no longer change a month you have already paid.',
+          )}
         </Caveat>
       </Card>
 
       {closing && (
-        <Modal title={`Close ${monthLabel(closing)}`} onClose={() => setClosing(null)}>
+        <Modal title={t('Close {{month}}', { month: monthLabel(closing) })} onClose={() => setClosing(null)}>
           <p className="text-[13px] text-ink-2">
-            After this, {monthLabel(closing)} stops recalculating and time
-            corrections for those dates are refused. You can reopen it later —
-            both actions are recorded in the audit log.
+            {t(
+              'After this, {{month}} stops recalculating and time corrections for those dates are refused. You can reopen it later — both actions are recorded in the audit log.',
+              { month: monthLabel(closing) },
+            )}
           </p>
 
           <div className="mt-3">
             <TextField
-              label="Note (optional)"
+              label={t('Note (optional)')}
               value={note}
               onChange={setNote}
-              placeholder="Paid on 3 September"
+              placeholder={t('Paid on 3 September')}
             />
           </div>
 
           <RowActions>
-            <MiniButton onClick={() => setClosing(null)}>Cancel</MiniButton>
+            <MiniButton onClick={() => setClosing(null)}>{t('Cancel')}</MiniButton>
             <MiniButton
               disabled={mutation.busy}
               onClick={() =>
@@ -153,7 +154,7 @@ export function MonthsTab() {
                 })
               }
             >
-              Close the month
+              {t('Close the month')}
             </MiniButton>
           </RowActions>
         </Modal>
@@ -166,16 +167,15 @@ export function MonthsTab() {
       */}
       {reopening && (
         <ConfirmDialog
-          title={`Reopen ${monthLabel(reopening.yearMonth)}?`}
-          intro={
-            <>
-              Closed on {formatDate(reopening.closedAt.slice(0, 10))} by{' '}
-              {reopening.closedBy}. Both the closing and this reopening stay in
-              the audit log.
-            </>
-          }
-          warning="Its figures can move again — a holiday edit or a time correction will recalculate them. If this month has already been paid, the numbers behind that payment can change."
-          confirmLabel="Reopen"
+          title={t('Reopen {{month}}?', { month: monthLabel(reopening.yearMonth) })}
+          intro={t(
+            'Closed on {{date}} by {{name}}. Both the closing and this reopening stay in the audit log.',
+            { date: formatDate(reopening.closedAt.slice(0, 10)), name: reopening.closedBy },
+          )}
+          warning={t(
+            'Its figures can move again — a holiday edit or a time correction will recalculate them. If this month has already been paid, the numbers behind that payment can change.',
+          )}
+          confirmLabel={t('Reopen')}
           busy={mutation.busy}
           error={mutation.error}
           onClose={() => setReopening(null)}

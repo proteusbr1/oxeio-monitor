@@ -58,7 +58,7 @@ const SELECT = {
  *    would see the rule in the list while ingest kept applying the old decision.
  * 2. **The id of a deleted rule would stay in the cache**, and ingest would
  *    insert with that id, violate the foreign key and return a 500 for five
- *    minutes straight ([09 § 3a.11](../../../../docs/09-Build-Log.md)).
+ *    minutes straight ([09 § 3a.11](../../../../docs/history/09-Build-Log.md)).
  *
  * Careful: with several API instances, `invalidate()` clears only **its own**
  * process's cache; the others rely on the TTL. v1 has a single container

@@ -7,7 +7,7 @@ namespace oXeio.Core.Agent;
 /// leaves it marked "ready".
 ///
 /// The reason is this repo's own experience
-/// ([G58](../../../../docs/08-Gap-Analysis.md)): an MSI shipped with a wrong LaunchCondition,
+/// ([G58](../../../../docs/history/08-Gap-Analysis.md)): an MSI shipped with a wrong LaunchCondition,
 /// and then it turned out that <b>a new MSI could not fix it</b>: in a major upgrade the old
 /// package is removed using its own cached MSI, bug included. That one machine had to be
 /// fixed by hand. If that happened automatically on 15 PCs at 3 a.m., the whole office's

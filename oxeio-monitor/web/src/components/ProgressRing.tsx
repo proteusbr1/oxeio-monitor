@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 import { pctOf } from '../lib/format';
 
 /**
@@ -39,7 +40,7 @@ export function ProgressRing({
   max,
   size = 46,
   label,
-  ariaLabel = 'Progress',
+  ariaLabel: ariaLabelProp,
 }: {
   /** Amount done (seconds or hours; any unit, as long as it is the same one). */
   value: number;
@@ -57,6 +58,8 @@ export function ProgressRing({
    */
   ariaLabel?: string;
 }) {
+  const t = useT();
+  const ariaLabel = ariaLabelProp ?? t('Progress');
   const pct = pctOf(value, max);
   // Careful: the fill stops even above 100%; otherwise at 140% the circle would
   // start drawing again from the beginning and look like 40%.
@@ -75,8 +78,8 @@ export function ProgressRing({
       className="relative flex-none"
       style={{ width: size, height: size }}
       role="img"
-      aria-label={`${ariaLabel} — ${Math.round(pct)} percent`}
-      title={`${ariaLabel} — ${Math.round(pct)}%`}
+      aria-label={t('{{label}} — {{pct}} percent', { label: ariaLabel, pct: Math.round(pct) })}
+      title={t('{{label}} — {{pct}}%', { label: ariaLabel, pct: Math.round(pct) })}
     >
       {/* Rotated by -90 degrees so the fill starts at the top */}
       <svg width={size} height={size} className="-rotate-90">
@@ -129,7 +132,7 @@ export function ProgressBar({
   value,
   max,
   className = '',
-  ariaLabel = 'Progress',
+  ariaLabel: ariaLabelProp,
   tone = 'auto',
 }: {
   value: number;
@@ -147,6 +150,8 @@ export function ProgressBar({
    */
   tone?: 'auto' | 'ok';
 }) {
+  const t = useT();
+  const ariaLabel = ariaLabelProp ?? t('Progress');
   const pct = pctOf(value, max);
   const shown = Math.min(100, Math.max(0, pct));
   const met = tone === 'ok' || pct >= 100;
@@ -155,7 +160,7 @@ export function ProgressBar({
     <div
       className={`h-1.5 overflow-hidden rounded-full bg-line ${className}`}
       role="img"
-      aria-label={`${ariaLabel} — ${Math.round(pct)} percent`}
+      aria-label={t('{{label}} — {{pct}} percent', { label: ariaLabel, pct: Math.round(pct) })}
     >
       <div
         className={`h-full rounded-full transition-[width] duration-700 ${
@@ -192,7 +197,7 @@ export function TodayMeter({
   value,
   max,
   className = '',
-  ariaLabel = "Today's target",
+  ariaLabel: ariaLabelProp,
 }: {
   kind: 'counted' | 'zero' | 'unknown';
   value: number;
@@ -200,6 +205,8 @@ export function TodayMeter({
   className?: string;
   ariaLabel?: string;
 }) {
+  const t = useT();
+  const ariaLabel = ariaLabelProp ?? t("Today's target");
   if (kind !== 'counted') {
     const unknown = kind === 'unknown';
     return (
@@ -212,7 +219,11 @@ export function TodayMeter({
               'border border-dashed border-line'
         } ${className}`}
         role="img"
-        aria-label={unknown ? `${ariaLabel} — not counted yet` : `${ariaLabel} — nothing counted today`}
+        aria-label={
+          unknown
+            ? t('{{label}} — not counted yet', { label: ariaLabel })
+            : t('{{label}} — nothing counted today', { label: ariaLabel })
+        }
       />
     );
   }
@@ -225,7 +236,7 @@ export function TodayMeter({
     <div
       className={`h-1.5 overflow-hidden rounded-full bg-line ${className}`}
       role="img"
-      aria-label={`${ariaLabel} — ${Math.round(pct)} percent`}
+      aria-label={t('{{label}} — {{pct}} percent', { label: ariaLabel, pct: Math.round(pct) })}
     >
       <div
         className={`h-full min-w-[2px] rounded-full transition-[width] duration-700 ${

@@ -9,7 +9,7 @@ namespace oXeio.Agent.Sync;
 /// Finding a new version, downloading it, verifying it. <b>Not installing it.</b>
 ///
 /// The reason for not installing is written in <see cref="UpdateStage"/>; in short:
-/// [G58](../../../../docs/08-Gap-Analysis.md). Once a bad MSI has run, it cannot be rolled
+/// [G58](../../../../docs/history/08-Gap-Analysis.md). Once a bad MSI has run, it cannot be rolled
 /// back with a new MSI; someone has to go to the machine by hand.
 /// </summary>
 internal sealed class UpdateStager(

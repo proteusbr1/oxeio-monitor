@@ -19,7 +19,7 @@ import { CategoryService } from './category.service';
  * Careful: `AppCategoryService` lives **here** and is exported from here.
  * `AgentModule` imports this module, so ingest and D06 share one instance.
  * Otherwise `invalidate()` would clear its own copy's cache while ingest's copy
- * kept using five-minute-old rules ([09 § 3a.11](../../../../docs/09-Build-Log.md)).
+ * kept using five-minute-old rules ([09 § 3a.11](../../../../docs/history/09-Build-Log.md)).
  */
 @Module({
   controllers: [CategoryController, ActivityController],

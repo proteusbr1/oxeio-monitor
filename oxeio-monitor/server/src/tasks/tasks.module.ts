@@ -6,7 +6,11 @@ import { TasksSettingsController } from './tasks-settings.controller';
 import { TasksSettingsService } from './tasks-settings.service';
 import { MyTasksController, TasksController } from './tasks.controller';
 import { TasksJob } from './tasks.job';
+import { TasksHandoutService } from './tasks.handout.service';
+import { TasksPersonService } from './tasks.person.service';
+import { TasksPoolService } from './tasks.pool.service';
 import { TasksService } from './tasks.service';
+import { TasksStageService } from './tasks.stage.service';
 
 /**
  * Tasks: adding, daily hand-out, completion, and Settings → Tasks.
@@ -18,9 +22,18 @@ import { TasksService } from './tasks.service';
 @Module({
   imports: [AuditModule],
   controllers: [TasksController, MyTasksController, TasksSettingsController],
-  providers: [TasksService, TasksJob, OnScreenService, TasksSettingsService],
-  // `SummaryService` marks tasks started from window titles, reading the
-  // start-detection apps from the settings
-  exports: [TasksService, TasksSettingsService],
+  providers: [
+    TasksService,
+    TasksPoolService,
+    TasksHandoutService,
+    TasksPersonService,
+    TasksStageService,
+    TasksJob,
+    OnScreenService,
+    TasksSettingsService,
+  ],
+  // `SummaryService` marks tasks started from window titles
+  // (`TasksPersonService`), reading the start-detection apps from the settings
+  exports: [TasksPersonService, TasksSettingsService],
 })
 export class TasksModule {}

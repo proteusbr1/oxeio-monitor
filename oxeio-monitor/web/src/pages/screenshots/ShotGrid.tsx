@@ -1,4 +1,7 @@
+import { Trans } from 'react-i18next';
+
 import type { GalleryItem } from '../../api/screenshots';
+import { useT } from '../../i18n';
 import { formatTime } from '../../lib/format';
 import type { FreshUrls } from './useFreshUrls';
 
@@ -48,6 +51,7 @@ function ShotTile({
   showName: boolean;
   onOpen: () => void;
 }) {
+  const t = useT();
   const dead = urls.isDead(item, 'thumb');
   const time = formatTime(item.capturedAt);
 
@@ -58,14 +62,18 @@ function ShotTile({
       // Careful: the whole cell is a button. If only the image were clickable, tapping
       //    the narrow time/app strip below would do nothing and look broken.
       className="block w-full overflow-hidden rounded-lg border border-line bg-surface text-left transition hover:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
-      aria-label={`Screenshot at ${time}${showName ? `, ${item.fullName}` : ''}`}
+      aria-label={
+        showName
+          ? t('Screenshot at {{time}}, {{name}}', { time, name: item.fullName })
+          : t('Screenshot at {{time}}', { time })
+      }
     >
       <div className="relative aspect-[16/10] bg-paper">
         {dead ? (
           // A polite message instead of a broken icon: grey, not red, because nobody
           // did anything wrong; the file expired and was deleted (retention, ADR-006).
           <span className="absolute inset-0 grid place-items-center px-2 text-center text-[11px] text-ink-3">
-            Image no longer available
+            {t('Image no longer available')}
           </span>
         ) : (
           <img
@@ -92,7 +100,11 @@ function ShotTile({
           <span className="absolute top-1 right-1 rounded bg-black/55 px-1 py-px text-[10px] text-white">
             {/* Careful: `.num` wraps only the number, for tabular-nums digits; putting
                 the words in the mono font would widen the strip and cover the image */}
-            Monitor <span className="num">{item.monitorIndex + 1}</span>
+            <Trans
+              i18nKey="Monitor <n>{{number}}</n>"
+              values={{ number: item.monitorIndex + 1 }}
+              components={{ n: <span className="num" /> }}
+            />
           </span>
         )}
       </div>

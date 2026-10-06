@@ -1,5 +1,6 @@
 import { listEmployees, type EmployeeView } from '../api/staff';
 import { useApi } from '../api/useApi';
+import { useT } from '../i18n';
 
 /**
  * Staff picker: needed on the timeline, screenshot and report pages alike.
@@ -24,9 +25,9 @@ import { useApi } from '../api/useApi';
 export function EmployeePicker({
   value,
   onChange,
-  label = 'Staff',
+  label,
   allowAll = false,
-  allLabel = 'Everyone',
+  allLabel,
   includeInactive = false,
   className = '',
 }: {
@@ -40,6 +41,7 @@ export function EmployeePicker({
   includeInactive?: boolean;
   className?: string;
 }) {
+  const t = useT();
   const { data, error, loading } = useApi(
     (signal) =>
       listEmployees({ status: includeInactive ? 'all' : 'active' }, signal),
@@ -50,7 +52,7 @@ export function EmployeePicker({
 
   return (
     <label className={`block ${className}`}>
-      <span className="mb-1 block text-[11.5px] text-ink-3">{label}</span>
+      <span className="mb-1 block text-[11.5px] text-ink-3">{label ?? t('Staff')}</span>
       <select
         value={value === null ? '' : String(value)}
         disabled={loading || error !== null}
@@ -61,20 +63,20 @@ export function EmployeePicker({
           Careful: all three states must be shown here; otherwise, with an empty list,
              a blank dropdown would look like the control itself is broken.
         */}
-        {loading && <option value="">Loading…</option>}
-        {error && <option value="">Couldn't load the list</option>}
+        {loading && <option value="">{t('Loading…')}</option>}
+        {error && <option value="">{t("Couldn't load the list")}</option>}
 
         {!loading && !error && (
           <>
-            {allowAll && <option value="">{allLabel}</option>}
+            {allowAll && <option value="">{allLabel ?? t('Everyone')}</option>}
             {!allowAll && value === null && (
-              <option value="">— Choose —</option>
+              <option value="">{t('— Choose —')}</option>
             )}
-            {rows.length === 0 && <option value="">No staff yet</option>}
+            {rows.length === 0 && <option value="">{t('No staff yet')}</option>}
             {rows.map((emp) => (
               <option key={emp.id} value={emp.id}>
                 {emp.fullName} · {emp.empCode}
-                {emp.status === 'inactive' ? ' (Inactive)' : ''}
+                {emp.status === 'inactive' ? ` ${t('(Inactive)')}` : ''}
               </option>
             ))}
           </>

@@ -5,6 +5,7 @@ import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { ErrorBox, Loading } from '../../components/States';
 import { MiniButton, SelectField, ServerError, TextField, useMutation } from '../../components/ui';
+import { currentLanguage, useT } from '../../i18n';
 import { countryOptions } from './region.math';
 
 /**
@@ -13,8 +14,11 @@ import { countryOptions } from './region.math';
  * Set by the setup wizard; ORG_NAME in the .env is the fallback.
  */
 export function OrganizationCard() {
+  const t = useT();
   const org = useApi(getOrganization, []);
-  const countries = useMemo(() => countryOptions(), []);
+  // named in the dashboard's language, and renamed when it changes
+  const language = currentLanguage();
+  const countries = useMemo(() => countryOptions(language), [language]);
   const save = useMutation();
   const [name, setName] = useState<string | null>(null);
   const [country, setCountry] = useState<string | null>(null);
@@ -27,11 +31,11 @@ export function OrganizationCard() {
   const changed = shownName.trim() !== org.data.name || shownCountry !== (org.data.country ?? '');
 
   return (
-    <Card title="Company" hint="Shown on the login page and in summaries and reports">
+    <Card title={t('Company')} hint={t('Shown on the login page and in summaries and reports')}>
       <div className="grid gap-3.5 p-4 sm:grid-cols-2">
-        <TextField label="Name" value={shownName} onChange={setName} maxLength={80} />
+        <TextField label={t('Name')} value={shownName} onChange={setName} maxLength={80} />
         <SelectField
-          label="Country"
+          label={t('Country')}
           value={shownCountry}
           onChange={setCountry}
           options={[{ value: '', label: '—' }, ...countries]}
@@ -49,7 +53,7 @@ export function OrganizationCard() {
               })
             }
           >
-            {save.busy ? 'Saving…' : 'Save'}
+            {save.busy ? t('Saving…') : t('Save')}
           </MiniButton>
         </div>
       </div>

@@ -11,7 +11,7 @@ import {
  * H04: staged rollout.
  *
  * A mistake in these rules is found on the office's 15 PCs, by which time it
- * is too late: G58 (docs/08-Gap-Analysis.md) showed that once a bad MSI has
+ * is too late: G58 (docs/history/08-Gap-Analysis.md) showed that once a bad MSI has
  * been delivered, a new MSI cannot fix it; someone has to go by hand.
  */
 

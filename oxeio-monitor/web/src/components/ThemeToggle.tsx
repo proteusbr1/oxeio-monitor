@@ -18,6 +18,7 @@ import { useCallback, useEffect, useSyncExternalStore } from 'react';
  */
 
 import type { Theme } from '../api/account';
+import { useT } from '../i18n';
 
 export type { Theme };
 
@@ -159,10 +160,11 @@ export function useTheme(): ThemeState {
  * button. With tokens, near-white text in dark would fade into near-white.
  */
 export function ThemeToggle() {
+  const t = useT();
   const { theme, toggle } = useTheme();
   const goingLight = theme === 'dark';
 
-  const label = goingLight ? 'Switch to light mode' : 'Switch to dark mode';
+  const label = goingLight ? t('Switch to light mode') : t('Switch to dark mode');
 
   return (
     <button

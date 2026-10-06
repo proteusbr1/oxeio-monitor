@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Trans } from 'react-i18next';
 
 import { getHourly, type HourlyChart as HourlyData } from '../../api/dashboard';
 import { useApi } from '../../api/useApi';
@@ -6,6 +7,7 @@ import { Card } from '../../components/Card';
 import { Duration } from '../../components/Duration';
 import { SectionHead } from '../../components/Page';
 import { Caveat, Empty, ErrorBox, Loading } from '../../components/States';
+import { useT } from '../../i18n';
 import { formatDuration, workTimeZoneLabel } from '../../lib/format';
 
 /**
@@ -43,6 +45,7 @@ export function HourlyChart({
   date: string;
   nonce: number;
 }) {
+  const t = useT();
   const { data, error, loading, reload } = useApi(
     (signal) => getHourly(employeeId, date, signal),
     [employeeId, date, nonce],
@@ -51,8 +54,8 @@ export function HourlyChart({
   return (
     <section>
       <SectionHead
-        title="Work by hour"
-        hint={`Counted time only · 24 hours on the ${workTimeZoneLabel()} clock`}
+        title={t('Work by hour')}
+        hint={t('Counted time only · 24 hours on the {{zone}} clock', { zone: workTimeZoneLabel() })}
       />
 
       {loading && !data ? (
@@ -61,8 +64,8 @@ export function HourlyChart({
         <ErrorBox error={error} retry={reload} />
       ) : !data || data.buckets.length === 0 || data.totalActiveSec === 0 ? (
         <Empty
-          title="No counted work on this day"
-          hint="Idle and locked time never reaches this chart. Grey bands in the timeline above mean the PC was on, but the work wasn't counted."
+          title={t('No counted work on this day')}
+          hint={t("Idle and locked time never reaches this chart. Grey bands in the timeline above mean the PC was on, but the work wasn't counted.")}
         />
       ) : (
         <Body data={data} />
@@ -72,6 +75,7 @@ export function HourlyChart({
 }
 
 function Body({ data }: { data: HourlyData }) {
+  const t = useT();
   const peak = Math.max(...data.buckets.map((b) => b.activeSec));
   /**
    * Important: the scale ceiling is **never below 60 minutes**. Scaling by
@@ -116,13 +120,11 @@ function Body({ data }: { data: HourlyData }) {
               · <span className="num">{formatDuration(shown.activeSec)}</span>
             </span>
           ) : (
-            <>
-              Counted{' '}
-              <span className="num font-semibold text-ink">
-                {formatDuration(data.totalActiveSec)}
-              </span>{' '}
-              in total
-            </>
+            <Trans
+              i18nKey="Counted <b>{{total}}</b> in total"
+              values={{ total: formatDuration(data.totalActiveSec) }}
+              components={{ b: <span className="num font-semibold text-ink" /> }}
+            />
           )}
         </p>
 
@@ -132,7 +134,7 @@ function Body({ data }: { data: HourlyData }) {
             viewBox={`0 0 ${W} ${H}`}
             className="block w-full min-w-[620px]"
             role="img"
-            aria-label={`Work by hour — ${formatDuration(data.totalActiveSec)} in total`}
+            aria-label={t('Work by hour — {{total}} in total', { total: formatDuration(data.totalActiveSec) })}
             // When the mouse leaves the chart the readout returns to its default.
             // Phones never fire this event, so the last tapped hour stays shown
             // there, which is desired; otherwise the number would vanish as the finger lifts.
@@ -222,9 +224,9 @@ function Body({ data }: { data: HourlyData }) {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-line px-4 py-2.5 text-[11.5px] text-ink-3">
-          <span>Numbers below = hour of the {workTimeZoneLabel()} day (0–23)</span>
+          <span>{t('Numbers below = hour of the {{zone}} day (0–23)', { zone: workTimeZoneLabel() })}</span>
           <span>
-            Counted work this day{' '}
+            {t('Counted work this day')}{' '}
             <Duration seconds={data.totalActiveSec} className="text-ink-2" />
           </span>
         </div>
@@ -232,8 +234,10 @@ function Body({ data }: { data: HourlyData }) {
 
       {overFull && (
         <Caveat>
-          Some hours hold <b>more than 60 minutes</b> — one person had two PCs
-          running then, and that time is counted twice.
+          <Trans
+            i18nKey="Some hours hold <b>more than 60 minutes</b> — one person had two PCs running then, and that time is counted twice."
+            components={{ b: <b /> }}
+          />
         </Caveat>
       )}
     </>

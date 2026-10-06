@@ -6,6 +6,7 @@ import { Page } from '../../components/Page';
 import { ErrorBox, Loading } from '../../components/States';
 import { dayDuty } from '../live/roster';
 import { TeamRoster } from '../live/TeamRoster';
+import { useT } from '../../i18n';
 
 /**
  * **Worklog: who is working right now, and who is not.**
@@ -28,6 +29,7 @@ import { TeamRoster } from '../live/TeamRoster';
 const REFRESH_MS = 15_000;
 
 export function WorklogPage() {
+  const t = useT();
   const { user } = useAuth();
 
   /**
@@ -45,8 +47,8 @@ export function WorklogPage() {
 
   if (!canView) {
     return (
-      <Page title="Worklog">
-        <ErrorBox error={new ApiError(403, "You don't have access")} />
+      <Page title={t('Worklog')}>
+        <ErrorBox error={new ApiError(403, t("You don't have access"))} />
       </Page>
     );
   }
@@ -55,8 +57,8 @@ export function WorklogPage() {
 
   return (
     <Page
-      title="Worklog"
-      subtitle="Who is working right now, and who is not"
+      title={t('Worklog')}
+      subtitle={t('Who is working right now, and who is not')}
     >
       {/*
         Careful: a refresh does not put the whole screen into loading:
@@ -64,7 +66,7 @@ export function WorklogPage() {
            every 15 seconds and nobody could finish reading even one.
       */}
       {board.loading && !data ? (
-        <Loading label="Loading the team…" />
+        <Loading label={t('Loading the team…')} />
       ) : !data ? (
         <ErrorBox error={board.error} retry={board.reload} />
       ) : (

@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 
+import { useT } from '../i18n';
+
 /**
  * I09: "Signing out in 60 seconds".
  *
@@ -21,6 +23,7 @@ export function IdleWarning({
   onStay: () => void;
   onLogoutNow: () => void;
 }) {
+  const t = useT();
   const boxRef = useRef<HTMLDivElement>(null);
 
   /**
@@ -56,7 +59,7 @@ export function IdleWarning({
       ref={boxRef}
       role="alertdialog"
       aria-live="assertive"
-      aria-label="Your session is about to end"
+      aria-label={t('Your session is about to end')}
       className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-sm rounded-xl border border-brand/40 bg-surface p-4 shadow-lg sm:inset-x-auto sm:right-4 sm:bottom-4"
     >
       {/*
@@ -64,11 +67,10 @@ export function IdleWarning({
            the countdown every single time.
       */}
       <h2 className="text-[14px] font-semibold text-brand-ink">
-        Signing out in {secondsLeft} second{secondsLeft === 1 ? '' : 's'}
+        {t('Signing out in {{count}} seconds', { count: secondsLeft })}
       </h2>
       <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
-        Nothing has happened for a while, so the session will close for
-        security. Any click or key press cancels this.
+        {t('Nothing has happened for a while, so the session will close for security. Any click or key press cancels this.')}
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -77,14 +79,14 @@ export function IdleWarning({
           onClick={onStay}
           className="rounded-md border border-ink bg-ink px-3 py-1.5 text-[13px] font-medium text-on-ink transition hover:bg-ink-strong focus:outline-none focus:ring-2 focus:ring-brand/30"
         >
-          Stay signed in
+          {t('Stay signed in')}
         </button>
         <button
           type="button"
           onClick={onLogoutNow}
           className="rounded-md border border-line bg-surface px-3 py-1.5 text-[13px] font-medium text-ink-2 transition hover:border-brand hover:text-ink focus:outline-none focus:ring-2 focus:ring-brand/30"
         >
-          Sign out now
+          {t('Sign out now')}
         </button>
       </div>
     </div>

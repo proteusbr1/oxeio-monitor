@@ -22,6 +22,8 @@
  * exactly as the server's `zone.ts` computes it. `utcOffsetMinutes` is only
  * the fallback for a browser whose `Intl` does not know the zone.
  */
+import { currentLanguage, translate } from '../i18n';
+
 let workZone = { timeZone: 'UTC', utcOffsetMinutes: 0 };
 let zoneFormat: Intl.DateTimeFormat | null = makeZoneFormat('UTC');
 /** offset per UTC minute; the board asks about the same minutes over and over */
@@ -356,6 +358,18 @@ export function thisMonthRange(now: Date = new Date()): {
 
 // ── Showing dates ───────────────────────────────────────────────────────────
 
+/**
+ * Month and weekday names in the dashboard's language when it is not
+ * English (`10 de agosto de 2026`, `lun`) — from `Intl`, so no list of names
+ * is kept here per language. A display locale (`DISPLAY_LOCALE`) still wins:
+ * it asks for numeric dates.
+ */
+function inUiLanguage(date: Date, options: Intl.DateTimeFormatOptions): string | null {
+  const language = currentLanguage();
+  if (displayLocale !== null || language === 'en') return null;
+  return new Intl.DateTimeFormat(language, { ...options, timeZone: 'UTC' }).format(date);
+}
+
 /** `'2026-08-10'` → `'10 August 2026'` */
 export function formatDate(date: string): string {
   const parsed = parseWorkDate(date);
@@ -367,7 +381,10 @@ export function formatDate(date: string): string {
       year: 'numeric',
     });
   }
-  return `${parsed.getUTCDate()} ${MONTHS[parsed.getUTCMonth()]} ${parsed.getUTCFullYear()}`;
+  return (
+    inUiLanguage(parsed, { day: 'numeric', month: 'long', year: 'numeric' }) ??
+    `${parsed.getUTCDate()} ${MONTHS[parsed.getUTCMonth()]} ${parsed.getUTCFullYear()}`
+  );
 }
 
 /** `'2026-08-10'` to `'10 Aug'`: for narrow table columns. */
@@ -381,7 +398,10 @@ export function formatDateMedium(date: string): string {
   if (displayLocale !== null) {
     return localeDate(parsed, { day: '2-digit', month: '2-digit', year: 'numeric' });
   }
-  return `${parsed.getUTCDate()} ${MONTHS_SHORT[parsed.getUTCMonth()]} ${parsed.getUTCFullYear()}`;
+  return (
+    inUiLanguage(parsed, { day: 'numeric', month: 'short', year: 'numeric' }) ??
+    `${parsed.getUTCDate()} ${MONTHS_SHORT[parsed.getUTCMonth()]} ${parsed.getUTCFullYear()}`
+  );
 }
 
 export function formatDateShort(date: string): string {
@@ -389,7 +409,10 @@ export function formatDateShort(date: string): string {
   if (!parsed) return date;
   if (displayLocale !== null)
     return localeDate(parsed, { day: '2-digit', month: '2-digit' });
-  return `${parsed.getUTCDate()} ${MONTHS_SHORT[parsed.getUTCMonth()]}`;
+  return (
+    inUiLanguage(parsed, { day: 'numeric', month: 'short' }) ??
+    `${parsed.getUTCDate()} ${MONTHS_SHORT[parsed.getUTCMonth()]}`
+  );
 }
 
 /**
@@ -402,7 +425,7 @@ export function formatDateShort(date: string): string {
 export function weekdayOf(date: string): string {
   const parsed = parseWorkDate(date);
   if (!parsed) return '';
-  return WEEKDAYS[parsed.getUTCDay()];
+  return inUiLanguage(parsed, { weekday: 'short' }) ?? WEEKDAYS[parsed.getUTCDay()];
 }
 
 /** `'2026-08'` → `'August 2026'` */
@@ -415,7 +438,11 @@ export function formatMonth(monthKey: string): string {
     );
     return localeDate(first, { month: '2-digit', year: 'numeric' });
   }
-  return `${MONTHS[month - 1]} ${monthKey.slice(0, 4)}`;
+  const first = new Date(Date.UTC(Number(monthKey.slice(0, 4)), month - 1, 1));
+  return (
+    inUiLanguage(first, { month: 'long', year: 'numeric' }) ??
+    `${MONTHS[month - 1]} ${monthKey.slice(0, 4)}`
+  );
 }
 
 /**
@@ -453,19 +480,15 @@ export function formatDateTime(iso: string | null): string {
  * mechanical and lowers trust in the numbers.
  */
 export function formatAgo(iso: string | null, now: Date = new Date()): string {
-  if (!iso) return 'Never';
+  if (!iso) return translate('Never');
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return '—';
 
   const sec = Math.floor((now.getTime() - at.getTime()) / 1000);
-  if (sec < 45) return 'Just now';
-  if (sec < 3600) return ago(Math.round(sec / 60), 'minute');
-  if (sec < 86400) return ago(Math.round(sec / 3600), 'hour');
-  return ago(Math.round(sec / 86400), 'day');
-}
-
-function ago(count: number, unit: string): string {
-  return `${count} ${unit}${count === 1 ? '' : 's'} ago`;
+  if (sec < 45) return translate('Just now');
+  if (sec < 3600) return translate('{{count}} minutes ago', { count: Math.round(sec / 60) });
+  if (sec < 86400) return translate('{{count}} hours ago', { count: Math.round(sec / 3600) });
+  return translate('{{count}} days ago', { count: Math.round(sec / 86400) });
 }
 
 // ── Duration ────────────────────────────────────────────────────────────────

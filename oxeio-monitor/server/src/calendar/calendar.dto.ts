@@ -10,6 +10,7 @@ import {
   IsOptional,
   IsString,
   Matches,
+  ValidateIf,
   Max,
   MaxLength,
   Min,
@@ -64,12 +65,12 @@ export class CreateWorkPolicyDto {
   @IsInt({ each: true }) @Min(1, { each: true }) @Max(7, { each: true })
   weeklyOffDays?: number[];
 
-  /** If omitted, 07:00-23:00 is set; it cannot be made 24 hours by setting `null` (ADR-011c) */
-  @IsOptional() @Matches(HHMM, { message: "screenshotFrom must be in 'HH:MM' format" })
-  screenshotFrom?: string;
+  /** Both null (or omitted) = whenever the computer is in use; else 'HH:MM' */
+  @IsOptional() @ValidateIf((_, v) => v !== null) @Matches(HHMM, { message: "screenshotFrom must be in 'HH:MM' format" })
+  screenshotFrom?: string | null;
 
-  @IsOptional() @Matches(HHMM, { message: "screenshotTo must be in 'HH:MM' format" })
-  screenshotTo?: string;
+  @IsOptional() @ValidateIf((_, v) => v !== null) @Matches(HHMM, { message: "screenshotTo must be in 'HH:MM' format" })
+  screenshotTo?: string | null;
 
   /**
    * **When the office is open.** Only decides when an `agent_down` alert is
@@ -142,11 +143,12 @@ export class UpdateWorkPolicyDto {
   @IsInt({ each: true }) @Min(1, { each: true }) @Max(7, { each: true })
   weeklyOffDays?: number[];
 
-  @IsOptional() @Matches(HHMM)
-  screenshotFrom?: string;
+  // null on both = whenever the computer is in use
+  @IsOptional() @ValidateIf((_, v) => v !== null) @Matches(HHMM)
+  screenshotFrom?: string | null;
 
-  @IsOptional() @Matches(HHMM)
-  screenshotTo?: string;
+  @IsOptional() @ValidateIf((_, v) => v !== null) @Matches(HHMM)
+  screenshotTo?: string | null;
 
   /** Office hours: the window for the `agent_down` alert (G01) */
   @IsOptional() @Matches(HHMM)

@@ -8,6 +8,8 @@ export type Theme = 'light' | 'dark';
 export interface UserPreferences {
   /** unset = this browser's own choice */
   theme?: Theme;
+  /** unset = the company's default language */
+  language?: 'en' | 'pt-BR' | 'es';
 }
 
 export interface AccountView {
@@ -39,6 +41,7 @@ export function getAccount(signal?: AbortSignal): Promise<AccountView> {
 export function updateAccount(body: {
   fullName?: string;
   theme?: Theme | null;
+  language?: 'en' | 'pt-BR' | 'es' | null;
 }): Promise<AccountView> {
   return api<AccountView>('/account', { method: 'PATCH', body });
 }

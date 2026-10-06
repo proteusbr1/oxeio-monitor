@@ -19,7 +19,7 @@ import type { Digest, DigestRow } from './digest.math';
  * Careful: **never sorted by hours.** Putting everyone in hours order would
  * turn this into a daily **leaderboard** — and that is on the README's "never"
  * list. Within each group the order is **by employee code**, exactly as in the
- * report ([10 § R22 note](../../../../docs/10-Roadmap.md)).
+ * report ([10 § R22 note](../../../../docs/history/10-Roadmap.md)).
  *
  * Careful: **no app, domain or screenshot here either** — only hours. The
  * rule from `digest.math.ts` holds: Telegram messages get forwarded.

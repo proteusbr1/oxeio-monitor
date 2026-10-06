@@ -32,7 +32,7 @@ public sealed record WindowSample
 /// <item>While the same window stays in front there is a single record, not one per second</item>
 /// <item><b>Under 5 seconds is dropped</b> (D04): this filters alt-tab storms</item>
 /// <item>Nothing is counted unless ACTIVE: which app was in front during idle time is meaningless</item>
-/// <item>A full URL never goes out, only the domain ([ADR-013](../../../../docs/05-Options-Decisions.md))</item>
+/// <item>A full URL never goes out, only the domain ([ADR-013](../../../../docs/history/05-Options-Decisions.md))</item>
 /// </list>
 /// </summary>
 public sealed class AppUsageTracker(
@@ -50,7 +50,7 @@ public sealed class AppUsageTracker(
 
     /// <summary>
     /// As with segments: even while working in one app for a long time, records come out
-    /// regularly, or a crash would lose all of it ([G53](../../../../docs/08-Gap-Analysis.md)).
+    /// regularly, or a crash would lose all of it ([G53](../../../../docs/history/08-Gap-Analysis.md)).
     /// </summary>
     public static readonly TimeSpan DefaultMaxDuration = TimeSpan.FromMinutes(5);
 

@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { Trans } from 'react-i18next';
 
 import { getAttendanceReport, reportXlsxUrl } from '../../api/reports';
 import { useApi } from '../../api/useApi';
@@ -20,6 +21,7 @@ import {
 import { seesEveryone } from '../../api/auth';
 import { HeatGrid } from './HeatGrid';
 import { buildMonthGrid, type GridSort } from './heatmap';
+import { useT } from '../../i18n';
 
 /**
  * Monthly progress (`/monthly`).
@@ -39,16 +41,17 @@ import { buildMonthGrid, type GridSort } from './heatmap';
  *   so they are never allowed to make the request (see below).
  */
 export function MonthlyPage() {
+  const t = useT();
   const { user } = useAuth();
 
   // Important: for staff this screen is the colleagues' list; better to stop before
   //   catching the 403, or every visit would make a pointless server call.
   if (!seesEveryone(user?.role)) {
     return (
-      <Page title="Monthly">
+      <Page title={t('Monthly')}>
         <Empty
-          title="You don't have access"
-          hint="Everyone's monthly hours are for the owner and managers only."
+          title={t("You don't have access")}
+          hint={t("Everyone's monthly hours are for the owner and managers only.")}
         />
       </Page>
     );
@@ -58,6 +61,7 @@ export function MonthlyPage() {
 }
 
 function MonthlyBoard() {
+  const t = useT();
   const today = todayInWorkZone();
   const [month, setMonth] = useState(() => monthKeyOf(today));
   const [sort, setSort] = useState<GridSort>('pace');
@@ -107,21 +111,21 @@ function MonthlyBoard() {
           )
         }
         disabled={download.busy}
-        title="The file is built on the server first, then downloads"
+        title={t('The file is built on the server first, then downloads')}
       >
-        {download.busy ? 'Preparing…' : 'Excel'}
+        {download.busy ? t('Preparing…') : 'Excel'}
       </Button>
     </>
   );
 
   return (
     <Page
-      title="Monthly"
+      title={t('Monthly')}
       subtitle={
         // Careful: the month name also comes from the data's `meta`, so every number on
         //    the screen speaks for the same response (see the `grid` note above)
         data
-          ? `${formatMonth(monthKeyOf(data.meta.from))} · counted from ${formatDate(data.meta.from)} to ${formatDate(data.meta.to)}`
+          ? `${formatMonth(monthKeyOf(data.meta.from))} · ${t('counted from {{from}} to {{to}}', { from: formatDate(data.meta.from), to: formatDate(data.meta.to) })}`
           : formatMonth(month)
       }
       actions={actions}
@@ -135,24 +139,24 @@ function MonthlyBoard() {
       )}
 
       {loading && !data ? (
-        <Loading label="Loading the month…" />
+        <Loading label={t('Loading the month…')} />
       ) : error ? (
         <ErrorBox error={error} retry={reload} />
       ) : !grid || grid.rows.length === 0 ? (
         <Empty
-          title={`Nothing counted in ${formatMonth(month)} yet`}
-          hint="Have staff been added, and is the agent installed on their computers? Hours start adding up from the day after the agent runs."
+          title={t('Nothing counted in {{month}} yet', { month: formatMonth(month) })}
+          hint={t('Have staff been added, and is the agent installed on their computers? Hours start adding up from the day after the agent runs.')}
         />
       ) : (
         <div className="space-y-4">
           <StatRow>
-            <Stat label="Staff" value={grid.totals.employees} />
+            <Stat label={t('Staff')} value={grid.totals.employees} />
             <Stat
-              label="Counted so far"
+              label={t('Counted so far')}
               value={formatHoursAsDuration(grid.totals.creditedHours)}
             />
             <Stat
-              label="Expected so far"
+              label={t('Expected so far')}
               value={formatHoursAsDuration(grid.totals.expectedHours)}
               tone="muted"
             />
@@ -161,13 +165,13 @@ function MonthlyBoard() {
                  grey/black, or red would lose its meaning.
             */}
             <Stat
-              label="Behind"
+              label={t('Behind')}
               value={grid.totals.behind}
               unit={`/${grid.totals.employees}`}
               tone={grid.totals.behind > 0 ? 'attention' : 'muted'}
             />
             <Stat
-              label="Everyone's monthly target"
+              label={t("Everyone's monthly target")}
               value={
                 grid.totals.targetHoursInRange === null
                   ? '—'
@@ -179,12 +183,12 @@ function MonthlyBoard() {
 
           <div>
             <SectionHead
-              title="Staff × date"
+              title={t('Staff × date')}
               // Careful: do not write "darker": the ramp is opacity over `--color-ink`,
               //    and `ink` is black in the light theme, white in dark. So in dark,
               //    more hours make the cell **brighter**, not darker, and the text
               //    would say the opposite. Theme-neutral wording is the only safe one.
-              hint="The stronger a cell, the more hours were counted that day"
+              hint={t('The stronger a cell, the more hours were counted that day')}
               actions={
                 <SortToggle value={sort} onChange={setSort} />
               }
@@ -199,10 +203,10 @@ function MonthlyBoard() {
               Careful: numbers use English digits (10, 6).
             */}
             <p className="mt-3 text-xs text-ink-3">
-              <b className="font-semibold text-ink-2">Hours</b> are counted, not
-              days. <span className="num">10</span> hours one day and{' '}
-              <span className="num">6</span> the next is fine — what matters is
-              reaching the month's total target.
+              <Trans
+                i18nKey="<b>Hours</b> are counted, not days. 10 hours one day and 6 the next is fine — what matters is reaching the month's total target."
+                components={{ b: <b className="font-semibold text-ink-2" /> }}
+              />
             </p>
 
             <Notices
@@ -237,14 +241,13 @@ function Notices({
   estimated: boolean;
   excluded: string[];
 }) {
+  const t = useT();
   const notes: ReactNode[] = [];
 
   if (clamped) {
     notes.push(
       <>
-        The month is not over yet. Data was requested up to{' '}
-        {formatDate(requestedTo)}, but only {formatDate(coveredTo)} is covered —
-        so “Expected so far” is the target up to today, not for the whole month.
+        {t('The month is not over yet. Data was requested up to {{requested}}, but only {{covered}} is covered — so “Expected so far” is the target up to today, not for the whole month.', { requested: formatDate(requestedTo), covered: formatDate(coveredTo) })}
       </>,
     );
   }
@@ -252,9 +255,7 @@ function Notices({
   if (estimated) {
     notes.push(
       <>
-        A monthly target marked <span className="num">≈</span> is an estimate —
-        it drops if a new public holiday is declared on any of the remaining
-        days.
+        {t('A monthly target marked ≈ is an estimate — it drops if a new public holiday is declared on any of the remaining days.')}
       </>,
     );
   }
@@ -262,9 +263,7 @@ function Notices({
   if (excluded.length > 0) {
     notes.push(
       <>
-        {excluded.length} people are missing from this count —{' '}
-        {excluded.join(', ')}. They are inactive, but their last working day is
-        not on file, so no target could be set for them.
+        {t('{{count}} people are missing from this count — {{names}}. They are inactive, but their last working day is not on file, so no target could be set for them.', { count: excluded.length, names: excluded.join(', ') })}
       </>,
     );
   }
@@ -292,14 +291,15 @@ function SortToggle({
   value: GridSort;
   onChange: (next: GridSort) => void;
 }) {
+  const t = useT();
   return (
     <div className="flex items-center gap-1">
-      <span className="text-[11.5px] text-ink-3">Sort</span>
+      <span className="text-[11.5px] text-ink-3">{t('Sort')}</span>
       <Tab active={value === 'pace'} onClick={() => onChange('pace')}>
-        Shortfall first
+        {t('Shortfall first')}
       </Tab>
       <Tab active={value === 'name'} onClick={() => onChange('name')}>
-        Name
+        {t('Name')}
       </Tab>
     </div>
   );

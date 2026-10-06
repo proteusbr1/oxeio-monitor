@@ -6,6 +6,7 @@ import { ProgressBar } from '../../components/ProgressRing';
 import { StatusChip } from '../../components/StatusDot';
 import { PersonCell, Table, type Column } from '../../components/Table';
 import { formatDuration, pctOf } from '../../lib/format';
+import { useT } from '../../i18n';
 
 /**
  * **Team table, with all six columns of mockup A**: Employee, Today, Target,
@@ -24,6 +25,7 @@ import { formatDuration, pctOf } from '../../lib/format';
  * scrolling across six columns would lose which row you are looking at.
  */
 export function TeamTable({ cards }: { cards: LiveCard[] }) {
+  const t = useT();
   const { features } = useFeatures();
   /**
    * Careful: an employee on leave goes **to the end of the list**; sorting progress
@@ -46,13 +48,13 @@ export function TeamTable({ cards }: { cards: LiveCard[] }) {
   const columns: Column<LiveCard>[] = [
     {
       key: 'person',
-      header: 'Staff',
+      header: t('Staff'),
       className: 'min-w-40',
       render: (c) => <PersonCell fullName={c.fullName} empCode={c.empCode} />,
     },
     {
       key: 'today',
-      header: 'Today',
+      header: t('Today'),
       align: 'right',
       render: (c) => (
         <span className="num font-semibold">
@@ -62,7 +64,7 @@ export function TeamTable({ cards }: { cards: LiveCard[] }) {
     },
     {
       key: 'target',
-      header: 'Target',
+      header: t('Target'),
       align: 'right',
       render: (c) =>
         /*
@@ -84,14 +86,14 @@ export function TeamTable({ cards }: { cards: LiveCard[] }) {
             className="text-ink-3"
             title={
               dayDuty(c) === 'leave'
-                ? 'On approved leave today'
+                ? t('On approved leave today')
                 : dayDuty(c) === 'none'
-                  ? 'No hours target in this work policy'
-                  : 'Weekly off or holiday'
+                  ? t('No hours target in this work policy')
+                  : t('Weekly off or holiday')
             }
           >
             {/* Careful: no target is not a day off; say so instead of the dash */}
-            {dayDuty(c) === 'none' ? 'No target' : '—'}
+            {dayDuty(c) === 'none' ? t('No target') : '—'}
           </span>
         ),
     },
@@ -121,7 +123,7 @@ export function TeamTable({ cards }: { cards: LiveCard[] }) {
       ? [
           {
             key: 'tasks',
-            header: 'Tasks',
+            header: t('Tasks'),
             align: 'right' as const,
             className: 'whitespace-nowrap',
             render: (c: LiveCard) => <TaskCell card={c} />,
@@ -130,13 +132,13 @@ export function TeamTable({ cards }: { cards: LiveCard[] }) {
       : []),
     {
       key: 'progress',
-      header: 'Progress',
+      header: t('Progress'),
       className: 'w-40 min-w-32',
       render: (c) => <TodayBar card={c} />,
     },
     {
       key: 'status',
-      header: 'Status',
+      header: t('Status'),
       /*
         The coloured pill from the mockup. It was not written anew: `StatusChip`
            already existed (used at the top of the card). Careful: building our own
@@ -184,6 +186,7 @@ export function TeamTable({ cards }: { cards: LiveCard[] }) {
  * the percentage beside it.
  */
 function TodayBar({ card }: { card: LiveCard }) {
+  const t = useT();
   const targeted = hasTarget(card);
 
   // No target: the Target column says so, and there is nothing to draw a bar against
@@ -211,7 +214,7 @@ function TodayBar({ card }: { card: LiveCard }) {
     return (
       <div
         className="h-1.5 rounded-full bg-line/60"
-        title="Weekly off or holiday — nothing is expected today"
+        title={t('Weekly off or holiday — nothing is expected today')}
       />
     );
   }
@@ -228,8 +231,8 @@ function TodayBar({ card }: { card: LiveCard }) {
           tone="ok"
           ariaLabel={
             bonus
-              ? `${card.fullName} — worked on a day off, against a normal day`
-              : `${card.fullName} — today's target`
+              ? t('{{name}} — worked on a day off, against a normal day', { name: card.fullName })
+              : t("{{name}} — today's target", { name: card.fullName })
           }
         />
       </div>

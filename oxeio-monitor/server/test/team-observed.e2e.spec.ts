@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { workDateOf } from '../src/agent/util/work-time';
-import { DashboardService } from '../src/dashboard/dashboard.service';
+import { DashboardLiveService } from '../src/dashboard/dashboard.live.service';
+import { DashboardTrendService } from '../src/dashboard/dashboard.trend.service';
 import { SummaryService } from '../src/summary/summary.service';
 import {
   createHarness,
@@ -41,7 +42,8 @@ import {
  */
 let h: Harness;
 let summary: SummaryService;
-let dashboard: DashboardService;
+let dashboard: DashboardTrendService;
+let liveBoard: DashboardLiveService;
 
 const HOUR = 3600;
 const MS_PER_DAY = 86_400_000;
@@ -49,7 +51,8 @@ const MS_PER_DAY = 86_400_000;
 beforeAll(async () => {
   h = await createHarness();
   summary = h.app.get(SummaryService);
-  dashboard = h.app.get(DashboardService);
+  dashboard = h.app.get(DashboardTrendService);
+  liveBoard = h.app.get(DashboardLiveService);
 });
 
 afterAll(async () => {
@@ -196,7 +199,7 @@ describe("G111 — the board's card says how many people the total covers", () =
  */
 describe('G130 — the card says they are on leave today', () => {
   const cardFor = async (empCode: string) => {
-    const board = await dashboard.live(workNoon());
+    const board = await liveBoard.live(workNoon());
     return board.cards.find((c) => c.empCode === empCode)!;
   };
 

@@ -13,6 +13,7 @@ import type { Me } from '../api/auth';
 import { updateAccount } from '../api/account';
 import { setUnauthorizedHandler } from '../api/client';
 import { applyTheme, setThemeSaver } from '../components/ThemeToggle';
+import { setLanguage } from '../i18n';
 import { loadSession } from './session';
 import { IdleWarning } from './IdleWarning';
 import { login as loginRequest, type LoginCredentials } from './twoFactorApi';
@@ -94,6 +95,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     });
   }, [signedIn, savedTheme]);
+
+  // their own language follows them to every computer (Account page)
+  const savedLanguage = user?.preferences?.language;
+  useEffect(() => {
+    if (savedLanguage) setLanguage(savedLanguage);
+  }, [savedLanguage]);
 
   useEffect(() => {
     // When a session ends on any request (30 minutes of inactivity, I09),

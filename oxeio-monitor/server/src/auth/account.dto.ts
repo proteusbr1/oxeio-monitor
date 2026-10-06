@@ -1,5 +1,6 @@
 import { IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateIf } from 'class-validator';
 
+import { LANGUAGES, type Language } from '../settings/languages';
 import { THEMES, type Theme } from './preferences';
 
 /** PATCH /account — only what a person may change about themselves */
@@ -15,4 +16,10 @@ export class UpdateAccountDto {
   @ValidateIf((_, v) => v !== null)
   @IsIn(THEMES)
   theme?: Theme | null;
+
+  /** `null` = back to the company's default language */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsIn(LANGUAGES)
+  language?: Language | null;
 }

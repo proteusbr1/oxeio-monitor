@@ -23,7 +23,7 @@ export interface WorkPolicyView {
    * ISO weekday: Mon = 1 ... Fri = 5 ... Sun = 7. Several allowed; empty = every day is a workday.
    */
   weeklyOffDays: number[];
-  /** `'HH:MM'` capture window; default 07:00-23:00. */
+  /** `'HH:MM'` capture window; both null = whenever the computer is in use (the default). */
   screenshotFrom: string | null;
   screenshotTo: string | null;
   /**
@@ -33,7 +33,7 @@ export interface WorkPolicyView {
   screenshotsEnabled: boolean;
   /**
    * `'HH:MM'` when the office is open. Careful: this is NOT the capture window.
-   * The capture window is wide (07:00-23:00) so screenshots are taken even when
+   * The capture window can be wide (or unlimited) so screenshots are taken even when
    * someone works early or late; this one is narrow (9-18) so no "agent silent"
    * alert fires while the office is closed. `null` means open all day.
    */
@@ -59,8 +59,9 @@ export type WorkPolicyBody = Partial<{
   monthlyTargetHours: number;
   expectedWorkdays: number;
   weeklyOffDays: number[];
-  screenshotFrom: string;
-  screenshotTo: string;
+  /** both null = whenever the computer is in use */
+  screenshotFrom: string | null;
+  screenshotTo: string | null;
   screenshotsEnabled: boolean;
   officeFrom: string;
   officeTo: string;

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import { useT } from '../i18n';
+
 /**
  * The build number in the corner: which code is running right now.
  *
@@ -23,6 +25,7 @@ interface ApiVersion {
 }
 
 export function VersionBadge() {
+  const t = useT();
   const [api, setApi] = useState<ApiVersion | null>(null);
 
   /**
@@ -59,9 +62,9 @@ export function VersionBadge() {
 
   const detail = [
     `web #${BUILD} · ${COMMIT}`,
-    api ? `api #${api.build} · ${api.commit}` : 'api version unknown',
-    BUILT_AT ? `built ${BUILT_AT}` : null,
-    mismatch ? 'Web and API are from different builds — redeploy' : null,
+    api ? `api #${api.build} · ${api.commit}` : t('api version unknown'),
+    BUILT_AT ? t('built {{date}}', { date: BUILT_AT }) : null,
+    mismatch ? t('Web and API are from different builds — redeploy') : null,
   ]
     .filter(Boolean)
     .join('\n');

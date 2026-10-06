@@ -1,5 +1,6 @@
 import { ProgressRing } from '../../components/ProgressRing';
 import { formatDuration, formatHours } from '../../lib/format';
+import { useT } from '../../i18n';
 
 /**
  * Ring for **today's** target (`todayWorkedSec / dailyTargetSec`).
@@ -27,12 +28,13 @@ export function TodayRing({
   targetSec: number;
   size?: number;
 }) {
+  const t = useT();
   return (
     <ProgressRing
       value={workedSec}
       max={targetSec}
       size={size}
-      ariaLabel="Today's target"
+      ariaLabel={t("Today's target")}
     />
   );
 }
@@ -71,12 +73,13 @@ export function targetText(targetSec: number): string {
  *    today's hours, just without the comparison to the target.
  */
 export function DayOffTag() {
+  const t = useT();
   return (
     <span
-      title="Weekly off or holiday — nothing is expected today"
+      title={t('Weekly off or holiday — nothing is expected today')}
       className="flex-none rounded-full border border-line bg-paper px-2 py-1 text-[11px] font-semibold whitespace-nowrap text-ink-3"
     >
-      Day off
+      {t('Day off')}
     </span>
   );
 }

@@ -183,12 +183,15 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      # WiX 5: our Package.wxs uses the v4 schema, which 5 builds as is. WiX 6
-      # and later come under the Open Source Maintenance Fee (a paid sponsorship
-      # for companies earning over US$10,000 a year; v7 refuses to run until its
-      # EULA is accepted) — pinning 5 keeps the build free and reproducible.
+      # WiX 7 needs its Open Source Maintenance Fee EULA accepted before it
+      # builds. This project is used non-commercially, which the OSMF terms
+      # exempt from the fee (it applies to revenue-generating use by
+      # organisations with US$10,000+ a year). Anyone building it for such
+      # use must sponsor the WiX project first: https://docs.firegiant.com/wix/osmf/
       - name: Install WiX
-        run: dotnet tool install --global wix --version 5.0.2
+        run: |
+          dotnet tool install --global wix
+          wix eula accept wix7
 
       - name: Build MSI
         shell: pwsh

@@ -1,4 +1,5 @@
 import { Page } from '../../components/Page';
+import { useT } from '../../i18n';
 import { TaskList } from './TaskPoolPage';
 
 /**
@@ -16,8 +17,9 @@ import { TaskList } from './TaskPoolPage';
  * route and the server's `@Roles` are all the same.
  */
 export function ReviewPage() {
+  const t = useT();
   return (
-    <Page title="Review" subtitle="Skipped and deleted tasks — and why">
+    <Page title={t('Review')} subtitle={t('Skipped and deleted tasks — and why')}>
       <TaskList lockedStage="to_review" />
     </Page>
   );

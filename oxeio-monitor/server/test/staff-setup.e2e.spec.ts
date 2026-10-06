@@ -375,7 +375,7 @@ describe('GET /employees: setup state', () => {
  * A manager's access (the owner's decision).
  *
  * A manager can add and edit employees, and can fully run Holidays and
- * Categories. But not salary ([ADR-023](../../../docs/05-Options-Decisions.md)).
+ * Categories. But not salary ([ADR-023](../../../docs/history/05-Options-Decisions.md)).
  *
  * The last two tests are the real ones: `redact.ts` strips the salary from
  * the manager's response, but that does not stop salary being sent to the

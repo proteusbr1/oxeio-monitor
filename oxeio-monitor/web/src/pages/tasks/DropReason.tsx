@@ -4,6 +4,7 @@ import {
   type DropReason,
 } from '../../api/tasks';
 import { Chip, MiniButton } from '../../components/ui';
+import { useT } from '../../i18n';
 
 /**
  * **"Why did you drop it?" and the button itself is the answer.**
@@ -31,10 +32,11 @@ export function DropReasonPicker({
   onPick: (reason: DropReason) => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   return (
     <span className="flex flex-wrap items-center justify-end gap-1.5">
       {/* Careful: the question stays visible; otherwise it would be unclear why a row of red buttons appeared */}
-      <span className="text-[11.5px] whitespace-nowrap text-ink-3">Why?</span>
+      <span className="text-[11.5px] whitespace-nowrap text-ink-3">{t('Why?')}</span>
       {DROP_REASONS.map((reason) => (
         <MiniButton
           key={reason}
@@ -42,11 +44,11 @@ export function DropReasonPicker({
           disabled={busy}
           onClick={() => onPick(reason)}
         >
-          {DROP_REASON_LABEL[reason]}
+          {t(DROP_REASON_LABEL[reason])}
         </MiniButton>
       ))}
       <MiniButton disabled={busy} onClick={onCancel}>
-        Cancel
+        {t('Cancel')}
       </MiniButton>
     </span>
   );
@@ -59,7 +61,8 @@ export function DropReasonPicker({
  * rendered; a "—" would suggest someone left it blank on purpose.
  */
 export function DropReasonTag({ reason }: { reason: DropReason | null }) {
+  const t = useT();
   if (reason === null) return null;
 
-  return <Chip tone="muted">{DROP_REASON_LABEL[reason]}</Chip>;
+  return <Chip tone="muted">{t(DROP_REASON_LABEL[reason])}</Chip>;
 }

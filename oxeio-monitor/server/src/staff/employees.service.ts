@@ -825,7 +825,7 @@ export class EmployeesService {
 
   /**
    * **Salary belongs to the owner alone**
-   * ([ADR-023](../../../docs/05-Options-Decisions.md), spec section 4.3).
+   * ([ADR-023](../../../docs/history/05-Options-Decisions.md), spec section 4.3).
    * Managers can add and edit employees, but not salary.
    *
    * Careful: without this guard the situation would be worse than either

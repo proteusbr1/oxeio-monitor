@@ -13,7 +13,7 @@ import { MAX_REGEX_LENGTH } from './category-matcher';
  *
  * Careful: **categories never enter pay calculations.** No number in this file
  * goes anywhere near `payroll` or `credited_sec`. Someone who is "unproductive"
- * all day still keeps their hours ([09 § 4](../../../../docs/09-Build-Log.md)).
+ * all day still keeps their hours ([09 § 4](../../../../docs/history/09-Build-Log.md)).
  */
 
 /** D08 "top 10": the default, but the endpoint can change it. */
@@ -697,7 +697,7 @@ export function parseWorkDate(text: string): Date {
  *
  * `today` comes in as a parameter (from `workDateOf(new Date())`) so the function
  * stays pure and tests need not depend on the clock; clock-dependent tests break
- * every day after midnight ([09 § 3a.11](../../../../docs/09-Build-Log.md)).
+ * every day after midnight ([09 § 3a.11](../../../../docs/history/09-Build-Log.md)).
  *
  * Careful: it throws `RangeError` on bad input, not `BadRequestException`; a pure
  * function knows nothing about HTTP (same as

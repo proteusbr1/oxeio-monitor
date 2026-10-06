@@ -6,6 +6,7 @@ import { Card } from '../../components/Card';
 import { ErrorBox, Loading } from '../../components/States';
 import { useFeatures } from '../../features/FeaturesContext';
 import { Chip, MiniButton, Notice, ServerError, useMutation } from '../../components/ui';
+import { useT } from '../../i18n';
 import { addStartApp, sameApps, START_APPS_MAX } from './startApps';
 
 /**
@@ -22,6 +23,7 @@ import { addStartApp, sameApps, START_APPS_MAX } from './startApps';
  * the page says so — a list that silently does nothing is the worst outcome.
  */
 export function TasksTab() {
+  const t = useT();
   const view = useApi(getTaskSettings, []);
   const { features } = useFeatures();
   const save = useMutation();
@@ -72,24 +74,21 @@ export function TasksTab() {
    * so the chip keeps describing what is saved.
    */
   const state = current.active
-    ? { tone: 'counted' as const, text: 'On' }
+    ? { tone: 'counted' as const, text: t('On') }
     : savedApps.length > 0
-      ? { tone: 'attention' as const, text: 'Resting' }
-      : { tone: 'muted' as const, text: 'Off' };
+      ? { tone: 'attention' as const, text: t('Resting') }
+      : { tone: 'muted' as const, text: t('Off') };
 
   return (
     <div className="space-y-3">
       <Card
-        title="Start detection"
-        hint="Which apps show that a task was started"
+        title={t('Start detection')}
+        hint={t('Which apps show that a task was started')}
         actions={<Chip tone={state.tone}>{state.text}</Chip>}
       >
         <div className="space-y-4 p-4">
           <p className="text-[13px] text-ink-2">
-            When a window whose title starts with a task&rsquo;s number is in
-            front in one of these apps, the task is marked started and its
-            on-screen time shown. Leave empty to turn this off. Needs the Apps
-            &amp; websites module.
+            {t('When a window whose title starts with a task’s number is in front in one of these apps, the task is marked started and its on-screen time shown. Leave empty to turn this off. Needs the Apps & websites module.')}
           </p>
 
           {/*
@@ -98,7 +97,7 @@ export function TasksTab() {
                the mouse can still be undone by not saving.
           */}
           {apps.length > 0 ? (
-            <ul className="flex flex-wrap gap-2" aria-label="Apps read for start detection">
+            <ul className="flex flex-wrap gap-2" aria-label={t('Apps read for start detection')}>
               {apps.map((app) => (
                 <li
                   key={app.toLowerCase()}
@@ -108,7 +107,7 @@ export function TasksTab() {
                   <button
                     type="button"
                     onClick={() => edit(apps.filter((a) => a !== app))}
-                    aria-label={`Remove ${app}`}
+                    aria-label={t('Remove {{app}}', { app })}
                     className="tap rounded-full px-1.5 text-ink-3 hover:text-ink"
                   >
                     ×
@@ -118,8 +117,7 @@ export function TasksTab() {
             </ul>
           ) : (
             <p className="text-[12.5px] text-ink-3">
-              No apps — start detection is off. Tasks are only marked done, by
-              hand.
+              {t('No apps — start detection is off. Tasks are only marked done, by hand.')}
             </p>
           )}
 
@@ -137,8 +135,8 @@ export function TasksTab() {
                   add();
                 }
               }}
-              aria-label="Program name to add"
-              placeholder="e.g. WINWORD.EXE"
+              aria-label={t('Program name to add')}
+              placeholder={t('e.g. WINWORD.EXE')}
               maxLength={100}
               spellCheck={false}
               className="num w-full max-w-[260px] rounded-md border border-line bg-paper px-2.5 py-1.5 text-[12.5px] text-ink"
@@ -147,11 +145,10 @@ export function TasksTab() {
               onClick={add}
               disabled={typed.trim() === '' || apps.length >= START_APPS_MAX}
             >
-              Add
+              {t('Add')}
             </MiniButton>
             <span className="text-[11.5px] text-ink-3">
-              The program&rsquo;s file name, as Task Manager shows it — capitals
-              do not matter.
+              {t('The program’s file name, as Task Manager shows it — capitals do not matter.')}
             </span>
           </div>
           {addError && (
@@ -167,9 +164,7 @@ export function TasksTab() {
           */}
           {apps.length > 0 && !features.appTracking && (
             <Notice tone="attention">
-              Apps &amp; websites is off, so no window titles are read and
-              start detection rests — the list is kept. Turn Apps &amp;
-              websites on in Settings › Modules to use it.
+              {t('Apps & websites is off, so no window titles are read and start detection rests — the list is kept. Turn Apps & websites on in Settings › Modules to use it.')}
             </Notice>
           )}
 
@@ -177,7 +172,7 @@ export function TasksTab() {
           <div className="flex items-center justify-end gap-3">
             {saved && !changed && (
               <span role="status" className="text-xs text-ink-2">
-                Saved
+                {t('Saved')}
               </span>
             )}
             {changed && (
@@ -188,11 +183,11 @@ export function TasksTab() {
                   setAddError(null);
                 }}
               >
-                Undo changes
+                {t('Undo changes')}
               </MiniButton>
             )}
             <MiniButton disabled={!changed || save.busy} onClick={submit}>
-              {save.busy ? 'Saving…' : 'Save'}
+              {save.busy ? t('Saving…') : t('Save')}
             </MiniButton>
           </div>
         </div>

@@ -3,7 +3,7 @@ namespace oXeio.Core.Agent;
 /// <summary>
 /// H08: which of the agent's log files must be deleted.
 ///
-/// The spec has two limits (<a href="../../../docs/04-Features.md">04 § H08</a>):
+/// The spec has two limits (<a href="../../../docs/history/04-Features.md">04 § H08</a>):
 /// <b>7 days</b>, and <b>50 MB in total</b>. Both are needed because they guard against
 /// different dangers: without the day limit, a quiet machine would collect logs for years,
 /// and without the size limit a crash loop could fill the disk in one afternoon.

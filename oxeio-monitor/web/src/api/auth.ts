@@ -88,7 +88,7 @@ export function fetchCurrency(signal?: AbortSignal): Promise<CurrencyInfo> {
  */
 export function fetchDisplayLocale(
   signal?: AbortSignal,
-): Promise<{ locale: string | null }> {
+): Promise<{ locale: string | null; language?: string }> {
   return api('/auth/display-locale', { silent401: true, signal });
 }
 

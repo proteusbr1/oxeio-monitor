@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import type { TeamHour } from '../../api/dashboard';
 import { formatDuration } from '../../lib/format';
+import { useT } from '../../i18n';
 
 /**
  * E01: the day's rhythm: how much the whole team worked across 24 hours.
@@ -27,6 +28,7 @@ export function DayPulse({
   hours: TeamHour[];
   currentHour: number | null;
 }) {
+  const t = useT();
   const [hover, setHover] = useState<number | null>(null);
 
   const peak = hours.reduce((m, h) => Math.max(m, h.activeSec), 0);
@@ -40,7 +42,7 @@ export function DayPulse({
   if (peak === 0) {
     return (
       <p className="px-4 py-8 text-center text-sm text-ink-3">
-        No work counted yet today — the shape of the day fills in as people work.
+        {t('No work counted yet today — the shape of the day fills in as people work.')}
       </p>
     );
   }
@@ -62,12 +64,11 @@ export function DayPulse({
                 {hourLabel(shown.hour)}
               </span>{' '}
               · <span className="num">{formatDuration(shown.activeSec)}</span> ·{' '}
-              <span className="num">{shown.people}</span>{' '}
-              {shown.people === 1 ? 'person' : 'people'}
+              <span className="num">{t('{{count}} people', { count: shown.people })}</span>
             </span>
           ) : (
             <>
-              Busiest hour{' '}
+              {t('Busiest hour')}{' '}
               <span className="num font-semibold text-ink">
                 {peakHour ? hourLabel(peakHour.hour) : '—'}
               </span>{' '}
@@ -111,7 +112,7 @@ export function DayPulse({
                * precisely with touch in mind.
                */
               onClick={() => setHover(h.hour)}
-              aria-label={`${hourLabel(h.hour)} — ${formatDuration(h.activeSec)}, ${h.people} people`}
+              aria-label={`${hourLabel(h.hour)} — ${formatDuration(h.activeSec)}, ${t('{{count}} people', { count: h.people })}`}
             >
               <span
                 className="w-full rounded-t-[4px] transition-[height,opacity] duration-500"

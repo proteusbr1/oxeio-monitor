@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { createEmployee, changeLoginEmail, changeUserRole, createPortalAccount, nextEmployeeCode, resetUserPassword, deactivateEmployee, listEmployees, reactivateEmployee, turnAgentOn, updateEmployee, type AssignableRole, type Role, type CreateEmployeeBody, type EmployeeStatus, type EmployeeView, type UpdateEmployeeBody, type PayBasis } from '../../api/staff';
+import { createEmployee, createEnrollmentCode, changeLoginEmail, changeUserRole, createPortalAccount, nextEmployeeCode, resetUserPassword, deactivateEmployee, listEmployees, reactivateEmployee, turnAgentOn, updateEmployee, type AssignableRole, type Role, type CreateEmployeeBody, type EmployeeStatus, type EmployeeView, type UpdateEmployeeBody, type PayBasis, type EnrollmentCodeResult } from '../../api/staff';
 import { listWorkPolicies } from '../../api/calendar';
 import { useApi } from '../../api/useApi';
 import { useAuth } from '../../auth/AuthContext';
@@ -11,7 +11,9 @@ import { Card } from '../../components/Card';
 import { Button } from '../../components/Page';
 import { Empty, ErrorBox, Loading } from '../../components/States';
 import { PersonCell, Table, type Column } from '../../components/Table';
-import { formatDate, todayInWorkZone } from '../../lib/format';
+import { useT } from '../../i18n';
+import { translateServerMessage } from '../../i18n/server-messages';
+import { formatDate, formatDateTime, todayInWorkZone } from '../../lib/format';
 import {
   CheckboxField,
   Chip,
@@ -61,6 +63,7 @@ const STATUS_OPTIONS = [
 type StatusFilter = EmployeeStatus | 'all';
 
 export function StaffDirectory() {
+  const t = useT();
   const { user } = useAuth();
   /**
    * Important: two different questions, so two different names, even though today
@@ -97,6 +100,8 @@ export function StaffDirectory() {
   const [deactivating, setDeactivating] = useState<EmployeeView | null>(null);
   const [reactivating, setReactivating] = useState<EmployeeView | null>(null);
   const [portalFor, setPortalFor] = useState<EmployeeView | null>(null);
+  const [enrollCode, setEnrollCode] = useState<EnrollmentCodeResult | null>(null);
+  const enroll = useMutation();
   const [tempPassword, setTempPassword] = useState<{
     email: string;
     password: string;
@@ -113,22 +118,23 @@ export function StaffDirectory() {
    */
   const onTurnAgentOn = (emp: EmployeeView) => {
     const ok = window.confirm(
-      `Turn ${emp.fullName}'s agent back on?\n\n`
-        + 'Their PC starts sending hours and screenshots again, using the login it already has.\n\n'
-        + '⚠️ Do NOT do this if that PC was lost or stolen — whoever holds it gets back in too. '
-        + 'In that case leave it off and sign in fresh on the new machine.',
+      t("Turn {{name}}'s agent back on?", { name: emp.fullName })
+        + '\n\n'
+        + t('Their PC starts sending hours and screenshots again, using the login it already has.')
+        + '\n\n⚠️ '
+        + t('Do NOT do this if that PC was lost or stolen — whoever holds it gets back in too. In that case leave it off and sign in fresh on the new machine.'),
     );
     if (!ok) return;
 
     void turnAgentOn(emp.id)
       .then(() => staff.reload())
-      .catch((e: unknown) => window.alert((e as Error).message));
+      .catch((e: unknown) => window.alert(translateServerMessage((e as Error).message)));
   };
 
   const columns: Column<EmployeeView>[] = [
     {
       key: 'name',
-      header: 'Name',
+      header: t('Name'),
       /**
        * The manager's name is **bold and green**, so in a list of 15 you need not open
        *    each row's `Login` window to learn who has which role.
@@ -145,14 +151,14 @@ export function StaffDirectory() {
           empCode={emp.empCode}
           /* Careful: the job title is in the next column, not under the name */
           accent={emp.portalRole === 'manager'}
-          accentTitle="Manager — sees everyone's Live Board and reports"
+          accentTitle={t("Manager — sees everyone's Live Board and reports")}
         />
         </Link>
       ),
     },
     {
       key: 'designation',
-      header: 'Job title',
+      header: t('Job title'),
       /*
         The job title is free text and no rule attaches to it. Whether tasks are
            handed to the person is the one thing that does, so it is marked here
@@ -165,19 +171,19 @@ export function StaffDirectory() {
             {emp.designation ?? '—'}
           </span>
           {features.tasks && emp.receivesTasks && (
-            <Chip tone="muted">Receives tasks</Chip>
+            <Chip tone="muted">{t('Receives tasks')}</Chip>
           )}
         </span>
       ),
     },
     {
       key: 'policy',
-      header: 'Work policy',
+      header: t('Work policy'),
       render: (emp) => policyName(emp.policyId),
     },
     {
       key: 'joined',
-      header: 'Joined',
+      header: t('Joined'),
       render: (emp) => (
         <span className="num">
           {emp.joinedOn ? formatDate(emp.joinedOn) : '—'}
@@ -189,7 +195,7 @@ export function StaffDirectory() {
       ? [
           {
             key: 'salary',
-            header: 'Pay',
+            header: t('Pay'),
             align: 'right' as const,
             render: (emp: EmployeeView) => (
               <span className="num">{payText(emp) ?? '—'}</span>
@@ -199,7 +205,7 @@ export function StaffDirectory() {
       : []),
     /**
      * **The rollout's one condition**: no PC gets the agent without a signature
-     * (see the rollout section in `docs/01-Planning.md`).
+     * (see the rollout section in `docs/history/01-Planning.md`).
      *
      * Careful: the column is inside the list, not on a separate page: on rollout day
      * the question is "is this one signed off?", and the answer should be on that row.
@@ -216,15 +222,15 @@ export function StaffDirectory() {
      */
     {
       key: 'setup',
-      header: 'Setup',
+      header: t('Setup'),
       render: (emp) => {
         if (emp.status !== 'active') return <span className="text-ink3">—</span>;
 
         // Careful: the order is the order of work: first login, then MSI, then they sign in
         if (!emp.hasPortalAccount) {
           return (
-            <span className="text-brand" title="Create a portal account first — the agent asks for this login">
-              Needs login
+            <span className="text-brand" title={t('Create a portal account first — the agent asks for this login')}>
+              {t('Needs login')}
             </span>
           );
         }
@@ -243,35 +249,35 @@ export function StaffDirectory() {
             <button
               type="button"
               className="text-brand underline underline-offset-2"
-              title="Their agent was switched off (this happens when someone is made inactive). Turn it back on — no need to reinstall."
+              title={t('Their agent was switched off (this happens when someone is made inactive). Turn it back on — no need to reinstall.')}
               onClick={() => onTurnAgentOn(emp)}
             >
-              Turn agent on
+              {t('Turn agent on')}
             </button>
           );
         }
         if (!emp.hasDevice) {
           return (
-            <span className="text-idle" title="Login ready — now install the agent on their PC">
-              Ready to install
+            <span className="text-idle" title={t('Login ready — now install the agent on their PC')}>
+              {t('Ready to install')}
             </span>
           );
         }
         return (
-          <span className="text-ok" title="Signed in from their PC — tracking">
-            Running
+          <span className="text-ok" title={t('Signed in from their PC — tracking')}>
+            {t('Running')}
           </span>
         );
       },
     },
     {
       key: 'status',
-      header: 'Status',
+      header: t('Status'),
       render: (emp) =>
         emp.status === 'active' ? (
-          <Chip tone="counted">Active</Chip>
+          <Chip tone="counted">{t('Active')}</Chip>
         ) : (
-          <Chip>Inactive{emp.leftOn ? ` · ${formatDate(emp.leftOn)}` : ''}</Chip>
+          <Chip>{t('Inactive')}{emp.leftOn ? ` · ${formatDate(emp.leftOn)}` : ''}</Chip>
         ),
     },
     {
@@ -285,29 +291,38 @@ export function StaffDirectory() {
        */
       render: (emp) => (
         <RowActions>
-          <MiniButton onClick={() => setEditing(emp)}>Edit</MiniButton>
+          <MiniButton onClick={() => setEditing(emp)}>{t('Edit')}</MiniButton>
           {!isOwner ? null : emp.status === 'active' ? (
             <>
               <MiniButton
                 onClick={() => setPortalFor(emp)}
                 title={
                   emp.hasPortalAccount
-                    ? `Login: ${emp.portalEmail ?? ''} — change it or reset the password`
-                    : 'Gives them a login to see their own hours'
+                    ? t('Login: {{email}} — change it or reset the password', { email: emp.portalEmail ?? '' })
+                    : t('Gives them a login to see their own hours')
                 }
               >
                 {/* Important: the text changes when an account exists; otherwise there would
                     be no hint what pressing "Portal account" does, and the owner would
                     think a new account would be created again. */}
-                {emp.hasPortalAccount ? 'Login' : 'Portal account'}
+                {emp.hasPortalAccount ? t('Login') : t('Portal account')}
+              </MiniButton>
+              <MiniButton
+                onClick={() =>
+                  enroll.run(async () => setEnrollCode(await createEnrollmentCode(emp.id)))
+                }
+                disabled={enroll.busy}
+                title={t('A one-time code to link a PC to them in a silent install (msiexec … ENROLLCODE=…) — not needed when they sign in on the PC themselves')}
+              >
+                {t('Agent code')}
               </MiniButton>
               <MiniButton tone="danger" onClick={() => setDeactivating(emp)}>
-                Deactivate
+                {t('Deactivate')}
               </MiniButton>
             </>
           ) : (
             <MiniButton onClick={() => setReactivating(emp)}>
-              Reactivate
+              {t('Reactivate')}
             </MiniButton>
           )}
         </RowActions>
@@ -336,9 +351,9 @@ export function StaffDirectory() {
     needLogin === 0 && needAgent === 0 && switchedOff === 0
       ? undefined
       : [
-          needLogin > 0 ? `${needLogin} still need a portal account` : null,
-          needAgent > 0 ? `${needAgent} ready for the agent` : null,
-          switchedOff > 0 ? `${switchedOff} agent switched off` : null,
+          needLogin > 0 ? t('{{count}} still need a portal account', { count: needLogin }) : null,
+          needAgent > 0 ? t('{{count}} ready for the agent', { count: needAgent }) : null,
+          switchedOff > 0 ? t('{{count}} agents switched off', { count: switchedOff }) : null,
         ]
           .filter(Boolean)
           .join(' · ');
@@ -352,18 +367,18 @@ export function StaffDirectory() {
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div className="flex flex-wrap items-end gap-2">
           <label className="block">
-            <span className="mb-1 block text-[11.5px] text-ink-3">Search</span>
+            <span className="mb-1 block text-[11.5px] text-ink-3">{t('Search')}</span>
             <input
               type="search"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
-              placeholder="Name, code or email"
+              placeholder={t('Name, code or email')}
               className="w-56 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] outline-none placeholder:text-ink-3 focus:border-brand focus:ring-2 focus:ring-brand/25"
             />
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-[11.5px] text-ink-3">Status</span>
+            <span className="mb-1 block text-[11.5px] text-ink-3">{t('Status')}</span>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as StatusFilter)}
@@ -371,7 +386,7 @@ export function StaffDirectory() {
             >
               {STATUS_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
+                  {t(option.label)}
                 </option>
               ))}
             </select>
@@ -379,7 +394,7 @@ export function StaffDirectory() {
         </div>
 
         <Button tone="primary" onClick={() => setCreating(true)}>
-          Add staff
+          {t('Add staff')}
         </Button>
       </div>
 
@@ -388,15 +403,15 @@ export function StaffDirectory() {
 
       {!staff.loading && !staff.error && rows.length === 0 && (
         <Empty
-          title={search ? 'No one matches that search' : 'No staff yet'}
+          title={search ? t('No one matches that search') : t('No staff yet')}
           hint={
             search
-              ? 'Try part of a name, code or email — or change "Status" to include inactive people.'
-              : 'Add someone first and give them a portal account — the agent on their PC asks for that same email and password the first time it runs.'
+              ? t('Try part of a name, code or email — or change "Status" to include inactive people.')
+              : t('Add someone first and give them a portal account — the agent on their PC asks for that same email and password the first time it runs.')
           }
           action={
             <Button tone="primary" onClick={() => setCreating(true)}>
-              Add staff
+              {t('Add staff')}
             </Button>
           }
         />
@@ -405,7 +420,7 @@ export function StaffDirectory() {
       {rows.length > 0 && (
         <Card
           padded={false}
-          title={`Staff · ${staff.data?.total ?? rows.length}`}
+          title={`${t('Staff')} · ${staff.data?.total ?? rows.length}`}
           /**
            * **The rollout's one number.** One line saying "how many are left", and
            * what is left, instead of reading 15 rows.
@@ -415,7 +430,7 @@ export function StaffDirectory() {
            */
           hint={setupHint ?? (
             canSeeSalary
-              ? 'Viewing or changing salary is recorded in the audit log.'
+              ? t('Viewing or changing salary is recorded in the audit log.')
               : undefined
           )}
         >
@@ -438,7 +453,7 @@ export function StaffDirectory() {
           canSeeSalary={canSeeSalary}
           policies={policies.data?.rows.map((p) => ({
             value: String(p.id),
-            label: p.isActive ? p.name : `${p.name} (closed)`,
+            label: p.isActive ? p.name : t('{{name}} (closed)', { name: p.name }),
           }))}
           onClose={() => {
             setCreating(false);
@@ -492,13 +507,28 @@ export function StaffDirectory() {
         />
       )}
 
+      <ServerError error={enroll.error} />
+      {enrollCode && (
+        <SecretModal
+          title={t('Agent enrollment code')}
+          label={t('code')}
+          secret={enrollCode.code}
+          note={`${enrollCode.employee.fullName} · ${enrollCode.employee.empCode}`}
+          meta={t('Use it once, before {{date}}: {{command}}', {
+            date: formatDateTime(enrollCode.expiresAt),
+            command: `msiexec /i oXeioAgent-<version>.msi /qn ENROLLCODE=${enrollCode.code}`,
+          })}
+          onClose={() => setEnrollCode(null)}
+        />
+      )}
+
       {tempPassword && (
         <SecretModal
-          title="Temporary password"
-          label="password"
+          title={t('Temporary password')}
+          label={t('password')}
           secret={tempPassword.password}
           note={tempPassword.email}
-          meta="They must change this password at their first sign-in."
+          meta={t('They must change this password at their first sign-in.')}
           onClose={() => setTempPassword(null)}
         />
       )}
@@ -619,6 +649,7 @@ function EmployeeForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const t = useT();
   const initial = formOf(employee);
   const [form, setForm] = useState<StaffForm>(initial);
   const { features } = useFeatures();
@@ -695,23 +726,23 @@ function EmployeeForm({
 
   return (
     <Modal
-      title={employee ? `${employee.fullName} — edit` : 'New staff member'}
+      title={employee ? t('{{name}} — edit', { name: employee.fullName }) : t('New staff member')}
       hint={
-        employee ? `Code ${employee.empCode}` : 'Only the name is required'
+        employee ? t('Code {{code}}', { code: employee.empCode }) : t('Only the name is required')
       }
       onClose={onClose}
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button
             tone="primary"
             onClick={submit}
             disabled={busy || incomplete}
-            title={incomplete ? 'The name is required' : undefined}
+            title={incomplete ? t('The name is required') : undefined}
           >
-            {busy ? 'Saving…' : 'Save'}
+            {busy ? t('Saving…') : t('Save')}
           </Button>
         </>
       }
@@ -729,7 +760,7 @@ function EmployeeForm({
             would one day drift.
           */}
           <TextField
-            label="Employee code"
+            label={t('Employee code')}
             value={form.empCode}
             onChange={() => {
               /* cannot be changed */
@@ -738,15 +769,15 @@ function EmployeeForm({
             mono
             hint={
               employee
-                ? 'Assigned by the system — this never changes'
+                ? t('Assigned by the system — this never changes')
                 : form.empCode === ''
-                  ? 'Assigned automatically when you save'
-                  : 'Assigned automatically — this is the next one in line'
+                  ? t('Assigned automatically when you save')
+                  : t('Assigned automatically — this is the next one in line')
             }
           />
           {/* Careful: the code field is now disabled, so the cursor starts here when the modal opens */}
           <TextField
-            label="Full name"
+            label={t('Full name')}
             value={form.fullName}
             onChange={set('fullName')}
             required
@@ -754,22 +785,22 @@ function EmployeeForm({
             autoFocus={!employee}
           />
           <TextField
-            label="Email"
+            label={t('Email')}
             type="email"
             value={form.email}
             onChange={set('email')}
-            hint="Needed to create a portal account"
+            hint={t('Needed to create a portal account')}
           />
           {/*
             **Job title**: free text, for people to read ("Senior Accountant").
                No rule attaches to it — rules read the switch below.
           */}
           <TextField
-            label="Job title"
+            label={t('Job title')}
             value={form.designation}
             onChange={set('designation')}
             maxLength={120}
-            hint="Shown beside their name; nothing is worked out from it"
+            hint={t('Shown beside their name; nothing is worked out from it')}
           />
           {/*
             **Receives tasks**: the one switch the morning hand-out reads.
@@ -781,10 +812,10 @@ function EmployeeForm({
           {features.tasks && (
             <FullWidth>
               <CheckboxField
-                label="Receives tasks"
+                label={t('Receives tasks')}
                 checked={form.receivesTasks}
                 onChange={(next) => setForm((prev) => ({ ...prev, receivesTasks: next }))}
-                hint="Tasks from the pool are handed to them every morning and listed on their My data page."
+                hint={t('Tasks from the pool are handed to them every morning and listed on their My data page.')}
               />
             </FullWidth>
           )}
@@ -800,29 +831,29 @@ function EmployeeForm({
           */}
           {features.tasks && form.receivesTasks && (
             <TextField
-              label="Daily task target"
+              label={t('Daily task target')}
               value={form.dailyTaskTarget}
               onChange={set('dailyTaskTarget')}
               placeholder="25"
-              hint="Leave empty to use the shared target from the work policy. 0 means no target — they still receive tasks and the count still shows, but nobody is marked behind."
+              hint={t('Leave empty to use the shared target from the work policy. 0 means no target — they still receive tasks and the count still shows, but nobody is marked behind.')}
             />
           )}
           <TextField
-            label="Joined on"
+            label={t('Joined on')}
             type="date"
             value={form.joinedOn}
             onChange={set('joinedOn')}
             max={todayInWorkZone()}
           />
           <SelectField
-            label="Work policy"
+            label={t('Work policy')}
             value={form.policyId}
             onChange={set('policyId')}
             options={[
-              { value: '', label: '— Default —' },
+              { value: '', label: t('— Default —') },
               ...(policies ?? []),
             ]}
-            hint="The monthly target, screenshot window and idle threshold all come from here"
+            hint={t('The monthly target, screenshot window and idle threshold all come from here')}
           />
 
           {/*
@@ -843,7 +874,7 @@ function EmployeeForm({
                 />
               </div>
               <p className="mt-1.5 text-[11.5px] text-ink-3">
-                Pay is the owner's alone; viewing or changing it is recorded in the audit log.
+                {t("Pay is the owner's alone; viewing or changing it is recorded in the audit log.")}
               </p>
             </FullWidth>
           )}
@@ -867,25 +898,26 @@ function DeactivateDialog({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const t = useT();
   const { busy, error, run } = useMutation();
   const [leftOn, setLeftOn] = useState(todayInWorkZone());
 
   return (
     <ConfirmDialog
-      title={`Deactivate ${employee.fullName}?`}
-      intro="Their past hours, screenshots and reports all stay — nothing is deleted. You can reactivate them later."
-      warning="All their devices will be revoked at the same time, any unused enrolment code is cancelled, and their portal account is closed. No new data will arrive from those PCs."
-      confirmLabel="Deactivate"
+      title={t('Deactivate {{name}}?', { name: employee.fullName })}
+      intro={t('Their past hours, screenshots and reports all stay — nothing is deleted. You can reactivate them later.')}
+      warning={t('All their devices will be revoked at the same time, any unused enrolment code is cancelled, and their portal account is closed. No new data will arrive from those PCs.')}
+      confirmLabel={t('Deactivate')}
       withReason
       extra={
         <div className="max-w-xs">
           <TextField
-            label="Last workday"
+            label={t('Last workday')}
             type="date"
             value={leftOn}
             onChange={setLeftOn}
             max={todayInWorkZone()}
-            hint="Defaults to today — the month is counted only up to this date"
+            hint={t('Defaults to today — the month is counted only up to this date')}
           />
         </div>
       }
@@ -911,14 +943,15 @@ function ReactivateDialog({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const t = useT();
   const { busy, error, run } = useMutation();
 
   return (
     <ConfirmDialog
-      title={`Reactivate ${employee.fullName}?`}
-      intro="They come back to the active list and count towards the monthly target again."
-      warning="Their PC does not come back on its own — their agent was switched off when they were made inactive. Use “Turn agent on” in their row afterwards, otherwise it stays silent."
-      confirmLabel="Reactivate"
+      title={t('Reactivate {{name}}?', { name: employee.fullName })}
+      intro={t('They come back to the active list and count towards the monthly target again.')}
+      warning={t('Their PC does not come back on its own — their agent was switched off when they were made inactive. Use “Turn agent on” in their row afterwards, otherwise it stays silent.')}
+      confirmLabel={t('Reactivate')}
       tone="primary"
       busy={busy}
       error={error}
@@ -996,6 +1029,7 @@ function PortalAccountForm({
    * would have to remember which has been opened and which not, though the system
    * itself knows.
    */
+  const t = useT();
   const existing = employee.hasPortalAccount && employee.portalUserId !== null;
 
   const [email, setEmail] = useState(
@@ -1057,17 +1091,21 @@ function PortalAccountForm({
 
   return (
     <Modal
-      title={`${employee.fullName} — ${existing ? 'login' : 'portal account'}`}
+      title={
+        existing
+          ? t('{{name}} — login', { name: employee.fullName })
+          : t('{{name}} — portal account', { name: employee.fullName })
+      }
       hint={
         existing
-          ? 'Change the sign-in email or role, or give them a new password'
-          : 'They will be able to see their own hours and progress'
+          ? t('Change the sign-in email or role, or give them a new password')
+          : t('They will be able to see their own hours and progress')
       }
       onClose={onClose}
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>
-            Cancel
+            {t('Cancel')}
           </Button>
           {existing ? (
             <>
@@ -1086,7 +1124,7 @@ function PortalAccountForm({
                 }
                 disabled={busy}
               >
-                {busy ? 'Working…' : 'Reset password'}
+                {busy ? t('Working…') : t('Reset password')}
               </Button>
               <Button
                 tone="primary"
@@ -1109,7 +1147,7 @@ function PortalAccountForm({
                 }
                 disabled={busy || email.trim() === '' || !hasChanges}
               >
-                {busy ? 'Saving…' : 'Save changes'}
+                {busy ? t('Saving…') : t('Save changes')}
               </Button>
             </>
           ) : (
@@ -1128,7 +1166,7 @@ function PortalAccountForm({
               }
               disabled={busy || email.trim() === ''}
             >
-              {busy ? 'Creating…' : 'Create account'}
+              {busy ? t('Creating…') : t('Create account')}
             </Button>
           )}
         </>
@@ -1137,18 +1175,18 @@ function PortalAccountForm({
       <div className="space-y-3.5">
         <Notice>
           {existing
-            ? 'Change the email or the role, then Save. Resetting gives them a new password — shown only once, and it does not change anything else.'
-            : 'Set a password below, or leave it empty and one will be generated for you. Either way they can sign in straight away.'}
+            ? t('Change the email or the role, then Save. Resetting gives them a new password — shown only once, and it does not change anything else.')
+            : t('Set a password below, or leave it empty and one will be generated for you. Either way they can sign in straight away.')}
         </Notice>
 
         <TextField
-          label="Email"
+          label={t('Email')}
           type="email"
           value={email}
           onChange={setEmail}
           required
           autoFocus
-          hint="This is the email they will sign in with"
+          hint={t('This is the email they will sign in with')}
         />
 
         {/*
@@ -1156,20 +1194,20 @@ function PortalAccountForm({
              who gets in, with what, and then what they see.
         */}
         <TextField
-          label="Password"
+          label={t('Password')}
           type="password"
           value={password}
           onChange={setPassword}
-          hint="At least 10 characters. Leave it empty and one will be generated."
+          hint={t('At least 10 characters. Leave it empty and one will be generated.')}
         />
 
         {!ownerAccount && (
           <SelectField
-            label="Role"
+            label={t('Role')}
             value={role}
             onChange={(value) => setRole(value as AssignableRole)}
-            options={PORTAL_ROLES}
-            hint="A staff screen has no buttons — they can only look at their own hours"
+            options={PORTAL_ROLES.map((r) => ({ ...r, label: t(r.label) }))}
+            hint={t('A staff screen has no buttons — they can only look at their own hours')}
           />
         )}
 

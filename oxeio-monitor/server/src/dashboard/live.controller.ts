@@ -2,12 +2,10 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 
 import { Roles } from '../auth/decorators';
-import {
-  DashboardService,
-  type LiveBoard,
-  type TeamPulse,
-  type TeamTrend,
-} from './dashboard.service';
+import { DashboardDayService } from './dashboard.day.service';
+import { DashboardLiveService } from './dashboard.live.service';
+import { DashboardTrendService } from './dashboard.trend.service';
+import type { LiveBoard, TeamPulse, TeamTrend } from './dashboard.types';
 
 /**
  * `GET /api/v1/live`
@@ -20,11 +18,15 @@ import {
 @Roles(UserRole.owner, UserRole.manager)
 @Controller('live')
 export class LiveController {
-  constructor(private readonly dashboard: DashboardService) {}
+  constructor(
+    private readonly liveBoard: DashboardLiveService,
+    private readonly day: DashboardDayService,
+    private readonly trends: DashboardTrendService,
+  ) {}
 
   @Get()
   live(): Promise<LiveBoard> {
-    return this.dashboard.live();
+    return this.liveBoard.live();
   }
 
   /**
@@ -40,7 +42,7 @@ export class LiveController {
    */
   @Get('pulse')
   pulse(@Query('date') date?: string): Promise<TeamPulse> {
-    return this.dashboard.teamPulse(date);
+    return this.day.teamPulse(date);
   }
 
   /**
@@ -52,6 +54,6 @@ export class LiveController {
    */
   @Get('trend')
   trend(): Promise<TeamTrend> {
-    return this.dashboard.teamTrend();
+    return this.trends.teamTrend();
   }
 }

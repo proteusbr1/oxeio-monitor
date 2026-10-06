@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  oXeio Monitoring — database schema  ·  19 models
 //
-//  Source of truth : docs/07-Technical-Spec.md § 2
-//  Calculation rules: docs/07-Technical-Spec.md § 2.1 (a-e)
+//  Source of truth : docs/history/07-Technical-Spec.md § 2
+//  Calculation rules: docs/history/07-Technical-Spec.md § 2.1 (a-e)
 //
 //  Four decisions this schema enforces at the type level:
 //    · SegmentState has only three values; BREAK/MEETING/OFF_SHIFT do not exist (ADR-011d)
@@ -254,7 +254,7 @@ model Employee {
    */
   dailyTaskTarget Int?          @map("daily_task_target")
   policyId       Int?           @map("policy_id")
-  /// Monthly salary: **only the owner can see it** ([ADR-023](../../docs/05-Options-Decisions.md)).
+  /// Monthly salary: **only the owner can see it** ([ADR-023](../../docs/history/05-Options-Decisions.md)).
   /// Needed to work out the money for a shortfall: (salary / monthly target hours) x shortfall hours.
   /// Careful: Decimal, not Float: money is never kept in a binary float.
   payBasis       PayBasis       @default(monthly) @map("pay_basis")
@@ -977,7 +977,7 @@ model DailySummary {
 /**
  * **Old salaries** *(23 August 2026)*: so past payroll does not move.
  *
- * Careful: **why this was needed.** [R1](../../docs/10-Roadmap.md) closes a month and
+ * Careful: **why this was needed.** [R1](../../docs/history/10-Roadmap.md) closes a month and
  * so protects the *hours*: `refreshMonth()` no longer touches a closed month. But
  * payroll takes the salary figure from `employees.monthly_salary`, **live**. So when
  * someone's salary was raised, **a closed month's payroll would silently change

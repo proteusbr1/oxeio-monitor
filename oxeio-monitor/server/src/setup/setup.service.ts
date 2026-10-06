@@ -138,8 +138,9 @@ export class SetupService implements OnApplicationBootstrap {
             monthlyTargetHours: rules.monthlyTargetHours,
             expectedWorkdays: rules.expectedWorkdays,
             weeklyOffDays: rules.weeklyOffDays,
-            screenshotFrom: '07:00',
-            screenshotTo: '23:00',
+            // whenever the computer is in use (Settings → Policies to limit it)
+            screenshotFrom: null,
+            screenshotTo: null,
             idleThresholdSec: 60,
             slotMinutes: 5,
             timezone: region.timeZone ?? WORK_TIMEZONE,

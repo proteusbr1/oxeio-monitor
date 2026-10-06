@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Trans } from 'react-i18next';
 
 import { getRegionSettings, saveRegionSettings, type SettingSource } from '../../api/settings';
 import { useApi } from '../../api/useApi';
@@ -19,6 +20,8 @@ import {
   ServerError,
   useMutation,
 } from '../../components/ui';
+import { BackToEnv } from './BackToEnv';
+import { LANGUAGES, useT } from '../../i18n';
 
 const SOURCE_LABEL: Record<SettingSource, string> = {
   dashboard: 'set here',
@@ -33,6 +36,7 @@ const SOURCE_LABEL: Record<SettingSource, string> = {
  * value. Nothing on screen is translated either way.
  */
 export function RegionTab() {
+  const t = useT();
   const region = useApi(getRegionSettings, []);
   const save = useMutation();
 
@@ -46,6 +50,7 @@ export function RegionTab() {
   const [timeZone, setTimeZone] = useState<string | null>(null);
   const [currency, setCurrency] = useState<string | null>(null);
   const [locale, setLocale] = useState<string | null>(null);
+  const [language, setLanguageChoice] = useState<string | null>(null);
   const [confirmZone, setConfirmZone] = useState(false);
 
   if (region.loading && !current) return <Loading />;
@@ -56,11 +61,13 @@ export function RegionTab() {
   const tz = timeZone ?? current.timeZone.value;
   const cur = currency ?? current.currency.code;
   const loc = locale ?? current.displayLocale.value ?? '';
+  const lang = language ?? current.language.value;
   const zoneChanged = tz !== current.timeZone.value;
   const changed =
     zoneChanged ||
     cur !== current.currency.code ||
-    loc !== (current.displayLocale.value ?? '');
+    loc !== (current.displayLocale.value ?? '') ||
+    lang !== current.language.value;
 
   const withCurrent = (
     options: { value: string; label: string }[],
@@ -76,6 +83,7 @@ export function RegionTab() {
         timeZone: tz,
         currency: cur,
         displayLocale: loc === '' ? null : loc,
+        language: lang as 'en' | 'pt-BR' | 'es',
       });
       // currency and format are read before the first render — reload to apply
       if (!zoneChanged) {
@@ -89,58 +97,81 @@ export function RegionTab() {
   return (
     <div className="space-y-3">
       {current.restartNeeded && (
-        <RestartNotice what={`The time zone ${current.timeZone.value}`} />
+        <RestartNotice what={t('The time zone {{zone}}', { zone: current.timeZone.value })} />
       )}
 
       <Card
-        title="Region"
-        hint="Time zone, currency and how dates and numbers are written"
+        title={t('Region')}
+        hint={t('Time zone, currency and how dates and numbers are written')}
       >
         <div className="space-y-4 p-4">
           <SelectField
-            label="Time zone of the work day"
+            label={t('Time zone of the work day')}
             value={tz}
             onChange={setTimeZone}
             options={withCurrent(zones, tz)}
             hint={
-              <>
-                Where midnight falls, when the nightly jobs run, the dates on
-                reports ({SOURCE_LABEL[current.timeZone.source]}). Daylight
-                saving is followed automatically. Running now:{' '}
-                <b>{current.runningTimeZone}</b>.
-              </>
+              <Trans
+                i18nKey="Where midnight falls, when the nightly jobs run, the dates on reports ({{source}}). Daylight saving is followed automatically. Running now: <b>{{zone}}</b>."
+                values={{
+                  source: t(SOURCE_LABEL[current.timeZone.source]),
+                  zone: current.runningTimeZone,
+                }}
+                components={{ b: <b /> }}
+              />
             }
           />
           <SelectField
-            label="Currency"
+            label={t('Currency')}
             value={cur}
             onChange={setCurrency}
             options={withCurrent(currencies, cur)}
-            hint={`Of salaries, deductions and deposits — only the symbol changes, not the amounts (${SOURCE_LABEL[current.currency.source]})`}
+            hint={t('Of salaries, deductions and deposits — only the symbol changes, not the amounts ({{source}})', {
+              source: t(SOURCE_LABEL[current.currency.source]),
+            })}
           />
           <SelectField
-            label="Dates and numbers"
+            label={t('Dates and numbers')}
             value={loc}
             onChange={setLocale}
-            options={withCurrent([...LOCALE_CHOICES], loc)}
-            hint={`The order and separators only — no word on screen is translated (${SOURCE_LABEL[current.displayLocale.source]})`}
+            options={withCurrent(
+              LOCALE_CHOICES.map((o) => ({ ...o, label: t(o.label) })),
+              loc,
+            )}
+            hint={t('The order and separators only ({{source}})', {
+              source: t(SOURCE_LABEL[current.displayLocale.source]),
+            })}
+          />
+          <SelectField
+            label={t('Dashboard language')}
+            value={lang}
+            onChange={setLanguageChoice}
+            options={LANGUAGES.map((l) => ({ value: l.code, label: l.label }))}
+            hint={t('For everyone who has not chosen their own on the Account page ({{source}})', {
+              source: t(SOURCE_LABEL[current.language.source]),
+            })}
           />
 
           {zoneChanged && (
             <Notice tone="attention">
-              A new time zone moves where every day starts and ends from the
-              next restart on. Days already summarised keep the cut they were
-              counted with. Best set once, before people start working.
+              {t('A new time zone moves where every day starts and ends from the next restart on. Days already summarised keep the cut they were counted with. Best set once, before people start working.')}
             </Notice>
           )}
 
           <ServerError error={save.error} />
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            {[current.timeZone, current.currency, current.displayLocale].some(
+              (v) => v.source === 'dashboard',
+            ) && (
+              // currency and formats are read before the first render, and the
+              // page tells about a pending restart for the zone — so reload it
+              <BackToEnv subject="region" restartNote onDone={() => window.location.reload()} />
+            )}
             <MiniButton
               disabled={!changed || save.busy}
               onClick={() => (zoneChanged ? setConfirmZone(true) : submit())}
             >
-              {save.busy ? 'Saving…' : 'Save'}
+              {save.busy ? t('Saving…') : t('Save')}
             </MiniButton>
           </div>
         </div>
@@ -148,10 +179,10 @@ export function RegionTab() {
 
       {confirmZone && (
         <ConfirmDialog
-          title={`Change the time zone to ${tz}?`}
-          intro="It takes effect when the server restarts — there is a button for that once it is saved."
-          warning="From then on, midnight, the nightly jobs and every new day follow this zone. Days already counted are not recalculated."
-          confirmLabel="Save time zone"
+          title={t('Change the time zone to {{zone}}?', { zone: tz })}
+          intro={t('It takes effect when the server restarts — there is a button for that once it is saved.')}
+          warning={t('From then on, midnight, the nightly jobs and every new day follow this zone. Days already counted are not recalculated.')}
+          confirmLabel={t('Save time zone')}
           tone="primary"
           busy={save.busy}
           error={save.error}

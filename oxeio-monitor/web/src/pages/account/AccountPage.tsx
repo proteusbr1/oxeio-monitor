@@ -18,11 +18,13 @@ import { useTheme } from '../../components/ThemeToggle';
 import {
   FormGrid,
   Notice,
+  SelectField,
   ServerError,
   TextField,
   useMutation,
 } from '../../components/ui';
 import { formatAgo, formatDateTime } from '../../lib/format';
+import { LANGUAGES, setLanguage, useT, type Language } from '../../i18n';
 import { TwoFactorCard } from './TwoFactorCard';
 
 /**
@@ -35,13 +37,14 @@ const ROLE_LABEL: Record<AccountView['role'], string> = {
   owner: 'Owner',
   manager: 'Manager',
   coordinator: 'Coordinator',
-  employee: 'Staff',
+  employee: 'Staff member',
 };
 
 /** must match MIN_PASSWORD_LENGTH on the server */
 const MIN_PASSWORD = 10;
 
 export function AccountPage() {
+  const t = useT();
   const account = useApi((signal) => getAccount(signal), []);
   const { data, error, loading, reload } = account;
 
@@ -50,12 +53,13 @@ export function AccountPage() {
   if (!data) return null;
 
   return (
-    <Page title="Account" subtitle={data.email}>
+    <Page title={t('Account')} subtitle={data.email}>
       <div className="space-y-4">
         <div className="grid gap-4 xl:grid-cols-2">
           <div className="space-y-4">
             <ProfileCard account={data} onSaved={reload} />
             <AppearanceCard />
+            <LanguageCard account={data} onSaved={reload} />
           </div>
           <div className="space-y-4">
             <PasswordCard account={data} onSaved={reload} />
@@ -75,30 +79,31 @@ function ProfileCard({
   account: AccountView;
   onSaved: () => void;
 }) {
+  const t = useT();
   const { refresh } = useAuth();
   const [name, setName] = useState(account.fullName);
   const save = useMutation();
   const changed = name.trim() !== account.fullName && name.trim().length >= 2;
 
   return (
-    <Card title="Profile">
+    <Card title={t('Profile')}>
       <dl className="mb-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
-        <dt className="text-ink-3">Sign-in email</dt>
+        <dt className="text-ink-3">{t('Sign-in email')}</dt>
         <dd className="min-w-0 truncate">{account.email}</dd>
-        <dt className="text-ink-3">Role</dt>
-        <dd>{ROLE_LABEL[account.role]}</dd>
+        <dt className="text-ink-3">{t('Role')}</dt>
+        <dd>{t(ROLE_LABEL[account.role])}</dd>
         {account.staff && (
           <>
-            <dt className="text-ink-3">Staff record</dt>
+            <dt className="text-ink-3">{t('Staff record')}</dt>
             <dd>
               <span className="num">{account.staff.empCode}</span>
               {account.staff.designation && ` · ${account.staff.designation}`}
             </dd>
           </>
         )}
-        <dt className="text-ink-3">Member since</dt>
+        <dt className="text-ink-3">{t('Member since')}</dt>
         <dd>{formatDateTime(account.createdAt)}</dd>
-        <dt className="text-ink-3">Last sign-in</dt>
+        <dt className="text-ink-3">{t('Last sign-in')}</dt>
         <dd>
           {account.lastLoginAt ? formatDateTime(account.lastLoginAt) : '—'}
         </dd>
@@ -106,8 +111,7 @@ function ProfileCard({
 
       {account.nameFromStaffRecord ? (
         <Notice>
-          Your name and email come from your staff record. Ask the owner or a
-          manager if they need correcting.
+          {t('Your name and email come from your staff record. Ask the owner or a manager if they need correcting.')}
         </Notice>
       ) : (
         <form
@@ -122,14 +126,14 @@ function ProfileCard({
           }}
         >
           <TextField
-            label="Your name"
+            label={t('Your name')}
             value={name}
             onChange={setName}
             maxLength={120}
           />
           <ServerError error={save.error} />
           <Button type="submit" tone="primary" disabled={!changed || save.busy}>
-            {save.busy ? 'Saving…' : 'Save name'}
+            {save.busy ? t('Saving…') : t('Save name')}
           </Button>
         </form>
       )}
@@ -144,6 +148,7 @@ function PasswordCard({
   account: AccountView;
   onSaved: () => void;
 }) {
+  const t = useT();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -156,10 +161,10 @@ function PasswordCard({
 
   return (
     <Card
-      title="Password"
+      title={t('Password')}
       hint={
         account.pwChangedAt
-          ? `Last changed ${formatAgo(account.pwChangedAt)}`
+          ? t('Last changed {{ago}}', { ago: formatAgo(account.pwChangedAt) })
           : undefined
       }
     >
@@ -179,43 +184,73 @@ function PasswordCard({
         }}
       >
         <TextField
-          label="Current password"
+          label={t('Current password')}
           type="password"
           value={current}
           onChange={setCurrent}
         />
         <FormGrid>
           <TextField
-            label="New password"
+            label={t('New password')}
             type="password"
             value={next}
             onChange={setNext}
-            hint={`At least ${MIN_PASSWORD} characters`}
+            hint={t('At least {{count}} characters', { count: MIN_PASSWORD })}
           />
           <TextField
-            label="New password again"
+            label={t('New password again')}
             type="password"
             value={confirm}
             onChange={setConfirm}
-            hint={mismatch ? 'The two do not match' : undefined}
+            hint={mismatch ? t('The two do not match') : undefined}
           />
         </FormGrid>
         <ServerError error={save.error} />
         {done && (
           <Notice>
-            Password changed. Your other devices will be signed out within 5
-            minutes.
+            {t('Password changed. Your other devices will be signed out within 5 minutes.')}
           </Notice>
         )}
         <Button type="submit" tone="primary" disabled={!ready || save.busy}>
-          {save.busy ? 'Saving…' : 'Change password'}
+          {save.busy ? t('Saving…') : t('Change password')}
         </Button>
       </form>
     </Card>
   );
 }
 
+function LanguageCard({ account, onSaved }: { account: AccountView; onSaved: () => void }) {
+  const t = useT();
+  const { refresh } = useAuth();
+  const save = useMutation();
+  const current = account.preferences.language ?? '';
+
+  return (
+    <Card title={t('Language')} hint={t('The dashboard’s language for you, on every computer')}>
+      <SelectField
+        label={t('Language')}
+        value={current}
+        onChange={(value) =>
+          save.run(async () => {
+            const language = value === '' ? null : (value as Language);
+            await updateAccount({ language });
+            setLanguage(language);
+            await refresh();
+            onSaved();
+          })
+        }
+        options={[
+          { value: '', label: t('The company’s default') },
+          ...LANGUAGES.map((l) => ({ value: l.code, label: l.label })),
+        ]}
+      />
+      <ServerError error={save.error} />
+    </Card>
+  );
+}
+
 function AppearanceCard() {
+  const t = useT();
   const { theme, set } = useTheme();
   const options = [
     { value: 'dark' as const, label: 'Dark' },
@@ -224,10 +259,10 @@ function AppearanceCard() {
 
   return (
     <Card
-      title="Appearance"
-      hint="Saved on your account, so it follows you to other computers"
+      title={t('Appearance')}
+      hint={t('Saved on your account, so it follows you to other computers')}
     >
-      <div role="radiogroup" aria-label="Theme" className="flex gap-2">
+      <div role="radiogroup" aria-label={t('Theme')} className="flex gap-2">
         {options.map((o) => (
           <button
             key={o.value}
@@ -241,7 +276,7 @@ function AppearanceCard() {
                 : 'border-line text-ink-2 hover:border-brand/50'
             }`}
           >
-            {o.label}
+            {t(o.label)}
           </button>
         ))}
       </div>
@@ -272,6 +307,7 @@ const WARNING_EVENTS = new Set([
 ]);
 
 function SessionsCard() {
+  const t = useT();
   const { data, error, loading, reload } = useApi(
     (signal) => getAccountActivity(signal),
     [],
@@ -281,8 +317,8 @@ function SessionsCard() {
 
   return (
     <Card
-      title="Devices & recent activity"
-      hint="Your last sign-ins and security changes"
+      title={t('Devices & recent activity')}
+      hint={t('Your last sign-ins and security changes')}
       actions={
         <Button
           disabled={signOut.busy}
@@ -294,7 +330,7 @@ function SessionsCard() {
             })
           }
         >
-          {signOut.busy ? 'Please wait…' : 'Sign out other devices'}
+          {signOut.busy ? t('Please wait…') : t('Sign out other devices')}
         </Button>
       }
     >
@@ -302,8 +338,7 @@ function SessionsCard() {
       {signedOut && (
         <div className="mb-3">
           <Notice>
-            Done — any other browser or phone signed in as you is signed out
-            within 5 minutes.
+            {t('Done — any other browser or phone signed in as you is signed out within 5 minutes.')}
           </Notice>
         </div>
       )}
@@ -312,7 +347,7 @@ function SessionsCard() {
       ) : error ? (
         <ErrorBox error={error} retry={reload} />
       ) : !data || data.length === 0 ? (
-        <p className="text-[13px] text-ink-3">Nothing recorded yet.</p>
+        <p className="text-[13px] text-ink-3">{t('Nothing recorded yet.')}</p>
       ) : (
         <ul className="divide-y divide-line text-[13px]">
           {data.map((e: AccountEvent, i) => (
@@ -325,7 +360,7 @@ function SessionsCard() {
                   WARNING_EVENTS.has(e.action) ? 'text-brand-ink' : undefined
                 }
               >
-                {EVENT_LABEL[e.action] ?? e.action}
+                {EVENT_LABEL[e.action] ? t(EVENT_LABEL[e.action]) : e.action}
               </span>
               <span className="text-ink-3">
                 {e.ip && <span className="num mr-3">{e.ip}</span>}

@@ -15,6 +15,8 @@
  * to tell a blocked tab from an opened one, and the count above would be impossible.
  */
 
+import { translate } from '../i18n';
+
 /**
  * Careful: not `Window`, only what is needed, so tests can build a fake tab
  * without jsdom (`environment: 'node'` in `vitest.config.ts`).
@@ -74,10 +76,13 @@ export function openInTabs(
 export function blockedNotice(total: number, blocked: number): string | null {
   if (blocked <= 0) return null;
 
-  const what =
-    blocked === total
-      ? `The browser blocked all ${total} tabs.`
-      : `The browser blocked ${blocked} of ${total} tabs.`;
-
-  return `${what} Allow pop-ups for this site — the icon at the right of the address bar — then press again.`;
+  return blocked === total
+    ? translate(
+        'The browser blocked all {{count}} tabs. Allow pop-ups for this site — the icon at the right of the address bar — then press again.',
+        { count: total },
+      )
+    : translate(
+        'The browser blocked {{blocked}} of {{total}} tabs. Allow pop-ups for this site — the icon at the right of the address bar — then press again.',
+        { blocked, total },
+      );
 }

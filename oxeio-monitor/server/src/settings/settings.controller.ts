@@ -2,12 +2,14 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Inject,
   Ip,
   Logger,
+  Param,
   Patch,
   Post,
 } from '@nestjs/common';
@@ -35,6 +37,12 @@ import {
   type RegionView,
   type Source,
 } from './app-settings.rules';
+import { WORK_TIMEZONE } from '../agent/util/work-time';
+import { TELEGRAM_SETTING_KEY } from '../alerts/telegram.settings';
+import { ErrorReporter } from '../error-reporting/error-reporter.service';
+import { ERROR_REPORTING_SETTING_KEY } from '../error-reporting/error-reporting.rules';
+import { OFFSITE_SETTING_KEY } from '../ops/offsite.settings';
+import { PrismaService } from '../prisma/prisma.service';
 import { AppSettingsService } from './app-settings.service';
 import { checkStorage, type StorageForm } from './storage-check';
 import { STORAGE_SETTING_KEY, storageView, type StorageView } from './storage.settings';
@@ -61,6 +69,10 @@ class SaveRegionDto {
   // null = "the dashboard's own formats"
   @IsOptional() @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(35)
   displayLocale?: string | null;
+
+  // checked against LANGUAGES in validateRegion
+  @IsOptional() @IsString() @MaxLength(10)
+  language?: string;
 }
 
 class SaveStorageDto {
@@ -126,7 +138,53 @@ export class SettingsController {
     @Inject(SCREENSHOT_STORAGE) private readonly store: ScreenshotStorage,
     // BackupCheck lives in OpsModule, which needs this (global) module first
     private readonly moduleRef: ModuleRef,
+    private readonly prisma: PrismaService,
   ) {}
+
+  // ── back to the .env ──────────────────────────────────────────────────
+
+  /**
+   * Forgets what was saved on screen for one subject, so the `.env` value
+   * (or the built-in default) applies again. Each card that shows "set on
+   * screen" offers it. Nothing else is touched: the environment variable,
+   * stored screenshots and backups stay as they are.
+   */
+  @Delete('env/:subject')
+  async backToEnvironment(
+    @CurrentUser() actor: SessionUser,
+    @Param('subject') subject: string,
+    @Ip() ip: string,
+  ): Promise<{ subject: string; removed: boolean; restartNeeded: boolean }> {
+    const keys = ENV_SUBJECTS[subject];
+    if (!keys) {
+      throw new BadRequestException(`Unknown subject — one of: ${Object.keys(ENV_SUBJECTS).join(', ')}`);
+    }
+
+    const { count } = await this.prisma.setting.deleteMany({ where: { key: { in: keys } } });
+    this.settings.forget();
+    if (subject === 'errorReporting') {
+      // Sentry is set up at save time; it re-reads the .env now
+      await this.moduleRef.get(ErrorReporter, { strict: false }).reload();
+    }
+
+    if (count > 0) {
+      await this.audit.record({
+        userId: actor.userId,
+        action: 'change_setting',
+        targetType: 'setting',
+        targetId: keys.join(','),
+        ipAddress: ip,
+        meta: { op: 'back_to_env', subject },
+      });
+    }
+
+    // the time zone and the screenshot store are read at start-up
+    const restartNeeded =
+      count > 0 &&
+      ((subject === 'region' && (await this.settings.region()).timeZone.value !== WORK_TIMEZONE) ||
+        subject === 'storage');
+    return { subject, removed: count > 0, restartNeeded };
+  }
 
   // ── region ────────────────────────────────────────────────────────────
 
@@ -358,3 +416,14 @@ export class SettingsController {
     });
   }
 }
+
+/** What "use the .env value" forgets, per settings card */
+const ENV_SUBJECTS: Record<string, string[]> = {
+  region: [REGION_SETTING_KEY],
+  storage: [STORAGE_SETTING_KEY],
+  backup: [BACKUP_SETTING_KEY],
+  offsite: [OFFSITE_SETTING_KEY],
+  notifications: [TELEGRAM_SETTING_KEY],
+  errorReporting: [ERROR_REPORTING_SETTING_KEY],
+  updateKey: [UPDATE_KEY_SETTING_KEY],
+};

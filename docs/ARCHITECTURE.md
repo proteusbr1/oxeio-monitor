@@ -57,6 +57,9 @@ built-in default. The screen shows where each value comes from.
 | Settings → Privacy | `privacy` | — (screen only) |
 | Settings → Policies & holidays › Public holidays | `holidays.auto` | — (screen only) |
 
+Each card set on screen offers "Use the .env value", which forgets the saved
+value (`DELETE /settings/env/:subject`).
+
 Server side: `server/src/settings/app-settings.service.ts` reads them (cached,
 cleared on save); each subject has a `resolve…()` rule next to it.
 
@@ -71,6 +74,10 @@ endpoints answer 404 (`@RequiresFeature(...)`); nothing is deleted.
 | `payroll` | pay sheet and pay terms (the Payroll page becomes "Leave & months") | |
 | `deposits` | security deposits, held back from pay — **needs payroll** | payroll holds nothing back |
 | `screenshots` | pictures of the screen, gallery, Live Board screen column | agents stop taking pictures (screen sampling for idle detection goes on); uploads in flight are dropped |
+
+When pictures are taken is a work-policy setting (Settings → Policies):
+whenever the computer is in use (the default — no window), or only between
+two times. Either way only while someone is at the keyboard or mouse.
 | `appTracking` | apps & websites, productivity, Settings › Apps & sites | agents stop recording apps; counted hours do not change |
 | `designTargets` | design target pool, review, hand-out jobs — **needs appTracking** (design-app window titles show which jobs were started) | |
 
@@ -129,6 +136,23 @@ year ahead in its config (`zoneTransitions`) and cuts days with them
 zone name (`web/src/lib/format.ts`). Nightly jobs run at 03:00 and 03:30,
 never in the 02:00 hour that daylight saving skips or repeats.
 
+## Languages
+
+The dashboard speaks English, Brazilian Portuguese and Spanish
+(`web/src/i18n/`, i18next). The English text is the key (`t('Save')`), so
+an untranslated string still reads correctly; catalogs live in
+`web/src/i18n/locales/<lang>/<area>.json`, one file per area of the app,
+merged at build time (`en` holds only plural forms). Which language shows:
+the person's own choice (Account page, `users.preferences.language`) › the
+company default (Settings → Company & region, setting `region.language` or
+`DEFAULT_LANGUAGE`) › the browser › English. Dates use the language's month
+and weekday names unless a display locale asks for numeric dates.
+
+Server error messages are written in English and translated on the
+dashboard by `web/src/i18n/server-messages.ts` (exact keys plus patterns in
+`locales/<lang>/server.json`) — when a server message changes, update its
+key there too. Emails, Telegram, PDF and Excel output are still English.
+
 ## Account page
 
 Every signed-in person has **Account** (`/account`; the old `/security`
@@ -155,12 +179,12 @@ and per-service scope rules); the dashboard only hides what a role cannot use.
 | `agent/` | everything the Windows agent calls: enrolment, config, heartbeat, activity and screenshot ingest, updates and their gradual rollout, capability health |
 | `activity/` | app/site usage and the categories they fall into |
 | `summary/` | daily and monthly roll-ups (hours, targets, pace), day close, retention of old screenshots |
-| `dashboard/` | the Live Board: team status, pulse, 7-day trend |
+| `dashboard/` | the Live Board: team status (`dashboard.live.service.ts`), pulse plus one person's timeline and hourly chart (`dashboard.day.service.ts`), 7-day trend and month card (`dashboard.trend.service.ts`); shapes in `dashboard.types.ts`, pure rules in `dashboard.math.ts` |
 | `screenshots/` | the gallery and signed image links (who may see whose) |
-| `reports/` | attendance / summary / apps reports, Excel and PDF, the monthly report delivery |
+| `reports/` | attendance / summary / apps reports, Excel and PDF, the monthly report delivery. `reports.service.ts` is the front door; one file per report (`reports.attendance.service.ts`, `reports.summary.service.ts`, `reports.productivity.service.ts`), the shared range / employees / target / meta in `reports.context.service.ts`, download name and export audit in `reports.export.service.ts` |
 | `payroll/` | the pay sheet, currency |
 | `deposits/` | security deposits ledger and settlements |
-| `targets/` | design targets: pool, hand-out jobs, review, file trace |
+| `tasks/` | tasks: the full list, stats and owner edits (`tasks.service.ts`), bulk add to the pool (`tasks.pool.service.ts`), hand-out / top-up / return jobs (`tasks.handout.service.ts`), the assignee's own list and actions (`tasks.person.service.ts`), check / fix / review / deliver / publish (`tasks.stage.service.ts`), file trace (`on-screen.service.ts`); shapes in `tasks.types.ts`, pure rules in `tasks.rules.ts` |
 | `adjustments/` | hour corrections made by the owner |
 | `staff/` | the people, their portal logins and roles, staff codes |
 | `calendar/` | holidays (import from a file or from the public calendar — `public-holidays.ts`, date.nager.at, ~200 countries), work policies, agreed leave, closing a month |

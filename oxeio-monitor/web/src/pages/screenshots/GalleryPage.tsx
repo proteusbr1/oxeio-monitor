@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { Trans } from 'react-i18next';
 
 import { getGallery, type GalleryQuery } from '../../api/screenshots';
 import { useApi } from '../../api/useApi';
@@ -13,6 +14,7 @@ import { Lightbox } from './Lightbox';
 import { ShotGrid } from './ShotGrid';
 import { useFreshUrls } from './useFreshUrls';
 import { seesEveryone } from '../../api/auth';
+import { useT } from '../../i18n';
 
 /**
  * Screenshot gallery (`/screenshots`).
@@ -30,6 +32,7 @@ import { seesEveryone } from '../../api/auth';
  * recorded too.
  */
 export function GalleryPage() {
+  const t = useT();
   const { user } = useAuth();
   // Staff only get their own shots; nothing to pick
   /**
@@ -94,12 +97,14 @@ export function GalleryPage() {
 
   return (
     <Page
-      title="Screenshots"
+      title={t('Screenshots')}
       subtitle={
         data
-          ? `${formatDate(data.date)} · ${formatCount(data.total)} ${
-              data.total === 1 ? 'image' : 'images'
-            }`
+          ? t('{{date}} · {{total}} images', {
+              date: formatDate(data.date),
+              total: formatCount(data.total),
+              count: data.total,
+            })
           : formatDate(date)
       }
       actions={
@@ -110,16 +115,16 @@ export function GalleryPage() {
               onChange={changeEmployee}
               // Careful: `label`/`allLabel` are explicit so this page's wording does
               //    not change if the component's defaults ever do
-              label="Staff"
+              label={t('Staff')}
               allowAll
-              allLabel="Everyone"
+              allLabel={t('Everyone')}
               // Careful: a departed employee's old days must stay viewable, or their
               //    name could not be picked even though their screenshots exist
               includeInactive
             />
           )}
           <DatePicker
-            label="Date"
+            label={t('Date')}
             value={date}
             onChange={changeDate}
             withArrows
@@ -130,29 +135,24 @@ export function GalleryPage() {
       <AuditNote isEmployee={isEmployee} />
 
       {loading && !data ? (
-        <Loading label="Loading screenshots…" />
+        <Loading label={t('Loading screenshots…')} />
       ) : error ? (
         <ErrorBox error={error} retry={reload} />
       ) : items.length === 0 && data?.screenshotsOff ? (
         <Empty
-          title="Screenshots are off for this person"
-          hint={
-            <>
-              Their work policy does not take screenshots (Settings → Policies).
-              Hours, idle time and the jiggler check are counted as usual.
-            </>
-          }
+          title={t('Screenshots are off for this person')}
+          hint={t(
+            'Their work policy does not take screenshots (Settings → Policies). Hours, idle time and the jiggler check are counted as usual.',
+          )}
         />
       ) : items.length === 0 ? (
         <Empty
-          title="No screenshots on this day"
+          title={t('No screenshots on this day')}
           hint={
-            <>
-              Screenshots are taken only while someone is <b>working</b> — if
-              a person stayed idle all day, or the agent was down, the day
-              stays empty. On a weekly off or a holiday that is exactly what
-              you should see. Try another date.
-            </>
+            <Trans
+              i18nKey="Screenshots are taken only while someone is <b>working</b> — if a person stayed idle all day, or the agent was down, the day stays empty. On a weekly off or a holiday that is exactly what you should see. Try another date."
+              components={{ b: <b /> }}
+            />
           }
         />
       ) : (
@@ -201,15 +201,18 @@ export function GalleryPage() {
  * number carefully", and this is a **promise**. So a thin brand line, not a warning ⚠.
  */
 function AuditNote({ isEmployee }: { isEmployee: boolean }) {
+  const t = useT();
   return (
     <p className="mb-3 rounded-lg border border-brand/30 bg-brand-bg px-3.5 py-2.5 text-xs text-ink-2">
       {/* Careful: the sentence must be exactly this: "Opening a screenshot is recorded
           in the audit log." The <b> only emphasises; it does not break the text */}
-      Opening a screenshot is <b>recorded in the audit log</b> — who opened
-      it, when, and whose screen it was.{' '}
+      <Trans
+        i18nKey="Opening a screenshot is <b>recorded in the audit log</b> — who opened it, when, and whose screen it was."
+        components={{ b: <b /> }}
+      />{' '}
       {isEmployee
-        ? 'You can only see your own screenshots.'
-        : 'Even opening this page writes a row.'}
+        ? t('You can only see your own screenshots.')
+        : t('Even opening this page writes a row.')}
     </p>
   );
 }
@@ -223,23 +226,27 @@ function Pager({
   totalPages: number;
   onChange: (next: number) => void;
 }) {
+  const t = useT();
   return (
     <Card padded={false}>
       <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
         <Button onClick={() => onChange(page - 1)} disabled={page <= 1}>
-          ◀ Previous
+          ◀ {t('Previous')}
         </Button>
         <Button
           onClick={() => onChange(page + 1)}
           disabled={page >= totalPages}
         >
-          Next ▶
+          {t('Next')} ▶
         </Button>
         {/* Careful: `.num` goes only on the numbers, not the words; it brings
             tabular-nums, and a whole sentence in the mono font would look clumsy */}
         <span className="ml-auto text-xs text-ink-3">
-          Page <span className="num">{formatCount(page)}</span> /{' '}
-          <span className="num">{formatCount(totalPages)}</span>
+          <Trans
+            i18nKey="Page <n>{{page}}</n> / <n>{{total}}</n>"
+            values={{ page: formatCount(page), total: formatCount(totalPages) }}
+            components={{ n: <span className="num" /> }}
+          />
         </span>
       </div>
     </Card>

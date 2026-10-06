@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { Button } from '../../components/Page';
 import { Modal, Notice } from '../../components/ui';
+import { useT } from '../../i18n';
 
 /**
  * Careful: recovery codes can be seen this one time only; the server stores just a sha256.
@@ -19,6 +20,7 @@ export function RecoveryCodesModal({
   codes: string[];
   onClose: () => void;
 }) {
+  const t = useT();
   const [saved, setSaved] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'ok' | 'failed'>('idle');
 
@@ -44,20 +46,19 @@ export function RecoveryCodesModal({
 
   return (
     <Modal
-      title="Recovery codes"
-      hint="These are how you get in if you lose your phone"
+      title={t('Recovery codes')}
+      hint={t('These are how you get in if you lose your phone')}
       dismissible={false}
       onClose={onClose}
       footer={
         <Button tone="primary" disabled={!saved} onClick={onClose}>
-          Close
+          {t('Close')}
         </Button>
       }
     >
       <div className="space-y-3">
         <Notice tone="attention">
-          These codes will not be shown again — the server keeps only their
-          hashes. Copy them somewhere safe now, or write them down on paper.
+          {t('These codes will not be shown again — the server keeps only their hashes. Copy them somewhere safe now, or write them down on paper.')}
         </Notice>
 
         <ul className="grid grid-cols-2 gap-2 rounded-lg border border-line bg-paper px-4 py-4">
@@ -72,20 +73,19 @@ export function RecoveryCodesModal({
         </ul>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={copy}>Copy all</Button>
+          <Button onClick={copy}>{t('Copy all')}</Button>
           {copyState === 'ok' && (
-            <span className="text-xs text-ink-3">Copied</span>
+            <span className="text-xs text-ink-3">{t('Copied')}</span>
           )}
           {copyState === 'failed' && (
             <span className="text-xs text-brand-ink">
-              Could not copy — select the codes and copy them by hand
+              {t('Could not copy — select the codes and copy them by hand')}
             </span>
           )}
         </div>
 
         <Notice>
-          Each code works once. When you run low you can generate a fresh set
-          from this page — every old code stops working the moment you do.
+          {t('Each code works once. When you run low you can generate a fresh set from this page — every old code stops working the moment you do.')}
         </Notice>
 
         <label className="flex items-start gap-2 rounded-md border border-line bg-surface px-3 py-2 text-[13px] text-ink-2">
@@ -95,7 +95,7 @@ export function RecoveryCodesModal({
             onChange={(e) => setSaved(e.target.checked)}
             className="mt-0.5 accent-brand"
           />
-          <span>I have copied or written down the codes</span>
+          <span>{t('I have copied or written down the codes')}</span>
         </label>
       </div>
     </Modal>

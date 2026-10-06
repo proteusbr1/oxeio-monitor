@@ -79,11 +79,8 @@ export class WorkPoliciesService {
   }
 
   /**
-   * If no capture window is given, 07:00-23:00 is set.
-   *
-   * Careful: the schema says `NULL` means pictures 24 hours, but that directly
-   * breaks ADR-011c (pictures of personal activity at 2 AM). So `NULL` can
-   * never be set through this path; leaving the field empty sets the approved window.
+   * If no capture window is given, screenshots are taken whenever the
+   * computer is in use (work-policy.rules.ts › DEFAULT_CAPTURE_WINDOW).
    */
   async create(
     actor: SessionUser,
@@ -91,8 +88,9 @@ export class WorkPoliciesService {
     ip: string,
   ): Promise<WorkPolicyView> {
     const screenshotFrom =
-      dto.screenshotFrom ?? DEFAULT_CAPTURE_WINDOW.screenshotFrom;
-    const screenshotTo = dto.screenshotTo ?? DEFAULT_CAPTURE_WINDOW.screenshotTo;
+      dto.screenshotFrom === undefined ? DEFAULT_CAPTURE_WINDOW.screenshotFrom : dto.screenshotFrom;
+    const screenshotTo =
+      dto.screenshotTo === undefined ? DEFAULT_CAPTURE_WINDOW.screenshotTo : dto.screenshotTo;
     this.assertWindow(screenshotFrom, screenshotTo);
     const regime = this.checkedRegime(dto);
 
@@ -150,14 +148,11 @@ export class WorkPoliciesService {
     // Careful: if only one end is sent, it must be validated against the old
     // one. Looking at the new part alone would make "start 22:00" seem valid
     // when the old end was 18:00, not 23:00: the window would invert.
+    // `undefined` = not sent (keep), `null` = whenever the computer is in use
     const screenshotFrom =
-      dto.screenshotFrom ??
-      before.screenshotFrom ??
-      DEFAULT_CAPTURE_WINDOW.screenshotFrom;
+      dto.screenshotFrom === undefined ? before.screenshotFrom : dto.screenshotFrom;
     const screenshotTo =
-      dto.screenshotTo ??
-      before.screenshotTo ??
-      DEFAULT_CAPTURE_WINDOW.screenshotTo;
+      dto.screenshotTo === undefined ? before.screenshotTo : dto.screenshotTo;
     this.assertWindow(screenshotFrom, screenshotTo);
 
     /**
@@ -346,7 +341,7 @@ export class WorkPoliciesService {
     }
   }
 
-  private assertWindow(from: string, to: string): void {
+  private assertWindow(from: string | null, to: string | null): void {
     const problem = captureWindowProblem(from, to);
     if (problem) throw new BadRequestException(problem);
   }

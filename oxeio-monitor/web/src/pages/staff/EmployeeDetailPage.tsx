@@ -13,6 +13,7 @@ import {
   todayInWorkZone,
   weekdayOf,
 } from '../../lib/format';
+import { useT } from '../../i18n';
 import { Adjustments } from './Adjustments';
 import { HourlyChart } from './HourlyChart';
 import { DayShots } from './DayShots';
@@ -45,6 +46,7 @@ import { TopUsage } from './TopUsage';
  * answering "was anything granted last month?" day by day would never happen.
  */
 export function EmployeeDetailPage() {
+  const t = useT();
   const { id } = useParams();
   const [params, setParams] = useSearchParams();
   // a switched-off module's sections are not mounted at all: their endpoints
@@ -72,7 +74,7 @@ export function EmployeeDetailPage() {
       validId
         ? getEmployee(employeeId, signal)
         : // NaN would get a 400 from the ParseIntPipe, so never go to the network
-          Promise.reject(new Error("That staff link isn't valid")),
+          Promise.reject(new Error(t("That staff link isn't valid"))),
     [employeeId, validId, nonce],
   );
 
@@ -82,10 +84,10 @@ export function EmployeeDetailPage() {
 
   if (!validId) {
     return (
-      <Page title="Staff member">
+      <Page title={t('Staff member')}>
         <Empty
-          title="That link isn't valid"
-          hint="This page's address should look like `/staff/3`. Open it by clicking someone's card on the Live Board."
+          title={t("That link isn't valid")}
+          hint={t("This page's address should look like `/staff/3`. Open it by clicking someone's card on the Live Board.")}
         />
       </Page>
     );
@@ -95,7 +97,7 @@ export function EmployeeDetailPage() {
   // same 404/403 four times; one error box is enough.
   if (loading && !employee) {
     return (
-      <Page title="Staff member">
+      <Page title={t('Staff member')}>
         <Loading />
       </Page>
     );
@@ -103,7 +105,7 @@ export function EmployeeDetailPage() {
 
   if (error || !employee) {
     return (
-      <Page title="Staff member">
+      <Page title={t('Staff member')}>
         <ErrorBox error={error} retry={reload} />
       </Page>
     );
@@ -119,7 +121,7 @@ export function EmployeeDetailPage() {
           {employee.department ? ` · ${employee.department}` : ''}
           {' — '}
           <span className="num">{formatDate(date)}</span>, {weekdayOf(date)}
-          {date === today ? ' (Today)' : ''}
+          {date === today ? ` (${t('Today')})` : ''}
           {/*
             Careful: this says "Inactive", not "Idle". The dictionary maps
                inactive to Idle, but that is the live board's **current state**.
@@ -127,7 +129,7 @@ export function EmployeeDetailPage() {
                person who left the company would read "Idle" and a manager would
                think they were sitting there right now.
           */}
-          {employee.status === 'inactive' ? ' · Inactive staff' : ''}
+          {employee.status === 'inactive' ? ` · ${t('Inactive staff')}` : ''}
         </>
       }
       actions={
@@ -139,15 +141,15 @@ export function EmployeeDetailPage() {
           <DatePicker
             value={date}
             onChange={setDate}
-            label="Date"
+            label={t('Date')}
             max={today}
             withArrows
           />
           <Button
             onClick={() => setNonce((n) => n + 1)}
-            title="Reloads every section on this page"
+            title={t('Reloads every section on this page')}
           >
-            Refresh
+            {t('Refresh')}
           </Button>
         </>
       }

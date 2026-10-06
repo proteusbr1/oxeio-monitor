@@ -1,3 +1,5 @@
+import { Trans } from 'react-i18next';
+
 import type { AgentVersionView } from '../../api/agent';
 import { listDevices } from '../../api/agent';
 import { useApi } from '../../api/useApi';
@@ -13,6 +15,7 @@ import {
   type FleetRow,
 } from './fleet';
 import { Chip } from '../../components/ui';
+import { useT } from '../../i18n';
 
 /**
  * **Which PC is on which build.**
@@ -29,6 +32,7 @@ import { Chip } from '../../components/ui';
  * back exactly that two-screen dilemma.
  */
 export function FleetCard({ versions }: { versions: AgentVersionView[] }) {
+  const t = useT();
   const { data, loading, error, reload } = useApi(
     (signal) => listDevices(signal),
     [],
@@ -45,16 +49,16 @@ export function FleetCard({ versions }: { versions: AgentVersionView[] }) {
 
   return (
     <Card
-      title="Where the Fleet Stands"
-      hint="Which PC is running which build right now"
+      title={t('Where the Fleet Stands')}
+      hint={t('Which PC is running which build right now')}
       padded={false}
     >
       {loading && !data && <Loading />}
       {error && <ErrorBox error={error} retry={reload} />}
       {!loading && !error && tally.total === 0 && (
         <Empty
-          title="No active PCs"
-          hint="Nothing is enrolled yet, so there is nothing to update."
+          title={t('No active PCs')}
+          hint={t('Nothing is enrolled yet, so there is nothing to update.')}
         />
       )}
 
@@ -89,15 +93,23 @@ function RolloutBar({
   tally: ReturnType<typeof fleetTally>;
   newest: string;
 }) {
+  const t = useT();
   const pct = (n: number) => `${(n / tally.total) * 100}%`;
 
   return (
     <div className="border-b border-line px-4 pt-3 pb-4">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <span className="text-[13px] text-ink-2">
-          <span className="num font-semibold text-ink">{tally.newest}</span> of{' '}
-          <span className="num">{tally.total}</span> PCs are on{' '}
-          <span className="num font-semibold">{newest}</span>
+          <Trans
+            i18nKey="<strong>{{newest}}</strong> of <num>{{count}}</num> PCs are on <ver>{{version}}</ver>"
+            count={tally.total}
+            values={{ newest: tally.newest, count: tally.total, version: newest }}
+            components={{
+              strong: <span className="num font-semibold text-ink" />,
+              num: <span className="num" />,
+              ver: <span className="num font-semibold" />,
+            }}
+          />
         </span>
       </div>
 
@@ -111,10 +123,10 @@ function RolloutBar({
       </div>
 
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] text-ink-2">
-        <Key tone="bg-ok" n={tally.newest} label="on the newest build" />
-        <Key tone="bg-idle" n={tally.behind} label="behind — they update themselves" />
-        <Key tone="bg-brand" n={tally.stranded} label="too old to update themselves" />
-        <Key tone="bg-ink-3" n={tally.unknown} label="never reported a version" />
+        <Key tone="bg-ok" n={tally.newest} label={t('on the newest build')} />
+        <Key tone="bg-idle" n={tally.behind} label={t('behind — they update themselves')} />
+        <Key tone="bg-brand" n={tally.stranded} label={t('too old to update themselves')} />
+        <Key tone="bg-ink-3" n={tally.unknown} label={t('never reported a version')} />
       </div>
     </div>
   );
@@ -140,6 +152,7 @@ interface Flat extends FleetRow {
 }
 
 function FleetTable({ groups }: { groups: FleetGroup[] }) {
+  const t = useT();
   const rows: Flat[] = groups.flatMap((group) =>
     group.rows.map((row, i) => ({ ...row, group, first: i === 0 })),
   );
@@ -152,7 +165,7 @@ function FleetTable({ groups }: { groups: FleetGroup[] }) {
       columns={[
         {
           key: 'staff',
-          header: 'Staff',
+          header: t('Staff'),
           render: (r) =>
             r.employee ? (
               <PersonCell
@@ -162,24 +175,24 @@ function FleetTable({ groups }: { groups: FleetGroup[] }) {
             ) : (
               // Careful: devices not linked to an employee are shown too; hiding them
               //    would make the fleet count disagree with the neighbouring column
-              <span className="text-ink-3">Not linked to anyone</span>
+              <span className="text-ink-3">{t('Not linked to anyone')}</span>
             ),
         },
         {
           key: 'pc',
-          header: 'PC',
+          header: t('PC'),
           render: (r) => <span className="num">{r.hostname}</span>,
         },
         {
           key: 'user',
-          header: 'Windows user',
+          header: t('Windows user'),
           render: (r) => (
             <span className="num text-ink-3">{r.windowsUsername}</span>
           ),
         },
         {
           key: 'seen',
-          header: 'Last seen',
+          header: t('Last seen'),
           align: 'right',
           render: (r) => (
             <span className={`num ${r.quiet ? 'text-brand-ink' : 'text-ink-3'}`}>
@@ -198,7 +211,7 @@ function FleetTable({ groups }: { groups: FleetGroup[] }) {
           render: (r) =>
             r.quiet || r.issues.length > 0 ? (
               <span className="inline-flex flex-wrap justify-end gap-1">
-                {r.quiet && <Chip tone="attention">Quiet</Chip>}
+                {r.quiet && <Chip tone="attention">{t('Quiet')}</Chip>}
                 {/* the agent's own report — see capabilityIssues() */}
                 {r.issues.map((issue) => (
                   <span key={issue.text} title={issue.hint}>
@@ -220,33 +233,34 @@ function FleetTable({ groups }: { groups: FleetGroup[] }) {
  * someone must go and install on those five by hand, which is the only way.
  */
 function VersionBand({ group }: { group: FleetGroup }) {
+  const t = useT();
   const n = group.rows.length;
 
   return (
     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
       <span className="num text-[14px] font-semibold text-ink">
-        {group.version ?? 'Version unknown'}
+        {group.version ?? t('Version unknown')}
       </span>
       <span className="text-[12.5px] text-ink-3">
-        {n} {n === 1 ? 'PC' : 'PCs'}
+        {t('{{count}} PCs', { count: n })}
       </span>
 
       {group.lag === 'newest' && (
-        <span className="text-[12.5px] text-ok-ink">· newest build</span>
+        <span className="text-[12.5px] text-ok-ink">· {t('newest build')}</span>
       )}
       {group.lag === 'behind' && (
         <span className="text-[12.5px] text-idle-ink">
-          · behind — the tray offers the update by itself
+          · {t('behind — the tray offers the update by itself')}
         </span>
       )}
       {group.lag === 'stranded' && (
         <span className="text-[12.5px] text-brand-ink">
-          · too old to update itself — install the MSI by hand
+          · {t('too old to update itself — install the MSI by hand')}
         </span>
       )}
       {group.lag === 'unknown' && (
         <span className="text-[12.5px] text-ink-3">
-          · the agent never said which build it runs
+          · {t('the agent never said which build it runs')}
         </span>
       )}
     </div>

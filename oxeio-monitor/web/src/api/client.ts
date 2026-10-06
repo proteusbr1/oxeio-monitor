@@ -1,3 +1,5 @@
+import i18n from 'i18next';
+
 const BASE = '/api/v1';
 
 export class ApiError extends Error {
@@ -85,14 +87,14 @@ export async function api<T>(
     } | null;
 
     /**
-     * Careful: `p.message` is the server's message, and it reaches the screen in
-     * the server's own wording (see `<ErrorBox>`). It is not translated here: a translation table would let new server messages slip
-     * through untranslated without anyone noticing. The fallback below is our own
-     * text, so it is in English.
+     * Careful: `p.message` is the server's message, kept in its own English
+     * wording here; it is translated where it is shown (`<ErrorBox>`,
+     * `<ServerError>` → i18n/server-messages.ts), so the original stays
+     * available for logs and crash reports.
      */
     const message = Array.isArray(p?.message)
       ? p.message.join(', ')
-      : (p?.message ?? `Request failed (${res.status})`);
+      : (p?.message ?? requestFailed(res.status));
 
     if (res.status === 401 && !silent401) onUnauthorized();
 
@@ -100,4 +102,14 @@ export async function api<T>(
   }
 
   return payload as T;
+}
+
+/**
+ * Straight from `i18next`, not `../i18n`: this file also loads in tests
+ * that stub `document` without a DOM, where `../i18n` cannot initialise.
+ */
+function requestFailed(status: number): string {
+  return i18n.isInitialized
+    ? (i18n.t('Request failed ({{status}})', { status }) as string)
+    : `Request failed (${status})`;
 }

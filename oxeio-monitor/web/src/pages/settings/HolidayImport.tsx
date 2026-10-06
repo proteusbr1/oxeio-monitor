@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Trans } from 'react-i18next';
 
 import {
   importHolidays,
@@ -9,6 +10,7 @@ import {
 import { useApi } from '../../api/useApi';
 import { Button } from '../../components/Page';
 import { formatDate, todayInWorkZone } from '../../lib/format';
+import { useT } from '../../i18n';
 import {
   CheckboxField,
   Modal,
@@ -34,6 +36,7 @@ export function HolidayImportModal({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const t = useT();
   const [source, setSource] = useState<'public' | 'file'>('public');
   const thisYear = Number(todayInWorkZone().slice(0, 4));
   const [country, setCountry] = useState('');
@@ -83,34 +86,34 @@ export function HolidayImportModal({
 
   return (
     <Modal
-      title="Import holidays"
-      hint="A country's public holidays, or a calendar file"
+      title={t('Import holidays')}
+      hint={t("A country's public holidays, or a calendar file")}
       onClose={onClose}
       footer={
         done !== null ? (
           <Button tone="primary" onClick={onClose}>
-            Close
+            {t('Close')}
           </Button>
         ) : (
           <>
-            <Button onClick={onClose}>Cancel</Button>
+            <Button onClick={onClose}>{t('Cancel')}</Button>
             <Button
               tone="primary"
               disabled={!plan || plan.add.length === 0 || write.busy}
               onClick={() => run(false)}
             >
               {write.busy
-                ? 'Importing…'
+                ? t('Importing…')
                 : plan
-                  ? `Import ${plan.add.length}`
-                  : 'Import'}
+                  ? t('Import {{n}}', { n: plan.add.length })
+                  : t('Import')}
             </Button>
           </>
         )
       }
     >
       <div className="space-y-3 text-[13px]">
-        <div className="flex gap-2" role="radiogroup" aria-label="Source">
+        <div className="flex gap-2" role="radiogroup" aria-label={t('Source')}>
           {(['public', 'file'] as const).map((s) => (
             <button
               key={s}
@@ -127,7 +130,7 @@ export function HolidayImportModal({
                   : 'border-line text-ink-2 hover:text-ink'
               }`}
             >
-              {s === 'public' ? 'Public calendar' : 'File'}
+              {s === 'public' ? t('Public calendar') : t('File')}
             </button>
           ))}
         </div>
@@ -135,14 +138,14 @@ export function HolidayImportModal({
         {source === 'public' ? (
           <div className="flex flex-wrap items-end gap-2">
             <SelectField
-              label="Country"
+              label={t('Country')}
               value={country}
               onChange={(v) => {
                 setCountry(v);
                 setPlan(null);
               }}
               options={[
-                { value: '', label: countries.data ? 'Choose…' : 'Loading…' },
+                { value: '', label: countries.data ? t('Choose…') : t('Loading…') },
                 ...(countries.data ?? []).map((c) => ({
                   value: c.code,
                   label: c.name,
@@ -150,7 +153,7 @@ export function HolidayImportModal({
               ]}
             />
             <SelectField
-              label="Year"
+              label={t('Year')}
               value={String(year)}
               onChange={(v) => {
                 setYear(Number(v));
@@ -173,67 +176,70 @@ export function HolidayImportModal({
               className="block text-[12.5px]"
             />
             <p className="text-[11.5px] text-ink-3">
-              CSV, one per line:{' '}
-              <span className="num">2027-04-21,Tiradentes,public</span> — type
-              is public, optional or company (public if left out). ICS: all-day
-              events, as calendar apps export them.
+              <Trans
+                i18nKey="CSV, one per line: <code>2027-04-21,Tiradentes,public</code> — type is public, optional or company (public if left out). ICS: all-day events, as calendar apps export them."
+                components={{ code: <span className="num" /> }}
+              />
             </p>
           </>
         )}
         {source === 'public' && (
           <p className="text-[11.5px] text-ink-3">
-            Nationwide public holidays only — regional or company days are added
-            by hand.
+            {t('Nationwide public holidays only — regional or company days are added by hand.')}
             {countries.error &&
-              ' The public calendar could not be reached; use a file instead.'}
+              ` ${t('The public calendar could not be reached; use a file instead.')}`}
           </p>
         )}
 
         <CheckboxField
-          label="Also the current and past months"
+          label={t('Also the current and past months')}
           checked={allowPast}
           onChange={(v) => {
             setAllowPast(v);
             if (ready) run(true, v);
           }}
-          hint="A holiday there lowers that month's workdays — its targets and prorated salary change. Leave off unless you mean it."
+          hint={t("A holiday there lowers that month's workdays — its targets and prorated salary change. Leave off unless you mean it.")}
         />
 
         {ready && !plan && (
           <Button onClick={() => run(true)} disabled={preview.busy}>
-            {preview.busy ? 'Reading…' : 'Preview'}
+            {preview.busy ? t('Reading…') : t('Preview')}
           </Button>
         )}
 
         <ServerError error={preview.error ?? write.error} />
 
-        {done !== null && <Notice>{done} holiday(s) added.</Notice>}
+        {done !== null && <Notice>{t('{{count}} holidays added.', { count: done })}</Notice>}
 
         {plan && done === null && (
           <div className="space-y-2">
             <Section
-              title={`Will be added — ${plan.add.length}`}
+              title={t('Will be added — {{n}}', { n: plan.add.length })}
               rows={plan.add.map(
-                (h) => `${formatDate(h.date)} · ${h.name} (${h.type})`,
+                (h) => `${formatDate(h.date)} · ${h.name} (${t(h.type)})`,
               )}
             />
             <Section
-              title={`Already holidays, left as they are — ${plan.existing.length}`}
+              title={t('Already holidays, left as they are — {{n}}', { n: plan.existing.length })}
               rows={plan.existing.map((h) =>
                 h.nameInDb === h.name
                   ? `${formatDate(h.date)} · ${h.name}`
-                  : `${formatDate(h.date)} · "${h.nameInDb}" here, "${h.name}" in the ${source === 'public' ? 'calendar' : 'file'}`,
+                  : `${formatDate(h.date)} · ${
+                      source === 'public'
+                        ? t('"{{here}}" here, "{{there}}" in the calendar', { here: h.nameInDb, there: h.name })
+                        : t('"{{here}}" here, "{{there}}" in the file', { here: h.nameInDb, there: h.name })
+                    }`,
               )}
             />
             <Section
-              title={`In a month already counted, left out — ${plan.pastMonths.length}`}
+              title={t('In a month already counted, left out — {{n}}', { n: plan.pastMonths.length })}
               rows={plan.pastMonths.map(
                 (h) => `${formatDate(h.date)} · ${h.name}`,
               )}
               tone="attention"
             />
             <Section
-              title={`Could not be read — ${plan.problems.length}`}
+              title={t('Could not be read — {{n}}', { n: plan.problems.length })}
               rows={plan.problems}
               tone="attention"
             />

@@ -4,6 +4,7 @@ import type { LiveCard } from '../../api/dashboard';
 import type { GalleryItem } from '../../api/screenshots';
 import { Button } from '../../components/Page';
 import { formatBytes, formatDateTime } from '../../lib/format';
+import { useT } from '../../i18n';
 
 /**
  * E03: clicking a thumbnail shows the full image.
@@ -26,6 +27,7 @@ export function ShotLightbox({
   onClose: () => void;
   onRefresh: () => void;
 }) {
+  const t = useT();
   const closeRef = useRef<HTMLButtonElement>(null);
   const [broken, setBroken] = useState(false);
 
@@ -59,7 +61,7 @@ export function ShotLightbox({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={`Latest screenshot of ${card.fullName}`}
+        aria-label={t('Latest screenshot of {{name}}', { name: card.fullName })}
         // Careful: a click inside must not close it; closing the modal by accident
         // while looking at the image is annoying.
         onClick={(e) => e.stopPropagation()}
@@ -83,18 +85,18 @@ export function ShotLightbox({
               <span className="num">{card.empCode}</span>
               {shot ? ` · ${formatDateTime(shot.capturedAt)}` : ''}
               {shot && shot.monitorIndex > 0
-                ? ` · Monitor ${shot.monitorIndex + 1}`
+                ? ` · ${t('Monitor {{number}}', { number: shot.monitorIndex + 1 })}`
                 : ''}
             </p>
           </div>
 
           <div className="flex items-center gap-2">
-            <Button onClick={onRefresh}>Fetch again</Button>
+            <Button onClick={onRefresh}>{t('Fetch again')}</Button>
             <button
               ref={closeRef}
               type="button"
               onClick={onClose}
-              aria-label="Close"
+              aria-label={t('Close')}
               className="rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink-2 transition hover:border-brand hover:text-ink focus:outline-none focus:ring-2 focus:ring-brand/30"
             >
               ✕
@@ -105,21 +107,19 @@ export function ShotLightbox({
         <div className="min-h-0 flex-1 overflow-auto bg-paper">
           {!shot ? (
             <p className="px-6 py-14 text-center text-sm text-ink-3">
-              This shot is no longer in the latest set. Every shot from the day
-              is on the Screenshots page.
+              {t('This shot is no longer in the latest set. Every shot from the day is on the Screenshots page.')}
             </p>
           ) : broken ? (
             <div className="px-6 py-14 text-center">
-              <p className="text-sm text-ink-2">Link expired (5 minutes)</p>
+              <p className="text-sm text-ink-2">{t('Link expired (5 minutes)')}</p>
               <p className="mt-1 text-xs text-ink-3">
-                Image links are made to be short-lived — “Fetch again” gets a
-                fresh one.
+                {t('Image links are made to be short-lived — “Fetch again” gets a fresh one.')}
               </p>
             </div>
           ) : (
             <img
               src={shot.fullUrl}
-              alt={`Latest screenshot of ${card.fullName}`}
+              alt={t('Latest screenshot of {{name}}', { name: card.fullName })}
               onError={() => setBroken(true)}
               /**
                * Careful: this used to be `h-auto w-full`, with no limit at all. `w-full` always

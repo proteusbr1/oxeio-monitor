@@ -1,3 +1,4 @@
+import { Trans } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
 import { getMyDays, getMyDeposit, getMySummary, type MyDay } from '../../api/me';
@@ -21,6 +22,7 @@ import {
   weekdayOf,
 } from '../../lib/format';
 import { Adjustments } from '../staff/Adjustments';
+import { useT } from '../../i18n';
 
 /**
  * The employee's own page.
@@ -41,6 +43,7 @@ import { Adjustments } from '../staff/Adjustments';
  * does not have (ADR-011d). The tray window has no buttons for the same reason.
  */
 export function MyDataPage() {
+  const t = useT();
   const { user } = useAuth();
   const { features } = useFeatures();
   const today = todayInWorkZone();
@@ -98,7 +101,7 @@ export function MyDataPage() {
 
   return (
     <Page
-      title="My data"
+      title={t('My data')}
       subtitle={
         summary.data
           ? `${summary.data.employee.fullName} · ${summary.data.employee.empCode}`
@@ -107,8 +110,10 @@ export function MyDataPage() {
     >
       {!linked && (
         <Empty
-          title="This account has no hours of its own"
-          hint="Owner and manager accounts are not linked to a staff record, so there is nothing personal to show here. Staff see their own hours on this page."
+          title={t('This account has no hours of its own')}
+          hint={t(
+            'Owner and manager accounts are not linked to a staff record, so there is nothing personal to show here. Staff see their own hours on this page.',
+          )}
         />
       )}
 
@@ -121,16 +126,16 @@ export function MyDataPage() {
         <div className="space-y-4">
           <StatRow>
             <Stat
-              label="Today"
+              label={t('Today')}
               value={<Duration seconds={p.todayActiveSec} />}
             />
             <Stat
-              label="This month"
+              label={t('This month')}
               value={<Duration seconds={p.monthActiveSec} />}
               unit={p.noTarget ? undefined : `/ ${p.monthlyTargetHours}h`}
             />
             <Stat
-              label="Last 7 days"
+              label={t('Last 7 days')}
               value={<Duration seconds={p.week7ActiveSec} />}
             />
             {/*
@@ -145,19 +150,19 @@ export function MyDataPage() {
             */}
             {p.noTarget ? (
               // Careful: no target means no pace; say so, not "Ahead 0s"
-              <Stat label="Target" value="No target" tone="muted" />
+              <Stat label={t('Target')} value={t('No target')} tone="muted" />
             ) : p.observed ? (
               <Stat
-                label={p.paceSec < 0 ? 'Behind' : 'Ahead'}
+                label={p.paceSec < 0 ? t('Behind') : t('Ahead')}
                 value={formatSignedDuration(p.paceSec)}
                 tone={p.paceSec < 0 ? 'attention' : 'counted'}
               />
             ) : (
               <Stat
-                label="Pace"
-                value="Not observed yet"
+                label={t('Pace')}
+                value={t('Not observed yet')}
                 tone="muted"
-                sub="no finished workday counted for you yet"
+                sub={t('no finished workday counted for you yet')}
               />
             )}
           </StatRow>
@@ -172,8 +177,8 @@ export function MyDataPage() {
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card
-              title="Where You Are"
-              hint="The same numbers your tray icon shows"
+              title={t('Where You Are')}
+              hint={t('The same numbers your tray icon shows')}
             >
               {p.noTarget ? (
                 /*
@@ -182,9 +187,9 @@ export function MyDataPage() {
                      so the hours are shown plainly.
                 */
                 <dl className="space-y-1.5 text-[13px]">
-                  <PlainLine label="Today" seconds={p.todayActiveSec} />
-                  <PlainLine label="Last 7 days" seconds={p.week7ActiveSec} />
-                  <PlainLine label="This month" seconds={p.monthActiveSec} />
+                  <PlainLine label={t('Today')} seconds={p.todayActiveSec} />
+                  <PlainLine label={t('Last 7 days')} seconds={p.week7ActiveSec} />
+                  <PlainLine label={t('This month')} seconds={p.monthActiveSec} />
                 </dl>
               ) : (
                 <div className="flex flex-wrap items-center gap-6">
@@ -193,13 +198,18 @@ export function MyDataPage() {
                       value={p.monthActiveSec}
                       max={p.monthlyTargetHours * 3600}
                       size={64}
-                      ariaLabel="This month"
+                      ariaLabel={t('This month')}
                     />
                     <div className="text-[13px]">
-                      <div className="font-medium">This month</div>
+                      <div className="font-medium">{t('This month')}</div>
                       <div className="text-ink-3">
-                        <Duration seconds={p.monthActiveSec} /> of{' '}
-                        {p.monthlyTargetHours}h
+                        <Trans
+                          i18nKey="<done></done> of {{hours}}h"
+                          values={{ hours: p.monthlyTargetHours }}
+                          components={{
+                            done: <Duration seconds={p.monthActiveSec} />,
+                          }}
+                        />
                       </div>
                     </div>
                   </div>
@@ -213,19 +223,20 @@ export function MyDataPage() {
                     */}
                     {p.dailyTargetSec > 0 ? (
                       <Line
-                        label="Today"
+                        label={t('Today')}
                         value={p.todayActiveSec}
                         max={p.dailyTargetSec}
                       />
                     ) : (
                       <p className="text-[13px] text-ink-2">
-                        Today is a day off — nothing is expected. Anything you do
-                        work still counts.
+                        {t(
+                          'Today is a day off — nothing is expected. Anything you do work still counts.',
+                        )}
                       </p>
                     )}
 
                     <Line
-                      label="Last 7 days"
+                      label={t('Last 7 days')}
                       value={p.week7ActiveSec}
                       max={p.week7TargetSec}
                     />
@@ -251,13 +262,13 @@ export function MyDataPage() {
             {deposit.data &&
               (deposit.data.totalMinor > 0 || deposit.data.settlement) && (
                 <Card
-                  title="Security Deposit"
+                  title={t('Security Deposit')}
                   hint={
                     deposit.data.settlement
-                      ? 'Settled — this is the record'
-                      : `Held from your salary · ${deposit.data.months.length} ${
-                          deposit.data.months.length === 1 ? 'month' : 'months'
-                        }`
+                      ? t('Settled — this is the record')
+                      : t('Held from your salary · {{count}} months', {
+                          count: deposit.data.months.length,
+                        })
                   }
                 >
                   <div className="num text-[26px] font-semibold">
@@ -269,16 +280,17 @@ export function MyDataPage() {
                   {deposit.data.settlement ? (
                     <p className="mt-1 text-[13px] text-ink-2">
                       {deposit.data.settlement.outcome === 'refunded'
-                        ? 'Refunded to you'
-                        : 'Not refunded — the notice period was short'}
+                        ? t('Refunded to you')
+                        : t('Not refunded — the notice period was short')}
                       {deposit.data.settlement.note &&
                         ` · ${deposit.data.settlement.note}`}
                     </p>
                   ) : (
                     <p className="mt-1 text-[13px] text-ink-2">
-                      This is your money, held back each month. You get all of
-                      it when you leave, as long as you give at least{' '}
-                      {deposit.data.noticeDays} days&apos; notice.
+                      {t(
+                        "This is your money, held back each month. You get all of it when you leave, as long as you give at least {{count}} days' notice.",
+                        { count: deposit.data.noticeDays },
+                      )}
                     </p>
                   )}
 
@@ -303,7 +315,7 @@ export function MyDataPage() {
                 </Card>
               )}
 
-            <Card title="What Is Recorded" hint="And for how long">
+            <Card title={t('What Is Recorded')} hint={t('And for how long')}>
               <dl className="space-y-2.5 text-[13px]">
                 {/*
                   Every line here comes from the server (`/me`): whether pictures
@@ -311,46 +323,60 @@ export function MyDataPage() {
                   policy, and the days on Settings → Privacy. Written by hand it
                   would turn into a promise nobody keeps.
                 */}
-                <Row term="Screenshots">
-                  {summary.data.screenshotsTaken
-                    ? `Kept ${summary.data.screenshotRetentionDays} days, then deleted automatically — `
-                    : 'Not taken — no pictures of your screen are recorded.'}
+                <Row term={t('Screenshots')}>
                   {/* the link only where the route exists (`canSeeScreenshots`) */}
-                  {seesOwnShots ? (
-                    summary.data.screenshotsTaken ? (
-                      <Link to="/screenshots" className="underline">
-                        see yours
-                      </Link>
+                  {summary.data.screenshotsTaken ? (
+                    seesOwnShots ? (
+                      <Trans
+                        i18nKey="Kept {{count}} days, then deleted automatically — <a>see yours</a>"
+                        count={summary.data.screenshotRetentionDays}
+                        components={{
+                          a: <Link to="/screenshots" className="underline" />,
+                        }}
+                      />
                     ) : (
-                      <>
-                        {' '}
-                        Any taken earlier are deleted after{' '}
-                        {summary.data.screenshotRetentionDays} days —{' '}
-                        <Link to="/screenshots" className="underline">
-                          see them
-                        </Link>
-                      </>
+                      t(
+                        'Kept {{count}} days, then deleted automatically — seen by the owner and managers only',
+                        { count: summary.data.screenshotRetentionDays },
+                      )
                     )
-                  ) : summary.data.screenshotsTaken ? (
-                    'seen by the owner and managers only'
-                  ) : null}
+                  ) : (
+                    <>
+                      {t('Not taken — no pictures of your screen are recorded.')}
+                      {seesOwnShots && (
+                        <>
+                          {' '}
+                          <Trans
+                            i18nKey="Any taken earlier are deleted after {{count}} days — <a>see them</a>"
+                            count={summary.data.screenshotRetentionDays}
+                            components={{
+                              a: <Link to="/screenshots" className="underline" />,
+                            }}
+                          />
+                        </>
+                      )}
+                    </>
+                  )}
                 </Row>
-                <Row term="Apps & websites">
+                <Row term={t('Apps & websites')}>
                   {summary.data.appsTracked
-                    ? 'Which app is in front and its window title; for websites, the site name only — never the full address.'
-                    : 'Not recorded — only whether the keyboard and mouse are in use.'}
+                    ? t(
+                        'Which app is in front and its window title; for websites, the site name only — never the full address.',
+                      )
+                    : t('Not recorded — only whether the keyboard and mouse are in use.')}
                 </Row>
-                <Row term="Working hours">
-                  Active time only. Idle and locked time is recorded but never
-                  counted as work.
+                <Row term={t('Working hours')}>
+                  {t(
+                    'Active time only. Idle and locked time is recorded but never counted as work.',
+                  )}
                 </Row>
-                <Row term="Policy signed">
+                <Row term={t('Policy signed')}>
                   {summary.data.policySignedAt
                     ? formatDate(summary.data.policySignedAt)
-                    : 'Not recorded yet'}
+                    : t('Not recorded yet')}
                 </Row>
                 {summary.data.employee.joinedOn && (
-                  <Row term="Joined">
+                  <Row term={t('Joined')}>
                     {formatDate(summary.data.employee.joinedOn)}
                   </Row>
                 )}
@@ -363,13 +389,13 @@ export function MyDataPage() {
       {linked && (
         <div className="mt-4 space-y-4">
           <Card
-            title="Day by Day"
-            hint="Last 30 days · days off and empty days are shown too"
+            title={t('Day by Day')}
+            hint={t('Last 30 days · days off and empty days are shown too')}
             padded={false}
           >
             {days.loading && <Loading />}
             {days.error && <ErrorBox error={days.error} retry={days.reload} />}
-            {days.data?.length === 0 && <Empty title="Nothing recorded yet" />}
+            {days.data?.length === 0 && <Empty title={t('Nothing recorded yet')} />}
             {days.data && days.data.length > 0 && (
               <DayTable rows={days.data} monthCreditedSec={p?.monthCreditedSec} />
             )}
@@ -456,6 +482,7 @@ function DayTable({ rows, monthCreditedSec }: {
    */
   monthCreditedSec: number | undefined;
 }) {
+  const t = useT();
   return (
     <Table
       rows={rows}
@@ -465,7 +492,7 @@ function DayTable({ rows, monthCreditedSec }: {
       columns={[
         {
           key: 'date',
-          header: 'Date',
+          header: t('Date'),
           render: (r) => (
             <span className="num">
               {formatDateShort(r.workDate)}{' '}
@@ -475,7 +502,7 @@ function DayTable({ rows, monthCreditedSec }: {
         },
         {
           key: 'worked',
-          header: 'Worked',
+          header: t('Worked'),
           align: 'right',
           render: (r) => (
             <Duration
@@ -486,7 +513,7 @@ function DayTable({ rows, monthCreditedSec }: {
         },
         {
           key: 'adjust',
-          header: 'Correction',
+          header: t('Correction'),
           align: 'right',
           render: (r) =>
             // Careful: a dash at zero; writing `+0:00` would make every row look
@@ -501,7 +528,7 @@ function DayTable({ rows, monthCreditedSec }: {
         },
         {
           key: 'credited',
-          header: 'Counted',
+          header: t('Counted'),
           align: 'right',
           render: (r) => <Duration seconds={r.creditedSec} />,
         },
@@ -510,23 +537,23 @@ function DayTable({ rows, monthCreditedSec }: {
           header: '',
           render: (r) =>
             r.isOffDay ? (
-              <span className="text-[11.5px] text-ink-3">Day off</span>
+              <span className="text-[11.5px] text-ink-3">{t('Day off')}</span>
             ) : null,
         },
       ]}
       footer={
         <tr>
           <td className="px-3 py-2 text-[12.5px] text-ink-3">
-            This month so far
+            {t('This month so far')}
             {/* Careful: which column the total is for is written out; otherwise readers
                 would try to reconcile it as the sum of "Worked" (G162) */}
-            <span className="text-ink-3/70"> · counted</span>
+            <span className="text-ink-3/70"> · {t('counted')}</span>
           </td>
           <td colSpan={3} className="px-3 py-2 text-right">
             {monthCreditedSec === undefined ? (
               <span
                 className="text-ink-3"
-                title="Could not load this month's total"
+                title={t("Could not load this month's total")}
               >
                 —
               </span>

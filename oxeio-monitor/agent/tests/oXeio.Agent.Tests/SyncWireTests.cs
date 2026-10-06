@@ -128,7 +128,7 @@ public class SyncWireTests
 
     /// <summary>
     /// A07: these fields were on the wire long ago but nobody filled them
-    /// ([G71](../../../../docs/08-Gap-Analysis.md)). Now they are filled, and this is the guard.
+    /// ([G71](../../../../docs/history/08-Gap-Analysis.md)). Now they are filled, and this is the guard.
     /// </summary>
     [Fact]
     public void The_app_and_title_go_out_with_the_screenshot()

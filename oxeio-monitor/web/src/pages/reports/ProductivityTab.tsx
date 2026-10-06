@@ -6,6 +6,7 @@ import { ProgressBar } from '../../components/ProgressRing';
 import { Caveat, Empty, ErrorBox, Loading } from '../../components/States';
 import { PersonCell, Table, type Column } from '../../components/Table';
 import { formatPct } from '../../lib/format';
+import { useT } from '../../i18n';
 import { CATEGORY_LABEL, MetaNote, Pill } from './shared';
 
 /**
@@ -30,6 +31,7 @@ export function ProductivityTab({
   /** How many top apps/sites to return; the server caps it at 200 */
   limit: number;
 }) {
+  const t = useT();
   const { data, error, loading, reload } = useApi(
     (signal) =>
       getProductivityReport(
@@ -39,13 +41,15 @@ export function ProductivityTab({
     [from, to, employeeId, limit],
   );
 
-  if (loading && !data) return <Loading label="Loading app and site usage…" />;
+  if (loading && !data) return <Loading label={t('Loading app and site usage…')} />;
   if (error) return <ErrorBox error={error} retry={reload} />;
   if (!data || (data.top.length === 0 && data.byEmployee.length === 0)) {
     return (
       <Empty
-        title="No app or site usage in this range"
-        hint="While the agent runs, working time is collected on its own. In a new office it is normal for this page to stay empty for the first few days."
+        title={t('No app or site usage in this range')}
+        hint={t(
+          'While the agent runs, working time is collected on its own. In a new office it is normal for this page to stay empty for the first few days.',
+        )}
       />
     );
   }
@@ -53,7 +57,7 @@ export function ProductivityTab({
   const topColumns: Column<ProductivityItem>[] = [
     {
       key: 'name',
-      header: 'App / site',
+      header: t('App / site'),
       render: (item) => (
         <div className="min-w-0">
           <div className="truncate font-medium text-ink">
@@ -68,29 +72,29 @@ export function ProductivityTab({
     },
     {
       key: 'kind',
-      header: 'Type',
+      header: t('Type'),
       render: (item) => (
-        <Pill muted>{item.kind === 'site' ? 'Site' : 'App'}</Pill>
+        <Pill muted>{item.kind === 'site' ? t('Site') : t('App')}</Pill>
       ),
     },
     {
       key: 'category',
-      header: 'Category',
+      header: t('Category'),
       render: (item) => (
         <Pill muted={item.category === 'uncategorized'}>
-          {CATEGORY_LABEL[item.category]}
+          {t(CATEGORY_LABEL[item.category])}
         </Pill>
       ),
     },
     {
       key: 'hours',
-      header: 'Time',
+      header: t('Time'),
       align: 'right',
       render: (item) => <Hours hours={item.hours} />,
     },
     {
       key: 'share',
-      header: 'Share',
+      header: t('Share'),
       align: 'right',
       className: 'w-32',
       render: (item) => (
@@ -99,7 +103,7 @@ export function ProductivityTab({
             value={item.sharePct}
             max={100}
             className="w-16"
-            ariaLabel="Share"
+            ariaLabel={t('Share')}
           />
           <span className="num w-11 text-right text-ink-2">
             {formatPct(item.sharePct)}
@@ -112,14 +116,14 @@ export function ProductivityTab({
   const employeeColumns: Column<ProductivityEmployeeRow>[] = [
     {
       key: 'person',
-      header: 'Staff',
+      header: t('Staff'),
       render: (row) => (
         <PersonCell fullName={row.fullName} empCode={row.empCode} />
       ),
     },
     {
       key: 'productive',
-      header: 'Productive',
+      header: t('Productive'),
       align: 'right',
       render: (row) => (
         <Hours hours={row.productiveHours} className="font-semibold" />
@@ -127,32 +131,32 @@ export function ProductivityTab({
     },
     {
       key: 'neutral',
-      header: 'Neutral',
+      header: t('Neutral'),
       align: 'right',
       render: (row) => <Hours hours={row.neutralHours} />,
     },
     {
       key: 'unproductive',
-      header: 'Unproductive',
+      header: t('Unproductive'),
       align: 'right',
       render: (row) => <Hours hours={row.unproductiveHours} />,
     },
     {
       // Careful: grey — these have not matched any rule yet; nothing bad about them
       key: 'uncategorized',
-      header: 'Uncategorized',
+      header: t('Uncategorized'),
       align: 'right',
       render: (row) => <Hours hours={row.uncategorizedHours} tone="muted" />,
     },
     {
       key: 'tracked',
-      header: 'Total tracked',
+      header: t('Total tracked'),
       align: 'right',
       render: (row) => <Hours hours={row.trackedHours} tone="muted" />,
     },
     {
       key: 'share',
-      header: 'Productive share',
+      header: t('Productive share'),
       align: 'right',
       className: 'w-32',
       render: (row) => (
@@ -161,7 +165,7 @@ export function ProductivityTab({
             value={row.productiveSharePct}
             max={100}
             className="w-16"
-            ariaLabel="Productive share"
+            ariaLabel={t('Productive share')}
           />
           <span className="num w-11 text-right">
             {formatPct(row.productiveSharePct)}
@@ -174,14 +178,14 @@ export function ProductivityTab({
   return (
     <>
       <StatRow>
-        <Stat label="Total tracked" value={<Hours hours={data.totalTrackedHours} />} />
+        <Stat label={t('Total tracked')} value={<Hours hours={data.totalTrackedHours} />} />
         <Stat
-          label="Uncategorized"
+          label={t('Uncategorized')}
           value={<Hours hours={data.uncategorizedHours} />}
           tone="muted"
         />
         <Stat
-          label="Uncategorized share"
+          label={t('Uncategorized share')}
           value={formatPct(
             data.totalTrackedHours > 0
               ? (data.uncategorizedHours / data.totalTrackedHours) * 100
@@ -193,13 +197,13 @@ export function ProductivityTab({
 
       <div className="mt-4 space-y-4">
         <Card
-          title="Top Apps and Sites"
-          hint="Sites show the domain only — the full address is never stored"
+          title={t('Top Apps and Sites')}
+          hint={t('Sites show the domain only — the full address is never stored')}
           padded={false}
         >
           {data.top.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-ink-3">
-              No apps or sites were recorded in this range.
+              {t('No apps or sites were recorded in this range.')}
             </p>
           ) : (
             <Table
@@ -211,10 +215,10 @@ export function ProductivityTab({
           )}
         </Card>
 
-        <Card title="By Staff" padded={false}>
+        <Card title={t('By Staff')} padded={false}>
           {data.byEmployee.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-ink-3">
-              No usage was recorded for anyone in this range.
+              {t('No usage was recorded for anyone in this range.')}
             </p>
           ) : (
             <Table
@@ -234,10 +238,9 @@ export function ProductivityTab({
            `daily_summary` percentage exactly, which is not an error.
       */}
       <Caveat>
-        Productive share = productive ÷ total tracked time, and the denominator
-        includes uncategorized time too. The more category rules there are, the
-        higher this number climbs — so do not be surprised if it does not match
-        the dashboard's daily score exactly.
+        {t(
+          "Productive share = productive ÷ total tracked time, and the denominator includes uncategorized time too. The more category rules there are, the higher this number climbs — so do not be surprised if it does not match the dashboard's daily score exactly.",
+        )}
       </Caveat>
 
       <MetaNote meta={data.meta} />

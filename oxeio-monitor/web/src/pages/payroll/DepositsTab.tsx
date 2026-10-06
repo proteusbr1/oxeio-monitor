@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Trans } from 'react-i18next';
 
 import { correctDepositInstalment, depositMonths, listDeposits, setDepositStart, settleDeposit, updateDepositPolicy, type DepositBalance } from '../../api/payroll';
 import { useApi } from '../../api/useApi';
@@ -17,6 +18,7 @@ import {
   orUndefined,
   useMutation,
 } from '../../components/ui';
+import { useT } from '../../i18n';
 
 /**
  * **Security deposit.**
@@ -32,6 +34,7 @@ import {
  * whole point of the feature.
  */
 export function DepositsTab() {
+  const t = useT();
   const { data, error, loading, reload } = useApi(
     (signal) => listDeposits(signal),
     [],
@@ -59,27 +62,30 @@ export function DepositsTab() {
       <ServerError error={mutation.error} />
 
       <Card
-        title="Security Deposit"
+        title={t('Security Deposit')}
         hint={
           data
-            ? `${data.policy.amount} a month · refundable with ${data.policy.noticeDays} days' notice`
-            : 'Held from salary each month, refunded when someone leaves'
+            ? t("{{amount}} a month · refundable with {{days}} days' notice", {
+                amount: data.policy.amount,
+                days: data.policy.noticeDays,
+              })
+            : t('Held from salary each month, refunded when someone leaves')
         }
         padded={false}
         actions={
           <RowActions>
             <MiniButton disabled={!data} onClick={() => setEditingRule(true)}>
-              Edit rule
+              {t('Edit rule')}
             </MiniButton>
           </RowActions>
         }
       >
         {loading && !data ? (
-          <Loading label="Loading deposits…" />
+          <Loading label={t('Loading deposits…')} />
         ) : !data ? (
           <ErrorBox error={error} retry={reload} />
         ) : rows.length === 0 ? (
-          <Empty title="No staff yet" />
+          <Empty title={t('No staff yet')} />
         ) : (
           <>
             {/*
@@ -94,8 +100,7 @@ export function DepositsTab() {
                 {amountOf(heldMinor)}
               </span>
               <span className="text-[12px] text-ink-2">
-                held from {open.length}{' '}
-                {open.length === 1 ? 'person' : 'people'}
+                {t('held from {{count}} people', { count: open.length })}
               </span>
             </div>
 
@@ -114,18 +119,20 @@ export function DepositsTab() {
                     {row.settlement ? (
                       <span className="block text-[12px] text-ink-2">
                         {row.settlement.outcome === 'refunded'
-                          ? 'Refunded'
-                          : 'Forfeited'}{' '}
-                        {row.settlement.amount} ·{' '}
+                          ? t('Refunded {{amount}}', { amount: row.settlement.amount })
+                          : t('Forfeited {{amount}}', { amount: row.settlement.amount })}
+                        {' · '}
                         {row.settlement.noticeDaysGiven === null
-                          ? 'notice dates were not recorded'
-                          : `${row.settlement.noticeDaysGiven} days' notice, rule is ${row.settlement.noticeDaysRule}`}
+                          ? t('notice dates were not recorded')
+                          : t("{{given}} days' notice, rule is {{rule}}", {
+                              given: row.settlement.noticeDaysGiven,
+                              rule: row.settlement.noticeDaysRule,
+                            })}
                         {row.settlement.note && ` · ${row.settlement.note}`}
                       </span>
                     ) : (
                       <span className="block text-[12px] text-ink-3">
-                        {row.months} {row.months === 1 ? 'month' : 'months'}{' '}
-                        held
+                        {t('{{count}} months held', { count: row.months })}
                         {/*
                           Important: **which month deductions start from**; without
                              this the owner would have to work it out, and a mistake
@@ -136,9 +143,13 @@ export function DepositsTab() {
                         */}
                         {row.effectiveStart && (
                           <>
-                            {' · from '}
-                            <span className="num">{row.effectiveStart}</span>
-                            {row.startYearMonth === null && ' (by rule)'}
+                            {' · '}
+                            <Trans
+                              i18nKey="from <n>{{month}}</n>"
+                              values={{ month: row.effectiveStart }}
+                              components={{ n: <span className="num" /> }}
+                            />
+                            {row.startYearMonth === null && ` ${t('(by rule)')}`}
                           </>
                         )}
                       </span>
@@ -171,16 +182,16 @@ export function DepositsTab() {
                          be read.
                     */}
                     <MiniButton onClick={() => setMonthsFor(row)}>
-                      Months
+                      {t('Months')}
                     </MiniButton>
                     {!row.settlement && (
                       <MiniButton onClick={() => setStartFor(row)}>
-                        Start month
+                        {t('Start month')}
                       </MiniButton>
                     )}
                     {!row.settlement && row.balanceMinor > 0 && (
                       <MiniButton onClick={() => setSettling(row)}>
-                        Settle
+                        {t('Settle')}
                       </MiniButton>
                     )}
                   </RowActions>
@@ -191,10 +202,9 @@ export function DepositsTab() {
         )}
 
         <Caveat>
-          The instalment is written into the ledger month by month, so changing
-          the amount later never rewrites what was already held. The payroll
-          sheet shows it as its own line: the salary earned stays the same, and
-          only the amount handed over that month goes down.
+          {t(
+            'The instalment is written into the ledger month by month, so changing the amount later never rewrites what was already held. The payroll sheet shows it as its own line: the salary earned stays the same, and only the amount handed over that month goes down.',
+          )}
         </Caveat>
       </Card>
 
@@ -224,8 +234,10 @@ export function DepositsTab() {
                */
               if (result.removed > 0 || result.added > 0) {
                 window.alert(
-                  `Ledger updated — ${result.removed} instalment(s) removed, ` +
-                    `${result.added} added.`,
+                  t('Ledger updated — {{removed}} instalment(s) removed, {{added}} added.', {
+                    removed: result.removed,
+                    added: result.added,
+                  }),
                 );
               }
             })
@@ -293,6 +305,7 @@ function EditRule({
     active?: boolean;
   }) => void;
 }) {
+  const t = useT();
   const [amount, setAmount] = useState(policy.amount);
   const [startYearMonth, setStart] = useState(policy.startYearMonth);
   const [noticeDays, setNotice] = useState(String(policy.noticeDays));
@@ -309,11 +322,11 @@ function EditRule({
 
   return (
     <Modal
-      title="Security deposit rule"
+      title={t('Security deposit rule')}
       onClose={onClose}
       footer={
         <RowActions>
-          <MiniButton onClick={onClose}>Cancel</MiniButton>
+          <MiniButton onClick={onClose}>{t('Cancel')}</MiniButton>
           <MiniButton
             disabled={busy || badAmount || badNotice}
             onClick={() =>
@@ -326,40 +339,39 @@ function EditRule({
               })
             }
           >
-            Save
+            {t('Save')}
           </MiniButton>
         </RowActions>
       }
     >
       <FormGrid>
-        <TextField label="Amount a month" value={amount} onChange={setAmount} />
+        <TextField label={t('Amount a month')} value={amount} onChange={setAmount} />
         <TextField
-          label="Notice required (days)"
+          label={t('Notice required (days)')}
           value={noticeDays}
           onChange={setNotice}
         />
         <TextField
-          label="Collect from"
+          label={t('Collect from')}
           value={startYearMonth}
           onChange={setStart}
           placeholder="2026-08"
         />
         <SelectField
-          label="Collecting"
+          label={t('Collecting')}
           value={active}
           onChange={setActive}
           options={[
-            { value: 'yes', label: 'Yes — add an instalment each month' },
-            { value: 'no', label: 'No — stop adding new instalments' },
+            { value: 'yes', label: t('Yes — add an instalment each month') },
+            { value: 'no', label: t('No — stop adding new instalments') },
           ]}
         />
 
         <FullWidth>
           <Notice>
-            Changing the amount only affects months that have not been recorded
-            yet. Everything already held keeps the amount it was held at, so
-            nobody&apos;s balance moves because a rule changed today. Turning
-            collection off leaves every balance untouched.
+            {t(
+              "Changing the amount only affects months that have not been recorded yet. Everything already held keeps the amount it was held at, so nobody's balance moves because a rule changed today. Turning collection off leaves every balance untouched.",
+            )}
           </Notice>
         </FullWidth>
       </FormGrid>
@@ -393,6 +405,7 @@ function SettleDialog({
     note?: string;
   }) => void;
 }) {
+  const t = useT();
   const [noticeGivenOn, setNoticeGiven] = useState('');
   const [lastWorkingDay, setLastDay] = useState('');
   const [outcome, setOutcome] = useState<'refunded' | 'forfeited'>('refunded');
@@ -410,11 +423,11 @@ function SettleDialog({
 
   return (
     <Modal
-      title={`Settle ${row.fullName}'s deposit`}
+      title={t("Settle {{name}}'s deposit", { name: row.fullName })}
       onClose={onClose}
       footer={
         <RowActions>
-          <MiniButton onClick={onClose}>Cancel</MiniButton>
+          <MiniButton onClick={onClose}>{t('Cancel')}</MiniButton>
           <MiniButton
             tone={outcome === 'forfeited' ? 'danger' : undefined}
             disabled={busy}
@@ -427,7 +440,7 @@ function SettleDialog({
               })
             }
           >
-            {outcome === 'refunded' ? 'Refund' : 'Forfeit'}
+            {outcome === 'refunded' ? t('Refund') : t('Forfeit')}
           </MiniButton>
         </RowActions>
       }
@@ -435,35 +448,36 @@ function SettleDialog({
       <FormGrid>
         <FullWidth>
           <Notice>
-            {row.balance} held over {row.months}{' '}
-            {row.months === 1 ? 'month' : 'months'}. This closes the ledger — no
-            further instalments are added, and it cannot be settled twice.
+            {t(
+              '{{balance}} held over {{count}} months. This closes the ledger — no further instalments are added, and it cannot be settled twice.',
+              { balance: row.balance, count: row.months },
+            )}
           </Notice>
         </FullWidth>
 
         <TextField
-          label="Notice given on"
+          label={t('Notice given on')}
           value={noticeGivenOn}
           onChange={setNoticeGiven}
           type="date"
         />
         <TextField
-          label="Last working day"
+          label={t('Last working day')}
           value={lastWorkingDay}
           onChange={setLastDay}
           type="date"
         />
 
         <SelectField
-          label="Outcome"
+          label={t('Outcome')}
           value={outcome}
           onChange={(v) => setOutcome(v as 'refunded' | 'forfeited')}
           options={[
-            { value: 'refunded', label: 'Refund the full amount' },
-            { value: 'forfeited', label: 'Forfeit — notice was too short' },
+            { value: 'refunded', label: t('Refund the full amount') },
+            { value: 'forfeited', label: t('Forfeit — notice was too short') },
           ]}
         />
-        <TextField label="Note" value={note} onChange={setNote} />
+        <TextField label={t('Note')} value={note} onChange={setNote} />
 
         {/*
           Important: the calculation is shown but the buttons are not changed: the
@@ -474,16 +488,16 @@ function SettleDialog({
         <FullWidth>
           {daysGiven === null ? (
             <Notice>
-              Without both dates the notice period is not recorded — the
-              settlement still goes through, and the ledger simply says the
-              dates were not known.
+              {t(
+                'Without both dates the notice period is not recorded — the settlement still goes through, and the ledger simply says the dates were not known.',
+              )}
             </Notice>
           ) : (
             <Notice>
-              {daysGiven} days&apos; notice · the rule asks for {noticeDays}.{' '}
+              {t("{{given}} days' notice · the rule asks for {{rule}}.", { given: daysGiven, rule: noticeDays })}{' '}
               {daysGiven >= noticeDays
-                ? 'This meets the rule.'
-                : 'This is short of the rule — refunding anyway is your call, and the note is a good place to say why.'}
+                ? t('This meets the rule.')
+                : t('This is short of the rule — refunding anyway is your call, and the note is a good place to say why.')}
             </Notice>
           )}
         </FullWidth>
@@ -513,16 +527,17 @@ function StartMonthDialog({
   onClose: () => void;
   onSubmit: (yearMonth: string | null) => void;
 }) {
+  const t = useT();
   const [month, setMonth] = useState(row.startYearMonth ?? row.effectiveStart ?? '');
 
   return (
     <Modal
-      title={`${row.fullName} — deposit start`}
-      hint="From which month this person's deposit started being held"
+      title={t('{{name}} — deposit start', { name: row.fullName })}
+      hint={t("From which month this person's deposit started being held")}
       onClose={onClose}
       footer={
         <>
-          <MiniButton onClick={onClose}>Cancel</MiniButton>
+          <MiniButton onClick={onClose}>{t('Cancel')}</MiniButton>
           {/*
             Careful: "back to rule" is a separate button; if you cleared the field and
                saved, it could not be told whether that meant "I said nothing" or
@@ -530,27 +545,28 @@ function StartMonthDialog({
           */}
           {row.startYearMonth !== null && (
             <MiniButton disabled={busy} onClick={() => onSubmit(null)}>
-              Use the rule
+              {t('Use the rule')}
             </MiniButton>
           )}
           <MiniButton
             disabled={busy || month === '' || month === row.startYearMonth}
             onClick={() => onSubmit(month)}
           >
-            {busy ? 'Saving…' : 'Save'}
+            {busy ? t('Saving…') : t('Save')}
           </MiniButton>
         </>
       }
     >
       <div className="space-y-3.5">
         <Notice>
-          Moving this <b>later</b> deletes the instalments before it, and moving
-          it <b>earlier</b> adds the missing ones. The ledger is rebuilt to match
-          the month you choose.
+          <Trans
+            i18nKey="Moving this <b>later</b> deletes the instalments before it, and moving it <b>earlier</b> adds the missing ones. The ledger is rebuilt to match the month you choose."
+            components={{ b: <b /> }}
+          />
         </Notice>
 
         <TextField
-          label="Deposit starts from"
+          label={t('Deposit starts from')}
           type="month"
           value={month}
           onChange={setMonth}
@@ -558,8 +574,8 @@ function StartMonthDialog({
           autoFocus
           hint={
             row.startYearMonth === null
-              ? `Currently following the rule (${row.effectiveStart ?? '—'})`
-              : 'Set by you — "Use the rule" puts it back'
+              ? t('Currently following the rule ({{month}})', { month: row.effectiveStart ?? '—' })
+              : t('Set by you — "Use the rule" puts it back')
           }
         />
       </div>
@@ -590,6 +606,7 @@ function MonthsDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const t = useT();
   const months = useApi(
     (signal) => depositMonths(row.employeeId, signal),
     [row.employeeId],
@@ -611,7 +628,7 @@ function MonthsDialog({
 
   return (
     <Modal
-      title={`${row.fullName} — month by month`}
+      title={t('{{name}} — month by month', { name: row.fullName })}
       onClose={onClose}
     >
       {months.loading && <Loading />}
@@ -619,8 +636,8 @@ function MonthsDialog({
 
       {months.data && months.data.months.length === 0 && (
         <Empty
-          title="No instalments yet"
-          hint="The ledger fills month by month once the rule starts."
+          title={t('No instalments yet')}
+          hint={t('The ledger fills month by month once the rule starts.')}
         />
       )}
 
@@ -637,7 +654,7 @@ function MonthsDialog({
                   setReason('');
                 }}
               >
-                Correct
+                {t('Correct')}
               </MiniButton>
             </li>
           ))}
@@ -647,7 +664,7 @@ function MonthsDialog({
       {editing && (
         <FormGrid>
           <TextField
-            label={`New amount for ${editing}`}
+            label={t('New amount for {{month}}', { month: editing })}
             value={amount}
             onChange={setAmount}
             /*
@@ -655,18 +672,18 @@ function MonthsDialog({
                  the server and the database both block it, but without the reason on
                  screen the owner would keep trying.
             */
-            hint="More than zero. To skip the early months use Start month instead."
+            hint={t('More than zero. To skip the early months use Start month instead.')}
           />
           <TextField
-            label="Why"
+            label={t('Why')}
             value={reason}
             onChange={setReason}
-            hint="Six months from now this line is the only answer"
+            hint={t('Six months from now this line is the only answer')}
           />
           <FullWidth>
             <ServerError error={mutation.error} />
             <RowActions>
-              <MiniButton onClick={() => setEditing(null)}>Cancel</MiniButton>
+              <MiniButton onClick={() => setEditing(null)}>{t('Cancel')}</MiniButton>
               <MiniButton
                 disabled={!ready || mutation.busy}
                 onClick={() =>
@@ -685,7 +702,7 @@ function MonthsDialog({
                   })
                 }
               >
-                Save
+                {t('Save')}
               </MiniButton>
             </RowActions>
           </FullWidth>
@@ -693,9 +710,9 @@ function MonthsDialog({
       )}
 
       <Caveat>
-        Correcting a month changes the ledger, not the rule — the amount for
-        every other month stays as it was written. A closed month cannot be
-        corrected; reopen it first.
+        {t(
+          'Correcting a month changes the ledger, not the rule — the amount for every other month stays as it was written. A closed month cannot be corrected; reopen it first.',
+        )}
       </Caveat>
     </Modal>
   );

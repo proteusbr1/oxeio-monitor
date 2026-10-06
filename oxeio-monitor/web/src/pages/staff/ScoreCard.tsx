@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { Trans } from 'react-i18next';
 
 import { getDailyProductivity, type ProductivityScore } from '../../api/activity';
 import { useApi } from '../../api/useApi';
@@ -6,6 +7,7 @@ import { Card } from '../../components/Card';
 import { Duration } from '../../components/Duration';
 import { SectionHead } from '../../components/Page';
 import { Caveat, Empty, ErrorBox, Loading } from '../../components/States';
+import { useT } from '../../i18n';
 import { formatPct, pctOf } from '../../lib/format';
 
 /**
@@ -55,6 +57,7 @@ export function ScoreCard({
   date: string;
   nonce: number;
 }) {
+  const t = useT();
   const { data, error, loading, reload } = useApi(
     // One day means `from === to`. Parameters are camelCase, otherwise 400.
     (signal) =>
@@ -68,8 +71,8 @@ export function ScoreCard({
   return (
     <section>
       <SectionHead
-        title="Productivity score"
-        hint="From the category rules · this number never touches pay"
+        title={t('Productivity score')}
+        hint={t('From the category rules · this number never touches pay')}
       />
 
       {loading && !data ? (
@@ -78,8 +81,8 @@ export function ScoreCard({
         <ErrorBox error={error} retry={reload} />
       ) : !score || score.totalSec === 0 ? (
         <Empty
-          title="No app or site records on this day"
-          hint="The score comes from app-usage rows. With no rows there is nothing to score — and zero is not shown, because zero would claim that none of the day was work."
+          title={t('No app or site records on this day')}
+          hint={t('The score comes from app-usage rows. With no rows there is nothing to score — and zero is not shown, because zero would claim that none of the day was work.')}
         />
       ) : (
         <>
@@ -99,24 +102,25 @@ export function ScoreCard({
 function Numbers({ score }: { score: ProductivityScore }) {
   // Careful: when the unrecognised share is large it is the real news of the day,
   // so it gets the attention colour. This card has at most one red tile.
+  const t = useT();
   const alarming = score.unknownPct >= 50;
 
   return (
     <div className="flex flex-wrap gap-x-10 gap-y-4">
       <div>
-        <div className="text-[11.5px] text-ink-3">Score</div>
+        <div className="text-[11.5px] text-ink-3">{t('Score')}</div>
         <div className="num mt-0.5 text-3xl leading-none font-semibold text-ink">
           {formatPct(score.scorePct)}
         </div>
         <div className="mt-1 text-[11px] text-ink-3">
           {score.scorePct === null
-            ? 'No known time to score'
-            : 'Share of known time spent on work'}
+            ? t('No known time to score')
+            : t('Share of known time spent on work')}
         </div>
       </div>
 
       <div>
-        <div className="text-[11.5px] text-ink-3">Uncategorised</div>
+        <div className="text-[11.5px] text-ink-3">{t('Uncategorised')}</div>
         <div
           className={`num mt-0.5 text-3xl leading-none font-semibold ${
             alarming ? 'text-brand-ink' : 'text-ink-3'
@@ -125,7 +129,7 @@ function Numbers({ score }: { score: ProductivityScore }) {
           {formatPct(score.unknownPct)}
         </div>
         <div className="mt-1 text-[11px] text-ink-3">
-          of the day matched no rule — left out of the score
+          {t('of the day matched no rule — left out of the score')}
         </div>
       </div>
     </div>
@@ -142,34 +146,46 @@ function Explain({ score }: { score: ProductivityScore }) {
     But the "…% uncategorised" below **stays unconditional**, on purpose; the
        reason is explained below.
   */
+  const t = useT();
   const hasUnknown = score.categorizedSec < score.totalSec;
 
   return (
     <p className="mt-4 rounded-md border border-line bg-paper px-3 py-2 text-xs leading-relaxed text-ink-3">
       {hasUnknown ? (
-        <>
-          The score sits on the{' '}
-          <Duration
-            seconds={score.categorizedSec}
-            className="font-semibold text-ink-2"
-          />{' '}
-          of <b>known</b> time in this day, not on the full{' '}
-          <Duration
-            seconds={score.totalSec}
-            className="font-semibold text-ink-2"
-          />
-        </>
+        <Trans
+          i18nKey="The score sits on the <known/> of <b>known</b> time in this day, not on the full <total/> — <b>{{pct}} uncategorised</b>."
+          values={{ pct: formatPct(score.unknownPct) }}
+          components={{
+            known: (
+              <Duration
+                seconds={score.categorizedSec}
+                className="font-semibold text-ink-2"
+              />
+            ),
+            total: (
+              <Duration
+                seconds={score.totalSec}
+                className="font-semibold text-ink-2"
+              />
+            ),
+            b: <b />,
+          }}
+        />
       ) : (
-        <>
-          The score sits on all{' '}
-          <Duration
-            seconds={score.totalSec}
-            className="font-semibold text-ink-2"
-          />{' '}
-          of tracked time in this day
-        </>
+        <Trans
+          i18nKey="The score sits on all <total/> of tracked time in this day — <b>{{pct}} uncategorised</b>."
+          values={{ pct: formatPct(score.unknownPct) }}
+          components={{
+            total: (
+              <Duration
+                seconds={score.totalSec}
+                className="font-semibold text-ink-2"
+              />
+            ),
+            b: <b />,
+          }}
+        />
       )}
-      {' — '}
       {/*
         Important: the "…% uncategorised" sentence is **unconditional**, right
            under the score. It used to show only at 30%+, so with 29%
@@ -178,12 +194,10 @@ function Explain({ score }: { score: ProductivityScore }) {
            label comes first and the number after; only this line reads the whole
            thing in one go.
       */}
-      <b>{formatPct(score.unknownPct)} uncategorised</b>.
       {score.unknownPct >= 30 && (
         <>
           {' '}
-          With that much of the day unmatched, the number cannot stand as a
-          verdict on anyone. Adding category rules will change it.
+          {t('With that much of the day unmatched, the number cannot stand as a verdict on anyone. Adding category rules will change it.')}
         </>
       )}
     </p>
@@ -191,32 +205,33 @@ function Explain({ score }: { score: ProductivityScore }) {
 }
 
 function Breakdown({ score }: { score: ProductivityScore }) {
+  const t = useT();
   const slices: Slice[] = [
     {
       key: 'productive',
-      label: 'Productive',
-      hint: 'Marked productive by a rule',
+      label: t('Productive'),
+      hint: t('Marked productive by a rule'),
       seconds: score.productiveSec,
       className: 'bg-ink',
     },
     {
       key: 'neutral',
-      label: 'Neutral',
-      hint: 'Known, but neither way',
+      label: t('Neutral'),
+      hint: t('Known, but neither way'),
       seconds: score.neutralSec,
       className: 'bg-ink-3/45',
     },
     {
       key: 'unproductive',
-      label: 'Unproductive',
-      hint: 'Marked unproductive by a rule — hours are still never cut',
+      label: t('Unproductive'),
+      hint: t('Marked unproductive by a rule — hours are still never cut'),
       seconds: score.unproductiveSec,
       className: 'bg-brand-ink',
     },
     {
       key: 'unknown',
-      label: 'Uncategorised',
-      hint: 'Matched no rule',
+      label: t('Uncategorised'),
+      hint: t('Matched no rule'),
       seconds: score.unknownSec,
       className: 'bg-paper',
       style: UNKNOWN_STRIPES,

@@ -31,16 +31,20 @@ import { CurrentUser, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
 import { RequiresFeature } from '../features/requires-feature';
 import { DROP_REASONS, REFERENCE_MAX, type DropReason } from './tasks.rules';
+import { TasksHandoutService } from './tasks.handout.service';
+import { TasksPersonService } from './tasks.person.service';
+import { TasksPoolService } from './tasks.pool.service';
+import { TasksService } from './tasks.service';
+import { TasksStageService } from './tasks.stage.service';
 import {
   DELETE_MAX,
-  TasksService,
   type BulkResult,
   type DeleteResult,
   type MyTask,
   type TaskList,
   type TaskStage,
   type TaskStats,
-} from './tasks.service';
+} from './tasks.types';
 
 class BulkDto {
   /**
@@ -175,7 +179,13 @@ class DropReasonDto {
 @RequiresFeature('tasks')
 @Controller('tasks')
 export class TasksController {
-  constructor(private readonly tasks: TasksService) {}
+  constructor(
+    private readonly tasks: TasksService,
+    private readonly pool: TasksPoolService,
+    private readonly handout: TasksHandoutService,
+    private readonly person: TasksPersonService,
+    private readonly stage: TasksStageService,
+  ) {}
 
   /** Up to 500 lines at once: coordinator, manager, owner */
   @Post('bulk')
@@ -184,7 +194,7 @@ export class TasksController {
     @Body() dto: BulkDto,
     @Ip() ip: string,
   ): Promise<BulkResult> {
-    return this.tasks.bulkAdd(actor, dto.text, ip);
+    return this.pool.bulkAdd(actor, dto.text, ip);
   }
 
   /** The full list: owner, manager, coordinator */
@@ -270,7 +280,7 @@ export class TasksController {
     @Body() dto: CheckedDto,
   ) {
     this.tasks.assertCanCheck(actor);
-    return this.tasks.markChecked(id, dto.ok, actor.userId, new Date());
+    return this.stage.markChecked(id, dto.ok, actor.userId, new Date());
   }
 
   /** "Fixed": who fixed it is stored separately; the task keeps its assignee */
@@ -280,7 +290,7 @@ export class TasksController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     this.tasks.assertCanCheck(actor);
-    return this.tasks.markFixed(id, actor.userId, new Date());
+    return this.stage.markFixed(id, actor.userId, new Date());
   }
 
   /**
@@ -293,7 +303,7 @@ export class TasksController {
     @CurrentUser() actor: SessionUser,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.tasks.markReviewed(id, actor.userId, new Date());
+    return this.stage.markReviewed(id, actor.userId, new Date());
   }
 
   /** "Delivered": owner, manager, coordinator */
@@ -303,7 +313,7 @@ export class TasksController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     this.tasks.assertCanUse(actor);
-    return this.tasks.markDelivered(id, new Date());
+    return this.stage.markDelivered(id, new Date());
   }
 
   /** "Published", with an optional reference for the result */
@@ -315,7 +325,7 @@ export class TasksController {
   ) {
     this.tasks.assertCanUse(actor);
     const ref = dto.publishedRef?.trim();
-    return this.tasks.markPublished(id, ref ? ref : null, new Date());
+    return this.stage.markPublished(id, ref ? ref : null, new Date());
   }
 
   /**
@@ -333,7 +343,7 @@ export class TasksController {
     @Ip() ip: string,
   ) {
     this.tasks.assertCanUse(actor);
-    return this.tasks.undoComplete(id, { userId: actor.userId, ip });
+    return this.person.undoComplete(id, { userId: actor.userId, ip });
   }
 
   /**
@@ -343,7 +353,7 @@ export class TasksController {
   @Roles(UserRole.owner, UserRole.manager)
   @Post('distribute')
   distribute() {
-    return this.tasks.distribute();
+    return this.handout.distribute();
   }
 }
 
@@ -354,11 +364,11 @@ export class TasksController {
 @RequiresFeature('tasks')
 @Controller('me/tasks')
 export class MyTasksController {
-  constructor(private readonly tasks: TasksService) {}
+  constructor(private readonly person: TasksPersonService) {}
 
   @Get()
   mine(@CurrentUser() actor: SessionUser): Promise<MyTask[]> {
-    return this.tasks.mine(employeeIdOf(actor));
+    return this.person.mine(employeeIdOf(actor));
   }
 
   /**
@@ -373,7 +383,7 @@ export class MyTasksController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: DropReasonDto,
   ) {
-    return this.tasks.skip(employeeIdOf(actor), id, dto.reason);
+    return this.person.skip(employeeIdOf(actor), id, dto.reason);
   }
 
   /** "I finished": a manual mark, limited to the person's daily target */
@@ -382,7 +392,7 @@ export class MyTasksController {
     @CurrentUser() actor: SessionUser,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.tasks.markDone(employeeIdOf(actor), id, actor.userId);
+    return this.person.markDone(employeeIdOf(actor), id, actor.userId);
   }
 
   /** "I pressed it by mistake": today's, own row, not yet moved along */
@@ -392,7 +402,7 @@ export class MyTasksController {
     @Param('id', ParseIntPipe) id: number,
     @Ip() ip: string,
   ) {
-    return this.tasks.undoMine(employeeIdOf(actor), id, new Date(), {
+    return this.person.undoMine(employeeIdOf(actor), id, new Date(), {
       userId: actor.userId,
       ip,
     });

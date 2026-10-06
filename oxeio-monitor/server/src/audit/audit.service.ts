@@ -17,7 +17,7 @@ export type AuditAction =
   | 'change_login_email'
   | 'view_screenshot'
   | 'export_report'
-  /** Viewing salary: the most sensitive read, so its own action ([ADR-023](../../../docs/05-Options-Decisions.md)) */
+  /** Viewing salary: the most sensitive read, so its own action ([ADR-023](../../../docs/history/05-Options-Decisions.md)) */
   | 'payroll_view'
   | 'change_setting'
   | 'create_enrollment_code'
@@ -25,7 +25,7 @@ export type AuditAction =
   | 'upload_policy_doc'
   /**
    * **The one condition for rollout**: "no agent goes on anyone's PC without
-   * a signature" ([01 § Rollout](../../../docs/01-Planning.md)). If who
+   * a signature" ([01 § Rollout](../../../docs/history/01-Planning.md)). If who
    * recorded whose signature and when were merged into `change_setting`, six
    * months later the question "was their signature really taken?" could not be answered.
    *

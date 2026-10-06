@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Trans } from 'react-i18next';
 
 import { createWorkPolicy, deactivateWorkPolicy, listWorkPolicies, reactivateWorkPolicy, updateWorkPolicy, type TargetBasis, type WorkPolicyBody, type WorkPolicyView } from '../../api/calendar';
 import { useApi } from '../../api/useApi';
@@ -14,6 +15,7 @@ import {
   formatMonth,
   todayInWorkZone,
 } from '../../lib/format';
+import { useT } from '../../i18n';
 import { HolidaysSection } from './HolidaysSection';
 import { targetPreview } from './policy.math';
 import {
@@ -72,6 +74,7 @@ export function PoliciesTab() {
 }
 
 function WorkPoliciesSection() {
+  const t = useT();
   const policies = useApi((signal) => listWorkPolicies(signal), []);
 
   const [editing, setEditing] = useState<WorkPolicyView | null>(null);
@@ -88,7 +91,7 @@ function WorkPoliciesSection() {
   const columns: Column<WorkPolicyView>[] = [
     {
       key: 'name',
-      header: 'Name',
+      header: t('Name'),
       render: (policy) => (
         <div className="min-w-0">
           <div className="truncate font-medium text-ink">{policy.name}</div>
@@ -100,23 +103,23 @@ function WorkPoliciesSection() {
     },
     {
       key: 'target',
-      header: 'Target',
+      header: t('Target'),
       align: 'right',
       render: (policy) => <TargetCell policy={policy} />,
     },
     {
       key: 'off',
-      header: 'Weekly off',
+      header: t('Weekly off'),
       render: (policy) =>
         policy.weeklyOffDays.length === 0 ? (
-          <span className="text-ink-3">None</span>
+          <span className="text-ink-3">{t('None')}</span>
         ) : (
-          policy.weeklyOffDays.map((d) => OFF_DAY_LABEL[d] ?? String(d)).join(' + ')
+          policy.weeklyOffDays.map((d) => (OFF_DAY_LABEL[d] ? t(OFF_DAY_LABEL[d]) : String(d))).join(' + ')
         ),
     },
     {
       key: 'office',
-      header: 'Office hours',
+      header: t('Office hours'),
       render: (policy) =>
         policy.officeFrom && policy.officeTo ? (
           <span className="num">
@@ -124,29 +127,33 @@ function WorkPoliciesSection() {
           </span>
         ) : (
           // Careful: "all day" means the alert is never quiet; that is not hiding anything
-          <span className="text-ink-3">all day</span>
+          <span className="text-ink-3">{t('all day')}</span>
         ),
     },
     ...(withShots
       ? [
           {
             key: 'window',
-            header: 'Screenshot window',
+            header: t('Screenshot window'),
             render: (policy: WorkPolicyView) =>
               // `false` only — an older server without the field means on
               policy.screenshotsEnabled === false ? (
-                <span className="text-ink-3">off</span>
+                <span className="text-ink-3">{t('off')}</span>
               ) : (
-                <span className="num">
-                  {policy.screenshotFrom ?? '07:00'}–{policy.screenshotTo ?? '23:00'}
-                </span>
+                policy.screenshotFrom === null || policy.screenshotTo === null ? (
+                  <span className="text-ink-3">{t('whenever in use')}</span>
+                ) : (
+                  <span className="num">
+                    {policy.screenshotFrom}–{policy.screenshotTo}
+                  </span>
+                )
               ),
           },
         ]
       : []),
     {
       key: 'idle',
-      header: 'Idle threshold',
+      header: t('Idle threshold'),
       align: 'right',
       render: (policy) => (
         <span className="num">{formatDuration(policy.idleThresholdSec)}</span>
@@ -154,7 +161,7 @@ function WorkPoliciesSection() {
     },
     {
       key: 'slot',
-      header: 'Slot',
+      header: t('Slot'),
       align: 'right',
       render: (policy) => (
         <span className="num">
@@ -165,18 +172,18 @@ function WorkPoliciesSection() {
     },
     {
       key: 'people',
-      header: 'Staff',
+      header: t('Staff'),
       align: 'right',
       render: (policy) => <span className="num">{policy.employeeCount}</span>,
     },
     {
       key: 'status',
-      header: 'Status',
+      header: t('Status'),
       render: (policy) =>
         policy.isActive ? (
-          <Chip tone="counted">Open</Chip>
+          <Chip tone="counted">{t('Open', { context: 'policy' })}</Chip>
         ) : (
-          <Chip>Closed</Chip>
+          <Chip>{t('Closed', { context: 'policy' })}</Chip>
         ),
     },
     {
@@ -185,18 +192,18 @@ function WorkPoliciesSection() {
       align: 'right',
       render: (policy) => (
         <RowActions>
-          <MiniButton onClick={() => setEditing(policy)}>Edit</MiniButton>
+          <MiniButton onClick={() => setEditing(policy)}>{t('Edit')}</MiniButton>
           {policy.isActive ? (
             <MiniButton
               tone="danger"
               onClick={() => setClosing(policy)}
               title={
                 policy.employeeCount > 0
-                  ? 'Move the people on this policy to another one first'
+                  ? t('Move the people on this policy to another one first')
                   : undefined
               }
             >
-              Close
+              {t('Close', { context: 'policy' })}
             </MiniButton>
           ) : (
             /**
@@ -207,7 +214,7 @@ function WorkPoliciesSection() {
              *
              * Careful: not `danger`; opening is the safe direction.
              */
-            <MiniButton onClick={() => setReopening(policy)}>Reopen</MiniButton>
+            <MiniButton onClick={() => setReopening(policy)}>{t('Reopen')}</MiniButton>
           )}
         </RowActions>
       ),
@@ -219,17 +226,16 @@ function WorkPoliciesSection() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <h2 className="text-[15px] font-semibold tracking-tight">
-            Work policies
+            {t('Work policies')}
           </h2>
           <p className="mt-0.5 text-xs text-ink-3">
             {withShots
-              ? 'Hours target, screenshot window and idle threshold'
-              : 'Hours target and idle threshold'}{' '}
-            — everything about a person's day comes from here
+              ? t("Hours target, screenshot window and idle threshold — everything about a person's day comes from here")
+              : t("Hours target and idle threshold — everything about a person's day comes from here")}
           </p>
         </div>
         <Button tone="primary" onClick={() => setCreating(true)}>
-          New policy
+          {t('New policy')}
         </Button>
       </div>
 
@@ -238,10 +244,17 @@ function WorkPoliciesSection() {
            for real danger (see the confirmation boxes).
       */}
       <Notice>
-        Change a number here and the next config sync changes{' '}
-        <strong>how every PC behaves</strong> — when idle starts counting
-        {withShots && ', when screenshots are taken'}. Change the monthly target and everyone's progress
-        percentage moves with it.
+        {withShots ? (
+          <Trans
+            i18nKey="Change a number here and the next config sync changes <b>how every PC behaves</b> — when idle starts counting, when screenshots are taken. Change the monthly target and everyone's progress percentage moves with it."
+            components={{ b: <strong /> }}
+          />
+        ) : (
+          <Trans
+            i18nKey="Change a number here and the next config sync changes <b>how every PC behaves</b> — when idle starts counting. Change the monthly target and everyone's progress percentage moves with it."
+            components={{ b: <strong /> }}
+          />
+        )}
       </Notice>
 
       {policies.loading && !policies.data && <Loading />}
@@ -251,11 +264,11 @@ function WorkPoliciesSection() {
 
       {!policies.loading && !policies.error && rows.length === 0 && (
         <Empty
-          title="No work policy yet"
-          hint="At least one policy is needed — without it nobody has a monthly target and the progress ring never fills. Create one with the default 176 hours."
+          title={t('No work policy yet')}
+          hint={t('At least one policy is needed — without it nobody has a monthly target and the progress ring never fills. Create one with the default 176 hours.')}
           action={
             <Button tone="primary" onClick={() => setCreating(true)}>
-              New policy
+              {t('New policy')}
             </Button>
           }
         />
@@ -378,8 +391,13 @@ function PolicyForm({
   const [basis, setBasis] = useState<TargetBasis>(policy?.targetBasis ?? 'month');
   const [deductShortfall, setDeductShortfall] = useState(policy?.deductShortfall !== false);
   const { features } = useFeatures();
+  const t = useT();
 
   // a boolean, so kept apart from the all-string form state above
+  // no window = whenever the computer is in use (the default for a new policy)
+  const [anyTime, setAnyTime] = useState(
+    policy ? policy.screenshotFrom === null || policy.screenshotTo === null : true,
+  );
   const [screenshotsEnabled, setScreenshotsEnabled] = useState(
     policy?.screenshotsEnabled !== false,
   );
@@ -419,8 +437,8 @@ function PolicyForm({
         //    out would let the server keep the old days, and they could
         //    never be cleared
         weeklyOffDays: offDays,
-        screenshotFrom: form.screenshotFrom,
-        screenshotTo: form.screenshotTo,
+        screenshotFrom: anyTime ? null : form.screenshotFrom,
+        screenshotTo: anyTime ? null : form.screenshotTo,
         screenshotsEnabled,
         officeFrom: form.officeFrom,
         officeTo: form.officeTo,
@@ -439,24 +457,24 @@ function PolicyForm({
 
   return (
     <Modal
-      title={policy ? `${policy.name} — Edit` : 'New Work Policy'}
+      title={policy ? t('{{name}} — Edit', { name: policy.name }) : t('New Work Policy')}
       hint={
         policy && policy.employeeCount > 0
-          ? `${policy.employeeCount} people are on this policy`
+          ? t('{{count}} people are on this policy', { count: policy.employeeCount })
           : undefined
       }
       onClose={onClose}
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button
             tone="primary"
             onClick={submit}
             disabled={busy || form.name.trim() === ''}
           >
-            {busy ? 'Saving…' : 'Save'}
+            {busy ? t('Saving…') : t('Save')}
           </Button>
         </>
       }
@@ -465,29 +483,29 @@ function PolicyForm({
         <FormGrid>
           <FullWidth>
             <TextField
-              label="Name"
+              label={t('Name')}
               value={form.name}
               onChange={set('name')}
               required
               autoFocus
               maxLength={120}
-              placeholder="General staff"
+              placeholder={t('General staff')}
             />
           </FullWidth>
 
           <FullWidth>
             <SelectField
-              label="Hours target"
+              label={t('Hours target')}
               value={basis}
               onChange={(v) => setBasis(v as TargetBasis)}
-              options={BASIS_OPTIONS}
+              options={BASIS_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
             />
           </FullWidth>
 
           {basis === 'month' && (
             <>
           <TextField
-            label="Monthly target (hours)"
+            label={t('Monthly target (hours)')}
             type="number"
             value={form.monthlyTargetHours}
             onChange={set('monthlyTargetHours')}
@@ -495,17 +513,17 @@ function PolicyForm({
             min={1}
             max={744}
             step="0.01"
-            hint="The only target that is stored. The daily target is derived from this — monthly target ÷ workdays. Default 176."
+            hint={t('The only target that is stored. The daily target is derived from this — monthly target ÷ workdays. Default 176.')}
           />
           <TextField
-            label="Expected workdays"
+            label={t('Expected workdays')}
             type="number"
             value={form.expectedWorkdays}
             onChange={set('expectedWorkdays')}
             mono
             min={1}
             max={31}
-            hint="How many days of work the month is assumed to hold — used for pace, and it divides the daily target"
+            hint={t('How many days of work the month is assumed to hold — used for pace, and it divides the daily target')}
           />
             </>
           )}
@@ -513,7 +531,7 @@ function PolicyForm({
           {basis === 'week' && (
             <FullWidth>
               <TextField
-                label="Hours per week"
+                label={t('Hours per week')}
                 type="number"
                 value={form.weeklyTargetHours}
                 onChange={set('weeklyTargetHours')}
@@ -521,7 +539,10 @@ function PolicyForm({
                 min={1}
                 max={168}
                 step="0.5"
-                hint={`Spread over the ${Math.max(1, 7 - offDays.length)} working days of the week → ${formatHours((Number(form.weeklyTargetHours) / Math.max(1, 7 - offDays.length)) * 3600)} h a day. The month's target is its workdays × that.`}
+                hint={t("Spread over the {{count}} working days of the week → {{hours}} h a day. The month's target is its workdays × that.", {
+                  count: Math.max(1, 7 - offDays.length),
+                  hours: formatHours((Number(form.weeklyTargetHours) / Math.max(1, 7 - offDays.length)) * 3600),
+                })}
               />
             </FullWidth>
           )}
@@ -529,7 +550,7 @@ function PolicyForm({
           {basis === 'day' && (
             <>
               <TextField
-                label="Hours per day"
+                label={t('Hours per day')}
                 type="number"
                 value={form.dailyTargetHours}
                 onChange={set('dailyTargetHours')}
@@ -539,7 +560,7 @@ function PolicyForm({
                 step="0.25"
               />
               <TextField
-                label="Break (minutes)"
+                label={t('Break (minutes)')}
                 type="number"
                 value={form.breakMinutes}
                 onChange={set('breakMinutes')}
@@ -553,17 +574,23 @@ function PolicyForm({
                   const fromSchedule = Math.max(0, span) / 60;
                   return (
                     <p className="text-[11.5px] leading-relaxed text-ink-3">
-                      The schedule is the working hours below ({form.officeFrom}–{form.officeTo}
-                      {Number(form.breakMinutes) > 0 ? `, minus a ${form.breakMinutes}-minute break` : ''})
+                      {Number(form.breakMinutes) > 0
+                        ? t('The schedule is the working hours below ({{range}}, minus a {{minutes}}-minute break)', {
+                            range: `${form.officeFrom}–${form.officeTo}`,
+                            minutes: form.breakMinutes,
+                          })
+                        : t('The schedule is the working hours below ({{range}})', {
+                            range: `${form.officeFrom}–${form.officeTo}`,
+                          })}
                       {fromSchedule > 0 && fromSchedule !== Number(form.dailyTargetHours) && (
                         <>
                           {' '}= {formatHours(fromSchedule * 3600)} h.{' '}
                           <MiniButton onClick={() => set('dailyTargetHours')(String(Math.round(fromSchedule * 100) / 100))}>
-                            Use {formatHours(fromSchedule * 3600)} h
+                            {t('Use {{hours}} h', { hours: formatHours(fromSchedule * 3600) })}
                           </MiniButton>
                         </>
                       )}
-                      {fromSchedule > 0 && fromSchedule === Number(form.dailyTargetHours) && ' — matches the hours per day.'}
+                      {fromSchedule > 0 && fromSchedule === Number(form.dailyTargetHours) && ` ${t('— matches the hours per day.')}`}
                     </p>
                   );
                 })()}
@@ -574,20 +601,19 @@ function PolicyForm({
           {basis === 'none' && (
             <FullWidth>
               <Notice>
-                Hours are recorded and shown as usual, but nobody is ahead or behind and no
-                missing hours are counted — for freelancers, owners or anyone without a quota.
+                {t('Hours are recorded and shown as usual, but nobody is ahead or behind and no missing hours are counted — for freelancers, owners or anyone without a quota.')}
               </Notice>
             </FullWidth>
           )}
 
           <FullWidth>
             <fieldset>
-            <legend className="mb-1 text-[12px] font-medium text-ink-2">Weekly off</legend>
+            <legend className="mb-1 text-[12px] font-medium text-ink-2">{t('Weekly off')}</legend>
             <div className="flex flex-wrap gap-x-4 gap-y-1.5">
               {ISO_DAYS.map((day) => (
                 <CheckboxField
                   key={day}
-                  label={OFF_DAY_LABEL[day]}
+                  label={t(OFF_DAY_LABEL[day])}
                   checked={offDays.includes(day)}
                   onChange={toggleOffDay(day)}
                   // the server keeps at least one workday a week
@@ -596,9 +622,8 @@ function PolicyForm({
               ))}
             </div>
             <p className="mt-1 text-[11.5px] leading-relaxed text-ink-3">
-              None ticked = every day is a workday. This is not a block — hours
-              worked on a day off still count in full.
-              {offDays.length >= 6 && ' A week keeps at least one workday, so the last day cannot be ticked.'}
+              {t('None ticked = every day is a workday. This is not a block — hours worked on a day off still count in full.')}
+              {offDays.length >= 6 && ` ${t('A week keeps at least one workday, so the last day cannot be ticked.')}`}
             </p>
             </fieldset>
           </FullWidth>
@@ -607,50 +632,59 @@ function PolicyForm({
           {basis === 'month' && preview && (
             <FullWidth>
               <p className="text-[11.5px] leading-relaxed text-ink-3">
-                {formatMonth(thisMonth)}: {preview.workdays} workdays with these
-                days off (before holidays) → {preview.workdays} ×{' '}
-                {formatHours(preview.dailyHours * 3600)} h ={' '}
-                <b className="text-ink-2">{formatHours(preview.monthHours * 3600)} h</b>.
+                <Trans
+                  i18nKey="{{month}}: {{count}} workdays with these days off (before holidays) → {{count}} × {{daily}} h = <b>{{total}} h</b>."
+                  count={preview.workdays}
+                  values={{
+                    month: formatMonth(thisMonth),
+                    daily: formatHours(preview.dailyHours * 3600),
+                    total: formatHours(preview.monthHours * 3600),
+                  }}
+                  components={{ b: <b className="text-ink-2" /> }}
+                />
               </p>
               {preview.mismatch && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded-md border border-idle/40 px-2.5 py-1.5 text-[12px] text-idle-ink">
                   <span>
-                    Expected workdays is {form.expectedWorkdays}, but this month has{' '}
-                    {preview.workdays} — the target would come to{' '}
-                    {formatHours(preview.monthHours * 3600)} h, not {form.monthlyTargetHours} h.
+                    {t('Expected workdays is {{expected}}, but this month has {{workdays}} — the target would come to {{hours}} h, not {{target}} h.', {
+                      expected: form.expectedWorkdays,
+                      workdays: preview.workdays,
+                      hours: formatHours(preview.monthHours * 3600),
+                      target: form.monthlyTargetHours,
+                    })}
                   </span>
                   <MiniButton onClick={() => set('expectedWorkdays')(String(preview.workdays))}>
-                    Use {preview.workdays}
+                    {t('Use {{n}}', { n: preview.workdays })}
                   </MiniButton>
                 </div>
               )}
             </FullWidth>
           )}
           <TextField
-            label={basis === 'day' ? 'Working hours from' : 'Office opens'}
+            label={basis === 'day' ? t('Working hours from') : t('Office opens')}
             type="time"
             value={form.officeFrom}
             onChange={set('officeFrom')}
             mono
           />
           <TextField
-            label={basis === 'day' ? 'Working hours until' : 'Office closes'}
+            label={basis === 'day' ? t('Working hours until') : t('Office closes')}
             type="time"
             value={form.officeTo}
             onChange={set('officeTo')}
             mono
-            hint="Outside these hours — and on the weekly off day and holidays — a quiet PC raises no alert. Hours worked outside them still count in full."
+            hint={t('Outside these hours — and on the weekly off day and holidays — a quiet PC raises no alert. Hours worked outside them still count in full.')}
           />
 
           <TextField
-            label="Idle threshold"
+            label={t('Idle threshold')}
             type="number"
             value={form.idleThresholdSec}
             onChange={set('idleThresholdSec')}
             mono
             min={10}
             max={3600}
-            hint="Seconds. Once the keyboard and mouse have been quiet this long, the time stops counting."
+            hint={t('Seconds. Once the keyboard and mouse have been quiet this long, the time stops counting.')}
           />
 
           {/*
@@ -662,55 +696,72 @@ function PolicyForm({
             <>
               <FullWidth>
                 <CheckboxField
-                  label="Take screenshots"
+                  label={t('Take screenshots')}
                   checked={screenshotsEnabled}
                   onChange={setScreenshotsEnabled}
-                  hint="Off: no screenshot is taken, stored or sent. Idle and jiggler detection keep working, so hours are counted the same way."
+                  hint={t('Off: no screenshot is taken, stored or sent. Idle and jiggler detection keep working, so hours are counted the same way.')}
                 />
               </FullWidth>
 
-              <TextField
-                label="Screenshots from"
-                type="time"
-                value={form.screenshotFrom}
-                onChange={set('screenshotFrom')}
-                mono
-                // kept, not cleared: turning screenshots back on restores the window
-                disabled={!screenshotsEnabled}
-              />
-              <TextField
-                label="Screenshots until"
-                type="time"
-                value={form.screenshotTo}
-                onChange={set('screenshotTo')}
-                mono
-                disabled={!screenshotsEnabled}
-                hint={
-                  screenshotsEnabled
-                    ? 'No screenshot is ever taken outside this window'
-                    : 'Not used while screenshots are off — kept for when they are turned back on'
-                }
-              />
+              <FullWidth>
+                <SelectField
+                  label={t('When to take screenshots')}
+                  value={anyTime ? 'any' : 'window'}
+                  onChange={(v) => setAnyTime(v === 'any')}
+                  disabled={!screenshotsEnabled}
+                  options={[
+                    { value: 'any', label: t('Whenever the computer is in use') },
+                    { value: 'window', label: t('Only between two times') },
+                  ]}
+                  hint={t('Only while someone is at the keyboard or mouse — never while the computer is idle, locked or asleep.')}
+                />
+              </FullWidth>
+              {!anyTime && (
+                <>
+                  <TextField
+                    label={t('Screenshots from')}
+                    type="time"
+                    value={form.screenshotFrom}
+                    onChange={set('screenshotFrom')}
+                    mono
+                    // kept, not cleared: turning screenshots back on restores the window
+                    disabled={!screenshotsEnabled}
+                  />
+                  <TextField
+                    label={t('Screenshots until')}
+                    type="time"
+                    value={form.screenshotTo}
+                    onChange={set('screenshotTo')}
+                    mono
+                    disabled={!screenshotsEnabled}
+                    hint={
+                      screenshotsEnabled
+                        ? t('No screenshot is ever taken outside this window')
+                        : t('Not used while screenshots are off — kept for when they are turned back on')
+                    }
+                  />
+                </>
+              )}
             </>
           )}
 
           <TextField
-            label="Slot (minutes)"
+            label={t('Slot (minutes)')}
             type="number"
             value={form.slotMinutes}
             onChange={set('slotMinutes')}
             mono
             min={1}
             max={60}
-            hint="How long each cell of the timeline is"
+            hint={t('How long each cell of the timeline is')}
           />
 
           {features.payroll && (
             <FullWidth>
               <fieldset className="space-y-2.5 rounded-md border border-line px-3 py-2.5">
-                <legend className="px-1 text-[12px] font-medium text-ink-2">Pay rules</legend>
+                <legend className="px-1 text-[12px] font-medium text-ink-2">{t('Pay rules')}</legend>
                 <TextField
-                  label="Overtime pay (× the hourly rate)"
+                  label={t('Overtime pay (× the hourly rate)')}
                   type="number"
                   value={form.overtimeMultiplier}
                   onChange={set('overtimeMultiplier')}
@@ -718,15 +769,15 @@ function PolicyForm({
                   min={1}
                   max={5}
                   step="0.05"
-                  placeholder="Not paid"
-                  hint="Hours above the month's target, paid at this multiple — e.g. 1.5. Empty: overtime is shown but not paid."
+                  placeholder={t('Not paid')}
+                  hint={t("Hours above the month's target, paid at this multiple — e.g. 1.5. Empty: overtime is shown but not paid.")}
                 />
                 {basis !== 'none' && (
                   <CheckboxField
-                    label="Deduct missing hours from monthly salaries"
+                    label={t('Deduct missing hours from monthly salaries')}
                     checked={deductShortfall}
                     onChange={setDeductShortfall}
-                    hint="Off: the salary is paid in full and the missing hours are only reported. Hourly pay is never deducted — fewer hours are simply fewer hours."
+                    hint={t('Off: the salary is paid in full and the missing hours are only reported. Hourly pay is never deducted — fewer hours are simply fewer hours.')}
                   />
                 )}
               </fieldset>
@@ -758,13 +809,14 @@ function ReopenPolicyDialog({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const t = useT();
   const { busy, error, run } = useMutation();
 
   return (
     <ConfirmDialog
-      title={`Reopen "${policy.name}"?`}
-      intro="New staff can be put on this policy again. Nothing about past months changes."
-      confirmLabel="Reopen"
+      title={t('Reopen "{{name}}"?', { name: policy.name })}
+      intro={t('New staff can be put on this policy again. Nothing about past months changes.')}
+      confirmLabel={t('Reopen')}
       tone="primary"
       busy={busy}
       error={error}
@@ -788,19 +840,20 @@ function ClosePolicyDialog({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const t = useT();
   const { busy, error, run } = useMutation();
   const occupied = policy.employeeCount > 0;
 
   return (
     <ConfirmDialog
-      title={`Close "${policy.name}"?`}
-      intro="The policy is not deleted, only closed — past months rest on it, so the record stays."
+      title={t('Close "{{name}}"?', { name: policy.name })}
+      intro={t('The policy is not deleted, only closed — past months rest on it, so the record stays.')}
       warning={
         occupied
-          ? `${policy.employeeCount} people are still on this policy. The server will refuse to close it — move them to another policy first.`
-          : 'No new staff member can be put on this policy again.'
+          ? t('{{count}} people are still on this policy. The server will refuse to close it — move them to another policy first.', { count: policy.employeeCount })
+          : t('No new staff member can be put on this policy again.')
       }
-      confirmLabel="Close"
+      confirmLabel={t('Close', { context: 'policy' })}
       busy={busy}
       error={error}
       onClose={onClose}
@@ -816,24 +869,25 @@ function ClosePolicyDialog({
 
 /** The hours target the way the policy states it */
 function TargetCell({ policy }: { policy: WorkPolicyView }) {
+  const t = useT();
   const unit = (n: number | null, per: string) => (
     <span className="num">
       {n ?? '—'}
-      <small className="ml-1 text-[11px] text-ink-3">h/{per}</small>
+      <small className="ml-1 text-[11px] text-ink-3">{per}</small>
     </span>
   );
   switch (policy.targetBasis) {
     case 'week':
-      return unit(policy.weeklyTargetHours, 'week');
+      return unit(policy.weeklyTargetHours, t('h/week'));
     case 'day':
-      return unit(policy.dailyTargetHours, 'day');
+      return unit(policy.dailyTargetHours, t('h/day'));
     case 'none':
-      return <span className="text-ink-3">No target</span>;
+      return <span className="text-ink-3">{t('No target')}</span>;
     default:
       return (
-        <span className="num" title={`Spread over ${policy.expectedWorkdays} workdays`}>
+        <span className="num" title={t('Spread over {{count}} workdays', { count: policy.expectedWorkdays })}>
           {policy.monthlyTargetHours}
-          <small className="ml-1 text-[11px] text-ink-3">h/month</small>
+          <small className="ml-1 text-[11px] text-ink-3">{t('h/month')}</small>
         </span>
       );
   }

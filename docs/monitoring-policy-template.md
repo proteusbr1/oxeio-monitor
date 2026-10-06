@@ -1,207 +1,241 @@
-# কর্মক্ষেত্রে কম্পিউটার মনিটরিং নীতিমালা
+# Workplace Computer Monitoring Policy
 
-**oXeio LLC** · সংস্করণ ১.০ · কার্যকর তারিখ: `__________`
+**[Company name]** · Version 1.0 · Effective date: `__________`
 
-> ℹ️ **oXeio-তে এই কাগজটা ব্যবহার হয় না** *(নিষ্পত্তি ১৫ আগস্ট ২০২৬)* —
-> এখানে মনিটরিং সহ অফিসের শর্তগুলো **জয়েন করার সময়েই** মেনে নেওয়া হয়,
-> তাই আলাদা সইয়ের ধাপ নেই। টেমপ্লেটটা রাখা আছে **অন্য কেউ এই সিস্টেম
-> নিজের অফিসে বসালে** তার জন্য — সেখানে হয়তো লিখিত সম্মতি লাগবে।
+> ⚠️ **Adapt this to your language and your local law before use — it is a
+> starting point, not legal advice.**
+> Have a lawyer in [Country] review it before you ask staff to sign it.
+> Check it against your employment law and your data protection law (for
+> example rules on consent, notice, purpose, retention and access requests).
+> Do not hand it out until every blank (`__________`) and every
+> `[placeholder]` is filled in.
 
-> ⚠️ **এটি একটি খসড়া টেমপ্লেট, চূড়ান্ত আইনি দলিল নয়।**
-> স্টাফদের সই নেওয়ার আগে একজন আইনজীবীকে দিয়ে দেখিয়ে নিন। বাংলাদেশ শ্রম আইন
-> ২০০৬ ও তার বিধিমালার সাথে সঙ্গতি, আর ভবিষ্যতের ডেটা সুরক্ষা আইনের সম্ভাব্য
-> শর্ত ([06-Research § ৪](06-Research.md)) — দুটোই যাচাই করা দরকার।
-> ফাঁকা ঘরগুলো (`__________`) পূরণ না করে বিলি করবেন না।
+> ℹ️ **For whoever prepares this document.** The text below describes oXeio
+> Monitor with every monitoring module switched on. Make it match your own
+> installation:
+>
+> - **Screenshots module off** (Settings → Modules): delete every row and
+>   paragraph about screenshots.
+> - **Apps & websites module off** (Settings → Modules): delete the rows about
+>   application names, window titles and website domains.
+> - **Settings → Privacy**: fill in how many days screenshots are kept, and
+>   whether staff can see their own screenshots.
+> - **Work policy** (Settings → Policies & holidays): fill in the screenshot
+>   hours, the screenshot interval, the idle threshold and the hours target.
+>
+> Some organisations accept these terms as part of the employment contract
+> and do not need a separate signature. Use this document where written
+> acknowledgement or consent is required or wanted.
 
 ---
 
-## ১. কেন এই নীতিমালা
+## 1. Why this policy exists
 
-oXeio LLC অফিসের কম্পিউটারগুলোতে একটি মনিটরিং সফটওয়্যার ("oXeio এজেন্ট")
-ব্যবহার করে। এই কাগজটি স্পষ্ট করে বলে **ঠিক কী দেখা হয়, কী দেখা হয় না,
-কেন, আর আপনার কী কী অধিকার আছে।**
+[Company name] uses monitoring software (the "oXeio agent") on company
+computers. This document states clearly **exactly what is recorded, what is
+not, why, and what your rights are.**
 
-আমরা এটি লিখছি কারণ গোপনে নজরদারি করা আমাদের উদ্দেশ্য নয়। আপনি জানবেন
-সিস্টেমটা কী করে — সেটাই এর কাজ করার শর্ত।
+We are writing it because secret surveillance is not our aim. You will know
+what the system does — that is a condition of using it at all.
 
 ---
 
-## ২. কেন মনিটরিং করা হয়
+## 2. Why we monitor
 
-| উদ্দেশ্য | ব্যাখ্যা |
+| Purpose | Explanation |
 |---|---|
-| **কাজের সময়ের হিসাব** | মাসে **২০৮ ঘণ্টা** সক্রিয় কাজের হিসাব রাখা |
-| স্বচ্ছ বেতন | ঘণ্টার হিসাব নিয়ে মতভেদ হলে দুই পক্ষের কাছেই একই তথ্য থাকা |
-| কাজের ধরন বোঝা | কোন কাজে কত সময় যাচ্ছে, দল হিসেবে কোথায় উন্নতি দরকার |
+| **Working time** | Keeping a record of active working time against the target of **[N] hours per [month / week]** |
+| Fair, transparent pay | If there is a disagreement about hours, both sides see the same records |
+| Understanding the work | How much time different kinds of work take, and where the team can improve |
 
-⚠️ **যা উদ্দেশ্য নয়:** ব্যক্তিগত জীবনে নজর রাখা, ব্যক্তিগত যোগাযোগ পড়া,
-বা কর্মীর উপর চাপ তৈরি করা।
+⚠️ **What it is not for:** watching your private life, reading your private
+communications, or putting pressure on staff.
 
 ---
 
-## ৩. ঠিক কী সংগ্রহ করা হয়
+## 3. Exactly what is collected
 
-| কী | বিস্তারিত | কখন |
+| What | Details | When |
 |---|---|---|
-| **সক্রিয় সময়** | কি-বোর্ড/মাউস ব্যবহারের **উপস্থিতি** (কী চাপা হয়েছে তা নয়) | ২৪ ঘণ্টা |
-| **নিষ্ক্রিয় সময়** | টানা ৬০ সেকেন্ড কোনো ইনপুট না থাকলে সময় গোনা **বন্ধ** হয় | ২৪ ঘণ্টা |
-| **স্ক্রিন লক** | কম্পিউটার লক থাকলে সময় গোনা হয় না | ২৪ ঘণ্টা |
-| **স্ক্রিনশট** | প্রতি ৫ মিনিটের স্লটে **একটি**, র‍্যান্ডম সেকেন্ডে | **শুধু সকাল ৭:০০ – রাত ১১:০০** |
-| **অ্যাপের নাম** | যেমন `EXCEL.EXE`, `chrome.exe` | সক্রিয় থাকাকালীন |
-| **উইন্ডোর শিরোনাম** | যেমন "মাসিক হিসাব.xlsx — Excel" | সক্রিয় থাকাকালীন |
-| **ওয়েবসাইটের ডোমেইন** | শুধু `facebook.com` — **কোন পাতা তা নয়** | সক্রিয় থাকাকালীন |
-| **কম্পিউটারের তথ্য** | হোস্টনেম, Windows ইউজারনেম, মেশিন আইডি | এককালীন |
+| **Active time** | That the keyboard or mouse is **being used** (not which keys are pressed) | Whenever the computer is on |
+| **Idle time** | After **[N] minutes** with no input, time **stops** being counted | Whenever the computer is on |
+| **Screen lock** | No time is counted while the computer is locked | Whenever the computer is on |
+| **Screenshots** | **One** picture of the screen in each [N]-minute period, at a random moment | [Whenever you are using the computer] / [**Only between [start time] and [end time]**] — choose one |
+| **Application name** | For example `EXCEL.EXE`, `chrome.exe` | While you are active |
+| **Window title** | For example "Monthly accounts.xlsx — Excel" | While you are active |
+| **Website domain** | Only `example.com` — **not which page** | While you are active |
+| **Computer details** | Computer name, Windows user name, device ID | Once, at setup |
 
-**স্ক্রিনশটের সময় নিয়ে দুটো কথা স্পষ্ট করে:**
+**Two things about screenshot times, stated plainly:**
 
-- রাত ১১:০০-এর পর বা সকাল ৭:০০-এর আগে **কোনো ছবি তোলা হয় না**। কেউ রাত
-  ২টায় কাজ করলে তার **সময় গোনা হবে**, কিন্তু ছবি উঠবে না।
-- কম্পিউটার নিষ্ক্রিয় বা লক থাকলে ছবি তোলা হয় না।
+- [If the policy has a window:] **No pictures are taken** before [start time]
+  or after [end time]. If you work outside it, your **time is counted**, but no
+  screenshot is taken.
+- [If pictures are taken whenever the computer is in use:] this includes any
+  time you use this computer outside working hours, such as a break — use a
+  personal device for personal matters.
+- No pictures are taken while the computer is idle or locked.
 
 ---
 
-## ৪. যা কখনোই সংগ্রহ করা হয় না
+## 4. What is never collected
 
-এগুলো প্রযুক্তিগতভাবে সম্ভব, কিন্তু আমরা **ইচ্ছাকৃতভাবে করি না**, এবং
-এই নীতিমালা বদলানো ছাড়া করা হবেও না:
+These things are technically possible, but we **deliberately do not do them**,
+and will not do them without changing this policy first:
 
-| ❌ যা করা হয় না | কেন উল্লেখ করছি |
+| ❌ Never collected | Why we mention it |
 |---|---|
-| **কি-লগিং** — আপনি কী টাইপ করছেন | পাসওয়ার্ড, ব্যক্তিগত বার্তা — কিছুই রেকর্ড হয় না |
-| **ক্লিপবোর্ড** — কী কপি করছেন | — |
-| **সম্পূর্ণ ওয়েব ঠিকানা** | `facebook.com` জমা হয়, `facebook.com/messages/...` **নয়** |
-| **ব্রাউজিং হিস্ট্রি** | ব্রাউজারের ইতিহাস পড়া হয় না |
-| **ওয়েবক্যাম বা মাইক্রোফোন** | কখনো চালু করা হয় না |
-| **স্ক্রিনের ভিডিও রেকর্ডিং** | শুধু নির্দিষ্ট সময়ের স্থির ছবি |
-| **ফাইলের ভেতরের লেখা** | ফাইল খোলা বা পড়া হয় না |
-| **ব্যক্তিগত ল্যাপটপ বা ফোন** | শুধু **অফিসের কম্পিউটার**, অফিসের কাজের জন্য |
-| **কাজের বাইরের সময়** | অফিসের বাইরে অফিসের কম্পিউটার ব্যবহার না করলে কিছুই নেই |
+| **Keystrokes** — what you type | Passwords and private messages are never recorded |
+| **Clipboard** — what you copy | — |
+| **Full web addresses** | `example.com` is stored; `example.com/messages/...` is **not** |
+| **Browsing history** | Your browser's history is not read |
+| **Webcam or microphone** | Never switched on |
+| **Video recording of the screen** | Only still pictures, within the hours stated above |
+| **Reading what is on the screen** | Screenshots are stored and shown to the people listed in section 6. They are never scanned for text, classified or searched automatically |
+| **Contents of files** | Files are not opened or read |
+| **Personal laptops or phones** | Only **company computers**, for company work |
+| **Time outside work** | Nothing is recorded unless you use the company computer |
 
-**ব্যক্তিগত ব্রাউজিং (Incognito / InPrivate):** ছদ্মবেশী উইন্ডো খুললে
-শুধু "ব্রাউজার ব্যবহার হয়েছে" টুকু থাকে — **কোন সাইট বা কোন পাতা, কিছুই নয়**।
-
----
-
-## ৫. সফটওয়্যারটি গোপন নয়
-
-- **আপনি নিজেই এটা চালু করবেন।** আপনার PC-তে বসানোর পর একটা জানালা আসবে,
-  আর সেখানে **আপনার নিজের ইমেইল ও পাসওয়ার্ড** দিয়ে সাইন ইন করতে হবে।
-  অর্থাৎ আপনার অজান্তে এটা চালু হওয়ার কোনো উপায় নেই।
-- চালু থাকলে **সবসময় টাস্কবারে (system tray) আইকন দেখা যাবে**।
-- আইকনে ক্লিক করলে দেখতে পাবেন এই মাসে আপনার কত ঘণ্টা হয়েছে।
-- সিঙ্ক ব্যর্থ হলে আইকন **লাল** হয়ে যাবে।
-- কোনো লুকানো বা ছদ্মবেশী ইনস্টলেশন নেই।
-
-> আপনার পাসওয়ার্ডটা ওই জানালায় শুধু **একবার** লাগে — সফটওয়্যারটি সেটা
-> কোথাও জমা রাখে না।
+**Private browsing (Incognito / InPrivate):** when you use a private window,
+only "a browser was used" is recorded — **no site and no page**.
 
 ---
 
-## ৬. কে দেখতে পায়
+## 5. The software is not hidden
 
-| কে | কী দেখতে পান |
+- **You switch it on yourself.** After it is installed on your computer, a
+  window appears and you sign in with **your own email address and
+  password**. It cannot start without you knowing.
+- While it runs, **its icon is always visible in the taskbar (system tray)**.
+- Clicking the icon shows how many hours you have recorded this month.
+- If it cannot send its data to the server, the icon turns **red**.
+- There is no hidden or disguised installation.
+
+> Your password is needed in that window **once only** — the software does
+> not store it anywhere.
+
+---
+
+## 6. Who can see what
+
+| Who | What they can see |
 |---|---|
-| **আপনি নিজে** | নিজের সময়ের হিসাব, নিজের স্ক্রিনশট, নিজের ঘণ্টা-সংশোধন |
-| **ম্যানেজার** | সব স্টাফের সময়, টাইমলাইন, স্ক্রিনশট ও রিপোর্ট — **বেতন ছাড়া** |
-| **প্রতিষ্ঠানের মালিক** | সব কিছু, বেতনসহ |
-| **বাইরের কেউ** | কিছুই নয় |
+| **You** | Your own recorded time, any corrections to it with their reasons, and [your own screenshots] |
+| **Managers** | All staff time, timelines, screenshots and reports — **but not pay** |
+| **Owner / administrators** | Everything, including pay |
+| **Anyone outside [Company name]** | Nothing |
 
-⭐ **প্রতিটি স্ক্রিনশট দেখার ঘটনা রেকর্ড হয়** — কে, কার ছবি, কখন দেখল।
-এই তালিকা মালিক দেখতে পান। অর্থাৎ "কে আমার স্ক্রিনশট দেখেছে" প্রশ্নের
-উত্তর সিস্টেমেই আছে।
-
----
-
-## ৭. ডেটা কোথায় থাকে, কতদিন থাকে
-
-- সব ডেটা **অফিসের নিজস্ব সার্ভারে** থাকে। কোনো বিদেশি ক্লাউড সেবায় যায় না।
-- সার্ভারের ডিস্ক এনক্রিপ্ট করা।
-- **স্ক্রিনশট ৯০ দিন পর স্বয়ংক্রিয়ভাবে মুছে যায়** — ডেটাবেস ও ডিস্ক দুই জায়গা থেকেই।
-- সময়ের হিসাব ও মাসিক সারাংশ বেতনের নথি হিসেবে `__________` বছর সংরক্ষিত থাকে।
+⭐ **Every time someone views screenshots, it is logged** — who looked, at
+whose pictures, and when. The owner can see this log. So the question "who
+has looked at my screenshots?" has an answer in the system.
 
 ---
 
-## ৮. সময়ের হিসাব কীভাবে হয়
+## 7. Where the data is kept, and for how long
 
-| নিয়ম | বিস্তারিত |
+- All data is stored on **[Company name]'s own server**, located in
+  [location / hosting provider]. [Describe any third-party or cloud services
+  used, e.g. for backups, or state that none are used.]
+- [Describe how the server and backups are protected, e.g. disk encryption.]
+- **Screenshots are deleted automatically after [N] days** — from both the
+  database and the disk.
+- Time records and monthly summaries are kept as payroll records for
+  `__________` years [or as required by law in [Country]].
+
+---
+
+## 8. How working time is calculated
+
+| Rule | Details |
 |---|---|
-| একমাত্র মাপকাঠি | **মাসে ২০৮ ঘণ্টা সক্রিয় সময়** |
-| কোনো শিফট নেই | কখন কাজ করবেন সেটা আপনার ও আপনার ম্যানেজারের বিষয় |
-| দেরি/লাঞ্চ/ব্রেক | **গোনাই হয় না** — কোনো "লেট" বা "ব্রেক" হিসাব নেই |
-| নিষ্ক্রিয়তা | টানা ৬০ সেকেন্ড ইনপুট না থাকলে সময় গোনা বন্ধ; আবার শুরু করলে চালু |
-| ঘাটতি | মাস শেষে ২০৮ ঘণ্টা পূর্ণ না হলে ঘাটতির অনুপাতে বেতন সমন্বয় হবে |
-| অতিরিক্ত ঘণ্টা | ঘণ্টা দেখানো হয়; অতিরিক্ত সময়ের হার `__________` |
+| The measure | **[N] hours of active time per [month / week]** |
+| Working hours | [Describe your arrangement: fixed hours, shifts, or flexible — e.g. "when you work is between you and your manager"] |
+| Lateness, lunch, breaks | [State whether these are tracked. If not: "**Not counted** — there is no 'late' or 'break' record"] |
+| Idle time | After [N] minutes with no input, counting stops; it starts again as soon as you resume |
+| Shortfall | [State what happens if the target is not met, in line with your contract and local law] |
+| Extra hours | Shown in the records; the overtime rate is `__________` |
 
-**সিস্টেমের দোষে সময় হারালে:** সার্ভার বা এজেন্ট বন্ধ থাকায় যদি আপনার
-কাজের সময় রেকর্ড না হয়, মালিক **কারণ লিখে** সেই সময় ফেরত যোগ করতে পারেন।
-সেই সংশোধন আপনি নিজের পাতায় **কারণসহ দেখতে পাবেন**।
-
----
-
-## ৯. আপনার অধিকার
-
-1. **নিজের ডেটা দেখার অধিকার** — নিজের সময়ের হিসাব ও স্ক্রিনশট যেকোনো সময়।
-   ওই একই ইমেইল-পাসওয়ার্ড দিয়ে `__________`-এ ঢুকে **My data** পাতায়
-   দেখতে পাবেন: আজ ও এই মাসের ঘণ্টা, দিনে-দিনে হিসাব, আপনার নামে কোনো
-   সংশোধন হলে সেটা কারণসহ, আর আপনার নিজের স্ক্রিনশট।
-2. **ভুল সংশোধনের অধিকার** — হিসাব ভুল মনে হলে `__________`-এর কাছে লিখিতভাবে জানাতে পারেন।
-3. **ব্যাখ্যা পাওয়ার অধিকার** — কোনো স্ক্রিনশট বা রেকর্ড নিয়ে প্রশ্ন থাকলে জবাব পাবেন।
-4. **প্রশ্ন করার অধিকার** — এই নীতিমালা নিয়ে যেকোনো প্রশ্ন করা যাবে, কোনো প্রতিক্রিয়ার ভয় ছাড়াই।
-5. **নীতিমালা বদলালে জানার অধিকার** — কী সংগ্রহ করা হয় তা বদলালে **আগেই লিখিতভাবে** জানানো হবে ও নতুন করে সই নেওয়া হবে।
+**If time is lost because of a system fault:** if your working time was not
+recorded because the server or the agent was down, the owner can add that
+time back **with a written reason**. You will see that correction on your own
+page, **together with its reason**.
 
 ---
 
-## ১০. ব্যক্তিগত ব্যবহার
+## 9. Your rights
 
-অফিসের কম্পিউটারে সীমিত ব্যক্তিগত ব্যবহার নিষিদ্ধ নয়। তবে মনে রাখবেন —
-কাজের সময়ের ভেতরে যা করবেন তা রেকর্ড হবে।
-
-**পরামর্শ:** ব্যক্তিগত ব্যাংকিং, স্বাস্থ্য বা একান্ত ব্যক্তিগত কাজের জন্য
-নিজের ফোন বা ব্যক্তিগত ডিভাইস ব্যবহার করুন। ওগুলো এই সিস্টেমের বাইরে।
+1. **The right to see your own data** — at any time. Sign in at
+   `__________` with the same email and password and open the **My data**
+   page. You will see your hours today and this month, a day-by-day record,
+   any correction made to your time with its reason, [and your own
+   screenshots].
+2. **The right to have mistakes corrected** — if you think a record is wrong,
+   tell `__________` in writing.
+3. **The right to an explanation** — if you have a question about any
+   screenshot or record, you will get an answer.
+4. **The right to ask questions** — you may ask anything about this policy,
+   without fear of any negative consequence.
+5. **The right to be told about changes** — if what is collected changes, you
+   will be told **in writing, beforehand**, and asked to sign again.
+6. [Add any further rights given by data protection law in [Country], e.g.
+   the right to a copy of your data, to object, or to complain to a
+   supervisory authority: [name of authority].]
 
 ---
 
-## ১১. অভিযোগ ও যোগাযোগ
+## 10. Personal use
 
-| বিষয় | কার কাছে |
+Limited personal use of company computers is not forbidden. But remember —
+whatever you do during working hours on a company computer is recorded.
+
+**Advice:** for personal banking, health matters or anything private, use your
+own phone or personal device. Those are outside this system.
+
+---
+
+## 11. Questions and complaints
+
+| Topic | Contact |
 |---|---|
-| সময়ের হিসাব নিয়ে প্রশ্ন | `__________` |
-| প্রাইভেসি নিয়ে উদ্বেগ | `__________` |
-| নীতিমালা লঙ্ঘনের অভিযোগ | `__________` |
+| Questions about your recorded time | `__________` |
+| Privacy concerns | [Data protection contact] |
+| Complaints that this policy was breached | `__________` |
 
 ---
 
-## ১২. স্বীকৃতি ও সম্মতি
+## 12. Acknowledgement and consent
 
-আমি নিশ্চিত করছি যে —
+I confirm that —
 
-- [ ] আমি এই নীতিমালাটি পড়েছি এবং বুঝেছি।
-- [ ] আমাকে প্রশ্ন করার সুযোগ দেওয়া হয়েছে এবং উত্তর পেয়েছি।
-- [ ] আমি বুঝেছি অফিসের কম্পিউটারে আমার কাজের সময় ও কার্যক্রম উপরে বর্ণিত
-      পদ্ধতিতে রেকর্ড হবে।
-- [ ] আমি এই নীতিমালার একটি অনুলিপি পেয়েছি।
+- [ ] I have read and understood this policy.
+- [ ] I was given the chance to ask questions, and my questions were answered.
+- [ ] I understand that my working time and activity on company computers
+      will be recorded as described above.
+- [ ] I have received a copy of this policy.
 
 <br>
 
 | | |
 |---|---|
-| কর্মীর নাম | `_______________________________` |
-| পদবি | `_______________________________` |
-| কর্মী কোড | `_______________________________` |
-| স্বাক্ষর | `_______________________________` |
-| তারিখ | `_______________________________` |
+| Employee name | `_______________________________` |
+| Job title | `_______________________________` |
+| Employee ID | `_______________________________` |
+| Signature | `_______________________________` |
+| Date | `_______________________________` |
 
 <br>
 
 | | |
 |---|---|
-| প্রতিষ্ঠানের পক্ষে | `_______________________________` |
-| পদবি | `_______________________________` |
-| স্বাক্ষর | `_______________________________` |
-| তারিখ | `_______________________________` |
+| On behalf of [Company name] | `_______________________________` |
+| Job title | `_______________________________` |
+| Signature | `_______________________________` |
+| Date | `_______________________________` |
 
 ---
 
-> সই করা কপি স্ক্যান করে ড্যাশবোর্ডে আপলোড করলে `policy_signed_at` বসে যাবে।
-> ⚠️ **সই না হওয়া পর্যন্ত ওই স্টাফের PC-তে এজেন্ট বসানো উচিত নয়** — এটি
-> কেবল কাগজের নিয়ম নয়, পুরো ব্যবস্থাটার ভিত্তি।
+> Once signed, record the signing date on the staff member's profile in the
+> dashboard; the employee sees it on their **My data** page. Keep the signed
+> copy with your employment records.
+> ⚠️ **Do not install the agent on a staff member's computer until they have
+> signed** — this is not just a paperwork rule; the whole system rests on it.

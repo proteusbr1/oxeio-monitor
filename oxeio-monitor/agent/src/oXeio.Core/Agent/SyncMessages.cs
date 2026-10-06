@@ -124,7 +124,7 @@ public sealed record HeartbeatRequest
     /// Sent once at enroll, but after an upgrade it would stay stale on the server. The server
     /// decides <b>from this number alone</b> whether to offer an update; if it were stale, an
     /// agent that had already updated would be offered the same update again and again
-    /// ([G59](../../../../docs/08-Gap-Analysis.md)).
+    /// ([G59](../../../../docs/history/08-Gap-Analysis.md)).
     /// </summary>
     public string? AgentVersion { get; init; }
 

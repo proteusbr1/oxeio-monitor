@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 
-import { DashboardService } from './dashboard.service';
+import { DashboardDayService } from './dashboard.day.service';
+import { DashboardLiveService } from './dashboard.live.service';
+import { DashboardTrendService } from './dashboard.trend.service';
 import { EmployeeActivityController } from './employee-activity.controller';
 import { LiveController } from './live.controller';
 
@@ -12,13 +14,13 @@ import { LiveController } from './live.controller';
  */
 @Module({
   controllers: [LiveController, EmployeeActivityController],
-  providers: [DashboardService],
+  providers: [DashboardLiveService, DashboardDayService, DashboardTrendService],
   /**
    * Note: the hourly snapshot job (`SnapshotService`) used to call this; that
    * job was removed (it sent 11 messages a day, and the owner wanted a single
    * daily report). The export stays: "who is working right now" should still
    * have exactly one calculation.
    */
-  exports: [DashboardService],
+  exports: [DashboardLiveService, DashboardDayService, DashboardTrendService],
 })
 export class DashboardModule {}

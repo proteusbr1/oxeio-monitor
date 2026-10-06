@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Trans } from 'react-i18next';
 
 import { getOffsiteSettings, saveOffsiteSettings, testOffsite } from '../../api/settings';
 import { getOpsHealth } from '../../api/ops';
@@ -16,6 +17,9 @@ import {
   TextField,
   useMutation,
 } from '../../components/ui';
+import { BackToEnv } from './BackToEnv';
+import { useT } from '../../i18n';
+import { translateServerMessage } from '../../i18n/server-messages';
 
 /**
  * Offsite backup settings, from the screen.
@@ -34,6 +38,7 @@ import {
  */
 /** oXeio's own backup: the offsite copy and last night's run (author's cards) */
 function OwnBackupCards() {
+  const t = useT();
   const offsite = useApi(getOffsiteSettings, []);
   const health = useApi(getOpsHealth, []);
   const save = useMutation();
@@ -57,17 +62,15 @@ function OwnBackupCards() {
   return (
     <div className="space-y-3">
       <Card
-        title="Offsite Copy — Backblaze B2"
-        hint="A second copy of the nightly backup, off this server"
+        title={t('Offsite Copy — Backblaze B2')}
+        hint={t('A second copy of the nightly backup, off this server')}
       >
         <div className="space-y-3.5 p-4">
           <Notice>
-            The nightly backup already runs, but it sits on{' '}
-            <b>the same machine as the data</b>. If that disk dies, both go
-            together. Three steps at{' '}
-            <span className="num">backblaze.com</span>: create a{' '}
-            <b>Private</b> bucket, then an <b>Application Key</b> limited to
-            that bucket, then paste the two values here.
+            <Trans
+              i18nKey="The nightly backup already runs, but it sits on <b>the same machine as the data</b>. If that disk dies, both go together. Three steps at <num>backblaze.com</num>: create a <b>Private</b> bucket, then an <b>Application Key</b> limited to that bucket, then paste the two values here."
+              components={{ b: <b />, num: <span className="num" /> }}
+            />
           </Notice>
 
           {/*
@@ -78,62 +81,70 @@ function OwnBackupCards() {
           {current && (
             <div className="text-[13px]">
               {current.source === 'database' && (
-                <span className="text-ok">
-                  Set here · key {current.keyHint} · bucket{' '}
-                  <span className="num">{current.bucket}</span>
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-ok">
+                    <Trans
+                      i18nKey="Set here · key {{keyHint}} · bucket <num>{{bucket}}</num>"
+                      values={{ keyHint: current.keyHint, bucket: current.bucket }}
+                      components={{ num: <span className="num" /> }}
+                    />
+                  </span>
+                  <BackToEnv subject="offsite" onDone={() => offsite.reload()} />
                 </span>
               )}
               {current.source === 'env' && (
                 <span className="text-idle">
-                  Currently using the server&rsquo;s own settings · key{' '}
-                  {current.keyHint} · bucket{' '}
-                  <span className="num">{current.bucket}</span>
+                  <Trans
+                    i18nKey="Currently using the server’s own settings · key {{keyHint}} · bucket <num>{{bucket}}</num>"
+                    values={{ keyHint: current.keyHint, bucket: current.bucket }}
+                    components={{ num: <span className="num" /> }}
+                  />
                 </span>
               )}
               {current.source === 'none' && (
                 <span className="text-ink-3">
-                  Not set — the backup exists only on this server
+                  {t('Not set — the backup exists only on this server')}
                 </span>
               )}
             </div>
           )}
 
           <TextField
-            label="Key ID"
+            label={t('Key ID')}
             value={keyId}
             onChange={setKeyId}
             mono
             placeholder={current?.keyId || ''}
-            hint="25 characters, shown next to the key on Backblaze"
+            hint={t('25 characters, shown next to the key on Backblaze')}
           />
 
           <TextField
-            label="Application key"
+            label={t('Application key')}
             value={appKey}
             onChange={setAppKey}
             mono
-            placeholder={current?.configured ? 'leave empty to keep the current one' : ''}
+            placeholder={current?.configured ? t('leave empty to keep the current one') : ''}
             /*
               Careful: this sentence is not decoration. Backblaze shows the key **only
                  once**, and that is exactly where the owner got stuck: it was partially
                  pasted and there was no way to see it again.
             */
-            hint="31 characters. Backblaze shows it only once — copy all of it."
+            hint={t('31 characters. Backblaze shows it only once — copy all of it.')}
           />
 
           <TextField
-            label="Bucket"
+            label={t('Bucket')}
             value={bucket}
             onChange={setBucket}
             mono
             placeholder={current?.bucket || 'oxeio-backups'}
-            hint="The bucket the key is limited to"
+            hint={t('The bucket the key is limited to')}
           />
 
           <ServerError error={save.error ?? probe.error} />
 
           {result && (
-            <Notice tone={result.ok ? 'info' : 'attention'}>{result.text}</Notice>
+            <Notice tone={result.ok ? 'info' : 'attention'}>{translateServerMessage(result.text)}</Notice>
           )}
 
           <div className="flex gap-2">
@@ -160,7 +171,7 @@ function OwnBackupCards() {
                 })
               }
             >
-              {save.busy ? 'Saving…' : 'Save'}
+              {save.busy ? t('Saving…') : t('Save')}
             </MiniButton>
 
             {/*
@@ -177,15 +188,16 @@ function OwnBackupCards() {
                 })
               }
             >
-              {probe.busy ? 'Checking…' : 'Test the connection'}
+              {probe.busy ? t('Checking…') : t('Test the connection')}
             </MiniButton>
           </div>
 
           <p className="text-[12px] text-ink-3">
-            The copy runs every Saturday at 10:00 {workTimeZoneLabel()}. Files are encrypted before
-            they leave this server, so Backblaze cannot read them —{' '}
-            <b>which also means the passphrase is the only way back in</b>. Keep
-            it somewhere other than this server.
+            <Trans
+              i18nKey="The copy runs every Saturday at 10:00 {{zone}}. Files are encrypted before they leave this server, so Backblaze cannot read them — <b>which also means the passphrase is the only way back in</b>. Keep it somewhere other than this server."
+              values={{ zone: workTimeZoneLabel() }}
+              components={{ b: <b /> }}
+            />
           </p>
         </div>
       </Card>
@@ -194,7 +206,7 @@ function OwnBackupCards() {
         "Configured" and "backups are really happening" are not the same, so the last
            run's state is on the same screen.
       */}
-      <Card title="Nightly Backup" hint="What the server managed last night">
+      <Card title={t('Nightly Backup')} hint={t('What the server managed last night')}>
         <div className="p-4">
           {health.loading && !backup && <Loading />}
           {health.error && !backup && (
@@ -205,16 +217,16 @@ function OwnBackupCards() {
             <div className="space-y-2 text-[13px]">
               <div className="flex flex-wrap items-center gap-2">
                 {backup.lastOutcome === 'failed' ? (
-                  <Chip tone="attention">Failed</Chip>
+                  <Chip tone="attention">{t('Failed')}</Chip>
                 ) : backup.lastSuccessAt ? (
-                  <Chip tone="counted">Ok</Chip>
+                  <Chip tone="counted">{t('Ok')}</Chip>
                 ) : (
-                  <Chip tone="muted">Never run</Chip>
+                  <Chip tone="muted">{t('Never run')}</Chip>
                 )}
                 <span className="text-ink-2">
                   {backup.lastSuccessAt
-                    ? `Last good backup ${formatAgo(backup.lastSuccessAt)}`
-                    : 'No successful backup yet'}
+                    ? t('Last good backup {{ago}}', { ago: formatAgo(backup.lastSuccessAt) })
+                    : t('No successful backup yet')}
                 </span>
                 {/* Careful: the server sends this **already formatted** (a string);
                     running formatBytes again broke the types */}

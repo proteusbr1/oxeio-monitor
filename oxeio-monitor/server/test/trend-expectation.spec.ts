@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   trendDayExpectation,
   type TrendStaff,
-} from '../src/dashboard/dashboard.service';
+} from '../src/dashboard/dashboard.trend.service';
 import { elapsedWorkdays } from '../src/summary/summary.math';
 
 /**

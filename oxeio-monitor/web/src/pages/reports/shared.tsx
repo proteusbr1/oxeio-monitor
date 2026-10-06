@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Trans } from 'react-i18next';
 
 import type { DayType, ReportMeta, UsageCategory } from '../../api/reports';
 import { Caveat } from '../../components/States';
@@ -8,6 +9,7 @@ import {
   formatHoursAsDuration,
   parseWorkDate,
 } from '../../lib/format';
+import { useT } from '../../i18n';
 
 /**
  * Pieces shared by the four report tabs.
@@ -48,30 +50,43 @@ export function rangeDays(from: string, to: string): number {
  *    here" and not cross-check.
  */
 export function MetaNote({ meta }: { meta: ReportMeta }) {
+  const t = useT();
   return (
     <div className="mt-3">
       <p className="text-[11.5px] text-ink-3">
-        <span className="num">{formatDate(meta.from)}</span> —{' '}
-        <span className="num">{formatDate(meta.to)}</span> ·{' '}
-        <span className="num">{meta.days}</span> days · generated{' '}
-        <span className="num">{formatDateTime(meta.generatedAt)}</span>
+        <Trans
+          i18nKey="<n>{{from}}</n> — <n>{{to}}</n> · <n>{{count}}</n> days · generated <n>{{at}}</n>"
+          count={meta.days}
+          values={{
+            from: formatDate(meta.from),
+            to: formatDate(meta.to),
+            at: formatDateTime(meta.generatedAt),
+          }}
+          components={{ n: <span className="num" /> }}
+        />
       </p>
 
       {meta.clampedToToday && (
         <Caveat>
-          Data was requested up to{' '}
-          <b className="num">{formatDate(meta.requestedTo)}</b>, but future days
-          have none — so this shows up to{' '}
-          <b className="num">{formatDate(meta.to)}</b>. The targets for the
-          remaining days are not added in here.
+          <Trans
+            i18nKey="Data was requested up to <b>{{requested}}</b>, but future days have none — so this shows up to <b>{{to}}</b>. The targets for the remaining days are not added in here."
+            values={{
+              requested: formatDate(meta.requestedTo),
+              to: formatDate(meta.to),
+            }}
+            components={{ b: <b className="num" /> }}
+          />
         </Caveat>
       )}
 
       {meta.excludedEmployees.length > 0 && (
         <Caveat>
-          These <span className="num">{meta.excludedEmployees.length}</span>{' '}
-          could not be included (inactive, with no last working day on file):{' '}
-          {meta.excludedEmployees.join(', ')}
+          <Trans
+            i18nKey="These <n>{{count}}</n> could not be included (inactive, with no last working day on file): {{names}}"
+            count={meta.excludedEmployees.length}
+            values={{ names: meta.excludedEmployees.join(', ') }}
+            components={{ n: <span className="num" /> }}
+          />
         </Caveat>
       )}
 
@@ -90,20 +105,17 @@ export function MetaNote({ meta }: { meta: ReportMeta }) {
       */}
       {meta.approximateHolidayDates.length > 0 && (
         <Caveat>
-          <span className="num">{meta.approximateHolidayDates.length}</span>{' '}
-          holiday date
-          {meta.approximateHolidayDates.length > 1 ? 's' : ''} in this range{' '}
-          {meta.approximateHolidayDates.length > 1 ? 'are' : 'is'} not final yet
-          (
-          {meta.approximateHolidayDates.map((d, i) => (
-            <span key={d}>
-              {i > 0 && ', '}
-              <b className="num">{formatDate(d)}</b>
-            </span>
-          ))}
-          ). Lunar dates move after the moon is sighted — if one moves, the
-          working days for that month change, and so do the target hours and the
-          payroll day fraction.
+          <Trans
+            i18nKey="<n>{{count}}</n> holiday dates in this range are not final yet (<b>{{dates}}</b>)."
+            count={meta.approximateHolidayDates.length}
+            values={{
+              dates: meta.approximateHolidayDates.map((d) => formatDate(d)).join(', '),
+            }}
+            components={{ n: <span className="num" />, b: <b className="num" /> }}
+          />{' '}
+          {t(
+            'Lunar dates move after the moon is sighted — if one moves, the working days for that month change, and so do the target hours and the payroll day fraction.',
+          )}
         </Caveat>
       )}
     </div>
@@ -158,12 +170,14 @@ export function SignedHours({ hours }: { hours: number }) {
   );
 }
 
+/** English keys — translate where shown: `t(DAY_TYPE_LABEL[type])` */
 export const DAY_TYPE_LABEL: Record<DayType, string> = {
   workday: 'Workday',
   weekly_off: 'Weekly off',
   holiday: 'Holiday',
 };
 
+/** English keys — translate where shown: `t(CATEGORY_LABEL[category])` */
 export const CATEGORY_LABEL: Record<UsageCategory, string> = {
   productive: 'Productive',
   neutral: 'Neutral',
@@ -182,9 +196,11 @@ export const MAX_SHOWN_ROWS = 500;
 export function TrimmedNote({ total }: { total: number }) {
   return (
     <p className="border-t border-line px-4 py-2.5 text-[11.5px] text-ink-3">
-      Showing the first <span className="num">{MAX_SHOWN_ROWS}</span> of{' '}
-      <span className="num">{total}</span> rows — the full list is in the Excel
-      file.
+      <Trans
+        i18nKey="Showing the first <n>{{max}}</n> of <n>{{total}}</n> rows — the full list is in the Excel file."
+        values={{ max: MAX_SHOWN_ROWS, total }}
+        components={{ n: <span className="num" /> }}
+      />
     </p>
   );
 }

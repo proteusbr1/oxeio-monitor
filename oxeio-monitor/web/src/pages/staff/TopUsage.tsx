@@ -1,3 +1,5 @@
+import { Trans } from 'react-i18next';
+
 import type { Productivity, UsageReport, UsageTally } from '../../api/activity';
 import { getTopUsage } from '../../api/activity';
 import { useApi } from '../../api/useApi';
@@ -5,6 +7,7 @@ import { Card } from '../../components/Card';
 import { Duration } from '../../components/Duration';
 import { SectionHead } from '../../components/Page';
 import { Caveat, Empty, ErrorBox, Loading } from '../../components/States';
+import { useT } from '../../i18n';
 import { formatCount, formatPct } from '../../lib/format';
 
 /**
@@ -55,6 +58,7 @@ export function TopUsage({
   date: string;
   nonce: number;
 }) {
+  const t = useT();
   const { data, error, loading, reload } = useApi(
     (signal) =>
       getTopUsage(
@@ -72,8 +76,8 @@ export function TopUsage({
   return (
     <section>
       <SectionHead
-        title="Most used"
-        hint={`Top ${TOP_LIMIT} for this day`}
+        title={t('Most used')}
+        hint={t('Top {{limit}} for this day', { limit: TOP_LIMIT })}
       />
 
       {loading && !data ? (
@@ -82,17 +86,17 @@ export function TopUsage({
         <ErrorBox error={error} retry={reload} />
       ) : !data || nothing ? (
         <Empty
-          title="No app or site records on this day"
-          hint="The agent reports the foreground app once per slot. Nothing at all means either the PC or the agent wasn't running."
+          title={t('No app or site records on this day')}
+          hint={t("The agent reports the foreground app once per slot. Nothing at all means either the PC or the agent wasn't running.")}
         />
       ) : (
         <>
           <div className="grid gap-3 lg:grid-cols-2">
             <UsagePanel
-              title="Top Apps"
-              hint="By process name"
+              title={t('Top Apps')}
+              hint={t('By process name')}
               report={data.apps}
-              emptyText="No app rows on this day"
+              emptyText={t('No app rows on this day')}
               unitLabel="app"
             />
             {/*
@@ -100,10 +104,10 @@ export function TopUsage({
                  whose data is viewed has a right to know that the full URL is stored nowhere.
             */}
             <UsagePanel
-              title="Top Sites"
-              hint="Domains only — full URLs are never stored"
+              title={t('Top Sites')}
+              hint={t('Domains only — full URLs are never stored')}
               report={data.sites}
-              emptyText="No browser time found"
+              emptyText={t('No browser time found')}
               unitLabel="domain"
             />
           </div>
@@ -126,11 +130,13 @@ function UsagePanel({
   report: UsageReport;
   emptyText: string;
   /**
-   * **Singular**: `'app'` / `'domain'`. The plural `s` is added below, so even
-   * a single domain does not produce broken English like "1 apps".
+   * **Singular**: `'app'` / `'domain'`. The plural form comes from the
+   * catalog (`_one` / `_other`), so even a single domain does not produce
+   * broken English like "1 apps".
    */
-  unitLabel: string;
+  unitLabel: 'app' | 'domain';
 }) {
+  const t = useT();
   return (
     <Card title={title} hint={hint}>
       {report.rows.length === 0 ? (
@@ -145,8 +151,17 @@ function UsagePanel({
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-line pt-2.5 text-[11.5px] text-ink-3">
         <span>
-          <span className="num">{formatCount(report.distinctKeys)}</span>{' '}
-          {report.distinctKeys === 1 ? unitLabel : `${unitLabel}s`} in total ·{' '}
+          <Trans
+            i18nKey={
+              unitLabel === 'app'
+                ? '<n>{{formatted}}</n> apps in total'
+                : '<n>{{formatted}}</n> domains in total'
+            }
+            count={report.distinctKeys}
+            values={{ formatted: formatCount(report.distinctKeys) }}
+            components={{ n: <span className="num" /> }}
+          />{' '}
+          ·{' '}
           <Duration seconds={report.totalSec} tone="muted" />
         </span>
         {/*
@@ -155,7 +170,7 @@ function UsagePanel({
         */}
         {report.otherSec > 0 && (
           <span>
-            Outside this list{' '}
+            {t('Outside this list')}{' '}
             <Duration seconds={report.otherSec} tone="muted" />
           </span>
         )}
@@ -165,12 +180,19 @@ function UsagePanel({
 }
 
 function UsageRow({ row }: { row: UsageTally }) {
+  const t = useT();
   const cat = row.category ?? 'unknown';
 
   return (
     <div
       className="grid grid-cols-[10px_minmax(0,1fr)_auto] items-center gap-x-2.5"
-      title={`${row.label} · ${CAT_LABEL[cat]} · ${formatPct(row.sharePct, 1)} of time · ${formatCount(row.records)} rows`}
+      title={t('{{label}} · {{category}} · {{pct}} of time · {{rows}} rows', {
+        label: row.label,
+        category: t(CAT_LABEL[cat]),
+        pct: formatPct(row.sharePct, 1),
+        rows: formatCount(row.records),
+        count: row.records,
+      })}
     >
       <span
         aria-hidden
@@ -189,7 +211,7 @@ function UsageRow({ row }: { row: UsageTally }) {
           */}
           {row.mixed && (
             <span className="flex-none rounded border border-line px-1 text-[10px] text-ink-3">
-              Mixed
+              {t('Mixed')}
             </span>
           )}
         </div>

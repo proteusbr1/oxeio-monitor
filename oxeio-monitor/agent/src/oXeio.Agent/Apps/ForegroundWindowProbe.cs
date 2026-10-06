@@ -11,7 +11,7 @@ namespace oXeio.Agent.Apps;
 ///
 /// <b>There is no keyboard or mouse hook here</b>, and there never will be. Only "which window is
 /// in front" and "what is its title", which any user can see by opening Task Manager. This system
-/// does not know what is being typed ([04-Features section L](../../../../docs/04-Features.md)).
+/// does not know what is being typed ([04-Features section L](../../../../docs/history/04-Features.md)).
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class ForegroundWindowProbe
@@ -68,7 +68,7 @@ internal sealed class ForegroundWindowProbe
                 // Careful: the URL is read **only for browsers**, and only if the caller wants it.
                 // If the window did not change the caller passes null, to avoid the cost of running
                 // UI Automation every second ([06-Research section
-                // 2.6](../../../../docs/06-Research.md)).
+                // 2.6](../../../../docs/history/06-Research.md)).
                 RawUrl = isBrowser ? urlReader?.Invoke(hwnd) : null,
                 IsBrowser = isBrowser,
             };

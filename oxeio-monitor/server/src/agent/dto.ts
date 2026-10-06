@@ -119,7 +119,7 @@ export class HeartbeatDto {
    * Careful: this is not just dashboard cosmetics; the heartbeat decides whether
    * to offer an update **by looking at this number**. If stale, the server would
    * keep offering the same update to an agent that had already updated
-   * ([G59](../../../docs/08-Gap-Analysis.md)).
+   * ([G59](../../../docs/history/08-Gap-Analysis.md)).
    */
   @IsOptional() @IsString() @MaxLength(50)
   agentVersion?: string;

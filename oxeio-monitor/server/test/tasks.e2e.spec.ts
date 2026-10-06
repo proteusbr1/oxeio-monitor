@@ -4,7 +4,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { workDateOf } from '../src/agent/util/work-time';
 import { FeaturesService } from '../src/features/features.service';
+import { TasksHandoutService } from '../src/tasks/tasks.handout.service';
+import { TasksPersonService } from '../src/tasks/tasks.person.service';
 import { TasksService } from '../src/tasks/tasks.service';
+import { TasksStageService } from '../src/tasks/tasks.stage.service';
 import { BULK_MAX_LINES, TASK_NUMBER_START } from '../src/tasks/tasks.rules';
 import {
   createHarness,
@@ -106,6 +109,9 @@ const post = (session: Session, path: string, body: object) =>
   session.http.post(path).set('X-CSRF-Token', session.csrf).send(body);
 
 const svc = () => h.app.get(TasksService);
+const handout = () => h.app.get(TasksHandoutService);
+const person = () => h.app.get(TasksPersonService);
+const stage = () => h.app.get(TasksStageService);
 
 /**
  * The owner's session, with tasks pasted.
@@ -327,7 +333,7 @@ describe('POST /tasks/bulk — lines, links and duplicates', () => {
     expect(list.body.rows[0].reference).toBe('TICKET-7');
     expect(list.body.rows[0].link).toBe('https://example.com/tickets/7');
 
-    await svc().distribute();
+    await handout().distribute();
 
     const session = await loginReady(h, 'a1@test.local', STAFF_PASSWORD);
     const mine = await session.http.get('/api/v1/me/tasks').expect(200);
@@ -356,7 +362,7 @@ describe('allocation', () => {
     await assignee('OX-A2', 'a2@test.local');
     await seedPool(100);
 
-    await svc().distribute();
+    await handout().distribute();
 
     const rows = await h.prisma.task.findMany({
       where: { status: 'assigned' },
@@ -383,7 +389,7 @@ describe('allocation', () => {
     await assignee('OX-A1', 'a1@test.local');
     await seedPool(40);
 
-    await svc().distribute();
+    await handout().distribute();
 
     const numbers = (
       await h.prisma.task.findMany({
@@ -402,8 +408,8 @@ describe('allocation', () => {
     await assignee('OX-A1', 'a1@test.local');
     await seedPool(100);
 
-    await svc().distribute();
-    const second = await svc().distribute();
+    await handout().distribute();
+    const second = await handout().distribute();
 
     expect(second.assigned).toBe(0);
     expect(await h.prisma.task.count({ where: { status: 'assigned' } })).toBe(30);
@@ -413,7 +419,7 @@ describe('allocation', () => {
   it('when the pool is empty, quietly nothing happens', async () => {
     await assignee('OX-A1', 'a1@test.local');
 
-    expect((await svc().distribute()).assigned).toBe(0);
+    expect((await handout().distribute()).assigned).toBe(0);
   });
 
   it('POST /tasks/distribute: owner and manager only', async () => {
@@ -436,7 +442,7 @@ describe('GET /tasks/assignees', () => {
     await seedPool(40);
     // 40 in the pool: 30 to the first by staff code and 10 to the second,
     // so both appear
-    await svc().distribute();
+    await handout().distribute();
     // Someone who never held a task is not listed
     await coordinator('OX-C1', 'c1@test.local');
 
@@ -467,11 +473,11 @@ describe('detecting "work started" from a window title', () => {
     const one = await assignee('OX-A1', 'a1@test.local');
     await seedPool(1);
 
-    await svc().distribute();
+    await handout().distribute();
 
     const row = await h.prisma.task.findFirstOrThrow();
     const seenAt = new Date(workNoon().getTime() + 37 * 60_000);
-    const started = await svc().markStartedByTaskNumbers(
+    const started = await person().markStartedByTaskNumbers(
       one.id,
       new Map([[String(row.taskNumber), seenAt]]),
     );
@@ -500,12 +506,12 @@ describe('detecting "work started" from a window title', () => {
     const other = await assignee('OX-A2', 'a2@test.local');
     await seedPool(1);
 
-    await svc().distribute();
+    await handout().distribute();
 
     const row = await h.prisma.task.findFirstOrThrow();
     // The row belongs to OX-A1 (first in staff-code order), but OX-A2 is
     // the one whose window showed it
-    const started = await svc().markStartedByTaskNumbers(
+    const started = await person().markStartedByTaskNumbers(
       other.id,
       new Map([[String(row.taskNumber), workNoon()]]),
     );
@@ -528,10 +534,10 @@ describe('return to the pool at day end', () => {
     await assignee('OX-A1', 'a1@test.local');
     await seedPool(40);
 
-    await svc().distribute();
+    await handout().distribute();
     expect(await h.prisma.task.count({ where: { status: 'assigned' } })).toBe(30);
 
-    const { returned } = await svc().returnUnworked(workDateOf(TODAY));
+    const { returned } = await handout().returnUnworked(workDateOf(TODAY));
 
     expect(returned).toBe(30);
     expect(await h.prisma.task.count({ where: { status: 'pool' } })).toBe(40);
@@ -551,7 +557,7 @@ describe('return to the pool at day end', () => {
     const one = await assignee('OX-A1', 'a1@test.local');
     await seedPool(40);
 
-    await svc().distribute();
+    await handout().distribute();
 
     const mine = await h.prisma.task.findMany({
       where: { assignedToId: one.id },
@@ -568,7 +574,7 @@ describe('return to the pool at day end', () => {
       },
     });
 
-    const { returned } = await svc().returnUnworked(workDateOf(TODAY));
+    const { returned } = await handout().returnUnworked(workDateOf(TODAY));
 
     expect(returned).toBe(29);
     const kept = await h.prisma.task.findUniqueOrThrow({ where: { id: mine[0].id } });
@@ -585,7 +591,7 @@ describe('return to the pool at day end', () => {
     await assignee('OX-A1', 'a1@test.local');
     await seedPool(40);
 
-    await svc().distribute();
+    await handout().distribute();
 
     const before = await h.prisma.task.findMany({
       where: { status: 'assigned' },
@@ -593,8 +599,8 @@ describe('return to the pool at day end', () => {
       orderBy: { id: 'asc' },
     });
 
-    await svc().returnUnworked(workDateOf(TODAY));
-    await svc().distribute();
+    await handout().returnUnworked(workDateOf(TODAY));
+    await handout().distribute();
 
     const after = await h.prisma.task.findMany({
       where: { id: { in: before.map((b) => b.id) } },
@@ -611,7 +617,7 @@ describe('return to the pool at day end', () => {
     const one = await assignee('OX-A1', 'a1@test.local');
     await seedPool(40);
 
-    await svc().distribute();
+    await handout().distribute();
 
     const mine = await h.prisma.task.findMany({
       where: { assignedToId: one.id },
@@ -624,10 +630,10 @@ describe('return to the pool at day end', () => {
      * from the database because the FK must be satisfied.
      */
     const anyUser = await h.prisma.user.findFirstOrThrow({ select: { id: true } });
-    await svc().markDone(one.id, mine[0].id, anyUser.id);
-    await svc().skip(one.id, mine[1].id, 'not_needed');
+    await person().markDone(one.id, mine[0].id, anyUser.id);
+    await person().skip(one.id, mine[1].id, 'not_needed');
 
-    const { returned } = await svc().returnUnworked(workDateOf(TODAY));
+    const { returned } = await handout().returnUnworked(workDateOf(TODAY));
 
     expect(returned).toBe(28);
     expect(await h.prisma.task.count({ where: { status: 'done' } })).toBe(1);
@@ -646,7 +652,7 @@ describe('started tasks', () => {
     const one = await assignee('OX-A1', 'a1@test.local');
     await seedPool(40);
 
-    await svc().distribute();
+    await handout().distribute();
 
     const row = await h.prisma.task.findFirstOrThrow({
       where: { assignedToId: one.id },
@@ -657,7 +663,7 @@ describe('started tasks', () => {
       data: { startedAt: workNoon(-1) },
     });
 
-    await svc().returnUnworked(workDateOf(workNoon()));
+    await handout().returnUnworked(workDateOf(workNoon()));
 
     const after = await h.prisma.task.findUniqueOrThrow({ where: { id: row.id } });
     expect(after.status).toBe('assigned');
@@ -689,7 +695,7 @@ describe('task number', () => {
     await seedPool(1);
 
     const before = await h.prisma.task.findFirstOrThrow();
-    await svc().distribute();
+    await handout().distribute();
     const after = await h.prisma.task.findFirstOrThrow();
 
     expect(after.taskNumber).toBe(before.taskNumber);
@@ -881,7 +887,7 @@ describe('queues — waiting for delivery and publishing', () => {
   it('once delivered, the row leaves the first queue and goes to the second', async () => {
     const id = await markDoneAt(1, '2025-01-10T10:00:00Z');
 
-    await svc().markDelivered(id, workNoon());
+    await stage().markDelivered(id, workNoon());
 
     const [stats, toDeliver, toPublish] = await Promise.all([
       svc().stats(),
@@ -998,7 +1004,7 @@ describe('check — checked, problem found, fixed', () => {
   it('when it is fine it leaves the queue and does not go to the fix queue', async () => {
     const id = await finished(1);
 
-    await svc().markChecked(id, true, actorId, workNoon());
+    await stage().markChecked(id, true, actorId, workNoon());
 
     const stats = await svc().stats();
     expect(stats.toCheck).toBe(0);
@@ -1015,7 +1021,7 @@ describe('check — checked, problem found, fixed', () => {
     const id = await finished(1);
     await finished(2);
 
-    await svc().markChecked(id, false, actorId, workNoon());
+    await stage().markChecked(id, false, actorId, workNoon());
 
     const [stats, toFix, toDeliver] = await Promise.all([
       svc().stats(),
@@ -1033,10 +1039,10 @@ describe('check — checked, problem found, fixed', () => {
 
   it('after being fixed it returns to the delivery queue', async () => {
     const id = await finished(1);
-    await svc().markChecked(id, false, actorId, workNoon());
+    await stage().markChecked(id, false, actorId, workNoon());
     expect((await svc().stats()).toDeliver).toBe(0);
 
-    await svc().markFixed(id, actorId, workNoon());
+    await stage().markFixed(id, actorId, workNoon());
 
     const stats = await svc().stats();
     expect(stats.toFix).toBe(0);
@@ -1052,8 +1058,8 @@ describe('check — checked, problem found, fixed', () => {
     const id = await finished(1);
     await h.prisma.task.update({ where: { id }, data: { assignedToId: one.id } });
 
-    await svc().markChecked(id, false, actorId, workNoon());
-    await svc().markFixed(id, actorId, workNoon());
+    await stage().markChecked(id, false, actorId, workNoon());
+    await stage().markFixed(id, actorId, workNoon());
 
     const row = await h.prisma.task.findUniqueOrThrow({ where: { id } });
     expect(row.assignedToId).toBe(one.id);
@@ -1063,8 +1069,8 @@ describe('check — checked, problem found, fixed', () => {
   /** Pressing twice does not move the date — otherwise "when it was checked" would jump */
   it('pressing again does not change the date', async () => {
     const id = await finished(1);
-    await svc().markChecked(id, true, actorId, new Date('2026-08-24T10:00:00Z'));
-    await svc().markChecked(id, false, actorId, new Date('2026-08-25T10:00:00Z'));
+    await stage().markChecked(id, true, actorId, new Date('2026-08-24T10:00:00Z'));
+    await stage().markChecked(id, false, actorId, new Date('2026-08-25T10:00:00Z'));
 
     const row = await h.prisma.task.findUniqueOrThrow({ where: { id } });
     expect(row.checkedAt?.toISOString()).toBe(new Date('2026-08-24T10:00:00Z').toISOString());
@@ -1074,14 +1080,14 @@ describe('check — checked, problem found, fixed', () => {
 
   it('an unfinished task cannot be checked', async () => {
     const row = await h.prisma.task.findUniqueOrThrow({ where: { reference: REF_OF(1) } });
-    await expect(svc().markChecked(row.id, true, actorId, workNoon())).rejects.toThrow();
+    await expect(stage().markChecked(row.id, true, actorId, workNoon())).rejects.toThrow();
   });
 
   it('"fixed" cannot be said when there is no problem', async () => {
     const id = await finished(1);
-    await svc().markChecked(id, true, actorId, workNoon());
+    await stage().markChecked(id, true, actorId, workNoon());
 
-    await expect(svc().markFixed(id, actorId, workNoon())).rejects.toThrow();
+    await expect(stage().markFixed(id, actorId, workNoon())).rejects.toThrow();
   });
 });
 
@@ -1275,7 +1281,7 @@ describe('undoing Complete', () => {
 
     await post(session, `/api/v1/me/tasks/${id}/done`, {}).expect(201);
 
-    const mine = await svc().mine(one.id);
+    const mine = await person().mine(one.id);
     expect(mine).toHaveLength(1);
     // But it is no longer "in hand" — it is finished
     expect(mine[0].completedAt).not.toBeNull();
@@ -1458,7 +1464,7 @@ describe('allocation — someone with a target of 0 gets tasks too', () => {
     await staff('OX-M1', 'm1@test.local', { receivesTasks: true, dailyTaskTarget: 0 });
     await seedPool(100);
 
-    await svc().distribute();
+    await handout().distribute();
 
     const rows = await h.prisma.task.findMany({
       where: { status: 'assigned' },
@@ -1477,7 +1483,7 @@ describe('allocation — someone with a target of 0 gets tasks too', () => {
     await coordinator('OX-C1', 'c1@test.local');
     await seedPool(100);
 
-    expect((await svc().distribute()).assigned).toBe(0);
+    expect((await handout().distribute()).assigned).toBe(0);
   });
 
   /**
@@ -1490,10 +1496,10 @@ describe('allocation — someone with a target of 0 gets tasks too', () => {
       dailyTaskTarget: 0,
     });
     await seedPool(100);
-    await svc().distribute();
+    await handout().distribute();
     expect(await h.prisma.task.count({ where: { assignedToId: helper.id } })).toBe(30);
 
-    await svc().returnUnworked(workDateOf(workNoon()));
+    await handout().returnUnworked(workDateOf(workNoon()));
 
     expect(await h.prisma.task.count({ where: { assignedToId: helper.id } })).toBe(0);
     expect(await h.prisma.task.count({ where: { status: 'pool' } })).toBe(100);
@@ -1506,7 +1512,7 @@ describe('allocation — someone with a target of 0 gets tasks too', () => {
       dailyTaskTarget: 0,
     });
     await seedPool(100);
-    await svc().distribute();
+    await handout().distribute();
 
     const one = await h.prisma.task.findFirstOrThrow({
       where: { assignedToId: helper.id },
@@ -1516,7 +1522,7 @@ describe('allocation — someone with a target of 0 gets tasks too', () => {
       data: { startedAt: workNoon() },
     });
 
-    await svc().returnUnworked(workDateOf(workNoon()));
+    await handout().returnUnworked(workDateOf(workNoon()));
 
     const still = await h.prisma.task.findUniqueOrThrow({ where: { id: one.id } });
     expect(still.assignedToId).toBe(helper.id);
@@ -1553,7 +1559,7 @@ describe('deleting tasks', () => {
     expect(await h.prisma.task.count()).toBe(5);
     expect(await h.prisma.task.count({ where: { status: 'deleted' } })).toBe(2);
 
-    await svc().distribute();
+    await handout().distribute();
 
     expect(await h.prisma.task.count({ where: { status: 'assigned' } })).toBe(3);
   });
@@ -1609,9 +1615,9 @@ describe('deleting tasks', () => {
   it('deleting a row in hand removes it from the list, and a replacement comes at the next hand-out', async () => {
     const one = await assignee('OX-A1', 'a1@test.local');
     const owner = await seedPool(31);
-    await svc().distribute();
+    await handout().distribute();
 
-    const mine = await svc().mine(one.id);
+    const mine = await person().mine(one.id);
     expect(mine).toHaveLength(30);
 
     await post(owner, '/api/v1/tasks/delete', {
@@ -1619,11 +1625,11 @@ describe('deleting tasks', () => {
       reason: 'not_needed',
     }).expect(201);
 
-    expect(await svc().mine(one.id)).toHaveLength(29);
+    expect(await person().mine(one.id)).toHaveLength(29);
 
     // 29 in hand, 1 left in the pool — so the replacement comes anyway
-    await svc().distribute();
-    expect(await svc().mine(one.id)).toHaveLength(30);
+    await handout().distribute();
+    expect(await person().mine(one.id)).toHaveLength(30);
   });
 
   /** The same id arriving twice would inflate the count */
@@ -1755,10 +1761,10 @@ describe('reason for dropping', () => {
   it('on Skip the reason goes in the same field', async () => {
     const one = await assignee('OX-A1', 'a1@test.local');
     await seedPool(1);
-    await svc().distribute();
+    await handout().distribute();
 
     const session = await loginReady(h, 'a1@test.local', STAFF_PASSWORD);
-    const mine = await svc().mine(one.id);
+    const mine = await person().mine(one.id);
 
     await post(session, `/api/v1/me/tasks/${mine[0].id}/skip`, {
       reason: 'duplicate',
@@ -1772,10 +1778,10 @@ describe('reason for dropping', () => {
   it('Skip without a reason is rejected', async () => {
     const one = await assignee('OX-A1', 'a1@test.local');
     await seedPool(1);
-    await svc().distribute();
+    await handout().distribute();
 
     const session = await loginReady(h, 'a1@test.local', STAFF_PASSWORD);
-    const mine = await svc().mine(one.id);
+    const mine = await person().mine(one.id);
 
     await post(session, `/api/v1/me/tasks/${mine[0].id}/skip`, {}).expect(400);
 
@@ -2015,7 +2021,7 @@ describe('on-screen time — start detection', () => {
   async function scene() {
     const who = await withDevice('OX-S1');
     const owner = await seedPool(3);
-    await svc().distribute();
+    await handout().distribute();
 
     const [seen, unseen, open] = await h.prisma.task.findMany({
       where: { assignedToId: who.employeeId },

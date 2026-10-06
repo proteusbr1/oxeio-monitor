@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Trans } from 'react-i18next';
 
 import {
   getPrivacy,
@@ -17,6 +18,7 @@ import {
   TextField,
   useMutation,
 } from '../../components/ui';
+import { useT } from '../../i18n';
 
 /**
  * Settings → Privacy: the choices *inside* the Screenshots module — who sees
@@ -27,6 +29,7 @@ import {
  * pictures off for everyone; this page decides what happens while they are on.
  */
 export function PrivacyTab() {
+  const t = useT();
   const privacy = useApi(getPrivacy, []);
   const save = useMutation();
 
@@ -74,35 +77,31 @@ export function PrivacyTab() {
       privacy.reload();
     });
 
-  const logins =
-    staffLogins === 1 ? '1 staff login' : `${staffLogins} staff logins`;
+  const logins = t('{{count}} staff logins', { count: staffLogins });
 
   return (
     <div className="space-y-3">
       <Notice>
-        Choices about the screenshots while they are taken. To stop taking
-        them altogether, turn Screenshots off in Settings → Modules.
+        {t('Choices about the screenshots while they are taken. To stop taking them altogether, turn Screenshots off in Settings → Modules.')}
       </Notice>
 
-      <Card title="Screenshots" hint="Who sees them, and for how long">
+      <Card title={t('Screenshots')} hint={t('Who sees them, and for how long')}>
         <div className="space-y-4 p-4">
           <CheckboxField
-            label="Staff see their own screenshots"
+            label={t('Staff see their own screenshots')}
             checked={see}
             onChange={(next) => edit(() => setStaffSee(next))}
             hint={
-              <>
-                Staff and coordinator logins can open the pictures of their own
-                screen, never anyone else&rsquo;s — this affects{' '}
-                <b>{logins}</b>. You and managers always see every picture.
-                Either way, My data tells staff that pictures are taken and how
-                long they are kept.
-              </>
+              <Trans
+                i18nKey="Staff and coordinator logins can open the pictures of their own screen, never anyone else’s — this affects <b>{{logins}}</b>. You and managers always see every picture. Either way, My data tells staff that pictures are taken and how long they are kept."
+                values={{ logins }}
+                components={{ b: <b /> }}
+              />
             }
           />
 
           <TextField
-            label="Keep screenshots for (days)"
+            label={t('Keep screenshots for (days)')}
             type="number"
             value={daysText}
             onChange={(next) => edit(() => setDays(next))}
@@ -112,17 +111,17 @@ export function PrivacyTab() {
             step="1"
             hint={
               daysValid
-                ? `Older pictures are deleted every night. Staff see this number on My data. Between ${RETENTION_MIN_DAYS} and ${RETENTION_MAX_DAYS} days; 90 by default.`
-                : `A whole number of days, between ${RETENTION_MIN_DAYS} and ${RETENTION_MAX_DAYS}.`
+                ? t('Older pictures are deleted every night. Staff see this number on My data. Between {{min}} and {{max}} days; 90 by default.', { min: RETENTION_MIN_DAYS, max: RETENTION_MAX_DAYS })
+                : t('A whole number of days, between {{min}} and {{max}}.', { min: RETENTION_MIN_DAYS, max: RETENTION_MAX_DAYS })
             }
           />
 
           {shortening && (
             <Notice tone="attention">
-              The next nightly cleanup deletes every picture older than{' '}
-              {daysNum} days — the ones between {daysNum} and{' '}
-              {settings.screenshotRetentionDays} days old that are kept today
-              cannot be brought back.
+              {t('The next nightly cleanup deletes every picture older than {{days}} days — the ones between {{days}} and {{current}} days old that are kept today cannot be brought back.', {
+                days: daysNum,
+                current: settings.screenshotRetentionDays,
+              })}
             </Notice>
           )}
 
@@ -130,14 +129,14 @@ export function PrivacyTab() {
           <div className="flex items-center justify-end gap-3">
             {saved && !changed && (
               <span role="status" className="text-xs text-ink-2">
-                Saved
+                {t('Saved')}
               </span>
             )}
             <MiniButton
               disabled={!changed || !daysValid || save.busy}
               onClick={submit}
             >
-              {save.busy ? 'Saving…' : 'Save'}
+              {save.busy ? t('Saving…') : t('Save')}
             </MiniButton>
           </div>
         </div>

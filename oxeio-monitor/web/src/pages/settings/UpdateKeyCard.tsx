@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Trans } from 'react-i18next';
 
 import { getUpdateKey, saveUpdateKey } from '../../api/settings';
 import { useApi } from '../../api/useApi';
@@ -11,6 +12,8 @@ import {
   TextAreaField,
   useMutation,
 } from '../../components/ui';
+import { BackToEnv } from './BackToEnv';
+import { useT } from '../../i18n';
 
 /**
  * The owner's public key for signed agent updates (deploy/README.md, "Signed agent updates").
@@ -21,6 +24,7 @@ import {
  * stays on the owner's own machine, never here.
  */
 export function UpdateKeyCard() {
+  const t = useT();
   const key = useApi(getUpdateKey, []);
   const save = useMutation();
   const [text, setText] = useState<string | null>(null);
@@ -41,47 +45,49 @@ export function UpdateKeyCard() {
 
   return (
     <Card
-      title="Update signing key"
-      hint="Optional — only signed agent updates can be published"
+      title={t('Update signing key')}
+      hint={t('Optional — only signed agent updates can be published')}
     >
       <div className="space-y-3 p-4">
         <Notice>
-          Paste the <b>public</b> key (the contents of{' '}
-          <span className="num">update-key.pub.pem</span>). Build the MSI with{' '}
-          <span className="num">-UpdatePublicKey</span> and sign each release
-          with the private key, which stays on your machine — never on this
-          server.
+          <Trans
+            i18nKey="Paste the <b>public</b> key (the contents of <num>update-key.pub.pem</num>). Build the MSI with <num>-UpdatePublicKey</num> and sign each release with the private key, which stays on your machine — never on this server."
+            components={{ b: <b />, num: <span className="num" /> }}
+          />
         </Notice>
         <TextAreaField
-          label="Public key"
+          label={t('Public key')}
           value={value}
           onChange={setText}
           rows={4}
           placeholder="-----BEGIN PUBLIC KEY----- …"
           hint={
             current.source === 'environment'
-              ? "Set in the server's .env — saving here takes over."
+              ? t("Set in the server's .env — saving here takes over.")
               : current.publicKey
-                ? 'Set. Unsigned MSIs can no longer be published.'
-                : 'Not set — MSIs are checked by their hash only.'
+                ? t('Set. Unsigned MSIs can no longer be published.')
+                : t('Not set — MSIs are checked by their hash only.')
           }
         />
         <ServerError error={save.error} />
         <div className="flex justify-end gap-2">
+          {current.source === 'dashboard' && (
+            <BackToEnv subject="updateKey" onDone={() => key.reload()} />
+          )}
           {current.publicKey && (
             <MiniButton
               tone="danger"
               disabled={save.busy}
               onClick={() => store(null)}
             >
-              Remove key
+              {t('Remove key')}
             </MiniButton>
           )}
           <MiniButton
             disabled={save.busy || text === null}
             onClick={() => store(value.trim() || null)}
           >
-            {save.busy ? 'Saving…' : 'Save'}
+            {save.busy ? t('Saving…') : t('Save')}
           </MiniButton>
         </div>
       </div>

@@ -8,6 +8,8 @@ import {
 } from 'react';
 
 import { ApiError } from '../api/client';
+import { translate, useT } from '../i18n';
+import { translateServerMessage } from '../i18n/server-messages';
 import { Button } from './Page';
 
 /**
@@ -36,11 +38,11 @@ const INPUT =
  */
 export function messageOf(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.status === 403) return "You don't have access";
-    return error.message;
+    if (error.status === 403) return translate("You don't have access");
+    return translateServerMessage(error.message);
   }
-  if (error instanceof Error) return error.message;
-  return 'Something went wrong';
+  if (error instanceof Error) return translateServerMessage(error.message);
+  return translate('Something went wrong');
 }
 
 /**
@@ -177,6 +179,7 @@ export function Modal({
   footer?: ReactNode;
   dismissible?: boolean;
 }) {
+  const t = useT();
   const titleId = useId();
 
   useEffect(() => {
@@ -221,8 +224,8 @@ export function Modal({
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close"
-              title="Close"
+              aria-label={t('Close')}
+              title={t('Close')}
               className="rounded-md border border-line px-2 py-1 text-[13px] text-ink-2 transition hover:border-brand hover:text-ink focus:outline-none focus:ring-2 focus:ring-brand/30"
             >
               ✕
@@ -576,13 +579,14 @@ export function FilterChip({
   children: ReactNode;
   onClear: () => void;
 }) {
+  const t = useT();
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-brand/40 bg-brand-bg px-2.5 py-1 text-[11.5px] text-brand-ink">
       {children}
       <button
         type="button"
         onClick={onClear}
-        aria-label="Remove filter"
+        aria-label={t('Remove filter')}
         className="rounded-full px-1 leading-none transition hover:text-ink focus:outline-none focus:ring-2 focus:ring-brand/30"
       >
         ✕
@@ -607,8 +611,8 @@ export function ConfirmDialog({
   confirmLabel,
   tone = 'danger',
   withReason = false,
-  reasonLabel = 'Reason',
-  reasonHint = 'At least 3 characters — this is what the audit log will keep',
+  reasonLabel,
+  reasonHint,
   extra,
   busy,
   error,
@@ -631,6 +635,7 @@ export function ConfirmDialog({
   onConfirm: (reason: string) => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const [reason, setReason] = useState('');
   const tooShort = withReason && reason.trim().length < 3;
 
@@ -641,15 +646,15 @@ export function ConfirmDialog({
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button
             tone={tone}
             disabled={busy || tooShort}
             onClick={() => onConfirm(reason.trim())}
-            title={tooShort ? 'Write a reason (at least 3 characters)' : undefined}
+            title={tooShort ? t('Write a reason (at least 3 characters)') : undefined}
           >
-            {busy ? 'Please wait…' : confirmLabel}
+            {busy ? t('Please wait…') : confirmLabel}
           </Button>
         </>
       }
@@ -660,8 +665,8 @@ export function ConfirmDialog({
         {extra}
         {withReason && (
           <TextAreaField
-            label={reasonLabel}
-            hint={reasonHint}
+            label={reasonLabel ?? t('Reason')}
+            hint={reasonHint ?? t('At least 3 characters — this is what the audit log will keep')}
             value={reason}
             onChange={setReason}
             required
@@ -703,6 +708,7 @@ export function SecretModal({
   meta?: ReactNode;
   onClose: () => void;
 }) {
+  const t = useT();
   const [saved, setSaved] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'ok' | 'failed'>('idle');
 
@@ -734,14 +740,13 @@ export function SecretModal({
       onClose={onClose}
       footer={
         <Button tone="primary" disabled={!saved} onClick={onClose}>
-          Close
+          {t('Close')}
         </Button>
       }
     >
       <div className="space-y-3">
         <Notice tone="attention">
-          This {label} will not be shown again — the server keeps only its
-          hash. Copy it now.
+          {t('This {{label}} will not be shown again — the server keeps only its hash. Copy it now.', { label })}
         </Notice>
 
         <div className="rounded-lg border border-line bg-paper px-4 py-4 text-center">
@@ -752,13 +757,13 @@ export function SecretModal({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={copy}>Copy</Button>
+          <Button onClick={copy}>{t('Copy')}</Button>
           {copyState === 'ok' && (
-            <span className="text-xs text-ink-3">Copied</span>
+            <span className="text-xs text-ink-3">{t('Copied')}</span>
           )}
           {copyState === 'failed' && (
             <span className="text-xs text-brand-ink">
-              Could not copy — select the text and copy it by hand
+              {t('Could not copy — select the text and copy it by hand')}
             </span>
           )}
         </div>
@@ -772,7 +777,7 @@ export function SecretModal({
             onChange={(e) => setSaved(e.target.checked)}
             className="mt-0.5 accent-brand"
           />
-          <span>I have copied or written down the {label}</span>
+          <span>{t('I have copied or written down the {{label}}', { label })}</span>
         </label>
       </div>
     </Modal>

@@ -2,7 +2,7 @@
  * Tests never touch the dev database: they run in a separate `*_test`
  * database on the same Postgres instance.
  *
- * Note: [02-Workflow §9](../../../docs/02-Workflow.md) mentions Testcontainers.
+ * Note: [02-Workflow §9](../../../docs/history/02-Workflow.md) mentions Testcontainers.
  * It was deliberately not adopted: Postgres already runs in docker compose,
  * and starting a fresh container per run costs 30+ seconds and a dependency
  * for nothing. With a service container in CI, this same code works.

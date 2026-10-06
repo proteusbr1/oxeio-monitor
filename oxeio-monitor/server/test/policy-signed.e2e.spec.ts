@@ -14,7 +14,7 @@ import {
 
 /**
  * The only precondition of the rollout: "no agent goes on anyone's PC without
- * a signature" ([01 section Rollout](../../docs/01-Planning.md)).
+ * a signature" ([01 section Rollout](../../docs/history/01-Planning.md)).
  *
  * Careful: for a while the `policy_signed_at` column existed, the API read it
  * and the web typed it, but there was no way to set it. So the precondition

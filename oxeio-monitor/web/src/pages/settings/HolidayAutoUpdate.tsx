@@ -3,6 +3,7 @@ import { useApi } from '../../api/useApi';
 import { useAuth } from '../../auth/AuthContext';
 import { MiniButton, ServerError, useMutation } from '../../components/ui';
 import { formatAgo } from '../../lib/format';
+import { useT } from '../../i18n';
 
 /**
  * "Keep public holidays up to date": every night the server imports this year
@@ -11,6 +12,7 @@ import { formatAgo } from '../../lib/format';
  * counted. The owner switches it on; managers see the state and can run it.
  */
 export function HolidayAutoUpdate({ onUpdated }: { onUpdated: () => void }) {
+  const t = useT();
   const { user } = useAuth();
   const isOwner = user?.role === 'owner';
   const { data, reload } = useApi((signal) => getHolidayAuto(signal), []);
@@ -36,24 +38,26 @@ export function HolidayAutoUpdate({ onUpdated }: { onUpdated: () => void }) {
             onChange={(e) => change(() => setHolidayAuto(e.target.checked))}
           />
           <span>
-            Keep public holidays up to date automatically
+            {t('Keep public holidays up to date automatically')}
             {data.country && <span className="text-ink-3"> · {data.country}</span>}
           </span>
         </label>
         {data.enabled && (
           <MiniButton disabled={save.busy} onClick={() => change(runHolidayAuto)}>
-            {save.busy ? 'Updating…' : 'Update now'}
+            {save.busy ? t('Updating…') : t('Update now')}
           </MiniButton>
         )}
       </div>
       <p className="mt-1 text-[11.5px] leading-relaxed text-ink-3">
         {!data.country
-          ? 'Choose the company’s country in Settings → Company & region first.'
+          ? t('Choose the company’s country in Settings → Company & region first.')
           : data.enabled
-            ? `This year and next are imported from the country’s public calendar, each year once — a holiday you delete does not come back, and months already counted are never changed.${
-                data.lastRunAt ? ` Last run ${formatAgo(data.lastRunAt)}: ${data.lastResult ?? ''}` : ''
+            ? `${t('This year and next are imported from the country’s public calendar, each year once — a holiday you delete does not come back, and months already counted are never changed.')}${
+                data.lastRunAt
+                  ? ` ${t('Last run {{ago}}: {{result}}', { ago: formatAgo(data.lastRunAt), result: data.lastResult ?? '' })}`
+                  : ''
               }`
-            : 'Off — public holidays are only added when someone imports them.'}
+            : t('Off — public holidays are only added when someone imports them.')}
       </p>
       <ServerError error={save.error} />
     </div>

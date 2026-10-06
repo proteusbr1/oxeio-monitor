@@ -1,5 +1,8 @@
 import type { InputHTMLAttributes } from 'react';
 
+import { useT } from '../i18n';
+import { translateServerMessage } from '../i18n/server-messages';
+
 interface FieldProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
   hint?: string;
@@ -30,13 +33,14 @@ export function SubmitButton({
   busy?: boolean;
   disabled?: boolean;
 }) {
+  const t = useT();
   return (
     <button
       type="submit"
       disabled={busy || disabled}
       className="w-full rounded-md bg-ink px-4 py-2.5 text-[15px] font-medium text-on-ink transition hover:bg-ink-strong focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
     >
-      {busy ? 'Please wait…' : children}
+      {busy ? t('Please wait…') : children}
     </button>
   );
 }
@@ -54,7 +58,7 @@ export function ErrorNote({ children }: { children: React.ReactNode }) {
       role="alert"
       className="rounded-md border border-brand/30 bg-brand-bg px-3 py-2 text-sm text-brand-ink"
     >
-      {children}
+      {typeof children === 'string' ? translateServerMessage(children) : children}
     </p>
   );
 }

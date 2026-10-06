@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { TeamTrend } from '../../api/dashboard';
 import { formatDateShort, formatDuration, pctOf, weekdayOf } from '../../lib/format';
 import { targetText } from './TodayRing';
+import { useT } from '../../i18n';
 
 /**
  * Two look-back cards for the board: **the last seven days**, and **the current month**.
@@ -28,6 +29,7 @@ export function WeekBars({ days }: { days: TeamTrend['days'] }) {
    * Careful: the scale includes the target too; otherwise a light day's bar would
    *    fill the full height and the day would look excellent.
    */
+  const t = useT();
   const peak = days.reduce(
     (m, d) => Math.max(m, d.workedSec, d.targetSec),
     0,
@@ -68,15 +70,15 @@ export function WeekBars({ days }: { days: TeamTrend['days'] }) {
               {shown.tracked ? (
                 <>
                   <span className="num">{formatDuration(shown.workedSec)}</span>
-                  {shown.expectedStaff === 0 && ' · day off'}
+                  {shown.expectedStaff === 0 && ` · ${t('day off')}`}
                 </>
               ) : (
-                'not tracked yet'
+                t('not tracked yet')
               )}
             </span>
           ) : (
             <>
-              Counted{' '}
+              {t('Counted')}{' '}
               <span className="num font-semibold text-ink">
                 {formatDuration(seenSec)}
               </span>
@@ -85,8 +87,7 @@ export function WeekBars({ days }: { days: TeamTrend['days'] }) {
               {seen.length < days.length && (
                 <span className="text-ink-3">
                   {' '}
-                  · <span className="num">{seen.length}</span> of{' '}
-                  <span className="num">{days.length}</span> days tracked
+                  · {t('{{seen}} of {{total}} days tracked', { seen: seen.length, total: days.length })}
                 </span>
               )}
             </>
@@ -122,9 +123,9 @@ export function WeekBars({ days }: { days: TeamTrend['days'] }) {
                 title={
                   d.tracked
                     ? `${formatDateShort(d.date)} — ${formatDuration(d.workedSec)}${
-                        off ? ' · day off' : ''
+                        off ? ` · ${t('day off')}` : ''
                       }`
-                    : `${formatDateShort(d.date)} — not tracked yet`
+                    : `${formatDateShort(d.date)} — ${t('not tracked yet')}`
                 }
               >
                 {d.tracked ? (
@@ -216,6 +217,7 @@ export function WeekBars({ days }: { days: TeamTrend['days'] }) {
  *    invisible assumption would be another kind of falsehood.
  */
 export function MonthCard({ month }: { month: TeamTrend['month'] }) {
+  const t = useT();
   const pct = pctOf(month.creditedSec, month.targetSec);
   const ahead = month.paceSec >= 0;
 
@@ -227,7 +229,7 @@ export function MonthCard({ month }: { month: TeamTrend['month'] }) {
         <span className="num text-2xl leading-none font-semibold">
           {formatDuration(month.creditedSec)}
         </span>
-        <p className="mt-2 text-[11.5px] text-ink-3">No hours target set</p>
+        <p className="mt-2 text-[11.5px] text-ink-3">{t('No hours target set')}</p>
       </div>
     );
   }
@@ -244,7 +246,7 @@ export function MonthCard({ month }: { month: TeamTrend['month'] }) {
              (see the TodayRing note).
         */}
         <span className="text-xs text-ink-3">
-          of <span className="num">{targetText(month.targetSec)}</span>
+          {t('of {{target}}', { target: targetText(month.targetSec) })}
         </span>
       </div>
 
@@ -258,7 +260,7 @@ export function MonthCard({ month }: { month: TeamTrend['month'] }) {
       <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-[11.5px]">
         <span className="text-ink-2">
           <span className="num font-semibold text-ink">{Math.round(pct)}%</span>{' '}
-          of the month&rsquo;s target
+          {t('of the month’s target')}
         </span>
         {/*
           Careful: "behind" is **not red**, deliberately. In this theme solid red means
@@ -269,7 +271,7 @@ export function MonthCard({ month }: { month: TeamTrend['month'] }) {
           <span className="num font-semibold">
             {formatDuration(Math.abs(month.paceSec))}
           </span>{' '}
-          {ahead ? 'ahead of pace' : 'behind pace'}
+          {ahead ? t('ahead of pace') : t('behind pace')}
         </span>
       </div>
 
@@ -279,9 +281,7 @@ export function MonthCard({ month }: { month: TeamTrend['month'] }) {
             Careful: no `.num` on the date: tabular figures would make it look loose,
                like `13  Aug`. Equal-width digits are only for numbers aligned in a column.
           */}
-          Pace counts whole days from {formatDateShort(month.trackedFrom)}, when
-          tracking started — the days before it, and today, are not counted
-          against anyone.
+          {t('Pace counts whole days from {{date}}, when tracking started — the days before it, and today, are not counted against anyone.', { date: formatDateShort(month.trackedFrom) })}
         </p>
       )}
     </div>
@@ -331,10 +331,11 @@ export function FewestHours({
   people: TeamTrend['laggards'];
   days: number;
 }) {
+  const t = useT();
   if (people.length === 0) {
     return (
       <p className="px-4 py-8 text-center text-sm text-ink-3">
-        No one to show yet — the list fills in as days are counted.
+        {t('No one to show yet — the list fills in as days are counted.')}
       </p>
     );
   }
@@ -356,8 +357,8 @@ export function FewestHours({
             */}
             <div className="mt-0.5 text-[11.5px] text-ink-3">
               {p.daysCounted === 0
-                ? `Nothing counted in ${days} days`
-                : `${p.daysCounted} of ${days} days counted`}
+                ? t('Nothing counted in {{count}} days', { count: days })
+                : t('{{counted}} of {{count}} days counted', { counted: p.daysCounted, count: days })}
             </div>
           </div>
           <span className="num text-[13px] font-semibold">
@@ -370,10 +371,11 @@ export function FewestHours({
 }
 
 export function TopPerformers({ leaders }: { leaders: TeamTrend['leaders'] }) {
+  const t = useT();
   if (leaders.length === 0) {
     return (
       <p className="px-4 py-8 text-center text-sm text-ink-3">
-        No hours counted yet — the list fills in as people work.
+        {t('No hours counted yet — the list fills in as people work.')}
       </p>
     );
   }

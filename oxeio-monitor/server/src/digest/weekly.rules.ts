@@ -23,7 +23,7 @@ import type { AttendanceRow, SummaryRow } from '../reports/reports.types';
  *
  * Careful: **"no row" and "a row with 0 hours" are also different.** F01/F02
  * merge both into "no activity" (`status: worked > 0 ? 'worked' : 'no_activity'`
- * in `reports.service.ts`), but the difference **exists** in the DB:
+ * in `reports.attendance.service.ts`), but the difference **exists** in the DB:
  * `refreshDate()` writes a row for **every active employee** every day,
  * whether or not they worked. So a row existing = that day was measured.
  * Merged, the mistake would go **both ways**: someone whose agent runs fine
@@ -367,7 +367,7 @@ export interface Weekly {
   off: WeeklyRow[];
   /**
    * Careful: people who did not appear in the report at all — `status=inactive`
-   * with `left_on` empty (`reports.service.ts`). Since when they were absent is
+   * with `left_on` empty (`reports.context.service.ts`). Since when they were absent is
    * unknown, neither their hours nor their target can be worked out.
    *
    * Their names **are sent** in the message. The report deliberately names them
@@ -416,7 +416,7 @@ export interface WeeklySource {
    * "11 August's target" from it.
    *
    * Careful: rows for days before joining or after leaving are **not here at
-   * all** (`employedOn` in `reports.service.ts`) — so this file has nothing
+   * all** (`employedOn` in `reports.context.service.ts`) — so this file has nothing
    * extra to do about `joinedOn`; those days are not in the expectation anyway.
    *
    * Careful: hours are **not summed from here**, they come from F02. Adding up

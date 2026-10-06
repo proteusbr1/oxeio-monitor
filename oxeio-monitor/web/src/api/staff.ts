@@ -222,6 +222,17 @@ export interface EnrollmentCodeResult {
   expiresAt: string;
   employee: { id: number; empCode: string; fullName: string };
 }
+
+/**
+ * A one-time code that links a PC to this person without anyone signing in
+ * at the PC — for silent installs (`msiexec … ENROLLCODE=…`). Owner only.
+ */
+export function createEnrollmentCode(employeeId: number): Promise<EnrollmentCodeResult> {
+  return api<EnrollmentCodeResult>('/devices/enrollment-code', {
+    method: 'POST',
+    body: { employeeId },
+  });
+}
 // ── Account (owner-only) ────────────────────────────────────────────────────
 
 /** `tempPassword` comes back only once: show it in the modal, it is stored nowhere. */

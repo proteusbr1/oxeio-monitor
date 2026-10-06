@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Trans } from 'react-i18next';
 
 import type { TaskView } from '../../api/me';
 import {
@@ -12,6 +13,7 @@ import {
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { ErrorBox, Loading } from '../../components/States';
+import { useT } from '../../i18n';
 import { formatAgo } from '../../lib/format';
 import { blockedNotice, openInTabs } from '../../lib/popups';
 import { DropReasonPicker } from './DropReason';
@@ -26,7 +28,7 @@ import { Chip, MiniButton, Notice, ServerError, useMutation } from '../../compon
  * **the system says "started"**, and **the person says "finished"**. Each
  * reports only what it truly knows.
  *
- * Careful: this does not break oXeio's rule ([ADR-032](../../../../docs/05-Options-Decisions.md)):
+ * Careful: this does not break oXeio's rule ([ADR-032](../../../../docs/history/05-Options-Decisions.md)):
  * the button **changes no measured number** — hours stay what the agent
  * counted. It is only an announcement of work.
  *
@@ -34,6 +36,7 @@ import { Chip, MiniButton, Notice, ServerError, useMutation } from '../../compon
  * "no tasks" box on the page of someone who never receives tasks is pointless.
  */
 export function MyTasks({ progress }: { progress?: TaskView | null }) {
+  const t = useT();
   const { data, loading, error, reload } = useApi(myTasks, []);
   const skip = useMutation();
 
@@ -57,8 +60,8 @@ export function MyTasks({ progress }: { progress?: TaskView | null }) {
    * Careful: the server sends only **today's** finished rows, so there is no
    * need to count days here: having `completedAt` means "today, and still undoable".
    */
-  const inHand = data.filter((t) => t.completedAt === null);
-  const finished = data.filter((t) => t.completedAt !== null);
+  const inHand = data.filter((task) => task.completedAt === null);
+  const finished = data.filter((task) => task.completedAt !== null);
 
   /**
    * Links of the tasks in hand — only those that have one; a task may be
@@ -67,7 +70,7 @@ export function MyTasks({ progress }: { progress?: TaskView | null }) {
    * Careful: **the ones in hand, not those finished today**: the "Finished
    * today" part below is a receipt, not a to-do.
    */
-  const links = inHand.flatMap((t) => (t.link ? [t.link] : []));
+  const links = inHand.flatMap((task) => (task.link ? [task.link] : []));
 
   /**
    * **Every link in hand, in one press.**
@@ -87,12 +90,12 @@ export function MyTasks({ progress }: { progress?: TaskView | null }) {
    * starting; only then is the "name it with the number" advice true for
    * this person. Otherwise it would promise something the system does not do.
    */
-  const detected = data.some((t) => t.startedAt !== null);
+  const detected = data.some((task) => task.startedAt !== null);
 
   return (
     <Card
-      title="Your Tasks"
-      hint={`${inHand.length} in hand — oldest first`}
+      title={t('Your Tasks')}
+      hint={t('{{n}} in hand — oldest first', { n: inHand.length })}
       /*
         The button is at the top of the card, not on each row: the action is
            for the whole list, not one task. Careful: the number is in the
@@ -103,8 +106,8 @@ export function MyTasks({ progress }: { progress?: TaskView | null }) {
         <span className="flex items-center gap-2">
           {progress && <TaskProgress view={progress} />}
           {links.length > 1 && (
-            <MiniButton title="Opens the link of every task in hand, each in its own tab" onClick={openAll}>
-              Open all {links.length} ↗
+            <MiniButton title={t('Opens the link of every task in hand, each in its own tab')} onClick={openAll}>
+              {t('Open all {{n}} ↗', { n: links.length })}
             </MiniButton>
           )}
         </span>
@@ -112,14 +115,17 @@ export function MyTasks({ progress }: { progress?: TaskView | null }) {
     >
       <div className="space-y-3 p-4">
         <Notice>
-          Press <b>Complete</b> when a task is finished, or <b>Skip</b> with the
-          reason if it cannot be done.
+          <Trans
+            i18nKey="Press <b>Complete</b> when a task is finished, or <b>Skip</b> with the reason if it cannot be done."
+            components={{ b: <b /> }}
+          />
           {detected && (
             <>
               {' '}
-              Starting a file or document name with the task number —{' '}
-              <span className="num">1000042-Quarterly report</span> — lets the
-              system see when you start.
+              <Trans
+                i18nKey="Starting a file or document name with the task number — <n>1000042-Quarterly report</n> — lets the system see when you start."
+                components={{ n: <span className="num" /> }}
+              />
             </>
           )}
         </Notice>
@@ -139,20 +145,20 @@ export function MyTasks({ progress }: { progress?: TaskView | null }) {
         */}
         {tabsNotice && <Notice tone="attention">{tabsNotice}</Notice>}
 
-        {inHand.map((t) => (
+        {inHand.map((task) => (
           <TaskRow
-            key={t.id}
-            task={t}
+            key={task.id}
+            task={task}
             busy={skip.busy}
             onDone={() =>
               skip.run(async () => {
-                await completeTask(t.id);
+                await completeTask(task.id);
                 reload();
               })
             }
             onSkip={(reason) =>
               skip.run(async () => {
-                await skipTask(t.id, reason);
+                await skipTask(task.id, reason);
                 reload();
               })
             }
@@ -173,16 +179,16 @@ export function MyTasks({ progress }: { progress?: TaskView | null }) {
         {finished.length > 0 && (
           <div className="space-y-2 pt-1">
             <div className="text-[11.5px] font-semibold tracking-wide text-ink-3 uppercase">
-              Finished today · {finished.length}
+              {t('Finished today · {{n}}', { n: finished.length })}
             </div>
-            {finished.map((t) => (
+            {finished.map((task) => (
               <FinishedRow
-                key={t.id}
-                task={t}
+                key={task.id}
+                task={task}
                 busy={skip.busy}
                 onUndo={() =>
                   skip.run(async () => {
-                    await undoTask(t.id);
+                    await undoTask(task.id);
                     reload();
                   })
                 }
@@ -206,6 +212,7 @@ function TaskRow({
   onDone: () => void;
   onSkip: (reason: DropReason) => void;
 }) {
+  const t = useT();
   /**
    * **Skip does not drop at once: it first asks "why".**
    *
@@ -231,10 +238,10 @@ function TaskRow({
         */}
         <span className="block text-[11.5px] text-ink-3">
           {task.startedAt
-            ? `Started ${formatAgo(task.startedAt)}`
+            ? t('Started {{ago}}', { ago: formatAgo(task.startedAt) })
             : task.assignedAt
               ? formatAgo(task.assignedAt)
-              : 'just now'}
+              : t('just now')}
         </span>
       </span>
 
@@ -247,7 +254,7 @@ function TaskRow({
           rel="noreferrer noopener"
           className="text-[12.5px] whitespace-nowrap text-data hover:underline"
         >
-          Open link ↗
+          {t('Open link ↗')}
         </a>
       )}
 
@@ -258,7 +265,7 @@ function TaskRow({
       */}
       {task.taskNumber !== null && typeof navigator.clipboard !== 'undefined' && (
         <MiniButton onClick={() => void navigator.clipboard.writeText(String(task.taskNumber))}>
-          Copy
+          {t('Copy')}
         </MiniButton>
       )}
 
@@ -282,11 +289,11 @@ function TaskRow({
       ) : (
         <>
           <MiniButton tone="good" disabled={busy} onClick={onDone}>
-            Complete
+            {t('Complete')}
           </MiniButton>
 
           <MiniButton tone="danger" disabled={busy} onClick={() => setAsking(true)}>
-            Skip
+            {t('Skip')}
           </MiniButton>
         </>
       )}
@@ -310,6 +317,7 @@ function FinishedRow({
   busy: boolean;
   onUndo: () => void;
 }) {
+  const t = useT();
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-line px-3 py-2">
       <span className="num min-w-[104px] text-[15px] font-semibold text-ink-2">
@@ -319,7 +327,7 @@ function FinishedRow({
       <span className="min-w-0 flex-1">
         <span className="num block text-[12.5px] break-all text-ink-2">{task.reference}</span>
         <span className="block text-[11.5px] text-ink-3">
-          {task.completedAt ? `Done ${formatAgo(task.completedAt)}` : 'Done'}
+          {task.completedAt ? t('Done {{ago}}', { ago: formatAgo(task.completedAt) }) : t('Done')}
         </span>
       </span>
 
@@ -328,7 +336,7 @@ function FinishedRow({
            is to **take back** a mistake, not make a new announcement.
       */}
       <MiniButton disabled={busy} onClick={onUndo}>
-        Undo
+        {t('Undo')}
       </MiniButton>
     </div>
   );
@@ -340,13 +348,14 @@ function FinishedRow({
  * without one just `3 done today`.
  */
 export function TaskProgress({ view }: { view: TaskView }) {
+  const t = useT();
   if (view.target === null) {
-    return <Chip tone="muted">{view.done} done today</Chip>;
+    return <Chip tone="muted">{t('{{n}} done today', { n: view.done })}</Chip>;
   }
 
   return (
     <Chip tone={view.met ? 'counted' : 'muted'}>
-      {view.done}/{view.target} today
+      {t('{{done}}/{{target}} today', { done: view.done, target: view.target })}
     </Chip>
   );
 }

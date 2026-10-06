@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { translate } from '../i18n';
+
 /**
  * F05: .xlsx download.
  *
@@ -60,7 +62,7 @@ export function useXlsxDownload(): XlsxDownload {
         saveBlob(await res.blob(), filenameOf(res) ?? fallbackName);
       } catch (err) {
         if (!alive.current) return;
-        setError(err instanceof Error ? err.message : "Couldn't download the file");
+        setError(err instanceof Error ? err.message : translate("Couldn't download the file"));
       } finally {
         if (alive.current) setBusy(false);
       }
@@ -81,8 +83,8 @@ export function useXlsxDownload(): XlsxDownload {
  * comes (as in `<ErrorBox>`; the server is the place to settle language, not the client).
  */
 async function messageOf(res: Response): Promise<string> {
-  if (res.status === 403) return "You don't have access";
-  if (res.status === 401) return 'Your session ended — please sign in again';
+  if (res.status === 403) return translate("You don't have access");
+  if (res.status === 401) return translate('Your session ended — please sign in again');
 
   try {
     const body = (await res.json()) as { message?: string | string[] } | null;
@@ -93,7 +95,7 @@ async function messageOf(res: Response): Promise<string> {
     // Body empty or binary: the generic message below will be used
   }
 
-  return `Couldn't build the file (${res.status})`;
+  return translate("Couldn't build the file ({{status}})", { status: res.status });
 }
 
 /**

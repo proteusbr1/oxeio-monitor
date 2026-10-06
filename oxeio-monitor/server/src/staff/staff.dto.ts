@@ -140,7 +140,7 @@ export class UpdateEmployeeDto {
  *
  * Why a separate endpoint instead of a field on `PATCH /employees/:id`: this
  * is not editing employee details but **recording a legal event**, the only
- * rollout precondition ([01 § Rollout](../../../docs/01-Planning.md)). Inside
+ * rollout precondition ([01 § Rollout](../../../docs/history/01-Planning.md)). Inside
  * the normal update it would blend into `employee_update` audit rows, and
  * "whose signature was taken when" could not be pulled out separately.
  *

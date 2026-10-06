@@ -1,5 +1,6 @@
 import type { Role } from '../../api/auth';
 import type { FeatureKey, Features } from '../../api/features';
+import { translate } from '../../i18n';
 
 /**
  * Settings' side menu: which tabs exist, in which section, and who sees them.
@@ -162,8 +163,9 @@ export function settingsSections(
   features: Features,
 ): SettingsSection[] {
   const isOwner = role === 'owner';
+  // translated here, at call time (render), so a language switch shows at once
   return SECTIONS.map((section) => ({
-    title: section.title,
+    title: translate(section.title),
     tabs: section.tabs
       .filter((t) => isOwner || t.manager)
       .filter((t) => t.feature === undefined || features[t.feature])
@@ -171,11 +173,11 @@ export function settingsSections(
         const subtitle =
           typeof t.subtitle === 'function' ? t.subtitle(features) : t.subtitle;
         return isOwner
-          ? { id: t.id, label: t.label, subtitle }
+          ? { id: t.id, label: translate(t.label), subtitle: translate(subtitle) }
           : {
               id: t.id,
-              label: t.managerLabel ?? t.label,
-              subtitle: t.managerSubtitle ?? subtitle,
+              label: translate(t.managerLabel ?? t.label),
+              subtitle: translate(t.managerSubtitle ?? subtitle),
             };
       }),
   })).filter((section) => section.tabs.length > 0);

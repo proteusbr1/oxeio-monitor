@@ -472,7 +472,7 @@ describe('same input → tray · Monthly · Live Board all give the same number'
    * up the days' targets, but **exactly inside this window**. So the sum
    * always comes to "window working days × daily target".
    *
-   * `reports.service.ts` does not build the window itself, it calls
+   * `reports.context.service.ts` does not build the window itself, it calls
    * `elapsedWindow()` — here that same sum is imitated and shown.
    */
   it("the report's day-by-day sum is the same window, the same working days", () => {

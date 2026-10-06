@@ -1,5 +1,6 @@
 import type { UsageReport } from '../../api/activity';
 import { formatDuration, pctOf } from '../../lib/format';
+import { useT } from '../../i18n';
 
 /**
  * Today's sorted list of which apps the team spent time in.
@@ -21,12 +22,13 @@ import { formatDuration, pctOf } from '../../lib/format';
  * seen at a glance.
  */
 export function TopApps({ usage }: { usage: UsageReport }) {
+  const t = useT();
   const rows = usage.rows.slice(0, 5);
 
   if (rows.length === 0) {
     return (
       <p className="px-4 py-8 text-center text-sm text-ink-3">
-        No app time counted yet today.
+        {t('No app time counted yet today.')}
       </p>
     );
   }
@@ -53,7 +55,7 @@ export function TopApps({ usage }: { usage: UsageReport }) {
                    none is shown; it only says the contents are mixed.
               */}
               {row.mixed && (
-                <span className="ml-1.5 text-[10.5px] text-ink-3">mixed</span>
+                <span className="ml-1.5 text-[10.5px] text-ink-3">{t('mixed')}</span>
               )}
             </span>
             <span className="num shrink-0 text-[11.5px] text-ink-3">
@@ -76,7 +78,7 @@ export function TopApps({ usage }: { usage: UsageReport }) {
       {other > 0 && (
         <li className="text-[11.5px] text-ink-3">
           <div className="flex items-baseline justify-between gap-3">
-            <span>everything else</span>
+            <span>{t('everything else')}</span>
             <span className="num">{formatDuration(other)}</span>
           </div>
           <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-line">

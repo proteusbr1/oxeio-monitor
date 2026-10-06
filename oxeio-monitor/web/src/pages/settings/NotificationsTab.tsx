@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Trans } from 'react-i18next';
 
 import { getTelegramSettings, saveTelegramSettings, testTelegram } from '../../api/settings';
 import { useApi } from '../../api/useApi';
@@ -11,6 +12,8 @@ import {
   TextField,
   useMutation,
 } from '../../components/ui';
+import { BackToEnv } from './BackToEnv';
+import { useT } from '../../i18n';
 
 /**
  * Telegram settings, editable from the screen.
@@ -25,6 +28,7 @@ import {
  * with the field empty keeps the existing one.
  */
 export function NotificationsTab() {
+  const t = useT();
   const telegram = useApi(getTelegramSettings, []);
   const save = useMutation();
   const probe = useMutation();
@@ -44,13 +48,14 @@ export function NotificationsTab() {
     <div className="space-y-3">
       <Card
         title="Telegram"
-        hint="Where the weekly summary and alerts are sent"
+        hint={t('Where the weekly summary and alerts are sent')}
       >
         <div className="space-y-3.5 p-4">
           <Notice>
-            Create a bot with <b>@BotFather</b> on Telegram, then send it a
-            message so it can reply. The chat id is the conversation it should
-            post into.
+            <Trans
+              i18nKey="Create a bot with <b>@BotFather</b> on Telegram, then send it a message so it can reply. The chat id is the conversation it should post into."
+              components={{ b: <b /> }}
+            />
           </Notice>
 
           {/*
@@ -62,49 +67,59 @@ export function NotificationsTab() {
           {current && (
             <div className="text-[13px]">
               {current.source === 'database' && (
-                <span className="text-ok">
-                  Set here · token {current.tokenHint} · chat{' '}
-                  <span className="num">{current.chatId}</span>
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-ok">
+                    <Trans
+                      i18nKey="Set here · token {{token}} · chat <num>{{chat}}</num>"
+                      values={{ token: current.tokenHint, chat: current.chatId }}
+                      components={{ num: <span className="num" /> }}
+                    />
+                  </span>
+                  <BackToEnv subject="notifications" onDone={() => telegram.reload()} />
                 </span>
               )}
               {current.source === 'env' && (
                 <span className="text-idle">
-                  Currently using the server&rsquo;s <span className="num">.env</span>{' '}
-                  · token {current.tokenHint} · chat{' '}
-                  <span className="num">{current.chatId}</span>
+                  <Trans
+                    i18nKey="Currently using the server’s <num>.env</num> · token {{token}} · chat <num>{{chat}}</num>"
+                    values={{ token: current.tokenHint, chat: current.chatId }}
+                    components={{ num: <span className="num" /> }}
+                  />
                 </span>
               )}
               {current.source === 'none' && (
                 <span className="text-ink-3">
-                  Not set — nothing is being sent to Telegram
+                  {t('Not set — nothing is being sent to Telegram')}
                 </span>
               )}
             </div>
           )}
 
           <TextField
-            label="Bot token"
+            label={t('Bot token')}
             value={token}
             onChange={setToken}
             mono
-            placeholder={current?.configured ? 'leave empty to keep the current one' : ''}
-            hint="From @BotFather. It is never shown again after saving."
+            placeholder={current?.configured ? t('leave empty to keep the current one') : ''}
+            hint={t('From @BotFather. It is never shown again after saving.')}
           />
 
           <TextField
-            label="Chat id"
+            label={t('Chat id')}
             value={chatId}
             onChange={setChatId}
             mono
             placeholder={current?.chatId || ''}
-            hint="A number. Negative numbers are groups."
+            hint={t('A number. Negative numbers are groups.')}
           />
 
           <ServerError error={save.error ?? probe.error} />
 
           {result && (
+            // `result` holds the English text (the key), so the ✓ check does not
+            // depend on the language on screen
             <Notice tone={result.startsWith('✓') ? 'info' : 'attention'}>
-              {result}
+              {t(result)}
             </Notice>
           )}
 
@@ -129,7 +144,7 @@ export function NotificationsTab() {
                 })
               }
             >
-              {save.busy ? 'Saving…' : 'Save'}
+              {save.busy ? t('Saving…') : t('Save')}
             </MiniButton>
 
             {/*
@@ -152,14 +167,13 @@ export function NotificationsTab() {
                 })
               }
             >
-              {probe.busy ? 'Sending…' : 'Send a test message'}
+              {probe.busy ? t('Sending…') : t('Send a test message')}
             </MiniButton>
           </div>
         </div>
 
         <Caveat>
-          The weekly summary contains staff names and hours, so it only goes to
-          the chat set here. Changing it takes effect immediately — no restart.
+          {t('The weekly summary contains staff names and hours, so it only goes to the chat set here. Changing it takes effect immediately — no restart.')}
         </Caveat>
       </Card>
     </div>

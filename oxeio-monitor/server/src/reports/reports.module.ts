@@ -4,7 +4,12 @@ import { AlertMailer } from '../alerts/alerts.mailer';
 import { TelegramChannel } from '../alerts/telegram.channel';
 import { MonthDeliveryService } from './month-delivery.service';
 import { ReportsController } from './reports.controller';
+import { ReportsAttendanceService } from './reports.attendance.service';
+import { ReportsContextService } from './reports.context.service';
+import { ReportsExportService } from './reports.export.service';
+import { ReportsProductivityService } from './reports.productivity.service';
 import { ReportsService } from './reports.service';
+import { ReportsSummaryService } from './reports.summary.service';
 
 /**
  * F01 · F02 · F04 · F05 · F08.
@@ -32,7 +37,17 @@ import { ReportsService } from './reports.service';
    * comment there gives the reason. Both are stateless transports (they read
    * settings on every call), so a second instance shares no state.
    */
-  providers: [ReportsService, MonthDeliveryService, AlertMailer, TelegramChannel],
+  providers: [
+    ReportsService,
+    ReportsContextService,
+    ReportsExportService,
+    ReportsAttendanceService,
+    ReportsSummaryService,
+    ReportsProductivityService,
+    MonthDeliveryService,
+    AlertMailer,
+    TelegramChannel,
+  ],
   /**
    * F07 (`DigestModule`) calls this very service; it does not read
    * `daily_summary` and work out the target itself. So the daily email and the

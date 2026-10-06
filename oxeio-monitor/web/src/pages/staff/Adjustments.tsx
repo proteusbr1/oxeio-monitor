@@ -29,6 +29,7 @@ import {
   TextField,
   useMutation,
 } from '../../components/ui';
+import { useT } from '../../i18n';
 
 /**
  * Hours adjustment.
@@ -53,6 +54,7 @@ export function Adjustments({
   employeeId: number;
   nonce: number;
 }) {
+  const t = useT();
   const { user } = useAuth();
   const isOwner = user?.role === 'owner';
 
@@ -69,11 +71,11 @@ export function Adjustments({
 
   return (
     <Card
-      title="Hour Corrections"
-      hint="Time given back when the system — not the person — lost the hours"
+      title={t('Hour Corrections')}
+      hint={t('Time given back when the system — not the person — lost the hours')}
       actions={
         isOwner ? (
-          <Button onClick={() => setAdding(true)}>Add correction</Button>
+          <Button onClick={() => setAdding(true)}>{t('Add correction')}</Button>
         ) : undefined
       }
     >
@@ -82,8 +84,8 @@ export function Adjustments({
 
       {!loading && !error && rows.length === 0 && (
         <Empty
-          title="No corrections"
-          hint="The recorded hours stand exactly as they were measured."
+          title={t('No corrections')}
+          hint={t('The recorded hours stand exactly as they were measured.')}
         />
       )}
 
@@ -98,8 +100,7 @@ export function Adjustments({
           {counted.length > 0 && (
             <p className="text-[13px] text-ink-2">
               <span className="num font-semibold">{formatSignedDuration(totalSec(counted))}</span>{' '}
-              counted in total, from {counted.length}{' '}
-              {counted.length === 1 ? 'correction' : 'corrections'}
+              {t('counted in total, from {{count}} corrections', { count: counted.length })}
             </p>
           )}
 
@@ -150,6 +151,7 @@ function Row({
   canRevoke: boolean;
   onRevoke: () => void;
 }) {
+  const t = useT();
   return (
     <li className="flex flex-wrap items-start justify-between gap-2 py-2.5">
       <div className="min-w-0 space-y-1">
@@ -173,29 +175,29 @@ function Row({
             {formatDate(row.workDate)}
           </span>
 
-          <Chip>{CAUSE_LABELS[row.cause] ?? row.cause}</Chip>
+          <Chip>{CAUSE_LABELS[row.cause] ? t(CAUSE_LABELS[row.cause]) : row.cause}</Chip>
 
           {row.beyondEvidence && (
-            <Chip tone="pending">More than measured</Chip>
+            <Chip tone="pending">{t('More than measured')}</Chip>
           )}
 
-          {!row.active && <Chip tone="muted">Revoked</Chip>}
+          {!row.active && <Chip tone="muted">{t('Revoked')}</Chip>}
         </div>
 
         {/* The reason is always shown; staff read this themselves (J08) */}
         <p className="max-w-prose text-[13px] text-ink-2">{row.reason}</p>
 
         <p className="text-[11.5px] text-ink-3">
-          Recorded by {row.createdBy}
+          {t('Recorded by {{name}}', { name: row.createdBy })}
           {!row.active && row.revokedBy ? (
-            <> · revoked by {row.revokedBy}{row.revokeReason ? ` — ${row.revokeReason}` : ''}</>
+            <> · {t('revoked by {{name}}', { name: row.revokedBy })}{row.revokeReason ? ` — ${row.revokeReason}` : ''}</>
           ) : null}
         </p>
       </div>
 
       {canRevoke && row.active && (
         <MiniButton tone="danger" onClick={onRevoke}>
-          Revoke
+          {t('Revoke')}
         </MiniButton>
       )}
     </li>
@@ -215,6 +217,7 @@ function AddDialog({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const t = useT();
   const { busy, error, run } = useMutation();
 
   const [workDate, setWorkDate] = useState(todayInWorkZone());
@@ -234,12 +237,12 @@ function AddDialog({
 
   return (
     <Modal
-      title="Add hour correction"
+      title={t('Add hour correction')}
       onClose={onClose}
       footer={
         <div className="flex justify-end gap-2">
           <Button onClick={onClose} disabled={busy}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button
             tone="primary"
@@ -256,21 +259,19 @@ function AddDialog({
               })
             }
           >
-            Add correction
+            {t('Add correction')}
           </Button>
         </div>
       }
     >
       <div className="space-y-3">
         <Notice tone="info">
-          This does not change what was measured — the raw activity stays
-          exactly as recorded. The correction is stored beside it, with your
-          name and reason, and the staff member can see both.
+          {t('This does not change what was measured — the raw activity stays exactly as recorded. The correction is stored beside it, with your name and reason, and the staff member can see both.')}
         </Notice>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <TextField
-            label="Day"
+            label={t('Day')}
             type="date"
             value={workDate}
             onChange={setWorkDate}
@@ -278,17 +279,17 @@ function AddDialog({
           />
 
           <SelectField
-            label="Direction"
+            label={t('Direction')}
             value={sign}
             onChange={(v) => setSign(v as 'plus' | 'minus')}
             options={[
-              { value: 'plus', label: 'Give hours back' },
-              { value: 'minus', label: 'Take hours off' },
+              { value: 'plus', label: t('Give hours back') },
+              { value: 'minus', label: t('Take hours off') },
             ]}
           />
 
           <TextField
-            label="Hours"
+            label={t('Hours')}
             type="number"
             value={hours}
             onChange={setHours}
@@ -297,7 +298,7 @@ function AddDialog({
           />
 
           <TextField
-            label="Minutes"
+            label={t('Minutes')}
             type="number"
             value={minutes}
             onChange={setMinutes}
@@ -307,25 +308,25 @@ function AddDialog({
         </div>
 
         <SelectField
-          label="What happened"
+          label={t('What happened')}
           value={cause}
           onChange={(v) => setCause(v as AdjustmentCause)}
           options={Object.entries(CAUSE_LABELS).map(([value, label]) => ({
             value,
-            label,
+            label: t(label),
           }))}
         />
 
         <TextField
-          label="Reason"
+          label={t('Reason')}
           value={reason}
           onChange={setReason}
-          hint="The staff member reads this — write it for them, not for the log"
+          hint={t('The staff member reads this — write it for them, not for the log')}
         />
 
         {tooLong && (
           <Notice tone="attention">
-            A single day cannot be corrected by more than 24 hours.
+            {t('A single day cannot be corrected by more than 24 hours.')}
           </Notice>
         )}
 
@@ -344,13 +345,17 @@ function RevokeDialog({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const t = useT();
   const { busy, error, run } = useMutation();
 
   return (
     <ConfirmDialog
-      title={`Revoke ${formatSignedDuration(row.deltaSec)} on ${formatDate(row.workDate)}?`}
-      intro="The correction stops counting from now on. It is not deleted — the record, your reason and the original one all stay."
-      confirmLabel="Revoke"
+      title={t('Revoke {{amount}} on {{date}}?', {
+        amount: formatSignedDuration(row.deltaSec),
+        date: formatDate(row.workDate),
+      })}
+      intro={t('The correction stops counting from now on. It is not deleted — the record, your reason and the original one all stay.')}
+      confirmLabel={t('Revoke')}
       withReason
       busy={busy}
       error={error}

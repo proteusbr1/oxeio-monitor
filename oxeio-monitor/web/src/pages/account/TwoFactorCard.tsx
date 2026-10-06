@@ -13,6 +13,7 @@ import { Card } from '../../components/Card';
 import { ErrorBox, Loading } from '../../components/States';
 import { Button } from '../../components/Page';
 import { Modal, Notice, ServerError, useMutation } from '../../components/ui';
+import { useT } from '../../i18n';
 import { RecoveryCodesModal } from './RecoveryCodesModal';
 
 /**
@@ -21,6 +22,7 @@ import { RecoveryCodesModal } from './RecoveryCodesModal';
  * staff can harden their own accounts too. Lives on the Account page.
  */
 export function TwoFactorCard() {
+  const t = useT();
   const { data, error, loading, reload } = useApi(
     (signal) => twoFactorStatus(signal),
     [],
@@ -41,19 +43,18 @@ export function TwoFactorCard() {
   return (
     <>
       <Card
-        title="Two-factor authentication (2FA)"
+        title={t('Two-factor authentication (2FA)')}
         hint={
           data.enabled
-            ? `On · ${data.recoveryCodesLeft} recovery codes left`
-            : 'Off'
+            ? t('On · {{count}} recovery codes left', { count: data.recoveryCodesLeft })
+            : t('Off')
         }
       >
 
         {data.enabled ? (
           <div className="space-y-3">
             <Notice>
-              Signing in needs a 6-digit code from your authenticator app after
-              the password. Even a leaked password will not let anyone in.
+              {t('Signing in needs a 6-digit code from your authenticator app after the password. Even a leaked password will not let anyone in.')}
             </Notice>
 
             {/*
@@ -62,34 +63,28 @@ export function TwoFactorCard() {
             */}
             {data.recoveryCodesLeft <= 2 && (
               <Notice tone="attention">
-                You are nearly out of recovery codes ({data.recoveryCodesLeft}{' '}
-                left). Generate a fresh set now — if you lose your phone, these
-                are the only way back in.
+                {t('You are nearly out of recovery codes ({{count}} left). Generate a fresh set now — if you lose your phone, these are the only way back in.', { count: data.recoveryCodesLeft })}
               </Notice>
             )}
 
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => setConfirming('regenerate')}>
-                New recovery codes
+                {t('New recovery codes')}
               </Button>
               <Button tone="danger" onClick={() => setConfirming('disable')}>
-                Turn off 2FA
+                {t('Turn off 2FA')}
               </Button>
             </div>
           </div>
         ) : (
           <div className="space-y-3">
             <Notice>
-              Google Authenticator, Microsoft Authenticator, Authy — any TOTP
-              app works. You get 10 recovery codes when you turn it on; those
-              are what you sign in with if you lose your phone.
+              {t('Google Authenticator, Microsoft Authenticator, Authy — any TOTP app works. You get 10 recovery codes when you turn it on; those are what you sign in with if you lose your phone.')}
             </Notice>
 
             {data.pendingSetup && (
               <Notice tone="attention">
-                Setup was started once before and never finished. Starting again
-                gives you a new QR code — if you already scanned the old one,
-                delete it from your app.
+                {t('Setup was started once before and never finished. Starting again gives you a new QR code — if you already scanned the old one, delete it from your app.')}
               </Notice>
             )}
 
@@ -104,7 +99,7 @@ export function TwoFactorCard() {
                 })
               }
             >
-              {start.busy ? 'Please wait…' : 'Turn on 2FA'}
+              {start.busy ? t('Please wait…') : t('Turn on 2FA')}
             </Button>
           </div>
         )}
@@ -165,6 +160,7 @@ function EnableModal({
   onCancel: () => void;
   onDone: (codes: string[]) => void;
 }) {
+  const t = useT();
   const [code, setCode] = useState('');
   const m = useMutation();
 
@@ -177,23 +173,23 @@ function EnableModal({
 
   return (
     <Modal
-      title="Turn on 2FA"
-      hint="Scan the QR code, then enter the code from your app"
+      title={t('Turn on 2FA')}
+      hint={t('Scan the QR code, then enter the code from your app')}
       onClose={onCancel}
       footer={
         <>
-          <Button onClick={onCancel}>Cancel</Button>
+          <Button onClick={onCancel}>{t('Cancel')}</Button>
           <Button tone="primary" disabled={m.busy} onClick={submit}>
-            {m.busy ? 'Verifying…' : 'Verify and turn on'}
+            {m.busy ? t('Verifying…') : t('Verify and turn on')}
           </Button>
         </>
       }
     >
       <div className="space-y-3">
         <ol className="list-inside list-decimal space-y-1 text-[13px] text-ink-2">
-          <li>Open the authenticator app on your phone</li>
-          <li>Scan the QR code below</li>
-          <li>Type the 6 digits your app is showing</li>
+          <li>{t('Open the authenticator app on your phone')}</li>
+          <li>{t('Scan the QR code below')}</li>
+          <li>{t('Type the 6 digits your app is showing')}</li>
         </ol>
 
         {/*
@@ -213,7 +209,7 @@ function EnableModal({
           <div className="rounded bg-white p-2">
             <img
               src={setup.qrDataUrl}
-              alt="2FA QR code"
+              alt={t('2FA QR code')}
               width={240}
               height={240}
               className="h-auto max-w-full"
@@ -222,10 +218,9 @@ function EnableModal({
         </div>
 
         <details className="rounded-md border border-line bg-paper px-3 py-2 text-[13px] text-ink-2">
-          <summary className="cursor-pointer">Can&rsquo;t scan the QR?</summary>
+          <summary className="cursor-pointer">{t('Can’t scan the QR?')}</summary>
           <p className="mt-2">
-            Choose &ldquo;enter a setup key&rdquo; in your app and give it this
-            secret:
+            {t('Choose “enter a setup key” in your app and give it this secret:')}
           </p>
           <p className="num mt-1.5 break-all text-ink select-all">
             {setup.secret}
@@ -236,7 +231,7 @@ function EnableModal({
 
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-ink-2">
-            The 6-digit code from your app
+            {t('The 6-digit code from your app')}
           </span>
           <input
             type="text"
@@ -255,9 +250,7 @@ function EnableModal({
         </label>
 
         <Notice tone="attention">
-          2FA is not turned on until the code matches. Closing this dialog
-          changes nothing — so there is no risk of locking yourself out by
-          forgetting to scan.
+          {t('2FA is not turned on until the code matches. Closing this dialog changes nothing — so there is no risk of locking yourself out by forgetting to scan.')}
         </Notice>
       </div>
     </Modal>
@@ -278,6 +271,7 @@ function PasswordConfirmModal({
   onCancel: () => void;
   onDone: (codes: string[] | null) => void;
 }) {
+  const t = useT();
   const [password, setPassword] = useState('');
   const m = useMutation();
 
@@ -297,17 +291,17 @@ function PasswordConfirmModal({
 
   return (
     <Modal
-      title={isDisable ? 'Turn off 2FA?' : 'New recovery codes'}
+      title={isDisable ? t('Turn off 2FA?') : t('New recovery codes')}
       onClose={onCancel}
       footer={
         <>
-          <Button onClick={onCancel}>Cancel</Button>
+          <Button onClick={onCancel}>{t('Cancel')}</Button>
           <Button
             tone={isDisable ? 'danger' : 'primary'}
             disabled={m.busy || password === ''}
             onClick={submit}
           >
-            {m.busy ? 'Please wait…' : isDisable ? 'Turn off' : 'Generate'}
+            {m.busy ? t('Please wait…') : isDisable ? t('Turn off') : t('Generate')}
           </Button>
         </>
       }
@@ -315,15 +309,15 @@ function PasswordConfirmModal({
       <div className="space-y-3">
         <Notice tone="attention">
           {isDisable
-            ? 'Once it is off, a password alone gets you in, and your recovery codes are deleted.'
-            : 'Generating a new set makes every old recovery code stop working immediately.'}
+            ? t('Once it is off, a password alone gets you in, and your recovery codes are deleted.')
+            : t('Generating a new set makes every old recovery code stop working immediately.')}
         </Notice>
 
         <ServerError error={m.error} />
 
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-ink-2">
-            Your password
+            {t('Your password')}
           </span>
           <input
             type="password"

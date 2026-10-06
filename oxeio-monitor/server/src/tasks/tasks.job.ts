@@ -4,7 +4,7 @@ import { Cron } from '@nestjs/schedule';
 import { workDateOf } from '../agent/util/work-time';
 import { FeaturesService } from '../features/features.service';
 import { JOB_TIMEZONE, RunLock, SCHEDULING_ENABLED } from '../summary/scheduling';
-import { TasksService } from './tasks.service';
+import { TasksHandoutService } from './tasks.handout.service';
 
 /**
  * Every day at 08:00 (work zone): hand out tasks from the pool to everyone who
@@ -34,7 +34,7 @@ export class TasksJob {
   private readonly topUpLock = new RunLock();
 
   constructor(
-    private readonly tasks: TasksService,
+    private readonly tasks: TasksHandoutService,
     private readonly features: FeaturesService,
   ) {}
 

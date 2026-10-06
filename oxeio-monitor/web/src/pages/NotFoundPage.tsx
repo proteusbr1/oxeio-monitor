@@ -5,6 +5,7 @@ import { Page } from '../components/Page';
 import { Empty } from '../components/States';
 import { homePathFor } from '../api/auth';
 import { useFeatures } from '../features/FeaturesContext';
+import { useT } from '../i18n';
 
 /**
  * 404: no such address.
@@ -30,6 +31,7 @@ const HOME_WORD: Record<string, string> = {
 };
 
 export function NotFoundPage() {
+  const t = useT();
   const { user } = useAuth();
   const { features } = useFeatures();
   /**
@@ -40,16 +42,16 @@ export function NotFoundPage() {
   const home = homePathFor(user?.role, features.tasks);
 
   return (
-    <Page title="Not found">
+    <Page title={t('Not found')}>
       <Empty
-        title="There's nothing at this address"
-        hint="The link may be old, or the address has a typo."
+        title={t("There's nothing at this address")}
+        hint={t('The link may be old, or the address has a typo.')}
         action={
           <Link
             to={home}
             className="rounded-md border border-line bg-surface px-3 py-1.5 text-[13px] font-medium text-ink-2 transition hover:border-brand hover:text-ink focus:outline-none focus:ring-2 focus:ring-brand/30"
           >
-            {HOME_WORD[home] ?? 'Back'}
+            {t(HOME_WORD[home] ?? 'Back')}
           </Link>
         }
       />

@@ -17,7 +17,7 @@ import { taskTargetOf, taskView, type TaskView } from '../summary/task-start.rul
 import { asPreBlock, telegramDigest } from './digest.telegram';
 import { AppSettingsService } from '../settings/app-settings.service';
 
-/** In the letterhead and email title — the same env as `reports.service.ts` */
+/** In the letterhead and email title — the same env as `reports.export.service.ts` */
 const DEFAULT_ORG_NAME = 'oXeio Monitoring';
 
 export interface DigestResult {

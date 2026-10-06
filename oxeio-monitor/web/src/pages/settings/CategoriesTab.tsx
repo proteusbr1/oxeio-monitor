@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Trans } from 'react-i18next';
 
 import {
   createCategory,
@@ -17,6 +18,7 @@ import { Button } from '../../components/Page';
 import { Empty, ErrorBox, Loading } from '../../components/States';
 import { Table, type Column } from '../../components/Table';
 import { formatCount } from '../../lib/format';
+import { useT } from '../../i18n';
 import {
   Chip,
   ConfirmDialog,
@@ -75,6 +77,7 @@ const PATTERN_HINT: Record<MatchType, string> = {
 };
 
 export function CategoriesTab() {
+  const t = useT();
   const rules = useApi((signal) => listCategories(signal), []);
 
   const [editing, setEditing] = useState<CategoryRuleView | null>(null);
@@ -89,34 +92,34 @@ export function CategoriesTab() {
   const columns: Column<CategoryRuleView>[] = [
     {
       key: 'priority',
-      header: 'Priority',
+      header: t('Priority'),
       align: 'right',
       render: (rule) => <span className="num">{rule.priority}</span>,
     },
     {
       key: 'matchType',
-      header: 'Type',
-      render: (rule) => <Chip>{MATCH_LABEL[rule.matchType]}</Chip>,
+      header: t('Type'),
+      render: (rule) => <Chip>{t(MATCH_LABEL[rule.matchType])}</Chip>,
     },
     {
       key: 'pattern',
-      header: 'Pattern',
+      header: t('Pattern'),
       render: (rule) => <span className="num">{rule.pattern}</span>,
     },
     {
       key: 'displayName',
-      header: 'Shown as',
+      header: t('Shown as'),
       render: (rule) => rule.displayName,
     },
     {
       key: 'category',
-      header: 'Category',
+      header: t('Category'),
       // Important: the brand rule applies exactly here: solid `ink` = counted work,
       //    grey = not counted. No red is used: being unproductive is not an error,
       //    just a class.
       render: (rule) => (
         <Chip tone={rule.category === 'productive' ? 'counted' : 'muted'}>
-          {rule.category}
+          {t(rule.category)}
         </Chip>
       ),
     },
@@ -126,9 +129,9 @@ export function CategoriesTab() {
       align: 'right',
       render: (rule) => (
         <RowActions>
-          <MiniButton onClick={() => setEditing(rule)}>Edit</MiniButton>
+          <MiniButton onClick={() => setEditing(rule)}>{t('Edit')}</MiniButton>
           <MiniButton tone="danger" onClick={() => setRemoving(rule)}>
-            Delete
+            {t('Delete')}
           </MiniButton>
         </RowActions>
       ),
@@ -138,18 +141,18 @@ export function CategoriesTab() {
   return (
     <div className="space-y-3">
       <Notice>
-        <strong>Lower number wins</strong> — the first rule that matches is the
-        one that sticks, and the list below is in exactly that order, so a rule
-        higher up beats one lower down. Setting 200 does not mean "more
-        important"; it puts the rule practically last.
+        <Trans
+          i18nKey={'<b>Lower number wins</b> — the first rule that matches is the one that sticks, and the list below is in exactly that order, so a rule higher up beats one lower down. Setting 200 does not mean "more important"; it puts the rule practically last.'}
+          components={{ b: <strong /> }}
+        />
       </Notice>
 
       <div className="flex flex-wrap items-center justify-end gap-2">
         <Button onClick={() => setRerunning(true)}>
-          Apply rules to past rows
+          {t('Apply rules to past rows')}
         </Button>
         <Button tone="primary" onClick={() => setCreating(true)}>
-          New rule
+          {t('New rule')}
         </Button>
       </div>
 
@@ -164,11 +167,11 @@ export function CategoriesTab() {
 
       {!rules.loading && !rules.error && rows.length === 0 && (
         <Empty
-          title="No category rules at all"
-          hint="Without rules every app and site stays 'unknown' and no productivity score is ever produced. The seed normally installs 80+ rules — having none is not normal."
+          title={t('No category rules at all')}
+          hint={t("Without rules every app and site stays 'unknown' and no productivity score is ever produced. The seed normally installs 80+ rules — having none is not normal.")}
           action={
             <Button tone="primary" onClick={() => setCreating(true)}>
-              New rule
+              {t('New rule')}
             </Button>
           }
         />
@@ -177,8 +180,8 @@ export function CategoriesTab() {
       {rows.length > 0 && (
         <Card
           padded={false}
-          title={`Rules · ${rows.length}`}
-          hint="Matched in exactly the order shown below"
+          title={t('Rules · {{n}}', { n: rows.length })}
+          hint={t('Matched in exactly the order shown below')}
         >
           <Table
             columns={columns}
@@ -250,6 +253,7 @@ function RuleForm({
     rule?.category ?? 'neutral',
   );
   const [priority, setPriority] = useState(String(rule?.priority ?? 100));
+  const t = useT();
 
   const { busy, error, run } = useMutation();
 
@@ -270,12 +274,12 @@ function RuleForm({
         // Careful: after **changing** a rule, `onlyUnmatched: false` is needed;
         //    otherwise rows carrying the old decision would stay old
         onSaved(
-          'Rule changed. Rows already stored still carry the old decision — run "Apply rules to past rows" and choose "All rows".',
+          t('Rule changed. Rows already stored still carry the old decision — run "Apply rules to past rows" and choose "All rows".'),
         );
       } else {
         await createCategory(body);
         onSaved(
-          'New rule added. It applies to data arriving from now on; to apply it to old unknown rows as well, run "Apply rules to past rows".',
+          t('New rule added. It applies to data arriving from now on; to apply it to old unknown rows as well, run "Apply rules to past rows".'),
         );
       }
     });
@@ -283,16 +287,16 @@ function RuleForm({
 
   return (
     <Modal
-      title={rule ? 'Edit rule' : 'New category rule'}
-      hint="Which category an app or site falls into"
+      title={rule ? t('Edit rule') : t('New category rule')}
+      hint={t('Which category an app or site falls into')}
       onClose={onClose}
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button tone="primary" onClick={submit} disabled={busy || incomplete}>
-            {busy ? 'Saving…' : 'Save'}
+            {busy ? t('Saving…') : t('Save')}
           </Button>
         </>
       }
@@ -300,49 +304,49 @@ function RuleForm({
       <div className="space-y-3.5">
         <FormGrid>
           <SelectField
-            label="Match on"
+            label={t('Match on')}
             value={matchType}
             onChange={(value) => setMatchType(value as MatchType)}
-            options={MATCH_OPTIONS}
+            options={MATCH_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
           />
           <SelectField
-            label="Category"
+            label={t('Category')}
             value={category}
             onChange={(value) => setCategory(value as Productivity)}
-            options={CATEGORY_OPTIONS}
+            options={CATEGORY_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
           />
 
           <FullWidth>
             <TextField
-              label="Pattern"
+              label={t('Pattern')}
               value={pattern}
               onChange={setPattern}
               required
               mono
               autoFocus
               maxLength={260}
-              hint={PATTERN_HINT[matchType]}
+              hint={t(PATTERN_HINT[matchType])}
             />
           </FullWidth>
 
           <TextField
-            label="Shown as"
+            label={t('Shown as')}
             value={displayName}
             onChange={setDisplayName}
             required
             maxLength={100}
-            hint="This is the name reports will use"
+            hint={t('This is the name reports will use')}
           />
 
           <TextField
-            label="Priority"
+            label={t('Priority')}
             type="number"
             value={priority}
             onChange={setPriority}
             mono
             min={1}
             max={1000}
-            hint="Lower number wins. Default is 100; the general browser rules sit at 200, so a rule for a specific domain beats them."
+            hint={t('Lower number wins. Default is 100; the general browser rules sit at 200, so a rule for a specific domain beats them.')}
           />
         </FormGrid>
 
@@ -363,14 +367,15 @@ function RemoveDialog({
   onClose: () => void;
   onDone: (message: string) => void;
 }) {
+  const t = useT();
   const { busy, error, run } = useMutation();
 
   return (
     <ConfirmDialog
-      title={`Delete the rule "${rule.pattern}"?`}
-      intro={`${MATCH_LABEL[rule.matchType]} · ${rule.displayName} · ${rule.category}`}
-      warning="Every row this rule had categorised turns 'unknown' right away — that time drops out of the productivity score. You will be told how many rows once it is done."
-      confirmLabel="Delete"
+      title={t('Delete the rule "{{pattern}}"?', { pattern: rule.pattern })}
+      intro={`${t(MATCH_LABEL[rule.matchType])} · ${rule.displayName} · ${t(rule.category)}`}
+      warning={t("Every row this rule had categorised turns 'unknown' right away — that time drops out of the productivity score. You will be told how many rows once it is done.")}
+      confirmLabel={t('Delete')}
       busy={busy}
       error={error}
       onClose={onClose}
@@ -380,8 +385,12 @@ function RemoveDialog({
           // The server's `hint` is shown verbatim; it says what to do next
           onDone(
             result.orphanedRows === 0
-              ? `Rule deleted. ${result.hint}`
-              : `Rule deleted — ${formatCount(result.orphanedRows)} rows are now unknown. ${result.hint}`,
+              ? t('Rule deleted. {{hint}}', { hint: result.hint })
+              : t('Rule deleted — {{rows}} rows are now unknown. {{hint}}', {
+                  count: result.orphanedRows,
+                  rows: formatCount(result.orphanedRows),
+                  hint: result.hint,
+                }),
           );
         })
       }
@@ -405,17 +414,18 @@ function RecategorizeDialog({
   onDone: (message: string) => void;
 }) {
   const [onlyUnmatched, setOnlyUnmatched] = useState(true);
+  const t = useT();
   const { busy, error, run } = useMutation();
 
   return (
     <Modal
-      title="Apply rules to past rows"
-      hint="Categories are decided when data arrives, not when it is read"
+      title={t('Apply rules to past rows')}
+      hint={t('Categories are decided when data arrives, not when it is read')}
       onClose={onClose}
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button
             tone="primary"
@@ -424,40 +434,44 @@ function RecategorizeDialog({
               run(async () => {
                 const result = await recategorize(onlyUnmatched);
                 onDone(
-                  `${formatCount(result.scanned)} rows examined, ${formatCount(result.changed)} changed category.`,
+                  t('{{scanned}} rows examined, {{changed}} changed category.', {
+                    count: result.scanned,
+                    scanned: formatCount(result.scanned),
+                    changed: formatCount(result.changed),
+                  }),
                 );
               })
             }
           >
-            {busy ? 'Please wait…' : 'Run'}
+            {busy ? t('Please wait…') : t('Run')}
           </Button>
         </>
       }
     >
       <div className="space-y-3.5">
         <Notice>
-          When a rule changes, <strong>old rows keep the old decision</strong> —
-          the category is stamped on at the moment the data is stored. Skip this
-          and reports will show the new rules while the numbers still follow the
-          old ones.
+          <Trans
+            i18nKey="When a rule changes, <b>old rows keep the old decision</b> — the category is stamped on at the moment the data is stored. Skip this and reports will show the new rules while the numbers still follow the old ones."
+            components={{ b: <strong /> }}
+          />
         </Notice>
 
         <fieldset className="space-y-2">
           <legend className="mb-1 text-[12px] font-medium text-ink-2">
-            Which rows to apply to
+            {t('Which rows to apply to')}
           </legend>
 
           <Choice
             checked={onlyUnmatched}
             onChange={() => setOnlyUnmatched(true)}
-            title="Unknown rows only"
-            body="Fast. This is enough after adding a new rule."
+            title={t('Unknown rows only')}
+            body={t('Fast. This is enough after adding a new rule.')}
           />
           <Choice
             checked={!onlyUnmatched}
             onChange={() => setOnlyUnmatched(false)}
-            title="All rows"
-            body="Slower, and the browser waits a few seconds. This is what you need after changing or deleting a rule — otherwise the old decisions stay."
+            title={t('All rows')}
+            body={t('Slower, and the browser waits a few seconds. This is what you need after changing or deleting a rule — otherwise the old decisions stay.')}
           />
         </fieldset>
 

@@ -4,12 +4,13 @@ import { getGallery, type GalleryItem } from '../../api/screenshots';
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Empty, ErrorBox, Loading } from '../../components/States';
+import { useT } from '../../i18n';
 import { formatTime } from '../../lib/format';
 import { Lightbox } from '../screenshots/Lightbox';
 import { useFreshUrls, type FreshUrls } from '../screenshots/useFreshUrls';
 
 /**
- * The day's screenshots, on the employee's own page ([07 § 5](../../../../docs/07-Technical-Spec.md)).
+ * The day's screenshots, on the employee's own page ([07 § 5](../../../../docs/history/07-Technical-Spec.md)).
  *
  * <b>Why this is needed even though a gallery page exists:</b> when someone
  * questions a day ("what happened in these 3 hours?"), the answer only comes
@@ -30,6 +31,7 @@ export function DayShots({
   date: string;
   nonce: number;
 }) {
+  const t = useT();
   const [open, setOpen] = useState<number | null>(null);
 
   // The signed-link expiry (5 minutes, I07) is handled by the **same hook**
@@ -42,7 +44,7 @@ export function DayShots({
     [employeeId, date, nonce],
   );
 
-  if (loading && !data) return <Loading label="Loading screenshots…" />;
+  if (loading && !data) return <Loading label={t('Loading screenshots…')} />;
   if (error) return <ErrorBox error={error} retry={reload} />;
 
   const items = data?.items ?? [];
@@ -50,14 +52,14 @@ export function DayShots({
   if (items.length === 0) {
     return (
       <Card
-        title="Screenshots"
-        hint="One per 5-minute slot · 07:00–23:00 only"
+        title={t('Screenshots')}
+        hint={t('One per 5-minute slot, while the computer is in use')}
       >
         <Empty
-          title="No screenshots for this day"
+          title={t('No screenshots for this day')}
           // Careful: saying just "nothing here" would look like a broken system.
           // The three **normal** reasons are spelled out so nobody calls IT for nothing.
-          hint="Pictures are only taken while someone is working, and only between 07:00 and 23:00. A day off or an idle day has none."
+          hint={t('Pictures are only taken while someone is working, within the hours their work policy sets. A day off or an idle day has none.')}
         />
       </Card>
     );
@@ -66,8 +68,8 @@ export function DayShots({
   return (
     <>
       <Card
-        title="Screenshots"
-        hint={`${data?.total ?? items.length} this day · click to enlarge`}
+        title={t('Screenshots')}
+        hint={t('{{total}} this day · click to enlarge', { total: data?.total ?? items.length })}
       >
         {/* Careful: only the first page is shown. A day can have up to 192
             pictures (16 hours x 12). Fetching them all would flood the audit
@@ -85,8 +87,10 @@ export function DayShots({
 
         {data && data.total > items.length && (
           <p className="mt-3 text-[11.5px] text-ink-3">
-            Showing the first {items.length} of {data.total} — open the
-            Screenshots page for the rest.
+            {t('Showing the first {{shown}} of {{total}} — open the Screenshots page for the rest.', {
+              shown: items.length,
+              total: data.total,
+            })}
           </p>
         )}
       </Card>
@@ -113,6 +117,7 @@ function Thumb({
   urls: FreshUrls;
   onOpen: () => void;
 }) {
+  const t = useT();
   const dead = urls.isDead(shot, 'thumb');
 
   return (
@@ -127,12 +132,12 @@ function Thumb({
         // instead of a broken icon; otherwise a tab left open for ten minutes
         // would show every picture silently broken.
         <span className="grid aspect-video place-items-center px-1 text-center text-[10px] text-ink-3">
-          Picture is gone
+          {t('Picture is gone')}
         </span>
       ) : (
         <img
           src={urls.urlOf(shot, 'thumb')}
-          alt={`Screen at ${formatTime(shot.capturedAt)}`}
+          alt={t('Screen at {{time}}', { time: formatTime(shot.capturedAt) })}
           loading="lazy"
           onError={() => urls.reportError(shot, 'thumb')}
           onLoad={() => urls.reportLoad(shot, 'thumb')}

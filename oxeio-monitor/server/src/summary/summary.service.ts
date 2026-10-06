@@ -5,7 +5,7 @@ import { workDateOf } from '../agent/util/work-time';
 import { REGIME_SELECT, targetSpreadOf } from '../calendar/work-regime';
 import { PrismaService } from '../prisma/prisma.service';
 import { TasksSettingsService } from '../tasks/tasks-settings.service';
-import { TasksService } from '../tasks/tasks.service';
+import { TasksPersonService } from '../tasks/tasks.person.service';
 import { keepKnownLongNumbers, KNOWN_NUMBER_FROM, taskNumbersFirstSeenInDay } from './task-start.rules';
 import { trackedFromBy } from './tracking-start';
 import { prorate } from './proration';
@@ -77,7 +77,7 @@ export class SummaryService {
   constructor(
     private readonly prisma: PrismaService,
     /** Marks assigned tasks started from the number found in a window title. */
-    private readonly tasks: TasksService,
+    private readonly tasks: TasksPersonService,
     /** Which apps' titles start detection reads (none = off) */
     private readonly tasksSettings: TasksSettingsService,
   ) {}

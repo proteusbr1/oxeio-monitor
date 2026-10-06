@@ -5,6 +5,7 @@ import { ApiError } from '../../api/client';
 import { useAuth } from '../../auth/AuthContext';
 import { Wordmark } from '../../components/Brand';
 import { ErrorNote, Field, SubmitButton } from '../../components/Field';
+import { useT } from '../../i18n';
 
 const MIN_LENGTH = 10;
 
@@ -14,6 +15,7 @@ const MIN_LENGTH = 10;
  * there is no way around this screen.
  */
 export function ChangePasswordPage() {
+  const t = useT();
   const { user, signOut, refresh } = useAuth();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -35,7 +37,7 @@ export function ChangePasswordPage() {
     } catch (err) {
       // Careful: `err.message` is the server's message, in its own wording,
       // and is passed on as is
-      setError(err instanceof ApiError ? err.message : "Couldn't change it");
+      setError(err instanceof ApiError ? err.message : t("Couldn't change it"));
       setBusy(false);
     }
   }
@@ -52,10 +54,9 @@ export function ChangePasswordPage() {
           className="space-y-4 rounded-xl border border-line bg-surface p-6 shadow-sm"
         >
           <div>
-            <h1 className="text-lg font-semibold">Change your password</h1>
+            <h1 className="text-lg font-semibold">{t('Change your password')}</h1>
             <p className="mt-1 text-sm text-ink-3">
-              {user?.email} — the password has to be changed on first sign-in.
-              Nothing else can be done until then.
+              {t('{{email}} — the password has to be changed on first sign-in. Nothing else can be done until then.', { email: user?.email ?? '' })}
             </p>
           </div>
 
@@ -63,7 +64,7 @@ export function ChangePasswordPage() {
 
           <Field
             id="current"
-            label="Current password"
+            label={t('Current password')}
             type="password"
             autoComplete="current-password"
             required
@@ -74,19 +75,19 @@ export function ChangePasswordPage() {
 
           <Field
             id="next"
-            label="New password"
+            label={t('New password')}
             type="password"
             autoComplete="new-password"
             required
             minLength={MIN_LENGTH}
             value={next}
             onChange={(e) => setNext(e.target.value)}
-            hint={`At least ${MIN_LENGTH} characters, and not the old one`}
+            hint={t('At least {{count}} characters, and not the old one', { count: MIN_LENGTH })}
           />
 
           <Field
             id="confirm"
-            label="New password again"
+            label={t('New password again')}
             type="password"
             autoComplete="new-password"
             required
@@ -94,10 +95,10 @@ export function ChangePasswordPage() {
             onChange={(e) => setConfirm(e.target.value)}
           />
 
-          {mismatch && <ErrorNote>The two passwords don't match</ErrorNote>}
+          {mismatch && <ErrorNote>{t("The two passwords don't match")}</ErrorNote>}
 
           <SubmitButton busy={busy} disabled={mismatch}>
-            Change password
+            {t('Change password')}
           </SubmitButton>
 
           <button
@@ -105,7 +106,7 @@ export function ChangePasswordPage() {
             onClick={() => void signOut()}
             className="w-full text-center text-xs text-ink-3 underline-offset-2 hover:underline"
           >
-            Sign out
+            {t('Sign out')}
           </button>
         </form>
       </div>

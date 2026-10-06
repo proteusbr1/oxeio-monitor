@@ -72,7 +72,7 @@ internal struct DXGI_OUTDUPL_FRAME_INFO
     /// <summary>
     /// Zero means only the cursor moved and the desktop image did not change, yet
     /// <c>AcquireNextFrame</c> still succeeds
-    /// ([ADR-012c](../../../../docs/05-Options-Decisions.md)).
+    /// ([ADR-012c](../../../../docs/history/05-Options-Decisions.md)).
     /// </summary>
     internal uint AccumulatedFrames;
 
@@ -91,7 +91,7 @@ internal struct DXGI_OUTDUPL_FRAME_INFO
 
 /// <summary>
 /// DXGI Desktop Duplication: the primary capture engine
-/// ([ADR-012c](../../../../docs/05-Options-Decisions.md)).
+/// ([ADR-012c](../../../../docs/history/05-Options-Decisions.md)).
 ///
 /// All IIDs and slots were counted and matched against
 /// <c>Windows Kits\10\Include\10.0.26100.0\shared\{dxgi,dxgi1_2}.h</c>.

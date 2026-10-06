@@ -5,6 +5,8 @@ import {
   MAX_ISSUED_PER_DAY,
   POOL_PER_ASSIGNEE,
 } from '../src/tasks/tasks.rules';
+import { TasksHandoutService } from '../src/tasks/tasks.handout.service';
+import { TasksPersonService } from '../src/tasks/tasks.person.service';
 import { TasksService } from '../src/tasks/tasks.service';
 import {
   createEmployeeWithCode,
@@ -31,12 +33,16 @@ import {
  */
 let h: Harness;
 let tasks: TasksService;
+let personTasks: TasksPersonService;
+let handout: TasksHandoutService;
 
 const TARGET = 25;
 
 beforeAll(async () => {
   h = await createHarness();
   tasks = h.app.get(TasksService);
+  personTasks = h.app.get(TasksPersonService);
+  handout = h.app.get(TasksHandoutService);
 });
 
 afterAll(async () => {
@@ -153,7 +159,7 @@ describe('daily limit — cannot finish more than 25', () => {
     await alreadyDone(emp, TARGET, now);
     const [id] = await inHand(emp, 1, now);
 
-    await expect(tasks.markDone(emp, id, 1, now)).rejects.toThrow(/already marked 25/i);
+    await expect(personTasks.markDone(emp, id, 1, now)).rejects.toThrow(/already marked 25/i);
 
     const after = await h.prisma.task.findUniqueOrThrow({ where: { id } });
     expect(after.status).toBe('assigned');
@@ -167,7 +173,7 @@ describe('daily limit — cannot finish more than 25', () => {
     await alreadyDone(emp, TARGET - 1, now);
     const ids = await inHand(emp, 2, now);
     const results = await Promise.allSettled(
-      ids.map((id) => tasks.markDone(emp, id, owner.id, now)),
+      ids.map((id) => personTasks.markDone(emp, id, owner.id, now)),
     );
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
@@ -184,7 +190,7 @@ describe('daily limit — cannot finish more than 25', () => {
     await alreadyDone(emp, TARGET - 1, now);
     const [id] = await inHand(emp, 1, now);
 
-    await expect(tasks.markDone(emp, id, 1, now)).resolves.toEqual({ ok: true });
+    await expect(personTasks.markDone(emp, id, 1, now)).resolves.toEqual({ ok: true });
   });
 
   /**
@@ -201,7 +207,7 @@ describe('daily limit — cannot finish more than 25', () => {
     await alreadyDone(emp, 40, now);
     const [id] = await inHand(emp, 1, now);
 
-    await expect(tasks.markDone(emp, id, 1, now)).resolves.toEqual({ ok: true });
+    await expect(personTasks.markDone(emp, id, 1, now)).resolves.toEqual({ ok: true });
   });
 
   /**
@@ -215,7 +221,7 @@ describe('daily limit — cannot finish more than 25', () => {
     await alreadyDone(emp, 40, now);
     const [id] = await inHand(emp, 1, now);
 
-    await expect(tasks.markDone(emp, id, 1, now)).resolves.toEqual({ ok: true });
+    await expect(personTasks.markDone(emp, id, 1, now)).resolves.toEqual({ ok: true });
   });
 
   /**
@@ -234,7 +240,7 @@ describe('daily limit — cannot finish more than 25', () => {
     await alreadyDone(emp, TARGET, yesterday);
     const [id] = await inHand(emp, 1, now);
 
-    await expect(tasks.markDone(emp, id, 1, now)).resolves.toEqual({ ok: true });
+    await expect(personTasks.markDone(emp, id, 1, now)).resolves.toEqual({ ok: true });
   });
 
   /**
@@ -253,7 +259,7 @@ describe('daily limit — cannot finish more than 25', () => {
     await alreadyDone(emp, TARGET, lateTonight);
     const [id] = await inHand(emp, 1, lateTonight);
 
-    await expect(tasks.markDone(emp, id, 1, lateTonight)).rejects.toThrow(
+    await expect(personTasks.markDone(emp, id, 1, lateTonight)).rejects.toThrow(
       /already marked 25/i,
     );
   });
@@ -294,7 +300,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
     await alreadyDone(emp, 9, now);
     const [last] = await inHand(emp, 1, now);
 
-    await tasks.markDone(emp, last, 1, now);
+    await personTasks.markDone(emp, last, 1, now);
 
     // 10 done, 15 remaining -> ceil(15 x 30 / 25) = 18
     expect(await openCountOf(emp)).toBe(18);
@@ -308,7 +314,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
     await pool(50);
     const [last] = await inHand(emp, 1, now);
 
-    await tasks.skip(emp, last, 'not_needed', now);
+    await personTasks.skip(emp, last, 'not_needed', now);
 
     expect(await openCountOf(emp)).toBe(POOL_PER_ASSIGNEE);
   });
@@ -324,7 +330,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
     await pool(50);
     const ids = await inHand(emp, POOL_PER_ASSIGNEE, now);
 
-    await tasks.markDone(emp, ids[0], 1, now);
+    await personTasks.markDone(emp, ids[0], 1, now);
 
     // One finished, 29 remain in hand — 29 is enough for the remaining 24
     expect(await openCountOf(emp)).toBe(POOL_PER_ASSIGNEE - 1);
@@ -345,7 +351,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
     await alreadyDone(emp, TARGET - 1, now);
     const [last] = await inHand(emp, 1, now);
 
-    await tasks.markDone(emp, last, 1, now);
+    await personTasks.markDone(emp, last, 1, now);
 
     expect(await openCountOf(emp)).toBe(0);
   });
@@ -358,7 +364,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
     await pool(50);
     const [last] = await inHand(emp, 1, now);
 
-    await tasks.markDone(emp, last, 1, now);
+    await personTasks.markDone(emp, last, 1, now);
 
     expect(await openCountOf(emp)).toBe(0);
   });
@@ -375,7 +381,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
 
     const [last] = await inHand(emp, 1, now);
 
-    await expect(tasks.markDone(emp, last, 1, now)).resolves.toEqual({ ok: true });
+    await expect(personTasks.markDone(emp, last, 1, now)).resolves.toEqual({ ok: true });
     expect(await openCountOf(emp)).toBe(0);
   });
 
@@ -397,7 +403,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
     await alreadyDone(emp, TARGET, at3am);
     const [id] = await inHand(emp, 1, at3am);
 
-    await expect(tasks.markDone(emp, id, 1, at3am)).rejects.toThrow(
+    await expect(personTasks.markDone(emp, id, 1, at3am)).rejects.toThrow(
       /already marked 25/i,
     );
   });
@@ -418,7 +424,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
       data: { status: 'skipped', dropReason: 'not_needed' },
     });
 
-    await tasks.skip(emp, ids[0], 'not_needed', now);
+    await personTasks.skip(emp, ids[0], 'not_needed', now);
 
     expect(await openCountOf(emp)).toBe(0);
   });
@@ -439,7 +445,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
     await pool(50);
     expect(await openCountOf(emp)).toBe(0);
 
-    await tasks.topUpAll(now);
+    await handout.topUpAll(now);
 
     expect(await openCountOf(emp)).toBe(POOL_PER_ASSIGNEE);
   });
@@ -450,7 +456,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
     const emp = await person('OX-QJ', null, false);
 
     await pool(50);
-    await tasks.topUpAll(now);
+    await handout.topUpAll(now);
 
     expect(await openCountOf(emp)).toBe(0);
   });
@@ -461,9 +467,9 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
     const emp = await person('OX-QI', TARGET);
 
     await pool(80);
-    await tasks.topUpAll(now);
-    await tasks.topUpAll(now);
-    await tasks.topUpAll(now);
+    await handout.topUpAll(now);
+    await handout.topUpAll(now);
+    await handout.topUpAll(now);
 
     expect(await openCountOf(emp)).toBe(POOL_PER_ASSIGNEE);
   });
@@ -476,7 +482,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
     await pool(4);
     const [last] = await inHand(emp, 1, now);
 
-    await tasks.markDone(emp, last, 1, now);
+    await personTasks.markDone(emp, last, 1, now);
 
     expect(await openCountOf(emp)).toBe(4);
   });

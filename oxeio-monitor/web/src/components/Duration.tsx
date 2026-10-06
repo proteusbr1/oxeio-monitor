@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 import {
   formatDuration,
   formatHours,
@@ -25,6 +26,7 @@ export function Duration({
   tone?: 'counted' | 'muted';
   className?: string;
 }) {
+  const t = useT();
   const text = formatDuration(seconds);
   return (
     <span
@@ -32,7 +34,7 @@ export function Duration({
       title={
         seconds === null || seconds === undefined
           ? undefined
-          : `${formatHours(seconds, 2)} hours`
+          : t('{{hours}} hours', { hours: formatHours(seconds, 2) })
       }
     >
       {text}

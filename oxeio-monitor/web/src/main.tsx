@@ -7,6 +7,7 @@ import {
   fetchWorkTimeZone,
 } from './api/auth';
 import { App } from './App';
+import { setCompanyLanguage } from './i18n';
 import './index.css';
 import { installCrashReports } from './lib/crash-reports';
 import { setCurrency, setDisplayLocale, setWorkTimeZone } from './lib/format';
@@ -59,7 +60,10 @@ async function loadDisplayLocale(): Promise<void> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 3000);
   try {
-    setDisplayLocale((await fetchDisplayLocale(controller.signal)).locale);
+    const { locale, language } = await fetchDisplayLocale(controller.signal);
+    setDisplayLocale(locale);
+    // the company's default language, unless this person chose their own
+    setCompanyLanguage(language);
   } catch {
     // keep the default
   } finally {

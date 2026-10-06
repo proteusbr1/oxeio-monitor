@@ -11,6 +11,7 @@ import {
   formatMonth,
   hoursToSeconds,
 } from '../../lib/format';
+import { useT } from '../../i18n';
 import { MAX_SHOWN_ROWS, MetaNote, SignedHours, TrimmedNote } from './shared';
 
 /**
@@ -32,6 +33,7 @@ export function SummaryTab({
   employeeId: number | null;
   groupBy: GroupBy;
 }) {
+  const t = useT();
   const { data, error, loading, reload } = useApi(
     (signal) =>
       getSummaryReport(
@@ -41,13 +43,15 @@ export function SummaryTab({
     [from, to, employeeId, groupBy],
   );
 
-  if (loading && !data) return <Loading label="Loading summary…" />;
+  if (loading && !data) return <Loading label={t('Loading summary…')} />;
   if (error) return <ErrorBox error={error} retry={reload} />;
   if (!data || data.rows.length === 0) {
     return (
       <Empty
-        title="No summary for this range"
-        hint="Summaries are built from the daily figures. Until the agent sends data this page stays empty — try other dates."
+        title={t('No summary for this range')}
+        hint={t(
+          'Summaries are built from the daily figures. Until the agent sends data this page stays empty — try other dates.',
+        )}
       />
     );
   }
@@ -68,21 +72,21 @@ export function SummaryTab({
   const columns: Column<SummaryRow>[] = [
     {
       key: 'person',
-      header: 'Staff',
+      header: t('Staff'),
       render: (row) => (
         <PersonCell fullName={row.fullName} empCode={row.empCode} />
       ),
     },
     {
       key: 'bucket',
-      header: groupBy === 'month' ? 'Month' : 'Week',
+      header: groupBy === 'month' ? t('Month') : t('Week'),
       render: (row) => (
         <span className="num whitespace-nowrap">{bucketLabel(row)}</span>
       ),
     },
     {
       key: 'workdays',
-      header: 'Workdays',
+      header: t('Workdays'),
       align: 'right',
       render: (row) => (
         <span className="num text-ink-3">{formatCount(row.workdays)}</span>
@@ -90,7 +94,7 @@ export function SummaryTab({
     },
     {
       key: 'daysWithWork',
-      header: 'Days worked',
+      header: t('Days worked'),
       align: 'right',
       render: (row) => (
         <span className="num">{formatCount(row.daysWithWork)}</span>
@@ -98,19 +102,19 @@ export function SummaryTab({
     },
     {
       key: 'worked',
-      header: 'Worked',
+      header: t('Worked'),
       align: 'right',
       render: (row) => <Hours hours={row.workedHours} />,
     },
     {
       key: 'adjustment',
-      header: 'Adjustment',
+      header: t('Adjustment'),
       align: 'right',
       render: (row) => <SignedHours hours={row.adjustmentHours} />,
     },
     {
       key: 'credited',
-      header: 'Counted',
+      header: t('Counted'),
       align: 'right',
       render: (row) => (
         <Hours hours={row.creditedHours} className="font-semibold" />
@@ -124,7 +128,7 @@ export function SummaryTab({
        *    own, one that includes days before the agent was installed.
        */
       key: 'target',
-      header: 'Target · days shown',
+      header: t('Target · days shown'),
       align: 'right',
       render: (row) => <Hours hours={row.targetHours} tone="muted" />,
     },
@@ -133,13 +137,13 @@ export function SummaryTab({
       //    target is not a problem, so it is not red. While in progress it is neutral
       //    `ink`; red appears in this table only in the shortfall column.
       key: 'pace',
-      header: 'Progress',
+      header: t('Progress'),
       className: 'w-24',
       render: (row) => (
         <ProgressBar
           value={hoursToSeconds(row.creditedHours)}
           max={hoursToSeconds(row.targetHours)}
-          ariaLabel="Target"
+          ariaLabel={t('Target')}
         />
       ),
     },
@@ -151,7 +155,7 @@ export function SummaryTab({
       //    observed and have ended (`SummaryRow.shortfallHours`). Without saying so,
       //    the table would seem to disagree with itself.
       key: 'shortfall',
-      header: 'Shortfall vs expected',
+      header: t('Shortfall vs expected'),
       align: 'right',
       render: (row) =>
         row.shortfallHours > 0 ? (
@@ -164,7 +168,7 @@ export function SummaryTab({
     },
     {
       key: 'overtime',
-      header: 'Overtime',
+      header: t('Overtime'),
       align: 'right',
       render: (row) =>
         row.overtimeHours > 0 ? (
@@ -183,8 +187,10 @@ export function SummaryTab({
         Target, try to reconcile, and think the Shortfall column is wrong.
       */}
       <Card
-        title={groupBy === 'month' ? 'Month by Month' : 'Week by Week'}
-        hint="Counted = worked + adjustment. Shortfall is measured only against what was expected by yesterday — days before tracking started, and today, are never counted as a shortfall."
+        title={groupBy === 'month' ? t('Month by Month') : t('Week by Week')}
+        hint={t(
+          'Counted = worked + adjustment. Shortfall is measured only against what was expected by yesterday — days before tracking started, and today, are never counted as a shortfall.',
+        )}
         padded={false}
       >
         <Table

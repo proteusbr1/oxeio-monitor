@@ -152,8 +152,10 @@ export class AuthController {
    */
   @Public()
   @Get('display-locale')
-  async displayLocale(): Promise<{ locale: string | null }> {
-    return { locale: (await this.settings.region()).displayLocale.value };
+  async displayLocale(): Promise<{ locale: string | null; language: string }> {
+    const region = await this.settings.region();
+    // `language`: the company's default, used until a person picks their own
+    return { locale: region.displayLocale.value, language: region.language.value };
   }
 
   @AllowWhileMustChangePw()

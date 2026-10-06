@@ -6,6 +6,7 @@ import { Card } from '../../components/Card';
 import { Button } from '../../components/Page';
 import { Caveat, Empty, ErrorBox, Loading } from '../../components/States';
 import { PersonCell, Table, type Column } from '../../components/Table';
+import { useT } from '../../i18n';
 import { formatDate } from '../../lib/format';
 import { Chip, MiniButton, Modal, ServerError, useMutation } from '../../components/ui';
 import { PayFields, payText, validAmount } from './pay';
@@ -15,68 +16,69 @@ import { PayFields, payText, validAmount } from './pay';
  * (The same field is also in Staff → edit, with the rest of the person.)
  */
 export function SalariesTab() {
+  const t = useT();
   const staff = useApi((signal) => listEmployees({ status: 'active' }, signal), []);
   const [editing, setEditing] = useState<EmployeeView | null>(null);
 
-  if (staff.loading && !staff.data) return <Loading label="Loading salaries…" />;
+  if (staff.loading && !staff.data) return <Loading label={t('Loading salaries…')} />;
   if (!staff.data) return <ErrorBox error={staff.error} retry={staff.reload} />;
 
   const rows = staff.data.rows;
   const missing = rows.filter((e) => payText(e) === null).length;
 
   if (rows.length === 0) {
-    return <Empty title="No active staff yet" hint="Add people in Staff first." />;
+    return <Empty title={t('No active staff yet')} hint={t('Add people in Staff first.')} />;
   }
 
   const columns: Column<EmployeeView>[] = [
     {
       key: 'person',
-      header: 'Staff',
+      header: t('Staff'),
       render: (e) => <PersonCell fullName={e.fullName} empCode={e.empCode} />,
     },
     {
       key: 'title',
-      header: 'Job title',
+      header: t('Job title'),
       render: (e) => e.designation ?? '—',
     },
     {
       key: 'joined',
-      header: 'Joined',
+      header: t('Joined'),
       render: (e) => (e.joinedOn ? formatDate(e.joinedOn) : '—'),
     },
     {
       key: 'salary',
-      header: 'Pay',
+      header: t('Pay'),
       align: 'right',
       render: (e) => {
         const text = payText(e);
-        return text ? <span className="num">{text}</span> : <Chip tone="pending">Not set</Chip>;
+        return text ? <span className="num">{text}</span> : <Chip tone="pending">{t('Not set')}</Chip>;
       },
     },
     {
       key: 'actions',
       header: '',
       align: 'right',
-      render: (e) => <MiniButton onClick={() => setEditing(e)}>Edit</MiniButton>,
+      render: (e) => <MiniButton onClick={() => setEditing(e)}>{t('Edit')}</MiniButton>,
     },
   ];
 
   return (
     <>
       <Card
-        title="Pay"
+        title={t('Pay')}
         hint={
           missing > 0
-            ? `${missing} without a salary — they are left out of the pay sheet until one is set`
-            : 'Everyone active has a salary'
+            ? t('{{count}} without a salary — they are left out of the pay sheet until one is set', { count: missing })
+            : t('Everyone active has a salary')
         }
         padded={false}
       >
         <Table columns={columns} rows={rows} rowKey={(e) => String(e.id)} />
         <Caveat>
-          New pay terms count from this month (from next month if this month is
-          already closed). Months before keep the terms they had, so a pay
-          sheet already reviewed does not change.
+          {t(
+            'New pay terms count from this month (from next month if this month is already closed). Months before keep the terms they had, so a pay sheet already reviewed does not change.',
+          )}
         </Caveat>
       </Card>
 
@@ -103,6 +105,7 @@ function SalaryForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const t = useT();
   const [basis, setBasis] = useState<PayBasis>(employee.payBasis ?? 'monthly');
   const [salary, setSalary] = useState(employee.monthlySalary ?? '');
   const [rate, setRate] = useState(employee.hourlyRate ?? '');
@@ -115,13 +118,13 @@ function SalaryForm({
 
   return (
     <Modal
-      title={`Pay · ${employee.fullName}`}
+      title={t('Pay · {{name}}', { name: employee.fullName })}
       hint={employee.empCode}
       onClose={onClose}
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button
             tone="primary"
@@ -138,7 +141,7 @@ function SalaryForm({
               })
             }
           >
-            {busy ? 'Saving…' : 'Save'}
+            {busy ? t('Saving…') : t('Save')}
           </Button>
         </>
       }

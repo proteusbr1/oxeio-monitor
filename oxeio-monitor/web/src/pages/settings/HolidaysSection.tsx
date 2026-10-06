@@ -7,6 +7,7 @@ import { Button } from '../../components/Page';
 import { Empty, ErrorBox, Loading } from '../../components/States';
 import { Table, type Column } from '../../components/Table';
 import { formatDate, todayInWorkZone, weekdayOf } from '../../lib/format';
+import { useT } from '../../i18n';
 import {
   Chip,
   ConfirmDialog,
@@ -45,6 +46,7 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 export function HolidaysSection() {
+  const t = useT();
   const thisYear = Number(todayInWorkZone().slice(0, 4));
   const [year, setYear] = useState(thisYear);
 
@@ -60,7 +62,7 @@ export function HolidaysSection() {
   const columns: Column<HolidayView>[] = [
     {
       key: 'date',
-      header: 'Date',
+      header: t('Date'),
       render: (holiday) => (
         <span className="num">
           {formatDate(holiday.holidayDate)}
@@ -72,17 +74,17 @@ export function HolidaysSection() {
     },
     {
       key: 'name',
-      header: 'Name',
+      header: t('Name'),
       render: (holiday) => holiday.name,
     },
     {
       key: 'type',
-      header: 'Type',
+      header: t('Type'),
       render: (holiday) => (
         <span className="flex flex-wrap gap-1">
-          <Chip>{TYPE_LABEL[holiday.type] ?? holiday.type}</Chip>
+          <Chip>{TYPE_LABEL[holiday.type] ? t(TYPE_LABEL[holiday.type]) : holiday.type}</Chip>
           {/* the date can still move — pay and targets of that month may change with it */}
-          {holiday.approximate && <Chip tone="pending">Date may change</Chip>}
+          {holiday.approximate && <Chip tone="pending">{t('Date may change')}</Chip>}
         </span>
       ),
     },
@@ -92,9 +94,9 @@ export function HolidaysSection() {
       align: 'right',
       render: (holiday) => (
         <RowActions>
-          <MiniButton onClick={() => setEditing(holiday)}>Edit</MiniButton>
+          <MiniButton onClick={() => setEditing(holiday)}>{t('Edit')}</MiniButton>
           <MiniButton tone="danger" onClick={() => setRemoving(holiday)}>
-            Delete
+            {t('Delete')}
           </MiniButton>
         </RowActions>
       ),
@@ -106,10 +108,10 @@ export function HolidaysSection() {
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div className="min-w-0">
           <h2 className="text-[15px] font-semibold tracking-tight">
-            Holidays
+            {t('Holidays')}
           </h2>
           <p className="mt-0.5 text-xs text-ink-3">
-            Workdays for the month are counted with these days taken out
+            {t('Workdays for the month are counted with these days taken out')}
           </p>
         </div>
 
@@ -121,10 +123,10 @@ export function HolidaysSection() {
                to the old value. Changing the year is only a step or two anyway.
           */}
           <div>
-            <span className="mb-1 block text-[11.5px] text-ink-3">Year</span>
+            <span className="mb-1 block text-[11.5px] text-ink-3">{t('Year')}</span>
             <div className="flex items-center gap-1">
               <YearArrow
-                label="Previous year"
+                label={t('Previous year')}
                 disabled={year <= 2000}
                 onClick={() => setYear((y) => y - 1)}
               >
@@ -134,7 +136,7 @@ export function HolidaysSection() {
                 {year}
               </span>
               <YearArrow
-                label="Next year"
+                label={t('Next year')}
                 disabled={year >= 2100}
                 onClick={() => setYear((y) => y + 1)}
               >
@@ -144,9 +146,9 @@ export function HolidaysSection() {
           </div>
 
           <div className="flex gap-2">
-            <Button onClick={() => setImporting(true)}>Import holidays</Button>
+            <Button onClick={() => setImporting(true)}>{t('Import holidays')}</Button>
             <Button tone="primary" onClick={() => setCreating(true)}>
-              Add holiday
+              {t('Add holiday')}
             </Button>
           </div>
         </div>
@@ -161,14 +163,14 @@ export function HolidaysSection() {
 
       {!holidays.loading && !holidays.error && rows.length === 0 && (
         <Empty
-          title={`No holidays are set for ${year}`}
-          hint="With no holidays every day counts as a workday, which makes the month's pace look harsh for everyone. It is best to enter the public holidays at the start of the year."
+          title={t('No holidays are set for {{year}}', { year })}
+          hint={t("With no holidays every day counts as a workday, which makes the month's pace look harsh for everyone. It is best to enter the public holidays at the start of the year.")}
           action={
             <div className="flex gap-2">
               {/* a whole year at once, from an official calendar file */}
-              <Button onClick={() => setImporting(true)}>Import holidays</Button>
+              <Button onClick={() => setImporting(true)}>{t('Import holidays')}</Button>
               <Button tone="primary" onClick={() => setCreating(true)}>
-                Add holiday
+                {t('Add holiday')}
               </Button>
             </div>
           }
@@ -176,7 +178,7 @@ export function HolidaysSection() {
       )}
 
       {rows.length > 0 && (
-        <Card padded={false} title={`${year} · ${rows.length} Days`}>
+        <Card padded={false} title={t('{{year}} · {{count}} Days', { year, count: rows.length })}>
           <Table
             columns={columns}
             rows={rows}
@@ -261,6 +263,7 @@ function HolidayForm({
   );
   const [name, setName] = useState(holiday?.name ?? '');
   const [type, setType] = useState(holiday?.type ?? 'public');
+  const t = useT();
 
   const { busy, error, run } = useMutation();
 
@@ -272,13 +275,13 @@ function HolidayForm({
 
   return (
     <Modal
-      title={holiday ? 'Edit holiday' : 'New holiday'}
+      title={holiday ? t('Edit holiday') : t('New holiday')}
       hint={weekday === '' ? undefined : weekday}
       onClose={onClose}
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button
             tone="primary"
@@ -302,7 +305,7 @@ function HolidayForm({
               })
             }
           >
-            {busy ? 'Saving…' : 'Save'}
+            {busy ? t('Saving…') : t('Save')}
           </Button>
         </>
       }
@@ -310,35 +313,33 @@ function HolidayForm({
       <div className="space-y-3.5">
         <FormGrid>
           <TextField
-            label="Date"
+            label={t('Date')}
             type="date"
             value={holidayDate}
             onChange={setHolidayDate}
             required
             mono
-            hint="Future holidays can be entered too — entering the whole year up front is the norm"
+            hint={t('Future holidays can be entered too — entering the whole year up front is the norm')}
           />
           <SelectField
-            label="Type"
+            label={t('Type')}
             value={type}
             onChange={setType}
-            options={TYPE_OPTIONS}
+            options={TYPE_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
           />
           <TextField
-            label="Name"
+            label={t('Name')}
             value={name}
             onChange={setName}
             required
             autoFocus
             maxLength={120}
-            placeholder="Victory Day"
+            placeholder={t('Victory Day')}
           />
         </FormGrid>
 
         <Notice>
-          Adding a holiday lowers the workday count for that month, so everyone's
-          pace gets a little easier. The numbers move the moment you save it —
-          without anyone working an extra minute.
+          {t("Adding a holiday lowers the workday count for that month, so everyone's pace gets a little easier. The numbers move the moment you save it — without anyone working an extra minute.")}
         </Notice>
 
         <ServerError error={error} />
@@ -356,14 +357,15 @@ function RemoveHolidayDialog({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const t = useT();
   const { busy, error, run } = useMutation();
 
   return (
     <ConfirmDialog
-      title={`Delete "${holiday.name}"?`}
+      title={t('Delete "{{name}}"?', { name: holiday.name })}
       intro={`${formatDate(holiday.holidayDate)} · ${weekdayOf(holiday.holidayDate)}`}
-      warning="Deleting a holiday raises the workday count for that month — everyone falls behind on pace without working a minute less. If anyone has already read the monthly report, the numbers will no longer match."
-      confirmLabel="Delete"
+      warning={t('Deleting a holiday raises the workday count for that month — everyone falls behind on pace without working a minute less. If anyone has already read the monthly report, the numbers will no longer match.')}
+      confirmLabel={t('Delete')}
       busy={busy}
       error={error}
       onClose={onClose}

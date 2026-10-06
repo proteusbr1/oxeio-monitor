@@ -1,0 +1,8 @@
+{
+  "Too many failed attempts. Try again in {{count}} minutes._one": "Too many failed attempts. Try again in {{count}} minute.",
+  "Too many failed attempts. Try again in {{count}} minutes._other": "Too many failed attempts. Try again in {{count}} minutes.",
+  "You have already marked {{count}} tasks done today, so this one cannot be marked done — leave it in your list and finish it tomorrow._one": "You have already marked {{count}} tasks done today, so this one cannot be marked done — leave it in your list and finish it tomorrow.",
+  "You have already marked {{count}} tasks done today, so this one cannot be marked done — leave it in your list and finish it tomorrow._other": "You have already marked {{count}} tasks done today, so this one cannot be marked done — leave it in your list and finish it tomorrow.",
+  "{{count}} staff are still on this policy — move them to another policy first_one": "{{count}} staff are still on this policy — move them to another policy first",
+  "{{count}} staff are still on this policy — move them to another policy first_other": "{{count}} staff are still on this policy — move them to another policy first"
+}

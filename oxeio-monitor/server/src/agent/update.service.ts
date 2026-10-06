@@ -34,7 +34,7 @@ export class UpdateService {
   }
 
   /**
-   * G34 - the auto-update flow ([02-Workflow §8](../../docs/02-Workflow.md))
+   * G34 - the auto-update flow ([02-Workflow §8](../../docs/history/02-Workflow.md))
    * existed, but there was no endpoint to download the MSI.
    *
    * Nothing is offered when `rollout_stage = halted`, so a bad update can be

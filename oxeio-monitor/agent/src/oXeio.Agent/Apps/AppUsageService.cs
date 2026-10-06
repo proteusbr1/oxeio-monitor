@@ -12,7 +12,7 @@ namespace oXeio.Agent.Apps;
 ///
 /// <b>The address bar is read only when the window or title changes.</b> Running UI Automation
 /// every second would cost about 10-30 ms per call, thousands of times a day, and the CPU budget
-/// could not be kept under 1% ([06-Research section 2.6](../../../../docs/06-Research.md)).
+/// could not be kept under 1% ([06-Research section 2.6](../../../../docs/history/06-Research.md)).
 ///
 /// It is also read when the title changes, because navigating to a new page in the same window
 /// changes the address while the hwnd stays the same.

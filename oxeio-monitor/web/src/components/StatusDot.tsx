@@ -1,4 +1,5 @@
 import type { LiveStatus } from '../api/dashboard';
+import { useT } from '../i18n';
 
 /**
  * E01: the card's three states: working, paused, absent.
@@ -49,12 +50,13 @@ export function StatusDot({
   status: LiveStatus;
   className?: string;
 }) {
+  const t = useT();
   return (
     <span
       className={`inline-block size-2 flex-none rounded-full ${DOT_CLASS[status]} ${className}`}
       role="img"
-      aria-label={STATUS_LABEL[status]}
-      title={`${STATUS_LABEL[status]} — ${STATUS_HINT[status]}`}
+      aria-label={t(STATUS_LABEL[status])}
+      title={t('{{status}} — {{hint}}', { status: t(STATUS_LABEL[status]), hint: t(STATUS_HINT[status]) })}
     />
   );
 }
@@ -72,13 +74,14 @@ const CHIP_CLASS: Record<LiveStatus, string> = {
 
 /** Chip with the name: at the head of a card or in a table column. */
 export function StatusChip({ status }: { status: LiveStatus }) {
+  const t = useT();
   return (
     <span
-      title={STATUS_HINT[status]}
+      title={t(STATUS_HINT[status])}
       className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap ${CHIP_CLASS[status]}`}
     >
       <span aria-hidden className={`size-1.5 rounded-full ${DOT_CLASS[status]}`} />
-      {STATUS_LABEL[status]}
+      {t(STATUS_LABEL[status])}
     </span>
   );
 }
@@ -89,13 +92,14 @@ export function StatusChip({ status }: { status: LiveStatus }) {
  * guess leads to a wrong accusation.
  */
 export function StatusLegend() {
+  const t = useT();
   const all: LiveStatus[] = ['active', 'idle', 'offline'];
   return (
     <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11.5px] text-ink-3">
       {all.map((status) => (
         <span key={status} className="inline-flex items-center gap-1.5">
           <StatusDot status={status} />
-          {STATUS_LABEL[status]}
+          {t(STATUS_LABEL[status])}
         </span>
       ))}
     </div>

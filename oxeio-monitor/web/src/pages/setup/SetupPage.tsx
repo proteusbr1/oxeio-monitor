@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { Trans } from 'react-i18next';
 
 import { ApiError } from '../../api/client';
 import { runSetup, type SetupBody, type SetupResult } from '../../api/setup';
@@ -6,6 +7,7 @@ import { Wordmark } from '../../components/Brand';
 import { ErrorNote, Field } from '../../components/Field';
 import { Button } from '../../components/Page';
 import { CheckboxField, SelectField } from '../../components/ui';
+import { useT } from '../../i18n';
 import {
   countryOptions,
   currencyOf,
@@ -67,6 +69,7 @@ const STEPS: { id: StepId; title: string }[] = [
 ];
 
 export function SetupPage() {
+  const t = useT();
   const token = new URLSearchParams(window.location.search).get('token') ?? '';
 
   const zones = useMemo(() => timeZoneOptions(supportedValues('timeZone')), []);
@@ -103,16 +106,16 @@ export function SetupPage() {
 
   const problem = (): string | null => {
     const id = STEPS[step].id;
-    if (id === 'company' && form.organizationName.trim().length < 2) return 'Give the company a name.';
-    if (id === 'region' && !form.timeZone) return 'Choose the time zone the work day follows.';
-    if (id === 'region' && !form.currency) return 'Choose the currency salaries are in.';
+    if (id === 'company' && form.organizationName.trim().length < 2) return t('Give the company a name.');
+    if (id === 'region' && !form.timeZone) return t('Choose the time zone the work day follows.');
+    if (id === 'region' && !form.currency) return t('Choose the currency salaries are in.');
     if (id === 'owner') {
-      if (form.ownerName.trim().length < 2) return 'Write your name.';
-      if (!/^\S+@\S+\.\S+$/.test(form.ownerEmail.trim())) return 'That email does not look right.';
-      if (form.ownerPassword.length < 10) return 'The password needs at least 10 characters.';
-      if (form.ownerPassword !== form.ownerPassword2) return 'The two passwords are not the same.';
+      if (form.ownerName.trim().length < 2) return t('Write your name.');
+      if (!/^\S+@\S+\.\S+$/.test(form.ownerEmail.trim())) return t('That email does not look right.');
+      if (form.ownerPassword.length < 10) return t('The password needs at least 10 characters.');
+      if (form.ownerPassword !== form.ownerPassword2) return t('The two passwords are not the same.');
     }
-    if (id === 'week' && form.weeklyOffDays.length > 6) return 'At least one working day a week is needed.';
+    if (id === 'week' && form.weeklyOffDays.length > 6) return t('At least one working day a week is needed.');
     return null;
   };
 
@@ -147,7 +150,7 @@ export function SetupPage() {
       // start, and they were just chosen
       window.location.replace('/');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Can't reach the server");
+      setError(err instanceof ApiError ? err.message : t("Can't reach the server"));
       setBusy(false);
     }
   };
@@ -155,13 +158,15 @@ export function SetupPage() {
   if (!token) {
     return (
       <Shell>
-        <h1 className="text-lg font-semibold">Set up oXeio</h1>
+        <h1 className="text-lg font-semibold">{t('Set up oXeio')}</h1>
         <p className="text-sm text-ink-2">
-          This install has no owner yet. To set it up, open the link the server printed in its log
-          when it started — it looks like <span className="num">…/setup?token=…</span>.
+          <Trans
+            i18nKey="This install has no owner yet. To set it up, open the link the server printed in its log when it started — it looks like <num>…/setup?token=…</num>."
+            components={{ num: <span className="num" /> }}
+          />
         </p>
         <p className="text-xs text-ink-3">
-          With Docker: <span className="num">docker compose logs api | grep setup</span>
+          {t('With Docker:')} <span className="num">docker compose logs api | grep setup</span>
         </p>
       </Shell>
     );
@@ -170,14 +175,16 @@ export function SetupPage() {
   if (done) {
     return (
       <Shell>
-        <h1 className="text-lg font-semibold">All set</h1>
+        <h1 className="text-lg font-semibold">{t('All set')}</h1>
         <p className="text-sm text-ink-2">
           {done.restartNeeded
-            ? 'Applying your time zone — the server restarts once. This takes a few seconds…'
-            : 'Opening the dashboard…'}
+            ? t('Applying your time zone — the server restarts once. This takes a few seconds…')
+            : t('Opening the dashboard…')}
         </p>
         {done.holidaysAdded > 0 && (
-          <p className="text-xs text-ink-3">{done.holidaysAdded} public holidays added.</p>
+          <p className="text-xs text-ink-3">
+            {t('{{count}} public holidays added.', { count: done.holidaysAdded })}
+          </p>
         )}
       </Shell>
     );
@@ -189,19 +196,23 @@ export function SetupPage() {
       <form onSubmit={next} className="space-y-4">
         <div>
           <p className="text-[11px] tracking-wider text-ink-3 uppercase">
-            Step {step + 1} of {STEPS.length} · {STEPS[step].title}
+            {t('Step {{step}} of {{total}} · {{title}}', {
+              step: step + 1,
+              total: STEPS.length,
+              title: t(STEPS[step].title),
+            })}
           </p>
           <h1 className="mt-1 text-lg font-semibold">
-            {id === 'company' && 'Set up oXeio'}
-            {id === 'region' && 'Where you work'}
-            {id === 'owner' && 'Your account'}
-            {id === 'week' && 'Your work week'}
+            {id === 'company' && t('Set up oXeio')}
+            {id === 'region' && t('Where you work')}
+            {id === 'owner' && t('Your account')}
+            {id === 'week' && t('Your work week')}
           </h1>
           <p className="mt-1 text-sm text-ink-3">
-            {id === 'company' && 'A few basics to get started. Everything can be changed later in Settings.'}
-            {id === 'region' && 'The time zone decides when a work day starts and ends.'}
-            {id === 'owner' && 'You will be the owner: you see everything and manage the rest.'}
-            {id === 'week' && 'Used for monthly targets. Adjust per person later if needed.'}
+            {id === 'company' && t('A few basics to get started. Everything can be changed later in Settings.')}
+            {id === 'region' && t('The time zone decides when a work day starts and ends.')}
+            {id === 'owner' && t('You will be the owner: you see everything and manage the rest.')}
+            {id === 'week' && t('Used for monthly targets. Adjust per person later if needed.')}
           </p>
         </div>
 
@@ -211,16 +222,16 @@ export function SetupPage() {
           <>
             <Field
               id="org"
-              label="Company name"
+              label={t('Company name')}
               required
               autoFocus
               maxLength={80}
               value={form.organizationName}
               onChange={(e) => set('organizationName', e.target.value)}
-              placeholder="Acme Design Studio"
+              placeholder={t('Acme Design Studio')}
             />
             <SelectField
-              label="Country"
+              label={t('Country')}
               value={form.country}
               onChange={(v) => {
                 setForm((f) => ({
@@ -231,7 +242,7 @@ export function SetupPage() {
                   weeklyOffDays: weekendOf(v),
                 }));
               }}
-              options={[{ value: '', label: 'Choose…' }, ...countries]}
+              options={[{ value: '', label: t('Choose…') }, ...countries]}
             />
           </>
         )}
@@ -239,19 +250,19 @@ export function SetupPage() {
         {id === 'region' && (
           <>
             <SelectField
-              label="Time zone"
+              label={t('Time zone')}
               value={form.timeZone}
               onChange={(v) => set('timeZone', v)}
-              options={[{ value: '', label: 'Choose…' }, ...zones]}
+              options={[{ value: '', label: t('Choose…') }, ...zones]}
             />
             <SelectField
-              label="Currency"
+              label={t('Currency')}
               value={form.currency}
               onChange={(v) => set('currency', v)}
-              options={[{ value: '', label: 'Choose…' }, ...currencies]}
+              options={[{ value: '', label: t('Choose…') }, ...currencies]}
             />
             <SelectField
-              label="Dates and numbers"
+              label={t('Dates and numbers')}
               value={form.displayLocale}
               onChange={(v) => set('displayLocale', v)}
               options={LOCALE_CHOICES}
@@ -263,7 +274,7 @@ export function SetupPage() {
           <>
             <Field
               id="name"
-              label="Your name"
+              label={t('Your name')}
               required
               autoFocus
               value={form.ownerName}
@@ -271,7 +282,7 @@ export function SetupPage() {
             />
             <Field
               id="email"
-              label="Email"
+              label={t('Email')}
               type="email"
               autoComplete="username"
               required
@@ -280,7 +291,7 @@ export function SetupPage() {
             />
             <Field
               id="password"
-              label="Password"
+              label={t('Password')}
               type="password"
               autoComplete="new-password"
               required
@@ -289,7 +300,7 @@ export function SetupPage() {
             />
             <Field
               id="password2"
-              label="Password again"
+              label={t('Password again')}
               type="password"
               autoComplete="new-password"
               required
@@ -302,7 +313,7 @@ export function SetupPage() {
         {id === 'week' && (
           <>
             <div>
-              <span className="mb-1 block text-[11.5px] text-ink-3">Days off each week</span>
+              <span className="mb-1 block text-[11.5px] text-ink-3">{t('Days off each week')}</span>
               <div className="flex flex-wrap gap-1.5">
                 {WEEKDAYS.map((d) => {
                   const off = form.weeklyOffDays.includes(d.iso);
@@ -323,7 +334,7 @@ export function SetupPage() {
                         off ? 'border-brand bg-brand-bg text-brand-ink' : 'border-line text-ink-2'
                       }`}
                     >
-                      {d.label}
+                      {t(d.label)}
                     </button>
                   );
                 })}
@@ -331,20 +342,20 @@ export function SetupPage() {
             </div>
             <Field
               id="hours"
-              label="Hours per month (target)"
+              label={t('Hours per month (target)')}
               type="number"
               min={1}
               max={744}
               value={String(hours)}
               onChange={(e) => set('monthlyTargetHours', Number(e.target.value))}
-              hint={`About ${workdays} working days × 8 hours.`}
+              hint={t('About {{count}} working days × 8 hours.', { count: workdays })}
             />
             {form.country && (
               <CheckboxField
-                label="Add the country's public holidays (this year and next)"
+                label={t("Add the country's public holidays (this year and next)")}
                 checked={form.importHolidays}
                 onChange={(v) => set('importHolidays', v)}
-                hint="From a public calendar. Regional and company days are added later in Settings."
+                hint={t('From a public calendar. Regional and company days are added later in Settings.')}
               />
             )}
           </>
@@ -352,10 +363,10 @@ export function SetupPage() {
 
         <div className="flex items-center justify-between gap-2 pt-1">
           <Button onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0 || busy}>
-            Back
+            {t('Back')}
           </Button>
           <Button tone="primary" type="submit" disabled={busy}>
-            {busy ? 'Setting up…' : step === STEPS.length - 1 ? 'Finish' : 'Next'}
+            {busy ? t('Setting up…') : step === STEPS.length - 1 ? t('Finish') : t('Next')}
           </Button>
         </div>
       </form>
@@ -364,12 +375,13 @@ export function SetupPage() {
 }
 
 function Shell({ children }: { children: ReactNode }) {
+  const t = useT();
   return (
     <div className="grid min-h-full place-items-center px-4 py-10">
       <div className="w-full max-w-md">
         <div className="mb-6 flex items-center justify-center gap-2.5 rounded-lg bg-chrome px-4 py-3 text-white">
           <Wordmark className="text-lg" />
-          <span className="text-xs text-white/55">Workforce Monitor</span>
+          <span className="text-xs text-white/55">{t('Workforce Monitor')}</span>
         </div>
         <div className="space-y-4 rounded-xl border border-line bg-surface p-6 shadow-sm">{children}</div>
       </div>

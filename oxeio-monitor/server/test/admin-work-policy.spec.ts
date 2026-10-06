@@ -1,33 +1,27 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  CAPTURE_EARLIEST,
-  CAPTURE_LATEST,
   captureWindowProblem,
   DEFAULT_CAPTURE_WINDOW,
   hhmmToMinutes,
 } from '../src/calendar/work-policy.rules';
 
-describe('capture window: the ADR-011c limits', () => {
-  it('accepts 07:00-23:00', () => {
+describe('capture window', () => {
+  it('no window at all = whenever the computer is in use, and that is the default', () => {
+    expect(captureWindowProblem(null, null)).toBeNull();
+    expect(DEFAULT_CAPTURE_WINDOW).toEqual({ screenshotFrom: null, screenshotTo: null });
+  });
+
+  it('accepts any window inside the day, early mornings and late nights included', () => {
     expect(captureWindowProblem('07:00', '23:00')).toBeNull();
     expect(captureWindowProblem('09:00', '18:00')).toBeNull();
+    expect(captureWindowProblem('00:00', '23:59')).toBeNull();
+    expect(captureWindowProblem('05:30', '23:30')).toBeNull();
   });
 
-  /**
-   * A hard product rule: no screenshots of personal activity on a laptop at
-   * 2 am. This is the only place where a person can change that limit.
-   */
-  it('rejects starting one minute early', () => {
-    expect(captureWindowProblem('06:59', '23:00')).toContain('ADR-011c');
-  });
-
-  it('rejects ending one minute late', () => {
-    expect(captureWindowProblem('07:00', '23:01')).toContain('ADR-011c');
-  });
-
-  it('rejects an attempt at 24 hours', () => {
-    expect(captureWindowProblem('00:00', '23:59')).not.toBeNull();
+  it('half a window is refused — both ends, or neither', () => {
+    expect(captureWindowProblem('09:00', null)).toContain('both');
+    expect(captureWindowProblem(null, '18:00')).toContain('both');
   });
 
   /**
@@ -47,21 +41,6 @@ describe('capture window: the ADR-011c limits', () => {
     expect(captureWindowProblem('7:00', '23:00')).toContain('window start');
     expect(captureWindowProblem('07:00', '２３:００')).toContain('window end');
     expect(captureWindowProblem('07:00', '25:00')).toContain('window end');
-  });
-
-  /**
-   * If the default itself became invalid, then omitting the capture window
-   * would silently install a rule-breaking config, and no test would catch it.
-   */
-  it('the default window is itself valid', () => {
-    expect(
-      captureWindowProblem(
-        DEFAULT_CAPTURE_WINDOW.screenshotFrom,
-        DEFAULT_CAPTURE_WINDOW.screenshotTo,
-      ),
-    ).toBeNull();
-    expect(DEFAULT_CAPTURE_WINDOW.screenshotFrom).toBe(CAPTURE_EARLIEST);
-    expect(DEFAULT_CAPTURE_WINDOW.screenshotTo).toBe(CAPTURE_LATEST);
   });
 });
 

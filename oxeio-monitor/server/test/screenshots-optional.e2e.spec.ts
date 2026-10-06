@@ -51,7 +51,10 @@ const agentConfig = async () =>
       .set('Authorization', `Bearer ${device.token}`)
       .set('X-Client-Time', iso(realNow()))
       .expect(200)
-  ).body as { version: string; config: { screenshot: { enabled: boolean } } };
+  ).body as {
+    version: string;
+    config: { screenshot: { enabled: boolean }; screenshotFrom: string | null; screenshotTo: string | null };
+  };
 
 describe('screenshot.enabled', () => {
   it('is on by default — nothing changes for an existing deployment', async () => {
@@ -108,5 +111,35 @@ describe('screenshot.enabled', () => {
       .expect(200);
 
     expect((await gallery()).body.screenshotsOff).toBe(true);
+  });
+});
+
+describe('capture window: whenever in use, or between two times', () => {
+  it('the owner switches between the two, and the agent is told', async () => {
+    const policy = await h.prisma.workPolicy.findFirstOrThrow();
+    const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
+    const patch = (body: object) =>
+      owner.http.patch(`/api/v1/work-policies/${policy.id}`).set('X-CSRF-Token', owner.csrf).send(body);
+
+    await patch({ screenshotFrom: null, screenshotTo: null }).expect(200);
+    let { config } = await agentConfig();
+    expect(config).toMatchObject({ screenshotFrom: null, screenshotTo: null });
+
+    await patch({ screenshotFrom: '05:30', screenshotTo: '23:30' }).expect(200);
+    ({ config } = await agentConfig());
+    expect(config).toMatchObject({ screenshotFrom: '05:30', screenshotTo: '23:30' });
+
+    // half a window is refused
+    await patch({ screenshotFrom: null }).expect(400);
+  });
+
+  it('a new policy takes screenshots whenever the computer is in use', async () => {
+    const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
+    const res = await owner.http
+      .post('/api/v1/work-policies')
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ name: 'Office', monthlyTargetHours: 176, expectedWorkdays: 22, weeklyOffDays: [6, 7] })
+      .expect(201);
+    expect(res.body).toMatchObject({ screenshotFrom: null, screenshotTo: null });
   });
 });

@@ -8,6 +8,7 @@ import { StatusChip } from '../../components/StatusDot';
 import { PersonCell, Table, type Column } from '../../components/Table';
 import { Tabs } from '../../components/Tabs';
 import { formatDuration, formatTime } from '../../lib/format';
+import { useT } from '../../i18n';
 import { StaffDirectory } from './StaffDirectory';
 
 /** 30 seconds like the board: both screens show the same numbers, in step */
@@ -21,6 +22,7 @@ const REFRESH_MS = 30_000;
  * page opens from either tab.
  */
 function StaffToday() {
+  const t = useT();
   const navigate = useNavigate();
   const board = usePolling((signal) => getLiveBoard(signal), REFRESH_MS, []);
 
@@ -29,7 +31,7 @@ function StaffToday() {
   const columns: Column<LiveCard>[] = [
     {
       key: 'person',
-      header: 'Staff',
+      header: t('Staff'),
       className: 'min-w-44',
       render: (c) => (
         <PersonCell
@@ -41,12 +43,12 @@ function StaffToday() {
     },
     {
       key: 'status',
-      header: 'Status',
+      header: t('Status'),
       render: (c) => <StatusChip status={c.status} />,
     },
     {
       key: 'today',
-      header: 'Today',
+      header: t('Today'),
       align: 'right',
       render: (c) => (
         <span className="num font-semibold">
@@ -56,7 +58,7 @@ function StaffToday() {
     },
     {
       key: 'month',
-      header: 'This month',
+      header: t('This month'),
       align: 'right',
       render: (c) => (
         <span className="num text-ink-2">
@@ -72,7 +74,7 @@ function StaffToday() {
     },
     {
       key: 'seen',
-      header: 'Agent last spoke',
+      header: t('Agent last spoke'),
       align: 'right',
       /*
         This column is the one thing on this page that the board lacks: the
@@ -88,7 +90,7 @@ function StaffToday() {
             {formatTime(c.lastHeartbeatAt)}
           </span>
         ) : (
-          <span className="text-ink-3" title="This agent has never checked in">
+          <span className="text-ink-3" title={t('This agent has never checked in')}>
             —
           </span>
         ),
@@ -99,17 +101,17 @@ function StaffToday() {
     <>
       <p className="mb-3 text-xs text-ink-3">
         {board.data
-          ? `${cards.length} active · updated every 30 seconds`
-          : 'Everyone on the board'}
+          ? t('{{count}} active · updated every 30 seconds', { count: cards.length })
+          : t('Everyone on the board')}
       </p>
       {board.loading && !board.data ? (
-        <Loading label="Loading staff…" />
+        <Loading label={t('Loading staff…')} />
       ) : !board.data ? (
         <ErrorBox error={board.error} retry={board.reload} />
       ) : cards.length === 0 ? (
         <Empty
-          title="No active staff yet"
-          hint="Add people in the Directory tab, then install the agent on their PC."
+          title={t('No active staff yet')}
+          hint={t('Add people in the Directory tab, then install the agent on their PC.')}
         />
       ) : (
         <Table
@@ -135,23 +137,24 @@ const TABS: { id: TabId; label: string }[] = [
 ];
 
 export function StaffPage() {
+  const t = useT();
   const [params, setParams] = useSearchParams();
   const active: TabId = params.get('tab') === 'directory' ? 'directory' : 'today';
 
   return (
     <Page
-      title="Staff"
+      title={t('Staff')}
       subtitle={
         active === 'today'
-          ? 'Who is working now, and how much today'
-          : 'Add and edit people, their logins and their PCs — nothing is ever deleted'
+          ? t('Who is working now, and how much today')
+          : t('Add and edit people, their logins and their PCs — nothing is ever deleted')
       }
     >
       <Tabs
-        items={TABS}
+        items={TABS.map((tab) => ({ ...tab, label: t(tab.label) }))}
         active={active}
         onChange={(tab) => setParams(tab === 'today' ? {} : { tab }, { replace: true })}
-        label="Staff"
+        label={t('Staff')}
       />
       <div className="mt-4">
         {active === 'today' ? <StaffToday /> : <StaffDirectory />}

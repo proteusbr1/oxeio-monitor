@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 
+import { translate } from '../i18n';
 import { sendCrash } from '../lib/crash-reports';
 
 /**
@@ -69,11 +70,10 @@ export class ErrorBoundary extends Component<Props, State> {
         className="mx-auto max-w-xl rounded-xl border border-brand/30 bg-brand-bg px-5 py-6 text-center"
       >
         <p className="text-sm font-medium text-brand-ink">
-          This page couldn't be displayed
+          {translate("This page couldn't be displayed")}
         </p>
         <p className="mt-1.5 text-xs text-ink-3">
-          The other tabs will still work. If it keeps happening, send a
-          screenshot — this is a bug in the system, not something you did wrong.
+          {translate('The other tabs will still work. If it keeps happening, send a screenshot — this is a bug in the system, not something you did wrong.')}
         </p>
         {/* Careful: the technical message stays visible; it is the only clue to the bug */}
         <pre className="num mt-3 overflow-x-auto rounded-md border border-line bg-surface px-3 py-2 text-left text-[11px] whitespace-pre-wrap text-ink-2">

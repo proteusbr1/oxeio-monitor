@@ -6,7 +6,7 @@
  * finally the payroll sheet all show numbers that come from here. Mixed into
  * DB queries, mistakes would show up only in real data, at month end.
  *
- * Source of the rules: [07-Technical-Spec section 2.1](../../../docs/07-Technical-Spec.md).
+ * Source of the rules: [07-Technical-Spec section 2.1](../../../docs/history/07-Technical-Spec.md).
  * (Its sub-sections are referred to here as a, b, c, d, e, in order.)
  */
 
@@ -370,9 +370,9 @@ export interface ElapsedWindow {
  * employee saw on their own screen differed from what the owner saw by about
  * 89 hours. Two answers on two screens means the question of which is true
  * has no answer. Now **three paths** fill this one shape: `summary.service`,
- * `progress.service`, `reports.service`.
+ * `progress.service`, `reports.context.service`.
  *
- * Careful: `dashboard.service` is **not** in this list, and that is not a
+ * Careful: the dashboard services (`dashboard.*.service`) are **not** in this list, and that is not a
  * mistake: the Live Board does not recount the month, it **reads**
  * `monthly_summary.expected_sec`, which is this function's own saved result.
  * Its seven-day strip does use its own `trendDayExpectation()`, which

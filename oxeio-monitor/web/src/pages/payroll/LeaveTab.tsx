@@ -5,6 +5,7 @@ import { listEmployees } from '../../api/staff';
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Caveat, Empty, ErrorBox, Loading } from '../../components/States';
+import { useT } from '../../i18n';
 import { formatDate } from '../../lib/format';
 import {
   ConfirmDialog,
@@ -43,6 +44,7 @@ const TYPES = [
  */
 /** Leave for one month — the month is picked on the Payroll page */
 export function LeaveTab({ month }: { month: string }) {
+  const t = useT();
 
   const { data, error, loading, reload } = useApi(
     (signal) => listLeaves(month, signal),
@@ -63,8 +65,8 @@ export function LeaveTab({ month }: { month: string }) {
       <ServerError error={mutation.error} />
 
       <Card
-        title="Leave"
-        hint="Days off that were agreed — not absences"
+        title={t('Leave')}
+        hint={t('Days off that were agreed — not absences')}
         padded={false}
         actions={
           <RowActions>
@@ -72,19 +74,19 @@ export function LeaveTab({ month }: { month: string }) {
               disabled={!staff.data || staff.data.rows.length === 0}
               onClick={() => setAdding(true)}
             >
-              Add leave
+              {t('Add leave')}
             </MiniButton>
           </RowActions>
         }
       >
         {loading && !data ? (
-          <Loading label="Loading leave…" />
+          <Loading label={t('Loading leave…')} />
         ) : !data ? (
           <ErrorBox error={error} retry={reload} />
         ) : data.rows.length === 0 ? (
           <Empty
-            title="No leave recorded for this month"
-            hint="Anyone who was away on these dates counts as a full shortfall until it is written here."
+            title={t('No leave recorded for this month')}
+            hint={t('Anyone who was away on these dates counts as a full shortfall until it is written here.')}
           />
         ) : (
           <ul className="divide-y divide-line">
@@ -100,7 +102,7 @@ export function LeaveTab({ month }: { month: string }) {
                 <span className="min-w-0 flex-1 text-[13px]">
                   {row.employeeName}
                   <span className="ml-2 text-[12px] text-ink-3">
-                    {labelOf(row.type)}
+                    {t(labelOf(row.type))}
                   </span>
                   {row.note && (
                     <span className="block text-[12px] text-ink-2">
@@ -116,14 +118,14 @@ export function LeaveTab({ month }: { month: string }) {
                   */}
                   {!row.countsTowardTarget && (
                     <span className="block text-[12px] text-idle-ink">
-                      Already a day off — this changes no target
+                      {t('Already a day off — this changes no target')}
                     </span>
                   )}
                 </span>
 
                 <RowActions>
                   <MiniButton tone="danger" onClick={() => setRemoving(row)}>
-                    Remove
+                    {t('Remove')}
                   </MiniButton>
                 </RowActions>
               </li>
@@ -132,10 +134,9 @@ export function LeaveTab({ month }: { month: string }) {
         )}
 
         <Caveat>
-          Leave is paid. The hours target for those days is removed, so nobody
-          shows a shortfall for being away — but the payroll fraction (days
-          employed ÷ days in the month) does not change, so the salary is the
-          same. A month that has been closed refuses new leave; reopen it first.
+          {t(
+            'Leave is paid. The hours target for those days is removed, so nobody shows a shortfall for being away — but the payroll fraction (days employed ÷ days in the month) does not change, so the salary is the same. A month that has been closed refuses new leave; reopen it first.',
+          )}
         </Caveat>
       </Card>
 
@@ -171,7 +172,7 @@ export function LeaveTab({ month }: { month: string }) {
 
       {removing && (
         <ConfirmDialog
-          title="Remove this leave day?"
+          title={t('Remove this leave day?')}
           intro={
             <>
               {formatDate(removing.leaveDate)} · {removing.employeeName}
@@ -179,10 +180,10 @@ export function LeaveTab({ month }: { month: string }) {
           }
           warning={
             removing.countsTowardTarget
-              ? "That day's target comes back, so the month will show it as a shortfall again unless it was worked."
-              : 'That day was already a day off, so no target changes.'
+              ? t("That day's target comes back, so the month will show it as a shortfall again unless it was worked.")
+              : t('That day was already a day off, so no target changes.')
           }
-          confirmLabel="Remove"
+          confirmLabel={t('Remove')}
           busy={mutation.busy}
           error={mutation.error}
           onClose={() => setRemoving(null)}
@@ -221,6 +222,7 @@ function AddLeave({
     note?: string;
   }) => void;
 }) {
+  const t = useT();
   const [employeeId, setEmployeeId] = useState(staff[0]?.value ?? '');
   const [from, setFrom] = useState(`${month}-01`);
   const [to, setTo] = useState(`${month}-01`);
@@ -235,7 +237,7 @@ function AddLeave({
   const backwards = from !== '' && to !== '' && to < from;
 
   return (
-    <Modal title="Add leave" onClose={onClose}>
+    <Modal title={t('Add leave')} onClose={onClose}>
       {/*
         Careful: do not swallow `skipped` silently. Days already in the ledger are not
            added, and closing the modal with "added" would make the owner think the
@@ -243,16 +245,17 @@ function AddLeave({
       */}
       {skipped.length > 0 && (
         <Notice tone="attention">
-          {skipped.length} day{skipped.length === 1 ? '' : 's'} already had
-          leave and {skipped.length === 1 ? 'was' : 'were'} left alone:{' '}
-          {skipped.map((d) => formatDate(d)).join(', ')}
+          {t('{{count}} days already had leave and were left alone: {{dates}}', {
+            count: skipped.length,
+            dates: skipped.map((d) => formatDate(d)).join(', '),
+          })}
         </Notice>
       )}
 
       <FormGrid>
         <FullWidth>
           <SelectField
-            label="Staff"
+            label={t('Staff')}
             value={employeeId}
             onChange={setEmployeeId}
             options={staff}
@@ -261,7 +264,7 @@ function AddLeave({
         </FullWidth>
 
         <TextField
-          label="From"
+          label={t('From')}
           type="date"
           value={from}
           onChange={(v) => {
@@ -272,33 +275,33 @@ function AddLeave({
           required
         />
 
-        <TextField label="To" type="date" value={to} onChange={setTo} required />
+        <TextField label={t('To')} type="date" value={to} onChange={setTo} required />
 
         <SelectField
-          label="Type"
+          label={t('Type')}
           value={type}
           onChange={setType}
-          options={TYPES}
-          hint="All three are paid"
+          options={TYPES.map((o) => ({ ...o, label: t(o.label) }))}
+          hint={t('All three are paid')}
         />
 
         <FullWidth>
           <TextField
-            label="Note (optional)"
+            label={t('Note (optional)')}
             value={note}
             onChange={setNote}
-            placeholder="Family wedding"
+            placeholder={t('Family wedding')}
             maxLength={280}
           />
         </FullWidth>
       </FormGrid>
 
       {backwards && (
-        <Notice tone="attention">The end date is before the start date.</Notice>
+        <Notice tone="attention">{t('The end date is before the start date.')}</Notice>
       )}
 
       <RowActions>
-        <MiniButton onClick={onClose}>Cancel</MiniButton>
+        <MiniButton onClick={onClose}>{t('Cancel')}</MiniButton>
         <MiniButton
           disabled={busy || employeeId === '' || from === '' || backwards}
           onClick={() => {
@@ -311,7 +314,7 @@ function AddLeave({
             });
           }}
         >
-          Add
+          {t('Add')}
         </MiniButton>
       </RowActions>
     </Modal>
@@ -319,5 +322,5 @@ function AddLeave({
 }
 
 function labelOf(type: string): string {
-  return TYPES.find((t) => t.value === type)?.label ?? type;
+  return TYPES.find((o) => o.value === type)?.label ?? type;
 }

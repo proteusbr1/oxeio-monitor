@@ -6,6 +6,7 @@ import { Hours } from '../../components/Duration';
 import { Empty, ErrorBox, Loading } from '../../components/States';
 import { PersonCell, Table, type Column } from '../../components/Table';
 import { formatCount, formatDateShort, weekdayOf } from '../../lib/format';
+import { useT } from '../../i18n';
 import {
   DAY_TYPE_LABEL,
   MAX_SHOWN_ROWS,
@@ -33,6 +34,7 @@ export function AttendanceTab({
   to: string;
   employeeId: number | null;
 }) {
+  const t = useT();
   const { features } = useFeatures();
   const { data, error, loading, reload } = useApi(
     (signal) =>
@@ -45,13 +47,15 @@ export function AttendanceTab({
     [from, to, employeeId],
   );
 
-  if (loading && !data) return <Loading label="Loading attendance…" />;
+  if (loading && !data) return <Loading label={t('Loading attendance…')} />;
   if (error) return <ErrorBox error={error} retry={reload} />;
   if (!data || data.rows.length === 0) {
     return (
       <Empty
-        title="No rows in this range"
-        hint="Staff may have joined or left outside these dates, or the agent has not sent anything yet. Try other dates."
+        title={t('No rows in this range')}
+        hint={t(
+          'Staff may have joined or left outside these dates, or the agent has not sent anything yet. Try other dates.',
+        )}
       />
     );
   }
@@ -62,7 +66,7 @@ export function AttendanceTab({
   const columns: Column<AttendanceRow>[] = [
     {
       key: 'person',
-      header: 'Staff',
+      header: t('Staff'),
       render: (row) => (
         <PersonCell
           fullName={row.fullName}
@@ -73,7 +77,7 @@ export function AttendanceTab({
     },
     {
       key: 'date',
-      header: 'Date',
+      header: t('Date'),
       render: (row) => (
         <span className="whitespace-nowrap">
           <span className="num">{formatDateShort(row.date)}</span>
@@ -85,16 +89,16 @@ export function AttendanceTab({
     },
     {
       key: 'dayType',
-      header: 'Day',
+      header: t('Day'),
       render: (row) => (
         <Pill muted={row.dayType !== 'workday'}>
-          {DAY_TYPE_LABEL[row.dayType]}
+          {t(DAY_TYPE_LABEL[row.dayType])}
         </Pill>
       ),
     },
     {
       key: 'worked',
-      header: 'Worked',
+      header: t('Worked'),
       align: 'right',
       render: (row) => <Hours hours={row.workedHours} />,
     },
@@ -102,20 +106,20 @@ export function AttendanceTab({
       // Careful: grey, because idle time is **not counted**. In black it would look
       //    as if it were added to the worked hours.
       key: 'idle',
-      header: 'Idle',
+      header: t('Idle'),
       align: 'right',
       render: (row) => <Hours hours={row.idleHours} tone="muted" />,
     },
     {
       key: 'adjustment',
-      header: 'Adjustment',
+      header: t('Adjustment'),
       align: 'right',
       render: (row) => <SignedHours hours={row.adjustmentHours} />,
     },
     {
       // Important: this is the real column: worked + adjustment, the one that matches the target
       key: 'credited',
-      header: 'Counted',
+      header: t('Counted'),
       align: 'right',
       render: (row) => (
         <Hours hours={row.creditedHours} className="font-semibold" />
@@ -123,7 +127,7 @@ export function AttendanceTab({
     },
     {
       key: 'target',
-      header: 'Target',
+      header: t('Target'),
       align: 'right',
       render: (row) => <Hours hours={row.targetHours} tone="muted" />,
     },
@@ -143,7 +147,7 @@ export function AttendanceTab({
       ? [
           {
             key: 'tasks',
-            header: 'Tasks done',
+            header: t('Tasks done'),
             align: 'right' as const,
             render: (row: AttendanceRow) =>
               row.tasksDone === null ? (
@@ -160,15 +164,15 @@ export function AttendanceTab({
   return (
     <>
       <StatRow>
-        <Stat label="Staff" value={formatCount(totals.employees)} />
-        <Stat label="Rows" value={formatCount(totals.rows)} />
-        <Stat label="Days with work" value={formatCount(totals.daysWithWork)} />
+        <Stat label={t('Staff')} value={formatCount(totals.employees)} />
+        <Stat label={t('Rows')} value={formatCount(totals.rows)} />
+        <Stat label={t('Days with work')} value={formatCount(totals.daysWithWork)} />
         <Stat
-          label="Total worked"
+          label={t('Total worked')}
           value={<Hours hours={totals.workedHours} />}
         />
         <Stat
-          label="Total counted"
+          label={t('Total counted')}
           value={<Hours hours={totals.creditedHours} />}
         />
         {/*
@@ -179,14 +183,14 @@ export function AttendanceTab({
           `meta.expectedHours`, which the Monthly page shows.
         */}
         <Stat
-          label="Total target · days listed"
+          label={t('Total target · days listed')}
           value={<Hours hours={totals.targetHours} />}
           tone="muted"
         />
       </StatRow>
 
       <div className="mt-4">
-        <Card title="Day by Day" padded={false}>
+        <Card title={t('Day by Day')} padded={false}>
           <Table
             columns={columns}
             rows={shown}
@@ -197,7 +201,7 @@ export function AttendanceTab({
             footer={
               <tr>
                 <td className="px-3 py-2" colSpan={3}>
-                  Total
+                  {t('Total')}
                 </td>
                 <td className="num px-3 py-2 text-right">
                   <Hours hours={totals.workedHours} />

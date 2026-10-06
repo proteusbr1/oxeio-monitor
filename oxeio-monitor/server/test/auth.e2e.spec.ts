@@ -50,7 +50,7 @@ describe('protected routes without login', () => {
 
   it('GET /auth/display-locale is public and empty by default', async () => {
     const res = await h.http().get('/api/v1/auth/display-locale').expect(200);
-    expect(res.body).toEqual({ locale: null });
+    expect(res.body).toEqual({ locale: null, language: 'en' });
   });
 
   it('GET /auth/me → 401', async () => {

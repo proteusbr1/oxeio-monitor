@@ -3,6 +3,7 @@ import { ProgressBar } from '../../components/ProgressRing';
 import { StatusDot } from '../../components/StatusDot';
 import { formatDuration, pctOf } from '../../lib/format';
 import { dayDuty } from './roster';
+import { useT } from '../../i18n';
 
 /**
  * Two bars for the board: **what state the team is in now**, and **who stands where**.
@@ -47,6 +48,7 @@ const FILL: Record<LiveStatus, string> = {
  *      - hovering any slice gives its name and count
  */
 export function StatusStrip({ cards }: { cards: LiveCard[] }) {
+  const t = useT();
   const counts = ORDER.map((slot) => ({
     ...slot,
     n: cards.filter((c) => c.status === slot.status).length,
@@ -75,11 +77,11 @@ export function StatusStrip({ cards }: { cards: LiveCard[] }) {
         <li
           key={c.status}
           className="flex items-center gap-3 px-4 py-2"
-          title={`${c.label} — ${c.n} of ${total}`}
+          title={t('{{label}} — {{n}} of {{total}}', { label: t(c.label), n: c.n, total })}
         >
           <span className="flex min-w-24 shrink-0 items-center gap-1.5 text-[12.5px] text-ink-2">
             <StatusDot status={c.status} />
-            {c.label}
+            {t(c.label)}
           </span>
 
           {/*
@@ -126,6 +128,7 @@ export function StatusStrip({ cards }: { cards: LiveCard[] }) {
  *    the person's status, not to their position in the list.
  */
 export function TargetBars({ cards }: { cards: LiveCard[] }) {
+  const t = useT();
   /**
    * Careful: an employee on leave goes **to the end of the list** and has no bar;
    *    drawing progress against zero would make the day off look like a failure.
@@ -205,14 +208,14 @@ export function TargetBars({ cards }: { cards: LiveCard[] }) {
                   tone={bonus ? 'ok' : 'auto'}
                   ariaLabel={
                     bonus
-                      ? `${card.fullName} — worked on a day off, against a normal day`
-                      : `${card.fullName} — today's target`
+                      ? t('{{name}} — worked on a day off, against a normal day', { name: card.fullName })
+                      : t("{{name}} — today's target", { name: card.fullName })
                   }
                 />
               ) : noTarget ? null : (
                 <div
                   className="h-1.5 rounded-full bg-line/60"
-                  title="Weekly off or holiday — nothing is expected today"
+                  title={t('Weekly off or holiday — nothing is expected today')}
                 />
               )}
             </div>
@@ -223,7 +226,7 @@ export function TargetBars({ cards }: { cards: LiveCard[] }) {
               </span>
               {/* `w-9` keeps the percentages aligned on one line at the right */}
               <span className="num min-w-9 text-[11px] whitespace-nowrap text-ink-3">
-                {noTarget ? 'no target' : pct === null ? 'off' : `${pct}%`}
+                {noTarget ? t('no target') : pct === null ? t('off', { context: 'day' }) : `${pct}%`}
               </span>
             </div>
           </li>

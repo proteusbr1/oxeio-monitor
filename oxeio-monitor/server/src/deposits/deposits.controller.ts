@@ -33,7 +33,7 @@ import {
  *
  * Careful: the whole class is **owner-only**, not even managers — the deposit
  * is part of salary directly, and no salary figure is within a manager's reach
- * ([ADR-023](../../../docs/05-Options-Decisions.md) · ADR-027).
+ * ([ADR-023](../../../docs/history/05-Options-Decisions.md) · ADR-027).
  *
  * Staff see their own deposit at `GET /api/v1/me/deposit` — only **their own**
  * numbers there, nobody else's.

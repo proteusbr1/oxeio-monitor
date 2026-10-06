@@ -4,6 +4,8 @@
  * keep the screen from offering what it would refuse or silently drop.
  */
 
+import { translate } from '../../i18n';
+
 /** The server's `START_APPS_MAX`: more than this is a mistake, not a setting */
 export const START_APPS_MAX = 20;
 
@@ -26,19 +28,19 @@ export type AddAppResult =
  */
 export function addStartApp(apps: readonly string[], raw: string): AddAppResult {
   const name = raw.trim();
-  if (name === '') return { error: 'Type the program name first.' };
+  if (name === '') return { error: translate('Type the program name first.') };
   if (/[\\/]/.test(name)) {
-    return { error: 'Just the program name, without the folder — e.g. WINWORD.EXE.' };
+    return { error: translate('Just the program name, without the folder — e.g. WINWORD.EXE.') };
   }
   if (!START_APP_PATTERN.test(name)) {
-    return { error: 'A program name such as WINWORD.EXE — no quotes or special characters.' };
+    return { error: translate('A program name such as WINWORD.EXE — no quotes or special characters.') };
   }
   const key = name.toLowerCase();
   if (apps.some((app) => app.toLowerCase() === key)) {
-    return { error: `${name} is already on the list.` };
+    return { error: translate('{{name}} is already on the list.', { name }) };
   }
   if (apps.length >= START_APPS_MAX) {
-    return { error: `At most ${START_APPS_MAX} apps.` };
+    return { error: translate('At most {{count}} apps.', { count: START_APPS_MAX }) };
   }
   return { apps: [...apps, name] };
 }
