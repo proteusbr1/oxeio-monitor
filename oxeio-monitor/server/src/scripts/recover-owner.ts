@@ -61,17 +61,17 @@ async function main(): Promise<void> {
     const owners = await listOwners(prisma);
 
     if (owners.length === 0) {
-      console.log('কোনো owner অ্যাকাউন্ট নেই।');
+      console.log('No owner accounts.');
       return;
     }
 
-    console.log(`${owners.length}টি owner অ্যাকাউন্ট:\n`);
+    console.log(`${owners.length} owner account(s):\n`);
     for (const o of owners) {
-      const seen = o.lastLoginAt?.toISOString().slice(0, 16) ?? 'কখনো ঢোকেনি';
+      const seen = o.lastLoginAt?.toISOString().slice(0, 16) ?? 'never logged in';
       console.log(
         `  #${o.id}  ${o.email}  (${o.fullName})  · ` +
-          `${o.isActive ? 'সক্রিয়' : 'নিষ্ক্রিয়'} · ` +
-          `${o.hasTwoFactor ? '2FA চালু' : '2FA নেই'} · শেষ লগইন ${seen}`,
+          `${o.isActive ? 'active' : 'inactive'} · ` +
+          `${o.hasTwoFactor ? '2FA on' : '2FA off'} · last login ${seen}`,
       );
     }
     return;
@@ -85,10 +85,10 @@ async function main(): Promise<void> {
    */
   if (!has('confirm')) {
     console.error(
-      'কিছুই বদলানো হয়নি।\n\n' +
-        'এই স্ক্রিপ্ট owner-এর পাসওয়ার্ড **বদলে দেয়** (আগেরটা আর কাজ করবে না),\n' +
-        'আর 2FA থাকলে সেটাও সরিয়ে দেয়। নিশ্চিত হলে `--confirm` দিন।\n\n' +
-        'আগে দেখে নিন কোন কোন অ্যাকাউন্ট আছে: `--list`\n',
+      'Nothing was changed.\n\n' +
+        "This script **replaces** the owner's password (the old one stops working),\n" +
+        'and removes 2FA if it is set. If you are sure, pass `--confirm`.\n\n' +
+        'First see which accounts exist: `--list`\n',
     );
     process.exitCode = 2;
     return;
@@ -102,9 +102,9 @@ async function main(): Promise<void> {
   if (!result.ok) {
     console.error(`\n${result.detail}\n`);
     if (result.reason === 'no-owner-no-email') {
-      console.error('  … --confirm --email owner@office.local [--name "নাম"]\n');
+      console.error('  … --confirm --email owner@office.local [--name "Name"]\n');
     } else {
-      console.error('  … --list  দিয়ে দেখে নিন\n');
+      console.error('  … check with --list\n');
     }
     // Careful: distinct exit codes, so that when the script sits inside a
     // runbook, "what went wrong" can be answered without reading the output.
@@ -113,14 +113,14 @@ async function main(): Promise<void> {
   }
 
   console.log(
-    `\n✅ ${result.kind === 'created' ? 'নতুন owner অ্যাকাউন্ট তৈরি হলো' : 'পাসওয়ার্ড রিসেট হলো'}\n`,
+    `\n✅ ${result.kind === 'created' ? 'new owner account created' : 'password reset'}\n`,
   );
-  console.log(`   ইমেইল    : ${result.email}`);
-  console.log(`   পাসওয়ার্ড : ${result.password}\n`);
-  console.log('⚠️ এই পাসওয়ার্ড আর কোথাও লেখা নেই — এখনই ব্যবহার করুন।');
-  console.log('⚠️ প্রথম লগইনেই নতুন পাসওয়ার্ড চাওয়া হবে।');
+  console.log(`   email    : ${result.email}`);
+  console.log(`   password : ${result.password}\n`);
+  console.log('⚠️ This password is not stored anywhere else — use it now.');
+  console.log('⚠️ A new password will be required at the first login.');
   if (result.clearedTwoFactor) {
-    console.log('⚠️ 2FA সরিয়ে দেওয়া হয়েছে — ঢুকে আবার চালু করে নিন।');
+    console.log('⚠️ 2FA was removed — log in and turn it on again.');
   }
   console.log('');
 }

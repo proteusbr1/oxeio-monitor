@@ -123,16 +123,16 @@ function serviceWorkerPlugin(): Plugin {
       const leaked = shell.filter((path) => path.startsWith('/api'));
       if (leaked.length > 0) {
         this.error(
-          `সার্ভিস ওয়ার্কারের precache তালিকায় API পথ ঢুকেছে: ${leaked.join(', ')} — ` +
-            'API উত্তর কখনো ক্যাশ হতে পারে না (লাইভ সংখ্যা ও স্ক্রিনশট)।',
+          `API paths ended up in the service worker precache list: ${leaked.join(', ')} — ` +
+            'API responses must never be cached (live figures and screenshots).',
         );
       }
 
       const chunk = bundle[SW_FILE];
       if (!chunk || chunk.type !== 'chunk') {
         this.error(
-          `${SW_FILE} তৈরি হয়নি — rollup-এর entry বা \`entryFileNames\` বদলে গেছে। ` +
-            'ওয়ার্কার ছাড়া অ্যাপ চলবে, কিন্তু PWA ইনস্টল হবে না।',
+          `${SW_FILE} was not generated — rollup's entry or \`entryFileNames\` changed. ` +
+            'The app will run without the worker, but the PWA cannot be installed.',
         );
         return;
       }
@@ -159,12 +159,12 @@ function serviceWorkerPlugin(): Plugin {
        */
       if (chunk.code.includes('__OXEIO_PRECACHE__') || chunk.code.includes('__OXEIO_SW_VERSION__')) {
         this.error(
-          `${SW_FILE}-এ প্লেসহোল্ডার বসানো যায়নি — \`src/pwa-sw.ts\`-এ ` +
-            'নামগুলো বদলে গেছে কি না দেখুন।',
+          `Could not inject the placeholders into ${SW_FILE} — check whether the names ` +
+            'in \`src/pwa-sw.ts\` changed.',
         );
       }
 
-      this.info(`sw.js: ${shell.length}টা ফাইল precache, ভার্সন ${version}`);
+      this.info(`sw.js: ${shell.length} files precached, version ${version}`);
     },
   };
 }

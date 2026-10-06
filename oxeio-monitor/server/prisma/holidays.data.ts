@@ -504,7 +504,7 @@ export interface PendingGazette {
  * keep firing falsely and after a while nobody would read it.
  */
 export const PENDING_GAZETTES: readonly PendingGazette[] = [
-  { year: 2027, dueBy: 'নভেম্বর ২০২৬' },
+  { year: 2027, dueBy: 'November 2026' },
 ];
 
 /**
@@ -530,10 +530,10 @@ export function gazetteNotes(
     if (unsure.length === 0) return [];
 
     return [
-      `⚠️ ${year}-এর ${unsure.length}টি তারিখ জ্যোতির্গণনার হিসাব — প্রজ্ঞাপন এখনো বেরোয়নি ` +
-        `(${unsure[0].date} … ${unsure[unsure.length - 1].date})। ` +
-        `ওগুলো এখনই ${year}-এর ওই মাসগুলোর কর্মদিবস ও টার্গেট ঠিক করছে। ` +
-        `${dueBy}-এ প্রজ্ঞাপনের সাথে মিলিয়ে prisma/holidays.data.ts হালনাগাদ করুন।`,
+      `⚠️ ${unsure.length} dates in ${year} are astronomical estimates; the gazette is not out yet ` +
+        `(${unsure[0].date} … ${unsure[unsure.length - 1].date}). ` +
+        `They already set the working days and targets of those ${year} months. ` +
+        `Check them against the gazette in ${dueBy} and update prisma/holidays.data.ts.`,
     ];
   });
 }
@@ -572,10 +572,10 @@ export function validateHolidays(entries: readonly HolidayEntry[]): string[] {
   const seen = new Map<string, string>();
 
   entries.forEach((entry, i) => {
-    const at = `সারি ${i + 1}`;
+    const at = `Row ${i + 1}`;
 
     if (!isRealDate(entry.date)) {
-      problems.push(`${at}: "${entry.date}" — এমন কোনো তারিখ নেই`);
+      problems.push(`${at}: "${entry.date}" — no such date`);
       return; // with a bad date the remaining checks are meaningless
     }
 
@@ -587,20 +587,20 @@ export function validateHolidays(entries: readonly HolidayEntry[]): string[] {
     const before = seen.get(entry.date);
     if (before !== undefined) {
       problems.push(
-        `${at}: ${entry.date} তারিখটা আগেও আছে ("${before}") — একটা তারিখে একটাই সারি`,
+        `${at}: ${entry.date} is already listed ("${before}") — one row per date`,
       );
     }
     seen.set(entry.date, entry.name);
 
     if (entry.name.trim() === '') {
-      problems.push(`${at} (${entry.date}): নাম খালি`);
+      problems.push(`${at} (${entry.date}): name is empty`);
     }
     if (entry.nameEn.trim() === '') {
-      problems.push(`${at} (${entry.date}): ইংরেজি নাম খালি`);
+      problems.push(`${at} (${entry.date}): English name is empty`);
     }
     /** The API limits the `name` column to 120 characters (`CreateHolidayDto`). */
     if (holidayRowName(entry).length > 120) {
-      problems.push(`${at} (${entry.date}): নাম ১২০ অক্ষরের বেশি`);
+      problems.push(`${at} (${entry.date}): name is longer than 120 characters`);
     }
     /**
      * Writing the "probable" marker into the name by hand would contradict
@@ -608,7 +608,7 @@ export function validateHolidays(entries: readonly HolidayEntry[]): string[] {
      */
     if (entry.name.includes(APPROX_SUFFIX.trim())) {
       problems.push(
-        `${at} (${entry.date}): নামে "${APPROX_SUFFIX.trim()}" লিখবেন না — approximate ঘরটাই যথেষ্ট`,
+        `${at} (${entry.date}): do not write "${APPROX_SUFFIX.trim()}" in the name — the approximate flag is enough`,
       );
     }
   });
@@ -974,8 +974,8 @@ export function planHolidaySeedRun(
   const notes = [
     ...needsConsent.map(
       (e) =>
-        `⚠️⚠️ বসানো হয়নি: ${e.date} — "${holidayRowName(e)}" ` +
-        `(${monthKey(e.date)} মাসের হিসাব ইতিমধ্যে চলে গেছে)`,
+        `⚠️⚠️ Not inserted: ${e.date} — "${holidayRowName(e)}" ` +
+        `(the figures for ${monthKey(e.date)} are already out)`,
     ),
     /**
      * Careful: the last two sentences of this note were **verified, not
@@ -989,15 +989,15 @@ export function planHolidaySeedRun(
      */
     ...(needsConsent.length > 0
       ? [
-          `⚠️⚠️ উপরের ${needsConsent.length}টি তারিখ বসালে ওই মাসগুলোর কর্মদিবস কমবে — ` +
-            `target_sec · expected_sec · pace_sec আর পে-রোলের d÷D ভগ্নাংশ, সবই বদলাবে (সরাসরি টাকা)। ` +
-            `চলতি মাস ১৫ মিনিটের মধ্যে নিজে থেকেই নতুন হিসাবে চলে যাবে; ` +
-            `অতীত মাস স্থির থাকবে, তারপর ওই মাসের কোনো time-adjustment অনুমোদনের দিন হঠাৎ লাফ দেবে। ` +
-            `সচেতনভাবে বসাতে: SEED_HOLIDAYS_PAST=true — তার আগে deploy/README.md § ২.১গ পড়ুন।`,
+          `⚠️⚠️ Inserting the ${needsConsent.length} dates above would reduce the working days of those months — ` +
+            `target_sec · expected_sec · pace_sec and the payroll d÷D fraction would all change (real money). ` +
+            `The current month moves to the new figures by itself within 15 minutes; ` +
+            `a past month stays fixed, then jumps suddenly the day any time adjustment for that month is approved. ` +
+            `To insert them on purpose: SEED_HOLIDAYS_PAST=true — first read deploy/README.md § 2.1c.`,
         ]
       : []),
     ...plan.unlisted.map(
-      (row) => `⚠️ তালিকায় নেই: ${row.date} — "${row.name}" (এখনো ছুটি কি?)`,
+      (row) => `⚠️ Not in the list: ${row.date} — "${row.name}" (is it still a holiday?)`,
     ),
     /**
      * Why the last part of this note is needed: when `planHolidaySeed()` finds
@@ -1011,23 +1011,23 @@ export function planHolidaySeedRun(
     ...plan.renamed.map((diff) => {
       const markLost = hasApproxSuffix(diff.inList) && !hasApproxSuffix(diff.inDb);
       return (
-        `⚠️ একই তারিখ, আলাদা নাম: ${diff.date} — DB-তে "${diff.inDb}", তালিকায় "${diff.inList}" — ` +
-        `seed নাম বদলায় না` +
+        `⚠️ Same date, different name: ${diff.date} — DB has "${diff.inDb}", list has "${diff.inList}" — ` +
+        `the seed does not rename` +
         (markLost
-          ? `, তাই সারিটা কোনোদিন "${APPROX_SUFFIX.trim()}" চিহ্ন পাবে না; ঠিক করতে Settings → Holidays`
-          : `; বদলাতে চাইলে Settings → Holidays`)
+          ? `, so this row will never get the "${APPROX_SUFFIX.trim()}" marker; to fix it, go to Settings → Holidays`
+          : `; to rename it, go to Settings → Holidays`)
       );
     }),
     ...heldBack.map(
       (e) =>
-        `⚠️ তালিকায় আছে, DB-তে নেই: ${e.date} — "${holidayRowName(e)}" (${yearOf(e.date)} আগেই বসানো, তাই বসানো হয়নি)`,
+        `⚠️ In the list but not in the DB: ${e.date} — "${holidayRowName(e)}" (${yearOf(e.date)} was seeded earlier, so it was not inserted)`,
     ),
     ...plan.keptByName.map(
       (kept) =>
-        `· "${kept.entry.name}" ${kept.foundAt}-এ আছে (তালিকায় ${kept.entry.date}) — ছোঁয়া হয়নি`,
+        `· "${kept.entry.name}" is on ${kept.foundAt} (list has ${kept.entry.date}) — left untouched`,
     ),
     ...(plan.keptByCluster.length > 0
-      ? [`· ${plan.keptByCluster.length}টি সারি বাদ — গুচ্ছটা হাতে সরানো হয়েছে`]
+      ? [`· ${plan.keptByCluster.length} rows skipped — the cluster was moved by hand`]
       : []),
   ];
 

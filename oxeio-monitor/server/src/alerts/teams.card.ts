@@ -36,7 +36,7 @@ const CARD_VERSION = '1.4';
  * it. So it is trimmed here, and the message itself says that it was trimmed.
  */
 const MAX_CHARS = 20_000;
-const TRIMMED_NOTE = '\n\n_(বার্তাটা লম্বা হওয়ায় কেটে দেওয়া হয়েছে — পুরোটা সার্ভারের লগে)_';
+const TRIMMED_NOTE = '\n\n_(The message was too long and has been trimmed — the full text is in the server log)_';
 
 export function trimForTeams(text: string): string {
   if (text.length <= MAX_CHARS) return text;

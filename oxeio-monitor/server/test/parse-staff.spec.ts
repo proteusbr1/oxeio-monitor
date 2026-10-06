@@ -68,34 +68,34 @@ describe('parseStaff: happy path', () => {
 
 describe('parseStaff: catching mistakes', () => {
   it('stops when it is not a list', () => {
-    expect(() => parseStaff({ 'OX-01': 25000 })).toThrow(/তালিকা/);
+    expect(() => parseStaff({ 'OX-01': 25000 })).toThrow(/must be a list/);
   });
 
   /** Three cells means salary `undefined`, which gives an unclear Prisma error. */
   it('stops when there are too few cells', () => {
-    expect(one(['OX-01', 'Rakib', 'Designer'])).toThrow(/চার বা পাঁচ ঘর/);
+    expect(one(['OX-01', 'Rakib', 'Designer'])).toThrow(/four or five cells/);
   });
 
   it('also stops when there are too many cells', () => {
-    expect(one([...ROW, '2026-01-05', 'extra'])).toThrow(/চার বা পাঁচ ঘর/);
+    expect(one([...ROW, '2026-01-05', 'extra'])).toThrow(/four or five cells/);
   });
 
   /** Putting quotes around a number in JSON is a very common mistake. */
   it('stops when the salary is written as a string', () => {
-    expect(one(['OX-01', 'Rakib', 'Designer', '25000'])).toThrow(/উদ্ধৃতি/);
+    expect(one(['OX-01', 'Rakib', 'Designer', '25000'])).toThrow(/without quotes/);
   });
 
   /** The column is `Int`: a fraction would silently lose the paisa. */
   it('stops on a fractional salary', () => {
-    expect(one(['OX-01', 'Rakib', 'Designer', 25000.5])).toThrow(/ভগ্নাংশ/);
+    expect(one(['OX-01', 'Rakib', 'Designer', 25000.5])).toThrow(/fraction/);
   });
 
   it('stops on a negative salary', () => {
-    expect(one(['OX-01', 'Rakib', 'Designer', -1])).toThrow(/ঋণাত্মক/);
+    expect(one(['OX-01', 'Rakib', 'Designer', -1])).toThrow(/negative/);
   });
 
   it('stops when the name is empty', () => {
-    expect(one(['OX-01', '   ', 'Designer', 25000])).toThrow(/নাম/);
+    expect(one(['OX-01', '   ', 'Designer', 25000])).toThrow(/name — must be text/);
   });
 
   /**
@@ -105,7 +105,7 @@ describe('parseStaff: catching mistakes', () => {
    */
   it('stops when the same code appears twice', () => {
     const rows = [[...ROW], ['OX-01', 'Onno Keu', 'Manager', 40000]];
-    expect(() => parseStaff(rows)).toThrow(/এই কোডটা আগেও আছে/);
+    expect(() => parseStaff(rows)).toThrow(/this code appears earlier/);
   });
 
   it('stops when the date format is wrong', () => {
@@ -119,8 +119,8 @@ describe('parseStaff: catching mistakes', () => {
    * straight into proration.
    */
   it('stops on a date that does not exist in the calendar', () => {
-    expect(one([...ROW, '2026-02-30'])).toThrow(/এমন কোনো তারিখ নেই/);
-    expect(one([...ROW, '2026-13-01'])).toThrow(/এমন কোনো তারিখ নেই/);
+    expect(one([...ROW, '2026-02-30'])).toThrow(/no such date/);
+    expect(one([...ROW, '2026-13-01'])).toThrow(/no such date/);
   });
 
   /** 2024 is a leap year and 2026 is not: whether 29 February is valid depends on the year. */
@@ -128,7 +128,7 @@ describe('parseStaff: catching mistakes', () => {
     expect(parseStaff([[...ROW, '2024-02-29']])[0].joinedOn).toBeInstanceOf(
       Date,
     );
-    expect(one([...ROW, '2026-02-29'])).toThrow(/এমন কোনো তারিখ নেই/);
+    expect(one([...ROW, '2026-02-29'])).toThrow(/no such date/);
   });
 
   /**
@@ -137,7 +137,7 @@ describe('parseStaff: catching mistakes', () => {
    */
   it('the message says which row and which employee', () => {
     const rows = [[...ROW], ['OX-02', 'Karim', 'Intern', 'oops']];
-    expect(() => parseStaff(rows)).toThrow(/সারি 2 \(OX-02\)/);
+    expect(() => parseStaff(rows)).toThrow(/Row 2 \(OX-02\)/);
   });
 });
 

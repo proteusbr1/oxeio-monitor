@@ -11,7 +11,7 @@ export function testDatabaseUrl(): string {
   const base = process.env.DATABASE_URL;
   if (!base) {
     throw new Error(
-      'DATABASE_URL সেট নেই — টেস্ট চালান `npm test` দিয়ে (ওটা ../.env লোড করে)',
+      'DATABASE_URL is not set — run the tests with `npm test` (it loads ../.env)',
     );
   }
 

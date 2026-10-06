@@ -284,8 +284,8 @@ export class DepositsService {
     if (skipped > 0) {
       // Careful: not dropped silently — this gap survived for so long thanks to silence
       this.logger.warn(
-        `জামানতের ${skipped}টা কিস্তি বসানো হলো না — বন্ধ মাস (${[...shut].join(', ')})। ` +
-          'দরকার হলে মাসটা আগে খুলুন।',
+        `${skipped} deposit installments were not inserted — closed months (${[...shut].join(', ')}). ` +
+          'If needed, reopen the month first.',
       );
     }
 
@@ -297,7 +297,7 @@ export class DepositsService {
     });
 
     if (count > 0) {
-      this.logger.log(`জামানতের খাতায় ${count}টা নতুন কিস্তি বসল`);
+      this.logger.log(`${count} new installments added to the deposit ledger`);
     }
   }
 
@@ -411,8 +411,8 @@ export class DepositsService {
     });
 
     this.logger.log(
-      `${employee.fullName}: জামানতের শুরু ${employee.depositStartYearMonth ?? 'নিয়ম'} → ` +
-        `${yearMonth ?? 'নিয়ম'} (${removed} মোছা, ${after - before} যোগ)`,
+      `${employee.fullName}: deposit start ${employee.depositStartYearMonth ?? 'default'} → ` +
+        `${yearMonth ?? 'default'} (${removed} removed, ${after - before} added)`,
     );
 
     return { removed, added: after - before };
@@ -554,7 +554,7 @@ export class DepositsService {
     });
 
     this.logger.warn(
-      `${employee.fullName}: ${yearMonth}-এর কিস্তি ${row.amountPaisa} → ${amountPaisa} পয়সা · ${trimmed}`,
+      `${employee.fullName}: ${yearMonth} installment ${row.amountPaisa} → ${amountPaisa} paisa · ${trimmed}`,
     );
 
     return { from: row.amountPaisa, to: amountPaisa };
@@ -697,7 +697,7 @@ export class DepositsService {
       // Careful: 409, not silently a second row — nowhere would record that the
       // money was refunded twice.
       throw new ConflictException(
-        `${employee.empCode}-এর জামানত ইতিমধ্যে নিষ্পত্তি হয়েছে (${existing.outcome})।`,
+        `The deposit of ${employee.empCode} is already settled (${existing.outcome}).`,
       );
     }
 

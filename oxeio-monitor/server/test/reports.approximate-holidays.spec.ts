@@ -88,7 +88,7 @@ async function infoSheetRows(m: ReportMeta): Promise<[string, string][]> {
   await wb.xlsx.load(buffer as unknown as ArrayBuffer);
 
   const sheet = wb.getWorksheet('Info');
-  expect(sheet, 'ওয়ার্কবুকে "Info" শিটই নেই').toBeDefined();
+  expect(sheet, 'the workbook has no "Info" sheet').toBeDefined();
 
   const rows: [string, string][] = [];
   sheet!.eachRow((row) => {
@@ -141,7 +141,7 @@ describe('G108: reaches the inside of the Excel file', () => {
     );
     const row = rows.find(([label]) => label === 'Holiday dates not final');
 
-    expect(row, 'Info শিটে সতর্কবার্তার সারিই নেই').toBeDefined();
+    expect(row, 'the Info sheet has no warning row').toBeDefined();
     expect(row![1]).toBe(approximateHolidayNote([APPROX]));
   });
 

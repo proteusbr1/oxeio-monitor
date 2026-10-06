@@ -20,8 +20,8 @@ const example = join(__dirname, 'staff.example.json');
 const file = existsSync(local) ? local : example;
 
 if (file === example) {
-  console.error('❌ staff.local.json নেই — দেখা হচ্ছে staff.example.json');
-  console.error(`   খোঁজা হয়েছিল: ${local}`);
+  console.error('❌ staff.local.json not found — checking staff.example.json');
+  console.error(`   looked for: ${local}`);
   process.exitCode = 1;
 }
 
@@ -38,10 +38,10 @@ try {
      * `]` in the wrong place after adding a date. Node's own message gives a
      * character offset, not a line number.
      */
-    console.error(`❌ ফাইলটা বৈধ JSON নয়: ${(e as Error).message}`);
+    console.error(`❌ the file is not valid JSON: ${(e as Error).message}`);
     console.error(
-      '   সবচেয়ে সাধারণ কারণ: শেষ সারির পরে বাড়তি কমা, ' +
-        'বা তারিখ বসাতে গিয়ে বন্ধনী সরে যাওয়া।',
+      '   Most common causes: an extra comma after the last row, ' +
+        'or a bracket that moved while adding a date.',
     );
     process.exit(1);
   }
@@ -54,9 +54,9 @@ try {
 const withDate = rows.filter((r) => r.joinedOn).length;
 const pad = (s: string, n: number) => s.padEnd(n, ' ');
 
-console.log(`✅ ${rows.length} জন — ধাঁচ ঠিক আছে\n`);
+console.log(`✅ ${rows.length} staff — format is OK\n`);
 for (const r of rows) {
-  const date = r.joinedOn?.toISOString().slice(0, 10) ?? '— তারিখ নেই';
+  const date = r.joinedOn?.toISOString().slice(0, 10) ?? '— no date';
   console.log(
     `   ${pad(r.empCode, 8)} ${pad(r.fullName, 22)} ` +
       `${pad(String(r.monthlySalary), 8)} ${date}`,
@@ -71,7 +71,7 @@ for (const r of rows) {
  */
 if (withDate < rows.length) {
   console.log(
-    `\n⚠️  ${rows.length - withDate} জনের যোগদানের তারিখ নেই — তাঁদের হিসাব ` +
-      'পুরো মাস ধরে হবে (G37 proration চলবে না)।',
+    `\n⚠️  ${rows.length - withDate} staff have no join date — they will be ` +
+      'calculated for the full month (G37 proration will not apply).',
   );
 }

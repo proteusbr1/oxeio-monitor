@@ -172,7 +172,7 @@ export async function login(
     res.headers['set-cookie'] as unknown as string[],
     'oxeio_csrf',
   );
-  if (!csrf) throw new Error('লগইনের পরেও CSRF cookie আসেনি');
+  if (!csrf) throw new Error('no CSRF cookie after login');
 
   return { http, csrf };
 }

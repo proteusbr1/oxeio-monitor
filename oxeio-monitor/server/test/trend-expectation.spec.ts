@@ -204,7 +204,7 @@ describe('the strip and the monthly card follow one rule', () => {
         [iso, ribbon],
         // If it fails we must be able to see which day — otherwise the seven
         //    cases would blur into one message
-        `${iso} — ফিতে ও কার্ড আলাদা কথা বলছে`,
+        `${iso} — the strip and the card disagree`,
       ).toEqual([iso, monthlySaysExpected(day(iso), s, TOMORROW, holidays)]);
     }
   });

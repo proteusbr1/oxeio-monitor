@@ -297,7 +297,7 @@ async function seedHolidays(): Promise<{
   const problems = validateHolidays(entries);
   if (problems.length > 0) {
     // Stop here: a wrong date goes straight into the workday count.
-    throw new Error(`ছুটির তালিকায় ভুল:\n  - ${problems.join('\n  - ')}`);
+    throw new Error(`Errors in the holiday list:\n  - ${problems.join('\n  - ')}`);
   }
 
   const seeded = await loadSeededYears(settingKey);
@@ -363,14 +363,14 @@ async function seedHolidays(): Promise<{
    */
   const approx = run.create.filter((h) => h.approximate).length;
   const parts = [
-    `${run.create.length}টি বসেছে (${approx}টি সম্ভাব্য তারিখ)`,
-    `${run.kept}টি আগে থেকেই ছিল`,
+    `${run.create.length} inserted (${approx} approximate dates)`,
+    `${run.kept} already existed`,
   ];
   if (run.needsConsent.length > 0) {
-    parts.push(`${run.needsConsent.length}টি চলতি/অতীত মাস বলে আটকানো`);
+    parts.push(`${run.needsConsent.length} held back (current/past month)`);
   }
   if (run.heldBack.length > 0) {
-    parts.push(`${run.heldBack.length}টি বন্ধ বছরে (তাই বসেনি)`);
+    parts.push(`${run.heldBack.length} in a closed year (not inserted)`);
   }
   /**
    * Three states are reported separately. "No year completed" and "all years
@@ -379,11 +379,11 @@ async function seedHolidays(): Promise<{
    */
   if (years.length === 0) {
     const done = [...seeded].sort((a, b) => a - b).join(', ');
-    parts.push(`সব বছর আগেই সম্পূর্ণ (${done})`);
+    parts.push(`all years already complete (${done})`);
   } else if (settledYears.length > 0) {
-    parts.push(`বছর সম্পূর্ণ হলো: ${settledYears.join(', ')}`);
+    parts.push(`years completed: ${settledYears.join(', ')}`);
   } else {
-    parts.push('কোনো বছর সম্পূর্ণ হয়নি — সম্মতির অপেক্ষায় সারি আছে');
+    parts.push('no year completed — rows are waiting for consent');
   }
 
   /**
@@ -437,8 +437,8 @@ function loadStaff(): StaffRow[] {
 
   if (usingExample) {
     console.warn(
-      '⚠  staff.local.json নেই — staff.example.json দিয়ে seed হচ্ছে। ' +
-        'আসল তালিকা বসাতে staff.local.json বানান।',
+      '⚠  staff.local.json not found — seeding from staff.example.json. ' +
+        'Create staff.local.json to seed the real list.',
     );
   }
 
@@ -489,8 +489,8 @@ async function seedEmployees(policyId: number): Promise<number> {
   const already = await prisma.employee.count();
   if (!shouldSeedSampleStaff(usingExample, already)) {
     console.warn(
-      `⚠  ${already} জন কর্মী ইতিমধ্যেই আছেন — নমুনা তালিকা বসানো হলো না। ` +
-        'আসল তালিকা বসাতে prisma/staff.local.json বানান।',
+      `⚠  ${already} staff already exist — the sample list was not inserted. ` +
+        'Create prisma/staff.local.json to seed the real list.',
     );
     return 0;
   }
@@ -529,8 +529,8 @@ async function seedOwner(): Promise<string> {
 
   if (!password) {
     throw new Error(
-      'SEED_OWNER_PASSWORD সেট করা নেই। .env-এ বসিয়ে আবার চালান — ' +
-        'ডিফল্ট পাসওয়ার্ড বসানো হয় না, ইচ্ছাকৃতভাবে।',
+      'SEED_OWNER_PASSWORD is not set. Put it in .env and run again — ' +
+        'no default password is used, on purpose.',
     );
   }
 
@@ -561,26 +561,26 @@ async function main(): Promise<void> {
   const staff = await seedEmployees(policyId);
   const ownerEmail = await seedOwner();
 
-  console.log('✅ seed সম্পূর্ণ');
+  console.log('✅ seed complete');
   console.log(
-    `   work policy   : #${policyId} · ${SEED_POLICY.monthlyTargetHours.toLocaleString('bn-BD')} ঘণ্টা/মাস · ছবি ০৭:০০–২৩:০০`,
+    `   work policy   : #${policyId} · ${SEED_POLICY.monthlyTargetHours.toLocaleString('en-US')} hours/month · screenshots 07:00–23:00`,
   );
-  console.log(`   app categories: ${rules}টি রুল`);
+  console.log(`   app categories: ${rules} rules`);
   console.log(`   holidays      : ${holidays.summary}`);
   console.log(
-    '                   ⚠️ "(সম্ভাব্য)" লেখা তারিখগুলো চাঁদ/তিথি-নির্ভর — ঘোষণা এলে ঠিক করে নিন',
+    '                   ⚠️ dates marked "(সম্ভাব্য)" depend on the moon/tithi — fix them when the announcement comes',
   );
   // Standing facts about the list first, then what this run did.
   for (const note of [...holidays.standing, ...holidays.notes]) {
     console.log(`                   ${note}`);
   }
-  console.log(`   কর্মী          : ${staff} জন — কারো policy সই করা নেই, রোলআউটের আগে দরকার`);
-  console.log(`   owner         : ${ownerEmail} (প্রথম লগইনে পাসওয়ার্ড বদলাতে হবে)`);
+  console.log(`   staff         : ${staff} — nobody has signed the policy yet, needed before rollout`);
+  console.log(`   owner         : ${ownerEmail} (must change the password on first login)`);
 }
 
 main()
   .catch((e: unknown) => {
-    console.error('❌ seed ব্যর্থ:', e);
+    console.error('❌ seed failed:', e);
     process.exitCode = 1;
   })
   .finally(() => {

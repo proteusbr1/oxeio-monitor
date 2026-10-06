@@ -79,7 +79,7 @@ describe('trimForTeams', () => {
   it('when trimmed, that is stated', () => {
     const trimmed = trimForTeams('ক'.repeat(30_000));
 
-    expect(trimmed).toContain('কেটে দেওয়া হয়েছে');
+    expect(trimmed).toContain('has been trimmed');
   });
 
   it('it is not trimmed exactly at the limit', () => {

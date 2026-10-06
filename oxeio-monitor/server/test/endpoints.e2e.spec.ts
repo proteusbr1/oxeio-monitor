@@ -96,7 +96,7 @@ describe('every endpoint really responds', () => {
     for (const url of [...SHARED_READS(employeeId), ...OWNER_ONLY_READS]) {
       const res = await s.http.get(url);
       notServerError(res.status, url);
-      expect(res.status, `${url} → owner-এর ৪০৩/৪০৪ পাওয়ার কথা নয়`).toBeLessThan(
+      expect(res.status, `${url} → the owner should not get 403/404`).toBeLessThan(
         400,
       );
     }
@@ -108,7 +108,7 @@ describe('every endpoint really responds', () => {
     for (const url of SHARED_READS(employeeId)) {
       const res = await s.http.get(url);
       notServerError(res.status, url);
-      expect(res.status, `${url} → ম্যানেজারের পড়ার কথা`).toBeLessThan(400);
+      expect(res.status, `${url} → the manager should be able to read`).toBeLessThan(400);
     }
   });
 
@@ -121,7 +121,7 @@ describe('every endpoint really responds', () => {
 
     for (const url of OWNER_ONLY_READS) {
       const res = await s.http.get(url);
-      expect(res.status, `${url} → ম্যানেজারের ঢোকার কথা নয়`).toBe(403);
+      expect(res.status, `${url} → the manager should not get in`).toBe(403);
     }
   });
 
@@ -164,7 +164,7 @@ describe('every endpoint really responds', () => {
 
     for (const url of [...SHARED_READS(employeeId), ...OWNER_ONLY_READS]) {
       const res = await s.http.get(url);
-      expect(res.status, `${url} → গবেষকের ঢোকার কথা নয়`).toBe(403);
+      expect(res.status, `${url} → the researcher should not get in`).toBe(403);
     }
   });
 
@@ -196,20 +196,20 @@ describe('every endpoint really responds', () => {
     const mine = await s.http.get(`/api/v1/screenshots?date=${TODAY}`);
     expect(mine.status).toBeLessThan(400);
     for (const row of mine.body.rows ?? []) {
-      expect(row.employeeId, 'নিজের ছবি ছাড়া কিছু আসার কথা নয়').toBe(them.id);
+      expect(row.employeeId, 'nothing but their own screenshots should come back').toBe(them.id);
     }
 
     // Asking for someone else's — it is not silently swapped for their own, it is 403
     const theirs = await s.http.get(
       `/api/v1/screenshots?employeeId=${employeeId}&date=${TODAY}`,
     );
-    expect(theirs.status, 'অন্যের ছবি চাইলে ৪০৩').toBe(403);
+    expect(theirs.status, "asking for someone else's screenshots gives 403").toBe(403);
   });
 
   it('everything is closed without login', async () => {
     for (const url of [...SHARED_READS(employeeId), ...OWNER_ONLY_READS]) {
       const res = await h.http().get(url);
-      expect(res.status, `${url} → লগইন ছাড়াই খোলা!`).toBe(401);
+      expect(res.status, `${url} → open without login!`).toBe(401);
     }
   });
 });

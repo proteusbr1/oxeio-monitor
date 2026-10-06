@@ -85,7 +85,7 @@ async function sheetRows(
   await wb.xlsx.load((await attendanceWorkbook(report(rows))) as unknown as ArrayBuffer);
 
   const sheet = wb.getWorksheet('Attendance');
-  expect(sheet, 'ওয়ার্কবুকে "Attendance" শিটই নেই').toBeDefined();
+  expect(sheet, 'the workbook has no "Attendance" sheet').toBeDefined();
 
   const all: string[][] = [];
   sheet!.eachRow((r) => {

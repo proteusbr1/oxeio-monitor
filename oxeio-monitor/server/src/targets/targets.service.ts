@@ -493,10 +493,11 @@ export class TargetsService {
         SET status = 'assigned',
             assigned_to_id = ${employeeId},
             assigned_at = ${now},
-            -- ⚠️⚠️ COALESCE — পুল থেকে **ফিরে আসা** টার্গেটের নম্বর
-            --    ইতিমধ্যেই আছে, আর নম্বরটা ASIN-এর, বরাদ্দের নয়।
-            --    আবার বসালে সিরিয়াল অকারণে ফুরাত, আর পুরোনো ফাইলের
-            --    নাম কোনোদিন কিছুর সাথে মিলত না।
+            -- ⚠️⚠️ COALESCE — a target that **came back from the pool**
+            --    already has a number, and the number belongs to the ASIN,
+            --    not to the assignment. Assigning a new one would burn
+            --    serial numbers for nothing, and the old file names would
+            --    never match anything.
             job_number = COALESCE(job_number, nextval('design_job_number_seq'))
         WHERE id = ${row.id} AND status = 'pool'
       `;

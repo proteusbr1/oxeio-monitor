@@ -290,8 +290,8 @@ export class TelegramChannel {
     // after paying for the whole upload
     if (doc.bytes.byteLength > TELEGRAM_DOCUMENT_MAX_BYTES) {
       this.logger.error(
-        `Telegram-এ পাঠানো গেল না — ফাইলটা বড় (${doc.filename}, ` +
-          `${Math.round(doc.bytes.byteLength / 1024 / 1024)} MB, সীমা ` +
+        `Could not send to Telegram — file too large (${doc.filename}, ` +
+          `${Math.round(doc.bytes.byteLength / 1024 / 1024)} MB, limit ` +
           `${TELEGRAM_DOCUMENT_MAX_BYTES / 1024 / 1024} MB)`,
       );
       return 'failed';

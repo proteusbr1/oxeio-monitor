@@ -39,12 +39,12 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
  */
 function parseDate(where: string, value: string): Date {
   if (!DATE.test(value)) {
-    throw new Error(`${where}: joinedOn "${value}" — YYYY-MM-DD হতে হবে`);
+    throw new Error(`${where}: joinedOn "${value}" — must be YYYY-MM-DD`);
   }
 
   const date = new Date(`${value}T00:00:00.000Z`);
   if (Number.isNaN(date.getTime())) {
-    throw new Error(`${where}: joinedOn "${value}" — এমন কোনো তারিখ নেই`);
+    throw new Error(`${where}: joinedOn "${value}" — no such date`);
   }
 
   /**
@@ -52,14 +52,14 @@ function parseDate(where: string, value: string): Date {
    * this round-trip comparison the typo would go straight into proration.
    */
   if (date.toISOString().slice(0, 10) !== value) {
-    throw new Error(`${where}: joinedOn "${value}" — এমন কোনো তারিখ নেই`);
+    throw new Error(`${where}: joinedOn "${value}" — no such date`);
   }
   return date;
 }
 
 function str(where: string, field: string, value: unknown): string {
   if (typeof value !== 'string' || value.trim() === '') {
-    throw new Error(`${where}: ${field} — লেখা হতে হবে, খালি নয়`);
+    throw new Error(`${where}: ${field} — must be text, not empty`);
   }
   return value.trim();
 }
@@ -73,7 +73,7 @@ function str(where: string, field: string, value: unknown): string {
  */
 export function parseStaff(raw: unknown): StaffRow[] {
   if (!Array.isArray(raw)) {
-    throw new Error('staff ফাইলটা একটা তালিকা (array) হতে হবে');
+    throw new Error('The staff file must be a list (array)');
   }
 
   const rows: StaffRow[] = [];
@@ -81,17 +81,17 @@ export function parseStaff(raw: unknown): StaffRow[] {
 
   raw.forEach((row: unknown, i: number) => {
     // Row numbers start at 1 so they match counting rows in the open file.
-    const at = `সারি ${i + 1}`;
+    const at = `Row ${i + 1}`;
 
     if (!Array.isArray(row) || row.length < 4 || row.length > 5) {
       throw new Error(
-        `${at}: ["কোড", "নাম", "পদবি", বেতন] — চার বা পাঁচ ঘর লাগে, পাওয়া গেছে ${
+        `${at}: ["code", "name", "designation", salary] — needs four or five cells, got ${
           Array.isArray(row) ? row.length : typeof row
         }`,
       );
     }
 
-    const empCode = str(at, 'কোড', row[0]);
+    const empCode = str(at, 'code', row[0]);
     const where = `${at} (${empCode})`;
 
     /**
@@ -101,25 +101,25 @@ export function parseStaff(raw: unknown): StaffRow[] {
      * list is built by copy-paste.
      */
     if (seen.has(empCode)) {
-      throw new Error(`${where}: এই কোডটা আগেও আছে — প্রতিটা কোড আলাদা হতে হবে`);
+      throw new Error(`${where}: this code appears earlier — every code must be unique`);
     }
     seen.add(empCode);
 
     const monthlySalary = row[3];
     if (typeof monthlySalary !== 'number' || !Number.isFinite(monthlySalary)) {
       throw new Error(
-        `${where}: বেতন সংখ্যা হতে হবে — উদ্ধৃতি ছাড়া, যেমন 25000`,
+        `${where}: salary must be a number — without quotes, e.g. 25000`,
       );
     }
     // The column is an `Int`; a fraction would be silently truncated.
     if (!Number.isInteger(monthlySalary) || monthlySalary < 0) {
-      throw new Error(`${where}: বেতন ভগ্নাংশ বা ঋণাত্মক হতে পারে না`);
+      throw new Error(`${where}: salary cannot be a fraction or negative`);
     }
 
     rows.push({
       empCode,
-      fullName: str(where, 'নাম', row[1]),
-      designation: str(where, 'পদবি', row[2]),
+      fullName: str(where, 'name', row[1]),
+      designation: str(where, 'designation', row[2]),
       monthlySalary,
       ...(row[4] === undefined
         ? {}

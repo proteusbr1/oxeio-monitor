@@ -346,12 +346,12 @@ describe('gazetteNotes', () => {
         entry({ date: '2027-03-10', approximate: true }),
         entry({ date: '2027-03-26', name: 'স্বাধীনতা দিবস', approximate: false }),
       ],
-      [{ year: 2027, dueBy: 'নভেম্বর ২০২৬' }],
+      [{ year: 2027, dueBy: 'November 2026' }],
     );
 
     expect(notes).toHaveLength(1);
-    expect(notes[0]).toContain('2টি');
-    expect(notes[0]).toContain('নভেম্বর ২০২৬');
+    expect(notes[0]).toContain('2 dates');
+    expect(notes[0]).toContain('November 2026');
   });
 
   /** There is no point talking about uncertainty that does not exist */
@@ -359,12 +359,12 @@ describe('gazetteNotes', () => {
     expect(
       gazetteNotes(
         [entry({ date: '2027-12-16', approximate: false })],
-        [{ year: 2027, dueBy: 'নভেম্বর ২০২৬' }],
+        [{ year: 2027, dueBy: 'November 2026' }],
       ),
     ).toEqual([]);
     expect(
       gazetteNotes([entry({ date: '2026-03-21' })], [
-        { year: 2027, dueBy: 'নভেম্বর ২০২৬' },
+        { year: 2027, dueBy: 'November 2026' },
       ]),
     ).toEqual([]);
   });
@@ -381,7 +381,7 @@ describe('gazetteNotes', () => {
 
     expect(unsure2027).toBeGreaterThan(0);
     expect(notes).toHaveLength(1);
-    expect(notes[0]).toContain(`${unsure2027}টি`);
+    expect(notes[0]).toContain(`${unsure2027} dates`);
     expect(notes[0]).toContain('2027');
   });
 
@@ -773,8 +773,8 @@ describe('planHolidaySeedRun', () => {
 
     expect(note).toContain('জাতির পিতার জন্মদিন');
     expect(note).toContain(`শবে কদর${APPROX_SUFFIX}`);
-    expect(note).toContain('seed নাম বদলায় না');
-    expect(note).toContain('কোনোদিন');
+    expect(note).toContain('the seed does not rename');
+    expect(note).toContain('never get');
     expect(note).toContain('Settings → Holidays');
   });
 
@@ -792,8 +792,8 @@ describe('planHolidaySeedRun', () => {
     );
     const note = run.notes.find((n) => n.includes('2026-03-17'));
 
-    expect(note).toContain('seed নাম বদলায় না');
-    expect(note).not.toContain('কোনোদিন');
+    expect(note).toContain('the seed does not rename');
+    expect(note).not.toContain('never get');
   });
 
   /**
@@ -960,8 +960,8 @@ describe('planHolidaySeedRun — current/past months', () => {
 
     expect(howTo).toBeDefined();
     expect(howTo).toContain('d÷D');
-    expect(howTo).toContain('অতীত মাস');
-    expect(howTo).toContain('§ ২.১গ');
+    expect(howTo).toContain('past month');
+    expect(howTo).toContain('§ 2.1c');
   });
 
   it('with consent all are inserted, and there is no complaint either', () => {

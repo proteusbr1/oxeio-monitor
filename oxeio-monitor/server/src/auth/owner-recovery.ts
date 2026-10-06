@@ -81,7 +81,7 @@ export async function recoverOwner(
       return {
         ok: false,
         reason: 'no-owner-no-email',
-        detail: 'কোনো owner অ্যাকাউন্ট নেই — নতুন একটা বানাতে ইমেইল দিতে হবে।',
+        detail: 'No owner account exists — pass an email to create a new one.',
       };
     }
 
@@ -125,12 +125,12 @@ export async function recoverOwner(
       ? {
           ok: false,
           reason: 'not-found',
-          detail: `\`${email}\` নামে কোনো owner নেই।`,
+          detail: `No owner with the email \`${email}\`.`,
         }
       : {
           ok: false,
           reason: 'ambiguous',
-          detail: `${owners.length}টি owner আছে — কোনটা, সেটা ইমেইল দিয়ে বলতে হবে।`,
+          detail: `There are ${owners.length} owners — pass an email to say which one.`,
         };
   }
 
