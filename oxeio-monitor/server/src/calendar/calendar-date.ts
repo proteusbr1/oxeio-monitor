@@ -2,14 +2,14 @@
  * 'YYYY-MM-DD' -> a `Date` fit to store in a `@db.Date` column.
  *
  * Careful: `src/agent/util/work-time.ts` is deliberately **not** used here.
- * That file converts an *instant* to a Dhaka date (for example which workday a
+ * That file converts an *instant* to a work-zone date (for example which workday a
  * segment falls on). But a joining date or a holiday date is not an instant:
  * it is a plain calendar date that a person wrote by hand. Applying a
  * timezone to it would sometimes turn the 1st into the 31st.
  *
  * Careful: the real trap: `new Date('2026-08-10T00:00:00')` (without a
  * trailing `Z`) is read in the server's **local** time. If the server is in
- * Dhaka, that is 18:00 of the previous day in UTC, so the database would get
+ * a zone east of UTC (Asia/Dhaka, say), that is 18:00 of the previous day in UTC, so the database would get
  * a date one day behind and the holiday calendar would silently shift by a
  * day. That is why the `Z` is written explicitly.
  */

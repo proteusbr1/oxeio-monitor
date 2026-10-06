@@ -161,7 +161,7 @@ function categoryOf(
 /** One row of `groupBy(['employeeId','workDate','categoryId'])`. */
 export interface DailyGroup {
   employeeId: number;
-  /** `@db.Date`: the Dhaka date, stored as a UTC midnight. */
+  /** `@db.Date`: the work-zone date, stored as a UTC midnight. */
   workDate: Date;
   categoryId: number | null;
   seconds: number;
@@ -659,9 +659,9 @@ export interface WorkDateRange {
 /**
  * `work_date` (`@db.Date`) -> `YYYY-MM-DD`.
  *
- * Careful: **no timezone conversion.** The column is already the Dhaka date, stored
+ * Careful: **no timezone conversion.** The column is already the work-zone date, stored
  * as a UTC midnight (that is exactly what `workDateOf` in
- * [work-time.ts](../agent/util/work-time.ts) sets). Adding +6 hours again here, or
+ * [work-time.ts](../agent/util/work-time.ts) sets). Adding the zone's offset again here, or
  * using `toLocaleDateString`, would shift every date by a day depending on the
  * server's timezone, and that would show up only on some machines.
  */

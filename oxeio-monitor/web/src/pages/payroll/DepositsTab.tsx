@@ -21,7 +21,7 @@ import {
 /**
  * **Security deposit.**
  *
- * The owner's rule: "৳500 is withheld from salary each month, and anyone who leaves
+ * The owner's rule, as first set up: "৳500 is withheld from salary each month, and anyone who leaves
  * giving 30 days' notice gets the whole deposit back."
  *
  * Careful: this screen is **owner-only**, not even managers: the deposit is a direct
@@ -267,7 +267,7 @@ export function DepositsTab() {
   );
 }
 
-/** Paisa to a two-decimal number without '৳', the same as the server's `paisaToTaka` */
+/** Paisa to a two-decimal number without the currency symbol, the same as the server's `paisaToTaka` */
 function takaOf(paisa: number): string {
   return (paisa / 100).toFixed(2);
 }
@@ -318,7 +318,7 @@ function EditRule({
             disabled={busy || badAmount || badNotice}
             onClick={() =>
               onSubmit({
-                // The screen takes taka, the API paisa; the conversion is in this one place
+                // The screen takes whole currency units, the API minor units (paisa); the conversion is in this one place
                 amountPaisa: Math.round(Number(amount) * 100),
                 startYearMonth: orUndefined(startYearMonth),
                 noticeDays: Number(noticeDays),
@@ -601,7 +601,7 @@ function MonthsDialog({
   const mutation = useMutation();
 
   /**
-   * Careful: taka to paisa happens here, with `Math.round`. Sending a floating-point
+   * Careful: whole units to paisa happens here, with `Math.round`. Sending a floating-point
    *    product (`500.10 * 100 = 50009.999...`) directly would make the server's
    *    `@IsInt()` return 400, and the owner would not understand what they did wrong.
    */

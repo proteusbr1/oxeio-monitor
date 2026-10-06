@@ -37,7 +37,7 @@ import {
  * from the old theme. So the text says "Solid / grey", not a colour name.
  */
 
-/** Careful: Asia/Dhaka = UTC+06:00, no DST; the same constant as in `lib/format.ts` */
+/** Careful: the work zone has a fixed offset (no DST); the same constant as in `lib/format.ts` */
 const MINUTES_PER_DAY = 24 * 60;
 
 /**
@@ -69,7 +69,7 @@ const SEG_CLASS: Record<SegmentState, string> = {
 
 interface Span {
   seg: TimelineSegment;
-  /** Minutes from 00:00 of that day in Dhaka; negative or 1440+ past midnight */
+  /** Minutes from 00:00 of that day in the work zone; negative or 1440+ past midnight */
   fromMin: number;
   toMin: number;
   /** Which row it goes in, starting from 1 */
@@ -344,7 +344,7 @@ function TimelineBody({ timeline }: { timeline: Timeline }) {
  *    `new Date()` it has no side effects.
  */
 function buildView(t: Timeline): View {
-  // Careful: `parseWorkDate` gives UTC midnight; moving back 6 hours gives 00:00 in Dhaka
+  // Careful: `parseWorkDate` gives UTC midnight; moving back by the offset gives 00:00 in the work zone
   const parsed = parseWorkDate(t.date);
   const dayStartMs = (parsed?.getTime() ?? 0) - workOffsetMs();
   const minuteOf = (iso: string): number =>

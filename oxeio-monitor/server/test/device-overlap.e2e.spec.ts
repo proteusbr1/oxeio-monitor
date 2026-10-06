@@ -25,7 +25,7 @@ let deviceB: number;
 /**
  * Two different "now"s, and that is deliberate (G140).
  *
- * - `workDate` comes from `dhakaNoon()` — the fixture's work day, 12 hours
+ * - `workDate` comes from `workNoon()` — the fixture's work day, 12 hours
  *   from both boundaries, so it does not break when the day rolls over at
  *   midnight.
  * - `runOnce()` gets the real clock, because the throttle is compared with
@@ -40,7 +40,7 @@ let deviceB: number;
  */
 const workDate = workDateOf(workNoon());
 
-/** An instant within that work day (hour + minute on the Dhaka clock) */
+/** An instant within that work day (hour + minute on the work-zone clock) */
 const at = (hour: number, minute = 0): Date =>
   new Date(workDate.getTime() + (hour - 6) * 3_600_000 + minute * 60_000);
 
@@ -173,7 +173,7 @@ describe('device_overlap — producer', () => {
    *
    * The bug this guards: the test above ran twice at the same instant, so
    * the 6-hour throttle seemed sufficient. But the check runs every hour and
-   * reads the whole Dhaka day's segments each time — once the condition is
+   * reads the whole work day's segments each time — once the condition is
    * true, it stays true for every later tick that day. So a new alert for the
    * same event every 6 hours, 3-4 a day, each one a separate email.
    *
@@ -192,7 +192,7 @@ describe('device_overlap — producer', () => {
     expect(await check.runOnce(realNow())).toBe(1);
 
     // Moved to 1 AM — 19 hours from the evening tick, well outside the 6-hour
-    // window, yet the same Dhaka day
+    // window, yet the same work day
     await h.prisma.alert.updateMany({ data: { createdAt: at(1) } });
 
     expect(await check.runOnce(at(20))).toBe(0);
@@ -201,7 +201,7 @@ describe('device_overlap — producer', () => {
 
   /**
    * It fires again the next day — this test pays for the fix above. Per-day
-   * silence must not turn into "silent forever": a new Dhaka day means a new
+   * silence must not turn into "silent forever": a new work day means a new
    * event, and the owner needs to know.
    */
   it('yesterday\'s alert does not block today\'s', async () => {

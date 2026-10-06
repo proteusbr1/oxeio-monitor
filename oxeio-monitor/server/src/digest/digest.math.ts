@@ -83,7 +83,7 @@ export interface DigestRow {
 }
 
 export interface Digest {
-  /** Today's date in Dhaka, YYYY-MM-DD */
+  /** Today's date in the work zone, YYYY-MM-DD */
   workDate: string;
   /** The part of the month that was counted */
   monthFrom: string;
@@ -232,7 +232,7 @@ export function digestSubject(digest: Digest): string {
  * The plain-text body.
  *
  * Careful: no attempt is made to lay out printed-style columns (`padEnd`
- * etc.). Bengali glyph widths differ from font to font and conjuncts are
+ * etc.). Bengali (and other non-Latin) glyph widths differ from font to font and conjuncts are
  * several code units — so aligned columns would look straight in some clients
  * and ragged in others. Simple bullets read the same everywhere.
  */

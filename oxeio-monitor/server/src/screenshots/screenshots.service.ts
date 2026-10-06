@@ -318,8 +318,8 @@ export class ScreenshotsService {
 
   private resolveDate(iso?: string): Date {
     if (iso === undefined) {
-      // Careful: Dhaka's "today", not the server's UTC "today"; between
-      // midnight and 6 am they are two different dates.
+      // Careful: the work zone's "today", not the server's UTC "today"; between
+      // local midnight and the zone's offset hour they are two different dates.
       return workDateOf(new Date());
     }
     const parsed = parseWorkDate(iso);

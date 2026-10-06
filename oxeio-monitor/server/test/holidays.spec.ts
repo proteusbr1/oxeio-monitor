@@ -302,7 +302,7 @@ describe('workToday', () => {
     expect(workToday(new Date('2026-08-31T20:00:00.000Z'))).toBe('2026-09-01');
   });
 
-  it('just before and after Dhaka midnight', () => {
+  it('just before and after local midnight', () => {
     expect(workToday(new Date('2026-08-14T17:59:59.000Z'))).toBe('2026-08-14');
     expect(workToday(new Date('2026-08-14T18:00:00.000Z'))).toBe('2026-08-15');
   });

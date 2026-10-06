@@ -122,7 +122,7 @@ describe('POST /agent/app-usage: segment state', () => {
     expect(await h.prisma.appUsage.count()).toBe(2);
 
     /**
-     * Careful: the Dhaka date, not UTC's. This repeats G62 exactly, and was
+     * Careful: the work-zone date, not UTC's. This repeats G62 exactly, and was
      * another sleeping time bomb (it went off at 00:03 on 22 August).
      *
      * `new Date().toISOString()` gives UTC, and Dhaka is UTC+6, so between

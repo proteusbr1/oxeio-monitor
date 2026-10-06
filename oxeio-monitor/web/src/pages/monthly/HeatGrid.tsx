@@ -72,7 +72,7 @@ export function HeatGrid({
   today,
 }: {
   grid: MonthGrid;
-  /** Today in Dhaka, so the column can be marked */
+  /** Today in the work zone, so the column can be marked */
   today: string;
 }) {
   // Careful: keep only the keys, not the cell objects; holding old objects after the

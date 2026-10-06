@@ -104,7 +104,7 @@ describe('throttle: one per device per cause in 6 hours', () => {
  * Day-scoped alerts: one per day (G166).
  *
  * The bug this block guards: `device_overlap` and `synthetic_input` both
- * speak about the whole Dhaka day, both run every hour, and both re-read the
+ * speak about the whole work day, both run every hour, and both re-read the
  * whole day's segments each time. Once the condition is true it stays true
  * on every later tick that day, yet the throttle window is only 6 hours and
  * the key has no day in it. Result: 3-4 identical alerts a day for one
@@ -147,7 +147,7 @@ describe('G166: day-scoped alerts fire only once a day', () => {
     expect(isThrottledFor('synthetic_input', earlier, noon)).toBe(true);
   });
 
-  /** Not silent forever: a new Dhaka day means a new event */
+  /** Not silent forever: a new work day means a new event */
   it('yesterday\'s alert does not block today\'s', () => {
     // Last night at 11 pm in Dhaka
     const lastNight = new Date('2026-09-06T17:00:00Z');
@@ -242,10 +242,10 @@ describe('suppressFlood: filtering one round\'s candidates', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// Dhaka time
+// work-zone time
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('Dhaka time', () => {
+describe('work-zone time', () => {
   it('local hour, not UTC', () => {
     // 20:30 Dhaka = 14:30 UTC
     expect(workHourOf(new Date('2026-08-11T14:30:00Z'))).toBe(20);

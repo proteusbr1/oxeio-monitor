@@ -248,7 +248,7 @@ describe('heartbeat', () => {
    */
   it('on a holiday the daily target is zero, not null', async () => {
     /**
-     * Careful: the Dhaka date, not UTC's. This repeats G62 exactly.
+     * Careful: the work-zone date, not UTC's. This repeats G62 exactly.
      *
      * Today's date used to be built here with `getUTCFullYear/Month/Date`. In
      * the daytime the two agree, so the test passed. But between Dhaka
@@ -301,7 +301,7 @@ describe('heartbeat', () => {
    */
   it('when a new version is set, "since when" is set too', async () => {
     /**
-     * Careful: `realNow()`, not `dhakaNoon()`, and this is not an exception
+     * Careful: `realNow()`, not `workNoon()`, and this is not an exception
      * to G140 but a legitimate use of it. The time is written by the server,
      * with its own clock, so the comparison must be against the real clock
      * too. A pinned noon would give a wrong result twice a day.
@@ -448,7 +448,7 @@ describe('heartbeat', () => {
 
 describe('segments: dedupe and validation (section 2.1d)', () => {
   /**
-   * Timestamps must always stay inside today's Dhaka day.
+   * Timestamps must always stay inside today's work day.
    *
    * This used to be `minutesAgo(30)`. Running the test just after midnight
    * put it on the previous date, the server split the segment at midnight
@@ -521,7 +521,7 @@ describe('segments: dedupe and validation (section 2.1d)', () => {
 
   it('counts_as_work is true only for active', async () => {
     /**
-     * Careful: all three segments are inside today's Dhaka day and arranged
+     * Careful: all three segments are inside today's work day and arranged
      * one after another.
      *
      * `idle`/`locked` used to have `minutesAgo(15/10/9)`, which is exactly

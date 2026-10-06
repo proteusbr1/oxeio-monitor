@@ -45,7 +45,7 @@ export interface ParsedQuery {
   date: string | null;
   /** What remains after removing the date: the name/code part of the search. */
   text: string;
-  /** A date was found, but it is after today in Dhaka. */
+  /** A date was found, but it is after today in the work zone. */
   future: boolean;
 }
 
@@ -117,7 +117,7 @@ function parseDateToken(token: string, today: string): string | null {
 
   /**
    * The four-digit part is the year, so both `2026-08-01` (ISO) and `01/08/2026`
-   * (as written in Dhaka) work, with no guessing about which is day and which is month.
+   * (day first) work, with no guessing about which is day and which is month.
    * Careful: two-digit years (`01/08/26`) are not accepted: with three numbers it
    * is no longer certain which one is the year, and a wrong guess would open another
    * day's timeline, one that looks perfect and is merely the wrong day.

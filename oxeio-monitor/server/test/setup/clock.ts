@@ -2,7 +2,7 @@
  * The test clock.
  *
  * Careful: date-dependent tests broke three times in this repo, in three
- * different files: the dedupe test (after Dhaka midnight), `adjustments.e2e`
+ * different files: the dedupe test (after local midnight), `adjustments.e2e`
  * (pace, a number that grows daily, the owner inbox filling up) and
  * `agent-recovery.e2e` (outside office hours, CI ran at 23:19). Each time the
  * code already had a way to inject the time (`runOnce(now)`, `todayWindow()`);
@@ -48,14 +48,14 @@ export function workNoon(dayOffset = 0): Date {
 }
 
 /**
- * Today's date in Dhaka, as `'YYYY-MM-DD'`.
+ * Today's date in the work zone, as `'YYYY-MM-DD'`.
  *
  * This formula used to be written by hand in four specs
  * (`new Date(Date.now() + 6 * 3600_000).toISOString().slice(0, 10)`), and
  * four copies means one gets changed and the rest do not. In the dedupe test
  * this exact formula was written assuming UTC and broke.
  *
- * The name deliberately differs from `dhakaToday(now)` in
+ * The name deliberately differs from `workToday(now)` in
  * `prisma/holidays.data.ts`: that one is a production function and takes an
  * argument, and with the same name the import would not show which is which.
  */
@@ -79,7 +79,7 @@ export function workTodayIso(): string {
  * `adjustments.e2e`). If that number keeps growing, it is a signal that
  * someone is not following the rule.
  *
- * Never use it to build fixture dates; use `dhakaNoon()` for that.
+ * Never use it to build fixture dates; use `workNoon()` for that.
  */
 export function realNow(): Date {
   return new Date();

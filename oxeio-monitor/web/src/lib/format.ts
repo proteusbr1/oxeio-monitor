@@ -13,14 +13,14 @@
  */
 
 /**
- * Asia/Dhaka = UTC+06:00, no DST; exactly the same constant as the server's
+ * The default, Asia/Dhaka, is UTC+06:00 with no DST; exactly the same constant as the server's
  * `work-time.ts`. With two numbers in two places, one would eventually change.
  */
 let WORK_OFFSET_MS = 6 * 60 * 60 * 1000;
 
 /**
  * The work-day zone, which the server may run on something other than
- * Asia/Dhaka (`WORK_TIMEZONE`). Starts as Dhaka, so a server that does not
+ * Asia/Dhaka (`WORK_TIMEZONE`). Starts as that default, so a server that does not
  * send the zone (older version, request failed) behaves exactly as before.
  */
 let workZone = { timeZone: 'Asia/Dhaka', utcOffsetMinutes: 360 };
@@ -48,7 +48,7 @@ export function workTimeZone(): string {
   return workZone.timeZone;
 }
 
-/** Short place name for labels: `Asia/Dhaka` → `Dhaka`, `America/Sao_Paulo` → `Sao Paulo` */
+/** Short place name for labels, e.g. `Asia/Dhaka` → `Dhaka`, `America/Sao_Paulo` → `Sao Paulo` */
 export function workTimeZoneLabel(): string {
   return (workZone.timeZone.split('/').pop() ?? workZone.timeZone).replace(
     /_/g,
@@ -56,12 +56,12 @@ export function workTimeZoneLabel(): string {
   );
 }
 
-/** Offset of the work-day zone in ms (Dhaka = 6 h) — for the few callers that cut days by hand */
+/** Offset of the work-day zone in ms (6 h for the default Asia/Dhaka) — for the few callers that cut days by hand */
 export function workOffsetMs(): number {
   return WORK_OFFSET_MS;
 }
 
-/** The offset as an ISO-8601 suffix: `+06:00`, `-03:00` */
+/** The offset as an ISO-8601 suffix, e.g. `+06:00`, `-03:00` */
 export function workOffsetIso(): string {
   const min = workZone.utcOffsetMinutes;
   const abs = Math.abs(min);
@@ -185,10 +185,10 @@ function localeDate(
 // ── Workday (`YYYY-MM-DD`) ──────────────────────────────────────────────────
 
 /**
- * Today's workday in Dhaka: the browser's timezone is not assumed.
+ * Today's workday in the work zone: the browser's timezone is not assumed.
  *
- * `new Date().toISOString().slice(0, 10)` would give the UTC date, and in Dhaka
- * between midnight and 6 a.m. that shows the previous day, so an employee working
+ * `new Date().toISOString().slice(0, 10)` would give the UTC date, and in a zone ahead of UTC (Dhaka, say)
+ * between midnight and the offset hour (6 a.m.) that shows the previous day, so an employee working
  * at night (normal per section 2.1-a) could not find their own hours for today.
  * In the other direction, in a browser in Bangkok `toLocaleDateString()` would run
  * a day ahead. So the offset is stated explicitly here.
@@ -198,18 +198,18 @@ export function todayInWorkZone(now: Date = new Date()): string {
 }
 
 /**
- * The current hour in Dhaka, 0-23: "where are we now" on the day-rhythm chart.
+ * The current hour in the work zone, 0-23: "where are we now" on the day-rhythm chart.
  *
  * Careful: `new Date().getHours()` cannot be used; that is the browser's hour. If
  * the owner opened the board from abroad, the marker would sit under the wrong
  * column, and a hard-to-spot error: the chart would be right, only the mark moved.
- * The offset is explicit here, as in `todayInDhaka`.
+ * The offset is explicit here, as in `todayInWorkZone`.
  */
 export function workHourNow(now: Date = new Date()): number {
   return new Date(now.getTime() + WORK_OFFSET_MS).getUTCHours();
 }
 
-/** Which Dhaka workday an instant falls in: `YYYY-MM-DD`. */
+/** Which work day an instant falls in: `YYYY-MM-DD`. */
 export function workDateOf(instant: Date | string): string {
   const date = typeof instant === 'string' ? new Date(instant) : instant;
   return isoDateOf(new Date(date.getTime() + WORK_OFFSET_MS));
@@ -285,7 +285,7 @@ export function shiftMonth(monthKey: string, months: number): string {
   return `${moved.getUTCFullYear()}-${pad(moved.getUTCMonth() + 1)}`;
 }
 
-/** The 1st of the current month to today in Dhaka. The default range for report pages. */
+/** The 1st of the current month to today in the work zone. The default range for report pages. */
 export function thisMonthRange(now: Date = new Date()): {
   from: string;
   to: string;
@@ -359,11 +359,11 @@ export function formatMonth(monthKey: string): string {
 }
 
 /**
- * ISO instant to the Dhaka clock time, `'14:32'`.
+ * ISO instant to the work-zone clock time, `'14:32'`.
  *
  * Careful: `toLocaleTimeString()` would show the user's own timezone; someone
- * outside Dhaka (or on a VPN) would see wrong screenshot times and have no way
- * to notice. All office times are Dhaka time.
+ * outside the work zone (or on a VPN) would see wrong screenshot times and have no way
+ * to notice. All office times are work-zone time.
  */
 export function formatTime(iso: string | null): string {
   if (!iso) return '—';
@@ -372,7 +372,7 @@ export function formatTime(iso: string | null): string {
   return `${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`;
 }
 
-/** ISO instant to `'10 August 2026, 14:32'` (Dhaka time). */
+/** ISO instant to `'10 August 2026, 14:32'` (work-zone time). */
 export function formatDateTime(iso: string | null): string {
   if (!iso) return '—';
   const at = new Date(iso);
@@ -499,7 +499,7 @@ export function hoursToSeconds(hours: number | string): number {
   return Number.isFinite(value) ? value * HOUR : 0;
 }
 
-// ── Percentages, bytes, taka ────────────────────────────────────────────────
+// ── Percentages, bytes, money ───────────────────────────────────────────────
 
 /**
  * `null` means no data, not zero (the server's `scorePct` sends exactly this).
@@ -538,7 +538,7 @@ export function formatBytes(bytes: number | null | undefined): string {
 }
 
 /**
- * The currency's symbol — `৳` until the server says otherwise
+ * The currency's symbol — `৳` (the BDT default) until the server says otherwise
  * (`GET /auth/currency`, loaded in `main.tsx` before the first render).
  * Only the symbol changes; the number keeps the formatting below.
  */
@@ -556,7 +556,7 @@ export function currencySymbol(): string {
 }
 
 /**
- * Taka: `'13000.50'` to `'৳ 13,000.50'`.
+ * Money: `'13000.50'` to `'৳ 13,000.50'` (with the default BDT symbol).
  *
  * The symbol is the configured currency's (`currencySymbol()`); with the
  * default BDT the text is exactly what it always was.

@@ -74,7 +74,7 @@ export interface DepositBalance {
 /**
  * **Security money (deposit).**
  *
- * The owner's rule: 500 taka is held back from salary each month, and anyone
+ * The owner's rule (in the first deployment, 500 taka): a fixed amount is held back from salary each month, and anyone
  * who leaves after giving 30 days' notice gets the whole amount back.
  *
  * **The ledger is written down, not calculated** — the money held is the
@@ -96,7 +96,7 @@ export class DepositsService {
     private readonly audit: AuditService,
   ) {}
 
-  /** The current month in the Dhaka calendar — `2026-08` */
+  /** The current month in the work-zone calendar — `2026-08` */
   private currentMonth(): YearMonth {
     return workDateOf(new Date()).toISOString().slice(0, 7);
   }

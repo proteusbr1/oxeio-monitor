@@ -30,12 +30,12 @@ import {
  *
  * Careful: none of what is tested here is a question of "looks nice": each
  * is a mistake where a **wrong number** lands on screen and nobody catches
- * it because it looks right. If the Dhaka date shifts by a day, a person who
+ * it because it looks right. If the work-zone date shifts by a day, a person who
  * works at night cannot find their hours; if the adjustment sign is lost,
  * add and subtract look the same.
  */
 
-// ── Dhaka dates ─────────────────────────────────────────────────────────────
+// ── work-zone dates ─────────────────────────────────────────────────────────────
 
 describe('todayInWorkZone — the browser timezone is not assumed', () => {
   /**
@@ -89,7 +89,7 @@ describe('shifting dates', () => {
   it('crosses the year boundary, the month moves', () =>
     expect(shiftMonth('2026-01', -1)).toBe('2025-12'));
 
-  it('the current month range is based on today in Dhaka', () => {
+  it('the current month range is based on today in the work zone', () => {
     const range = thisMonthRange(new Date('2026-08-11T20:00:00Z'));
     expect(range).toEqual({ from: '2026-08-01', to: '2026-08-12' });
   });
@@ -108,8 +108,8 @@ describe('showing dates', () => {
   it('a bad month gives back what came in', () =>
     expect(formatMonth('2026-99')).toBe('2026-99'));
 
-  /** Careful: time on the Dhaka clock, not the user's timezone */
-  it('time on the Dhaka clock', () =>
+  /** Careful: time on the work-zone clock, not the user's timezone */
+  it('time on the work-zone clock', () =>
     expect(formatTime('2026-08-11T08:32:00Z')).toBe('14:32'));
 
   it('dash when there is no time', () => expect(formatTime(null)).toBe('—'));

@@ -38,7 +38,7 @@ import {
 } from './targets.rules';
 
 /**
- * 'YYYY-MM-DD' becomes the Dhaka midnight of that day.
+ * 'YYYY-MM-DD' becomes the local midnight of that day.
  *
  * Careful: this sits at module level on purpose. The `list()` filter and the
  * `stats()` count must use exactly the same date. If a chip says 132 and
@@ -58,10 +58,10 @@ const nextDay = (day: string): Date =>
 const laterDay = (a: string, b: string): string => (a >= b ? a : b);
 
 /**
- * Which Dhaka day an instant falls on, as `'YYYY-MM-DD'`.
+ * Which work day an instant falls on, as `'YYYY-MM-DD'`.
  *
  * Careful: `toISOString().slice(0,10)` would give the UTC day, which shows
- * yesterday before 06:00 in Dhaka. Someone who pressed Complete at 11 pm and
+ * yesterday before the zone's offset hour (06:00 for Asia/Dhaka). Someone who pressed Complete at 11 pm and
  * spotted a mistake would then find Undo blocked as "yesterday's work".
  */
 const workDateStr = (at: Date): string =>
@@ -589,7 +589,7 @@ export class TargetsService {
    * change yesterday's numbers too, and someone could move work from a bad day
    * to a good one. The owner can undo older ones.
    *
-   * Careful: "today" means the Dhaka day, counted exactly as reports count it.
+   * Careful: "today" means the work day, counted exactly as reports count it.
    */
   async mine(employeeId: number): Promise<MyTarget[]> {
     const rows = await this.prisma.designTarget.findMany({
@@ -930,11 +930,11 @@ export class TargetsService {
   }
 
   /**
-   * How many were marked done in today's Dhaka day.
+   * How many were marked done in today's work day.
    *
    * Careful: the boundaries come from `localMidnightOf`/`nextLocalMidnight`,
    * not computed by hand. `workDateOf()` is a label, not an instant; using it
-   * directly would start the day at 06:00 Dhaka, and this repo has made
+   * directly would start the day at the offset hour (06:00 for Asia/Dhaka), and this repo has made
    * exactly that mistake most often.
    *
    * Careful: counted by `assignedToId`, not `completedById`. The dashboard
@@ -1053,7 +1053,7 @@ export class TargetsService {
      *
      * This used to be `numbers: string[]` plus a `now: Date`, and the caller
      * passed the work-day label in place of `now`. The label is UTC midnight,
-     * i.e. 06:00 Dhaka, so every target's "work started" got that one instant:
+     * i.e. 06:00 in Asia/Dhaka, so every target's "work started" got that one instant:
      * 711 of 711 in the field, all the same time, and each before its own
      * `assigned_at` (distribution is at 08:00).
      *

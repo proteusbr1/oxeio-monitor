@@ -6,7 +6,7 @@
  * Settings → Region *before* that happens.
  */
 /**
- * Minutes east of UTC for `timeZone` (Asia/Dhaka = 360, America/Sao_Paulo =
+ * Minutes east of UTC for `timeZone` (for example Asia/Dhaka = 360, America/Sao_Paulo =
  * -180). Throws if the name is unknown or the zone observes DST in `year`.
  *
  * Compares 1 January with 1 July: any DST rule, northern or southern

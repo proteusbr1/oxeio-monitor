@@ -66,8 +66,8 @@ export function ReportsPage() {
 
 function ReportsBoard() {
   const [tab, setTab] = useState<TabId>('attendance');
-  // Careful: not `new Date().toISOString().slice(0,10)`; between midnight and 6am in
-  //    Dhaka that gives the previous date and the report would open a day behind.
+  // Careful: not `new Date().toISOString().slice(0,10)`; between midnight and the offset hour in
+  //    zones ahead of UTC (6am in Asia/Dhaka) that gives the previous date and the report would open a day behind.
   const [range, setRange] = useState(() => thisMonthRange());
   const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [groupBy, setGroupBy] = useState<GroupBy>('month');

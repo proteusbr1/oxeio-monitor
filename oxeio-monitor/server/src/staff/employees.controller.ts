@@ -131,7 +131,7 @@ export class EmployeesController {
    * policy.
    *
    * The body is optional: `{ "signedOn": "2026-08-03" }`. Without it, today's
-   * Dhaka date is used.
+   * work-zone date is used.
    *
    * Careful: this is the only place to record the one rollout precondition
    * ([01 § Rollout](../../../docs/01-Planning.md)). The column existed and was

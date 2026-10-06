@@ -155,7 +155,7 @@ export function deleteLeave(id: number): Promise<void> {
 export interface DepositPolicyView {
   /** '500.00' */
   amount: string;
-  /** Sent in paisa: 500 taka = 50000. */
+  /** Sent in minor units (paisa): 500.00 = 50000. */
   amountPaisa: number;
   startYearMonth: string;
   noticeDays: number;

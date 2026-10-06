@@ -180,7 +180,7 @@ export function keepKnownLongIds(
  *
  * Careful: this function used to return only a `Set`, and the caller then
  * wrote **the work-day label** into `design_targets.started_at`, so every
- * target's "work started" became 6 am Dhaka time. In the field **all 711 of
+ * target's "work started" became 6 am Asia/Dhaka time (the field zone). In the field **all 711 of
  * 711** sat at that one moment, and every one was **before** its own
  * `assigned_at` (assignment happens at 8 am).
  *

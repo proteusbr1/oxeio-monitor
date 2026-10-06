@@ -666,7 +666,7 @@ export class EmployeesService {
     if (!before) throw new NotFoundException('Staff member not found');
 
     /**
-     * Careful: the date is stored as **Dhaka midnight**, not the moment of
+     * Careful: the date is stored as **local midnight**, not the moment of
      * entry. The column is `timestamptz`, so storing the moment would make a
      * record of "signed 3 August" show 2 or 4 August when the time zone
      * changes, which is unacceptable for the date of a legal document.

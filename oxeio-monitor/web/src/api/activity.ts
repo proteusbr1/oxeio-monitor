@@ -148,7 +148,7 @@ export interface TeamReport {
 export interface RangeQuery {
   /** Defaults to the 1st of the current month */
   from?: string;
-  /** Defaults to today's date in Dhaka */
+  /** Defaults to today's date in the work zone */
   to?: string;
 }
 

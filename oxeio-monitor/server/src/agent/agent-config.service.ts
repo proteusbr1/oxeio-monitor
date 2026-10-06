@@ -14,7 +14,7 @@ export interface AgentConfig {
   screenshotTo: string | null;
   timezone: string;
   /**
-   * Minutes east of UTC for `timezone` (Asia/Dhaka = 360). Sent as a number
+   * Minutes east of UTC for `timezone` (e.g. Asia/Dhaka = 360). Sent as a number
    * so the agent does not need a tz database: the server only accepts zones
    * without DST, so one fixed offset is the whole story.
    */

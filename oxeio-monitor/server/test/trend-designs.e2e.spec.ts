@@ -22,7 +22,7 @@ import {
  *
  * **The real risk is at the day boundary.** `completed_at` is a timestamptz,
  * and that table has no `work_date` column — so the bucketing must go by the
- * Dhaka day. Most tests in this file check both sides of exactly that boundary.
+ * work day. Most tests in this file check both sides of exactly that boundary.
  */
 let h: Harness;
 let dashboard: DashboardService;
@@ -44,15 +44,15 @@ beforeEach(async () => {
   await resetDatabase(h.prisma, h.app);
 });
 
-/** Today's working day in Dhaka — as a label (UTC midnight) */
+/** Today's working day in the work zone — as a label (UTC midnight) */
 const today = () => workDateOf(workNoon());
 
 /**
- * The **real moment** of a given hour inside one Dhaka day.
+ * The **real moment** of a given hour inside one work day.
  *
  * This function is the centre of the file. `dayLabel` is a **label** — the
- * Dhaka day written as UTC midnight. That day's Dhaka midnight starts **6
- * hours before the label**. Getting this wrong would silently shift every
+ * work day written as UTC midnight. That day's local midnight starts **6
+ * hours before the label** (for the Asia/Dhaka zone the tests run in). Getting this wrong would silently shift every
  * boundary test the wrong way, and they would stay green.
  */
 function atWorkHour(dayLabel: Date, hour: number): Date {
@@ -102,7 +102,7 @@ describe('seven-day strip — how many designs were finished', () => {
   });
 
   /**
-   * **The most important test of this file — both sides of Dhaka midnight.**
+   * **The most important test of this file — both sides of local midnight.**
    *
    * 23:30 in Dhaka is **17:30 the same day** in UTC; 00:30 in Dhaka is **18:30
    * the previous day** in UTC. If someone bucketed by the UTC day, every design

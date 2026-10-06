@@ -33,7 +33,7 @@ export const ADJUSTMENT_MAX_SEC = 24 * 3600;
  * approval workflow.
  */
 export class CreateAdjustmentDto {
-  /** The day the hours count toward (Dhaka workday). */
+  /** The day the hours count toward (work day). */
   @Matches(DATE_ONLY, { message: 'workDate must be YYYY-MM-DD' })
   workDate!: string;
 

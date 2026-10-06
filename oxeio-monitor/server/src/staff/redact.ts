@@ -130,7 +130,7 @@ export interface EmployeeBaseView {
 
 /** Only the owner's response **contains** the salary field. */
 export interface OwnerEmployeeView extends EmployeeBaseView {
-  /** Taka, two decimals. `null` when not set, not zero (see payroll). */
+  /** Whole currency units, two decimals. `null` when not set, not zero (see payroll). */
   monthlySalary: string | null;
 }
 
@@ -220,7 +220,7 @@ export function toEmployeeViews(
  * A `@db.Date` column comes from Prisma as UTC midnight, so the first ten
  * characters of the ISO string are the calendar date.
  *
- * Careful: the Dhaka offset is **not** added here. This is not an instant but
+ * Careful: the work-zone offset is **not** added here. This is not an instant but
  * a plain calendar date, like a birthday or joining date. Applying a time
  * zone would sometimes turn the 1st into the 31st.
  */

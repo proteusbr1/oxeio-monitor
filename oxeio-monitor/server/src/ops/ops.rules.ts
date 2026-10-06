@@ -40,7 +40,7 @@ const OFFSET_MS = LOCAL_OFFSET_MIN * MINUTE_MS;
  * restoring a file changes `mtime`; a six-month-old backup would then look like
  * "today's" and never rotate out. The name does not change.
  *
- * Careful: the date is Dhaka time. The 02:30 dump is 20:30 the previous day in
+ * Careful: the date is work-zone time. For Asia/Dhaka the 02:30 dump is 20:30 the previous day in
  * UTC; building the name from UTC would shift the file's date, and "which
  * night's backup", by one day.
  *

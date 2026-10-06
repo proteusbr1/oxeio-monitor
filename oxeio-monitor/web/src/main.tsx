@@ -36,7 +36,7 @@ async function loadWorkTimeZone(): Promise<void> {
 /**
  * The currency symbol comes from the server before the first render, so no
  * amount is ever drawn with the wrong one. If the request fails or is slow
- * (older server, offline PWA) the default ৳ stays — as before.
+ * (older server, offline PWA) the default ৳ (BDT) stays — as before.
  */
 async function loadCurrency(): Promise<void> {
   const controller = new AbortController();

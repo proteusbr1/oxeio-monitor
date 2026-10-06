@@ -55,7 +55,7 @@ export function parseWorkDate(text: string): Date {
 /**
  * UTC-midnight Date → 'YYYY-MM-DD'.
  * `toLocaleDateString()` or `getFullYear()` are not used: with the server
- * outside Dhaka (or west of UTC in CI) they would be a day behind.
+ * outside the work zone (or west of UTC in CI) they would be a day behind.
  */
 export function toIsoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -189,7 +189,7 @@ export function parseReportRange(
     );
   }
 
-  // Today's date in Dhaka, through work-time rather than computing the offset ourselves
+  // Today's date in the work zone, through work-time rather than computing the offset ourselves
   const today = workDateOf(opts.now ?? new Date());
 
   if (from.getTime() > today.getTime()) {
@@ -431,7 +431,7 @@ export interface Bucket {
  *
  * Not hardcoded. If the off day is Friday (ISO 5) the week starts on Saturday,
  * so the off day falls at the end of the week and a work week is not split
- * across two buckets. Assuming Monday would cut every Bangladeshi work week in
+ * across two buckets. Assuming Monday would cut every work week that ends on a Friday (as in Bangladesh) in
  * the middle. With no off day (null), the international habit: Monday.
  */
 export function weekStartIsoDay(weeklyOffDays: readonly number[]): number {

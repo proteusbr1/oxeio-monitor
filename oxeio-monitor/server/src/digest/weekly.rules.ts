@@ -85,13 +85,13 @@ function round2(value: number): number {
  */
 export const WEEKLY_WINDOW_DAYS = 7;
 
-/** Careful: default Friday (ISO 5) — the weekly off day in Bangladesh, the end of the week */
+/** Careful: default Friday (ISO 5) — the weekly off day in Bangladesh (the default), the end of the week */
 export const WEEKLY_DIGEST_DEFAULT_DAY = 5;
-/** 6 pm (Dhaka) — just before the daily digest's 6:30, so the two do not arrive together */
+/** 6 pm (work zone) — just before the daily digest's 6:30, so the two do not arrive together */
 export const WEEKLY_DIGEST_DEFAULT_HOUR = 18;
 
 export interface WeeklyWindow {
-  /** First day of the window, YYYY-MM-DD (Dhaka) */
+  /** First day of the window, YYYY-MM-DD (work zone) */
   from: string;
   /** Last day of the window = today */
   to: string;
@@ -99,9 +99,9 @@ export interface WeeklyWindow {
 }
 
 /**
- * The 7 days ending with the Dhaka day that `now` falls on.
+ * The 7 days ending with the work day that `now` falls on.
  *
- * Careful: "today" means **Dhaka's** today. The server runs in UTC; at 6 pm
+ * Careful: "today" means **the work zone's** today. The server runs in UTC; at 6 pm
  * Friday `now` is still afternoon in UTC, so the date would match — but if
  * someone ran it by hand at 11 pm, it would already be the next day in UTC and
  * the window would shift by a whole day.
@@ -118,7 +118,7 @@ export function weeklyWindow(now: Date): WeeklyWindow {
 export interface WeeklySchedule {
   /** ISO day — 1 = Monday … 7 = Sunday (same as the `weekly_off_day` column) */
   isoDay: number;
-  /** 0-23, Dhaka hour */
+  /** 0-23, work-zone hour */
   hour: number;
   /** What goes into `@Cron` — six fields: second minute hour day month weekday */
   expression: string;
@@ -399,7 +399,7 @@ export interface Weekly {
  */
 export interface ObservedDay {
   employeeId: number;
-  /** YYYY-MM-DD (Dhaka) */
+  /** YYYY-MM-DD (work zone) */
   date: string;
 }
 
@@ -691,8 +691,8 @@ const PACE_TOLERANCE_HOURS = 0.05;
  * the whole call is HTTP 400, i.e. **nothing arrives**.
  *
  * Careful: the measure is in UTF-16 code units, and JS `String.length` counts
- * exactly that. So `Buffer.byteLength()` must not be used: a Bengali letter is
- * 3 bytes in UTF-8, so counting bytes would treat a team with Bengali names as
+ * exactly that. So `Buffer.byteLength()` must not be used: a Bengali (or other
+ * non-Latin) letter is 3 bytes in UTF-8, so counting bytes would treat a team with Bengali names as
  * "over the limit" at a third of the size and cut half the names.
  */
 export const TELEGRAM_TEXT_LIMIT = 4096;

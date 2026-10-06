@@ -27,7 +27,7 @@ import {
  * top-up kept pouring in more work, filling the hand with work that can never
  * be touched today.
  *
- * This file has no pinned dates; everything is relative to `dhakaNoon()`.
+ * This file has no pinned dates; everything is relative to `workNoon()`.
  */
 let h: Harness;
 let targets: TargetsService;
@@ -110,7 +110,7 @@ async function inHand(employeeId: number, n: number, at: Date): Promise<number[]
   return ids;
 }
 
-/** `n` already finished in today's Dhaka day */
+/** `n` already finished in today's work day */
 async function alreadyDone(employeeId: number, n: number, at: Date): Promise<void> {
   const owner = await h.prisma.user.findFirstOrThrow();
 
@@ -211,11 +211,11 @@ describe('daily limit — cannot finish more than 25', () => {
   });
 
   /**
-   * The day is the Dhaka day, not the UTC day — the most repeated mistake in
+   * The day is the work day, not the UTC day — the most repeated mistake in
    * this repo.
    *
    * If yesterday's 25 counted toward today, a designer would be blocked in
-   * the morning. The fixture is placed at yesterday's Dhaka noon, and the
+   * the morning. The fixture is placed at yesterday's local noon, and the
    * claim is that nothing is blocked today.
    */
   it('yesterday\'s "done" does not count toward today\'s limit', async () => {
@@ -230,7 +230,7 @@ describe('daily limit — cannot finish more than 25', () => {
   });
 
   /**
-   * The last hour of the Dhaka day is still today — by UTC it would fall on
+   * The last hour of the work day is still today — by UTC it would fall on
    * tomorrow.
    *
    * 11 PM in Dhaka is 5 PM UTC of the same day; but if the `workDateOf()`

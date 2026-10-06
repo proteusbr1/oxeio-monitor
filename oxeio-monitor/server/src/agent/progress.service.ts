@@ -21,9 +21,9 @@ import { workDateOf } from './util/work-time';
 const MS_PER_DAY = 86_400_000;
 
 export interface EmployeeProgress {
-  /** Seconds counted on today's date in Dhaka. */
+  /** Seconds counted on today's date in the work zone. */
   todayActiveSec: number;
-  /** Seconds counted in the current month (Dhaka). */
+  /** Seconds counted in the current month (work zone). */
   monthActiveSec: number;
 
   /**
@@ -135,7 +135,7 @@ export class ProgressService {
   ): Promise<EmployeeProgress> {
     const today = workDateOf(now);
 
-    // First day of the month, by the Dhaka calendar, not UTC.
+    // First day of the month, by the work-zone calendar, not UTC.
     const monthStart = new Date(
       Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1),
     );
@@ -191,7 +191,7 @@ export class ProgressService {
          * definition**. With two definitions the number would jump by itself when it
          * crosses the boundary (at midnight).
          *
-         * Careful: **the price paid for this is known and accepted**: from Dhaka midnight
+         * Careful: **the price paid for this is known and accepted**: from local midnight
          * to 00:15, yesterday's row is not final yet (day-close runs at 00:15,
          * `day-close.job.ts`), so in those fifteen minutes the tray may leave out the last
          * few minutes of yesterday. Summing raw segments used to be exact there. Still,

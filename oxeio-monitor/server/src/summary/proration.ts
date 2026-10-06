@@ -21,7 +21,7 @@ import { countLeaveWorkdays, countWorkdays } from './summary.math';
  *
  * Careful: **salary and target must both be prorated together.** Prorating
  * only the target would double the hourly rate: 13 workdays x 8 = 104 h, with
- * salary 20,000 -> 192 taka/hour (should be 96). Doing both gives rate =
+ * salary 20,000 -> 192 currency units/hour (should be 96). Doing both gives rate =
  * (S*d/D) / (d*8) = **S / (D*8)**, so someone who joined on the 15th and
  * someone who stayed the whole month have exactly the same hourly rate. That
  * equality is the foundation of the whole rule.

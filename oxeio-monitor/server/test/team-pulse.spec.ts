@@ -26,7 +26,7 @@ const WORK_OFFSET_MS = 6 * 3_600_000;
 const DAY = new Date('2026-08-13T00:00:00.000Z');
 const DAY_START_MS = DAY.getTime() - WORK_OFFSET_MS;
 
-/** Starts at `hour` in Dhaka, lasting `mins` minutes */
+/** Starts at `hour` in the work zone, lasting `mins` minutes */
 function seg(employeeId: number, hour: number, mins: number, atMin = 0) {
   const startMs = DAY_START_MS + hour * 3_600_000 + atMin * 60_000;
   return {

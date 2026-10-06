@@ -69,7 +69,7 @@ export class RetentionJob {
     @Inject(SCREENSHOT_STORAGE) private readonly storage: ScreenshotStorage,
   ) {}
 
-  /** Careful: without `timeZone`, 2 am UTC = 8 am in Dhaka, disk I/O during office hours. */
+  /** Careful: without `timeZone`, 2 am UTC = 8 am in Asia/Dhaka (UTC+6), disk I/O during office hours. */
   @Cron('0 0 2 * * *', {
     name: 'screenshot-retention',
     timeZone: JOB_TIMEZONE,

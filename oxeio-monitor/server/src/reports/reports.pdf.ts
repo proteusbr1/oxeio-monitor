@@ -86,7 +86,7 @@ export interface LetterheadSpec {
   reportTitle: string;
   rangeFrom: string;
   rangeTo: string;
-  /** ISO; printed in Dhaka time */
+  /** ISO; printed in work-zone time */
   generatedAt: string;
 }
 

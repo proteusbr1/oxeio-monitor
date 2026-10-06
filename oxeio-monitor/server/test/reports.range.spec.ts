@@ -220,8 +220,8 @@ describe('months and buckets', () => {
   });
 
   /**
-   * If weeks started on Monday, every Bangladeshi working week (Saturday to
-   * Thursday) would be split across two buckets, and the weekly summary would
+   * If weeks started on Monday, every working week that ends on Friday (Saturday to
+   * Thursday, as in Bangladesh) would be split across two buckets, and the weekly summary would
    * never show anyone a whole week.
    */
   it('the week starts the day after the weekly day off', () => {

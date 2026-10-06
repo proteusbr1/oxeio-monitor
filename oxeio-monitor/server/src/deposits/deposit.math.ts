@@ -6,7 +6,7 @@
  * be tested quietly.
  */
 
-/** '2026-08' — year-month, in the Dhaka calendar. */
+/** '2026-08' — year-month, in the work-zone calendar. */
 export type YearMonth = string;
 
 export const YEAR_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -60,7 +60,7 @@ export function monthsBetween(from: YearMonth, to: YearMonth): YearMonth[] {
  *
  * Careful: notice given on 31 July with the last day 30 August = 30 days, not
  * 29. That is what people mean by "30 days' notice", and a one-day difference
- * could withhold someone's 5,000 taka.
+ * could withhold someone's whole deposit (5,000 taka, for example).
  */
 export function daysBetween(from: Date, to: Date): number {
   const MS_PER_DAY = 24 * 60 * 60 * 1000;

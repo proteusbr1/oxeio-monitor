@@ -6,9 +6,9 @@ import { shiftWorkDate, todayInWorkZone } from '../lib/format';
  * Careful: the value of `<input type="date">` is exactly `YYYY-MM-DD`, which is
  * what the server wants. No round trip through `new Date(...)` is needed, and
  * doing one leads into the timezone trap (`toISOString()` gives UTC, which after
- * midnight in Dhaka is the previous date).
+ * midnight in the work zone is the previous date).
  *
- * Careful: `max` defaults to today in Dhaka. Picking a future date is pointless,
+ * Careful: `max` defaults to today in the work zone. Picking a future date is pointless,
  * and the empty screen would make it look as if data was lost.
  */
 export function DatePicker({

@@ -192,7 +192,7 @@ export function MonthsTab() {
   );
 }
 
-/** The current month in Dhaka, as `YYYY-MM` */
+/** The current month in the work zone, as `YYYY-MM` */
 function currentMonth(): string {
   return workNow().slice(0, 7);
 }
@@ -200,7 +200,7 @@ function currentMonth(): string {
 /**
  * The last `n` months, newest first, including the current month.
  *
- * Careful: uses the Dhaka date, not the browser's. Otherwise someone in another
+ * Careful: uses the work-zone date, not the browser's. Otherwise someone in another
  *    timezone opening the screen near midnight would see the list a month off.
  */
 function lastMonths(n: number): string[] {
@@ -213,7 +213,7 @@ function lastMonths(n: number): string[] {
   return out;
 }
 
-/** Careful: Dhaka is UTC+6; this keeps the same day as the server */
+/** Careful: the work zone has a fixed offset; this keeps the same day as the server */
 function workNow(): string {
   return new Date(Date.now() + workOffsetMs()).toISOString();
 }

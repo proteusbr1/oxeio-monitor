@@ -27,7 +27,7 @@ export class GalleryQueryDto {
   @Min(1)
   employeeId?: number;
 
-  /** Defaults to today's work day in Dhaka when omitted. */
+  /** Defaults to today's work day in the work zone when omitted. */
   @IsOptional()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, {
     message: 'Date must be in YYYY-MM-DD format',

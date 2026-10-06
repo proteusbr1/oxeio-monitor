@@ -317,7 +317,7 @@ async function seedHolidays(): Promise<{
       name: row.name,
     })),
     years,
-    // "Today" is the Dhaka date, not the machine's local clock (see `dhakaToday()`).
+    // "Today" is the work-zone date, not the machine's local clock (see `workToday()`).
     { today: workToday(new Date()), allowPast: ALLOW_PAST_HOLIDAYS },
   );
 
@@ -325,7 +325,7 @@ async function seedHolidays(): Promise<{
     await prisma.holiday.create({
       data: {
         // `@db.Date` columns use UTC midnight; local time would shift the
-        // holiday to the previous day in Dhaka (same trap as in `parse-staff.ts`).
+        // holiday to the previous day in the work zone (same trap as in `parse-staff.ts`).
         holidayDate: new Date(`${entry.date}T00:00:00.000Z`),
         name: holidayRowName(entry),
         // The screen's Type picker only offers public/optional/company; any

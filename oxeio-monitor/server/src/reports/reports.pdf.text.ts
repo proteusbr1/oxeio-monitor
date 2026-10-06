@@ -8,7 +8,7 @@ import { WORK_TIMEZONE, workPathParts } from '../agent/util/work-time';
  *
  * The 14 fonts that come with pdfkit (Helvetica, Times, Courier ...) are
  * encoded in **WinAnsi**, so they have no glyph for any character outside
- * Latin-1. Writing Bengali raises no error; the spot is just left **blank** or
+ * Latin-1. Writing Bengali (or any other non-Latin script) raises no error; the spot is just left **blank** or
  * a box appears. So the failure is silent: the server returns 200, the file
  * downloads, and when opened the name column is empty.
  *
@@ -24,7 +24,7 @@ import { WORK_TIMEZONE, workPathParts } from '../agent/util/work-time';
  * 3. The real substance of a PDF is numbers (hours, dates, employee codes),
  *    which are ASCII anyway. Bengali would only be in the labels.
  *
- * A gap still remains: **employee names are in Bengali in the database**. If
+ * A gap still remains: **employee names may be in a non-Latin script (Bengali, in the first deployment) in the database**. If
  * those were printed silently blank, a reader would think the data was missing.
  * So [personLabel()](#) checks whether the name can be printed and, if not,
  * puts in the **employee code** and reports `lossy`, and the PDF footnote
@@ -175,12 +175,12 @@ export function truncateToWidth(
 }
 
 /**
- * `generated_at` (ISO/UTC) → Dhaka time fit to print on the letterhead.
+ * `generated_at` (ISO/UTC) → work-zone time fit to print on the letterhead.
  *
  * `toLocaleString()` is deliberately not used: it depends on the server's
  * timezone and ICU data, and Docker's slim images often have ICU trimmed. The
- * same code would then print Dhaka time on one machine and UTC on another,
- * with "(Asia/Dhaka)" written beside both.
+ * same code would then print work-zone time on one machine and UTC on another,
+ * with the zone name written beside both.
  */
 export function workStamp(instant: Date): string {
   const { year, month, day, hhmmss } = workPathParts(instant);

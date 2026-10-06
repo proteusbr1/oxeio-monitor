@@ -21,11 +21,11 @@ const YEAR_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 export class UpdateDepositPolicyDto {
   /**
-   * **In paisa**, not taka — 500 taka = 50000.
+   * **In minor units** (paisa), not whole units — for BDT, 500 taka = 50000.
    *
    * Careful: not a decimal string like salary, because an instalment has no
    * reason to include fractional paisa; with an integer, rounding never comes
-   * up. The screen shows the taka field and multiplies by 100 before sending.
+   * up. The screen shows the amount in whole currency units and multiplies by 100 before sending.
    */
   @IsOptional()
   @IsInt()
@@ -111,7 +111,7 @@ export class CorrectInstalmentDto {
   /**
    * Careful: `@Min(1)` — there is no way to enter zero, and that is by design.
    * A waiver means there is **no** instalment that month, not an instalment of
-   * 0 taka; merging the two ruins the answer to "how many months have been
+   * zero; merging the two ruins the answer to "how many months have been
    * paid" — which is exactly what happened in the field. To skip early months,
    * use `PATCH :id/start`.
    */

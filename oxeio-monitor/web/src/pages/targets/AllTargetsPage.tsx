@@ -79,9 +79,9 @@ export function AllTargetsPage() {
  * The search box accepts **a URL or an ASIN**: a researcher can paste a link
  * to check whether it was already done, and by whom.
  */
-/** Today's date in Dhaka, `YYYY-MM-DD` */
+/** Today's date in the work zone, `YYYY-MM-DD` */
 function workToday(): string {
-  // Careful: `toISOString()` gives UTC; in Dhaka before 6 am it would show yesterday
+  // Careful: `toISOString()` gives UTC; in the work zone between midnight and the offset hour it would show yesterday
   return todayInWorkZone();
 }
 

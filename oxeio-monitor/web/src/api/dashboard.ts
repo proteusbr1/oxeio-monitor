@@ -47,7 +47,7 @@ export interface LiveCard {
   /** Careful: 0 means the target is switched off. */
   designTargetPerDay: number;
   status: LiveStatus;
-  /** Seconds counted for today in Dhaka. */
+  /** Seconds counted for today in the work zone. */
   todayWorkedSec: number;
 
   /**
@@ -119,7 +119,7 @@ export interface LiveCard {
 }
 
 export interface LiveBoard {
-  /** Today's workday in Dhaka, `YYYY-MM-DD`. */
+  /** Today's workday in the work zone, `YYYY-MM-DD`. */
   workDate: string;
   /** ISO instant */
   generatedAt: string;
@@ -150,7 +150,7 @@ export interface Timeline {
 
 /** E01: one day of the seven-day chart (`GET /live/trend`). */
 export interface TrendDay {
-  /** Workday in Dhaka, `YYYY-MM-DD`. */
+  /** Workday in the work zone, `YYYY-MM-DD`. */
   date: string;
   workedSec: number;
   /**
@@ -256,7 +256,7 @@ export interface TeamTrend {
 
 /** E01: one hour of the team's day rhythm (`GET /live/pulse`). */
 export interface TeamHour {
-  /** Local hour in Dhaka, 0-23. */
+  /** Local hour in the work zone, 0-23. */
   hour: number;
   /** The team's total counted seconds in that hour. */
   activeSec: number;
@@ -272,7 +272,7 @@ export interface TeamHour {
 }
 
 export interface TeamPulse {
-  /** Workday in Dhaka, `YYYY-MM-DD`. */
+  /** Workday in the work zone, `YYYY-MM-DD`. */
   date: string;
   /** Always 24 entries; empty hours are present with zero. */
   hours: TeamHour[];
@@ -281,7 +281,7 @@ export interface TeamPulse {
 }
 
 export interface HourlyBucket {
-  /** Local hour in Dhaka, 0-23. */
+  /** Local hour in the work zone, 0-23. */
   hour: number;
   activeSec: number;
 }
@@ -333,8 +333,8 @@ export function getTeamTrend(signal?: AbortSignal): Promise<TeamTrend> {
 /**
  * E04: `GET /api/v1/employees/:id/timeline?date=YYYY-MM-DD`
  *
- * Careful: if `date` is omitted, the server uses today in Dhaka. But when the page
- * has a date picker, send it explicitly with `todayInDhaka()`; otherwise the date
+ * Careful: if `date` is omitted, the server uses today in the work zone. But when the page
+ * has a date picker, send it explicitly with `todayInWorkZone()`; otherwise the date
  * the user picked and the data shown can drift apart.
  */
 export function getTimeline(

@@ -264,9 +264,9 @@ const NAV: NavItem[] = [
  * dashboard (glossary section 1).
  */
 /**
- * Dhaka date and time: `15 Aug 2026 · 18:40`.
+ * Work-zone date and time: `15 Aug 2026 · 18:40`.
  *
- * Careful: it adds UTC+6 and cuts from the ISO string rather than using
+ * Careful: it adds the work zone's offset and cuts from the ISO string rather than using
  * `toLocaleString`, so the result is the same whatever the machine's timezone or locale.
  * Careful: no seconds: a number changing every second draws the eye, yet the
  * board refreshes every 30 seconds, so the clock would look fresher than the data.

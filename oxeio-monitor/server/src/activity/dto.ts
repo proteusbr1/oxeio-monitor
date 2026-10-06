@@ -93,7 +93,7 @@ export class RangeQueryDto {
   @Matches(DATE_FORMAT, { message: '`from` must be in YYYY-MM-DD format' })
   from?: string;
 
-  /** Today's date in Dhaka if omitted. */
+  /** Today's date in the work zone if omitted. */
   @IsOptional()
   @Matches(DATE_FORMAT, { message: '`to` must be in YYYY-MM-DD format' })
   to?: string;

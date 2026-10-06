@@ -63,7 +63,7 @@ export function throttleFloor(now: Date, windowHours = THROTTLE_HOURS): Date {
  * **Alerts that describe the whole day.**
  *
  * The bug this fixes: these two checks run **every hour** and each time read
- * the segments of the **whole Dhaka day**. Once the condition is true it is
+ * the segments of the **whole work day**. Once the condition is true it is
  * true on every later tick that day, because old rows are not deleted. But the
  * throttle window is only 6 hours and the key does not contain the day. So
  * **the same incident** produced 3-4 alerts a day, each with an identical
@@ -88,14 +88,14 @@ export const DAY_SCOPED_TYPES: ReadonlySet<AlertType> = new Set<AlertType>([
  * Where the throttle window starts for such alerts.
  *
  * For day-scoped types it is **the earlier of two**: the start of today in
- * Dhaka, or 6 hours ago. Both are needed:
+ * the work zone, or 6 hours ago. Both are needed:
  * <ul>
  *   <li>Without the start of the day, the same day would raise repeated alerts;</li>
  *   <li>Without the 6 hours, right after midnight the window would shrink to a
  *       minute or so and yesterday night's alert would not be suppressed.</li>
  * </ul>
  *
- * Careful: the next day is not silenced. A new Dhaka day is a new incident, so
+ * Careful: the next day is not silenced. A new work day is a new incident, so
  * the floor moves forward with the day.
  */
 export function alertFloor(
@@ -129,7 +129,7 @@ export function isThrottled(
 
 /**
  * Type-aware version: for day-scoped alerts the window extends back to the
- * start of today in Dhaka.
+ * start of today in the work zone.
  */
 export function isThrottledFor(
   type: AlertType,
@@ -183,16 +183,16 @@ export function suppressFlood<T extends AlertKey>(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// 2. Dhaka time. Offsets are never computed by hand; everything comes from work-time.ts
+// 2. work-zone time. Offsets are never computed by hand; everything comes from work-time.ts
 // ════════════════════════════════════════════════════════════════════════════
 
-/** Local hour in Dhaka, 0-23 */
+/** Local hour in the work zone, 0-23 */
 export function workHourOf(instant: Date): number {
   return Number(workPathParts(instant).hhmmss.slice(0, 2));
 }
 
 /**
- * ISO weekday of the Dhaka date: Mon = 1 ... Fri = 5 ... Sun = 7.
+ * ISO weekday of the work-zone date: Mon = 1 ... Fri = 5 ... Sun = 7.
  *
  * Careful: `work_policies.weekly_off_day` stores exactly this number (Fri = 5),
  * but JavaScript's `getUTCDay()` gives Sun = 0 ... Sat = 6. Without converting,
@@ -204,7 +204,7 @@ export function workIsoWeekday(instant: Date): number {
   return day === 0 ? 7 : day;
 }
 
-/** Minute of the day in Dhaka local time (0-1439) */
+/** Minute of the day in work-zone local time (0-1439) */
 export function workMinuteOfDay(instant: Date): number {
   const hhmmss = workPathParts(instant).hhmmss;
   return Number(hhmmss.slice(0, 2)) * 60 + Number(hhmmss.slice(2, 4));
@@ -236,7 +236,7 @@ export interface OfficeHoursInput {
  * when an `agent_down` alert is not raised. The owner's question was why we
  * should alert about agents being down after the office closes.
  *
- * Field measurement (14 days, by Dhaka hour): 18:00 -> 90, 00:00 -> 78,
+ * Field measurement (14 days, by work-zone hour): 18:00 -> 90, 00:00 -> 78,
  * 06:00 -> 78, 12:00 -> 33. So every PC switched off after office hours raised
  * an alert, and because `THROTTLE_HOURS = 6` it came back three times through the night.
  *

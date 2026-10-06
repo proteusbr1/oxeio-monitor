@@ -58,7 +58,7 @@ export interface GalleryPage {
 export interface GalleryQuery {
   /** Careful: for role=employee this is not ignored; anything but their own id gives a 403. */
   employeeId?: number;
-  /** Defaults to today's workday in Dhaka. */
+  /** Defaults to today's workday in the work zone. */
   date?: string;
   /** Starts at 1. Careful: at most 10,000. */
   page?: number;

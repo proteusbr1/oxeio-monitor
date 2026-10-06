@@ -22,7 +22,7 @@ import {
  */
 
 export interface LatestShots {
-  /** Which workday the shots are for; the server picks today's Dhaka date itself */
+  /** Which workday the shots are for; the server picks today's work-zone date itself */
   date: string;
   /**
    * How many employees have a screenshot.
@@ -41,9 +41,9 @@ export interface LatestShots {
 export const NO_SHOTS: LatestShots = { date: '', total: 0, byEmployee: new Map() };
 
 /**
- * The latest screenshots for today in Dhaka, one per employee.
+ * The latest screenshots for today in the work zone, one per employee.
  *
- * Careful: `date` is deliberately not sent. The server uses the Dhaka workday
+ * Careful: `date` is deliberately not sent. The server uses the work day
  *    itself (`workDateOf`). A date sent from the browser would be a different day
  *    on each side after midnight, and cards would keep showing yesterday's shot.
  */

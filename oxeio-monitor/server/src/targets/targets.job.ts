@@ -7,13 +7,13 @@ import { JOB_TIMEZONE, RunLock, SCHEDULING_ENABLED } from '../summary/scheduling
 import { TargetsService } from './targets.service';
 
 /**
- * Every day at 08:00 (Dhaka): distribute targets from the pool among designers.
+ * Every day at 08:00 (work zone): distribute targets from the pool among designers.
  *
  * The time is shortly before work starts, so the list is ready when people sit
  * down and nobody has to press anything.
  *
  * Without `timeZone`, cron would run in the server's own timezone (UTC in
- * Docker), so "8 am" would be 2 pm in Dhaka.
+ * Docker), so "8 am" would be 2 pm in Asia/Dhaka (UTC+6).
  *
  * Careful: `disabled` and the `if` below are two locks and both are needed.
  * Without them, one tick during tests would distribute into other people's

@@ -289,7 +289,7 @@ export interface SummaryRow {
   /** The part of the bucket inside the range and the employment period; not the whole month/week. */
   bucketStart: string;
   bucketEnd: string;
-  /** How many of those Dhaka days are workdays. */
+  /** How many of those work-zone days are workdays. */
   workdays: number;
   daysWithWork: number;
   workedHours: number;

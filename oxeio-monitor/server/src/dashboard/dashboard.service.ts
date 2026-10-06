@@ -84,7 +84,7 @@ export interface LiveCard {
   /** Careful: 0 means the target is off; the screen then shows nothing */
   designTargetPerDay: number;
   status: LiveStatus;
-  /** Seconds counted for today's date in Dhaka */
+  /** Seconds counted for today's date in the work zone */
   todayWorkedSec: number;
   /**
    * One work day's target — the Live Board ring is now measured against **this**.
@@ -143,7 +143,7 @@ export interface LiveCard {
 }
 
 export interface LiveBoard {
-  /** Today's work day in Dhaka, `YYYY-MM-DD` */
+  /** Today's work day in the work zone, `YYYY-MM-DD` */
   workDate: string;
   generatedAt: Date;
   cards: LiveCard[];
@@ -169,21 +169,21 @@ export interface Timeline {
 }
 
 export interface HourlyBucket {
-  /** Local hour in Dhaka, 0-23 */
+  /** Local hour in the work zone, 0-23 */
   hour: number;
   activeSec: number;
 }
 
 /** One day of the seven-day chart (`GET /live/trend`) */
 /**
- * Careful: Dhaka is UTC+6, with no DST. It is used only to translate
- * **label → instant**: `workDateOf()` returns the Dhaka day as UTC midnight,
- * and the real Dhaka midnight is this many milliseconds earlier.
+ * Careful: the work zone has a fixed offset (no DST). It is used only to translate
+ * **label → instant**: `workDateOf()` returns the work day as UTC midnight,
+ * and the real local midnight is this many milliseconds earlier.
  */
 const WORK_OFFSET_MS = LOCAL_OFFSET_MIN * 60_000;
 
 export interface TrendDay {
-  /** Work day in Dhaka, `YYYY-MM-DD` */
+  /** Work day in the work zone, `YYYY-MM-DD` */
   date: string;
   /** The team's total counted seconds on that day */
   workedSec: number;
@@ -208,7 +208,7 @@ export interface TrendDay {
    * caused confusion in the field: a manager gave 44 minutes to 19 files and
    * showed "16". So only `design_targets.completed_at` is used here.
    *
-   * Careful: the day boundary is **Dhaka's**, not UTC's — `completed_at` is a
+   * Careful: the day boundary is **the work zone's**, not UTC's — `completed_at` is a
    * timestamptz and that table has no `work_date` column, so it is bucketed
    * with `workDateOf()`. The same function that decides "which day" for the
    * whole system.
@@ -369,7 +369,7 @@ export interface TeamTrend {
 
 /** The live board's rhythm-of-the-day chart (`GET /live/pulse`) */
 export interface TeamPulse {
-  /** Work day in Dhaka, `YYYY-MM-DD` */
+  /** Work day in the work zone, `YYYY-MM-DD` */
   date: string;
   /** Always 24 — an empty hour still has `activeSec: 0, people: 0` */
   hours: TeamHour[];
@@ -554,7 +554,7 @@ export class DashboardService {
        * it was opened — exactly the mistake caught later (the note beside
        * ADR-037, restoring `completed_via = 'filename'`).
        *
-       * Careful: `completedAt` is a timestamptz, so it is filtered by the Dhaka
+       * Careful: `completedAt` is a timestamptz, so it is filtered by the work
        * day's **boundaries** — there is no `workDate` column to compare for equality.
        */
       this.prisma.designTarget.groupBy({
@@ -870,20 +870,22 @@ export class DashboardService {
        * **How many designs were finished in the ribbon's seven days.**
        *
        * Careful: raw `completed_at` values are fetched and bucketed in code, not
-       * via `groupBy` — the day boundary is **Dhaka's**, and doing it in SQL
+       * via `groupBy` — the day boundary is **the work zone's**, and doing it in SQL
        * would mean writing the time-zone rule a second time. `workDateOf()` is
        * the only place in the system that decides "which day"; a second
        * definition means two pages telling two numbers one day.
        *
        * Careful: **`first` and `today` are labels, not instants** —
-       * `workDateOf()` stores the Dhaka day as **UTC midnight**, while the real
-       * Dhaka midnight is **6 hours earlier**. This difference is a recurring
-       * source of bugs in this repo, so both boundaries are worked out by hand:
-       *      start = Dhaka midnight of `first`       → `first − 6h`
-       *      end   = Dhaka midnight after `today`    → `today + 24h − 6h`
-       *    Careful: get it wrong and the window slides **6 hours late**: work
-       *    from Dhaka midnight to 6 am on the ribbon's first day would be lost,
-       *    and the same six hours of tomorrow would come in instead — a slot
+       * `workDateOf()` stores the work day as **UTC midnight**, while the real
+       * local midnight is **the zone's offset earlier** (6 hours for Asia/Dhaka).
+       * This difference is a recurring source of bugs in this repo, so both
+       * boundaries are worked out by hand (offset = `WORK_OFFSET_MS`):
+       *      start = local midnight of `first`       → `first − offset`
+       *      end   = local midnight after `today`    → `today + 24h − offset`
+       *    Careful: get it wrong and the window slides **late by the offset**: work
+       *    from local midnight to the offset hour (6 am for Asia/Dhaka) on the
+       *    ribbon's first day would be lost, and the same hours of tomorrow
+       *    would come in instead — a slot
        *    the ribbon does not have, so it would be silently dropped. Someone
        *    working early in the morning would show less on the first day, with
        *    no error raised.
@@ -966,7 +968,7 @@ export class DashboardService {
       }));
 
     /**
-     * Buckets by Dhaka day — done once, the loop below only reads.
+     * Buckets by work day — done once, the loop below only reads.
      * Careful: `completedAt` can be `null` (`DateTime?`) even though the query
      * filters for it; TypeScript has to be told, and dropping `null` is
      * right — an unfinished target is not "finished today".
@@ -1210,8 +1212,9 @@ export class DashboardService {
   }
 
   /**
-   * Careful: without `date`, today in Dhaka — not the server's. If the server runs
-   *    in UTC, before 6 am in Dhaka the date of `new Date()` would show the previous day.
+   * Careful: without `date`, today in the work zone — not the server's. If the server runs
+   *    in UTC, between local midnight and the zone's offset hour (6 am for Asia/Dhaka)
+   *    the date of `new Date()` would show the previous day.
    */
   private resolveWorkDate(raw?: string): Date {
     if (raw === undefined) return workDateOf(new Date());

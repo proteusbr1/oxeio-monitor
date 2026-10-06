@@ -78,8 +78,8 @@ const PAGE_SIZE = 50;
 
 /**
  * Careful: `from`/`to` here are **instants**, not plain dates (`@IsISO8601()`). The
- *    Dhaka offset is added explicitly: `?from=2026-08-10` would be read by the
- *    server as UTC midnight, so events before 6am Dhaka time would fall on the
+ *    work-zone offset is added explicitly: `?from=2026-08-10` would be read by the
+ *    server as UTC midnight, so events before the offset hour (6am in Asia/Dhaka) would fall on the
  *    previous day, and who looked at what in the early morning could not be found.
  */
 function dayStart(date: string): string {
@@ -130,7 +130,7 @@ export function AuditTab() {
       key: 'time',
       header: 'When',
       render: (row) => (
-        // Careful: the time is Dhaka time; `formatTime()` adds the offset explicitly.
+        // Careful: the time is work-zone time; `formatTime()` adds the offset explicitly.
         //    With `toLocaleTimeString()`, someone on a VPN would see the wrong time and
         //    the answer to "who looked when" would be wrong.
         <span

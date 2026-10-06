@@ -60,7 +60,7 @@ beforeEach(async () => {
   await resetDatabase(h.prisma, h.app);
 });
 
-/** Today's working day in Dhaka — all fixtures are relative to it */
+/** Today's working day in the work zone — all fixtures are relative to it */
 const today = () => workDateOf(workNoon());
 
 async function makeEmployee(empCode: string): Promise<number> {

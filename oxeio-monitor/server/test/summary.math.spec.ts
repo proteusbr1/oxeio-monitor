@@ -211,7 +211,7 @@ describe('summarizeDay — one day summary (K06)', () => {
     expect(n.creditedSec).toBe(-2 * HOUR);
   });
 
-  it('first and last work times are placed on the Dhaka clock', () => {
+  it('first and last work times are placed on the work-zone clock', () => {
     const n = summarizeDay({
       ...empty,
       segments: [

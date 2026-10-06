@@ -32,7 +32,7 @@ export interface DigestResult {
 }
 
 /**
- * **F07** — the daily digest email (6:30 pm, Dhaka).
+ * **F07** — the daily digest email (6:30 pm, work zone).
  *
  * The numbers are produced **through `ReportsService`** — F01 (one day,
  * today) and F02 (1st of the month → today). Reading `daily_summary` directly
@@ -226,7 +226,7 @@ export class DigestService {
        * cannot tell "the one who makes" from "the one who looks".
        *
        * Careful: `completed_at` is a timestamptz, so a raw query splits by the
-       * Dhaka day; Prisma's `groupBy` cannot cut by date.
+       * work day; Prisma's `groupBy` cannot cut by date.
        */
       const rows = await this.prisma.$queryRaw<
         { employee_id: number; n: number }[]
@@ -259,7 +259,7 @@ export class DigestService {
 
   /** Just the numbers — tests or a future preview can call it without email */
   async collect(now: Date = new Date()): Promise<Digest> {
-    // Careful: "today" means **Dhaka's** today — with the server in UTC, at 6:30 pm
+    // Careful: "today" means **the work zone's** today — with the server in UTC, at 6:30 pm
     //    the date of `new Date()` would still be right, but relying on it would be
     //    wrong and a manual run at 11 pm would be a day behind
     const today = workDateOf(now);

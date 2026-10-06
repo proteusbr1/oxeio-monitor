@@ -50,12 +50,12 @@ async function makeShot(opts: {
   filePath?: string;
 }): Promise<{ id: bigint; filePath: string; thumbPath: string }> {
   /**
-   * `work_date` must be set by the Dhaka calculation, not UTC.
+   * `work_date` must be set by the work-zone calculation, not UTC.
    *
    * The job's cutoff `retentionCutoff()` = `workDateOf(now) - 90 days`, i.e.
-   * it uses the Dhaka workday. The fixture used to take the UTC date from
+   * it uses the work day. The fixture used to take the UTC date from
    * `Date.now()`, and between midnight and 6am (Dhaka is UTC+6) the UTC date
-   * is a day behind. So `daysAgo: 90` really built a row 91 Dhaka days old,
+   * is a day behind. So `daysAgo: 90` really built a row 91 work days old,
    * and the boundary test failed every night in those six hours.
    *
    * It was caught exactly that way: by running at 00:30. Run in the daytime,
@@ -154,7 +154,7 @@ describe('retention job: the body really runs', () => {
 
   /**
    * Just either side of the boundary. `retentionCutoff` goes back 90 days from
-   * today's Dhaka date and the condition is `workDate < cutoff`, so a
+   * today's work-zone date and the condition is `workDate < cutoff`, so a
    * screenshot exactly 90 days old stays and a 91-day-old one goes. Writing
    * `<=` would give 89 days instead of the promised 90, and nobody would notice.
    */

@@ -66,7 +66,7 @@ beforeEach(async () => {
 });
 
 /**
- * Sends one active segment of `seconds` seconds at Dhaka noon `dayOffset`
+ * Sends one active segment of `seconds` seconds at local noon `dayOffset`
  * days ago, exactly the way the offline outbox replays later.
  */
 async function upload(dayOffset: number, seconds: number): Promise<void> {

@@ -30,7 +30,7 @@ import {
  * the instant the number was first seen in a title.
  *
  * This file has no pinned dates (G140) — every fixture is relative to
- * "today", and hours within the day are placed with `atDhakaHour()`.
+ * "today", and hours within the day are placed with `atWorkHour()`.
  */
 let h: Harness;
 let summary: SummaryService;
@@ -57,10 +57,10 @@ beforeEach(async () => {
 const today = () => workDateOf(workNoon());
 
 /**
- * The real instant of a given hour on that Dhaka day.
+ * The real instant of a given hour on that work day.
  *
- * `dayLabel` is a label — the Dhaka day written as UTC midnight. That day's
- * Dhaka midnight starts 6 hours before the label. Mixing up the two is what
+ * `dayLabel` is a label — the work day written as UTC midnight. That day's
+ * local midnight starts 6 hours before the label (Asia/Dhaka). Mixing up the two is what
  * caused G163.
  */
 const atWorkHour = (dayLabel: Date, hour: number): Date =>

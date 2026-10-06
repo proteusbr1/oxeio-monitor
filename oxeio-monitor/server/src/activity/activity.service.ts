@@ -245,7 +245,7 @@ export class ActivityService {
    */
   private range(query: RangeQueryDto): WorkDateRange {
     try {
-      // "Today" means today in **Dhaka**, whatever the server's timezone.
+      // "Today" means today in **the work zone**, whatever the server's timezone.
       return resolveRange(query.from, query.to, workDateOf(new Date()));
     } catch (err) {
       if (err instanceof RangeError) {

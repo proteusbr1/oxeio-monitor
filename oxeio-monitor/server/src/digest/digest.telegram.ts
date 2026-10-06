@@ -82,7 +82,7 @@ export interface DigestExtras {
    * page; only the daily flood on the phone was stopped.
    */
   silentPcs: number;
-  /** Time of sending (Dhaka), such as `18:30` — says which moment the numbers are for */
+  /** Time of sending (work zone), such as `18:30` — says which moment the numbers are for */
   atTime: string;
   /**
    * Today's numbers for designers — by `empCode`.

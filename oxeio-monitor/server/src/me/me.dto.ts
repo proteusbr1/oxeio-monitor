@@ -9,7 +9,7 @@ const DATE_MESSAGE = 'Date must be in YYYY-MM-DD format';
  *
  * Careful: there is deliberately **no** `@Type(() => Date)`. It would turn
  * `2026-08-10` into a UTC instant first, and then "which work day" would depend
- * on the server's timezone. A work day belongs to the Dhaka calendar (§ 2.1-a),
+ * on the server's timezone. A work day belongs to the work-zone calendar (§ 2.1-a),
  * so the string goes all the way to the service.
  */
 export class MyDaysQuery {

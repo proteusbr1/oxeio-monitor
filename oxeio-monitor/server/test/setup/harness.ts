@@ -275,9 +275,9 @@ export const iso = (d: Date): string => d.toISOString();
 export const minutesAgo = (n: number): Date => new Date(Date.now() - n * 60_000);
 
 /**
- * A recent window that stays inside today's Dhaka day.
+ * A recent window that stays inside today's work day.
  *
- * Tests cannot be written with `minutesAgo(30)`: just after Dhaka midnight,
+ * Tests cannot be written with `minutesAgo(30)`: just after local midnight,
  * "30 minutes ago" means yesterday. Three tests used to break, and the cause
  * was the clock, not the code:
  *

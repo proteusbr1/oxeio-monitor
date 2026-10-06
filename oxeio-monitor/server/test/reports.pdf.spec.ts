@@ -216,7 +216,7 @@ describe('hoursText and workStamp', () => {
     expect(hoursText(Number.POSITIVE_INFINITY)).toBe(EMPTY_CELL);
   });
 
-  it('creation time is in the Dhaka clock, not the server timezone', () => {
+  it('creation time is in the work-zone clock, not the server timezone', () => {
     // 12:34 UTC = 18:34 in Dhaka
     expect(workStamp(new Date('2026-08-11T12:34:56.000Z'))).toBe(
       '2026-08-11 18:34 (Asia/Dhaka)',

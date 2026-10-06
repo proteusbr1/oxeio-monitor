@@ -432,7 +432,7 @@ describe('pattern validation: stopping rules that would be silently dropped', ()
 
 describe('reading and writing work_date', () => {
   /**
-   * `work_date` is a `@db.Date`: the Dhaka date, stored as UTC midnight.
+   * `work_date` is a `@db.Date`: the work-zone date, stored as UTC midnight.
    * Applying a timezone again here would shift every date by a day, and that
    * would show only on some servers.
    */

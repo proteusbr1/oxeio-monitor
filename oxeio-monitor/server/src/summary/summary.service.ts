@@ -87,7 +87,7 @@ export class SummaryService {
     private readonly targets: TargetsService,
   ) {}
 
-  /** Dhaka's current work day: the entry point for K06. */
+  /** The current work day: the entry point for K06. */
   refreshToday(now: Date = new Date()): Promise<RefreshResult> {
     return this.refreshDate(workDateOf(now), now);
   }
@@ -418,7 +418,7 @@ export class SummaryService {
          */
         /**
          * Careful: **the real moment, not the work-day label** (G163). `workDate`
-         * used to go here, i.e. 6 am Dhaka time, and in MyTargets "Started 5
+         * used to go here, i.e. 6 am Asia/Dhaka time, and in MyTargets "Started 5
          * hours ago" appeared the moment a job was opened.
          */
         await this.targets.markStartedByJobNumbers(

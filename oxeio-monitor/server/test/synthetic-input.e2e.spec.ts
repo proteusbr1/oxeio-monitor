@@ -29,7 +29,7 @@ let deviceId: number;
 /**
  * **Two different "now"s, and that is deliberate (G140).**
  *
- * - `workDate` comes from `dhakaNoon()` — the fixture's working day, 12 hours
+ * - `workDate` comes from `workNoon()` — the fixture's working day, 12 hours
  *   from both boundaries, so it does not break when the day rolls over at midnight.
  * - `runOnce()` gets the **real clock**, because the throttle is compared with
  *   the alert's `created_at` — which comes from the **database's** `now()`.
@@ -42,7 +42,7 @@ let deviceId: number;
  */
 const workDate = workDateOf(workNoon());
 
-/** A moment inside that working day (on the Dhaka clock) */
+/** A moment inside that working day (on the work-zone clock) */
 const at = (hour: number, minute = 0): Date =>
   new Date(workDate.getTime() + (hour - 6) * 3_600_000 + minute * 60_000);
 

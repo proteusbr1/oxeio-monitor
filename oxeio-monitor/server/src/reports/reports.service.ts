@@ -228,7 +228,7 @@ export class ReportsService {
      * `daily_summary` does not have this and should not: that table keeps time,
      * and this is about work. So it is read straight from `design_targets`.
      *
-     * `completed_at` is a timestamptz, and the rows must be split into **Dhaka
+     * `completed_at` is a timestamptz, and the rows must be split into **work
      * days**, hence the raw query; Prisma's `groupBy` cannot cut dates.
      *
      * **One query for the whole range**: counting per row separately would be
@@ -940,7 +940,7 @@ export class ReportsService {
       employees.map((e) => e.id),
     );
 
-    // Today in Dhaka: `parseReportRange()` finds the clamping limit exactly this way
+    // Today in the work zone: `parseReportRange()` finds the clamping limit exactly this way
     const today = workDateOf(new Date());
 
     const windowBy = new Map(

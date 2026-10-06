@@ -5,11 +5,11 @@ import { JOB_TIMEZONE, RunLock, SCHEDULING_ENABLED } from '../summary/scheduling
 import { DigestService, type DigestResult } from './digest.service';
 
 /**
- * F07 — the daily digest at **6:30 pm (Dhaka)** every day.
+ * F07 — the daily digest at **6:30 pm (work zone)** every day.
  *
  * Careful: without `timeZone` the cron would run in the server's own time zone
  * (almost always UTC in Docker) — "6:30 pm" would then really be 12:30 am in
- * Dhaka, so the email would arrive in the early hours of the next day and
+ * a UTC+6 zone such as Asia/Dhaka, so the email would arrive in the early hours of the next day and
  * "today's hours" would really be yesterday's.
  *
  * Careful: `disabled` **and** the `if` below — two locks, both needed (see the

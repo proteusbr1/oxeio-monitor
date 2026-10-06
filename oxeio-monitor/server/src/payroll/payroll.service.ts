@@ -87,7 +87,7 @@ export interface PayrollSheet {
    * It happens when someone was absent the whole month. `netPayable` would
    * then be negative, and a negative salary means nothing, so it is stopped at
    * zero and the name is **called out separately** here. Stopping it silently
-   * would show 500 taka deposited in the ledger while the money was never deducted.
+   * would show an instalment deposited in the ledger while the money was never deducted.
    */
   depositExceedsPayable: string[];
 
@@ -327,8 +327,8 @@ export class PayrollService {
 
       /**
        * There is no such thing as a negative salary. If someone was absent the
-       * whole month, `payable` becomes 0 and there is no room to deduct 500
-       * taka. The number is stopped at zero, but the name is **called out
+       * whole month, `payable` becomes 0 and there is no room to deduct the
+       * instalment. The number is stopped at zero, but the name is **called out
        * separately** in `depositExceedsPayable`; stopped silently, the ledger
        * would show it deposited while the money was never deducted.
        */
@@ -397,7 +397,7 @@ function hours(sec: number): string {
   return (sec / HOUR).toFixed(2);
 }
 
-/** `null` means "no instalment was set that month", not 0 taka */
+/** `null` means "no instalment was set that month", not zero */
 function takaOrNull(paisa: number | null | undefined): string | null {
   return paisa === null || paisa === undefined ? null : paisaToTaka(paisa);
 }

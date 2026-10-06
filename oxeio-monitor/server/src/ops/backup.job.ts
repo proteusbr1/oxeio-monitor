@@ -75,7 +75,7 @@ export class BackupJob implements OnApplicationBootstrap {
   }
 
   /**
-   * Without `timeZone`, 02:30 UTC is 08:30 in Dhaka: a dump over the whole
+   * Without `timeZone`, 02:30 UTC is 08:30 in Asia/Dhaka (UTC+6): a dump over the whole
    * database right as the office starts. The heaviest job at the busiest time.
    */
   @Cron(BACKUP_CRON, {

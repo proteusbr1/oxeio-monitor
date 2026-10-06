@@ -69,7 +69,7 @@ function asAgent<T extends { set(field: string, val: string): T }>(
 
 const today = () => workDateOf(workNoon());
 
-/** The real moment of that hour in Dhaka, not the label */
+/** The real moment of that hour in the work zone, not the label */
 const atWorkHour = (dayLabel: Date, hour: number): Date =>
   new Date(dayLabel.getTime() - WORK_OFFSET_MS + hour * HOUR_MS);
 

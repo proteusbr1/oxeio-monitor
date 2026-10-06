@@ -139,7 +139,7 @@ export class UpdateEmployeeDto {
  */
 export class PolicySignedDto {
   /**
-   * `YYYY-MM-DD`. Defaults to **today's Dhaka date**.
+   * `YYYY-MM-DD`. Defaults to **today's work-zone date**.
    *
    * Careful: a date can be given because the paper is often signed earlier
    * and entered on the dashboard two days later. Treating the entry day as the
@@ -153,7 +153,7 @@ export class PolicySignedDto {
  * person's monthly totals, screenshots and audit trail.
  */
 export class DeactivateEmployeeDto {
-  /** Defaults to today's Dhaka date when omitted. */
+  /** Defaults to today's work-zone date when omitted. */
   @IsOptional() @Matches(DATE_ONLY, { message: 'leftOn must be in YYYY-MM-DD format' })
   leftOn?: string;
 

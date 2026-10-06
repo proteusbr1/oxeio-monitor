@@ -21,7 +21,7 @@ import { formatDuration } from '../../lib/format';
  */
 export function DayPulse({
   hours,
-  /** The current hour in Dhaka, 0-23; `null` if not known. */
+  /** The current hour in the work zone, 0-23; `null` if not known. */
   currentHour,
 }: {
   hours: TeamHour[];
@@ -153,7 +153,7 @@ export function DayPulse({
   );
 }
 
-/** `09:00`: Dhaka local hour, two digits. */
+/** `09:00`: work-zone local hour, two digits. */
 function hourLabel(hour: number): string {
   return `${String(hour).padStart(2, '0')}:00`;
 }

@@ -291,7 +291,7 @@ function secondsSince(then: Date, now: Date): number {
   return (now.getTime() - then.getTime()) / MS;
 }
 
-/** Local midnight in Dhaka for that date, as a UTC instant. */
+/** Local midnight in the work zone for that date, as a UTC instant. */
 function dayStartUtcMs(workDate: Date): number {
   return workDate.getTime() - OFFSET_MS;
 }
@@ -372,7 +372,7 @@ export function spreadIntoHourBuckets(
 
 /** The whole team's picture for one hour */
 export interface TeamHour {
-  /** Local hour in Dhaka, 0-23 */
+  /** Local hour in the work zone, 0-23 */
   hour: number;
   /** The team's total counted seconds in that hour */
   activeSec: number;
@@ -473,7 +473,7 @@ export function parseWorkDate(raw: string): Date | null {
  * Work day → `YYYY-MM-DD`.
  *
  * Careful: sending `@db.Date` straight into JSON would give
- * `2026-08-10T00:00:00.000Z`. In Dhaka that instant is 6 am on the 10th — a
+ * `2026-08-10T00:00:00.000Z`. In Asia/Dhaka that instant is 6 am on the 10th — a
  * browser converting it to local time showed the previous day for some
  * people. So dates always travel as strings, never as Date.
  */
@@ -486,7 +486,7 @@ export function formatWorkDate(workDate: Date): string {
   ].join('-');
 }
 
-/** The 1st of the month containing that Dhaka date — start of the monthly ring. */
+/** The 1st of the month containing that work-zone date — start of the monthly ring. */
 export function monthStartOf(workDate: Date): Date {
   return new Date(
     Date.UTC(workDate.getUTCFullYear(), workDate.getUTCMonth(), 1),

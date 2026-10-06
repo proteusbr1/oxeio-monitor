@@ -61,7 +61,7 @@ import { fixedOffsetMinutes } from '../src/agent/util/fixed-offset';
 
 /** One row of the list. */
 export interface HolidayEntry {
-  /** `YYYY-MM-DD`, the Dhaka date (not a clock reading). */
+  /** `YYYY-MM-DD`, a calendar date in the holiday country (not a clock reading). */
   date: string;
   /** Bengali name; this is what goes to the DB and the screen. */
   name: string;
@@ -658,11 +658,12 @@ export function monthKey(date: string): string {
 }
 
 /**
- * **Today's** date in Dhaka (`YYYY-MM-DD`).
+ * **Today's** date in the work time zone (`YYYY-MM-DD`).
  *
  * Careful: `toISOString()` **always gives the UTC date**, whatever the
- * machine's TZ. Between midnight and 6 am in Dhaka the UTC date is still the
- * previous day, so the 6 hours are added **first**, `toISOString()` after.
+ * machine's TZ. Between local midnight and the zone's UTC offset (6 am for
+ * Asia/Dhaka) the UTC date is still the previous day, so the offset is added
+ * **first**, `toISOString()` after.
  * Otherwise a seed run in the small hours of the 1st would see "today" in the
  * previous month, treat **that month as the current one**, and silently insert
  * holidays into the month that just ended, shifting its payroll.
@@ -888,7 +889,7 @@ export function yearsToSeed(
  * prevented) or silently block everything. The caller must state both.
  */
 export interface SeedTiming {
-  /** Today's date in Dhaka, `YYYY-MM-DD`: `dhakaToday(new Date())`. */
+  /** Today's date in the work zone, `YYYY-MM-DD`: `workToday(new Date())`. */
   today: string;
   /**
    * **Explicit consent** to insert holidays in the current and past months

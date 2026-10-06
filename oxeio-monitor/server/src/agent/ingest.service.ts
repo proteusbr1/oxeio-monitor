@@ -602,7 +602,7 @@ export class IngestService {
      * midnight with `day_rollover`.
      *
      * Careful: the comparison is **moment against moment** (`startedAt` vs `at`), not
-     * against the label: compared with `workDate`, that would read as 6 am Dhaka time,
+     * against the label: compared with `workDate`, that would read as the zone's UTC offset in the morning (6 am for Asia/Dhaka),
      * and almost every valid close would be dropped too.
      */
     await this.prisma.workSession.updateMany({

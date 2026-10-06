@@ -44,7 +44,7 @@ export class DayCloseJob {
     private readonly summary: SummaryService,
   ) {}
 
-  /** Careful: without `timeZone` this would run at 00:15 UTC = 6:15 am in Dhaka. */
+  /** Careful: without `timeZone` this would run at 00:15 UTC = 6:15 am in Asia/Dhaka (UTC+6). */
   @Cron('0 15 0 * * *', {
     name: 'day-close',
     timeZone: JOB_TIMEZONE,

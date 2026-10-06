@@ -16,7 +16,7 @@ import {
 /**
  * **R21 — security money (deposit).**
  *
- * The owner's rule (15 August): 500 taka is held back every month, and anyone
+ * The owner's rule (15 August): a fixed amount (500 taka in the first deployment) is held back every month, and anyone
  * who leaves with 30 days' notice gets all of it back.
  *
  * This is money, so the questions are about money: is anything deducted
@@ -34,7 +34,7 @@ afterAll(async () => {
   await h.close();
 });
 
-/** The current Dhaka month — the tests' expectations match it */
+/** The current work-zone month — the tests' expectations match it */
 const thisMonth = workNoon().toISOString().slice(0, 7);
 
 /** '2026-09' → '2026-08' */

@@ -264,11 +264,11 @@ export function dayTypeOf(workedSec: number, isOffDay: boolean): DayType {
 }
 
 /**
- * The Dhaka hour (0-23).
+ * The work-zone hour (0-23).
  *
- * Careful: `+6 hours` is not added here; the offset logic must live in one
+ * Careful: the zone's offset is not added here; the offset logic must live in one
  * place (`agent/util/work-time.ts`). It has no helper that returns the
- * hour, so the hour is cut from the `HHMMSS` of `dhakaPathParts()`.
+ * hour, so the hour is cut from the `HHMMSS` of `workPathParts()`.
  */
 export function workHourOf(instant: Date): number {
   return Number(workPathParts(instant).hhmmss.slice(0, 2));
@@ -286,7 +286,7 @@ export function workHourOf(instant: Date): number {
  * pace would lag all month.
  *
  * Careful: the input must be a **UTC-midnight** date like `workDateOf()`
- * returns; only then is the UTC day the Dhaka day.
+ * returns; only then is the UTC day the work day.
  */
 export function isoWeekday(workDate: Date): number {
   const js = workDate.getUTCDay();
@@ -325,9 +325,9 @@ export function countWorkdays(
 /**
  * The work day immediately before `now`; day close (K05) closes exactly this one.
  *
- * Careful: first get the Dhaka date, **then** subtract one day. The other
+ * Careful: first get the work-zone date, **then** subtract one day. The other
  * way round (subtract 24 hours first, then `workDateOf`), a job run at 00:15
- * would land on 00:15 of the previous Dhaka day. It would get the same date
+ * would land on 00:15 of the previous work day. It would get the same date
  * but the result would no longer be reliable when called at other times of day.
  */
 export function previousWorkDate(now: Date): Date {
@@ -389,7 +389,7 @@ export interface ElapsedWindowInput {
    */
   periodStart: Date;
   periodEnd: Date;
-  /** Dhaka's **today** work day (`workDateOf(now)`); itself lies outside the window. */
+  /** **Today's** work day (`workDateOf(now)`); itself lies outside the window. */
   today: Date;
   /** G37: `null` = has been there since before the period. */
   joinedOn: Date | null;

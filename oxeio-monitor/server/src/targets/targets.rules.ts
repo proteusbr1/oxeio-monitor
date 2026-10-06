@@ -320,11 +320,11 @@ export function topUpSize(
      * keeps its gate inside for exactly this reason; this does the same.
      */
     staffType: string | null | undefined;
-    /** How many were marked done in today's Dhaka day */
+    /** How many were marked done in today's work day */
     completedToday: number;
     /** How many `assigned` targets are in hand now */
     openCount: number;
-    /** The total number issued to them in today's Dhaka day */
+    /** The total number issued to them in today's work day */
     issuedToday: number;
     /** Their daily design target (`designTargetOf`) */
     dailyTarget: number;

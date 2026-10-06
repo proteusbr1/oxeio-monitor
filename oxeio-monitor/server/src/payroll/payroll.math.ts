@@ -10,7 +10,7 @@
 export const PAISA_PER_TAKA = 100;
 
 export interface PayrollInput {
-  /** Monthly salary, in taka. */
+  /** Monthly salary, in the currency's whole units (taka for the BDT default). */
   monthlySalary: number;
   /**
    * That employee's target for that month: **their work days × the daily
@@ -162,9 +162,9 @@ export function computePayroll(input: PayrollInput): PayrollLine {
   const targetHours = targetSec / 3600;
 
   // Careful: the rate is **not** rounded separately for the deduction; below it
-  // goes directly salaryPaisa × shortfall ÷ target. 13000 ÷ 208 = 62.5 taka,
+  // goes directly salaryPaisa × shortfall ÷ target. 13000 ÷ 208 = 62.5 currency units,
   // but 10000 ÷ 208 = 48.0769…. Rounding the rate first would multiply that
-  // fraction by every hour and end up a few taka off at month end.
+  // fraction by every hour and end up a few currency units off at month end.
   const hourlyRatePaisa = Math.round(salaryPaisa / targetHours);
 
   /**
@@ -200,7 +200,7 @@ export function computePayroll(input: PayrollInput): PayrollLine {
   };
 }
 
-/** Paisa → taka for display (two decimals). */
+/** Minor → whole units for display (paisa → taka for BDT; two decimals). */
 export function paisaToTaka(paisa: number): string {
   const sign = paisa < 0 ? '-' : '';
   const abs = Math.abs(paisa);

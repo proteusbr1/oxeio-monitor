@@ -6,7 +6,7 @@ import { workDateOf } from '../src/agent/util/work-time';
 /**
  * Guards the helper that every fixture now stands on.
  *
- * If `dhakaNoon()` were wrong, nothing would throw; fixtures would just drift
+ * If `workNoon()` were wrong, nothing would throw; fixtures would just drift
  * back near a day boundary and tests would break silently a few times a year.
  * That exact failure happened three times (G62, adjustments, agent-recovery),
  * and each time it was caught only by coincidence, because CI happened to run
@@ -20,7 +20,7 @@ describe('workNoon — a safe instant for fixtures', () => {
     expect(workNoon().toISOString().slice(11)).toBe('06:00:00.000Z');
   });
 
-  it('falls on the current Dhaka day, same as the server "today"', () => {
+  it('falls on the current work day, same as the server "today"', () => {
     expect(workDateOf(workNoon()).getTime()).toBe(
       workDateOf(new Date()).getTime(),
     );
@@ -32,11 +32,11 @@ describe('workNoon — a safe instant for fixtures', () => {
    * `+ 6 * 3_600_000` to `+ 1 * 3_600_000`, every other test would stay green
    * and the time-of-day flakiness would come back.
    */
-  it('at least 11 hours away from both Dhaka midnights', () => {
+  it('at least 11 hours away from both local midnights', () => {
     const noon = workNoon();
     /**
-     * Careful: `workDateOf()` returns the Dhaka day as a UTC-midnight label
-     * (`2026-09-05T00:00:00Z` = the Dhaka day of 5 September). The real Dhaka
+     * Careful: `workDateOf()` returns the work day as a UTC-midnight label
+     * (`2026-09-05T00:00:00Z` = the work day of 5 September). The real local
      * midnight instant is six hours earlier. Treating label and instant as the
      * same thing broke this test once; `todayWindow()` subtracts
      * `6 * 3_600_000` for the same reason.

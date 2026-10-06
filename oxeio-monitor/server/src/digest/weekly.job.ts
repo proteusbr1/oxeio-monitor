@@ -19,12 +19,12 @@ const SCHEDULE = weeklyScheduleOf(
 
 /**
  * **R3** — a summary to the owner's Telegram once a week.
- * Default Friday 6:00 pm (Dhaka); change with `WEEKLY_DIGEST_DAY` /
+ * Default Friday 6:00 pm (work zone); change with `WEEKLY_DIGEST_DAY` /
  * `WEEKLY_DIGEST_HOUR`.
  *
  * Careful: without `timeZone` the cron would run in the server's own time zone
  * (almost always UTC in Docker) — "Friday 6 pm" would then really be 12 am
- * **Saturday** in Dhaka, so the message would arrive on the first day of the
+ * **Saturday** in the work zone, so the message would arrive on the first day of the
  * next week and the window would also shift by a day. For a day-based cron the
  * mistake does more harm than for the daily one: the weekday changes too.
  *

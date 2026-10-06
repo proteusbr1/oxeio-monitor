@@ -31,7 +31,7 @@ import {
 let h: Harness;
 let employeeId: number;
 
-/** Today's date in Dhaka: not UTC (G62, section 3d), and taken from the harness (G140) */
+/** Today's date in the work zone: not UTC (G62, section 3d), and taken from the harness (G140) */
 const todayInWorkZone = (): string => workTodayIso();
 
 beforeAll(async () => {
@@ -496,7 +496,7 @@ describe('reconciling with segments', () => {
     // Both must be present: the raw work and the adjustment, neither changes the other
     //
     // Careful: `worked.durationSec`, not a hard-coded `1800`. Near midnight
-    // `todayWindow()` clamps the window to today in Dhaka, so at 00:01 it
+    // `todayWindow()` clamps the window to today in the work zone, so at 00:01 it
     // gives at most 58 s, not 1800 s (see the note in the harness). Matching
     // exactly what was sent avoids the test going red every night in a window
     // of about 2 minutes (CI ran at exactly that time: section 3b).
