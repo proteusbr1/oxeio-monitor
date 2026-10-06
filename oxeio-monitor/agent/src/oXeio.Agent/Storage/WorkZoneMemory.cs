@@ -10,9 +10,9 @@ namespace oXeio.Agent.Storage;
 /// (<c>America/Sao_Paulo|-180</c>), read at startup.
 ///
 /// ⚠️ Without it, a PC that boots while the server is unreachable would count
-/// in Asia/Dhaka until the first config arrives, and on a non-Dhaka server
+/// in Asia/Dhaka until the first config arrives, and on a server in another zone
 /// every segment of that morning would land on the wrong work date. The first
-/// boot ever still starts on Dhaka, which is also the server's default.
+/// boot ever still starts on Asia/Dhaka, which is also the server's default.
 ///
 /// ⚠️ Never throws, like <c>MilestoneMemory</c>: a file that cannot be read or
 /// written only means the next boot starts on the default zone, and an

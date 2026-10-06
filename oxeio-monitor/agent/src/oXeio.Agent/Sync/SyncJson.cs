@@ -26,8 +26,8 @@ internal static class SyncJson
     /// round-trip with the offset by default (<c>2026-08-09T14:03:02.1234567+06:00</c>), which
     /// JS's <c>new Date(...)</c>, and therefore the server's
     /// <c>@Type(() =&gt; Date) @IsDate()</c>, accepts as is. A custom converter would lose the
-    /// offset at exactly this point, Dhaka time would be taken as UTC, and everyone's hours
-    /// would land 6 hours off, on the wrong day.
+    /// offset at exactly this point, work-zone local time would be taken as UTC, and everyone's
+    /// hours would land off by the zone's offset (6 hours in Dhaka), on the wrong day.
     ///
     /// Careful: without <see cref="JsonIgnoreCondition.WhenWritingNull"/>, a field like
     /// <c>appName: null</c> would go on the wire; when <c>@IsOptional()</c> gets null, some

@@ -55,7 +55,7 @@ public sealed class LiveDuration
     {
         if (counted < TimeSpan.Zero) counted = TimeSpan.Zero;
 
-        // The counted number went backwards: Dhaka midnight passed (today's total is zero), or
+        // The counted number went backwards: midnight in the work zone passed (today's total is zero), or
         // the server sent a correction. The previously shown value must not be kept then, or
         // the window would show yesterday's total all day.
         if (counted < _counted) _shown = counted;

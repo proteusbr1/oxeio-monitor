@@ -26,10 +26,10 @@ internal static class MonthlyMilestone
     public const string EventClass = "monthly_target";
 
     /// <summary>
-    /// The identity of the month in the Dhaka calendar, e.g. <c>2026-08</c>.
+    /// The identity of the month in the work time zone's calendar, e.g. <c>2026-08</c>.
     ///
-    /// Careful: not the UTC month. Dhaka is UTC+6, so at 2am on the 1st of the month UTC is
-    /// still the previous month; in those six hours the new month's balloon would be recorded
+    /// Careful: not the UTC month. A work zone ahead of UTC (Dhaka, the default, is UTC+6) means that at 2am on the 1st
+    /// of the month UTC is still the previous month; in those hours the new month's balloon would be recorded
     /// under the old month, and shown again when the new month started.
     /// </summary>
     public static string MonthKeyOf(DateTimeOffset now)
@@ -52,7 +52,7 @@ internal static class MonthlyMilestone
     /// Whether a balloon should be shown right now.
     /// </summary>
     /// <param name="status">The tray's latest state.</param>
-    /// <param name="now">Used to derive the Dhaka month.</param>
+    /// <param name="now">Used to derive the month in the work time zone.</param>
     /// <param name="lastCelebrated">The last month it was shown, or <c>null</c>.</param>
     /// <param name="monthKey">Current month key; if true is returned, record this.</param>
     public static bool ShouldCelebrate(

@@ -348,13 +348,14 @@ internal sealed partial class AgentHost
          * monitors. That is enough for a 7-day log, and the other lines do not get pushed out.
          */
         /**
-         * Careful: the slot time is shown in <b>Dhaka</b> time, not UTC.
+         * Careful: the slot time is shown in the <b>work time zone</b>, not in UTC.
          *
          * `slot.SlotStart` is UTC (`SlotScheduler.FloorToSlot` gives a zero offset), but the
          * **timestamp** of this line is written by `FileLog` in local time (`DateTimeOffset.Now`,
-         * +06:00). If the two were not in one zone, the log would show "22:14 ... slot 16:10" side
-         * by side: two times for one event, and whoever reads the log during an incident would have
-         * to add 6 hours in their head. This confusion was caught in the G137 investigation.
+         * for example +06:00 in Dhaka). If the two were not in one zone, the log would show
+         * "22:14 ... slot 16:10" side by side: two times for one event, and whoever reads the log
+         * during an incident would have to add the zone's offset in their head.
+         * This confusion was caught in the G137 investigation.
          */
         _log.Info(
             $"📸 slot {WorkTime.LocalTimeOf(slot.SlotStart):HH\\:mm} · {results.Count} monitor(s)" +

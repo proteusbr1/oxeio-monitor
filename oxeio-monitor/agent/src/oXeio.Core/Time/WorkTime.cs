@@ -1,13 +1,14 @@
 namespace oXeio.Core.Time;
 
 /// <summary>
-/// Asia/Dhaka = UTC+06:00 with no DST, so it is safe to calculate with a constant offset.
+/// A work time zone without DST (default Asia/Dhaka = UTC+06:00) has a constant offset, so it is
+/// safe to calculate with it.
 ///
-/// An exact mirror of the server's <c>server/src/agent/util/dhaka-time.ts</c>.
+/// An exact mirror of the server's <c>server/src/agent/util/work-time.ts</c>.
 /// Without the same rule on both sides, the agent and the server would derive different <c>work_date</c>s.
 ///
-/// In v1 only Asia/Dhaka. To support another time zone, <c>TimeZoneInfo</c> would have to
-/// go in here; with DST this simple calculation would break.
+/// Only zones without DST (a fixed offset) are supported. To support zones with DST,
+/// <c>TimeZoneInfo</c> would have to go in here; with DST this simple calculation would break.
 ///
 /// Update: the server may now run on another zone without DST
 /// (<c>WORK_TIMEZONE</c>) and sends its fixed offset in the config
@@ -100,14 +101,14 @@ public static class WorkTime
     /// <summary>Back to Asia/Dhaka — for tests.</summary>
     public static void Reset() => _zone = new Zone(DefaultTimeZone, DefaultOffset);
 
-    /// <summary>The date, on the Dhaka calendar, that this moment falls on.</summary>
+    /// <summary>The date, in the work time zone, that this moment falls on.</summary>
     public static DateOnly WorkDateOf(DateTimeOffset instant)
     {
         var local = instant.ToUniversalTime() + Offset;
         return DateOnly.FromDateTime(local.UtcDateTime);
     }
 
-    /// <summary>What time it is on the Dhaka clock at that moment.</summary>
+    /// <summary>What time it is on the work zone's clock at that moment.</summary>
     public static TimeOnly LocalTimeOf(DateTimeOffset instant)
     {
         var local = instant.ToUniversalTime() + Offset;

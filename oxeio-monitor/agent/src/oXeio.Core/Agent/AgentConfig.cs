@@ -28,11 +28,11 @@ public sealed record AgentConfig
     /// <inheritdoc cref="ScreenshotFrom"/>
     public string? ScreenshotTo { get; init; }
 
-    /// <summary>Always <c>"Asia/Dhaka"</c> in v1, see <see cref="oXeio.Core.Time.WorkTime"/>.</summary>
+    /// <summary>IANA name of the work time zone (<c>"Asia/Dhaka"</c> by default), see <see cref="oXeio.Core.Time.WorkTime"/>.</summary>
     public required string Timezone { get; init; }
 
     /// <summary>
-    /// Minutes east of UTC for <see cref="Timezone"/> (Asia/Dhaka = 360). The
+    /// Minutes east of UTC for <see cref="Timezone"/> (for example Asia/Dhaka = 360). The
     /// server only accepts zones without DST, so this one number is enough.
     /// <c>null</c> from a server older than the field — keep the current offset.
     /// </summary>
@@ -77,7 +77,7 @@ public sealed record AgentConfig
     /// <see cref="ScreenshotFrom"/>/<see cref="ScreenshotTo"/> → <see cref="CaptureWindow"/>.
     ///
     /// Written once here so that modules do not each parse "HH:MM" their own way: one
-    /// <c>DateTime.Parse</c> would mean something different under a Bangladeshi locale.
+    /// <c>DateTime.Parse</c> would mean something different under another locale.
     /// </summary>
     public CaptureWindow ToCaptureWindow() =>
         new(ParseHhMm(ScreenshotFrom), ParseHhMm(ScreenshotTo));

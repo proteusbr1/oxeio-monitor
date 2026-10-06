@@ -90,7 +90,7 @@ public class LiveDurationTests
     }
 
     /// <summary>
-    /// Careful: at Dhaka midnight today's total resets to zero. Holding on to the
+    /// Careful: at midnight in the work zone today's total resets to zero. Holding on to the
     /// previous value then would make the window show yesterday's total all of tomorrow.
     /// </summary>
     [Fact]

@@ -105,7 +105,7 @@ internal sealed class InstanceLock : IDisposable
     /// <summary>
     /// The real Win32 code is in the low 16 bits of <c>IOException.HResult</c>
     /// (0x8007_00XX means FACILITY_WIN32). Matching the message text would not work:
-    /// it changes with the locale, and some of these machines may run Bengali Windows.
+    /// it changes with the locale, and some of these machines may run Windows in another language.
     /// </summary>
     private static int Win32Code(IOException ex) => ex.HResult & 0xFFFF;
 

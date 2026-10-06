@@ -11,7 +11,7 @@ namespace oXeio.Agent.Tests;
 /// </summary>
 public class MonthlyPaceTests
 {
-    /// <summary>A moment in Dhaka time.</summary>
+    /// <summary>A moment in the default work zone (Dhaka, UTC+6).</summary>
     private static DateTimeOffset AtWorkZone(int year, int month, int day, int hour = 12) =>
         new(year, month, day, hour, 0, 0, TimeSpan.FromHours(6));
 
@@ -78,7 +78,7 @@ public class MonthlyPaceTests
     }
 
     /// <summary>
-    /// The Dhaka calendar, not UTC. 03:00 on the 1st in Dhaka is still 21:00 on the
+    /// The work zone's calendar, not UTC. 03:00 on the 1st in Dhaka (UTC+6) is still 21:00 on the
     /// 31st of the previous month in UTC; with UTC the calculation would be for the
     /// previous month's last day, so the first morning of a new month would show
     /// "208 hours behind".

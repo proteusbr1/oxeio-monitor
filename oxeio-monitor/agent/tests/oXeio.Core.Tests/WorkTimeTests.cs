@@ -3,7 +3,7 @@ using oXeio.Core.Time;
 namespace oXeio.Core.Tests;
 
 /// <summary>
-/// Must give exactly the same result as the server's <c>dhaka-time.ts</c>;
+/// Must give exactly the same result as the server's <c>work-time.ts</c>;
 /// otherwise the agent and the server would compute different <c>work_date</c> values.
 /// </summary>
 public class WorkTimeTests

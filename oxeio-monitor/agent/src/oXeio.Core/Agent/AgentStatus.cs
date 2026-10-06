@@ -43,7 +43,7 @@ public sealed record AgentStatus
     /// </summary>
     public required UpdateStatus Update { get; init; }
 
-    /// <summary>Today's ACTIVE time on the Dhaka calendar.</summary>
+    /// <summary>Today's ACTIVE time on the work time zone's calendar.</summary>
     public required TimeSpan ActiveToday { get; init; }
 
     /// <summary>
@@ -62,7 +62,7 @@ public sealed record AgentStatus
     /// </summary>
     public DateTimeOffset? CountedAt { get; init; }
 
-    /// <summary>This month's ACTIVE time on the Dhaka calendar. It is compared with the monthly 208 hours.</summary>
+    /// <summary>This month's ACTIVE time on the work time zone's calendar. It is compared with the monthly 208 hours.</summary>
     public required TimeSpan ActiveThisMonth { get; init; }
 
     /// <summary>

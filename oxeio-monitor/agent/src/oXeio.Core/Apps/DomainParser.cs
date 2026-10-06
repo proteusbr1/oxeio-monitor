@@ -80,7 +80,7 @@ public static class DomainParser
     }
 
     /// <summary>
-    /// People type anything into the address bar: search words, Bengali sentences, file
+    /// People type anything into the address bar: search words, sentences in any language, file
     /// paths. Stored as a "domain" they would fill the report with garbage, and <b>the words
     /// searched for would go to the server</b>, which is effectively keylogging.
     /// So anything that does not look like a domain is dropped.

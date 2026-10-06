@@ -115,7 +115,7 @@ internal static class UiText
     }
 
     /// <summary>
-    /// <c>HH:MM</c> on the Dhaka clock.
+    /// <c>HH:MM</c> on the work time zone's clock.
     ///
     /// Not <c>ToLocalTime()</c>. The machine's time zone may be set wrongly (often the case on
     /// a new PC), and then the "last sync" staff saw would not match the server's records,
@@ -128,7 +128,7 @@ internal static class UiText
                local.Minute.ToString("00", CultureInfo.InvariantCulture);
     }
 
-    /// <summary>The Dhaka date, e.g. <c>9 August 2026</c>.</summary>
+    /// <summary>The date in the work time zone, e.g. <c>9 August 2026</c>.</summary>
     public static string WorkDate(DateTimeOffset instant)
     {
         var date = WorkTime.WorkDateOf(instant);

@@ -99,8 +99,8 @@ public static class AgentLiveness
     {
         ArgumentNullException.ThrowIfNull(beat);
 
-        // InvariantCulture is mandatory. If numbers were written in Bengali digits under a
-        // Bengali locale, the watchdog's parse would fail and a healthy agent would be killed
+        // InvariantCulture is mandatory. If numbers were written in non-Latin digits (Bengali, say)
+        // under a matching locale, the watchdog's parse would fail and a healthy agent would be killed
         // as having "no heartbeat".
         return string.Create(
             CultureInfo.InvariantCulture,
