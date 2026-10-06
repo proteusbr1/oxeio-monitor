@@ -39,13 +39,14 @@ const ACTIONS: { value: string; label: string }[] = [
   { value: 'payroll_view', label: 'Salary viewed' },
   { value: 'change_setting', label: 'Setting changed' },
   /**
-   * **Un-finishing a finished design.**
+   * **Un-finishing a finished task.**
    *
    * Careful: kept near the top of the list on purpose. It is the only action that
    * **erases its own trace** (`completed_at` and `completed_by_id` both become
    * `null`), so the log is the only place to see it.
    */
-  { value: 'design_undone', label: 'Design un-completed' },
+  { value: 'task_undone', label: 'Task un-completed' },
+  { value: 'task_deleted', label: 'Tasks deleted' },
   { value: 'revoke_device', label: 'Device revoked' },
   { value: 'create_enrollment_code', label: 'Enrolment code' },
   { value: 'export_report', label: 'Report exported' },
@@ -56,22 +57,35 @@ const ACTIONS: { value: string; label: string }[] = [
   { value: 'login_failed', label: 'Failed sign-in' },
 ];
 
-const ACTION_LABEL: Record<string, string> = Object.fromEntries(
-  ACTIONS.filter((a) => a.value !== '').map((a) => [a.value, a.label]),
-);
+/**
+ * Rows written before the Tasks module carry the old action names; they are
+ * never rewritten (the log is history), so they keep a readable label. Not in
+ * the filter list: new rows never use them.
+ */
+const LEGACY_ACTION_LABEL: Record<string, string> = {
+  design_undone: 'Task un-completed (old log)',
+  design_deleted: 'Tasks deleted (old log)',
+};
+
+const ACTION_LABEL: Record<string, string> = {
+  ...LEGACY_ACTION_LABEL,
+  ...Object.fromEntries(
+    ACTIONS.filter((a) => a.value !== '').map((a) => [a.value, a.label]),
+  ),
+};
 
 /**
  * Careful: `Record<Role, ...>`, **not** `Record<string, ...>`.
  *
- * When `researcher` was added to `UserRole`, the map in `Layout.tsx` was fixed but
+ * When a role was added to `UserRole`, the map in `Layout.tsx` was fixed but
  * **this one was missed**, because with `string` the compiler said nothing. Result:
- * the raw word `researcher` appeared in the researcher's rows of the audit log.
+ * the raw role word appeared in that person's rows of the audit log.
  * Now, if the enum grows, this line errors.
  */
 const ROLE_LABEL: Record<Role, string> = {
   owner: 'Owner',
   manager: 'Manager',
-  researcher: 'Researcher',
+  coordinator: 'Coordinator',
   employee: 'Staff',
 };
 

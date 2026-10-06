@@ -18,7 +18,7 @@ services:
       # This one value makes Caddy listen on the domain instead of `:8080`,
       # and obtain and renew the certificate from Let's Encrypt by itself.
       #
-      # Careful: set `PUBLIC_HOST=monitor.oxeio.com` in `.env`. It is deliberately
+      # Careful: set `PUBLIC_HOST=monitor.example.com` in `.env`. It is deliberately
       #    not hardcoded here, so a domain change touches only one place.
       CADDY_SITE: ${PUBLIC_HOST:?PUBLIC_HOST is not set — put the domain in .env}
 

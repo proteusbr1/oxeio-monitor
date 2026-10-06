@@ -16,7 +16,7 @@ namespace oXeio.Core.Tests;
 public class ScreenActivityTests
 {
     private static readonly DateTimeOffset Start =
-        new(2026, 8, 16, 4, 0, 0, TimeSpan.Zero); // 10 AM in Dhaka
+        new(2026, 8, 16, 4, 0, 0, TimeSpan.Zero); // 10 AM local (UTC+6 in tests)
 
     private static DateTimeOffset At(int minutes) => Start.AddMinutes(minutes);
 

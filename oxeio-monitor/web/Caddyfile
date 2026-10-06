@@ -12,7 +12,7 @@
 # The site address comes from an ENVIRONMENT VARIABLE: no need to edit the file.
 #
 #   With nothing set it is `:8080`: the office LAN and dev behave as before.
-#   With `CADDY_SITE=monitor.oxeio.com`, Caddy itself listens on 80 and 443 and
+#   With `CADDY_SITE=monitor.example.com`, Caddy itself listens on 80 and 443 and
 #   **gets and renews the Let's Encrypt certificate** too: no certbot needed.
 #
 # Careful: with a domain, DNS must be set up first (A record -> the VPS's IP).
@@ -164,7 +164,7 @@
 	#    extension; `caddy:2-alpine` has no `/etc/mime.types` either. So the file would
 	#    be sniffed as `text/plain`. Chrome does not check the MIME type today, so it
 	#    installs anyway, but that is not something to rely on: one line makes it certain.
-	#    After a deploy: `curl -I https://hub.oxeio.com/manifest.webmanifest`
+	#    After a deploy: `curl -I https://monitor.example.com/manifest.webmanifest`
 	@manifest path /manifest.webmanifest
 	header @manifest Content-Type "application/manifest+json"
 }

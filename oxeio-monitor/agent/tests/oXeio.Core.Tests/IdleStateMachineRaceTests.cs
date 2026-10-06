@@ -31,7 +31,7 @@ public class IdleStateMachineRaceTests
 {
     private static readonly TimeSpan Threshold = TimeSpan.FromSeconds(60);
     private static readonly DateTimeOffset Start =
-        new(2026, 9, 6, 4, 0, 0, TimeSpan.Zero); // 10 AM in Dhaka
+        new(2026, 9, 6, 4, 0, 0, TimeSpan.Zero); // 10 AM local (UTC+6 in tests)
 
     /// <summary>
     /// Careful: a race is not caught with few rounds. The critical section is a

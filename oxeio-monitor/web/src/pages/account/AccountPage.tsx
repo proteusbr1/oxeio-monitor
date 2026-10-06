@@ -34,7 +34,7 @@ import { TwoFactorCard } from './TwoFactorCard';
 const ROLE_LABEL: Record<AccountView['role'], string> = {
   owner: 'Owner',
   manager: 'Manager',
-  researcher: 'Researcher',
+  coordinator: 'Coordinator',
   employee: 'Staff',
 };
 

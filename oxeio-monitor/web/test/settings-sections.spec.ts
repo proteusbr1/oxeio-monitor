@@ -26,6 +26,18 @@ describe('settingsSections', () => {
     expect(ids('manager')).toEqual(['categories', 'policies']);
   });
 
+  it('Tasks sits in Work for the owner, only while the Tasks module is on', () => {
+    const work = settingsSections('owner', ALL_FEATURES_ON).find((s) => s.title === 'Work');
+    expect(work?.tabs.map((t) => t.id)).toEqual(['categories', 'policies', 'tasks']);
+    expect(ids('owner', off({ tasks: false }))).not.toContain('tasks');
+    // start detection rests without Apps & websites, but the tab stays: the list is kept
+    expect(ids('owner', off({ appTracking: false }))).toContain('tasks');
+  });
+
+  it('Tasks is owner-only', () => {
+    expect(ids('manager')).not.toContain('tasks');
+  });
+
   it('managers keep their own labels and subtitles', () => {
     const tab = settingsSections('manager', ALL_FEATURES_ON)
       .flatMap((s) => s.tabs)

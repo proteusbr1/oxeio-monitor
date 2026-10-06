@@ -5,7 +5,7 @@ namespace oXeio.Core.Tests;
 public class SlotSchedulerTests
 {
     private static readonly DateTimeOffset Nine =
-        new(2026, 8, 9, 3, 0, 0, TimeSpan.Zero); // 9 AM in Dhaka
+        new(2026, 8, 9, 3, 0, 0, TimeSpan.Zero); // 9 AM local (UTC+6 in tests)
 
     [Fact]
     public void The_shot_always_falls_inside_its_own_slot()

@@ -237,14 +237,6 @@ export interface PayrollRow {
   empCode: string;
   fullName: string;
   /**
-   * Kind of work; this used to be `designation`.
-   *
-   * Careful: the designation field was removed from the form (the owner's
-   * decision), so it would have stayed empty forever for new staff, silently showing
-   * nothing on screen.
-   */
-  staffType: 'designer' | 'researcher' | 'manager' | null;
-  /**
    * `null` = this employee's salary is not set, which is not the same as zero.
    * Showing them the same way would silently put a wrong number on the sheet.
    * Careful: all money and hours are strings (Decimal, not float). Do not compute

@@ -75,7 +75,7 @@ export function configureApp(
    * **The JSON body cap is 8 MB**, at the owner's request.
    *
    * Careful: Express's default is **100 KB**, and it was not set here. So when
-   * a researcher pasted a big list, the request got a 413 **before it even
+   * someone pasted a big list, the request got a 413 **before it even
    * reached validation**, with no understandable reason on screen.
    *
    * Careful: the cap is deliberately **larger than** the DTO's cap (5 MB), so

@@ -118,7 +118,7 @@ internal static partial class Program
         var totpAsked = false;
 
         using var form = new SignInForm(
-            "https://oxeio.office.local",
+            "https://monitor.example.com",
             (email, _, totp, _) =>
             {
                 var result = which switch

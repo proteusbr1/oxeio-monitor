@@ -18,14 +18,14 @@ public sealed record ZoneTransition
 /// offset up in that table, so days are cut exactly where the server cuts them,
 /// without relying on Windows' time-zone data (which can lag behind a country's
 /// change of rules). With no table (an older server) it uses the single offset,
-/// as before. Before any config arrives the zone is Asia/Dhaka, UTC+06:00.
+/// as before. Before any config arrives the zone is UTC (the server's default too).
 /// </summary>
 public static class WorkTime
 {
-    /// <summary>Asia/Dhaka — what the agent uses before any config arrives.</summary>
-    public static readonly TimeSpan DefaultOffset = TimeSpan.FromHours(6);
+    /// <summary>UTC — what the agent uses before any config arrives (the server's default too).</summary>
+    public static TimeSpan DefaultOffset { get; private set; } = TimeSpan.Zero;
 
-    public const string DefaultTimeZone = "Asia/Dhaka";
+    public static string DefaultTimeZone { get; private set; } = "UTC";
 
     /// <summary>
     /// Real offsets run from UTC−12:00 to UTC+14:00. Anything outside is a
@@ -46,14 +46,14 @@ public static class WorkTime
     /// <summary>The work-day offset right now.</summary>
     public static TimeSpan Offset => OffsetAt(DateTimeOffset.UtcNow);
 
-    /// <summary>IANA name of the work-day zone, e.g. <c>Asia/Dhaka</c>.</summary>
+    /// <summary>IANA name of the work-day zone, e.g. <c>Europe/Lisbon</c>.</summary>
     public static string TimeZoneName => _zone.Name;
 
     /// <summary>How many offset changes are known (0 = one fixed offset).</summary>
     public static int TransitionCount => _zone.Transitions.Length;
 
     /// <summary>
-    /// Short place name for the tray: <c>Asia/Dhaka</c> → <c>Dhaka</c>,
+    /// Short place name for the tray: <c>Europe/Lisbon</c> → <c>Lisbon</c>,
     /// <c>America/Sao_Paulo</c> → <c>Sao Paulo</c>.
     /// </summary>
     public static string Label
@@ -148,8 +148,20 @@ public static class WorkTime
         int.TryParse(text.AsSpan().Trim(), System.Globalization.NumberStyles.AllowLeadingSign,
             System.Globalization.CultureInfo.InvariantCulture, out value);
 
-    /// <summary>Back to Asia/Dhaka — for tests.</summary>
+    /// <summary>Back to the default zone — for tests.</summary>
     public static void Reset() => _zone = new Zone(DefaultTimeZone, DefaultOffset, []);
+
+    /// <summary>
+    /// Tests only: the zone <see cref="Reset"/> returns to. The test projects pin a fixed
+    /// UTC+6 zone (<c>Etc/GMT-6</c>) once, at load, so their fixed instants keep meaning the
+    /// same local times whatever the product default is. Never called by the agent itself.
+    /// </summary>
+    public static void UseDefaultForTests(string timeZone, int offsetMinutes)
+    {
+        DefaultTimeZone = timeZone;
+        DefaultOffset = TimeSpan.FromMinutes(offsetMinutes);
+        Reset();
+    }
 
     /// <summary>
     /// The offset in force at that instant: the last change at or before it. Before

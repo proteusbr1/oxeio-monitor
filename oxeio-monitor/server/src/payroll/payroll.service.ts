@@ -16,14 +16,6 @@ export interface PayrollRow {
   employeeId: number;
   empCode: string;
   fullName: string;
-  /**
-   * Kind of work, replacing `designation`/`department`.
-   *
-   * Those two fields were removed from the form (owner's decision), so showing
-   * them on screen would mean **silently showing stale values**: a new
-   * employee's fields would just be empty.
-   */
-  staffType: 'designer' | 'researcher' | 'manager' | null;
   /** null = no salary set for this employee: not treated as zero, shown separately */
   monthlySalary: string | null;
   targetHours: string;
@@ -184,7 +176,6 @@ export class PayrollService {
         id: true,
         empCode: true,
         fullName: true,
-        staffType: true,
         payBasis: true,
         monthlySalary: true,
         hourlyRate: true,
@@ -295,7 +286,6 @@ export class PayrollService {
         employeeId: e.id,
         empCode: e.empCode,
         fullName: e.fullName,
-        staffType: e.staffType,
         targetHours: hours(summary.targetSec),
         /** How much is really being asked for */
         observedTargetHours: hours(observedTargetSec),

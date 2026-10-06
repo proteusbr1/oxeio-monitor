@@ -319,7 +319,7 @@ Agents connect to `https://<server>`; the dashboard stays on Caddy's port 8080.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File deploy\make-cert.ps1 `
-    -Hostname oxeio.office.local -IpAddress 192.168.0.10
+    -Hostname monitor.office.lan -IpAddress 192.168.0.10
 ```
 
 Without arguments it uses the machine's name and all its LAN IPv4 addresses.
@@ -365,7 +365,7 @@ Caddy keeps sending plain HTTP to the api and every dashboard request returns
 Check: `docker compose logs api --tail 20` shows `https://`, and
 
 ```powershell
-curl.exe https://oxeio.office.local/api/v1/health --cacert deploy\certs\oxeio-cert.pem
+curl.exe https://monitor.office.lan/api/v1/health --cacert deploy\certs\oxeio-cert.pem
 ```
 
 returns `{"status":"ok","db":"up",…}`.

@@ -6,7 +6,7 @@ namespace oXeio.Core.Agent;
 /// The last good config from the server, as kept on disk.
 ///
 /// ⚠️ Without it the agent starts every boot on <see cref="AgentConfig.Default"/>
-/// (Asia/Dhaka zone, 60 s idle, 07:00–23:00) and keeps it until the server answers. A PC
+/// (UTC zone, 60 s idle, 07:00–23:00) and keeps it until the server answers. A PC
 /// rebooted while the server is unreachable would then count with a policy
 /// nobody chose, and nothing on the dashboard would say so.
 ///

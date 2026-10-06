@@ -15,11 +15,11 @@ public class CaptureGateTests
 {
     private static readonly CaptureWindow Day = CaptureWindow.Default; // 07:00-23:00
 
-    /// <summary>12:00 noon in Dhaka: inside the window (UTC+6, so 06:00 UTC).</summary>
+    /// <summary>12:00 noon local: inside the window (tests run in UTC+6, so 06:00 UTC).</summary>
     private static readonly DateTimeOffset Noon =
         new(2026, 8, 12, 6, 0, 0, TimeSpan.Zero);
 
-    /// <summary>2 AM in Dhaka: outside the window.</summary>
+    /// <summary>2 AM local: outside the window.</summary>
     private static readonly DateTimeOffset Night =
         new(2026, 8, 11, 20, 0, 0, TimeSpan.Zero);
 

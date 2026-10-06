@@ -4,8 +4,9 @@ import { SegmentState, type Prisma } from '@prisma/client';
 import { workDateOf } from '../agent/util/work-time';
 import { REGIME_SELECT, targetSpreadOf } from '../calendar/work-regime';
 import { PrismaService } from '../prisma/prisma.service';
-import { TargetsService } from '../targets/targets.service';
-import { designFirstSeenInDay, keepKnownLongIds, KNOWN_JOB_FROM } from './design.rules';
+import { TasksSettingsService } from '../tasks/tasks-settings.service';
+import { TasksService } from '../tasks/tasks.service';
+import { keepKnownLongNumbers, KNOWN_NUMBER_FROM, taskNumbersFirstSeenInDay } from './task-start.rules';
 import { trackedFromBy } from './tracking-start';
 import { prorate } from './proration';
 import {
@@ -75,8 +76,10 @@ export class SummaryService {
 
   constructor(
     private readonly prisma: PrismaService,
-    /** Used to close assigned targets using the number found in a file name. */
-    private readonly targets: TargetsService,
+    /** Marks assigned tasks started from the number found in a window title. */
+    private readonly tasks: TasksService,
+    /** Which apps' titles start detection reads (none = off) */
+    private readonly tasksSettings: TasksSettingsService,
   ) {}
 
   /** The current work day: the entry point for K06. */
@@ -176,7 +179,10 @@ export class SummaryService {
 
     const ids = employees.map((e) => e.id);
 
-    const [segments, shots, adjustments, usage, holiday, designTitles] =
+    // Start detection: none when no apps are listed or Apps & websites is off
+    const startApps = await this.tasksSettings.detectionApps();
+
+    const [segments, shots, adjustments, usage, holiday, taskTitles] =
       await Promise.all([
       this.prisma.activitySegment.findMany({
         where: { workDate, employeeId: { in: ids } },
@@ -219,27 +225,33 @@ export class SummaryService {
       }),
       this.prisma.holiday.findUnique({ where: { holidayDate: workDate } }),
       /**
-       * **Design numbers**: the title of design apps.
+       * **Task numbers**: the titles of the start-detection apps.
        *
        * Careful: the `usage` query above could not be reused: it fetches only
        * rows that have a `categoryId` and are **ACTIVE** (for productivity),
-       * but design numbers exist outside those two conditions as well. If
-       * Illustrator did not fall in a category, design counting would stop
-       * and nobody would understand why.
+       * but task numbers exist outside those two conditions as well. If an
+       * app did not fall in a category, start detection would stop and nobody
+       * would understand why.
        *
        * Careful: `windowTitle` is fetched here, but **stored nowhere**:
-       * `designFirstSeenInDay()` returns only the leading number (the owner's condition).
+       * `taskNumbersFirstSeenInDay()` returns only the leading number.
+       *
+       * Careful: with start detection off **no title is read at all**.
        */
-      this.prisma.appUsage.findMany({
+      startApps.size === 0
+        ? Promise.resolve([])
+        : this.prisma.appUsage.findMany({
         where: {
           workDate,
           employeeId: { in: ids },
-          processName: { in: ['Illustrator.exe', 'Photoshop.exe'] },
+          // case-insensitive: `EXCEL.EXE` and `Excel.exe` are the same program
+          OR: [...startApps].map((app) => ({
+            processName: { equals: app, mode: 'insensitive' as const },
+          })),
         },
         /**
-         * Careful: `startedAt` is fetched too (G163): the target's "work
-         * started" mark is exactly this moment. It was not fetched before, so
-         * the caller had to use the work-day label and everyone's "start" became 6 am.
+         * Careful: `startedAt` is fetched too: the task's "work started" mark
+         * is exactly this moment, not the work-day label.
          */
         select: {
           employeeId: true,
@@ -272,7 +284,7 @@ export class SummaryService {
 
     const holidays = new Set(holiday ? [workDate.getTime()] : []);
 
-    const designsBy = await this.claimDesigns(designTitles, workDate);
+    const startedBy = await this.claimTaskNumbers(taskTitles, workDate, startApps);
 
     const ops: Prisma.PrismaPromise<unknown>[] = [];
 
@@ -287,9 +299,9 @@ export class SummaryService {
       });
 
       // Careful: not put inside `summarizeDay`; that is a pure calculation of
-      // **time**, and a design count is not time. Mixing them would suddenly
+      // **time**, and a task count is not time. Mixing them would suddenly
       // require a database in that function's tests.
-      const designsDone = designsBy.get(e.id) ?? 0;
+      const tasksStarted = startedBy.get(e.id) ?? 0;
 
       ops.push(
         this.prisma.dailySummary.upsert({
@@ -298,10 +310,10 @@ export class SummaryService {
             employeeId: e.id,
             workDate,
             ...numbers,
-            designsDone,
+            tasksStarted,
             computedAt: now,
           },
-          update: { ...numbers, designsDone, computedAt: now },
+          update: { ...numbers, tasksStarted, computedAt: now },
         }),
       );
     }
@@ -316,28 +328,24 @@ export class SummaryService {
   }
 
   /**
-   * **How many new designs today**, per employee.
+   * **How many tasks were started today**, per employee (start detection).
    *
-   * Careful: **"opened" and "new" are not the same, and the gap is big.**
-   * Reopening yesterday's file today is not today's work. Measured in the
-   * field, one person's 39 drops to **24**; the simple "everything seen
-   * today" rule could show over 50% above the target, and someone's
-   * evaluation would stand on that number.
-   *
-   * So each (employee, design) pair goes into `design_credits` **only once**;
-   * the primary key does not allow a second insert (`skipDuplicates`). "Today's
-   * number" = the rows claimed on today's date.
+   * Careful: **"seen" and "new" are not the same.** Bringing yesterday's
+   * window back to the front today is not a new start. So each (employee,
+   * number) pair goes into `task_credits` **only once**; the primary key does
+   * not allow a second insert (`skipDuplicates`). "Today's number" = the rows
+   * claimed on today's date.
    *
    * Careful: **one limit of ordering needs writing down:** credit is claimed
    * in the name of *whichever day is computed first*. In normal running days
    * move forward, so that is fine, but if someone recomputes an **old** day,
-   * that day's designs may already sit under a later day, and the old day
+   * that day's numbers may already sit under a later day, and the old day
    * will show fewer. When backfilling, go **oldest to newest**.
    *
-   * Careful: it never throws; the design count is an extra measure, and the
+   * Careful: it never throws; the task count is an extra measure, and the
    * hours summary must not be blocked because of it.
    */
-  private async claimDesigns(
+  private async claimTaskNumbers(
     titles: readonly {
       employeeId: number;
       processName: string;
@@ -345,83 +353,69 @@ export class SummaryService {
       startedAt: Date;
     }[],
     workDate: Date,
+    apps: ReadonlySet<string>,
   ): Promise<Map<number, number>> {
     const counts = new Map<number, number>();
-    if (titles.length === 0) return counts;
+    if (titles.length === 0 || apps.size === 0) return counts;
 
     const byEmployee = groupBy(titles, (t) => t.employeeId);
 
     try {
       for (const [employeeId, rows] of byEmployee) {
-        // G163: along with the number, the moment it was "first seen".
-        const firstSeen = designFirstSeenInDay(rows);
+        // Along with the number, the moment it was "first seen"
+        const firstSeen = taskNumbersFirstSeenInDay(rows, apps);
         if (firstSeen.size === 0) continue;
 
         const raw = new Set(firstSeen.keys());
 
         /**
-         * **At seven digits or more the number must really be assigned**.
-         *
-         * Careful: the title rule accepts up to seven digits (job numbers
-         * start at 1,000,000), but seven-digit **stock IDs** exist too:
-         * `1536601_4406`, `5524618`, `9937760`. Four came in on a single day
-         * in the field, and they were being counted as designs.
-         *
-         * Instead of guessing from digit count, **check whether it is in the
-         * list**; that is the only exact way to tell.
-         *
-         * Careful: the query is only for the long numbers; usually 0-4 a day.
+         * **At seven digits or more the number must really be a task
+         * number**: seven-digit stock IDs exist too, and checking the list is
+         * the only exact way to tell. The query is only for the long numbers.
          */
         const longOnes = [...raw]
           .map((id) => Number.parseInt(id, 10))
-          .filter((n) => Number.isSafeInteger(n) && n >= KNOWN_JOB_FROM);
+          .filter((n) => Number.isSafeInteger(n) && n >= KNOWN_NUMBER_FROM);
 
         const known = new Set<string>();
         if (longOnes.length > 0) {
-          const found = await this.prisma.designTarget.findMany({
-            where: { jobNumber: { in: longOnes } },
-            select: { jobNumber: true },
+          const found = await this.prisma.task.findMany({
+            where: { taskNumber: { in: longOnes } },
+            select: { taskNumber: true },
           });
           for (const f of found) {
-            if (f.jobNumber !== null) known.add(String(f.jobNumber));
+            if (f.taskNumber !== null) known.add(String(f.taskNumber));
           }
         }
 
-        const ids = keepKnownLongIds(raw, known);
-        if (ids.size === 0) continue;
+        const numbers = keepKnownLongNumbers(raw, known);
+        if (numbers.size === 0) continue;
 
-        await this.prisma.designCredit.createMany({
-          data: [...ids].map((designId) => ({
+        await this.prisma.taskCredit.createMany({
+          data: [...numbers].map((taskNumber) => ({
             employeeId,
-            designId,
+            taskNumber,
             firstWorkDate: workDate,
           })),
           skipDuplicates: true,
         });
 
         /**
-         * **"Work started" mark on assigned targets.**
+         * **"Work started" mark on assigned tasks**, with **the real moment**
+         * each number was first seen, not the work-day label.
          *
-         * Careful: this used to **close** the target here, and that was
-         * wrong: the number appears in a title when the file is **opened**,
-         * not when it is finished. Finishing is now said by the designer.
-         *
-         * Careful: the same `ids` set, so the titles are not read twice.
+         * Careful: this never closes a task: the number appears when the
+         * window is **opened**, not when the work is finished.
          */
-        /**
-         * Careful: **the real moment, not the work-day label** (G163). `workDate`
-         * used to go here, i.e. 6 am Asia/Dhaka time, and in MyTargets "Started 5
-         * hours ago" appeared the moment a job was opened.
-         */
-        await this.targets.markStartedByJobNumbers(
+        await this.tasks.markStartedByTaskNumbers(
           employeeId,
-          new Map([...ids].map((id) => [id, firstSeen.get(id)!])),
+          new Map([...numbers].map((id) => [id, firstSeen.get(id)!])),
         );
       }
 
-      // Careful: counted **after** claiming, not before; otherwise designs seen
-      // for the first time today would miss this run's count and the number would lag a day.
-      const claimed = await this.prisma.designCredit.groupBy({
+      // Careful: counted **after** claiming, not before; otherwise numbers seen
+      // for the first time today would miss this run's count and lag a day.
+      const claimed = await this.prisma.taskCredit.groupBy({
         by: ['employeeId'],
         where: { firstWorkDate: workDate, employeeId: { in: [...byEmployee.keys()] } },
         _count: { _all: true },
@@ -430,7 +424,7 @@ export class SummaryService {
       for (const row of claimed) counts.set(row.employeeId, row._count._all);
     } catch (err) {
       this.logger.warn(
-        `Could not count designs for ${workDate.toISOString().slice(0, 10)}: ${
+        `Could not count started tasks for ${workDate.toISOString().slice(0, 10)}: ${
           err instanceof Error ? err.message : String(err)
         }`,
       );

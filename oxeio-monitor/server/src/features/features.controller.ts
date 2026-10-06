@@ -27,7 +27,7 @@ class SaveFeaturesDto {
   appTracking?: boolean;
 
   @IsOptional() @IsBoolean()
-  designTargets?: boolean;
+  tasks?: boolean;
 }
 
 /** What a module already holds — so the owner sees what a switch hides */
@@ -40,10 +40,10 @@ interface FeatureUsage {
   hasScreenshots: boolean;
   /** whether any app or website usage is stored */
   hasAppUsage: boolean;
-  /** design targets ever added */
-  designTargets: number;
-  /** active people whose work type is designer */
-  designers: number;
+  /** tasks ever added */
+  tasks: number;
+  /** active people who receive tasks */
+  taskReceivers: number;
 }
 
 interface FeaturesSettingsView {
@@ -74,7 +74,7 @@ export class FeaturesController {
   @Roles(UserRole.owner)
   @Get('settings/features')
   async settings(): Promise<FeaturesSettingsView> {
-    const [paidStaff, depositMonths, shot, usage, designTargets, designers] =
+    const [paidStaff, depositMonths, shot, usage, tasks, taskReceivers] =
       await Promise.all([
         this.prisma.employee.count({
           where: {
@@ -85,9 +85,9 @@ export class FeaturesController {
         this.prisma.securityDeposit.count(),
         this.prisma.screenshot.findFirst({ select: { id: true } }),
         this.prisma.appUsage.findFirst({ select: { id: true } }),
-        this.prisma.designTarget.count(),
+        this.prisma.task.count(),
         this.prisma.employee.count({
-          where: { status: 'active', staffType: 'designer' },
+          where: { status: 'active', receivesTasks: true },
         }),
       ]);
 
@@ -99,8 +99,8 @@ export class FeaturesController {
         depositMonths,
         hasScreenshots: shot !== null,
         hasAppUsage: usage !== null,
-        designTargets,
-        designers,
+        tasks,
+        taskReceivers,
       },
     };
   }
@@ -118,7 +118,7 @@ export class FeaturesController {
       deposits: dto.deposits ?? before.deposits,
       screenshots: dto.screenshots ?? before.screenshots,
       appTracking: dto.appTracking ?? before.appTracking,
-      designTargets: dto.designTargets ?? before.designTargets,
+      tasks: dto.tasks ?? before.tasks,
     };
 
     const changed = changedFeatures(before, after);

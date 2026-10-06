@@ -5,7 +5,7 @@ import { navFor, type NavUser } from '../src/components/nav';
 
 const user = (over: Partial<NavUser> = {}): NavUser => ({
   role: 'owner',
-  canAddTargets: true,
+  canAddTasks: true,
   canSeeScreenshots: true,
   ...over,
 });
@@ -16,7 +16,7 @@ describe('navFor — the Screenshots entry', () => {
   it('follows the server’s canSeeScreenshots, for staff as for the owner', () => {
     expect(paths(user({ role: 'employee' }))).toContain('/screenshots');
     expect(paths(user({ role: 'employee', canSeeScreenshots: false }))).not.toContain('/screenshots');
-    expect(paths(user({ role: 'researcher', canSeeScreenshots: false }))).not.toContain('/screenshots');
+    expect(paths(user({ role: 'coordinator', canSeeScreenshots: false }))).not.toContain('/screenshots');
     expect(paths(user({ canSeeScreenshots: false }))).not.toContain('/screenshots');
   });
 
@@ -27,11 +27,38 @@ describe('navFor — the Screenshots entry', () => {
 });
 
 describe('navFor — other modules', () => {
-  it('design targets hide their three entries', () => {
-    const shown = paths(user(), off({ designTargets: false }));
-    expect(shown).not.toContain('/targets');
-    expect(shown).not.toContain('/targets/all');
-    expect(shown).not.toContain('/targets/review');
+  it('the Tasks module hides its three entries', () => {
+    const shown = paths(user(), off({ tasks: false }));
+    expect(shown).not.toContain('/tasks');
+    expect(shown).not.toContain('/tasks/all');
+    expect(shown).not.toContain('/tasks/review');
+  });
+
+  it('Tasks no longer needs Apps & websites', () => {
+    const shown = paths(user(), off({ appTracking: false }));
+    expect(shown).toEqual(expect.arrayContaining(['/tasks', '/tasks/all', '/tasks/review']));
+  });
+
+  it('the Tasks section, in order, under its own heading', () => {
+    const items = navFor(user(), ALL_FEATURES_ON).filter((i) => i.to.startsWith('/tasks'));
+    expect(items.map((i) => [i.to, i.label])).toEqual([
+      ['/tasks', 'Add tasks'],
+      ['/tasks/all', 'Task pool'],
+      ['/tasks/review', 'Review'],
+    ]);
+    expect(items[0].section).toBe('Tasks');
+  });
+
+  /** Review is team management: owner and manager, like the server's `@Roles` */
+  it('a coordinator adds and sees the pool but not Review; plain staff see none', () => {
+    const coordinator = paths(user({ role: 'coordinator' }));
+    expect(coordinator).toContain('/tasks');
+    expect(coordinator).toContain('/tasks/all');
+    expect(coordinator).not.toContain('/tasks/review');
+    expect(coordinator).toContain('/me');
+
+    const staff = paths(user({ role: 'employee' }));
+    expect(staff.some((p) => p.startsWith('/tasks'))).toBe(false);
   });
 
   it('Payroll is renamed, not removed, while payroll is off', () => {

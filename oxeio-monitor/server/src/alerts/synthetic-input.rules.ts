@@ -177,7 +177,7 @@ export function scoreSpread(segments: readonly ActiveSegment[]): number | null {
  * strength of this rule.
  *
  * Each one alone can be defeated:
- *   - Length alone: a designer can work two hours in one file
+ *   - Length alone: someone can work two hours in one file
  *   - Windows alone: the screen does not change while watching a video either
  *   - Score alone: even very steady work can give equal scores
  *

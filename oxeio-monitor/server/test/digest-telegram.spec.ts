@@ -221,30 +221,30 @@ describe('telegramDigest', () => {
   });
 
   /**
-   * The design section (21 August) — the owner's target of 25.
+   * The tasks section — done / target.
    *
-   * Only those with an entry in the map appear — not researchers. Otherwise
-   * they would be listed as "0/25" every day, which is an accusation, not
-   * information.
+   * Only those with an entry in the map appear. Otherwise people the measure
+   * is not for would be listed as "0/25" every day, which is an accusation,
+   * not information.
    */
-  it('only designers appear in the design section', () => {
+  it('only people with an entry appear in the tasks section', () => {
     const text = telegramDigest(
       digestOf([
-        row({ empCode: 'OX-07', fullName: 'Designer A', todayHours: 8 }),
-        row({ empCode: 'OX-04', fullName: 'Researcher B', todayHours: 8 }),
+        row({ empCode: 'OX-07', fullName: 'Assignee A', todayHours: 8 }),
+        row({ empCode: 'OX-04', fullName: 'Coordinator B', todayHours: 8 }),
       ]),
       'oXeio',
       {
         ...EXTRAS,
-        designs: new Map([['OX-07', { done: 24, target: 25, met: false }]]),
+        tasks: new Map([['OX-07', { done: 24, target: 25, met: false }]]),
       },
     );
 
-    expect(text).toContain('DESIGNS TODAY · 1');
+    expect(text).toContain('✅ TASKS TODAY · 1');
     expect(text).toContain('24/25');
     // The name will be in the hours group above anyway — so the claim is
-    // about the design number: a researcher gets no "/25"
-    expect(text).not.toContain('/25  Researcher B');
+    // about the task number: someone without an entry gets no "/25"
+    expect(text).not.toContain('/25  Coordinator B');
   });
 
   /** A check mark when the target is reached — consistent with the hours rule (`>=`) */
@@ -254,16 +254,18 @@ describe('telegramDigest', () => {
       // "MET THE TARGET" heading would make the claim false
       telegramDigest(digestOf([row({ empCode: 'OX-07', fullName: 'A', todayHours: 5 })]), 'oXeio', {
         ...EXTRAS,
-        designs: new Map([['OX-07', { done, target: 25, met: done >= 25 }]]),
+        tasks: new Map([['OX-07', { done, target: 25, met: done >= 25 }]]),
       });
 
-    expect(make(25)).toContain('✅');
-    expect(make(24)).not.toContain('✅');
+    // The section heading carries a ✅ too, so the claim is about the row
+    expect(make(25)).toContain('25/25 ✅');
+    expect(make(24)).toContain('24/25');
+    expect(make(24)).not.toContain('24/25 ✅');
   });
 
   /**
-   * The owner's choice (22 August): the manager also designs, so their
-   * number appears; but with no target there is no `/25` and no check mark.
+   * Someone without a target who still finished tasks: the number appears,
+   * but with no `/25` and no check mark.
    */
   it('someone without a target shows a number, but with no mould', () => {
     const text = telegramDigest(
@@ -271,19 +273,21 @@ describe('telegramDigest', () => {
       'oXeio',
       {
         ...EXTRAS,
-        designs: new Map([['OX-01', { done: 43, target: null, met: false }]]),
+        tasks: new Map([['OX-01', { done: 43, target: null, met: false }]]),
       },
     );
 
     expect(text).toContain('43');
     expect(text).not.toContain('43/');
-    expect(text).not.toContain('✅');
+    const line = text.split('\n').find((l) => l.includes('43') && l.includes('Belal'));
+    expect(line).toBeDefined();
+    expect(line).not.toContain('✅');
   });
 
-  /** If nobody has a design target, the section does not appear at all */
-  it('no designers means no section', () => {
+  /** If nobody has anything to show, the section does not appear at all */
+  it('no entries means no section', () => {
     const text = telegramDigest(digestOf([row()]), 'oXeio', EXTRAS);
-    expect(text).not.toContain('DESIGNS TODAY');
+    expect(text).not.toContain('TASKS TODAY');
   });
 
   /**
@@ -300,7 +304,7 @@ describe('telegramDigest', () => {
       {
         silentPcs: 2,
         atTime: '18:30',
-        designs: new Map([['OX-01', { done: 24, target: 25, met: false }]]),
+        tasks: new Map([['OX-01', { done: 24, target: 25, met: false }]]),
       },
     );
 

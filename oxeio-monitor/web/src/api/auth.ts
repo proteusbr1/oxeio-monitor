@@ -16,21 +16,21 @@ export interface Me {
   /** Their own choices, saved on the account (Account page) */
   preferences: UserPreferences;
   /**
-   * Whether the user may submit design targets.
+   * Whether the user may add tasks.
    *
-   * Important: this is computed by the server, not derived from the raw `staffType`.
-   * Writing the rule ("owner, manager or researcher") again in the web app would
-   * eventually give two different answers, and someone would see a menu entry that
-   * returns 403.
+   * Important: this is computed by the server, not derived from the role here.
+   * Writing the rule ("owner, manager or coordinator") again in the web app
+   * would eventually give two different answers, and someone would see a menu
+   * entry that returns 403.
    */
-  canAddTargets: boolean;
+  canAddTasks: boolean;
   /**
-   * Whether the user may check spelling (ADR-038).
+   * Whether the user may check finished tasks (Checked / Needs fix).
    *
-   * Different from `canAddTargets`: every researcher may submit targets, but only
-   * researchers the owner has explicitly ticked get to review spelling.
+   * Different from `canAddTasks`, though today the same people hold both;
+   * kept apart so the server can narrow one without the other.
    */
-  canProofread: boolean;
+  canCheckTasks: boolean;
   /**
    * Whether the Screenshots page is theirs to open: the module is on, and they
    * are owner or manager — or staff while Settings → Privacy lets staff see
@@ -112,7 +112,7 @@ export function changePassword(
  *
  * Important: the condition is an allow-list, which is the whole reason this
  * function exists. Five screens used to check `role === 'employee'`, i.e. "not
- * staff means sees everything". When the `researcher` role was added, it turned
+ * staff means sees everything". When a fourth role was added, it turned
  * out every new role would fall on the "sees everything" side: everyone's
  * screenshots, everyone's reports, the search box. There was no compile error.
  *
@@ -126,15 +126,16 @@ export function seesEveryone(role: Role | undefined | null): boolean {
 /**
  * Where each role lands after login, or after a "not found".
  *
- * Careful: a researcher landing on `/me` used to see four hours-based tiles, none
- * of them relevant to their work. A designer landing on the Design Pool saw the
- * whole team's work, not their own.
+ * Careful: a coordinator landing on `/me` would see hours tiles, none of them
+ * about their work (adding and checking tasks). Someone who receives tasks
+ * lands on `/me`, where their own list is — not on the pool, which is
+ * everyone's work.
  */
 export function homePathFor(
   role: Role | undefined | null,
-  // design targets switched off in Settings → Modules: no pool to land on
-  designTargets = true,
+  // the Tasks module switched off in Settings → Modules: no pool to land on
+  tasks = true,
 ): string {
   if (seesEveryone(role)) return '/';
-  return role === 'researcher' && designTargets ? '/targets/all' : '/me';
+  return role === 'coordinator' && tasks ? '/tasks/all' : '/me';
 }

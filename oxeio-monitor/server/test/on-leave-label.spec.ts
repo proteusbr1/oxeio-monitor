@@ -45,7 +45,7 @@ function row(over: Partial<AttendanceRow> = {}): AttendanceRow {
     employeeId: 1,
     empCode: 'OX-001',
     fullName: 'Jane Doe',
-    staffType: null,
+    receivesTasks: false,
     department: null,
     date: '2026-08-03',
     dayType: 'workday',
@@ -55,7 +55,7 @@ function row(over: Partial<AttendanceRow> = {}): AttendanceRow {
     idleHours: 0,
     adjustmentHours: 0,
     creditedHours: 0,
-    designsDone: null,
+    tasksDone: null,
     targetHours: 0,
     ...over,
   };

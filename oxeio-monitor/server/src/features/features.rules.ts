@@ -23,7 +23,7 @@ export const FEATURE_KEYS = [
   'deposits',
   'screenshots',
   'appTracking',
-  'designTargets',
+  'tasks',
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
@@ -32,15 +32,24 @@ export type Features = Record<FeatureKey, boolean>;
 
 /**
  * A module that only works inside another one. Deposits are held back from
- * pay, so they need Payroll; design targets learn which jobs were started
- * (and for how long) from the design apps' window titles, so they need Apps &
- * websites. While the parent
- * is off the child is off too, whatever its own switch says — and its own
- * switch is kept, so turning the parent back on restores it.
+ * pay, so they need Payroll. While the parent is off the child is off too,
+ * whatever its own switch says — and its own switch is kept, so turning the
+ * parent back on restores it.
+ *
+ * Tasks has no parent: only its optional start detection reads window
+ * titles, and that part simply goes inactive while Apps & websites is off
+ * (see `tasks/tasks-settings.rules.ts`).
  */
 export const FEATURE_PARENT: Partial<Record<FeatureKey, FeatureKey>> = {
   deposits: 'payroll',
-  designTargets: 'appTracking',
+};
+
+/**
+ * Keys a module was saved under before it was renamed: read when the new key
+ * is absent from the saved row. The Tasks module was `designTargets`.
+ */
+const LEGACY_FEATURE_KEYS: Partial<Record<FeatureKey, string>> = {
+  tasks: 'designTargets',
 };
 
 export function isFeatureKey(value: unknown): value is FeatureKey {
@@ -63,7 +72,11 @@ export function resolveFeatures(saved: unknown): Features {
       : {};
 
   const out = {} as Features;
-  for (const key of FEATURE_KEYS) out[key] = row[key] !== false;
+  for (const key of FEATURE_KEYS) {
+    const legacy = LEGACY_FEATURE_KEYS[key];
+    const value = key in row || legacy === undefined ? row[key] : row[legacy];
+    out[key] = value !== false;
+  }
   return out;
 }
 

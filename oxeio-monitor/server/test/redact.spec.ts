@@ -22,9 +22,9 @@ function row(overrides: Partial<EmployeeRow> = {}): EmployeeRow {
     designation: 'Designer',
     department: 'Creative',
     // work type, next to designation, not a replacement for it
-    staffType: 'designer',
+    receivesTasks: true,
     /** the person's own daily target; `null` means the policy's applies */
-    dailyDesignTarget: null,
+    dailyTaskTarget: null,
     policyId: 1,
     monthlySalary: 13000,
     payBasis: 'monthly',

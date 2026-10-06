@@ -35,7 +35,7 @@ afterAll(async () => {
 });
 
 /** a person with a PC, one picture today, and a login with this role */
-async function person(code: string, role: 'employee' | 'researcher' | null) {
+async function person(code: string, role: 'employee' | 'coordinator' | null) {
   const employee = await h.prisma.employee.create({
     data: { empCode: code, fullName: code, status: 'active' },
   });
@@ -99,10 +99,10 @@ beforeEach(async () => {
   today = formatWorkDate(workDateOf(workNoon()));
 });
 
-describe('a researcher sees only their own pictures', () => {
+describe('a coordinator sees only their own pictures', () => {
   it('in "latest per person" too, not everyone\'s', async () => {
     const other = await person('OX-OTHER', null);
-    const me = await person('OX-RES', 'researcher');
+    const me = await person('OX-CRD', 'coordinator');
 
     const latest = await me.session!.http.get('/api/v1/screenshots/latest').expect(200);
     expect(ids(latest.body)).toEqual([me.id]);
@@ -116,7 +116,7 @@ describe('a researcher sees only their own pictures', () => {
 
   it('and cannot ask for someone else\'s', async () => {
     const other = await person('OX-OTHER', null);
-    const me = await person('OX-RES', 'researcher');
+    const me = await person('OX-CRD', 'coordinator');
     await me.session!.http
       .get(`/api/v1/screenshots?date=${today}&employeeId=${other.id}`)
       .expect(403);
@@ -132,9 +132,9 @@ describe('Screenshots for staff — on (the default)', () => {
 });
 
 describe('Screenshots for staff — off', () => {
-  it('staff and researchers no longer see their own pictures', async () => {
+  it('staff and coordinators no longer see their own pictures', async () => {
     const emp = await person('OX-EMP', 'employee');
-    const res = await person('OX-RES', 'researcher');
+    const res = await person('OX-CRD', 'coordinator');
     await setStaffScreenshots(false);
 
     for (const session of [emp.session!, res.session!]) {

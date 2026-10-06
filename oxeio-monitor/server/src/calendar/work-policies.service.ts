@@ -42,8 +42,8 @@ export interface WorkPolicyView {
   officeFrom: string | null;
   officeTo: string | null;
   idleThresholdSec: number;
-  /** The designer's daily target; applies only to `staffType = designer` */
-  dailyDesignTarget: number;
+  /** Tasks per day; applies only to people who receive tasks (0 = no target) */
+  dailyTaskTarget: number;
   slotMinutes: number;
   timezone: string;
   isActive: boolean;
@@ -120,9 +120,9 @@ export class WorkPoliciesService {
         ...(dto.screenshotsEnabled === undefined
           ? {}
           : { screenshotsEnabled: dto.screenshotsEnabled }),
-        ...(dto.dailyDesignTarget === undefined
+        ...(dto.dailyTaskTarget === undefined
           ? {}
-          : { dailyDesignTarget: dto.dailyDesignTarget }),
+          : { dailyTaskTarget: dto.dailyTaskTarget }),
       },
     });
 
@@ -198,9 +198,9 @@ export class WorkPoliciesService {
         ...(dto.screenshotsEnabled === undefined
           ? {}
           : { screenshotsEnabled: dto.screenshotsEnabled }),
-        ...(dto.dailyDesignTarget === undefined
+        ...(dto.dailyTaskTarget === undefined
           ? {}
-          : { dailyDesignTarget: dto.dailyDesignTarget }),
+          : { dailyTaskTarget: dto.dailyTaskTarget }),
       },
       include: { _count: { select: { employees: true } } },
     });
@@ -374,7 +374,7 @@ function toView(policy: WorkPolicy, employeeCount: number): WorkPolicyView {
     officeFrom: policy.officeFrom,
     officeTo: policy.officeTo,
     idleThresholdSec: policy.idleThresholdSec,
-    dailyDesignTarget: policy.dailyDesignTarget,
+    dailyTaskTarget: policy.dailyTaskTarget,
     slotMinutes: policy.slotMinutes,
     timezone: policy.timezone,
     isActive: policy.isActive,

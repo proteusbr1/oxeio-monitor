@@ -35,7 +35,7 @@ export function GalleryPage() {
   /**
    * Careful: the name `isEmployee` **stays**, but the logic is inverted: the question
    * is now *"does this person not see the whole team?"*. It used to be
-   * `role === 'employee'`, so a researcher role would get **everyone's shots** and the
+   * `role === 'employee'`, so a coordinator would get **everyone's shots** and the
    * picker too: the server would block it, the screen would not.
    */
   const isEmployee = !seesEveryone(user?.role);

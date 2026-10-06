@@ -16,9 +16,9 @@ import { GalleryPage } from './pages/screenshots/GalleryPage';
 import { LiveBoardPage } from './pages/live/LiveBoardPage';
 import { LoginPage } from './pages/account/LoginPage';
 import { MonthlyPage } from './pages/monthly/MonthlyPage';
-import { AllTargetsPage } from './pages/targets/AllTargetsPage';
-import { ReviewPage } from './pages/targets/ReviewPage';
-import { TargetsPage } from './pages/targets/TargetsPage';
+import { TaskPoolPage } from './pages/tasks/TaskPoolPage';
+import { ReviewPage } from './pages/tasks/ReviewPage';
+import { AddTasksPage } from './pages/tasks/AddTasksPage';
 import { MyDataPage } from './pages/me/MyDataPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
@@ -105,8 +105,8 @@ function Router() {
    */
   /**
    * The name `isStaff` **stays**, but the logic is inverted. It used to be
-   * `role === 'employee'`, so once the `researcher` role arrived the
-   * researcher no longer counted as "staff": they landed on the live board,
+   * `role === 'employee'`, so once a fourth role arrived that person no
+   * longer counted as "staff": they landed on the live board,
    * where there is nothing for them but a 403 box.
    * The real question is *"does this person not see the whole team?"* — and
    * that is what the code now says.
@@ -123,19 +123,14 @@ function Router() {
   const mayOpenWorklog = isOwner || user.role === 'manager';
 
   /**
-   * **A researcher lands on their own work list after login.**
+   * **A coordinator lands on the Task pool after login.**
    *
-   * They used to land on `/me`: four **hours** tiles, none about their work.
-   * The first screen of the day said *"you are being measured"* and said
-   * nothing about their output. Field result: both researchers' **last login
-   * was 13 August**, the day the system went live; they never came back.
-   *
-   * This used to be `user.canAddTargets ? ... : '/me'`, when that flag carried
-   * the meaning "this is a researcher" because the role was `employee`.
-   * Now the role is separate, so the question is direct, and the rule lives in
-   * **one place**, `homePathFor`; the "not found" page reads it too.
+   * On `/me` they would see hours tiles, none about their work: the first
+   * screen of the day would say *"you are being measured"* and nothing about
+   * their output. The rule lives in **one place**, `homePathFor`; the "not
+   * found" page reads it too.
    */
-  const staffLanding = homePathFor(user.role, features.designTargets);
+  const staffLanding = homePathFor(user.role, features.tasks);
 
   return (
     <Routes>
@@ -178,26 +173,31 @@ function Router() {
         <Route path="me" element={<MyDataPage />} />
 
         {/*
-          Targets — researcher · manager · owner.
+          Tasks — coordinator · manager · owner.
 
           The route is **open to everyone**, deliberately: the real guard is on
-          the server (`assertCanSubmit` → 403). If someone types the address, the
-          page just shows the server's message, which is this code base's rule:
-          hiding things on screen is the first safeguard, not the last.
+          the server (403). If someone types the address, the page just shows
+          the server's message, which is this code base's rule: hiding things
+          on screen is the first safeguard, not the last.
         */}
-        {features.designTargets && (
-          <Route path="targets" element={<TargetsPage />} />
-        )}
-        {features.designTargets && (
-          <Route path="targets/all" element={<AllTargetsPage />} />
-        )}
+        {features.tasks && <Route path="tasks" element={<AddTasksPage />} />}
+        {features.tasks && <Route path="tasks/all" element={<TaskPoolPage />} />}
         {/*
           owner + manager — the sidebar, this route and the server's
           `@Roles(owner, manager)` are the same in all three places (lesson from
           G134: change one of the three and the other two must change too).
         */}
-        {features.designTargets && (
-          <Route path="targets/review" element={<ReviewPage />} />
+        {features.tasks && <Route path="tasks/review" element={<ReviewPage />} />}
+        {/*
+          The module's old addresses (bookmarks, the tray, links in old
+          messages) lead to the same pages under their new names.
+        */}
+        {features.tasks && <Route path="targets" element={<Navigate to="/tasks" replace />} />}
+        {features.tasks && (
+          <Route path="targets/all" element={<Navigate to="/tasks/all" replace />} />
+        )}
+        {features.tasks && (
+          <Route path="targets/review" element={<Navigate to="/tasks/review" replace />} />
         )}
 
         {/*

@@ -84,7 +84,7 @@ public class MonthlyMilestoneTests
         Assert.False(MonthlyMilestone.ShouldCelebrate(Status(0, target: 0), August, null, out _));
 
     /// <summary>
-    /// The work zone's month, not UTC. 1 September 02:00 (Dhaka, UTC+6) is 31 August 20:00 UTC; with
+    /// The work zone's month, not UTC. 1 September 02:00 (local, UTC+6 in tests) is 31 August 20:00 UTC; with
     /// UTC the September balloon would be filed under August and shown again in
     /// September.
     /// </summary>

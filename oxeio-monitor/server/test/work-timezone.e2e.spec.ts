@@ -9,7 +9,7 @@ import type { Harness } from './setup/harness';
  * only shows up with Nest, Prisma and Postgres together: the raw SQL that
  * cuts days with `AT TIME ZONE`, the config the agent and the dashboard
  * read, and the one place that still added 6 hours by hand
- * (`workDateStr` in targets.service.ts — Undo near midnight was refused
+ * (`workDateStr` in tasks.service.ts — Undo near midnight was refused
  * as "not today's work").
  *
  * The env is stubbed before the app modules are imported, because the
@@ -23,7 +23,7 @@ let h: Harness;
 let mod: {
   time: typeof import('../src/agent/util/work-time');
   harness: typeof import('./setup/harness');
-  targets: typeof import('../src/targets/targets.service');
+  tasks: typeof import('../src/tasks/tasks.service');
   dashboard: typeof import('../src/dashboard/dashboard.service');
   reports: typeof import('../src/reports/reports.service');
   agentConfig: typeof import('../src/agent/agent-config.service');
@@ -35,7 +35,7 @@ beforeAll(async () => {
   mod = {
     time: await import('../src/agent/util/work-time'),
     harness: await import('./setup/harness'),
-    targets: await import('../src/targets/targets.service'),
+    tasks: await import('../src/tasks/tasks.service'),
     dashboard: await import('../src/dashboard/dashboard.service'),
     reports: await import('../src/reports/reports.service'),
     agentConfig: await import('../src/agent/agent-config.service'),
@@ -54,16 +54,16 @@ afterAll(async () => {
 const atLocalHour = (dayLabel: Date, hour: number): Date =>
   new Date(dayLabel.getTime() - SP_OFFSET_MS + hour * HOUR_MS);
 
-let asinCounter = 0;
-async function designDone(
+let refCounter = 0;
+async function taskDone(
   completedAt: Date,
   assignedToId: number | null = null,
 ): Promise<number> {
   const owner = await h.prisma.user.findFirstOrThrow();
-  asinCounter += 1;
-  const row = await h.prisma.designTarget.create({
+  refCounter += 1;
+  const row = await h.prisma.task.create({
     data: {
-      asin: `B${String(asinCounter).padStart(9, '0')}`,
+      reference: `REF-${refCounter}`,
       addedById: owner.id,
       status: 'done',
       completedAt,
@@ -88,66 +88,66 @@ describe('WORK_TIMEZONE=America/Sao_Paulo, whole app', () => {
     expect(config.utcOffsetMinutes).toBe(-180);
   });
 
-  it('Undo at 23:45 local accepts a design finished at 23:30 the same local day', async () => {
+  it('Undo at 23:45 local accepts a task finished at 23:30 the same local day', async () => {
     const { employeeId } = await mod.harness.createEmployeeWithCode(
       h.prisma,
       'OX-TZ1',
     );
     const day = new Date('2026-08-11T00:00:00Z');
     // 23:30 local = 02:30 UTC the next day — the UTC date is already 12 Aug
-    const id = await designDone(atLocalHour(day, 23.5), employeeId);
+    const id = await taskDone(atLocalHour(day, 23.5), employeeId);
 
     const result = await h.app
-      .get(mod.targets.TargetsService)
+      .get(mod.tasks.TasksService)
       .undoMine(employeeId, id, atLocalHour(day, 23.75), {
         userId: (await h.prisma.user.findFirstOrThrow()).id,
         ip: null,
       });
 
     expect(result).toEqual({ ok: true });
-    const row = await h.prisma.designTarget.findUniqueOrThrow({
+    const row = await h.prisma.task.findUniqueOrThrow({
       where: { id },
     });
     expect(row.completedAt).toBeNull();
   });
 
   it('the 7-day trend puts 23:30 and 00:30 local on their own days', async () => {
-    await h.prisma.designTarget.deleteMany();
+    await h.prisma.task.deleteMany();
     const today = mod.time.workDateOf(mod.harness.workNoon());
     const yesterday = new Date(today.getTime() - 86_400_000);
 
-    await designDone(atLocalHour(yesterday, 23.5));
-    await designDone(atLocalHour(today, 0.5));
+    await taskDone(atLocalHour(yesterday, 23.5));
+    await taskDone(atLocalHour(today, 0.5));
 
     const { days } = await h.app
       .get(mod.dashboard.DashboardService)
       .teamTrend();
-    expect(days.at(-2)!.designsFinished).toBe(1);
-    expect(days.at(-1)!.designsFinished).toBe(1);
+    expect(days.at(-2)!.tasksDone).toBe(1);
+    expect(days.at(-1)!.tasksDone).toBe(1);
   });
 
-  it('the attendance report counts designs by the local day (SQL AT TIME ZONE)', async () => {
-    await h.prisma.designTarget.deleteMany();
+  it('the attendance report counts tasks by the local day (SQL AT TIME ZONE)', async () => {
+    await h.prisma.task.deleteMany();
     const { employeeId } = await mod.harness.createEmployeeWithCode(
       h.prisma,
       'OX-TZ2',
     );
     await h.prisma.employee.update({
       where: { id: employeeId },
-      data: { staffType: 'designer' },
+      data: { receivesTasks: true },
     });
     const d1 = new Date('2026-08-10T00:00:00Z');
     const d2 = new Date('2026-08-11T00:00:00Z');
     // 22:00 local on the 10th = 01:00 UTC on the 11th
-    await designDone(atLocalHour(d1, 22), employeeId);
+    await taskDone(atLocalHour(d1, 22), employeeId);
     // 01:00 local on the 11th = 04:00 UTC on the 11th
-    await designDone(atLocalHour(d2, 1), employeeId);
+    await taskDone(atLocalHour(d2, 1), employeeId);
 
     const report = await h.app
       .get(mod.reports.ReportsService)
       .attendance({ from: '2026-08-10', to: '2026-08-11', employeeId });
     const byDate = Object.fromEntries(
-      report.rows.map((r) => [r.date, r.designsDone]),
+      report.rows.map((r) => [r.date, r.tasksDone]),
     );
 
     expect(byDate['2026-08-10']).toBe(1);

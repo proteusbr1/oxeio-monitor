@@ -76,6 +76,26 @@ describe('PATCH /users/:id/role', () => {
     ).toBe('manager');
   });
 
+  /** A coordinator adds and checks tasks; the session flags say so */
+  it('staff can be made a coordinator, and /auth/me then allows tasks', async () => {
+    const { userId, email } = await staffWithLogin('RL-CRD');
+
+    const res = await setRole(userId, 'coordinator').expect(200);
+    expect(res.body.role).toBe('coordinator');
+
+    const s = await loginReady(h, email, PASSWORD);
+    const me = await s.http.get('/api/v1/auth/me').expect(200);
+    expect(me.body).toMatchObject({ role: 'coordinator', canAddTasks: true, canCheckTasks: true });
+    expect(me.body).not.toHaveProperty('canAddTargets');
+  });
+
+  it('plain staff may not add or check tasks', async () => {
+    const { email } = await staffWithLogin('RL-EMP');
+    const s = await loginReady(h, email, PASSWORD);
+    const me = await s.http.get('/api/v1/auth/me').expect(200);
+    expect(me.body).toMatchObject({ canAddTasks: false, canCheckTasks: false });
+  });
+
   it('a manager can be made staff again', async () => {
     const { userId } = await staffWithLogin('RL-DOWN', 'manager');
 

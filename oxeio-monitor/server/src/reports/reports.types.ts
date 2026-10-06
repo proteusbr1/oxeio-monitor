@@ -192,14 +192,14 @@ export interface AttendanceRow {
   empCode: string;
   fullName: string;
   /**
-   * Kind of work: rules attach **only to this**.
+   * Gets tasks handed out (Tasks module).
    *
    * Careful: `department` below is **kept** deliberately: old rows have
    * values, and the PDF transliteration path checks that field. But the
    * field was removed from the form, so it **stays empty for new
-   * employees**; rely on `staffType` for classification.
+   * employees**.
    */
-  staffType: 'designer' | 'researcher' | 'manager' | null;
+  receivesTasks: boolean;
   department: string | null;
   date: string;
   dayType: DayType;
@@ -230,18 +230,13 @@ export interface AttendanceRow {
   adjustmentHours: number;
   creditedHours: number;
   /**
-   * Number of **new** designs on that day.
+   * How many tasks were **completed** on that day: the Complete button. `null` if 0.
    *
-   * Careful: `null` if not a designer, not zero. Writing zero would put "0
-   * designs" in a researcher's row, which reads like an accusation; the measure is not theirs.
+   * Careful: `null`, not zero: in a spreadsheet 0 means "measured and found
+   * zero", which reads like an accusation on the row of someone the measure is
+   * not for. Merely **starting** a task (start detection) is not counted.
    */
-  /**
-   * How many designs were **completed** on that day: the Complete button. `null` if 0.
-   *
-   * Careful: merely **opening** a file is not counted (owner's decision):
-   * that count cannot tell "the one who makes it" from "the one who looks at it".
-   */
-  designsDone: number | null;
+  tasksDone: number | null;
   /**
    * That day's target: on a workday `monthly_target / expected_workdays`
    * (208 / 26 = 8 hours), 0 on weekly off days and public holidays.

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { STAFF_TYPE_LABEL, type StaffType } from '../../api/staff';
 import { createEmployee, changeLoginEmail, changeUserRole, createPortalAccount, nextEmployeeCode, resetUserPassword, deactivateEmployee, listEmployees, reactivateEmployee, turnAgentOn, updateEmployee, type AssignableRole, type Role, type CreateEmployeeBody, type EmployeeStatus, type EmployeeView, type UpdateEmployeeBody, type PayBasis } from '../../api/staff';
 import { listWorkPolicies } from '../../api/calendar';
 import { useApi } from '../../api/useApi';
@@ -14,6 +13,7 @@ import { Empty, ErrorBox, Loading } from '../../components/States';
 import { PersonCell, Table, type Column } from '../../components/Table';
 import { formatDate, todayInWorkZone } from '../../lib/format';
 import {
+  CheckboxField,
   Chip,
   ConfirmDialog,
   FormGrid,
@@ -143,12 +143,7 @@ export function StaffDirectory() {
         <PersonCell
           fullName={emp.fullName}
           empCode={emp.empCode}
-          /*
-            Careful: the type comes **before** the designation: rules attach to it, so
-               scanning the list you should spot "whose type is not set" (in the field
-               two were empty, and one of them was actually a designer).
-          */
-          /* Careful: the designation is no longer shown; the type is in the next column */
+          /* Careful: the job title is in the next column, not under the name */
           accent={emp.portalRole === 'manager'}
           accentTitle="Manager — sees everyone's Live Board and reports"
         />
@@ -156,19 +151,24 @@ export function StaffDirectory() {
       ),
     },
     {
-      key: 'department',
-      header: 'Type',
-      /* Careful: **red** when the type is not set. In the field two were empty, and one
-         of them was actually a designer (133 designs). The gap must be visible,
-         because without a type the target calculation skips that employee. */
-      render: (emp) =>
-        emp.staffType ? (
-          STAFF_TYPE_LABEL[emp.staffType]
-        ) : (
-          <span className="text-brand" title="No target rules apply until this is set">
-            Not set
+      key: 'designation',
+      header: 'Job title',
+      /*
+        The job title is free text and no rule attaches to it. Whether tasks are
+           handed to the person is the one thing that does, so it is marked here
+           while the Tasks module is on — scanning the list answers "who gets
+           tasks tomorrow?" without opening every row.
+      */
+      render: (emp) => (
+        <span className="flex flex-wrap items-center gap-1.5">
+          <span className={emp.designation ? undefined : 'text-ink-3'}>
+            {emp.designation ?? '—'}
           </span>
-        ),
+          {features.tasks && emp.receivesTasks && (
+            <Chip tone="muted">Receives tasks</Chip>
+          )}
+        </span>
+      ),
     },
     {
       key: 'policy',
@@ -512,10 +512,11 @@ interface StaffForm {
   empCode: string;
   fullName: string;
   email: string;
-  /** Careful: empty string = "not set"; `StaffType | ''` */
-  staffType: string;
-  /** Careful: empty string = "not set", so the policy's 25 applies; `'0'` = off */
-  dailyDesignTarget: string;
+  /** Job title, free text; empty = none */
+  designation: string;
+  receivesTasks: boolean;
+  /** Careful: empty string = "not set", so the policy's 25 applies; `'0'` = no target */
+  dailyTaskTarget: string;
   policyId: string;
   joinedOn: string;
   monthlySalary: string;
@@ -528,12 +529,13 @@ function formOf(employee: EmployeeView | null): StaffForm {
     empCode: employee?.empCode ?? '',
     fullName: employee?.fullName ?? '',
     email: employee?.email ?? '',
-    staffType: employee?.staffType ?? '',
-    dailyDesignTarget:
-      employee?.dailyDesignTarget === null ||
-      employee?.dailyDesignTarget === undefined
+    designation: employee?.designation ?? '',
+    receivesTasks: employee?.receivesTasks ?? false,
+    dailyTaskTarget:
+      employee?.dailyTaskTarget === null ||
+      employee?.dailyTaskTarget === undefined
         ? ''
-        : String(employee.dailyDesignTarget),
+        : String(employee.dailyTaskTarget),
     policyId:
       employee?.policyId === null || employee?.policyId === undefined
         ? ''
@@ -567,17 +569,20 @@ function patchOf(
   // Careful: an empty field means `null` ("delete it"), not `''`; sending `''` would
   //    trip `@IsEmail`/`@Matches` and give a 400
   if (after.email.trim() !== before.email) patch.email = orNull(after.email);
-  // Careful: empty means `null` ("remove the type"); the server accepts `null`
-  if (after.staffType !== before.staffType) {
-    patch.staffType = after.staffType === '' ? null : (after.staffType as StaffType);
+  // Careful: empty means `null` ("no job title"), like the email above
+  if (after.designation.trim() !== before.designation) {
+    patch.designation = orNull(after.designation);
+  }
+  if (after.receivesTasks !== before.receivesTasks) {
+    patch.receivesTasks = after.receivesTasks;
   }
   // Careful: empty means `null` ("clear their own number, go back to the policy"),
-  //    not `0`; sending `0` would **switch the target off**, which is a different thing
-  if (after.dailyDesignTarget.trim() !== before.dailyDesignTarget) {
-    patch.dailyDesignTarget =
-      after.dailyDesignTarget.trim() === ''
+  //    not `0`; sending `0` would mean **no target**, which is a different thing
+  if (after.dailyTaskTarget.trim() !== before.dailyTaskTarget) {
+    patch.dailyTaskTarget =
+      after.dailyTaskTarget.trim() === ''
         ? null
-        : Number(after.dailyDesignTarget);
+        : Number(after.dailyTaskTarget);
   }
   if (after.joinedOn !== before.joinedOn) {
     patch.joinedOn = orNull(after.joinedOn);
@@ -664,12 +669,11 @@ function EmployeeForm({
         const body: CreateEmployeeBody = {
           fullName: form.fullName.trim(),
           ...(orUndefined(form.email) ? { email: form.email.trim() } : {}),
-          ...(form.staffType === ''
-            ? {}
-            : { staffType: form.staffType as StaffType }),
-          ...(form.dailyDesignTarget.trim() === ''
-            ? {}
-            : { dailyDesignTarget: Number(form.dailyDesignTarget) }),
+          ...(orUndefined(form.designation) ? { designation: form.designation.trim() } : {}),
+          ...(form.receivesTasks ? { receivesTasks: true } : {}),
+          ...(form.receivesTasks && form.dailyTaskTarget.trim() !== ''
+            ? { dailyTaskTarget: Number(form.dailyTaskTarget) }
+            : {}),
           ...(form.policyId ? { policyId: Number(form.policyId) } : {}),
           ...(form.joinedOn ? { joinedOn: form.joinedOn } : {}),
           ...(canSeeSalary ? { payBasis: form.payBasis } : {}),
@@ -757,98 +761,52 @@ function EmployeeForm({
             hint="Needed to create a portal account"
           />
           {/*
-            **Staff type**, the owner's request: the only field that **rules** attach to
-               (the designer's daily target).
-
-            Careful: the free-text "Designation" below stays, deliberately: it is a job
-               title ("Senior Graphic Designer"), this is a class. Merged, adding
-               "Senior" to the title would silently stop the target rule applying to
-               that employee.
+            **Job title**: free text, for people to read ("Senior Accountant").
+               No rule attaches to it — rules read the switch below.
           */}
-          <SelectField
-            label="Staff type"
-            value={form.staffType}
-            onChange={set('staffType')}
-            options={[
-              { value: '', label: 'Not set' },
-              { value: 'designer', label: 'Designer' },
-              { value: 'researcher', label: 'Researcher' },
-              { value: 'manager', label: 'Manager' },
-            ]}
-            hint="Designers get a daily design target; the others do not"
+          <TextField
+            label="Job title"
+            value={form.designation}
+            onChange={set('designation')}
+            maxLength={120}
+            hint="Shown beside their name; nothing is worked out from it"
           />
           {/*
-            **This field appears only for designers**: the server's
-               `hasDesignTarget()` checks exactly this same condition. Showing it for
-               others would let it be filled while changing nothing on any screen; a
-               field that does nothing is more confusing than a wrong number.
+            **Receives tasks**: the one switch the morning hand-out reads.
 
-            Careful: changing the type away from "Designer" hides the field but does
-               **not erase** the saved value; making them a designer again brings the
-               number back.
+            Careful: not the portal role. A coordinator *adds and checks* tasks
+               (role, set on the row's "Login"); this decides whether tasks are
+               *handed to* the person. One person can be both, or neither.
           */}
-          {features.designTargets && form.staffType === 'designer' && (
-            <TextField
-              label="Daily design target"
-              value={form.dailyDesignTarget}
-              onChange={set('dailyDesignTarget')}
-              placeholder="25"
-              hint="Leave empty to use the shared target from the work policy. 0 turns the target off — the count still shows, but nobody is marked behind."
-            />
+          {features.tasks && (
+            <FullWidth>
+              <CheckboxField
+                label="Receives tasks"
+                checked={form.receivesTasks}
+                onChange={(next) => setForm((prev) => ({ ...prev, receivesTasks: next }))}
+                hint="Tasks from the pool are handed to them every morning and listed on their My data page."
+              />
+            </FullWidth>
           )}
           {/*
-            **Two fields, one name, and that is the only trap here.**
+            **The target appears only for people who receive tasks**: the server's
+               rule is exactly the same ("has a target" = receives tasks and a
+               target above 0). Showing it for others would let it be filled while
+               changing nothing; a field that does nothing is more confusing than a
+               wrong number.
 
-            The owner's decision: researcher and designer do not do the same work, so
-            their access should not be the same. So researcher is now a portal **role**
-            (`UserRole.researcher`), and rights come from there.
-
-            Careful: this field (**Staff type**) does **not** grant rights: it is the
-               name of the work, and it is what opens the designer's target field. The
-               role is set in a separate window (the row's "Login" button).
-
-            Important: so when the two disagree, the message below appears. The role
-               could have been set quietly, but then the owner would never know what
-               happened, and in this project **invisible magic** has repeatedly caused
-               wrong numbers. A visible warning, not a hidden correction.
+            Careful: unticking "Receives tasks" hides the field but does **not
+               erase** the saved value; ticking it again brings the number back.
           */}
-          {employee &&
-            features.designTargets &&
-            form.staffType === 'researcher' &&
-            employee.portalRole !== null &&
-            employee.portalRole !== 'researcher' && (
-              <FullWidth>
-                <Notice tone="attention">
-                  Their work type is Researcher, but their portal role is{' '}
-                  <b>{ROLE_WORD[employee.portalRole]}</b> — so they will not see
-                  the Design Pool or the spelling queue. Open <b>Login</b> on
-                  their row and set the role to <b>Researcher</b>.
-                </Notice>
-              </FullWidth>
-            )}
-          {employee &&
-            form.staffType !== 'researcher' &&
-            employee.portalRole === 'researcher' && (
-              <FullWidth>
-                <Notice tone="attention">
-                  Their portal role is Researcher, so they can still open the
-                  Design Pool — even though their work type is not Researcher.
-                  Change the role on their <b>Login</b> if that is not intended.
-                </Notice>
-              </FullWidth>
-            )}
-          {/*
-            Careful: **the "Designation" and "Department" fields were removed**
-               (the owner's decision).
-
-            Important: **Staff type** above is now the only classification, and
-               writing the same thing in three fields means three spellings
-               ("Designer", "Graphic Designer", "Design") that no rule can attach to.
-
-            Careful: the two database columns were **not dropped**: old rows hold
-               values, and deleting them would lose history. They are just no longer
-               edited or shown.
-          */}
+          {features.tasks && form.receivesTasks && (
+            <TextField
+              label="Daily task target"
+              value={form.dailyTaskTarget}
+              onChange={set('dailyTaskTarget')}
+              placeholder="25"
+              hint="Leave empty to use the shared target from the work policy. 0 means no target — they still receive tasks and the count still shows, but nobody is marked behind."
+            />
+          )}
           <TextField
             label="Joined on"
             type="date"
@@ -983,22 +941,6 @@ function ReactivateDialog({
  * then bound in the screen's code, not only in the server's DTO.
  */
 /**
- * Careful: the role's **human-readable name**, not the server value. Writing
- * `employee` in a message would make the owner think it was some technical signal.
- *
- * Careful: `Record<Role, string>`: a **complete** map, deliberately. If something
- * new is added to `UserRole`, a compile error appears here, and no blank cell shows
- * on screen. When `researcher` was added, only **two** places in the whole
- * codebase were caught this way.
- */
-const ROLE_WORD: Record<Role, string> = {
-  owner: 'Owner',
-  manager: 'Manager',
-  researcher: 'Researcher',
-  employee: 'Staff',
-};
-
-/**
  * **Which role shows what in the dropdown**: a complete map.
  *
  * Careful: `owner` is not `'employee'`; it **never reaches** here: the owner's
@@ -1008,23 +950,21 @@ const ROLE_WORD: Record<Role, string> = {
 const ASSIGNABLE_OF: Record<Role, AssignableRole> = {
   owner: 'employee',
   manager: 'manager',
-  researcher: 'researcher',
+  coordinator: 'coordinator',
   employee: 'employee',
 };
 
 const PORTAL_ROLES: { value: AssignableRole; label: string }[] = [
   { value: 'employee', label: 'Staff — their own hours only' },
   /**
-   * The owner's decision: researcher and designer do not do the same work, so their
-   * access should not be the same.
-   *
-   * Careful: the text says **what they will get**, not the word "Researcher" alone.
-   * The adjacent field (Staff type) has exactly the same word yet grants no rights;
+   * Careful: the text says **what they will get**, not the word "Coordinator"
+   * alone — and that otherwise they are like staff. "Receives tasks" on the
+   * staff form is a different question (whether work is handed to them);
    * if the two could not be told apart, the owner would look in the wrong field.
    */
   {
-    value: 'researcher',
-    label: 'Researcher — Design Pool and the spelling queue',
+    value: 'coordinator',
+    label: 'Coordinator — adds and checks tasks; sees only their own data otherwise',
   },
   { value: 'manager', label: "Manager — everyone's Live Board and reports" },
 ];
@@ -1079,10 +1019,10 @@ function PortalAccountForm({
    * Careful: **the bug came back a third time, on this one line.**
    *
    * It used to read `portalRole === 'manager' ? 'manager' : 'employee'`, meaning
-   * *"if not a manager, staff"*. After the `researcher` role arrived, that showed a
-   * researcher as **"Staff" in the dropdown**, and an owner who opened the window just
-   * to fix an email typo and pressed save would **silently turn them from researcher
-   * into ordinary staff**, losing the Design Pool and the spelling queue.
+   * *"if not a manager, staff"*. After a fourth role arrived, that showed such a
+   * person as **"Staff" in the dropdown**, and an owner who opened the window just
+   * to fix an email typo and pressed save would **silently turn them into ordinary
+   * staff**, losing the Task pool and the check queue.
    *
    * Careful: this is the same bug the note above describes for managers. It was then
    * fixed with `? :`, and that fix itself became a trap for the new role. Important:

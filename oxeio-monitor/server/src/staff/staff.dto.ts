@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEmail,
   IsIn,
   IsInt,
@@ -36,16 +37,11 @@ export class CreateEmployeeDto {
   department?: string;
 
   /**
-   * Kind of work. Rules attach **only to this** (for example the designer's
-   * daily 25).
-   *
-   * Careful: not a replacement for `designation`; they sit side by side.
-   * `designation` is the job title (free text), this is the class (fixed
-   * list). It is optional: without it the employee is **left out** of target
-   * calculations, not given zero.
+   * **Gets tasks handed out** (Tasks module). Default `false`: someone who
+   * does not receive tasks is **left out** of task targets, not given zero.
    */
-  @IsOptional() @IsIn(['designer', 'researcher', 'manager'])
-  staffType?: 'designer' | 'researcher' | 'manager';
+  @IsOptional() @IsBoolean()
+  receivesTasks?: boolean;
 
   @IsOptional() @IsInt() @Min(1)
   policyId?: number;
@@ -64,7 +60,7 @@ export class CreateEmployeeDto {
   joinedOn?: string;
 
   /**
-   * **This designer's own daily target.**
+   * **This person's own daily task target.**
    *
    * Careful: **when left empty the policy's number applies** (25 in
    * `work_policies`), not zero. Sending `null` clears the earlier value and
@@ -74,7 +70,8 @@ export class CreateEmployeeDto {
    * The cap of 500 is there to catch typos, not as policy (same as the policy field).
    */
   @IsOptional() @IsInt() @Min(0) @Max(500)
-  dailyDesignTarget?: number | null;}
+  dailyTaskTarget?: number | null;
+}
 /**
  * Careful: every field is optional and `null` is accepted too, because
  * `@IsOptional()` skips validation for both null and undefined. This is
@@ -105,9 +102,9 @@ export class UpdateEmployeeDto {
   @IsOptional() @IsString() @MaxLength(120)
   department?: string | null;
 
-  /** Careful: sending `null` is **valid**; it is the only way to remove the type. */
-  @IsOptional() @IsIn(['designer', 'researcher', 'manager', null])
-  staffType?: 'designer' | 'researcher' | 'manager' | null;
+  /** Gets tasks handed out (Tasks module) */
+  @IsOptional() @IsBoolean()
+  receivesTasks?: boolean;
 
   @IsOptional() @IsInt() @Min(1)
   policyId?: number | null;
@@ -126,7 +123,7 @@ export class UpdateEmployeeDto {
   joinedOn?: string | null;
 
   /**
-   * **This designer's own daily target.**
+   * **This person's own daily task target.**
    *
    * Careful: **when left empty the policy's number applies** (25 in
    * `work_policies`), not zero. Sending `null` clears the earlier value and
@@ -136,7 +133,8 @@ export class UpdateEmployeeDto {
    * The cap of 500 is there to catch typos, not as policy (same as the policy field).
    */
   @IsOptional() @IsInt() @Min(0) @Max(500)
-  dailyDesignTarget?: number | null;}
+  dailyTaskTarget?: number | null;
+}
 /**
  * `POST /employees/:id/policy-signed`: date of the signed monitoring policy.
  *

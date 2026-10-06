@@ -4,6 +4,7 @@ import { UserRole } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { workDateOf } from '../src/agent/util/work-time';
+import { FeaturesService } from '../src/features/features.service';
 import {
   createHarness,
   hashPassword,
@@ -186,6 +187,59 @@ describe('GET /me', () => {
 
   it('401 without login', async () => {
     await h.http().get('/api/v1/me').expect(401);
+  });
+});
+
+describe('GET /me — tasks finished today', () => {
+  /** A task assigned to this person, finished at `at` (or still in hand) */
+  async function task(reference: string, assignedToId: number, completedAt: Date | null) {
+    const owner = await h.prisma.user.findFirstOrThrow({ where: { role: UserRole.owner } });
+    await h.prisma.task.create({
+      data: {
+        reference,
+        addedById: owner.id,
+        assignedToId,
+        assignedAt: new Date(now.getTime() - 3 * 3600_000),
+        status: completedAt ? 'done' : 'assigned',
+        completedAt,
+      },
+    });
+  }
+
+  it('nothing to show for someone who does not receive tasks and finished none', async () => {
+    const s = await staffSession();
+    const res = await s.http.get('/api/v1/me').expect(200);
+    expect(res.body.tasks).toBeNull();
+  });
+
+  /** Only FINISHED today counts — a task in hand or finished yesterday does not */
+  it('counts tasks finished today against the target', async () => {
+    await h.prisma.employee.update({
+      where: { id: employeeId },
+      data: { receivesTasks: true, dailyTaskTarget: 3 },
+    });
+    await task('T-1', employeeId, now);
+    await task('T-2', employeeId, new Date(now.getTime() - 60_000));
+    await task('T-3', employeeId, null);
+    await task('T-4', employeeId, new Date(now.getTime() - 2 * MS_PER_DAY));
+    await task('T-5', otherId, now);
+
+    const s = await staffSession();
+    const res = await s.http.get('/api/v1/me').expect(200);
+    expect(res.body.tasks).toEqual({ done: 2, target: 3, met: false });
+  });
+
+  it('with the module off there is no tasks block', async () => {
+    await h.prisma.employee.update({
+      where: { id: employeeId },
+      data: { receivesTasks: true, dailyTaskTarget: 3 },
+    });
+    await h.prisma.setting.create({ data: { key: 'features', value: { tasks: false } } });
+    h.app.get(FeaturesService).forget();
+
+    const s = await staffSession();
+    const res = await s.http.get('/api/v1/me').expect(200);
+    expect(res.body.tasks).toBeNull();
   });
 });
 

@@ -13,11 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { monthBoundsOf, toIsoDate } from '../reports/reports.range';
 import { ReportsService } from '../reports/reports.service';
 import { buildDigest, digestBody, digestSubject, type Digest } from './digest.math';
-import {
-  designTargetOf,
-  designView,
-  type DesignView,
-} from '../summary/design.rules';
+import { taskTargetOf, taskView, type TaskView } from '../summary/task-start.rules';
 import { asPreBlock, telegramDigest } from './digest.telegram';
 import { AppSettingsService } from '../settings/app-settings.service';
 
@@ -114,7 +110,7 @@ export class DigestService {
     const plain = telegramDigest(digest, (await this.organizationName()), {
       silentPcs: await this.silentPcsToday(now),
       atTime: workClock(now),
-      designs: await this.designsToday(digest.workDate),
+      tasks: await this.tasksToday(digest.workDate),
     });
 
     const telegramOutcome = await this.telegram.sendHtml(asPreBlock(plain), plain);
@@ -187,50 +183,46 @@ export class DigestService {
   }
 
   /**
-   * How many designs each person made today — by `empCode`.
+   * How many tasks each person finished today — by `empCode`.
    *
-   * Careful: **only `staff_type = 'designer'`**, and only when the target is
-   * on. Counting everyone would put researchers on the list daily as "0/25" —
-   * an accusation, not information.
+   * Careful: a target line (`24/25`) only for people with a task target.
+   * Counting everyone against a target would put people the measure is not
+   * for on the list daily as "0/25" — an accusation, not information.
    *
-   * Careful: never throws — the design count is an extra measure; it must not
+   * Careful: never throws — the task count is an extra measure; it must not
    * hold up the whole daily report.
    */
-  private async designsToday(
+  private async tasksToday(
     workDate: string,
-  ): Promise<Map<string, DesignView>> {
-    const out = new Map<string, DesignView>();
+  ): Promise<Map<string, TaskView>> {
+    const out = new Map<string, TaskView>();
 
-    // design targets switched off in Settings → Modules: no design lines
-    if (!(await this.features.isOn('designTargets'))) return out;
+    // Tasks switched off in Settings → Modules: no task lines
+    if (!(await this.features.isOn('tasks'))) return out;
 
     try {
       /**
-       * Careful: **all active employees**, not only designers — because the
-       * manager designs too (43 in three days). Who gets on the list is decided
-       * by `designView()`: with a target, `24/25 ✅`; without one, just the
-       * number; and nothing at all if they did nothing.
+       * Careful: **all active employees**, not only those with a target —
+       * someone without a target may still finish tasks. Who gets on the list
+       * is decided by `taskView()`: with a target, `24/25 ✅`; without one,
+       * just the number; and nothing at all if they did nothing.
        */
       const staff = await this.prisma.employee.findMany({
         where: { status: 'active' },
         select: {
           id: true,
           empCode: true,
-          staffType: true,
-          dailyDesignTarget: true,
-          policy: { select: { dailyDesignTarget: true } },
+          receivesTasks: true,
+          dailyTaskTarget: true,
+          policy: { select: { dailyTaskTarget: true } },
         },
       });
       if (staff.length === 0) return out;
 
       /**
-       * **Only "finished" is counted** *(the owner's decision)*: files that are
-       * merely opened must not count — only ones marked complete.
-       *
-       * Careful: this used to count `designCredit`, i.e. how many files were
-       * **opened**. In the field the manager (OX-01) was showing "16" when he
-       * had opened 19 files for a total of just **44 minutes**. An opened-count
-       * cannot tell "the one who makes" from "the one who looks".
+       * **Only "finished" is counted**: tasks merely started (seen on screen)
+       * do not count — only ones marked complete. A started-count cannot tell
+       * the one who does the work from the one who looks at it.
        *
        * Careful: `completed_at` is a timestamptz, so a raw query splits by the
        * work day; Prisma's `groupBy` cannot cut by date.
@@ -239,7 +231,7 @@ export class DigestService {
         { employee_id: number; n: number }[]
       >`
         SELECT assigned_to_id AS employee_id, count(*)::int AS n
-          FROM design_targets
+          FROM tasks
          WHERE assigned_to_id = ANY(${staff.map((d) => d.id)}::int[])
            AND completed_at IS NOT NULL
            AND (completed_at AT TIME ZONE ${WORK_TIMEZONE})::date = ${workDate}::date
@@ -248,16 +240,16 @@ export class DigestService {
       const byId = new Map(rows.map((r) => [r.employee_id, Number(r.n)]));
 
       for (const d of staff) {
-        const view = designView(
-          d.staffType,
+        const view = taskView(
+          d.receivesTasks,
           byId.get(d.id) ?? 0,
-          designTargetOf(d.dailyDesignTarget, d.policy?.dailyDesignTarget),
+          taskTargetOf(d.dailyTaskTarget, d.policy?.dailyTaskTarget),
         );
         if (view !== null) out.set(d.empCode, view);
       }
     } catch (err) {
       this.logger.warn(
-        `Could not count designs: ${err instanceof Error ? err.message : String(err)}`,
+        `Could not count tasks: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 

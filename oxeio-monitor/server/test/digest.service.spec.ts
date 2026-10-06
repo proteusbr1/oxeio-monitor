@@ -56,7 +56,7 @@ const attendance: AttendanceReport = {
       employeeId: 1,
       empCode: 'OX-001',
       fullName: 'মামুনুর রশিদ',
-      staffType: null,
+      receivesTasks: false,
     department: null,
       date: '2026-08-11',
       dayType: 'workday',
@@ -66,8 +66,7 @@ const attendance: AttendanceReport = {
       workedHours: 7.5,
       idleHours: 0.5,
       adjustmentHours: 0,
-      // Design count (21 August) — null when not a designer
-    designsDone: null,
+    tasksDone: null,
     creditedHours: 7.5,
       targetHours: 8,
     },
@@ -131,13 +130,12 @@ function makeService(
     // "How many PCs were silent today" — for the one Telegram line (18 August)
     alert: { findMany: () => Promise.resolve([]) },
     /**
-     * The design count (21 August). Without the stub `designsToday()` would
+     * The task count. Without the stub `tasksToday()` would
      * throw, caught by `logger.warn`, so the "no SMTP" test's warn count would
      * go from 1 to 2. The failure is not silent, which is what we want; it
      * just should not have a reason to happen in the tests.
      */
     employee: { findMany: () => Promise.resolve([]) },
-    designCredit: { groupBy: () => Promise.resolve([]) },
   } as unknown as PrismaService;
 
   const reports = {

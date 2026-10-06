@@ -76,12 +76,12 @@ public class FileLogTests : IDisposable
     {
         var log = new FileLog(_dir);
 
-        log.Startup("0.1.0", "https://oxeio.office.local", @"C:\ProgramData\oXeio");
+        log.Startup("0.1.0", "https://monitor.example.com", @"C:\ProgramData\oXeio");
 
         var text = Read();
 
         Assert.Contains("0.1.0", text);
-        Assert.Contains("oxeio.office.local", text);
+        Assert.Contains("monitor.example.com", text);
         Assert.Contains(@"C:\ProgramData\oXeio", text);
     }
 

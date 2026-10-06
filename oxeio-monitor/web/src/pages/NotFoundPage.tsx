@@ -25,7 +25,7 @@ import { useFeatures } from '../features/FeaturesContext';
  */
 const HOME_WORD: Record<string, string> = {
   '/': 'Back to Live Board',
-  '/targets/all': 'Back to the Design Pool',
+  '/tasks/all': 'Back to the Task pool',
   '/me': 'My data',
 };
 
@@ -34,10 +34,10 @@ export function NotFoundPage() {
   const { features } = useFeatures();
   /**
    * Careful: this used to read `role === 'employee' ? '/screenshots' : '/'`; with
-   * the researcher role, a researcher got `/` (the Live Board), which is a 403 for
+   * a fourth role, that person got `/` (the Live Board), which is a 403 for
    * them. Now the rule is in one place, matching the landing logic in App.tsx.
    */
-  const home = homePathFor(user?.role, features.designTargets);
+  const home = homePathFor(user?.role, features.tasks);
 
   return (
     <Page title="Not found">

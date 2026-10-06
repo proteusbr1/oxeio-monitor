@@ -1,6 +1,7 @@
 import type { LiveCard } from '../../api/dashboard';
-import { DesignCell } from './DesignCell';
-import { dayDuty, designView } from './roster';
+import { useFeatures } from '../../features/FeaturesContext';
+import { TaskCell } from './TaskCell';
+import { dayDuty, taskView } from './roster';
 import { ProgressBar } from '../../components/ProgressRing';
 import { StatusChip } from '../../components/StatusDot';
 import { PersonCell, Table, type Column } from '../../components/Table';
@@ -23,6 +24,7 @@ import { formatDuration, pctOf } from '../../lib/format';
  * scrolling across six columns would lose which row you are looking at.
  */
 export function TeamTable({ cards }: { cards: LiveCard[] }) {
+  const { features } = useFeatures();
   /**
    * Careful: an employee on leave goes **to the end of the list**; sorting progress
    *    against zero would make the day off look like a failure.
@@ -98,30 +100,31 @@ export function TeamTable({ cards }: { cards: LiveCard[] }) {
       It was removed on the owner's instruction.
 
       It was added because "you had to go to the Monthly page". But this board table
-      is about **today**: Today, Target, Designs, Progress. The month figure answered
+      is about **today**: Today, Target, Tasks, Progress. The month figure answered
       a different question and made the table wider.
 
       Careful: the information is not lost: it is on the **Monthly** page, and the
       Worklog roster also has a `This month` column. One click away, not deleted.
     */
     /**
-     * **Today's designs.**
+     * **Today's finished tasks.**
      *
-     * Careful: the cell is **shared** in `DesignCell`; the Worklog roster shows the
+     * Careful: the cell is **shared** in `TaskCell`; the Worklog roster shows the
      * same thing. Copying it would let one change and not the other.
      *
-     * Careful: the column appears **only when** at least one team member has designs.
-     * Always showing it would leave an empty cell every day in researchers' rows, and
+     * Careful: the column appears **only when** the Tasks module is on and at
+     * least one team member has something to show. Always showing it would leave
+     * an empty cell every day in the rows of people who never receive tasks, and
      * an empty cell looks like "no data yet", when they are simply not measured on it.
      */
-    ...(cards.some((c) => designView(c) !== null)
+    ...(features.tasks && cards.some((c) => taskView(c) !== null)
       ? [
           {
-            key: 'designs',
-            header: 'Designs',
+            key: 'tasks',
+            header: 'Tasks',
             align: 'right' as const,
             className: 'whitespace-nowrap',
-            render: (c: LiveCard) => <DesignCell card={c} />,
+            render: (c: LiveCard) => <TaskCell card={c} />,
           },
         ]
       : []),

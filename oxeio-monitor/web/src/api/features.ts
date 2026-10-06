@@ -17,8 +17,11 @@ export interface Features {
   screenshots: boolean;
   /** which apps and websites are used — hours do not depend on it */
   appTracking: boolean;
-  /** needs `appTracking` — off while apps & websites are off */
-  designTargets: boolean;
+  /**
+   * a pool of tasks handed out each day. No parent: start detection inside it
+   * reads window titles from `appTracking`, but the tasks work without it.
+   */
+  tasks: boolean;
 }
 
 export type FeatureKey = keyof Features;
@@ -29,7 +32,7 @@ export const ALL_FEATURES_ON: Features = {
   deposits: true,
   screenshots: true,
   appTracking: true,
-  designTargets: true,
+  tasks: true,
 };
 
 /**
@@ -38,7 +41,6 @@ export const ALL_FEATURES_ON: Features = {
  */
 export const FEATURE_PARENT: Partial<Record<FeatureKey, FeatureKey>> = {
   deposits: 'payroll',
-  designTargets: 'appTracking',
 };
 
 /** What each module already holds, so a switch never hides data by surprise */
@@ -51,10 +53,10 @@ export interface FeatureUsage {
   hasScreenshots: boolean;
   /** whether any app or website usage is stored */
   hasAppUsage: boolean;
-  /** design targets ever added */
-  designTargets: number;
-  /** active people whose work type is designer */
-  designers: number;
+  /** tasks ever added */
+  tasks: number;
+  /** active people who receive tasks */
+  taskReceivers: number;
 }
 
 export interface FeatureSettingsView {

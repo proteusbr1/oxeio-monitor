@@ -104,72 +104,54 @@ export function restingStartsAt(rows: readonly LiveCard[]): number {
   return rows.findIndex((c) => !isWorking(c.status));
 }
 
-export interface DesignView {
+export interface TaskView {
   /**
-   * How many designs were **finished** today (the Complete button).
+   * How many tasks were **finished** today (the Complete button).
    *
-   * Careful: opening a file is deliberately not counted: that count cannot tell
-   * "who makes" from "who views" (a manager showed "16" from 19 files with 44
-   * minutes total).
+   * Careful: a start is deliberately not counted: seeing a task number in a
+   * window title cannot tell "who does it" from "who looks at it".
    */
   done: number;
-  /** Careful: `null` = **this employee has no design target**, not a target of zero */
+  /** Careful: `null` = **this employee has no task target**, not a target of zero */
   target: number | null;
   /** Always `false` without a target: "not applicable", not "failed" */
   met: boolean;
 }
 
 /**
- * **Today's designs: three states, not two** (the owner's choice).
+ * **Today's tasks: three states, not two.**
  *
  * | Who | What is shown |
  * |---|---|
- * | Designer with a target | `24 / 25` |
- * | Someone else who still designed | just `43` |
- * | Nobody designed | nothing |
+ * | Receives tasks, with a target | `24 / 25` |
+ * | Anyone else who still finished tasks | just `43` |
+ * | Nobody finished any | nothing |
  *
- * Careful: the middle row is the decision: the manager (OX-01) also designs, **43**
- * in three days. After the role was set to `manager`, the number kept vanishing from
- * every screen though the work was real. "How many" and "did they hit the target"
- * stay two separate questions.
+ * Careful: the middle row is the decision: someone without a target (a
+ * manager helping out, a target of 0) may still finish tasks. "How many" and
+ * "did they hit the target" stay two separate questions, and hiding the
+ * number would lose real work.
  *
- * Careful: **an exact copy of the server's `design.rules.ts`.** If the two differ,
- * Telegram would say one thing and the screen another, and this project has fallen
- * in exactly that trap before (see the note on `compareVersion` in `fleet.ts`).
+ * Careful: **an exact copy of the server's `taskView`** (`task-start.rules.ts`).
+ * If the two differ, the digest would say one thing and the screen another,
+ * and this project has fallen in exactly that trap before (see the note on
+ * `compareVersion` in `fleet.ts`).
  */
-export function designView(card: LiveCard): DesignView | null {
+export function taskView(card: LiveCard): TaskView | null {
   /**
    * **Only "finished" is counted.**
    *
-   * Careful: **why this changed.** The left side used to show the "opened" count too.
-   * In the field the manager (OX-01) showed **16**, yet measuring showed they gave a
-   * total of **44 minutes** to 19 files (10 on one, 1-4 on most). They were
-   * **opening files to look**, not making them.
-   *
-   * Important: an "opened" count **cannot tell who makes from who views**. The
-   * Complete button's count can, because the designer says so themselves.
-   *
-   * Careful: `card.designsDone` (opened) still comes in the API and is stored in
-   * `daily_summary`; it helps detect "work started". It is just not **shown**,
-   * because as a number it is misleading.
+   * Careful: `card.tasksStarted` still comes in the API (it is how the Live
+   * Board knows work began), but it is not **shown** as the count: a start
+   * only says a window was opened.
    */
-  const done = card.designsFinished;
+  const done = card.tasksDone;
 
-  /**
-   * Careful: `met` still uses the **opened** count, not "finished". This is
-   * intentional.
-   *
-   * The Complete button is new and **nobody has pressed it yet** in the field
-   * (measured: `completed_via = 'button'` gave 0). Tying the check mark to
-   * "finished" now would show **everyone as missing the target** the next morning,
-   * though the work was done. Once pressing the button becomes habit, this is a
-   * one-line change.
-   */
-  if (card.staffType === 'designer' && card.designTargetPerDay > 0) {
+  if (card.receivesTasks && card.taskTargetPerDay > 0) {
     return {
       done,
-      target: card.designTargetPerDay,
-      met: done >= card.designTargetPerDay,
+      target: card.taskTargetPerDay,
+      met: done >= card.taskTargetPerDay,
     };
   }
 

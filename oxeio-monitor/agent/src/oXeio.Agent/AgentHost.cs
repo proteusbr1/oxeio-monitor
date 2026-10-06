@@ -281,7 +281,7 @@ internal sealed partial class AgentHost : IAsyncDisposable
         _log = log ?? NullSyncLog.Instance;
 
         // Before the first work date is computed: a restart without network
-        // must keep counting in the zone the server last sent, not in the default zone (Asia/Dhaka)
+        // must keep counting in the zone the server last sent, not in the default zone (UTC)
         _zoneMemory = new WorkZoneMemory(AgentDataDirectory.Default);
         if (_zoneMemory.TryRestore())
             _log.Info($"Work-day zone restored: {WorkTime.ToMemoryLine()}");

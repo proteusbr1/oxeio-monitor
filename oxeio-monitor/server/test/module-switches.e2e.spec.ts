@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 
 import { FEATURES_SETTING_KEY } from '../src/features/features.rules';
+import { FeaturesService } from '../src/features/features.service';
 import { PrivacyService } from '../src/privacy/privacy.service';
 import {
   createEmployeeWithCode,
@@ -23,7 +24,7 @@ import {
 
 /**
  * Module switches: payroll, security deposits, screenshots, apps & websites
- * and design targets can be switched off by the owner. Off = the endpoints
+ * and tasks can be switched off by the owner. Off = the endpoints
  * answer 404 (and the capture modules stop the agents); nothing is deleted,
  * and an install that never touches the switches behaves as before.
  *
@@ -72,14 +73,14 @@ describe('defaults', () => {
       deposits: true,
       screenshots: true,
       appTracking: true,
-      designTargets: true,
+      tasks: true,
     });
   });
 
   it('the endpoints answer as they always did', async () => {
     await owner.http.get('/api/v1/payroll?month=2026-08').expect(200);
     await owner.http.get('/api/v1/deposits').expect(200);
-    await owner.http.get('/api/v1/design-targets').expect(200);
+    await owner.http.get('/api/v1/tasks').expect(200);
   });
 
   it('the settings view says what each module holds', async () => {
@@ -91,8 +92,8 @@ describe('defaults', () => {
       depositMonths: 0,
       hasScreenshots: false,
       hasAppUsage: false,
-      designTargets: 0,
-      designers: expect.any(Number),
+      tasks: 0,
+      taskReceivers: expect.any(Number),
     });
   });
 });
@@ -135,7 +136,7 @@ describe('switching off', () => {
     expect(blocked.body.message).toMatch(/Settings → Modules/);
 
     await owner.http.get('/api/v1/deposits').expect(404);
-    await owner.http.get('/api/v1/design-targets').expect(200);
+    await owner.http.get('/api/v1/tasks').expect(200);
   });
 
   it('deposits off → the owner screen and the employee card are both 404', async () => {
@@ -145,11 +146,28 @@ describe('switching off', () => {
     await owner.http.get('/api/v1/me/deposit').expect(404);
   });
 
-  it('design targets off → the pool and the designer list are both 404', async () => {
-    await save({ designTargets: false }).expect(200);
+  it('tasks off → the pool, the own list and Settings → Tasks are all 404', async () => {
+    await save({ tasks: false }).expect(200);
 
-    await owner.http.get('/api/v1/design-targets').expect(404);
-    await owner.http.get('/api/v1/me/targets').expect(404);
+    await owner.http.get('/api/v1/tasks').expect(404);
+    await owner.http.get('/api/v1/me/tasks').expect(404);
+    await owner.http.get('/api/v1/settings/tasks').expect(404);
+  });
+
+  /** A row saved before the rename only knows the old key */
+  it('a saved row with only the old `designTargets` key still switches tasks off', async () => {
+    await h.prisma.setting.create({
+      data: { key: FEATURES_SETTING_KEY, value: { designTargets: false } },
+    });
+    h.app.get(FeaturesService).forget();
+
+    const res = await owner.http.get('/api/v1/features').expect(200);
+    expect(res.body.tasks).toBe(false);
+    await owner.http.get('/api/v1/tasks').expect(404);
+
+    // saving writes the new key; the old one is kept but no longer decides
+    await save({ tasks: true }).expect(200);
+    await owner.http.get('/api/v1/tasks').expect(200);
   });
 
   it('turning it back on brings the module back', async () => {
@@ -162,14 +180,14 @@ describe('switching off', () => {
 
   it('a partial save leaves the other switches as they were', async () => {
     await save({ deposits: false }).expect(200);
-    const res = await save({ designTargets: false }).expect(200);
+    const res = await save({ tasks: false }).expect(200);
 
     expect(res.body.features).toEqual({
       payroll: true,
       deposits: false,
       screenshots: true,
       appTracking: true,
-      designTargets: false,
+      tasks: false,
     });
   });
 });
@@ -213,18 +231,19 @@ describe('capture modules — the agents stop collecting', () => {
     expect((await owner.http.get('/api/v1/auth/me').expect(200)).body.canSeeScreenshots).toBe(false);
   });
 
-  it('apps & websites off → no app tracking, usage sent anyway is dropped, design targets go with it', async () => {
+  it('apps & websites off → no app tracking, usage sent anyway is dropped, tasks carry on', async () => {
     const { code } = await createEmployeeWithCode(h.prisma);
     const device = await enrollDevice(h, code);
 
     const res = await save({ appTracking: false }).expect(200);
-    expect(res.body.features.designTargets).toBe(true);
-    expect(res.body.effective.designTargets).toBe(false);
+    // tasks have no parent: only their start detection goes inactive
+    expect(res.body.features.tasks).toBe(true);
+    expect(res.body.effective.tasks).toBe(true);
 
     expect((await agentConfig(device.token)).appTracking.enabled).toBe(false);
     await owner.http.get('/api/v1/categories').expect(404);
     await owner.http.get('/api/v1/activity/top').expect(404);
-    await owner.http.get('/api/v1/design-targets').expect(404);
+    await owner.http.get('/api/v1/tasks').expect(200);
 
     const used = todayWindow(600);
     const sent = await h

@@ -12,7 +12,7 @@ import {
  * Careful: the real subject of the test is **not success but being blocked**:
  * the browser allows more than one tab per press only after permission, and
  * that is exactly what will happen in the field every day. If mishandled, the
- * designer would see one tab and think the button was broken.
+ * person would see one tab and think the button was broken.
  *
  * No `window` is needed: `openInTabs` takes the opening job from outside, so a
  * fake browser can be set up without jsdom (the rule in `vitest.config.ts`).
@@ -31,7 +31,7 @@ describe('openInTabs', () => {
 
   /**
    * Careful: tabnabbing: without this one line an opened tab could use
-   * `window.opener` to redirect the designer's page to a fake login.
+   * `window.opener` to redirect the person's page to a fake login.
    */
   it('cuts the opener of every tab it opens', () => {
     const made: OpenedTab[] = [];

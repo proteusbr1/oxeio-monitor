@@ -14,7 +14,7 @@ const ALL_ON = {
   deposits: true,
   screenshots: true,
   appTracking: true,
-  designTargets: true,
+  tasks: true,
 };
 
 describe('resolveFeatures', () => {
@@ -32,7 +32,7 @@ describe('resolveFeatures', () => {
 
   it('a mangled value keeps the module on', () => {
     expect(
-      resolveFeatures({ payroll: 'no', deposits: 0, designTargets: null }),
+      resolveFeatures({ payroll: 'no', deposits: 0, tasks: null }),
     ).toEqual(ALL_ON);
     expect(resolveFeatures(['payroll'])).toEqual(ALL_ON);
     expect(resolveFeatures('off')).toEqual(ALL_ON);
@@ -43,6 +43,23 @@ describe('resolveFeatures', () => {
       ...ALL_ON,
       payroll: false,
     });
+  });
+});
+
+describe('resolveFeatures — the renamed tasks switch', () => {
+  /** Rows saved before the rename say `designTargets` */
+  it('reads the legacy key when `tasks` is absent', () => {
+    expect(resolveFeatures({ designTargets: false }).tasks).toBe(false);
+    expect(resolveFeatures({ designTargets: true }).tasks).toBe(true);
+  });
+
+  it('the new key wins when both are present', () => {
+    expect(resolveFeatures({ designTargets: false, tasks: true }).tasks).toBe(true);
+    expect(resolveFeatures({ designTargets: true, tasks: false }).tasks).toBe(false);
+  });
+
+  it('the legacy key is not a module of its own', () => {
+    expect(Object.keys(resolveFeatures({ designTargets: false }))).not.toContain('designTargets');
   });
 });
 
@@ -70,8 +87,9 @@ describe('effectiveFeatures — a child module needs its parent', () => {
     expect(effectiveFeatures(ALL_ON).deposits).toBe(true);
   });
 
-  it('design targets are off while apps & websites are', () => {
-    expect(effectiveFeatures({ ...ALL_ON, appTracking: false }).designTargets).toBe(false);
+  /** Only start detection needs window titles, and it goes inactive by itself */
+  it('tasks stay on while apps & websites are off — tasks have no parent', () => {
+    expect(effectiveFeatures({ ...ALL_ON, appTracking: false }).tasks).toBe(true);
   });
 
   it('the old "screenshots for staff" key is not a module any more', () => {

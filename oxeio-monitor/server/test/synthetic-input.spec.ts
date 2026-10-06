@@ -180,13 +180,13 @@ describe('findSyntheticInput — who must not be caught', () => {
   });
 
   /**
-   * A designer can work three hours in one file — but their hand is uneven
+   * Someone can work three hours in one file — but their hand is uneven
    * and the title changes too. So they are not caught.
    */
   it('unbroken work but an uneven hand — not caught', () => {
     const segments = run(0, 180, (i) => 60 + ((i * 7) % 40));
 
-    expect(findSyntheticInput(segments, [win(0, 180, 'ai|design')])).toHaveLength(0);
+    expect(findSyntheticInput(segments, [win(0, 180, 'excel|budget')])).toHaveLength(0);
   });
 
   it('not caught when the window changes', () => {

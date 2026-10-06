@@ -92,7 +92,7 @@ export function PrivacyTab() {
             onChange={(next) => edit(() => setStaffSee(next))}
             hint={
               <>
-                Staff and researcher logins can open the pictures of their own
+                Staff and coordinator logins can open the pictures of their own
                 screen, never anyone else&rsquo;s — this affects{' '}
                 <b>{logins}</b>. You and managers always see every picture.
                 Either way, My data tells staff that pictures are taken and how

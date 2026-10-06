@@ -60,7 +60,7 @@ function attendance(over: Partial<AttendanceReport> = {}): AttendanceReport {
         employeeId: 1,
         empCode: 'OX-001',
         fullName: 'Jane Doe',
-        staffType: null,
+        receivesTasks: false,
     department: 'Support',
         date: '2026-08-11',
         dayType: 'workday',
@@ -70,8 +70,7 @@ function attendance(over: Partial<AttendanceReport> = {}): AttendanceReport {
         workedHours: 7.5,
         idleHours: 0.5,
         adjustmentHours: 0,
-        // the designs count: null unless the person is a designer
-    designsDone: null,
+    tasksDone: null,
     creditedHours: 7.5,
         targetHours: 8,
       },

@@ -202,6 +202,49 @@ describe('employee code: in the system\'s hands', () => {
   });
 });
 
+describe('receiving tasks', () => {
+  it('off by default; can be switched on with an own daily target, and back', async () => {
+    const created = await owner.http
+      .post('/api/v1/employees')
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ fullName: 'Task Person', designation: 'Clerk' })
+      .expect(201);
+    expect(created.body).toMatchObject({ receivesTasks: false, dailyTaskTarget: null, designation: 'Clerk' });
+    expect(created.body).not.toHaveProperty('staffType');
+
+    const on = await owner.http
+      .patch(`/api/v1/employees/${created.body.id}`)
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ receivesTasks: true, dailyTaskTarget: 15 })
+      .expect(200);
+    expect(on.body).toMatchObject({ receivesTasks: true, dailyTaskTarget: 15 });
+
+    const cleared = await owner.http
+      .patch(`/api/v1/employees/${created.body.id}`)
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ dailyTaskTarget: null })
+      .expect(200);
+    expect(cleared.body).toMatchObject({ receivesTasks: true, dailyTaskTarget: null });
+  });
+
+  it('created with receivesTasks at once', async () => {
+    const res = await owner.http
+      .post('/api/v1/employees')
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ fullName: 'Task Person Two', receivesTasks: true, dailyTaskTarget: 0 })
+      .expect(201);
+    expect(res.body).toMatchObject({ receivesTasks: true, dailyTaskTarget: 0 });
+  });
+
+  it('the old staffType field is refused', async () => {
+    await owner.http
+      .post('/api/v1/employees')
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ fullName: 'Old Field', staffType: 'manager' })
+      .expect(400);
+  });
+});
+
 describe('GET /employees: setup state', () => {
   it('a newly added employee has both false', async () => {
     await createEmployeeWithCode(h.prisma, 'SU-NEW');
@@ -367,7 +410,7 @@ describe('manager access', () => {
     await manager.http
       .patch(`/api/v1/employees/${created.body.id}`)
       .set('X-CSRF-Token', manager.csrf)
-      .send({ fullName: 'Pore Naam', department: 'Design' })
+      .send({ fullName: 'Pore Naam', department: 'Finance' })
       .expect(200);
   });
 

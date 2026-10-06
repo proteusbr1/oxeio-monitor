@@ -243,7 +243,7 @@ export class AdjustmentsService {
     /**
      * Careful: like `resolveEmployeeScope` in `screenshots.service`, the
      * condition is an **allow-list**. It used to read `role !== employee`, and
-     * when the `researcher` role was added we found that any new role would
+     * when a fourth role was added we found that any new role would
      * **skip this guard entirely**, opening anyone's pay adjustments.
      * Careful: the controller has no `@Roles` here either (deliberately), so
      * this is the only guard.

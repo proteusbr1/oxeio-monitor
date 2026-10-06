@@ -25,7 +25,7 @@ class SavePrivacyDto {
 
 interface PrivacyView {
   settings: PrivacySettings;
-  /** staff and researcher logins — who "see their own screenshots" affects */
+  /** staff and coordinator logins — who "see their own screenshots" affects */
   staffLogins: number;
 }
 
@@ -43,7 +43,7 @@ export class PrivacyController {
   @Get()
   async read(): Promise<PrivacyView> {
     const staffLogins = await this.prisma.user.count({
-      where: { isActive: true, role: { in: ['employee', 'researcher'] } },
+      where: { isActive: true, role: { in: ['employee', 'coordinator'] } },
     });
     return { settings: await this.privacy.get(), staffLogins };
   }

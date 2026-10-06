@@ -117,29 +117,35 @@ const MODULES: ModuleInfo[] = [
     onWarning: () =>
       'Recording starts again at the agents’ next sync. The time while it was off stays without app data.',
   },
+  /**
+   * Not nested under Apps & websites: the tasks work on their own. Only start
+   * detection (Settings › Tasks) reads window titles, and it simply rests
+   * while Apps & websites is off.
+   */
   {
-    key: 'designTargets',
-    title: 'Design targets',
-    what: 'A pool of design jobs handed out to designers each day, with review and progress — the design apps’ window titles show which jobs were started and for how long.',
+    key: 'tasks',
+    title: 'Tasks',
+    what: 'A pool of work items handed out to people each day, with a daily target, an optional check step and review of what was dropped.',
     hides: [
-      'Add target design, Design Pool and Review',
-      'The design panels on the Live Board and in the daily summary',
-      'Each designer’s target list on My data',
-      'The daily design target field in Staff',
+      'Add tasks, Task pool and Review',
+      'The task panels on the Live Board and in the daily summary',
+      'Each person’s task list on My data',
+      'Receives tasks and the daily task target in Staff',
+      'Settings › Tasks',
     ],
     holds: (u) => {
       const parts = [
-        u.designTargets > 0
-          ? plural(u.designTargets, 'design target', 'design targets')
+        u.tasks > 0 ? plural(u.tasks, 'task', 'tasks') : null,
+        u.taskReceivers > 0
+          ? plural(u.taskReceivers, 'person receives tasks', 'people receive tasks')
           : null,
-        u.designers > 0 ? plural(u.designers, 'designer', 'designers') : null,
       ].filter(Boolean);
       return parts.length > 0
-        ? `${parts.join(' · ')} on record — nothing is deleted`
+        ? `${parts.join(' · ')} — nothing is deleted`
         : null;
     },
     offWarning: () =>
-      'The daily hand-out stops too: jobs already handed out stay with their designer until the module is back on.',
+      'The daily hand-out stops too: tasks already handed out stay with their assignee until the module is back on.',
   },
 ];
 

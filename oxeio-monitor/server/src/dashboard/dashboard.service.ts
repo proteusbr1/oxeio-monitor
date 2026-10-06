@@ -33,7 +33,7 @@ import {
 import { isWorkday, monthBoundsOf } from '../reports/reports.range';
 import { prorate } from '../summary/proration';
 import { isObserved } from '../summary/summary.math';
-import { designTargetOf } from '../summary/design.rules';
+import { taskTargetOf } from '../summary/task-start.rules';
 import { trackedFromBy } from '../summary/tracking-start';
 
 /**
@@ -56,24 +56,23 @@ export interface LiveCard {
   empCode: string;
   fullName: string;
   designation: string | null;
-  /** Kind of work — the design target applies to this only */
-  staffType: 'designer' | 'researcher' | 'manager' | null;
+  /** Gets tasks handed out (Tasks module) — the task target applies to these only */
+  receivesTasks: boolean;
   /**
-   * **How many new designs today** — always 0 if not a designer.
+   * **How many tasks were started today** (start detection: the task number
+   * first seen in a window title). Always 0 while start detection is off.
    *
-   * Careful: the number comes from `design_credits`, not `daily_summary` —
-   * early in the day the summary row may not exist yet, and the card would
-   * show "0" though work was done. Both come from the same claim, so the
-   * numbers match.
+   * Careful: the number comes from `task_credits`, not `daily_summary` —
+   * early in the day the summary row may not exist yet. Both come from the
+   * same claim, so the numbers match.
    * Careful: it updates on the summary refresh (every 15 minutes), so it is
    * **not live** — it does not move second by second like the hours do.
    */
-  /** How many design files were **opened** today (counted by the number in the title) */
-  designsDone: number;
-  /** How many assigned targets were marked **finished** today (Complete button) */
-  designsFinished: number;
-  /** Careful: 0 means the target is off; the screen then shows nothing */
-  designTargetPerDay: number;
+  tasksStarted: number;
+  /** How many assigned tasks were marked **finished** today (Complete button) */
+  tasksDone: number;
+  /** Careful: 0 means the target is off; the screen then shows no target. Counts only while `receivesTasks`. */
+  taskTargetPerDay: number;
   status: LiveStatus;
   /** Seconds counted for today's date in the work zone */
   todayWorkedSec: number;
@@ -187,19 +186,18 @@ export interface TrendDay {
    */
   tracked: boolean;
   /**
-   * **How many designs were finished on that day.**
+   * **How many tasks were finished on that day.**
    *
-   * Careful: **"finished", not "opened"** — the owner's choice (ADR-037).
-   * `design_credits` says how many files were **opened**, and that number
-   * caused confusion in the field: a manager gave 44 minutes to 19 files and
-   * showed "16". So only `design_targets.completed_at` is used here.
+   * Careful: **"finished", not "started"** (ADR-037). `task_credits` says how
+   * many were brought to the screen, which cannot tell the one who does the
+   * work from the one who looks at it. So only `tasks.completed_at` is used here.
    *
    * Careful: the day boundary is **the work zone's**, not UTC's — `completed_at` is a
    * timestamptz and that table has no `work_date` column, so it is bucketed
    * with `workDateOf()`. The same function that decides "which day" for the
    * whole system.
    */
-  designsFinished: number;
+  tasksDone: number;
 
   /** How many people really had a target that day — zero means everyone was off */
   expectedStaff: number;
@@ -433,21 +431,21 @@ export class DashboardService {
         empCode: true,
         fullName: true,
         designation: true,
-        staffType: true,
+        receivesTasks: true,
         // Careful: `joinedOn`/`leftOn` are needed because the target is
         // **prorated** — for someone who joined mid-month, it is not the full month's.
         joinedOn: true,
         leftOn: true,
-        /** The employee's own design target — the policy's applies when empty */
-        dailyDesignTarget: true,
+        /** The employee's own task target — the policy's applies when empty */
+        dailyTaskTarget: true,
         policy: {
           // `expectedWorkdays` — the **denominator** of the daily target. Without
           // it we would have to divide by calendar work days here, and that was
           // the real cause of the gap between the tray and this card.
           select: {
             ...REGIME_SELECT,
-            // The designer's daily target — shown next to the hours
-            dailyDesignTarget: true,
+            // Tasks per day — shown next to the hours
+            dailyTaskTarget: true,
           },
         },
       },
@@ -487,7 +485,7 @@ export class DashboardService {
       set.add(l.leaveDate.getTime());
     }
 
-    const [devices, todaySums, designToday, finishedToday, monthSums, recentSegments] =
+    const [devices, todaySums, startedToday, finishedToday, monthSums, recentSegments] =
       await Promise.all([
       // Careful: revoked devices are excluded — their lastSeenAt stays old
       // forever, so even an employee whose PC was replaced would show red.
@@ -522,26 +520,24 @@ export class DashboardService {
         where: { employeeId: { in: ids }, countsAsWork: true, workDate: today },
         _sum: { durationSec: true },
       }),
-      // Designs claimed today — indexed (employee_id, first_work_date)
-      this.prisma.designCredit.groupBy({
+      // Tasks started today — indexed (employee_id, first_work_date)
+      this.prisma.taskCredit.groupBy({
         by: ['employeeId'],
         where: { employeeId: { in: ids }, firstWorkDate: today },
         _count: { _all: true },
       }),
       /**
-       * **How many targets were marked "finished" today.**
+       * **How many tasks were marked "finished" today.**
        *
-       * Careful: the query above (`designCredit`) says **how many files were
-       * opened**; this one says **how many were finished**. They are not the
-       * same, and that is the owner's choice: *"both — start and finish
-       * separately"*. Shown as one, a file would count as finished the moment
-       * it was opened — exactly the mistake caught later (the note beside
-       * ADR-037, restoring `completed_via = 'filename'`).
+       * Careful: the query above (`taskCredit`) says **how many were
+       * started**; this one says **how many were finished**. They are not the
+       * same: shown as one, a task would count as finished the moment it was
+       * opened.
        *
        * Careful: `completedAt` is a timestamptz, so it is filtered by the work
        * day's **boundaries** — there is no `workDate` column to compare for equality.
        */
-      this.prisma.designTarget.groupBy({
+      this.prisma.task.groupBy({
         by: ['assignedToId'],
         where: {
           assignedToId: { in: ids },
@@ -590,7 +586,7 @@ export class DashboardService {
     }
 
     const todaySec = sumByEmployee(todaySums);
-    const designsBy = new Map(designToday.map((d) => [d.employeeId, d._count._all]));
+    const startedBy = new Map(startedToday.map((d) => [d.employeeId, d._count._all]));
     // Careful: `assignedToId` can be null (a row returned to the pool) — skip it
     const finishedBy = new Map(
       finishedToday
@@ -649,12 +645,12 @@ export class DashboardService {
         empCode: e.empCode,
         fullName: e.fullName,
         designation: e.designation,
-        staffType: e.staffType,
-        designsDone: designsBy.get(e.id) ?? 0,
-        designsFinished: finishedBy.get(e.id) ?? 0,
-        designTargetPerDay: designTargetOf(
-          e.dailyDesignTarget,
-          e.policy?.dailyDesignTarget,
+        receivesTasks: e.receivesTasks,
+        tasksStarted: startedBy.get(e.id) ?? 0,
+        tasksDone: finishedBy.get(e.id) ?? 0,
+        taskTargetPerDay: taskTargetOf(
+          e.dailyTaskTarget,
+          e.policy?.dailyTaskTarget,
         ),
         status: decideLiveStatus({
           devices: own,
@@ -851,7 +847,7 @@ export class DashboardService {
         select: { holidayDate: true },
       }),
       /**
-       * **How many designs were finished in the ribbon's seven days.**
+       * **How many tasks were finished in the ribbon's seven days.**
        *
        * Careful: raw `completed_at` values are fetched and bucketed in code, not
        * via `groupBy` — the day boundary is **the work zone's**, and doing it in SQL
@@ -874,7 +870,7 @@ export class DashboardService {
        *    working early in the morning would show less on the first day, with
        *    no error raised.
        */
-      this.prisma.designTarget.findMany({
+      this.prisma.task.findMany({
         where: {
           completedAt: {
             gte: startOfWorkDate(first),
@@ -979,7 +975,7 @@ export class DashboardService {
       days.push({
         date: formatWorkDate(date),
         workedSec,
-        designsFinished: finishedByDay.get(ms) ?? 0,
+        tasksDone: finishedByDay.get(ms) ?? 0,
         // Careful: the criterion is **whether the date is after tracking began**,
         // not whether a row exists. Otherwise an empty future day would also
         // become "not observed".

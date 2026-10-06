@@ -49,7 +49,7 @@
 .EXAMPLE
     # Stated explicitly (recommended)
     powershell -ExecutionPolicy Bypass -File deploy\make-cert.ps1 `
-        -Hostname oxeio.office.local -IpAddress 192.168.0.10
+        -Hostname monitor.office.lan -IpAddress 192.168.0.10
 
 .EXAMPLE
     # Renewal - nothing has to change on the agents

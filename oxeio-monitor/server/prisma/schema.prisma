@@ -31,13 +31,12 @@ enum SegmentState {
 
 /// **Portal role**: who can enter which screen.
 ///
-/// Careful: do not confuse it with `staffType`: that is **what work they do**
-/// (designer, researcher, manager); this is **what they are allowed to see**.
+/// Careful: do not confuse it with `Employee.receivesTasks`: that is **what work they
+/// get handed**; this is **what they are allowed to see**.
 ///
-/// `researcher` was added on 25 August 2026. The owner's reasoning: researchers and
-/// designers do different work, so their access should not be the same. Until then both
-/// had the role `employee`, and the difference was hidden in another table, which is why
-/// a `when: canAddTargets` hack had to go into the sidebar.
+/// `coordinator` adds tasks to the pool and checks finished ones, and otherwise sees
+/// only their own data, like `employee`. Permission lives on the role, in one table,
+/// so the sidebar needs no per-person exception.
 ///
 /// Careful: adding a new value is NOT fail-closed everywhere. `@Roles()` and the
 /// sidebar's `roles[]` run on allowlists, so they are safe. But a hand-written
@@ -46,51 +45,32 @@ enum SegmentState {
 enum UserRole {
   owner
   manager
-  researcher
+  coordinator
   employee
 }
 
 /**
- * **The kind of work a staff member does** *(21 August 2026, requested by the owner)*.
+ * Which stage of its life a task is in.
  *
- * Careful: do NOT confuse this with `UserRole`. `UserRole` says *who can see what*
- * (portal permission); this says *who does what work*. A person can be of the
- * `manager` type and still be an `employee` in the portal, and the other way around.
- *
- * Careful: the `designation` column STAYS: that is the job title ("Senior Graphic
- * Designer"), free text. This is a **category**, and only rules on this can work
- * (such as the designer's daily target of 25). Putting rules on free text would make
- * "Designer" and "graphic designer" two different things.
- */
-enum StaffType {
-  designer
-  researcher
-  manager
-}
-
-/**
- * Which stage of its life a design target is in *(22 August 2026)*.
- *
- * Careful: `skipped` is kept apart from `done`: a skipped target is nobody's
+ * Careful: `skipped` is kept apart from `done`: a skipped task is nobody's
  * work, so it is not counted, but it also does not go back to the pool, otherwise it
  * would land in someone's hands again the next day.
  */
-enum DesignTargetStatus {
+enum TaskStatus {
   pool
   assigned
   done
   skipped
 
   /**
-   * **The page no longer exists on Amazon** *(29 August 2026)*: the owner or a manager
-   * picked it and deleted it by hand.
+   * **Removed from the work** by the owner, a manager or a coordinator.
    *
    * Careful: the row **stays in the table**, and that is the whole reason for this
-   * value: `asin` is UNIQUE, so a dead ASIN can never return to the pool. A real
-   * `DELETE` would remove exactly that guard.
+   * value: `reference` is UNIQUE, so a removed task can never come back into the pool
+   * by being pasted again. A real `DELETE` would remove exactly that guard.
    *
-   * Careful: not `skipped`: that is the designer's "I don't want to do it"; this is
-   * "the thing itself is gone".
+   * Careful: not `skipped`: that is the assignee's "I am not doing this one"; this is
+   * "the task itself is gone".
    */
   deleted
 }
@@ -228,16 +208,15 @@ model WorkPolicy {
   officeFrom         String? @map("office_from") @db.VarChar(5)
   officeTo           String? @map("office_to") @db.VarChar(5)
   /**
-   * **The designer's daily target** *(21 August 2026)*: the owner wants 25.
+   * **Tasks per day** for people who receive tasks (Tasks module).
    *
-   * Careful: it sits **beside** the hours target, not instead of it: a designer also
-   * follows the 208 hours, and this number is on top. Careful: it applies only to staff
-   * with `staff_type = 'designer'` (`hasDesignTarget()`); for the rest the cell does not
+   * Careful: it sits **beside** the hours target, not instead of it. It applies only to
+   * staff with `receives_tasks` (`hasTaskTarget()`); for the rest the cell does not
    * even show on screen, because "0/25" looks like an accusation when the measure is
    * not theirs at all.
    * Careful: setting 0 switches the target **off**: counting continues, but nobody is "behind".
    */
-  dailyDesignTarget  Int     @default(25) @map("daily_design_target")
+  dailyTaskTarget    Int     @default(25) @map("daily_task_target")
   idleThresholdSec   Int     @default(60) @map("idle_threshold_sec")
   slotMinutes        Int     @default(5) @map("slot_minutes")
   /// Asia/Dhaka = GMT+6 (UTC+06:00), no DST, so work_date can always be derived without doubt
@@ -254,27 +233,26 @@ model Employee {
   empCode        String         @unique @map("emp_code")
   fullName       String         @map("full_name")
   email          String?        @unique
-  /// Job title: free text, for display only ("Senior Graphic Designer")
+  /// Job title: free text, for display only ("Senior Accountant")
   designation    String?
   department     String?
   /**
-   * Kind of work: rules apply **only on this** ([StaffType](#StaffType)).
+   * **Gets tasks handed out** (Tasks module): the morning hand-out and the top-ups
+   * go only to people with this on.
    *
-   * Careful: `null` means "not set yet", and that is not the same as `designer`:
-   * the target calculation then **leaves that employee out**, it does not count zero.
+   * Careful: receiving tasks and having a daily target are two questions. "Has a
+   * target" = this AND an effective `dailyTaskTarget` above 0 (`hasTaskTarget()`).
    */
-  staffType      StaffType?     @map("staff_type")
+  receivesTasks  Boolean        @default(false) @map("receives_tasks")
   /**
-   * **This employee's own daily design target** *(22 August)*. In the owner's words:
-   * *"karo daily target 25 ta, kono designer er daily target 15 ta"* (some have a daily
-   * target of 25, some designers 15).
+   * **This employee's own daily task target**: some people do 25 a day, some 15.
    *
-   * Careful: `null` means **the policy's number applies** (`work_policies.daily_design_target`),
-   * not zero. Careful: there is deliberately no default: with a default, "nobody said
-   * anything" and "the owner chose this number himself" would look the same, exactly as
-   * with `depositStartYearMonth`.
+   * Careful: `null` means **the policy's number applies** (`work_policies.daily_task_target`),
+   * not zero; 0 switches this person's target off. Careful: there is deliberately no
+   * default: with a default, "nobody said anything" and "the owner chose this number
+   * himself" would look the same, exactly as with `depositStartYearMonth`.
    */
-  dailyDesignTarget Int?         @map("daily_design_target")
+  dailyTaskTarget Int?          @map("daily_task_target")
   policyId       Int?           @map("policy_id")
   /// Monthly salary: **only the owner can see it** ([ADR-023](../../docs/05-Options-Decisions.md)).
   /// Needed to work out the money for a shortfall: (salary / monthly target hours) x shortfall hours.
@@ -313,8 +291,8 @@ model Employee {
   appUsage          AppUsage[]
   events            Event[]
   dailySummaries    DailySummary[]
-  designCredits     DesignCredit[]
-  designTargets     DesignTarget[]
+  taskCredits       TaskCredit[]
+  tasks             Task[]
   monthlySummary    MonthlySummary[]
   timeAdjustments   TimeAdjustment[]
   enrollmentCodes   EnrollmentCode[]
@@ -345,14 +323,14 @@ model User {
   sessionsRevokedAt DateTime? @map("sessions_revoked_at") @db.Timestamptz(3)
   /// The person's own choices (theme; language later) — see account/preferences.ts
   preferences  Json      @default("{}")
-  /// Design targets this user marked as "finished"
-  completedTargets DesignTarget[] @relation("designTargetCompletedBy")
-  /// Checked the spelling (ADR-038): usually a researcher
-  checkedTargets   DesignTarget[] @relation("designTargetCheckedBy")
-  /** Skipped designs this user has looked over *(31 August)* */
-  reviewedTargets  DesignTarget[] @relation("designTargetReviewedBy")
-  /// Fixed mistakes: usually a manager
-  fixedTargets     DesignTarget[] @relation("designTargetFixedBy")
+  /// Tasks this user marked as "finished"
+  completedTasks Task[] @relation("taskCompletedBy")
+  /// Tasks this user checked: usually a coordinator
+  checkedTasks   Task[] @relation("taskCheckedBy")
+  /** Dropped tasks this user has looked over */
+  reviewedTasks  Task[] @relation("taskReviewedBy")
+  /// Fixed problems: usually a manager
+  fixedTasks     Task[] @relation("taskFixedBy")
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   employee           Employee?        @relation(fields: [employeeId], references: [id])
@@ -364,8 +342,8 @@ model User {
   adjustmentsRevoked TimeAdjustment[] @relation("AdjustmentRevokedBy")
 
   @@map("users")
-  /// Targets this user submitted (22 August)
-  addedTargets DesignTarget[] @relation("addedTargets")
+  /// Tasks this user added
+  addedTasks Task[] @relation("addedTasks")
 }
 
 model Device {
@@ -751,52 +729,33 @@ model AgentVersion {
 /// Careful: target / shortfall / overtime / late / attendance are not here:
 ///    there is no daily target at all. All target calculations live in MonthlySummary.
 /**
- * **When a design was first seen** *(21 August 2026)*.
+ * **A task**: one work item in the pool, handed to one person.
  *
- * Careful: **why a separate table, rather than counting every day.** The honest answer
- * to "how many designs today" is the number of **new** designs: opening yesterday's
- * file again today is not today's work. Measured in the field, the difference is big:
- * one person's 39 drops to **24**. But knowing whether something is "new" needs the
- * **whole history**, and scanning that every day would get expensive after a year.
+ * Coordinators, managers or the owner paste tasks in bulk; every morning they are
+ * handed out at random to the people who receive tasks.
  *
- * So each (employee, design) pair goes in **only once**, and the primary key does not
- * let it go in a second time. "How many today" = rows whose `first_work_date` is today.
- *
- * Careful: **the design's name is not stored here**, only the leading number. The
- * owner's condition (21 August): the title may be read, but the name is not to be kept
- * or shown anywhere.
+ * Careful: **identity is `reference`**, and `@unique` is there: the same reference
+ * pasted twice would give two people the same work.
  */
-/**
- * **A design target submitted by a researcher** *(22 August 2026)*.
- *
- * Researchers submit ~500 Amazon T-shirt URLs a day; from them, targets are
- * distributed randomly among the designers.
- *
- * Careful: **identity is the ASIN, not the URL**, and `@unique` is there. The same
- * product has countless URL forms (`?th=1`, `ref=sr_1_3`, `.co.uk`); looking for
- * duplicates by URL would have three designers making the same design.
- *
- * Careful: the original URL is **not stored**: the owner's rule (22 August): just put
- * the ASIN in and build `https://www.amazon.com/dp/...`. Keeping it would leave two
- * forms of the same thing in the table.
- */
-model DesignTarget {
-  id     Int                @id @default(autoincrement())
-  /// Careful: exactly 10 characters, upper case: see `targets.rules.ts`
-  asin   String             @unique @db.VarChar(10)
-  status DesignTargetStatus @default(pool)
+model Task {
+  id        Int        @id @default(autoincrement())
+  /// What the task is: free text up to 200 characters, trimmed, unique
+  reference String     @unique @db.VarChar(200)
+  /// Where the work item lives: an http(s) URL, or null
+  link      String?    @db.VarChar(500)
+  status    TaskStatus @default(pool)
 
   /**
-   * The number given at assignment: the designer puts it in the file name
-   * (`1000042-Funny Cat T-Shirt.ai`), and that is how "finished" is detected.
+   * The task number, given when the task is added: the assignee puts it at the
+   * start of the window title (`1000042 - Quarterly report.docx`), and that is how
+   * "started" is detected.
    *
-   * Careful: it starts at **1,000,000**, a measured figure: the largest number in the
-   * current files is 973,065. Starting lower, some old file would wrongly close a
-   * target.
+   * Careful: it starts at **1,000,000** (`task_number_seq`), so it never collides with
+   * the short numbers people already put at the start of file names.
    */
-  jobNumber Int? @unique @map("job_number")
+  taskNumber Int? @unique @map("task_number")
 
-  /// Careful: who submitted it: a researcher, manager or the owner
+  /// Careful: who added it: a coordinator, manager or the owner
   addedById Int      @map("added_by_id")
   addedAt   DateTime @default(now()) @map("added_at") @db.Timestamptz(3)
 
@@ -804,102 +763,91 @@ model DesignTarget {
   assignedAt   DateTime? @map("assigned_at") @db.Timestamptz(3)
 
   /**
-   * **Work has started**: the file was opened for the first time *(23 August)*.
+   * **Work has started**: the task number was first seen at the start of a window
+   * title in one of the start-detection apps.
    *
-   * Careful: **"opened" and "finished" are not the same, and they were first confused.**
-   * The agent sees the number in the title the moment the file **comes to the front**,
-   * i.e. at the start of work. Treating that as "finished" would close the target as
-   * soon as it is opened, and the designer would not find it in the list the next day.
-   *
-   * So the automatic signal goes here, and **the designer says it is finished
-   * himself** (the Complete button). The system says only what it really knows.
+   * Careful: **"started" and "finished" are not the same.** The agent sees the number
+   * the moment the window **comes to the front**, i.e. at the start of work. Treating
+   * that as "finished" would close the task as soon as it is opened. So the automatic
+   * signal goes here, and **the assignee says it is finished** (the Complete button).
    */
   startedAt   DateTime? @map("started_at") @db.Timestamptz(3)
   completedAt DateTime? @map("completed_at") @db.Timestamptz(3)
   /**
-   * **Who said "finished"** *(23 August 2026, the owner's report)*.
+   * **Who said "finished"**.
    *
-   * Careful: `completedVia` says **how** it happened (`manual` / `filename`), but
-   * **who** did it was written nowhere. So the name shown in the list was that of
-   * **the person it was assigned to**: even when the owner himself pressed Complete,
-   * the designer's name showed, which is plainly wrong information.
+   * Careful: `completedVia` says **how** it happened (`manual` / `filename`), this says
+   * **who**: the owner may press Complete on someone's behalf, and the list must not
+   * show the assignee's name for it.
    *
-   * Linked to `User`, not `Employee`: on both paths (the designer's own page and the
-   * owner's list) the one who presses is a logged-in user. Linking to Employee would
-   * leave no row at all for the owner/manager.
+   * Linked to `User`, not `Employee`: on both paths (the assignee's own page and the
+   * owner's list) the one who presses is a logged-in user.
    */
   completedById Int?    @map("completed_by_id")
-  completedBy   User?   @relation("designTargetCompletedBy", fields: [completedById], references: [id])
+  completedBy   User?   @relation("taskCompletedBy", fields: [completedById], references: [id])
 
-  /// **Spelling has been checked** (ADR-038, 25 August 2026).
-  ///
-  /// Careful: **a date, not a state**, like `uploaded_at`/`live_at`. A new state would
-  /// move the row away from `done`, and every "how many designs are done" count in the
-  /// whole system would silently drop.
-  ///
-  /// Careful: `null` = **not checked yet**, not "no mistakes": those are two different things.
   /**
-   * **The owner/manager has looked over the dropped row** *(31 August 2026)*.
+   * **The owner/manager has looked over the dropped row**.
    *
    * Careful: **`NULL` means it is in the queue**, and that is the queue's only condition
    * (along with `dropReason != null`). Without this marker the list would never become
-   * empty, and on 24 August exactly that mistake left 27,641 rows standing in the upload
-   * queue (see the note on `UPLOAD_QUEUE_FROM`).
+   * empty.
    *
    * Careful: sending it back to the pool clears this too: the row is then no longer
    * dropped, so "looked over" has no subject any more.
    */
   reviewedAt   DateTime? @map("reviewed_at") @db.Timestamptz(3)
   reviewedById Int?      @map("reviewed_by_id")
-  reviewedBy   User?     @relation("designTargetReviewedBy", fields: [reviewedById], references: [id])
+  reviewedBy   User?     @relation("taskReviewedBy", fields: [reviewedById], references: [id])
 
+  /// **Checked** (the optional QA step).
+  ///
+  /// Careful: **a date, not a state**, like `delivered_at`/`published_at`. A new state
+  /// would move the row away from `done`, and every "how many tasks are done" count in
+  /// the whole system would silently drop.
+  ///
+  /// Careful: `null` = **not checked yet**, not "no problems": those are two different things.
   checkedAt    DateTime? @map("checked_at") @db.Timestamptz(3)
   checkedById  Int?      @map("checked_by_id")
-  checkedBy    User?     @relation("designTargetCheckedBy", fields: [checkedById], references: [id])
+  checkedBy    User?     @relation("taskCheckedBy", fields: [checkedById], references: [id])
 
-  /// **A mistake was found**: `null` means it was checked and was fine
+  /// **A problem was found**: `null` means it was checked and was fine
   /// (if `checked_at` is set), or has not been checked yet.
   errorFoundAt DateTime? @map("error_found_at") @db.Timestamptz(3)
 
-  /// **The mistake has been fixed**.
+  /// **The problem has been fixed**.
   ///
-  /// Careful: `assigned_to_id` **never changes**: the design stays with the original
-  /// designer. Otherwise the work would pass to whoever fixed it, and the whole
-  /// investigation of 23 August began exactly from seeing such an inflated number.
+  /// Careful: `assigned_to_id` **never changes**: the task stays with the original
+  /// assignee. Otherwise the work would pass to whoever fixed it.
   fixedAt      DateTime? @map("fixed_at") @db.Timestamptz(3)
   fixedById    Int?      @map("fixed_by_id")
-  fixedBy      User?     @relation("designTargetFixedBy", fields: [fixedById], references: [id])
+  fixedBy      User?     @relation("taskFixedBy", fields: [fixedById], references: [id])
   /**
-   * **Uploaded** *(23 August 2026, requested by the owner)*.
+   * **Delivered** (optional post-completion stage).
    *
    * Careful: **a date, not a new state**, just like `startedAt`/`completedAt`.
-   * Put in `status`, a piece of work would go from "done" to "uploaded", and every
+   * Put in `status`, a piece of work would go from "done" to "delivered", and every
    * count based on `status = 'done'` would silently drop. Kept as a date, **all the
    * stages stay true together**, and you can also tell when each happened.
    */
-  uploadedAt  DateTime? @map("uploaded_at") @db.Timestamptz(3)
+  deliveredAt DateTime? @map("delivered_at") @db.Timestamptz(3)
   /**
-   * **Live on Amazon**: i.e. listed for sale.
+   * **Published**: the last stage, after delivery.
    *
-   * Careful: upload and live are not the same: Amazon reviews, and also rejects. Keeping
-   * them apart shows where the pipeline leaks: how many uploads are **stuck or
-   * rejected**.
+   * Careful: delivered and published are not the same: whoever receives the work may
+   * still review or reject it. Keeping them apart shows where the pipeline leaks.
    */
-  liveAt      DateTime? @map("live_at") @db.Timestamptz(3)
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(3)
   /**
-   * ASIN of the **new** product that went live.
+   * An optional reference for the **published result** (an order number, a URL, an
+   * id in another system).
    *
-   * Careful: do not confuse it with `asin` above: that is the researcher's found
-   * **sample** product (what the design was based on), while this is our own
-   * **sellable** product. In one column, "which is whose" would stay muddled forever.
-   *
-   * This column is the bridge for linking to sales figures in future: from effort
-   * to result.
+   * Careful: do not confuse it with `reference` above: that is what the task was about;
+   * this is what came out of it.
    */
-  liveAsin    String?   @map("live_asin") @db.VarChar(20)
+  publishedRef String?  @map("published_ref") @db.VarChar(200)
   /**
-   * **The last thing that happened** *(23 August 2026)*: the basis for list order and
-   * the date filter.
+   * **The last thing that happened**: the basis for list order and the date filter.
    *
    * Careful: **computed in the database** (`GENERATED ALWAYS AS ... STORED`): code never
    * writes to it, and PostgreSQL itself blocks any attempt. So there can be no state
@@ -911,64 +859,76 @@ model DesignTarget {
    * Careful: it is written optional (`?`) in Prisma so that no `create` treats it as
    * required: in the real database the column is never NULL.
    */
-  lastActivityAt DateTime? @map("last_activity_at") @db.Timestamptz(3)
-  /// `filename` (detected automatically) or `manual` (the designer said so himself)
+  lastActivityAt DateTime? @default(dbgenerated("GREATEST(added_at, assigned_at, started_at, completed_at, checked_at, fixed_at, delivered_at, published_at)")) @map("last_activity_at") @db.Timestamptz(3)
+  /// `filename` (detected automatically) or `manual` (the person said so)
   completedVia String? @map("completed_via") @db.VarChar(16)
 
   /**
-   * **Why the row went away** *(31 August 2026)*: `not_found` ·
-   * `copyright` · `events`.
+   * **Why the row went away**: `not_needed` · `cannot_do` · `duplicate` · `other`.
    *
-   * Careful: **one column, two paths:** the designer's Skip and the owner's Delete both
+   * Careful: **one column, two paths:** the assignee's Skip and the owner's Delete both
    * write here. Which path was taken is told by `status`, so the reason need not be kept
-   * twice. It used to be called `skipped_reason`, but none of the 93 skipped rows had
-   * anything written in it: the screen never sent a reason.
+   * twice.
    *
-   * Careful: **the machine value is stored, not the screen text** (`not_found`, not
-   * "Not Found"): otherwise if the wording changed one day, all the old rows would
-   * mean something else. The list is in one place: `DROP_REASONS` in `targets.rules.ts`.
+   * Careful: **the machine value is stored, not the screen text** (`not_needed`, not
+   * "No longer needed"): otherwise if the wording changed one day, all the old rows would
+   * mean something else. The list is in one place: `DROP_REASONS` in `tasks.rules.ts`.
    */
   dropReason String? @map("drop_reason") @db.VarChar(16)
 
   /**
-   * **Where this row was before oXeio** *(22 August, import)*.
+   * **Where this row came from before oXeio**, as free text from an import.
    *
-   * In the old Excel, name and date were mixed in one cell
-   * (`Hafiz-29-07-2026`, `Salman 03.01.2026`, `বেলাল`), and among them were
-   * **the names of staff who have left too** (rony · aman · eshaan · tamim...).
-   *
-   * Careful: so those could NOT go into `assignedToId`: the FK is tied to employee rows,
-   * and making rows for people who are not here would pass history off as the present.
-   * But they were not thrown away either: the raw text stays here, so the answer to
-   * "who made this design" is not lost.
+   * Careful: names of people who are not staff rows could NOT go into `assignedToId`
+   * (the FK is tied to employee rows), but they are not thrown away either: the raw
+   * text stays here.
    *
    * Careful: `null` means the row was born in oXeio itself, not imported.
    */
   sourceNote String? @map("source_note")
 
-  addedBy    User      @relation("addedTargets", fields: [addedById], references: [id])
+  addedBy    User      @relation("addedTasks", fields: [addedById], references: [id])
   assignedTo Employee? @relation(fields: [assignedToId], references: [id])
 
-  /// For picking from the pool at distribution time: `WHERE status = 'pool'`
+  /// For picking from the pool at hand-out time: `WHERE status = 'pool'`
   @@index([status])
-  /// The designer's own list
+  /// The assignee's own list
   @@index([assignedToId, status])
-  @@map("design_targets")
+  @@index([completedById])
+  /// List order: latest activity first
+  @@index([lastActivityAt(sort: Desc)])
+  @@index([assignedToId, lastActivityAt(sort: Desc)])
+  @@map("tasks")
 }
 
-model DesignCredit {
+/**
+ * **When a task number was first seen on screen** (start detection, Tasks module).
+ *
+ * Careful: **why a separate table, rather than counting every day.** The honest answer
+ * to "how many tasks were started today" is the number of **new** numbers: bringing
+ * yesterday's window back to the front today is not a new start. But knowing whether
+ * something is "new" needs the **whole history**, and scanning that every day would get
+ * expensive after a year.
+ *
+ * So each (employee, number) pair goes in **only once**, and the primary key does not
+ * let it go in a second time. "How many today" = rows whose `first_work_date` is today.
+ *
+ * Careful: **the window title is not stored here**, only the leading number. Titles
+ * may be read for the configured apps, but never kept or shown.
+ */
+model TaskCredit {
   employeeId    Int      @map("employee_id")
-  /// The number at the front of the file name, such as `37933`
-  designId      String   @map("design_id") @db.VarChar(16)
-  /// The Dhaka day on which this was **first** seen
+  /// The number at the start of the window title, such as `1000042`
+  taskNumber    String   @map("task_number") @db.VarChar(16)
+  /// The work day on which this was **first** seen
   firstWorkDate DateTime @map("first_work_date") @db.Date
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   employee Employee @relation(fields: [employeeId], references: [id])
 
-  @@id([employeeId, designId])
+  @@id([employeeId, taskNumber])
   @@index([employeeId, firstWorkDate])
-  @@map("design_credits")
+  @@map("task_credits")
 }
 
 model DailySummary {
@@ -993,15 +953,13 @@ model DailySummary {
   productivityPct Decimal?  @map("productivity_pct") @db.Decimal(5, 2)
   screenshotCount Int       @default(0) @map("screenshot_count")
   /**
-   * **How many new designs today** (for designers): counted from [DesignCredit].
+   * **How many tasks were started today**: task numbers first seen at the start of a
+   * window title that day ([TaskCredit]), only while start detection is on.
    *
-   * Careful: it is **stored** here deliberately: Worklog, the Telegram report, the
-   * monthly Excel and the employee's own page all read this one number, so four separate
-   * calculations can never disagree.
-   * Careful: for anyone who is not a designer this is always 0: that is not "did not
-   * work", it is "this measure is not for them". So the screen does not show the column.
+   * Careful: this is "started", not "done"; finished counts come from
+   * `tasks.completed_at`. Always 0 when start detection is off.
    */
-  designsDone     Int       @default(0) @map("designs_done")
+  tasksStarted    Int       @default(0) @map("tasks_started")
   dayType         DayType?  @map("day_type")
   computedAt      DateTime  @default(now()) @map("computed_at") @db.Timestamptz(3)
 
@@ -1152,6 +1110,7 @@ model SummaryDirty {
   /// When it was first marked: this is the drain order (oldest first)
   markedAt DateTime @default(now()) @map("marked_at") @db.Timestamptz(3)
 
+  @@index([markedAt])
   @@map("summary_dirty")
 }
 

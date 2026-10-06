@@ -55,8 +55,7 @@ export function attendanceWorkbook(report: AttendanceReport): Promise<Buffer> {
   const columns: ExcelColumn<AttendanceRow>[] = [
     { header: 'Emp code', width: 14, value: (r) => r.empCode },
     { header: 'Name', width: 26, value: (r) => r.fullName },
-    // Type first: it is now the classification
-    { header: 'Staff type', width: 14, value: (r) => r.staffType },
+    { header: 'Receives tasks', width: 14, value: (r) => (r.receivesTasks ? 'Yes' : null) },
     // The cell was removed from the form, so it is empty for new employees
     { header: 'Department', width: 18, value: (r) => r.department },
     { header: 'Date', width: 13, value: (r) => r.date },
@@ -80,18 +79,12 @@ export function attendanceWorkbook(report: AttendanceReport): Promise<Buffer> {
     hours('Credited (hours)', (r: AttendanceRow) => r.creditedHours),
     hours('Target (hours)', (r: AttendanceRow) => r.targetHours),
     hours('Idle (hours)', (r: AttendanceRow) => r.idleHours),
-    /*
-      The design count: the owner's target of 25.
-      If the person is not a designer the cell is **empty**, not 0: in a
-      spreadsheet 0 means "measured and found zero", which would be false here.
-    */
     /**
-     * How many designs were **completed** (the Complete button).
-     *
-     * Opening a file is **not** counted (owner's decision): that count could not
-     * tell "the one who makes" from "the one who views".
+     * How many tasks were **completed** (the Complete button). Empty, not 0,
+     * when there were none: 0 would read as "measured and found zero".
+     * Starting a task (start detection) is **not** counted.
      */
-    { header: 'Designs', width: 10, value: (r: AttendanceRow) => r.designsDone },
+    { header: 'Tasks done', width: 11, value: (r: AttendanceRow) => r.tasksDone },
   ];
 
   return buildWorkbook(

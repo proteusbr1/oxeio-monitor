@@ -126,7 +126,7 @@ describe('every endpoint really responds', () => {
   });
 
   /**
-   * A researcher never gets near the whole team's data (25 August 2026).
+   * A coordinator never gets near the whole team's data.
    *
    * Why this list is the most important net in the whole file: adding a new
    * value to `UserRole` looks harmless, but many conditions in the codebase
@@ -142,19 +142,19 @@ describe('every endpoint really responds', () => {
    * only two compile errors, both merely about widening a type.
    *
    * So the guard goes by the list: on every route open to owner and manager,
-   * a researcher must get 403. If someone adds a new route later it joins
+   * a coordinator must get 403. If someone adds a new route later it joins
    * this list automatically.
    */
-  it('a researcher cannot enter any owner/manager route', async () => {
+  it('a coordinator cannot enter any owner/manager route', async () => {
     const them = await h.prisma.employee.create({
-      data: { empCode: 'OX-79', fullName: 'Researcher', staffType: 'researcher' },
+      data: { empCode: 'OX-79', fullName: 'Coordinator' },
     });
     await h.prisma.user.create({
       data: {
         email: 'r-ep@test.local',
-        fullName: 'Researcher',
+        fullName: 'Coordinator',
         passwordHash: await hashPassword('staff-password-123'),
-        role: 'researcher',
+        role: 'coordinator',
         employeeId: them.id,
         mustChangePw: false,
       },
@@ -164,27 +164,27 @@ describe('every endpoint really responds', () => {
 
     for (const url of [...SHARED_READS(employeeId), ...OWNER_ONLY_READS]) {
       const res = await s.http.get(url);
-      expect(res.status, `${url} → the researcher should not get in`).toBe(403);
+      expect(res.status, `${url} → the coordinator should not get in`).toBe(403);
     }
   });
 
   /**
    * And this is the direct guard against that trap. Calling `/screenshots`
    * without `employeeId` made the old code read it as "no filter" and return
-   * everyone's pictures. A researcher also has their own agent (verified in
+   * everyone's pictures. A coordinator also has their own agent (verified in
    * the field), so they touch this route every day — the question is not
    * whether they can get in, but how much they can see.
    */
-  it('a researcher sees only their own pictures — not everyone\'s', async () => {
+  it('a coordinator sees only their own pictures — not everyone\'s', async () => {
     const them = await h.prisma.employee.create({
-      data: { empCode: 'OX-80', fullName: 'Researcher', staffType: 'researcher' },
+      data: { empCode: 'OX-80', fullName: 'Coordinator' },
     });
     await h.prisma.user.create({
       data: {
         email: 'r-shot@test.local',
-        fullName: 'Researcher',
+        fullName: 'Coordinator',
         passwordHash: await hashPassword('staff-password-123'),
-        role: 'researcher',
+        role: 'coordinator',
         employeeId: them.id,
         mustChangePw: false,
       },

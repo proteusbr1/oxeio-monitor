@@ -195,7 +195,7 @@ describe('G46 — catching fake input', () => {
     // Each span needs its own score, so two rounds of one hour each
     await activeRun(at(10), at(11), 62);
     await activeRun(at(11), at(13), 97);
-    await window(at(10), at(13), 'illustrator.exe', 'poster.ai');
+    await window(at(10), at(13), 'excel.exe', 'budget.xlsx');
 
     expect(await check.runOnce(realNow())).toBe(0);
   });

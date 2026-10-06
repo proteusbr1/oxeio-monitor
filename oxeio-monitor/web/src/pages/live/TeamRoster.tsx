@@ -13,10 +13,10 @@ import type { GalleryItem } from '../../api/screenshots';
 import { useFeatures } from '../../features/FeaturesContext';
 import { getLatestShots, NO_SHOTS } from './latestShots';
 import { isWorking } from './onTheClock';
-import { DesignCell } from './DesignCell';
+import { TaskCell } from './TaskCell';
 import {
   dayDuty,
-  designView,
+  taskView,
   meterKind,
   restingStartsAt,
   rosterRows,
@@ -123,29 +123,27 @@ export function TeamRoster({
       render: (c) => <TodayCell card={c} />,
     },
     /*
-      **Design** column: the owner's daily 25 count.
+      **Tasks** column: today's finished tasks against the daily target.
 
-      Careful: the column appears **only when** the team has at least one designer.
-         Always showing it would leave an empty cell every day in researchers' rows,
-         and an empty cell looks like "no data yet", when they are simply not
-         measured on it.
+      Careful: the column appears **only when** the Tasks module is on and someone
+         has something to show. Always showing it would leave an empty cell every
+         day in the rows of people who never receive tasks, and an empty cell
+         looks like "no data yet", when they are simply not measured on it.
     */
-    ...(rows.some((c) => designView(c) !== null)
+    ...(features.tasks && rows.some((c) => taskView(c) !== null)
       ? [
           {
-            key: 'designs',
+            key: 'tasks',
             /**
-             * One word, one number counted (ADR-037, see the link below).
+             * One word, one number counted (ADR-037): finished, not started.
              *
-             * Careful: it used to say `Designs · opened / done`. After the cell's
-             * number changed, the heading was left behind; this was caught by grepping
-             * the live bundle, so it was re-checked after the fix
-             * ([Build Log](../../../../docs/09-Build-Log.md)).
+             * Careful: when the cell's number changes, the heading must change
+             * with it ([Build Log](../../../../docs/09-Build-Log.md)).
              */
-            header: 'Designs',
+            header: 'Tasks',
             align: 'right' as const,
             className: 'hidden min-w-[92px] md:table-cell',
-            render: (c: LiveCard) => <DesignCell card={c} />,
+            render: (c: LiveCard) => <TaskCell card={c} />,
           },
         ]
       : []),

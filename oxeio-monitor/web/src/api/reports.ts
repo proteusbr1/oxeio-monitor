@@ -139,10 +139,10 @@ export interface AttendanceRow {
   onLeave: boolean;
   /** Careful: hours (decimal), not seconds. Show with `formatHoursAsDuration()`. */
   /**
-   * How many designs were finished that day (Complete button); `null` when 0.
-   * Careful: opened files are not counted (the owner's decision).
+   * How many tasks were finished that day (Complete button); `null` when 0.
+   * Careful: starts are not counted — only finished work.
    */
-  designsDone: number | null;
+  tasksDone: number | null;
   workedHours: number;
   idleHours: number;
   adjustmentHours: number;

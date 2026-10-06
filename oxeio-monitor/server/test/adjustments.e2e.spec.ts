@@ -297,11 +297,11 @@ describe('who can see (J08)', () => {
   });
 
   /**
-   * A researcher cannot see someone else's pay adjustments.
+   * A coordinator cannot see someone else's pay adjustments.
    *
    * Careful: this is the most valuable test today, and the reason is
    * frightening. `assertCanSee` had `if (role !== employee) return;`, i.e.
-   * "if not staff, let them see everything". The moment `researcher` was
+   * "if not staff, let them see everything". The moment a fourth role was
    * added to `UserRole`, the new role would fall into that very branch, skip
    * the guard entirely, and anyone's bonus-and-deduction figures would be
    * open.
@@ -314,7 +314,7 @@ describe('who can see (J08)', () => {
    * guards it: the next new value added to the enum must not slip in by
    * itself.
    */
-  it('a researcher cannot see others\' adjustments', async () => {
+  it('a coordinator cannot see others\' adjustments', async () => {
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     await owner.http
       .post(`/api/v1/employees/${employeeId}/time-adjustments`)
@@ -322,16 +322,16 @@ describe('who can see (J08)', () => {
       .send(body())
       .expect(201);
 
-    // The researcher has their own separate staff row, and the role `researcher`
+    // The coordinator has their own separate staff row, and the role `coordinator`
     const them = await h.prisma.employee.create({
-      data: { empCode: 'OX-78', fullName: 'Researcher', staffType: 'researcher' },
+      data: { empCode: 'OX-78', fullName: 'Coordinator' },
     });
     await h.prisma.user.create({
       data: {
         email: 'r-adj@test.local',
-        fullName: 'Researcher',
+        fullName: 'Coordinator',
         passwordHash: await hashPassword('staff-password-123'),
-        role: 'researcher',
+        role: 'coordinator',
         employeeId: them.id,
         mustChangePw: false,
       },

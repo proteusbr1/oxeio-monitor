@@ -9,7 +9,7 @@ namespace oXeio.Core.Tests;
 /// The work-day offset is process-wide state (<see cref="WorkTime.TrySet"/>),
 /// so every test that changes it lives in this collection: xUnit runs a
 /// collection with parallelisation disabled on its own, after the others.
-/// Without that, the Dhaka tests in other classes could see São Paulo's offset
+/// Without that, the tests in other classes could see São Paulo's offset
 /// halfway through.
 /// </summary>
 [CollectionDefinition(Name, DisableParallelization = true)]
@@ -19,9 +19,9 @@ public sealed class WorkTimeZoneCollection
 }
 
 /// <summary>
-/// The server may run on another zone without DST (<c>WORK_TIMEZONE</c>) and
-/// sends <c>utcOffsetMinutes</c> in the config. These tests check that:
-///  1. by default nothing changes — Asia/Dhaka, UTC+06:00;
+/// The server sends its zone (<c>WORK_TIMEZONE</c>) and <c>utcOffsetMinutes</c> in the
+/// config. These tests check that:
+///  1. without a config the agent counts in UTC (the tests pin UTC+06:00, see TestZone);
 ///  2. with America/Sao_Paulo (−180) days, the capture window and midnight
 ///     splits follow São Paulo's clock, across month and year boundaries.
 /// </summary>
@@ -38,12 +38,12 @@ public sealed class WorkTimeZoneTests : IDisposable
         new(y, mo, d, h, mi, 0, TimeSpan.Zero);
 
     [Fact]
-    public void Default_zone_is_UTC_plus_six()
+    public void Without_a_config_the_agent_counts_in_UTC_and_the_tests_in_UTC_plus_six()
     {
+        Assert.Equal("UTC", AgentConfig.Default.Timezone);
+        Assert.Equal(0, AgentConfig.Default.UtcOffsetMinutes);
         Assert.Equal(TimeSpan.FromHours(6), WorkTime.Offset);
-        Assert.Equal("Asia/Dhaka", WorkTime.TimeZoneName);
-        Assert.Equal("Dhaka", WorkTime.Label);
-        Assert.Equal(360, AgentConfig.Default.UtcOffsetMinutes);
+        Assert.Equal("Etc/GMT-6", WorkTime.TimeZoneName);
         Assert.Equal(new DateOnly(2026, 8, 9), WorkTime.WorkDateOf(Utc(2026, 8, 8, 18)));
     }
 
@@ -55,7 +55,7 @@ public sealed class WorkTimeZoneTests : IDisposable
 
         Assert.Equal(new DateOnly(2026, 8, 10), WorkTime.WorkDateOf(Utc(2026, 8, 11, 2, 59)));
         Assert.Equal(new DateOnly(2026, 8, 11), WorkTime.WorkDateOf(Utc(2026, 8, 11, 3)));
-        // 15:00 local — where the Dhaka offset used to turn the day
+        // 15:00 local — where a UTC+6 offset would turn the day
         Assert.Equal(new DateOnly(2026, 8, 11), WorkTime.WorkDateOf(Utc(2026, 8, 11, 18)));
         Assert.Equal(new TimeOnly(7, 5), WorkTime.LocalTimeOf(Utc(2026, 8, 11, 10, 5)));
         Assert.Equal(Utc(2026, 8, 12, 3), WorkTime.NextLocalMidnight(Utc(2026, 8, 11, 15)));
@@ -113,7 +113,7 @@ public sealed class WorkTimeZoneTests : IDisposable
     {
         Assert.False(WorkTime.TrySet(SaoPaulo, minutes));
         Assert.Equal(TimeSpan.FromHours(6), WorkTime.Offset);
-        Assert.Equal("Asia/Dhaka", WorkTime.TimeZoneName);
+        Assert.Equal("Etc/GMT-6", WorkTime.TimeZoneName);
     }
 
     [Fact]
@@ -228,9 +228,9 @@ public sealed class WorkTimeDaylightSavingTests : IDisposable
     [Fact]
     public void An_older_server_without_a_table_keeps_one_offset()
     {
-        Assert.True(WorkTime.TrySet("Asia/Dhaka", 360));
+        Assert.True(WorkTime.TrySet("Asia/Kolkata", 330));
         Assert.Equal(0, WorkTime.TransitionCount);
-        Assert.Equal(TimeSpan.FromHours(6), WorkTime.OffsetAt(Utc(2026, 7, 15, 12)));
-        Assert.Equal("Asia/Dhaka|360", WorkTime.ToMemoryLine());
+        Assert.Equal(TimeSpan.FromMinutes(330), WorkTime.OffsetAt(Utc(2026, 7, 15, 12)));
+        Assert.Equal("Asia/Kolkata|330", WorkTime.ToMemoryLine());
     }
 }

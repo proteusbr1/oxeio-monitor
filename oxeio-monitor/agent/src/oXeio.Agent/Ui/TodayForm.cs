@@ -264,7 +264,7 @@ internal sealed class TodayForm : OwnerDrawnForm
         stack.Gap(6);
 
         // ── this month ────────────────────────────────────────────────────
-        var pace = PaceOf(status, now);
+        var pace = PaceOf(status);
 
         stack.TargetRow(
             "This month",
@@ -412,13 +412,8 @@ internal sealed class TodayForm : OwnerDrawnForm
          * write "0:00 ahead": a compliment on a new employee's first day with not a single
          * observation behind it.
          *
-         * Careful: **this branch comes before `PaceOf`**, and that is the whole point: placed
-         * later, the estimate (`MonthlyPace.Estimate`) would already have been chosen, and it
-         * counts from the 1st of the month, so it would show exactly those unobserved days as a
-         * shortfall. Fixing one false reassurance would create a false accusation in the other
-         * direction.
          */
-        var view = MonthlyPace.ViewFor(status.PaceObserved, status.Pace, pace);
+        var view = MonthlyPace.ViewFor(status.PaceObserved, pace);
 
         if (view is MonthlyPace.PaceView.NotObserved)
         {
@@ -439,10 +434,6 @@ internal sealed class TodayForm : OwnerDrawnForm
         // every staff member who is "behind" would see "0:00 behind".
         var text = UiText.Duration(value.Duration()) + (ahead ? " ahead" : " behind");
 
-        // Careful: if it is our guess and not the server's number, it must not be hidden; the
-        // word is our admission that we do not know about holidays.
-        if (view is MonthlyPace.PaceView.Estimated) text += " (estimated)";
-
         // Being behind is **amber**, not red. In this window red is only for "data is not
         // reaching the server": that is a system failure, and being behind is not an incident.
         stack.Legend(left, text, ahead ? Theme.Ok : Theme.Idle);
@@ -451,17 +442,11 @@ internal sealed class TodayForm : OwnerDrawnForm
     /// <summary>
     /// "Ahead or behind" (B05b/J02).
     ///
-    /// If the server sends the number, that is what is used: it is the dashboard's number, and
-    /// seeing two numbers in two places makes staff assume one is lying.
-    /// If the server does not send it, <see cref="MonthlyPace"/>'s estimate, with "estimated"
-    /// in the label itself. Careful: do not remove that word; it is our admission that we do
-    /// not know about holidays.
-    ///
-    /// If there is no target at all (target 0) the line is omitted: "0:00 hours ahead" is meaningless.
+    /// Only the server's number: it is the dashboard's number, worked out with the real
+    /// working days, and seeing two numbers in two places makes staff assume one is lying.
+    /// No number (no target, or an old server) = no line: "0:00 hours ahead" is meaningless.
     /// </summary>
-    private static TimeSpan? PaceOf(AgentStatus status, DateTimeOffset now) =>
-        status.Pace
-        ?? MonthlyPace.Estimate(status.ActiveThisMonth, status.MonthlyTargetHours, now);
+    private static TimeSpan? PaceOf(AgentStatus status) => status.Pace;
 
     /// <summary>
     /// What is written in the pill next to the number.

@@ -13,7 +13,7 @@ import { parseStaff, shouldSeedSampleStaff } from '../prisma/parse-staff';
  * So the messages are tested too: "it stopped" is not enough, it must say
  * where.
  */
-const ROW = ['OX-01', 'Rakib Hasan', 'Designer', 25000] as const;
+const ROW = ['OX-01', 'Rakib Hasan', 'Accountant', 25000] as const;
 
 const one = (row: unknown) => () => parseStaff([row]);
 
@@ -23,7 +23,7 @@ describe('parseStaff: happy path', () => {
       {
         empCode: 'OX-01',
         fullName: 'Rakib Hasan',
-        designation: 'Designer',
+        designation: 'Accountant',
         monthlySalary: 25000,
       },
     ]);
@@ -57,7 +57,7 @@ describe('parseStaff: happy path', () => {
   });
 
   it('trims whitespace', () => {
-    const [row] = parseStaff([[' OX-01 ', ' Rakib ', ' Designer ', 25000]]);
+    const [row] = parseStaff([[' OX-01 ', ' Rakib ', ' Accountant ', 25000]]);
     expect(row).toMatchObject({ empCode: 'OX-01', fullName: 'Rakib' });
   });
 
@@ -73,7 +73,7 @@ describe('parseStaff: catching mistakes', () => {
 
   /** Three cells means salary `undefined`, which gives an unclear Prisma error. */
   it('stops when there are too few cells', () => {
-    expect(one(['OX-01', 'Rakib', 'Designer'])).toThrow(/four or five cells/);
+    expect(one(['OX-01', 'Rakib', 'Accountant'])).toThrow(/four or five cells/);
   });
 
   it('also stops when there are too many cells', () => {
@@ -82,20 +82,20 @@ describe('parseStaff: catching mistakes', () => {
 
   /** Putting quotes around a number in JSON is a very common mistake. */
   it('stops when the salary is written as a string', () => {
-    expect(one(['OX-01', 'Rakib', 'Designer', '25000'])).toThrow(/without quotes/);
+    expect(one(['OX-01', 'Rakib', 'Accountant', '25000'])).toThrow(/without quotes/);
   });
 
   /** The column is `Int`: a fraction would silently lose the paisa. */
   it('stops on a fractional salary', () => {
-    expect(one(['OX-01', 'Rakib', 'Designer', 25000.5])).toThrow(/fraction/);
+    expect(one(['OX-01', 'Rakib', 'Accountant', 25000.5])).toThrow(/fraction/);
   });
 
   it('stops on a negative salary', () => {
-    expect(one(['OX-01', 'Rakib', 'Designer', -1])).toThrow(/negative/);
+    expect(one(['OX-01', 'Rakib', 'Accountant', -1])).toThrow(/negative/);
   });
 
   it('stops when the name is empty', () => {
-    expect(one(['OX-01', '   ', 'Designer', 25000])).toThrow(/name — must be text/);
+    expect(one(['OX-01', '   ', 'Accountant', 25000])).toThrow(/name — must be text/);
   });
 
   /**

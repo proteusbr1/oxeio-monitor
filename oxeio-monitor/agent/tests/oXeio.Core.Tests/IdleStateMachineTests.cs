@@ -11,7 +11,7 @@ public class IdleStateMachineTests
 {
     private static readonly TimeSpan Threshold = TimeSpan.FromSeconds(60);
     private static readonly DateTimeOffset Start =
-        new(2026, 8, 9, 4, 0, 0, TimeSpan.Zero); // 10 AM in Dhaka
+        new(2026, 8, 9, 4, 0, 0, TimeSpan.Zero); // 10 AM local (UTC+6 in tests)
 
     private static IdleStateMachine New(DateTimeOffset? at = null) =>
         new(Threshold, at ?? Start);
@@ -170,7 +170,7 @@ public class IdleStateMachineTests
     [Fact]
     public void Crossing_midnight_splits_the_segment_across_two_dates()
     {
-        // 23:50 in Dhaka = 17:50Z
+        // 23:50 local (UTC+6 in tests) = 17:50Z
         var lateNight = new DateTimeOffset(2026, 8, 8, 17, 50, 0, TimeSpan.Zero);
         var sm = New(lateNight);
 

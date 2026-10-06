@@ -1,5 +1,6 @@
 import { getAttendanceReport, type AttendanceRow } from '../../api/reports';
 import { useApi } from '../../api/useApi';
+import { useFeatures } from '../../features/FeaturesContext';
 import { Card, Stat, StatRow } from '../../components/Card';
 import { Hours } from '../../components/Duration';
 import { Empty, ErrorBox, Loading } from '../../components/States';
@@ -32,6 +33,7 @@ export function AttendanceTab({
   to: string;
   employeeId: number | null;
 }) {
+  const { features } = useFeatures();
   const { data, error, loading, reload } = useApi(
     (signal) =>
       // Careful: `employeeId: null` must not be sent; `qs()` drops null, so "everyone"
@@ -126,30 +128,33 @@ export function AttendanceTab({
       render: (row) => <Hours hours={row.targetHours} tone="muted" />,
     },
     /**
-     * **Designs finished today**, per designer.
+     * **Tasks finished that day**, per person — only while the Tasks module is on.
      *
-     * Careful: the number already existed in Excel but **not on screen**, so you had
-     * to download the file to see it.
+     * Careful: the number is in the Excel file too ("Tasks done"); on screen it
+     * saves a download.
      *
-     * Careful: there used to be two columns (Opened and Finished). **"Opened" was
-     * removed** (owner's decision): that count could not tell "who makes" apart from
-     * "who views".
+     * Careful: only "finished" is counted; a start cannot tell the one who does
+     * the work from the one who looks at it.
      *
-     * Careful: the cell is **empty** at 0, not "0". A 0 in the row of a non-design
-     * employee would mean "measured and found zero", which would be false.
+     * Careful: the cell is **empty** at 0, not "0". A 0 in the row of someone who
+     * never receives tasks would mean "measured and found zero", which would be false.
      */
-    {
-      key: 'designs',
-      header: 'Designs',
-      align: 'right',
-      render: (row) =>
-        row.designsDone === null ? (
-          <span className="text-ink-3">—</span>
-        ) : (
-          // Green: the only number that means "work finished"
-          <span className="num font-medium text-ok">{row.designsDone}</span>
-        ),
-    },
+    ...(features.tasks
+      ? [
+          {
+            key: 'tasks',
+            header: 'Tasks done',
+            align: 'right' as const,
+            render: (row: AttendanceRow) =>
+              row.tasksDone === null ? (
+                <span className="text-ink-3">—</span>
+              ) : (
+                // Green: the only number that means "work finished"
+                <span className="num font-medium text-ok">{row.tasksDone}</span>
+              ),
+          },
+        ]
+      : []),
   ];
 
   return (

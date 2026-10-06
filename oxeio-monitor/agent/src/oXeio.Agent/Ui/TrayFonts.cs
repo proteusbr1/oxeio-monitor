@@ -65,10 +65,9 @@ internal sealed class TrayFonts : IDisposable
     /// version since Vista, long before our minimum target of Windows 10 1809.
     /// The other two are just a safety net in case someone uninstalls the system font.
     ///
-    /// Careful: this used to list "Nirmala UI"/"Shonar Bangla"/"Vrinda" first, because the
-    /// text was in Bengali. Now that all text on screen is English, that list is not just
-    /// unnecessary but harmful: Nirmala UI is made for Indic scripts, its Latin metrics are
-    /// unlike Segoe UI's, and next to the rest of Windows's UI the window looked out of place.
+    /// Careful: do not put a font made for another script (Nirmala UI and the like) first:
+    /// its Latin metrics are unlike Segoe UI's, and next to the rest of Windows's UI the
+    /// window looks out of place.
     /// </summary>
     private static readonly string[] Candidates =
     [

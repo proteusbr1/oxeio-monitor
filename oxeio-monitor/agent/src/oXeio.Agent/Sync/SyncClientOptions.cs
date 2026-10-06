@@ -13,7 +13,7 @@ namespace oXeio.Agent.Sync;
 internal sealed record SyncClientOptions
 {
     /// <summary>
-    /// The server's base URL, e.g. <c>https://oxeio.office.local/api/v1</c>.
+    /// The server's base URL, e.g. <c>https://monitor.example.com/api/v1</c>.
     ///
     /// Careful: without a trailing '/', <see cref="Uri"/>'s relative-join rules <b>cut off</b>
     /// the last segment: "…/api/v1" + "agent/segments" = "…/api/agent/segments".

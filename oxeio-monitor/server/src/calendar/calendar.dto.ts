@@ -95,12 +95,12 @@ export class CreateWorkPolicyDto {
   screenshotsEnabled?: boolean;
 
   /**
-   * The designer's daily target (owner's request 25).
+   * Tasks per day for people who receive tasks (default 25).
    * Careful: 0 is **valid**: the target is off, but counting continues.
    * Careful: the ceiling of 500 is for catching typos, not for policy.
    */
   @IsOptional() @IsInt() @Min(0) @Max(500)
-  dailyDesignTarget?: number;
+  dailyTaskTarget?: number;
 }
 export class UpdateWorkPolicyDto {
   @IsOptional() @IsString() @MinLength(1) @MaxLength(120)
@@ -166,12 +166,12 @@ export class UpdateWorkPolicyDto {
   screenshotsEnabled?: boolean;
 
   /**
-   * The designer's daily target (owner's request 25).
+   * Tasks per day for people who receive tasks (default 25).
    * Careful: 0 is **valid**: the target is off, but counting continues.
    * Careful: the ceiling of 500 is for catching typos, not for policy.
    */
   @IsOptional() @IsInt() @Min(0) @Max(500)
-  dailyDesignTarget?: number;
+  dailyTaskTarget?: number;
 }
 // ── holidays ────────────────────────────────────────────────────────────────
 

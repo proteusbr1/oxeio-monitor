@@ -60,6 +60,17 @@ const SECTIONS: { title: string; tabs: TabDef[] }[] = [
             : 'Hours target, idle threshold, days off and holidays',
         managerSubtitle: 'Days off — the hours target moves with them',
       },
+      /**
+       * The choices inside the Tasks module (start detection) — owner only,
+       * like Privacy for screenshots; Modules only switches it on or off.
+       */
+      {
+        id: 'tasks',
+        label: 'Tasks',
+        manager: false,
+        subtitle: 'Which apps show that a task was started',
+        feature: 'tasks',
+      },
     ],
   },
   {

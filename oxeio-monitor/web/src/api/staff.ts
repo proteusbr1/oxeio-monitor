@@ -20,24 +20,16 @@ import { qs } from './query';
  */
 
 export type EmployeeStatus = 'active' | 'inactive';
-/** Careful: not `UserRole` (who sees what); this is "what work they do". */
-export type StaffType = 'designer' | 'researcher' | 'manager';
-export const STAFF_TYPE_LABEL: Record<StaffType, string> = {
-  designer: 'Designer',
-  researcher: 'Researcher',
-  manager: 'Manager',
-};
 /**
  * The portal role: which screens a person gets into.
  *
- * Careful: do not confuse it with `StaffType`: that is what work they do, this is
- * what they can see. The names overlap, which is why the mistake is easy.
+ * Careful: do not confuse it with `receivesTasks` on the staff row: that is
+ * whether work is handed to them, this is what they can see.
  *
- * `researcher` was added because researchers and designers do different work, so
- * their access should differ. Until then both had the role `employee`, and the
- * difference hid in another table.
+ * `coordinator` adds and checks tasks but otherwise sees only their own data,
+ * like `employee`.
  */
-export type Role = 'owner' | 'manager' | 'researcher' | 'employee';
+export type Role = 'owner' | 'manager' | 'coordinator' | 'employee';
 /**
  * The roles that can be assigned from the dropdown; `owner` is deliberately left out.
  *
@@ -63,23 +55,21 @@ export interface EmployeeView {
   email: string | null;
   designation: string | null;
   /**
-   * Kind of work; rules apply only to this.
+   * Whether tasks are handed to them each morning (the Tasks module).
    *
-   * Careful: not a replacement for `designation`, which is a job title (free text);
-   * this is a category.
-   * Careful: `null` means "not set"; target calculations then skip this employee
-   * rather than treat it as zero.
+   * Careful: not a job title — `designation` is that (free text); this is
+   * the one switch the hand-out reads.
    */
-  staffType: StaffType | null;
+  receivesTasks: boolean;
   department: string | null;
   /**
-   * This designer's own daily design target.
+   * Their own daily task target; applies only while `receivesTasks`.
    *
    * Careful: `null` = not set, so the policy's number (25) applies. Not zero.
-   * Careful: `0` = target switched off; counting continues, but nobody is "behind".
+   * Careful: `0` = no target; they still receive tasks, but nobody is "behind".
    * These are two different states, which is why this is `number | null`.
    */
-  dailyDesignTarget: number | null;
+  dailyTaskTarget: number | null;
   policyId: number | null;
   /** `YYYY-MM-DD` */
   joinedOn: string | null;
@@ -99,8 +89,8 @@ export interface EmployeeView {
    */
   /**
    * Careful: the type is borrowed from `Role`, not a hand-written list. It used to
-   * say `'owner' | 'manager' | 'employee'`, and when `researcher` was added it
-   * silently fell behind: comparing a researcher's role made TypeScript say "these
+   * say `'owner' | 'manager' | 'employee'`, and when a fourth role was added it
+   * silently fell behind: comparing that role made TypeScript say "these
    * have nothing in common".
    */
   portalRole: Role | null;
@@ -157,9 +147,9 @@ export interface CreateEmployeeBody {
   email?: string;
   designation?: string;
   department?: string;
-  staffType?: StaffType;
-  /** Careful: if omitted or `null`, the policy target applies; `0` = switched off. */
-  dailyDesignTarget?: number | null;
+  receivesTasks?: boolean;
+  /** Careful: if omitted or `null`, the policy target applies; `0` = no target. */
+  dailyTaskTarget?: number | null;
   policyId?: number;
   /**
    * Careful: money must be sent as a string (`'13000'` or `'13000.50'`). As a JSON
@@ -181,11 +171,11 @@ export type UpdateEmployeeBody = Partial<{
   email: string | null;
   designation: string | null;
   department: string | null;
-  staffType: StaffType | null;
+  receivesTasks: boolean;
   /**
-   * Careful: `null` = "delete my own number, use the policy"; `0` = target switched off.
+   * Careful: `null` = "delete my own number, use the policy"; `0` = no target.
    */
-  dailyDesignTarget: number | null;
+  dailyTaskTarget: number | null;
   policyId: number | null;
   monthlySalary: string | null;
   payBasis: PayBasis;

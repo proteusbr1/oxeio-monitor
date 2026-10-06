@@ -51,15 +51,15 @@ function workStamp(): string {
 
 /**
  * Careful: `Record<Role, ...>`, not `Record<string, ...>`; this change is the real
- * work here. It used to be `string`, so when the `researcher` role was added the
+ * work here. It used to be `string`, so when a fourth role was added the
  * compiler said nothing, and the name silently showed in the screen corner as
- * `researcher` (lowercase, the raw value). Now when the enum grows, the error
+ * the raw lowercase value. Now when the enum grows, the error
  * appears right here.
  */
 const ROLE_LABEL: Record<Role, string> = {
   owner: 'Owner',
   manager: 'Manager',
-  researcher: 'Researcher',
+  coordinator: 'Coordinator',
   employee: 'Staff',
 };
 

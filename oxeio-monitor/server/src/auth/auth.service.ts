@@ -25,7 +25,7 @@ import type { SessionUser } from './types';
  * Careful: the guard formula is **borrowed from the rules file**, not written
  * again here, so the server's guard and the session's flag are tied to the same line.
  */
-import { canUseTargets } from '../targets/targets.rules';
+import { canUseTasks } from '../tasks/tasks.rules';
 
 /**
  * A login can end three ways, hence a discriminated union. Expressing it with
@@ -63,23 +63,24 @@ export interface MeResult {
    */
   canSeeScreenshots: boolean;
   /**
-   * **Whether this user may submit design targets.** (22 August)
+   * **Whether this user may add tasks and see the task pool.**
    *
-   * Careful: **why a ready-made answer and not the raw `staffType`.** The rule
-   * is "owner, manager, **or** staffType = researcher"; sending the raw value
-   * would force the web to **rewrite** that condition, and one day the server
-   * and the screen would disagree (someone would see the menu but get a 403,
-   * or the reverse). The server decides, the web only obeys. The condition is
-   * the exact twin of `TargetsService.assertCanSubmit()`.
+   * Careful: **why a ready-made answer and not the raw role.** The rule is
+   * "owner, manager or coordinator"; sending only the role would force the web
+   * to **rewrite** that condition, and one day the server and the screen would
+   * disagree (someone would see the menu but get a 403, or the reverse). The
+   * server decides, the web only obeys. The condition is the exact twin of
+   * `TasksService.assertCanUse()`.
    */
-  canAddTargets: boolean;
+  canAddTasks: boolean;
   /**
-   * **Whether this user can proofread spelling** (ADR-038).
+   * **Whether this user can check finished tasks** (the QA step).
    *
-   * Careful: **separate** from `canAddTargets`. Every researcher can submit
-   * targets, but only those the owner has ticked do spell checking.
+   * Careful: **separate** from `canAddTasks` although the formula is the same
+   * today: the two cover different things on screen (a menu item versus a row
+   * button).
    */
-  canProofread: boolean;
+  canCheckTasks: boolean;
 }
 
 @Injectable()
@@ -214,13 +215,9 @@ export class AuthService {
   async me(userId: number): Promise<MeResult> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      // Careful: the work type is needed for `canAddTargets`: researchers sign
-      // in with the `employee` role, so the role alone cannot tell
       /**
-       * Careful: `include: { employee: ... }` used to be here, because
-       * `canAddTargets` and `canProofread` had to be read from **another
-       * table**. Since the `researcher` role arrived on 25 August, both come
-       * straight from the role, so the join is **gone from every `/auth/me` call**.
+       * Careful: no join: `canAddTasks` and `canCheckTasks` come straight
+       * from the role.
        */
     });
     if (!user || !user.isActive) {
@@ -243,11 +240,11 @@ export class AuthService {
        * names, deliberately. On screen they cover two different things (a menu
        * item versus a row button), and keeping separate condition names means
        * changing one later does not require hunting for the other. The formula
-       * is written **in one place** in `canUseTargets`, so even with separate
+       * is written **in one place** in `canUseTasks`, so even with separate
        * names the two can never silently diverge.
        */
-      canAddTargets: canUseTargets(user.role),
-      canProofread: canUseTargets(user.role),
+      canAddTasks: canUseTasks(user.role),
+      canCheckTasks: canUseTasks(user.role),
     };
   }
 
@@ -386,7 +383,7 @@ export class AuthService {
      * to the enum tomorrow it **should not slip in here by itself** (the
      * controller's `@IsIn` has the same list).
      */
-    role: 'employee' | 'researcher' | 'manager',
+    role: 'employee' | 'coordinator' | 'manager',
     ip: string,
   ): Promise<{ id: number; email: string; role: UserRole }> {
     const target = await this.prisma.user.findUnique({

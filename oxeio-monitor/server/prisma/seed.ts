@@ -345,9 +345,9 @@ const STAFF: StaffRow[] = loadStaff();
 /** Department derived from designation, to group reports by team. */
 function departmentOf(designation: string): string {
   if (designation === 'Manager') return 'Management';
-  if (designation === 'Designer') return 'Design';
-  if (designation === 'Researcher') return 'Research';
-  return 'Intern';
+  if (designation === 'Accountant') return 'Finance';
+  if (designation === 'Analyst') return 'Operations';
+  return 'General';
 }
 
 async function seedEmployees(policyId: number): Promise<number> {

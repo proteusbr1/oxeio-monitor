@@ -352,7 +352,7 @@ internal sealed partial class AgentHost
          *
          * `slot.SlotStart` is UTC (`SlotScheduler.FloorToSlot` gives a zero offset), but the
          * **timestamp** of this line is written by `FileLog` in local time (`DateTimeOffset.Now`,
-         * for example +06:00 in Dhaka). If the two were not in one zone, the log would show
+         * for example -03:00 in São Paulo). If the two were not in one zone, the log would show
          * "22:14 ... slot 16:10" side by side: two times for one event, and whoever reads the log
          * during an incident would have to add the zone's offset in their head.
          * This confusion was caught in the G137 investigation.

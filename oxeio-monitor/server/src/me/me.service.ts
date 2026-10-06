@@ -1,12 +1,8 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 
 import { ProgressService, type EmployeeProgress } from '../agent/progress.service';
-import { workDateOf } from '../agent/util/work-time';
-import {
-  designTargetOf,
-  designView,
-  type DesignView,
-} from '../summary/design.rules';
+import { localMidnightOf, nextLocalMidnight, workDateOf } from '../agent/util/work-time';
+import { taskTargetOf, taskView, type TaskView } from '../summary/task-start.rules';
 import { DepositsService } from '../deposits/deposits.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { parseWorkDate, toIsoDate } from '../reports/reports.range';
@@ -38,14 +34,15 @@ export interface MySummary {
   /** whether they can open the pictures of their own screen (Settings → Privacy) */
   canSeeOwnScreenshots: boolean;
   /**
-   * **Today's designs**: `null` when there is nothing to show.
+   * **Tasks finished today** (`{ done, target, met }`): `null` when there is
+   * nothing to show or the Tasks module is off.
    *
    * Staff see this themselves **on purpose**: the number they are measured by
    * should be available to them too. By the same logic `policySignedAt` and
    * the retention are on this page.
    * `null` means "this measure does not apply to you", not zero.
    */
-  designs: DesignView | null;
+  tasks: TaskView | null;
 }
 
 /** One day's row in the employee's own list */
@@ -70,7 +67,7 @@ export const MY_DAYS_MAX = 92;
 /**
  * **J04 · J05 · J08** — the employee's **own** data.
  *
- * <b>There is no `employeeId` parameter here, and that is the core design.</b>
+ * <b>There is no `employeeId` parameter here, and that is the core of the module.</b>
  * With an id in the path a staff member could change the number and see a
  * colleague's whole day; the doc of `employee-activity.controller.ts` states
  * the same worry (the staff's own view must go on a separate path). The id
@@ -124,7 +121,7 @@ export class MeService {
     const employeeId = this.employeeIdOf(actor);
 
     const [features, privacy] = await Promise.all([this.features.all(), this.privacy.get()]);
-    const [employee, progress, designsDone] = await Promise.all([
+    const [employee, progress, tasksDone] = await Promise.all([
       this.prisma.employee.findUniqueOrThrow({
         where: { id: employeeId },
         select: {
@@ -133,16 +130,25 @@ export class MeService {
           designation: true,
           joinedOn: true,
           policySignedAt: true,
-          staffType: true,
-          dailyDesignTarget: true,
-          policy: { select: { dailyDesignTarget: true, screenshotsEnabled: true } },
+          receivesTasks: true,
+          dailyTaskTarget: true,
+          policy: { select: { dailyTaskTarget: true, screenshotsEnabled: true } },
         },
       }),
       this.progress.forEmployee(employeeId, now),
-      // Designs claimed today (indexed on employee_id, first_work_date)
-      this.prisma.designCredit.count({
-        where: { employeeId, firstWorkDate: workDateOf(now) },
-      }),
+      /**
+       * Tasks **finished** in today's work day, counted by assignee: the same
+       * number the Live board, the digest and the reports show (starting a
+       * task is not finishing it).
+       */
+      features.tasks
+        ? this.prisma.task.count({
+            where: {
+              assignedToId: employeeId,
+              completedAt: { gte: localMidnightOf(now), lt: nextLocalMidnight(now) },
+            },
+          })
+        : Promise.resolve(0),
     ]);
 
     return {
@@ -159,18 +165,17 @@ export class MeService {
       appsTracked: features.appTracking,
       canSeeOwnScreenshots: features.screenshots && privacy.staffSeeOwnScreenshots,
       /**
-       * The rule lives in one place (`designView`) and has three states: with a
-       * target, a bare count without a target, and nothing. All four screens call
+       * The rule lives in one place (`taskView`) and has three states: with a
+       * target, a bare count without a target, and nothing. The screens call
        * the same function, so two screens can never disagree.
        */
-      designs: designView(
-        employee.staffType,
-        designsDone,
-        designTargetOf(
-          employee.dailyDesignTarget,
-          employee.policy?.dailyDesignTarget,
-        ),
-      ),
+      tasks: features.tasks
+        ? taskView(
+            employee.receivesTasks,
+            tasksDone,
+            taskTargetOf(employee.dailyTaskTarget, employee.policy?.dailyTaskTarget),
+          )
+        : null,
     };
   }
 

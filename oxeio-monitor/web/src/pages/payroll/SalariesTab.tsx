@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { listEmployees, STAFF_TYPE_LABEL, updateEmployee, type EmployeeView, type PayBasis } from '../../api/staff';
+import { listEmployees, updateEmployee, type EmployeeView, type PayBasis } from '../../api/staff';
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Page';
@@ -35,9 +35,9 @@ export function SalariesTab() {
       render: (e) => <PersonCell fullName={e.fullName} empCode={e.empCode} />,
     },
     {
-      key: 'type',
-      header: 'Work type',
-      render: (e) => (e.staffType ? STAFF_TYPE_LABEL[e.staffType] : '—'),
+      key: 'title',
+      header: 'Job title',
+      render: (e) => e.designation ?? '—',
     },
     {
       key: 'joined',

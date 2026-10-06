@@ -355,9 +355,9 @@ export class ScreenshotsService {
      * Careful: the condition is **"is owner or manager"**, not "is not
      * employee", and the difference is not one of letters but of security.
      *
-     * It was caught when `researcher` was added to `UserRole`: the earlier
+     * It was caught when a fourth role was added to `UserRole`: the earlier
      * `role !== employee` condition would send any new role **down this
-     * branch**, and `null` means *no filter*, so researchers would have seen
+     * branch**, and `null` means *no filter*, so that role would have seen
      * **everyone's screenshots, for every day**. There would be no compile
      * error, no failing test, and nobody would say anything.
      *
@@ -429,7 +429,7 @@ export class ScreenshotsService {
      * Careful: when an employee calls it, only their own: exactly the gallery's
      * rule. Written separately here, one day one would change and not the other.
      */
-    // the same rule as the gallery — a researcher sees only their own too
+    // the same rule as the gallery — a coordinator sees only their own too
     const mine = await this.scopeFor(actor);
 
     const where = {
@@ -537,8 +537,8 @@ export class ScreenshotsService {
          * Marks viewing one's own photos (J05); E11 can tell these apart.
          *
          * Careful: this used to be `role === employee`, a guess from the role.
-         * After the `researcher` role arrived it would have become false:
-         * researchers are also measured and view their own photos, yet the
+         * After the `coordinator` role arrived it would have become false:
+         * coordinators are also measured and view their own photos, yet the
          * audit log would have recorded it as **viewing someone else's**. Now
          * the question is direct: are the rows their own? Whatever the role,
          * the answer does not change.

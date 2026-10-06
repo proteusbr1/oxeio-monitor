@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { LiveCard } from '../src/api/dashboard';
 import {
   dayDuty,
-  designView,
+  taskView,
   meterKind,
   restingStartsAt,
   rosterRows,
@@ -23,13 +23,13 @@ function card(over: Partial<LiveCard> = {}): LiveCard {
     employeeId: 1,
     empCode: 'OX-01',
     fullName: 'Rakib Hasan',
-    designation: 'Researcher',
-    // Design target: does not apply to researchers
-    staffType: 'researcher',
-    designsDone: 0,
-    // "Finished" is a separate field: opened and finished are not the same
-    designsFinished: 0,
-    designTargetPerDay: 25,
+    designation: 'Coordinator',
+    // The task target: does not apply to someone who does not receive tasks
+    receivesTasks: false,
+    tasksStarted: 0,
+    // "Done" is a separate field: started and finished are not the same
+    tasksDone: 0,
+    taskTargetPerDay: 25,
     status: 'active',
     todayWorkedSec: 3_600,
     dailyTargetSec: 28_800,
@@ -154,75 +154,70 @@ describe('restingStartsAt — where the stragglers band goes', () => {
   });
 });
 
-describe('designView — the designs of today', () => {
+describe('taskView — the tasks of today', () => {
   /**
-   * **Only "finished" counts.** The owner's decision: opening a file does not
-   * count, only completing does.
-   *
-   * Careful: **why this changed.** The "opened" count used to be shown, and
-   * `met` used it too. In the field, a manager (OX-01) showed **16**, though
-   * they had spent a total of **44 minutes** on 19 files, **opening and looking**
-   * at them, not making them.
+   * **Only "finished" counts.** A start (a window title with the task number)
+   * only says something was opened, which cannot tell the one who does the
+   * work from the one who looks at it.
    *
    * This block guards that decision: if someone silently switches to
-   * `designsDone` (opened), the tests below will break.
+   * `tasksStarted`, the tests below will break.
    */
-  it('opening a file does not count, only Complete', () => {
+  it('a start does not count, only Complete', () => {
     /**
-     * Careful: **exactly the case seen in the field**: a manager opened 100
-     * files but marked none finished. This used to show "100"; now it shows nothing.
-     *
-     * A manager was chosen on purpose: if a designer had a target,
-     * showing `0 / 25` is right (they are under measurement), so it would not be `null`.
+     * Careful: someone who receives tasks with **no target** (0) was chosen on
+     * purpose: with a target, `0 / 25` is right (they are under measurement),
+     * so it would not be `null`.
      */
     expect(
-      designView(card({ staffType: 'manager', designsDone: 100, designsFinished: 0 })),
+      taskView(card({ receivesTasks: true, taskTargetPerDay: 0, tasksStarted: 100, tasksDone: 0 })),
     ).toBeNull();
 
-    /** Not one opened, but 3 marked finished: the number appears */
+    /** Not one started, but 3 marked finished: the number appears */
     expect(
-      designView(card({ staffType: 'manager', designsDone: 0, designsFinished: 3 })),
+      taskView(card({ receivesTasks: true, taskTargetPerDay: 0, tasksStarted: 0, tasksDone: 3 })),
     ).toEqual({ done: 3, target: null, met: false });
 
-    /** Careful: a designer is shown even at zero: they have a target, so the measure applies */
+    /** Careful: someone with a target is shown even at zero: the measure applies */
     expect(
-      designView(card({ staffType: 'designer', designsDone: 100, designsFinished: 0 })),
+      taskView(card({ receivesTasks: true, tasksStarted: 100, tasksDone: 0 })),
     ).toEqual({ done: 0, target: 25, met: false });
   });
 
   /**
-   * **The owner's choice.** Staff type changes: a manager designs too.
-   * Careful: after a change of type the number was vanishing, though the work was real.
+   * Someone who does not receive tasks may still finish one (the owner or a
+   * manager marked it for them, or the switch was turned off later): the
+   * number is real, so it shows — with no target.
    */
-  it('not a designer but finished work: the number shows, with no target', () => {
-    const view = designView(card({ staffType: 'manager', designsFinished: 43 }));
+  it('finished work without a target: the number shows, with no target', () => {
+    const view = taskView(card({ receivesTasks: false, tasksDone: 43 }));
     expect(view).toEqual({ done: 43, target: null, met: false });
   });
 
-  /** Careful: nobody without a target ever has `met` true, even at 43 > 25 */
+  /** Careful: nobody without a target is ever green, even at 999 > 25 */
   it('nobody without a target is ever green', () => {
+    expect(taskView(card({ receivesTasks: false, tasksDone: 999 }))?.met).toBe(false);
     expect(
-      designView(card({ staffType: 'manager', designsFinished: 999 }))?.met,
+      taskView(card({ receivesTasks: true, taskTargetPerDay: 0, tasksDone: 999 }))?.met,
     ).toBe(false);
   });
 
-  it('calculation with the designer target', () => {
-    expect(
-      designView(card({ staffType: 'designer', designsFinished: 25 })),
-    ).toEqual({ done: 25, target: 25, met: true });
+  it('calculation with the task target', () => {
+    expect(taskView(card({ receivesTasks: true, tasksDone: 25 }))).toEqual({
+      done: 25,
+      target: 25,
+      met: true,
+    });
 
-    expect(
-      designView(card({ staffType: 'designer', designsFinished: 24 }))?.met,
-    ).toBe(false);
+    expect(taskView(card({ receivesTasks: true, tasksDone: 24 }))?.met).toBe(false);
   });
 
   /** Careful: nothing if no work: reading "0" feels like an accusation */
-  it('shows nothing when no design was made', () => {
-    expect(designView(card({ staffType: 'researcher', designsFinished: 0 }))).toBeNull();
-    expect(designView(card({ staffType: null, designsDone: 0 }))).toBeNull();
+  it('shows nothing when no task was finished and there is no target', () => {
+    expect(taskView(card({ receivesTasks: false, tasksDone: 0 }))).toBeNull();
+    expect(taskView(card({ receivesTasks: false, tasksStarted: 5 }))).toBeNull();
   });
 });
-
 
 describe('G130 — what is expected today, and why not', () => {
   it('an ordinary working day: there is a target', () => {

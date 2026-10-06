@@ -24,15 +24,15 @@ import type { SessionUser } from '../auth/types';
  */
 class ChangeRoleDto {
   /**
-   * `researcher` was added later; `owner` is still excluded (ADR-011d).
+   * `coordinator` adds and checks tasks; `owner` is still excluded (ADR-011d).
    *
    * Careful: the list is written by hand rather than borrowed from `UserRole`,
    * on purpose. If a new value is added to the enum tomorrow, it must not
    * slip in here by itself. Widening the role-assignment list is a decision,
    * not an accident.
    */
-  @IsIn(['employee', 'researcher', 'manager'])
-  role!: 'employee' | 'researcher' | 'manager';
+  @IsIn(['employee', 'coordinator', 'manager'])
+  role!: 'employee' | 'coordinator' | 'manager';
 }
 
 class ChangeEmailDto {

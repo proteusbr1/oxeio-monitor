@@ -8,7 +8,7 @@ namespace oXeio.Agent.Tests;
 /// <summary>
 /// The work-day zone, from the wire to the disk. These tests change the
 /// process-wide offset in <see cref="WorkTime"/>, so they run on their own
-/// (see the collection), never next to tests that count Dhaka days.
+/// (see the collection), never next to tests that count days in the test zone.
 /// </summary>
 [CollectionDefinition(Name, DisableParallelization = true)]
 public sealed class WorkZoneCollection

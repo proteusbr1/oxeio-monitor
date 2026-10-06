@@ -1,12 +1,12 @@
 /**
- * Open many links in new tabs at once (the owner's request: a button to open all
- * 30 designs together).
+ * Open many links in new tabs at once (a button to open the links of all 30
+ * tasks in hand together).
  *
  * Careful: the browser blocks from the second tab on, and that is the whole
  * reason for this file. Several `window.open()` calls in one press count as a
  * pop-up to the browser: Chrome opens the first, blocks the other 29, and quietly
  * puts a small icon in the address bar. So "I opened them" cannot end the job: it
- * must count how many really opened. Otherwise a designer who sees one tab would
+ * must count how many really opened. Otherwise someone who sees one tab would
  * think the button is broken, and nobody would say where the other 29 went.
  *
  * Careful: `'noopener'` is deliberately left out; `opener = null` is set by hand
@@ -52,7 +52,7 @@ export function openInTabs(
       continue;
     }
     // Careful: tabnabbing: the new tab could use `window.opener` to send this page
-    // elsewhere (the same reason as `rel="noopener"` in `MyTargets`)
+    // elsewhere (the same reason as `rel="noopener"` in `MyTasks`)
     tab.opener = null;
     opened++;
   }
@@ -65,7 +65,7 @@ export function openInTabs(
  *
  * Careful: the message must say what to do, not just "blocked". The fix is in
  * one place: the pop-up icon in the address bar, allowing this site, once. Without
- * that sentence a designer would assume the button itself was broken and open 30
+ * that sentence the person would assume the button itself was broken and open 30
  * links by hand every day.
  *
  * Careful: `null` when everything opened: reassurance like "all good" does not go

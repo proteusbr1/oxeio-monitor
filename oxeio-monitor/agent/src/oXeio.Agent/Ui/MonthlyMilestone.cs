@@ -28,7 +28,7 @@ internal static class MonthlyMilestone
     /// <summary>
     /// The identity of the month in the work time zone's calendar, e.g. <c>2026-08</c>.
     ///
-    /// Careful: not the UTC month. A work zone ahead of UTC (Dhaka, the default, is UTC+6) means that at 2am on the 1st
+    /// Careful: not the UTC month. A work zone ahead of UTC (UTC+6, say) means that at 2am on the 1st
     /// of the month UTC is still the previous month; in those hours the new month's balloon would be recorded
     /// under the old month, and shown again when the new month started.
     /// </summary>

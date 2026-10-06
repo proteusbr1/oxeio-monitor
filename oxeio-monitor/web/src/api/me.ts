@@ -66,6 +66,29 @@ export interface MySummary {
   appsTracked: boolean;
   /** whether they can open the pictures of their own screen (Settings → Privacy) */
   canSeeOwnScreenshots: boolean;
+  /**
+   * Tasks they **finished** today (completed in today's work day, by them) —
+   * the same count the Live Board, the reports and the digest use.
+   * `null` = nothing to show: no target and nothing finished.
+   */
+  tasks: TaskView | null;
+}
+
+/**
+ * Today's tasks: three states, not two (the server's `taskView`).
+ *
+ * | who | shown |
+ * |---|---|
+ * | has a target | `24 / 25` |
+ * | no target, but finished some | `3` |
+ * | neither | nothing (`null`) |
+ */
+export interface TaskView {
+  done: number;
+  /** Careful: `null` = this person has no task target, not a target of zero */
+  target: number | null;
+  /** Always `false` without a target: "not applicable", not "failed" */
+  met: boolean;
 }
 
 export interface MyDay {

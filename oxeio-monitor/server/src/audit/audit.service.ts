@@ -51,7 +51,7 @@ export type AuditAction =
   | 'month_closed'
   | 'month_reopened'
   /**
-   * **Marking a completed design as "not complete".**
+   * **Marking a completed task as "not complete".**
    *
    * Careful: **this is the only undo action that leaves no trace of its
    * own.** Pressing Undo sets `completed_at`, `completed_via` and
@@ -59,24 +59,26 @@ export type AuditAction =
    * completed vanishes from the row. Without a log, even if someone did
    * Complete -> Undo -> Complete every day, the owner would never see it.
    *
-   * Careful: it was added in response to the owner asking whether designers
-   * should have this access at all. The real problem with that question was
-   * not the right itself but **having no way to verify**. The log changes the
-   * question from "do I trust them?" to "I can look if I need to".
+   * Careful: giving assignees an Undo is only safe because it can be
+   * verified: the log changes the question from "do I trust them?" to "I can
+   * look if I need to".
    *
    * Careful: `meta` keeps **the values that were erased** (when it was
    * completed, who pressed it); they are no longer in the row, so the log is
    * the only place.
+   *
+   * Rows written before the Tasks module carry the old action name
+   * `design_undone`; they are kept as they are.
    */
-  | 'design_undone'
+  | 'task_undone'
   /**
-   * **Deleting a dead ASIN**: the page no longer exists on Amazon.
+   * **Removing tasks from the work** (soft delete, with a reason).
    *
    * Careful: not merged into `change_setting`: one day the question "who
-   * removed so many links, and when" will come up, and then one would have to
-   * search among thousands of settings rows.
+   * removed so many tasks, and when" will come up, and then one would have to
+   * search among thousands of settings rows. Older rows say `design_deleted`.
    */
-  | 'design_deleted'
+  | 'task_deleted'
   /** R2: leave reduces the target, so a record of who added/removed it is needed */
   | 'leave_added'
   | 'leave_removed'

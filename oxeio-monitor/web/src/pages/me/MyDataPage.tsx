@@ -5,7 +5,7 @@ import { useApi } from '../../api/useApi';
 import { seesEveryone } from '../../api/auth';
 import { useAuth } from '../../auth/AuthContext';
 import { useFeatures } from '../../features/FeaturesContext';
-import { MyTargets } from '../targets/MyTargets';
+import { MyTasks } from '../tasks/MyTasks';
 import { Card, Stat, StatRow } from '../../components/Card';
 import { Duration } from '../../components/Duration';
 import { Page } from '../../components/Page';
@@ -163,12 +163,12 @@ export function MyDataPage() {
           </StatRow>
 
           {/*
-            **Their own design target**: at the very top, because a designer's daily
-               work starts here.
-            Careful: for someone with no target the card **is not rendered**; an
-               empty box on a researcher's page is pointless.
+            **Their own tasks**: near the top, because for someone who receives
+               tasks the day's work starts here.
+            Careful: for someone with no tasks the card **is not rendered**; an
+               empty box on the page of someone who never receives tasks is pointless.
           */}
-          {features.designTargets && <MyTargets />}
+          {features.tasks && <MyTasks progress={summary.data.tasks} />}
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card

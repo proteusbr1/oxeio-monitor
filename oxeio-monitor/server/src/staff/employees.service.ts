@@ -68,9 +68,9 @@ const EMPLOYEE_SELECT = {
   email: true,
   designation: true,
   department: true,
-  staffType: true,
-  /** Their own design target; `null` means the policy's value applies. */
-  dailyDesignTarget: true,
+  receivesTasks: true,
+  /** Their own daily task target; `null` means the policy's value applies. */
+  dailyTaskTarget: true,
   policyId: true,
   monthlySalary: true,
   payBasis: true,
@@ -263,14 +263,16 @@ export class EmployeesService {
     if (dto.email !== undefined) data.email = dto.email;
     if (dto.designation !== undefined) data.designation = dto.designation;
     if (dto.department !== undefined) data.department = dto.department;
-    // Careful: `null` is a valid value too (removing the type), hence `!== undefined`.
-    if (dto.staffType !== undefined) data.staffType = dto.staffType;
+    // Careful: `undefined` = leave alone; `null` is not accepted (it is a yes/no)
+    if (dto.receivesTasks !== undefined && dto.receivesTasks !== null) {
+      data.receivesTasks = dto.receivesTasks;
+    }
     if (dto.monthlySalary !== undefined) data.monthlySalary = dto.monthlySalary;
     if (dto.payBasis !== undefined) data.payBasis = dto.payBasis;
     if (dto.hourlyRate !== undefined) data.hourlyRate = dto.hourlyRate;
     // Careful: `null` is valid too: "clear their own number and fall back to the policy".
-    if (dto.dailyDesignTarget !== undefined) {
-      data.dailyDesignTarget = dto.dailyDesignTarget;
+    if (dto.dailyTaskTarget !== undefined) {
+      data.dailyTaskTarget = dto.dailyTaskTarget;
     }
     if (dto.joinedOn !== undefined) {
       data.joinedOn =
@@ -785,9 +787,9 @@ export class EmployeesService {
       email: dto.email ?? null,
       designation: dto.designation ?? null,
       department: dto.department ?? null,
-      staffType: dto.staffType ?? null,
+      receivesTasks: dto.receivesTasks ?? false,
       // Careful: null = "no own number", so the policy's target applies, not zero.
-      dailyDesignTarget: dto.dailyDesignTarget ?? null,
+      dailyTaskTarget: dto.dailyTaskTarget ?? null,
       policyId: dto.policyId ?? null,
       // The string goes straight into Decimal; no float on the way.
       monthlySalary: dto.monthlySalary ?? null,

@@ -164,10 +164,10 @@ export class SetupService implements OnApplicationBootstrap {
 
     await this.settings.save(REGION_SETTING_KEY, { ...region }, owner.id);
     await this.settings.save(ORGANIZATION_SETTING_KEY, { name: organizationName, country }, owner.id);
-    // the original company's own modules start off on a new install; the
-    // owner turns them on in Settings → Modules if they fit
+    // Tasks and Deposits start off on a new install; the owner turns them
+    // on in Settings → Modules if they fit
     await this.features.save(
-      { ...(await this.features.all()), designTargets: false, deposits: false },
+      { ...(await this.features.all()), tasks: false, deposits: false },
       owner.id,
     );
 

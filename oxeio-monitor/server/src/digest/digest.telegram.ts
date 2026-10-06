@@ -1,5 +1,5 @@
 import { WORK_TIMEZONE_LABEL } from '../agent/util/work-time';
-import type { DesignView } from '../summary/design.rules';
+import type { TaskView } from '../summary/task-start.rules';
 import type { Digest, DigestRow } from './digest.math';
 
 /**
@@ -85,12 +85,12 @@ export interface DigestExtras {
   /** Time of sending (work zone), such as `18:30` — says which moment the numbers are for */
   atTime: string;
   /**
-   * Today's numbers for designers — by `empCode`.
+   * Tasks finished today — by `empCode`.
    *
-   * Careful: only designers have them; others have no entry here. An empty map
-   * means "nobody has a design target", and then the section is not added at all.
+   * Careful: only people with something to show have an entry. An empty map
+   * means "nothing to report", and then the section is not added at all.
    */
-  designs?: ReadonlyMap<string, DesignView>;
+  tasks?: ReadonlyMap<string, TaskView>;
 }
 
 /**
@@ -200,27 +200,26 @@ export function telegramDigest(
   }
 
   /**
-   * **Today's designs** — the owner's target of 25.
+   * **Today's tasks** — done / target.
    *
    * Careful: deliberately **not put inside** the hours groups: someone can be
-   * behind on hours and still meet the design target, and the reverse. They
+   * behind on hours and still meet the task target, and the reverse. They
    * are two different measures, so separate sections — otherwise two answers
    * to "who is behind" would be mixed together.
    *
    * Careful: the order here too is by employee code, not by number.
    */
-  const designRows = rows.filter((r) => extras.designs?.has(r.empCode));
+  const taskRows = rows.filter((r) => extras.tasks?.has(r.empCode));
 
-  if (designRows.length > 0) {
-    out.push('', `🎨 DESIGNS TODAY · ${designRows.length}`);
+  if (taskRows.length > 0) {
+    out.push('', `✅ TASKS TODAY · ${taskRows.length}`);
 
-    for (const r of designRows) {
-      const d = extras.designs!.get(r.empCode)!;
+    for (const r of taskRows) {
+      const d = extras.tasks!.get(r.empCode)!;
 
       /**
-       * Careful: **with no target, just the number** (the owner's choice). The
-       * manager designs too; the number is real but he has no target — so no
-       * `/25` and no ✅. "How many were done" and "did they reach the target"
+       * Careful: **with no target, just the number**. The number is real but
+       * the person has no target — so no `/25` and no ✅. "How many were done" and "did they reach the target"
        * remain two separate questions.
        */
       const left = d.target === null

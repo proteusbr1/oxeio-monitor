@@ -11,14 +11,14 @@ public class WorkTimeTests
     [Fact]
     public void Ten_to_midnight_falls_on_the_earlier_day()
     {
-        var t = new DateTimeOffset(2026, 8, 8, 17, 50, 0, TimeSpan.Zero); // 23:50 in Dhaka
+        var t = new DateTimeOffset(2026, 8, 8, 17, 50, 0, TimeSpan.Zero); // 23:50 local (UTC+6 in tests)
         Assert.Equal(new DateOnly(2026, 8, 8), WorkTime.WorkDateOf(t));
     }
 
     [Fact]
     public void After_midnight_it_is_a_new_day()
     {
-        var t = new DateTimeOffset(2026, 8, 8, 18, 0, 0, TimeSpan.Zero); // 00:00 in Dhaka
+        var t = new DateTimeOffset(2026, 8, 8, 18, 0, 0, TimeSpan.Zero); // 00:00 local (UTC+6 in tests)
         Assert.Equal(new DateOnly(2026, 8, 9), WorkTime.WorkDateOf(t));
     }
 
@@ -41,7 +41,7 @@ public class WorkTimeTests
     [Fact]
     public void The_local_clock_time_is_correct()
     {
-        var t = new DateTimeOffset(2026, 8, 9, 1, 0, 0, TimeSpan.Zero); // 07:00 in Dhaka
+        var t = new DateTimeOffset(2026, 8, 9, 1, 0, 0, TimeSpan.Zero); // 07:00 local (UTC+6 in tests)
         Assert.Equal(new TimeOnly(7, 0), WorkTime.LocalTimeOf(t));
     }
 }

@@ -28,11 +28,11 @@ public sealed record AgentConfig
     /// <inheritdoc cref="ScreenshotFrom"/>
     public string? ScreenshotTo { get; init; }
 
-    /// <summary>IANA name of the work time zone (<c>"Asia/Dhaka"</c> by default), see <see cref="oXeio.Core.Time.WorkTime"/>.</summary>
+    /// <summary>IANA name of the work time zone (<c>"UTC"</c> by default), see <see cref="oXeio.Core.Time.WorkTime"/>.</summary>
     public required string Timezone { get; init; }
 
     /// <summary>
-    /// Minutes east of UTC for <see cref="Timezone"/> right now (for example Asia/Dhaka = 360).
+    /// Minutes east of UTC for <see cref="Timezone"/> right now (for example America/Sao_Paulo = -180).
     /// <c>null</c> from a server older than the field — keep the current offset.
     /// </summary>
     public int? UtcOffsetMinutes { get; init; }
@@ -64,8 +64,8 @@ public sealed record AgentConfig
         SlotMinutes = 5,
         ScreenshotFrom = "07:00",
         ScreenshotTo = "23:00",
-        Timezone = "Asia/Dhaka",
-        UtcOffsetMinutes = 360,
+        Timezone = "UTC",
+        UtcOffsetMinutes = 0,
         MonthlyTargetHours = 208,
         HeartbeatSec = 30,
         AppTracking = new AppTrackingConfig { Enabled = true, MinDurationSec = 5 },

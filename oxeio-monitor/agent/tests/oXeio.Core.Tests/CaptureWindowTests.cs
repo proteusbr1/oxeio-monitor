@@ -4,8 +4,8 @@ namespace oXeio.Core.Tests;
 
 public class CaptureWindowTests
 {
-    /// <summary>Dhaka local time to a UTC instant</summary>
-    private static DateTimeOffset Dhaka(int hour, int minute = 0) =>
+    /// <summary>Local time (tests run in UTC+6) to a UTC instant</summary>
+    private static DateTimeOffset Local(int hour, int minute = 0) =>
         new DateTimeOffset(2026, 8, 9, hour, minute, 0, TimeSpan.Zero)
             .AddHours(-6);
 
@@ -18,14 +18,14 @@ public class CaptureWindowTests
     [InlineData(2, 0, false)]  // 2 AM: time is counted, pictures are not
     public void No_screenshots_outside_seven_to_twenty_three(int h, int m, bool allowed)
     {
-        Assert.Equal(allowed, CaptureWindow.Default.Allows(Dhaka(h, m)));
+        Assert.Equal(allowed, CaptureWindow.Default.Allows(Local(h, m)));
     }
 
     [Fact]
     public void With_no_window_screenshots_are_allowed_around_the_clock()
     {
-        Assert.True(CaptureWindow.Always.Allows(Dhaka(3)));
-        Assert.True(CaptureWindow.Always.Allows(Dhaka(23, 30)));
+        Assert.True(CaptureWindow.Always.Allows(Local(3)));
+        Assert.True(CaptureWindow.Always.Allows(Local(23, 30)));
     }
 
     [Fact]
@@ -34,8 +34,8 @@ public class CaptureWindowTests
         // 23:00 -> 07:00 (the limit in the opposite direction)
         var night = new CaptureWindow(new TimeOnly(23, 0), new TimeOnly(7, 0));
 
-        Assert.True(night.Allows(Dhaka(23, 30)));
-        Assert.True(night.Allows(Dhaka(2)));
-        Assert.False(night.Allows(Dhaka(12)));
+        Assert.True(night.Allows(Local(23, 30)));
+        Assert.True(night.Allows(Local(2)));
+        Assert.False(night.Allows(Local(12)));
     }
 }

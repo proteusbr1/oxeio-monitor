@@ -47,9 +47,10 @@ export function LiveBoardPage() {
   const offline = cards.filter((card) => card.status === 'offline').length;
   const todaySec = cards.reduce((sum, card) => sum + card.todayWorkedSec, 0);
   const worked = cards.filter((card) => card.todayWorkedSec > 0).length;
-  const finished = cards.reduce((sum, card) => sum + card.designsFinished, 0);
-  // design targets switched off in Settings → Modules: no design panels
-  const hasDesigners = features.designTargets && cards.some((card) => card.staffType === 'designer');
+  const finished = cards.reduce((sum, card) => sum + card.tasksDone, 0);
+  // the Tasks module switched off in Settings → Modules: no task panels;
+  // and only when someone receives tasks — otherwise the panels would be zeros
+  const hasAssignees = features.tasks && cards.some((card) => card.receivesTasks);
   const month = trend.data?.month;
   // Careful: with nobody on a target (all no-target or no policy) there is no pace to show
   const observed = month?.trackedFrom != null && month.targetSec > 0;
@@ -74,7 +75,7 @@ export function LiveBoardPage() {
       <StudioStat label="Working now" value={active} unit={`/ ${cards.length}`} note={<>{idle} idle · {offline} offline<br />{offCount} off today{noTargetCount > 0 && ` · ${noTargetCount} no target`}</>} />
       <StudioStat label="Hours today" value={formatDuration(todaySec)} note={<>{worked} staff with recorded time{delta && <><br />{delta}{trend.error && ' · last update'}</>}</>} />
       <StudioStat label="Average today" value={worked ? formatDuration(todaySec / worked) : '—'} note={<>Across {worked} staff with time<br />{dailyTarget ? `${formatDuration(dailyTarget)} daily target` : targets.length ? 'Individual targets shown below' : 'No daily target today'}</>} />
-      {hasDesigners && <StudioStat label="Designs finished" value={finished} note="Marked complete today" />}
+      {hasAssignees && <StudioStat label="Tasks done" value={finished} note="Marked complete today" />}
       <StudioStat label={!observed ? 'Monthly pace' : month!.paceSec < 0 ? 'Behind monthly pace' : 'Ahead of monthly pace'} value={observed ? formatDuration(Math.abs(month!.paceSec)) : '—'} tone={observed ? month!.paceSec < 0 ? 'warning' : 'ok' : undefined} note={trend.error ? 'Refresh failed · last update shown' : observed ? <>Counted from {formatDate(month!.trackedFrom!)}{month!.notObservedStaff > 0 && ` · ${month!.notObservedStaff} not counted yet`}</> : month && month.targetSec <= 0 ? 'Nobody has an hours target' : 'No finished day counted yet'} />
       {isOwner && <StudioStat label="Open alerts" value={alerts.data?.openCount ?? '—'} tone={alerts.data?.openCount ? 'warning' : undefined} note={<Link to="/alerts" className="underline underline-offset-4">{alerts.error ? 'Refresh failed · view alerts ↗' : alerts.data?.rows[0]?.title ?? 'View alerts ↗'}</Link>} />}
     </div>
@@ -87,11 +88,11 @@ export function LiveBoardPage() {
       <Card title="Hours · Last 7 Days" hint="Solid line = usual target · dashed bars = not tracked" padded={false}><DataPanel result={trend}>{trend.data && <WeekBars days={trend.data.days} />}</DataPanel></Card>
     </div>
     <div className="studio-detail-grid">
-      <Card title="Team Snapshot" hint={withTarget ? 'Today’s hours, targets and design progress · furthest along first' : noTargetCount ? 'Today’s hours · no hours target set' : 'Day off · recorded hours still count'} actions={<Link className="tap text-xs underline underline-offset-4" to="/worklog">View Worklog ↗</Link>} padded={false}>
+      <Card title="Team Snapshot" hint={withTarget ? 'Today’s hours, targets and task progress · furthest along first' : noTargetCount ? 'Today’s hours · no hours target set' : 'Day off · recorded hours still count'} actions={<Link className="tap text-xs underline underline-offset-4" to="/worklog">View Worklog ↗</Link>} padded={false}>
         <TeamTable cards={cards} />
       </Card>
       <div className="studio-detail-side">
-        {hasDesigners && <Card title="Designs Finished · Last 7 Days" hint="Whole team · today is still in progress" padded={false}><DataPanel result={trend}>{trend.data && <StudioWeek days={trend.data.days} metric="designs" />}</DataPanel></Card>}
+        {hasAssignees && <Card title="Tasks Done · Last 7 Days" hint="Whole team · today is still in progress" padded={false}><DataPanel result={trend}>{trend.data && <StudioWeek days={trend.data.days} metric="tasks" />}</DataPanel></Card>}
         {tracksApps && <Card title="Where Today Went" hint="Whole team · counted app time only" padded={false}><DataPanel result={apps}>{apps.data && <TopApps usage={apps.data.apps} />}</DataPanel></Card>}
         <Card title="Fewest Hours" hint={trend.data ? `Least counted in the last ${trend.data.laggardDays} days` : 'Least counted recently'} padded={false}><DataPanel result={trend}>{trend.data && <FewestHours people={trend.data.laggards} days={trend.data.laggardDays} />}</DataPanel></Card>
       </div>
@@ -124,23 +125,23 @@ function DataPanel({ result, children }: { result: Pick<ApiResult<unknown>, 'dat
   return <>{result.error && <p role="status" className="px-5 pb-3 text-xs text-idle-ink">Couldn’t refresh this summary. Showing its last successful update. <button type="button" onClick={result.reload} className="tap underline">Retry</button></p>}{children}</>;
 }
 
-function StudioWeek({ days, metric }: { days: TrendDay[]; metric: 'designs' | 'hours' }) {
+function StudioWeek({ days, metric }: { days: TrendDay[]; metric: 'tasks' | 'hours' }) {
   const [selected, setSelected] = useState<string | null>(null);
-  const valueOf = (day: TrendDay) => metric === 'designs' ? day.designsFinished : day.workedSec;
-  const labelOf = (day: TrendDay) => metric === 'designs' ? `${day.designsFinished}` : formatDuration(day.workedSec);
+  const valueOf = (day: TrendDay) => metric === 'tasks' ? day.tasksDone : day.workedSec;
+  const labelOf = (day: TrendDay) => metric === 'tasks' ? `${day.tasksDone}` : formatDuration(day.workedSec);
   const peak = Math.max(...days.filter((day) => day.tracked).map(valueOf), 1);
   const shown = days.find((day) => day.date === selected);
   if (!days.length) return <p className="p-5 text-sm text-ink-2">No daily history yet.</p>;
   const tracked = days.filter((day) => day.tracked);
   return <div className="studio-chart">
-    <div className="studio-chart-columns" aria-label={metric === 'designs' ? 'Completed designs by day' : 'Active hours by day'}>
-      {days.map((day) => <button type="button" key={day.date} className="studio-chart-day" onMouseEnter={() => setSelected(day.date)} onFocus={() => setSelected(day.date)} onClick={() => setSelected(day.date)} aria-label={`${formatDate(day.date)}: ${day.tracked ? `${labelOf(day)} ${metric === 'designs' ? 'designs finished' : 'active time'}${day.expectedStaff === 0 ? ', day off' : ''}` : 'not tracked yet'}`}>
+    <div className="studio-chart-columns" aria-label={metric === 'tasks' ? 'Finished tasks by day' : 'Active hours by day'}>
+      {days.map((day) => <button type="button" key={day.date} className="studio-chart-day" onMouseEnter={() => setSelected(day.date)} onFocus={() => setSelected(day.date)} onClick={() => setSelected(day.date)} aria-label={`${formatDate(day.date)}: ${day.tracked ? `${labelOf(day)} ${metric === 'tasks' ? 'tasks done' : 'active time'}${day.expectedStaff === 0 ? ', day off' : ''}` : 'not tracked yet'}`}>
         <span className="studio-chart-value">{day.tracked ? labelOf(day) : '—'}</span>
         <span className={`studio-chart-bar${day.tracked ? '' : ' is-untracked'}`} style={{ height: day.tracked ? `${Math.max(2, valueOf(day) / peak * 135)}px` : '35px' }} />
       </button>)}
     </div>
     <div className="studio-chart-dates" aria-hidden>{days.map((day) => <span key={day.date}>{weekdayOf(day.date).slice(0, 3)}<br />{Number(day.date.slice(-2))}</span>)}</div>
-    <p className="studio-chart-total"><strong>{tracked.length ? tracked.reduce((sum, day) => sum + day.designsFinished, 0) : '—'}</strong> designs finished · {tracked.length} of {days.length} days tracked</p>
-    <p className="studio-chart-note" aria-live="polite">{shown ? `${formatDateShort(shown.date)} · ${shown.tracked ? `${labelOf(shown)} ${metric === 'designs' ? 'finished' : 'active'}${shown.expectedStaff === 0 ? ' · day off' : ''}` : 'not tracked yet'}` : 'Today is still in progress. Dashed bars mean not tracked yet.'}</p>
+    <p className="studio-chart-total"><strong>{tracked.length ? tracked.reduce((sum, day) => sum + day.tasksDone, 0) : '—'}</strong> tasks done · {tracked.length} of {days.length} days tracked</p>
+    <p className="studio-chart-note" aria-live="polite">{shown ? `${formatDateShort(shown.date)} · ${shown.tracked ? `${labelOf(shown)} ${metric === 'tasks' ? 'done' : 'active'}${shown.expectedStaff === 0 ? ' · day off' : ''}` : 'not tracked yet'}` : 'Today is still in progress. Dashed bars mean not tracked yet.'}</p>
   </div>;
 }

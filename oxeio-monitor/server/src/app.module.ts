@@ -24,7 +24,7 @@ import { PayrollModule } from './payroll/payroll.module';
 import { ReportsModule } from './reports/reports.module';
 import { ScreenshotsModule } from './screenshots/screenshots.module';
 import { SummaryModule } from './summary/summary.module';
-import { TargetsModule } from './targets/targets.module';
+import { TasksModule } from './tasks/tasks.module';
 import { StorageModule } from './storage/storage.module';
 import { SettingsModule } from './settings/settings.module';
 import { SetupModule } from './setup/setup.module';
@@ -84,8 +84,8 @@ import { StaffModule } from './staff/staff.module';
     // Do not add a separate forRoot() here: two explorers would register the same @Cron
     // twice and bootstrap would fail with "cron job already exists".
     SummaryModule,
-    // Design targets: submission, daily distribution, completion
-    TargetsModule,
+    // Tasks: adding, daily hand-out, completion
+    TasksModule,
     AlertsModule,
     // Careful: OpsModule and DigestModule both have `@Cron`, but the explorer comes from
     // the global forRoot() of SummaryModule above, so these go **after** it.

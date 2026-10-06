@@ -31,10 +31,10 @@ export interface EmployeeRow {
   email: string | null;
   designation: string | null;
   department: string | null;
-  /** Kind of work. Managers see it too; it is not secret, unlike salary. */
-  staffType: 'designer' | 'researcher' | 'manager' | null;
+  /** Gets tasks handed out (Tasks module). Managers see it too; it is not secret, unlike salary. */
+  receivesTasks: boolean;
   /**
-   * **The designer's own daily target.**
+   * **This person's own daily task target**; `null` = the policy's applies.
    *
    * Careful: this field used to be **missing** here, while the screen type
    * (`EmployeeView`) always claimed it was sent. The failure was silent: the
@@ -45,7 +45,7 @@ export interface EmployeeRow {
    * That is the cost of forgetting a field in a whitelist-style function:
    * not a leak but an **absence**, and it is noticed very late.
    */
-  dailyDesignTarget: number | null;
+  dailyTaskTarget: number | null;
   policyId: number | null;
   monthlySalary: Decimalish | null;
   payBasis: 'monthly' | 'hourly' | 'none';
@@ -69,10 +69,10 @@ export interface EmployeeBaseView {
   email: string | null;
   designation: string | null;
   department: string | null;
-  /** Kind of work. Managers see it too; it is not secret, unlike salary. */
-  staffType: 'designer' | 'researcher' | 'manager' | null;
+  /** Gets tasks handed out (Tasks module). Managers see it too; it is not secret, unlike salary. */
+  receivesTasks: boolean;
   /**
-   * **The designer's own daily target.**
+   * **This person's own daily task target**; `null` = the policy's applies.
    *
    * Careful: this field used to be **missing** here, while the screen type
    * (`EmployeeView`) always claimed it was sent. The failure was silent: the
@@ -83,7 +83,7 @@ export interface EmployeeBaseView {
    * That is the cost of forgetting a field in a whitelist-style function:
    * not a leak but an **absence**, and it is noticed very late.
    */
-  dailyDesignTarget: number | null;
+  dailyTaskTarget: number | null;
   policyId: number | null;
   /** 'YYYY-MM-DD' */
   joinedOn: string | null;
@@ -121,8 +121,8 @@ export interface EmployeeBaseView {
    */
   /**
    * Careful: the type is **borrowed** from `UserRole`, not a hand-written
-   * list. It used to say `'owner' | 'manager' | 'employee'`, and when
-   * `researcher` was added to the enum, this was **the only place in the whole
+   * list. It used to say `'owner' | 'manager' | 'employee'`, and when a
+   * fourth role was added to the enum, this was **the only place in the whole
    * codebase** that raised a compile error. Every other condition would have
    * silently gone the wrong way. Borrowing the enum means this cannot go
    * silent next time; it stays in step by itself.
@@ -164,8 +164,8 @@ export function toEmployeeView(row: EmployeeRow, role: UserRole): EmployeeView {
     email: row.email,
     designation: row.designation,
     department: row.department,
-    staffType: row.staffType,
-    dailyDesignTarget: row.dailyDesignTarget,
+    receivesTasks: row.receivesTasks,
+    dailyTaskTarget: row.dailyTaskTarget,
     policyId: row.policyId,
     joinedOn: toDateOnly(row.joinedOn),
     leftOn: toDateOnly(row.leftOn),

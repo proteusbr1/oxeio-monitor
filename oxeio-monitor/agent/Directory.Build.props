@@ -67,8 +67,7 @@
       0.3.5 -> 0.3.6: no code change. The MSI and both exes are now signed (ADR-014).
 
       0.3.6 -> 0.3.7: no code change. The server address baked into the MSI changed from
-      `oxeio.office.local` to `hub.oxeio.com` (VPS). 0.3.6 had gone to the owner with
-      the old address.
+      the office LAN to the VPS. 0.3.6 had gone to the owner with the old address.
 
       0.3.8 -> 0.4.1: behaviour changed, so the minor version went up:
         - 0.4.0: time counting stops when the screen has not changed at all for 10 minutes

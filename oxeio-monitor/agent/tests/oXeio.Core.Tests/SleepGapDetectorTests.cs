@@ -5,7 +5,7 @@ namespace oXeio.Core.Tests;
 public class SleepGapDetectorTests
 {
     private static readonly DateTimeOffset T0 =
-        new(2026, 8, 9, 11, 0, 0, TimeSpan.Zero); // 5 PM in Dhaka
+        new(2026, 8, 9, 11, 0, 0, TimeSpan.Zero); // 5 PM local (UTC+6 in tests)
 
     private static SleepGapDetector New() =>
         new(TimeSpan.FromSeconds(1));

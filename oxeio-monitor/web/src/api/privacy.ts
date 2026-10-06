@@ -11,7 +11,7 @@ export const RETENTION_MIN_DAYS = 7;
 export const RETENTION_MAX_DAYS = 3650;
 
 export interface PrivacySettings {
-  /** staff and researcher logins can open the pictures of their own screen */
+  /** staff and coordinator logins can open the pictures of their own screen */
   staffSeeOwnScreenshots: boolean;
   /** screenshots older than this are deleted by the nightly cleanup */
   screenshotRetentionDays: number;
@@ -19,7 +19,7 @@ export interface PrivacySettings {
 
 export interface PrivacyView {
   settings: PrivacySettings;
-  /** active staff and researcher logins — who the first setting affects */
+  /** active staff and coordinator logins — who the first setting affects */
   staffLogins: number;
 }
 

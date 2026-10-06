@@ -14,7 +14,8 @@ namespace oXeio.Agent.Ui;
 /// An exception thrown on the UI thread would take the whole agent down, and the cause
 /// would be "the text was a bit long".
 ///
-/// In English one character is one UTF-16 unit, so more fits in 63 slots than in Bengali.
+/// In English one character is one UTF-16 unit, so more fits in 63 slots than in scripts
+/// written with combining marks.
 /// Even so, three lines do not always fit (the longest combination is about 80), so the lines
 /// are ordered by priority: only as many as fit are shown, from the top.
 /// </summary>

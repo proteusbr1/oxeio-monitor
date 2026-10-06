@@ -5,7 +5,7 @@ import { DayCloseJob } from './day-close.job';
 import { RetentionJob } from './retention.job';
 import { SCHEDULING_ENABLED } from './scheduling';
 import { SummaryRefreshJob } from './summary-refresh.job';
-import { TargetsModule } from '../targets/targets.module';
+import { TasksModule } from '../tasks/tasks.module';
 import { SummaryService } from './summary.service';
 
 /**
@@ -28,13 +28,13 @@ import { SummaryService } from './summary.service';
  */
 @Module({
   /**
-   * `TargetsModule`: to switch off a target using the task number found in a
-   * file name. Careful: it sits in the same array as the conditional
+   * `TasksModule`: to mark tasks started from the task number found in a
+   * window title (start detection). Careful: it sits in the same array as the conditional
    * `ScheduleModule` because that one is dropped in tests but this is not.
    */
   imports: [
     ...(SCHEDULING_ENABLED ? [ScheduleModule.forRoot()] : []),
-    TargetsModule,
+    TasksModule,
   ],
   providers: [SummaryService, SummaryRefreshJob, DayCloseJob, RetentionJob],
   // Exported so that tests or a future admin endpoint can call `runOnce()`

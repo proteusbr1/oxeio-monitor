@@ -18,7 +18,7 @@ namespace oXeio.Agent;
 internal sealed record AgentSettings
 {
     /// <summary>
-    /// Example: <c>https://oxeio.office.local</c>. <b>Address only</b>, no path.
+    /// Example: <c>https://monitor.example.com</c>. <b>Address only</b>, no path.
     ///
     /// Careful: the API prefix (<c>/api/v1</c>) is not written here; <see cref="ApiRoot"/> adds it.
     /// That is a server internal; asking the office admin to remember it means someone will forget

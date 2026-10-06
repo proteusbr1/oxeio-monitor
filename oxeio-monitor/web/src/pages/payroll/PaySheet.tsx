@@ -4,7 +4,6 @@ import { Card } from '../../components/Card';
 import { Hours } from '../../components/Duration';
 import { ProgressBar } from '../../components/ProgressRing';
 import { Caveat, Empty, ErrorBox, Loading } from '../../components/States';
-import { STAFF_TYPE_LABEL } from '../../api/staff';
 import { PersonCell, Table, type Column } from '../../components/Table';
 import {
   formatDate,
@@ -63,11 +62,7 @@ export function PayrollSheetView({
       key: 'person',
       header: 'Staff',
       render: (row) => (
-        <PersonCell
-          fullName={row.fullName}
-          empCode={row.empCode}
-          note={row.staffType ? STAFF_TYPE_LABEL[row.staffType] : undefined}
-        />
+        <PersonCell fullName={row.fullName} empCode={row.empCode} />
       ),
     },
     {

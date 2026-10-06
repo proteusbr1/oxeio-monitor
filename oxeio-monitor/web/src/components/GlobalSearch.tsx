@@ -33,7 +33,7 @@ import { seesEveryone } from '../api/auth';
 export function GlobalSearch() {
   const { user } = useAuth();
   // Careful: the condition is an allow-list. Writing `!== 'employee'` would give
-  // researchers a search box over the whole team's names too.
+  // coordinators a search box over the whole team's names too.
   if (!seesEveryone(user?.role)) return null;
   return <SearchBox />;
 }

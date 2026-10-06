@@ -99,8 +99,8 @@ interface ResolvedEmployee {
   empCode: string;
   fullName: string;
   department: string | null;
-  /** Kind of work: the designs column is filled only for designers */
-  staffType: 'designer' | 'researcher' | 'manager' | null;
+  /** Gets tasks handed out (Tasks module) */
+  receivesTasks: boolean;
   joinedOn: Date | null;
   leftOn: Date | null;
   monthlyTargetSec: number;
@@ -222,11 +222,10 @@ export class ReportsService {
     );
 
     /**
-     * **How many targets each person marked "finished" on each day** (the
-     * owner's request).
+     * **How many tasks each person marked "finished" on each day.**
      *
      * `daily_summary` does not have this and should not: that table keeps time,
-     * and this is about work. So it is read straight from `design_targets`.
+     * and this is about work. So it is read straight from `tasks`.
      *
      * `completed_at` is a timestamptz, and the rows must be split into **work
      * days**, hence the raw query; Prisma's `groupBy` cannot cut dates.
@@ -240,7 +239,7 @@ export class ReportsService {
       SELECT assigned_to_id AS employee_id,
              (completed_at AT TIME ZONE ${WORK_TIMEZONE})::date AS work_date,
              count(*)::int AS n
-        FROM design_targets
+        FROM tasks
        WHERE assigned_to_id = ANY(${ctx.employees.map((e) => e.id)}::int[])
          AND completed_at IS NOT NULL
          AND (completed_at AT TIME ZONE ${WORK_TIMEZONE})::date
@@ -288,7 +287,7 @@ export class ReportsService {
           employeeId: employee.id,
           empCode: employee.empCode,
           fullName: employee.fullName,
-          staffType: employee.staffType,
+          receivesTasks: employee.receivesTasks,
           department: employee.department,
           date: toIsoDate(date),
           dayType: dayTypeOf(date, rule),
@@ -310,20 +309,15 @@ export class ReportsService {
           adjustmentHours: secondsToHours(summary?.adjustmentSec ?? 0),
           creditedHours: secondsToHours(credited),
           /**
-           * `null` (the column is empty) if no designs were done, not zero.
-           * If someone who is not a designer does some, the number shows: a
-           * manager also designs, and hiding that would lose information.
-           */
-          /**
-           * **Only "finished"** (owner's decision): `daily_summary.designsDone`
-           * used to go here, i.e. how many files were **opened**. That number
-           * caused confusion in the field: a manager with 44 minutes in 19 files
-           * was showing "16".
+           * **Only "finished"**: `daily_summary.tasksStarted` (how many were
+           * merely brought to the screen) cannot tell the one who does the work
+           * from the one who looks at it.
            *
            * `null` when 0: in a spreadsheet 0 means "measured and found zero",
-           * which would be false on the row of someone outside design.
+           * which would be false on the row of someone the measure is not for.
+           * Anyone who finished tasks shows the number, target or not.
            */
-          designsDone:
+          tasksDone:
             finishedByKey.get(`${employee.id}|${date.getTime()}`) ?? null,
           targetHours: secondsToHours(dayTarget),
         });
@@ -758,7 +752,7 @@ export class ReportsService {
           empCode: true,
           fullName: true,
           department: true,
-          staffType: true,
+          receivesTasks: true,
           status: true,
           joinedOn: true,
           leftOn: true,
@@ -811,7 +805,7 @@ export class ReportsService {
         empCode: e.empCode,
         fullName: e.fullName,
         department: e.department,
-        staffType: e.staffType,
+        receivesTasks: e.receivesTasks,
         joinedOn: e.joinedOn,
         leftOn: e.leftOn,
         monthlyTargetSec,

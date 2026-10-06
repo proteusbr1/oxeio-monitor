@@ -7,7 +7,7 @@ import type { FeatureKey, Features } from '../api/features';
  */
 
 /** What the filter reads from the signed-in user */
-export type NavUser = Pick<Me, 'role' | 'canAddTargets' | 'canSeeScreenshots'>;
+export type NavUser = Pick<Me, 'role' | 'canAddTasks' | 'canSeeScreenshots'>;
 
 export interface NavItem {
   to: string;
@@ -18,11 +18,9 @@ export interface NavItem {
   /**
    * An extra condition beyond the role.
    *
-   * Careful: the Targets page is also seen by researchers, whose role is `employee`,
-   * so putting `employee` in `roles` would show it to all staff. So the
-   * server-computed answer (`canAddTargets`) is checked instead; the rule is not
-   * rewritten on the web side, or one day the menu would show an entry whose page
-   * returns 403.
+   * Careful: when a page depends on more than the role, the server-computed
+   * answer (e.g. `canSeeScreenshots`) is checked here; the rule is not rewritten
+   * on the web side, or one day the menu would show an entry whose page returns 403.
    */
   when?: (user: NavUser) => boolean;
   /** Belongs to a module the owner can switch off (Settings → Modules) */
@@ -88,59 +86,48 @@ export const NAV: NavItem[] = [
     roles: ['owner', 'manager'],
   },
   /**
-   * Targets: the researcher's daily page.
+   * Tasks: the coordinator's daily pages.
    *
-   * Careful: in the sidebar, not in Settings (the owner's decision). People come
-   * here every day, while Settings is a place to set something once and forget.
-   * Deposits is in the sidebar for exactly the same reason (09 section 3).
+   * Careful: in the sidebar, not in Settings. People come here every day,
+   * while Settings is a place to set something once and forget.
    *
-   * The hack that used to be here, and why it is gone: it was `roles:
-   * ['owner','manager','employee']` together with `when: (user) =>
-   * user.canAddTargets`, with a comment admitting that `employee` is there only for
-   * researchers and the real filter is `when`.
+   * Careful: the roles list tells the truth — `coordinator` is its own role,
+   * so plain `employee` (who receives tasks on My data) is left out and one
+   * place guards it instead of two.
    *
-   * Careful: that was forced, not chosen. The portal had three roles and
-   * researchers came in as `employee`. Leaving `employee` out of the list dropped
-   * them; putting it in showed this to all nine designers too. The owner later
-   * split the role (researchers and designers do different work), so the list now
-   * tells the truth and one place guards it instead of two.
-   */
-  /**
-   * Two pages under one section, like `Oversight -> Alerts`. Careful: the section
-   * label shows only in the sidebar (above `lg`), so the two item names must be
-   * clear on their own: in a phone's horizontal row "Add targets"/"All targets"
-   * must make sense standing alone.
-   *
-   * Careful: the names no longer contain "Design", because the section title says
-   * it already, and "Targets -> Add Design Targets" says the same thing twice.
+   * Careful: the section label shows only in the sidebar (above `lg`), so the
+   * item names must be clear on their own: in a phone's horizontal row "Add
+   * tasks"/"Task pool" must make sense standing alone.
    */
   {
-    to: '/targets',
-    label: 'Add target design',
-    roles: ['owner', 'manager', 'researcher'],
-    section: 'Targets',
+    to: '/tasks',
+    label: 'Add tasks',
+    // `end`: otherwise this entry would also light up on /tasks/all and /tasks/review
+    end: true,
+    roles: ['owner', 'manager', 'coordinator'],
+    section: 'Tasks',
     child: true,
-    feature: 'designTargets',
+    feature: 'tasks',
   },
   {
-    to: '/targets/all',
-    label: 'Design Pool',
-    roles: ['owner', 'manager', 'researcher'],
+    to: '/tasks/all',
+    label: 'Task pool',
+    roles: ['owner', 'manager', 'coordinator'],
     child: true,
-    feature: 'designTargets',
+    feature: 'tasks',
   },
   /**
-   * Review: right below Design Pool.
+   * Review: right below Task pool.
    *
-   * Careful: no researchers. Why a designer skipped something is a team-management
+   * Careful: no coordinators. Why someone skipped a task is a team-management
    * question, which matches the server's `@Roles(owner, manager)`.
    */
   {
-    to: '/targets/review',
+    to: '/tasks/review',
     label: 'Review',
     roles: ['owner', 'manager'],
     child: true,
-    feature: 'designTargets',
+    feature: 'tasks',
   },
   /**
    * J05: the staff member's own page. The name is exactly the same as the tray menu
@@ -154,18 +141,16 @@ export const NAV: NavItem[] = [
   /**
    * Careful: this heading is not just decoration, it closes the section above. A
    * section label marks only the start, not the end; without a heading after
-   * "Targets", My data, Staff and Screenshots would all look as if they were inside
+   * "Tasks", My data, Staff and Screenshots would all look as if they were inside
    * that section.
    */
   /**
-   * Careful: `researcher` is here too. Researchers also have an agent and are also
-   * measured (verified: both OX-04 and OX-05 have active devices). The personal page
-   * is not tied to the kind of work.
+   * Careful: `coordinator` is here too. Coordinators also have an agent and are
+   * also measured; the personal page is not tied to the kind of work.
    *
-   * `manager` is here too, and without it the work of that day would be pointless.
-   * The office manager now gets 30 designs every day (`DESIGN_WORK_STAFF_TYPES`),
-   * but the list lives on this page. Without the menu link the 30 tasks would
-   * arrive and they could not find them except by typing the URL.
+   * `manager` is here too: a manager may receive tasks (`receivesTasks`), and
+   * the list lives on this page. Without the menu link the tasks would arrive
+   * and they could not find them except by typing the URL.
    *
    * Careful: an older note said an owner/manager's `employee_id` is usually `null`,
    * so the page returned 403. That is no longer true: someone not linked to an
@@ -175,7 +160,7 @@ export const NAV: NavItem[] = [
   {
     to: '/me',
     label: 'My data',
-    roles: ['manager', 'researcher', 'employee'],
+    roles: ['manager', 'coordinator', 'employee'],
     section: 'Team',
   },
   /**
@@ -189,12 +174,12 @@ export const NAV: NavItem[] = [
    */
   /**
    * Careful: the owner's/manager's list has no `My data`, so the section heading is
-   * needed here too; otherwise the "Targets" section would never close on their
+   * needed here too; otherwise the "Tasks" section would never close on their
    * screen. Only one of the two is ever visible, so the heading is not shown twice.
    */
   { to: '/staff', label: 'Staff', roles: ['owner', 'manager'], section: 'Team' },
   /**
-   * Careful: researchers and designers see only their own here; the server applies the scope.
+   * Careful: coordinators and staff see only their own here; the server applies the scope.
    *
    * `canSeeScreenshots` is the server's answer (module on, and staff only while
    * Settings → Privacy lets them see their own) — the same one the route uses.
@@ -204,7 +189,7 @@ export const NAV: NavItem[] = [
   {
     to: '/screenshots',
     label: 'Screenshots',
-    roles: ['owner', 'manager', 'researcher', 'employee'],
+    roles: ['owner', 'manager', 'coordinator', 'employee'],
     feature: 'screenshots',
     when: (user) => user.canSeeScreenshots,
   },
@@ -239,7 +224,7 @@ export const NAV: NavItem[] = [
   {
     to: '/account',
     label: 'Account',
-    roles: ['owner', 'manager', 'researcher', 'employee'],
+    roles: ['owner', 'manager', 'coordinator', 'employee'],
   },
   { to: '/settings', label: 'Settings', roles: ['owner', 'manager'] },
 ];

@@ -32,20 +32,21 @@ export interface LiveCard {
   empCode: string;
   fullName: string;
   designation: string | null;
-  /** Kind of work; design targets apply only to this. */
-  staffType: 'designer' | 'researcher' | 'manager' | null;
+  /** Whether tasks are handed to them (Staff → Receives tasks). */
+  receivesTasks: boolean;
   /**
-   * How many new designs today. Careful: always 0 for non-designers. That does not
-   * mean "did no work", it means "this measure is not for them", so the screen
-   * leaves the cell empty. Updated on the summary refresh (~15 minutes), not live
-   * like the hours.
+   * How many tasks were first seen started today (a window title beginning
+   * with the task number — only while start detection is on). Updated on the
+   * summary refresh (~15 minutes), not live like the hours.
    */
-  /** How many design files were opened today. */
-  designsDone: number;
-  /** How many targets were marked finished today (the Complete button). */
-  designsFinished: number;
-  /** Careful: 0 means the target is switched off. */
-  designTargetPerDay: number;
+  tasksStarted: number;
+  /** How many tasks they marked finished today (the Complete button). */
+  tasksDone: number;
+  /**
+   * Their daily task target (own number, else the policy's). Careful: 0 means
+   * no target; it only counts while `receivesTasks`.
+   */
+  taskTargetPerDay: number;
   status: LiveStatus;
   /** Seconds counted for today in the work zone. */
   todayWorkedSec: number;
@@ -171,13 +172,13 @@ export interface TrendDay {
    */
   tracked: boolean;
   /**
-   * How many designs were finished on that day.
+   * How many tasks were finished on that day.
    *
-   * Careful: "finished", not "opened" (the owner's choice, ADR-037). Counting
-   * opened files caused confusion in the field: 44 minutes across 19 files showed
-   * "16".
+   * Careful: "finished", not "started" (ADR-037): a start only says a window
+   * was opened, which cannot tell the one who does the work from the one who
+   * looks at it.
    */
-  designsFinished: number;
+  tasksDone: number;
 
   /** How many people really had a target; zero means everyone is on leave. */
   expectedStaff: number;
