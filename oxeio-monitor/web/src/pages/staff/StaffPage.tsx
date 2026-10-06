@@ -61,9 +61,12 @@ function StaffToday() {
       render: (c) => (
         <span className="num text-ink-2">
           {formatDuration(c.monthWorkedSec)}
-          <small className="ml-1 text-[11px] text-ink-3">
-            /{Math.round(c.monthTargetSec / 3600)}h
-          </small>
+          {/* No target: the hours alone, not "/0h" */}
+          {!c.noTarget && (
+            <small className="ml-1 text-[11px] text-ink-3">
+              /{Math.round(c.monthTargetSec / 3600)}h
+            </small>
+          )}
         </span>
       ),
     },

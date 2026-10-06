@@ -172,6 +172,9 @@ export function TargetBars({ cards }: { cards: LiveCard[] }) {
         const bonus =
           !targeted && card.todayWorkedSec > 0 && card.dailyTargetSec > 0;
 
+        // Careful: no target is not a day off; no bar and no "off" label
+        const noTarget = dayDuty(card) === 'none';
+
         const pct =
           targeted || bonus
             ? Math.round(pctOf(card.todayWorkedSec, card.dailyTargetSec))
@@ -206,7 +209,7 @@ export function TargetBars({ cards }: { cards: LiveCard[] }) {
                       : `${card.fullName} — today's target`
                   }
                 />
-              ) : (
+              ) : noTarget ? null : (
                 <div
                   className="h-1.5 rounded-full bg-line/60"
                   title="Weekly off or holiday — nothing is expected today"
@@ -219,8 +222,8 @@ export function TargetBars({ cards }: { cards: LiveCard[] }) {
                 {formatDuration(card.todayWorkedSec)}
               </span>
               {/* `w-9` keeps the percentages aligned on one line at the right */}
-              <span className="num w-9 text-[11px] text-ink-3">
-                {pct === null ? 'off' : `${pct}%`}
+              <span className="num min-w-9 text-[11px] whitespace-nowrap text-ink-3">
+                {noTarget ? 'no target' : pct === null ? 'off' : `${pct}%`}
               </span>
             </div>
           </li>

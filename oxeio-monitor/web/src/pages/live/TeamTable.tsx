@@ -83,10 +83,13 @@ export function TeamTable({ cards }: { cards: LiveCard[] }) {
             title={
               dayDuty(c) === 'leave'
                 ? 'On approved leave today'
-                : 'Weekly off or holiday'
+                : dayDuty(c) === 'none'
+                  ? 'No hours target in this work policy'
+                  : 'Weekly off or holiday'
             }
           >
-            —
+            {/* Careful: no target is not a day off; say so instead of the dash */}
+            {dayDuty(c) === 'none' ? 'No target' : '—'}
           </span>
         ),
     },
@@ -157,7 +160,9 @@ export function TeamTable({ cards }: { cards: LiveCard[] }) {
            signal enough, since the order does not say whether they are "furthest
            behind" or "on leave today".
       */
-      rowMuted={(c) => !hasTarget(c) && c.todayWorkedSec === 0}
+      rowMuted={(c) =>
+        !hasTarget(c) && dayDuty(c) !== 'none' && c.todayWorkedSec === 0
+      }
     />
   );
 }
@@ -177,6 +182,11 @@ export function TeamTable({ cards }: { cards: LiveCard[] }) {
  */
 function TodayBar({ card }: { card: LiveCard }) {
   const targeted = hasTarget(card);
+
+  // No target: the Target column says so, and there is nothing to draw a bar against
+  if (dayDuty(card) === 'none') {
+    return <span className="text-[11px] text-ink-3">—</span>;
+  }
 
   /**
    * **Work done on a day off also shows in the bar, and it is green.**

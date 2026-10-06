@@ -39,6 +39,14 @@ export interface MyProgress {
    * deserve to be told is completely different.
    */
   observed: boolean;
+  /**
+   * The work policy has no hours target. Then `monthlyTargetHours`,
+   * `dailyTargetSec`, `week7TargetSec` and `paceSec` are all 0.
+   *
+   * Careful: a 0 daily target does not mean "day off" here. Show the hours
+   * plainly, with no target, ring, bar or ahead/behind.
+   */
+  noTarget: boolean;
 }
 
 export interface MySummary {

@@ -119,6 +119,8 @@ export interface LiveCard {
   /** The month's numbers — secondary now, but payroll is based on this */
   monthWorkedSec: number;
   monthTargetSec: number;
+  /** their policy has no hours target (basis 'none'): hours shown, never ahead or behind */
+  noTarget: boolean;
   /** Last heartbeat — null if no **active** device has responded */
   lastHeartbeatAt: Date | null;
 
@@ -672,6 +674,7 @@ export class DashboardService {
         onLeaveToday: leaveBy.get(e.id)?.has(today.getTime()) ?? false,
         monthWorkedSec: monthSec.get(e.id) ?? 0,
         monthTargetSec: Math.round(target.targetSec),
+        noTarget: spread.periodTargetSec === 0,
         lastHeartbeatAt: latestHeartbeat(own),
         agentPresence: agentPresence(own),
       };

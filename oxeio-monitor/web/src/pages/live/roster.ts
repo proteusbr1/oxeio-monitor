@@ -48,8 +48,10 @@ export function meterKind(card: LiveCard): MeterKind {
  * the screen says different things ("on leave" vs "day off"). Merging them would
  * make a leave day's card say "day off", meaning **the whole office is closed**,
  * a new falsehood introduced while fixing another.
+ *
+ * `'none'`: a workday for someone whose policy has no hours target (`noTarget`).
  */
-export type DayDuty = 'target' | 'leave' | 'off';
+export type DayDuty = 'target' | 'leave' | 'off' | 'none';
 
 export function dayDuty(card: LiveCard): DayDuty {
   /**
@@ -58,7 +60,15 @@ export function dayDuty(card: LiveCard): DayDuty {
    * "day off": nobody has a target that day, so singling them out would be
    * meaningless. Hence the condition sits **inside** `todayIsWorkday`.
    */
-  if (!card.todayIsWorkday || card.dailyTargetSec <= 0) return 'off';
+  if (!card.todayIsWorkday) return 'off';
+  /**
+   * Careful: **a person with no hours target has `dailyTargetSec` 0, but that is
+   * not a day off.** `'none'` means a working day with nothing to measure against:
+   * the screens show the hours plainly, with no "day off" and no bar. Leave still
+   * shows as leave.
+   */
+  if (card.noTarget) return card.onLeaveToday ? 'leave' : 'none';
+  if (card.dailyTargetSec <= 0) return 'off';
   return card.onLeaveToday ? 'leave' : 'target';
 }
 

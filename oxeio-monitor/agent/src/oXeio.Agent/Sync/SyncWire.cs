@@ -379,6 +379,8 @@ internal static class SyncWire
         public int? Week7TargetSec { get; init; }
         /// <summary>See <see cref="EmployeeProgress.Observed"/>.</summary>
         public bool? Observed { get; init; }
+        /// <summary>See <see cref="EmployeeProgress.NoTarget"/>.</summary>
+        public bool? NoTarget { get; init; }
     }
 
     internal static HeartbeatResponse ToHeartbeatResponse(HeartbeatResponseDto dto)
@@ -406,19 +408,24 @@ internal static class SyncWire
     ///
     /// Careful: the whole thing is also discarded if <c>monthlyTargetHours ≤ 0</c>. With a zero
     /// target <see cref="AgentStatus.MonthlyProgress"/> returns 0, so a person who worked the
-    /// whole month would see an empty progress bar all month.
+    /// whole month would see an empty progress bar all month. The one exception is a work
+    /// policy that says outright it has no hours target (<c>noTarget</c>): then 0 is the
+    /// truth, and the window shows hours only.
     /// </summary>
     private static EmployeeProgress? ToProgress(ProgressDto? dto)
     {
         if (dto is null) return null;
-        if (dto.MonthlyTargetHours is not { } target || target <= 0) return null;
+        var noTarget = dto.NoTarget == true;
+        if (dto.MonthlyTargetHours is not { } target || (target <= 0 && !noTarget)) return null;
 
         return new EmployeeProgress
         {
             TodayActiveSec = Math.Max(0, dto.TodayActiveSec ?? 0),
             MonthActiveSec = Math.Max(0, dto.MonthActiveSec ?? 0),
-            MonthlyTargetHours = target,
-            PaceSec = dto.PaceSec,
+            MonthlyTargetHours = noTarget ? 0 : target,
+            NoTarget = noTarget,
+            // with no target there is nothing to be ahead of or behind
+            PaceSec = noTarget ? null : dto.PaceSec,
 
             // Careful: these are **not** wrapped in `Math.Max(0, …)`. null means "an old server
             // did not say", and 0 means "day off today". Flattening to zero would make the two

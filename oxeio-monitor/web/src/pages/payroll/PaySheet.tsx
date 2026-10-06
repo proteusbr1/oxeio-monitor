@@ -144,15 +144,23 @@ export function PayrollSheetView({
     },
     {
       key: 'salary',
-      header: 'Monthly salary',
+      header: 'Pay',
       align: 'right',
-      // Careful: `null` = salary **not set**, not zero. Rendering `—` for both would
+      // Careful: `null` = pay **not set**, not zero. Rendering `—` for both would
       //    look the same, and a forgotten salary entry would never be noticed.
       render: (row) =>
-        row.monthlySalary === null ? (
+        row.payBasis === 'none' ? (
+          <span className="text-[11.5px] text-ink-3">Not paid here</span>
+        ) : row.payBasis === 'hourly' ? (
+          row.hourlyRate === null ? (
+            <span className="text-[11.5px] text-ink-3">Not set</span>
+          ) : (
+            <span className="num">{formatTaka(row.hourlyRate)} / h</span>
+          )
+        ) : row.monthlySalary === null ? (
           <span className="text-[11.5px] text-ink-3">Not set</span>
         ) : (
-          <span className="num">{formatTaka(row.monthlySalary)}</span>
+          <span className="num">{formatTaka(row.monthlySalary)} / month</span>
         ),
     },
     {
@@ -168,10 +176,23 @@ export function PayrollSheetView({
       header: 'Deduction',
       align: 'right',
       render: (row) =>
-        row.deduction !== null && Number(row.deduction) > 0 ? (
+        row.payBasis !== 'monthly' ? (
+          <span className="num text-ink-3">—</span>
+        ) : row.deduction !== null && Number(row.deduction) > 0 ? (
           <span className="num text-brand-ink">{formatTaka(row.deduction)}</span>
         ) : (
           <span className="num text-ink-3">{formatTaka(row.deduction)}</span>
+        ),
+    },
+    {
+      key: 'overtimePay',
+      header: 'Overtime pay',
+      align: 'right',
+      render: (row) =>
+        row.overtimePay !== null && Number(row.overtimePay) > 0 ? (
+          <span className="num text-ok">{formatTaka(row.overtimePay)}</span>
+        ) : (
+          <span className="num text-ink-3">—</span>
         ),
     },
     {
@@ -228,7 +249,7 @@ export function PayrollSheetView({
     <>
       <Card
         title={`Payroll Hours · ${formatMonth(month)}`}
-        hint="Deduction = salary × shortfall ÷ target, and shortfall counts only the days we actually watched. Net payable = payable − deposit. Every view of this sheet is written to the audit log."
+        hint="Monthly salary: deduction = salary × shortfall ÷ target (only if the work policy deducts), shortfall counting only the days we actually watched. Hourly: hours counted × rate, plus paid leave. Overtime is paid when the work policy sets a multiplier. Net payable = payable − deposit. Every view of this sheet is written to the audit log."
         padded={false}
       >
         <Table
@@ -239,12 +260,13 @@ export function PayrollSheetView({
         />
       </Card>
 
-      {/* O4: the server's `payroll.math.ts` says exactly the same thing */}
-      <Caveat>
-        No money is calculated for overtime — there is no separate overtime
-        rate (O4, settled 23 Aug). “Payable” above is only the salary minus the
-        shortfall deduction.
-      </Caveat>
+      {/* the rules come from each person's work policy (Settings → Policies › Pay rules) */}
+      {!data.rows.some((r) => r.overtimePay !== null && Number(r.overtimePay) > 0) && (
+        <Caveat>
+          No overtime is paid this month — a work policy pays it only when it sets an
+          overtime multiplier (Settings → Policies & holidays › Pay rules).
+        </Caveat>
+      )}
 
       {data.missingSalary.length > 0 && (
         <Caveat>

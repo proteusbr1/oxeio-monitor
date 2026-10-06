@@ -49,8 +49,12 @@ export function LiveBoardPage() {
   // design targets switched off in Settings → Modules: no design panels
   const hasDesigners = features.designTargets && cards.some((card) => card.staffType === 'designer');
   const month = trend.data?.month;
-  const observed = month?.trackedFrom != null;
+  // Careful: with nobody on a target (all no-target or no policy) there is no pace to show
+  const observed = month?.trackedFrom != null && month.targetSec > 0;
   const withTarget = cards.filter((card) => dayDuty(card) === 'target').length;
+  // No-target staff are not "off": they work today, there is just nothing to measure
+  const noTargetCount = cards.filter((card) => dayDuty(card) === 'none').length;
+  const offCount = cards.length - withTarget - noTargetCount;
   const targets = cards.filter((card) => card.dailyTargetSec > 0);
   const dailyTarget = targets.length && targets.every((card) => card.dailyTargetSec === targets[0].dailyTargetSec) ? targets[0].dailyTargetSec : null;
   const yesterday = trend.data?.days.at(-2);
@@ -65,11 +69,11 @@ export function LiveBoardPage() {
   else content = <>
     {board.error && <p role="status" className="rounded-lg border border-brand/30 bg-brand-bg px-4 py-3 text-sm text-brand-ink">Couldn't refresh — showing the last successful snapshot from {formatTime(board.updatedAt?.toISOString() ?? null)}.</p>}
     <div className="studio-stats">
-      <StudioStat label="Working now" value={active} unit={`/ ${cards.length}`} note={<>{idle} idle · {offline} offline<br />{cards.length - withTarget} off / no target today</>} />
+      <StudioStat label="Working now" value={active} unit={`/ ${cards.length}`} note={<>{idle} idle · {offline} offline<br />{offCount} off today{noTargetCount > 0 && ` · ${noTargetCount} no target`}</>} />
       <StudioStat label="Hours today" value={formatDuration(todaySec)} note={<>{worked} staff with recorded time{delta && <><br />{delta}{trend.error && ' · last update'}</>}</>} />
-      <StudioStat label="Average today" value={worked ? formatDuration(todaySec / worked) : '—'} note={<>Across {worked} staff with time<br />{dailyTarget ? `${formatDuration(dailyTarget)} daily target` : 'Individual targets shown below'}</>} />
+      <StudioStat label="Average today" value={worked ? formatDuration(todaySec / worked) : '—'} note={<>Across {worked} staff with time<br />{dailyTarget ? `${formatDuration(dailyTarget)} daily target` : targets.length ? 'Individual targets shown below' : 'No daily target today'}</>} />
       {hasDesigners && <StudioStat label="Designs finished" value={finished} note="Marked complete today" />}
-      <StudioStat label={!observed ? 'Monthly pace' : month!.paceSec < 0 ? 'Behind monthly pace' : 'Ahead of monthly pace'} value={observed ? formatDuration(Math.abs(month!.paceSec)) : '—'} tone={observed ? month!.paceSec < 0 ? 'warning' : 'ok' : undefined} note={trend.error ? 'Refresh failed · last update shown' : observed ? <>Counted from {formatDate(month!.trackedFrom!)}{month!.notObservedStaff > 0 && ` · ${month!.notObservedStaff} not counted yet`}</> : 'No finished day counted yet'} />
+      <StudioStat label={!observed ? 'Monthly pace' : month!.paceSec < 0 ? 'Behind monthly pace' : 'Ahead of monthly pace'} value={observed ? formatDuration(Math.abs(month!.paceSec)) : '—'} tone={observed ? month!.paceSec < 0 ? 'warning' : 'ok' : undefined} note={trend.error ? 'Refresh failed · last update shown' : observed ? <>Counted from {formatDate(month!.trackedFrom!)}{month!.notObservedStaff > 0 && ` · ${month!.notObservedStaff} not counted yet`}</> : month && month.targetSec <= 0 ? 'Nobody has an hours target' : 'No finished day counted yet'} />
       {isOwner && <StudioStat label="Open alerts" value={alerts.data?.openCount ?? '—'} tone={alerts.data?.openCount ? 'warning' : undefined} note={<Link to="/alerts" className="underline underline-offset-4">{alerts.error ? 'Refresh failed · view alerts ↗' : alerts.data?.rows[0]?.title ?? 'View alerts ↗'}</Link>} />}
     </div>
     <div className="studio-overview">
@@ -81,7 +85,7 @@ export function LiveBoardPage() {
       <Card title="Hours · Last 7 Days" hint="Solid line = usual target · dashed bars = not tracked" padded={false}><DataPanel result={trend}>{trend.data && <WeekBars days={trend.data.days} />}</DataPanel></Card>
     </div>
     <div className="studio-detail-grid">
-      <Card title="Team Snapshot" hint={withTarget ? 'Today’s hours, targets and design progress · furthest along first' : 'Day off · recorded hours still count'} actions={<Link className="tap text-xs underline underline-offset-4" to="/worklog">View Worklog ↗</Link>} padded={false}>
+      <Card title="Team Snapshot" hint={withTarget ? 'Today’s hours, targets and design progress · furthest along first' : noTargetCount ? 'Today’s hours · no hours target set' : 'Day off · recorded hours still count'} actions={<Link className="tap text-xs underline underline-offset-4" to="/worklog">View Worklog ↗</Link>} padded={false}>
         <TeamTable cards={cards} />
       </Card>
       <div className="studio-detail-side">

@@ -120,6 +120,7 @@ internal static class TrayTooltip
         // The server has not reported the month total yet. Writing "0:00/208 (0%)" would
         // read as "you did nothing" when we simply do not know (AgentStatus.MonthlyKnown).
         if (!status.MonthlyKnown) return "Monthly total loading…";
+        if (status.NoTarget) return $"Month {UiText.Duration(status.ActiveThisMonth)}";
 
         // "Month", not "This month". The sync line follows this one, and all three lines
         // must fit in 63 slots; five extra characters would push the sync line out.

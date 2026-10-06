@@ -73,6 +73,24 @@ public class HeartbeatProgressTests
     }
 
     /// <summary>
+    /// The exception: a work policy with no hours target says so, and then the zero is
+    /// true. The hours still arrive; the pace (credited − 0) is dropped, since "ahead of
+    /// nothing" means nothing.
+    /// </summary>
+    [Fact]
+    public void A_zero_target_is_accepted_when_the_policy_has_none()
+    {
+        var response = Parse(
+            """{"progress":{"todayActiveSec":10,"monthActiveSec":20,"monthlyTargetHours":0,"noTarget":true,"paceSec":20,"dailyTargetSec":0}}""");
+
+        Assert.NotNull(response.Progress);
+        Assert.True(response.Progress!.NoTarget);
+        Assert.Equal(20, response.Progress.MonthActiveSec);
+        Assert.Equal(0, response.Progress.MonthlyTargetHours);
+        Assert.Null(response.Progress.PaceSec);
+    }
+
+    /// <summary>
     /// The most important safeguard: losing one progress field must never cost a
     /// <b>command</b>. Even if the server one day drops a field or adds a new one,
     /// revoke/reload_config must still arrive.

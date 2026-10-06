@@ -224,6 +224,12 @@ internal sealed class TodayForm : OwnerDrawnForm
             return;
         }
 
+        if (status.NoTarget)
+        {
+            PaintHoursOnly(stack, status);
+            return;
+        }
+
         // ── today ─────────────────────────────────────────────────────────
         // Careful: a target of zero means a day off: a sentence, not a bar. Showing an empty
         // bar on a day off would nag "still 8 hours to go today".
@@ -269,6 +275,25 @@ internal sealed class TodayForm : OwnerDrawnForm
             expected: ExpectedRatio(status, pace));
 
         PaintLegend(stack, status, pace);
+    }
+
+    /// <summary>
+    /// The same three rows when the work policy has no hours target: the hours, without a
+    /// bar. Careful: the zero targets the server sends then must not read as "day off".
+    /// </summary>
+    private void PaintHoursOnly(TextStack stack, AgentStatus status)
+    {
+        stack.TargetRow("Today", UiText.Duration(status.ActiveToday), null, Theme.Ink);
+        stack.Gap(6);
+        stack.TargetRow(
+            "Last 7 days",
+            status.ActiveLast7 is { } worked ? UiText.Duration(worked) : "—",
+            null,
+            Theme.Ink);
+        stack.Gap(6);
+        stack.TargetRow(
+            "This month", UiText.Duration(status.ActiveThisMonth), null, Theme.Ink,
+            note: "No hours target — every hour you work is counted.");
     }
 
     /// <summary>

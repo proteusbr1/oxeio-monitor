@@ -54,6 +54,8 @@ export interface EmployeeProgress {
   monthCreditedSec: number;
   /** From that employee's work policy, not a hardcoded 208. */
   monthlyTargetHours: number;
+  /** their policy has no hours target (basis 'none'): hours only, no pace */
+  noTarget: boolean;
   /**
    * **B05b** - how far ahead (+) or behind (-) up to today, in seconds.
    * `credited_sec - expected_sec` (§ 2.1-b).
@@ -371,6 +373,7 @@ export class ProgressService {
       monthCreditedSec,
       // G37 - what the agent shows is **their** target, not a flat 208.
       monthlyTargetHours: p.targetSec / 3600,
+      noTarget: spread.periodTargetSec === 0,
       dailyTargetSec: todayIsWorkday ? perWorkdayTargetSec : 0,
       week7ActiveSec,
       /**

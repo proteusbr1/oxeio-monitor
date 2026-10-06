@@ -71,6 +71,28 @@ is deleted.
 | `designTargets` | design target pool, review, hand-out jobs, digest lines |
 | `staffScreenshots` | staff and researcher logins see their own screenshots |
 
+## Work regimes
+
+Two halves, set in two places:
+
+- **The hours target lives on the work policy** (Settings → Policies &
+  holidays): `targetBasis` is `month` (N hours over the month's workdays),
+  `week` (N hours a week, spread over the days not off), `day` (N hours each
+  workday, e.g. a fixed 09:00–18:00 less a break) or `none` (hours are
+  counted, nothing is measured against them). The policy's pay rules say
+  whether a monthly salary is cut for a shortfall (`deductShortfall`) and
+  whether overtime is paid (`overtimeMultiplier`; empty = not paid).
+- **The pay lives on the person** (Staff → Directory, owner only):
+  `payBasis` is `monthly` (a salary), `hourly` (a rate × the hours counted,
+  plus paid leave) or `none` (not paid through oXeio). Changes keep the old
+  terms as a `salary_periods` slice, so earlier months pay at earlier terms.
+
+Every target basis is turned into one pair — target seconds over the
+month's workdays — by `server/src/calendar/work-regime.ts`
+(`targetSpreadOf`), so the rollup, pace, tray and payroll math stay one
+formula. A `none` policy sets `noTarget`: screens and the tray show hours
+only, and a target of 0 does not read as a day off.
+
 ## Roles
 
 `owner` (everything), `manager` (team, reports, screenshots — no money, no

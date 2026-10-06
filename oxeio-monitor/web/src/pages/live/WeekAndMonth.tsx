@@ -219,6 +219,19 @@ export function MonthCard({ month }: { month: TeamTrend['month'] }) {
   const pct = pctOf(month.creditedSec, month.targetSec);
   const ahead = month.paceSec >= 0;
 
+  // Careful: nobody on a target (all no-target): the hours alone, with no "of 0h",
+  // no percentage and no pace
+  if (month.targetSec <= 0) {
+    return (
+      <div className="px-4 pt-1 pb-3">
+        <span className="num text-2xl leading-none font-semibold">
+          {formatDuration(month.creditedSec)}
+        </span>
+        <p className="mt-2 text-[11.5px] text-ink-3">No hours target set</p>
+      </div>
+    );
+  }
+
   return (
     <div className="px-4 pt-1 pb-3">
       <div className="flex items-baseline gap-2">

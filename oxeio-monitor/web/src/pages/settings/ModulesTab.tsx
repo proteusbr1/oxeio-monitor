@@ -41,7 +41,7 @@ const MODULES: ModuleInfo[] = [
     title: 'Payroll',
     what: 'Monthly pay sheet worked out from salaries, hours and leave.',
     hides: [
-      'The Pay sheet and Salaries tabs of Payroll (the page becomes “Leave & months”)',
+      'Payroll’s Pay sheet and each person’s pay terms (the page becomes “Leave & months”)',
       'The salary column and field in Staff',
     ],
     holds: (u) =>

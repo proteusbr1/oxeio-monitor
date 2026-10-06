@@ -68,7 +68,10 @@ export function TeamRoster({
   cards: readonly LiveCard[];
   /** Careful: so that a staff member's browser does not collect pointless 403s */
   canView: boolean;
-  /** How many have a target today; 0 on a day off, and the header text changes */
+  /**
+   * How many have a workday today (with or without an hours target); 0 on a day
+   * off for everyone, and the header text changes
+   */
   withTarget: number;
 }) {
   const [openFor, setOpenFor] = useState<number | null>(null);
@@ -351,7 +354,9 @@ function TodayCell({ card }: { card: LiveCard }) {
             ? `/ ${targetText(card.dailyTargetSec)}`
             : duty === 'leave'
               ? 'on leave'
-              : 'day off'}
+              : duty === 'none'
+                ? 'no target'
+                : 'day off'}
         </span>
       </div>
 
@@ -380,6 +385,17 @@ function MonthCell({ card }: { card: LiveCard }) {
    * hours were genuinely measured, so they are not hidden.
    */
   const unknown = meterKind(card) === 'unknown' && card.monthWorkedSec === 0;
+
+  // No target: the hours alone, with no "/ 0h" and no bar against zero
+  if (card.noTarget) {
+    return (
+      <div className="inline-block w-full max-w-[140px] text-right">
+        <div className="num text-[12.5px] text-ink-2">
+          {unknown ? <span className="text-ink-3">—</span> : formatDuration(card.monthWorkedSec)}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="inline-block w-full max-w-[140px] text-right">

@@ -4,6 +4,7 @@ import { usePolling } from '../../api/useApi';
 import { useAuth } from '../../auth/AuthContext';
 import { Page } from '../../components/Page';
 import { ErrorBox, Loading } from '../../components/States';
+import { dayDuty } from '../live/roster';
 import { TeamRoster } from '../live/TeamRoster';
 
 /**
@@ -70,9 +71,9 @@ export function WorklogPage() {
         <TeamRoster
           cards={data.cards}
           canView={canView}
+          // Careful: no-target staff work today too (`'none'`), so they count here
           withTarget={
-            data.cards.filter((c) => c.todayIsWorkday && c.dailyTargetSec > 0)
-              .length
+            data.cards.filter((c) => dayDuty(c) !== 'off').length
           }
         />
       )}

@@ -2,16 +2,17 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { STAFF_TYPE_LABEL, type StaffType } from '../../api/staff';
-import { createEmployee, changeLoginEmail, changeUserRole, createPortalAccount, nextEmployeeCode, resetUserPassword, deactivateEmployee, listEmployees, reactivateEmployee, turnAgentOn, updateEmployee, type AssignableRole, type Role, type CreateEmployeeBody, type EmployeeStatus, type EmployeeView, type UpdateEmployeeBody } from '../../api/staff';
+import { createEmployee, changeLoginEmail, changeUserRole, createPortalAccount, nextEmployeeCode, resetUserPassword, deactivateEmployee, listEmployees, reactivateEmployee, turnAgentOn, updateEmployee, type AssignableRole, type Role, type CreateEmployeeBody, type EmployeeStatus, type EmployeeView, type UpdateEmployeeBody, type PayBasis } from '../../api/staff';
 import { listWorkPolicies } from '../../api/calendar';
 import { useApi } from '../../api/useApi';
 import { useAuth } from '../../auth/AuthContext';
 import { useFeatures } from '../../features/FeaturesContext';
+import { PayFields, payText } from '../payroll/pay';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Page';
 import { Empty, ErrorBox, Loading } from '../../components/States';
 import { PersonCell, Table, type Column } from '../../components/Table';
-import { currencySymbol, formatDate, formatTaka, todayInWorkZone } from '../../lib/format';
+import { formatDate, todayInWorkZone } from '../../lib/format';
 import {
   Chip,
   ConfirmDialog,
@@ -188,10 +189,10 @@ export function StaffDirectory() {
       ? [
           {
             key: 'salary',
-            header: 'Monthly salary',
+            header: 'Pay',
             align: 'right' as const,
             render: (emp: EmployeeView) => (
-              <span className="num">{formatTaka(emp.monthlySalary)}</span>
+              <span className="num">{payText(emp) ?? '—'}</span>
             ),
           },
         ]
@@ -518,6 +519,8 @@ interface StaffForm {
   policyId: string;
   joinedOn: string;
   monthlySalary: string;
+  payBasis: PayBasis;
+  hourlyRate: string;
 }
 
 function formOf(employee: EmployeeView | null): StaffForm {
@@ -537,6 +540,8 @@ function formOf(employee: EmployeeView | null): StaffForm {
         : String(employee.policyId),
     joinedOn: employee?.joinedOn ?? '',
     monthlySalary: employee?.monthlySalary ?? '',
+    payBasis: employee?.payBasis ?? 'monthly',
+    hourlyRate: employee?.hourlyRate ?? '',
   };
 }
 
@@ -580,8 +585,17 @@ function patchOf(
   if (after.policyId !== before.policyId) {
     patch.policyId = after.policyId === '' ? null : Number(after.policyId);
   }
-  if (canSeeSalary && after.monthlySalary.trim() !== before.monthlySalary) {
-    patch.monthlySalary = orNull(after.monthlySalary);
+  // pay terms go together: a change of basis, salary or rate sends all three,
+  // so the server keeps one consistent history slice
+  if (
+    canSeeSalary &&
+    (after.monthlySalary.trim() !== before.monthlySalary ||
+      after.hourlyRate.trim() !== before.hourlyRate ||
+      after.payBasis !== before.payBasis)
+  ) {
+    patch.payBasis = after.payBasis;
+    patch.monthlySalary = after.payBasis === 'monthly' ? orNull(after.monthlySalary) : null;
+    patch.hourlyRate = after.payBasis === 'hourly' ? orNull(after.hourlyRate) : null;
   }
 
   return patch;
@@ -658,8 +672,12 @@ function EmployeeForm({
             : { dailyDesignTarget: Number(form.dailyDesignTarget) }),
           ...(form.policyId ? { policyId: Number(form.policyId) } : {}),
           ...(form.joinedOn ? { joinedOn: form.joinedOn } : {}),
-          ...(canSeeSalary && orUndefined(form.monthlySalary)
+          ...(canSeeSalary ? { payBasis: form.payBasis } : {}),
+          ...(canSeeSalary && form.payBasis === 'monthly' && orUndefined(form.monthlySalary)
             ? { monthlySalary: form.monthlySalary.trim() }
+            : {}),
+          ...(canSeeSalary && form.payBasis === 'hourly' && orUndefined(form.hourlyRate)
+            ? { hourlyRate: form.hourlyRate.trim() }
             : {}),
         };
         await createEmployee(body);
@@ -856,14 +874,19 @@ function EmployeeForm({
           */}
           {canSeeSalary && (
             <FullWidth>
-              <TextField
-                label={`Monthly salary (${currencySymbol()})`}
-                value={form.monthlySalary}
-                onChange={set('monthlySalary')}
-                mono
-                placeholder="13000"
-                hint='Viewing or changing salary is recorded in the audit log. Write it as "13000" or "13000.50"; leave it empty to clear the salary that is set.'
-              />
+              <div className="grid gap-3.5 sm:grid-cols-2">
+                <PayFields
+                  basis={form.payBasis}
+                  salary={form.monthlySalary}
+                  rate={form.hourlyRate}
+                  onBasis={(basis) => setForm((prev) => ({ ...prev, payBasis: basis }))}
+                  onSalary={set('monthlySalary')}
+                  onRate={set('hourlyRate')}
+                />
+              </div>
+              <p className="mt-1.5 text-[11.5px] text-ink-3">
+                Pay is the owner's alone; viewing or changing it is recorded in the audit log.
+              </p>
             </FullWidth>
           )}
         </FormGrid>

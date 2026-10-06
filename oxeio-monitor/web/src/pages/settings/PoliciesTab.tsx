@@ -1,8 +1,9 @@
 import { useState } from 'react';
 
-import { createWorkPolicy, deactivateWorkPolicy, listWorkPolicies, reactivateWorkPolicy, updateWorkPolicy, type WorkPolicyBody, type WorkPolicyView } from '../../api/calendar';
+import { createWorkPolicy, deactivateWorkPolicy, listWorkPolicies, reactivateWorkPolicy, updateWorkPolicy, type TargetBasis, type WorkPolicyBody, type WorkPolicyView } from '../../api/calendar';
 import { useApi } from '../../api/useApi';
 import { useAuth } from '../../auth/AuthContext';
+import { useFeatures } from '../../features/FeaturesContext';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Page';
 import { Empty, ErrorBox, Loading } from '../../components/States';
@@ -28,6 +29,7 @@ import {
   ServerError,
   TextField,
   useMutation,
+  SelectField,
 } from '../../components/ui';
 
 /**
@@ -94,20 +96,9 @@ function WorkPoliciesSection() {
     },
     {
       key: 'target',
-      header: 'Monthly target',
+      header: 'Target',
       align: 'right',
-      render: (policy) => (
-        <span className="num">
-          {policy.monthlyTargetHours}
-          <small className="ml-1 text-[11px] text-ink-3">h</small>
-        </span>
-      ),
-    },
-    {
-      key: 'workdays',
-      header: 'Workdays',
-      align: 'right',
-      render: (policy) => <span className="num">{policy.expectedWorkdays}</span>,
+      render: (policy) => <TargetCell policy={policy} />,
     },
     {
       key: 'off',
@@ -324,6 +315,27 @@ interface PolicyFormState {
   officeTo: string;
   idleThresholdSec: string;
   slotMinutes: string;
+  weeklyTargetHours: string;
+  dailyTargetHours: string;
+  breakMinutes: string;
+  overtimeMultiplier: string;
+}
+
+const BASIS_OPTIONS: { value: TargetBasis; label: string }[] = [
+  { value: 'month', label: 'Hours per month' },
+  { value: 'week', label: 'Hours per week' },
+  { value: 'day', label: 'Hours per day (fixed schedule)' },
+  { value: 'none', label: 'No target — record hours only' },
+];
+
+/** minutes between two 'HH:MM' times (0 if not a forward range) */
+function minutesBetween(from: string, to: string): number {
+  const m = (t: string) => {
+    const [h, mm] = t.split(':').map(Number);
+    return h * 60 + mm;
+  };
+  if (!/^\d{2}:\d{2}$/.test(from) || !/^\d{2}:\d{2}$/.test(to)) return 0;
+  return Math.max(0, m(to) - m(from));
 }
 
 function PolicyForm({
@@ -348,7 +360,14 @@ function PolicyForm({
     officeTo: policy?.officeTo ?? '18:00',
     idleThresholdSec: String(policy?.idleThresholdSec ?? 300),
     slotMinutes: String(policy?.slotMinutes ?? 10),
+    weeklyTargetHours: policy?.weeklyTargetHours === null || policy?.weeklyTargetHours === undefined ? '40' : String(policy.weeklyTargetHours),
+    dailyTargetHours: policy?.dailyTargetHours === null || policy?.dailyTargetHours === undefined ? '8' : String(policy.dailyTargetHours),
+    breakMinutes: policy?.breakMinutes === null || policy?.breakMinutes === undefined ? '60' : String(policy.breakMinutes),
+    overtimeMultiplier: policy?.overtimeMultiplier === null || policy?.overtimeMultiplier === undefined ? '' : String(policy.overtimeMultiplier),
   });
+  const [basis, setBasis] = useState<TargetBasis>(policy?.targetBasis ?? 'month');
+  const [deductShortfall, setDeductShortfall] = useState(policy?.deductShortfall !== false);
+  const { features } = useFeatures();
 
   // a boolean, so kept apart from the all-string form state above
   const [screenshotsEnabled, setScreenshotsEnabled] = useState(
@@ -377,6 +396,12 @@ function PolicyForm({
   const submit = (): void => {
     run(async () => {
       const body: WorkPolicyBody = {
+        targetBasis: basis,
+        weeklyTargetHours: basis === 'week' ? Number(form.weeklyTargetHours) : undefined,
+        dailyTargetHours: basis === 'day' ? Number(form.dailyTargetHours) : undefined,
+        breakMinutes: basis === 'day' && form.breakMinutes !== '' ? Number(form.breakMinutes) : undefined,
+        overtimeMultiplier: form.overtimeMultiplier.trim() === '' ? null : Number(form.overtimeMultiplier),
+        deductShortfall,
         monthlyTargetHours: Number(form.monthlyTargetHours),
         expectedWorkdays: Number(form.expectedWorkdays),
         // ⚠️ always sent, even empty: `[]` = "no weekly day off". Leaving it
@@ -439,6 +464,17 @@ function PolicyForm({
             />
           </FullWidth>
 
+          <FullWidth>
+            <SelectField
+              label="Hours target"
+              value={basis}
+              onChange={(v) => setBasis(v as TargetBasis)}
+              options={BASIS_OPTIONS}
+            />
+          </FullWidth>
+
+          {basis === 'month' && (
+            <>
           <TextField
             label="Monthly target (hours)"
             type="number"
@@ -460,6 +496,78 @@ function PolicyForm({
             max={31}
             hint="How many days of work the month is assumed to hold — used for pace, and it divides the daily target"
           />
+            </>
+          )}
+
+          {basis === 'week' && (
+            <FullWidth>
+              <TextField
+                label="Hours per week"
+                type="number"
+                value={form.weeklyTargetHours}
+                onChange={set('weeklyTargetHours')}
+                mono
+                min={1}
+                max={168}
+                step="0.5"
+                hint={`Spread over the ${Math.max(1, 7 - offDays.length)} working days of the week → ${formatHours((Number(form.weeklyTargetHours) / Math.max(1, 7 - offDays.length)) * 3600)} h a day. The month's target is its workdays × that.`}
+              />
+            </FullWidth>
+          )}
+
+          {basis === 'day' && (
+            <>
+              <TextField
+                label="Hours per day"
+                type="number"
+                value={form.dailyTargetHours}
+                onChange={set('dailyTargetHours')}
+                mono
+                min={0.5}
+                max={24}
+                step="0.25"
+              />
+              <TextField
+                label="Break (minutes)"
+                type="number"
+                value={form.breakMinutes}
+                onChange={set('breakMinutes')}
+                mono
+                min={0}
+                max={480}
+              />
+              <FullWidth>
+                {(() => {
+                  const span = minutesBetween(form.officeFrom, form.officeTo) - Number(form.breakMinutes || 0);
+                  const fromSchedule = Math.max(0, span) / 60;
+                  return (
+                    <p className="text-[11.5px] leading-relaxed text-ink-3">
+                      The schedule is the working hours below ({form.officeFrom}–{form.officeTo}
+                      {Number(form.breakMinutes) > 0 ? `, minus a ${form.breakMinutes}-minute break` : ''})
+                      {fromSchedule > 0 && fromSchedule !== Number(form.dailyTargetHours) && (
+                        <>
+                          {' '}= {formatHours(fromSchedule * 3600)} h.{' '}
+                          <MiniButton onClick={() => set('dailyTargetHours')(String(Math.round(fromSchedule * 100) / 100))}>
+                            Use {formatHours(fromSchedule * 3600)} h
+                          </MiniButton>
+                        </>
+                      )}
+                      {fromSchedule > 0 && fromSchedule === Number(form.dailyTargetHours) && ' — matches the hours per day.'}
+                    </p>
+                  );
+                })()}
+              </FullWidth>
+            </>
+          )}
+
+          {basis === 'none' && (
+            <FullWidth>
+              <Notice>
+                Hours are recorded and shown as usual, but nobody is ahead or behind and no
+                missing hours are counted — for freelancers, owners or anyone without a quota.
+              </Notice>
+            </FullWidth>
+          )}
 
           <FullWidth>
             <fieldset>
@@ -485,7 +593,7 @@ function PolicyForm({
           </FullWidth>
 
           {/* what these numbers come to in a real month — see policy.math.ts */}
-          {preview && (
+          {basis === 'month' && preview && (
             <FullWidth>
               <p className="text-[11.5px] leading-relaxed text-ink-3">
                 {formatMonth(thisMonth)}: {preview.workdays} workdays with these
@@ -508,14 +616,14 @@ function PolicyForm({
             </FullWidth>
           )}
           <TextField
-            label="Office opens"
+            label={basis === 'day' ? 'Working hours from' : 'Office opens'}
             type="time"
             value={form.officeFrom}
             onChange={set('officeFrom')}
             mono
           />
           <TextField
-            label="Office closes"
+            label={basis === 'day' ? 'Working hours until' : 'Office closes'}
             type="time"
             value={form.officeTo}
             onChange={set('officeTo')}
@@ -576,6 +684,34 @@ function PolicyForm({
             max={60}
             hint="How long each cell of the timeline is"
           />
+
+          {features.payroll && (
+            <FullWidth>
+              <fieldset className="space-y-2.5 rounded-md border border-line px-3 py-2.5">
+                <legend className="px-1 text-[12px] font-medium text-ink-2">Pay rules</legend>
+                <TextField
+                  label="Overtime pay (× the hourly rate)"
+                  type="number"
+                  value={form.overtimeMultiplier}
+                  onChange={set('overtimeMultiplier')}
+                  mono
+                  min={1}
+                  max={5}
+                  step="0.05"
+                  placeholder="Not paid"
+                  hint="Hours above the month's target, paid at this multiple — e.g. 1.5. Empty: overtime is shown but not paid."
+                />
+                {basis !== 'none' && (
+                  <CheckboxField
+                    label="Deduct missing hours from monthly salaries"
+                    checked={deductShortfall}
+                    onChange={setDeductShortfall}
+                    hint="Off: the salary is paid in full and the missing hours are only reported. Hourly pay is never deducted — fewer hours are simply fewer hours."
+                  />
+                )}
+              </fieldset>
+            </FullWidth>
+          )}
         </FormGrid>
 
         <ServerError error={error} />
@@ -656,4 +792,29 @@ function ClosePolicyDialog({
       }
     />
   );
+}
+
+/** The hours target the way the policy states it */
+function TargetCell({ policy }: { policy: WorkPolicyView }) {
+  const unit = (n: number | null, per: string) => (
+    <span className="num">
+      {n ?? '—'}
+      <small className="ml-1 text-[11px] text-ink-3">h/{per}</small>
+    </span>
+  );
+  switch (policy.targetBasis) {
+    case 'week':
+      return unit(policy.weeklyTargetHours, 'week');
+    case 'day':
+      return unit(policy.dailyTargetHours, 'day');
+    case 'none':
+      return <span className="text-ink-3">No target</span>;
+    default:
+      return (
+        <span className="num" title={`Spread over ${policy.expectedWorkdays} workdays`}>
+          {policy.monthlyTargetHours}
+          <small className="ml-1 text-[11px] text-ink-3">h/month</small>
+        </span>
+      );
+  }
 }

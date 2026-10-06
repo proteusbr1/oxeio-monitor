@@ -1,20 +1,14 @@
 import { useState } from 'react';
 
-import { listEmployees, STAFF_TYPE_LABEL, updateEmployee, type EmployeeView } from '../../api/staff';
+import { listEmployees, STAFF_TYPE_LABEL, updateEmployee, type EmployeeView, type PayBasis } from '../../api/staff';
 import { useApi } from '../../api/useApi';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Page';
 import { Caveat, Empty, ErrorBox, Loading } from '../../components/States';
 import { PersonCell, Table, type Column } from '../../components/Table';
-import { formatDate, formatTaka } from '../../lib/format';
-import {
-  Chip,
-  MiniButton,
-  Modal,
-  ServerError,
-  TextField,
-  useMutation,
-} from '../../components/ui';
+import { formatDate } from '../../lib/format';
+import { Chip, MiniButton, Modal, ServerError, useMutation } from '../../components/ui';
+import { PayFields, payText, validAmount } from './pay';
 
 /**
  * Everyone's monthly salary in one list — what the pay sheet starts from.
@@ -28,7 +22,7 @@ export function SalariesTab() {
   if (!staff.data) return <ErrorBox error={staff.error} retry={staff.reload} />;
 
   const rows = staff.data.rows;
-  const missing = rows.filter((e) => !e.monthlySalary).length;
+  const missing = rows.filter((e) => payText(e) === null).length;
 
   if (rows.length === 0) {
     return <Empty title="No active staff yet" hint="Add people in Staff first." />;
@@ -52,14 +46,12 @@ export function SalariesTab() {
     },
     {
       key: 'salary',
-      header: 'Monthly salary',
+      header: 'Pay',
       align: 'right',
-      render: (e) =>
-        e.monthlySalary ? (
-          <span className="num">{formatTaka(e.monthlySalary)}</span>
-        ) : (
-          <Chip tone="pending">Not set</Chip>
-        ),
+      render: (e) => {
+        const text = payText(e);
+        return text ? <span className="num">{text}</span> : <Chip tone="pending">Not set</Chip>;
+      },
     },
     {
       key: 'actions',
@@ -72,7 +64,7 @@ export function SalariesTab() {
   return (
     <>
       <Card
-        title="Salaries"
+        title="Pay"
         hint={
           missing > 0
             ? `${missing} without a salary — they are left out of the pay sheet until one is set`
@@ -82,8 +74,8 @@ export function SalariesTab() {
       >
         <Table columns={columns} rows={rows} rowKey={(e) => String(e.id)} />
         <Caveat>
-          A new salary counts from this month (from next month if this month is
-          already closed). Months before keep the salary they had, so a pay
+          New pay terms count from this month (from next month if this month is
+          already closed). Months before keep the terms they had, so a pay
           sheet already reviewed does not change.
         </Caveat>
       </Card>
@@ -111,14 +103,19 @@ function SalaryForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const [basis, setBasis] = useState<PayBasis>(employee.payBasis ?? 'monthly');
   const [salary, setSalary] = useState(employee.monthlySalary ?? '');
+  const [rate, setRate] = useState(employee.hourlyRate ?? '');
   const { busy, error, run } = useMutation();
-  const value = salary.trim();
-  const valid = value === '' || /^\d+(\.\d{1,2})?$/.test(value);
+  const valid = validAmount(salary) && validAmount(rate);
+  const changed =
+    basis !== (employee.payBasis ?? 'monthly') ||
+    salary.trim() !== (employee.monthlySalary ?? '') ||
+    rate.trim() !== (employee.hourlyRate ?? '');
 
   return (
     <Modal
-      title={`Salary · ${employee.fullName}`}
+      title={`Pay · ${employee.fullName}`}
       hint={employee.empCode}
       onClose={onClose}
       footer={
@@ -128,11 +125,14 @@ function SalaryForm({
           </Button>
           <Button
             tone="primary"
-            disabled={busy || !valid || value === (employee.monthlySalary ?? '')}
+            disabled={busy || !valid || !changed}
             onClick={() =>
               run(async () => {
+                // the three go together, so the server keeps one history slice
                 await updateEmployee(employee.id, {
-                  monthlySalary: value === '' ? null : value,
+                  payBasis: basis,
+                  monthlySalary: basis === 'monthly' && salary.trim() !== '' ? salary.trim() : null,
+                  hourlyRate: basis === 'hourly' && rate.trim() !== '' ? rate.trim() : null,
                 });
                 onSaved();
               })
@@ -144,18 +144,13 @@ function SalaryForm({
       }
     >
       <div className="space-y-3">
-        <TextField
-          label="Monthly salary"
-          value={salary}
-          onChange={setSalary}
-          mono
-          autoFocus
-          placeholder="25000"
-          hint={
-            valid
-              ? 'Numbers only. Leave empty to remove it — the person then drops off the pay sheet.'
-              : 'Numbers only, with at most two decimals (e.g. 25000 or 25000.50).'
-          }
+        <PayFields
+          basis={basis}
+          salary={salary}
+          rate={rate}
+          onBasis={setBasis}
+          onSalary={setSalary}
+          onRate={setRate}
         />
         <ServerError error={error} />
       </div>

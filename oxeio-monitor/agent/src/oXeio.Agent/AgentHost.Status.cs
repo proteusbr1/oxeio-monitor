@@ -90,6 +90,7 @@ internal sealed partial class AgentHost
             CountedAt = DateTimeOffset.UtcNow,
             ActiveThisMonth = TimeSpan.FromSeconds(progress?.MonthActiveSec ?? 0),
             MonthlyTargetHours = progress?.MonthlyTargetHours ?? 208,
+            NoTarget = progress?.NoTarget ?? false,
 
             // Careful: before the first heartbeat the month cell is a false zero; the place that
             // shows it must be told (AgentStatus.MonthlyKnown).

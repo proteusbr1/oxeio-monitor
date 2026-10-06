@@ -163,6 +163,13 @@ public sealed record EmployeeProgress
     public required double MonthlyTargetHours { get; init; }
 
     /// <summary>
+    /// The work policy has no hours target (pay by the hour, freelancers): every hour counts,
+    /// but there is no bar, pace or "hours left". Then <see cref="MonthlyTargetHours"/> and the
+    /// daily and 7-day targets are 0, and that 0 does <b>not</b> mean "day off".
+    /// </summary>
+    public bool NoTarget { get; init; }
+
+    /// <summary>
     /// Pace: <c>credited - expected</c>, positive means ahead (07 section 2.1(b)).
     ///
     /// <b>Optional, and that is the point.</b> An exact figure needs working days counted,

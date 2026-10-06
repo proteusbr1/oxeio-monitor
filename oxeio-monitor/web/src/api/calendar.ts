@@ -9,8 +9,17 @@ export interface WorkPolicyView {
   id: number;
   name: string;
   /** The only target; default 208. */
+  /** how the hours target is stated (server: calendar/work-regime.ts) */
+  targetBasis: TargetBasis;
   monthlyTargetHours: number;
   expectedWorkdays: number;
+  weeklyTargetHours: number | null;
+  dailyTargetHours: number | null;
+  breakMinutes: number | null;
+  /** overtime paid at this multiple of the hourly rate; null = not paid */
+  overtimeMultiplier: number | null;
+  /** monthly salaries: missing hours are deducted */
+  deductShortfall: boolean;
   /**
    * ISO weekday: Mon = 1 ... Fri = 5 ... Sun = 7. Several allowed; empty = every day is a workday.
    */
@@ -38,8 +47,16 @@ export interface WorkPolicyView {
   /** Check this before deactivating: if anyone is still assigned, the server refuses. */
   employeeCount: number;
 }
+export type TargetBasis = 'month' | 'week' | 'day' | 'none';
+
 export type WorkPolicyBody = Partial<{
   name: string;
+  targetBasis: TargetBasis;
+  weeklyTargetHours: number | null;
+  dailyTargetHours: number | null;
+  breakMinutes: number | null;
+  overtimeMultiplier: number | null;
+  deductShortfall: boolean;
   monthlyTargetHours: number;
   expectedWorkdays: number;
   weeklyOffDays: number[];

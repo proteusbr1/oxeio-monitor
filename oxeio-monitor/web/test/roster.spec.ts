@@ -33,6 +33,8 @@ function card(over: Partial<LiveCard> = {}): LiveCard {
     status: 'active',
     todayWorkedSec: 3_600,
     dailyTargetSec: 28_800,
+    // By default there is an hours target; the no-target policy has its own tests
+    noTarget: false,
     todayIsWorkday: true,
     // G130: by default nobody is on leave; leave claims have their own describe
     onLeaveToday: false,
@@ -281,5 +283,32 @@ describe('G130 — what is expected today, and why not', () => {
     expect(onLeave).not.toBe('target');
     expect(dayOff).not.toBe('target');
     expect(onLeave).not.toBe(dayOff);
+  });
+
+  /**
+   * Careful: the server sends a target of 0 for people whose policy has no hours
+   * target. That 0 must not read as "day off": the screens show their hours
+   * plainly instead.
+   */
+  describe('no hours target (freelancers)', () => {
+    const none = { noTarget: true, dailyTargetSec: 0, monthTargetSec: 0 };
+
+    it('a workday with no target is "none", not "off"', () => {
+      expect(dayDuty(card(none))).toBe('none');
+    });
+
+    it('a real day off still wins: weekly off day or holiday', () => {
+      expect(dayDuty(card({ ...none, todayIsWorkday: false }))).toBe('off');
+    });
+
+    it('approved leave still shows as leave', () => {
+      expect(dayDuty(card({ ...none, onLeaveToday: true }))).toBe('leave');
+    });
+
+    it('leave on a day off stays "off", as for everyone else', () => {
+      expect(
+        dayDuty(card({ ...none, todayIsWorkday: false, onLeaveToday: true })),
+      ).toBe('off');
+    });
   });
 });

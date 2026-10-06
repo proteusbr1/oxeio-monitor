@@ -81,6 +81,9 @@ public sealed record AgentStatus
     /// <summary><see cref="AgentConfig.MonthlyTargetHours"/>, usually 208.</summary>
     public required double MonthlyTargetHours { get; init; }
 
+    /// <summary>See <see cref="EmployeeProgress.NoTarget"/>: show hours only, no targets.</summary>
+    public bool NoTarget { get; init; }
+
     /// <summary>
     /// Pace: how far ahead or behind where the month's progress should be on this day.
     /// Positive means ahead (<see cref="EmployeeProgress.PaceSec"/>).

@@ -44,7 +44,7 @@ export function PayrollPage() {
     ...(features.payroll
       ? [
           { id: 'sheet' as const, label: 'Pay sheet' },
-          { id: 'salaries' as const, label: 'Salaries' },
+          { id: 'salaries' as const, label: 'Pay' },
         ]
       : []),
     { id: 'leave', label: 'Leave' },
@@ -145,13 +145,13 @@ function Checklist({
   const steps: { tab: TabId; label: string; tone: Tone; text: ReactNode }[] = [
     {
       tab: 'salaries',
-      label: 'Salaries',
+      label: 'Pay',
       tone: !sheet ? 'info' : sheet.missingSalary.length > 0 ? 'problem' : 'done',
       text: !sheet
         ? '…'
         : sheet.missingSalary.length > 0
           ? `Missing for ${names(sheet.missingSalary)}`
-          : 'Everyone has one',
+          : 'Everyone has pay terms',
     },
     {
       tab: 'leave',

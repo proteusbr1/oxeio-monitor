@@ -118,7 +118,7 @@ export function MyDataPage() {
             <Stat
               label="This month"
               value={<Duration seconds={p.monthActiveSec} />}
-              unit={`/ ${p.monthlyTargetHours}h`}
+              unit={p.noTarget ? undefined : `/ ${p.monthlyTargetHours}h`}
             />
             <Stat
               label="Last 7 days"
@@ -134,7 +134,10 @@ export function MyDataPage() {
                  The number was not a lie, the sentence was: not one of their
                  workdays had been observed to the end yet.
             */}
-            {p.observed ? (
+            {p.noTarget ? (
+              // Careful: no target means no pace; say so, not "Ahead 0s"
+              <Stat label="Target" value="No target" tone="muted" />
+            ) : p.observed ? (
               <Stat
                 label={p.paceSec < 0 ? 'Behind' : 'Ahead'}
                 value={formatSignedDuration(p.paceSec)}
@@ -163,50 +166,63 @@ export function MyDataPage() {
               title="Where You Are"
               hint="The same numbers your tray icon shows"
             >
-              <div className="flex flex-wrap items-center gap-6">
-                <div className="flex items-center gap-3">
-                  <ProgressRing
-                    value={p.monthActiveSec}
-                    max={p.monthlyTargetHours * 3600}
-                    size={64}
-                    ariaLabel="This month"
-                  />
-                  <div className="text-[13px]">
-                    <div className="font-medium">This month</div>
-                    <div className="text-ink-3">
-                      <Duration seconds={p.monthActiveSec} /> of{' '}
-                      {p.monthlyTargetHours}h
+              {p.noTarget ? (
+                /*
+                  Careful: no hours target. A ring or bar against 0 would be empty
+                     or full for no reason, and a 0 daily target is not a day off,
+                     so the hours are shown plainly.
+                */
+                <dl className="space-y-1.5 text-[13px]">
+                  <PlainLine label="Today" seconds={p.todayActiveSec} />
+                  <PlainLine label="Last 7 days" seconds={p.week7ActiveSec} />
+                  <PlainLine label="This month" seconds={p.monthActiveSec} />
+                </dl>
+              ) : (
+                <div className="flex flex-wrap items-center gap-6">
+                  <div className="flex items-center gap-3">
+                    <ProgressRing
+                      value={p.monthActiveSec}
+                      max={p.monthlyTargetHours * 3600}
+                      size={64}
+                      ariaLabel="This month"
+                    />
+                    <div className="text-[13px]">
+                      <div className="font-medium">This month</div>
+                      <div className="text-ink-3">
+                        <Duration seconds={p.monthActiveSec} /> of{' '}
+                        {p.monthlyTargetHours}h
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="min-w-[180px] flex-1 space-y-3">
-                  {/*
-                    Careful: on a day off the daily target is 0; show a sentence, not an
-                       empty bar. An empty bar says "8 hours still to go today" and
-                       nags, when nothing is expected today. The tray window follows
-                       the same rule.
-                  */}
-                  {p.dailyTargetSec > 0 ? (
+                  <div className="min-w-[180px] flex-1 space-y-3">
+                    {/*
+                      Careful: on a day off the daily target is 0; show a sentence, not an
+                         empty bar. An empty bar says "8 hours still to go today" and
+                         nags, when nothing is expected today. The tray window follows
+                         the same rule.
+                    */}
+                    {p.dailyTargetSec > 0 ? (
+                      <Line
+                        label="Today"
+                        value={p.todayActiveSec}
+                        max={p.dailyTargetSec}
+                      />
+                    ) : (
+                      <p className="text-[13px] text-ink-2">
+                        Today is a day off — nothing is expected. Anything you do
+                        work still counts.
+                      </p>
+                    )}
+
                     <Line
-                      label="Today"
-                      value={p.todayActiveSec}
-                      max={p.dailyTargetSec}
+                      label="Last 7 days"
+                      value={p.week7ActiveSec}
+                      max={p.week7TargetSec}
                     />
-                  ) : (
-                    <p className="text-[13px] text-ink-2">
-                      Today is a day off — nothing is expected. Anything you do
-                      work still counts.
-                    </p>
-                  )}
-
-                  <Line
-                    label="Last 7 days"
-                    value={p.week7ActiveSec}
-                    max={p.week7TargetSec}
-                  />
+                  </div>
                 </div>
-              </div>
+              )}
             </Card>
 
             {/*
@@ -338,6 +354,17 @@ export function MyDataPage() {
         </div>
       )}
     </Page>
+  );
+}
+
+function PlainLine({ label, seconds }: { label: string; seconds: number }) {
+  return (
+    <div className="flex items-baseline justify-between gap-6">
+      <dt className="text-ink-2">{label}</dt>
+      <dd className="num font-medium">
+        <Duration seconds={seconds} />
+      </dd>
+    </div>
   );
 }
 

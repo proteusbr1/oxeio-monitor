@@ -119,7 +119,13 @@ export interface EmployeeView {
   createdAt: string;
   /** Only present in the owner's response. Read the note above. */
   monthlySalary?: string | null;
+  /** How they are paid — owner's response only, like the salary */
+  payBasis?: PayBasis;
+  hourlyRate?: string | null;
 }
+
+/** monthly salary · hourly rate · not paid through oXeio */
+export type PayBasis = 'monthly' | 'hourly' | 'none';
 export interface EmployeeListQuery {
   /** Default `active`. */
   status?: EmployeeStatus | 'all';
@@ -161,6 +167,8 @@ export interface CreateEmployeeBody {
    * unnoticed. Pass the input box's value directly.
    */
   monthlySalary?: string;
+  payBasis?: PayBasis;
+  hourlyRate?: string;
   joinedOn?: string;
 }
 /**
@@ -180,6 +188,8 @@ export type UpdateEmployeeBody = Partial<{
   dailyDesignTarget: number | null;
   policyId: number | null;
   monthlySalary: string | null;
+  payBasis: PayBasis;
+  hourlyRate: string | null;
   joinedOn: string | null;
 }>;
 export function createEmployee(

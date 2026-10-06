@@ -70,6 +70,9 @@ internal static class MonthlyMilestone
         // a reboot), without this condition the congratulation would come at the wrong time.
         if (!status.MonthlyKnown) return false;
 
+        // no target, nothing to reach
+        if (status.NoTarget) return false;
+
         return Reached(status.ActiveThisMonth, status.MonthlyTargetHours);
     }
 

@@ -284,6 +284,10 @@ export interface PayrollRow {
   hourlyRate: string | null;
   deduction: string | null;
   payable: string | null;
+  /** how this person is paid that month */
+  payBasis: 'monthly' | 'hourly' | 'none';
+  /** money for overtime — only when the work policy pays it */
+  overtimePay: string | null;
 }
 export interface PayrollSheet {
   /** `YYYY-MM` */

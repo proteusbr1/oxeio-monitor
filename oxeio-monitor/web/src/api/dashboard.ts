@@ -67,6 +67,16 @@ export interface LiveCard {
   dailyTargetSec: number;
 
   /**
+   * The person's work policy has no hours target (freelancers and the like).
+   *
+   * Careful: then `dailyTargetSec` and `monthTargetSec` are 0, which does **not**
+   * mean a day off. Show their hours plainly, without a target, a percentage or a
+   * bar against one. A real day off still comes from `todayIsWorkday` and
+   * `onLeaveToday` (see `dayDuty()` in `pages/live/roster.ts`).
+   */
+  noTarget: boolean;
+
+  /**
    * Whether today is a workday for this employee. Both the weekly day off and
    * public holidays make it `false`.
    *
