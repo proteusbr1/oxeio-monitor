@@ -567,8 +567,8 @@ export function elapsedWorkdays(
  * **calendar** workdays, so a day when neither server nor agent ran at all
  * would still be a full 8-hour expectation. In the field that was very
  * costly: tracking began on 13-15 August, yet the payroll target was the
- * whole month's 208 hours; the deduction for 12 people came to **৳79,788**,
- * of which **৳61,280** was for days the system never saw.
+ * whole month's 208 hours; the deduction for 12 people came to **79,788.00**,
+ * of which **61,280.00** was for days the system never saw.
  *
  * "Observed" means **that day's `daily_summary` row was written**.
  * `refreshDate()` writes a row for every active employee, with or without

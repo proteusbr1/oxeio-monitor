@@ -1,6 +1,6 @@
 import type { EmployeeView, PayBasis } from '../../api/staff';
 import { SelectField, TextField } from '../../components/ui';
-import { currencySymbol, formatTaka } from '../../lib/format';
+import { currencySymbol, formatMoney } from '../../lib/format';
 
 /**
  * How someone is paid — the same words and fields on the Staff form and on
@@ -18,8 +18,8 @@ export const PAY_BASIS_OPTIONS: { value: PayBasis; label: string }[] = [
 export function payText(emp: Pick<EmployeeView, 'payBasis' | 'monthlySalary' | 'hourlyRate'>): string | null {
   const basis = emp.payBasis ?? 'monthly';
   if (basis === 'none') return 'Not paid here';
-  if (basis === 'hourly') return emp.hourlyRate ? `${formatTaka(emp.hourlyRate)} / hour` : null;
-  return emp.monthlySalary ? `${formatTaka(emp.monthlySalary)} / month` : null;
+  if (basis === 'hourly') return emp.hourlyRate ? `${formatMoney(emp.hourlyRate)} / hour` : null;
+  return emp.monthlySalary ? `${formatMoney(emp.monthlySalary)} / month` : null;
 }
 
 /** A pay amount as typed: digits with at most two decimals, or empty */

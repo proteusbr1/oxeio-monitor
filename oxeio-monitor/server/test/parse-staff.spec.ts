@@ -85,7 +85,7 @@ describe('parseStaff: catching mistakes', () => {
     expect(one(['OX-01', 'Rakib', 'Accountant', '25000'])).toThrow(/without quotes/);
   });
 
-  /** The column is `Int`: a fraction would silently lose the paisa. */
+  /** The column is `Int`: a fraction would silently lose the cents. */
   it('stops on a fractional salary', () => {
     expect(one(['OX-01', 'Rakib', 'Accountant', 25000.5])).toThrow(/fraction/);
   });

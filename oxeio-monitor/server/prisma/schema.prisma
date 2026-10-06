@@ -1183,8 +1183,8 @@ model Leave {
 model DepositPolicy {
   /// Careful: always 1: the way to more than one row is closed (not `@default(1)`; code sets it)
   id             Int      @id
-  /// How much each month, **in paisa**: 500 taka = 50000
-  amountPaisa    Int      @map("amount_paisa")
+  /// How much each month, **in minor units** (hundredths): 500.00 = 50000
+  amountMinor    Int      @map("amount_minor")
   /// From which month deduction starts: '2026-08'
   startYearMonth String   @map("start_year_month") @db.Char(7)
   /// How many days' notice must be given before leaving: if less, the deposit is forfeited
@@ -1205,7 +1205,7 @@ model DepositPolicy {
  * months, someone joins midway, or someone's month is skipped, a calculation-based
  * ledger would give a different answer every time, and there would be no way to say
  * which is true.
- * `amount_paisa` is on **every row**, not looking at the rule. That is the real trick
+ * `amount_minor` is on **every row**, not looking at the rule. That is the real trick
  * for preserving history.
  * Careful: rows go in **from the start month up to the current month**, and not for any
  * month before the employee joined (`joined_on`). Once inactive, none go in after that.
@@ -1215,8 +1215,8 @@ model SecurityDeposit {
   employeeId  Int      @map("employee_id")
   /// '2026-08'
   yearMonth   String   @map("year_month") @db.Char(7)
-  /// How much was deducted that month, in paisa. Careful: this does not change even if the rule changes
-  amountPaisa Int      @map("amount_paisa")
+  /// How much was deducted that month, in minor units. Careful: this does not change even if the rule changes
+  amountMinor Int      @map("amount_minor")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   employee Employee @relation(fields: [employeeId], references: [id])
@@ -1242,8 +1242,8 @@ model DepositSettlement {
   employeeId      Int       @map("employee_id")
   /// `refunded` · `forfeited`
   outcome         String
-  /// The deposit amount at settlement, in paisa. Careful: this stays intact even if the ledger changes later
-  amountPaisa     Int       @map("amount_paisa")
+  /// The deposit amount at settlement, in minor units. Careful: this stays intact even if the ledger changes later
+  amountMinor     Int       @map("amount_minor")
   /// When notice was given
   noticeGivenOn   DateTime? @map("notice_given_on") @db.Date
   /// Last working day

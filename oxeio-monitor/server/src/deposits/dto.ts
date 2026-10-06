@@ -21,17 +21,17 @@ const YEAR_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 export class UpdateDepositPolicyDto {
   /**
-   * **In minor units** (paisa), not whole units — for BDT, 500 taka = 50000.
+   * **In minor units** (hundredths), not whole units — 500.00 = 50000.
    *
    * Careful: not a decimal string like salary, because an instalment has no
-   * reason to include fractional paisa; with an integer, rounding never comes
+   * reason to include a fraction of a minor unit; with an integer, rounding never comes
    * up. The screen shows the amount in whole currency units and multiplies by 100 before sending.
    */
   @IsOptional()
   @IsInt()
   @Min(1)
   @Max(100_000_00)
-  amountPaisa?: number;
+  amountMinor?: number;
 
   /** '2026-08' — the month deductions start */
   @IsOptional()
@@ -118,7 +118,7 @@ export class CorrectInstalmentDto {
   @IsInt()
   @Min(1)
   @Max(100_000_00)
-  amountPaisa!: number;
+  amountMinor!: number;
 
   /** Careful: the only answer, six months later, to "why is that month's amount different" */
   @IsString()

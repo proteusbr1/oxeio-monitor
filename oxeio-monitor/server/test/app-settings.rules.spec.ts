@@ -19,12 +19,12 @@ import {
  * behaviour the server always had.
  */
 describe('resolveRegion', () => {
-  it('nothing saved, nothing in .env → Dhaka, BDT, own formats (as before)', () => {
+  it('nothing saved, nothing in .env → Dhaka, USD, own formats', () => {
     const r = resolveRegion(null, {}, 'Asia/Dhaka');
     expect(r.timeZone).toEqual({ value: 'Asia/Dhaka', source: 'default' });
     expect(r.currency).toMatchObject({
-      code: 'BDT',
-      symbol: '৳',
+      code: 'USD',
+      symbol: '$',
       source: 'default',
     });
     expect(r.displayLocale).toEqual({ value: null, source: 'default' });
@@ -46,13 +46,13 @@ describe('resolveRegion', () => {
 
   it('what is saved on screen wins over .env', () => {
     const r = resolveRegion(
-      { currency: 'USD', displayLocale: null },
+      { currency: 'EUR', displayLocale: null },
       { CURRENCY: 'BRL', DISPLAY_LOCALE: 'pt-BR' },
       'Asia/Dhaka',
     );
     expect(r.currency).toMatchObject({
-      code: 'USD',
-      symbol: '$',
+      code: 'EUR',
+      symbol: '€',
       source: 'dashboard',
     });
     // null saved = "own formats", a choice — not "fall back to .env"

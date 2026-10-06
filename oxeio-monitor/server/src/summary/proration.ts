@@ -174,12 +174,12 @@ export function prorate(input: ProrationInput): Proration {
 }
 
 /**
- * The salary fraction, **to be multiplied in paisa**, not on its own.
+ * The salary fraction, **to be multiplied in minor units**, not on its own.
  *
  * Careful: the fraction is returned as a `number`, so **money must not be
  * computed from it directly**. `computePayroll()` multiplies and rounds once,
  * using d and D itself. Rounding in two places would make someone's salary
- * differ by a few paisa, caught only when reconciling at month end.
+ * differ by a few cents, caught only when reconciling at month end.
  *
  * **If D = 0 the result is 1**: the whole month is off (possible when Eid and
  * public holidays fall together). Nobody has any workday, so a shortfall is

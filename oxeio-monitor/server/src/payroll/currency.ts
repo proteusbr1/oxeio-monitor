@@ -1,22 +1,22 @@
 /**
  * The currency salaries, deductions and deposits are in — `CURRENCY`
- * (ISO 4217), default `BDT`.
+ * (ISO 4217), default `USD`.
  *
  * The server never prints money with a symbol: amounts leave as decimal
- * strings (`'13000.50'`, see `paisaToTaka`). Only the dashboard puts the
+ * strings (`'13000.50'`, see `minorToAmount`). Only the dashboard puts the
  * symbol in front, so this module only has to say which currency it is.
  *
  * ⚠️ Only currencies with two minor digits are accepted. Every amount is
- *    stored in hundredths (`amount_paisa`, `PAISA_PER_TAKA = 100`); a
+ *    stored in hundredths (`amount_minor`, `MINOR_PER_UNIT = 100`); a
  *    currency with none (JPY) or three (KWD) would be off by a factor of 100
  *    or 10 in every stored row, silently. Like an unknown time zone, it is
  *    refused at startup instead.
  */
 
 export interface CurrencyInfo {
-  /** ISO 4217, e.g. `BDT` */
+  /** ISO 4217, e.g. `USD` */
   code: string;
-  /** What goes in front of an amount, e.g. `৳`, `R$` */
+  /** What goes in front of an amount, e.g. `$`, `R$` */
   symbol: string;
 }
 
@@ -28,7 +28,7 @@ export function checkCurrency(raw: string): CurrencyInfo {
     !Intl.supportedValuesOf('currency').includes(code)
   ) {
     throw new Error(
-      `CURRENCY="${raw}" is not an ISO 4217 code (example: BDT, BRL, USD)`,
+      `CURRENCY="${raw}" is not an ISO 4217 code (example: USD, EUR, BRL)`,
     );
   }
 
@@ -55,5 +55,5 @@ export function checkCurrency(raw: string): CurrencyInfo {
  * server before it answers a single request.
  */
 export const CURRENCY: CurrencyInfo = checkCurrency(
-  process.env.CURRENCY || 'BDT',
+  process.env.CURRENCY || 'USD',
 );

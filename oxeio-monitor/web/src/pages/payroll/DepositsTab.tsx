@@ -21,7 +21,7 @@ import {
 /**
  * **Security deposit.**
  *
- * The owner's rule, as first set up: "৳500 is withheld from salary each month, and anyone who leaves
+ * The owner's rule, as first set up: "500.00 is withheld from salary each month, and anyone who leaves
  * giving 30 days' notice gets the whole deposit back."
  *
  * Careful: this screen is **owner-only**, not even managers: the deposit is a direct
@@ -48,11 +48,11 @@ export function DepositsTab() {
   const open = rows.filter((r) => !r.settlement);
 
   /**
-   * Careful: the total is summed **from paisa**, not by parsing the `balance`
+   * Careful: the total is summed **from minor units**, not by parsing the `balance`
    *    string: `Number("500.00")` works, but adding floating-point decimals across
-   *    twelve rows would end a paisa off, and the owner would notice.
+   *    twelve rows would end a cent off, and the owner would notice.
    */
-  const heldPaisa = open.reduce((sum, r) => sum + r.balancePaisa, 0);
+  const heldMinor = open.reduce((sum, r) => sum + r.balanceMinor, 0);
 
   return (
     <>
@@ -91,7 +91,7 @@ export function DepositsTab() {
             */}
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line px-4 py-3">
               <span className="num text-[19px] font-semibold">
-                {takaOf(heldPaisa)}
+                {amountOf(heldMinor)}
               </span>
               <span className="text-[12px] text-ink-2">
                 held from {open.length}{' '}
@@ -165,7 +165,7 @@ export function DepositsTab() {
                     */}
                     {/*
                       Important: **the door to view the months.** The owner used to see
-                         only the total (*"2 months held · ৳500"*): both true, together
+                         only the total (*"2 months held · 500.00"*): both true, together
                          meaningless. Careful: it is viewable even after settlement: a
                          closed ledger means it cannot be changed, not that it cannot
                          be read.
@@ -178,7 +178,7 @@ export function DepositsTab() {
                         Start month
                       </MiniButton>
                     )}
-                    {!row.settlement && row.balancePaisa > 0 && (
+                    {!row.settlement && row.balanceMinor > 0 && (
                       <MiniButton onClick={() => setSettling(row)}>
                         Settle
                       </MiniButton>
@@ -267,9 +267,9 @@ export function DepositsTab() {
   );
 }
 
-/** Paisa to a two-decimal number without the currency symbol, the same as the server's `paisaToTaka` */
-function takaOf(paisa: number): string {
-  return (paisa / 100).toFixed(2);
+/** Minor units to a two-decimal number without the currency symbol, the same as the server's `minorToAmount` */
+function amountOf(minor: number): string {
+  return (minor / 100).toFixed(2);
 }
 
 function EditRule({
@@ -287,7 +287,7 @@ function EditRule({
   busy: boolean;
   onClose: () => void;
   onSubmit: (body: {
-    amountPaisa?: number;
+    amountMinor?: number;
     startYearMonth?: string;
     noticeDays?: number;
     active?: boolean;
@@ -318,8 +318,8 @@ function EditRule({
             disabled={busy || badAmount || badNotice}
             onClick={() =>
               onSubmit({
-                // The screen takes whole currency units, the API minor units (paisa); the conversion is in this one place
-                amountPaisa: Math.round(Number(amount) * 100),
+                // The screen takes whole currency units, the API minor units (hundredths); the conversion is in this one place
+                amountMinor: Math.round(Number(amount) * 100),
                 startYearMonth: orUndefined(startYearMonth),
                 noticeDays: Number(noticeDays),
                 active: active === 'yes',
@@ -571,9 +571,9 @@ function StartMonthDialog({
  * **One person's month-by-month ledger, and correcting a wrong amount.**
  *
  * Careful — why this was needed: the owner's page had only the total, *"2 months
- * held · ৳500"*. Both true, together meaningless, and in the field exactly that
+ * held · 500.00"*. Both true, together meaningless, and in the field exactly that
  * question came up: why does OX-10 show 2 months with 500? The cause was one month
- * sitting at ৳0, but **there was no way to see the months** on the owner's screen
+ * sitting at 0.00, but **there was no way to see the months** on the owner's screen
  * (only on the employee's own `/me/deposit`).
  *
  * Careful: and even when visible there was **no way to correct**: `ensureLedger()`
@@ -601,13 +601,13 @@ function MonthsDialog({
   const mutation = useMutation();
 
   /**
-   * Careful: whole units to paisa happens here, with `Math.round`. Sending a floating-point
+   * Careful: whole units to minor units happens here, with `Math.round`. Sending a floating-point
    *    product (`500.10 * 100 = 50009.999...`) directly would make the server's
    *    `@IsInt()` return 400, and the owner would not understand what they did wrong.
    */
-  const paisa = Math.round(Number(amount) * 100);
+  const minor = Math.round(Number(amount) * 100);
   const ready =
-    Number.isFinite(paisa) && paisa > 0 && reason.trim().length > 0;
+    Number.isFinite(minor) && minor > 0 && reason.trim().length > 0;
 
   return (
     <Modal
@@ -674,7 +674,7 @@ function MonthsDialog({
                     await correctDepositInstalment(
                       row.employeeId,
                       editing,
-                      paisa,
+                      minor,
                       reason.trim(),
                     );
                     setEditing(null);

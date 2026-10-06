@@ -42,7 +42,7 @@ const post = (s: Session, path: string, body: object) =>
 describe('Settings → Region', () => {
   it('defaults are what the server always had', async () => {
     const res = await owner.http.get('/api/v1/settings/region').expect(200);
-    expect(res.body.currency).toMatchObject({ code: 'BDT', source: 'default' });
+    expect(res.body.currency).toMatchObject({ code: 'USD', source: 'default' });
     expect(res.body.restartNeeded).toBe(false);
   });
 

@@ -71,9 +71,9 @@ export function fetchWorkTimeZone(signal?: AbortSignal): Promise<WorkTimeZone> {
 }
 
 export interface CurrencyInfo {
-  /** ISO 4217, e.g. `BDT` */
+  /** ISO 4217, e.g. `USD` */
   code: string;
-  /** e.g. `৳`, `R$` */
+  /** e.g. `$`, `R$` */
   symbol: string;
 }
 

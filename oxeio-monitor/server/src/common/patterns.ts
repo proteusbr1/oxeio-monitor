@@ -10,11 +10,11 @@
  *
  * If `13000.10` arrives from JSON as a number, it sits in IEEE-754 as
  * 13000.099999999999 and is then rounded back by Decimal(12,2), and nobody
- * would ever know why a paisa was off. A string goes straight into Prisma's
+ * would ever know why a cent was off. A string goes straight into Prisma's
  * Decimal with no float in between.
  */
-export const TAKA = /^\d{1,10}(\.\d{1,2})?$/;
-export const TAKA_MSG =
+export const MONEY = /^\d{1,10}(\.\d{1,2})?$/;
+export const MONEY_MSG =
   'Salary must be given as a string in the form "13000" or "13000.50"';
 export const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 export const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;

@@ -214,7 +214,7 @@ export function setDisplayLocale(locale: string | null | undefined): void {
 /**
  * `'13,000.50'` (the formats below) → the locale's separators, e.g.
  * `'13.000,50'`. Works on the string, never through `Number()` — the same
- * rule `formatTaka` keeps for money.
+ * rule `formatMoney` keeps for money.
  */
 function localizeDigits(text: string): string {
   if (displayLocale === null) return text;
@@ -591,11 +591,11 @@ export function formatBytes(bytes: number | null | undefined): string {
 }
 
 /**
- * The currency's symbol — `৳` (the BDT default) until the server says otherwise
+ * The currency's symbol — `$` (the USD default) until the server says otherwise
  * (`GET /auth/currency`, loaded in `main.tsx` before the first render).
  * Only the symbol changes; the number keeps the formatting below.
  */
-let currencySymbolValue = '৳';
+let currencySymbolValue = '$';
 
 export function setCurrency(currency: { code: string; symbol: string }): void {
   if (typeof currency.symbol === 'string' && currency.symbol.trim() !== '') {
@@ -603,16 +603,16 @@ export function setCurrency(currency: { code: string; symbol: string }): void {
   }
 }
 
-/** For labels such as "Monthly salary (৳)" */
+/** For labels such as "Monthly salary ($)" */
 export function currencySymbol(): string {
   return currencySymbolValue;
 }
 
 /**
- * Money: `'13000.50'` to `'৳ 13,000.50'` (with the default BDT symbol).
+ * Money: `'13000.50'` to `'$ 13,000.50'` (with the default USD symbol).
  *
- * The symbol is the configured currency's (`currencySymbol()`); with the
- * default BDT the text is exactly what it always was.
+ * The symbol is the configured currency's (`currencySymbol()`); the digits
+ * are formatted the same whatever the currency.
  *
  * Careful: the server sends money as a string (Decimal, not float). No `Number()`
  * arithmetic is done here, only thousands separators are inserted; otherwise
@@ -620,7 +620,7 @@ export function currencySymbol(): string {
  *
  * It must not be called on anyone's screen except the owner's (section 4.3, ADR-023).
  */
-export function formatTaka(amount: string | null | undefined): string {
+export function formatMoney(amount: string | null | undefined): string {
   if (amount === null || amount === undefined) return '—';
   const [whole, fraction] = amount.split('.');
   const sign = whole.startsWith('-') ? '-' : '';

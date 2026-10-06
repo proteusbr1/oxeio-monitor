@@ -11,7 +11,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { DATE_ONLY, TAKA, TAKA_MSG } from '../common/patterns';
+import { DATE_ONLY, MONEY, MONEY_MSG } from '../common/patterns';
 
 // ── employees ───────────────────────────────────────────────────────────────
 
@@ -46,14 +46,14 @@ export class CreateEmployeeDto {
   @IsOptional() @IsInt() @Min(1)
   policyId?: number;
 
-  @IsOptional() @Matches(TAKA, { message: TAKA_MSG })
+  @IsOptional() @Matches(MONEY, { message: MONEY_MSG })
   monthlySalary?: string;
 
   /** how they are paid: a monthly salary, an hourly rate, or not through oXeio */
   @IsOptional() @IsIn(['monthly', 'hourly', 'none'])
   payBasis?: 'monthly' | 'hourly' | 'none';
 
-  @IsOptional() @Matches(TAKA, { message: 'hourlyRate must be a string such as "25" or "25.50"' })
+  @IsOptional() @Matches(MONEY, { message: 'hourlyRate must be a string such as "25" or "25.50"' })
   hourlyRate?: string;
 
   @IsOptional() @Matches(DATE_ONLY, { message: 'joinedOn must be in YYYY-MM-DD format' })
@@ -110,13 +110,13 @@ export class UpdateEmployeeDto {
   policyId?: number | null;
 
   /** A change writes a separate audit row (targetType = `employee_salary`). */
-  @IsOptional() @Matches(TAKA, { message: TAKA_MSG })
+  @IsOptional() @Matches(MONEY, { message: MONEY_MSG })
   monthlySalary?: string | null;
 
   @IsOptional() @IsIn(['monthly', 'hourly', 'none'])
   payBasis?: 'monthly' | 'hourly' | 'none';
 
-  @IsOptional() @Matches(TAKA, { message: 'hourlyRate must be a string such as "25" or "25.50"' })
+  @IsOptional() @Matches(MONEY, { message: 'hourlyRate must be a string such as "25" or "25.50"' })
   hourlyRate?: string | null;
 
   @IsOptional() @Matches(DATE_ONLY)

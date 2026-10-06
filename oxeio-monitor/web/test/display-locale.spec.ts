@@ -10,7 +10,7 @@ import {
   formatHours,
   formatMonth,
   formatPct,
-  formatTaka,
+  formatMoney,
   setDisplayLocale,
   weekdayOf,
 } from '../src/lib/format';
@@ -27,7 +27,7 @@ describe('no locale — the formats as they always were', () => {
     expect(formatDate('2026-08-10')).toBe('10 August 2026');
     expect(formatDateShort('2026-08-10')).toBe('10 Aug');
     expect(formatMonth('2026-08')).toBe('August 2026');
-    expect(formatTaka('13000.50')).toBe('৳ 13,000.50');
+    expect(formatMoney('13000.50')).toBe('$ 13,000.50');
     expect(formatCount(12345)).toBe('12,345');
     expect(formatHours(27_000)).toBe('7.5');
   });
@@ -43,8 +43,8 @@ describe('pt-BR', () => {
 
   it('numbers use . for thousands and , for decimals', () => {
     setDisplayLocale('pt-BR');
-    expect(formatTaka('13000.50')).toBe('৳ 13.000,50');
-    expect(formatTaka('-250.05')).toBe('৳ -250,05');
+    expect(formatMoney('13000.50')).toBe('$ 13.000,50');
+    expect(formatMoney('-250.05')).toBe('$ -250,05');
     expect(formatCount(12345)).toBe('12.345');
     expect(formatHours(27_000)).toBe('7,5');
     expect(formatPct(12.5, 1)).toBe('12,5%');
@@ -60,7 +60,7 @@ describe('pt-BR', () => {
   it('money is never turned into a number on the way', () => {
     setDisplayLocale('pt-BR');
     // 13000.10 as a float would print 13000.0999…
-    expect(formatTaka('13000.10')).toBe('৳ 13.000,10');
+    expect(formatMoney('13000.10')).toBe('$ 13.000,10');
   });
 });
 
@@ -68,7 +68,7 @@ describe('en-US — month first', () => {
   it('dates', () => {
     setDisplayLocale('en-US');
     expect(formatDate('2026-08-10')).toBe('08/10/2026');
-    expect(formatTaka('13000.50')).toBe('৳ 13,000.50');
+    expect(formatMoney('13000.50')).toBe('$ 13,000.50');
   });
 });
 

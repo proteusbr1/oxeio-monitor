@@ -11,7 +11,7 @@ import {
   formatMonth,
   formatPct,
   formatSignedDuration,
-  formatTaka,
+  formatMoney,
   formatTime,
   isValidWorkDate,
   monthEndOf,
@@ -212,19 +212,19 @@ describe('formatBytes', () => {
   it('dash on null', () => expect(formatBytes(null)).toBe('—'));
 });
 
-describe('formatTaka — not converted to a number', () => {
+describe('formatMoney — not converted to a number', () => {
   /**
    * Careful: the server sends money as a **string** (Decimal). Computing with
    * `Number()` would turn 13000.10 into 13000.0999… on screen.
    */
-  it('thousands comma', () => expect(formatTaka('13000.50')).toBe('৳ 13,000.50'));
+  it('thousands comma', () => expect(formatMoney('13000.50')).toBe('$ 13,000.50'));
   it('the decimal places stay exactly', () =>
-    expect(formatTaka('13000.10')).toBe('৳ 13,000.10'));
+    expect(formatMoney('13000.10')).toBe('$ 13,000.10'));
   it('no decimals are added when there are none', () =>
-    expect(formatTaka('900')).toBe('৳ 900'));
-  it('negative', () => expect(formatTaka('-1500')).toBe('৳ -1,500'));
-  it('lakh-style digits', () => expect(formatTaka('1234567')).toBe('৳ 1,234,567'));
-  it('dash on null', () => expect(formatTaka(null)).toBe('—'));
+    expect(formatMoney('900')).toBe('$ 900'));
+  it('negative', () => expect(formatMoney('-1500')).toBe('$ -1,500'));
+  it('seven digits', () => expect(formatMoney('1234567')).toBe('$ 1,234,567'));
+  it('dash on null', () => expect(formatMoney(null)).toBe('—'));
 });
 
 describe('formatCount', () => {

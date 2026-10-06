@@ -9,7 +9,7 @@ import {
 import { workDateOf } from '../agent/util/work-time';
 import { AuditService } from '../audit/audit.service';
 import type { SessionUser } from '../auth/types';
-import { paisaToTaka } from '../payroll/payroll.math';
+import { minorToAmount } from '../payroll/payroll.math';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   checkNotice,
@@ -22,7 +22,7 @@ import type { SettleDepositDto, UpdateDepositPolicyDto } from './dto';
 
 export interface DepositPolicyView {
   amount: string;
-  amountPaisa: number;
+  amountMinor: number;
   startYearMonth: string;
   noticeDays: number;
   active: boolean;
@@ -54,7 +54,7 @@ export interface DepositBalance {
   status: string;
   months: number;
   balance: string;
-  balancePaisa: number;
+  balanceMinor: number;
   /** Once settled the ledger is closed — `balance` is then only history */
   settlement: DepositSettlementView | null;
 
@@ -74,7 +74,7 @@ export interface DepositBalance {
 /**
  * **Security money (deposit).**
  *
- * The owner's rule (in the first deployment, 500 taka): a fixed amount is held back from salary each month, and anyone
+ * The owner's rule (in the first deployment, 500.00): a fixed amount is held back from salary each month, and anyone
  * who leaves after giving 30 days' notice gets the whole amount back.
  *
  * **The ledger is written down, not calculated** — the money held is the
@@ -117,8 +117,8 @@ export class DepositsService {
     }
 
     return {
-      amount: paisaToTaka(row.amountPaisa),
-      amountPaisa: row.amountPaisa,
+      amount: minorToAmount(row.amountMinor),
+      amountMinor: row.amountMinor,
       startYearMonth: row.startYearMonth,
       noticeDays: row.noticeDays,
       active: row.active,
@@ -148,7 +148,7 @@ export class DepositsService {
     await this.prisma.depositPolicy.update({
       where: { id: 1 },
       data: {
-        amountPaisa: dto.amountPaisa ?? undefined,
+        amountMinor: dto.amountMinor ?? undefined,
         startYearMonth: dto.startYearMonth ?? undefined,
         noticeDays: dto.noticeDays ?? undefined,
         active: dto.active ?? undefined,
@@ -209,7 +209,7 @@ export class DepositsService {
       ).map((s) => s.employeeId),
     );
 
-    const rows: { employeeId: number; yearMonth: string; amountPaisa: number }[] =
+    const rows: { employeeId: number; yearMonth: string; amountMinor: number }[] =
       [];
 
     for (const e of employees) {
@@ -236,7 +236,7 @@ export class DepositsService {
       if (from > to) continue;
 
       for (const yearMonth of monthsBetween(from, to)) {
-        rows.push({ employeeId: e.id, yearMonth, amountPaisa: policy.amountPaisa });
+        rows.push({ employeeId: e.id, yearMonth, amountMinor: policy.amountMinor });
       }
     }
 
@@ -252,7 +252,7 @@ export class DepositsService {
      *
      * Careful: so if a closed month had a gap (a late joiner, the rule paused
      * and resumed, or the start month moved back), the next page load would
-     * push ৳500 into that month — **after the paper had gone out**. The ledger
+     * push 500.00 into that month — **after the paper had gone out**. The ledger
      * would say the money was deducted, but the payslip would not show it.
      *
      * Careful: **it is filtered out, not thrown** — this runs on every page
@@ -425,8 +425,8 @@ export class DepositsService {
    * amount there was **no way at all** to fix it. `ensureLedger()` runs with
    * `createMany({ skipDuplicates: true })`, so an existing row is never
    * updated — and that is deliberate (when the rule's amount changes, old
-   * months are not rewritten). As a result a ৳0 row sat in the field for two
-   * weeks, and the page showed *"2 months held · ৳500"*.
+   * months are not rewritten). As a result a 0.00 row sat in the field for two
+   * weeks, and the page showed *"2 months held · 500.00"*.
    *
    * It was eventually fixed with a **trick**: move the start month forward to
    * delete the row, then set it back to the rule so it was re-posted. It worked
@@ -441,7 +441,7 @@ export class DepositsService {
    *
    * Careful: **zero cannot be entered** — the database `CHECK` blocks it too.
    * A waiver means there is **no** instalment that month, not an instalment of
-   * ৳0; merging the two ruins the answer to "how many months have been paid".
+   * 0.00; merging the two ruins the answer to "how many months have been paid".
    * To skip early months there is `setStartMonth()`.
    * TODO: there is **still no way to waive a month in the middle** — if needed
    *    it is a separate decision (keep the row with a `waived` flag, or delete
@@ -451,7 +451,7 @@ export class DepositsService {
     actor: SessionUser,
     employeeId: number,
     yearMonth: string,
-    amountPaisa: number,
+    amountMinor: number,
     reason: string,
     ip: string,
   ): Promise<{ from: number; to: number }> {
@@ -464,7 +464,7 @@ export class DepositsService {
      *    otherwise the message would be a raw Postgres error, and the owner
      *    would not understand what they did wrong.
      */
-    if (!Number.isInteger(amountPaisa) || amountPaisa <= 0) {
+    if (!Number.isInteger(amountMinor) || amountMinor <= 0) {
       throw new BadRequestException(
         'The instalment must be more than zero — to skip the early months use the start month instead',
       );
@@ -530,11 +530,11 @@ export class DepositsService {
     }
 
     // Careful: nothing changed — no event is written to the ledger (same rule as setStartMonth)
-    if (row.amountPaisa === amountPaisa) return { from: row.amountPaisa, to: amountPaisa };
+    if (row.amountMinor === amountMinor) return { from: row.amountMinor, to: amountMinor };
 
     await this.prisma.securityDeposit.update({
       where: { employeeId_yearMonth: { employeeId, yearMonth } },
-      data: { amountPaisa },
+      data: { amountMinor },
     });
 
     await this.audit.record({
@@ -547,24 +547,24 @@ export class DepositsService {
         op: 'deposit_instalment_corrected',
         empCode: employee.empCode,
         yearMonth,
-        fromPaisa: row.amountPaisa,
-        toPaisa: amountPaisa,
+        fromMinor: row.amountMinor,
+        toMinor: amountMinor,
         why: trimmed,
       },
     });
 
     this.logger.warn(
-      `${employee.fullName}: ${yearMonth} installment ${row.amountPaisa} → ${amountPaisa} paisa · ${trimmed}`,
+      `${employee.fullName}: ${yearMonth} installment ${row.amountMinor} → ${amountMinor} minor units · ${trimmed}`,
     );
 
-    return { from: row.amountPaisa, to: amountPaisa };
+    return { from: row.amountMinor, to: amountMinor };
   }
 
   /**
    * One month's instalments, per employee — the payroll sheet calls this.
    *
    * Careful: in the map, **an employee with no instalment has no key**, not
-   * zero. On the sheet "৳0 deducted" and "was never meant to be deducted" are
+   * zero. On the sheet "0.00 deducted" and "was never meant to be deducted" are
    * different things, and a zero would show both the same.
    */
   async instalmentsFor(yearMonth: string): Promise<Map<number, number>> {
@@ -572,17 +572,17 @@ export class DepositsService {
 
     const rows = await this.prisma.securityDeposit.findMany({
       where: { yearMonth },
-      select: { employeeId: true, amountPaisa: true },
+      select: { employeeId: true, amountMinor: true },
     });
 
-    return new Map(rows.map((r) => [r.employeeId, r.amountPaisa]));
+    return new Map(rows.map((r) => [r.employeeId, r.amountMinor]));
   }
 
   /** One person's month-by-month list and total — staff call this to see their own */
   async forEmployee(employeeId: number): Promise<{
     months: DepositMonth[];
     total: string;
-    totalPaisa: number;
+    totalMinor: number;
     settlement: DepositSettlementView | null;
     noticeDays: number;
   }> {
@@ -597,15 +597,15 @@ export class DepositsService {
       this.policy(),
     ]);
 
-    const totalPaisa = rows.reduce((sum, r) => sum + r.amountPaisa, 0);
+    const totalMinor = rows.reduce((sum, r) => sum + r.amountMinor, 0);
 
     return {
       months: rows.map((r) => ({
         yearMonth: r.yearMonth,
-        amount: paisaToTaka(r.amountPaisa),
+        amount: minorToAmount(r.amountMinor),
       })),
-      total: paisaToTaka(totalPaisa),
-      totalPaisa,
+      total: minorToAmount(totalMinor),
+      totalMinor,
       settlement: settlement ? toSettlementView(settlement) : null,
       noticeDays: policy.noticeDays,
     };
@@ -629,7 +629,7 @@ export class DepositsService {
       }),
       this.prisma.securityDeposit.groupBy({
         by: ['employeeId'],
-        _sum: { amountPaisa: true },
+        _sum: { amountMinor: true },
         _count: { _all: true },
       }),
       this.prisma.depositSettlement.findMany(),
@@ -643,7 +643,7 @@ export class DepositsService {
       policy,
       rows: employees.map((e) => {
         const agg = sumOf.get(e.id);
-        const balancePaisa = agg?._sum.amountPaisa ?? 0;
+        const balanceMinor = agg?._sum.amountMinor ?? 0;
         const settlement = settledOf.get(e.id);
 
         // The same function `ensureLedger()` calls, used here too
@@ -661,8 +661,8 @@ export class DepositsService {
           fullName: e.fullName,
           status: e.status,
           months: agg?._count._all ?? 0,
-          balance: paisaToTaka(balancePaisa),
-          balancePaisa,
+          balance: minorToAmount(balanceMinor),
+          balanceMinor,
           settlement: settlement ? toSettlementView(settlement) : null,
         };
       }),
@@ -705,9 +705,9 @@ export class DepositsService {
 
     const agg = await this.prisma.securityDeposit.aggregate({
       where: { employeeId },
-      _sum: { amountPaisa: true },
+      _sum: { amountMinor: true },
     });
-    const amountPaisa = agg._sum.amountPaisa ?? 0;
+    const amountMinor = agg._sum.amountMinor ?? 0;
 
     const policy = await this.policy();
     const notice = checkNotice(
@@ -720,7 +720,7 @@ export class DepositsService {
       data: {
         employeeId,
         outcome: dto.outcome,
-        amountPaisa,
+        amountMinor,
         noticeGivenOn: dto.noticeGivenOn ? new Date(dto.noticeGivenOn) : null,
         lastWorkingDay: dto.lastWorkingDay ? new Date(dto.lastWorkingDay) : null,
         noticeDaysGiven: notice.daysGiven,
@@ -739,7 +739,7 @@ export class DepositsService {
       meta: {
         empCode: employee.empCode,
         outcome: dto.outcome,
-        amount: paisaToTaka(amountPaisa),
+        amount: minorToAmount(amountMinor),
         // What the rule said and what the owner did — both are kept, because
         // for an exception that very pair is what has to be looked at later
         noticeDaysGiven: notice.daysGiven,
@@ -754,7 +754,7 @@ export class DepositsService {
 
 function toSettlementView(row: {
   outcome: string;
-  amountPaisa: number;
+  amountMinor: number;
   noticeGivenOn: Date | null;
   lastWorkingDay: Date | null;
   noticeDaysGiven: number | null;
@@ -765,7 +765,7 @@ function toSettlementView(row: {
 }): DepositSettlementView {
   return {
     outcome: row.outcome as 'refunded' | 'forfeited',
-    amount: paisaToTaka(row.amountPaisa),
+    amount: minorToAmount(row.amountMinor),
     noticeGivenOn: row.noticeGivenOn?.toISOString().slice(0, 10) ?? null,
     lastWorkingDay: row.lastWorkingDay?.toISOString().slice(0, 10) ?? null,
     noticeDaysGiven: row.noticeDaysGiven,

@@ -51,7 +51,7 @@ export function resolveRegion(
     ? { value: saved.currency, source: 'dashboard' as const }
     : has(env.CURRENCY)
       ? { value: env.CURRENCY, source: 'environment' as const }
-      : { value: 'BDT', source: 'default' as const };
+      : { value: 'USD', source: 'default' as const };
 
   // `null` saved on screen is a choice ("the dashboard's own formats"),
   // `undefined` means "never saved"

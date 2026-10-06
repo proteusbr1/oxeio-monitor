@@ -318,7 +318,7 @@ describe('digestBody', () => {
   });
 
   it('no mention of money — salary is owner-only and audited (ADR-023)', () => {
-    expect(body).not.toMatch(/৳|salary|বেতন/i);
+    expect(body).not.toMatch(/\$|salary|বেতন/i);
   });
 
   it('when nobody is behind it says "Nobody", not an empty section', () => {

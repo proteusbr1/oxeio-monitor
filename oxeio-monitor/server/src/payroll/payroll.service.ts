@@ -7,7 +7,7 @@ import { FeaturesService } from '../features/features.service';
 import { dailyTargetSecOf, hasTarget, REGIME_SELECT } from '../calendar/work-regime';
 import { PrismaService } from '../prisma/prisma.service';
 import { proratedExpectedSec } from '../summary/summary.math';
-import { computePayroll, paisaToTaka, payTermsForMonth } from './payroll.math';
+import { computePayroll, minorToAmount, payTermsForMonth } from './payroll.math';
 
 // G108: **one** definition of uncertainty, shared with the reports
 import { approximateHolidayDates } from '../reports/reports.range';
@@ -50,7 +50,7 @@ export interface PayrollRow {
    *
    * `null`, not zero, if no instalment was set for that month (a month before
    * the rule started, or they had not yet joined). Writing zero would make
-   * "৳0 was deducted" look the same as "nothing was meant to be deducted".
+   * "0.00 was deducted" look the same as "nothing was meant to be deducted".
    */
   securityDeposit: string | null;
 
@@ -255,7 +255,7 @@ export class PayrollService {
        * `targetSec`, while `creditedSec` only comes from days the system was
        * running. In August tracking started on the 13th to 15th, so nearly half
        * the month silently became shortfall: the deduction for 12 people came to
-       * **৳79,788**, of which **৳61,280** was for days nobody ever observed.
+       * **79,788.00**, of which **61,280.00** was for days nobody ever observed.
        *
        * The calculation is not new: `proratedExpectedSec()` already works out
        * "the target for how many billable days". Only the numerator changed:
@@ -319,7 +319,7 @@ export class PayrollService {
           // The instalment is still shown: whether the money was due does not
           // depend on whether a salary is set. But the net cannot be computed,
           // so `netPayable` is null.
-          securityDeposit: takaOrNull(depositOf.get(e.id)),
+          securityDeposit: amountOrNull(depositOf.get(e.id)),
           netPayable: null,
         });
         continue;
@@ -350,7 +350,7 @@ export class PayrollService {
         paidLeaveSec: summary.leaveWorkdays * dailyTargetSecOf(e.policy),
       });
 
-      const depositPaisa = depositOf.get(e.id) ?? null;
+      const depositMinor = depositOf.get(e.id) ?? null;
 
       /**
        * There is no such thing as a negative salary. If someone was absent the
@@ -359,7 +359,7 @@ export class PayrollService {
        * separately** in `depositExceedsPayable`; stopped silently, the ledger
        * would show it deposited while the money was never deducted.
        */
-      if (depositPaisa !== null && depositPaisa > line.payablePaisa) {
+      if (depositMinor !== null && depositMinor > line.payableMinor) {
         depositExceedsPayable.push(e.fullName);
       }
 
@@ -369,13 +369,13 @@ export class PayrollService {
         // and going through a number midway could silently round the amount
         payBasis: line.payBasis,
         monthlySalary: salaryThatMonth === null ? null : Number(salaryThatMonth).toFixed(2),
-        hourlyRate: paisaToTaka(line.hourlyRatePaisa),
-        deduction: paisaToTaka(line.deductionPaisa),
-        overtimePay: paisaToTaka(line.overtimePayPaisa),
-        payable: paisaToTaka(line.payablePaisa),
-        securityDeposit: takaOrNull(depositPaisa),
-        netPayable: paisaToTaka(
-          Math.max(0, line.payablePaisa - (depositPaisa ?? 0)),
+        hourlyRate: minorToAmount(line.hourlyRateMinor),
+        deduction: minorToAmount(line.deductionMinor),
+        overtimePay: minorToAmount(line.overtimePayMinor),
+        payable: minorToAmount(line.payableMinor),
+        securityDeposit: amountOrNull(depositMinor),
+        netPayable: minorToAmount(
+          Math.max(0, line.payableMinor - (depositMinor ?? 0)),
         ),
       });
     }
@@ -427,6 +427,6 @@ function hours(sec: number): string {
 }
 
 /** `null` means "no instalment was set that month", not zero */
-function takaOrNull(paisa: number | null | undefined): string | null {
-  return paisa === null || paisa === undefined ? null : paisaToTaka(paisa);
+function amountOrNull(minor: number | null | undefined): string | null {
+  return minor === null || minor === undefined ? null : minorToAmount(minor);
 }

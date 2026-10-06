@@ -8,7 +8,7 @@ import { PersonCell, Table, type Column } from '../../components/Table';
 import {
   formatDate,
   formatMonth,
-  formatTaka,
+  formatMoney,
   hoursToSeconds,
 } from '../../lib/format';
 
@@ -24,7 +24,7 @@ import {
  *    does not fetch needlessly, and `useApi` refetches only when the month changes.
  *
  * Careful: all hours and money are **strings** (Decimal). Never add or subtract
- *    them via `Number()`; `formatTaka()` only inserts commas, otherwise 13000.10
+ *    them via `Number()`; `formatMoney()` only inserts commas, otherwise 13000.10
  *    would show as 13000.0999… on screen.
  */
 /**
@@ -150,12 +150,12 @@ export function PayrollSheetView({
           row.hourlyRate === null ? (
             <span className="text-[11.5px] text-ink-3">Not set</span>
           ) : (
-            <span className="num">{formatTaka(row.hourlyRate)} / h</span>
+            <span className="num">{formatMoney(row.hourlyRate)} / h</span>
           )
         ) : row.monthlySalary === null ? (
           <span className="text-[11.5px] text-ink-3">Not set</span>
         ) : (
-          <span className="num">{formatTaka(row.monthlySalary)} / month</span>
+          <span className="num">{formatMoney(row.monthlySalary)} / month</span>
         ),
     },
     {
@@ -163,7 +163,7 @@ export function PayrollSheetView({
       header: 'Hourly rate',
       align: 'right',
       render: (row) => (
-        <span className="num text-ink-3">{formatTaka(row.hourlyRate)}</span>
+        <span className="num text-ink-3">{formatMoney(row.hourlyRate)}</span>
       ),
     },
     {
@@ -174,9 +174,9 @@ export function PayrollSheetView({
         row.payBasis !== 'monthly' ? (
           <span className="num text-ink-3">—</span>
         ) : row.deduction !== null && Number(row.deduction) > 0 ? (
-          <span className="num text-brand-ink">{formatTaka(row.deduction)}</span>
+          <span className="num text-brand-ink">{formatMoney(row.deduction)}</span>
         ) : (
-          <span className="num text-ink-3">{formatTaka(row.deduction)}</span>
+          <span className="num text-ink-3">{formatMoney(row.deduction)}</span>
         ),
     },
     {
@@ -185,7 +185,7 @@ export function PayrollSheetView({
       align: 'right',
       render: (row) =>
         row.overtimePay !== null && Number(row.overtimePay) > 0 ? (
-          <span className="num text-ok">{formatTaka(row.overtimePay)}</span>
+          <span className="num text-ok">{formatMoney(row.overtimePay)}</span>
         ) : (
           <span className="num text-ink-3">—</span>
         ),
@@ -195,7 +195,7 @@ export function PayrollSheetView({
       header: 'Payable',
       align: 'right',
       render: (row) => (
-        <span className="num">{formatTaka(row.payable)}</span>
+        <span className="num">{formatMoney(row.payable)}</span>
       ),
     },
     {
@@ -203,7 +203,7 @@ export function PayrollSheetView({
        * This month's deposit instalment.
        *
        * Careful: `—` means no instalment this month (the ledger has not started or is
-       *    settled). It is not 0, because an instalment of ৳0 does not exist.
+       *    settled). It is not 0, because an instalment of 0.00 does not exist.
        */
       key: 'deposit',
       header: 'Deposit',
@@ -213,7 +213,7 @@ export function PayrollSheetView({
           <span className="num text-ink-3">—</span>
         ) : (
           <span className="num text-brand-ink">
-            {formatTaka(row.securityDeposit)}
+            {formatMoney(row.securityDeposit)}
           </span>
         ),
     },
@@ -235,7 +235,7 @@ export function PayrollSheetView({
         row.netPayable === null ? (
           <span className="text-[11.5px] text-ink-3">Not set</span>
         ) : (
-          <span className="num font-semibold">{formatTaka(row.netPayable)}</span>
+          <span className="num font-semibold">{formatMoney(row.netPayable)}</span>
         ),
     },
   ];

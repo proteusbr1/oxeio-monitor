@@ -47,14 +47,14 @@ beforeEach(async () => {
   await h.prisma.depositPolicy.upsert({
     where: { id: 1 },
     update: {
-      amountPaisa: 50_000,
+      amountMinor: 50_000,
       startYearMonth: POLICY_START,
       active: true,
       updatedBy: 'test',
     },
     create: {
       id: 1,
-      amountPaisa: 50_000,
+      amountMinor: 50_000,
       startYearMonth: POLICY_START,
       active: true,
       updatedBy: 'test',
@@ -172,7 +172,7 @@ describe('PATCH /deposits/:id/start', () => {
       data: {
         employeeId,
         outcome: 'refunded',
-        amountPaisa: 50_000,
+        amountMinor: 50_000,
         // Required — the number of days the rule specified at settlement time is
         // also stored in the row (history does not move if the rule changes later)
         noticeDaysRule: 30,

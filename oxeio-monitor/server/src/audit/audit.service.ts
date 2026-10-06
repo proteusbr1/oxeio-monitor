@@ -94,7 +94,7 @@ export type AuditAction =
    *
    * - `deposit_settle`: **returning or forfeiting someone's deposited
    *   money.** This is the heaviest single decision in the system: one click
-   *   can take several thousand taka out of someone's hands. `meta` keeps what
+   *   can take several thousand out of someone's hands. `meta` keeps what
    *   the rule said (`noticeDaysGiven` versus `noticeDaysRule`) and what the
    *   owner did, because in an exception exactly that pair will need to be
    *   looked at later.

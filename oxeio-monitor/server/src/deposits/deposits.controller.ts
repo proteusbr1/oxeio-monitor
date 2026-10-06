@@ -91,9 +91,9 @@ export class DepositsController {
    * `GET /api/v1/deposits/:employeeId/months` — one person's month-by-month ledger.
    *
    * Careful: **without this the owner could not see the ledger itself.** The
-   * page had only the total (*"2 months held · ৳500"*), and read together those
+   * page had only the total (*"2 months held · 500.00"*), and read together those
    * two numbers can be meaningless — which is what happened in the field (one
-   * month was ৳0). Until now the months were visible only on **the employee's
+   * month was 0.00). Until now the months were visible only on **the employee's
    * own** page (`/me/deposit`).
    */
   @Get(':employeeId/months')
@@ -122,7 +122,7 @@ export class DepositsController {
       actor,
       employeeId,
       dto.yearMonth,
-      dto.amountPaisa,
+      dto.amountMinor,
       dto.reason,
       ip,
     );

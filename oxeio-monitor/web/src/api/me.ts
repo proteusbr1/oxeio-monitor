@@ -143,7 +143,7 @@ export interface MyDepositSettlement {
 export interface MyDeposit {
   months: MyDepositMonth[];
   total: string;
-  totalPaisa: number;
+  totalMinor: number;
   /** Once settled the ledger is closed; `total` is then history only. */
   settlement: MyDepositSettlement | null;
   /** How many days' notice is required before leaving; the screen shows the condition. */

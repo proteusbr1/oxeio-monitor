@@ -640,7 +640,7 @@ export class SummaryService {
          * day when the system did not run at all would still be a full 8-hour
          * expectation. Cost in the field: tracking began on 13-15 August, yet
          * the salary target was the whole month's; the deduction for 12 people
-         * came to ৳79,788, of which ৳61,280 was for unobserved days.
+         * came to 79,788.00, of which 61,280.00 was for unobserved days.
          *
          * "Observed" means that day's `daily_summary` row was written.
          * Careful: a row that **exists with 0 hours** means absence, which

@@ -49,7 +49,7 @@ beforeEach(async () => {
   await h.prisma.depositPolicy.create({
     data: {
       id: 1,
-      amountPaisa: 50_000,
+      amountMinor: 50_000,
       startYearMonth: '2026-01',
       noticeDays: 30,
       active: false,

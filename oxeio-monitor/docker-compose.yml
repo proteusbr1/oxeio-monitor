@@ -60,7 +60,7 @@ services:
       # Per-IP limit. The paired counter did not catch many emails from one IP
       LOGIN_IP_MAX_FAILS: ${LOGIN_IP_MAX_FAILS:-50}
       # ISO 4217, two-decimal currencies only (see .env.example)
-      CURRENCY: ${CURRENCY:-BDT}
+      CURRENCY: ${CURRENCY:-USD}
       PORT: 3000
       STORAGE_ROOT: /data/storage
       # screenshots in an S3-compatible bucket instead of STORAGE_ROOT

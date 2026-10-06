@@ -384,7 +384,7 @@ describe('payroll: salary is prorated too', () => {
  * `target_sec`, yet `credited_sec` only comes from days when the system was
  * running. In August 2026 tracking started on the 13th-15th, so nearly half
  * the month was unobserved, yet those days were deducted from salary as
- * shortfall. The deductions of 12 people came to ৳79,788, of which ৳61,280
+ * shortfall. The deductions of 12 people came to 79,788.00, of which 61,280.00
  * was for unobserved days.
  *
  * The correct number was sitting in the same row (`monthly_summary.expected_sec`,

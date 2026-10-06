@@ -7,15 +7,15 @@ import { qs } from './query';
 export interface DepositMonths {
   months: { yearMonth: string; amount: string }[];
   total: string;
-  totalPaisa: number;
+  totalMinor: number;
   settlement: unknown | null;
   noticeDays: number;
 }
 /**
  * Careful: the months used to be visible only on the employee's own page
  * (`/me/deposit`). The owner's page had only the total, e.g. "2 months held
- * ৳500", and those two numbers read together can be meaningless. That is exactly
- * what happened in the field: one month sat at ৳0 and nobody could tell why the
+ * 500.00", and those two numbers read together can be meaningless. That is exactly
+ * what happened in the field: one month sat at 0.00 and nobody could tell why the
  * total did not add up.
  */
 export function depositMonths(
@@ -29,17 +29,17 @@ export function depositMonths(
  *
  * Careful: there used to be no way to do this. `ensureLedger()` never updates an
  * existing row (intentionally), so a wrong amount stayed forever. `reason` is
- * required, and `amountPaisa` cannot be zero.
+ * required, and `amountMinor` cannot be zero.
  */
 export function correctDepositInstalment(
   employeeId: number,
   yearMonth: string,
-  amountPaisa: number,
+  amountMinor: number,
   reason: string,
 ): Promise<{ from: number; to: number }> {
   return api<{ from: number; to: number }>(
     `/deposits/${employeeId}/instalment`,
-    { method: 'PATCH', body: { yearMonth, amountPaisa, reason } },
+    { method: 'PATCH', body: { yearMonth, amountMinor, reason } },
   );
 }
 export function setDepositStart(
@@ -155,8 +155,8 @@ export function deleteLeave(id: number): Promise<void> {
 export interface DepositPolicyView {
   /** '500.00' */
   amount: string;
-  /** Sent in minor units (paisa): 500.00 = 50000. */
-  amountPaisa: number;
+  /** Sent in minor units (hundredths): 500.00 = 50000. */
+  amountMinor: number;
   startYearMonth: string;
   noticeDays: number;
   active: boolean;
@@ -192,7 +192,7 @@ export interface DepositBalance {
   /** How many months of installments have been recorded. */
   months: number;
   balance: string;
-  balancePaisa: number;
+  balanceMinor: number;
   settlement: DepositSettlementView | null;
 }
 export function listDeposits(
@@ -204,7 +204,7 @@ export function listDeposits(
   );
 }
 export interface DepositPolicyBody {
-  amountPaisa?: number;
+  amountMinor?: number;
   startYearMonth?: string;
   noticeDays?: number;
   active?: boolean;
@@ -240,7 +240,7 @@ export interface PayrollRow {
    * `null` = this employee's salary is not set, which is not the same as zero.
    * Showing them the same way would silently put a wrong number on the sheet.
    * Careful: all money and hours are strings (Decimal, not float). Do not compute
-   * with `Number()`; use `formatTaka()` / `formatHoursAsDuration()`.
+   * with `Number()`; use `formatMoney()` / `formatHoursAsDuration()`.
    */
   monthlySalary: string | null;
   targetHours: string;

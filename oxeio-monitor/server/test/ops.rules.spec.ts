@@ -435,7 +435,7 @@ describe('Telegram message', () => {
       now,
     );
     expect(message).not.toContain('facebook');
-    expect(message).not.toContain('৳');
+    expect(message).not.toContain('$');
     expect(message).toContain('no work all day');
   });
 

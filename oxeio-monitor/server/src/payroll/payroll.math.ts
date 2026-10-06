@@ -6,11 +6,11 @@
  * not be tested in isolation, yet a mistake lands directly in a person's pocket.
  */
 
-/** Money is never computed in binary float: all arithmetic is in paisa (integers). */
-export const PAISA_PER_TAKA = 100;
+/** Money is never computed in binary float: all arithmetic is in minor units (integers, hundredths). */
+export const MINOR_PER_UNIT = 100;
 
 export interface PayrollInput {
-  /** Monthly salary, in the currency's whole units (taka for the BDT default). */
+  /** Monthly salary, in the currency's whole units. */
   monthlySalary: number;
   /**
    * That employee's target for that month: **their work days × the daily
@@ -28,7 +28,7 @@ export interface PayrollInput {
    * `targetSec`, while `creditedSec` only comes from days the system was
    * running. In August tracking started on the 13th to 15th, so nearly half the
    * month silently became shortfall: the deduction for 12 people came to
-   * **৳79,788**, of which **৳61,280** was for days nobody ever observed.
+   * **79,788.00**, of which **61,280.00** was for days nobody ever observed.
    *
    * The rate does not change. The hourly rate is still `salary ÷ targetSec`,
    * since the salary is for the whole month's work. What changes is **how much
@@ -69,15 +69,15 @@ export interface PayrollInput {
 export interface PayrollLine {
   payBasis: 'monthly' | 'hourly' | 'none';
   /** money for overtime hours, in minor units (0 when overtime is not paid) */
-  overtimePayPaisa: number;
-  /** Hourly rate, in paisa. */
-  hourlyRatePaisa: number;
+  overtimePayMinor: number;
+  /** Hourly rate, in minor units. */
+  hourlyRateMinor: number;
   shortfallSec: number;
   overtimeSec: number;
-  /** How much less is paid for the shortfall, in paisa. 0 if there is no shortfall. */
-  deductionPaisa: number;
-  /** Salary minus deduction, in paisa. */
-  payablePaisa: number;
+  /** How much less is paid for the shortfall, in minor units. 0 if there is no shortfall. */
+  deductionMinor: number;
+  /** Salary minus deduction, in minor units. */
+  payableMinor: number;
   /**
    * The **money for extra hours is not calculated**; only the hours are reported.
    * What the OT rate should be (1x, 1.5x, or nothing) is a business decision.
@@ -133,12 +133,12 @@ export function computePayroll(input: PayrollInput): PayrollLine {
   if (payBasis === 'none') {
     return {
       payBasis,
-      overtimePayPaisa: 0,
-      hourlyRatePaisa: 0,
+      overtimePayMinor: 0,
+      hourlyRateMinor: 0,
       shortfallSec: 0,
       overtimeSec: 0,
-      deductionPaisa: 0,
-      payablePaisa: 0,
+      deductionMinor: 0,
+      payableMinor: 0,
       overtimeNote,
     };
   }
@@ -158,22 +158,22 @@ export function computePayroll(input: PayrollInput): PayrollLine {
     throw new RangeError('The month workdays cannot be negative or undefined');
   }
 
-  const basePaisa = Math.round(monthlySalary * PAISA_PER_TAKA);
+  const baseMinor = Math.round(monthlySalary * MINOR_PER_UNIT);
 
   /**
    * **Applicable salary = monthly × d ÷ D**: the core line of G37.
    *
    * Careful: multiply and divide **together**, not by computing the fraction
    * first. `salaryFraction()` is provided separately, but it is not used for
-   * money: rounding twice would make a few paisa of difference in someone's pay.
+   * money: rounding twice would make a few cents of difference in someone's pay.
    *
    * D = 0 (the whole month off) → full salary (O9). A shortfall is then
    * impossible, since the target is 0 too.
    */
-  const salaryPaisa =
+  const salaryMinor =
     monthWorkdays <= 0
-      ? basePaisa
-      : Math.round((basePaisa * Math.min(workdays, monthWorkdays)) / monthWorkdays);
+      ? baseMinor
+      : Math.round((baseMinor * Math.min(workdays, monthWorkdays)) / monthWorkdays);
 
   /**
    * **Target 0 is valid, but for one reason only.**
@@ -195,13 +195,13 @@ export function computePayroll(input: PayrollInput): PayrollLine {
 
     return {
       payBasis,
-      overtimePayPaisa: 0,
-      hourlyRatePaisa: 0,
+      overtimePayMinor: 0,
+      hourlyRateMinor: 0,
       shortfallSec: 0,
       overtimeSec: input.noTarget ? 0 : Math.max(0, creditedSec),
-      deductionPaisa: 0,
+      deductionMinor: 0,
       // 0 work days means d/D is 0 too, so this is 0; only D = 0 gives the full salary
-      payablePaisa: salaryPaisa,
+      payableMinor: salaryMinor,
       overtimeNote,
     };
   }
@@ -209,10 +209,10 @@ export function computePayroll(input: PayrollInput): PayrollLine {
   const targetHours = targetSec / 3600;
 
   // Careful: the rate is **not** rounded separately for the deduction; below it
-  // goes directly salaryPaisa × shortfall ÷ target. 13000 ÷ 208 = 62.5 currency units,
+  // goes directly salaryMinor × shortfall ÷ target. 13000 ÷ 208 = 62.5 currency units,
   // but 10000 ÷ 208 = 48.0769…. Rounding the rate first would multiply that
   // fraction by every hour and end up a few currency units off at month end.
-  const hourlyRatePaisa = Math.round(salaryPaisa / targetHours);
+  const hourlyRateMinor = Math.round(salaryMinor / targetHours);
 
   /**
    * **The shortfall is measured against the observed part, not the whole target.**
@@ -233,27 +233,27 @@ export function computePayroll(input: PayrollInput): PayrollLine {
   const surplusSec = Math.max(0, creditedSec - targetSec);
 
   // the policy may keep the salary whole and only report the missing hours
-  const deductionPaisa =
+  const deductionMinor =
     deficitSec === 0 || input.deductShortfall === false
       ? 0
-      : Math.round((salaryPaisa * deficitSec) / targetSec);
+      : Math.round((salaryMinor * deficitSec) / targetSec);
 
   // overtime paid at the policy's multiple of the hourly rate, if it pays it
-  const overtimePayPaisa =
+  const overtimePayMinor =
     multiplier === null || surplusSec === 0
       ? 0
-      : Math.round((salaryPaisa * surplusSec * multiplier) / targetSec);
+      : Math.round((salaryMinor * surplusSec * multiplier) / targetSec);
 
   return {
     payBasis,
-    overtimePayPaisa,
-    hourlyRatePaisa,
+    overtimePayMinor,
+    hourlyRateMinor,
     shortfallSec: deficitSec,
     overtimeSec: surplusSec,
-    deductionPaisa,
+    deductionMinor,
     // The deduction can never exceed the salary: if someone is absent the whole
     // month, deficit = target, so deduction = full salary, payable = 0. Never negative.
-    payablePaisa: Math.max(0, salaryPaisa - deductionPaisa) + overtimePayPaisa,
+    payableMinor: Math.max(0, salaryMinor - deductionMinor) + overtimePayMinor,
     overtimeNote,
   };
 }
@@ -276,36 +276,36 @@ function hourlyPay(
   if (!Number.isFinite(input.creditedSec) || input.creditedSec < 0) {
     throw new RangeError('Credited time cannot be negative');
   }
-  const ratePaisa = Math.round(rate * PAISA_PER_TAKA);
+  const rateMinor = Math.round(rate * MINOR_PER_UNIT);
   const credited = input.creditedSec;
   const leaveSec = Math.max(0, input.paidLeaveSec ?? 0);
   const target = input.noTarget || !(input.targetSec > 0) ? 0 : input.targetSec;
 
   const overtimeSec = target > 0 ? Math.max(0, credited - target) : 0;
   const regularSec = credited - (multiplier === null ? 0 : overtimeSec) + leaveSec;
-  const regularPaisa = Math.round((ratePaisa * regularSec) / 3600);
-  const overtimePayPaisa =
-    multiplier === null ? 0 : Math.round((ratePaisa * overtimeSec * multiplier) / 3600);
+  const regularMinor = Math.round((rateMinor * regularSec) / 3600);
+  const overtimePayMinor =
+    multiplier === null ? 0 : Math.round((rateMinor * overtimeSec * multiplier) / 3600);
 
   return {
     payBasis: 'hourly',
-    overtimePayPaisa,
-    hourlyRatePaisa: ratePaisa,
+    overtimePayMinor,
+    hourlyRateMinor: rateMinor,
     // reported, never deducted: an hourly worker is simply paid for fewer hours
     shortfallSec:
       target > 0 ? Math.max(0, Math.min(input.observedTargetSec, target) - credited) : 0,
     overtimeSec,
-    deductionPaisa: 0,
-    payablePaisa: regularPaisa + overtimePayPaisa,
+    deductionMinor: 0,
+    payableMinor: regularMinor + overtimePayMinor,
     overtimeNote,
   };
 }
 
-/** Minor → whole units for display (paisa → taka for BDT; two decimals). */
-export function paisaToTaka(paisa: number): string {
-  const sign = paisa < 0 ? '-' : '';
-  const abs = Math.abs(paisa);
-  return `${sign}${Math.floor(abs / PAISA_PER_TAKA)}.${String(abs % PAISA_PER_TAKA).padStart(2, '0')}`;
+/** Minor → whole units for display (5 → "0.05"; two decimals). */
+export function minorToAmount(minor: number): string {
+  const sign = minor < 0 ? '-' : '';
+  const abs = Math.abs(minor);
+  return `${sign}${Math.floor(abs / MINOR_PER_UNIT)}.${String(abs % MINOR_PER_UNIT).padStart(2, '0')}`;
 }
 
 // ════════════════════════════════════════════════════════════════════════════

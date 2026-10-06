@@ -119,7 +119,7 @@ describe('one rate: the denominator is always the policy expected_workdays', () 
     expect(secondsToHours(targetSecIn(span, noHoliday, perDay))).toBe(216);
     expect(secondsToHours(targetSecIn(span, twoHolidays, perDay))).toBe(200);
 
-    // the difference is exactly two days' target, not a paisa off
+    // the difference is exactly two days' target, not a cent off
     expect(
       targetSecIn(span, noHoliday, perDay) -
         targetSecIn(span, twoHolidays, perDay),

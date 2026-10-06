@@ -16,7 +16,7 @@ import {
 /**
  * **R21 — security money (deposit).**
  *
- * The owner's rule (15 August): a fixed amount (500 taka in the first deployment) is held back every month, and anyone
+ * The owner's rule (15 August): a fixed amount (500.00 in the first deployment) is held back every month, and anyone
  * who leaves with 30 days' notice gets all of it back.
  *
  * This is money, so the questions are about money: is anything deducted
@@ -55,7 +55,7 @@ beforeEach(async () => {
   await h.prisma.depositPolicy.upsert({
     where: { id: 1 },
     update: {
-      amountPaisa: 50_000,
+      amountMinor: 50_000,
       startYearMonth: thisMonth,
       noticeDays: 30,
       active: true,
@@ -63,7 +63,7 @@ beforeEach(async () => {
     },
     create: {
       id: 1,
-      amountPaisa: 50_000,
+      amountMinor: 50_000,
       startYearMonth: thisMonth,
       noticeDays: 30,
       active: true,
@@ -148,7 +148,7 @@ describe('the deposit ledger', () => {
     await owner.http
       .patch('/api/v1/deposits/policy')
       .set('X-CSRF-Token', owner.csrf)
-      .send({ amountPaisa: 60_000 })
+      .send({ amountMinor: 60_000 })
       .expect(200);
 
     const { rows, policy } = await balances();
@@ -276,7 +276,7 @@ describe('who can see it', () => {
     await manager.http
       .patch('/api/v1/deposits/policy')
       .set('X-CSRF-Token', manager.csrf)
-      .send({ amountPaisa: 10 })
+      .send({ amountMinor: 10 })
       .expect(403);
   });
 
@@ -466,7 +466,7 @@ describe('a closed month does not move the ledger', () => {
      */
     const past = prevMonth(thisMonth);
     await h.prisma.securityDeposit.create({
-      data: { employeeId: staff.id, yearMonth: past, amountPaisa: 50_000 },
+      data: { employeeId: staff.id, yearMonth: past, amountMinor: 50_000 },
     });
     await h.prisma.monthClosure.create({
       data: { yearMonth: past, closedBy: 'test' },
@@ -490,13 +490,13 @@ describe('correcting an instalment amount', () => {
   const correct = (
     employeeId: number,
     yearMonth: string,
-    amountPaisa: number,
+    amountMinor: number,
     reason = 'হিসাবের ভুল',
   ) =>
     owner.http
       .patch(`/api/v1/deposits/${employeeId}/instalment`)
       .set('X-CSRF-Token', owner.csrf)
-      .send({ yearMonth, amountPaisa, reason });
+      .send({ yearMonth, amountMinor, reason });
 
   it('the amount changes, and the total shows it', async () => {
     const staff = await addStaff('Songshodhon Ek');
@@ -519,7 +519,7 @@ describe('correcting an instalment amount', () => {
    * an instalment of 0 exists. Mixing the two ruins the answer to "how many
    * months have been paid".
    *
-   * The database also has `CHECK (amount_paisa > 0)`, but the check is
+   * The database also has `CHECK (amount_minor > 0)`, but the check is
    * stopped here first — otherwise the message would be a raw Postgres error.
    */
   it('zero cannot be set — waiving and 0 are not the same', async () => {
@@ -613,8 +613,8 @@ describe('correcting an instalment amount', () => {
     expect(row.meta).toMatchObject({
       op: 'deposit_instalment_corrected',
       yearMonth: thisMonth,
-      fromPaisa: 50_000,
-      toPaisa: 25_000,
+      fromMinor: 50_000,
+      toMinor: 25_000,
       why: 'জুলাইয়ের আংশিক বেতন',
     });
   });
@@ -649,7 +649,7 @@ describe('correcting an instalment amount', () => {
    * prove that 0 cannot get in some other way, and the field row got in
    * exactly that way (directly, not over HTTP).
    *
-   * `deposit_policy` has had `CHECK (amount_paisa > 0)` from day one, but the
+   * `deposit_policy` has had `CHECK (amount_minor > 0)` from day one, but the
    * ledger rows did not, and that is where the wrong value lands. This test
    * guards the new CHECK, bypassing the DTO entirely.
    */
@@ -659,14 +659,14 @@ describe('correcting an instalment amount', () => {
 
     await expect(
       h.prisma.securityDeposit.create({
-        data: { employeeId: staff.id, yearMonth: '2020-01', amountPaisa: 0 },
+        data: { employeeId: staff.id, yearMonth: '2020-01', amountMinor: 0 },
       }),
     ).rejects.toThrow();
 
     // Negative too — same CHECK
     await expect(
       h.prisma.securityDeposit.create({
-        data: { employeeId: staff.id, yearMonth: '2020-02', amountPaisa: -1 },
+        data: { employeeId: staff.id, yearMonth: '2020-02', amountMinor: -1 },
       }),
     ).rejects.toThrow();
   });

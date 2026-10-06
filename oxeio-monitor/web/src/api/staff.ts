@@ -153,7 +153,7 @@ export interface CreateEmployeeBody {
   policyId?: number;
   /**
    * Careful: money must be sent as a string (`'13000'` or `'13000.50'`). As a JSON
-   * float, 13000.10 could become 13000.0999..., and a one-paisa difference would go
+   * float, 13000.10 could become 13000.0999..., and a one-cent difference would go
    * unnoticed. Pass the input box's value directly.
    */
   monthlySalary?: string;

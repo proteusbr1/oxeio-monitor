@@ -60,25 +60,25 @@ describe('computePayroll — monthly salary', () => {
   it('the original rule stays the default: missing hours deducted, overtime not paid', () => {
     const line = computePayroll({ ...month, monthlySalary: 3200, creditedSec: 150 * H });
     expect(line.payBasis).toBe('monthly');
-    expect(line.deductionPaisa).toBe(20_000); // 10 h × 20.00
-    expect(line.payablePaisa).toBe(300_000);
-    expect(line.overtimePayPaisa).toBe(0);
+    expect(line.deductionMinor).toBe(20_000); // 10 h × 20.00
+    expect(line.payableMinor).toBe(300_000);
+    expect(line.overtimePayMinor).toBe(0);
   });
   it('the policy can keep the salary whole', () => {
     const line = computePayroll({ ...month, monthlySalary: 3200, creditedSec: 150 * H, deductShortfall: false });
-    expect(line.deductionPaisa).toBe(0);
-    expect(line.payablePaisa).toBe(320_000);
+    expect(line.deductionMinor).toBe(0);
+    expect(line.payableMinor).toBe(320_000);
     expect(line.shortfallSec).toBe(10 * H); // still reported
   });
   it('overtime paid at the policy multiple', () => {
     const line = computePayroll({ ...month, monthlySalary: 3200, creditedSec: 170 * H, overtimeMultiplier: 1.5 });
-    expect(line.overtimePayPaisa).toBe(30_000); // 10 h × 20.00 × 1.5
-    expect(line.payablePaisa).toBe(350_000);
+    expect(line.overtimePayMinor).toBe(30_000); // 10 h × 20.00 × 1.5
+    expect(line.payableMinor).toBe(350_000);
     expect(line.overtimeNote).toMatch(/×1.5/);
   });
   it('no target: the salary is paid, nothing short, no overtime', () => {
     const line = computePayroll({ ...month, targetSec: 0, observedTargetSec: 0, monthlySalary: 3200, creditedSec: 50 * H, noTarget: true });
-    expect(line).toMatchObject({ payablePaisa: 320_000, deductionPaisa: 0, overtimeSec: 0, shortfallSec: 0 });
+    expect(line).toMatchObject({ payableMinor: 320_000, deductionMinor: 0, overtimeSec: 0, shortfallSec: 0 });
   });
   it('a zero target that is not "no target" is still refused', () => {
     expect(() => computePayroll({ ...month, targetSec: 0, monthlySalary: 3200, creditedSec: 0 })).toThrow(/zero/);
@@ -88,19 +88,19 @@ describe('computePayroll — monthly salary', () => {
 describe('computePayroll — hourly', () => {
   it('hours counted × rate, plus paid leave', () => {
     const line = computePayroll({ ...month, monthlySalary: 0, payBasis: 'hourly', hourlyRate: 25, creditedSec: 100 * H, paidLeaveSec: 16 * H });
-    expect(line.payablePaisa).toBe(290_000); // (100 + 16) × 25.00
-    expect(line.deductionPaisa).toBe(0);
+    expect(line.payableMinor).toBe(290_000); // (100 + 16) × 25.00
+    expect(line.deductionMinor).toBe(0);
   });
   it('without a multiplier, every hour is paid the same; with one, hours over the target get it', () => {
     const plain = computePayroll({ ...month, monthlySalary: 0, payBasis: 'hourly', hourlyRate: 20, creditedSec: 170 * H });
-    expect(plain.payablePaisa).toBe(340_000);
+    expect(plain.payableMinor).toBe(340_000);
     const ot = computePayroll({ ...month, monthlySalary: 0, payBasis: 'hourly', hourlyRate: 20, creditedSec: 170 * H, overtimeMultiplier: 2 });
-    expect(ot.overtimePayPaisa).toBe(40_000); // 10 h × 20 × 2
-    expect(ot.payablePaisa).toBe(360_000); // 160 × 20 + 400
+    expect(ot.overtimePayMinor).toBe(40_000); // 10 h × 20 × 2
+    expect(ot.payableMinor).toBe(360_000); // 160 × 20 + 400
   });
   it('none: hours only, no money', () => {
     const line = computePayroll({ ...month, monthlySalary: 0, payBasis: 'none', creditedSec: 100 * H });
-    expect(line).toMatchObject({ payBasis: 'none', payablePaisa: 0 });
+    expect(line).toMatchObject({ payBasis: 'none', payableMinor: 0 });
   });
 });
 

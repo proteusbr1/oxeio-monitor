@@ -249,7 +249,7 @@ export function MyDataPage() {
                  be worked out from it.
             */}
             {deposit.data &&
-              (deposit.data.totalPaisa > 0 || deposit.data.settlement) && (
+              (deposit.data.totalMinor > 0 || deposit.data.settlement) && (
                 <Card
                   title="Security Deposit"
                   hint={

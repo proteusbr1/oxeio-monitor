@@ -42,9 +42,9 @@ describe('protected routes without login', () => {
     expect(res.body).toEqual({ timeZone: 'Asia/Dhaka', utcOffsetMinutes: 360 });
   });
 
-  it('GET /auth/currency is public and defaults to BDT', async () => {
+  it('GET /auth/currency is public and defaults to USD', async () => {
     const res = await h.http().get('/api/v1/auth/currency').expect(200);
-    expect(res.body).toEqual({ code: 'BDT', symbol: '৳' });
+    expect(res.body).toEqual({ code: 'USD', symbol: '$' });
   });
 
   it('GET /auth/display-locale is public and empty by default', async () => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   computePayroll,
-  paisaToTaka,
+  minorToAmount,
   salaryForMonth,
   supersededThrough,
 } from '../src/payroll/payroll.math';
@@ -19,8 +19,8 @@ const TARGET = 208 * 3600;
  * the month was unobserved, yet those days counted as shortfall and were
  * deducted from salary.
  *
- * Measured cost in the field: 12 people's deductions came to ৳79,788, of which
- * ৳61,280 was for unobserved days.
+ * Measured cost in the field: 12 people's deductions came to 79,788.00, of which
+ * 61,280.00 was for unobserved days.
  */
 describe('payroll: no deduction for unobserved days', () => {
   /** The core test of this describe: the real shape of August. */
@@ -39,8 +39,8 @@ describe('payroll: no deduction for unobserved days', () => {
     expect(line.shortfallSec).toBe(2 * 3600);
 
     // the rate is still the full-month one: 10000 / 208 = 48.0769.../hour
-    //   deduction = 10000 x 7200 / 748800 = about 96.15 taka
-    expect(paisaToTaka(line.deductionPaisa)).toBe('96.15');
+    //   deduction = 10000 x 7200 / 748800 = about 96.15
+    expect(minorToAmount(line.deductionMinor)).toBe('96.15');
   });
 
   /**
@@ -59,7 +59,7 @@ describe('payroll: no deduction for unobserved days', () => {
     });
 
     expect(old.shortfallSec).toBe(98 * 3600);
-    expect(paisaToTaka(old.deductionPaisa)).toBe('4711.54');
+    expect(minorToAmount(old.deductionMinor)).toBe('4711.54');
   });
 
   /**
@@ -78,7 +78,7 @@ describe('payroll: no deduction for unobserved days', () => {
     });
 
     expect(line.shortfallSec).toBe(112 * 3600);
-    expect(line.deductionPaisa).toBeGreaterThan(0);
+    expect(line.deductionMinor).toBeGreaterThan(0);
   });
 
   /**
@@ -96,8 +96,8 @@ describe('payroll: no deduction for unobserved days', () => {
     });
 
     expect(line.shortfallSec).toBe(0);
-    expect(line.deductionPaisa).toBe(0);
-    expect(paisaToTaka(line.payablePaisa)).toBe('10000.00');
+    expect(line.deductionMinor).toBe(0);
+    expect(minorToAmount(line.payableMinor)).toBe('10000.00');
   });
 
   /**
@@ -151,8 +151,8 @@ describe('payroll: converting shortfall to money', () => {
     });
 
     expect(line.shortfallSec).toBe(0);
-    expect(line.deductionPaisa).toBe(0);
-    expect(paisaToTaka(line.payablePaisa)).toBe('13000.00');
+    expect(line.deductionMinor).toBe(0);
+    expect(minorToAmount(line.payableMinor)).toBe('13000.00');
   });
 
   it('nothing is deducted for working over the target, and OT money is not calculated', () => {
@@ -166,13 +166,13 @@ describe('payroll: converting shortfall to money', () => {
       monthWorkdays: 26,
     });
 
-    expect(line.deductionPaisa).toBe(0);
+    expect(line.deductionMinor).toBe(0);
     expect(line.overtimeSec).toBe(10 * 3600);
-    expect(paisaToTaka(line.payablePaisa)).toBe('13000.00');
+    expect(minorToAmount(line.payableMinor)).toBe('13000.00');
   });
 
   it('checks the numbers with a salary that divides evenly', () => {
-    // 13000 / 208 = 62.50 taka/hour. 20 hours short = 1250 taka.
+    // 13000 / 208 = 62.50/hour. 20 hours short = 1250.00.
     const line = computePayroll({
       monthlySalary: 13000,
       targetSec: TARGET,
@@ -183,16 +183,16 @@ describe('payroll: converting shortfall to money', () => {
       monthWorkdays: 26,
     });
 
-    expect(paisaToTaka(line.hourlyRatePaisa)).toBe('62.50');
-    expect(paisaToTaka(line.deductionPaisa)).toBe('1250.00');
-    expect(paisaToTaka(line.payablePaisa)).toBe('11750.00');
+    expect(minorToAmount(line.hourlyRateMinor)).toBe('62.50');
+    expect(minorToAmount(line.deductionMinor)).toBe('1250.00');
+    expect(minorToAmount(line.payableMinor)).toBe('11750.00');
   });
 
   /**
    * The most useful test. 10000 / 208 = 48.0769..., which does not divide
-   * evenly. Rounding the rate to paisa first (4808) and then multiplying by
+   * evenly. Rounding the rate to minor units first (4808) and then multiplying by
    * the hours would give 961.60 for 20 hours, when the correct value is
-   * 961.54. Six paisa a month sounds small, but the error always leans the
+   * 961.54. Six cents a month sounds small, but the error always leans the
    * same way: against the employee.
    */
   it('for a salary that does not divide evenly, the rate is not rounded first', () => {
@@ -206,10 +206,10 @@ describe('payroll: converting shortfall to money', () => {
       monthWorkdays: 26,
     });
 
-    expect(paisaToTaka(line.deductionPaisa)).toBe('961.54');
+    expect(minorToAmount(line.deductionMinor)).toBe('961.54');
 
     const naive = Math.round((Math.round(1000000 / 208) * 20) / 1);
-    expect(paisaToTaka(naive)).toBe('961.60'); // what it would have been
+    expect(minorToAmount(naive)).toBe('961.60'); // what it would have been
   });
 
   it('a full month of absence gives payable zero, not negative', () => {
@@ -223,8 +223,8 @@ describe('payroll: converting shortfall to money', () => {
       monthWorkdays: 26,
     });
 
-    expect(paisaToTaka(line.deductionPaisa)).toBe('15000.00');
-    expect(line.payablePaisa).toBe(0);
+    expect(minorToAmount(line.deductionMinor)).toBe('15000.00');
+    expect(line.payableMinor).toBe(0);
   });
 
   /**
@@ -275,8 +275,8 @@ describe('payroll: converting shortfall to money', () => {
       const line = computePayroll({ ...HALF, creditedSec: 112 * 3600 });
 
       // 20000 x 14 / 26 = 10,769.23
-      expect(line.payablePaisa).toBe(Math.round((2000000 * 14) / 26));
-      expect(line.deductionPaisa).toBe(0);
+      expect(line.payableMinor).toBe(Math.round((2000000 * 14) / 26));
+      expect(line.deductionMinor).toBe(0);
     });
 
     /**
@@ -296,14 +296,14 @@ describe('payroll: converting shortfall to money', () => {
         monthWorkdays: 26,
       });
 
-      expect(partial.hourlyRatePaisa).toBe(full.hourlyRatePaisa);
+      expect(partial.hourlyRateMinor).toBe(full.hourlyRateMinor);
     });
 
     it('working half in a half month deducts half of the prorated salary', () => {
       const line = computePayroll({ ...HALF, creditedSec: 56 * 3600 });
 
       const prorated = Math.round((2000000 * 14) / 26);
-      expect(line.deductionPaisa).toBe(Math.round(prorated / 2));
+      expect(line.deductionMinor).toBe(Math.round(prorated / 2));
     });
 
     /** Not there at all that month: target 0, salary 0, and no fuss. */
@@ -317,8 +317,8 @@ describe('payroll: converting shortfall to money', () => {
         monthWorkdays: 26,
       });
 
-      expect(line.payablePaisa).toBe(0);
-      expect(line.deductionPaisa).toBe(0);
+      expect(line.payableMinor).toBe(0);
+      expect(line.deductionMinor).toBe(0);
       expect(line.shortfallSec).toBe(0);
     });
 
@@ -336,23 +336,23 @@ describe('payroll: converting shortfall to money', () => {
         monthWorkdays: 0,
       });
 
-      expect(line.payablePaisa).toBe(2000000);
+      expect(line.payableMinor).toBe(2000000);
     });
 
     /** Even working over the target, the prorated salary is the maximum (ADR-023). */
     it('working over the target earns no extra money', () => {
       const line = computePayroll({ ...HALF, creditedSec: 200 * 3600 });
 
-      expect(line.payablePaisa).toBe(Math.round((2000000 * 14) / 26));
+      expect(line.payableMinor).toBe(Math.round((2000000 * 14) / 26));
       expect(line.overtimeSec).toBe(88 * 3600);
     });
   });
 
-  it('paisa to taka conversion keeps the decimals right', () => {
-    expect(paisaToTaka(0)).toBe('0.00');
-    expect(paisaToTaka(5)).toBe('0.05');
-    expect(paisaToTaka(100)).toBe('1.00');
-    expect(paisaToTaka(123456)).toBe('1234.56');
+  it('minor units to amount conversion keeps the decimals right', () => {
+    expect(minorToAmount(0)).toBe('0.00');
+    expect(minorToAmount(5)).toBe('0.05');
+    expect(minorToAmount(100)).toBe('1.00');
+    expect(minorToAmount(123456)).toBe('1234.56');
   });
 
   it('none of the office\'s twelve people ever gets a negative payable', () => {
@@ -370,9 +370,9 @@ describe('payroll: converting shortfall to money', () => {
           monthWorkdays: 26,
         });
 
-        expect(line.payablePaisa).toBeGreaterThanOrEqual(0);
-        expect(line.payablePaisa).toBeLessThanOrEqual(salary * 100);
-        expect(line.deductionPaisa + line.payablePaisa).toBe(salary * 100);
+        expect(line.payableMinor).toBeGreaterThanOrEqual(0);
+        expect(line.payableMinor).toBeLessThanOrEqual(salary * 100);
+        expect(line.deductionMinor + line.payableMinor).toBe(salary * 100);
       }
     }
   });
