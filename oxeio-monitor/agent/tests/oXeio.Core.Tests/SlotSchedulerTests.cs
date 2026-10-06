@@ -8,7 +8,7 @@ public class SlotSchedulerTests
         new(2026, 8, 9, 3, 0, 0, TimeSpan.Zero); // 9 AM in Dhaka
 
     [Fact]
-    public void ছবি_সবসময়_নিজের_স্লটের_ভেতরেই_ওঠে()
+    public void The_shot_always_falls_inside_its_own_slot()
     {
         var s = new SlotScheduler(5, new Random(42));
         var at = Nine;
@@ -22,7 +22,7 @@ public class SlotSchedulerTests
     }
 
     [Fact]
-    public void দুই_ঘণ্টায়_চব্বিশটা_স্লট()
+    public void Twenty_four_slots_in_two_hours()
     {
         var s = new SlotScheduler(5, new Random(7));
 
@@ -42,7 +42,7 @@ public class SlotSchedulerTests
     }
 
     [Fact]
-    public void পরপর_দুটো_ছবির_ব্যবধান_একরকম_হয়_না()
+    public void The_gap_between_consecutive_shots_is_not_uniform()
     {
         var s = new SlotScheduler(5, new Random(1234));
         var at = Nine;
@@ -60,7 +60,7 @@ public class SlotSchedulerTests
     }
 
     [Fact]
-    public void স্লটের_শুরু_সবসময়_পাঁচ_মিনিটের_ঘরে()
+    public void A_slot_always_starts_on_a_five_minute_boundary()
     {
         var s = new SlotScheduler(5, new Random(9));
 

@@ -40,14 +40,14 @@ public class SyncWireTests
     [InlineData("GitHub.COM", "github.com")]
     [InlineData("example.com.", "example.com")]
     [InlineData("  ", null)]
-    public void ডোমেইন_ছাড়া_আর_কিছুই_যায়_না(string? input, string? expected) =>
+    public void Nothing_but_the_domain_goes_out(string? input, string? expected) =>
         Assert.Equal(expected, SyncWire.DomainOnly(input));
 
     /// <summary>
     /// The ':' inside an IPv6 literal is not a port; trimming it would ruin the address.
     /// </summary>
     [Fact]
-    public void IPv6_লিটারাল_অক্ষত_থাকে() =>
+    public void An_IPv6_literal_stays_intact() =>
         Assert.Equal("[::1]", SyncWire.DomainOnly("http://[::1]/admin"));
 
     /// <summary>
@@ -56,7 +56,7 @@ public class SyncWireTests
     /// </summary>
     /// </summary>
     [Fact]
-    public void ফুল_URL_এলেও_তারে_শুধু_ডোমেইন_ওঠে()
+    public void Even_a_full_URL_puts_only_the_domain_on_the_wire()
     {
         var dto = One(Record(domain: "https://mail.google.com/mail/u/0/#inbox/FMfcgz"));
 
@@ -70,7 +70,7 @@ public class SyncWireTests
     /// None of these strings is written by us, so they cannot be trusted.
     /// </summary>
     [Fact]
-    public void সার্ভারের_সীমার_বেশি_লম্বা_কিছু_যায়_না()
+    public void Nothing_longer_than_the_server_limit_goes_out()
     {
         var dto = One(Record(
             process: new string('p', 400),
@@ -85,7 +85,7 @@ public class SyncWireTests
     }
 
     [Fact]
-    public void সীমার_ভেতরে_থাকলে_কিছু_বদলায়_না()
+    public void Values_within_the_limit_are_unchanged()
     {
         var dto = One(Record(app: "Google Chrome", title: "GitHub", domain: "github.com"));
 
@@ -105,11 +105,11 @@ public class SyncWireTests
     [InlineData(SegmentState.Active, "active")]
     [InlineData(SegmentState.Idle, "idle")]
     [InlineData(SegmentState.Locked, "locked")]
-    public void সেগমেন্টের_অবস্থা_ছোট_হাতে_যায়(SegmentState state, string wire) =>
+    public void The_segment_state_goes_out_in_lower_case(SegmentState state, string wire) =>
         Assert.Equal(wire, SyncWire.StateToWire(state));
 
     [Fact]
-    public void অচেনা_অবস্থা_চুপচাপ_পাঠানো_হয়_না() =>
+    public void An_unknown_state_is_never_sent_silently() =>
         Assert.Throws<ArgumentOutOfRangeException>(
             () => SyncWire.StateToWire((SegmentState)99));
 
@@ -131,7 +131,7 @@ public class SyncWireTests
     /// ([G71](../../../../docs/08-Gap-Analysis.md)). Now they are filled, and this is the guard.
     /// </summary>
     [Fact]
-    public void ছবির_সাথে_অ্যাপ_ও_টাইটেল_তারে_ওঠে()
+    public void The_app_and_title_go_out_with_the_screenshot()
     {
         var dto = Shot("excel.exe", "Q3 budget.xlsx");
 
@@ -141,7 +141,7 @@ public class SyncWireTests
 
     /// <summary>With app tracking off nothing is known, so sending empty is correct.</summary>
     [Fact]
-    public void না_জানা_থাকলে_ঘর_খালিই_যায়()
+    public void Unknown_values_go_out_empty()
     {
         var dto = Shot();
 
@@ -155,7 +155,7 @@ public class SyncWireTests
     /// would be deleted.
     /// </summary>
     [Fact]
-    public void লম্বা_টাইটেল_বা_নাম_সীমায়_ছাঁটা_হয়()
+    public void A_long_title_or_name_is_trimmed_to_the_limit()
     {
         var dto = Shot(new string('a', 400), new string('b', 1500));
 

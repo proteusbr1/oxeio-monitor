@@ -81,7 +81,7 @@ public class IdleStateMachineRaceTests
     /// <c>OnSuspend</c> directly on the UI thread while the tracker is still inside its tick.
     /// </summary>
     [Fact]
-    public void ট্র্যাকার_আর_পাওয়ার_একসাথে_ঢুকলেও_সময়_দুবার_গোনা_হয়_না()
+    public void Time_is_not_counted_twice_when_tracker_and_power_events_enter_together()
     {
         var clock = new SharedClock();
         var sm = new IdleStateMachine(Threshold, Start);
@@ -124,7 +124,7 @@ public class IdleStateMachineRaceTests
     /// tracker has stopped; it checks the token only at the top of its loop.
     /// </summary>
     [Fact]
-    public void বন্ধ_হওয়ার_সময়_শেষ_সেগমেন্টও_ওভারল্যাপ_করে_না()
+    public void The_final_segment_at_shutdown_does_not_overlap_either()
     {
         var clock = new SharedClock();
         var sm = new IdleStateMachine(Threshold, Start);
@@ -162,7 +162,7 @@ public class IdleStateMachineRaceTests
     /// restoring this one line turns it red.
     /// </summary>
     [Fact]
-    public void পিছিয়ে_যাওয়া_ঘড়িতে_CloseAll_সময়_পিছোয়_না()
+    public void CloseAll_does_not_move_time_backwards_when_the_clock_goes_back()
     {
         var sm = new IdleStateMachine(Threshold, Start);
 

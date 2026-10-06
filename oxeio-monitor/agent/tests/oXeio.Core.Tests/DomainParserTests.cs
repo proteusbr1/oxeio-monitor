@@ -10,7 +10,7 @@ public class DomainParserTests
     [InlineData("github.com/anthropics/claude", "github.com")]
     [InlineData("https://Mail.Google.COM/inbox", "mail.google.com")]
     [InlineData("https://docs.google.com:443/document/d/xyz", "docs.google.com")]
-    public void ডোমেইনটুকুই_বেরোয়(string url, string expected)
+    public void Only_the_domain_comes_out(string url, string expected)
     {
         Assert.Equal(expected, DomainParser.Extract(url));
     }
@@ -20,7 +20,7 @@ public class DomainParserTests
     /// search terms, everything. Once it lands in the database there is no way back.
     /// </summary>
     [Fact]
-    public void পথ_query_কিছুই_বেরোয়_না()
+    public void Path_query_and_fragment_never_come_out()
     {
         var d = DomainParser.Extract("https://bank.com/account/12345?token=SECRET#tab");
 
@@ -30,13 +30,13 @@ public class DomainParserTests
     }
 
     [Fact]
-    public void URL_এ_ইউজারনেম_পাসওয়ার্ড_থাকলেও_যায়_না()
+    public void Username_and_password_in_the_URL_do_not_leak()
     {
         Assert.Equal("intranet.local", DomainParser.Extract("https://admin:hunter2@intranet.local/x"));
     }
 
     [Fact]
-    public void IPv6_ঠিকানা_কেটে_যায়_না()
+    public void An_IPv6_address_is_not_truncated()
     {
         // several ':' present, so the port trimming does not apply
         Assert.Equal("[::1]", DomainParser.Extract("http://[::1]/dashboard"));
@@ -52,19 +52,19 @@ public class DomainParserTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("notadomain")]
-    public void সার্চ_শব্দ_ডোমেইন_হিসেবে_যায়_না(string typed)
+    public void Search_terms_are_not_returned_as_a_domain(string typed)
     {
         Assert.Null(DomainParser.Extract(typed));
     }
 
     [Fact]
-    public void localhost_চলে()
+    public void Localhost_is_accepted()
     {
         Assert.Equal("localhost", DomainParser.Extract("http://localhost:3000/api"));
     }
 
     [Fact]
-    public void null_দিলে_null()
+    public void Null_input_gives_null()
     {
         Assert.Null(DomainParser.Extract(null));
     }
@@ -76,7 +76,7 @@ public class DomainParserTests
     [InlineData("Bing - Microsoft​ Edge [InPrivate]")]
     [InlineData("Mozilla Firefox (Private Browsing)")]
     [InlineData("ছদ্মবেশী উইন্ডো — Chrome")]
-    public void ব্যক্তিগত_উইন্ডো_চেনা_যায়(string title)
+    public void Private_windows_are_recognised(string title)
     {
         Assert.True(DomainParser.LooksPrivate(title));
     }
@@ -85,7 +85,7 @@ public class DomainParserTests
     [InlineData("YouTube - Google Chrome")]
     [InlineData("Inbox (23) - Outlook")]
     [InlineData(null)]
-    public void সাধারণ_উইন্ডো_ব্যক্তিগত_নয়(string? title)
+    public void Normal_windows_are_not_private(string? title)
     {
         Assert.False(DomainParser.LooksPrivate(title));
     }

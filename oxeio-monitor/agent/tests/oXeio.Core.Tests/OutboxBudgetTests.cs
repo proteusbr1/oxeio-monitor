@@ -17,7 +17,7 @@ public class OutboxBudgetTests
     // ── when there is nothing to do ─────────────────────────────────────────
 
     [Fact]
-    public void খালি_আউটবক্সে_কিছুই_হয়_না()
+    public void An_empty_outbox_needs_no_action()
     {
         var plan = Small().Plan([], Now);
 
@@ -26,7 +26,7 @@ public class OutboxBudgetTests
     }
 
     [Fact]
-    public void ক্যাপের_নিচে_থাকলে_কিছুই_বাদ_যায়_না()
+    public void Under_the_cap_nothing_is_dropped()
     {
         OutboxEntryInfo[] entries =
         [
@@ -48,7 +48,7 @@ public class OutboxBudgetTests
     /// reason to touch segments to free space.
     /// </summary>
     [Fact]
-    public void জায়গা_দরকার_হলে_স্ক্রিনশটই_আগে_যায়()
+    public void Screenshots_go_first_when_space_is_needed()
     {
         var budget = new OutboxBudget(1000, 900, TimeSpan.FromDays(7), TimeSpan.FromDays(30));
 
@@ -66,7 +66,7 @@ public class OutboxBudgetTests
     }
 
     [Fact]
-    public void ক্রম_স্ক্রিনশট_তারপর_app_usage_তারপর_event_সবশেষে_segment()
+    public void Drop_order_is_screenshot_then_app_usage_then_event_and_segment_last()
     {
         var budget = new OutboxBudget(10, 1, TimeSpan.FromDays(7), TimeSpan.FromDays(30));
 
@@ -84,7 +84,7 @@ public class OutboxBudgetTests
     }
 
     [Fact]
-    public void একই_ধরনের_মধ্যে_পুরোনোটাই_আগে_যায়()
+    public void Within_the_same_kind_the_oldest_goes_first()
     {
         var budget = new OutboxBudget(1000, 900, TimeSpan.FromDays(7), TimeSpan.FromDays(30));
 
@@ -104,7 +104,7 @@ public class OutboxBudgetTests
     /// is not "segments are immortal", it is "segments go last".
     /// </summary>
     [Fact]
-    public void আর_কিছু_না_থাকলে_সেগমেন্টও_যায়()
+    public void Segments_go_too_when_nothing_else_is_left()
     {
         var budget = new OutboxBudget(100, 50, TimeSpan.FromDays(7), TimeSpan.FromDays(30));
 
@@ -128,7 +128,7 @@ public class OutboxBudgetTests
     /// another trim: one DELETE + fsync every 5 minutes, week after week.
     /// </summary>
     [Fact]
-    public void লক্ষ্যে_নেমে_এলেই_ছাঁটাই_থামে()
+    public void Trimming_stops_as_soon_as_the_target_is_reached()
     {
         var entries = new List<OutboxEntryInfo>();
         for (var i = 1; i <= 10; i++)
@@ -144,7 +144,7 @@ public class OutboxBudgetTests
     // ── age ─────────────────────────────────────────────────────────────────
 
     [Fact]
-    public void ক্যাপের_নিচে_থাকলেও_পুরোনো_স্ক্রিনশট_যায়()
+    public void Old_screenshots_expire_even_under_the_cap()
     {
         OutboxEntryInfo[] entries =
         [
@@ -163,7 +163,7 @@ public class OutboxBudgetTests
     /// retention would delete the pay of a whole fortnight.
     /// </summary>
     [Fact]
-    public void সেগমেন্টের_মেয়াদ_আলাদা_ও_অনেক_লম্বা()
+    public void Segment_retention_is_separate_and_much_longer()
     {
         OutboxEntryInfo[] entries =
         [
@@ -177,7 +177,7 @@ public class OutboxBudgetTests
     }
 
     [Fact]
-    public void ত্রিশ_দিন_পেরোলে_সেগমেন্টও_মেয়াদ_হারায়()
+    public void Segments_expire_too_after_thirty_days()
     {
         OutboxEntryInfo[] entries = [Entry(1, OutboundKind.Segment, 10, ageDays: 31)];
 
@@ -193,7 +193,7 @@ public class OutboxBudgetTests
     /// it, the upload would break midway and the row would be lost too.
     /// </summary>
     [Fact]
-    public void ধার_নেওয়া_সারি_ছোঁয়া_হয়_না()
+    public void Leased_rows_are_not_touched()
     {
         OutboxEntryInfo[] entries =
         [
@@ -208,7 +208,7 @@ public class OutboxBudgetTests
     }
 
     [Fact]
-    public void সব_সারি_ধার_নেওয়া_থাকলে_কিছুই_করার_থাকে_না()
+    public void With_every_row_leased_there_is_nothing_to_do()
     {
         OutboxEntryInfo[] entries =
         [
@@ -225,7 +225,7 @@ public class OutboxBudgetTests
     // ── arithmetic and validation ───────────────────────────────────────────
 
     [Fact]
-    public void বয়স_আর_ক্যাপ_দুটোই_একসাথে_খাটে()
+    public void Age_and_cap_rules_apply_together()
     {
         OutboxEntryInfo[] entries =
         [
@@ -246,7 +246,7 @@ public class OutboxBudgetTests
     }
 
     [Fact]
-    public void অসম্ভব_বাজেট_নাকচ_হয়()
+    public void An_impossible_budget_is_rejected()
     {
         Assert.Throws<ArgumentOutOfRangeException>(
             () => new OutboxBudget(0, 0, TimeSpan.FromDays(7), TimeSpan.FromDays(30)));
@@ -261,7 +261,7 @@ public class OutboxBudgetTests
     }
 
     [Fact]
-    public void ডিফল্ট_বাজেট_সাত_দিনের_অফলাইন_সহ্য_করে()
+    public void The_default_budget_tolerates_seven_days_offline()
     {
         // ~170 MB a day x 7 days = about 1.2 GB, cap 2 GiB
         const long sevenDays = 7L * 170 * 1024 * 1024;

@@ -38,7 +38,7 @@ public class IdleStateMachineTests
     /// Now the state does not change, but records come out regularly.
     /// </summary>
     [Fact]
-    public void কাজ_করতে_থাকলেও_রেকর্ড_নিয়মিত_বেরোয়_কিন্তু_স্টেট_বদলায়_না()
+    public void Records_come_out_regularly_during_work_but_the_state_does_not_change()
     {
         var sm = New();
         var closed = Run(sm, Start, 600, _ => TimeSpan.Zero);
@@ -49,7 +49,7 @@ public class IdleStateMachineTests
     }
 
     [Fact]
-    public void ঠিক_৬০_সেকেন্ড_নিষ্ক্রিয়তায়_টাইমার_থামে()
+    public void The_timer_stops_at_exactly_60_seconds_of_inactivity()
     {
         var sm = New();
 
@@ -66,7 +66,7 @@ public class IdleStateMachineTests
     }
 
     [Fact]
-    public void Retro_adjust_ঠিক_৬০_সেকেন্ড_পিছিয়ে_কাটে()
+    public void Retro_adjust_cuts_back_exactly_60_seconds()
     {
         var sm = New();
         Run(sm, Start, 300, _ => TimeSpan.Zero);
@@ -81,7 +81,7 @@ public class IdleStateMachineTests
     }
 
     [Fact]
-    public void দশ_মিনিট_দূরে_থাকলে_ঠিক_দশ_মিনিটই_বাদ_যায়()
+    public void Ten_minutes_away_excludes_exactly_ten_minutes()
     {
         var sm = New();
         var all = Run(sm, Start, 300, _ => TimeSpan.Zero).ToList();
@@ -102,7 +102,7 @@ public class IdleStateMachineTests
     }
 
     [Fact]
-    public void ইনপুট_পেলেই_সাথে_সাথে_আবার_চালু()
+    public void Input_resumes_counting_immediately()
     {
         var sm = New();
         Run(sm, Start, 300, _ => TimeSpan.Zero);
@@ -115,7 +115,7 @@ public class IdleStateMachineTests
     }
 
     [Fact]
-    public void লক_করলে_LOCKED_আনলকের_পর_ইনপুট_পেলে_ACTIVE()
+    public void Locking_gives_LOCKED_and_input_after_unlock_gives_ACTIVE()
     {
         var sm = New();
         Run(sm, Start, 60, _ => TimeSpan.Zero);
@@ -136,7 +136,7 @@ public class IdleStateMachineTests
     }
 
     [Fact]
-    public void আনলকের_পর_কেউ_না_ছুঁলে_IDLE_হয়_ACTIVE_নয়()
+    public void Unlocking_without_input_gives_IDLE_not_ACTIVE()
     {
         var sm = New();
         sm.Tick(Start.AddSeconds(1), TimeSpan.Zero, locked: true, screenFrozen: false);
@@ -148,7 +148,7 @@ public class IdleStateMachineTests
     }
 
     [Fact]
-    public void ঘুম_থেকে_জাগলে_ভুতুড়ে_সময়_যোগ_হয়_না()
+    public void Waking_from_sleep_adds_no_phantom_time()
     {
         var sm = New();
         Run(sm, Start, 300, _ => TimeSpan.Zero);
@@ -168,7 +168,7 @@ public class IdleStateMachineTests
     }
 
     [Fact]
-    public void মধ্যরাত_পার_হলে_সেগমেন্ট_দুই_তারিখে_ভাগ_হয়()
+    public void Crossing_midnight_splits_the_segment_across_two_dates()
     {
         // 23:50 in Dhaka = 17:50Z
         var lateNight = new DateTimeOffset(2026, 8, 8, 17, 50, 0, TimeSpan.Zero);
@@ -199,7 +199,7 @@ public class IdleStateMachineTests
     }
 
     [Fact]
-    public void কোনো_সেগমেন্টই_দুই_তারিখ_জুড়ে_থাকে_না()
+    public void No_segment_spans_two_dates()
     {
         var lateNight = new DateTimeOffset(2026, 8, 8, 17, 0, 0, TimeSpan.Zero);
         var sm = New(lateNight);
@@ -214,7 +214,7 @@ public class IdleStateMachineTests
     }
 
     [Fact]
-    public void শুধু_ACTIVE_কাজ_হিসেবে_গোনা_হয়()
+    public void Only_ACTIVE_counts_as_work()
     {
         var sm = New();
         var closed = Run(sm, Start, 300, _ => TimeSpan.Zero);   // 0 → 300 working
@@ -233,7 +233,7 @@ public class IdleStateMachineTests
     }
 
     [Fact]
-    public void Input_score_শূন্য_থেকে_একশো_র_মধ্যে_থাকে()
+    public void Input_score_stays_between_zero_and_one_hundred()
     {
         var sm = New();
         // input in half the seconds, none in the other half, but never exceeding the threshold

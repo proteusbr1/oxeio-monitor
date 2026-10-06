@@ -30,7 +30,7 @@ public class TrayTooltipTests
     };
 
     [Fact]
-    public void সাইন_ইন_করা_থাকলে_চলতি_অবস্থাই_দেখায() =>
+    public void When_signed_in_the_current_state_is_shown() =>
         Assert.Contains("Working", TrayTooltip.Build(Status()), StringComparison.Ordinal);
 
     /**
@@ -40,7 +40,7 @@ public class TrayTooltipTests
      * was exactly the one invisible thing on screen.
      */
     [Fact]
-    public void সাইন_ইন_না_করা_থাকলে_সেটাই_প্রথমে()
+    public void When_not_signed_in_that_comes_first()
     {
         var text = TrayTooltip.Build(Status(enrolled: false));
 
@@ -53,7 +53,7 @@ public class TrayTooltipTests
     /// recorded right now</b>, otherwise the message sounds harmless and they sign in late.
     /// </summary>
     [Fact]
-    public void বার্তায়_ঘণ্টা_না_জমার_কথা_আছে() =>
+    public void The_message_says_hours_are_not_being_counted() =>
         Assert.Contains(
             "not counting",
             TrayTooltip.Build(Status(enrolled: false)),
@@ -65,7 +65,7 @@ public class TrayTooltipTests
      * staff on a revoked machine would read "sign in".
      */
     [Fact]
-    public void বাতিল_হলে_সাইন_ইনের_কথা_নয়()
+    public void When_revoked_it_does_not_talk_about_signing_in()
     {
         var text = TrayTooltip.Build(
             Status(enrolled: false, health: SyncHealth.Revoked));
@@ -80,13 +80,13 @@ public class TrayTooltipTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void টুলটিপ_কখনো_খালি_নয়(bool enrolled) =>
+    public void The_tooltip_is_never_empty(bool enrolled) =>
         Assert.False(string.IsNullOrWhiteSpace(TrayTooltip.Build(Status(enrolled))));
 
     /// <summary>The 63-character limit of Win32 <c>NOTIFYICONDATA.szTip</c>.</summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void সীমার_মধ্যে_থাকে(bool enrolled) =>
+    public void The_tooltip_stays_within_the_length_limit(bool enrolled) =>
         Assert.True(TrayTooltip.Build(Status(enrolled)).Length <= TrayTooltip.MaxLength);
 }

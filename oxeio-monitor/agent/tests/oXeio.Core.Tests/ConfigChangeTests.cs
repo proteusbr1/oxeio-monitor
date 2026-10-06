@@ -15,7 +15,7 @@ public class ConfigChangeTests
     private static AgentConfig Base => AgentConfig.Default;
 
     [Fact]
-    public void একই_কনফিগে_কিছুই_বদলায়_না()
+    public void An_identical_config_changes_nothing()
     {
         var change = ConfigChange.Between(Base, Base with { });
 
@@ -28,7 +28,7 @@ public class ConfigChangeTests
     /// Changing the monthly target or the timezone is not a reason to cut anyone's segment.
     /// </summary>
     [Fact]
-    public void মাসিক_টার্গেট_বদলালে_ট্র্যাকিং_ছোঁয়া_হয়_না()
+    public void Changing_the_monthly_target_does_not_touch_tracking()
     {
         var change = ConfigChange.Between(Base, Base with { MonthlyTargetHours = 180 });
 
@@ -37,7 +37,7 @@ public class ConfigChangeTests
     }
 
     [Fact]
-    public void ছবির_সময়সীমা_বদলালে_শুধু_উইন্ডো()
+    public void Changing_the_screenshot_time_range_only_affects_the_window()
     {
         var change = ConfigChange.Between(Base, Base with { ScreenshotTo = "21:00" });
 
@@ -46,7 +46,7 @@ public class ConfigChangeTests
     }
 
     [Fact]
-    public void স্লট_বদলালে_ট্র্যাকিং_ছোঁয়া_হয়_না()
+    public void Changing_the_slot_does_not_touch_tracking()
     {
         var change = ConfigChange.Between(Base, Base with { SlotMinutes = 10 });
 
@@ -61,7 +61,7 @@ public class ConfigChangeTests
     [Theory]
     [InlineData(0)]
     [InlineData(-5)]
-    public void অবৈধ_স্লট_উপেক্ষা_করা_হয়(int minutes)
+    public void An_invalid_slot_is_ignored(int minutes)
     {
         var change = ConfigChange.Between(Base, Base with { SlotMinutes = minutes });
 
@@ -69,7 +69,7 @@ public class ConfigChangeTests
     }
 
     [Fact]
-    public void idle_সীমা_বদলালে_ট্র্যাকিং_ছুঁতে_হয়()
+    public void Changing_the_idle_threshold_touches_tracking()
     {
         var change = ConfigChange.Between(Base, Base with { IdleThresholdSec = 120 });
 
@@ -81,7 +81,7 @@ public class ConfigChangeTests
     /// Careful: a zero limit would mean "idle every second"; if set by mistake it is ignored.
     /// </summary>
     [Fact]
-    public void শূন্য_idle_সীমা_উপেক্ষা_করা_হয়()
+    public void A_zero_idle_threshold_is_ignored()
     {
         var change = ConfigChange.Between(Base, Base with { IdleThresholdSec = 0 });
 
@@ -90,7 +90,7 @@ public class ConfigChangeTests
     }
 
     [Fact]
-    public void অ্যাপ_ট্র্যাকিং_বন্ধ_করা_ট্র্যাকিং_ছোঁয়()
+    public void Turning_app_tracking_off_touches_tracking()
     {
         var change = ConfigChange.Between(
             Base,
@@ -105,7 +105,7 @@ public class ConfigChangeTests
     /// record to close. Returning true by mistake would make the agent call `CloseAll` for nothing.
     /// </summary>
     [Fact]
-    public void বন্ধ_থাকা_অ্যাপ_ট্র্যাকিংয়ে_সীমা_বদল_গোনা_হয়_না()
+    public void A_limit_change_while_app_tracking_is_off_does_not_count()
     {
         var off = new AppTrackingConfig { Enabled = false, MinDurationSec = 5 };
         var offLonger = new AppTrackingConfig { Enabled = false, MinDurationSec = 30 };
@@ -119,7 +119,7 @@ public class ConfigChangeTests
     }
 
     [Fact]
-    public void heartbeat_বদল_ট্র্যাকিং_ছোঁয়_না()
+    public void A_heartbeat_change_does_not_touch_tracking()
     {
         var change = ConfigChange.Between(Base, Base with { HeartbeatSec = 45 });
 

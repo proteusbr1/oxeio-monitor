@@ -9,7 +9,7 @@ namespace oXeio.Core.Tests;
 public class IdleMathTests
 {
     [Fact]
-    public void সাধারণ_ক্ষেত্রে_পার্থক্যই_ফল()
+    public void In_the_normal_case_the_difference_is_the_result()
     {
         Assert.Equal(
             TimeSpan.FromSeconds(75),
@@ -17,7 +17,7 @@ public class IdleMathTests
     }
 
     [Fact]
-    public void এইমাত্র_ইনপুট_হলে_শূন্য()
+    public void Input_just_now_gives_zero()
     {
         Assert.Equal(TimeSpan.Zero, IdleMath.Elapsed(500_000, 500_000));
     }
@@ -27,7 +27,7 @@ public class IdleMathTests
     /// answer by itself; no separate condition is needed.
     /// </summary>
     [Fact]
-    public void ঘড়ি_উল্টে_গেলেও_হিসাব_ঠিক_থাকে()
+    public void The_result_is_correct_across_a_tick_counter_wrap()
     {
         // the last input was 5 seconds before the wrap, now is 3 seconds after it
         uint lastInput = uint.MaxValue - 5_000 + 1;
@@ -45,7 +45,7 @@ public class IdleMathTests
     /// would show "inactive" all day.
     /// </summary>
     [Fact]
-    public void ভবিষ্যতের_টাইমস্ট্যাম্প_শূন্যে_আটকে_যায়()
+    public void A_future_timestamp_is_clamped_to_zero()
     {
         uint now = 1_000_000;
         uint lastInput = now + 5_000; // 5 seconds ahead
@@ -57,7 +57,7 @@ public class IdleMathTests
     }
 
     [Fact]
-    public void ক্ল্যাম্প_না_থাকলে_কত_বড়_ভুল_হতো()
+    public void Without_the_clamp_the_error_would_be_huge()
     {
         uint now = 1_000_000;
         uint lastInput = now + 5_000;
@@ -73,7 +73,7 @@ public class IdleMathTests
     [InlineData(1u)]
     [InlineData(uint.MaxValue)]
     [InlineData(IdleMath.FutureGuard)]
-    public void কোনো_ইনপুটেই_ঋণাত্মক_সময়_আসে_না(uint lastInput)
+    public void No_input_ever_gives_a_negative_time(uint lastInput)
     {
         var elapsed = IdleMath.Elapsed(12_345, lastInput);
         Assert.True(elapsed >= TimeSpan.Zero);

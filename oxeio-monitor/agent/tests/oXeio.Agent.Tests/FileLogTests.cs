@@ -23,7 +23,7 @@ public class FileLogTests : IDisposable
 
     /// <summary>The folder does **not exist**, which is exactly the state at first boot.</summary>
     [Fact]
-    public void ফোল্ডার_না_থাকলেও_লেখে()
+    public void It_writes_even_when_the_folder_does_not_exist()
     {
         var log = new FileLog(_dir);
 
@@ -33,7 +33,7 @@ public class FileLogTests : IDisposable
     }
 
     [Fact]
-    public void তিনটে_মাত্রাই_আলাদা_করে_চেনা_যায়()
+    public void All_three_levels_are_told_apart()
     {
         var log = new FileLog(_dir);
 
@@ -59,7 +59,7 @@ public class FileLogTests : IDisposable
     /// problem.
     /// </summary>
     [Fact]
-    public void লিখতে_না_পারলেও_ছোড়ে_না()
+    public void It_does_not_throw_when_it_cannot_write()
     {
         var blocked = Path.Combine(_dir, "blocked");
         Directory.CreateDirectory(_dir);
@@ -72,7 +72,7 @@ public class FileLogTests : IDisposable
     }
 
     [Fact]
-    public void স্টার্টআপ_লাইনে_ভার্সন_সার্ভার_আর_পাথ_থাকে()
+    public void The_startup_line_carries_version_server_and_path()
     {
         var log = new FileLog(_dir);
 
@@ -97,11 +97,11 @@ public class FileLogTests : IDisposable
     [InlineData("outbox-drops.log", false)]      // another module's log
     [InlineData("outbox-drops.log.1", false)]
     [InlineData("watchdog.log", false)]
-    public void শুধু_নিজের_আর্কাইভই_চেনে(string name, bool expected) =>
+    public void Only_its_own_archives_are_recognised(string name, bool expected) =>
         Assert.Equal(expected, FileLog.DayFromName(name) is not null);
 
     [Fact]
-    public void নাম_থেকে_তারিখটা_ঠিকঠাক_পড়ে() =>
+    public void The_date_is_read_correctly_from_the_name() =>
         Assert.Equal(new DateOnly(2026, 8, 12), FileLog.DayFromName("agent-2026-08-12.log"));
 
     /**
@@ -113,7 +113,7 @@ public class FileLogTests : IDisposable
      * Caught by running it on a real machine, by eye, not by a test.
      */
     [Fact]
-    public void নতুন_ফাইলের_শুরুতে_utf8_bom_বসে()
+    public void A_new_file_starts_with_a_UTF8_BOM()
     {
         var log = new FileLog(_dir);
         log.Info("hello · world — ✅");
@@ -127,7 +127,7 @@ public class FileLogTests : IDisposable
 
     /** Writing it on every line would pile up BOMs in the middle and corrupt the text. */
     [Fact]
-    public void bom_একবারই_বসে()
+    public void The_BOM_is_written_only_once()
     {
         var log = new FileLog(_dir);
         log.Info("এক");

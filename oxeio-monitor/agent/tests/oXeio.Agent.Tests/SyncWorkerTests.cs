@@ -38,7 +38,7 @@ public class SyncWorkerTests
         new(box, client, clock: () => T0);
 
     [Fact]
-    public async Task সফল_হলে_সব_সারি_কিউ_থেকে_চলে_যায়()
+    public async Task On_success_every_row_leaves_the_queue()
     {
         var box = await Filled(10);
         var client = new FakeSyncClient();
@@ -50,7 +50,7 @@ public class SyncWorkerTests
     }
 
     [Fact]
-    public async Task সাময়িক_ব্যর্থতায়_কিছুই_হারায়_না()
+    public async Task A_transient_failure_loses_nothing()
     {
         var box = await Filled(10);
         var client = new FakeSyncClient();
@@ -69,7 +69,7 @@ public class SyncWorkerTests
     /// people's work records because of one person's mistake.
     /// </summary>
     [Fact]
-    public async Task একটা_খারাপ_রেকর্ড_বাকিদের_ডোবায়_না()
+    public async Task One_bad_record_does_not_sink_the_others()
     {
         var box = await Filled(20);
         var client = new FakeSyncClient();
@@ -91,7 +91,7 @@ public class SyncWorkerTests
     }
 
     [Fact]
-    public async Task খারাপ_রেকর্ড_খুঁজতে_ব্যাচ_সত্যিই_ছোট_হয়()
+    public async Task The_batch_really_shrinks_to_find_the_bad_record()
     {
         var box = await Filled(20);
         var client = new FakeSyncClient();
@@ -109,7 +109,7 @@ public class SyncWorkerTests
     }
 
     [Fact]
-    public async Task Revoke_হলে_ডেটা_মোছা_হয়_না()
+    public async Task Revoke_does_not_delete_the_data()
     {
         var box = await Filled(5);
         var client = new FakeSyncClient();
@@ -127,7 +127,7 @@ public class SyncWorkerTests
     }
 
     [Fact]
-    public async Task Revoke_এর_পর_আর_চেষ্টা_হয়_না()
+    public async Task No_more_attempts_after_revoke()
     {
         var box = await Filled(5);
         var client = new FakeSyncClient();
@@ -144,7 +144,7 @@ public class SyncWorkerTests
     }
 
     [Fact]
-    public async Task পড়া_যায়_না_এমন_সারি_কিউ_আটকে_রাখে_না()
+    public async Task An_unreadable_row_does_not_block_the_queue()
     {
         var box = new FakeOutbox();
         await box.EnqueueAsync(new OutboxItem
@@ -168,7 +168,7 @@ public class SyncWorkerTests
     }
 
     [Fact]
-    public async Task সেগমেন্ট_স্ক্রিনশটের_আগে_যায়()
+    public async Task Segments_go_before_screenshots()
     {
         var box = new FakeOutbox();
         await box.EnqueueAsync(OutboxCodec.Item(
@@ -193,7 +193,7 @@ public class SyncWorkerTests
     }
 
     [Fact]
-    public async Task খালি_কিউয়ে_কিছুই_ঘটে_না()
+    public async Task Nothing_happens_on_an_empty_queue()
     {
         var box = new FakeOutbox();
         var client = new FakeSyncClient();
@@ -211,7 +211,7 @@ public class SyncWorkerTests
     /// shutdown/agent_stop reaches the server, and no false agent_down appears the next day.
     /// </summary>
     [Fact]
-    public async Task DrainKindOnce_শুধু_সেই_kind_পাঠায়()
+    public async Task DrainKindOnce_sends_only_that_kind()
     {
         var box = new FakeOutbox();
         // Five segments are queued first; a normal drain would send these first

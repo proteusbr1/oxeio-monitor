@@ -19,14 +19,14 @@ public class SessionEndTests
     // ── WM_ENDSESSION ───────────────────────────────────────────────────────
 
     [Fact]
-    public void লগঅফের_বিটে_logoff_যায() =>
+    public void The_logoff_bit_gives_logoff() =>
         Assert.Equal(
             AgentEventTypes.Logoff,
             SessionMonitor.InterpretEndSession(1, Flags(Win32.ENDSESSION_LOGOFF)));
 
     /// <summary>lParam 0 = Windows is shutting down or restarting (MSDN).</summary>
     [Fact]
-    public void শূন্য_lParam_মানে_shutdown() =>
+    public void A_zero_lParam_means_shutdown() =>
         Assert.Equal(AgentEventTypes.Shutdown, SessionMonitor.InterpretEndSession(1, 0));
 
     /// <summary>
@@ -34,13 +34,13 @@ public class SessionEndTests
     /// Comparing with <c>==</c> would send this case the wrong way.
     /// </summary>
     [Fact]
-    public void CRITICAL_যোগ_হলেও_shutdown_ই_থাকে() =>
+    public void Adding_CRITICAL_still_gives_shutdown() =>
         Assert.Equal(
             AgentEventTypes.Shutdown,
             SessionMonitor.InterpretEndSession(1, Flags(Win32.ENDSESSION_CRITICAL)));
 
     [Fact]
-    public void CRITICAL_সহ_লগঅফও_logoff_ই_থাকে() =>
+    public void CRITICAL_with_logoff_still_gives_logoff() =>
         Assert.Equal(
             AgentEventTypes.Logoff,
             SessionMonitor.InterpretEndSession(
@@ -61,7 +61,7 @@ public class SessionEndTests
     /// its own, 12 at a time, and soon nobody would read the alerts.
     /// </summary>
     [Fact]
-    public void শুধু_CLOSEAPP_মানে_আপডেট() =>
+    public void CLOSEAPP_alone_means_an_update() =>
         Assert.Equal(
             AgentEventTypes.AgentUpdate,
             SessionMonitor.InterpretEndSession(1, Flags(Win32.ENDSESSION_CLOSEAPP)));
@@ -73,7 +73,7 @@ public class SessionEndTests
     /// real <c>logoff</c> event would be lost.
     /// </summary>
     [Fact]
-    public void CLOSEAPP_আর_LOGOFF_একসাথে_হলে_logoff() =>
+    public void CLOSEAPP_together_with_LOGOFF_is_a_logoff() =>
         Assert.Equal(
             AgentEventTypes.Logoff,
             SessionMonitor.InterpretEndSession(
@@ -84,7 +84,7 @@ public class SessionEndTests
     /// Sending an event here would wrongly record "PC shut down".
     /// </summary>
     [Fact]
-    public void বাতিল_হওয়া_সেশন_শেষে_কিছুই_যায়_না() =>
+    public void A_cancelled_session_end_sends_nothing() =>
         Assert.Null(SessionMonitor.InterpretEndSession(0, 0));
 
     // ── WM_WTSSESSION_CHANGE ────────────────────────────────────────────────
@@ -92,7 +92,7 @@ public class SessionEndTests
     [Theory]
     [InlineData(Win32.WTS_SESSION_LOGOFF)]
     [InlineData(Win32.WTS_SESSION_TERMINATE)]
-    public void সেশন_শেষ_হলে_logoff(int code) =>
+    public void Session_end_codes_give_logoff(int code) =>
         Assert.Equal(AgentEventTypes.Logoff, SessionMonitor.ClosingEventType(code));
 
     /// <summary>
@@ -105,7 +105,7 @@ public class SessionEndTests
     [InlineData(Win32.WTS_SESSION_UNLOCK)]
     [InlineData(Win32.WTS_SESSION_LOGON)]
     [InlineData(Win32.WTS_REMOTE_DISCONNECT)]
-    public void বাকি_সেশন_বার্তায়_কোনো_ইভেন্ট_নয়(int code) =>
+    public void Other_session_messages_give_no_event(int code) =>
         Assert.Null(SessionMonitor.ClosingEventType(code));
 
     /// <summary>
@@ -113,7 +113,7 @@ public class SessionEndTests
     /// On RDP disconnect the clock stops but nobody has "left"; on logoff both happen.
     /// </summary>
     [Fact]
-    public void ট্র্যাকিং_থামা_আর_চলে_যাওয়া_এক_নয()
+    public void Tracking_stopping_and_leaving_are_not_the_same()
     {
         Assert.Equal(SessionChange.Suspend, SessionMonitor.Interpret(Win32.WTS_REMOTE_DISCONNECT));
         Assert.Null(SessionMonitor.ClosingEventType(Win32.WTS_REMOTE_DISCONNECT));
@@ -124,7 +124,7 @@ public class SessionEndTests
 
     /// <summary>A string that matches the server's prisma enum exactly.</summary>
     [Fact]
-    public void ইভেন্টের_নাম_সার্ভারের_নামই()
+    public void The_event_names_match_the_servers_names()
     {
         Assert.Equal("logoff", AgentEventTypes.Logoff);
         Assert.Equal("shutdown", AgentEventTypes.Shutdown);

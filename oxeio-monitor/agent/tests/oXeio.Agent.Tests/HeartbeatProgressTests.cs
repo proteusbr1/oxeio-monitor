@@ -23,7 +23,7 @@ public class HeartbeatProgressTests
 
     /// <summary>The server's <c>agent.controller.ts</c> returns exactly this shape.</summary>
     [Fact]
-    public void সার্ভারের_progress_পড়া_হয()
+    public void The_servers_progress_is_read()
     {
         var response = Parse(
             """
@@ -51,7 +51,7 @@ public class HeartbeatProgressTests
     /// The server sends <c>null</c> when no staff member is linked to the device.
     /// </summary>
     [Fact]
-    public void কর্মী_যুক্ত_না_থাকলে_null()
+    public void Progress_is_null_when_no_staff_member_is_linked()
     {
         var response = Parse("""{"commands":[],"configVersion":"x","progress":null}""");
 
@@ -64,7 +64,7 @@ public class HeartbeatProgressTests
     /// someone who worked the whole month would look empty all month.
     /// </summary>
     [Fact]
-    public void শূন্য_টার্গেট_মেনে_নেওয়া_হয_না()
+    public void A_zero_target_is_not_accepted()
     {
         var response = Parse(
             """{"progress":{"todayActiveSec":10,"monthActiveSec":20,"monthlyTargetHours":0}}""");
@@ -78,7 +78,7 @@ public class HeartbeatProgressTests
     /// revoke/reload_config must still arrive.
     /// </summary>
     [Fact]
-    public void progress_ভাঙা_থাকলেও_কমান্ড_পৌঁছায়()
+    public void A_broken_progress_does_not_stop_commands_arriving()
     {
         var response = Parse(
             """
@@ -98,7 +98,7 @@ public class HeartbeatProgressTests
 
     /// <summary>If the server one day sends pace, it should be used automatically (B05b).</summary>
     [Fact]
-    public void paceSec_এলে_পড়া_হয()
+    public void paceSec_is_read_when_present()
     {
         var response = Parse(
             """
@@ -123,7 +123,7 @@ public class HeartbeatProgressTests
     /// staff member's first day would show "0:00 ahead" in the tray.
     /// </summary>
     [Fact]
-    public void observed_মিথ্যা_এলে_পড়া_হয()
+    public void A_false_observed_flag_is_read()
     {
         var response = Parse(
             """
@@ -149,7 +149,7 @@ public class HeartbeatProgressTests
     /// everyone's totals were fine: telling one truth and lying to everyone.
     /// </summary>
     [Fact]
-    public void পুরোনো_সার্ভার_observed_না_পাঠালে_null()
+    public void An_old_server_without_observed_gives_null()
     {
         var response = Parse(
             """

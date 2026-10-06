@@ -21,11 +21,11 @@ public class SignOutGateTests
     private const int Something = 7;
 
     [Fact]
-    public void সাইন_ইন_করা_থাকলে_সাইন_আউট_করা_যায়() =>
+    public void Sign_out_is_allowed_when_signed_in() =>
         Assert.True(SignOutGate.Allows(Enrolled, NotRevoked, Nothing));
 
     [Fact]
-    public void সাইন_ইন_না_থাকলে_সাইন_আউটের_কিছু_নেই() =>
+    public void Nothing_to_sign_out_of_when_not_signed_in() =>
         Assert.Equal(
             SignOutGate.Verdict.NotSignedIn,
             SignOutGate.Check(NotEnrolled, NotRevoked, Nothing));
@@ -42,7 +42,7 @@ public class SignOutGateTests
      * give two different explanations.
      */
     [Fact]
-    public void বাতিল_ডিভাইসে_revoke_ই_উত্তর_সাইন_ইন_নেই_নয()
+    public void On_a_revoked_device_the_answer_is_revoked_not_not_signed_in()
     {
         Assert.Equal(
             SignOutGate.Verdict.Revoked,
@@ -55,12 +55,12 @@ public class SignOutGateTests
     }
 
     [Fact]
-    public void বাতিল_ডিভাইসে_সাইন_আউট_নিষ্ক্রিয়() =>
+    public void Sign_out_is_disabled_on_a_revoked_device() =>
         Assert.False(SignOutGate.Allows(NotEnrolled, Revoked, Something));
 
     /** The main test of this file */
     [Fact]
-    public void অপাঠানো_সারি_থাকলে_আলাদা_উত্তর()
+    public void Unsent_rows_give_a_distinct_verdict()
     {
         Assert.Equal(
             SignOutGate.Verdict.PendingUpload,
@@ -77,13 +77,13 @@ public class SignOutGateTests
      * equals "nothing". Staff should not pay for a bug.
      */
     [Fact]
-    public void ঋণাত্মক_গণনা_কিছু_নেই_ধরা_হয() =>
+    public void A_negative_count_is_treated_as_nothing() =>
         Assert.Equal(
             SignOutGate.Verdict.Ready,
             SignOutGate.Check(Enrolled, NotRevoked, -3));
 
     [Fact]
-    public void একটা_সারিও_যথেষ্ট() =>
+    public void A_single_row_is_enough() =>
         Assert.Equal(
             SignOutGate.Verdict.PendingUpload,
             SignOutGate.Check(Enrolled, NotRevoked, 1));
@@ -93,7 +93,7 @@ public class SignOutGateTests
      * things must be in it: how many, what will happen, and the way out.
      */
     [Fact]
-    public void অপাঠানো_থাকলে_বার্তায়_সংখ্যা_ক্ষতি_ও_পথ_তিনটেই_থাকে()
+    public void With_unsent_rows_the_message_has_count_loss_and_way_out()
     {
         var text = SignOutGate.Confirm(SignOutGate.Verdict.PendingUpload, Something);
 
@@ -104,7 +104,7 @@ public class SignOutGateTests
 
     /** Careful: "1 items": any sign of carelessness makes the whole warning less believable */
     [Fact]
-    public void একবচন_ও_বহুবচন_আলাদা()
+    public void Singular_and_plural_are_worded_differently()
     {
         var one = SignOutGate.Confirm(SignOutGate.Verdict.PendingUpload, 1);
         var many = SignOutGate.Confirm(SignOutGate.Verdict.PendingUpload, 5);
@@ -119,7 +119,7 @@ public class SignOutGateTests
      * out on a shared PC; then hours would go to the wrong person.
      */
     [Fact]
-    public void সব_পাঠানো_হয়ে_গেলে_বার্তা_ভয়_দেখায়_না()
+    public void When_everything_is_sent_the_message_does_not_alarm()
     {
         var text = SignOutGate.Confirm(SignOutGate.Verdict.Ready, Nothing);
 
@@ -135,7 +135,7 @@ public class SignOutGateTests
     [Theory]
     [InlineData(SignOutGate.Verdict.NotSignedIn)]
     [InlineData(SignOutGate.Verdict.Revoked)]
-    public void নিষ্ক্রিয়_অবস্থায়_বার্তা_চাইলে_ছুঁড়ে_দেয(SignOutGate.Verdict verdict) =>
+    public void Asking_for_a_message_in_a_disabled_state_throws(SignOutGate.Verdict verdict) =>
         Assert.Throws<ArgumentOutOfRangeException>(
             () => SignOutGate.Confirm(verdict, Nothing));
 }

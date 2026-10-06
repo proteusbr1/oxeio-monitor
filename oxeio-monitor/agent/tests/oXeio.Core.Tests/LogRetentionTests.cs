@@ -25,11 +25,11 @@ public class LogRetentionTests
             .ToList();
 
     [Fact]
-    public void কিছু_না_থাকলে_কিছুই_মোছে_না() =>
+    public void Nothing_is_deleted_when_there_are_no_files() =>
         Assert.Empty(Plan([]));
 
     [Fact]
-    public void ছয়_দিনের_পুরোনো_থাকে() =>
+    public void Files_up_to_six_days_old_are_kept() =>
         Assert.Empty(Plan([File(1), File(3), File(6)]));
 
     /// <summary>
@@ -38,7 +38,7 @@ public class LogRetentionTests
     /// `&lt;` would keep eight days.
     /// </summary>
     [Fact]
-    public void সাত_দিনের_পুরোনো_যায়()
+    public void Files_seven_days_old_or_more_are_deleted()
     {
         var doomed = Plan([File(6), File(7), File(30)]);
 
@@ -53,11 +53,11 @@ public class LogRetentionTests
     /// clock error, exactly when the log is most needed.
     /// </summary>
     [Fact]
-    public void ভবিষ্যতের_তারিখ_রেখে_দেওয়া_হয() =>
+    public void Files_dated_in_the_future_are_kept() =>
         Assert.Empty(Plan([new LogRetention.LogFile("tomorrow.log", Today.AddDays(1), 10)]));
 
     [Fact]
-    public void বাজেট_ছাড়ালে_পুরোনোটা_আগে_যায়()
+    public void Over_budget_the_oldest_file_goes_first()
     {
         // three files x 40 bytes = 120, budget 100, so deleting one is enough
         var doomed = Plan(
@@ -75,7 +75,7 @@ public class LogRetentionTests
     /// beside another 50 MB of archives, effectively doubling the limit.
     /// </summary>
     [Fact]
-    public void চলতি_ফাইলটাও_বাজেটে_ধরা_হয়()
+    public void The_active_file_counts_toward_the_budget()
     {
         var doomed = Plan([File(1, 40)], activeBytes: 80, maxBytes: 100);
 
@@ -88,7 +88,7 @@ public class LogRetentionTests
     /// exactly the information the log exists to keep.
     /// </summary>
     [Fact]
-    public void চলতি_ফাইল_একাই_বড়_হলে_সব_আর্কাইভ_যায়()
+    public void When_the_active_file_alone_is_too_big_all_archives_go()
     {
         var doomed = Plan([File(1, 10), File(2, 10)], activeBytes: 500, maxBytes: 100);
 
@@ -100,7 +100,7 @@ public class LogRetentionTests
     /// Delete twice.
     /// </summary>
     [Fact]
-    public void পুরোনো_আর_বড়_দুটো_শর্তেই_পড়লে_একবারই_আসে()
+    public void A_file_matching_both_age_and_size_rules_is_listed_once()
     {
         var doomed = Plan([File(30, 400)], maxBytes: 100);
 

@@ -20,7 +20,7 @@ public class LiveDurationTests
     /// The main claim: the clock advances even when the counted number does not change.
     /// </summary>
     [Fact]
-    public void কাজ_চলাকালীন_সেকেন্ড_এগোয়()
+    public void Seconds_advance_while_working()
     {
         var live = new LiveDuration();
 
@@ -37,7 +37,7 @@ public class LiveDurationTests
     /// text.
     /// </summary>
     [Fact]
-    public void Idle_হলে_ঘড়ি_থেমে_থাকে()
+    public void The_clock_stands_still_when_idle()
     {
         var live = new LiveDuration();
 
@@ -48,7 +48,7 @@ public class LiveDurationTests
 
     /// <summary>Careful: with no anchor known, not even one second is made up.</summary>
     [Fact]
-    public void Anchor_না_থাকলে_কিছুই_যোগ_হয়_না()
+    public void Nothing_is_added_without_an_anchor()
     {
         var live = new LiveDuration();
 
@@ -62,7 +62,7 @@ public class LiveDurationTests
     /// <b>invent</b> hours on its own. At the ceiling the number freezes.
     /// </summary>
     [Fact]
-    public void পুরোনো_anchor_ছাদে_আটকায়()
+    public void A_stale_anchor_is_capped_at_the_ceiling()
     {
         var live = new LiveDuration();
 
@@ -77,7 +77,7 @@ public class LiveDurationTests
     /// "I worked, yet the time went down" would make the whole system unbelievable.
     /// </summary>
     [Fact]
-    public void সংখ্যা_কম_এলেও_ঘড়ি_পিছোয়_না()
+    public void The_clock_does_not_go_back_when_a_lower_number_arrives()
     {
         var live = new LiveDuration();
 
@@ -94,7 +94,7 @@ public class LiveDurationTests
     /// previous value then would make the window show yesterday's total all of tomorrow.
     /// </summary>
     [Fact]
-    public void মধ্যরাতে_শূন্য_হলে_আবার_গোড়া_থেকে()
+    public void A_midnight_reset_to_zero_starts_over()
     {
         var live = new LiveDuration();
         live.Next(Min(300), T0, T0.AddMinutes(1), counting: true);
@@ -107,7 +107,7 @@ public class LiveDurationTests
 
     /// <summary>Careful: if the machine clock goes back, no negative time is added.</summary>
     [Fact]
-    public void ঘড়ি_পিছিয়ে_গেলে_কিছু_যোগ_হয়_না()
+    public void Nothing_is_added_when_the_machine_clock_goes_back()
     {
         var live = new LiveDuration();
 
@@ -130,7 +130,7 @@ public class LiveDurationTests
     /// advances <b>strictly</b> every second, including at the moment the snapshot changes.
     /// </summary>
     [Fact]
-    public void Snapshot_বদলানোর_মুহূর্তেও_ঘড়ি_থামে_না()
+    public void The_clock_does_not_stall_even_at_the_moment_the_snapshot_changes()
     {
         var live = new LiveDuration();
         var previous = TimeSpan.MinValue;
@@ -164,7 +164,7 @@ public class LiveDurationTests
     /// happened in 0.4.8.
     /// </summary>
     [Fact]
-    public void ছাদ_প্রকাশের_ব্যবধানের_চেয়ে_বড়()
+    public void The_ceiling_is_larger_than_the_publish_interval()
     {
         Assert.True(LiveDuration.MaxDrift > TimeSpan.FromMinutes(5));
     }
@@ -173,7 +173,7 @@ public class LiveDurationTests
     /// When a new counted number arrives it becomes the base; the clock runs from there.
     /// </summary>
     [Fact]
-    public void নতুন_সংখ্যা_এলে_সেখান_থেকেই_চলে()
+    public void A_new_counted_number_becomes_the_new_base()
     {
         var live = new LiveDuration();
         live.Next(Min(120), T0, T0.AddSeconds(30), counting: true); // 120:30

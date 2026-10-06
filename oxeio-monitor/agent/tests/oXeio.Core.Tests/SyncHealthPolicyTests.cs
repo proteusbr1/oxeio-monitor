@@ -10,7 +10,7 @@ public class SyncHealthPolicyTests
     private static readonly SyncHealthPolicy P = SyncHealthPolicy.Default;
 
     [Fact]
-    public void কিউ_খালি_থাকলে_সবসময়_সুস্থ()
+    public void An_empty_queue_is_always_healthy()
     {
         // At 3 AM there is nothing to send, so showing red makes no sense
         var h = P.Evaluate(
@@ -24,7 +24,7 @@ public class SyncHealthPolicyTests
     }
 
     [Fact]
-    public void সদ্য_সিঙ্ক_হলে_সুস্থ()
+    public void A_recent_sync_is_healthy()
     {
         var h = P.Evaluate(Start.AddMinutes(10), Start, 40, false, Start.AddMinutes(12));
 
@@ -32,7 +32,7 @@ public class SyncHealthPolicyTests
     }
 
     [Fact]
-    public void পনেরো_মিনিট_আটকে_থাকলে_হলুদ()
+    public void Stuck_for_fifteen_minutes_is_degraded()
     {
         var h = P.Evaluate(Start, Start, 40, false, Start.AddMinutes(15));
 
@@ -40,7 +40,7 @@ public class SyncHealthPolicyTests
     }
 
     [Fact]
-    public void দুই_ঘণ্টা_আটকে_থাকলে_লাল()
+    public void Stuck_for_two_hours_is_failing()
     {
         var h = P.Evaluate(Start, Start, 40, false, Start.AddHours(2));
 
@@ -53,7 +53,7 @@ public class SyncHealthPolicyTests
     /// first experience would be "something is broken".
     /// </summary>
     [Fact]
-    public void কখনো_সফল_না_হলে_চালু_হওয়ার_সময়_থেকে_গোনা_হয়()
+    public void Without_any_success_the_clock_runs_from_the_start_time()
     {
         Assert.Equal(
             SyncHealth.Ok,
@@ -65,7 +65,7 @@ public class SyncHealthPolicyTests
     }
 
     [Fact]
-    public void Revoke_সবকিছুর_আগে()
+    public void Revoked_wins_over_everything_else()
     {
         // queue empty, synced just now; revoked still wins
         var h = P.Evaluate(Start, Start, 0, revoked: true, now: Start);
@@ -74,7 +74,7 @@ public class SyncHealthPolicyTests
     }
 
     [Fact]
-    public void J07_এর_বাক্যটি_হুবহু_আছে()
+    public void The_J07_sentence_is_present_verbatim()
     {
         var text = SyncHealthPolicy.Describe(SyncHealth.Failing, 42);
 
@@ -84,13 +84,13 @@ public class SyncHealthPolicyTests
     }
 
     [Fact]
-    public void সুস্থ_অবস্থায়_কোনো_বার্তা_নেই()
+    public void No_message_when_healthy()
     {
         Assert.Null(SyncHealthPolicy.Describe(SyncHealth.Ok, 0));
     }
 
     [Fact]
-    public void ডিফল্ট_সময়সীমাগুলো_যা_হওয়ার_কথা()
+    public void Default_time_limits_are_as_specified()
     {
         Assert.Equal(TimeSpan.FromMinutes(15), SyncHealthPolicy.DefaultDegradedAfter);
         Assert.Equal(TimeSpan.FromHours(2), SyncHealthPolicy.DefaultFailingAfter);

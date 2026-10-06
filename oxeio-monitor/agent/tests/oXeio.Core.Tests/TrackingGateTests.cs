@@ -17,7 +17,7 @@ public class TrackingGateTests
     private const bool NotRevoked = false;
 
     [Fact]
-    public void সাইন_ইন_করা_থাকলে_গোনা_চলে() =>
+    public void Counting_runs_when_signed_in() =>
         Assert.True(TrackingGate.Allows(Enrolled, NotRevoked));
 
     /**
@@ -27,13 +27,13 @@ public class TrackingGateTests
      * admin's time on someone else's attendance.
      */
     [Fact]
-    public void সাইন_ইন_না_করা_থাকলে_গোনা_নয়() =>
+    public void No_counting_before_sign_in() =>
         Assert.Equal(
             TrackingGate.Verdict.NotEnrolled,
             TrackingGate.Check(NotEnrolled, NotRevoked));
 
     [Fact]
-    public void বাতিল_ডিভাইসে_গোনা_নয়() =>
+    public void No_counting_on_a_revoked_device() =>
         Assert.Equal(
             TrackingGate.Verdict.Revoked,
             TrackingGate.Check(Enrolled, Revoked));
@@ -45,7 +45,7 @@ public class TrackingGateTests
      * instruction to switch back on what the office switched off.
      */
     [Fact]
-    public void দুটোই_সত্যি_হলে_বাতিল_জেতে() =>
+    public void When_both_apply_revoked_wins() =>
         Assert.Equal(
             TrackingGate.Verdict.Revoked,
             TrackingGate.Check(NotEnrolled, Revoked));
@@ -55,7 +55,7 @@ public class TrackingGateTests
     [InlineData(TrackingGate.Verdict.Allowed)]
     [InlineData(TrackingGate.Verdict.NotEnrolled)]
     [InlineData(TrackingGate.Verdict.Revoked)]
-    public void প্রতিটা_অবস্থার_ব্যাখ্যা_আছে(TrackingGate.Verdict verdict) =>
+    public void Every_verdict_has_an_explanation(TrackingGate.Verdict verdict) =>
         Assert.False(string.IsNullOrWhiteSpace(TrackingGate.Explain(verdict)));
 
     /**
@@ -64,7 +64,7 @@ public class TrackingGateTests
      * unaware that there is anything for them to do.
      */
     [Fact]
-    public void সাইন_ইনের_বার্তা_কাজটা_বলে() =>
+    public void The_sign_in_message_says_what_to_do() =>
         Assert.Contains(
             "Sign in",
             TrackingGate.Explain(TrackingGate.Verdict.NotEnrolled),
@@ -78,7 +78,7 @@ public class TrackingGateTests
      * startup. The owner's reply was one line: there is no option to sign in.
      */
     [Fact]
-    public void সাইন_ইনের_বার্তা_কোথায়_সেটাও_বলে() =>
+    public void The_sign_in_message_also_says_where() =>
         Assert.Contains(
             "tray",
             TrackingGate.Explain(TrackingGate.Verdict.NotEnrolled),

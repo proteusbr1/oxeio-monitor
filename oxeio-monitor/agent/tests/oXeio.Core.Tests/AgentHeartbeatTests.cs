@@ -16,7 +16,7 @@ public class AgentHeartbeatTests
     // ── write <-> read ──────────────────────────────────────────────────────
 
     [Fact]
-    public void লেখা_আর_পড়া_একই_মান_ফেরায়()
+    public void Writing_then_reading_returns_the_same_values()
     {
         var written = Sample();
 
@@ -35,7 +35,7 @@ public class AgentHeartbeatTests
     /// the line must be short and written in one go.
     /// </summary>
     [Fact]
-    public void এক_লাইনেই_লেখা_হয়()
+    public void It_is_written_on_a_single_line()
     {
         var text = AgentLiveness.Format(Sample());
 
@@ -61,7 +61,7 @@ public class AgentHeartbeatTests
     [InlineData("v=1 pid=abc unbiased=5000")]
     [InlineData("এলোমেলো লেখা")]
     [InlineData("=====")]
-    public void ভাঙা_লাইনে_null_ফেরে(string? line)
+    public void A_malformed_line_returns_null(string? line)
     {
         Assert.Null(AgentLiveness.TryParse(line));
     }
@@ -72,7 +72,7 @@ public class AgentHeartbeatTests
     /// update is the most fragile one.
     /// </summary>
     [Fact]
-    public void অচেনা_ক্ষেত্র_উপেক্ষা_করা_হয়()
+    public void Unknown_fields_are_ignored()
     {
         var read = AgentLiveness.TryParse(
             "v=2 pid=4242 session=1 unbiased=5000 queue=17 build=deadbeef utc=2026-08-10T09:14:03.0000000Z");
@@ -83,7 +83,7 @@ public class AgentHeartbeatTests
     }
 
     [Fact]
-    public void ঐচ্ছিক_ক্ষেত্র_না_থাকলেও_পড়া_যায়()
+    public void Optional_fields_may_be_missing()
     {
         var read = AgentLiveness.TryParse("v=1 pid=4242 unbiased=5000");
 
@@ -95,7 +95,7 @@ public class AgentHeartbeatTests
     // ── age ─────────────────────────────────────────────────────────────────
 
     [Fact]
-    public void বয়স_unbiased_ঘড়ির_বিয়োগ()
+    public void Age_is_the_difference_of_the_unbiased_clock()
     {
         var age = AgentLiveness.Age(Sample(unbiasedMs: 5_000), nowUnbiasedMs: 12_000);
 
@@ -109,13 +109,13 @@ public class AgentHeartbeatTests
     /// reboot nobody's time would be counted.
     /// </summary>
     [Fact]
-    public void আগের_বুটের_হার্টবিটের_বয়স_দেওয়া_হয়_না()
+    public void No_age_is_given_for_a_heartbeat_from_a_previous_boot()
     {
         Assert.Null(AgentLiveness.Age(Sample(unbiasedMs: 900_000), nowUnbiasedMs: 4_000));
     }
 
     [Fact]
-    public void একই_মুহূর্তে_বয়স_শূন্য()
+    public void At_the_same_instant_the_age_is_zero()
     {
         Assert.Equal(TimeSpan.Zero, AgentLiveness.Age(Sample(unbiasedMs: 5_000), 5_000));
     }
@@ -125,7 +125,7 @@ public class AgentHeartbeatTests
     /// a long GC pause would get a healthy agent killed. The 8x interval is deliberate.
     /// </summary>
     [Fact]
-    public void বাসি_হওয়ার_সীমা_ব্যবধানের_অনেক_গুণ()
+    public void The_stale_limit_is_many_times_the_interval()
     {
         Assert.True(AgentLiveness.StaleAfter >= AgentLiveness.HeartbeatInterval * 6);
     }

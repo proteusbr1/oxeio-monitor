@@ -9,7 +9,7 @@ public class RetryPolicyTests
     // ── backoff steps ───────────────────────────────────────────────────────
 
     [Fact]
-    public void প্রথম_ব্যর্থতায়_base_delay()
+    public void The_first_failure_uses_the_base_delay()
     {
         Assert.Equal(TimeSpan.FromSeconds(5), RetryPolicy.Default.DelayFor(1));
     }
@@ -20,13 +20,13 @@ public class RetryPolicyTests
     [InlineData(3, 20.0)]
     [InlineData(4, 40.0)]
     [InlineData(5, 80.0)]
-    public void প্রতিবার_দ্বিগুণ_হয়(int attempt, double seconds)
+    public void Each_attempt_doubles_the_delay(int attempt, double seconds)
     {
         Assert.Equal(TimeSpan.FromSeconds(seconds), RetryPolicy.Default.DelayFor(attempt));
     }
 
     [Fact]
-    public void সিলিং_ছাড়ায়_না()
+    public void The_delay_never_exceeds_the_ceiling()
     {
         // 5 x 2^9 = 2560 seconds, but the ceiling is 5 minutes
         Assert.Equal(TimeSpan.FromMinutes(5), RetryPolicy.Default.DelayFor(10));
@@ -38,7 +38,7 @@ public class RetryPolicyTests
     /// sync worker of exactly the machine with the most accumulated data would die.
     /// </summary>
     [Fact]
-    public void বহু_চেষ্টার_পরেও_overflow_হয়_না()
+    public void Many_attempts_do_not_overflow()
     {
         Assert.Equal(TimeSpan.FromMinutes(5), RetryPolicy.Default.DelayFor(5_000));
         Assert.Equal(TimeSpan.FromMinutes(5), RetryPolicy.Default.DelayFor(int.MaxValue));
@@ -49,7 +49,7 @@ public class RetryPolicyTests
     [InlineData(0)]
     [InlineData(-1)]
     [InlineData(int.MinValue)]
-    public void অসম্ভব_attempt_এ_throw_না_করে_প্রথম_ধাপ_ধরে(int attempt)
+    public void An_impossible_attempt_number_falls_back_to_the_first_step_without_throwing(int attempt)
     {
         Assert.Equal(TimeSpan.FromSeconds(5), RetryPolicy.Default.DelayFor(attempt));
     }
@@ -57,7 +57,7 @@ public class RetryPolicyTests
     // ── jitter ──────────────────────────────────────────────────────────────
 
     [Fact]
-    public void jitter_মাঝামাঝি_হলে_মূল_বিলম্বই_ফেরে()
+    public void Mid_range_jitter_returns_the_plain_delay()
     {
         Assert.Equal(
             RetryPolicy.Default.DelayFor(3),
@@ -65,7 +65,7 @@ public class RetryPolicyTests
     }
 
     [Fact]
-    public void jitter_পঁচিশ_শতাংশের_দুই_পাশে_থাকে()
+    public void Jitter_stays_within_plus_or_minus_twenty_five_percent()
     {
         // attempt 3 → 20 seconds, ±25% → 15 to 25
         Assert.Equal(TimeSpan.FromSeconds(15), RetryPolicy.Default.DelayFor(3, 0));
@@ -76,7 +76,7 @@ public class RetryPolicyTests
     [InlineData(-5.0)]
     [InlineData(7.0)]
     [InlineData(double.NaN)]
-    public void বাজে_jitter_নমুনাতেও_বিলম্ব_যুক্তিসঙ্গত_থাকে(double sample)
+    public void The_delay_stays_sane_even_with_a_bad_jitter_sample(double sample)
     {
         var delay = RetryPolicy.Default.DelayFor(3, sample);
 
@@ -88,7 +88,7 @@ public class RetryPolicyTests
     /// loop and eat a core; on an office PC that would show as nothing but a spinning fan.
     /// </summary>
     [Fact]
-    public void jitter_কখনো_শূন্য_বিলম্ব_দেয়_না()
+    public void Jitter_never_produces_a_zero_delay()
     {
         var full = new RetryPolicy(
             TimeSpan.FromSeconds(1), 2, TimeSpan.FromSeconds(10), 1.0, null, TimeSpan.FromDays(1));
@@ -101,7 +101,7 @@ public class RetryPolicyTests
     /// ceiling they would line up in one queue again right there.
     /// </summary>
     [Fact]
-    public void সিলিংয়ের_ওপরেও_jitter_কাজ_করে()
+    public void Jitter_applies_above_the_ceiling_too()
     {
         var atCeiling = RetryPolicy.Default.DelayFor(50, 1);
 
@@ -111,7 +111,7 @@ public class RetryPolicyTests
     // ── Retry-After ─────────────────────────────────────────────────────────
 
     [Fact]
-    public void সার্ভারের_retry_after_বড়_হলে_সেটাই_মানা_হয়()
+    public void A_larger_server_Retry_After_is_honoured()
     {
         var delay = RetryPolicy.Default.DelayFor(1, 0.5, TimeSpan.FromMinutes(30));
 
@@ -119,7 +119,7 @@ public class RetryPolicyTests
     }
 
     [Fact]
-    public void সার্ভারের_retry_after_ছোট_হলে_নিজের_হিসাবই_চলে()
+    public void A_smaller_server_Retry_After_leaves_our_own_delay()
     {
         var delay = RetryPolicy.Default.DelayFor(6, 0.5, TimeSpan.FromSeconds(1));
 
@@ -127,7 +127,7 @@ public class RetryPolicyTests
     }
 
     [Fact]
-    public void NextAttemptAt_এখনকার_সময়ের_পরে_পড়ে()
+    public void NextAttemptAt_falls_after_the_current_time()
     {
         var at = RetryPolicy.Default.NextAttemptAt(2, T0, 0.5);
 
@@ -141,14 +141,14 @@ public class RetryPolicyTests
     /// tries" would then delete ten days of payroll data.
     /// </summary>
     [Fact]
-    public void ডিফল্টে_চেষ্টার_সংখ্যায়_হাল_ছাড়া_হয়_না()
+    public void By_default_it_never_gives_up_on_attempt_count()
     {
         Assert.Null(RetryPolicy.Default.MaxAttempts);
         Assert.False(RetryPolicy.Default.ShouldAbandon(100_000, T0, T0 + TimeSpan.FromDays(29)));
     }
 
     [Fact]
-    public void সীমা_বেঁধে_দিলে_চেষ্টার_সংখ্যাতেও_হাল_ছাড়ে()
+    public void With_a_cap_set_it_gives_up_on_attempt_count_too()
     {
         var capped = new RetryPolicy(
             TimeSpan.FromSeconds(5), 2, TimeSpan.FromMinutes(5), 0.25, 3, TimeSpan.FromDays(30));
@@ -158,7 +158,7 @@ public class RetryPolicyTests
     }
 
     [Fact]
-    public void মেয়াদ_পেরোলে_হাল_ছাড়ে()
+    public void It_gives_up_when_the_age_limit_passes()
     {
         Assert.False(RetryPolicy.Default.ShouldAbandon(1, T0, T0 + TimeSpan.FromDays(29)));
         Assert.True(RetryPolicy.Default.ShouldAbandon(1, T0, T0 + TimeSpan.FromDays(30)));
@@ -168,13 +168,13 @@ public class RetryPolicyTests
     /// Age is measured from the time of <b>creation</b>, not from the last attempt.
     /// </summary>
     [Fact]
-    public void বয়স_শেষ_চেষ্টা_নয়_তৈরির_সময়_থেকে_মাপা_হয়()
+    public void Age_is_measured_from_creation_not_from_the_last_attempt()
     {
         Assert.True(RetryPolicy.Default.ShouldAbandon(1, T0, T0 + TimeSpan.FromDays(31)));
     }
 
     [Fact]
-    public void অসম্ভব_সেটিং_নাকচ_হয়()
+    public void Impossible_settings_are_rejected()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new RetryPolicy(
             TimeSpan.Zero, 2, TimeSpan.FromMinutes(5), 0.25, null, TimeSpan.FromDays(30)));
@@ -197,7 +197,7 @@ public class RetryPolicyTests
     [InlineData(200)]
     [InlineData(201)]
     [InlineData(204)]
-    public void দুইশোর_ঘর_সফল(int status)
+    public void The_2xx_range_is_success(int status)
     {
         Assert.Equal(SyncOutcome.Success, SyncOutcomeClassifier.FromHttpStatus(status));
     }
@@ -209,7 +209,7 @@ public class RetryPolicyTests
     [InlineData(504)]
     [InlineData(429)]
     [InlineData(408)]
-    public void সার্ভারের_গোলমাল_সাময়িক(int status)
+    public void Server_trouble_is_transient(int status)
     {
         Assert.Equal(SyncOutcome.Transient, SyncOutcomeClassifier.FromHttpStatus(status));
     }
@@ -220,13 +220,13 @@ public class RetryPolicyTests
     [InlineData(415)]
     [InlineData(422)]
     [InlineData(413)]
-    public void রেকর্ডের_দোষ_হলে_স্থায়ী(int status)
+    public void A_fault_in_the_record_is_permanent(int status)
     {
         Assert.Equal(SyncOutcome.Permanent, SyncOutcomeClassifier.FromHttpStatus(status));
     }
 
     [Fact]
-    public void revoke_বডি_সহ_৪০৩_হলে_ডিভাইস_বাতিল()
+    public void A_403_with_a_revoke_body_revokes_the_device()
     {
         Assert.Equal(
             SyncOutcome.Revoked,
@@ -238,7 +238,7 @@ public class RetryPolicyTests
     /// kept.
     /// </summary>
     [Fact]
-    public void revoke_ছাড়া_৪০৩_শুধু_সাময়িক()
+    public void A_403_without_revoke_is_only_transient()
     {
         Assert.Equal(SyncOutcome.Transient, SyncOutcomeClassifier.FromHttpStatus(403));
     }
@@ -250,7 +250,7 @@ public class RetryPolicyTests
     [Theory]
     [InlineData(401)]
     [InlineData(404)]
-    public void অথ_বা_রুটের_গোলমালে_ডেটা_ফেলে_দেওয়া_হয়_না(int status)
+    public void Auth_or_route_trouble_does_not_discard_data(int status)
     {
         Assert.Equal(SyncOutcome.Transient, SyncOutcomeClassifier.FromHttpStatus(status));
     }
@@ -259,13 +259,13 @@ public class RetryPolicyTests
     [InlineData(0)]
     [InlineData(-1)]
     [InlineData(999)]
-    public void অজানা_ফলাফলে_সন্দেহের_সুবিধা_ডেটাই_পায়(int status)
+    public void An_unknown_status_gives_the_data_the_benefit_of_the_doubt(int status)
     {
         Assert.Equal(SyncOutcome.Transient, SyncOutcomeClassifier.FromHttpStatus(status));
     }
 
     [Fact]
-    public void রেসপন্সই_না_এলে_সাময়িক()
+    public void No_response_at_all_is_transient()
     {
         Assert.Equal(SyncOutcome.Transient, SyncOutcomeClassifier.FromTransportFailure());
     }

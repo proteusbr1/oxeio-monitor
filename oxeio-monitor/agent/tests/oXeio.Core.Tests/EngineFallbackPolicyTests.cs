@@ -11,13 +11,13 @@ public class EngineFallbackPolicyTests
         => new(failures, TimeSpan.FromMinutes(cooldownMin));
 
     [Fact]
-    public void শুরুতে_প্রাথমিক_ইঞ্জিনই_চেষ্টা_করা_হয়()
+    public void The_primary_engine_is_tried_first()
     {
         Assert.True(Policy().ShouldTryPrimary(T0));
     }
 
     [Fact]
-    public void সীমার_কম_ব্যর্থতায়_থামে_না()
+    public void Fewer_failures_than_the_limit_do_not_pause_it()
     {
         var p = Policy(failures: 3);
 
@@ -29,7 +29,7 @@ public class EngineFallbackPolicyTests
     }
 
     [Fact]
-    public void টানা_ব্যর্থতায়_বিরতি_শুরু_হয়()
+    public void Consecutive_failures_start_a_cooldown()
     {
         var p = Policy(failures: 3, cooldownMin: 30);
 
@@ -42,7 +42,7 @@ public class EngineFallbackPolicyTests
     }
 
     [Fact]
-    public void বিরতি_শেষ_হলে_আবার_চেষ্টা_হয়()
+    public void The_primary_is_tried_again_when_the_cooldown_ends()
     {
         var p = Policy(failures: 3, cooldownMin: 30);
         for (var i = 0; i < 3; i++) p.RecordFailure(T0);
@@ -57,7 +57,7 @@ public class EngineFallbackPolicyTests
     /// pause would effectively become permanent and DXGI would never come back.
     /// </summary>
     [Fact]
-    public void বিরতির_পর_কাউন্টার_শূন্য_থেকে_শুরু_হয়()
+    public void The_counter_restarts_from_zero_after_a_cooldown()
     {
         var p = Policy(failures: 3, cooldownMin: 30);
         for (var i = 0; i < 3; i++) p.RecordFailure(T0);
@@ -71,7 +71,7 @@ public class EngineFallbackPolicyTests
     }
 
     [Fact]
-    public void সফল_হলে_হিসাব_পুরো_মুছে_যায়()
+    public void A_success_clears_the_failure_count()
     {
         var p = Policy(failures: 3);
 
@@ -87,7 +87,7 @@ public class EngineFallbackPolicyTests
     }
 
     [Fact]
-    public void বিরতি_চলাকালীন_ব্যর্থতা_বিরতি_বাড়ায়_না()
+    public void A_failure_during_the_cooldown_does_not_extend_it()
     {
         // While the fallback engine runs the primary is not called at all, so
         // RecordFailure should not arrive. If it does, the pause deadline must not be
@@ -102,7 +102,7 @@ public class EngineFallbackPolicyTests
     }
 
     [Fact]
-    public void ডিফল্ট_মানগুলো_যা_হওয়ার_কথা()
+    public void Default_values_are_as_specified()
     {
         Assert.Equal(3, EngineFallbackPolicy.DefaultFailuresBeforeCooldown);
         Assert.Equal(TimeSpan.FromMinutes(30), EngineFallbackPolicy.DefaultCooldown);

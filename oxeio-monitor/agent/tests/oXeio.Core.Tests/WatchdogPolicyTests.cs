@@ -24,7 +24,7 @@ public class WatchdogPolicyTests
     // ── the normal path ─────────────────────────────────────────────────────
 
     [Fact]
-    public void সুস্থ_থাকলে_কিছুই_করা_হয়_না()
+    public void A_healthy_agent_is_left_alone()
     {
         var d = WatchdogPolicy.Decide(Healthy, new RestartLadder(), T0);
 
@@ -33,7 +33,7 @@ public class WatchdogPolicyTests
     }
 
     [Fact]
-    public void লক_খালি_থাকলে_চালু_করা_হয়()
+    public void A_free_lock_means_the_agent_is_started()
     {
         var obs = Healthy with { InstanceLockHeld = false, ProcessAlive = false, HeartbeatUnbiasedMs = null };
 
@@ -49,7 +49,7 @@ public class WatchdogPolicyTests
     /// watchdog that only checks "does the process exist" would never catch this failure.
     /// </summary>
     [Fact]
-    public void হার্টবিট_বাসি_হলে_মেরে_আবার_চালু_করা_হয়()
+    public void A_stale_heartbeat_means_kill_and_restart()
     {
         var obs = Healthy with { HeartbeatUnbiasedMs = Now - 300_000 };
 
@@ -61,7 +61,7 @@ public class WatchdogPolicyTests
     }
 
     [Fact]
-    public void হার্টবিট_ফাইল_না_থাকলেও_জমে_যাওয়া_ধরা_হয়()
+    public void A_missing_heartbeat_file_counts_as_wedged_too()
     {
         var obs = Healthy with { HeartbeatUnbiasedMs = null };
 
@@ -71,7 +71,7 @@ public class WatchdogPolicyTests
     }
 
     [Fact]
-    public void সীমার_ঠিক_ভেতরের_হার্টবিট_তাজা()
+    public void A_heartbeat_just_inside_the_limit_is_fresh()
     {
         var obs = Healthy with
         {
@@ -87,7 +87,7 @@ public class WatchdogPolicyTests
     /// there thinking a dead agent was healthy.
     /// </summary>
     [Fact]
-    public void আগের_বুটের_হার্টবিট_তাজা_ধরা_হয়_না()
+    public void A_heartbeat_from_a_previous_boot_is_not_fresh()
     {
         var obs = Healthy with { HeartbeatUnbiasedMs = Now + 600_000 };
 
@@ -102,7 +102,7 @@ public class WatchdogPolicyTests
     /// ruined, and nobody would notice.
     /// </summary>
     [Fact]
-    public void probe_ব্যর্থ_হলে_কখনোই_চালু_করা_হয়_না()
+    public void A_failed_probe_never_starts_an_agent()
     {
         var obs = Healthy with { ProbeSucceeded = false, InstanceLockHeld = false };
 
@@ -118,7 +118,7 @@ public class WatchdogPolicyTests
     /// processes, on 15 PCs at once.
     /// </summary>
     [Fact]
-    public void সেশন_শূন্যে_চালু_করা_হয়_না()
+    public void Nothing_is_started_from_session_zero()
     {
         var obs = Healthy with { InstanceLockHeld = false, SessionUsable = false };
 
@@ -129,7 +129,7 @@ public class WatchdogPolicyTests
     }
 
     [Fact]
-    public void শাটডাউনের_সময়_চালু_করা_হয়_না()
+    public void Nothing_is_started_during_shutdown()
     {
         var obs = Healthy with { InstanceLockHeld = false, ShuttingDown = true };
 
@@ -143,7 +143,7 @@ public class WatchdogPolicyTests
     /// The agent dying at shutdown is not a failure; it must not waste a ladder step.
     /// </summary>
     [Fact]
-    public void শাটডাউনে_স্থিরতার_হিসাব_নষ্ট_হয়_না()
+    public void Shutdown_does_not_spoil_the_stability_count()
     {
         var ladder = new RestartLadder();
         ladder.RecordLaunch(T0);
@@ -161,7 +161,7 @@ public class WatchdogPolicyTests
     /// mistake costs an hour counted twice.
     /// </summary>
     [Fact]
-    public void অচেনা_কেউ_লক_ধরে_থাকলে_মারাও_হয়_না_চালুও_হয়_না()
+    public void A_foreign_lock_holder_is_neither_killed_nor_replaced()
     {
         var obs = Healthy with { ProcessId = null, ProcessAlive = false, HeartbeatUnbiasedMs = null };
 
@@ -175,7 +175,7 @@ public class WatchdogPolicyTests
     // ── preventing the storm ────────────────────────────────────────────────
 
     [Fact]
-    public void চালু_করার_পরপরই_আবার_চালু_করা_হয়_না()
+    public void No_second_start_right_after_a_start()
     {
         var ladder = new RestartLadder();
         var missing = Healthy with { InstanceLockHeld = false, ProcessAlive = false, HeartbeatUnbiasedMs = null };
@@ -196,7 +196,7 @@ public class WatchdogPolicyTests
     /// raised.
     /// </summary>
     [Fact]
-    public void বারবার_ব্যর্থ_হলে_একবারই_অ্যালার্ম_ওঠে()
+    public void Repeated_failures_raise_the_alarm_only_once()
     {
         var ladder = new RestartLadder();
         var missing = Healthy with { InstanceLockHeld = false, ProcessAlive = false, HeartbeatUnbiasedMs = null };
@@ -227,7 +227,7 @@ public class WatchdogPolicyTests
     /// Giving up does not mean stopping for good: exactly one attempt after 6 hours.
     /// </summary>
     [Fact]
-    public void ঠান্ডা_হওয়ার_পর_একবার_চেষ্টা_হয়()
+    public void One_attempt_is_made_after_the_cool_off()
     {
         var ladder = new RestartLadder();
         var missing = Healthy with { InstanceLockHeld = false, ProcessAlive = false, HeartbeatUnbiasedMs = null };

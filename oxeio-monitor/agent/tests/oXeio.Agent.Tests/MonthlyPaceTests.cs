@@ -19,12 +19,12 @@ public class MonthlyPaceTests
 
     /// <summary>August 2026 has 31 days, 4 of them Fridays (7, 14, 21, 28).</summary>
     [Fact]
-    public void মাসের_কর্মদিবস_শুক্রবার_বাদে() =>
+    public void Workdays_in_a_month_exclude_Fridays() =>
         Assert.Equal(31 - 4, MonthlyPace.WorkdaysInMonth(2026, 8));
 
     /// <summary>February 2028 is a leap year: 29 days, 4 Fridays (4, 11, 18, 25).</summary>
     [Fact]
-    public void লিপ_বছরের_ফেব্রুয়ারিও_ঠিক_গোনা_হয() =>
+    public void A_leap_year_February_is_counted_correctly() =>
         Assert.Equal(29 - 4, MonthlyPace.WorkdaysInMonth(2028, 2));
 
     /// <summary>
@@ -33,7 +33,7 @@ public class MonthlyPaceTests
     /// would show a bogus "ahead".
     /// </summary>
     [Fact]
-    public void আজকের_দিনও_গোনা_হয()
+    public void Today_is_counted_too()
     {
         // 2026-08-03 is a Monday; none of 1, 2, 3 is a Friday
         Assert.Equal(3, MonthlyPace.WorkdaysElapsed(new DateOnly(2026, 8, 3)));
@@ -50,7 +50,7 @@ public class MonthlyPaceTests
     /// or behind at month end, whatever the reason.
     /// </summary>
     [Fact]
-    public void মাসের_শেষে_লক্ষ্য_ছুঁলে_গতি_শূন্য()
+    public void Reaching_the_target_at_month_end_gives_zero_pace()
     {
         var pace = MonthlyPace.Estimate(
             TimeSpan.FromHours(208), 208, Dhaka(2026, 8, 31));
@@ -60,7 +60,7 @@ public class MonthlyPaceTests
     }
 
     [Fact]
-    public void বেশি_কাজ_করলে_এগিয়ে()
+    public void Working_more_than_expected_is_ahead()
     {
         var pace = MonthlyPace.Estimate(TimeSpan.FromHours(208), 208, Dhaka(2026, 8, 20));
 
@@ -69,7 +69,7 @@ public class MonthlyPaceTests
     }
 
     [Fact]
-    public void কম_কাজ_করলে_পিছিয়ে()
+    public void Working_less_than_expected_is_behind()
     {
         var pace = MonthlyPace.Estimate(TimeSpan.FromHours(10), 208, Dhaka(2026, 8, 20));
 
@@ -84,7 +84,7 @@ public class MonthlyPaceTests
     /// "208 hours behind".
     /// </summary>
     [Fact]
-    public void মাস_ঢাকার_ক্যালেন্ডারে_গোনা_হয()
+    public void The_month_is_counted_in_the_Dhaka_calendar()
     {
         var firstMorning = Dhaka(2026, 9, 1, hour: 3);
 
@@ -105,7 +105,7 @@ public class MonthlyPaceTests
     [InlineData(0d)]
     [InlineData(-5d)]
     [InlineData(double.NaN)]
-    public void লক্ষ্য_না_থাকলে_গতিও_নেই(double target) =>
+    public void No_target_means_no_pace(double target) =>
         Assert.Null(MonthlyPace.Estimate(TimeSpan.FromHours(10), target, Dhaka(2026, 8, 10)));
 
     // ══════════════ G111: "not observed yet" comes first ══════════════
@@ -117,7 +117,7 @@ public class MonthlyPaceTests
     /// be shown: praise on a new staff member's first day with not one observation behind it.
     /// </summary>
     [Fact]
-    public void না_দেখা_হলে_সার্ভারের_শূন্যও_নয়()
+    public void Not_observed_wins_even_over_a_server_zero()
     {
         Assert.Equal(
             MonthlyPace.PaceView.NotObserved,
@@ -134,7 +134,7 @@ public class MonthlyPaceTests
     /// opposite false accusation.
     /// </summary>
     [Fact]
-    public void না_দেখা_হলে_আন্দাজেও_ফেরা_যায_না()
+    public void Not_observed_wins_even_over_the_estimate()
     {
         Assert.Equal(
             MonthlyPace.PaceView.NotObserved,
@@ -143,7 +143,7 @@ public class MonthlyPaceTests
 
     /// <summary>Old server (no <c>observed</c>): behavior is exactly as before.</summary>
     [Fact]
-    public void দেখা_হলে_সার্ভারের_সংখ্যাই()
+    public void When_observed_the_server_number_is_used()
     {
         Assert.Equal(
             MonthlyPace.PaceView.Server,
@@ -154,7 +154,7 @@ public class MonthlyPaceTests
     /// The server is silent but the staff member was observed: only then use the estimate.
     /// </summary>
     [Fact]
-    public void সার্ভার_না_বললে_আন্দাজ()
+    public void When_the_server_is_silent_the_estimate_is_used()
     {
         Assert.Equal(
             MonthlyPace.PaceView.Estimated,
@@ -165,7 +165,7 @@ public class MonthlyPaceTests
     /// No target at all: "0:00 hours ahead" is meaningless, so the line is dropped.
     /// </summary>
     [Fact]
-    public void কোনো_সংখ্যাই_না_থাকলে_লাইন_বাদ()
+    public void With_no_number_at_all_the_line_is_dropped()
     {
         Assert.Equal(MonthlyPace.PaceView.None, MonthlyPace.ViewFor(true, null, null));
     }

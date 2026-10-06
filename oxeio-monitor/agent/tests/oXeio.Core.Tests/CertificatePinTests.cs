@@ -19,19 +19,19 @@ public class CertificatePinTests
     private static string[] Pins(params string[] pins) => pins;
 
     [Fact]
-    public void পিন_না_থাকলে_যাচাই_ওএসের_হাতে() =>
+    public void With_no_pin_validation_is_left_to_the_OS() =>
         Assert.Equal(
             CertificatePin.Verdict.NoPinConfigured,
             CertificatePin.Check([], PinA, chainOk: true));
 
     [Fact]
-    public void পিন_মিললে_আর_চেইন_ঠিক_থাকলে_চলে() =>
+    public void A_matching_pin_with_a_valid_chain_is_trusted() =>
         Assert.Equal(
             CertificatePin.Verdict.Trusted,
             CertificatePin.Check(Pins(PinA), PinA, chainOk: true));
 
     [Fact]
-    public void পিন_না_মিললে_প্রত্যাখ্যান() =>
+    public void A_pin_mismatch_is_rejected() =>
         Assert.Equal(
             CertificatePin.Verdict.PinMismatch,
             CertificatePin.Check(Pins(PinA), PinB, chainOk: true));
@@ -43,13 +43,13 @@ public class CertificatePinTests
      * without that check an expired certificate would work forever.
      */
     [Fact]
-    public void পিন_মিললেও_চেইন_ভাঙা_থাকলে_প্রত্যাখ্যান() =>
+    public void A_matching_pin_with_a_broken_chain_is_still_rejected() =>
         Assert.Equal(
             CertificatePin.Verdict.ChainInvalid,
             CertificatePin.Check(Pins(PinA), PinA, chainOk: false));
 
     [Fact]
-    public void সার্টই_না_এলে_প্রত্যাখ্যান() =>
+    public void No_certificate_is_rejected() =>
         Assert.Equal(
             CertificatePin.Verdict.NoCertificate,
             CertificatePin.Check(Pins(PinA), null, chainOk: true));
@@ -60,7 +60,7 @@ public class CertificatePinTests
      * moment of renewal (which is why the runbook § 7.1 has its particular order).
      */
     [Fact]
-    public void দুটো_পিনের_যেকোনো_একটা_মিললেই_চলে()
+    public void Either_of_two_pins_matching_is_enough()
     {
         Assert.Equal(
             CertificatePin.Verdict.Trusted,
@@ -73,7 +73,7 @@ public class CertificatePinTests
 
     /** Careful: base64 is case-sensitive; a one-character difference is a different key */
     [Fact]
-    public void তুলনাটা_অক্ষরের_ছাঁদ_মেনে_চলে() =>
+    public void The_comparison_is_case_sensitive() =>
         Assert.Equal(
             CertificatePin.Verdict.PinMismatch,
             CertificatePin.Check(Pins(PinA), PinA.ToLowerInvariant(), chainOk: true));
@@ -81,7 +81,7 @@ public class CertificatePinTests
     // ── Parse ───────────────────────────────────────────────────────────────
 
     [Fact]
-    public void খালি_কনফিগে_কোনো_পিন_নেই()
+    public void An_empty_config_has_no_pins()
     {
         Assert.Empty(CertificatePin.Parse(null));
         Assert.Empty(CertificatePin.Parse(""));
@@ -95,7 +95,7 @@ public class CertificatePinTests
      * so pinning would be on and always failing.
      */
     [Fact]
-    public void ফাঁকা_জায়গা_ও_বাড়তি_কমা_ছেঁকে_নেয()
+    public void Whitespace_and_extra_commas_are_filtered_out()
     {
         var pins = CertificatePin.Parse($" {PinA} , {PinB} , ");
 
@@ -105,7 +105,7 @@ public class CertificatePinTests
     }
 
     [Fact]
-    public void একটা_পিনও_চলে() =>
+    public void A_single_pin_works_too() =>
         Assert.Single(CertificatePin.Parse(PinA));
 
     /** Every state must have a sentence a human can read */
@@ -115,6 +115,6 @@ public class CertificatePinTests
     [InlineData(CertificatePin.Verdict.ChainInvalid)]
     [InlineData(CertificatePin.Verdict.NoCertificate)]
     [InlineData(CertificatePin.Verdict.NoPinConfigured)]
-    public void প্রতিটা_অবস্থার_ব্যাখ্যা_আছে(CertificatePin.Verdict verdict) =>
+    public void Every_verdict_has_an_explanation(CertificatePin.Verdict verdict) =>
         Assert.False(string.IsNullOrWhiteSpace(CertificatePin.Explain(verdict)));
 }

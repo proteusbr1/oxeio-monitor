@@ -14,18 +14,18 @@ public class AgentVersionTests
     /// come out as <c>0.1.0+&lt;commit&gt;</c>.
     /// </summary>
     [Fact]
-    public void commit_hash_ছেঁটে_ফেলা_হয়() =>
+    public void The_commit_hash_is_trimmed_off() =>
         Assert.Equal(
             "0.1.0",
             Program.TrimBuildMetadata("0.1.0+ef685e42b94046aa7b4f05b6ccc1a34990357d89"));
 
     [Fact]
-    public void সাধারণ_ভার্সন_অক্ষত_থাকে() =>
+    public void A_plain_version_is_left_intact() =>
         Assert.Equal("0.2.3", Program.TrimBuildMetadata("0.2.3"));
 
     /// <summary>A pre-release part stays: it belongs to SemVer, it is not build metadata.</summary>
     [Fact]
-    public void pre_release_অংশ_থেকে_যায়() =>
+    public void The_pre_release_part_is_kept() =>
         Assert.Equal("1.0.0-beta.2", Program.TrimBuildMetadata("1.0.0-beta.2+abc123"));
 
     /// <summary>
@@ -38,6 +38,6 @@ public class AgentVersionTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("+onlymetadata")]
-    public void কিছু_না_পেলে_শূন্য_ভার্সন(string? raw) =>
+    public void Nothing_to_report_gives_version_zero(string? raw) =>
         Assert.Equal("0.0.0", Program.TrimBuildMetadata(raw));
 }

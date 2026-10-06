@@ -5,13 +5,13 @@ namespace oXeio.Core.Tests;
 public class BatchNarrowingTests
 {
     [Fact]
-    public void শুরুতে_পুরো_মাপেই_চেষ্টা_হয়()
+    public void It_starts_at_the_full_size()
     {
         Assert.Equal(500, new BatchNarrowing(500).Current);
     }
 
     [Fact]
-    public void সাময়িক_ব্যর্থতায়_মাপ_বদলায়_না()
+    public void A_transient_failure_does_not_change_the_size()
     {
         // When the network is down the batch is not at fault; shrinking it would make
         // the drain needlessly slow after the link returns
@@ -24,7 +24,7 @@ public class BatchNarrowingTests
     }
 
     [Fact]
-    public void Permanent_পেলে_ব্যাচ_অর্ধেক_হয়()
+    public void A_permanent_failure_halves_the_batch()
     {
         var n = new BatchNarrowing(500);
 
@@ -36,7 +36,7 @@ public class BatchNarrowingTests
     }
 
     [Fact]
-    public void বারবার_অর্ধেক_হয়ে_শেষে_একটায়_নামে()
+    public void Repeated_halving_ends_at_a_single_record()
     {
         var n = new BatchNarrowing(500);
         var steps = 0;
@@ -56,7 +56,7 @@ public class BatchNarrowingTests
     }
 
     [Fact]
-    public void একটায়_নামার_পর_আর_ছোট_হয়_না()
+    public void Once_at_one_record_it_gets_no_smaller()
     {
         var n = new BatchNarrowing(1);
 
@@ -67,7 +67,7 @@ public class BatchNarrowingTests
     }
 
     [Fact]
-    public void সফল_হলে_পুরো_মাপে_ফেরে()
+    public void A_success_returns_to_the_full_size()
     {
         var n = new BatchNarrowing(500);
         n.OnPermanent();
@@ -84,7 +84,7 @@ public class BatchNarrowingTests
     /// 55 per minute and take over 15 hours.
     /// </summary>
     [Fact]
-    public void খারাপ_রেকর্ড_ফেলার_পর_পুরো_মাপে_ফেরে()
+    public void After_dropping_the_bad_record_it_returns_to_the_full_size()
     {
         var n = new BatchNarrowing(500);
         while (!n.IsIsolated) n.OnPermanent();
@@ -99,7 +99,7 @@ public class BatchNarrowingTests
     [InlineData(0, 1)]
     [InlineData(-5, 1)]
     [InlineData(1000, 500)] // cannot ask for more than the server's limit
-    public void অসম্ভব_মাপ_সীমার_মধ্যে_আটকায়(int given, int expected)
+    public void An_impossible_size_is_clamped_into_range(int given, int expected)
     {
         Assert.Equal(expected, new BatchNarrowing(given).Current);
     }

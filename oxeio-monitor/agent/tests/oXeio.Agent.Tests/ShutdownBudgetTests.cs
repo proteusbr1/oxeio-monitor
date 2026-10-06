@@ -28,7 +28,7 @@ public class ShutdownBudgetTests
     /// sensitive one: above it the user would see "app is not responding".
     /// </summary>
     [Fact]
-    public void শাটডাউনে_UI_থ্রেড_Windows_এর_সীমার_অর্ধেকের_কমই_আটকায়() =>
+    public void At_shutdown_the_UI_thread_blocks_for_less_than_half_of_the_Windows_limit() =>
         Assert.True(
             AgentHost.EndSessionTotalBudget < WindowsKillTimeout / 2,
             $"EndSessionTotalBudget ({AgentHost.EndSessionTotalBudget}) " +
@@ -40,7 +40,7 @@ public class ShutdownBudgetTests
     /// and if the write ran late there would be no time left to send.
     /// </summary>
     [Fact]
-    public void বাইরের_ছাদ_ভেতরের_দুই_ধাপের_যোগফল() =>
+    public void The_outer_ceiling_is_the_sum_of_the_two_inner_steps() =>
         Assert.Equal(
             AgentHost.EndSessionEnqueueWait + AgentHost.EndSessionSendBudget,
             AgentHost.EndSessionTotalBudget);
@@ -50,7 +50,7 @@ public class ShutdownBudgetTests
     /// send.
     /// </summary>
     [Fact]
-    public void কিউয়ে_লেখার_অপেক্ষা_পাঠানোর_ছাদের_ভেতরে() =>
+    public void The_queue_write_wait_fits_inside_the_send_ceiling() =>
         Assert.True(
             AgentHost.EndSessionEnqueueWait < AgentHost.EndSessionSendBudget,
             "EndSessionEnqueueWait must leave room for the send itself");
@@ -80,7 +80,7 @@ public class ShutdownBudgetTests
     /// all three steps; if a fourth step is added later it belongs here too.
     /// </summary>
     [Fact]
-    public void Dispose_এর_তিনটে_ধাপ_মিলে_শাটডাউন_বাজেটের_ভেতরে()
+    public void The_three_Dispose_steps_together_fit_inside_the_shutdown_budget()
     {
         var sequential =
             AgentHost.StopEnqueueBudget + AgentHost.GoodbyeBudget + AgentHost.FinalDrainBudget;
@@ -95,7 +95,7 @@ public class ShutdownBudgetTests
 
     /// <summary>Careful: the whole DisposeAsync is also below Windows' limit.</summary>
     [Fact]
-    public void শাটডাউন_বাজেট_Windows_এর_সীমার_নিচে() =>
+    public void The_shutdown_budget_is_below_the_Windows_limit() =>
         Assert.True(Program.ShutdownBudget < WindowsKillTimeout);
 
     /// <summary>
@@ -107,7 +107,7 @@ public class ShutdownBudgetTests
     /// keeps happening in this project.
     /// </summary>
     [Fact]
-    public void দুই_শাটডাউন_পথ_একই_কাজে_একই_বাজেট_নেয়()
+    public void Both_shutdown_paths_use_the_same_budget_for_the_same_job()
     {
         Assert.Equal(AgentHost.EndSessionEnqueueWait, AgentHost.StopEnqueueBudget);
         Assert.Equal(AgentHost.EndSessionSendBudget, AgentHost.GoodbyeBudget);

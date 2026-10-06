@@ -24,7 +24,7 @@ public class AppUsageTrackerTests
     private static AppUsageTracker New() => new();
 
     [Fact]
-    public void একই_অ্যাপে_থাকলে_একটাই_রেকর্ড()
+    public void Staying_in_one_app_gives_a_single_record()
     {
         var t = New();
 
@@ -42,7 +42,7 @@ public class AppUsageTrackerTests
     /// recorded, the real picture in the report would be buried.
     /// </summary>
     [Fact]
-    public void পাঁচ_সেকেন্ডের_কম_হলে_রেকর্ড_হয়_না()
+    public void Under_five_seconds_is_not_recorded()
     {
         var t = New();
         var all = new List<oXeio.Core.Agent.AppUsageRecord>();
@@ -56,7 +56,7 @@ public class AppUsageTrackerTests
     }
 
     [Fact]
-    public void ঠিক_পাঁচ_সেকেন্ড_হলে_রেকর্ড_হয়()
+    public void Exactly_five_seconds_is_recorded()
     {
         var t = New();
 
@@ -85,7 +85,7 @@ public class AppUsageTrackerTests
     /// two different things.
     /// </summary>
     [Fact]
-    public void নিষ্ক্রিয়_অবস্থায়ও_রেকর্ড_হয়_কিন্তু_আলাদা_চিহ্নে()
+    public void Idle_time_is_recorded_too_but_marked_Idle()
     {
         var t = New();
 
@@ -108,7 +108,7 @@ public class AppUsageTrackerTests
     /// "is this time counted?" would have no single answer.
     /// </summary>
     [Fact]
-    public void অবস্থা_বদলালে_খণ্ড_ওখানেই_কাটে()
+    public void A_state_change_cuts_the_chunk_right_there()
     {
         var t = New();
 
@@ -127,7 +127,7 @@ public class AppUsageTrackerTests
 
     /// <summary>In the normal state the mark is ACTIVE: the default did not change.</summary>
     [Fact]
-    public void সচল_অবস্থার_রেকর্ডে_চিহ্ন_Active()
+    public void A_record_made_while_active_is_marked_Active()
     {
         var t = New();
 
@@ -139,7 +139,7 @@ public class AppUsageTrackerTests
     }
 
     [Fact]
-    public void লক_করা_অবস্থায়ও_গোনা_হয়_না()
+    public void Nothing_is_recorded_while_locked()
     {
         var t = New();
 
@@ -157,7 +157,7 @@ public class AppUsageTrackerTests
     /// "chrome.exe 8 hours" all day and D08 (top 10 sites) could not be built.
     /// </summary>
     [Fact]
-    public void ডোমেইন_বদলালে_নতুন_রেকর্ড()
+    public void A_domain_change_starts_a_new_record()
     {
         var t = New();
 
@@ -170,7 +170,7 @@ public class AppUsageTrackerTests
     }
 
     [Fact]
-    public void একই_ডোমেইনে_টাইটেল_বদলালে_নতুন_রেকর্ড_নয়()
+    public void A_title_change_on_the_same_domain_does_not_start_a_new_record()
     {
         // Scrolling on one page also changes the title; a new row each time would
         // inflate the record count for no reason
@@ -183,7 +183,7 @@ public class AppUsageTrackerTests
     }
 
     [Fact]
-    public void ফুল_URL_কখনো_রেকর্ডে_ওঠে_না()
+    public void The_full_URL_never_ends_up_in_a_record()
     {
         var t = New();
 
@@ -202,7 +202,7 @@ public class AppUsageTrackerTests
     /// indirectly.
     /// </summary>
     [Fact]
-    public void ব্যক্তিগত_ব্রাউজিংয়ে_ডোমেইন_বা_টাইটেল_কিছুই_যায়_না()
+    public void Private_browsing_keeps_neither_domain_nor_title()
     {
         var t = New();
 
@@ -220,7 +220,7 @@ public class AppUsageTrackerTests
     // ── durability ──────────────────────────────────────────────────────────
 
     [Fact]
-    public void টানা_এক_অ্যাপে_থাকলেও_রেকর্ড_নিয়মিত_বেরোয়()
+    public void Records_come_out_regularly_even_when_staying_in_one_app()
     {
         // Same as segments; otherwise a crash would lose everything (G53)
         var t = New();
@@ -235,7 +235,7 @@ public class AppUsageTrackerTests
     }
 
     [Fact]
-    public void ভাগ_হলেও_মোট_সময়_ঠিক_থাকে()
+    public void The_total_time_stays_correct_after_splitting()
     {
         var t = New();
         var all = new List<oXeio.Core.Agent.AppUsageRecord>();
@@ -249,7 +249,7 @@ public class AppUsageTrackerTests
     }
 
     [Fact]
-    public void প্রতিটি_রেকর্ডের_আলাদা_uuid()
+    public void Every_record_has_its_own_uuid()
     {
         var t = New();
         var all = new List<oXeio.Core.Agent.AppUsageRecord>();
@@ -261,7 +261,7 @@ public class AppUsageTrackerTests
     }
 
     [Fact]
-    public void কোনো_উইন্ডো_না_থাকলে_খোলাটা_বন্ধ_হয়()
+    public void With_no_window_the_open_record_is_closed()
     {
         var t = New();
 
@@ -280,7 +280,7 @@ public class AppUsageTrackerTests
     /// otherwise the screenshots taken exactly at an app switch would stay nameless forever.
     /// </summary>
     [Fact]
-    public void সামনের_উইন্ডো_প্রথম_মুহূর্ত_থেকেই_জানা_যায়()
+    public void The_foreground_window_is_known_from_the_first_moment()
     {
         var t = New();
 
@@ -296,7 +296,7 @@ public class AppUsageTrackerTests
     /// up paired with an image.
     /// </summary>
     [Fact]
-    public void ACTIVE_ছাড়া_সামনের_উইন্ডো_বলা_হয়_না()
+    public void No_foreground_window_is_reported_unless_ACTIVE()
     {
         var t = New();
 

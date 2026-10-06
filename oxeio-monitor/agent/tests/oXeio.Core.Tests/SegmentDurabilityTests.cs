@@ -24,7 +24,7 @@ public class SegmentDurabilityTests
     }
 
     [Fact]
-    public void টানা_কাজেও_সেগমেন্ট_নিয়মিত_বন্ধ_হয়()
+    public void Segments_close_regularly_even_during_continuous_work()
     {
         var m = new IdleStateMachine(Threshold, T0);
 
@@ -37,7 +37,7 @@ public class SegmentDurabilityTests
     }
 
     [Fact]
-    public void ভাগ_হলেও_কোনো_সেকেন্ড_হারায়_না_বা_দুবার_গোনা_হয়_না()
+    public void Splitting_loses_no_second_and_counts_none_twice()
     {
         var m = new IdleStateMachine(Threshold, T0);
 
@@ -52,7 +52,7 @@ public class SegmentDurabilityTests
     }
 
     [Fact]
-    public void প্রতিটি_ভাগের_আলাদা_uuid_থাকে()
+    public void Every_split_piece_has_its_own_uuid()
     {
         // With the same uuid the server would take the second as a duplicate and drop
         // it, so time would still be lost even after splitting
@@ -64,7 +64,7 @@ public class SegmentDurabilityTests
     }
 
     [Fact]
-    public void স্টেট_বদলালে_ভাগের_ঘড়ি_নতুন_করে_শুরু_হয়()
+    public void A_state_change_restarts_the_split_clock()
     {
         var m = new IdleStateMachine(Threshold, T0);
 
@@ -77,7 +77,7 @@ public class SegmentDurabilityTests
     }
 
     [Fact]
-    public void নিষ্ক্রিয়_সময়ও_ভাগ_হয়()
+    public void Idle_time_is_split_too()
     {
         // When someone goes to lunch an IDLE segment would stay open for an hour. That
         // is not work time, but if a crash lost it, it would later be unclear what that time was.
@@ -93,7 +93,7 @@ public class SegmentDurabilityTests
     }
 
     [Fact]
-    public void মাপটা_বদলানো_যায়_কিন্তু_শূন্য_দেওয়া_যায়_না()
+    public void The_length_is_configurable_but_zero_is_rejected()
     {
         Assert.Throws<ArgumentOutOfRangeException>(
             () => new IdleStateMachine(Threshold, T0, maxSegment: TimeSpan.Zero));
@@ -106,7 +106,7 @@ public class SegmentDurabilityTests
     /// be cut backwards, and the idle time would silently be **counted as work**.
     /// </summary>
     [Fact]
-    public void ভাগ_করার_পরেও_retro_adjust_পুরো_ষাট_সেকেন্ড_কাটে()
+    public void Retro_adjust_still_cuts_the_full_sixty_seconds_after_a_split()
     {
         var m = new IdleStateMachine(Threshold, T0);
         var all = new List<ActivitySegment>();
@@ -133,7 +133,7 @@ public class SegmentDurabilityTests
     }
 
     [Fact]
-    public void ডিফল্ট_মাপ_পাঁচ_মিনিট()
+    public void Default_length_is_five_minutes()
     {
         Assert.Equal(TimeSpan.FromMinutes(5), IdleStateMachine.MaxSegmentLength);
     }

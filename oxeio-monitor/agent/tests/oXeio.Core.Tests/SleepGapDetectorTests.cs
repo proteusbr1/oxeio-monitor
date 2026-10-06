@@ -17,13 +17,13 @@ public class SleepGapDetectorTests
             Monotonic: T0.AddSeconds(seconds));
 
     [Fact]
-    public void প্রথম_নমুনায়_কখনো_ঘুম_ধরা_পড়ে_না()
+    public void The_first_sample_never_detects_sleep()
     {
         Assert.False(New().Observe(At(100)).Detected);
     }
 
     [Fact]
-    public void স্বাভাবিক_এক_সেকেন্ডের_টিকে_কিছু_হয়_না()
+    public void Normal_one_second_ticks_detect_nothing()
     {
         var d = New();
         d.Observe(At(100));
@@ -33,7 +33,7 @@ public class SleepGapDetectorTests
     }
 
     [Fact]
-    public void টাইমারের_সামান্য_ঢিলেমি_ঘুম_বলে_ধরা_হয়_না()
+    public void Slight_timer_slack_is_not_taken_for_sleep()
     {
         var d = New();
         d.Observe(At(100));
@@ -45,7 +45,7 @@ public class SleepGapDetectorTests
 
     /// <summary>A laptop shut at 5 PM and opened at 9 AM: 16 hours of bogus work.</summary>
     [Fact]
-    public void ষোলো_ঘণ্টার_ঘুম_ধরা_পড়ে_এবং_শেষ_জাগ্রত_মুহূর্তে_থামে()
+    public void A_sixteen_hour_sleep_is_detected_and_stops_at_the_last_awake_moment()
     {
         var d = New();
         d.Observe(At(100));
@@ -65,7 +65,7 @@ public class SleepGapDetectorTests
     /// must still be caught from the clock alone.
     /// </summary>
     [Fact]
-    public void ইভেন্ট_ছাড়াই_শুধু_ঘড়ি_দেখে_ধরা_পড়ে()
+    public void Sleep_is_detected_from_the_clocks_alone_without_an_event()
     {
         var d = New();
         d.Observe(At(100));
@@ -81,7 +81,7 @@ public class SleepGapDetectorTests
     /// Even so it must be caught from the monotonic jump.
     /// </summary>
     [Fact]
-    public void unbiased_ঘড়িও_এগোলে_মনোটনিক_লাফেই_ধরা_পড়ে()
+    public void Sleep_is_detected_from_the_monotonic_jump_even_if_the_unbiased_clock_advances()
     {
         var d = New();
         d.Observe(At(100));
@@ -95,7 +95,7 @@ public class SleepGapDetectorTests
     }
 
     [Fact]
-    public void কাউন্টার_পিছিয়ে_গেলেও_ঋণাত্মক_হয়_না()
+    public void The_slept_duration_is_never_negative_even_if_a_counter_goes_back()
     {
         var d = New();
         d.Observe(At(1000));
@@ -106,7 +106,7 @@ public class SleepGapDetectorTests
     }
 
     [Fact]
-    public void Reset_এর_পর_আবার_প্রথম_নমুনা_ধরা_হয়()
+    public void After_Reset_the_next_sample_is_treated_as_the_first()
     {
         var d = New();
         d.Observe(At(100));

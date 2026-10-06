@@ -32,20 +32,20 @@ public class CaptureGateTests
     private const bool NotRevoked = false;
 
     [Fact]
-    public void সক্রিয়_ও_উইন্ডোর_ভেতরে_হলে_ছবি_ওঠে() =>
+    public void A_screenshot_is_taken_when_active_and_inside_the_window() =>
         Assert.True(CaptureGate.Allows(SegmentState.Active, Enrolled, NotRevoked, Day, Noon));
 
     [Theory]
     [InlineData(SegmentState.Idle)]
     [InlineData(SegmentState.Locked)]
-    public void ACTIVE_ছাড়া_ছবি_নয়(SegmentState state) =>
+    public void No_screenshot_unless_ACTIVE(SegmentState state) =>
         Assert.Equal(
             CaptureGate.Verdict.NotActive,
             CaptureGate.Check(state, Enrolled, NotRevoked, Day, Noon));
 
     /// <summary>A04b: working at 2 AM counts as time, but no picture is taken.</summary>
     [Fact]
-    public void উইন্ডোর_বাইরে_ছবি_নয়() =>
+    public void No_screenshot_outside_the_window() =>
         Assert.Equal(
             CaptureGate.Verdict.OutsideWindow,
             CaptureGate.Check(SegmentState.Active, Enrolled, NotRevoked, Day, Night));
@@ -55,7 +55,7 @@ public class CaptureGateTests
     /// stopped; pictures were still taken and piled up on a dismissed employee's PC.
     /// </summary>
     [Fact]
-    public void বাতিল_ডিভাইসে_ছবি_নয়() =>
+    public void No_screenshot_on_a_revoked_device() =>
         Assert.Equal(
             CaptureGate.Verdict.Revoked,
             CaptureGate.Check(SegmentState.Active, Enrolled, Revoked, Day, Noon));
@@ -65,14 +65,14 @@ public class CaptureGateTests
     /// taken on the revoked device?" would be "it was idle then": true, but not the real reason.
     /// </summary>
     [Fact]
-    public void বাতিলের_কারণটাই_আগে_বলা_হয়() =>
+    public void The_revoked_reason_is_reported_first() =>
         Assert.Equal(
             CaptureGate.Verdict.Revoked,
             CaptureGate.Check(SegmentState.Idle, Enrolled, Revoked, Day, Night));
 
     /// <summary>Revoke wins even inside the 24-hour window (outside ADR-011c).</summary>
     [Fact]
-    public void সবসময়_খোলা_উইন্ডোতেও_বাতিল_আটকায়() =>
+    public void Revoke_blocks_even_with_an_always_open_window() =>
         Assert.False(
             CaptureGate.Allows(SegmentState.Active, Enrolled, Revoked, CaptureWindow.Always, Night));
 
@@ -84,7 +84,7 @@ public class CaptureGateTests
      * under the name of someone who has not even signed in. The owner caught this in 0.3.3.
      */
     [Fact]
-    public void সাইন_ইন_না_করা_থাকলে_ছবি_নয়() =>
+    public void No_screenshot_before_sign_in() =>
         Assert.Equal(
             CaptureGate.Verdict.NotEnrolled,
             CaptureGate.Check(SegmentState.Active, NotEnrolled, NotRevoked, Day, Noon));
@@ -93,7 +93,7 @@ public class CaptureGateTests
     /// The reason is stated first too: "it was idle then" is not the real answer.
     /// </summary>
     [Fact]
-    public void সাইন_ইনের_কারণটাই_আগে_বলা_হয়() =>
+    public void The_not_signed_in_reason_is_reported_first() =>
         Assert.Equal(
             CaptureGate.Verdict.NotEnrolled,
             CaptureGate.Check(SegmentState.Idle, NotEnrolled, NotRevoked, Day, Night));
@@ -105,7 +105,7 @@ public class CaptureGateTests
      * asking them to switch on what the office switched off.
      */
     [Fact]
-    public void দুটোই_সত্যি_হলে_বাতিলের_কথাই_বলা_হয়() =>
+    public void When_both_apply_revoked_is_the_reason_reported() =>
         Assert.Equal(
             CaptureGate.Verdict.Revoked,
             CaptureGate.Check(SegmentState.Active, NotEnrolled, Revoked, Day, Noon));

@@ -18,19 +18,19 @@ public class OutboxSweepTests
     private static readonly TimeSpan Hourly = TimeSpan.FromHours(1);
 
     [Fact]
-    public void প্রথমবার_স্টার্টআপ() =>
+    public void The_first_run_is_the_startup_sweep() =>
         Assert.Equal(
             OutboxSweep.Reason.Startup,
             OutboxSweep.Check(DateTimeOffset.MinValue, Now, Hourly, hasWriteError: false));
 
     [Fact]
-    public void সদ্য_চললে_আবার_চলে_না() =>
+    public void A_recent_sweep_does_not_run_again() =>
         Assert.Equal(
             OutboxSweep.Reason.No,
             OutboxSweep.Check(Now.AddMinutes(-20), Now, Hourly, hasWriteError: false));
 
     [Fact]
-    public void ঘণ্টা_পেরোলে_চলে() =>
+    public void It_runs_once_the_hour_has_passed() =>
         Assert.Equal(
             OutboxSweep.Reason.Due,
             OutboxSweep.Check(Now.AddMinutes(-61), Now, Hourly, hasWriteError: false));
@@ -40,7 +40,7 @@ public class OutboxSweepTests
     /// sweep slip a tick later each time and run a few times fewer by the end of the day.
     /// </summary>
     [Fact]
-    public void ঠিক_এক_ঘণ্টার_মাথায়ও_চলে() =>
+    public void It_runs_at_exactly_the_one_hour_mark_too() =>
         Assert.Equal(
             OutboxSweep.Reason.Due,
             OutboxSweep.Check(Now.AddHours(-1), Now, Hourly, hasWriteError: false));
@@ -50,13 +50,13 @@ public class OutboxSweepTests
     /// Waiting for the hour would silently lose the data in between.
     /// </summary>
     [Fact]
-    public void লেখা_ব্যর্থ_হলে_অপেক্ষা_নেই() =>
+    public void A_failed_write_does_not_wait() =>
         Assert.Equal(
             OutboxSweep.Reason.WriteFailed,
             OutboxSweep.Check(Now.AddSeconds(-5), Now, Hourly, hasWriteError: true));
 
     [Fact]
-    public void লেখার_ব্যর্থতা_স্টার্টআপের_চেয়েও_আগে() =>
+    public void A_write_failure_takes_priority_over_startup() =>
         Assert.Equal(
             OutboxSweep.Reason.WriteFailed,
             OutboxSweep.Check(DateTimeOffset.MinValue, Now, Hourly, hasWriteError: true));

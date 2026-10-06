@@ -29,7 +29,7 @@ public class PixelCopyTests
     }
 
     [Fact]
-    public void Pitch_আর_প্রস্থ_সমান_হলে_হুবহু_কপি_হয়()
+    public void Equal_pitch_and_width_copy_exactly()
     {
         const int w = 8, h = 4;
         var src = Grid(w * 4, w, h);
@@ -40,7 +40,7 @@ public class PixelCopyTests
     }
 
     [Fact]
-    public void Pitch_বড়_হলে_padding_বাদ_যায়_আর_সারি_সরে_না()
+    public void A_larger_pitch_drops_the_padding_without_shifting_rows()
     {
         const int w = 8, h = 4;
         const int pitch = (w * 4) + 64; // the driver's extra 64 bytes
@@ -71,7 +71,7 @@ public class PixelCopyTests
     /// path.
     /// </summary>
     [Fact]
-    public void টানা_কপি_করলে_ছবি_তেরছা_হতো()
+    public void A_single_run_copy_would_slant_the_image()
     {
         const int w = 8, h = 4;
         const int pitch = (w * 4) + 64;
@@ -88,7 +88,7 @@ public class PixelCopyTests
     }
 
     [Fact]
-    public void শেষ_সারির_padding_না_থাকলেও_চলে()
+    public void A_missing_padding_after_the_last_row_is_fine()
     {
         // the driver may give no padding after the last row
         const int w = 8, h = 4;
@@ -103,7 +103,7 @@ public class PixelCopyTests
     }
 
     [Fact]
-    public void উৎস_ছোট_হলে_চুপচাপ_আবর্জনা_না_দিয়ে_থেমে_যায়()
+    public void A_too_small_source_throws_instead_of_silently_returning_garbage()
     {
         const int w = 8, h = 4;
         const int pitch = w * 4;
@@ -117,14 +117,14 @@ public class PixelCopyTests
     [InlineData(0, 4)]
     [InlineData(4, 0)]
     [InlineData(-1, 4)]
-    public void অসম্ভব_মাপ_নাকচ_হয়(int w, int h)
+    public void An_impossible_size_is_rejected(int w, int h)
     {
         Assert.Throws<ArgumentOutOfRangeException>(
             () => PixelCopy.ToTightBuffer(new byte[1024], 4096, w, h));
     }
 
     [Fact]
-    public void Pitch_প্রস্থের_চেয়ে_ছোট_হলে_নাকচ()
+    public void A_pitch_smaller_than_the_width_is_rejected()
     {
         // a pitch smaller than width x 4 means the calculation is wrong somewhere; not something
         // to accept quietly
@@ -135,7 +135,7 @@ public class PixelCopyTests
     // ── ContentBounds ───────────────────────────────────────────────────────
 
     [Fact]
-    public void পুল_বড়_হলে_কনটেন্টের_মাপই_নেওয়া_হয়()
+    public void When_the_pool_is_larger_the_content_size_is_used()
     {
         // after the monitor is lowered to 1920x1080 the pool keeps returning 2560x1440 for a while
         var (w, h) = PixelCopy.ContentBounds(2560, 1440, 1920, 1080);
@@ -145,7 +145,7 @@ public class PixelCopyTests
     }
 
     [Fact]
-    public void কনটেন্ট_বড়_দেখালেও_টেক্সচারের_বাইরে_যাওয়া_হয়_না()
+    public void A_larger_reported_content_size_never_goes_outside_the_texture()
     {
         // the opposite direction must be prevented too; otherwise it would fall outside the texture
         var (w, h) = PixelCopy.ContentBounds(1920, 1080, 2560, 1440);
@@ -155,7 +155,7 @@ public class PixelCopyTests
     }
 
     [Fact]
-    public void মাপ_মিলে_গেলে_সেটাই_ফেরে()
+    public void Matching_sizes_are_returned_as_they_are()
     {
         var (w, h) = PixelCopy.ContentBounds(1920, 1080, 1920, 1080);
 
@@ -164,7 +164,7 @@ public class PixelCopyTests
     }
 
     [Fact]
-    public void ঋণাত্মক_মাপ_শূন্যে_আটকায়()
+    public void A_negative_size_is_clamped_to_zero()
     {
         var (w, h) = PixelCopy.ContentBounds(1920, 1080, -1, -1);
 
@@ -201,7 +201,7 @@ public class PixelCopyTests
     }
 
     [Fact]
-    public void শূন্য_পাকে_উৎসই_ফেরে()
+    public void Zero_turns_returns_the_source_itself()
     {
         var src = Tagged(4, 3);
         var (dst, w, h) = PixelCopy.RotateClockwise(src, 4, 3, 0);
@@ -212,7 +212,7 @@ public class PixelCopyTests
     }
 
     [Fact]
-    public void নব্বই_ডিগ্রিতে_মাপ_উল্টে_যায়_আর_কোণা_ঠিক_জায়গায়_বসে()
+    public void Ninety_degrees_swaps_the_size_and_places_the_corners_correctly()
     {
         var src = Tagged(4, 3);
         var (dst, w, h) = PixelCopy.RotateClockwise(src, 4, 3, 1);
@@ -229,7 +229,7 @@ public class PixelCopyTests
     }
 
     [Fact]
-    public void একশো_আশি_ডিগ্রিতে_মাপ_একই_থাকে_ছবি_উল্টে_যায়()
+    public void One_eighty_degrees_keeps_the_size_and_flips_the_image()
     {
         var src = Tagged(4, 3);
         var (dst, w, h) = PixelCopy.RotateClockwise(src, 4, 3, 2);
@@ -241,7 +241,7 @@ public class PixelCopyTests
     }
 
     [Fact]
-    public void চার_পাক_ঘোরালে_আবার_আগের_জায়গায়()
+    public void Four_turns_return_to_the_original()
     {
         // the best test of rotation: applying it four times, a full circle, leaves the result
         // unchanged
@@ -257,7 +257,7 @@ public class PixelCopyTests
     }
 
     [Fact]
-    public void নব্বই_দুবার_আর_একশো_আশি_একবার_একই_ফল()
+    public void Ninety_twice_equals_one_eighty_once()
     {
         var src = Tagged(4, 3);
 
@@ -276,13 +276,13 @@ public class PixelCopyTests
     [InlineData(2u, 1)] // ROTATE90
     [InlineData(3u, 2)] // ROTATE180
     [InlineData(4u, 3)] // ROTATE270
-    public void DXGI_ঘূর্ণন_কোড_ঠিকভাবে_পাকে_রূপান্তরিত_হয়(uint rotation, int turns)
+    public void DXGI_rotation_codes_convert_to_the_right_number_of_turns(uint rotation, int turns)
     {
         Assert.Equal(turns, PixelCopy.TurnsForRotation(rotation));
     }
 
     [Fact]
-    public void অচেনা_ঘূর্ণন_কোডে_ঘোরানো_হয়_না()
+    public void An_unknown_rotation_code_does_not_rotate()
     {
         // given an unknown value, not rotating is safer than rotating by a guess
         Assert.Equal(0, PixelCopy.TurnsForRotation(99));

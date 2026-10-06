@@ -13,7 +13,7 @@ namespace oXeio.Agent.Tests;
 public class ThumbPathTests
 {
     [Fact]
-    public void মূল_ছবির_পাশেই_থাকে()
+    public void The_thumbnail_sits_next_to_the_main_image()
     {
         var main = @"C:\ProgramData\oXeio\queue\2026-08-11\140500-m0-abc.webp";
 
@@ -24,12 +24,12 @@ public class ThumbPathTests
 
     /// <summary>Careful: it must still end in .webp; the sweeper looks for `*.webp`.</summary>
     [Fact]
-    public void থাম্বনেইলও_webp_থাকে() =>
+    public void The_thumbnail_stays_a_webp_file() =>
         Assert.EndsWith(".webp", OutboxPaths.ThumbPathFor("x/y.webp"));
 
     /// <summary>Calling it twice must not turn into `-thumb-thumb`.</summary>
     [Fact]
-    public void নিজের_উপর_আবার_চালালে_আলাদা_পথ()
+    public void Applying_it_to_its_own_result_gives_a_different_path()
     {
         var once = OutboxPaths.ThumbPathFor("a.webp");
 

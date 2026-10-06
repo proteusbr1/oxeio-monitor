@@ -351,7 +351,7 @@ public class ScreenActivityTests
     /// even though the first stays still</b>.
     /// </summary>
     [Fact]
-    public void দ্বিতীয়_মনিটর_বদলালে_পর্দা_জমেনি()
+    public void A_change_on_the_second_monitor_means_not_frozen()
     {
         var screen = new ScreenActivity();
 
@@ -369,7 +369,7 @@ public class ScreenActivityTests
     /// it is caught on two monitors exactly as before.
     /// </summary>
     [Fact]
-    public void দুই_মনিটরের_কোনোটাই_না_বদলালে_জমে_যায়()
+    public void Frozen_when_neither_of_two_monitors_changes()
     {
         var screen = new ScreenActivity();
 
@@ -385,7 +385,7 @@ public class ScreenActivityTests
     /// Careful: adding or removing a monitor counts as "changed": someone touched the machine.
     /// </summary>
     [Fact]
-    public void মনিটরের_সংখ্যা_বদলালে_বদল_হিসেবে_ধরা_হয়()
+    public void A_changed_monitor_count_counts_as_a_change()
     {
         Assert.True(ScreenActivity.DiffersAny([Flat(10)], [Flat(10), Flat(10)]));
         Assert.False(ScreenActivity.DiffersAny([Flat(10)], [Flat(10)]));
@@ -395,7 +395,7 @@ public class ScreenActivityTests
     /// The old single-screen call works as before; it is now a list of one member.
     /// </summary>
     [Fact]
-    public void এক_মনিটরের_পুরোনো_আচরণ_অপরিবর্তিত()
+    public void Single_monitor_behaviour_is_unchanged()
     {
         var screen = new ScreenActivity();
 
@@ -406,7 +406,7 @@ public class ScreenActivityTests
 
     /// <summary>Careful: an empty list means "could not capture anything": not a sample.</summary>
     [Fact]
-    public void খালি_তালিকা_নমুনা_হিসেবে_গোনা_হয়_না()
+    public void An_empty_list_is_not_counted_as_a_sample()
     {
         var screen = new ScreenActivity();
 

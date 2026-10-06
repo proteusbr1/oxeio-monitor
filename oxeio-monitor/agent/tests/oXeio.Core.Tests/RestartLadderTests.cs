@@ -13,7 +13,7 @@ public class RestartLadderTests
     /// 30 seconds. Putting a backoff on the very first attempt would make that false.
     /// </summary>
     [Fact]
-    public void প্রথম_ক্র্যাশে_সাথে_সাথেই_চালু_করা_যায়()
+    public void The_first_crash_allows_an_immediate_relaunch()
     {
         var ladder = new RestartLadder();
 
@@ -28,13 +28,13 @@ public class RestartLadderTests
     [InlineData(2, 90)]
     [InlineData(3, 270)]
     [InlineData(4, 810)]
-    public void প্রতিবার_তিনগুণ_অপেক্ষা(int failures, double seconds)
+    public void Each_failure_triples_the_wait(int failures, double seconds)
     {
         Assert.Equal(TimeSpan.FromSeconds(seconds), new RestartLadder().DelayAfter(failures));
     }
 
     [Fact]
-    public void সিলিং_ছাড়ায়_না()
+    public void The_delay_never_exceeds_the_ceiling()
     {
         Assert.Equal(TimeSpan.FromMinutes(15), new RestartLadder().DelayAfter(5));
     }
@@ -44,7 +44,7 @@ public class RestartLadderTests
     /// supervisor, and it would happen on exactly the machine that has been broken the longest.
     /// </summary>
     [Fact]
-    public void বহু_ব্যর্থতাতেও_overflow_হয়_না()
+    public void Many_failures_do_not_overflow()
     {
         var ladder = new RestartLadder();
 
@@ -55,7 +55,7 @@ public class RestartLadderTests
     }
 
     [Fact]
-    public void চালু_করার_পর_ব্যাকঅফ_মানা_হয়()
+    public void The_backoff_is_honoured_after_a_launch()
     {
         var ladder = new RestartLadder();
         ladder.RecordLaunch(T0);
@@ -70,7 +70,7 @@ public class RestartLadderTests
     /// advance; otherwise it would retry every 30 seconds forever.
     /// </summary>
     [Fact]
-    public void প্রতিটা_লঞ্চ_আগেই_ব্যর্থ_ধরা_হয়()
+    public void Every_launch_is_counted_as_a_failure_up_front()
     {
         var ladder = new RestartLadder();
 
@@ -82,7 +82,7 @@ public class RestartLadderTests
     // ── giving up and cooling off ───────────────────────────────────────────
 
     [Fact]
-    public void পাঁচবার_চেষ্টার_পর_হাল_ছাড়ে()
+    public void It_gives_up_after_five_attempts()
     {
         var ladder = LaunchUntilExhausted(out var now);
 
@@ -96,7 +96,7 @@ public class RestartLadderTests
     /// one of the 15 PCs, and nobody's time would be counted until then.
     /// </summary>
     [Fact]
-    public void ঠান্ডা_হওয়ার_পর_আবার_একবার_চেষ্টা_করে()
+    public void After_the_cool_off_it_tries_once_more()
     {
         var ladder = LaunchUntilExhausted(out var now);
         var coolOff = ladder.Policy.CoolOff;
@@ -108,13 +108,13 @@ public class RestartLadderTests
     /// <summary>If the cool-off interval were shorter than the ladder's biggest step,
     /// "giving up" would actually increase the attempts.</summary>
     [Fact]
-    public void ঠান্ডা_হওয়ার_সময়_সবচেয়ে_বড়_ধাপের_চেয়ে_বড়()
+    public void The_cool_off_is_longer_than_the_biggest_step()
     {
         Assert.True(RestartPolicy.Default.CoolOff >= RestartPolicy.Default.MaxDelay);
     }
 
     [Fact]
-    public void হাল_ছাড়ার_পরেও_চেষ্টা_চলতেই_থাকে()
+    public void Attempts_keep_going_after_giving_up()
     {
         var ladder = LaunchUntilExhausted(out var now);
         var coolOff = ladder.Policy.CoolOff;
@@ -131,7 +131,7 @@ public class RestartLadderTests
     // ── alarm ───────────────────────────────────────────────────────────────
 
     [Fact]
-    public void অ্যালার্ম_চিহ্ন_মনে_রাখা_হয়()
+    public void The_alarm_flag_is_remembered()
     {
         var ladder = LaunchUntilExhausted(out _);
 
@@ -147,7 +147,7 @@ public class RestartLadderTests
     /// and again anyway. Only continuous health counts.
     /// </summary>
     [Fact]
-    public void অল্প_সময়_সুস্থ_থাকলে_মই_রিসেট_হয়_না()
+    public void A_short_healthy_spell_does_not_reset_the_ladder()
     {
         var ladder = new RestartLadder();
         ladder.RecordLaunch(T0);
@@ -160,7 +160,7 @@ public class RestartLadderTests
     }
 
     [Fact]
-    public void টানা_স্থির_থাকলে_মই_রিসেট_হয়()
+    public void Continuous_stability_resets_the_ladder()
     {
         var ladder = LaunchUntilExhausted(out var now);
         ladder.MarkAlarmRaised();
@@ -177,7 +177,7 @@ public class RestartLadderTests
     /// <summary>An agent that crashes once a week must not reach the "given up" state
     /// after a month.</summary>
     [Fact]
-    public void মাঝেমধ্যে_ক্র্যাশ_জমে_হাল_ছাড়ায়_না()
+    public void Occasional_crashes_do_not_accumulate_into_giving_up()
     {
         var ladder = new RestartLadder();
         var now = T0;
@@ -202,7 +202,7 @@ public class RestartLadderTests
     /// there, when it is not.
     /// </summary>
     [Fact]
-    public void ঘড়ি_পিছিয়ে_গেলেও_আটকে_থাকে_না()
+    public void The_ladder_does_not_stay_stuck_when_the_clock_goes_back()
     {
         var ladder = new RestartLadder();
         ladder.RecordLaunch(T0);
@@ -214,7 +214,7 @@ public class RestartLadderTests
     }
 
     [Fact]
-    public void ঘড়ি_পিছালে_স্থিরতার_হিসাব_নতুন_করে_শুরু_হয়()
+    public void A_backwards_clock_restarts_the_stability_count()
     {
         var ladder = new RestartLadder();
         ladder.RecordLaunch(T0);
@@ -230,7 +230,7 @@ public class RestartLadderTests
     // ── settings validation ─────────────────────────────────────────────────
 
     [Fact]
-    public void অসম্ভব_সেটিং_নাকচ_হয়()
+    public void Impossible_settings_are_rejected()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new RestartPolicy(
             TimeSpan.Zero, 3, TimeSpan.FromMinutes(15), 5, TimeSpan.FromHours(6), TimeSpan.FromMinutes(10)));

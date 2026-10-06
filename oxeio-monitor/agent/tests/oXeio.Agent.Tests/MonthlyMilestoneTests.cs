@@ -33,7 +33,7 @@ public class MonthlyMilestoneTests
     };
 
     [Fact]
-    public void লক্ষ্য_ছুঁলে_একবার_দেখানো_হয()
+    public void Reaching_the_target_shows_the_balloon_once()
     {
         Assert.True(MonthlyMilestone.ShouldCelebrate(Status(208), August, null, out var key));
         Assert.Equal("2026-08", key);
@@ -41,11 +41,11 @@ public class MonthlyMilestoneTests
 
     /// <summary>This test is the feature's only hard promise.</summary>
     [Fact]
-    public void একই_মাসে_দ্বিতীয়বার_নয() =>
+    public void No_second_balloon_in_the_same_month() =>
         Assert.False(MonthlyMilestone.ShouldCelebrate(Status(300), August, "2026-08", out _));
 
     [Fact]
-    public void পরের_মাসে_আবার_দেখানো_হয()
+    public void The_balloon_shows_again_the_next_month()
     {
         var september = new DateTimeOffset(2026, 9, 15, 12, 0, 0, TimeSpan.FromHours(6));
 
@@ -54,7 +54,7 @@ public class MonthlyMilestoneTests
     }
 
     [Fact]
-    public void লক্ষ্যের_আগে_কিছুই_নয() =>
+    public void Nothing_before_the_target_is_reached() =>
         Assert.False(MonthlyMilestone.ShouldCelebrate(Status(207.9), August, null, out _));
 
     /// <summary>
@@ -63,7 +63,7 @@ public class MonthlyMilestoneTests
     /// congratulation at every moment of startup.
     /// </summary>
     [Fact]
-    public void শুরুর_অবস্থায়_বেলুন_নয() =>
+    public void No_balloon_in_the_starting_state() =>
         Assert.False(MonthlyMilestone.ShouldCelebrate(AgentStatus.Starting, August, null, out _));
 
     /// <summary>
@@ -71,7 +71,7 @@ public class MonthlyMilestoneTests
     /// even if the field holds a large value. "I don't know" can never become "target met".
     /// </summary>
     [Fact]
-    public void সার্ভার_না_বললে_বেলুন_নয() =>
+    public void No_balloon_when_the_server_has_not_said() =>
         Assert.False(MonthlyMilestone.ShouldCelebrate(
             Status(250, known: false), August, null, out _));
 
@@ -80,7 +80,7 @@ public class MonthlyMilestoneTests
     /// congratulation.
     /// </summary>
     [Fact]
-    public void টার্গেট_শূন্য_হলে_বেলুন_নয() =>
+    public void No_balloon_when_the_target_is_zero() =>
         Assert.False(MonthlyMilestone.ShouldCelebrate(Status(0, target: 0), August, null, out _));
 
     /// <summary>
@@ -89,7 +89,7 @@ public class MonthlyMilestoneTests
     /// September.
     /// </summary>
     [Fact]
-    public void মাসের_চাবি_ঢাকার_ক্যালেন্ডারে()
+    public void The_month_key_uses_the_Dhaka_calendar()
     {
         var justAfterMidnight = new DateTimeOffset(2026, 9, 1, 2, 0, 0, TimeSpan.FromHours(6));
 
@@ -98,7 +98,7 @@ public class MonthlyMilestoneTests
 
     /// <summary>The balloon text contains the target number, and no instruction.</summary>
     [Fact]
-    public void বেলুনের_লেখা_শুধু_খবর()
+    public void The_balloon_text_is_news_only()
     {
         var text = MonthlyMilestone.Text(208);
 
@@ -113,7 +113,7 @@ public class MonthlyMilestoneTests
     /// "once a day", since office PCs are switched off every night.
     /// </summary>
     [Fact]
-    public void স্মৃতি_রিস্টার্টের_পরেও_থাকে()
+    public void The_memory_survives_a_restart()
     {
         var dir = Path.Combine(Path.GetTempPath(), "oXeio-test-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
@@ -137,7 +137,7 @@ public class MonthlyMilestoneTests
     /// which means hour counting stops.
     /// </summary>
     [Fact]
-    public void পড়া_না_গেলেও_ছোড়ে_না()
+    public void An_unreadable_memory_does_not_throw()
     {
         var memory = new MilestoneMemory(
             Path.Combine(Path.GetTempPath(), "oXeio-নেই-" + Guid.NewGuid().ToString("N")));

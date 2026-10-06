@@ -31,7 +31,7 @@ public class FrameQualityTests
     }
 
     [Fact]
-    public void পুরো_কালো_ছবি_চিহ্নিত_হয়()
+    public void A_fully_black_frame_is_flagged()
     {
         var a = FrameQuality.Assess(Filled(0, 0, 0), W, H, Stride);
 
@@ -41,7 +41,7 @@ public class FrameQualityTests
     }
 
     [Fact]
-    public void এক_রঙের_ছবিও_চিহ্নিত_হয়()
+    public void A_single_colour_frame_is_flagged_too()
     {
         // A DRM-protected window is not always black; sometimes it comes out white or gray
         var a = FrameQuality.Assess(Filled(255, 255, 255), W, H, Stride);
@@ -52,7 +52,7 @@ public class FrameQualityTests
     }
 
     [Fact]
-    public void সাধারণ_ডেস্কটপের_ছবি_ঠিক_ধরা_হয়()
+    public void A_normal_desktop_frame_is_accepted()
     {
         var a = FrameQuality.Assess(Noisy(), W, H, Stride);
 
@@ -62,14 +62,14 @@ public class FrameQualityTests
     }
 
     [Fact]
-    public void খালি_বাফার_খারাপ_ধরা_হয়()
+    public void An_empty_buffer_counts_as_degraded()
     {
         var a = FrameQuality.Assess(ReadOnlySpan<byte>.Empty, W, H, Stride);
         Assert.True(a.Degraded);
     }
 
     [Fact]
-    public void শূন্য_মাপ_খারাপ_ধরা_হয়()
+    public void A_zero_size_counts_as_degraded()
     {
         Assert.True(FrameQuality.Assess(Filled(1, 2, 3), 0, 0, 0).Degraded);
     }
@@ -80,7 +80,7 @@ public class FrameQualityTests
     /// desired: each monitor's image is checked separately.
     /// </summary>
     [Fact]
-    public void অর্ধেক_কালো_হলে_খারাপ_বলা_হয়_না()
+    public void A_half_black_frame_is_not_flagged()
     {
         var buf = Noisy();
         Array.Clear(buf, 0, buf.Length / 2);
