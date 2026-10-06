@@ -4,8 +4,8 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
- * `audit_log`-এ যেসব action বসে (স্পেক § ২ দেখুন)।
- * স্ক্রিনশট দেখা, রিপোর্ট এক্সপোর্ট ইত্যাদি পরের মডিউলে যোগ হবে।
+ * The actions written to `audit_log` (see spec § 2).
+ * Screenshot viewing, report export and so on will be added in later modules.
  */
 export type AuditAction =
   | 'login'
@@ -17,81 +17,85 @@ export type AuditAction =
   | 'change_login_email'
   | 'view_screenshot'
   | 'export_report'
-  /** ⭐ বেতন দেখা — সবচেয়ে সংবেদনশীল রিড, তাই আলাদা action ([ADR-023](../../../docs/05-Options-Decisions.md)) */
+  /** Viewing salary: the most sensitive read, so its own action ([ADR-023](../../../docs/05-Options-Decisions.md)) */
   | 'payroll_view'
   | 'change_setting'
   | 'create_enrollment_code'
   | 'revoke_device'
   | 'upload_policy_doc'
   /**
-   * ⭐ **রোলআউটের একমাত্র শর্ত** — "সই ছাড়া কারো PC-তে এজেন্ট বসবে না"
-   * ([01 § রোলআউট](../../../docs/01-Planning.md))। কে কবে কার সই রেকর্ড
-   * করল সেটা `change_setting`-এ মিশে গেলে ছ-মাস পরে "ওর সই কি সত্যিই
-   * নেওয়া হয়েছিল" প্রশ্নের উত্তর আর খুঁজে পাওয়া যেত না।
+   * **The one condition for rollout**: "no agent goes on anyone's PC without
+   * a signature" ([01 § Rollout](../../../docs/01-Planning.md)). If who
+   * recorded whose signature and when were merged into `change_setting`, six
+   * months later the question "was their signature really taken?" could not be answered.
    *
-   * ⚠️ `upload_policy_doc` আলাদা রাখা হয়েছে — ওটা স্ক্যান করা কপি
-   * আপলোডের জন্য, যেটা এখনো তৈরি হয়নি। এটা শুধু **তারিখ** বসানো।
+   * Careful: `upload_policy_doc` is kept separate: that is for uploading a
+   * scanned copy, which does not exist yet. This one only sets the **date**.
    */
   | 'policy_signed'
-  /** সই ভুল করে বসানো হয়েছিল, তুলে নেওয়া হলো — বিরল, তাই আলাদা। */
+  /** A signature was recorded by mistake and taken back; rare, hence separate. */
   | 'policy_signed_cleared'
   | 'time_adjustment'
   | 'time_adjustment_revoke'
   /**
-   * ⭐⭐ R1 — মাস বন্ধ/খোলা। **বেতনের ভিত্তি স্থির করার মুহূর্তটাই** এটা,
-   * তাই আলাদা action: `change_setting`-এ মিশে গেলে "আগস্টের হিসাব কখন
-   * জমাট হয়েছিল, আর কে করেছিল" প্রশ্নের উত্তর ছ-মাস পরে খুঁজে পাওয়া যেত না।
+   * R1: month closed/reopened. This is **the moment the basis for pay is
+   * fixed**, hence separate actions: merged into `change_setting`, the
+   * question "when was August's calculation frozen, and who did it" could not
+   * be answered six months later.
    *
-   * ⚠️⚠️ `month_reopened` **আলাদা করে রাখা সবচেয়ে জরুরি** — বেতন দেওয়ার
-   * পর কেউ মাস খুলে সংখ্যা বদলালে সেটাই একমাত্র প্রমাণ। খোলার রেকর্ডটা
-   * বন্ধ করার রেকর্ডের সাথে এক করে ফেললে ইতিহাসটাই মুছে যেত।
+   * Careful: keeping `month_reopened` **separate is the most important
+   * part**. If someone reopens a month after pay and changes the numbers, it
+   * is the only evidence. Merging the reopening record with the closing
+   * record would erase the history.
    */
   | 'month_closed'
   | 'month_reopened'
   /**
-   * ⭐⭐ **শেষ হওয়া ডিজাইন "শেষ নয়" করে দেওয়া** *(২৫ আগস্ট ২০২৬)*।
+   * **Marking a completed design as "not complete".**
    *
-   * ⚠️⚠️ **এটাই একমাত্র মুছে-ফেলা কাজ যার নিজের কোনো চিহ্ন থাকে না।**
-   * Undo চাপলে `completed_at` · `completed_via` · `completed_by_id`
-   * তিনটেই `null` হয়ে যায় — অর্থাৎ কাজটা কখনো শেষ হয়েছিল, সেই
-   * প্রমাণটাই সারি থেকে উধাও। ⭐ লগ না থাকলে কেউ রোজ
-   * Complete → Undo → Complete করলেও মালিক দেখতেই পেতেন না।
+   * Careful: **this is the only undo action that leaves no trace of its
+   * own.** Pressing Undo sets `completed_at`, `completed_via` and
+   * `completed_by_id` all to `null`, so the proof that the task was ever
+   * completed vanishes from the row. Without a log, even if someone did
+   * Complete -> Undo -> Complete every day, the owner would never see it.
    *
-   * ⚠️ মালিকের প্রশ্নেই এটা যোগ হয়েছে: *"ei access ta ki designer
-   * der pawa uchit?"* — ⭐ প্রশ্নটার আসল সমস্যা ছিল অধিকার নয়,
-   * **যাচাই করার উপায় না থাকা**। লগটা প্রশ্নটাকে "বিশ্বাস করব কি
-   * না" থেকে "দরকার হলে দেখে নেব"-তে বদলে দেয়।
+   * Careful: it was added in response to the owner asking whether designers
+   * should have this access at all. The real problem with that question was
+   * not the right itself but **having no way to verify**. The log changes the
+   * question from "do I trust them?" to "I can look if I need to".
    *
-   * ⚠️ meta-তে **মুছে ফেলা মানগুলোই** রাখা হয় (কবে শেষ হয়েছিল, কে
-   * চেপেছিল) — সারিতে ওগুলো আর নেই, তাই লগই একমাত্র জায়গা।
+   * Careful: `meta` keeps **the values that were erased** (when it was
+   * completed, who pressed it); they are no longer in the row, so the log is
+   * the only place.
    */
   | 'design_undone'
   /**
-   * ⭐ **মরা ASIN মুছে ফেলা** *(২৯ আগস্ট ২০২৬)* — Amazon-এ পাতাটাই নেই।
+   * **Deleting a dead ASIN**: the page no longer exists on Amazon.
    *
-   * ⚠️ `change_setting`-এ মেশানো হয়নি: একদিন প্রশ্ন উঠবেই "এতগুলো লিঙ্ক
-   *    কে বাদ দিল, আর কবে" — আর তখন সেটিংসের হাজারটা সারির মধ্যে খুঁজতে হতো।
+   * Careful: not merged into `change_setting`: one day the question "who
+   * removed so many links, and when" will come up, and then one would have to
+   * search among thousands of settings rows.
    */
   | 'design_deleted'
-  /** ⭐ R2 — ছুটি টার্গেট কমায়, তাই কে লিখল/মুছল তা রেকর্ড থাকা দরকার */
+  /** R2: leave reduces the target, so a record of who added/removed it is needed */
   | 'leave_added'
   | 'leave_removed'
-  /** ⭐ বেতন **বদলানো** — দেখার (`payroll_view`) চেয়েও ভারী, কারণ এটা
-   *  কারো আয় বদলে দেয়। মান বদলালে meta-তে আগে/পরে দুটোই রাখা হয়। */
+  /** Salary **change**: heavier than viewing (`payroll_view`) because it
+   *  alters someone's income. When a value changes, meta keeps both before and after. */
   | 'salary_change'
   /**
-   * ⭐⭐ **R21 — জামানত (সিকিউরিটি মানি)।** দুটো আলাদা নাম, আর দুটোরই
-   * দরকার আছে:
+   * **R21: deposit (security money).** Two separate names, and both are needed:
    *
-   * · `deposit_policy_update` — অঙ্ক বা নোটিশের নিয়ম বদলানো। এটা
-   *   `change_setting`-এ মিশে গেলে "৫০০ কবে থেকে, আর কে বাড়াল" প্রশ্নের
-   *   উত্তর ছ-মাস পরে খুঁজে পাওয়া যেত না।
+   * - `deposit_policy_update`: changing the amount or the notice rule. If
+   *   merged into `change_setting`, the question "from when is it 500, and who
+   *   raised it" could not be answered six months later.
    *
-   * · ⚠️⚠️ `deposit_settle` — **কারো জমানো টাকা ফেরত দেওয়া বা বাজেয়াপ্ত
-   *   করা।** এটাই এই সিস্টেমের সবচেয়ে ভারী একক সিদ্ধান্ত: একটা ক্লিকে
-   *   কয়েক হাজার টাকা কারো হাতছাড়া হয়। meta-তে নিয়ম কী বলেছিল
-   *   (`noticeDaysGiven` বনাম `noticeDaysRule`) আর মালিক কী করলেন —
-   *   দুটোই রাখা হয়, কারণ ব্যতিক্রম হলে ঠিক ওই জোড়াটাই পরে দেখতে হবে।
+   * - `deposit_settle`: **returning or forfeiting someone's deposited
+   *   money.** This is the heaviest single decision in the system: one click
+   *   can take several thousand taka out of someone's hands. `meta` keeps what
+   *   the rule said (`noticeDaysGiven` versus `noticeDaysRule`) and what the
+   *   owner did, because in an exception exactly that pair will need to be
+   *   looked at later.
    */
   | 'deposit_policy_update'
   | 'deposit_settle'
@@ -101,14 +105,15 @@ export type AuditAction =
   | 'employee_reactivate'
   | 'device_restore'
   | 'alert_acknowledge'
-  /** D06 — মালিকের ক্যাটাগরি রুল বদলানো। `change_setting` দিয়ে লিখলে
-   *  কে কবে কোন সাইটকে "unproductive" বানাল সেটা ফিল্টার করা যেত না। */
+  /** D06: the owner changing a category rule. Written through `change_setting`,
+   *  who made which site "unproductive" and when could not be filtered. */
   | 'change_category_rule'
   | 'recategorize'
   /**
-   * **I06 — 2FA।** আটটা আলাদা নাম, একটা `change_setting` নয়: "কে কবে নিজের
-   * 2FA বন্ধ করল" আর "কে কবে থিম বদলাল" এক ফিল্টারে পড়লে প্রথমটা কোনোদিন
-   * খুঁজে পাওয়া যেত না — অথচ অ্যাকাউন্ট দখলের তদন্তে ঠিক ওটাই প্রথম প্রশ্ন।
+   * **I06: 2FA.** Eight separate names, not one `change_setting`: if "who
+   * turned off their own 2FA and when" and "who changed the theme and when"
+   * fell in the same filter, the first would never be found, yet in an account
+   * takeover investigation that is exactly the first question.
    */
   | '2fa_setup'
   | '2fa_enable'
@@ -116,39 +121,40 @@ export type AuditAction =
   | '2fa_disable'
   | '2fa_disable_failed'
   | '2fa_recovery_regenerate'
-  /** ⭐ রিকভারি কোড দিয়ে ঢোকা — বিরল আর সংবেদনশীল, তাই আলাদা action */
+  /** Signing in with a recovery code: rare and sensitive, hence a separate action */
   | '2fa_recovery_used'
   | '2fa_failed'
-  /** K02 — `POST /ops/backup/run`, হাতে চালানো ব্যাকআপ (রাতের cron অডিট করে না) */
+  /** K02: `POST /ops/backup/run`, a manual backup (the nightly cron is not audited) */
   | 'backup_run'
   /**
-   * **H04** — এজেন্টের নতুন ভার্সন বিলির জন্য নথিভুক্ত করা।
+   * **H04**: registering a new agent version for rollout.
    *
-   * ⭐ আলাদা action, `change_setting` নয়: এটা ১৫টা PC-তে **কোন
-   * সফটওয়্যার চলবে** তার সিদ্ধান্ত। খারাপ বিল্ড বেরোলে "কে কখন এটা
-   * ছাড়ল" প্রশ্নটাই প্রথম, আর সেটা থিম বদলানোর সাথে এক ফিল্টারে
-   * পড়লে খুঁজে পাওয়া যেত না।
+   * A separate action, not `change_setting`: this is the decision about
+   * **which software runs** on 15 PCs. If a bad build ships, "who released it
+   * and when" is the first question, and in the same filter as theme changes
+   * it could not be found.
    */
   | 'publish_agent_version'
   /**
-   * ⭐ owner MSI নামিয়েছেন — পুরোনো এজেন্টে (০.৪.১-এর আগে) tray-তে
-   * "Install update" নেই, তাই ওই PC-গুলোয় হাতে বসাতে হয় (09 § ৩ভ৯)।
-   * ⚠️ ইনস্টলার হাতে হাতে ঘোরার আগে "কে কোনটা নামাল" জানা থাকা দরকার।
+   * The owner downloaded the MSI. Older agents (before 0.4.1) have no
+   * "Install update" in the tray, so those PCs must be updated by hand
+   * (09-Build-Log.md, the 18 August entry on rollout visibility).
+   * Careful: before installers circulate by hand, it must be known who downloaded which.
    */
   | 'agent_version.download'
-  /** ⭐ `halted` দিয়ে থামানোও এখানেই — বিলি শুরু করার মতোই ভারী সিদ্ধান্ত */
+  /** Halting via `halted` is also here: as heavy a decision as starting a rollout */
   | 'change_agent_rollout'
   /**
-   * ⭐⭐ **যন্ত্র নিজে ধাপ বাড়িয়েছে** *(৫ সেপ্টেম্বর ২০২৬)* — canary বা
-   * partial ধাপে একটা আসল মেশিন ছ-ঘণ্টা টিকে থাকার পর।
+   * **The system advanced a stage itself**: after a real machine survived six
+   * hours in the canary or partial stage.
    *
-   * ⚠️⚠️ **`change_agent_rollout`-এর সাথে মেশানো হয়নি ইচ্ছাকৃতভাবে।** ওটা
-   * বলে *"একজন মানুষ সিদ্ধান্ত নিয়েছেন"*, আর এটা বলে *"শর্ত পূরণ হয়েছে"* —
-   * দুটো সম্পূর্ণ আলাদা দায়। খারাপ বিল্ড বেরোলে প্রথম প্রশ্নই হবে "এটা কে
-   * ছড়াল", আর এক ফিল্টারে থাকলে উত্তরটা পাওয়া যেত না।
+   * Careful: **deliberately not merged with `change_agent_rollout`.** That one
+   * says "a person decided", and this one says "the condition was met": two
+   * entirely different responsibilities. If a bad build ships, the first
+   * question will be "who spread it", and in one filter the answer could not be found.
    *
-   * ⚠️ `userId` এখানে সবসময় `null` — কোনো মানুষ চাপেননি, আর সেটা লুকানোর
-   * কিছু নেই।
+   * Careful: `userId` is always `null` here: no person pressed anything, and
+   * there is nothing to hide about that.
    */
   | 'agent_version.rollout_auto';
 
@@ -168,8 +174,8 @@ export class AuditService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * অডিট লেখা ব্যর্থ হলেও মূল কাজ আটকাবে না — কিন্তু চুপ করেও থাকবে না।
-   * (কে কার স্ক্রিনশট দেখল সেটা হারানোর চেয়ে লগে চিৎকার করা ভালো।)
+   * An audit write failure does not block the main work, but it does not stay
+   * silent either. (Better to shout in the log than lose who viewed whose screenshot.)
    */
   async record(entry: AuditEntry): Promise<void> {
     try {

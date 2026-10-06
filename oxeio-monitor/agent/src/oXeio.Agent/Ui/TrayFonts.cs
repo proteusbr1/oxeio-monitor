@@ -5,71 +5,70 @@ namespace oXeio.Agent.Ui;
 
 internal enum TrayFontRole
 {
-    /// <summary>সাধারণ লেখা।</summary>
+    /// <summary>Ordinary text.</summary>
     Body,
 
-    /// <summary>শিরোনাম ও গুরুত্বপূর্ণ লাইন।</summary>
+    /// <summary>Headings and important lines.</summary>
     Strong,
 
-    /// <summary>আজকের ঘণ্টা — জানালার সবচেয়ে বড় সংখ্যা।</summary>
+    /// <summary>Today's hours: the largest number in the window.</summary>
     Big,
 
-    /// <summary>পাদটীকা ও ব্যাখ্যা।</summary>
+    /// <summary>Footnotes and explanations.</summary>
     Small,
 
     /// <summary>
-    /// হিরো সংখ্যা — আজ কত ঘণ্টা গোনা হয়েছে। <see cref="Big"/>-এর চেয়ে বড়
-    /// আর হালকা: ৪৪px semibold। ⚠️ ৪৪px bold-এ সংখ্যাটা চিৎকার করত, আর
-    /// এই জানালার কাজ আশ্বাস দেওয়া, দাবি করা নয়।
+    /// The hero number: how many hours have been counted today. Larger than <see cref="Big"/>
+    /// and lighter: 44px semibold. Careful: at 44px bold the number shouted, and this window's
+    /// job is to reassure, not to make claims.
     /// </summary>
     Hero,
 
     /// <summary>
-    /// হিরো সংখ্যার <b>সেকেন্ড অংশ</b> — <see cref="Hero"/>-র ঠিক অর্ধেক (২২px)।
+    /// The <b>seconds part</b> of the hero number: exactly half of <see cref="Hero"/> (22px).
     ///
-    /// ⭐ মালিকের চাওয়া (১৮ আগস্ট): <c>3:59:22</c>-এর <c>:22</c> অর্ধেক মাপে।
-    /// ⚠️⚠️ কারণটা সাজসজ্জার চেয়ে বেশি: সেকেন্ডটাই একমাত্র অঙ্ক যেটা
-    /// <b>প্রতি সেকেন্ডে</b> বদলায়, আর পুরো মাপে সেটা চোখ টেনে রাখত —
-    /// অথচ কাজের সংখ্যা ঘণ্টা ও মিনিট। ছোট করলে নড়াচড়াটা থাকে (ঘড়ি
-    /// চলছে, সেটা দেখা যায়), কিন্তু আর চিৎকার করে না।
-    /// ⚠️ ফ্যামিলি ও style <see cref="Hero"/>-রই — নইলে দুটো অঙ্ক দেখতে
-    /// দুই পরিবারের লাগত, আর baseline মেলানোর হিসাবও ভাঙত।
+    /// The owner asked for this (18 August): the <c>:22</c> of <c>3:59:22</c> at half size.
+    /// The reason goes beyond decoration: seconds are the only digits that change
+    /// <b>every second</b>, and at full size they kept drawing the eye, while the figures that
+    /// matter for work are hours and minutes. Made smaller, the movement remains (you can see
+    /// the clock running) but it no longer shouts.
+    /// Careful: the family and style are <see cref="Hero"/>'s own; otherwise the two numbers
+    /// would look like they came from two families, and the baseline alignment would break.
     /// </summary>
     HeroSeconds,
 
-    /// <summary>রিডআউটের ছোট বড়-হাতের লেবেল (SYNC · LAST SYNC · QUEUED)।</summary>
+    /// <summary>The small uppercase labels of the readout (SYNC · LAST SYNC · QUEUED).</summary>
     Micro,
 
     /// <summary>
-    /// সংখ্যা ও ঘড়ির রিডআউট। ⚠️ আলাদা ফ্যামিলি (Cascadia Mono) — ওয়েবের
-    /// <c>--font-mono</c> যা বলে। সমান-প্রস্থের অঙ্ক পাশাপাশি বসলে চোখ
-    /// তুলনা করতে পারে; proportional-এ "১১:১১" আর "১৯:৪০" আলাদা চওড়া হতো।
+    /// Numbers and clock readouts. Careful: a separate family (Cascadia Mono), as the web's
+    /// <c>--font-mono</c> says. When equal-width digits sit side by side the eye can compare
+    /// them; in a proportional font "11:11" and "19:40" would have different widths.
     /// </summary>
     Mono,
 }
 
 /// <summary>
-/// জানালার লেখার ফন্ট, DPI অনুযায়ী ক্যাশ করা।
+/// Window text fonts, cached per DPI.
 ///
-/// ⚠️ ফন্ট একটা GDI হ্যান্ডেল। প্রতিটা <c>OnPaint</c>-এ <c>new Font(...)</c> লিখলে
-/// দেখতে নিরীহ লাগে (GC তো আছেই), কিন্তু ফাইনালাইজার চলার আগেই হাজারখানেক
-/// হ্যান্ডেল জমতে পারে — আর এই জানালা খোলা রেখে কেউ দিনভর কাজ করলে সেটাই ঘটে।
-/// তাই (ভূমিকা, DPI) জোড়া ধরে ক্যাশ। জোড়ার সংখ্যা সীমিত: ৪টা ভূমিকা × হাতে
-/// গোনা কয়েকটা DPI।
+/// Careful: a font is a GDI handle. Writing <c>new Font(...)</c> in every <c>OnPaint</c>
+/// looks harmless (the GC exists), but a thousand handles can pile up before the finalizer
+/// runs, and that is what happens when someone works all day with this window open.
+/// So fonts are cached per (role, DPI) pair. The number of pairs is limited: 4 roles x a
+/// handful of DPIs.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class TrayFonts : IDisposable
 {
     /// <summary>
-    /// অগ্রাধিকার ক্রমে ফন্ট। Segoe UI Windows-এর নিজস্ব UI ফন্ট, Vista থেকে
-    /// সব সংস্করণে আছে — আমাদের সর্বনিম্ন লক্ষ্য Windows 10 1809-এর অনেক আগে।
-    /// বাকি দুটো নিছক নিরাপত্তা, কেউ সিস্টেম ফন্ট আনইনস্টল করে ফেললে।
+    /// Fonts in order of preference. Segoe UI is Windows's own UI font, present in every
+    /// version since Vista, long before our minimum target of Windows 10 1809.
+    /// The other two are just a safety net in case someone uninstalls the system font.
     ///
-    /// ⚠️ আগে এখানে "Nirmala UI"/"Shonar Bangla"/"Vrinda" প্রথমে ছিল, কারণ
-    /// লেখা ছিল বাংলা। পর্দার সব লেখা ইংরেজি হওয়ার পর ওই তালিকাটা শুধু
-    /// অপ্রয়োজনীয় নয়, ক্ষতিকরও: Nirmala UI ইন্ডিক লিপির জন্য বানানো, তার
-    /// ল্যাটিন মেট্রিক Segoe UI-এর মতো নয়, আর Windows-এর বাকি সব UI-র পাশে
-    /// জানালাটা বেমানান দেখাত।
+    /// Careful: this used to list "Nirmala UI"/"Shonar Bangla"/"Vrinda" first, because the
+    /// text was in Bengali. Now that all text on screen is English, that list is not just
+    /// unnecessary but harmful: Nirmala UI is made for Indic scripts, its Latin metrics are
+    /// unlike Segoe UI's, and next to the rest of Windows's UI the window looked out of place.
     /// </summary>
     private static readonly string[] Candidates =
     [
@@ -77,8 +76,8 @@ internal sealed class TrayFonts : IDisposable
     ];
 
     /// <summary>
-    /// রিডআউটের সমান-প্রস্থ ফন্ট — ওয়েবের <c>--font-mono</c>-র সাথে এক।
-    /// Cascadia Mono Windows 11-এ আছে, Consolas Vista থেকেই আছে।
+    /// The equal-width font for readouts, the same as the web's <c>--font-mono</c>.
+    /// Cascadia Mono exists on Windows 11, and Consolas has been there since Vista.
     /// </summary>
     private static readonly string[] MonoCandidates =
     [
@@ -86,9 +85,9 @@ internal sealed class TrayFonts : IDisposable
     ];
 
     /// <summary>
-    /// ⚠️ semibold Windows-এ <b>আলাদা ফ্যামিলি</b>, style নয় — "Segoe UI"-তে
-    /// <c>FontStyle.Bold</c> দিলে ৭০০ ওজন আসে, ৬০০ নয়। না পেলে নিচে
-    /// <see cref="TrayFontRole.Hero"/> bold-এ ফিরে যায়।
+    /// Careful: semibold is a <b>separate family</b> on Windows, not a style: giving
+    /// <c>FontStyle.Bold</c> to "Segoe UI" gives weight 700, not 600. If it is not found,
+    /// <see cref="TrayFontRole.Hero"/> falls back to bold.
     /// </summary>
     private const string SemiboldFamily = "Segoe UI Semibold";
 
@@ -115,13 +114,13 @@ internal sealed class TrayFonts : IDisposable
         var key = (role, dpi);
         if (_cache.TryGetValue(key, out var cached)) return cached;
 
-        // ⚠️ মাপ পয়েন্টে নয়, পিক্সেলে। PerMonitorV2 প্রক্রিয়ায় WinForms নিজে থেকে
-        //    ফন্ট রি-স্কেল করে না, ফলে পয়েন্ট-ভিত্তিক ফন্ট ১৫০% মনিটরে ঠিক
-        //    ততটাই ছোট থাকত যতটা ১০০%-এ — অথচ জানালাটা বড় হয়ে যেত।
+        // Careful: size is in pixels, not points. In a PerMonitorV2 process WinForms does not
+        // rescale fonts itself, so point-based fonts would stay exactly as small on a 150%
+        // monitor as at 100%, while the window grew larger.
         var px = BasePixels(role) * dpi / 96f;
 
-        // Hero semibold ফ্যামিলি পেলে সেটাই, নইলে bold — দুটোর কোনোটাই না
-        // পেলে অন্তত মোটা দেখাক, নইলে হিরো সংখ্যাটা বডি লেখার মতো লাগত।
+        // Hero uses the semibold family if found, otherwise bold; if neither is found it should
+        // at least look heavy, or the hero number would look like body text.
         var family = role switch
         {
             TrayFontRole.Mono => _mono,
@@ -145,8 +144,8 @@ internal sealed class TrayFonts : IDisposable
     private static float BasePixels(TrayFontRole role) => role switch
     {
         TrayFontRole.Hero => 44f,
-        // ⚠️ ঠিক অর্ধেক, হাতে বসানো কোনো সংখ্যা নয় — হিরোর মাপ বদলালে
-        //    সেকেন্ডও আপনাআপনি সঙ্গে যায়
+        // Careful: exactly half, not a hand-set number; if the hero's size changes the
+        // seconds follow automatically
         TrayFontRole.HeroSeconds => 44f / 2f,
         TrayFontRole.Big => 30f,
         TrayFontRole.Strong => 16f,
@@ -157,9 +156,9 @@ internal sealed class TrayFonts : IDisposable
     };
 
     /// <summary>
-    /// ইনস্টল করা না থাকলে <see cref="ArgumentException"/> — এটাই একমাত্র
-    /// নির্ভরযোগ্য পরীক্ষা, কারণ <c>new Font(...)</c> অজানা নাম পেলে চুপচাপ
-    /// ফলব্যাক করে, অর্থাৎ ভুলটা কেবল স্ক্রিনে ধরা পড়ত, কোনো লগে নয়।
+    /// <see cref="ArgumentException"/> if not installed. This is the only reliable test,
+    /// because <c>new Font(...)</c> silently falls back when given an unknown name, so the
+    /// mistake would only be caught on screen, in no log.
     /// </summary>
     private static bool Exists(string family)
     {

@@ -7,9 +7,9 @@ import { RequiresFeature } from '../features/requires-feature';
 import { PayrollService, type PayrollSheet } from './payroll.service';
 
 /**
- * ⚠️ পুরো কন্ট্রোলারটাই **owner-only** — মেথড-লেভেলে নয়, ক্লাস-লেভেলে।
- * পরে কেউ নতুন endpoint যোগ করলে সেটাও আপনাআপনি owner-only থাকবে।
- * মেথডে বসালে নতুন endpoint নীরবে ম্যানেজারের নাগালে চলে যেত।
+ * The whole controller is **owner-only**, at class level, not method level.
+ * Any endpoint added later is owner-only automatically. Put on a method, a new
+ * endpoint would silently end up within a manager's reach.
  */
 @Roles(UserRole.owner)
 @RequiresFeature('payroll')

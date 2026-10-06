@@ -28,41 +28,41 @@ import {
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
 
-/** ঢাকার একটা নির্দিষ্ট মুহূর্ত — UTC+6, কোনো DST নেই */
+/** A fixed moment in Dhaka: UTC+6, no DST */
 function dhaka(iso: string): Date {
   return new Date(`${iso}+06:00`);
 }
 
-/** `now` থেকে n দিন আগের রাত ২:৩০-এর ব্যাকআপের নাম */
+/** Name of the 02:30 nightly backup from n days before `now` */
 function nightlyName(now: Date, daysAgo: number): string {
   return backupFileName(new Date(now.getTime() - daysAgo * DAY));
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ১. নাম — ঘোরানোর নিয়ম এটার উপরেই দাঁড়ানো
+// 1. Names: the rotation rule stands on these
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('ব্যাকআপের নাম', () => {
-  it('তারিখ ঢাকার সময়ে, UTC-তে নয়', () => {
-    // UTC-তে ১০ তারিখ রাত ৮:৩০ = ঢাকায় ১১ তারিখ রাত ২:৩০
+describe('backup names', () => {
+  it('the date is in Dhaka time, not UTC', () => {
+    // 20:30 on the 10th in UTC = 02:30 on the 11th in Dhaka
     expect(backupFileName(new Date('2026-08-10T20:30:00Z'))).toBe(
       'oxeio-2026-08-11-0230.dump.enc',
     );
   });
 
-  it('একই দিনে দুবার চালালে দুটো আলাদা নাম (ঘণ্টা-মিনিট আছে)', () => {
+  it('two runs on the same day get different names (hour and minute included)', () => {
     const a = backupFileName(dhaka('2026-08-11T02:30:00'));
     const b = backupFileName(dhaka('2026-08-11T14:05:00'));
     expect(a).not.toBe(b);
   });
 
-  it('নাম → সময় → নাম, ঘুরে এসে একই', () => {
+  it('name -> time -> name round-trips to the same value', () => {
     const at = dhaka('2026-08-11T02:30:00');
     const name = backupFileName(at);
     expect(parseBackupName(name)?.getTime()).toBe(at.getTime());
   });
 
-  it('⚠️ অন্য কোনো ফাইল কখনোই ব্যাকআপ বলে গোনা হয় না', () => {
+  it('no other file is ever counted as a backup', () => {
     for (const name of [
       'README-restore.txt',
       'oxeio-2026-08-11-0230.dump.enc.sha256',
@@ -76,17 +76,17 @@ describe('ব্যাকআপের নাম', () => {
     }
   });
 
-  it('⚠️ আজেবাজে তারিখ (মাস ১৩) regex পেরোলেও বাতিল', () => {
+  it('an impossible date (month 13) is rejected even if it passes the regex', () => {
     expect(parseBackupName('oxeio-2026-13-45-0230.dump.enc')).toBeNull();
   });
 
-  it('.part চেনা যায়, আর সেটা ব্যাকআপ নয়', () => {
+  it('.part files are recognised and are not backups', () => {
     const part = 'oxeio-2026-08-11-0230.dump.enc.part';
     expect(isPartFile(part)).toBe(true);
     expect(isBackupFile(part)).toBe(false);
   });
 
-  it('তালিকা নতুন থেকে পুরোনো ক্রমে', () => {
+  it('the list is ordered newest to oldest', () => {
     const now = dhaka('2026-08-11T02:30:00');
     const names = [nightlyName(now, 5), nightlyName(now, 0), nightlyName(now, 2)];
     expect(listBackups(names).map((f) => f.name)).toEqual([
@@ -98,13 +98,13 @@ describe('ব্যাকআপের নাম', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ২. ⭐ ঘোরানো — ভুল হলে শেষ ভালো কপিটাই যেত
+// 2. Rotation: if this is wrong, the last good copy could be deleted
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('পুরোনো ব্যাকআপ ঘোরানো', () => {
+describe('rotating old backups', () => {
   const now = dhaka('2026-08-11T03:00:00');
 
-  it('৩০ দিনের চেয়ে পুরোনোগুলো যায়, নতুনগুলো থাকে', () => {
+  it('those older than 30 days go, newer ones stay', () => {
     const names = [0, 5, 29, 31, 60].map((d) => nightlyName(now, d));
     expect(backupsToDelete(names, now, 30)).toEqual([
       nightlyName(now, 31),
@@ -112,8 +112,8 @@ describe('পুরোনো ব্যাকআপ ঘোরানো', () => {
     ]);
   });
 
-  it('⭐ সব পুরোনো হলেও সবচেয়ে নতুন দুটো কখনো মোছে না', () => {
-    // ব্যাকআপ ৪০ দিন ধরে ব্যর্থ — সরল বয়স-নিয়ম এখানে ডিস্ক খালি করে দিত
+  it('even if all are old, the two newest are never deleted', () => {
+    // backups have failed for 40 days; a plain age rule would empty the disk here
     const names = [40, 50, 60, 70].map((d) => nightlyName(now, d));
     const doomed = backupsToDelete(names, now, 30);
 
@@ -121,7 +121,7 @@ describe('পুরোনো ব্যাকআপ ঘোরানো', () => {
     expect(doomed).toHaveLength(names.length - BACKUP_KEEP_MIN);
   });
 
-  it('⚠️ চেনা যায় না এমন ফাইল ছোঁয়াই হয় না', () => {
+  it('files that are not recognised are never touched', () => {
     const names = [
       'README-restore.txt',
       'before-migration.dump',
@@ -132,21 +132,21 @@ describe('পুরোনো ব্যাকআপ ঘোরানো', () => {
     expect(backupsToDelete(names, now, 30)).toEqual([nightlyName(now, 92)]);
   });
 
-  it('ভবিষ্যতের তারিখ (ঘড়ি পিছিয়ে গেলে) রক্ষা পায়', () => {
+  it('future dates (if the clock went backwards) are protected', () => {
     const names = [
       backupFileName(new Date(now.getTime() + 2 * DAY)),
       nightlyName(now, 40),
       nightlyName(now, 41),
     ];
-    // ভবিষ্যতেরটা + ৪০ দিনেরটা = keepMin দুটো, বাকি একটা যায়
+    // the future one + the 40-day one = the two keepMin, the other one goes
     expect(backupsToDelete(names, now, 30)).toEqual([nightlyName(now, 41)]);
   });
 
-  it('কিছুই না থাকলে কিছুই মোছে না', () => {
+  it('deletes nothing when there is nothing', () => {
     expect(backupsToDelete([], now, 30)).toEqual([]);
   });
 
-  it('⚠️ অনাথ .sha256 যায়, কিন্তু কারো নিজের রাখা .sha256 নয়', () => {
+  it('an orphan .sha256 goes, but not one somebody kept on purpose', () => {
     const live = nightlyName(now, 1);
     const gone = nightlyName(now, 40);
     const half = nightlyName(now, 0);
@@ -154,16 +154,16 @@ describe('পুরোনো ব্যাকআপ ঘোরানো', () => {
     expect(
       orphanSidecars([
         live,
-        live + '.sha256', // ব্যাকআপটা আছে — থাকবে
-        gone + '.sha256', // ব্যাকআপ নেই — অনাথ
-        half + '.sha256', // ব্যাকআপটা এখনো লেখা হচ্ছে (.part) — থাকবে
+        live + '.sha256', // the backup exists: stays
+        gone + '.sha256', // no backup: orphan
+        half + '.sha256', // the backup is still being written (.part): stays
         half + '.part',
-        'notes.sha256', // আমাদের নয় — ছোঁয়া হবে না
+        'notes.sha256', // not ours: left alone
       ]),
     ).toEqual([gone + '.sha256']);
   });
 
-  it('⚠️ চলতি .part ফাইল মোছা হয় না, শুধু পড়ে থাকাগুলো', () => {
+  it('a running .part file is not deleted, only abandoned ones', () => {
     const running = {
       name: 'oxeio-2026-08-11-0230.dump.enc.part',
       mtime: new Date(now.getTime() - 60_000),
@@ -184,7 +184,7 @@ describe('পুরোনো ব্যাকআপ ঘোরানো', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ৩. ⭐ G04 — কখন বলব, আর কখন চুপ থাকব
+// 3. When to speak up and when to stay quiet
 // ════════════════════════════════════════════════════════════════════════════
 
 const okState = (now: Date): BackupState => ({
@@ -197,20 +197,20 @@ const okState = (now: Date): BackupState => ({
   observedSince: new Date(now.getTime() - 30 * DAY),
 });
 
-describe('G04 — ব্যাকআপ অ্যালার্ট', () => {
+describe('backup alerts', () => {
   const now = dhaka('2026-08-11T09:00:00');
 
-  it('⭐ সফল হলে কিচ্ছু বলে না', () => {
+  it('says nothing on success', () => {
     expect(backupVerdict(okState(now), now)).toBeNull();
   });
 
-  it('BACKUP_PASSPHRASE নেই — সবচেয়ে জোরে বলার মতো অবস্থা', () => {
+  it('BACKUP_PASSPHRASE missing is the state that deserves the loudest alert', () => {
     const verdict = backupVerdict({ ...okState(now), configured: false }, now);
     expect(verdict?.problem).toBe('not_configured');
     expect(backupAlertText(verdict!).title).toContain('BACKUP_PASSPHRASE');
   });
 
-  it('একরাতের ব্যর্থতা = সতর্কতা', () => {
+  it('one night of failure = warning', () => {
     const verdict = backupVerdict(
       {
         ...okState(now),
@@ -224,7 +224,7 @@ describe('G04 — ব্যাকআপ অ্যালার্ট', () => {
     expect(verdict?.severity).toBe('warning');
   });
 
-  it(`⭐ টানা ${BACKUP_CRITICAL_DAYS} দিন ব্যর্থ = গুরুতর`, () => {
+  it(`${BACKUP_CRITICAL_DAYS} failed days in a row = critical`, () => {
     const verdict = backupVerdict(
       {
         ...okState(now),
@@ -238,7 +238,7 @@ describe('G04 — ব্যাকআপ অ্যালার্ট', () => {
     expect(verdict?.daysSinceSuccess).toBe(2);
   });
 
-  it('শেষ চেষ্টা সফল, কিন্তু অনেক আগে — জবটা আর চলছেই না', () => {
+  it('last attempt succeeded but long ago: the job is no longer running', () => {
     const verdict = backupVerdict(
       {
         ...okState(now),
@@ -250,14 +250,14 @@ describe('G04 — ব্যাকআপ অ্যালার্ট', () => {
     expect(verdict?.problem).toBe('stale');
   });
 
-  it(`⚠️ ${BACKUP_STALE_HOURS} ঘণ্টার ভেতরের সফল ব্যাকআপ বাসি নয়`, () => {
+  it(`a successful backup within ${BACKUP_STALE_HOURS} hours is not stale`, () => {
     const fresh = new Date(now.getTime() - (BACKUP_STALE_HOURS - 1) * HOUR);
     expect(
       backupVerdict({ ...okState(now), lastAttemptAt: fresh, lastSuccessAt: fresh }, now),
     ).toBeNull();
   });
 
-  it('⚠️ সদ্য চালু হওয়া সার্ভার প্রথম মিনিটেই চেঁচায় না', () => {
+  it('a freshly started server does not shout in its first minute', () => {
     const fresh: BackupState = {
       configured: true,
       lastAttemptAt: null,
@@ -270,7 +270,7 @@ describe('G04 — ব্যাকআপ অ্যালার্ট', () => {
     expect(backupVerdict(fresh, now)).toBeNull();
   });
 
-  it('কিন্তু দুদিন পেরিয়ে গেলেও একটাও ব্যাকআপ না হলে গুরুতর', () => {
+  it('but if two days pass with no backup at all, it is critical', () => {
     const never: BackupState = {
       configured: true,
       lastAttemptAt: null,
@@ -285,7 +285,7 @@ describe('G04 — ব্যাকআপ অ্যালার্ট', () => {
     expect(verdict?.severity).toBe('critical');
   });
 
-  it('⭐ ডাম্প ঠিক আছে কিন্তু এক্সটার্নাল ড্রাইভে যায়নি — এটাও ব্যর্থতা', () => {
+  it('the dump is fine but did not reach the external drive: also a failure', () => {
     const verdict = backupVerdict(
       { ...okState(now), lastCopyOutcome: 'failed' },
       now,
@@ -294,13 +294,13 @@ describe('G04 — ব্যাকআপ অ্যালার্ট', () => {
     expect(verdict?.severity).toBe('warning');
   });
 
-  it('কপি কনফিগারই না করা থাকলে (null) সেটা ব্যর্থতা নয়', () => {
+  it('if the copy is not configured at all (null), that is not a failure', () => {
     expect(
       backupVerdict({ ...okState(now), lastCopyOutcome: null }, now),
     ).toBeNull();
   });
 
-  it('⚠️ প্রতিটা problem-এর জন্য শিরোনাম আছে', () => {
+  it('every problem has a title', () => {
     const problems = [
       'not_configured',
       'failed',
@@ -323,7 +323,7 @@ describe('G04 — ব্যাকআপ অ্যালার্ট', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ৪. K04 — হেলথ verdict
+// 4. Health verdict
 // ════════════════════════════════════════════════════════════════════════════
 
 const healthy: HealthFacts = {
@@ -335,33 +335,33 @@ const healthy: HealthFacts = {
   pendingAlerts: 0,
 };
 
-describe('K04 — হেলথ verdict', () => {
-  it('সব ঠিক হলে ok, কোনো সমস্যা নেই', () => {
+describe('health verdict', () => {
+  it('everything fine gives ok with no problems', () => {
     expect(healthVerdict(healthy)).toEqual({ status: 'ok', problems: [] });
   });
 
-  it('DB না থাকলে down, আর বাকি কিছু বলার দরকার নেই', () => {
+  it('DB down gives down, and nothing else needs saying', () => {
     const verdict = healthVerdict({ ...healthy, dbUp: false, diskUsedPct: 99 });
     expect(verdict.status).toBe('down');
     expect(verdict.problems).toHaveLength(1);
   });
 
-  it('⭐ রাতে সবার PC বন্ধ থাকলেও হেলথ সবুজই থাকে', () => {
+  it('health stays green even when all PCs are off at night', () => {
     const evening = { ...healthy, silentDevices: 15, activeDevices: 15 };
     expect(healthVerdict(evening).status).toBe('ok');
   });
 
-  it('ডিস্ক ৮০% পেরোলে degraded', () => {
+  it('disk over 80% gives degraded', () => {
     expect(healthVerdict({ ...healthy, diskUsedPct: 83 }).status).toBe('degraded');
   });
 
-  it('ডিস্কের তথ্য পড়া না গেলেও সেটা একটা সমস্যা', () => {
+  it('being unable to read disk info is also a problem', () => {
     const verdict = healthVerdict({ ...healthy, diskUsedPct: null });
     expect(verdict.status).toBe('degraded');
     expect(verdict.problems[0]).toMatch(/disk/i);
   });
 
-  it('ব্যাকআপের verdict থাকলে হেলথেও সেটাই দেখায়', () => {
+  it('when there is a backup verdict, health shows it too', () => {
     const verdict = healthVerdict({
       ...healthy,
       backup: {
@@ -375,7 +375,7 @@ describe('K04 — হেলথ verdict', () => {
     expect(verdict.problems.join(' ')).toContain('Backup');
   });
 
-  it('অ্যালার্ট জমে গেলে dispatcher আটকে থাকার খবর', () => {
+  it('a pile-up of alerts means the dispatcher is stuck', () => {
     expect(healthVerdict({ ...healthy, pendingAlerts: 500 }).status).toBe(
       'degraded',
     );
@@ -400,13 +400,13 @@ describe('K04 — হেলথ verdict', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ৫. ⭐ G08 — টেলিগ্রামে কী যাবে (আর কী যাবে না)
+// 5. What goes to Telegram (and what does not)
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('G08 — টেলিগ্রামের বার্তা', () => {
+describe('Telegram message', () => {
   const now = dhaka('2026-08-11T10:20:00');
 
-  it('টাইপের লেবেল, হোস্টনেম আর কতক্ষণ আগে — এটুকুই', () => {
+  it('type label, hostname and how long ago: nothing more', () => {
     const line = telegramLine(
       {
         type: 'agent_down',
@@ -421,8 +421,8 @@ describe('G08 — টেলিগ্রামের বার্তা', () => {
     expect(line).toContain('20 min ago');
   });
 
-  it('⭐ কর্মীর নাম, ডোমেইন বা টাকার অঙ্ক পাঠানোর কোনো পথই নেই', () => {
-    // ইনপুটে title/detail বলে কিছু নেওয়াই হয় না — allowlist, denylist নয়
+  it('there is no way to send an employee name, a domain or a money amount', () => {
+    // the input does not even accept title/detail: an allowlist, not a denylist
     const message = telegramMessage(
       [
         {
@@ -439,7 +439,7 @@ describe('G08 — টেলিগ্রামের বার্তা', () => {
     expect(message).toContain('no work all day');
   });
 
-  it('⚠️ হোস্টনেমের বাঁকা অক্ষর ছেঁকে ফেলা হয়', () => {
+  it('odd characters in the hostname are filtered out', () => {
     expect(safeHostname('PC-07')).toBe('PC-07');
     expect(safeHostname('<b>রহিম</b>-PC')).toBe('bb-PC');
     expect(safeHostname('   ')).toBeNull();
@@ -447,7 +447,7 @@ describe('G08 — টেলিগ্রামের বার্তা', () => {
     expect(safeHostname('x'.repeat(80))).toHaveLength(32);
   });
 
-  it('অচেনা টাইপেও ভাঙে না', () => {
+  it('does not break on an unknown type', () => {
     const line = telegramLine(
       { type: 'কিছু-একটা', severity: 'info', createdAt: now },
       now,
@@ -455,7 +455,7 @@ describe('G08 — টেলিগ্রামের বার্তা', () => {
     expect(line).toContain('Alert');
   });
 
-  it('একাধিক হলে হেডারে সংখ্যা, তারপর প্রতি লাইনে একটা', () => {
+  it('with several alerts: a count in the header, then one per line', () => {
     const message = telegramMessage(
       [
         { type: 'agent_down', severity: 'warning', hostname: 'PC-01', createdAt: now },
@@ -469,11 +469,11 @@ describe('G08 — টেলিগ্রামের বার্তা', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ৬. DATABASE_URL — pg_dump-এর আর্গুমেন্ট
+// 6. DATABASE_URL: the pg_dump arguments
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('DATABASE_URL ভাঙা', () => {
-  it('সাধারণ URL', () => {
+describe('parsing DATABASE_URL', () => {
+  it('a plain URL', () => {
     expect(parsePgUrl('postgresql://oxeio:secret@db.local:5433/oxeio?schema=public')).toEqual({
       host: 'db.local',
       port: '5433',
@@ -483,18 +483,18 @@ describe('DATABASE_URL ভাঙা', () => {
     });
   });
 
-  it('⚠️ percent-encoded পাসওয়ার্ড ডিকোড হয় — নইলে রোজ auth ব্যর্থ হতো', () => {
+  it('a percent-encoded password is decoded, otherwise auth would fail every day', () => {
     expect(parsePgUrl('postgres://us%40er:p%40ss%3Aword@localhost/oxeio')).toMatchObject({
       user: 'us@er',
       password: 'p@ss:word',
     });
   });
 
-  it('পোর্ট না থাকলে ৫৪৩২', () => {
+  it('port 5432 when no port is given', () => {
     expect(parsePgUrl('postgres://u:p@localhost/oxeio')?.port).toBe('5432');
   });
 
-  it('আজেবাজে বা অন্য স্কিমের URL-এ null', () => {
+  it('null for junk or a URL with another scheme', () => {
     expect(parsePgUrl('mysql://u:p@localhost/x')).toBeNull();
     expect(parsePgUrl('একদম-URL-নয়')).toBeNull();
     expect(parsePgUrl('postgres://u:p@localhost/')).toBeNull();

@@ -18,11 +18,11 @@ import {
 } from './setup/harness';
 
 /**
- * **J04 · J05 · J08** — কর্মীর নিজের পাতা।
+ * **J04, J05, J08** — the staff member's own page.
  *
- * ⭐⭐ এই ফাইলের সবচেয়ে জরুরি টেস্টগুলো ডেটা নিয়ে নয়, **সীমানা** নিয়ে:
- * একজন স্টাফ যেন কোনোভাবেই সহকর্মীর সংখ্যা না দেখে। পথে `:id` নেই বলেই
- * সেটা সম্ভব নয় — টেস্টগুলো ঠিক ওই নকশাটার পাহারা।
+ * The most important tests in this file are not about data but about the
+ * boundary: a staff member must never see a colleague's numbers. That is
+ * impossible because the path has no `:id` — the tests guard exactly that design.
  */
 let h: Harness;
 let employeeId: number;
@@ -38,7 +38,7 @@ const MS_PER_DAY = 86_400_000;
 
 const iso = (d: Date): string => d.toISOString().slice(0, 10);
 
-/** ওই দিনের একটা ACTIVE খণ্ড */
+/** An ACTIVE segment on that day */
 async function segment(
   forEmployee: number,
   day: Date,
@@ -112,7 +112,7 @@ beforeEach(async () => {
   });
   deviceId = device.id;
 
-  // ⚠️ স্টাফের পোর্টাল অ্যাকাউন্ট — `employeeId` বসানো, ওটাই সীমানা
+  // The staff member's portal account — `employeeId` is set, and that is the boundary
   await h.prisma.user.create({
     data: {
       email: STAFF_EMAIL,
@@ -126,7 +126,7 @@ beforeEach(async () => {
 });
 
 describe('GET /me', () => {
-  it('স্টাফ নিজের নাম ও ঘণ্টা দেখে', async () => {
+  it('staff see their own name and hours', async () => {
     await segment(employeeId, workDate, 3 * 3600);
 
     const s = await staffSession();
@@ -137,12 +137,12 @@ describe('GET /me', () => {
     expect(res.body.employee.designation).toBe('Developer');
     expect(res.body.progress.todayActiveSec).toBe(3 * 3600);
     /**
-     * ⭐ **G37 · ADR-025** — টার্গেট আর ফ্ল্যাট ২০৮ নয়, **কর্মদিবস × ৮**।
-     * তাই মাসভেদে বদলায় (ফেব্রু ১৯২ · সেপ্টে ২০৮ · আগস্ট ২১৬), আর একটা
-     * স্থির সংখ্যা লিখে রাখলে টেস্টটা মাস বদলালেই ভাঙত।
+     * G37, ADR-025 — the target is no longer a flat 208, it is work days x 8.
+     * So it varies by month (Feb 192, Sep 208, Aug 216), and writing down a
+     * fixed number would break the test whenever the month changed.
      *
-     * ⚠️ এখানে আসল দাবিটা সংখ্যা নয়, **নিয়ম**: টার্গেট ৮-এর গুণিতক, আর
-     * মাসের কর্মদিবসের সীমার ভেতরে (২০ … ২৭ দিন)।
+     * The real claim here is the rule, not a number: the target is a
+     * multiple of 8 and within the range of a month's work days (20 to 27 days).
      */
     const target = res.body.progress.monthlyTargetHours as number;
     expect(target % 8).toBe(0);
@@ -151,19 +151,19 @@ describe('GET /me', () => {
   });
 
   /**
-   * ⭐ **"ছবি ৯০ দিন পর মুছে যায়" — প্রতিশ্রুতিটা কাগজে আছে, পাতাতেও
-   * থাকা দরকার।** সংখ্যাটা সার্ভার থেকে আসে (`SCREENSHOT_RETENTION_DAYS`),
-   * ওয়েবে হাতে লেখা নয় — নইলে একদিন নীতি বদলালে পাতাটা পুরোনো
-   * প্রতিশ্রুতি দেখিয়ে যেত।
+   * "Screenshots are deleted after 90 days" — the promise is on paper and
+   * must be on the page too. The number comes from the server
+   * (`SCREENSHOT_RETENTION_DAYS`), not hand-written in the web app —
+   * otherwise if the policy changed one day the page would keep showing the old promise.
    */
-  it('ছবি কতদিন থাকে সেটাও বলে', async () => {
+  it('it also says how long screenshots are kept', async () => {
     const s = await staffSession();
     const res = await s.http.get('/api/v1/me').expect(200);
 
     expect(res.body.screenshotRetentionDays).toBe(90);
   });
 
-  it('সইয়ের তারিখ থাকলে দেখায়', async () => {
+  it('shows the signing date when there is one', async () => {
     await h.prisma.employee.update({
       where: { id: employeeId },
       data: { policySignedAt: new Date('2026-08-01T00:00:00Z') },
@@ -176,25 +176,25 @@ describe('GET /me', () => {
   });
 
   /**
-   * ⚠️ owner-এর `users.employee_id` সাধারণত null — তাঁর জন্য এই পাতাটা
-   * নেই, আর সেটা ভুল নয়। ৫০০ নয়, পরিষ্কার ৪০৩ আসা দরকার।
+   * The owner's `users.employee_id` is usually null — this page does not
+   * exist for them, and that is not a mistake. A clean 403 is needed, not a 500.
    */
-  it('কর্মীর সারিতে বাঁধা নয় এমন অ্যাকাউন্টে ৪০৩', async () => {
+  it('403 for an account not tied to a staff row', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     await s.http.get('/api/v1/me').expect(403);
   });
 
-  it('লগইন ছাড়া ৪০১', async () => {
+  it('401 without login', async () => {
     await h.http().get('/api/v1/me').expect(401);
   });
 });
 
 describe('GET /me/days', () => {
-  it('প্রতিটা দিনের সারি আসে — কাজ না থাকলেও', async () => {
+  it('a row comes back for every day — even with no work', async () => {
     const today = iso(workDate);
     const twoDaysAgo = iso(new Date(workDate.getTime() - 2 * MS_PER_DAY));
 
-    // মাঝের দিনটা ইচ্ছাকৃতভাবে খালি
+    // The middle day is deliberately empty
     await segment(employeeId, new Date(workDate.getTime() - 2 * MS_PER_DAY), 3600);
     await segment(employeeId, workDate, 2 * 3600);
 
@@ -203,17 +203,17 @@ describe('GET /me/days', () => {
       .get(`/api/v1/me/days?from=${twoDaysAgo}&to=${today}`)
       .expect(200);
 
-    // ⚠️ তিনটে সারি, দুটো নয় — ফাঁকা দিনটাও থাকতে হবে, নইলে "ওইদিন কী
-    //    হয়েছিল" প্রশ্নটাই পাতা থেকে উধাও হয়ে যেত
+    // Three rows, not two — the empty day must be there too, otherwise the
+    // question "what happened that day" would vanish from the page
     expect(res.body).toHaveLength(3);
-    // নতুন দিন আগে
+    // Newest day first
     expect(res.body[0].workDate).toBe(today);
     expect(res.body[0].workedSec).toBe(2 * 3600);
     expect(res.body[1].workedSec).toBe(0);
     expect(res.body[2].workedSec).toBe(3600);
   });
 
-  it('সংশোধন আলাদা করে দেখায়, আর credited-এ যোগ হয়', async () => {
+  it('shows the adjustment separately, and it adds into credited', async () => {
     await segment(employeeId, workDate, 3600);
 
     const owner = await h.prisma.user.findFirstOrThrow({
@@ -242,12 +242,13 @@ describe('GET /me/days', () => {
   });
 
   /**
-   * ⭐⭐ **এই টেস্টটাই মডিউলটার কারণ।** পথে `:id` থাকলে স্টাফ সংখ্যাটা
-   * বদলে সহকর্মীর দিন দেখে ফেলত। আইডি সেশন থেকে আসে, তাই সহকর্মীর
-   * ডেটা চাওয়ার কোনো **উপায়ই নেই** — এখানে সেটাই মিলিয়ে দেখা হচ্ছে:
-   * অন্য কর্মীর ঘণ্টা ডাটাবেসে আছে, তবু ফলাফলে আসে না।
+   * This test is the reason for the module. With `:id` in the path a staff
+   * member could change the number and see a colleague's days. The id comes
+   * from the session, so there is no way to ask for a colleague's data —
+   * this checks exactly that: another staff member's hours are in the
+   * database, yet do not appear in the result.
    */
-  it('সহকর্মীর ঘণ্টা কখনোই মেশে না', async () => {
+  it('a colleague\'s hours never mix in', async () => {
     await segment(otherId, workDate, 8 * 3600);
 
     const s = await staffSession();
@@ -259,7 +260,7 @@ describe('GET /me/days', () => {
     expect(res.body[0].workedSec).toBe(0);
   });
 
-  it('ভবিষ্যতের তারিখ চাইলে আজ পর্যন্তই', async () => {
+  it('asking for a future date gives up to today only', async () => {
     const s = await staffSession();
     const day = iso(workDate);
     const later = iso(new Date(workDate.getTime() + 10 * MS_PER_DAY));
@@ -272,8 +273,8 @@ describe('GET /me/days', () => {
     expect(res.body[0].workDate).toBe(day);
   });
 
-  /** ⚠️ ছাদ না থাকলে কেউ `from=2000-01-01` দিয়ে পুরো টেবিল টানত */
-  it('৯২ দিনের বেশি চাইলে শেষ ৯২ দিন', async () => {
+  /** Without a ceiling, someone could pull the whole table with `from=2000-01-01` */
+  it('asking for more than 92 days gives the last 92 days', async () => {
     const s = await staffSession();
     const res = await s.http
       .get(`/api/v1/me/days?from=2020-01-01&to=${iso(workDate)}`)
@@ -282,18 +283,18 @@ describe('GET /me/days', () => {
     expect(res.body).toHaveLength(92);
   });
 
-  /** ⚠️ regex আকৃতি দেখে, ক্যালেন্ডার দেখে `parseWorkDate` — ৫০০ নয়, ৪০০ */
-  it('অসম্ভব তারিখে ৪০০', async () => {
+  /** The regex checks shape, `parseWorkDate` checks the calendar — 400, not 500 */
+  it('400 for an impossible date', async () => {
     const s = await staffSession();
     await s.http.get('/api/v1/me/days?from=2026-02-31&to=2026-02-31').expect(400);
   });
 
-  it('তারিখ ছাড়া ৪০০', async () => {
+  it('400 without a date', async () => {
     const s = await staffSession();
     await s.http.get('/api/v1/me/days').expect(400);
   });
 
-  it('ম্যানেজারও নিজের পাতা পান না — কর্মীর সারিতে বাঁধা নন', async () => {
+  it('even a manager does not get their own page — not tied to a staff row', async () => {
     const s = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
     await s.http
       .get(`/api/v1/me/days?from=${iso(workDate)}&to=${iso(workDate)}`)

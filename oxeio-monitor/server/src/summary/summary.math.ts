@@ -1,12 +1,13 @@
 /**
- * সারাংশের সব **খাঁটি হিসাব** — কোনো I/O নেই, তাই ডাটাবেস ছাড়াই পরীক্ষা করা যায়।
+ * All the **pure calculations** for summaries. No I/O, so they can be tested without a database.
  *
- * আলাদা ফাইলে রাখার কারণ: `daily_summary` আর `monthly_summary`-র সংখ্যাগুলো
- * পুরো সিস্টেমের **দৃশ্যমান সত্য** — হিটম্যাপ, pace কার্ড, "My hours", আর
- * শেষে পে-রোল শিট সবই এখান থেকে আসা সংখ্যা দেখায়। এগুলো DB কোয়েরির সাথে
- * মিশে থাকলে ভুল ধরা পড়ত কেবল আসল ডেটায়, মাস শেষে।
+ * Why a separate file: the numbers in `daily_summary` and `monthly_summary`
+ * are the system's **visible truth**: the heatmap, pace cards, "My hours" and
+ * finally the payroll sheet all show numbers that come from here. Mixed into
+ * DB queries, mistakes would show up only in real data, at month end.
  *
- * নিয়মের উৎস: [07-Technical-Spec § ২.১](../../../docs/07-Technical-Spec.md)।
+ * Source of the rules: [07-Technical-Spec section 2.1](../../../docs/07-Technical-Spec.md).
+ * (The spec lettered its sub-sections in Bengali; here they are written a, b, c, d, e in order.)
  */
 
 import { resolve, sep } from 'node:path';
@@ -19,7 +20,7 @@ import { isOffWeekday } from './weekly-off';
 const MS_PER_DAY = 86_400_000;
 const SEC_PER_HOUR = 3600;
 
-// ═════════════════════════════ span union (§ ২.১-গ) ═════════════════════════
+// ============================= span union (spec 2.1-c) =========================
 
 export interface Span {
   startedAt: Date;
@@ -27,16 +28,16 @@ export interface Span {
 }
 
 /**
- * ⭐ ওভারল্যাপ করা সময়খণ্ডগুলো জোড়া লাগিয়ে দেয় (§ ২.১-গ)।
+ * Joins overlapping spans together (spec 2.1-c).
  *
- * ⚠️ **যোগফল নয়, UNION** — এটাই এই ফাইলের সবচেয়ে গুরুত্বপূর্ণ পার্থক্য।
- * কারো ডেস্কটপ ও ল্যাপটপ একসাথে চললে দুটো ডিভাইস থেকেই একই ঘড়ির সময়ে
- * ACTIVE সেগমেন্ট আসে; যোগ করলে ৮ ঘণ্টার দিন ১৬ ঘণ্টা দেখাত, আর মাসের
- * টার্গেট অর্ধেক সময়েই "পূর্ণ" হয়ে যেত।
+ * Careful: **a UNION, not a sum**; this is the most important distinction in
+ * this file. When someone's desktop and laptop run together, both devices
+ * send ACTIVE segments for the same wall-clock time; adding them would show
+ * an 8-hour day as 16 and the monthly target would be "met" in half the time.
  *
- * ⚠️ ফেরত আসা খণ্ডগুলো **নতুন অবজেক্ট**। ইনপুটের অবজেক্টে সরাসরি
- * `endedAt` বদলালে সেগুলো আসলে Prisma-র সারি — কলার পরে ওই সারিগুলো
- * ব্যবহার করলে নীরবে বিকৃত সময় পেত।
+ * Careful: the returned spans are **new objects**. Changing `endedAt` on the
+ * input objects directly would really change Prisma rows, and a caller using
+ * those rows later would silently get distorted times.
  */
 export function mergeSpans(spans: readonly Span[]): Span[] {
   const sorted = spans
@@ -49,9 +50,9 @@ export function mergeSpans(spans: readonly Span[]): Span[] {
   for (const s of sorted) {
     const last = merged[merged.length - 1];
 
-    // `<=` — ঠিক গা-ঘেঁষা দুটো খণ্ড (আগেরটার শেষ = পরেরটার শুরু) একটাই
-    // ধারাবাহিক কাজ। আলাদা রাখলে সীমানায় কিছু হারাত না বটে, কিন্তু
-    // "কতবার বসেছে" জাতীয় হিসাব ভুল হতো।
+    // `<=`: two spans exactly touching (end of one = start of the next) are
+    // one continuous piece of work. Keeping them apart would lose nothing at
+    // the boundary, but counts like "how many sittings" would be wrong.
     if (last && s.startedAt.getTime() <= last.endedAt.getTime()) {
       if (s.endedAt.getTime() > last.endedAt.getTime()) last.endedAt = s.endedAt;
     } else {
@@ -63,10 +64,11 @@ export function mergeSpans(spans: readonly Span[]): Span[] {
 }
 
 /**
- * UNION-এর মোট দৈর্ঘ্য, সেকেন্ডে।
+ * Total length of the UNION, in seconds.
  *
- * ⚠️ মিলিসেকেন্ড আগে যোগ, তারপর একবার round। প্রতি খণ্ডে আলাদা round করলে
- * দিনে কয়েকশো খণ্ডে অর্ধ-সেকেন্ডের ত্রুটি জমে মিনিটে দাঁড়াত।
+ * Careful: add the milliseconds first, then round once. Rounding each span
+ * separately would let half-second errors pile up to minutes over a few
+ * hundred spans a day.
  */
 export function unionSec(spans: readonly Span[]): number {
   const ms = mergeSpans(spans).reduce(
@@ -76,67 +78,68 @@ export function unionSec(spans: readonly Span[]): number {
   return Math.round(ms / 1000);
 }
 
-/** একটা ডিভাইসের ওই দিনের সব ACTIVE খণ্ড */
+/** All of one device's ACTIVE spans for that day. */
 export interface DeviceSpans {
   deviceId: number;
   spans: readonly Span[];
 }
 
 /**
- * **G32** — একই স্টাফের দুটো ডিভাইস একই ঘড়ির সময়ে কত সেকেন্ড চলেছে।
+ * **G32**: how many seconds one employee's two devices ran at the same wall-clock time.
  *
- * ⭐ <b>হিসাবটা বিয়োগ, কিন্তু কোন দুটো সংখ্যার তা সাবধানে বাছা:</b>
+ * <b>The calculation is a subtraction, but the choice of the two numbers is careful:</b>
  *
  * ```
- * overlap = Σ (প্রতিটা ডিভাইসের নিজের UNION) − (সব ডিভাইস মিলিয়ে UNION)
+ * overlap = sum(each device's own UNION) - (UNION across all devices)
  * ```
  *
- * ⚠️ `active_sec − worked_sec` **নয়**, যদিও সেটাই হাতের কাছে ছিল আর
- * `summarizeDay`-এর মন্তব্যেও ওটাকেই "কাঁচামাল" বলা আছে। কারণ
- * `active_sec` আসে এজেন্টের monotonic ঘড়ি থেকে (`duration_sec`), আর
- * `worked_sec` মাপা হয় দেয়ালঘড়ির `started_at`–`ended_at` দিয়ে। একটা
- * মেশিনেও ওই দুটো হুবহু মেলে না — ঘুম থেকে ওঠা, ঘড়ির সংশোধন, ছোট ফাঁক।
- * ওই ফারাকটাকে overlap ধরলে **একটাই ডিভাইসওয়ালা স্টাফের নামেও** অ্যালার্ট
- * উঠত, আর সেটাই হতো সবচেয়ে খারাপ ধরনের মিথ্যা: কারো কাজের সততা নিয়ে।
+ * Careful: **not** `active_sec - worked_sec`, although that was at hand and
+ * the comment in `summarizeDay` calls it the "raw material". `active_sec`
+ * comes from the agent's monotonic clock (`duration_sec`), while `worked_sec`
+ * is measured with the wall clock's `started_at`-`ended_at`. Even on one
+ * machine the two never match exactly: wake from sleep, clock corrections,
+ * small gaps. Treating that difference as overlap would raise an alert even
+ * for **an employee with a single device**, and that would be the worst kind
+ * of falsehood: about someone's honesty at work.
  *
- * এখানে দুটো দিকেই একই মাপকাঠি (দেয়ালঘড়ির UNION), তাই একটা ডিভাইসে
- * ফলটা গাণিতিকভাবেই ঠিক শূন্য।
+ * Here both sides use the same yardstick (wall-clock UNION), so with one
+ * device the result is mathematically exactly zero.
  *
- * ⚠️ প্রতি ডিভাইসের নিজের UNION নেওয়া হয়, কাঁচা যোগফল নয় — একই মেশিনের
- * দুটো সেগমেন্ট পরস্পরকে ছুঁয়ে থাকলে (রিট্রাই, সেশন পুনরায় খোলা) সেটা
- * দুই ডিভাইসের overlap বলে গোনা হতো।
+ * Careful: each device's own UNION is taken, not the raw sum. If two
+ * segments of the same machine touch each other (a retry, a reopened
+ * session), that would be counted as overlap between two devices.
  */
 export function overlapSec(devices: readonly DeviceSpans[]): number {
-  // একটাই ডিভাইস মানে overlap-এর প্রশ্নই নেই — কুয়েরির খরচও বাঁচে
+  // A single device means no overlap question at all; it also saves query cost.
   if (devices.length < 2) return 0;
 
   const perDevice = devices.reduce((total, d) => total + unionSec(d.spans), 0);
   const together = unionSec(devices.flatMap((d) => d.spans));
 
-  // ⚠️ ০-তে আটকানো: ভাসমান হিসাব বা round-এর কারণে -১ জাতীয় মান এলে
-  //    সেটা "ঋণাত্মক overlap" নয়, শূন্য।
+  // Careful: clamp at 0. If floating-point or rounding gives something like
+  // -1, that is not a "negative overlap", it is zero.
   return Math.max(0, perDevice - together);
 }
 
-// ═══════════════════════════ দৈনিক সারাংশ (K06) ═══════════════════════════
+// ========================= daily summary (K06) =========================
 
 export interface DaySegment extends Span {
   state: SegmentState;
-  /** এজেন্টের monotonic ঘড়ি থেকে — PC-র ঘড়ি বদলালেও অটুট */
+  /** From the agent's monotonic clock; unaffected if the PC's clock changes. */
   durationSec: number;
 }
 
 export interface DayInput {
-  /** ওই কর্মদিবসের **সব** সেগমেন্ট — active, idle, locked সবই */
+  /** **All** segments of that work day: active, idle, locked, everything. */
   segments: readonly DaySegment[];
-  /** এখনো মুছে না-যাওয়া স্ক্রিনশটের সংখ্যা */
+  /** Number of screenshots not yet deleted. */
   screenshotCount: number;
-  /** Σ time_adjustments.delta_sec (revoke করা বাদে), § ২.১-ঙ */
+  /** Sum of time_adjustments.delta_sec (excluding revoked ones), spec 2.1-e. */
   adjustmentSec: number;
-  /** productive ক্যাটাগরির app_usage খণ্ড */
+  /** app_usage spans in the productive category. */
   productiveSpans: readonly Span[];
   unproductiveSpans: readonly Span[];
-  /** ওই তারিখ কি সাপ্তাহিক ছুটি বা ক্যালেন্ডার ছুটি? */
+  /** Is that date a weekly off day or a calendar holiday? */
   isOffDay: boolean;
 }
 
@@ -158,26 +161,27 @@ export interface DayNumbers {
 }
 
 /**
- * ⭐ একজনের একদিনের পুরো সারাংশ — একটাই খাঁটি ফাংশন।
+ * A person's full summary for one day: a single pure function.
  *
- * সার্ভিসের কাজ শুধু সারি আনা আর সারি লেখা; **কী সংখ্যা বসবে সেই সিদ্ধান্ত
- * পুরোটাই এখানে**, যাতে ডাটাবেস ছাড়াই সবগুলো ধার পরীক্ষা করা যায়।
+ * The service only fetches and writes rows; **all decisions about which
+ * numbers go in are here**, so every edge can be tested without a database.
  */
 export function summarizeDay(input: DayInput): DayNumbers {
   const active = input.segments.filter((s) => s.state === 'active');
 
-  // ⚠️ `active_sec` কাঁচা যোগফল, আর `worked_sec` UNION — দুটো ইচ্ছাকৃতভাবে
-  //    আলাদা। দুই ডিভাইসে একসাথে কাজ করলে active > worked হবে।
+  // Careful: `active_sec` is a raw sum and `worked_sec` is a UNION, and they
+  // differ on purpose. Working on two devices at once makes active > worked.
   //
-  // ⚠️ কিন্তু ওই ফারাকটা `device_overlap`-এর কাঁচামাল **নয়** (এখানে আগে
-  //    তাই লেখা ছিল): `active_sec` আসে এজেন্টের monotonic ঘড়ি থেকে, আর
-  //    `worked_sec` দেয়ালঘড়ি থেকে — একটা মেশিনেও দুটো হুবহু মেলে না।
-  //    G32-র হিসাবটা `overlapSec()`-এ, আর সেখানে দুই দিকেই একই মাপকাঠি।
+  // Careful: that difference is **not** the raw material for `device_overlap`
+  // (this comment used to say so): `active_sec` comes from the agent's
+  // monotonic clock and `worked_sec` from the wall clock, and even on one
+  // machine the two never match exactly. G32's calculation is in
+  // `overlapSec()`, which uses the same yardstick on both sides.
   const activeSec = sumDuration(active);
 
-  // ⚠️ `locked`-ও idle-এ ধরা হয়। schema-তে `locked_sec` বলে কোনো কলাম নেই;
-  //    বাদ দিলে "লক করে লাঞ্চে গেল" সময়টা কোথাও দেখা যেত না এবং
-  //    active + idle আর দিনের মোট ট্র্যাক করা সময়ের সমান থাকত না।
+  // Careful: `locked` counts as idle too. The schema has no `locked_sec`
+  // column; leaving it out would hide the "locked the PC and went to lunch"
+  // time, and active + idle would no longer equal the day's total tracked time.
   const idleSec = sumDuration(
     input.segments.filter((s) => s.state === 'idle' || s.state === 'locked'),
   );
@@ -198,9 +202,9 @@ export function summarizeDay(input: DayInput): DayNumbers {
     workedSec,
     adjustmentSec: input.adjustmentSec,
 
-    // ⚠️ এখানে ০-তে আটকানো হয় **না**। owner যদি কাজ করা সময়ের চেয়ে বেশি
-    //    কেটে নেন, দিনের হিসাব ঋণাত্মকই দেখাবে — সেটাই তাঁর দেওয়া নির্দেশ।
-    //    আটকানোটা মাসিক স্তরে, আর কেন — `rollupMonth()` দেখুন।
+    // Careful: **not** clamped at 0 here. If the owner deducts more than the
+    // time worked, the day will show negative, which is the instruction they
+    // gave. The clamp is at month level; see `rollupMonth()` for why.
     creditedSec: workedSec + input.adjustmentSec,
 
     earliestHour: firstActivityAt === null ? null : dhakaHourOf(firstActivityAt),
@@ -227,30 +231,32 @@ function latestEnd(spans: readonly Span[]): Date {
 }
 
 /**
- * productive ÷ (productive + unproductive), শতকরা।
+ * productive / (productive + unproductive), as a percentage.
  *
- * ⚠️ `neutral` হিসাবের বাইরে — ইচ্ছাকৃত। Explorer, Notepad বা terminal-এ
- * কাটানো সময় neutral; ওগুলো হরে ঢোকালে যত বেশি কাজ, স্কোর তত কম হতো।
+ * Careful: `neutral` is left out, deliberately. Time in Explorer, Notepad or
+ * a terminal is neutral; putting it in the denominator would lower the score
+ * the more work was done.
  *
- * ⚠️ **এই সংখ্যা কখনো বেতনের হিসাবে ঢোকে না** — `worked_sec` ও
- * `credited_sec` ক্যাটাগরির কথা জানেই না। ক্যাটাগরি নিছক পর্যবেক্ষণ।
+ * Careful: **this number never enters salary calculation**: `worked_sec` and
+ * `credited_sec` know nothing about categories. Categories are observation only.
  */
 export function productivityPct(
   productiveSec: number,
   unproductiveSec: number,
 ): number | null {
   const total = productiveSec + unproductiveSec;
-  // ⚠️ শূন্য হলে `null`, `0` নয়। "কোনো ক্যাটাগরি করা অ্যাপ চলেনি" আর
-  //    "যা চলেছে সবই unproductive" — দুটো সম্পূর্ণ আলাদা কথা, আর
-  //    দ্বিতীয়টা কারো সম্পর্কে একটা অভিযোগ।
+  // Careful: `null` when zero, not `0`. "No categorised app ran" and "everything
+  // that ran was unproductive" are completely different statements, and the
+  // second is an accusation about someone.
   if (total <= 0) return null;
   return Math.round((productiveSec / total) * 10000) / 100;
 }
 
 /**
- * ⚠️ `worked` আগে দেখা হয় — ছুটির দিনে কেউ কাজ করলে দিনটা `worked`,
- * `holiday` নয় (§ ২.১-খ: ছুটির দিনের ঘণ্টাও পুরোপুরি গোনা হয়)। উল্টো
- * করলে হিটম্যাপে ওই দিনের কাজ ছুটির রঙে ঢাকা পড়ে যেত।
+ * Careful: `worked` is checked first. If someone works on a holiday, the
+ * day is `worked`, not `holiday` (spec 2.1-b: hours on holidays count in
+ * full). The other way round, that day's work would be hidden under the
+ * holiday colour on the heatmap.
  */
 export function dayTypeOf(workedSec: number, isOffDay: boolean): DayType {
   if (workedSec > 0) return 'worked';
@@ -258,50 +264,51 @@ export function dayTypeOf(workedSec: number, isOffDay: boolean): DayType {
 }
 
 /**
- * ঢাকার ঘণ্টা (০–২৩)।
+ * The Dhaka hour (0-23).
  *
- * ⚠️ নিজে `+৬ ঘণ্টা` যোগ করা হয়নি — অফসেটের হিসাব একটাই জায়গায় থাকা চাই
- * (`agent/util/dhaka-time.ts`)। ওখানে ঘণ্টা ফেরত দেওয়ার আলাদা helper নেই,
- * তাই `dhakaPathParts()`-এর `HHMMSS` থেকেই ঘণ্টাটা কাটা হচ্ছে।
+ * Careful: `+6 hours` is not added here; the offset logic must live in one
+ * place (`agent/util/dhaka-time.ts`). It has no helper that returns the
+ * hour, so the hour is cut from the `HHMMSS` of `dhakaPathParts()`.
  */
 export function dhakaHourOf(instant: Date): number {
   return Number(dhakaPathParts(instant).hhmmss.slice(0, 2));
 }
 
-// ═══════════════════ কর্মদিবস ও গতি — § ২.১-খ (K05/K06) ═══════════════════
+// =============== workdays and pace: spec 2.1-b (K05/K06) ===============
 
 /**
- * ISO সপ্তাহদিন: সোম = ১ … রবি = ৭।
+ * ISO weekday: Monday = 1 ... Sunday = 7.
  *
- * ⚠️ `getUTCDay()` সরাসরি ব্যবহার করা যায় না — ওখানে রবিবার **০**, আর
- * `work_policies.weekly_off_day` ISO মেনে চলে (শুক্র = ৫)। কেউ রবিবার
- * সাপ্তাহিক ছুটি (৭) দিলে সরাসরি তুলনায় কোনোদিনই মিলত না, আর ছুটির দিনটা
- * নীরবে কর্মদিবস হিসেবে গোনা হতো — প্রত্যেকের pace সারা মাস পিছিয়ে থাকত।
+ * Careful: `getUTCDay()` cannot be used directly: there Sunday is **0**,
+ * while `work_policies.weekly_off_day` follows ISO (Friday = 5). If someone
+ * set Sunday (7) as the weekly off day, a direct comparison would never
+ * match, the off day would silently be counted as a workday, and everyone's
+ * pace would lag all month.
  *
- * ⚠️ ইনপুট অবশ্যই `workDateOf()`-এর মতো **UTC-মধ্যরাত** তারিখ হতে হবে;
- * তাহলেই UTC-র দিনটা ঢাকার দিন।
+ * Careful: the input must be a **UTC-midnight** date like `workDateOf()`
+ * returns; only then is the UTC day the Dhaka day.
  */
 export function isoWeekday(workDate: Date): number {
   const js = workDate.getUTCDay();
   return js === 0 ? 7 : js;
 }
 
-/** § ২.১-খ — সাপ্তাহিক ছুটি নয়, আর holidays টেবিলেও নেই। */
+/** Spec 2.1-b: not a weekly off day, and not in the holidays table. */
 export function isWorkday(
   workDate: Date,
   weeklyOffDays: readonly number[],
   holidays: ReadonlySet<number>,
 ): boolean {
-  // null = প্রতিটি ক্যালেন্ডার দিনই কর্মদিবস (schema-র নিয়ম)
+  // null = every calendar day is a workday (schema rule)
   if (isOffWeekday(isoWeekday(workDate), weeklyOffDays)) {
     return false;
   }
-  // ⚠️ Prisma `@db.Date` সবসময় UTC-মধ্যরাত Date দেয়, আর `workDateOf()`-ও
-  //    তাই — দুই দিকের `getTime()` তাই নির্দ্বিধায় মেলানো যায়।
+  // Careful: Prisma `@db.Date` always gives a UTC-midnight Date, and so does
+  // `workDateOf()`, so `getTime()` from both sides can be compared safely.
   return !holidays.has(workDate.getTime());
 }
 
-/** `from` ও `to` — দুই প্রান্তই ধরা (§ ২.১-খ: "আজ ধরে")। */
+/** `from` and `to` are both included (spec 2.1-b: "including today"). */
 export function countWorkdays(
   from: Date,
   to: Date,
@@ -316,12 +323,12 @@ export function countWorkdays(
 }
 
 /**
- * `now`-এর ঠিক আগের কর্মদিবস — দিন-ক্লোজ (K05) এটাই ক্লোজ করে।
+ * The work day immediately before `now`; day close (K05) closes exactly this one.
  *
- * ⚠️ প্রথমে ঢাকার তারিখ বের করে **তারপর** একদিন বাদ। উল্টো করলে
- * (আগে ২৪ ঘণ্টা বাদ দিয়ে তারপর `workDateOf`) রাত ০০:১৫-এ চালানো জব
- * ঢাকার সময় আগের দিনের ০০:১৫-এ গিয়ে পড়ত — একই তারিখ পেত বটে, কিন্তু
- * দিনের যেকোনো সময়ে ডাকলে ফল আর নির্ভরযোগ্য থাকত না।
+ * Careful: first get the Dhaka date, **then** subtract one day. The other
+ * way round (subtract 24 hours first, then `workDateOf`), a job run at 00:15
+ * would land on 00:15 of the previous Dhaka day. It would get the same date
+ * but the result would no longer be reliable when called at other times of day.
  */
 export function previousWorkDate(now: Date): Date {
   return new Date(workDateOf(now).getTime() - MS_PER_DAY);
@@ -330,84 +337,85 @@ export function previousWorkDate(now: Date): Date {
 export interface MonthBounds {
   start: Date;
   end: Date;
-  /** '2026-08' — `monthly_summary.year_month` */
+  /** '2026-08', matches `monthly_summary.year_month`. */
   yearMonth: string;
 }
 
-/** কোনো কর্মদিবস কোন মাসে, আর সেই মাসের প্রথম ও শেষ তারিখ। */
+/** The month a work day belongs to, and that month's first and last dates. */
 export function monthBounds(workDate: Date): MonthBounds {
   const year = workDate.getUTCFullYear();
   const month = workDate.getUTCMonth();
 
   return {
     start: new Date(Date.UTC(year, month, 1)),
-    // পরের মাসের "০ তারিখ" = চলতি মাসের শেষ দিন — লিপ ইয়ারও নিজে সামলায়
+    // "Day 0" of the next month = last day of this month; leap years handled automatically.
     end: new Date(Date.UTC(year, month + 1, 0)),
     yearMonth: `${year}-${String(month + 1).padStart(2, '0')}`,
   };
 }
 
-// ══════════ প্রত্যাশার জানালা — ট্র্যাকিং শুরু থেকে গতকাল পর্যন্ত ══════════
+// ========== expectation window: from tracking start to yesterday ==========
 
-/** দুই প্রান্তই ধরা — `countWorkdays()`-এর মতোই */
+/** Both ends included, same as `countWorkdays()`. */
 export interface ElapsedWindow {
   from: Date;
   to: Date;
 }
 
 /**
- * ⭐⭐ **এই প্রকল্পে "কত দিন পেরিয়েছে" প্রশ্নের একমাত্র ইনপুট।**
+ * **The only input to the question "how many days have elapsed" in this project.**
  *
- * ⚠️ একসময় এর তিনটে আলাদা সংস্করণ ছিল — মাসিক rollup, tray (`/me`) আর Live
- * Board প্রত্যেকে নিজের মতো গুনত, আর কর্মী নিজের পর্দায় যা দেখতেন owner
- * তার চেয়ে ~৮৯ ঘণ্টা আলাদা দেখতেন। দুই পর্দায় দুই উত্তর মানে কোনটা সত্যি
- * সেই প্রশ্নের উত্তর নেই। এখন **তিনটে পথ** এই একটাই আকৃতি ভরে দেয় —
- * `summary.service`, `progress.service`, `reports.service`।
+ * Careful: this once had three separate versions: the monthly rollup, the
+ * tray (`/me`) and the Live Board each counted their own way, and what an
+ * employee saw on their own screen differed from what the owner saw by about
+ * 89 hours. Two answers on two screens means the question of which is true
+ * has no answer. Now **three paths** fill this one shape: `summary.service`,
+ * `progress.service`, `reports.service`.
  *
- * ⚠️ `dashboard.service` এই তালিকায় **নেই**, আর সেটা ভুল নয়: Live Board
- * মাসের সংখ্যাটা নতুন করে গোনে না, `monthly_summary.expected_sec` **পড়ে** —
- * অর্থাৎ এই ফাংশনেরই সংরক্ষিত ফল। তার সাত-দিনের ফিতেটা অবশ্য নিজের
- * `trendDayExpectation()` ব্যবহার করে, যা **ইচ্ছাকৃতভাবে** আজকের দিনটা রাখে
- * (কারণ ফিতের কাজ "আজ পর্যন্ত কী হলো" দেখানো); সেই ফারাকটা ওই ফাংশনের
- * নিজের নোটে ব্যাখ্যা করা আছে।
+ * Careful: `dashboard.service` is **not** in this list, and that is not a
+ * mistake: the Live Board does not recount the month, it **reads**
+ * `monthly_summary.expected_sec`, which is this function's own saved result.
+ * Its seven-day strip does use its own `trendDayExpectation()`, which
+ * **deliberately** keeps today (the strip's job is to show "what happened up
+ * to today"); that difference is explained in that function's own note.
  */
 export interface ElapsedWindowInput {
   /**
-   * জানালার বাইরের সীমা।
+   * The outer bounds of the window.
    *
-   * ⚠️ নাম `monthStart`/`monthEnd` **নয়**, কারণ শুধু মাসিক rollup এটা
-   *    ডাকে না: রিপোর্ট (F01/F02) চাওয়া রেঞ্জের দুই প্রান্ত পাঠায়। নিয়ম
-   *    এক, সীমাটা কলারের।
+   * Careful: not named `monthStart`/`monthEnd`, because the monthly rollup is
+   * not the only caller: reports (F01/F02) send the two ends of the requested
+   * range. The rule is the same; the bounds belong to the caller.
    */
   periodStart: Date;
   periodEnd: Date;
-  /** ঢাকার **আজকের** কর্মদিবস (`workDateOf(now)`) — নিজে জানালার বাইরে থাকে */
+  /** Dhaka's **today** work day (`workDateOf(now)`); itself lies outside the window. */
   today: Date;
-  /** G37 — `null` = পর্বের আগে থেকেই আছে */
+  /** G37: `null` = has been there since before the period. */
   joinedOn: Date | null;
   leftOn: Date | null;
   /**
-   * ⭐ **এই কর্মীর** সবচেয়ে পুরোনো `daily_summary.work_date`।
+   * The oldest `daily_summary.work_date` of **this employee**.
    *
-   * ⚠️⚠️ **এটা "এজেন্ট কবে বসেছে" নয়** — এটা "সার্ভার কবে থেকে এই
-   *    কর্মীকে নিয়ে হিসাব করছে"। `refreshDate()` প্রতিটি **active**
-   *    কর্মীর সারি লেখে, তার ডেটা থাক বা না থাক (`summary.service.ts`),
-   *    তাই সক্রিয় হওয়ার দিনই সাধারণত এই তারিখ।
+   * Careful: **this is not "when the agent was installed"**; it is "since
+   * when the server has been computing for this employee". `refreshDate()`
+   * writes a row for every **active** employee, with or without data
+   * (`summary.service.ts`), so the date is normally the day they became active.
    *
-   * ⚠️⚠️ ফলে এটা যা ঢাকে আর যা ঢাকে না, দুটো আলাদা করে জানা দরকার:
-   *    **ঢাকে** — এই সার্ভার বসার আগের দিনগুলো (প্রথম ইনস্টল), আর
-   *    কেউ সিস্টেমে যোগ হওয়ার আগে সংস্থার যে ইতিহাস আছে (org-min নিলে
-   *    জুলাই থেকে গোনা শুরু হতো)।
-   *    **ঢাকে না** — ১ অক্টোবর সক্রিয় হয়ে ৮ অক্টোবর এজেন্ট পাওয়া কর্মীর
-   *    ৫টা এজেন্টহীন দিন। ১ তারিখেই তার `no_activity` সারি বসে যায়, তাই
-   *    এই তারিখ ১ অক্টোবরই হয় আর দিনগুলো পুরো ঘাটতি হিসেবেই থাকে।
-   *    ⚠️ আগে এখানে উল্টোটা **দাবি করা ছিল**; দাবিটা মিথ্যা ছিল।
+   * Careful: what it covers and what it does not need to be known separately:
+   * **Covers**: days before this server was installed (first install), and
+   * any history the organisation has from before someone joined the system
+   * (taking org-min would have started counting from July).
+   * **Does not cover**: the 5 agentless days of an employee who became
+   * active on 1 October and got the agent on 8 October. Their `no_activity`
+   * row is written on the 1st, so this date is 1 October and those days stay
+   * as a full shortfall.
+   * Careful: this used to **claim the opposite**; the claim was false.
    *
-   * ⭐ সংখ্যাটা সবসময় org-min-এর সমান বা পরে, তাই দুটো মেলানোর দরকার নেই।
+   * The number is always equal to or later than org-min, so the two need not be compared.
    *
-   * ⚠️ `null` বা অনুপস্থিত = জানা নেই, আর তখন এই ধারণাটা জানালার উপর
-   *    **কোনো প্রভাবই ফেলে না** (জানালা শুরু হয় পর্বের শুরু বা যোগ দেওয়ার
-   *    দিন থেকে)।
+   * Careful: `null` or absent = unknown, and then this notion has **no effect
+   * at all** on the window (it starts from the period start or the joining day).
    */
   trackingStartedOn?: Date | null;
 }
@@ -418,42 +426,45 @@ export interface ElapsedInput extends ElapsedWindowInput {
 }
 
 /**
- * ⭐⭐ প্রত্যাশা কোন দিনগুলোর উপর হিসাব হবে — **সেই জানালাটা**।
+ * **The window the expectation is computed over: which days count.**
  *
- * ⚠️⚠️ **ট্র্যাকিং শুরুর আগের দিন গোনা হয় না।** এই ইনস্টলেশনে এজেন্ট বসেছে
- *    ১৩ আগস্ট ২০২৬; তার আগে কে কত কাজ করেছে আমরা **জানি না**। মাসের ১
- *    তারিখ থেকে গুনলে ওই না-দেখা দিনগুলো নীরবে "০ ঘণ্টা কাজ" হয়ে যেত, আর
- *    Monthly পাতা প্রত্যেককে ~৯৪ ঘণ্টা পিছিয়ে দেখাত — এমন এক সময়ের জন্য
- *    যখন মাপার যন্ত্রটাই বসেনি। **অনুপস্থিত পর্যবেক্ষণ ব্যর্থতা নয়।**
+ * Careful: **days before tracking started are not counted.** On this
+ * installation the agent went in on 13 August 2026; we **do not know** how
+ * much anyone worked before then. Counting from the 1st of the month would
+ * silently turn those unseen days into "0 hours worked" and the Monthly page
+ * would show everyone about 94 hours behind, for a time when the measuring
+ * instrument did not exist. **Absent monitoring is not failure.**
  *
- * ⚠️⚠️ **আজকের দিনটাও বাদ** — জানালা শেষ হয় `today − ১ দিনে`। Live
- *    Board-এ ঠিক এই ভুলটাই ধরা পড়েছিল: আজকের পুরো ৮ ঘণ্টা প্রত্যাশায়
- *    ধরলে ভোর ৬টায় দল "১১৪ ঘণ্টা পিছিয়ে" দেখাত, আর সন্ধ্যা নাগাদ সংখ্যাটা
- *    নিজে থেকেই ঠিক হয়ে যেত — একই দল দিনে দুবার দুই রকম রায় পেত, কেবল
- *    ঘড়ির কাঁটার কারণে। তাই pace-এর মানে: **গতকাল পর্যন্ত কে কোথায়।**
+ * Careful: **today is excluded too**: the window ends at `today - 1 day`.
+ * The Live Board caught exactly this mistake: counting today's full 8 hours
+ * in the expectation made the team look "114 hours behind" at 6 am, and by
+ * evening the number fixed itself, so the same team got two different
+ * verdicts a day just because of the clock. So pace means: **where everyone
+ * stands up to yesterday.**
  *
- * ⭐ এই দুটো সিদ্ধান্তই এখন **সব পর্দায় এক** — তবে দুইভাবে: মাসিক rollup
- *    (Monthly পাতা ও পে-রোলের pace), tray/`/me` আর রিপোর্ট এই ফাংশনটা
- *    **ডাকে**; Live Board ও দৈনিক ডাইজেস্ট তার সংরক্ষিত ফল
- *    (`monthly_summary.expected_sec`, `meta.expectedHours`) **পড়ে**। দুটোর
- *    উত্তর তাই এক, আর সংজ্ঞাটা একটাই জায়গায় লেখা।
- *    ⚠️ ব্যতিক্রম একটাই ও ইচ্ছাকৃত — Live Board-এর সাত-দিনের ফিতে
- *    (`trendDayExpectation()`), যা আজকের দিনটা রাখে।
- *    আগে তিনটে আলাদা সংজ্ঞা ছিল আর দুই পাতা দুই সংখ্যা বলত (Live Board ৪২ঘ,
- *    Monthly ৯৪৬ঘ)। দুটো সংখ্যা দুই কথা বললে কোনটা সত্যি সেই প্রশ্নের
- *    উত্তর থাকে না।
+ * Both decisions are now **the same on every screen**, in two ways: the
+ * monthly rollup (Monthly page and payroll pace), tray/`/me` and reports
+ * **call** this function; the Live Board and daily digest **read** its saved
+ * result (`monthly_summary.expected_sec`, `meta.expectedHours`). The answers
+ * are therefore equal, and the definition is written in one place.
+ * The one deliberate exception is the Live Board's seven-day strip
+ * (`trendDayExpectation()`), which keeps today.
+ * There used to be three definitions and two pages gave two numbers (Live
+ * Board 42 h, Monthly 946 h). When two numbers say different things, the
+ * question of which is true has no answer.
  *
- * ⚠️ `null` ফেরত = জানালাটাই খালি (পর্ব এখনো শুরু হয়নি, আজ মাসের ১ তারিখ,
- *    ট্র্যাকিং আজই শুরু, বা সে চলে যাওয়ার পরের মাস) — "০ কর্মদিবস", যেটা
- *    `0` কর্মদিবসের চেয়ে আলাদা কিছু নয়, তবু কলারের কাছে স্পষ্ট থাকে।
+ * Careful: a `null` return = the window itself is empty (the period has not
+ * started, today is the 1st of the month, tracking starts today, or it is the
+ * month after the person left): "0 workdays", which is no different from `0`
+ * workdays, but stays explicit for the caller.
  */
 export function elapsedWindow(input: ElapsedWindowInput): ElapsedWindow | null {
-  // ⚠️ শুরুর তিনটে সীমার মধ্যে **সবচেয়ে পরেরটা** — একজন ১৭ তারিখে যোগ
-  //    দিলে ট্র্যাকিং ১৩ তারিখে শুরু হলেও তার জানালা ১৭ থেকেই।
+  // Careful: the **latest** of the three start bounds. If someone joined on
+  // the 17th, their window starts from the 17th even if tracking began on the 13th.
   const from = maxDate(input.periodStart, input.joinedOn, input.trackingStartedOn ?? null);
 
-  // ⚠️ শেষের তিনটে সীমার মধ্যে **সবচেয়ে আগেরটা**। `periodEnd` না রাখলে গত
-  //    মাসের `workdays_elapsed` চিরকাল পুরো মাস ছাড়িয়ে বাড়ত।
+  // Careful: the **earliest** of the three end bounds. Without `periodEnd`,
+  // last month's `workdays_elapsed` would keep growing past the whole month forever.
   const to = minDate(
     new Date(input.today.getTime() - MS_PER_DAY),
     input.periodEnd,
@@ -464,50 +475,53 @@ export function elapsedWindow(input: ElapsedWindowInput): ElapsedWindow | null {
 }
 
 /**
- * ⭐⭐ **G111 — "এখনো দেখা হয়নি" আর "ঘাটতি নেই" এক নয়।**
+ * **G111: "not yet observed" is not the same as "no shortfall".**
  *
- * ⚠️⚠️ যাঁর একটাও **শেষ হয়ে যাওয়া** কর্মদিবস এখনো দেখা হয়নি (আজই প্রথম
- * দিন, বা এজেন্ট সবে বসেছে), তাঁর প্রত্যাশা ০ — তাই ঘাটতিও ০, আর গতিও ০।
- * পর্দায় সেটা দেখতে **হুবহু টার্গেট পূরণ করা মানুষের মতো**। দুটো সম্পূর্ণ
- * বিপরীত অবস্থা একই চেহারা পেলে সংখ্যাটা আর কোনো প্রশ্নের উত্তর দেয় না।
+ * Careful: someone for whom not a single **finished** workday has been
+ * observed yet (today is the first day, or the agent was just installed) has
+ * an expectation of 0, so a shortfall of 0 and a pace of 0. On screen that
+ * looks **exactly like a person who met the target**. When two completely
+ * opposite states look the same, the number answers no question any more.
  *
- * ⚠️ তাই এটা একটা **অবস্থা**, সংখ্যা নয়। পর্দাগুলো "০ ঘাটতি" দেখে নিজে
- * সিদ্ধান্ত নিলে নিয়মটা তিন জায়গায় তিনবার লেখা থাকত — এই প্রকল্পের
- * সবচেয়ে চেনা পাপ।
+ * Careful: so this is a **state**, not a number. If screens looked at "0
+ * shortfall" and decided for themselves, the rule would be written three
+ * times in three places, this project's most familiar sin.
  *
- * ⭐ সংখ্যাটা যেখান থেকে প্রত্যাশা বেরোয় ঠিক সেখান থেকেই পড়া হয়
- * (`elapsedWorkdays()`), তাই "দেখা হয়েছে" আর "প্রত্যাশা আছে" কখনো দুই
- * কথা বলতে পারে না।
+ * The number is read from exactly where the expectation comes from
+ * (`elapsedWorkdays()`), so "observed" and "has expectation" can never
+ * disagree.
  *
- * ⚠️ **`daysWithWork` নয়** — সেটা "কাজ করেছেন কি না", এটা "আমরা দেখেছি
- * কি না"। যিনি দেখা-যাওয়া দিনে এক ঘণ্টাও কাজ করেননি তিনি **দেখা হয়েছেন**,
- * আর তাঁর ঘাটতিটা সত্যিকারের ঘাটতি।
+ * Careful: **not `daysWithWork`**: that is "did they work", this is "did we
+ * look". Someone who did not work an hour on an observed day **was
+ * observed**, and their shortfall is a real shortfall.
  */
 export function isObserved(input: { workdaysElapsed: number }): boolean {
   return input.workdaysElapsed > 0;
 }
 
 /**
- * ওই জানালায় কত কর্মদিবস — `rollupMonth()`-এর `workdaysElapsed`।
+ * Workdays in that window: `workdaysElapsed` of `rollupMonth()`.
  *
- * ⚠️⚠️ গোনা হয় **ক্যালেন্ডার কর্মদিবস** (`isWorkday`), `daily_summary`
- *    **সারি নয়**। Live Board একসময় সারি গুনত (`day_type !== 'holiday'`)
- *    আর সেটা নীরবে ভুল ছিল: ছুটির দিনে কেউ এক ঘণ্টা কাজ করলে `dayTypeOf()`
- *    দিনটাকে `worked` লেখে, তাই ওই ছুটির দিনটাই একটা পুরো ৮ ঘণ্টার
- *    **প্রত্যাশা** হয়ে যেত — অর্থাৎ ছুটির দিনে কাজ করার শাস্তি।
+ * Careful: counted are **calendar workdays** (`isWorkday`), **not
+ * `daily_summary` rows**. The Live Board once counted rows
+ * (`day_type !== 'holiday'`) and that was silently wrong: if someone worked
+ * an hour on a holiday, `dayTypeOf()` marks the day `worked`, so that holiday
+ * became a full 8-hour **expectation**, a penalty for working on a holiday.
  */
 export function elapsedWorkdays(
   input: ElapsedInput,
   /**
-   * ⭐⭐ R2 — **ওই কর্মীর ছুটির দিন**, ঐচ্ছিক।
+   * **The employee's own leave days**, optional.
    *
-   * ⚠️⚠️ কেন `holidays`-এর সাথে মেশানো যায় না: `holidays` সংস্থার, আর
-   *    ওটা দিয়ে D-ও গোনা হয় (`prorate`)। একজনের ছুটি ওখানে ঢুকলে গোটা
-   *    দলের হর বদলে যেত। তাই আলাদা আর্গুমেন্ট।
+   * Careful: why it cannot be mixed into `holidays`: `holidays` belongs to
+   * the organisation and D is also counted with it (`prorate`). If one
+   * person's leave went in there, the denominator would change for the whole
+   * team. Hence a separate argument.
    *
-   * ⚠️ প্রত্যাশা গোনায় ছুটি বাদ **দিতেই হবে**, নইলে যিনি ছুটিতে ছিলেন
-   *    তিনি ঠিক ওই দিনগুলোর জন্য "পিছিয়ে" দেখাতেন — অথচ টার্গেট থেকে
-   *    দিনগুলো ইতিমধ্যেই বাদ। লব বাদ দিয়ে হর না দিলে ভগ্নাংশটাই মিথ্যা হতো।
+   * Careful: leave **must** be removed when counting expectation, otherwise
+   * someone who was on leave would show as "behind" for exactly those days,
+   * although the days are already removed from the target. Removing the
+   * numerator but not the denominator would make the fraction itself false.
    */
   leaveDates?: ReadonlySet<number>,
 ): number {
@@ -527,42 +541,44 @@ export function elapsedWorkdays(
     input.weeklyOffDays,
     input.holidays,
   );
-  // ⚠️ ঋণাত্মক নয় — জানালার সব দিনই ছুটি হলে শূন্য
+  // Careful: never negative; zero if every day in the window is leave.
   return Math.max(0, days - onLeave);
 }
 
 
 /**
- * ⭐⭐ R2 — একটা জানালায় কত **কর্মদিবস** ছুটিতে কাটল।
+ * Leave days that fell on **workdays** within a window.
  *
- * ⚠️⚠️ `isWorkday` দিয়ে ছেঁকে নেওয়াই এই ফাংশনটার গোটা কারণ। শুক্রবার বা
- * সরকারি ছুটির দিনে লেখা একটা ছুটি না ছাঁকলে টার্গেট থেকে আট ঘণ্টা কেটে
- * নিত — অথচ ওই দিনে কোনো টার্গেটই ছিল না। ব্যর্থতাটা হতো নীরব: সংখ্যা
- * কমত, কারণ কেউ খুঁজে পেত না।
+ * Careful: filtering with `isWorkday` is this function's whole reason for
+ * existing. A leave written on a Friday or public holiday, if not filtered,
+ * would cut eight hours from the target although there was no target that
+ * day. The failure would be silent: the number drops and nobody finds why.
  *
- * ⭐ তিন জায়গা এটাকেই ডাকে — টার্গেট (`prorate`), প্রত্যাশার লব
- * (`elapsedWorkdays`) আর tray-র সাত দিনের টার্গেট। আলাদা করে লেখা তিনটে
- * লুপ থেকে একটা ছেঁকে অন্যটা না ছাঁকা — ঠিক এই প্রকল্পের সবচেয়ে চেনা পাপ।
+ * Three places call this: the target (`prorate`), the numerator of the
+ * expectation (`elapsedWorkdays`) and the tray's seven-day target. Three
+ * separately written loops, with one filtering and another not, would be
+ * exactly this project's most familiar sin.
  */
 /**
- * ⭐⭐⭐ **জানালার ভেতরে কত কর্মদিবস আমরা সত্যিই দেখেছি** *(৬ সেপ্টেম্বর
- * ২০২৬, মালিকের সিদ্ধান্ত: "না-দেখা দিনের জন্য কর্তন হবে না")*।
+ * **How many workdays in the window we actually observed**: the owner's
+ * decision: no deduction for unobserved days.
  *
- * ⚠️⚠️ **কেন `elapsedWorkdays()` যথেষ্ট নয়:** ওটা জানালার **ক্যালেন্ডার**
- * কর্মদিবস গোনে — অর্থাৎ যে দিন সার্ভার বা এজেন্ট একেবারেই চলেনি, সে
- * দিনটাও পুরো ৮ ঘণ্টার প্রত্যাশা হয়েই থাকত। মাঠে তার দাম ছিল বিশাল:
- * আগস্টে ট্র্যাকিং শুরু হয় ১৩–১৫ তারিখে, অথচ বেতনের টার্গেট বসত পুরো
- * মাসের ২০৮ ঘণ্টা — ১২ জনের কর্তন দাঁড়াত **৳৭৯,৭৮৮**, যার **৳৬১,২৮০**
- * এমন দিনের জন্য যেগুলো সিস্টেম কোনোদিন দেখেইনি।
+ * Careful: **why `elapsedWorkdays()` is not enough:** it counts the window's
+ * **calendar** workdays, so a day when neither server nor agent ran at all
+ * would still be a full 8-hour expectation. In the field that was very
+ * costly: tracking began on 13-15 August, yet the payroll target was the
+ * whole month's 208 hours; the deduction for 12 people came to **৳79,788**,
+ * of which **৳61,280** was for days the system never saw.
  *
- * ⭐ "দেখা হয়েছে" মানে **ওই দিনের `daily_summary` সারিটা লেখা হয়েছিল**।
- * `refreshDate()` প্রতিটি active কর্মীর সারি লেখে, ডেটা থাক বা না থাক —
- * তাই সারির **অস্তিত্ব** মানে "সেদিন আমরা গুনছিলাম", আর সারির শূন্য
- * ঘণ্টা মানে "গুনছিলাম, কিন্তু তিনি কাজ করেননি"। ⚠️⚠️ দুটোকে এক করে
- * ফেললে অনুপস্থিতিও মকুব হয়ে যেত, আর সেটা উল্টো দিকের ভুল।
+ * "Observed" means **that day's `daily_summary` row was written**.
+ * `refreshDate()` writes a row for every active employee, with or without
+ * data, so the row's **existence** means "we were counting that day", and a
+ * row with zero hours means "we were counting, but they did not work".
+ * Careful: merging the two would also forgive absence, which is a mistake
+ * in the opposite direction.
  *
- * ⚠️ ছুটি বাদ যায় এখানেও — ঠিক `elapsedWorkdays()`-এর মতোই, নইলে লব ও
- * হর দুই আলাদা হিসাব হতো।
+ * Leave is removed here too, exactly like `elapsedWorkdays()`, otherwise the
+ * numerator and denominator would be two different calculations.
  */
 export function observedWorkdays(
   input: ElapsedInput,
@@ -600,74 +616,75 @@ export function countLeaveWorkdays(
   return count;
 }
 
-/** `proratedExpectedSec()`-এর তিনটে সংখ্যা */
+/** The three numbers for `proratedExpectedSec()`. */
 export interface ExpectedInput {
-  /** ⭐ G37 — **তার নিজের** মাসিক টার্গেট (`prorate()` থেকে), ফ্ল্যাট ২০৮ নয় */
+  /** G37: **their own** monthly target (from `prorate()`), not the flat 208. */
   targetSec: number;
-  /** ⭐ G37 — **তার নিজের** কর্মদিবস (d) */
+  /** G37: **their own** workdays (d). */
   expectedWorkdays: number;
-  /** `elapsedWorkdays()` থেকে — নিজে বানিয়ে নিলে জানালাটাই আবার আলাদা হয়ে যেত */
+  /** From `elapsedWorkdays()`; building it yourself would make the window differ again. */
   workdaysElapsed: number;
   /**
-   * ⭐⭐ R2 — ওই মাসে তার **অনুমোদিত ছুটির কর্মদিবস**।
+   * Their **approved leave workdays** in that month.
    *
-   * ⚠️⚠️ এটা **হর থেকে বাদ যায়**, `expectedWorkdays` থেকে নয়। কারণ
-   *    `expectedWorkdays` (d) পে-রোলের ভগ্নাংশ `d ÷ D`-র লব — ছুটি ওটা
-   *    ছুঁলে সবেতন ছুটি নীরবে বেতন-কাটা ছুটি হয়ে যেত।
+   * Careful: this is removed **from the denominator**, not from
+   * `expectedWorkdays`. `expectedWorkdays` (d) is the numerator of payroll's
+   * `d / D` fraction; if leave touched it, paid leave would silently become
+   * pay-cutting leave.
    *
-   * ⚠️⚠️ আর লব (`workdaysElapsed`)-ও ছুটি বাদ দিয়েই আসে
-   *    (`elapsedWorkdays()`-এর দ্বিতীয় আর্গুমেন্ট)। **দুই দিকেই বাদ
-   *    দিতে হয়, নয়তো কোনোটাতেই নয়** — একদিকে দিলে ভগ্নাংশটা ইচ্ছাকৃত
-   *    সিদ্ধান্ত নয়, বাগ।
+   * Careful: the numerator (`workdaysElapsed`) also comes with leave removed
+   * (the second argument of `elapsedWorkdays()`). **It must be removed on both
+   * sides or on neither**: removing on one side only makes the fraction a bug,
+   * not a deliberate decision.
    */
   leaveWorkdays?: number;
 }
 
 /**
- * ⭐⭐ **প্রত্যাশা কত সেকেন্ড** — § ২.১-খ-র সূত্রের একমাত্র বাস্তবায়ন।
+ * **How many seconds are expected**: the only implementation of the spec 2.1-b formula.
  *
  * ```
  * expected_sec = target_sec × workdays_elapsed ÷ expected_workdays
  * ```
  *
- * ⚠️ `rollupMonth()` (Monthly পাতা, Live Board, পে-রোলের pace) আর
- *    `progress.math.ts` (tray, `/me`) — দুটোই এখান দিয়ে যায়। আগে সূত্রটা
- *    দু-জায়গায় হাতে লেখা ছিল; একই সূত্র দুবার লেখা মানে একদিন একটা বদলাবে
- *    আর অন্যটা বদলাবে না।
+ * Careful: both `rollupMonth()` (Monthly page, Live Board, payroll pace) and
+ * `progress.math.ts` (tray, `/me`) go through here. The formula used to be
+ * hand-written in two places; writing one formula twice means one day one of
+ * them changes and the other does not.
  *
- * ⚠️ এখানে **ছোড়া হয় না**, ০ ফেরে। heartbeat-এর পথে একটা ভুল কনফিগ করা
- *    work policy তখন ওই কর্মীর প্রতিটা heartbeat-কে ৫০০ বানিয়ে দিত —
- *    একটা ভুল সংখ্যার শাস্তি হতো পুরো ট্র্যাকিং বন্ধ। কড়া যাচাই যেখানে
- *    দরকার সেখানে (`rollupMonth`) আলাদা করে বসানো আছে।
+ * Careful: this **does not throw**, it returns 0. On the heartbeat path, a
+ * misconfigured work policy would otherwise make every heartbeat of that
+ * employee a 500, so one wrong number would be punished by tracking stopping
+ * altogether. Strict validation sits separately where it is needed (`rollupMonth`).
  */
 export function proratedExpectedSec(input: ExpectedInput): number {
   const { targetSec, expectedWorkdays, workdaysElapsed } = input;
 
-  // ⚠️ কর্মদিবস শূন্য হলে ভাগ করা যায় না (পুরো মাস ছুটি ঘোষণা করলে হতে
-  //    পারে)। না আটকালে `NaN` ডাটাবেসে ও তারে চলে যেত, আর এজেন্টের
-  //    `System.Text.Json` `NaN` চেনে না — গোটা heartbeat-এর উত্তরটাই
-  //    (revoke কমান্ড সহ) পড়া যেত না।
+  // Careful: with zero workdays we cannot divide (possible if a whole month
+  // is declared a holiday). Without this guard `NaN` would go to the database
+  // and the wire, and the agent's `System.Text.Json` does not understand
+  // `NaN`, so the whole heartbeat reply (including the revoke command) would be unreadable.
   if (!Number.isFinite(targetSec) || targetSec <= 0) return 0;
   if (!Number.isFinite(expectedWorkdays) || expectedWorkdays <= 0) return 0;
 
   /**
-   * ⭐⭐ R2 — হর হলো **বিল-যোগ্য** কর্মদিবস, d নয়।
+   * The denominator is the **billable** workdays, not d.
    *
-   * `targetSec`-ও ঠিক এই দিনগুলোর জন্যই গোনা (`prorate()`), তাই ভাগফলটা
-   * "একটা বিল-যোগ্য দিনের টার্গেট" — ছুটি থাক বা না থাক একই।
+   * `targetSec` is also computed for exactly these days (`prorate()`), so the
+   * quotient is "the target for one billable day", the same with or without leave.
    *
-   * ⚠️ মাসের সব দিন ছুটি হলে হর ০ হয়ে যেত; তখন প্রত্যাশাও ০ — এবং
-   *    সেটাই সৎ, কারণ টার্গেটও ০।
+   * Careful: if every day of the month were leave the denominator would be 0;
+   * then the expectation is 0 too, which is honest, since the target is 0 as well.
    */
   const billable = Math.max(0, expectedWorkdays - (input.leaveWorkdays ?? 0));
   if (billable <= 0) return 0;
 
-  // ⚠️ ০ ও হরের মধ্যে আটকানো — নইলে পুরোনো তারিখ দিয়ে ডাকলে প্রত্যাশা
-  //    টার্গেট ছাড়িয়ে যেত আর তখন সবাই "পিছিয়ে" দেখাত।
+  // Careful: clamp between 0 and the denominator. Called with an old date,
+  // the expectation would otherwise exceed the target and everyone would show "behind".
   return Math.round((targetSec * clamp(workdaysElapsed, 0, billable)) / billable);
 }
 
-/** ⚠️ `null` মানে "এই সীমাটা নেই", তাই সে কখনো জেতে না। */
+/** Careful: `null` means "this bound does not exist", so it never wins. */
 function maxDate(base: Date, ...others: readonly (Date | null)[]): Date {
   return others.reduce<Date>(
     (best, d) => (d !== null && d.getTime() > best.getTime() ? d : best),
@@ -682,34 +699,34 @@ function minDate(base: Date, ...others: readonly (Date | null)[]): Date {
   );
 }
 
-// ══════════════════════════ মাসিক rollup (K05/K06) ══════════════════════════
+// ======================== monthly rollup (K05/K06) ========================
 
 export interface MonthInput {
-  /** Σ দৈনিক worked_sec — কেন যোগ করাই যথেষ্ট, `rollupMonth()`-এর নোট দেখুন */
+  /** Sum of daily worked_sec; why a plain sum is enough is in the `rollupMonth()` note. */
   workedSec: number;
   adjustmentSec: number;
-  /** ⭐ G37 — **তার কর্মদিবস × দৈনিক টার্গেট** (`prorate()` থেকে), ফ্ল্যাট ২০৮ নয় */
+  /** G37: **their workdays x daily target** (from `prorate()`), not the flat 208. */
   targetSec: number;
-  /** ⭐ G37 — **তার নিজের** কর্মদিবস (d) */
+  /** G37: **their own** workdays (d). */
   expectedWorkdays: number;
-  /** ⭐ G37 — ওই মাসের মোট কর্মদিবস (D), বেতনের ভগ্নাংশের হর */
+  /** G37: total workdays in that month (D), the denominator of the salary fraction. */
   monthWorkdays: number;
-  /** ⭐ R2 — অনুমোদিত ছুটির কর্মদিবস; d ও D কেউই ছোঁয় না, শুধু টার্গেট কমায় */
+  /** R2: approved leave workdays; touches neither d nor D, only lowers the target. */
   leaveWorkdays?: number;
   /**
-   * কত কর্মদিবস **শেষ হয়ে গেছে** — `elapsedWorkdays()` থেকে।
+   * How many workdays have **finished**, from `elapsedWorkdays()`.
    *
-   * ⚠️ "মাসের ১ তারিখ থেকে আজ পর্যন্ত" নয়: ট্র্যাকিং শুরুর আগের দিন আর
-   * আজকের দিনটা এর বাইরে (কারণ `elapsedWindow()`-এ)। সংখ্যাটা নিজে থেকে
-   * বানিয়ে নিলে Monthly পাতা আবার Live Board-এর সাথে অমিল দেখাত।
+   * Careful: not "from the 1st of the month to today": days before tracking
+   * started and today itself are outside it (because of `elapsedWindow()`).
+   * Building the number yourself would make the Monthly page disagree with the Live Board again.
    */
   workdaysElapsed: number;
   /**
-   * ⭐ যতগুলো কর্মদিবসের সারি সত্যিই লেখা হয়েছিল — বেতনের ঘাটতি এটার
-   * সাপেক্ষে মাপা হয় *(৬ সেপ্টেম্বর ২০২৬)*।
+   * How many workdays had their row really written; the salary shortfall is
+   * measured against this.
    */
   observedWorkdays: number;
-  /** যত দিনে worked_sec > 0 */
+  /** Days on which worked_sec > 0. */
   daysWithWork: number;
 }
 
@@ -725,12 +742,13 @@ export interface MonthNumbers {
   leaveWorkdays: number;
   workdaysElapsed: number;
   /**
-   * ⭐⭐ **যতগুলো কর্মদিবস আমরা সত্যিই দেখেছি** *(৬ সেপ্টেম্বর ২০২৬)*।
+   * **How many workdays we actually observed.**
    *
-   * ⚠️⚠️ `workdaysElapsed`-এর সাথে পার্থক্যটাই গোটা কথা: ওটা **ক্যালেন্ডার**
-   * গোনে, এটা গোনে যেসব দিনের `daily_summary` সারি সত্যিই লেখা হয়েছিল।
-   * বেতনের ঘাটতি এখন **এটার** সাপেক্ষে মাপা হয়, নইলে সিস্টেম বন্ধ থাকার
-   * দিনগুলোও কর্মীর ঘাটতি হয়ে যেত।
+   * Careful: the difference from `workdaysElapsed` is the whole point: that
+   * one counts **calendar** days, this one counts days whose `daily_summary`
+   * row was really written. The salary shortfall is now measured against
+   * **this**, otherwise days the system was down would count as the
+   * employee's shortfall.
    */
   observedWorkdays: number;
   daysWithWork: number;
@@ -741,18 +759,18 @@ export interface MonthNumbers {
 }
 
 /**
- * ⭐ মাসের সব সংখ্যা (§ ২.১-খ, § ২.১-ঙ, § ৩.২.১)।
+ * All of the month's numbers (spec 2.1-b, 2.1-e, 3.2.1).
  *
- * ⭐ **মাসিক worked = দৈনিক worked-এর সরল যোগফল** — আবার UNION করতে হয় না।
- * কারণ § ২.১-ক অনুযায়ী কোনো সেগমেন্ট দুই `work_date` জুড়ে থাকতে পারে না,
- * তাই দুই আলাদা দিনের খণ্ড কখনো ওভারল্যাপ করে না। এই একটি নিশ্চয়তার জোরেই
- * মাসের লাখখানেক সারিতে প্রতি ১৫ মিনিটে merge চালানো এড়ানো যায়।
+ * **Monthly worked = the plain sum of daily worked**; no second UNION is
+ * needed. By spec 2.1-a no segment can span two `work_date`s, so segments of
+ * two different days never overlap. That one guarantee is what avoids
+ * running a merge over about a hundred thousand rows a month every 15 minutes.
  *
- * ⚠️ pace-এ `credited` ব্যবহার করা হয়েছে, `worked` নয়। § ৩.২.১-এর
- * সিউডোকোডে `worked_sec − expected_sec` লেখা আছে, কিন্তু § ২.১-খ ও
- * § ২.১-ঙ (G35, পরে যোগ হওয়া) বলে টার্গেটের সাথে মেলে `credited_sec`।
- * `worked` ধরলে সার্ভারের দোষে ঘণ্টা হারানো স্টাফ owner-এর সংশোধনের
- * পরেও সারা মাস "পিছিয়ে" দেখাত — সংশোধনটার পুরো উদ্দেশ্যই ব্যর্থ হতো।
+ * Careful: pace uses `credited`, not `worked`. The pseudocode in 3.2.1 says
+ * `worked_sec - expected_sec`, but 2.1-b and 2.1-e (G35, added later) say
+ * `credited_sec` is what matches the target. Using `worked`, an employee who
+ * lost hours through a server fault would show "behind" all month even after
+ * the owner's correction, defeating the whole purpose of the correction.
  */
 export function rollupMonth(input: MonthInput): MonthNumbers {
   const {
@@ -768,26 +786,27 @@ export function rollupMonth(input: MonthInput): MonthNumbers {
   } = input;
 
   /**
-   * ⚠️⚠️ **টার্গেট ০ এখন বৈধ — কিন্তু শুধু একটাই কারণে** (G37): তার ওই
-   * মাসে কোনো কর্মদিবসই নেই (মাসের পরে যোগ দিয়েছে, আগেই চলে গেছে, বা
-   * পুরো মাসটাই ছুটি)। তখন ঘাটতিও অসম্ভব।
+   * Careful: **a target of 0 is valid now, but for one reason only** (G37):
+   * they have no workdays at all that month (joined after the month, left
+   * before it, or the whole month is a holiday). Then a shortfall is impossible.
    *
-   * ⚠️ কর্মদিবস **থাকা সত্ত্বেও** টার্গেট ০ মানে পলিসি ভুল বসানো, আর
-   * সেটা মেনে নিলে কেউ এক ঘণ্টা কাজ না করেই "টার্গেট পূরণ" দেখাত।
-   * `payroll.math.ts`-এ হুবহু একই শর্ত।
+   * Careful: a target of 0 **while workdays exist** means a wrongly set
+   * policy, and accepting it would show someone as "target met" without
+   * working a single hour. `payroll.math.ts` has exactly the same condition.
    */
   if (!Number.isFinite(targetSec) || targetSec < 0) {
     throw new RangeError('Monthly target cannot be negative');
   }
   /**
-   * ⚠️⚠️ শর্তটা **বিল-যোগ্য** দিন ধরে, d ধরে নয় — R2-তে এটাই ছিল একটা
-   *    সত্যিকারের ক্র্যাশ। কেউ গোটা মাস ছুটিতে থাকলে `targetSec` ঠিকই ০
-   *    (ছুটি টার্গেট কমায়) অথচ `expectedWorkdays` (d) অটুট (ছুটি সবেতন) —
-   *    অর্থাৎ দুটো শর্তই সত্যি হয়ে মাসিক rollup-টাই `RangeError`-এ পড়ত,
-   *    আর তাতে **ওই একজনের নয়, গোটা দলের** মাসিক সারি লেখা বন্ধ হতো।
+   * Careful: the condition uses **billable** days, not d. In R2 this was a
+   * real crash. If someone is on leave for the whole month, `targetSec` is
+   * correctly 0 (leave lowers the target) while `expectedWorkdays` (d) is
+   * intact (leave is paid), so both conditions were true and the monthly
+   * rollup itself fell into a `RangeError`, stopping the monthly rows being
+   * written for **the whole team, not just that one person**.
    *
-   * ⭐ যা ধরার জন্য এটা এখানে ছিল — নীতিতে কর্মদিবস আছে অথচ টার্গেট ০ —
-   *    সেটা এখনো ধরা পড়ে: ছুটি বাদ দেওয়ার পরও দিন থাকলে টার্গেট ০ হতে পারে না।
+   * What it was here to catch (a policy with workdays but target 0) is still
+   * caught: after removing leave, if days remain the target cannot be 0.
    */
   const billableWorkdays = Math.max(0, expectedWorkdays - leaveWorkdays);
   if (targetSec === 0 && billableWorkdays > 0) {
@@ -795,15 +814,17 @@ export function rollupMonth(input: MonthInput): MonthNumbers {
   }
 
   /**
-   * ⚠️ ⭐ এখানে ০-তে আটকানো **বাধ্যতামূলক**। `payroll.math.ts` ঋণাত্মক
-   * `creditedSec` পেলে `RangeError` ছোড়ে, আর সেটা পে-রোল শিটের লুপের
-   * ভেতরে — একজনের একটা অতিরিক্ত কর্তন গোটা মাসের পে-রোল রিকোয়েস্টকে
-   * ৫০০ বানিয়ে দিত, অথচ ভুলটা দেখাত সম্পূর্ণ অন্য জায়গায়।
+   * Careful: clamping at 0 here is **mandatory**. `payroll.math.ts` throws a
+   * `RangeError` on negative `creditedSec`, and that is inside the payroll
+   * sheet's loop; one person's one extra deduction would turn the whole
+   * month's payroll request into a 500, with the error appearing somewhere
+   * entirely different.
    */
   const creditedSec = Math.max(0, workedSec + adjustmentSec);
 
-  // ⭐ সূত্রটা এখানে আর লেখা নেই — `proratedExpectedSec()`-এ, কারণ tray-ও
-  //    ঠিক এই সূত্রই ডাকে। দুবার লিখলে একদিন একটা বদলাত আর অন্যটা নয়।
+  // The formula is no longer written here but in `proratedExpectedSec()`,
+  // because the tray calls exactly the same one. Written twice, one day one
+  // would change and not the other.
   const expectedSec = proratedExpectedSec({
     leaveWorkdays,
     targetSec,
@@ -824,20 +845,21 @@ export function rollupMonth(input: MonthInput): MonthNumbers {
     workdaysElapsed,
     observedWorkdays,
     daysWithWork,
-    // ⚠️ শূন্য দিয়ে ভাগ — কেউ সারা মাসে একদিনও কাজ না করলে Infinity বসত
+    // Careful: division by zero; if someone never worked a day all month, this would be Infinity.
     avgDailySec: daysWithWork > 0 ? Math.round(workedSec / daysWithWork) : 0,
     overtimeSec: Math.max(0, creditedSec - targetSec),
     shortfallSec: Math.max(0, targetSec - creditedSec),
     /**
-     * ⚠️ টার্গেট ০ হলে `creditedSec >= 0` সবসময় সত্যি — অর্থাৎ যে ওই মাসে
-     * ছিলই না, সে-ও "✅ টার্গেট পূরণ" দেখাত, আর `target_met_at`-এ একটা
-     * সময়ও বসে যেত। অর্জন বলে দাবি করার মতো কিছু সেখানে ঘটেনি।
+     * Careful: with a target of 0, `creditedSec >= 0` is always true, so
+     * someone who was not even there that month would show "target met" and
+     * `target_met_at` would get a timestamp. Nothing happened there that
+     * deserves to be claimed as an achievement.
      */
     targetMet: targetSec > 0 && creditedSec >= targetSec,
   };
 }
 
-/** ঘণ্টা → সেকেন্ড (work policy-র `Decimal` থেকে `target_sec`)। */
+/** Hours -> seconds (from the work policy's `Decimal` to `target_sec`). */
 export function hoursToSec(hours: number): number {
   return Math.round(hours * SEC_PER_HOUR);
 }
@@ -846,18 +868,19 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-// ═══════════════════════════ retention (K01) ═══════════════════════════
+// =========================== retention (K01) ===========================
 
 /**
- * এর **আগের** `work_date`-এর স্ক্রিনশট মুছে ফেলার যোগ্য।
+ * Screenshots with a `work_date` **before** this are eligible for deletion.
  *
- * ⭐ `days` যাচাই করা হয় কারণ এটাই এই গোটা মডিউলের সবচেয়ে ধ্বংসাত্মক সংখ্যা।
- * ভুলে `0` বা ঋণাত্মক এলে cutoff আজ বা ভবিষ্যতে গিয়ে পড়ত, আর রাত ২টার জব
- * নীরবে **আজকের ছবিসহ পুরো আর্কাইভ** মুছে দিত — ফাইল ও সারি দুটোই, কোনো
- * ব্যাকআপ ছাড়া। তাই সন্দেহ হলেই থেমে যাওয়া।
+ * `days` is validated because it is the most destructive number in this
+ * whole module. If `0` or a negative value arrived by mistake, the cutoff
+ * would land on today or the future, and the 2 am job would silently delete
+ * **the whole archive including today's photos**, files and rows both, with
+ * no backup. So stop whenever in doubt.
  *
- * ⚠️ তুলনাটা `<` (`<=` নয়) — ঠিক ৯০ দিন আগের ছবি **থাকবে**, কাটা পড়বে
- * তার চেয়ে পুরোনোগুলো। একদিন বেশি রাখা ভুলের নিরাপদ দিক।
+ * Careful: the comparison is `<` (not `<=`): a photo exactly 90 days old
+ * **stays**; only older ones are cut. Keeping one day extra is the safe side of a mistake.
  */
 export function retentionCutoff(now: Date, days: number): Date {
   if (!Number.isFinite(days) || days < 1) {
@@ -869,13 +892,13 @@ export function retentionCutoff(now: Date, days: number): Date {
 }
 
 /**
- * ফাইলটা সত্যিই storage রুটের ভেতরে তো?
+ * Is the file really inside the storage root?
  *
- * ⭐ "খাঁটি হিসাব" ফাইলে একটা পাথ-চেক অদ্ভুত লাগতে পারে, কিন্তু এটাই এই
- * মডিউলের তৃতীয় খাঁটি সিদ্ধান্ত — আর একমাত্র যেটার ভুলে **storage-এর
- * বাইরের ফাইল মুছে যেতে পারে**। `screenshots.file_path` ডাটাবেসের কলাম;
- * আজ সেটা সার্ভার নিজে বানায়, কিন্তু একটা `..` ঢুকে পড়লে retention জব
- * D:\ ড্রাইভের যেকোনো ফাইল `unlink` করত। তাই মোছার আগে যাচাই।
+ * A path check in a "pure calculations" file may look odd, but this is the
+ * module's third pure decision, and the only one where a mistake **can
+ * delete files outside storage**. `screenshots.file_path` is a database
+ * column; today the server builds it itself, but if a `..` slipped in, the
+ * retention job would `unlink` any file on the D:\ drive. So check before deleting.
  */
 export function isInsideRoot(root: string, candidate: string): boolean {
   const absRoot = resolve(root);

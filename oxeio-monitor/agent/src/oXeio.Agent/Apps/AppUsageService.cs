@@ -7,16 +7,15 @@ using oXeio.Core.Models;
 namespace oXeio.Agent.Apps;
 
 /// <summary>
-/// অ্যাপ ও সাইট ট্র্যাকিংয়ের তিনটে টুকরো এক জায়গায় (D01–D04):
-/// Win32 থেকে পড়া, ব্রাউজারের ঠিকানা, আর গোনার নিয়ম।
+/// The three pieces of app and site tracking in one place (D01-D04): reading from Win32, the
+/// browser's address, and the counting rules.
 ///
-/// ⭐ <b>address bar পড়া হয় শুধু উইন্ডো বা টাইটেল বদলালে।</b> প্রতি
-/// সেকেন্ডে UI Automation চালালে প্রতি কলে ~১০–৩০ ms যেত — দিনে হাজার হাজার
-/// বার, আর CPU বাজেট ১%-এর নিচে রাখা যেত না
-/// ([06-Research § ২.৬](../../../../docs/06-Research.md))।
+/// <b>The address bar is read only when the window or title changes.</b> Running UI Automation
+/// every second would cost about 10-30 ms per call, thousands of times a day, and the CPU budget
+/// could not be kept under 1% ([06-Research section 2.6](../../../../docs/06-Research.md)).
 ///
-/// টাইটেল বদলালেও পড়া হয়, কারণ একই উইন্ডোতে নতুন পেজে গেলে ঠিকানা বদলায়
-/// কিন্তু hwnd একই থাকে।
+/// It is also read when the title changes, because navigating to a new page in the same window
+/// changes the address while the hwnd stays the same.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class AppUsageService
@@ -32,33 +31,32 @@ internal sealed class AppUsageService
     public AppUsageService(TimeSpan? minDuration = null) =>
         _tracker = new AppUsageTracker(minDuration);
 
-    /// <summary>ডায়াগনস্টিকে দেখানোর জন্য — এখন কোন অ্যাপ গোনা হচ্ছে।</summary>
+    /// <summary>For diagnostics: which app is currently being counted.</summary>
     public string? CurrentProcess => _tracker.CurrentProcess;
 
     /// <summary>
-    /// A07 — ছবি তোলার মুহূর্তে সামনে কোন উইন্ডো।
+    /// A07: which window is in front at the moment an image is taken.
     ///
-    /// ⚠️ নতুন করে Win32-এ জিজ্ঞেস করা হয় <b>না</b> — যা <see cref="Tick"/>
-    /// শেষবার পড়েছে সেটাই ফেরে (সর্বোচ্চ এক টিক পুরোনো)। তাতে ছবির পাশের
-    /// নামটা আর <c>app_usage</c>-এর সারি <b>একই</b> নমুনা থেকে আসে; আলাদা
-    /// করে পড়লে দুটোয় দু-রকম অ্যাপ বসতে পারত, আর "ছবিতে Excel অথচ
-    /// রিপোর্টে Chrome" ধরনের অমিল ব্যাখ্যা করা যেত না।
+    /// Careful: Win32 is <b>not</b> queried again; what <see cref="Tick"/> last read is returned
+    /// (at most one tick old). That way the name beside the image and the <c>app_usage</c> row come
+    /// from the <b>same</b> sample; read separately, they could show different apps, and a mismatch
+    /// like "Excel in the image but Chrome in the report" could not be explained.
     /// </summary>
     public WindowSample? Current => _tracker.Current;
 
-    /// <summary>UI Automation এই মেশিনে কাজ করছে কি না।</summary>
+    /// <summary>Whether UI Automation works on this machine.</summary>
     public bool UrlReadingDisabled => _urls.Disabled;
 
-    /// <summary>প্রতি সেকেন্ডে ডাকা হয়। যা রেকর্ড বন্ধ হলো তা ফেরে।</summary>
+    /// <summary>Called every second. Returns any record that was closed.</summary>
     public IReadOnlyList<AppUsageRecord> Tick(DateTimeOffset now, SegmentState state)
     {
         /**
-         * ⭐ <b>R22a</b> — IDLE-এও উইন্ডো পড়া হয় (মিটিং চেনার একমাত্র সূত্র),
-         * কিন্তু <b>LOCKED-এ নয়</b>: পর্দা লক থাকলে সামনে পড়ার মতো কিছু নেই,
-         * আর লক করে উঠে যাওয়া মানুষটার পর্দা পড়ার কোনো কারণও নেই।
+         * <b>R22a:</b> the window is read in IDLE too (the only clue for recognising meetings), but
+         * <b>not in LOCKED</b>: with the screen locked there is nothing in front to read, and there
+         * is no reason to read the screen of someone who locked it and walked away.
          *
-         * ⚠️ খরচ নিয়ে: idle-এ উইন্ডো বদলায় না, তাই <see cref="ReadUrlIfChanged"/>
-         *    ক্যাশ করা মানই ফেরায় — UI Automation-এর দামি কলটা আর হয় না।
+         * Careful, on cost: in idle the window does not change, so <see cref="ReadUrlIfChanged"/>
+         * returns the cached value and the expensive UI Automation call does not happen.
          */
         if (state == SegmentState.Locked) return _tracker.Observe(null, now, state);
 
@@ -70,11 +68,11 @@ internal sealed class AppUsageService
     public IReadOnlyList<AppUsageRecord> CloseAll(DateTimeOffset now) => _tracker.CloseAll(now);
 
     /// <summary>
-    /// উইন্ডো বা টাইটেল বদলালে নতুন করে পড়া, নইলে আগেরটাই।
+    /// Read again if the window or title changed, otherwise return the previous value.
     ///
-    /// ⚠️ টাইটেল এখানে আবার পড়া হয় (probe-ও পড়ে) — কারণ probe-এর ভেতর
-    /// থেকে কলব্যাক হিসেবে ডাকা হচ্ছে, তখনো সেটার টাইটেল হাতে আসেনি।
-    /// দুবার <c>GetWindowText</c> ডাকা সস্তা; UI Automation নয়।
+    /// Careful: the title is read again here (the probe reads it too), because this is called as a
+    /// callback from inside the probe, when its title is not yet available. Calling
+    /// <c>GetWindowText</c> twice is cheap; UI Automation is not.
     /// </summary>
     private string? ReadUrlIfChanged(nint hwnd)
     {

@@ -32,7 +32,7 @@ export interface ScreenshotResult {
   accepted: number;
   duplicate: boolean;
   path: string;
-  /** থাম্বনেইল বসেছে কি না — null মানে গ্যালারি ফুল ছবিতে ফেরত যাবে (A06) */
+  /** Whether a thumbnail was stored; null means the gallery falls back to the full image (A06). */
   thumbPath: string | null;
 }
 
@@ -47,25 +47,25 @@ export class ScreenshotIngestService implements OnModuleInit {
   ) {}
 
   /**
-   * ⭐⭐ **G81 — চালুর সময়ই storage-এ লেখা যায় কি না দেখা।**
+   * **G81 - check at startup that storage is writable.**
    *
-   * ১৩ আগস্ট VPS-এ গ্যালারিতে *"10 this day"* দেখাত, অথচ দশটাই ভাঙা
-   * আইকন। কারণ: হোস্টের `.data/storage` ফোল্ডারটা **root**-এর, আর
-   * কনটেইনার চলে `node` (uid 1000) হয়ে। ⚠️ Dockerfile-এর
-   * `chown -R node:node` ওখানে কাজেই আসে না — bind mount ইমেজের
-   * ফোল্ডারটা **মালিকানাসহ** ঢেকে দেয়।
+   * On the VPS the gallery once showed *"10 this day"* while all ten were broken
+   * icons. The cause: the host's `.data/storage` folder belonged to **root**,
+   * while the container runs as `node` (uid 1000). Careful: the Dockerfile's
+   * `chown -R node:node` does not help, since a bind mount covers the image's
+   * folder **together with its ownership**.
    *
-   * ⚠️⚠️ কিন্তু আসল অপরাধটা ছিল **নীরবতা**। permission denied একটা
-   * জোরালো ভুল, অথচ সার্ভার দিব্যি উঠে বসে থাকত আর প্রতিটা ছবি নীরবে
-   * হারাত। storage-এ লেখা না গেলে এই পণ্যের **মূল কাজটাই অচল** — তখন
-   * চালু থাকাটাই বিভ্রান্তি।
+   * Careful: the real offence was the **silence**. Permission denied is a loud
+   * error, yet the server came up happily and silently lost every image. If
+   * storage cannot be written, the product's **core job does not work**, and
+   * staying up is only confusing.
    *
-   * তাই `SignedUrlService` দুর্বল সিক্রেটে যেমন থামে, ঠিক তেমন।
+   * So it stops just as `SignedUrlService` does on a weak secret.
    *
-   * ⭐ **probe লেখা হয় root-এর ভেতরে, শুধু `access()` নয়** — `access(W_OK)`
-   * ফোল্ডারের বিট দেখে, কিন্তু read-only mount, ভরা ডিস্ক বা SELinux
-   * লেবেলে সে **সফল বলেও** পরে লেখা আটকে যেতে পারে। সত্যিকারের লেখাই
-   * একমাত্র সত্যিকারের প্রমাণ।
+   * **The probe writes inside the root, not just `access()`**: `access(W_OK)`
+   * looks at the folder's mode bits, but with a read-only mount, a full disk or
+   * an SELinux label it can **report success** and writes still fail later. An
+   * actual write is the only real proof.
    */
   async onModuleInit(): Promise<void> {
     // the probe itself is the driver's (local folder or S3 bucket); the
@@ -75,16 +75,16 @@ export class ScreenshotIngestService implements OnModuleInit {
   }
 
   /**
-   * @param thumb ঐচ্ছিক ৩২০px থাম্বনেইল — এজেন্ট `thumb` নামের দ্বিতীয়
-   *   multipart অংশে পাঠায় (A06)। না পাঠালে (পুরোনো এজেন্ট) কিছুই ভাঙে না।
+   * @param thumb Optional 320px thumbnail; the agent sends it in a second
+   *   multipart part named `thumb` (A06). If absent (an old agent), nothing breaks.
    *
-   *   ⭐ **কেন এজেন্ট বানায়, সার্ভার নয়** — Node-এ WebP ডিকোড করার কোনো
-   *   উপায় নেই। `sharp` ইনস্টল করা নেই আর নতুন dependency নিষেধ; `pngjs`
-   *   আছে বটে, কিন্তু সে PNG-ই বোঝে, আর এজেন্ট পাঠায় WebP (ADR-007)।
-   *   এজেন্টে SkiaSharp আগে থেকেই আছে — সে ইতিমধ্যেই ১৯২০px-এ নামিয়ে
-   *   এনকোড করে (`WebpEncoder.cs`), তাই একই সারফেস থেকে ৩২০px বের করা
-   *   তার কাছে প্রায় বিনামূল্যে। বোনাস: থাম্বনেইলটাও নেটওয়ার্কের আগে
-   *   তৈরি হয়, তাই সার্ভারের CPU-তে ১৫টা PC-র রিসাইজের ঢেউ ওঠে না।
+   *   **Why the agent makes it, not the server**: Node has no way to decode
+   *   WebP. `sharp` is not installed and new dependencies are forbidden; `pngjs`
+   *   exists, but it understands only PNG, and the agent sends WebP (ADR-007).
+   *   The agent already has SkiaSharp and already downsizes to 1920px before
+   *   encoding (`WebpEncoder.cs`), so producing 320px from the same surface is
+   *   nearly free for it. Bonus: the thumbnail is also made before the network
+   *   hop, so the server CPU does not see a wave of resizes from 15 PCs.
    */
   async ingest(
     device: Device,
@@ -115,7 +115,7 @@ export class ScreenshotIngestService implements OnModuleInit {
     const workDate = workDateOf(capturedAt);
 
     // D:\oXeio\storage\screenshots\YYYY\MM\DD\emp-003\093147_m0.webp
-    // তারিখ ধরে ফোল্ডার — তাই ৯০ দিনের retention শুধু ফোল্ডার মুছেই করা যায় (ADR-006)
+    // Folders by date, so the 90-day retention is just deleting folders (ADR-006).
     const { year, month, day, hhmmss } = dhakaPathParts(capturedAt);
     const emp = `emp-${String(device.employeeId).padStart(3, '0')}`;
     const relPath = join(
@@ -127,13 +127,13 @@ export class ScreenshotIngestService implements OnModuleInit {
       `${hhmmss}_m${meta.monitorIndex}.webp`,
     ).replace(/\\/g, '/');
 
-    // ⚠️ `let` — আইডিটা try-র বাইরে দরকার, কারণ থাম্বনেইলের UPDATE-এ
-    //    `where` লাগবে। `file_path` unique **নয়** (schema দেখুন), তাই
-    //    পথ ধরে আপডেট করলে Prisma-ই ছুঁড়ে দিত।
+    // Careful: `let`, because the id is needed outside the try: the thumbnail
+    //    UPDATE needs a `where`. `file_path` is **not** unique (see the schema),
+    //    so updating by path would make Prisma throw.
     let screenshotId: bigint;
 
     try {
-      // DB আগে — UNIQUE-এ আটকালে ডিস্কে অযথা ফাইল লিখব না
+      // DB first; if it hits the UNIQUE constraint we do not write a pointless file.
       const created = await this.prisma.screenshot.create({
         select: { id: true },
         data: {
@@ -146,14 +146,15 @@ export class ScreenshotIngestService implements OnModuleInit {
           monitorIndex: meta.monitorIndex,
           filePath: relPath,
           /**
-           * ⭐ এখানে **সবসময় null**, থাম্বনেইল থাকলেও। মানটা বসে নিচে,
-           *    ফাইলটা সত্যিই ডিস্কে পড়ার **পরে**।
+           * **Always null here**, even when there is a thumbnail. The value is
+           *    set below, **after** the file has really reached the disk.
            *
-           * ⚠️ এখানেই পথটা বসিয়ে দিলে, আর তারপর লেখাটা ব্যর্থ হলে,
-           *    `thumb_path` এমন একটা ফাইলের দিকে দেখাত যেটা নেই।
-           *    গ্যালারির `thumbPath ?? filePath` fallback তখন **চলতই না**
-           *    (মান তো null নয়), আর গ্রিড ভাঙা ছবিতে ভরে যেত।
-           *    `thumb_path` তাই ইচ্ছার নয়, **ডিস্কের সত্যের** প্রতিচ্ছবি।
+           * Careful: if the path were set here and the write then failed,
+           *    `thumb_path` would point to a file that does not exist. The
+           *    gallery's `thumbPath ?? filePath` fallback would then **never
+           *    run** (the value is not null), and the grid would fill with broken
+           *    images. So `thumb_path` reflects **the truth on disk**, not
+           *    intent.
            */
           thumbPath: null,
           width: meta.width ?? null,
@@ -169,8 +170,8 @@ export class ScreenshotIngestService implements OnModuleInit {
         err instanceof Prisma.PrismaClientKnownRequestError &&
         err.code === 'P2002'
       ) {
-        // client_uuid অথবা (device, slot, monitor) — দুটোর যেকোনোটায় ডুপ্লিকেট।
-        // এজেন্ট আপলোড রিট্রাই করেছে, ভুল কিছু নয়।
+        // A duplicate on client_uuid or on (device, slot, monitor): either one.
+        // The agent retried the upload; nothing is wrong.
         return this.resolveDuplicate(
           device,
           meta,
@@ -196,39 +197,40 @@ export class ScreenshotIngestService implements OnModuleInit {
   }
 
   /**
-   * A06 — থাম্বনেইলটা ডিস্কে বসিয়ে `thumb_path` হালনাগাদ করে।
+   * A06 - put the thumbnail on disk and update `thumb_path`.
    *
-   * ⚠️ **এই ফাংশন কখনো ছুঁড়ে দেয় না।** পুরো শরীরটা একটা try/catch-এ, আর
-   *    catch শুধু লগ লেখে। কারণটা A06-এর মূল শর্ত: *ছবিটা মূল্যবান,
-   *    থাম্বনেইলটা সুবিধা মাত্র*। ডিস্ক ভরে যাওয়া, ফোল্ডারের পারমিশন,
-   *    অ্যান্টিভাইরাসের লক — যে কারণেই থাম্বনেইল লেখা আটকাক, ফুল ছবিটা
-   *    ততক্ষণে ডিস্কে ও DB-তে বসে গেছে। এখানে ছুঁড়ে দিলে এজেন্ট 500 পেত,
-   *    রিট্রাই করত, আর পরের বার P2002 ডুপ্লিকেট — অর্থাৎ একটা নিখুঁত
-   *    আপলোডকে ব্যর্থ বলে দেখানো হতো, স্রেফ একটা ছোট ছবি বানাতে না পেরে।
+   * Careful: **this function never throws.** The whole body is in one try/catch
+   *    and the catch only logs. The reason is the core condition of A06: *the
+   *    image is valuable, the thumbnail is only a convenience*. Whatever stops the
+   *    thumbnail from being written (a full disk, folder permissions, an antivirus
+   *    lock), the full image is already on disk and in the DB by then. Throwing
+   *    here would give the agent a 500, it would retry, and the next time hit a
+   *    P2002 duplicate; a perfect upload would be reported as failed just
+   *    because a small image could not be made.
    *
-   * @returns বসানো `thumb_path`, নয়তো `null` (গ্যালারি ফুল ছবিতে ফেরত যাবে)
+   * @returns the stored `thumb_path`, or `null` (the gallery falls back to the full image)
    */
   /**
-   * ⭐⭐ **G81 — "সারি আছে" আর "ফাইল আছে" এক কথা নয়।**
+   * **G81 - "the row exists" and "the file exists" are not the same thing.**
    *
-   * সারি ও ফাইল দুই জায়গায় লেখা হয়, DB আগে ডিস্ক পরে। ডিস্কে লেখা
-   * ব্যর্থ হলে সারিটা থেকে যায়, আর তখন যা ঘটত:
+   * The row and the file are written in two places, DB first and disk second. If
+   * the disk write fails the row stays, and then this is what happened:
    *
    * ```
-   * লেখা ব্যর্থ  →  এজেন্ট রিট্রাই  →  DB বলে "সারি তো আছে" (P2002)
-   *              →  সার্ভার { accepted: 0, duplicate: true } ফেরত দেয়
-   *              →  এজেন্ট আউটবক্স থেকে ছবিটা মুছে ফেলে
+   * write fails  ->  agent retries  ->  DB says "the row exists" (P2002)
+   *              ->  server returns { accepted: 0, duplicate: true }
+   *              ->  agent deletes the image from its outbox
    * ```
    *
-   * ⚠️⚠️ **duplicate পথটা সফলতা ধরে নিত** — যুক্তিসঙ্গত, কারণ ওটা লেখা
-   * হয়েছিল "এজেন্ট একই ছবি দুবার পাঠিয়েছে" ভেবে। ফল: ছবিটা চিরতরে
-   * হারাত, এজেন্ট নিশ্চিন্ত, সার্ভার নিশ্চিন্ত, আর মালিক দেখতেন ভাঙা
-   * আইকন — যার সাথে আসল কারণের কোনো মিল নেই।
+   * Careful: **the duplicate path assumed success**. That was reasonable, since
+   * it was written for "the agent sent the same image twice". The result: the
+   * image was lost for good, the agent was content, the server was content, and
+   * the owner saw a broken icon with no visible link to the real cause.
    *
-   * ⭐ এখন ফাইলটা সত্যিই আছে কি না **দেখা হয়**, আর না থাকলে
-   * **সারিয়ে দেওয়া হয়** — শুধু "ব্যর্থ" বললে এজেন্ট ছবিটা ধরে রাখত
-   * বটে, কিন্তু প্রতিবার একই দেয়ালে ধাক্কা খেত। রিট্রাইটাকে মেরামতে
-   * বদলে দেওয়াই আসল সমাধান।
+   * Now the server **checks** whether the file really exists, and if not
+   * **repairs it**. Merely answering "failed" would make the agent keep the
+   * image, but it would hit the same wall every time. Turning the retry into a
+   * repair is the real fix.
    */
   private async resolveDuplicate(
     device: Device,
@@ -239,8 +241,8 @@ export class ScreenshotIngestService implements OnModuleInit {
     thumb: Express.Multer.File | undefined,
   ): Promise<ScreenshotResult> {
     /**
-     * ⚠️ দুটো UNIQUE-এর **যেকোনোটায়** আটকাতে পারে, তাই দুটোই খোঁজা হয়:
-     * `client_uuid`, আর `(device, slot, monitor)`।
+     * Careful: either of the two UNIQUE constraints can trigger, so both are
+     * looked up: `client_uuid`, and `(device, slot, monitor)`.
      */
     const existing = await this.prisma.screenshot.findFirst({
       where: {
@@ -256,21 +258,21 @@ export class ScreenshotIngestService implements OnModuleInit {
       select: { id: true, filePath: true, thumbPath: true },
     });
 
-    // ⚠️ সারিটা এর মধ্যে মুছে গেছে (retention জব, বা কেউ হাতে) — বিরল,
-    //    কিন্তু তখন মেরামতের কিছু নেই। আগের আচরণেই ফিরি।
+    // Careful: the row has been deleted in the meantime (retention job, or by
+    //    hand). Rare, but then there is nothing to repair; fall back to the old behaviour.
     if (!existing) {
       return { accepted: 0, duplicate: true, path: relPath, thumbPath: null };
     }
 
     /**
-     * ⭐ **`existing.filePath`, `relPath` নয়** — দুটো আলাদা হতে পারে।
-     * রিট্রাইয়ে `captured_at`-এর সেকেন্ড এক না হলে ফাইলের নামও বদলায়
-     * (`hhmmss_m0.webp`)। নতুন পথে লিখলে সারিটা এক ফাইলের দিকে দেখাত আর
-     * বাইট পড়ে থাকত অন্য ফাইলে — অর্থাৎ ঠিক যে অমিলটা সারাতে বসেছি,
-     * সেটাই আবার তৈরি হতো।
+     * **`existing.filePath`, not `relPath`**; the two can differ. On a retry
+     * where the second of `captured_at` differs, the file name changes too
+     * (`hhmmss_m0.webp`). Writing to the new path would leave the row pointing at
+     * one file and the bytes in another, recreating exactly the mismatch we are
+     * trying to repair.
      */
     if ((await this.storage.size(existing.filePath)) !== null) {
-      // ফাইল আছে — সত্যিকারের ডুপ্লিকেট, এজেন্ট নিশ্চিন্তে মুছে ফেলুক
+      // The file exists: a true duplicate, the agent can safely delete it.
       return {
         accepted: 0,
         duplicate: true,
@@ -278,7 +280,7 @@ export class ScreenshotIngestService implements OnModuleInit {
         thumbPath: existing.thumbPath,
       };
     }
-    // ফাইল নেই — সারিটা এতিম। নিচে মেরামত।
+    // The file is missing: the row is an orphan. Repaired below.
 
     this.logger.warn(
       `Screenshot row ${existing.id} had no file on disk (${existing.filePath}) — healing from agent retry`,
@@ -294,10 +296,10 @@ export class ScreenshotIngestService implements OnModuleInit {
     );
 
     /**
-     * ⭐ `accepted: 1` — এজেন্টের দিক থেকে এটা সত্যিই গ্রহণ করা হয়েছে,
-     * এইবারই প্রথম। `duplicate: false`-ও তাই: সারিটা পুরোনো হলেও
-     * **বাইটগুলো নতুন**, আর এজেন্টের সিদ্ধান্ত (কিউ থেকে মোছা) নির্ভর
-     * করে বাইট পৌঁছেছে কি না তার উপর — সারি ছিল কি না তার উপর নয়।
+     * `accepted: 1`: from the agent's side this really is accepted, for the first
+     * time. So `duplicate: false` too: although the row is old, **the bytes are
+     * new**, and the agent's decision (delete from its queue) depends on whether
+     * the bytes arrived, not on whether a row existed.
      */
     return {
       accepted: 1,
@@ -313,7 +315,7 @@ export class ScreenshotIngestService implements OnModuleInit {
     fullSizeBytes: number,
     thumb: Express.Multer.File | undefined,
   ): Promise<string | null> {
-    // পুরোনো এজেন্ট থাম্বনেইল পাঠায় না — এটা ভুল নয়, তাই লগও নয়
+    // Old agents send no thumbnail; that is not an error, so nothing is logged.
     if (!thumb) return null;
 
     try {
@@ -325,8 +327,9 @@ export class ScreenshotIngestService implements OnModuleInit {
 
       const rejection = checkThumb(candidate, fullSizeBytes);
       if (rejection !== null) {
-        // ⚠️ warn, error নয় — আপলোডটা সফল হয়েছে। কিন্তু নীরবেও ফেলা যায় না:
-        //    এজেন্টের এনকোডার ভেঙে গেলে একমাত্র এই লাইনটাই বলবে।
+        // Careful: warn, not error; the upload succeeded. But it cannot be
+        //    dropped silently either: if the agent's encoder breaks, this line is
+        //    the only thing that will say so.
         this.logger.warn(
           `Thumbnail rejected (${rejection}): ${relPath} — the full screenshot was stored fine`,
         );
@@ -341,8 +344,8 @@ export class ScreenshotIngestService implements OnModuleInit {
 
       await this.storage.put(thumbRel, thumb.buffer, ALLOWED_SCREENSHOT_MIME);
 
-      // ⭐ ফাইলটা ডিস্কে পড়ার পরেই কেবল DB জানল — এর উল্টোটা মানেই
-      //    ভাঙা ছবির গ্রিড (উপরে `thumbPath: null`-এর নোট দেখুন)।
+      // The DB learns of it only after the file has reached disk; the reverse
+      //    means a grid of broken images (see the `thumbPath: null` note above).
       await this.prisma.screenshot.update({
         where: { id: screenshotId },
         data: { thumbPath: thumbRel },

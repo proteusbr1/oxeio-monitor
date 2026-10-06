@@ -15,42 +15,45 @@ import { useFreshUrls } from './useFreshUrls';
 import { seesEveryone } from '../../api/auth';
 
 /**
- * E06 · I07 · I08 · J05 — স্ক্রিনশট গ্যালারি (`/screenshots`)।
+ * Screenshot gallery (`/screenshots`).
  *
- * ⭐ এই পেজে `@Roles` নেই — owner, manager আর স্টাফ তিনজনেই আসে। পার্থক্যটা
- * **স্কোপে**: স্টাফের জন্য সার্ভার সেশন থেকেই `employeeId` বসায়, তাই এখানে
- * স্টাফ-ফিল্টারটা **দেখানোই হয় না** (J05)। দেখালে দুটো ক্ষতি হতো — সহকর্মীদের
- * নামের তালিকা ফাঁস হতো (`GET /employees` তার জন্য ৪০৩), আর অন্যের আইডি
- * বেছে সে ৪০৩ খেত, অথচ কন্ট্রোলটা তো তাকেই দেখানো হয়েছিল।
+ * Important: this page has no `@Roles`; owner, manager and staff all come here. The
+ * difference is in the **scope**: for staff the server sets `employeeId` from the
+ * session, so the staff filter is **not shown at all**. Showing it would do two
+ * kinds of harm: leak the list of colleagues' names (`GET /employees` returns 403
+ * for them), and let them pick someone else's ID and get a 403 from a control that
+ * was offered to them.
  *
- * ⭐ I08 — পেজে একটা **স্থায়ী** নোট: স্ক্রিনশট দেখা হলে সেটা audit log-এ
- * থাকে। এটা লুকোনোর জিনিস নয়, স্বচ্ছতার প্রতিশ্রুতির অংশ — স্টাফ জানে যে
- * তাকে দেখা হচ্ছে, আর কে দেখল সেটাও লেখা থাকছে।
+ * Important: the page carries a **permanent** note that viewing a screenshot is
+ * recorded in the audit log. It is not something to hide; it is part of the
+ * transparency promise: staff know they are being watched, and who looked is
+ * recorded too.
  */
 export function GalleryPage() {
   const { user } = useAuth();
-  // J05 — স্টাফ শুধু নিজেরটা পায়, বাছাবাছির কিছু নেই
+  // Staff only get their own shots; nothing to pick
   /**
-   * ⚠️ নামটা `isEmployee` **থাকল**, কিন্তু সূত্রটা উল্টে গেছে: এখন প্রশ্ন
-   * *"ইনি কি গোটা দল দেখেন না?"*। ২৫ আগস্টের আগে লেখা ছিল
-   * `role === 'employee'`, তাই গবেষক রোল এলে তিনি **সবার ছবি** আর
-   * বাছাবাছির ঘরটাও পেতেন — সার্ভার আটকাত, পর্দা নয়।
+   * Careful: the name `isEmployee` **stays**, but the logic is inverted: the question
+   * is now *"does this person not see the whole team?"*. It used to be
+   * `role === 'employee'`, so a researcher role would get **everyone's shots** and the
+   * picker too: the server would block it, the screen would not.
    */
   const isEmployee = !seesEveryone(user?.role);
 
   const [date, setDate] = useState(() => todayInDhaka());
   const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
-  /** `null` = লাইটবক্স বন্ধ */
+  /** `null` = lightbox closed */
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   /**
-   * ⚠️ ক্যোয়ারিটা `useMemo`-তে — এটাই `useApi`-র dep **আর** `useFreshUrls`-এর
-   *    রিসেট-সংকেত। প্রতি রেন্ডারে নতুন অবজেক্ট বানালে দুটোই অসীমবার চলত।
+   * Careful: the query is in `useMemo`; it is both the `useApi` dep **and** the
+   *    reset signal for `useFreshUrls`. A new object each render would make both run
+   *    forever.
    *
-   * ⚠️ স্টাফের ক্ষেত্রে `employeeId` পাঠানোই হয় না — নিজের আইডি পাঠালেও
-   *    কাজ হতো, কিন্তু সেটা `/auth/me`-র আইডির উপর ভরসা করা। সার্ভার সেশন
-   *    থেকে নেয়, সেটাই একমাত্র সত্য।
+   * Careful: for staff `employeeId` is never sent. Sending their own ID would work,
+   *    but that trusts the ID from `/auth/me`. The server takes it from the session,
+   *    which is the only source of truth.
    */
   const query = useMemo<GalleryQuery>(
     () => ({
@@ -69,7 +72,7 @@ export function GalleryPage() {
 
   const items = data?.items ?? [];
 
-  /** ফিল্টার বদলালে পাতা ১-এ ফেরা — নইলে "Page 3" খালি দেখাত */
+  /** Back to page 1 when a filter changes, or "Page 3" would show empty */
   const changeDate = useCallback((next: string) => {
     setDate(next);
     setPage(1);
@@ -85,7 +88,7 @@ export function GalleryPage() {
   const changePage = useCallback((next: number) => {
     setPage(next);
     setOpenIndex(null);
-    // ⚠️ পাতা বদলে স্ক্রল নিচেই থাকলে মনে হতো কিছুই হয়নি
+    // Careful: if the page changes while scroll stays at the bottom, nothing seems to happen
     window.scrollTo({ top: 0 });
   }, []);
 
@@ -105,13 +108,13 @@ export function GalleryPage() {
             <EmployeePicker
               value={employeeId}
               onChange={changeEmployee}
-              // ⚠️ `label`/`allLabel` স্পষ্ট করে দেওয়া — কম্পোনেন্টের ডিফল্ট
-              //    দুটো এখনো বাংলা, আর সেগুলো অন্য মালিকের ফাইলে
+              // Careful: `label`/`allLabel` are explicit because the component's two
+              //    defaults are still Bengali, and they live in another owner's file
               label="Staff"
               allowAll
               allLabel="Everyone"
-              // ⚠️ চলে যাওয়া কর্মীর পুরোনো দিনও দেখতে হয় — নইলে তার
-              //    স্ক্রিনশট থাকা সত্ত্বেও নামটাই বাছা যেত না
+              // Careful: a departed employee's old days must stay viewable, or their
+              //    name could not be picked even though their screenshots exist
               includeInactive
             />
           )}
@@ -157,7 +160,7 @@ export function GalleryPage() {
           <ShotGrid
             items={items}
             urls={urls}
-            // ⚠️ "Everyone" দেখা হলে নাম ছাড়া কোন ছবি কার বোঝার উপায় নেই
+            // Careful: when "Everyone" is shown, shots are unidentifiable without a name
             showName={!isEmployee && employeeId === null}
             onOpen={setOpenIndex}
           />
@@ -175,10 +178,10 @@ export function GalleryPage() {
       )}
 
       {/*
-        ⭐ শর্তসাপেক্ষে mount — খোলা মানেই তৈরি, বন্ধ মানেই মুছে যাওয়া। তাই
-        স্ক্রল-লক আর ফোকাস ফেরানোর হিসাব `useEffect`-এর cleanup-এই মিটে যায়।
-        ⚠️ `openIndex` তালিকার বাইরে চলে যেতে পারে (রিফ্রেশে ছবি কমে গেলে),
-           তাই আইটেমটা সত্যিই আছে কি না মিলিয়ে নেওয়া হয়।
+        Mounted conditionally: open means created, closed means gone. So scroll-lock
+        and focus-restore bookkeeping is settled in the `useEffect` cleanup.
+        Careful: `openIndex` can fall outside the list (if a refresh shrinks the
+           gallery), so the item is checked to really exist.
       */}
       {openIndex !== null && items[openIndex] && (
         <Lightbox
@@ -194,14 +197,14 @@ export function GalleryPage() {
 }
 
 /**
- * I08 — স্বচ্ছতার নোট। ⚠️ এটা `<Caveat>` নয়: caveat মানে "সংখ্যাটা সাবধানে
- * পড়ুন", আর এটা একটা **প্রতিশ্রুতি**। তাই সতর্কতার ⚠ নয়, সরু ব্র্যান্ড-রেখা।
+ * Transparency note. Careful: this is not a `<Caveat>`: a caveat means "read the
+ * number carefully", and this is a **promise**. So a thin brand line, not a warning ⚠.
  */
 function AuditNote({ isEmployee }: { isEmployee: boolean }) {
   return (
     <p className="mb-3 rounded-lg border border-brand/30 bg-brand-bg px-3.5 py-2.5 text-xs text-ink-2">
-      {/* ⚠️ বাক্যটা হুবহু এই — "Opening a screenshot is recorded in the audit
-          log." <b> শুধু জোর দেয়, লেখাটা ভাঙে না */}
+      {/* Careful: the sentence must be exactly this: "Opening a screenshot is recorded
+          in the audit log." The <b> only emphasises; it does not break the text */}
       Opening a screenshot is <b>recorded in the audit log</b> — who opened
       it, when, and whose screen it was.{' '}
       {isEmployee
@@ -232,8 +235,8 @@ function Pager({
         >
           Next ▶
         </Button>
-        {/* ⚠️ `.num` শুধু সংখ্যার উপরে, শব্দের উপরে নয় — ওটা tabular-nums
-            আনার জন্য, আর মনো ফন্টে গোটা বাক্য বসালে পট্টিটা বেঢপ দেখাত */}
+        {/* Careful: `.num` goes only on the numbers, not the words; it brings
+            tabular-nums, and a whole sentence in the mono font would look clumsy */}
         <span className="ml-auto text-xs text-ink-3">
           Page <span className="num">{formatCount(page)}</span> /{' '}
           <span className="num">{formatCount(totalPages)}</span>

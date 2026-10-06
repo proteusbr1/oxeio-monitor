@@ -10,18 +10,19 @@ import type {
 } from '../src/reports/reports.types';
 
 /**
- * ⭐⭐ **G130 (R2) — ছুটি সংখ্যায় পৌঁছেছিল, লেবেলে নয়।**
+ * G130 (R2) — leave reached the numbers, not the labels.
  *
- * ⚠️⚠️ ছুটি ইতিমধ্যেই পাঁচ জায়গায় ঢুকেছে — টার্গেট, প্রত্যাশা, tray, Live
- * Board, রিপোর্ট — অর্থাৎ কেউ আর ছুটির জন্য "পিছিয়ে" দেখায় না। কিন্তু
- * কাগজে **"On leave" বলে কিছু লেখা ছিল না**, তাই ছুটির দিনটা দেখতে হুবহু
- * একটা শূন্য-ঘণ্টার কর্মদিবসের মতো: `Workday` · `No activity` · ০ ঘণ্টা।
- * **সংখ্যা মিথ্যা বলছিল না, কিন্তু কারণটাও বলছিল না** — আর "ও ওই দিন কেন
- * কাজ করেনি" প্রশ্নের উত্তর খুঁজতে Settings → Leave-এ যেতে হতো।
+ * Leave already enters five places — the target, the expectation, the tray,
+ * the Live Board, the reports — so nobody shows "behind" for leave any more.
+ * But the paper said nothing like "On leave", so a leave day looked exactly
+ * like a zero-hour work day: `Workday` · `No activity` · 0 hours. The
+ * numbers were not lying, but they were not giving the reason — and to find
+ * out "why did they not work that day" you had to go to Settings -> Leave.
  *
- * ⚠️ এই ফাইলটার দাবি **ছাপার**, হিসাবের নয়। হিসাবটা `leave.spec.ts`
- * পাহারা দেয়; এখানে কেবল দেখা হয় সত্যিটা কাগজ পর্যন্ত **পৌঁছায় কি না** —
- * ঠিক সেই ফাঁক যেটার নাম এই রেপোতে "চুক্তি লেখা আছে, কলার লেখা হয়নি"।
+ * This file's claim is about printing, not calculation. The calculation is
+ * guarded by `leave.spec.ts`; here we only check whether the truth reaches
+ * the paper — exactly the gap this repo calls "the contract is written, the
+ * caller is not".
  */
 
 const meta: ReportMeta = {
@@ -75,11 +76,11 @@ function report(rows: AttendanceRow[]): AttendanceReport {
   };
 }
 
-/** তৈরি ওয়ার্কবুক আবার পড়ে Attendance শিটের শিরোনাম ও একটা সারি ফেরায় */
+/** Re-reads the built workbook and returns the Attendance sheet's headers and one row */
 async function sheetRows(
   rows: AttendanceRow[],
 ): Promise<{ headers: string[]; cells: string[][] }> {
-  // ⚠️ বাফারটা আবার পার্স করা হয় — কলামের সংজ্ঞা দেখলে "ফাইলে ওঠে" প্রমাণ হতো না
+  // The buffer is parsed again — looking at the column definitions would not prove "it lands in the file"
   const wb = new Workbook();
   await wb.xlsx.load((await attendanceWorkbook(report(rows))) as unknown as ArrayBuffer);
 
@@ -98,26 +99,26 @@ async function sheetRows(
   return { headers: all[0], cells: all.slice(1) };
 }
 
-describe('G130 — PDF-এর সারিতে কারণটা লেখা থাকে', () => {
-  it('ছুটির দিনে Day type ঘরে "On leave"', () => {
+describe('G130 — the reason is written in the PDF row', () => {
+  it('on a leave day the Day type cell says "On leave"', () => {
     const { lines } = attendanceLines(report([row({ onLeave: true })]));
     expect(lines[0].dayType).toBe('On leave');
   });
 
-  it('ছুটি না হলে আগের মতোই "Workday"', () => {
+  it('when not on leave it is "Workday" as before', () => {
     const { lines } = attendanceLines(report([row()]));
     expect(lines[0].dayType).toBe('Workday');
   });
 
   /**
-   * ⭐⭐ **এটাই সবচেয়ে সহজে ভুল হওয়া ধারটা।**
+   * The place where it is easiest to go wrong.
    *
-   * ⚠️⚠️ কথাটা `status` ঘরে বসানোর লোভ হয় — ওখানেই তো "No activity"
-   * লেখা থাকে। কিন্তু কেউ ছুটির দিনেও কাজ করতে পারেন (§ ৪ — যেকোনো দিনের
-   * কাজ গোনা হয়), আর `status`-এ বসালে ওই ঘণ্টাগুলো **কাগজ থেকে উধাও**
-   * হতো। দুটো আলাদা ঘরে দুটো আলাদা সত্যি।
+   * There is a temptation to put it in the `status` cell — that is where "No
+   * activity" is written. But someone can work on a leave day too (section 4
+   * — work on any day counts), and putting it in `status` would make those
+   * hours vanish from the paper. Two different truths in two different cells.
    */
-  it('⭐ ছুটির দিনে কাজ করলে দুটো তথ্যই থাকে — একটা অন্যটাকে ঢাকে না', () => {
+  it('working on a leave day keeps both facts — neither hides the other', () => {
     const { lines } = attendanceLines(
       report([
         row({
@@ -135,10 +136,10 @@ describe('G130 — PDF-এর সারিতে কারণটা লেখা
   });
 
   /**
-   * ⚠️ সাপ্তাহিক ছুটি আর ব্যক্তিগত ছুটি — দুটো আলাদা কথা। এক করে দিলে
-   *    কাগজ পড়ে বোঝা যেত না অফিস বন্ধ ছিল নাকি একজন ছুটিতে ছিলেন।
+   * The weekly holiday and personal leave are two different things. Merged,
+   * the paper would not say whether the office was closed or one person was on leave.
    */
-  it('সাপ্তাহিক ছুটি নিজের কথাই বলে', () => {
+  it('the weekly holiday says its own thing', () => {
     const { lines } = attendanceLines(
       report([row({ dayType: 'weekly_off', onLeave: false })]),
     );
@@ -146,13 +147,13 @@ describe('G130 — PDF-এর সারিতে কারণটা লেখা
   });
 });
 
-describe('G130 — Excel-এ আলাদা কলাম', () => {
-  it('"On leave" কলামটা শিটে আছে', async () => {
+describe('G130 — a separate column in Excel', () => {
+  it('the "On leave" column is on the sheet', async () => {
     const { headers } = await sheetRows([row()]);
     expect(headers).toContain('On leave');
   });
 
-  it('ছুটির সারিতে "Yes", অন্য সারিতে খালি', async () => {
+  it('"Yes" on a leave row, empty on other rows', async () => {
     const { headers, cells } = await sheetRows([
       row({ date: '2026-08-03', onLeave: true }),
       row({ date: '2026-08-04', onLeave: false }),
@@ -163,23 +164,23 @@ describe('G130 — Excel-এ আলাদা কলাম', () => {
 
     expect(cells[0][at]).toBe('Yes');
     /**
-     * ⚠️⚠️ **"No" নয়, খালি** — আর এটা সাজসজ্জার সিদ্ধান্ত নয়। ৩১ সারির
-     * কলামজুড়ে "No" লিখলে চোখ ওটা পড়াই বন্ধ করে দিত, আর তখন যে দু-একটা
-     * "Yes" আছে সেগুলোই হারিয়ে যেত — অর্থাৎ কলামটা যোগ করেও কিছু অর্জন
-     * হতো না।
+     * Empty, not "No" — and this is not a cosmetic decision. Writing "No"
+     * down a 31-row column would make the eye stop reading it, and then the
+     * one or two "Yes" would get lost — the column would be added and
+     * achieve nothing.
      */
     expect(cells[1][at]).toBe('');
   });
 
   /**
-   * ⭐⭐ **Day type ঘরটা Excel-এ ছোঁয়া হয়নি, আর সেটা ইচ্ছাকৃত।**
+   * The Day type cell is untouched in Excel, and that is deliberate.
    *
-   * ⚠️ PDF-এ কলাম যোগ করার জায়গা নেই (A4-এ ইতিমধ্যেই নয়টা), তাই সেখানে
-   * তথ্যটা Day type ঘরে বসেছে। Excel-এ জায়গার সমস্যা নেই, তাই সেখানে
-   * **দুটো ঘর দুটোই অক্ষত** — শিট ফিল্টার করে "কজন কর্মদিবসে ছুটি নিলেন"
-   * গোনা যায়, যেটা জোড়া লাগালে আর যেত না।
+   * The PDF has no room for another column (A4 already has nine), so the
+   * information went into the Day type cell there. Excel has no space
+   * problem, so both cells stay intact — you can filter the sheet and count
+   * "how many took leave on a work day", which merging would have made impossible.
    */
-  it('⭐ Excel-এ Day type অক্ষত — শিটে ছাঁকা যায়', async () => {
+  it('Day type stays intact in Excel — can be filtered on the sheet', async () => {
     const { headers, cells } = await sheetRows([row({ onLeave: true })]);
 
     const dayType = headers.indexOf('Day type');

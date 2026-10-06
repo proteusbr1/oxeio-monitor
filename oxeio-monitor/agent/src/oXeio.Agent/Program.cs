@@ -15,43 +15,42 @@ using oXeio.Core.Models;
 namespace oXeio.Agent;
 
 /// <summary>
-/// দুটো রূপ আছে:
+/// Two forms:
 ///
 /// <list type="bullet">
-/// <item><b>কিছু না দিলে</b> — পূর্ণ এজেন্ট। tray আইকন দেখা যায়, কনসোল নয়।</item>
-/// <item><c>--diagnose</c> — Win32 ও ক্যাপচার যাচাইয়ের টুল, কনসোলে ফল লেখে।</item>
+/// <item><b>With no arguments:</b> the full agent. The tray icon shows, not a console.</item>
+/// <item><c>--diagnose</c>: a tool for checking Win32 and capture, writing results to the
+/// console.</item>
 /// </list>
 ///
-/// ⚠️ প্রজেক্ট <c>WinExe</c>, তাই কনসোল আপনাআপনি থাকে না। এটা ইচ্ছাকৃত:
-/// <c>Exe</c> হলে প্রতিবার লগঅনে প্রতিটা PC-তে একটা কালো কনসোল উইন্ডো
-/// খুলে বসে থাকত, আর স্টাফ সেটা বন্ধ করে দিলে এজেন্টও মরত।
-/// <c>--diagnose</c>-এ কনসোলটা হাতে জুড়ে নেওয়া হয়।
+/// Careful: the project is <c>WinExe</c>, so there is no console automatically. This is deliberate:
+/// with <c>Exe</c>, a black console window would sit open on every PC at every logon, and if staff
+/// closed it the agent would die too. For <c>--diagnose</c> the console is attached by hand.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static partial class Program
 {
     /**
-     * ⭐ ভার্সনটা **assembly থেকে** পড়া হয়, হাতে লেখা নয়।
+     * The version is read **from the assembly**, not written by hand.
      *
-     * ⚠️ আগে এখানে `const string Version = "0.1.0"` ছিল, আর MSI-র ভার্সন
-     * আসত `installer/build.ps1`-এর আলাদা একটা চলক থেকে। দুটোর মধ্যে কোনো
-     * যোগ ছিল না — MSI ০.২.০ বিলি করলেও এজেন্ট heartbeat-এ নিজেকে ০.১.০
-     * বলত। সার্ভার ওই মান দেখেই আপডেট অফারের সিদ্ধান্ত নেয় (G59), তাই
-     * আপডেট হয়ে যাওয়া মেশিনকেও একই আপডেট বারবার অফার করা হতো আর H04-এর
-     * রোলআউট কোনোদিন শেষ হতো না।
+     * Careful: there used to be a `const string Version = "0.1.0"` here, and the MSI's version came
+     * from a separate variable in `installer/build.ps1`. There was no link between them: even when
+     * the MSI shipped 0.2.0, the agent called itself 0.1.0 in its heartbeat. The server decides
+     * update offers from that value (G59), so a machine that had already updated was offered the
+     * same update again and again, and the H04 rollout would never finish.
      *
-     * এখন উৎস একটাই: `agent/Directory.Build.props`।
+     * Now there is one source: `agent/Directory.Build.props`.
      */
     private static readonly string Version = ReadVersion();
 
     /// <summary>
-    /// ⚠️ `InformationalVersion`-এ SDK প্রায়ই `+<commit>` জুড়ে দেয়
-    /// (SourceLink)। সেটা সার্ভারে পাঠালে ভার্সন-তুলনা ভাঙত, কারণ
-    /// `rollout.ts` SemVer ধরে পড়ে — তাই `+`-এর পরেরটা ছেঁটে ফেলা হয়।
+    /// Careful: the SDK often appends `+<commit>` to `InformationalVersion` (SourceLink). Sending
+    /// that to the server would break version comparison, because `rollout.ts` reads SemVer, so
+    /// everything after the `+` is trimmed.
     ///
-    /// ⚠️ কিছুই না পেলে `"0.0.0"` — খালি স্ট্রিং নয়। খালি পাঠালে
-    /// সার্ভার সেটাকে "ভার্সন বলেনি" ধরে আগেরটা রেখে দিত (G59), আর তখন
-    /// সমস্যাটা আরও গভীরে লুকাত।
+    /// Careful: if nothing is found, `"0.0.0"`, not an empty string. If sent empty, the server
+    /// would treat it as "version not reported" and keep the previous one (G59), and the problem
+    /// would hide even deeper.
     /// </summary>
     private static string ReadVersion() =>
         TrimBuildMetadata(
@@ -60,10 +59,9 @@ internal static partial class Program
                 ?.InformationalVersion);
 
     /// <summary>
-    /// ⚠️ এটা অনুমান নয়, মেপে দেখা: এই রিপোতে assembly-র
-    /// <c>ProductVersion</c> আসে <c>0.1.0+ef685e42b940…</c> রূপে। ওই
-    /// পুরোটা সার্ভারে পাঠালে <c>rollout.ts</c>-এর SemVer তুলনা ভাঙত, আর
-    /// আপডেটের সিদ্ধান্ত এলোমেলো হতো।
+    /// Careful: this is not a guess but measured: in this repo the assembly's <c>ProductVersion</c>
+    /// comes as <c>0.1.0+ef685e42b940...</c>. Sending all of that to the server would break
+    /// <c>rollout.ts</c>'s SemVer comparison, and update decisions would become random.
     /// </summary>
     internal static string TrimBuildMetadata(string? raw)
     {
@@ -104,12 +102,11 @@ internal static partial class Program
     }
 
     /// <summary>
-    /// সাইন-ইন জানালাটা নকল উত্তর দিয়ে খুলে দেখা — <c>--preview-today</c>-র
-    /// মতোই একটা ডেভ টুল। কোনো সার্ভার লাগে না, কিছুই জমা হয় না।
+    /// Open the sign-in window with fake replies and look at it: a dev tool like
+    /// <c>--preview-today</c>. No server is needed and nothing is stored.
     ///
-    /// ⭐ কেন দরকার: জানালার চারটে অবস্থা আছে, আর আসল সার্ভারে সেগুলো
-    /// দেখতে হলে যথাক্রমে একটা ভুল পাসওয়ার্ড, একটা 2FA-ওয়ালা অ্যাকাউন্ট,
-    /// একটা owner অ্যাকাউন্ট আর একটা বন্ধ নেটওয়ার্ক লাগত।
+    /// Why it is needed: the window has four states, and seeing them on a real server would need,
+    /// respectively, a wrong password, an account with 2FA, an owner account and a dead network.
     ///
     /// <c>--preview-signin [wrong|totp|forbidden|offline]</c>
     /// </summary>
@@ -137,8 +134,8 @@ internal static partial class Program
                         EnrollmentStatus.ServerUnreachable,
                         "Could not reach the server: connection refused"),
 
-                    // ⚠️ প্রথম দফায় কোড চায়, দ্বিতীয় দফায় মেনে নেয় —
-                    //    দুটো ধাপই দেখা যায়
+                    // Careful: the first round asks for a code and the second accepts it, so both
+                    // steps can be seen
                     "totp" when !totpAsked && string.IsNullOrWhiteSpace(totp) => Ask(),
 
                     _ => new EnrollmentResult(
@@ -158,16 +155,14 @@ internal static partial class Program
             });
 
         /**
-         * ⚠️ অবস্থা চাওয়া হলে জানালাটা নিজে থেকেই একবার "Sign in" চাপে,
-         * যাতে ভুল-পাসওয়ার্ড বা 2FA-র চেহারাটাও ছবিতে তোলা যায়
-         * (`--preview-today`-তে অবস্থাগুলো ডেটা দিয়ে আসে, এখানে একটা
-         * ক্লিক লাগে)।
+         * Careful: when a state is requested, the window presses "Sign in" once by itself, so that
+         * the wrong-password or 2FA look can be photographed too (in `--preview-today` the states
+         * come as data; here a click is needed).
          *
-         * ⚠️ প্রথমে `SendKeys` দিয়ে চেষ্টা করা হয়েছিল — **কাজ করেনি**, আর
-         * নীরবে: কি-স্ট্রোকটা ফোরগ্রাউন্ড জানালায় যায়, আর সেটা আমাদের
-         * জানালা কি না তার কোনো নিশ্চয়তা নেই। বোতামটা `Controls` থেকে
-         * খুঁজে সরাসরি `PerformClick()` করাই একমাত্র নিশ্চিত পথ, আর তাতে
-         * ইনপুট-সিস্টেম জড়ায়ই না।
+         * Careful: `SendKeys` was tried first and **did not work**, silently: the keystroke goes to
+         * the foreground window, and there is no guarantee that is our window. Finding the button
+         * in `Controls` and calling `PerformClick()` directly is the only sure way, and it does not
+         * involve the input system at all.
          */
         if (which != "ok")
         {
@@ -184,18 +179,18 @@ internal static partial class Program
     }
 
     /// <summary>
-    /// "Today's hours" জানালাটা নমুনা ডেটায় খুলে দেখা — <c>--diagnose</c>-এর মতোই
-    /// একটা ডেভ টুল, কিছুই জমা হয় না, সার্ভারে কিছু যায় না।
+    /// Open the "Today's hours" window with sample data and look at it: a dev tool like
+    /// <c>--diagnose</c>. Nothing is stored and nothing goes to the server.
     ///
-    /// ⭐ কেন দরকার: জানালার চারটে অবস্থা আছে (মাস জানা নেই · স্বাভাবিক ·
-    /// সার্ভারে পৌঁছাচ্ছে না · টার্গেট পূর্ণ), আর সেগুলো আসল ডেটায় দেখতে হলে
-    /// যথাক্রমে একটা নতুন লগঅন, আধ ঘণ্টার কাজ, নেট বিচ্ছিন্ন করা আর একটা
-    /// পুরো মাস লাগত। ডিজাইন বদলে প্রতিবার সেটা করা যায় না।
+    /// Why it is needed: the window has four states (month unknown, normal, not reaching the
+    /// server, target met), and seeing them on real data would need, respectively, a fresh logon,
+    /// half an hour of work, disconnecting the network and a whole month. That cannot be done every
+    /// time the design changes.
     ///
     /// <c>--preview-today [loading|failing|met|signin]</c>
     ///
-    /// ⚠️ <c>signin</c> — G79-এর অবস্থা (সাইন ইন হয়নি)। এটা আসল ডেটায়
-    /// দেখতে হলে একটা তাজা ইনস্টল আর সাইন ইন <b>না</b> করে বসে থাকা লাগত।
+    /// Careful: <c>signin</c> is the G79 state (not signed in). Seeing it on real data would need a
+    /// fresh install and sitting there <b>without</b> signing in.
     /// </summary>
     private static int PreviewToday(string[] args)
     {
@@ -216,10 +211,10 @@ internal static partial class Program
         using var form = new TodayForm(fonts, () => options);
         form.Apply(SampleStatus(which));
 
-        // ⚠️ জায়গা ঠিক হয় **দেখানোর পরে** — নইলে হ্যান্ডল তৈরি হওয়ার আগে
-        //    Width এখনো WinForms-এর ডিফল্ট, আর হিসাবটা ওই ভুল মাপ ধরে করে
-        //    জানালাটা পর্দার ডান কিনারা পেরিয়ে চলে যায়। TrayIcon-ও একই
-        //    ক্রমে ডাকে (Show → PositionNearTray → Activate)।
+        // Careful: the position is set **after showing**. Otherwise, before the handle is created,
+        // Width is still WinForms' default, the calculation uses that wrong size, and the window
+        // runs past the right edge of the screen. TrayIcon calls in the same order (Show, then
+        // PositionNearTray, then Activate).
         form.Shown += (_, _) => form.PositionNearTray();
 
         Application.Run(form);
@@ -227,16 +222,16 @@ internal static partial class Program
     }
 
     /// <summary>
-    /// ⚠️ প্রতিটা নমুনায় <c>Enrolled</c> স্পষ্ট করে বসানো — কারণ
-    /// <see cref="AgentStatus.Starting"/>-এ সেটা <c>false</c> (চালু হওয়ার
-    /// মুহূর্তে ক্রেডেনশিয়াল পড়াই হয়নি)। না বসালে **সব প্রিভিউ** "Not
-    /// signed in" দেখাত, আর tray-র নকশা দেখার পুরো ব্যবস্থাটাই অকেজো হতো।
+    /// Careful: <c>Enrolled</c> is set explicitly in every sample, because in
+    /// <see cref="AgentStatus.Starting"/> it is <c>false</c> (credentials had not been read at
+    /// startup). Without it **every preview** would show "Not signed in", and the whole way of
+    /// checking the tray's design would be useless.
     /// </summary>
     private static AgentStatus SampleStatus(string which) => which switch
     {
-        // ⭐ G79-এর অবস্থাটা — লাল বিন্দু, "Not signed in", আর গোনা বন্ধ।
-        //    নকশাটা দেখার একমাত্র উপায় এটাই, কারণ আসল অবস্থাটা তৈরি করতে
-        //    হলে একটা তাজা ইনস্টল আর সাইন ইন **না** করে বসে থাকা লাগত।
+        // The G79 state: red dot, "Not signed in", and counting stopped. This is the only way to
+        // see the design, because producing the real state would need a fresh install and sitting
+        // there **without** signing in.
         "signin" => AgentStatus.Starting with
         {
             State = SegmentState.Active,
@@ -276,9 +271,9 @@ internal static partial class Program
             LastSyncAt = DateTimeOffset.UtcNow.AddMinutes(-1),
         },
 
-        // ⚠️ ডিফল্টটা ইচ্ছাকৃতভাবে মালিকের আসল অবস্থা (১১ আগস্ট): মাসের
-        //    শুরুতে সামান্য কাজ, অর্থাৎ মিটারের ভরাট ০.৩% — ঠিক সেই কেসটা
-        //    যেখানে ভরাটটা গোল হয়ে শূন্য হয়ে যেতে পারত।
+        // Careful: the default is deliberately the owner's real situation: a little work at the
+        // start of the month, so the meter's fill is 0.3%, exactly the case where the fill could
+        // round down to zero.
         _ => AgentStatus.Starting with
         {
             Enrolled = true,
@@ -291,8 +286,8 @@ internal static partial class Program
             ActiveLast7 = TimeSpan.FromMinutes(750),
             Last7Target = TimeSpan.FromHours(48),
 
-            // ⚠️ আসল মান, আজকের রান থেকে নেওয়া — মনগড়া নয়। শূন্যটাও ইচ্ছাকৃত:
-            //    "০% ব্যস্ত" ঘরটা পর্দায় কেমন দেখায় সেটাই দেখার জিনিস।
+            // Careful: real values, taken from today's run, not invented. The zero is deliberate
+            // too: how a "0% busy" cell looks on screen is the very thing to see.
             RecentBusy = [41, 16, 0, 35, 72, 7],
 
             LatestShotThumb = Path.Combine(
@@ -305,17 +300,16 @@ internal static partial class Program
     };
 
     /// <summary>
-    /// MSI ইনস্টল করার সময় একবার, অ্যাডমিন অধিকারে।
+    /// Once, at MSI install time, with admin rights.
     ///
-    /// ⭐ <b>কেন ইনস্টলারকে এটা করতে হয়:</b> ProgramData-র ডিফল্ট ACL-এ সাধারণ
-    /// ইউজার শুধু <b>নিজের বানানো</b> ফাইল বদলাতে পারে। ইনস্টলার (অ্যাডমিন)
-    /// ফোল্ডারটা বানিয়ে ফেলে রেখে গেলে স্টাফের অ্যাকাউন্টে চলা এজেন্ট
-    /// ওখানে SQLite কিউ লিখতেই পারত না — প্রতিটা INSERT-এ
-    /// <c>SQLITE_READONLY</c>, আর এজেন্ট চুপচাপ কিছুই জমাত না।
+    /// <b>Why the installer must do this:</b> under ProgramData's default ACL an ordinary user can
+    /// change only files <b>they created</b>. If the installer (admin) created the folder and left,
+    /// the agent running in the staff account could not write its SQLite queue there at all: every
+    /// INSERT would fail with <c>SQLITE_READONLY</c>, and the agent would quietly store nothing.
     ///
-    /// তাই ফোল্ডারটা <see cref="AgentDataDirectory.Ensure"/> দিয়েই বানানো হয়,
-    /// যেটা Users-কে Modify দেয়। ACL-এর নিয়ম একটাই জায়গায় থাকে — WiX-এ
-    /// আলাদা করে লিখলে দুটো সংজ্ঞা একদিন আলাদা হয়ে যেত।
+    /// So the folder is created through <see cref="AgentDataDirectory.Ensure"/>, which gives Users
+    /// Modify. The ACL rule lives in one place; written separately in WiX, the two definitions
+    /// would drift apart one day.
     /// </summary>
     private static int PrepareDataDir()
     {
@@ -336,9 +330,9 @@ internal static partial class Program
         var settings = AgentSettings.Load(out var source);
         if (settings is null)
         {
-            // ⚠️ চুপ করে বন্ধ হওয়া যাবে না। ইনস্টলার কনফিগ না লিখলে বা ভুল
-            //    লিখলে এজেন্ট নীরবে কিছুই করত না, আর কেউ সপ্তাহখানেক পরে
-            //    আবিষ্কার করত যে ওই PC-র কোনো ডেটাই নেই।
+            // Careful: it must not shut down silently. If the installer did not write the config,
+            // or wrote it wrongly, the agent would quietly do nothing, and someone would find out a
+            // week later that there was no data at all from that PC.
             Complain(
                 "oXeio agent could not start",
                 $"Server address not found.\n\nLooked in: {source}\n\n" +
@@ -353,11 +347,11 @@ internal static partial class Program
         _power = power;
 
         /*
-         * H08 — ⚠️⚠️ এখানে আগে `ConsoleSyncLog.Instance` ছিল, আর প্রজেক্ট
-         * `WinExe` — **কনসোলই নেই**। অর্থাৎ এজেন্টের প্রতিটা লগ লাইন
-         * শূন্যে যেত: এনরোলমেন্ট ব্যর্থ, টোকেন বাতিল, ৪২২ প্রত্যাখ্যান —
-         * কিছুরই কোনো চিহ্ন থাকত না। অথচ রানবুক সমস্যা হলে `agent.log`
-         * পড়তে বলত, আর ফাইলটা কোনোদিন লেখাই হয়নি।
+         * H08: **there used to be `ConsoleSyncLog.Instance` here**, and the project is `WinExe`, so
+         * **there is no console at all**. Every log line of the agent went into the void:
+         * enrollment failure, token revocation, 422 rejections, none of it left any trace. Yet the
+         * runbook said to read `agent.log` when there was a problem, and that file was never
+         * written.
          */
         var paths = OutboxPaths.Default;
         var log = new FileLog(paths.Logs);
@@ -376,24 +370,22 @@ internal static partial class Program
 
         Application.Run();
 
-        // ⭐⚠️ <b>ApplicationExit ইভেন্টে এই কাজটা করা যায় না</b>, যদিও দেখতে
-        //    সেটাই স্বাভাবিক জায়গা। ইভেন্ট হ্যান্ডলার হয় <c>async void</c> —
-        //    প্রথম <c>await</c>-এই সে ফিরে আসে, WinForms ধরে নেয় কাজ শেষ,
-        //    <c>Application.Run()</c> ফেরে, <c>Main</c> ফেরে, প্রসেস মরে।
-        //    ফলে DisposeAsync-এর বাকি অংশ — খোলা সেগমেন্ট বন্ধ করা,
-        //    <c>agent_stop</c> ইভেন্ট, শেষ drain — <b>কখনোই</b> চলত না।
-        //    Run() ফেরার পর সিঙ্ক্রোনাসভাবে অপেক্ষা করাই একমাত্র নির্ভরযোগ্য পথ।
+        // Careful: <b>this work cannot be done in the ApplicationExit event</b>, although that
+        // looks like the natural place. The event handler would be <c>async void</c>: at the first
+        // <c>await</c> it returns, WinForms assumes the work is done, <c>Application.Run()</c>
+        // returns, <c>Main</c> returns and the process dies. So the rest of DisposeAsync (closing
+        // the open segment, the <c>agent_stop</c> event, the final drain) would <b>never</b> run.
+        // Waiting synchronously after Run() returns is the only reliable way.
         Shutdown();
         return 0;
     }
 
     /// <summary>
-    /// বন্ধ হওয়ার সময় হাতে যতটুকু আছে ততটুকুই — তার বেশি নয়।
+    /// Only as much time as is available at shutdown, and no more.
     ///
-    /// ⚠️ Windows শাটডাউনে সব প্রসেস মিলিয়ে বাজেট কয়েক সেকেন্ড। ছাদ না দিলে
-    /// একটা ঝুলে যাওয়া drain-এর জন্য Windows আমাদের জোর করে মারত, আর তখন
-    /// <c>agent_stop</c> ইভেন্টটাও যেত না — অর্থাৎ ঠিক যে জিনিসটার জন্য এই
-    /// অপেক্ষা, সেটাই হারাত।
+    /// Careful: Windows' shutdown budget is a few seconds for all processes combined. Without a
+    /// ceiling, a hung drain would get us killed by Windows, and then the <c>agent_stop</c> event
+    /// would not go out either: the very thing this wait exists for would be lost.
     /// </summary>
     private static void Shutdown()
     {
@@ -405,27 +397,27 @@ internal static partial class Program
             var closing = host.DisposeAsync().AsTask();
             if (!closing.Wait(ShutdownBudget))
             {
-                // ⚠️ ছুড়ে দেওয়া হয় না, শুধু ছেড়ে দেওয়া হয়। এখানে ব্যতিক্রম
-                //    মানে exit code বদলে যাওয়া, আর watchdog সেটাকে ক্র্যাশ
-                //    ধরে এজেন্টকে আবার চালু করত — শাটডাউনের ঠিক মাঝখানে।
+                // Careful: it is not thrown, only released. An exception here would change the exit
+                // code, and the watchdog would treat that as a crash and restart the agent, right
+                // in the middle of the shutdown.
                 return;
             }
         }
         catch (Exception)
         {
-            // বন্ধ হচ্ছে — অভিযোগ শোনার কেউ নেই
+            // shutting down; nobody is there to hear a complaint
         }
     }
 
-    /// <summary>Windows-এর ~৫ সেকেন্ডের চেয়ে কম, যাতে আমরা নিজেরাই আগে সরে যাই।</summary>
+    /// <summary>Less than Windows' ~5 seconds, so that we step aside first ourselves.</summary>
     internal static readonly TimeSpan ShutdownBudget = TimeSpan.FromSeconds(4);
 
     private static AgentHost? _host;
     private static PowerMonitor? _power;
 
     /// <summary>
-    /// ⚠️ এই হ্যান্ডলার UI থ্রেডে চলে। এখানে কোনো নেটওয়ার্ক বা ডিস্কের কাজ
-    /// করা যাবে না — করলে লক/আনলকের সময় পুরো ডেস্কটপ আটকে যেত।
+    /// Careful: this handler runs on the UI thread. No network or disk work may be done here: it
+    /// would freeze the whole desktop during lock/unlock.
     /// </summary>
     private static void OnMessage(Message m)
     {
@@ -439,16 +431,16 @@ internal static partial class Program
                 _host?.OnPower(_power?.Interpret(m.WParam, m.LParam, DateTimeOffset.UtcNow));
                 break;
 
-            // G02 — logoff আর PC-বন্ধ আলাদা করার একমাত্র জায়গা।
-            // ⚠️ এখানে শুধু কিউয়ে ফেলা হয়; পাঠানোর চেষ্টা করলে ডেস্কটপ আটকে
-            //    যেত আর Windows দুজনকেই মেরে ফেলত।
+            // G02: the only place that tells logoff and PC shutdown apart. Careful: here we only
+            // put it on the queue; trying to send would freeze the desktop and Windows would kill
+            // both.
             case Win32.WM_ENDSESSION:
                 _host?.OnSessionEnd(SessionMonitor.InterpretEndSession(m.WParam, m.LParam));
                 break;
         }
     }
 
-    // ── কনসোল ও বার্তা ──────────────────────────────────────────────────────
+    // ── Console and messages ─────────────────────────────────────────────
 
     private const uint AttachParentProcess = 0xFFFFFFFF;
 
@@ -461,9 +453,8 @@ internal static partial class Program
     private static partial bool AllocConsole();
 
     /// <summary>
-    /// টার্মিনাল থেকে চালালে সেটার কনসোলেই লেখা, নইলে নতুন একটা।
-    /// দুটোই ব্যর্থ হলে চুপচাপ এগিয়ে যাওয়া — আউটপুট না দেখা গেলেও
-    /// ডায়াগনস্টিক চলতে বাধা নেই।
+    /// If run from a terminal, write to that terminal's console, otherwise to a new one. If both
+    /// fail, carry on quietly: even if the output cannot be seen, the diagnostic can still run.
     /// </summary>
     private static void AttachOrAllocConsole()
     {
@@ -472,15 +463,15 @@ internal static partial class Program
 
     private static void Complain(string title, string body)
     {
-        // ⚠️ MessageBox ব্যবহার করা হয় শুধু **চালু হতেই না পারার** ক্ষেত্রে।
-        //    স্বাভাবিক চলার সময় কোনো পপ-আপ নেই — tray আইকনই একমাত্র মুখ।
+        // Careful: MessageBox is used only when it **cannot start at all**. During normal running
+        // there are no pop-ups: the tray icon is the only face.
         try
         {
             MessageBox.Show(body, title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         catch (Exception)
         {
-            // কোনো ডেস্কটপ নেই (সার্ভিস/সেশন ০) — দেখানোর কিছু নেই
+            // no desktop (service/session 0): nothing to show
         }
     }
 }

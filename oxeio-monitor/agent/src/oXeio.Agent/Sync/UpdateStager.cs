@@ -6,11 +6,11 @@ using oXeio.Core.Agent;
 namespace oXeio.Agent.Sync;
 
 /// <summary>
-/// H04 — নতুন ভার্সন খোঁজা, নামানো, যাচাই করা। <b>বসানো নয়।</b>
+/// Finding a new version, downloading it, verifying it. <b>Not installing it.</b>
 ///
-/// কেন বসানো নয় তার কারণ <see cref="UpdateStage"/>-এ লেখা আছে —
-/// সংক্ষেপে: [G58](../../../../docs/08-Gap-Analysis.md)। খারাপ MSI একবার
-/// চললে নতুন MSI দিয়ে ফেরানো যায় না, হাতে যেতে হয়।
+/// The reason for not installing is written in <see cref="UpdateStage"/>; in short:
+/// [G58](../../../../docs/08-Gap-Analysis.md). Once a bad MSI has run, it cannot be rolled
+/// back with a new MSI; someone has to go to the machine by hand.
 /// </summary>
 internal sealed class UpdateStager(
     ISyncClient sync,
@@ -32,9 +32,9 @@ internal sealed class UpdateStager(
         !string.IsNullOrWhiteSpace(updatePublicKey) && _updateKey is null;
 
     /// <summary>
-    /// ⚠️ ঘন ঘন নয়। আপডেট রোজকার ঘটনা নয়, আর প্রতিটা চেক একটা নেটওয়ার্ক
-    /// কল — ১৫টা PC × দিনে বহুবার মানে অকারণ ভিড়। ৬ ঘণ্টায় একবারই যথেষ্ট,
-    /// কারণ বসানোটা এমনিতেও মানুষের হাতে।
+    /// Careful: not often. Updates are not an everyday event, and each check is a network
+    /// call; 15 PCs x many times a day would be needless crowding. Once every 6 hours is
+    /// enough, because installing is in human hands anyway.
     /// </summary>
     public static readonly TimeSpan CheckEvery = TimeSpan.FromHours(6);
 
@@ -43,8 +43,8 @@ internal sealed class UpdateStager(
     public UpdateStatus Status => _status;
 
     /// <summary>
-    /// একবার দেখা। ব্যতিক্রম কখনো বাইরে যায় না — আপডেট না পাওয়া
-    /// অসুবিধা, কিন্তু ট্র্যাকিং থামার কারণ নয়।
+    /// One look. Exceptions never escape; not getting an update is an inconvenience, but not
+    /// a reason to stop tracking.
     /// </summary>
     public async Task CheckOnceAsync(CancellationToken ct)
     {
@@ -52,14 +52,14 @@ internal sealed class UpdateStager(
         {
             var result = await sync.CheckUpdateAsync(currentVersion, ct).ConfigureAwait(false);
 
-            // ⚠️ ব্যর্থ হলে আগের অবস্থাটা **মুছে ফেলা হয় না**। সার্ভার এক
-            //    ঘণ্টা বন্ধ থাকলে ইতিমধ্যে যাচাই হওয়া MSI-টা "নেই" হয়ে যেত,
-            //    আর মালিক দেখতেন আপডেটটা উধাও।
+            // Careful: on failure the previous state is **not erased**. If the server were down
+            // for an hour, an MSI that was already verified would become "gone", and the
+            // owner would see the update vanish.
             if (!result.IsSuccess || result.Value is not { } offer) return;
 
             if (string.IsNullOrWhiteSpace(offer.Version)) return;
 
-            // ইতিমধ্যেই এই ভার্সনটা যাচাই হয়ে বসে আছে — আবার নামানোর মানে নেই
+            // This version is already verified and waiting; no point downloading again
             if (_status.Stage == UpdateStage.Verified && _status.Version == offer.Version)
                 return;
 
@@ -96,9 +96,9 @@ internal sealed class UpdateStager(
 
         _status = _status with { Stage = UpdateStage.Downloaded, MsiPath = file.SavedPath };
 
-        // ⭐ এখানেই একমাত্র প্রকৃত নিরাপত্তা-যাচাই। সার্ভার কী বলেছিল আর
-        //    ডিস্কে কী এল — দুটো না মিললে ফাইলটা **চালানো তো দূর, রেখে
-        //    দেওয়াও চলবে না**, নইলে পরে কেউ ওটাকে ভালো ভেবে বসিয়ে দিত।
+        // This is the only real security check here. What the server said and what arrived
+        // on disk must match; if they do not, the file must not be run, and must not even be
+        // kept, or someone might later install it thinking it was fine.
         if (!string.Equals(file.Sha256, offer.Sha256, StringComparison.OrdinalIgnoreCase))
         {
             log.Error(
@@ -150,7 +150,7 @@ internal sealed class UpdateStager(
             (signature == SignatureCheck.Valid ? " (hash and owner's signature)" : "") +
             $" — waiting to be installed: {file.SavedPath}");
 
-        // পুরোনো ভার্সনের নামানো MSI আর দরকার নেই
+        // Downloaded MSIs of older versions are no longer needed
         CleanOldMsi(file.SavedPath);
     }
 
@@ -164,8 +164,8 @@ internal sealed class UpdateStager(
     }
 
     /// <summary>
-    /// ⚠️ প্রতিটা ভার্সনের MSI ~৬২ MB। না মুছলে বছরখানেকে কয়েক গিগাবাইট
-    /// জমত, আর ডিস্ক ভরলে স্ক্রিনশট ইনজেস্টই থেমে যায়।
+    /// Careful: each version's MSI is ~62 MB. Without deleting, a few gigabytes would pile up
+    /// in about a year, and when the disk fills, screenshot ingest itself stops.
     /// </summary>
     private void CleanOldMsi(string keep)
     {

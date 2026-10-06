@@ -8,15 +8,15 @@ const DEFAULT_PAGE_SIZE = 50;
 
 export interface AuditLogRow {
   /**
-   * ⚠️⚠️ **স্ট্রিং, সংখ্যা নয়।** `audit_log.id` স্কিমায় `BigInt`, আর
-   * `app.setup.ts`-এ BigInt-এর কোনো JSON সিরিয়ালাইজার বসানো **নেই** —
-   * যাচাই করে দেখা হয়েছে। কাঁচা BigInt রেসপন্সে পাঠালে
-   * `JSON.stringify` রানটাইমে ছুড়ত: "Do not know how to serialize a
-   * BigInt", অর্থাৎ পুরো endpoint-টা ৫০০ হয়ে যেত — অথচ টাইপচেক নীরবে
-   * পাস করত, কারণ টাইপ-লেভেলে কোনো ভুল নেই।
+   * Careful: **a string, not a number.** `audit_log.id` is a `BigInt` in the
+   * schema, and `app.setup.ts` has **no** JSON serializer for BigInt (this was
+   * verified). Sending a raw BigInt in the response would make `JSON.stringify`
+   * throw at runtime: "Do not know how to serialize a BigInt", so the whole
+   * endpoint would return 500, while typecheck would pass silently because
+   * there is no mistake at the type level.
    *
-   * ⚠️ আর `Number(id)` করাও চলত না: ৯ কোয়াড্রিলিয়নের পরে JS-এর সংখ্যা
-   * নীরবে ভুল হতে শুরু করে।
+   * Careful: `Number(id)` would not work either: beyond 9 quadrillion JS
+   * numbers silently start going wrong.
    */
   id: string;
   occurredAt: string;
@@ -42,10 +42,10 @@ export interface AuditLogPage {
 }
 
 /**
- * E11 — audit log ভিউয়ার, **owner-only**।
+ * E11: audit log viewer, **owner-only**.
  *
- * শুধু পড়া। কোনো লেখা, মোছা বা সম্পাদনার পথ নেই — যে লগ বদলানো যায়,
- * সেটা আর প্রমাণ নয়।
+ * Read-only. There is no path to write, delete or edit: a log that can be
+ * changed is no longer evidence.
  */
 @Injectable()
 export class AuditLogService {
@@ -58,8 +58,8 @@ export class AuditLogService {
     const from = query.from ? new Date(query.from) : undefined;
     const to = query.to ? new Date(query.to) : undefined;
     if (from && to && from > to) {
-      // ⚠️ উল্টো রেঞ্জে Postgres নীরবে শূন্য সারি ফেরত দিত, আর ব্যবহারকারী
-      //    ভাবত ওই সময়ে সত্যিই কিছু ঘটেনি
+      // Careful: with a reversed range Postgres would silently return zero rows,
+      // and the user would think nothing really happened in that period
       throw new BadRequestException('`from` must be before `to`');
     }
 
@@ -74,8 +74,8 @@ export class AuditLogService {
         ? {
             occurredAt: {
               ...(from ? { gte: from } : {}),
-              // ⚠️ `lte` — inclusive। `?to=2026-08-10T23:59:59Z` লিখে কেউ
-              //    যেন শেষ সেকেন্ডটা হারিয়ে না ফেলে।
+              // Careful: `lte`, inclusive. So that nobody writing
+              // `?to=2026-08-10T23:59:59Z` loses the last second.
               ...(to ? { lte: to } : {}),
             },
           }
@@ -85,11 +85,11 @@ export class AuditLogService {
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.auditLog.findMany({
         where,
-        // ⭐ `occurredAt` একা যথেষ্ট নয় — একই মিলিসেকেন্ডে দুটো সারি বসতেই
-        //    পারে (login + change_setting একসাথে), আর তখন তাদের ক্রম
-        //    অনির্ধারিত। পেজ ১ আর পেজ ২ আলাদা query, তাই ক্রম বদলে গেলে
-        //    একটা সারি দুবার দেখাত আর আরেকটা কখনোই দেখাত না। `id` যোগ
-        //    করায় ক্রমটা সম্পূর্ণ (total order) হয়।
+        // `occurredAt` alone is not enough: two rows can land in the same
+        // millisecond (login + change_setting together), and then their order
+        // is undefined. Page 1 and page 2 are separate queries, so if the order
+        // shifted one row would show twice and another never. Adding `id` makes
+        // the order total.
         orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -101,8 +101,8 @@ export class AuditLogService {
           targetId: true,
           ipAddress: true,
           meta: true,
-          // ⚠️ `include: { user: true }` লিখলে `password_hash`ও রেসপন্সে
-          //    চলে যেত। তাই সবসময় স্পষ্ট select।
+          // Careful: writing `include: { user: true }` would also send
+          // `password_hash` in the response. So always an explicit select.
           user: {
             select: { id: true, email: true, fullName: true, role: true },
           },

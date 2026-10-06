@@ -9,7 +9,7 @@ import { LOCAL_OFFSET_MIN, WORK_TIMEZONE } from './util/dhaka-time';
 export interface AgentConfig {
   idleThresholdSec: number;
   slotMinutes: number;
-  /** 'HH:MM' — null হলে ২৪ ঘণ্টা ছবি ওঠে (ADR-011c) */
+  /** 'HH:MM' - when null, screenshots are taken around the clock (ADR-011c). */
   screenshotFrom: string | null;
   screenshotTo: string | null;
   timezone: string;
@@ -41,8 +41,8 @@ export class AgentConfigService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * এজেন্ট যে কনফিগ নিয়ে চলে। work policy থেকেই আসে, তাই ড্যাশবোর্ড থেকে
-   * threshold বদলালে পরের config sync-এ ১৫টা PC-তেই পৌঁছে যাবে।
+   * The config the agent runs with. It comes from the work policy, so a
+   * threshold changed on the dashboard reaches all 15 PCs on the next config sync.
    */
   async build(policyId: number | null): Promise<{
     version: string;
@@ -78,7 +78,7 @@ export class AgentConfigService {
     return { version: this.versionOf(config), config };
   }
 
-  /** ডিভাইসের স্টাফ যে policy-তে আছে, সেটাই — না থাকলে active default */
+  /** The policy the device's staff member is on; the active default if none. */
   async buildForDevice(
     device: Device,
   ): Promise<{ version: string; config: AgentConfig }> {
@@ -92,8 +92,9 @@ export class AgentConfigService {
   }
 
   /**
-   * কনফিগের হ্যাশই তার ভার্সন — আলাদা কলাম বা কাউন্টার লাগে না।
-   * এজেন্ট heartbeat-এ নিজের ভার্সন পাঠায়; না মিললে `reload_config` কমান্ড যায়।
+   * The config's hash is its version, so no separate column or counter is needed.
+   * The agent sends its version in the heartbeat; on a mismatch a `reload_config`
+   * command is sent.
    */
   private versionOf(config: AgentConfig): string {
     return createHash('sha256')

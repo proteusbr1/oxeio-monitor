@@ -22,23 +22,23 @@ export class LoginDto {
   password!: string;
 
   /**
-   * I06 — ঐচ্ছিক 2FA-র দ্বিতীয় ধাপ। প্রথম কলে থাকে না; সার্ভার
-   * `{ needsTotp: true }` ফেরত দিলে ইমেইল+পাসওয়ার্ডসহ আবার আসে।
-   * ⚠️ ১০ অক্ষর — ৬ অঙ্কের কোডে অ্যাপ থেকে কপি করলে স্পেস ঢুকে যায়।
+   * I06: the second step of optional 2FA. Absent on the first call; if the
+   * server returns `{ needsTotp: true }` it comes back with email + password.
+   * Careful: 10 characters, because copying a 6-digit code from the app can bring in a space.
    */
   @IsOptional()
   @IsString()
   @MaxLength(10)
   totp?: string;
 
-  /** ফোন হারালে — `ABCDE-FGHJK` ধরনের একবার-ব্যবহার্য কোড */
+  /** If the phone is lost: a single-use code of the form `ABCDE-FGHJK` */
   @IsOptional()
   @IsString()
   @MaxLength(40)
   recoveryCode?: string;
 }
 
-/** ⚠️ ৬ অঙ্ক, কিন্তু স্পেস/ড্যাশ মেনে নেওয়া হয় — normalize সার্ভারেই হয় */
+/** Careful: 6 digits, but spaces/dashes are accepted; normalizing happens on the server */
 export class TotpCodeDto {
   @IsString()
   @MinLength(6, { message: 'Enter the 6-digit code' })
@@ -47,9 +47,10 @@ export class TotpCodeDto {
 }
 
 /**
- * ⚠️ 2FA বন্ধ করা আর রিকভারি কোড নতুন করে বানানো — দুটোতেই পাসওয়ার্ড লাগে।
- *    সেশন cookie-ই যথেষ্ট ধরলে খোলা রেখে যাওয়া ল্যাপটপ থেকে 2FA খুলে
- *    ফেলা যেত, অথচ 2FA-র উদ্দেশ্যই cookie চুরির বিরুদ্ধে রক্ষা।
+ * Careful: turning off 2FA and regenerating recovery codes both need the
+ * password. If the session cookie alone were enough, 2FA could be switched
+ * off from a laptop left open, yet the whole purpose of 2FA is protection
+ * against cookie theft.
  */
 export class PasswordConfirmDto {
   @IsString()
@@ -76,17 +77,17 @@ export class CreatePortalAccountDto {
   @MaxLength(200)
   email!: string;
 
-  /** owner চাইলে manager-ও বানাতে পারে; ডিফল্ট employee */
+  /** The owner may create a manager too; default employee */
   @IsOptional()
   @IsEnum(UserRole)
   role?: UserRole;
 
   /**
-   * ⭐⭐ **মালিকের বেছে দেওয়া পাসওয়ার্ড** *(২৩ আগস্ট, মালিকের সিদ্ধান্ত)*।
+   * **A password chosen by the owner.**
    *
-   * ⚠️ ঐচ্ছিক। না দিলে সিস্টেম একটা এলোমেলো পাসওয়ার্ড বানায় (মালিককে
-   * একবার দেখানো হয়) — কিন্তু **কোনো ক্ষেত্রেই বদলাতে বলা হয় না**
-   * *(২৩ আগস্ট, [ADR-033](../../../docs/05-Options-Decisions.md))*।
+   * Careful: optional. If omitted, the system generates a random password
+   * (shown to the owner once), but **in no case is a change demanded**
+   * ([ADR-033](../../../docs/05-Options-Decisions.md)).
    */
   @IsOptional()
   @MinLength(MIN_PASSWORD_LENGTH, {
@@ -102,11 +103,10 @@ export class EmployeeIdParam {
 }
 
 /**
- * ⭐ owner কারো পাসওয়ার্ড রিসেট করে — চাইলে নিজেই একটা বসিয়ে দিয়ে
- * *(২৩ আগস্ট)*।
+ * The owner resets someone's password, optionally setting one directly.
  *
- * ⚠️ ঘরটা খালি রাখলে আগের আচরণ অক্ষত: এলোমেলো পাসওয়ার্ড, আর প্রথম
- * লগইনে বাধ্যতামূলক বদল।
+ * Careful: leaving the field empty keeps the earlier behavior intact: a
+ * random password, and a mandatory change on first login.
  */
 export class ResetPasswordDto {
   @IsOptional()

@@ -1,10 +1,11 @@
 /**
- * অ্যালার্ট কখন বসবে আর কখন **বসবে না** — সব সিদ্ধান্ত এখানে, খাঁটি ফাংশনে।
- * কোনো I/O নেই, কোনো Prisma নেই, কোনো ঘড়ি নেই (সময় সবসময় প্যারামিটারে আসে)।
+ * When an alert is raised and when it is **not**: all decisions live here, in
+ * pure functions. No I/O, no Prisma, no clock (time always comes in as a parameter).
  *
- * আলাদা ফাইলে রাখার কারণ: অ্যালার্টের আসল কঠিন প্রশ্নটা "কীভাবে পাঠাব" নয়,
- * "কখন **চুপ** থাকব"। ওই সিদ্ধান্তটুকু ডাটাবেসের সাথে মিশে থাকলে পরীক্ষা করা
- * যেত না, অথচ ভুল হলে ফল ভয়াবহ — হয় বন্যা, নয় নীরবতা।
+ * It is a separate file because the hard question about alerts is not "how do
+ * I send it" but "when do I stay **quiet**". If that decision were tangled up
+ * with the database it could not be tested, and getting it wrong is severe:
+ * either a flood or silence.
  */
 
 import {
@@ -33,10 +34,10 @@ const MINUTE_MS = 60_000;
 const HOUR_MS = 3_600_000;
 
 // ════════════════════════════════════════════════════════════════════════════
-// ১. বন্যা ঠেকানো — ⭐ এই অংশটুকুই পুরো মডিউলের মেরুদণ্ড
+// 1. Flood control — the backbone of the whole module
 // ════════════════════════════════════════════════════════════════════════════
 
-/** "একই অ্যালার্ট" মানে কী — এই তিনটে মিলে গেলে একই */
+/** What "the same alert" means: the same if these three match */
 export interface AlertKey {
   type: AlertType;
   deviceId?: number | null;
@@ -44,39 +45,39 @@ export interface AlertKey {
 }
 
 /**
- * ⭐ একই ডিভাইসের একই কারণ = একই key।
+ * Same reason on the same device = same key.
  *
- * ডিভাইস না থাকলে (যেমন ডিস্ক, বা কর্মীভিত্তিক অ্যালার্ট) key-তে তার জায়গায়
- * `-` বসে — ফলে "সার্ভারের ডিস্ক" নিজেই একটা একক সত্তা হিসেবে throttle হয়।
+ * When there is no device (e.g. disk, or per-employee alerts), `-` takes its
+ * place in the key, so "the server's disk" is throttled as a single entity.
  */
 export function dedupeKey(key: AlertKey): string {
   return `${key.type}|d:${key.deviceId ?? '-'}|e:${key.employeeId ?? '-'}`;
 }
 
-/** throttle জানালার শুরু — DB-তে `createdAt >= এই সময়` খোঁজা হয় */
+/** Start of the throttle window: the DB is searched for `createdAt >= this time` */
 export function throttleFloor(now: Date, windowHours = THROTTLE_HOURS): Date {
   return new Date(now.getTime() - windowHours * HOUR_MS);
 }
 
 /**
- * ⭐⭐⭐ **যেসব অ্যালার্ট গোটা দিনটার কথা বলে** *(৬ সেপ্টেম্বর ২০২৬, G166)*।
+ * **Alerts that describe the whole day.**
  *
- * ⚠️⚠️ **যে বাগটা এটা সারায়:** এই দুটো পরীক্ষা **প্রতি ঘণ্টায়** চলে আর
- * প্রতিবার **গোটা ঢাকা-দিনের** সেগমেন্ট পড়ে। শর্তটা একবার সত্যি হলে
- * দিনের বাকি প্রতিটা টিকেও সত্যি — কারণ পুরোনো সারিগুলো মুছে যায় না।
- * অথচ throttle-এর জানালা মোটে ৬ ঘণ্টা, আর key-তে দিনটা নেই। ফলে **একই
- * ঘটনার জন্য দিনে ৩–৪টা** অ্যালার্ট, প্রত্যেকটার শিরোনাম-বিবরণ-meta
- * অক্ষরে অক্ষরে এক, আর প্রত্যেকটা আলাদা ইমেইল।
+ * The bug this fixes: these two checks run **every hour** and each time read
+ * the segments of the **whole Dhaka day**. Once the condition is true it is
+ * true on every later tick that day, because old rows are not deleted. But the
+ * throttle window is only 6 hours and the key does not contain the day. So
+ * **the same incident** produced 3-4 alerts a day, each with an identical
+ * title, description and meta, and each one a separate email.
  *
- * ⚠️ এটা অনুমান নয় — একই পথে চলা `agent_down` মাঠে ঠিক এটাই করছে:
- * ২২ আগস্ট **১৩টা** (ডিভাইস, কর্মী) জোড়ার প্রত্যেকটা ঠিক **৪বার**
- * অ্যালার্ট পেয়েছে, ৬ ঘণ্টা পরপর (০০:১৭ · ০৬:১৯ · ১২:২০ · ১৮:২০)।
+ * This is not a guess: `agent_down`, which takes the same path, does exactly
+ * this in the field. On 22 August each of **13** (device, employee) pairs got
+ * exactly **4** alerts, 6 hours apart (00:17, 06:19, 12:20, 18:20).
  *
- * ⚠️⚠️ **`agent_down` এই তালিকায় নেই, ইচ্ছাকৃতভাবে।** ওটা দিনের কথা
- * বলে না — বলে *"এই মুহূর্তে PC-টা চুপ"*। তিন দিন ধরে বন্ধ থাকা PC-র
- * জন্য রোজ মনে করিয়ে দেওয়াটাই চাওয়া (alerts.rules.ts-এর নিজের নোট:
- * এখানে নীরবতার চেয়ে শব্দ ভালো)। `no_activity_today`-ও নেই — তার
- * ৪ ঘণ্টার জানালা ইতিমধ্যেই দিনে একটার বেশি অসম্ভব করে রেখেছে।
+ * `agent_down` is deliberately **not** in this list. It does not describe the
+ * day; it says "this PC is silent right now". A PC that stays off for three
+ * days should be reminded about daily (when in doubt, noise beats silence
+ * here). `no_activity_today` is not in the list either: its 4-hour window
+ * already makes more than one alert a day impossible.
  */
 export const DAY_SCOPED_TYPES: ReadonlySet<AlertType> = new Set<AlertType>([
   'device_overlap',
@@ -84,18 +85,18 @@ export const DAY_SCOPED_TYPES: ReadonlySet<AlertType> = new Set<AlertType>([
 ]);
 
 /**
- * ওই ধরনের অ্যালার্টের জন্য throttle জানালা কোথা থেকে শুরু *(G166)*।
+ * Where the throttle window starts for such alerts.
  *
- * ⭐ দিনভিত্তিক ধরনের জন্য **দুটোর মধ্যে যেটা আগের** — ঢাকার আজকের
- * দিনের শুরু, নাকি ৬ ঘণ্টা আগে। দুটোই দরকার:
+ * For day-scoped types it is **the earlier of two**: the start of today in
+ * Dhaka, or 6 hours ago. Both are needed:
  * <ul>
- *   <li>দিনের শুরু <b>ছাড়া</b> একই দিনে বারবার অ্যালার্ট হতো;</li>
- *   <li>৬ ঘণ্টা <b>ছাড়া</b> রাত ১২টার পরপরই জানালাটা মিনিটখানেকে নেমে
- *       আসত, আর গতরাতের অ্যালার্টের পুনরাবৃত্তি আটকাত না।</li>
+ *   <li>Without the start of the day, the same day would raise repeated alerts;</li>
+ *   <li>Without the 6 hours, right after midnight the window would shrink to a
+ *       minute or so and yesterday night's alert would not be suppressed.</li>
  * </ul>
  *
- * ⚠️ পরের দিন চুপ করানো হয় **না** — নতুন ঢাকা-দিন মানে নতুন ঘটনা,
- *    তাই মেঝেটা দিনের সাথে সাথে এগিয়ে যায়।
+ * Careful: the next day is not silenced. A new Dhaka day is a new incident, so
+ * the floor moves forward with the day.
  */
 export function alertFloor(
   type: AlertType,
@@ -105,16 +106,17 @@ export function alertFloor(
   const rolling = throttleFloor(now, windowHours);
   if (!DAY_SCOPED_TYPES.has(type)) return rolling;
 
-  // ⚠️ `localMidnightOf` — লেবেল নয়, আসল মুহূর্ত (dhaka-time.ts দেখুন)
+  // `localMidnightOf` gives the real instant, not a label (see dhaka-time.ts)
   const dayStart = localMidnightOf(now);
   return dayStart.getTime() < rolling.getTime() ? dayStart : rolling;
 }
 
 /**
- * আগেরটা এখনো "টাটকা" কি না।
+ * Whether the previous alert is still "fresh".
  *
- * ⚠️ ভবিষ্যতের সময়ও throttled ধরা হয় (`>` তুলনা) — সার্ভারের ঘড়ি পিছিয়ে
- *    গেলে যেন চুপ থাকার দিকে ভুল হয়, বন্যার দিকে নয়।
+ * Careful: a future timestamp also counts as throttled (the `>` comparison),
+ * so if the server clock goes backwards the error is on the side of silence,
+ * not a flood.
  */
 export function isThrottled(
   lastRaisedAt: Date | null | undefined,
@@ -126,8 +128,8 @@ export function isThrottled(
 }
 
 /**
- * ⭐ ধরন-সচেতন সংস্করণ *(G166)* — দিনভিত্তিক অ্যালার্টে জানালাটা
- * ঢাকার আজকের দিনের শুরু পর্যন্ত পিছিয়ে যায়।
+ * Type-aware version: for day-scoped alerts the window extends back to the
+ * start of today in Dhaka.
  */
 export function isThrottledFor(
   type: AlertType,
@@ -139,7 +141,7 @@ export function isThrottledFor(
   return lastRaisedAt.getTime() > alertFloor(type, now, windowHours).getTime();
 }
 
-/** কখন আবার একই অ্যালার্ট দেওয়া যাবে — ড্যাশবোর্ডে দেখানোর জন্য */
+/** When the same alert may be raised again, for showing on the dashboard */
 export function nextAllowedAt(
   lastRaisedAt: Date,
   windowHours = THROTTLE_HOURS,
@@ -148,13 +150,14 @@ export function nextAllowedAt(
 }
 
 /**
- * ⭐ এক দফার সব প্রার্থীকে ছেঁকে নেওয়া — দুই ধাপে:
+ * Filters one round's candidates, in two steps:
  *
- *  ১. DB-তে ৬ ঘণ্টার ভেতরে একই key-এর অ্যালার্ট থাকলে বাদ।
- *  ২. ⚠️ **একই দফার ভেতরেও** একই key দুবার এলে একটাই থাকবে। এই দ্বিতীয়
- *     ধাপটা ভুলে যাওয়া সবচেয়ে সহজ ফাঁদ: ১৫ মিনিটের জানালায় একই PC-র
- *     তিনটে agent_stop ইভেন্ট থাকলে DB-তে তখনো কিছুই বসেনি, তাই প্রথম
- *     ধাপ তিনটেকেই ছেড়ে দিত — আর একই সেকেন্ডে তিনটে অ্যালার্ট বসে যেত।
+ *  1. Drop anything whose key already has an alert in the DB within 6 hours.
+ *  2. **Within the same round too**, if the same key appears twice only one is
+ *     kept. This second step is the easiest trap to forget: if a 15-minute
+ *     window holds three agent_stop events for the same PC, the DB still has
+ *     nothing, so step 1 would let all three through and three alerts would be
+ *     created in the same second.
  */
 export function suppressFlood<T extends AlertKey>(
   candidates: readonly T[],
@@ -168,7 +171,7 @@ export function suppressFlood<T extends AlertKey>(
   for (const candidate of candidates) {
     const key = dedupeKey(candidate);
     if (seen.has(key)) continue;
-    // ⭐ G166 — দিনভিত্তিক ধরনের মেঝে আলাদা (`alertFloor`)
+    // Day-scoped types have a different floor (`alertFloor`)
     if (isThrottledFor(candidate.type, lastRaisedByKey.get(key), now, windowHours)) {
       continue;
     }
@@ -180,33 +183,34 @@ export function suppressFlood<T extends AlertKey>(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ২. ঢাকার সময় — ⚠️ নিজে অফসেট কষা হয় না, সব dhaka-time.ts থেকে
+// 2. Dhaka time. Offsets are never computed by hand; everything comes from dhaka-time.ts
 // ════════════════════════════════════════════════════════════════════════════
 
-/** ঢাকার স্থানীয় ঘণ্টা, ০–২৩ */
+/** Local hour in Dhaka, 0-23 */
 export function dhakaHourOf(instant: Date): number {
   return Number(dhakaPathParts(instant).hhmmss.slice(0, 2));
 }
 
 /**
- * ঢাকার তারিখের ISO দিন — সোম = ১ … শুক্র = ৫ … রবি = ৭।
+ * ISO weekday of the Dhaka date: Mon = 1 ... Fri = 5 ... Sun = 7.
  *
- * ⚠️ `work_policies.weekly_off_day` ঠিক এই সংখ্যাটাই রাখে (শুক্র = ৫), কিন্তু
- *    JavaScript-এর `getUTCDay()` দেয় রবি = ০ … শনি = ৬। রূপান্তর না করলে
- *    সাপ্তাহিক ছুটি একদিন সরে যেত, আর ভুলটা শুধু ছুটির দিনেই ধরা পড়ত।
+ * Careful: `work_policies.weekly_off_day` stores exactly this number (Fri = 5),
+ * but JavaScript's `getUTCDay()` gives Sun = 0 ... Sat = 6. Without converting,
+ * the weekly off day would shift by one, and the mistake would only show on
+ * the off day itself.
  */
 export function dhakaIsoWeekday(instant: Date): number {
   const day = workDateOf(instant).getUTCDay();
   return day === 0 ? 7 : day;
 }
 
-/** ঢাকার স্থানীয় সময় দিনের কত মিনিটে (০–১৪৩৯) */
+/** Minute of the day in Dhaka local time (0-1439) */
 export function dhakaMinuteOfDay(instant: Date): number {
   const hhmmss = dhakaPathParts(instant).hhmmss;
   return Number(hhmmss.slice(0, 2)) * 60 + Number(hhmmss.slice(2, 4));
 }
 
-/** 'HH:MM' → দিনের মিনিট। বেঠিক হলে null (তখন কলার "খোলা" ধরে) */
+/** 'HH:MM' -> minute of day. null if malformed (the caller then treats it as "open") */
 export function parseHhmm(value: string | null | undefined): number | null {
   if (!value) return null;
   const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value);
@@ -216,30 +220,31 @@ export function parseHhmm(value: string | null | undefined): number | null {
 
 export interface OfficeHoursInput {
   now: Date;
-  /** 'HH:MM' — খালি হলে সারাদিনই খোলা */
+  /** 'HH:MM'; if empty, open all day */
   officeFrom: string | null;
   officeTo: string | null;
-  /** পলিসির সাপ্তাহিক ছুটি (ISO দিন, শুক্র = ৫), না থাকলে null */
+  /** The policy's weekly off days (ISO weekday, Fri = 5); empty if none */
   weeklyOffDays: readonly number[];
-  /** আজ ক্যালেন্ডারে ছুটি কি না */
+  /** Whether today is a holiday in the calendar */
   isHoliday: boolean;
 }
 
 /**
- * ⭐⭐ **অফিস কি এখন খোলা?** *(২২ আগস্ট ২০২৬)*
+ * **Is the office open right now?**
  *
- * ⚠️⚠️ এই ফাংশনটার একমাত্র উদ্দেশ্য **চুপ থাকা** — `agent_down` অ্যালার্ট
- * কখন তোলা হবে না তা ঠিক করা। মালিকের কথা: *"office close er pore agent
- * gula down thakobe. seita abar alart kore dekhate hobe ken?"*
+ * Careful: the only purpose of this function is **staying quiet**: deciding
+ * when an `agent_down` alert is not raised. The owner's question was why we
+ * should alert about agents being down after the office closes.
  *
- * ⭐ মাঠের মাপ (১৪ দিন, ঢাকার ঘণ্টা অনুযায়ী): ১৮টা → ৯০, ০০টা → ৭৮,
- * ০৬টা → ৭৮, ১২টা → ৩৩। অর্থাৎ অফিস ছুটির পর PC নিভলেই অ্যালার্ট, আর
- * `THROTTLE_HOURS = 6` বলে সেটা সারা রাত ধরে তিনবার ফিরে আসে।
+ * Field measurement (14 days, by Dhaka hour): 18:00 -> 90, 00:00 -> 78,
+ * 06:00 -> 78, 12:00 -> 33. So every PC switched off after office hours raised
+ * an alert, and because `THROTTLE_HOURS = 6` it came back three times through the night.
  *
- * ⚠️ **সময় না বসানো থাকলে "খোলা" ধরা হয়**, বন্ধ নয়। ভুলের দুটো দিকই
- * খারাপ, কিন্তু সমান নয়: বেশি অ্যালার্ট বিরক্তিকর, আর **নীরবে বন্ধ হয়ে
- * যাওয়া অ্যালার্ট বিপজ্জনক** — কেউ টেরই পাবে না যে পাহারা নেই।
- * একই কারণে `officeTo <= officeFrom` (উল্টো বা সমান) হলেও খোলা ধরা হয়।
+ * Careful: **when no hours are set, it counts as "open"**, not closed. Both
+ * kinds of error are bad, but not equally: extra alerts are annoying, while
+ * **silently disabled alerts are dangerous** because nobody notices the watch
+ * is gone. For the same reason `officeTo <= officeFrom` (reversed or equal)
+ * also counts as open.
  */
 export function isOfficeOpen(input: OfficeHoursInput): boolean {
   const { now, officeFrom, officeTo, weeklyOffDays, isHoliday } = input;
@@ -258,18 +263,19 @@ export function isOfficeOpen(input: OfficeHoursInput): boolean {
 }
 
 /**
- * ⭐⭐ **এখন কি সবার হাজির থাকার কথা?** *(২৩ আগস্ট ২০২৬)*
+ * **Is everyone expected to be present now?**
  *
- * ⚠️⚠️ এটা `isOfficeOpen()` **নয়** — নামটা আলাদা রাখা হয়েছে ইচ্ছাকৃতভাবে।
- * অফিস ৯:০০-এ খোলেই; কিন্তু ৯:০০-এ **সবার PC চালু থাকার কথা নয়**, কারণ
- * মানুষ তখন সবে এসে বসছেন। দুটো আলাদা প্রশ্ন, তাই আলাদা ফাংশন —
- * `isOfficeOpen()`-এ ছাড় ঢোকালে সে নিজের নাম নিয়ে মিথ্যা বলত।
+ * Careful: this is **not** `isOfficeOpen()`, and the separate name is
+ * deliberate. The office does open at 9:00, but not **everyone's PC is
+ * expected to be on** at 9:00, because people are only just arriving. They are
+ * two different questions, so two functions: putting the allowance into
+ * `isOfficeOpen()` would make it lie about its own name.
  *
- * ⭐ মাঠে মাপা (২৩ আগস্ট): শুরুর সময় ০৮:৪৮–০৯:০৩, অথচ ৯:০০-এ ছটা
- * অ্যালার্ট — একটাও আসল নয়।
+ * Measured in the field (23 August): start times 08:48-09:03, yet six alerts
+ * at 9:00, none of them real.
  *
- * ⚠️ ছাড়টা কেবল **শুরুতে**, শেষে নয়: বিকেলে কারো PC হঠাৎ বন্ধ হয়ে
- * যাওয়া সত্যিকারের খবর, আর ছুটির আগে সেটা চাপা পড়া উচিত নয়।
+ * Careful: the allowance applies only at the **start**, not the end. A PC
+ * suddenly going off in the afternoon is real news and must not be hidden before closing.
  */
 export function isAgentWatchOpen(
   input: OfficeHoursInput,
@@ -278,18 +284,18 @@ export function isAgentWatchOpen(
   if (!isOfficeOpen(input)) return false;
 
   const from = parseHhmm(input.officeFrom);
-  // ⚠️ সময় জানা না থাকলে `isOfficeOpen()` সারাদিন খোলা ধরে — তখন
-  //    "খোলার পর" বলে কোনো মুহূর্তই নেই, তাই ছাড়ও নেই।
+  // Careful: when hours are unknown `isOfficeOpen()` counts the whole day as open, so
+  // there is no "after opening" moment and therefore no grace either.
   if (from === null) return true;
 
   return dhakaMinuteOfDay(input.now) >= from + graceMin;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ৩. G01 — এজেন্ট ১০ মিনিট চুপ
+// 3. Agent silent for 10 minutes
 // ════════════════════════════════════════════════════════════════════════════
 
-/** এই ইভেন্টগুলোর পরে চুপ থাকাটাই স্বাভাবিক */
+/** Silence after these events is normal */
 export const CLEAN_STOP_EVENTS: readonly string[] = [
   'agent_stop',
   'logoff',
@@ -299,20 +305,20 @@ export const CLEAN_STOP_EVENTS: readonly string[] = [
 
 export interface DeviceSilence {
   deviceId: number;
-  /** সার্ভারের ঘড়িতে শেষ কবে কিছু এসেছে */
+  /** When anything last arrived, on the server clock */
   lastSeenAt: Date | null;
-  /** ওই ডিভাইসের সর্বশেষ **বিদায়ী** ইভেন্ট (agent_stop/logoff/…), না থাকলে null */
+  /** The device's latest **goodbye** event (agent_stop/logoff/...); null if none */
   lastCleanStopAt?: Date | null;
 }
 
 /**
- * ⭐ চুপ থাকাটা কি ব্যাখ্যা করা আছে?
+ * Is the silence explained?
  *
- * PC বন্ধ করে বাড়ি যাওয়া আর এজেন্ট মরে যাওয়া — দুটোতেই ডেটা আসা বন্ধ হয়,
- * কিন্তু প্রথমটা খবর নয়। পার্থক্য একটাই: প্রথমটায় শেষ যা শুনেছি সেটা ছিল
- * একটা বিদায়ী ইভেন্ট। সেটাই যদি না দেখা হতো, তাহলে প্রতিদিন সন্ধ্যায়
- * প্রত্যেকের PC বন্ধ হওয়ামাত্র বারোটা অ্যালার্ট যেত — অর্থাৎ চেকটা সবসময়
- * সত্যি কথা বললেও কোনো কাজে লাগত না।
+ * Shutting the PC down and going home, and the agent dying, both stop the
+ * data, but the first is not news. The only difference: in the first case the
+ * last thing we heard was a goodbye event. Without that check, every evening
+ * as each PC was switched off twelve alerts would go out, so the check would
+ * be useful for nothing even though it always told the truth.
  */
 export function isExpectedSilence(
   device: DeviceSilence,
@@ -322,12 +328,12 @@ export function isExpectedSilence(
   if (!lastCleanStopAt) return false;
   if (!lastSeenAt) return true;
 
-  // বিদায়ী ইভেন্টটাই কি শেষ খবর ছিল? পরে আবার কিছু এসে থাকলে এজেন্ট
-  // ফিরে এসেছিল — তারপরের নীরবতার আর কোনো ব্যাখ্যা নেই।
+  // Was the goodbye event the last news? If anything came after it, the agent
+  // came back, and the silence after that has no explanation.
   return lastCleanStopAt.getTime() >= lastSeenAt.getTime() - graceMin * MINUTE_MS;
 }
 
-/** কতক্ষণ চুপ, মিনিটে (`lastSeenAt` না থাকলে null) */
+/** How long it has been silent, in minutes (null if there is no `lastSeenAt`) */
 export function silentMinutes(
   lastSeenAt: Date | null,
   now: Date,
@@ -337,11 +343,11 @@ export function silentMinutes(
 }
 
 /**
- * যেসব ডিভাইসের নীরবতার কোনো ব্যাখ্যা নেই।
+ * Devices whose silence has no explanation.
  *
- * ⚠️ `lastSeenAt === null` ডিভাইস বাদ — ওরা এনরোল হয়েও কখনো কিছু পাঠায়নি।
- *    সেটা এনরোলমেন্টের সমস্যা, "এজেন্ট বন্ধ হয়ে গেছে" নয়; আর ওদের অ্যালার্ট
- *    দিলে ইনস্টল না করা প্রতিটা ডিভাইস চিরকাল অভিযোগ করে যেত।
+ * Careful: devices with `lastSeenAt === null` are excluded. They enrolled but
+ * never sent anything. That is an enrollment problem, not "the agent stopped",
+ * and alerting on them would make every never-installed device complain forever.
  */
 export function agentDownCandidates(
   devices: readonly DeviceSilence[],
@@ -357,26 +363,27 @@ export function agentDownCandidates(
   });
 }
 
-/** একটা খোলা agent_down alert + তার ডিভাইসের সর্বশেষ অবস্থা */
+/** An open agent_down alert plus its device's latest state */
 export interface OpenAgentDownAlert {
   alertId: bigint;
-  /** ডিভাইসটা এখনো active (revoke হয়নি) */
+  /** The device is still active (not revoked) */
   deviceActive: boolean;
-  /** সার্ভারের ঘড়িতে শেষ কবে কিছু এসেছে */
+  /** When anything last arrived, on the server clock */
   lastSeenAt: Date | null;
 }
 
 /**
- * ⭐ ফিরে আসা এজেন্ট — কোন খোলা agent_down alert এখন নিজে বন্ধ করা যায়।
+ * A returned agent: which open agent_down alerts can now be closed automatically.
  *
- * `agentDownCandidates()`-এর ঠিক **আয়না**: ওটা "চুপ হয়ে গেছে" বাছে
- * (`lastSeenAt < floor`), এটা বাছে "আবার কথা বলছে" (`lastSeenAt >= floor`)।
- * যে PC-র জন্য alert উঠেছিল সে আবার ডেটা পাঠাতে শুরু করলে alert-এর প্রশ্নটা
- * ("এই PC কি ঠিক আছে?") নিজেই মিটে যায় — উত্তর হ্যাঁ। তাই সকালে মালিক শুধু
- * **এখন যা সত্যিই down** তা-ই দেখেন, রাতে-বন্ধ-হওয়া বারোটা বাসি warning নয়।
+ * The exact **mirror** of `agentDownCandidates()`: that one picks "went
+ * silent" (`lastSeenAt < floor`), this one picks "is talking again"
+ * (`lastSeenAt >= floor`). When the PC that raised an alert starts sending
+ * data again, the alert's question ("is this PC OK?") answers itself: yes. So
+ * in the morning the owner sees only what is **really down now**, not twelve
+ * stale warnings about PCs switched off overnight.
  *
- * ⚠️ revoke করা ডিভাইস বাদ — চুপ থাকাটাই তো উদ্দেশ্য, ওর alert এই পথে
- *    বন্ধ করা হয় না।
+ * Careful: revoked devices are excluded. Silence is the whole point for them,
+ * so their alerts are not closed this way.
  */
 export function recoveredAlertIds(
   alerts: readonly OpenAgentDownAlert[],
@@ -393,8 +400,9 @@ export function recoveredAlertIds(
 }
 
 /**
- * ⭐ সার্ভার সবে উঠেছে — এখন agent_down দেখা মানে শুধু নিজেরই অনুপস্থিতি দেখা।
- * এজেন্টদের ফিরে আসার সময় দেওয়ার আগে প্রশ্নটাই করা উচিত নয়।
+ * The server has just started: checking agent_down now would only measure our
+ * own absence. The question should not be asked before the agents have had
+ * time to come back.
  */
 export function isWithinStartupGrace(
   bootedAt: Date,
@@ -405,7 +413,7 @@ export function isWithinStartupGrace(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ৪. G02 — এজেন্ট বন্ধ / আনইনস্টলের চেষ্টা
+// 4. Agent stopped / uninstall attempt
 // ════════════════════════════════════════════════════════════════════════════
 
 export interface StopEvent {
@@ -416,26 +424,26 @@ export interface StopEvent {
 }
 
 /**
- * ⭐⭐ **যেসব ইভেন্ট একটা `agent_stop`-কে "স্বাভাবিক" বলে ব্যাখ্যা করে।**
+ * **Events that explain an `agent_stop` as "normal".**
  *
- * ⚠️ `agent_stop` নিজে কিছুই বোঝায় না — দিনে দুবার সবার PC-তে এটা ঘটে,
- * আবার কেউ Task Manager থেকে মেরে দিলেও ঠিক এটাই আসে। পার্থক্য করার
- * একমাত্র সূত্র আশেপাশের এই ইভেন্টগুলো।
+ * Careful: `agent_stop` means nothing by itself. It happens on everyone's PC
+ * twice a day, and it is exactly what arrives when someone kills the agent
+ * from Task Manager. The only way to tell them apart is these surrounding events.
  *
- * ⚠️⚠️ **`agent_update` যোগ হয়েছে ৫ সেপ্টেম্বর ২০২৬** — আর সেটা নিছক
- * একটা নাম যোগ করা নয়, একটা **নীরব মিথ্যা অ্যালার্ট** বন্ধ করা। এজেন্টের
- * MSI আপডেট বসানোর সময় Windows-এর Restart Manager এজেন্টকে বন্ধ করায়
- * (`ENDSESSION_CLOSEAPP`)। তখন `agent_stop` ঠিকই যেত, কিন্তু পাশে
- * `logoff`/`shutdown` কিছুই থাকত না — কারণ PC বন্ধ হচ্ছিল না। ফলে
- * **প্রতিটা আপডেট একটা `agent_killed` warning তুলত**।
+ * Careful: `agent_update` was added on 5 September 2026, and that was not just
+ * adding a name; it stopped a **silent false alert**. When the agent's MSI
+ * update is installed, the Windows Restart Manager makes the agent shut down
+ * (`ENDSESSION_CLOSEAPP`). `agent_stop` was sent, but no `logoff`/`shutdown`
+ * came with it, because the PC was not shutting down. So **every update raised
+ * an `agent_killed` warning**.
  *
- * ⭐ হাতে একটা-দুটো PC আপডেট করলে সেটা চোখে পড়ত না। কিন্তু রোলআউট নিজে
- * থেকে এগোতে শুরু করলে একসাথে ১২টা মিথ্যা অ্যালার্ট — আর তার পরেই কেউ
- * আর অ্যালার্ট পড়ত না, অর্থাৎ G02 কার্যত অকেজো হয়ে যেত।
+ * Updating one or two PCs by hand went unnoticed. But once the rollout
+ * started on its own, there would be 12 false alerts at once, and after that
+ * nobody would read alerts, so the stop/uninstall check would be useless in practice.
  *
- * ⚠️ **ছাড়টা সংকীর্ণ, আর সেটাই নকশা:** `agent_update` কেবল তখনই যায়
- * যখন Windows নিজে আমাদের বন্ধ করাচ্ছে। কেউ প্রসেসটা মেরে দিলে ওটা যায়
- * না, তাই আসল হস্তক্ষেপ আগের মতোই ধরা পড়ে।
+ * Careful: the exemption is narrow, by design. `agent_update` is sent only
+ * when Windows itself is shutting us down. If someone kills the process it is
+ * not sent, so real tampering is still caught as before.
  */
 export const CLEAN_STOP_CONTEXT: readonly string[] = [
   'logoff',
@@ -444,15 +452,15 @@ export const CLEAN_STOP_CONTEXT: readonly string[] = [
 ];
 
 /**
- * ⭐ agent_stop একই সাথে সবচেয়ে সাধারণ আর সবচেয়ে সন্দেহজনক ইভেন্ট।
+ * agent_stop is both the most common and the most suspicious event.
  *
- * দিনে দুবার করে প্রত্যেকের PC-তে এটা ঘটে (লগঅফ/শাটডাউন), আবার কেউ Task
- * Manager থেকে এজেন্ট মেরে দিলেও ঠিক এটাই আসে। পার্থক্য করার একমাত্র সূত্র:
- * আশেপাশে logoff/shutdown আছে কি না।
+ * It happens on everyone's PC twice a day (logoff/shutdown), and it is also
+ * exactly what arrives when someone kills the agent from Task Manager. The
+ * only way to tell them apart: whether a logoff/shutdown is nearby.
  *
- * ⚠️ সন্দেহের সুবিধা দেওয়া হয় **নীরবতার পক্ষে নয়** — জোড়া না মিললে
- *    অ্যালার্ট হয়। একটা মিথ্যা অ্যালার্ট বিরক্তিকর, কিন্তু চুপচাপ বন্ধ করে
- *    রাখা এজেন্ট পুরো মাসের হিসাব নষ্ট করে দেয়।
+ * Careful: the benefit of the doubt does **not** go to silence. If no pair
+ * matches, an alert is raised. A false alert is annoying, but a quietly
+ * stopped agent ruins a whole month's numbers.
  */
 export function isTamperStop(
   stop: StopEvent,
@@ -472,34 +480,33 @@ export function isTamperStop(
   return !paired;
 }
 
-/** আনইনস্টল = critical, শুধু বন্ধ করা = warning */
+/** Uninstall = critical, a plain stop = warning */
 export function tamperSeverity(eventType: string): 'warning' | 'critical' {
   return UNINSTALL_EVENT_TYPES.includes(eventType) ? 'critical' : 'warning';
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ৫. G03 — সার্ভারের ডিস্ক
+// 5. Server disk
 // ════════════════════════════════════════════════════════════════════════════
 
-/** `fs.statfs()`-এর যে অংশটুকু কাজে লাগে */
+/** The parts of `fs.statfs()` we use */
 export interface DiskStats {
-  /** মোট ব্লক */
+  /** Total blocks */
   blocks: number;
-  /** খালি ব্লক (root-এর জন্য রাখা অংশসহ) */
+  /** Free blocks (including the part reserved for root) */
   bfree: number;
-  /** সাধারণ ব্যবহারকারীর জন্য আসলে যতটা খালি */
+  /** Blocks actually free for ordinary users */
   bavail: number;
   bsize: number;
 }
 
 /**
- * ব্যবহৃত শতাংশ — `df`-এর সংজ্ঞা অনুযায়ী।
+ * Used percentage, following the definition `df` uses.
  *
- * ⚠️ হর হিসেবে `blocks` (মোট) নয়, `used + bavail` ধরা হয়। Linux-এ ext4
- *    ডিফল্টে ৫% ব্লক root-এর জন্য সরিয়ে রাখে; মোট দিয়ে ভাগ করলে বেরোনো
- *    সংখ্যাটা `df`-এর সাথে মিলত না, আর ডিস্ক আসলে ভরে যাওয়ার পরেও আমাদের
- *    হিসাবে ৯৫% পেরোত না — অর্থাৎ ঠিক যে মুহূর্তে অ্যালার্টটা দরকার, তখনই
- *    সেটা আসত না।
+ * Careful: the denominator is `used + bavail`, not `blocks` (the total). On
+ * Linux, ext4 reserves 5% of blocks for root by default; dividing by the total
+ * would not match `df`, and even when the disk was truly full our figure would
+ * never pass 95%, so the alert would be missing at exactly the moment it is needed.
  */
 export function diskUsedPct(stats: DiskStats): number {
   const used = stats.blocks - stats.bfree;
@@ -514,11 +521,11 @@ export interface DiskVerdict {
 }
 
 /**
- * ⭐ দুটো আলাদা `type` ব্যবহার করা ইচ্ছাকৃত।
+ * Using two different `type` values is deliberate.
  *
- * ৮০% পেরোনোর পর ৬ ঘণ্টায় একটা করে সতর্কতা যায়। ডিস্ক ৯৫%-এ পৌঁছালে
- * type বদলে যায় বলে throttle-এর key-ও বদলে যায় — ফলে গুরুতর খবরটা
- * সাথে সাথেই পৌঁছায়, আগের সতর্কতার ছায়ায় চাপা পড়ে থাকে না।
+ * Past 80%, one warning goes out every 6 hours. When the disk reaches 95% the
+ * type changes, so the throttle key changes too. The serious news therefore
+ * arrives immediately and is not buried in the shadow of the earlier warning.
  */
 export function diskVerdict(usedPct: number): DiskVerdict | null {
   if (usedPct >= DISK_CRITICAL_PCT) {
@@ -530,7 +537,7 @@ export function diskVerdict(usedPct: number): DiskVerdict | null {
   return null;
 }
 
-/** বাইট → মানুষের পড়ার মতো (অ্যালার্টের বার্তায় যায়) */
+/** Bytes -> human-readable (goes into the alert message) */
 export function humanBytes(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
   let value = Math.max(0, bytes);
@@ -543,7 +550,7 @@ export function humanBytes(bytes: number): string {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ৬. G06 — কেউ পুরো দিন কোনো কাজ করেনি
+// 6. Nobody did any work all day
 // ════════════════════════════════════════════════════════════════════════════
 
 export function isNoActivityWindow(
@@ -556,17 +563,17 @@ export function isNoActivityWindow(
 }
 
 export interface NoActivityInput {
-  /** আজ ওই কর্মীর কতগুলো `counts_as_work` সেগমেন্ট আছে */
+  /** How many `counts_as_work` segments this employee has today */
   workedSegments: number;
-  /** কর্মীর পলিসির সাপ্তাহিক ছুটি (ISO দিন), না থাকলে null */
+  /** The employee's policy weekly off days (ISO weekday); empty if none */
   weeklyOffDays: readonly number[];
-  /** আজ ক্যালেন্ডারে ছুটি কি না */
+  /** Whether today is a holiday in the calendar */
   isHoliday: boolean;
   /**
-   * ⭐ আজ **এই কর্মীর** অনুমোদিত ছুটি কি না *(৬ সেপ্টেম্বর ২০২৬)*।
+   * Whether today is an approved leave day for **this employee**.
    *
-   * ⚠️ `isHoliday`-র সাথে মেশানো নয়: ওটা **অফিসের** ক্যালেন্ডার, এটা
-   *    ওই একজনের — ঠিক `AttendanceRow.onLeave`-এর মতোই।
+   * Careful: not merged with `isHoliday`: that is the **office** calendar,
+   * this is that one person's, just like `AttendanceRow.onLeave`.
    */
   onLeave: boolean;
   joinedOn: Date | null;
@@ -575,15 +582,16 @@ export interface NoActivityInput {
 }
 
 /**
- * ⭐ এই ফাংশনের আসল কাজ **না** বলা।
+ * The real job of this function is to say **no**.
  *
- * "আজ কেউ কাজ করেনি" প্রশ্নের সোজা উত্তরটা প্রায়ই সঠিক অথচ অর্থহীন — শুক্রবার,
- * ঈদের ছুটি, বা যে গতকাল যোগ দিয়েছে। ⚠️ ছুটির দিন বাদ না দিলে প্রতি শুক্রবার
- * বারোটা মিথ্যা অ্যালার্ট যেত; মাসে চারবার। ওই অভ্যাসেই মানুষ অ্যালার্ট
- * ফোল্ডারটা না-পড়া অবস্থায় রেখে দেয়।
+ * The plain answer to "did nobody work today?" is often correct but
+ * meaningless: Friday, an Eid holiday, or someone who joined yesterday.
+ * Careful: without excluding holidays, twelve false alerts would go out every
+ * Friday, four times a month. That habit is how people end up leaving the
+ * alert folder unread.
  *
- * ⚠️ ছুটির দিন "বাদ" মানে শুধু অ্যালার্ট না দেওয়া — ওইদিন কেউ কাজ করলে তার
- *    ঘণ্টা পুরোপুরিই গোনা হয় (§ ২.১-খ, ছুটি কোনো ব্লক নয়)।
+ * Careful: "excluding" a holiday only means not raising the alert. If someone
+ * works that day their hours are counted in full (§ 2.1(b), a holiday is not a block).
  */
 export function shouldFlagNoActivity(input: NoActivityInput): boolean {
   const { workedSegments, weeklyOffDays, isHoliday, onLeave, joinedOn, leftOn, now } =
@@ -593,16 +601,16 @@ export function shouldFlagNoActivity(input: NoActivityInput): boolean {
   if (!isNoActivityWindow(now)) return false;
   if (isHoliday) return false;
   /**
-   * ⭐⭐⭐ **অনুমোদিত ছুটি** *(৬ সেপ্টেম্বর ২০২৬, G157)*।
+   * **Approved leave.**
    *
-   * ⚠️⚠️ **যে বাগটা এটা সারায়:** এই ফাইলের উপরের নোটে এতদিন লেখা ছিল
-   * *"ছুটির কোনো আবেদন-অনুমোদনের ব্যবস্থা এই সিস্টেমে নেই (ADR-011d)"* —
-   * আর সেটা **এক মাস ধরে বাসি**। ছুটির খাতা এসেছে R2/G130-তে, কিন্তু
-   * অ্যালার্টের কোনো পরীক্ষা কোনোদিন `leaves` টেবিলটা পড়েনি।
+   * The bug this fixes: the note at the top of this file used to say "there
+   * is no leave application/approval system in this one (ADR-011d)", and it
+   * was **a month stale**. The leave register arrived later, but no alert
+   * check ever read the `leaves` table.
    *
-   * ⚠️ মাঠে মেপে দেখা: মাত্র **৩টা** ছুটির দিনে **১১টা** মিথ্যা অ্যালার্ট
-   * (৮টা `agent_down` + ৩টা `no_activity_today`) — অর্থাৎ প্রতিটা ছুটির
-   * দিনেই মালিকের ইনবক্সে এমন খবর যেত যেটা তিনি নিজেই অনুমোদন করেছেন।
+   * Measured in the field: on just **3** leave days there were **11** false
+   * alerts (8 `agent_down` + 3 `no_activity_today`), so on every leave day
+   * the owner's inbox got news about something they had approved themselves.
    */
   if (onLeave) return false;
   if (isOffWeekday(dhakaIsoWeekday(now), weeklyOffDays)) {
@@ -610,58 +618,60 @@ export function shouldFlagNoActivity(input: NoActivityInput): boolean {
   }
 
   const today = workDateOf(now).getTime();
-  // যোগ দেওয়ার আগের দিনগুলোয় কাজ না থাকাই স্বাভাবিক
+  // No work before the joining date is normal
   if (joinedOn && joinedOn.getTime() > today) return false;
-  // ⚠️ `<` — চাকরির শেষ দিনটাও কর্মদিবস, তাই সেদিন কাজ না থাকলে অ্যালার্ট হবে
+  // Careful: `<`. The last day of employment is still a working day, so no work
+  // that day raises an alert.
   if (leftOn && leftOn.getTime() < today) return false;
 
   return true;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ৬ক. G32 — একই স্টাফের দুটো ডিভাইস একসাথে
+// 6a. Two devices of the same staff member at once
 // ════════════════════════════════════════════════════════════════════════════
 
 export interface OverlapInput {
-  /** ওই দিনে ওই স্টাফের কতগুলো আলাদা ডিভাইস সেগমেন্ট পাঠিয়েছে */
+  /** How many distinct devices of this staff member sent segments that day */
   deviceCount: number;
-  /** `overlapSec()` — দুই ডিভাইস একই ঘড়ির সময়ে কত সেকেন্ড চলেছে */
+  /** `overlapSec()`: seconds both devices ran at the same wall-clock time */
   overlapSec: number;
-  /** ওই দিনের UNION করা কাজের সময় — বার্তায় প্রেক্ষাপট দিতে */
+  /** The day's UNIONed worked time, to give context in the message */
   workedSec: number;
 }
 
 /**
- * **G32** — অ্যালার্ট উঠবে কি না।
+ * Whether an alert is raised.
  *
- * ⭐ <b>দোরগোড়াটা ১৫ মিনিট, আর সেটা ইচ্ছাকৃতভাবে উঁচু।</b> দুটো মেশিনে
- * কয়েক মিনিটের overlap একেবারে স্বাভাবিক: ডেস্কটপ লক না করে ল্যাপটপ নিয়ে
- * মিটিংয়ে যাওয়া, বা একটা মেশিনের সেগমেন্ট বন্ধ হওয়ার আগেই আরেকটায় কাজ শুরু।
- * ⚠️ দোরগোড়া ছোট করলে (ধরা যাক ১ মিনিট) প্রায় রোজই সবার নামে অ্যালার্ট
- * উঠত — আর তখন এই অ্যালার্টটার মানেই থাকত না।
+ * <b>The threshold is 15 minutes, deliberately high.</b> A few minutes of
+ * overlap on two machines is completely normal: walking into a meeting with
+ * the laptop without locking the desktop, or starting work on one machine
+ * before the other's segment has closed. Careful: with a lower threshold (say
+ * 1 minute) almost everyone would get an alert nearly every day, and the alert
+ * would stop meaning anything.
  *
- * ⚠️⚠️ severity `warning`, `critical` নয় — এবং এটা কোনো অভিযোগ **নয়**।
- * স্পেক (§ ২.১-গ) বলে সাধারণ কারণ দুটো: এক PC দুজন ব্যবহার করছে, অথবা
- * কোনো ভুলে-ফেলে-রাখা মেশিন চালু আছে। ঘণ্টার হিসাবে এর কোনো প্রভাব
- * পড়ে না — `worked_sec` এমনিতেই UNION, তাই সময় দুবার গোনা হয় না।
- * অ্যালার্টটা তাই তথ্য: <i>"এই দিনটার সংখ্যা দেখার আগে জেনে রাখুন"</i>।
+ * Careful: severity is `warning`, not `critical`, and this is **not** an
+ * accusation. The spec (§ 2.1(c)) names two common causes: one PC used by two
+ * people, or a forgotten machine left on. It has no effect on the hours,
+ * because `worked_sec` is a UNION anyway, so time is not counted twice. The
+ * alert is therefore information: <i>"know this before you read that day's numbers"</i>.
  */
 export function shouldFlagOverlap(
   input: OverlapInput,
   thresholdSec = OVERLAP_ALERT_SEC,
 ): boolean {
-  // ⚠️ ডিভাইস একটা হলে `overlapSec` গাণিতিকভাবেই ০, তবু শর্তটা স্পষ্ট করে
-  //    রাখা — ভবিষ্যতে হিসাবটা বদলালে এই পাহারাটা টিকে থাকে।
+  // Careful: with one device `overlapSec` is mathematically 0, but the condition is
+  // kept explicit so this guard survives if the calculation changes.
   if (input.deviceCount < 2) return false;
 
   return input.overlapSec >= thresholdSec;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ৭. G07 — কোন অ্যালার্টগুলো এখন ইমেইলে যাবে
+// 7. Which alerts go out by email now
 // ════════════════════════════════════════════════════════════════════════════
 
-/** বিষয়ে যে লেবেলটা বসে */
+/** The label that goes into the subject */
 export function severityLabel(severity: string): string {
   switch (severity) {
     case 'critical':

@@ -1,33 +1,33 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// একটা স্ক্রিনশটের <b>মেটাডেটা</b> — <c>POST /agent/screenshots</c>-এর
-/// multipart-এর <c>meta</c> অংশ। ছবির বাইট এখানে নেই।
+/// The <b>metadata</b> of one screenshot: the <c>meta</c> part of the multipart body of
+/// <c>POST /agent/screenshots</c>. The image bytes are not here.
 ///
-/// ⚠️ ছবি কখনো কিউয়ের সারিতে ঢোকে না। ২৮৮টা স্লট × ৩ মনিটর × ~২০০ KB মানে
-/// দিনে ~১৭০ MB; সেটা DB-র ভেতরে blob হিসেবে রাখলে প্রতিটা VACUUM ও ব্যাকআপ
-/// ভয়ংকর হয়ে যেত, আর একটা সারি পড়তে গেলেই পুরো ছবি RAM-এ উঠত। বাইটগুলো
-/// ডিস্কে আলাদা ফাইলে থাকে, সারি শুধু <see cref="OutboxItem.FilePath"/> ধরে রাখে।
+/// Images never go into a queue row. 288 slots x 3 monitors x ~200 KB is about 170 MB per
+/// day; storing that as a blob inside the DB would make every VACUUM and backup terrible, and
+/// reading one row would pull a whole image into RAM. The bytes live in a separate file on
+/// disk, and the row only holds <see cref="OutboxItem.FilePath"/>.
 /// </summary>
 public sealed record ScreenshotRecord
 {
     public required Guid ClientUuid { get; init; }
 
-    /// <summary>৫ মিনিটের স্লটের শুরু — <see cref="oXeio.Core.Capture.SlotScheduler"/> দেয়।</summary>
+    /// <summary>Start of the 5-minute slot: supplied by <see cref="oXeio.Core.Capture.SlotScheduler"/>.</summary>
     public required DateTimeOffset SlotStart { get; init; }
 
-    /// <summary>স্লটের ভেতরের আসল র‍্যান্ডম মুহূর্ত।</summary>
+    /// <summary>The actual random moment within the slot.</summary>
     public required DateTimeOffset CapturedAt { get; init; }
 
-    /// <summary>০-ভিত্তিক। সার্ভার ০–৭ ছাড়া মানে না।</summary>
+    /// <summary>0-based. The server accepts only 0 to 7.</summary>
     public required int MonitorIndex { get; init; }
 
     public int? Width { get; init; }
     public int? Height { get; init; }
 
-    /// <summary>ছবি তোলার মুহূর্তের foreground প্রসেস, যেমন <c>excel.exe</c>।</summary>
+    /// <summary>The foreground process at the moment of capture, e.g. <c>excel.exe</c>.</summary>
     public string? ActiveApp { get; init; }
 
-    /// <summary>সর্বোচ্চ ১০০০ অক্ষর।</summary>
+    /// <summary>At most 1000 characters.</summary>
     public string? ActiveTitle { get; init; }
 }

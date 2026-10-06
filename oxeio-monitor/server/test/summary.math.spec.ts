@@ -22,11 +22,11 @@ import {
   type DaySegment,
 } from '../src/summary/summary.math';
 
-/** ২০৮ ঘণ্টা, সেকেন্ডে */
+/** 208 hours, in seconds */
 const TARGET = 208 * 3600;
 const HOUR = 3600;
 
-/** ঢাকার সময় লিখে UTC instant — টেস্টগুলো পড়তে সহজ হয় */
+/** Write Dhaka time, get a UTC instant — makes the tests easier to read */
 function dhaka(iso: string): Date {
   return new Date(`${iso}+06:00`);
 }
@@ -46,15 +46,15 @@ function seg(
   };
 }
 
-/** UTC-মধ্যরাত — Prisma-র `@db.Date` ও `workDateOf()` যা দেয় */
+/** UTC midnight — what Prisma's `@db.Date` and `workDateOf()` return */
 function day(iso: string): Date {
   return new Date(`${iso}T00:00:00Z`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
 
-describe('mergeSpans / unionSec — একজনের দুই ডিভাইস (§ ২.১-গ)', () => {
-  it('আলাদা আলাদা খণ্ড যোগ হয়', () => {
+describe('mergeSpans / unionSec — one person, two devices (§ 2.1-c)', () => {
+  it('separate spans are added', () => {
     expect(
       unionSec([
         { startedAt: dhaka('2026-08-11T09:00:00'), endedAt: dhaka('2026-08-11T10:00:00') },
@@ -64,10 +64,10 @@ describe('mergeSpans / unionSec — একজনের দুই ডিভাই
   });
 
   /**
-   * ⭐ এই টেস্টটাই এই ফাইলের কারণ। ডেস্কটপ ও ল্যাপটপ একই সময়ে চললে
-   * যোগফল দিত ৪ ঘণ্টা, অথচ মানুষটা বসেছিল ৩ ঘণ্টা।
+   * This test is the reason for this file. With a desktop and a laptop running
+   * at the same time, the sum gave 4 hours, yet the person sat for 3 hours.
    */
-  it('একই সময়ে দুই ডিভাইস চললে সময় একবারই গোনা হয়', () => {
+  it('with two devices running at the same time, the time counts only once', () => {
     const spans = [
       { startedAt: dhaka('2026-08-11T09:00:00'), endedAt: dhaka('2026-08-11T11:00:00') },
       { startedAt: dhaka('2026-08-11T10:00:00'), endedAt: dhaka('2026-08-11T12:00:00') },
@@ -79,10 +79,10 @@ describe('mergeSpans / unionSec — একজনের দুই ডিভাই
       (t, s) => t + (s.endedAt.getTime() - s.startedAt.getTime()) / 1000,
       0,
     );
-    expect(naive).toBe(4 * HOUR); // যা হতো
+    expect(naive).toBe(4 * HOUR); // what would have happened
   });
 
-  it('একটা খণ্ড পুরোপুরি আরেকটার ভেতরে পড়লেও একবারই', () => {
+  it('a span that falls entirely inside another still counts once', () => {
     expect(
       unionSec([
         { startedAt: dhaka('2026-08-11T09:00:00'), endedAt: dhaka('2026-08-11T17:00:00') },
@@ -91,7 +91,7 @@ describe('mergeSpans / unionSec — একজনের দুই ডিভাই
     ).toBe(8 * HOUR);
   });
 
-  it('গা-ঘেঁষা দুটো খণ্ড এক হয়ে যায়', () => {
+  it('two adjoining spans merge into one', () => {
     const merged = mergeSpans([
       { startedAt: dhaka('2026-08-11T09:00:00'), endedAt: dhaka('2026-08-11T10:00:00') },
       { startedAt: dhaka('2026-08-11T10:00:00'), endedAt: dhaka('2026-08-11T11:00:00') },
@@ -101,7 +101,7 @@ describe('mergeSpans / unionSec — একজনের দুই ডিভাই
     expect(merged[0].endedAt).toEqual(dhaka('2026-08-11T11:00:00'));
   });
 
-  it('এলোমেলো ক্রমে এলেও ঠিক থাকে', () => {
+  it('works even when they arrive in random order', () => {
     expect(
       unionSec([
         { startedAt: dhaka('2026-08-11T14:00:00'), endedAt: dhaka('2026-08-11T15:00:00') },
@@ -111,7 +111,7 @@ describe('mergeSpans / unionSec — একজনের দুই ডিভাই
     ).toBe(4 * HOUR);
   });
 
-  it('শূন্য বা উল্টো দৈর্ঘ্যের খণ্ড বাদ পড়ে', () => {
+  it('zero-length or reversed spans are dropped', () => {
     expect(
       unionSec([
         { startedAt: dhaka('2026-08-11T09:00:00'), endedAt: dhaka('2026-08-11T09:00:00') },
@@ -120,8 +120,8 @@ describe('mergeSpans / unionSec — একজনের দুই ডিভাই
     ).toBe(0);
   });
 
-  /** ⭐ ইনপুট Prisma-র সারি — সেগুলো বদলে গেলে কলার নীরবে ভুল ডেটা পেত */
-  it('ইনপুটের অবজেক্ট বদলায় না', () => {
+  /** The input is Prisma rows — if they were mutated, the caller would silently get wrong data */
+  it('does not mutate the input objects', () => {
     const first = {
       startedAt: dhaka('2026-08-11T09:00:00'),
       endedAt: dhaka('2026-08-11T11:00:00'),
@@ -139,7 +139,7 @@ describe('mergeSpans / unionSec — একজনের দুই ডিভাই
 
 // ══════════════════════════════════════════════════════════════════════════
 
-describe('summarizeDay — একদিনের সারাংশ (K06)', () => {
+describe('summarizeDay — one day summary (K06)', () => {
   const empty = {
     screenshotCount: 0,
     adjustmentSec: 0,
@@ -148,7 +148,7 @@ describe('summarizeDay — একদিনের সারাংশ (K06)', () =
     isOffDay: false,
   };
 
-  it('active-এর কাঁচা যোগফল আর UNION আলাদা রাখে', () => {
+  it('keeps the raw sum of active and the UNION separate', () => {
     const n = summarizeDay({
       ...empty,
       segments: [
@@ -157,11 +157,11 @@ describe('summarizeDay — একদিনের সারাংশ (K06)', () =
       ],
     });
 
-    expect(n.activeSec).toBe(4 * HOUR); // দুই ডিভাইসের যোগফল
-    expect(n.workedSec).toBe(3 * HOUR); // আসলে যতক্ষণ বসেছিল
+    expect(n.activeSec).toBe(4 * HOUR); // sum over both devices
+    expect(n.workedSec).toBe(3 * HOUR); // how long they actually sat
   });
 
-  it('locked সময়টাও idle-এ ধরা হয়', () => {
+  it('locked time also counts as idle', () => {
     const n = summarizeDay({
       ...empty,
       segments: [
@@ -175,7 +175,7 @@ describe('summarizeDay — একদিনের সারাংশ (K06)', () =
     expect(n.idleSec).toBe(HOUR);
   });
 
-  it('idle বা locked কখনো কাজের সময়ে যোগ হয় না', () => {
+  it('idle or locked time is never added to working time', () => {
     const n = summarizeDay({
       ...empty,
       segments: [
@@ -189,7 +189,7 @@ describe('summarizeDay — একদিনের সারাংশ (K06)', () =
     expect(n.dayType).toBe('no_activity');
   });
 
-  it('সংশোধন যোগ হয়ে credited হয় (§ ২.১-ঙ)', () => {
+  it('adjustments are added to give credited time (§ 2.1-e)', () => {
     const n = summarizeDay({
       ...empty,
       segments: [seg('active', '2026-08-11T09:00:00', '2026-08-11T11:00:00')],
@@ -200,8 +200,8 @@ describe('summarizeDay — একদিনের সারাংশ (K06)', () =
     expect(n.creditedSec).toBe(4 * HOUR);
   });
 
-  /** দৈনিক স্তরে ঋণাত্মক হতে দেওয়া হয় — owner-এর নির্দেশ অবিকৃত থাকে */
-  it('কাজের চেয়ে বেশি কেটে নিলে দৈনিক credited ঋণাত্মক হয়', () => {
+  /** Daily credited may go negative — the owner's instruction is kept unchanged */
+  it('a deduction larger than the work makes daily credited negative', () => {
     const n = summarizeDay({
       ...empty,
       segments: [seg('active', '2026-08-11T09:00:00', '2026-08-11T10:00:00')],
@@ -211,7 +211,7 @@ describe('summarizeDay — একদিনের সারাংশ (K06)', () =
     expect(n.creditedSec).toBe(-2 * HOUR);
   });
 
-  it('প্রথম ও শেষ কাজের সময় ঢাকার ঘড়িতে বসে', () => {
+  it('first and last work times are placed on the Dhaka clock', () => {
     const n = summarizeDay({
       ...empty,
       segments: [
@@ -226,8 +226,8 @@ describe('summarizeDay — একদিনের সারাংশ (K06)', () =
     expect(n.latestHour).toBe(23);
   });
 
-  /** ⭐ § ২.১-খ — ছুটির দিনে কাজ করলে ঘণ্টা পুরোপুরি গোনা হয় */
-  it('ছুটির দিনে কাজ করলে দিনটা holiday নয়, worked', () => {
+  /** § 2.1-b — working on a holiday counts the hours in full */
+  it('working on a holiday makes the day worked, not holiday', () => {
     const n = summarizeDay({
       ...empty,
       segments: [seg('active', '2026-08-07T10:00:00', '2026-08-07T13:00:00')],
@@ -238,12 +238,12 @@ describe('summarizeDay — একদিনের সারাংশ (K06)', () =
     expect(n.workedSec).toBe(3 * HOUR);
   });
 
-  it('ছুটির দিনে কেউ না বসলে holiday, সাধারণ দিনে no_activity', () => {
+  it('holiday if nobody sat, no_activity on a normal day', () => {
     expect(summarizeDay({ ...empty, segments: [], isOffDay: true }).dayType).toBe('holiday');
     expect(summarizeDay({ ...empty, segments: [], isOffDay: false }).dayType).toBe('no_activity');
   });
 
-  it('কোনো সেগমেন্ট না থাকলে সময়গুলো null, শূন্য নয়', () => {
+  it('with no segments the times are null, not zero', () => {
     const n = summarizeDay({ ...empty, segments: [] });
 
     expect(n.firstActivityAt).toBeNull();
@@ -255,113 +255,113 @@ describe('summarizeDay — একদিনের সারাংশ (K06)', () =
 
 // ══════════════════════════════════════════════════════════════════════════
 
-describe('productivityPct — ক্যাটাগরির স্কোর', () => {
+describe('productivityPct — category score', () => {
   it('productive ÷ (productive + unproductive)', () => {
     expect(productivityPct(3 * HOUR, HOUR)).toBe(75);
   });
 
-  it('দুই দশমিক পর্যন্ত রাখে', () => {
+  it('keeps up to two decimals', () => {
     expect(productivityPct(1, 2)).toBe(33.33);
   });
 
-  /** "কিছুই ক্যাটাগরি হয়নি" আর "সব খারাপ" — এক নয় */
-  it('কোনো ক্যাটাগরি করা অ্যাপ না চললে null', () => {
+  /** "Nothing was categorised" and "everything is bad" are different */
+  it('null when no categorised app ran', () => {
     expect(productivityPct(0, 0)).toBeNull();
   });
 
-  it('শুধু unproductive চললে ০', () => {
+  it('0 when only unproductive ran', () => {
     expect(productivityPct(0, HOUR)).toBe(0);
   });
 });
 
 // ══════════════════════════════════════════════════════════════════════════
 
-describe('কর্মদিবস গোনা — § ২.১-খ', () => {
-  /** ⭐ JS-এ রবিবার ০, ISO-তে ৭ — না মেলালে রবিবারের ছুটি কখনো ধরা পড়ত না */
-  it('ISO সপ্তাহদিন: রবিবার ৭, শুক্রবার ৫', () => {
-    expect(isoWeekday(day('2026-02-01'))).toBe(7); // রবিবার
-    expect(isoWeekday(day('2026-08-07'))).toBe(5); // শুক্রবার
-    expect(isoWeekday(day('2026-08-31'))).toBe(1); // সোমবার
+describe('counting working days — § 2.1-b', () => {
+  /** Sunday is 0 in JS but 7 in ISO — unless reconciled, Sunday off would never be caught */
+  it('ISO weekday: Sunday 7, Friday 5', () => {
+    expect(isoWeekday(day('2026-02-01'))).toBe(7); // Sunday
+    expect(isoWeekday(day('2026-08-07'))).toBe(5); // Friday
+    expect(isoWeekday(day('2026-08-31'))).toBe(1); // Monday
   });
 
-  it('রবিবার সাপ্তাহিক ছুটি (৭) দিলেও ঠিকমতো বাদ পড়ে', () => {
+  it('Sunday as the weekly day off (7) is excluded correctly too', () => {
     expect(isWorkday(day('2026-02-01'), [7], new Set())).toBe(false);
     expect(isWorkday(day('2026-02-02'), [7], new Set())).toBe(true);
   });
 
-  it('holidays টেবিলের দিন কর্মদিবস নয়', () => {
+  it('a day in the holidays table is not a working day', () => {
     const holidays = new Set([day('2026-08-10').getTime()]);
     expect(isWorkday(day('2026-08-10'), [5], holidays)).toBe(false);
     expect(isWorkday(day('2026-08-11'), [5], holidays)).toBe(true);
   });
 
-  it('weeklyOffDay = null হলে প্রতিটি ক্যালেন্ডার দিনই কর্মদিবস', () => {
+  it('with weeklyOffDay = null every calendar day is a working day', () => {
     expect(countWorkdays(day('2026-08-01'), day('2026-08-31'), [], new Set())).toBe(31);
   });
 
-  it('আগস্ট ২০২৬ — শুক্রবার বাদে ২৭ দিন', () => {
+  it('August 2026 — 27 days excluding Fridays', () => {
     expect(countWorkdays(day('2026-08-01'), day('2026-08-31'), [5], new Set())).toBe(27);
   });
 
-  it('"আজ পর্যন্ত" আজকের দিনটাও ধরে', () => {
-    // ১–১১ আগস্টে একটাই শুক্রবার (৭ তারিখ)
+  it('"up to today" includes today', () => {
+    // 1–11 August has exactly one Friday (the 7th)
     expect(countWorkdays(day('2026-08-01'), day('2026-08-11'), [5], new Set())).toBe(10);
   });
 
-  it('ছুটি ও সাপ্তাহিক ছুটি একই দিনে পড়লে দুবার বাদ যায় না', () => {
-    const holidays = new Set([day('2026-08-07').getTime()]); // ওটা শুক্রবারও
+  it('a holiday and a weekly day off on the same day are not excluded twice', () => {
+    const holidays = new Set([day('2026-08-07').getTime()]); // that is a Friday too
     expect(countWorkdays(day('2026-08-01'), day('2026-08-31'), [5], holidays)).toBe(27);
   });
 });
 
-describe('monthBounds ও previousWorkDate', () => {
-  it('মাসের প্রথম ও শেষ দিন, আর year_month', () => {
+describe('monthBounds and previousWorkDate', () => {
+  it('first and last day of the month, and year_month', () => {
     const b = monthBounds(day('2026-08-11'));
     expect(b.start).toEqual(day('2026-08-01'));
     expect(b.end).toEqual(day('2026-08-31'));
     expect(b.yearMonth).toBe('2026-08');
   });
 
-  it('লিপ ইয়ারের ফেব্রুয়ারি ২৯ দিনে শেষ হয়', () => {
+  it('February of a leap year ends on day 29', () => {
     expect(monthBounds(day('2024-02-10')).end).toEqual(day('2024-02-29'));
     expect(monthBounds(day('2026-02-10')).end).toEqual(day('2026-02-28'));
   });
 
-  it('year_month-এ মাস দুই অঙ্কে থাকে', () => {
+  it('year_month keeps the month in two digits', () => {
     expect(monthBounds(day('2026-01-05')).yearMonth).toBe('2026-01');
     expect(monthBounds(day('2026-12-31')).yearMonth).toBe('2026-12');
   });
 
   /**
-   * ⭐ K05-এর মূল ভরসা। জব চলে ঢাকার ০০:১৫-তে, অর্থাৎ UTC-তে তখনো
-   * **আগের দিনের** সন্ধ্যা — UTC ধরে হিসাব করলে ভুল দিন ক্লোজ হতো।
+   * The main assurance for K05. The job runs at 00:15 Dhaka time, which in UTC is
+   * still the evening of the **previous day** — computing in UTC would close the wrong day.
    */
-  it('ঢাকার ০০:১৫-এ চললে আগের দিনটাই ক্লোজ হয়', () => {
+  it('running at 00:15 Dhaka closes the previous day', () => {
     expect(previousWorkDate(dhaka('2026-08-12T00:15:00'))).toEqual(day('2026-08-11'));
   });
 
-  it('মাসের ১ তারিখে চললে আগের মাসের শেষ দিন', () => {
+  it('running on the 1st of the month gives the last day of the previous month', () => {
     expect(previousWorkDate(dhaka('2026-09-01T00:15:00'))).toEqual(day('2026-08-31'));
-    // ⭐ আর তখন মাসিক rollup যায় আগের মাসেই — নইলে ৩১ আগস্টের ঘণ্টা
-    //    কোনো মাসের হিসাবেই ঢুকত না
+    // And then the monthly rollup goes to the previous month — otherwise the
+    //    hours of 31 August would count in no month at all
     expect(monthBounds(previousWorkDate(dhaka('2026-09-01T00:15:00'))).yearMonth).toBe('2026-08');
   });
 
-  it('দিনের যেকোনো সময়ে ডাকলেও একই আগের দিন', () => {
+  it('calling at any time of day gives the same previous day', () => {
     expect(previousWorkDate(dhaka('2026-08-12T23:59:00'))).toEqual(day('2026-08-11'));
   });
 });
 
 describe('dhakaHourOf', () => {
-  it('UTC নয়, ঢাকার ঘণ্টা দেয়', () => {
-    expect(dhakaHourOf(new Date('2026-08-11T18:15:00Z'))).toBe(0); // ঢাকায় ১২ তারিখ ০০:১৫
+  it('gives the Dhaka hour, not the UTC one', () => {
+    expect(dhakaHourOf(new Date('2026-08-11T18:15:00Z'))).toBe(0); // 00:15 on the 12th in Dhaka
     expect(dhakaHourOf(new Date('2026-08-11T01:00:00Z'))).toBe(7);
   });
 });
 
 // ══════════════════════════════════════════════════════════════════════════
 
-describe('rollupMonth — মাসিক টার্গেট ও গতি', () => {
+describe('rollupMonth — monthly target and pace', () => {
   const base = {
     adjustmentSec: 0,
     targetSec: TARGET,
@@ -372,15 +372,15 @@ describe('rollupMonth — মাসিক টার্গেট ও গতি', 
     daysWithWork: 10,
   };
 
-  it('expected = টার্গেট × গত কর্মদিবস ÷ মোট কর্মদিবস', () => {
+  it('expected = target × past working days ÷ total working days', () => {
     const m = rollupMonth({ ...base, workedSec: 80 * HOUR });
 
     expect(m.expectedSec).toBe(Math.round((TARGET * 10) / 27));
     expect(m.paceSec).toBe(80 * HOUR - m.expectedSec);
   });
 
-  /** ⭐ § ২.১-খ — মাসের শেষ কর্মদিবসে pace ঠিক শূন্যে ঠেকে */
-  it('মাস শেষে ঠিক টার্গেট করলে pace শূন্য', () => {
+  /** § 2.1-b — on the last working day of the month, pace lands exactly on zero */
+  it('pace is zero when the target is met exactly at month end', () => {
     const m = rollupMonth({
       ...base,
       workedSec: TARGET,
@@ -395,8 +395,8 @@ describe('rollupMonth — মাসিক টার্গেট ও গতি', 
     expect(m.shortfallSec).toBe(0);
   });
 
-  /** ⭐ § ২.১-ঙ — সংশোধন না ধরলে সার্ভারের দোষে হারানো ঘণ্টা সারা মাস পিছিয়ে রাখত */
-  it('pace-এ owner-এর সংশোধন ধরা হয়', () => {
+  /** § 2.1-e — without counting adjustments, hours lost to a server fault would keep someone behind all month */
+  it("pace counts the owner's adjustments", () => {
     const withoutAdj = rollupMonth({ ...base, workedSec: 60 * HOUR });
     const withAdj = rollupMonth({ ...base, workedSec: 60 * HOUR, adjustmentSec: 8 * HOUR });
 
@@ -405,11 +405,11 @@ describe('rollupMonth — মাসিক টার্গেট ও গতি', 
   });
 
   /**
-   * ⭐ সবচেয়ে জরুরি রক্ষাকবচ। `payroll.math.ts` ঋণাত্মক `creditedSec`
-   * পেলে `RangeError` ছোড়ে — একজনের অতিরিক্ত কর্তন গোটা মাসের পে-রোল
-   * শিটকে ৫০০ বানিয়ে দিত।
+   * The most important safeguard. `payroll.math.ts` throws a `RangeError` on a
+   * negative `creditedSec` — one person's excess deduction would turn the whole
+   * month's payroll sheet into a 500.
    */
-  it('কর্তন কাজের চেয়ে বেশি হলে মাসিক credited ঋণাত্মক হয় না', () => {
+  it('monthly credited does not go negative when the deduction exceeds the work', () => {
     const m = rollupMonth({ ...base, workedSec: 10 * HOUR, adjustmentSec: -50 * HOUR });
 
     expect(m.creditedSec).toBe(0);
@@ -417,7 +417,7 @@ describe('rollupMonth — মাসিক টার্গেট ও গতি', 
     expect(m.overtimeSec).toBe(0);
   });
 
-  it('টার্গেট ছাড়িয়ে গেলে overtime, ঘাটতি শূন্য', () => {
+  it('overtime when the target is exceeded, shortfall zero', () => {
     const m = rollupMonth({ ...base, workedSec: TARGET + 10 * HOUR, workdaysElapsed: 27, observedWorkdays: 27 });
 
     expect(m.overtimeSec).toBe(10 * HOUR);
@@ -425,13 +425,13 @@ describe('rollupMonth — মাসিক টার্গেট ও গতি', 
     expect(m.targetMet).toBe(true);
   });
 
-  it('ঠিক টার্গেটে পৌঁছালেই targetMet (এক সেকেন্ড কমে নয়)', () => {
+  it('targetMet as soon as the target is reached (not one second short)', () => {
     expect(rollupMonth({ ...base, workedSec: TARGET }).targetMet).toBe(true);
     expect(rollupMonth({ ...base, workedSec: TARGET - 1 }).targetMet).toBe(false);
   });
 
-  /** ⚠️ ভাগের হর শূন্য — না আটকালে ডাটাবেসে NaN যেত */
-  it('মাসে একটাও কর্মদিবস না থাকলে expected শূন্য, NaN নয়', () => {
+  /** The divisor is zero — without a guard NaN would reach the database */
+  it('expected is zero, not NaN, when the month has no working days', () => {
     const m = rollupMonth({
       ...base,
       workedSec: 5 * HOUR,
@@ -444,27 +444,27 @@ describe('rollupMonth — মাসিক টার্গেট ও গতি', 
     expect(m.paceSec).toBe(5 * HOUR);
   });
 
-  /** ⚠️ ০ দিয়ে ভাগ — Infinity বসে যেত */
-  it('একদিনও কাজ না করলে গড় শূন্য', () => {
+  /** Division by 0 — Infinity would end up there */
+  it('the average is zero when nobody worked a single day', () => {
     const m = rollupMonth({ ...base, workedSec: 0, daysWithWork: 0 });
 
     expect(m.avgDailySec).toBe(0);
     expect(Number.isFinite(m.avgDailySec)).toBe(true);
   });
 
-  it('গত কর্মদিবস মোট কর্মদিবস ছাড়াতে পারে না', () => {
+  it('past working days cannot exceed total working days', () => {
     const m = rollupMonth({ ...base, workedSec: 0, workdaysElapsed: 40, observedWorkdays: 40 });
 
-    // expected কখনো পুরো টার্গেটের বেশি হবে না, নইলে মাস শেষে সবাই
-    // হঠাৎ আরও পিছিয়ে যেত
+    // expected must never exceed the full target, otherwise everyone would
+    // suddenly fall further behind at month end
     expect(m.expectedSec).toBe(TARGET);
   });
 
-  it('টার্গেট শূন্য হলে থেমে যায়', () => {
+  it('stops when the target is zero', () => {
     expect(() => rollupMonth({ ...base, workedSec: 0, targetSec: 0 })).toThrow(RangeError);
   });
 
-  it('ঘণ্টা → সেকেন্ড', () => {
+  it('hours → seconds', () => {
     expect(hoursToSec(208)).toBe(TARGET);
     expect(hoursToSec(207.5)).toBe(747000);
   });
@@ -472,66 +472,67 @@ describe('rollupMonth — মাসিক টার্গেট ও গতি', 
 
 // ══════════════════════════════════════════════════════════════════════════
 
-describe('retentionCutoff — K01-এর সবচেয়ে বিপজ্জনক সংখ্যা', () => {
-  it('৯০ দিন আগের তারিখ দেয়', () => {
+describe('retentionCutoff — the most dangerous number in K01', () => {
+  it('gives the date 90 days ago', () => {
     expect(retentionCutoff(dhaka('2026-08-11T02:00:00'), 90)).toEqual(day('2026-05-13'));
   });
 
-  /** ⚠️ ঠিক ৯০ দিনের পুরোনো ছবিটা **থাকবে** — কাটা পড়ে তার আগেরগুলো */
-  it('সীমানার দিনটা রক্ষা পায়', () => {
+  /** A picture exactly 90 days old **stays** — those before it are cut */
+  it('the boundary day is spared', () => {
     const cutoff = retentionCutoff(dhaka('2026-08-11T02:00:00'), 90);
 
-    expect(day('2026-05-13') < cutoff).toBe(false); // থাকবে
-    expect(day('2026-05-12') < cutoff).toBe(true); // যাবে
+    expect(day('2026-05-13') < cutoff).toBe(false); // stays
+    expect(day('2026-05-12') < cutoff).toBe(true); // goes
   });
 
-  it('ঢাকার তারিখ ধরে হিসাব হয়, UTC-র নয়', () => {
-    // ঢাকায় ১২ তারিখ রাত ২টা = UTC-তে ১১ তারিখ রাত ৮টা
+  it('is computed on the Dhaka date, not UTC', () => {
+    // 2 a.m. on the 12th in Dhaka = 8 p.m. on the 11th in UTC
     expect(retentionCutoff(dhaka('2026-08-12T02:00:00'), 90)).toEqual(day('2026-05-14'));
   });
 
   /**
-   * ⭐ কনফিগে ভুলে `0` বসলে cutoff আজকের তারিখে গিয়ে পড়ত, আর রাত ২টার
-   * জব নীরবে আজকের ছবিসহ পুরো আর্কাইভ মুছে দিত — ফাইল ও সারি দুটোই।
+   * If `0` were set in config by mistake, the cutoff would land on today's date,
+   * and the 2 a.m. job would silently wipe the whole archive including today's
+   * pictures — both files and rows.
    */
-  it('শূন্য বা ঋণাত্মক দিনে থেমে যায়', () => {
+  it('stops at zero or negative days', () => {
     expect(() => retentionCutoff(dhakaNoon(), 0)).toThrow(RangeError);
     expect(() => retentionCutoff(dhakaNoon(), -1)).toThrow(RangeError);
     expect(() => retentionCutoff(dhakaNoon(), Number.NaN)).toThrow(RangeError);
   });
 });
 
-describe('isInsideRoot — ফাইল মোছার আগের পাহারা', () => {
+describe('isInsideRoot — the guard before deleting files', () => {
   const root = resolve('storage-root-for-test');
 
-  it('স্বাভাবিক আপেক্ষিক পাথ ভেতরেই', () => {
+  it('a normal relative path is inside', () => {
     expect(isInsideRoot(root, 'screenshots/2026/08/09/emp-003/093147_m0.webp')).toBe(true);
   });
 
-  /** ⭐ `..` — একটা ফাঁকই storage-এর বাইরের ফাইল মোছার জন্য যথেষ্ট */
-  it('.. দিয়ে বেরিয়ে যাওয়া পাথ নাকচ', () => {
+  /** `..` — a single gap is enough to delete a file outside storage */
+  it('a path escaping with .. is rejected', () => {
     expect(isInsideRoot(root, '../../Windows/System32/config')).toBe(false);
     expect(isInsideRoot(root, 'screenshots/../../outside.webp')).toBe(false);
   });
 
-  it('একেবারে বাইরের absolute পাথ নাকচ', () => {
+  it('an absolute path entirely outside is rejected', () => {
     expect(isInsideRoot(root, resolve(root, '..', 'other.webp'))).toBe(false);
   });
 
-  /** ⚠️ শুধু `startsWith(root)` লিখলে এই প্রতিবেশীটা "ভেতরে" মনে হতো */
-  it('নামের শুরু মিলে যাওয়া পাশের ফোল্ডার ভেতরে নয়', () => {
+  /** With only `startsWith(root)`, this neighbour would look "inside" */
+  it('a sibling folder whose name merely starts the same is not inside', () => {
     expect(isInsideRoot(root, `${root}-old${sep}x.webp`)).toBe(false);
   });
 
-  it('রুট নিজেই ভেতরে ধরা হয়', () => {
+  it('the root itself counts as inside', () => {
     expect(isInsideRoot(root, root)).toBe(true);
   });
 });
 
 // ══════════════════════════════════════════════════════════════════════════
 
-describe('RunLock — একই জব দুবার একসাথে নয়', () => {
-  it('চলতে থাকা অবস্থায় দ্বিতীয় ডাক null ফেরায়', async () => {
+describe('RunLock — the same job never twice at once', () => {
+  it('while running, a second call returns null', async () => {
     const lock = new RunLock();
     let release = (): void => {};
     const gate = new Promise<void>((r) => {
@@ -550,15 +551,15 @@ describe('RunLock — একই জব দুবার একসাথে নয
     expect(await first).toBe('প্রথম');
   });
 
-  it('আগেরটা শেষ হলে পরেরটা চলে', async () => {
+  it('when the previous one finishes, the next one runs', async () => {
     const lock = new RunLock();
 
     expect(await lock.run(async () => 1)).toBe(1);
     expect(await lock.run(async () => 2)).toBe(2);
   });
 
-  /** ⚠️ finally না থাকলে একবার ব্যতিক্রমেই জবটা চিরতরে আটকে যেত */
-  it('ব্যতিক্রম হলেও তালা খুলে যায়', async () => {
+  /** Without the finally, a single exception would block the job forever */
+  it('the lock is released even on an exception', async () => {
     const lock = new RunLock();
 
     await expect(

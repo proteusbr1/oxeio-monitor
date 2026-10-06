@@ -8,12 +8,14 @@ import { qs } from './query';
 export interface WorkPolicyView {
   id: number;
   name: string;
-  /** ⭐ একমাত্র টার্গেট, ডিফল্ট ২০৮ */
+  /** The only target; default 208. */
   monthlyTargetHours: number;
   expectedWorkdays: number;
-  /** ISO দিন — সোম = ১ … শুক্র = ৫ … রবি = ৭। Several allowed; empty = every day is a workday. */
+  /**
+   * ISO weekday: Mon = 1 ... Fri = 5 ... Sun = 7. Several allowed; empty = every day is a workday.
+   */
   weeklyOffDays: number[];
-  /** `'HH:MM'` — ক্যাপচার উইন্ডো, ডিফল্ট ০৭:০০–২৩:০০ */
+  /** `'HH:MM'` capture window; default 07:00-23:00. */
   screenshotFrom: string | null;
   screenshotTo: string | null;
   /**
@@ -22,10 +24,10 @@ export interface WorkPolicyView {
    */
   screenshotsEnabled: boolean;
   /**
-   * ⭐ `'HH:MM'` — অফিস কখন খোলা। ⚠️ ক্যাপচার উইন্ডো **নয়**: ওটা চওড়া
-   * (০৭:০০–২৩:০০) যাতে কেউ আগে-পরে কাজ করলেও ছবি ওঠে, আর এটা সংকীর্ণ
-   * (৯টা–৬টা) যাতে অফিস বন্ধ থাকলে "এজেন্ট চুপ" অ্যালার্ট না ওঠে।
-   * `null` হলে সারাদিনই খোলা ধরা হয়।
+   * `'HH:MM'` when the office is open. Careful: this is NOT the capture window.
+   * The capture window is wide (07:00-23:00) so screenshots are taken even when
+   * someone works early or late; this one is narrow (9-18) so no "agent silent"
+   * alert fires while the office is closed. `null` means open all day.
    */
   officeFrom: string | null;
   officeTo: string | null;
@@ -33,7 +35,7 @@ export interface WorkPolicyView {
   slotMinutes: number;
   timezone: string;
   isActive: boolean;
-  /** ⭐ deactivate করার আগে এটাই দেখার জিনিস — কেউ থাকলে সার্ভার আটকাবে */
+  /** Check this before deactivating: if anyone is still assigned, the server refuses. */
   employeeCount: number;
 }
 export type WorkPolicyBody = Partial<{
@@ -55,8 +57,8 @@ export function listWorkPolicies(
   return api<{ rows: WorkPolicyView[] }>('/work-policies', { signal });
 }
 /**
- * ⚠️ এখানে একটা সংখ্যা বদলালে পরের config sync-এ **প্রতিটা PC-র আচরণ**
- * বদলে যায় (idle threshold, ছবির উইন্ডো)। নিশ্চিত করার ধাপ রাখুন।
+ * Careful: changing a number here changes the behavior of every PC (idle
+ * threshold, capture window) at the next config sync. Add a confirmation step.
  */
 export function createWorkPolicy(
   body: WorkPolicyBody & { name: string },
@@ -75,31 +77,29 @@ export function deactivateWorkPolicy(id: number): Promise<WorkPolicyView> {
   });
 }
 /**
- * ⭐⭐⭐ **বন্ধ করা পলিসি আবার খোলা** *(৬ সেপ্টেম্বর ২০২৬, G167)*।
+ * Reopen a closed policy.
  *
- * ⚠️⚠️ **যে বাগটা এটা সারায়:** সার্ভারে `POST /work-policies/:id/reactivate`
- * ছিল **G85 থেকেই** — কন্ট্রোলার, সার্ভিস, অডিট-সারি, পাঁচটা ইউনিট টেস্ট,
- * সব। কেবল **কেউ ওটা ডাকত না**। ওয়েবে এই ফাংশনটাই লেখা হয়নি, আর
- * PoliciesTab-এ `!isActive` শাখায় কোনো বোতামও ছিল না।
+ * The server already had `POST /work-policies/:id/reactivate` (controller,
+ * service, audit row, five unit tests), but nothing called it: this function was
+ * never written on the web side and PoliciesTab had no button in the `!isActive`
+ * branch. So after an accidental Close the only way back was `curl` or raw SQL,
+ * exactly what the endpoint was written to avoid.
  *
- * ⚠️ ফলে ভুল করে Close চাপলে ফেরার পথ ছিল কেবল দুটো — `curl`, বা কাঁচা
- * SQL। ঠিক যে দুটো জিনিস দূর করতেই G85 লেখা হয়েছিল।
- *
- * ⭐ এই প্রকল্পের চেনা ভুলটাই আবার: **"চুক্তি লেখা আছে, কলার লেখা হয়নি।"**
+ * A familiar mistake in this project: the contract exists, the caller does not.
  */
 export function reactivateWorkPolicy(id: number): Promise<WorkPolicyView> {
   return api<WorkPolicyView>(`/work-policies/${id}/reactivate`, {
     method: 'POST',
   });
 }
-// ── ছুটি (owner-only) ───────────────────────────────────────────────────────
+// ── Holidays (owner-only) ──────────────────────────────────────────────────
 
 export interface HolidayView {
   id: number;
   /** `YYYY-MM-DD` */
   holidayDate: string;
   name: string;
-  /** `public` | `optional` | `company` — খোলা রাখা হয়েছে */
+  /** `public` | `optional` | `company`; left open-ended. */
   type: string;
 }
 export function listHolidays(
@@ -122,9 +122,10 @@ export function updateHoliday(
   return api<HolidayView>(`/holidays/${id}`, { method: 'PATCH', body });
 }
 /**
- * ⚠️ পুরো E10-এ এটাই একমাত্র সত্যিকারের DELETE, আর নিরীহ নয়: ছুটি মুছলে
- * ওই মাসের কর্মদিবস বেড়ে যায়, ফলে **সবার pace পিছিয়ে যায়** — কেউ কোনো
- * কাজ না করেও। নিশ্চিত করার বাক্সে এটা বলুন।
+ * Careful: this is the only real DELETE in the whole holiday module, and it is not
+ * harmless. Deleting a holiday adds a workday to that month, so everyone's pace
+ * falls behind even though nobody did anything differently. Say so in the
+ * confirmation box.
  */
 export function deleteHoliday(id: number): Promise<{ deleted: HolidayView }> {
   return api<{ deleted: HolidayView }>(`/holidays/${id}`, { method: 'DELETE' });

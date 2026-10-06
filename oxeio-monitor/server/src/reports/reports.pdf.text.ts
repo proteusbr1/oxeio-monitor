@@ -1,49 +1,50 @@
 import { WORK_TIMEZONE, dhakaPathParts } from '../agent/util/dhaka-time';
 
 /**
- * F06 — PDF-এ কোন লেখা আদৌ **ছাপা যাবে** তার খাঁটি হিসাব। pdfkit এখানে
- * ইমপোর্ট করা হয়নি, তাই পুরোটা DB ও লাইব্রেরি ছাড়াই পরীক্ষা করা যায়।
+ * F06: the pure calculation of which text can **be printed at all** in a PDF.
+ * pdfkit is not imported here, so all of it can be tested without the DB or the library.
  *
- * ⭐ **এই ফাইলটাই F06-এর সবচেয়ে বড় সিদ্ধান্তের জায়গা: PDF ইংরেজিতে।**
+ * **This file is where F06's biggest decision lives: the PDF is in English.**
  *
- * pdfkit-এর সাথে যে ১৪টা ফন্ট আসে (Helvetica, Times, Courier …) সেগুলো
- * **WinAnsi**-তে এনকোড করা — অর্থাৎ ল্যাটিন-১-এর বাইরে কোনো অক্ষরের গ্লিফই
- * ওদের নেই। বাংলা লিখলে কোনো এরর ওঠে না, শুধু জায়গাটা **ফাঁকা** থাকে বা
- * বাক্স বসে। অর্থাৎ ভুলটা নীরব: সার্ভার ২০০ দেয়, ফাইল নামে, খুললে নামের
- * কলাম খালি।
+ * The 14 fonts that come with pdfkit (Helvetica, Times, Courier ...) are
+ * encoded in **WinAnsi**, so they have no glyph for any character outside
+ * Latin-1. Writing Bengali raises no error; the spot is just left **blank** or
+ * a box appears. So the failure is silent: the server returns 200, the file
+ * downloads, and when opened the name column is empty.
  *
- * বাংলা ছাপাতে হলে একটা TTF embed করতে হতো। সেটা করা হয়নি, কারণ:
+ * Printing Bengali would mean embedding a TTF. That was not done, because:
  *
- * ১· রিপোর্টে **বাংলা ফন্টের কোনো ফাইল নেই** — একটা লাইসেন্স-করা বাইনারি
- *    ফন্ট রেপোতে ঢোকানো মানে লাইসেন্স, আকার আর build-এ কপি করার নিয়ম,
- *    তিনটেই আলাদা সিদ্ধান্ত। কেউ সেটা নেয়নি।
- * ২· বাংলা শুধু গ্লিফ নয়, **shaping**-ও লাগে (যুক্তাক্ষর, ই-কার আগে বসা,
- *    রেফ)। fontkit-এ ইন্ডিক shaper আছে বটে, কিন্তু সেটা আসল ফন্ট দিয়ে
- *    চোখে না দেখে ভরসা করা যায় না। ভাঙা যুক্তাক্ষরের PDF ইংরেজি PDF-এর
- *    চেয়ে খারাপ — ওটা দেখতে ঠিক লাগে, পড়তে ভুল।
- * ৩· PDF-এর আসল মালমসলা সংখ্যা (ঘণ্টা, তারিখ, এমপ কোড) — সেগুলো এমনিতেই
- *    ASCII। বাংলাটা কেবল লেবেলে।
+ * 1. The repo has **no Bengali font file**: putting a licensed binary font in
+ *    the repo means licensing, size and build-copy rules, three separate
+ *    decisions. Nobody took them.
+ * 2. Bengali needs not just glyphs but **shaping** (conjuncts, the vowel sign
+ *    that sits before the consonant, reph). fontkit has an Indic shaper, but it
+ *    cannot be trusted without checking by eye with the real font. A PDF with
+ *    broken conjuncts is worse than an English one: it looks right and reads wrong.
+ * 3. The real substance of a PDF is numbers (hours, dates, employee codes),
+ *    which are ASCII anyway. Bengali would only be in the labels.
  *
- * ⚠️ তবু একটা ফাঁক থেকে যায়: **কর্মীর নাম ডাটাবেসে বাংলা**। সেটা চুপচাপ
- * ফাঁকা ছাপা হলে পাঠক ভাবতেন ডেটাই নেই। তাই [personLabel()](#) নামটা
- * ছাপা যায় কি না দেখে, না গেলে **এমপ কোড** বসায় এবং `lossy` বলে জানায় —
- * আর সেই পতাকা দেখে PDF-এর পাদটীকায় কারণটা লেখা হয়।
+ * A gap still remains: **employee names are in Bengali in the database**. If
+ * those were printed silently blank, a reader would think the data was missing.
+ * So [personLabel()](#) checks whether the name can be printed and, if not,
+ * puts in the **employee code** and reports `lossy`, and the PDF footnote
+ * states the reason based on that flag.
  *
- * বাংলা নাম দরকার হলে Excel (F05) আছে — সেখানে UTF-8, কোনো সমস্যাই নেই।
+ * If a Bengali name is needed there is Excel (F05): UTF-8, no problem at all.
  */
 
-/** ছাপা না-গেলে যা বসে — কোনো কিছুই না বসিয়ে ফাঁকা রাখা সবচেয়ে খারাপ */
+/** What goes in when it cannot be printed; leaving it blank with nothing is the worst */
 export const UNPRINTABLE = '?';
 
-/** টেবিলের খালি ঘর — `null`/`undefined`/খালি স্ট্রিং সবই এটাই হয় */
+/** An empty table cell: `null`/`undefined`/empty string all become this */
 export const EMPTY_CELL = '-';
 
 /**
- * ইউনিকোড যতিচিহ্ন → ASCII।
+ * Unicode punctuation → ASCII.
  *
- * ⚠️ এগুলো WinAnsi-তে **আছে**, তবু বদলে দেওয়া হয় — কারণ একই ড্যাশ কোথাও
- * `–` কোথাও `-` হলে কলামের প্রস্থ মাপা আর তুলনা করা দুটোই অনির্দেশ্য হতো।
- * ছাপা লেখা যত কম রকমের বাইট, তত কম চমক।
+ * These **exist** in WinAnsi, but are replaced anyway: if the same dash is `–`
+ * in one place and `-` in another, measuring and comparing column widths both
+ * become unpredictable. The fewer kinds of bytes in the printed text, the fewer surprises.
  */
 const PUNCTUATION: ReadonlyMap<string, string> = new Map([
   [' ', ' '], // NBSP
@@ -58,26 +59,26 @@ const PUNCTUATION: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
- * WinAnsi-তে ছাপা যায় এমন অক্ষর: ASCII printable + Latin-1 supplement।
+ * Characters that can be printed in WinAnsi: ASCII printable + the Latin-1 supplement.
  *
- * ⚠️ WinAnsi-র ০x৮০–০x৯F ব্লকে আরও কিছু অক্ষর আছে (€, †, ‰ …), কিন্তু
- * সেগুলো ইচ্ছাকৃতভাবে বাদ — রিপোর্টে ওদের দরকার নেই, আর তালিকাটা যত ছোট
- * তত কম "এই একটা অক্ষরে ভাঙল কেন" রহস্য।
+ * WinAnsi's 0x80–0x9F block has a few more characters (€, †, ‰ ...), but they
+ * are left out on purpose: reports do not need them, and the shorter the list
+ * the fewer "why did it break on this one character" mysteries.
  */
 const PRINTABLE = /^[\x20-\x7E¡-ÿ]*$/;
 
 export interface PdfText {
   text: string;
-  /** কিছু অক্ষর ছাপা যায়নি — পাদটীকায় কারণ লেখা দরকার */
+  /** Some characters could not be printed: the footnote needs to say why */
   lossy: boolean;
 }
 
 /**
- * যেকোনো লেখাকে ছাপার উপযোগী করা।
+ * Makes any text fit for printing.
  *
- * ⚠️ ছাপা না-যাওয়া অক্ষর **মুছে ফেলা হয় না**, `?` বসে। মুছে দিলে
- * "মামুন" হয়ে যেত খালি স্ট্রিং, আর সেটা "নাম নেই"-এর সমান দেখাত।
- * একটা `?` অন্তত বলে যে এখানে কিছু ছিল।
+ * Characters that cannot be printed are **not deleted**, `?` goes in. Deleted,
+ * a Bengali name would become an empty string, which would look the same as
+ * "no name". A `?` at least says something was here.
  */
 export function toPdfText(value: string | null | undefined): PdfText {
   if (value === null || value === undefined || value.length === 0) {
@@ -102,14 +103,16 @@ export function toPdfText(value: string | null | undefined): PdfText {
 }
 
 /**
- * ⭐ কর্মীর নামের ঘরে কী বসবে।
+ * What goes in the employee name cell.
  *
- * নাম ছাপা গেলে নামই। না গেলে **এমপ কোড** — `???? ?????` নয়। কারণ
- * প্রশ্নচিহ্নের সারি দেখে কেউ কর্মীকে চিনতে পারতেন না, অথচ কোডটা তার
- * পাশের কলামেই আছে আর সবাই সেটা চেনে। দুই ঘরে একই কোড দেখলে অন্তত
- * বোঝা যায় "নামটা এই ফন্টে আসেনি", আর পাদটীকা সেটাই বলে।
+ * If the name can be printed, the name. If not, the **employee code**, not
+ * `???? ?????`. Nobody could recognise an employee from a row of question
+ * marks, yet the code is in the next column and everyone knows it. Seeing the
+ * same code in two cells at least shows that "the name did not come out in
+ * this font", and the footnote says exactly that.
  *
- * ⚠️ কোডও ছাপা না গেলে (হওয়ার কথা নয় — কোড ASCII) `?` বসে, খালি নয়।
+ * If the code cannot be printed either (it should not happen: codes are
+ * ASCII), `?` goes in, not blank.
  */
 export function personLabel(fullName: string, empCode: string): PdfText {
   const name = toPdfText(fullName);
@@ -120,12 +123,12 @@ export function personLabel(fullName: string, empCode: string): PdfText {
 }
 
 /**
- * ঘণ্টা → ছাপার লেখা।
+ * Hours → printed text.
  *
- * ⚠️ Excel-এ ঘণ্টা **সংখ্যা** হিসেবে যায় (reports.excel.ts-এর মূল নিয়ম),
- * কিন্তু PDF-এ যোগ করার বা sort করার কোনো উপায় নেই — ওটা ছবি। তাই এখানে
- * উল্টো সিদ্ধান্ত: সবসময় দুই দশমিকের **সমান-প্রস্থ লেখা**, যাতে কলামে
- * দশমিক বিন্দুগুলো এক লাইনে দাঁড়ায়।
+ * In Excel, hours go as **numbers** (the core rule of reports.excel.ts), but a
+ * PDF has no way to sum or sort: it is a picture. So the opposite decision
+ * here: always **fixed-width text** with two decimals, so the decimal points
+ * line up in the column.
  */
 export function hoursText(hours: number): string {
   if (!Number.isFinite(hours)) return EMPTY_CELL;
@@ -133,13 +136,14 @@ export function hoursText(hours: number): string {
 }
 
 /**
- * লেখা কেটে ছোট করা, শেষে `...`।
+ * Cuts text short, ending with `...`.
  *
- * `measure` বাইরে থেকে আসে (pdfkit-এর `widthOfString`) যাতে ফাংশনটা খাঁটি
- * থাকে — নইলে এই যুক্তিটুকু পরীক্ষা করতে গোটা PDF ইঞ্জিন লাগত।
+ * `measure` comes from outside (pdfkit's `widthOfString`) so the function
+ * stays pure; otherwise testing this logic would need the whole PDF engine.
  *
- * ⚠️ না কাটলে pdfkit লেখাটা পরের কলামের **উপরে** ছেপে দিত (সে ঘরের সীমা
- * জানে না), আর দুটো সংখ্যা মিশে গিয়ে তৃতীয় একটা ভুল সংখ্যা পড়া যেত।
+ * Without cutting, pdfkit would print the text **over** the next column (it
+ * does not know the cell's limits), and two numbers would blend, reading as a
+ * third, wrong number.
  */
 export function truncateToWidth(
   text: string,
@@ -150,8 +154,8 @@ export function truncateToWidth(
   if (measure(text) <= maxWidth) return text;
 
   const ellipsis = '...';
-  // ⚠️ `...`-ই যদি না আঁটে তবে যতটুকু আঁটে ততটুকু কাঁচা লেখা — খালি ঘরের
-  //    চেয়ে একটা আধখানা শব্দও ভালো
+  // If even `...` does not fit, as much raw text as fits: even half a word is
+  // better than an empty cell
   if (measure(ellipsis) > maxWidth) {
     let raw = '';
     for (const ch of text) {
@@ -171,12 +175,12 @@ export function truncateToWidth(
 }
 
 /**
- * `generated_at` (ISO/UTC) → লেটারহেডে ছাপার মতো ঢাকার সময়।
+ * `generated_at` (ISO/UTC) → Dhaka time fit to print on the letterhead.
  *
- * ⚠️ `toLocaleString()` ব্যবহার করা হয়নি — ওটা সার্ভারের টাইমজোন ও ICU
- * ডেটার উপর নির্ভর করে, আর Docker-এর slim ইমেজে ICU প্রায়ই ছাঁটা থাকে।
- * তখন একই কোড এক মেশিনে ঢাকার সময় আর আরেক মেশিনে UTC ছাপত, অথচ দুটোতেই
- * পাশে লেখা থাকত "(Asia/Dhaka)"।
+ * `toLocaleString()` is deliberately not used: it depends on the server's
+ * timezone and ICU data, and Docker's slim images often have ICU trimmed. The
+ * same code would then print Dhaka time on one machine and UTC on another,
+ * with "(Asia/Dhaka)" written beside both.
  */
 export function dhakaStamp(instant: Date): string {
   const { year, month, day, hhmmss } = dhakaPathParts(instant);
@@ -184,12 +188,12 @@ export function dhakaStamp(instant: Date): string {
 }
 
 /**
- * PDF-এ ছাপা হবে না এমন সারিগুলোর কথা।
+ * About the rows that will not be printed in the PDF.
  *
- * ⭐ সীমাটা আছেই কারণ ৩৭০ দিন × ১৫ জন = ৫৫০০ সারি — ওটা ১৫০ পাতার PDF,
- * তৈরি হতে কয়েক সেকেন্ড ইভেন্ট লুপ আটকে থাকত, আর কেউ পড়তও না। কিন্তু
- * চুপচাপ কেটে দেওয়া হয় না: বাদ পড়া সারির সংখ্যা ফাইলেই লেখা থাকে, আর
- * পুরোটা পেতে হলে Excel-এর কথা বলা থাকে।
+ * The limit exists because 370 days × 15 people = 5500 rows, a 150-page PDF
+ * that would block the event loop for a few seconds to build, and nobody would
+ * read it. But it is not cut silently: the number of dropped rows is written in
+ * the file, along with a pointer to Excel for the full data.
  */
 export const MAX_PDF_ROWS = 2000;
 

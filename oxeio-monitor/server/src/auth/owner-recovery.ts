@@ -6,12 +6,12 @@ import { UserRole, type PrismaClient } from '@prisma/client';
 import { ARGON2_OPTIONS } from './password.service';
 
 /**
- * ⭐⭐ **owner-lockout — ফেরার পথের সিদ্ধান্তগুলো।**
+ * **Owner lockout: the decisions on the way back in.**
  *
- * CLI-টা (`src/scripts/recover-owner.ts`) শুধু argv পড়ে আর পর্দায় লেখে;
- * **কী ঘটবে** তার পুরোটা এখানে। আলাদা করার কারণ একটাই: এই কোডটুকু
- * ভুল হলে হয় কেউ ঢুকতেই পারবে না, নয় ভুল লোক ঢুকে যাবে — আর সেটা
- * `process.argv`-র সাথে জড়ানো থাকলে একটাও টেস্ট লেখা যেত না।
+ * The CLI (`src/scripts/recover-owner.ts`) only reads argv and writes to the
+ * screen; **what happens** is all here. The reason for splitting is simple: if
+ * this code is wrong, either nobody can get in or the wrong person does, and
+ * tangled up with `process.argv` it could not have a single test.
  */
 
 export interface OwnerRow {
@@ -25,13 +25,14 @@ export interface OwnerRow {
 
 export type RecoverResult =
   | { ok: true; kind: 'reset' | 'created'; email: string; password: string; clearedTwoFactor: boolean }
-  /** কেন করা গেল না — CLI এটাই ছাপে, আর exit code-ও এখান থেকেই আসে */
+  /** Why it could not be done: the CLI prints this, and the exit code comes from here too */
   | { ok: false; reason: 'no-owner-no-email' | 'not-found' | 'ambiguous'; detail: string };
 
 /**
- * ⚠️ ২০ অক্ষর — `PasswordService.generateTempPassword()`-এর ১৪-র চেয়ে লম্বা,
- * ইচ্ছাকৃতভাবে। ওটা owner-এর হাতে দেওয়া অস্থায়ী পাসওয়ার্ড, আর এটা
- * **শেষ ভরসা**; তৈরি হওয়ার পর কিছুক্ষণ টার্মিনালের পর্দায় থেকে যেতে পারে।
+ * Careful: 20 characters, deliberately longer than the 14 of
+ * `PasswordService.generateTempPassword()`. That one is a temporary password
+ * handed to the owner, while this is the **last resort**; it may stay on the
+ * terminal screen for a while after it is created.
  */
 export function newRecoveryPassword(): string {
   return randomBytes(18).toString('base64url').slice(0, 20);
@@ -51,8 +52,8 @@ export async function listOwners(prisma: PrismaClient): Promise<OwnerRow[]> {
     orderBy: { id: 'asc' },
   });
 
-  // ⚠️ `totpSecret` বাইরে যায় না, শুধু "আছে কি নেই" — গোপন জিনিসটা
-  //    কোনো তালিকায় বা লগে ওঠার কারণ নেই।
+  // Careful: `totpSecret` does not leave this function, only "has one or not";
+  // the secret has no reason to appear in any list or log.
   return rows.map((r) => ({
     id: r.id,
     email: r.email,
@@ -71,9 +72,9 @@ export async function recoverOwner(
   const email = options.email?.trim();
 
   /**
-   * ⭐ owner **নেই** — এটাও বাস্তব অবস্থা: কেউ ভুল করে একমাত্র অ্যাকাউন্টটা
-   * নিষ্ক্রিয় করে দিলে (বা মুছে ফেললে), অথবা ডাটাবেস ফেরানোর পর। তখন নতুন
-   * একটা বানিয়ে দেওয়াই একমাত্র পথ।
+   * There being **no** owner is also a real state: someone deactivated (or
+   * deleted) the only account by mistake, or after a database restore. Then
+   * creating a new one is the only way.
    */
   if (owners.length === 0) {
     if (!email) {
@@ -108,9 +109,10 @@ export async function recoverOwner(
   }
 
   /**
-   * ⚠️ একাধিক owner থাকলে নিজে থেকে বেছে নেওয়া হয় **না**। "প্রথমটা নিয়ে
-   * নাও" লিখলে ভুল অ্যাকাউন্টের পাসওয়ার্ড বদলে যেত — অর্থাৎ যিনি
-   * ঠিকঠাক ঢুকছিলেন তিনিও আটকে যেতেন, আর আসল সমস্যাটা থেকেই যেত।
+   * Careful: with more than one owner, one is **not** picked automatically.
+   * "Just take the first" would change the wrong account's password, so
+   * someone who was signing in fine would be locked out too, and the real
+   * problem would remain.
    */
   const target = email
     ? owners.find((o) => o.email.toLowerCase() === email.toLowerCase())
@@ -138,17 +140,17 @@ export async function recoverOwner(
     where: { id: target.id },
     data: {
       passwordHash: await hash(password, ARGON2_OPTIONS),
-      // প্রথম লগইনেই বদলাতে হবে — এই পাসওয়ার্ডটা পর্দায় দেখা গেছে
+      // Must be changed on first login: this password has been seen on screen
       mustChangePw: true,
       pwChangedAt: new Date(),
-      // ⚠️ নিষ্ক্রিয় থাকলে ফিরিয়ে আনা হয় — নইলে পাসওয়ার্ড ঠিক করেও লগইন
-      //    আটকে থাকত, আর কারণটা বোঝা যেত না।
+      // Careful: if inactive it is reactivated; otherwise login would stay
+      // blocked even with the password fixed, and the reason would be unclear.
       isActive: true,
       /**
-       * ⭐ 2FA-ও সরানো হয়, আর এটাই lockout-এর **দ্বিতীয় অর্ধেক**। ফোন
-       * হারানো বা authenticator অ্যাপ মুছে যাওয়া পাসওয়ার্ড ভোলার চেয়ে কম
-       * সাধারণ নয়; শুধু পাসওয়ার্ড রিসেট করলে ওই অবস্থায় কিছুই বদলাত না —
-       * লগইনের পরের ধাপেই আবার আটকে যেত।
+       * 2FA is removed too, and this is the **second half** of the lockout fix.
+       * A lost phone or a deleted authenticator app is no less common than a
+       * forgotten password; resetting only the password would change nothing
+       * in that case, and the user would be stuck again at the next login step.
        */
       totpSecret: null,
     },
@@ -169,14 +171,16 @@ export async function recoverOwner(
 }
 
 /**
- * ⚠️ `userId` = **যাকে** রিসেট করা হলো, কারণ **কে** চালাল সেটা জানার কোনো
- * উপায় নেই (শেলে কোনো সেশন নেই, কোনো IP নেই)। `meta.via = 'cli'` দেখেই
- * বোঝা যাবে এটা ওয়েব থেকে হয়নি — আর তদন্তে ঠিক ওটাই আসল তথ্য।
+ * Careful: `userId` = **the person who was** reset, because there is no way
+ * to know **who** ran it (a shell has no session and no IP).
+ * `meta.via = 'cli'` shows it did not come from the web, and in an
+ * investigation that is the key fact.
  *
- * ⚠️ অডিট লেখা এখানে **try/catch-এ মোড়া নয়**, `AuditService.record()`-এর
- * মতো। ওখানে গিলে ফেলা ঠিক আছে (স্ক্রিনশট দেখার লগ হারানোর চেয়ে পাতা
- * খোলা জরুরি), কিন্তু এখানে উল্টো: চিহ্ন না রেখে owner-এর পাসওয়ার্ড
- * বদলে ফেলার চেয়ে কাজটা ব্যর্থ হওয়াই ভালো।
+ * Careful: the audit write is **not wrapped in try/catch** here, unlike
+ * `AuditService.record()`. Swallowing is fine there (keeping the page
+ * working matters more than losing a screenshot-view log), but here it is the
+ * opposite: it is better for the action to fail than to change the owner's
+ * password without leaving a trace.
  */
 async function audit(
   prisma: PrismaClient,

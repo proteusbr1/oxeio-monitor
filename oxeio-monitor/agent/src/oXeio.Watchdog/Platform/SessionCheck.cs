@@ -5,18 +5,18 @@ using oXeio.Watchdog.Native;
 namespace oXeio.Watchdog.Platform;
 
 /// <summary>
-/// <c>oXeio.Agent/Platform/SessionGuard.cs</c>-এর যেটুকু watchdog-এর দরকার, সেটুকুর
-/// পুনর্লিখন। ⚠️ কপি করা হয়েছে, রেফারেন্স নয় — watchdog-কে oXeio.Agent-এর উপর
-/// নির্ভর করানো যাবে না।
+/// The part of <c>oXeio.Agent/Platform/SessionGuard.cs</c> that the watchdog needs,
+/// rewritten. Careful: it is copied, not referenced; the watchdog must not depend on
+/// oXeio.Agent.
 ///
-/// এজেন্টের ক্ষেত্রে প্রশ্নটা ছিল "আমি কি ইনপুট দেখতে পাব?"। watchdog-এর ক্ষেত্রে
-/// প্রশ্নটা আলাদা এবং আরো ধারালো:
+/// For the agent the question was "can I see input?". For the watchdog the question is
+/// different and sharper:
 ///
-/// <b>⚠️ Session 0 থেকে <c>Process.Start</c> করলে সন্তানও Session 0-তেই জন্মায়।</b>
-/// সেখানে এজেন্টের নিজের SessionGuard তাকে সাথে সাথে বন্ধ করে দেয় (exit 1)।
-/// অর্থাৎ watchdog নিশ্চিত-ব্যর্থ একটা প্রসেস বারবার তৈরি করত — রিস্টার্ট-ঝড়ের
-/// নিখুঁত রেসিপি, আর ১৫টা PC-তে একসাথে। তাই ভুল সেশনে থাকলে watchdog কিছুই করে না,
-/// শুধু লেখে।
+/// <b>A child started with <c>Process.Start</c> from Session 0 is also born in
+/// Session 0.</b> There the agent's own SessionGuard shuts it down immediately
+/// (exit 1). So the watchdog would keep creating a process that is certain to fail:
+/// the perfect recipe for a restart storm, on 15 PCs at once. So when in the wrong
+/// session the watchdog does nothing except log.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static class SessionCheck
@@ -42,8 +42,8 @@ internal static class SessionCheck
                 "(Task Scheduler → At log on)।");
         }
 
-        // কনসোলে কেউ নেই (লগঅফের মাঝপথ, বা ফাস্ট ইউজার সুইচিং) — এজেন্টের
-        // অনুপস্থিতি এখানে বৈধ, ব্যর্থতা নয়। এক টিক পরে আবার দেখা হবে।
+        // Nobody is on the console (mid logoff, or fast user switching). The agent
+        // being absent is legitimate here, not a failure. We look again next tick.
         if (console == Kernel32.InvalidSessionId)
         {
             return new Result(false, sessionId, console,

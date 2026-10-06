@@ -8,32 +8,32 @@ using oXeio.Core.Time;
 namespace oXeio.Agent.Ui;
 
 /// <summary>
-/// ট্রে আইকন — এজেন্টের একমাত্র দৃশ্যমান অংশ।
+/// The tray icon: the only visible part of the agent.
 ///
-/// <b>এটা সাজসজ্জা নয়, একটা কমপ্লায়েন্স সারফেস।</b> লিখিত মনিটরিং পলিসিতে
-/// স্টাফকে প্রতিশ্রুতি দেওয়া আছে যে আইকনটা সবসময় দেখা যাবে। অর্থাৎ এই ক্লাসটা
-/// ঠিকমতো না চললে ইনস্টলেশনটা covert হয়ে যায় — যা করা যাবে না বলা আছে। তাই:
+/// <b>This is not decoration, it is a compliance surface.</b> The written monitoring policy
+/// promises staff that the icon will always be visible. So if this class does not work
+/// properly the installation becomes covert, which we have said we will not do. Therefore:
 ///
-///  • <see cref="NotifyIcon.Visible"/> লুকানোর কোনো পথ নেই, এবং প্রতিটা রেন্ডারে
-///    আবার true করা হয় (কেউ কোড থেকে ভুল করে লুকিয়ে ফেললেও এক সেকেন্ডে ফেরে)।
-///  • মেনুতে <b>Exit নেই</b>। স্টাফ ট্রে থেকে এজেন্ট থামাতে পারবে না।
-///  • মেনুতে বিরতি/মিটিং/pause-এর কোনো বাটন নেই (ADR-011d)। স্টাফের চাপার মতো
-///    কিছু থাকলেই সেটা approval workflow-র প্রথম ধাপ, আর এই সিস্টেমে সেরকম কিছু নেই।
+///  - There is no way to hide <see cref="NotifyIcon.Visible"/>, and it is set to true again
+///    on every render (even if someone hid it by mistake from code, it returns within a second).
+///  - The menu has <b>no Exit</b>. Staff cannot stop the agent from the tray.
+///  - The menu has no break/meeting/pause button (ADR-011d). Anything staff can press
+///    would be the first step of an approval workflow, and this system has nothing like that.
 ///
-/// ⚠️ এই অবজেক্টটা যে থ্রেডে তৈরি হবে সেই থ্রেডকেই পরে <c>Application.Run()</c>
-/// ডাকতে হবে। <see cref="Publish"/> যেকোনো থ্রেড থেকে ডাকা যায়।
+/// Careful: the thread that creates this object must also call <c>Application.Run()</c>
+/// later. <see cref="Publish"/> can be called from any thread.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class TrayIcon : IAgentStatusSink, IDisposable
 {
     private const string BalloonTitle = "oXeio";
 
-    // সিঙ্ক মেনু আইটেমটার দুই দশা। ধ্রুবক হিসেবে রাখা, কারণ লেখাটা দু জায়গায়
-    // বসে (তৈরির সময় ও RefreshMenu-তে) — হাতে লিখলে একটা বদলাত, অন্যটা নয়।
+    // The two states of the sync menu item. Kept as constants because the text appears in two
+    // places (at creation and in RefreshMenu); written by hand, one would change and not the other.
     private const string SyncNowText = "Sync now";
     private const string SyncBusyText = "Syncing…";
 
-    /// <summary>এর ভেতরে আবার "Sync now" চাপলে নতুন অনুরোধ যায় না।</summary>
+    /// <summary>Within this window, pressing "Sync now" again sends no new request.</summary>
     private static readonly TimeSpan SyncDebounce = TimeSpan.FromSeconds(20);
 
     private readonly MonotonicClock _clock;
@@ -53,7 +53,7 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
     private readonly ToolStripMenuItem _syncItem;
     private readonly ToolStripMenuItem _aboutItem;
 
-    // ── শুধু UI থ্রেড থেকে ছোঁয়া হয় ──────────────────────────────────────
+    // ── touched only from the UI thread ───────────────────────────────────
     private TrayOptions _options;
     private AgentStatus _status = AgentStatus.Starting;
     private TrayVisual? _shownVisual;
@@ -61,23 +61,22 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
     private SyncHealth? _shownHealth;
 
     /// <summary>
-    /// ⭐ কোন ভার্সনটার জন্য ইতিমধ্যে জানানো হয়েছে — ভার্সনপ্রতি একবার।
+    /// Which version has already been announced: once per version.
     ///
-    /// ⚠️ <see cref="BalloonThrottle"/>-এর ঘণ্টাভিত্তিক থ্রটল এখানে যথেষ্ট নয়:
-    /// একটা যাচাই-হওয়া আপডেট দিনের পর দিন বসে থাকতে পারে (স্টাফ ইনস্টল না
-    /// করলে), আর তখন ঘণ্টায় একটা করে বেলুন মানে দিনে আটটা — তার পরেই
-    /// Windows-এ অ্যাপটা চুপ করিয়ে দেওয়া হতো, আর তখন সিঙ্ক-ব্যর্থতার
-    /// জরুরি বার্তাটাও হারাত।
+    /// Careful: <see cref="BalloonThrottle"/>'s hourly throttle is not enough here: a verified
+    /// update can sit for days (if staff do not install it), and one balloon an hour means
+    /// eight a day; after that the app would get silenced in Windows, and the urgent
+    /// sync-failure message would be lost too.
     ///
-    /// ⚠️ এজেন্ট রিস্টার্টে ঘরটা খালি হয়, অর্থাৎ পরদিন একটা মনে-করিয়ে-দেওয়া
-    /// যায়। সেটা ইচ্ছাকৃত — না বসানো আপডেট মনে করানোর মতোই জিনিস।
+    /// Careful: the slot is emptied when the agent restarts, so there is one reminder the next
+    /// day. That is deliberate; an update not yet installed is worth a reminder.
     /// </summary>
     private string? _notifiedUpdate;
     private TimeSpan? _lastSyncRequest;
     private TodayForm? _todayForm;
     private AboutForm? _aboutForm;
 
-    // ── থ্রেড পেরিয়ে যায় ─────────────────────────────────────────────────
+    // ── crosses threads ───────────────────────────────────────────────────
     private AgentStatus _pending = AgentStatus.Starting;
     private int _renderScheduled;
     private volatile bool _disposed;
@@ -93,20 +92,20 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
         _fonts = new TrayFonts();
         _balloons = new BalloonThrottle();
 
-        // ⭐ সবার উপরে, আর সাইন ইন না থাকলে **বোল্ড** — এই অবস্থায় জানালার
-        //    আর সব কিছু (ঘণ্টা, ছবি, সিঙ্ক) অর্থহীন, একটাই কাজ বাকি।
+        // At the very top, and **bold** when not signed in: in that state everything else in the
+        // window (hours, image, sync) is meaningless, and only one task is left.
         /**
-         * ⭐⭐ H04 — নতুন ভার্সন বসানোর একমাত্র পথ, আর সেটা **স্টাফের হাতে**।
+         * H04: the only way to install a new version, and it is **in the staff's hands**.
          *
-         * ⚠️ নামের শেষে "…" আছে: চাপলে UAC জানালা উঠবে, অর্থাৎ তখনো
-         *    ভাবার সময় থাকে। নীরবে কিছু ঘটে না।
+         * Careful: the name ends with "…": pressing it brings up the UAC window, so there is
+         * still time to think. Nothing happens silently.
          */
         _updateItem = new ToolStripMenuItem("Install update…") { Visible = false };
         _signInItem = new ToolStripMenuItem("Sign in…") { Visible = false };
 
-        // ⚠️ নামের শেষে "…" নেই, ইচ্ছাকৃতভাবে। "…" মানে "আরেকটা জানালা
-        //    আসবে, তখনো ভাবার সময় আছে" — কিন্তু এখানে জানালাটা শুধু
-        //    নিশ্চিত করার, নতুন কোনো কাজ নয়।
+        // Careful: no "…" at the end of the name, deliberately. "…" means "another window will
+        // come, there is still time to think", but here the window only confirms; it is not a
+        // new task.
         _signOutItem = new ToolStripMenuItem("Sign out") { Visible = false };
         _todayItem = new ToolStripMenuItem("Today's hours");
         _portalItem = new ToolStripMenuItem("My data");
@@ -133,7 +132,7 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
 
         _menu.Items.AddRange(new ToolStripItem[]
         {
-            // ⭐ সবার উপরে — নতুন ভার্সন এলে সেটাই এখনকার সবচেয়ে জরুরি কাজ
+            // At the very top: when a new version arrives it is the most urgent job right now
             _updateItem,
             _signInItem,
             _todayItem,
@@ -146,28 +145,29 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
             _signOutItem,
         });
 
-        // ⚠️ এখানে কোনো "প্রস্থান" আইটেম যোগ করবেন না। যোগ করলে স্টাফ নিজের
-        //    ট্র্যাকিং বন্ধ করে দিতে পারত, আর তখন ২০৮ ঘণ্টার হিসাবের কোনো মানে থাকত না।
+        // Careful: do not add an "Exit" item here. If added, staff could stop their own
+        // tracking, and the 208-hour accounting would mean nothing.
         //
-        // ⚠️⚠️ **"Sign out" ওই নিষেধের ব্যতিক্রম নয় — এটা অন্য জিনিস**, আর
-        //    তফাতটা তিনটে জায়গায়:
-        //      ১· "প্রস্থান" **নীরবে** থামায় — অফিস দেখে মেশিনটা চুপ, আর
-        //         সেটা PC বন্ধ থাকার সাথে আলাদা করা যায় না।
-        //      ২· সাইন আউট টোকেন মুছে দেয়, তাই ওই ব্যক্তির নামে আর একটাও
-        //         সারি যেতে পারে না — অর্থাৎ হিসাব **অস্পষ্ট নয়, শেষ**।
-        //      ৩· শেয়ার করা PC-তে এটাই একমাত্র সৎ পথ। না থাকলে পরের জনের
-        //         ঘণ্টা আগের জনের খাতায় যেত — যা এড়াতে চাই ঠিক সেটাই।
-        //    ⭐ তাই আইটেমটা **সবার নিচে, আলাদা রেখার পরে** — রোজকার কাজের
-        //       পাশে নয়, যাতে ভুল করে চাপা না পড়ে।
+        // Careful: **"Sign out" is not an exception to that prohibition; it is a different
+        // thing**, and the difference is in three places:
+        //      1. "Exit" stops **silently**: the office sees the machine quiet and cannot tell
+        //         it apart from the PC being off.
+        //      2. Sign out deletes the token, so not a single further row can go under that
+        //         person's name: the tally is **not ambiguous, it is finished**.
+        //      3. On a shared PC this is the only honest way. Without it the next person's
+        //         hours would go onto the previous person's record, which is exactly what we
+        //         want to avoid.
+        //    So the item is **at the very bottom, after a separator**, not beside the
+        //    everyday items, so that it is not pressed by mistake.
 
         _menu.Opening += (_, _) => Guarded(RefreshMenu);
 
-        // ⚠️ হাতে <c>Shell_NotifyIcon</c> না ডেকে WinForms-এর NotifyIcon ব্যবহারের
-        //    একটা নির্দিষ্ট কারণ আছে: explorer.exe ক্র্যাশ করে আবার চালু হলে ট্রে-র
-        //    সব আইকন মুছে যায় আর shell একটা রেজিস্টার-করা "TaskbarCreated" মেসেজ
-        //    ব্রডকাস্ট করে। যে ইমপ্লিমেন্টেশন ওটা ধরে না, তার আইকন পরের রিবুট
-        //    পর্যন্ত উধাও — অর্থাৎ ঠিক তখনই অদৃশ্য, যখন কেউ দেখছে না।
-        //    NotifyIcon মেসেজটা নিজেই রেজিস্টার করে আইকন ফিরিয়ে আনে।
+        // Careful: there is a specific reason to use WinForms's NotifyIcon instead of calling
+        // <c>Shell_NotifyIcon</c> by hand: when explorer.exe crashes and restarts, all tray
+        // icons are wiped and the shell broadcasts a registered "TaskbarCreated" message. An
+        // implementation that does not catch it loses its icon until the next reboot: invisible
+        // exactly when nobody is looking.
+        // NotifyIcon registers that message itself and brings the icon back.
         _notify = new NotifyIcon
         {
             ContextMenuStrip = _menu,
@@ -178,29 +178,29 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
 
         _notify.DoubleClick += (_, _) => Guarded(ShowToday);
 
-        // প্রথম চেহারাটা এখনই বসিয়ে দেওয়া, প্রথম Publish-এর অপেক্ষা না করে
+        // Set the first appearance now, without waiting for the first Publish
         Render(AgentStatus.Starting);
     }
 
     /// <summary>
-    /// UI থ্রেডে কিছু চালানো — বাইরের কারো এই থ্রেডটা দরকার হলে এই পথেই।
+    /// Run something on the UI thread: this is the route for anyone outside who needs this thread.
     ///
-    /// ⚠️ এজেন্টে <see cref="UiDispatcher"/> **একটাই**, আর সেটা এই ক্লাসের
-    /// ভেতরে। দ্বিতীয় একটা বানালে সেটা অন্য থ্রেডে বসত (যে থ্রেডে তৈরি
-    /// হলো), আর তখন "UI থ্রেড" মানে দুটো আলাদা জিনিস হয়ে যেত — WinForms-এ
-    /// ওই ভুলের শাস্তি সাথে সাথে আসে না, সপ্তাহ দুয়েক পর একবার আসে।
+    /// Careful: there is **exactly one** <see cref="UiDispatcher"/> in the agent, and it is
+    /// inside this class. A second one would sit on another thread (whichever it was created
+    /// on), and then "UI thread" would mean two different things; in WinForms the penalty for
+    /// that mistake does not come immediately, it comes once, about two weeks later.
     /// </summary>
     public void Post(Action action) => _dispatcher.Post(action);
 
     // ── IAgentStatusSink ──────────────────────────────────────────────────
 
     /// <summary>
-    /// ট্র্যাকিং/সিঙ্ক থ্রেড থেকে আসে। কখনো ব্লক করে না, কখনো ছোড়ে না।
+    /// Comes from the tracking/sync thread. Never blocks, never throws.
     ///
-    /// ⚠️ প্রতিটা আপডেটের জন্য আলাদা <c>BeginInvoke</c> করা হয় না। UI থ্রেড এক
-    /// মুহূর্তের জন্য আটকে গেলে (মেনু খোলা, ড্র্যাগ চলছে) সেকেন্ডে একটা করে
-    /// মেসেজ জমে সারিটা ফুলে যেত। বদলে সবশেষ স্ট্যাটাসটা রাখা হয় আর একটাই
-    /// রেন্ডার সারিবদ্ধ থাকে — মাঝের ফ্রেমগুলো এমনিতেও কেউ দেখত না।
+    /// Careful: a separate <c>BeginInvoke</c> is not made for each update. If the UI thread
+    /// stalled for a moment (menu open, a drag in progress), one message a second would pile up
+    /// and the queue would bloat. Instead the latest status is kept and just one render stays
+    /// queued; nobody would have seen the frames in between anyway.
     /// </summary>
     public void Publish(AgentStatus status)
     {
@@ -212,7 +212,7 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
             _dispatcher.Post(RenderPending);
     }
 
-    /// <summary>এনরোলমেন্টের পর ডিভাইস আইডি/কর্মীর নাম বসাতে।</summary>
+    /// <summary>To set the device id/employee name after enrollment.</summary>
     public void UpdateOptions(TrayOptions options)
     {
         if (options is null || _disposed) return;
@@ -225,12 +225,13 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
         });
     }
 
-    // ── রেন্ডার (সবসময় UI থ্রেডে) ─────────────────────────────────────────
+    // ── render (always on the UI thread) ──────────────────────────────────
 
     private void RenderPending()
     {
-        // ⚠️ আগে পতাকা নামাও, তারপর মান পড়ো। উল্টো করলে এই দুই ধাপের মাঝে আসা
-        //    আপডেটটা হারিয়ে যেত — আইকন চিরকাল পুরোনো অবস্থায় আটকে থাকত।
+        // Careful: lower the flag first, then read the value. The other way round, an update
+        // arriving between those two steps would be lost and the icon would stay stuck in the
+        // old state forever.
         Interlocked.Exchange(ref _renderScheduled, 0);
         Render(Volatile.Read(ref _pending));
     }
@@ -246,9 +247,8 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
         {
             _shownVisual = visual;
 
-            // ⚠️ শুধু বদলালেই বসানো হয়। প্রতি সেকেন্ডে একই আইকন আবার বসালে
-            //    shell প্রতিবার ট্রে-টা নতুন করে আঁকে — কিছু মেশিনে সেটা চোখে
-            //    পড়ার মতো ঝিকিমিকি করে।
+            // Careful: set only when it changes. Setting the same icon every second makes the
+            // shell redraw the tray each time; on some machines that flickers visibly.
             _notify.Icon = _painter.Get(visual);
         }
 
@@ -259,7 +259,7 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
             SetTooltip(text);
         }
 
-        // পলিসি: আইকন লুকানো যাবে না
+        // Policy: the icon must not be hidden
         if (!_notify.Visible) _notify.Visible = true;
 
         NotifyOnHealthChange(status);
@@ -270,10 +270,10 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
     }
 
     /// <summary>
-    /// ⚠️ <see cref="NotifyIcon.Text"/> কখনো এক্সসেপশন ছুড়তে দেওয়া যাবে না।
-    /// পুরোনো রানটাইমে ৬৩-র বেশি হলে <c>ArgumentOutOfRangeException</c> আসে, আর
-    /// সেটা এখানে ঘটত UI থ্রেডে — অর্থাৎ পুরো এজেন্ট বন্ধ, কারণ "লেখাটা একটু
-    /// লম্বা ছিল"। <see cref="TrayTooltip"/> এমনিতেই মেপে দেয়, এটা দ্বিতীয় জাল।
+    /// Careful: <see cref="NotifyIcon.Text"/> must never be allowed to throw. On older
+    /// runtimes more than 63 characters raises <c>ArgumentOutOfRangeException</c>, and that
+    /// would happen here on the UI thread, stopping the whole agent just because "the text was
+    /// a bit long". <see cref="TrayTooltip"/> already measures it; this is the second net.
     /// </summary>
     private void SetTooltip(string text)
     {
@@ -288,8 +288,8 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
 
         try
         {
-            // শেষ চেষ্টা: কাঁচা কাটাকাটি। এখানে অক্ষর ভাঙার ঝুঁকি নেওয়া হচ্ছে,
-            // কারণ বিকল্প হলো টুলটিপ ছাড়া একটা আইকন।
+            // Last resort: a raw cut. This risks splitting a character, because the
+            // alternative is an icon with no tooltip.
             _notify.Text = text.Length > TrayTooltip.MaxLength
                 ? text[..TrayTooltip.MaxLength]
                 : text;
@@ -301,7 +301,7 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
         }
     }
 
-    // ── বেলুন ─────────────────────────────────────────────────────────────
+    // ── balloons ──────────────────────────────────────────────────────────
 
     private void NotifyOnHealthChange(AgentStatus status)
     {
@@ -310,8 +310,8 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
 
         _shownHealth = status.Health;
 
-        // প্রথম রেন্ডারে বেলুন নয় — চালু হওয়ার মুহূর্তে "সব ঠিক আছে" জানানোর
-        // কোনো দরকার নেই, আর তাতে বাস্তব সমস্যার বেলুনটা এক ঘণ্টা চাপা পড়ত
+        // No balloon on the first render: there is no need to announce "all is well" at startup,
+        // and it would suppress a real problem's balloon for an hour
         if (previous is null) return;
 
         switch (status.Health)
@@ -331,17 +331,17 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
     }
 
     /// <summary>
-    /// J03 — এ মাসের লক্ষ্য পূরণ হলে একবার ✅।
+    /// J03: once, ✅ when this month's target is reached.
     ///
-    /// ⭐ <b>মনে রাখা হয় দেখানোর আগে, পরে নয়।</b> বেলুন দেখানো একটা নীরবে
-    /// ব্যর্থ হতে পারা কাজ (Focus Assist, নোটিফিকেশন বন্ধ) — সেটার সফলতার
-    /// উপর স্মৃতি বসালে ওই মেশিনে প্রতিটা heartbeat-এ আবার চেষ্টা হতো, আর
-    /// Focus Assist বন্ধ হওয়ার মুহূর্তে বেলুনের বন্যা নামত।
+    /// Important: <b>it is remembered before showing, not after.</b> Showing a balloon is a
+    /// task that can fail silently (Focus Assist, notifications off); if memory depended on its
+    /// success, that machine would try again on every heartbeat, and a flood of balloons would
+    /// come the moment Focus Assist was turned off.
     ///
-    /// ⚠️ এখানে কোনো "রেন্ডারের আগে-পরে" তুলনা নেই, ইচ্ছাকৃতভাবে। লক্ষ্যটা
-    /// এজেন্ট বন্ধ থাকা অবস্থায়ও পূর্ণ হতে পারে (কর্মী অন্য PC-তে কাজ করেছে),
-    /// তখন প্রথম heartbeat-এই শর্তটা সত্যি হয়ে আসে — "বদলেছে কি না" দেখলে
-    /// ওই স্টাফ কোনোদিন বেলুনটা পেত না।
+    /// Careful: there is deliberately no "before/after render" comparison here. The target can
+    /// be reached even while the agent was off (the employee worked on another PC), and then
+    /// the condition is already true at the first heartbeat; checking "did it change" would mean
+    /// that employee never gets the balloon.
     /// </summary>
     private void NotifyOnMonthlyTarget(AgentStatus status)
     {
@@ -362,39 +362,39 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
     }
 
     /// <summary>
-    /// ⭐⭐ <b>H04 — আপডেট তৈরি, স্টাফকে বলা হচ্ছে</b> <i>(৫ সেপ্টেম্বর ২০২৬)</i>।
+    /// <b>H04: an update is ready, and staff are told.</b>
     ///
-    /// ⚠️⚠️ <b>এতদিন কিছুই বলা হতো না।</b> নতুন ভার্সন নীরবে নেমে যাচাই হয়ে
-    /// বসে থাকত, আর মেনুতে "Install update…" ফুটত — কিন্তু কেউ tray মেনু
-    /// না খুললে সেটা জানার কোনো উপায়ই ছিল না। সিঙ্ক ব্যর্থতা, বাতিল ডিভাইস,
-    /// মাসের লক্ষ্য — তিনটেরই বেলুন ছিল, আপডেটের ছিল না।
+    /// Careful: <b>nothing used to be said.</b> The new version downloaded and verified
+    /// silently, and "Install update…" appeared in the menu, but unless someone opened the tray
+    /// menu there was no way to know. Sync failure, revoked device and the monthly target all
+    /// had balloons; the update did not.
     ///
-    /// ⭐ ফলে মালিককে প্রতিটা PC-তে হাতে গিয়ে বসাতে হতো, অথচ MSI-টা ওই
-    /// মেশিনেই যাচাই হয়ে পড়ে ছিল।
+    /// So the owner had to go to every PC and install by hand, even though the MSI was already
+    /// verified and sitting on that machine.
     ///
-    /// ⚠️ কথাটা <b>কী করতে হবে</b> সেটাই বলে, শুধু "আপডেট আছে" নয় — মেনুটা
-    /// কোথায় সেটা না বললে বার্তাটা একটা প্রশ্ন হয়ে থাকত।
+    /// Careful: the message says <b>what to do</b>, not just "an update exists"; without saying
+    /// where the menu is, the message would remain a question.
     /// </summary>
     private void NotifyOnUpdateReady(AgentStatus status)
     {
         var update = status.Update;
 
-        // ⚠️ কেবল Verified — নামানো বা যাচাই চলাকালীন নয়, ঠিক মেনুর শর্তেই।
-        //    আগে জানালে স্টাফ মেনু খুলে কিছুই পেতেন না।
+        // Careful: only Verified, not while downloading or verifying, exactly the menu's
+        // condition. Telling staff earlier, they would open the menu and find nothing.
         if (update.Stage != UpdateStage.Verified) return;
 
         var version = update.Version;
         if (string.IsNullOrWhiteSpace(version)) return;
 
-        // ⚠️ ইনস্টলের পথ না থাকলে চুপ — নইলে বার্তাটা এমন কিছু করতে বলত
-        //    যেটা করার উপায় নেই
+        // Careful: no install path, stay quiet; otherwise the message would ask for something
+        // that cannot be done
         if (_options.InstallUpdate is null) return;
 
         if (string.Equals(_notifiedUpdate, version, StringComparison.Ordinal)) return;
 
-        // ⭐ মনে রাখা হয় দেখানোর **আগে** — বেলুন নীরবে ব্যর্থ হতে পারে
-        //   (Focus Assist), আর সফলতার উপর স্মৃতি বসালে প্রতি রেন্ডারে আবার
-        //   চেষ্টা হতো (একই যুক্তি NotifyOnMonthlyTarget-এ)।
+        // Remembered **before** showing: a balloon can fail silently (Focus Assist), and if
+        // memory depended on its success every render would try again (same reasoning as in
+        // NotifyOnMonthlyTarget).
         _notifiedUpdate = version;
 
         Balloon(
@@ -404,10 +404,10 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
     }
 
     /// <summary>
-    /// ⚠️ timeout প্যারামিটারটা Windows Vista থেকে উপেক্ষিত — কতক্ষণ দেখা যাবে
-    /// সেটা এখন সিস্টেম ঠিক করে। ⚠️ Focus Assist চালু থাকলে বা ইউজার
-    /// নোটিফিকেশন বন্ধ করে রাখলে এটা নীরবে কিছুই করে না, কোনো ত্রুটি ছাড়াই —
-    /// তাই বেলুনকে কখনো একমাত্র বার্তাবাহক ধরা যাবে না, আইকন ও টুলটিপই মূল।
+    /// Careful: the timeout parameter has been ignored since Windows Vista; the system now
+    /// decides how long it is shown. Careful: when Focus Assist is on or the user has turned
+    /// notifications off, this silently does nothing, with no error, so a balloon can never be
+    /// the only messenger; the icon and tooltip are the primary channel.
     /// </summary>
     private void Balloon(string eventClass, string text, ToolTipIcon icon)
     {
@@ -424,18 +424,18 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
         }
     }
 
-    // ── মেনুর কাজ ─────────────────────────────────────────────────────────
+    // ── menu actions ──────────────────────────────────────────────────────
 
     private void RefreshMenu()
     {
-        // ⚠️ Visible, Enabled নয়। সাইন ইন হয়ে গেলে আইটেমটার আর কোনো মানে
-        //    নেই — ধূসর হয়ে ঝুলে থাকলে স্টাফ ভাবত কিছু একটা ভেঙে আছে।
+        // Careful: Visible, not Enabled. Once signed in the item has no further meaning; hanging
+        // around greyed out would make staff think something is broken.
         /**
-         * ⚠️⚠️ কেবল <c>Verified</c> ধাপে — নামানো বা যাচাই চলাকালীন নয়।
+         * Careful: only in the <c>Verified</c> stage, not while downloading or verifying.
          *
-         * <c>Offered</c>/<c>Downloaded</c>-এ ফাইলটা এখনো বিশ্বাসযোগ্য নয়,
-         * আর <c>Corrupt</c>-এ সেটা মুছেই ফেলা হয়েছে। ওই অবস্থায় বোতাম
-         * দেখালে স্টাফ চাপতেন, কিছু হতো না, আর তিনি ভাবতেন সিস্টেম ভাঙা।
+         * In <c>Offered</c>/<c>Downloaded</c> the file is not yet trustworthy, and in
+         * <c>Corrupt</c> it has already been deleted. Showing the button in those states would
+         * have staff press it, nothing would happen, and they would think the system is broken.
          */
         _updateItem.Visible =
             _status.Update.Stage == UpdateStage.Verified
@@ -447,11 +447,11 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
         _signInItem.Visible = !_status.Enrolled && _options.RequestSignIn is not null;
 
         /*
-         * ⚠️ সিদ্ধান্তটা এখানে লেখা হয় না, <see cref="SignOutGate"/> থেকে আসে —
-         *    আর সেটাই <c>AgentHost</c> ক্লিকের পর আবার যাচাই করে। দুই জায়গায়
-         *    দুই রকম শর্ত লিখলে আইটেমটা দেখা যেত অথচ চাপলে কিছুই হতো না।
+         * Careful: the decision is not made here; it comes from <see cref="SignOutGate"/>, and
+         * <c>AgentHost</c> re-checks it after the click. Writing two different conditions in two
+         * places would show the item and then do nothing when pressed.
          *
-         * ⭐ tray-কে আউটবক্স পড়তে হয় না — <c>QueueDepth</c> স্ট্যাটাসেই আছে।
+         * The tray does not have to read the outbox; <c>QueueDepth</c> is already in the status.
          */
         _signOutItem.Visible =
             _options.RequestSignOut is not null
@@ -515,9 +515,9 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
 
         _lastSyncRequest = now;
 
-        // ⚠️ UI থ্রেডে সিঙ্ক ডাকা যাবে না। ইমপ্লিমেন্টেশন যদি একটা HTTP কল করে
-        //    বসে থাকে, ততক্ষণ ট্রে জমে থাকত — আর স্টাফ ভাবত এজেন্ট ক্র্যাশ করেছে,
-        //    ঠিক যখন সে সংযোগ নিয়ে দুশ্চিন্তায় আছে।
+        // Careful: sync must not be called on the UI thread. If the implementation sat in an
+        // HTTP call, the tray would freeze meanwhile, and staff would think the agent had
+        // crashed, just when they are worried about the connection.
         ThreadPool.QueueUserWorkItem(_ =>
         {
             try { request(); }
@@ -527,7 +527,7 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
         Balloon("sync_now", "Sync started", ToolTipIcon.Info);
     }
 
-    // ── বাইরের লিংক ───────────────────────────────────────────────────────
+    // ── external links ────────────────────────────────────────────────────
 
     private void OpenExternal(string? target, string missingMessage)
     {
@@ -539,10 +539,9 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
 
         try
         {
-            // ⚠️ UseShellExecute স্পষ্ট করে true। .NET Core-এ এর ডিফল্ট false, আর
-            //    তখন একটা URL দিলে "The specified executable is not a valid
-            //    application" বলে Win32Exception আসে — লোকাল মেশিনে পরীক্ষা না
-            //    করলে এটা ধরা পড়ে না।
+            // Careful: UseShellExecute explicitly true. In .NET Core its default is false, and
+            // then giving a URL raises a Win32Exception "The specified executable is not a valid
+            // application"; this is not caught unless you test on a local machine.
             using var process = Process.Start(new ProcessStartInfo(launch)
             {
                 UseShellExecute = true,
@@ -555,7 +554,7 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
         }
     }
 
-    /// <summary>শুধু http/https, অথবা <see cref="AllowedDocumentExtensions"/>-এর কোনো ফাইল।</summary>
+    /// <summary>Only http/https, or a file with one of <see cref="AllowedDocumentExtensions"/>.</summary>
     private static bool TryResolveTarget(string target, out string launch)
     {
         launch = string.Empty;
@@ -575,11 +574,10 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
     }
 
     /// <summary>
-    /// ⚠️ এই সাদা তালিকাটাই আসল নিরাপত্তা। পলিসির ঠিকানা আসে কনফিগ থেকে, আর
-    /// কনফিগ আসে নেটওয়ার্ক দিয়ে। যাচাই না করে ShellExecute করলে ওই একটা
-    /// স্ট্রিং বদলেই স্টাফের অ্যাকাউন্টে যেকোনো <c>.exe</c>, <c>.lnk</c>,
-    /// <c>.hta</c> বা <c>.ps1</c> চালানো যেত — মনিটরিং এজেন্ট তখন নিজেই
-    /// সবচেয়ে সহজ আক্রমণপথ।
+    /// Careful: this allow-list is the real security. The policy address comes from config,
+    /// and config comes over the network. Without validation before ShellExecute, changing that
+    /// one string would let any <c>.exe</c>, <c>.lnk</c>, <c>.hta</c> or <c>.ps1</c> run in the
+    /// staff member's account; the monitoring agent itself would be the easiest attack path.
     /// </summary>
     private static readonly string[] AllowedDocumentExtensions =
         [".pdf", ".html", ".htm", ".md", ".txt", ".rtf", ".docx"];
@@ -614,7 +612,7 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
         }
     }
 
-    // ── সহায়ক ─────────────────────────────────────────────────────────────
+    // ── helpers ────────────────────────────────────────────────────────────
 
     private void Guarded(Action action)
     {
@@ -631,30 +629,30 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
     private void Report(Exception ex)
     {
         try { _options.OnError?.Invoke(ex); }
-        catch { /* লগারও ভাঙলে আর কিছু করার নেই */ }
+        catch { /* if even the logger is broken there is nothing more to do */ }
     }
 
-    // ── বন্ধ ──────────────────────────────────────────────────────────────
+    // ── shutdown ──────────────────────────────────────────────────────────
 
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
 
-        // ⚠️ সরাসরি নয়, UI থ্রেডে পাঠিয়ে। NotifyIcon/Form অন্য থ্রেড থেকে
-        //    Dispose করলে হ্যান্ডেল ধ্বংস হয় ভুল থ্রেডে, আর ট্রেতে একটা ভূতুড়ে
-        //    আইকন পড়ে থাকে যতক্ষণ না কেউ তার উপর মাউস নেয়।
+        // Careful: not directly, but posted to the UI thread. Disposing a NotifyIcon/Form from
+        // another thread destroys the handle on the wrong thread, and a ghost icon stays in the
+        // tray until someone hovers the mouse over it.
         _dispatcher.Post(TearDown);
     }
 
     private void TearDown()
     {
-        // ক্রমটাই আসল কাজ:
-        // ১) আইকন লুকাও — না লুকিয়ে Dispose করলে shell-এর কাছে এন্ট্রিটা থেকে
-        //    যায়, আর "ভূতুড়ে আইকন" রয়ে যায়
-        // ২) Icon = null — নইলে ধাপ ৪-এ ধ্বংস করা HICON shell আঁকতে যেত
-        // ৩) জানালাগুলো বন্ধ
-        // ৪) আঁকার সম্পদ
+        // The order is the real work:
+        // 1) hide the icon: disposing without hiding leaves the entry with the shell, and a
+        //    "ghost icon" remains
+        // 2) Icon = null: otherwise the shell would try to draw the HICON destroyed in step 4
+        // 3) close the windows
+        // 4) the drawing resources
         try { _notify.Visible = false; } catch (Exception ex) { Report(ex); }
         try { _notify.Icon = null; } catch (Exception ex) { Report(ex); }
 
@@ -669,7 +667,7 @@ internal sealed class TrayIcon : IAgentStatusSink, IDisposable
         try { _painter.Dispose(); } catch (Exception ex) { Report(ex); }
         try { _fonts.Dispose(); } catch (Exception ex) { Report(ex); }
 
-        // সবার শেষে — এটার হ্যান্ডেল দিয়েই এখানে পৌঁছানো গেছে
+        // Last of all: we got here through its handle
         try { _dispatcher.Dispose(); } catch (Exception ex) { Report(ex); }
     }
 }

@@ -5,19 +5,19 @@ using System.Text;
 namespace oXeio.Watchdog.Platform;
 
 /// <summary>
-/// ছোট, নিজে থেকে ঘোরে এমন লগ। বাইরের কোনো লাইব্রেরি নয়।
+/// A small self-rotating log. No external library.
 ///
-/// <b>আয়তনের হিসাব:</b> সিলিং ৫১২ KiB, আর মাত্র একটা পুরোনো কপি (<c>.1</c>) —
-/// অর্থাৎ ডিস্কে সর্বোচ্চ ১ MiB, চিরকালের জন্য। এই প্রসেস সপ্তাহের পর সপ্তাহ চলে
-/// আর কেউ লগ পড়ে না; সীমা না থাকলে একদিন সেটাই ডিস্ক ভরাত।
+/// <b>Size budget:</b> a ceiling of 512 KiB and a single old copy (<c>.1</c>), so at
+/// most 1 MiB on disk, forever. This process runs for weeks at a time and nobody reads
+/// the log; without a limit it would eventually fill the disk.
 ///
-/// ⚠️ <b>প্রতি টিকে লেখা হয় না।</b> ৩০ সেকেন্ড পরপর একটা করে লাইন মানে দিনে
-/// ২,৮৮০টা — দিনে দুবার rotate, আর ঠিক যে লাইনটা দরকার (দুই সপ্তাহ আগের সেই
-/// ক্র্যাশ) সেটাই হারিয়ে যেত। তাই <see cref="WatchdogLoop"/> শুধু <b>বদল</b>
-/// লেখে, অবস্থা নয়।
+/// Careful: <b>it does not write on every tick.</b> One line every 30 seconds is 2,880
+/// a day, which means rotating twice a day and losing exactly the line that matters
+/// (the crash from two weeks ago). So <see cref="WatchdogLoop"/> writes only
+/// <b>changes</b>, not the current state.
 ///
-/// ⚠️ কোনো মেথড ছোড়ে না। ডিস্ক ভরা থাকলে লগ লেখা ব্যর্থ হবে — কিন্তু পাহারা
-/// চলতেই থাকবে। লগের দোষে ঘণ্টা গোনা থামা চলবে না।
+/// Careful: no method throws. If the disk is full, writing the log fails, but the
+/// supervision keeps going. A log problem must never stop the hour counting.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class RollingLog
@@ -46,8 +46,8 @@ internal sealed class RollingLog
                     CultureInfo.InvariantCulture,
                     $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}  {message}{Environment.NewLine}");
 
-                // FileShare.ReadWrite — অ্যাডমিন লগটা খুলে রাখলেও যেন লেখা আটকে
-                // না যায়। এই ফাইল আমাদের কাছে শুধুই লেখার জায়গা, সত্যের উৎস নয়।
+                // FileShare.ReadWrite so that an admin who has the log open does not
+                // block writing. To us this file is only a place to write, not a source of truth.
                 using var stream = new FileStream(
                     _path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite, 4096, FileOptions.None);
 
@@ -56,7 +56,7 @@ internal sealed class RollingLog
             }
             catch (Exception)
             {
-                // ইচ্ছাকৃতভাবে গিলে ফেলা — এখানে throw করা মানে পাহারাদারের মৃত্যু।
+                // Swallowed on purpose: throwing here would kill the watchdog.
             }
         }
     }
@@ -70,13 +70,13 @@ internal sealed class RollingLog
 
             var previous = _path + ".1";
 
-            // ⚠️ Move(overwrite: true) — আগে Delete করে তারপর Move করলে দুটোর
-            //    মাঝখানে প্রসেস মরলে দুটো ফাইলই থাকত না।
+            // Careful: Move(overwrite: true). Deleting first and then moving would
+            // leave neither file if the process died between the two steps.
             File.Move(_path, previous, overwrite: true);
         }
         catch (Exception)
         {
-            // ঘোরানো না গেলে ফাইল একটু বড় হবে — লেখা বন্ধ হওয়ার চেয়ে সেটা ভালো।
+            // If rotation fails the file just grows a bit; better than stopping writes.
         }
     }
 }

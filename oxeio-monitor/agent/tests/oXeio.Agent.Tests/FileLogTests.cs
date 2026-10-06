@@ -3,11 +3,11 @@ using oXeio.Agent.Storage;
 namespace oXeio.Agent.Tests;
 
 /// <summary>
-/// H08 — এজেন্টের লগ ফাইল সত্যিই ডিস্কে লেখে কি না।
+/// H08: does the agent's log file really get written to disk?
 ///
-/// ⚠️ এখানে সত্যিকারের ফাইলই লেখা হয়, মক নয় — কারণ যে জিনিসগুলো ভুল হতে
-/// পারে সেগুলো ঠিক ফাইল-সিস্টেমেই: ফোল্ডার নেই, ফাইল খোলা অবস্থায় লেখা,
-/// দিন বদলালে নাম বদলানো। মক দিয়ে এর একটাও পরীক্ষা হতো না।
+/// Careful: real files are written here, not mocks, because the things that can go
+/// wrong are in the file system itself: a missing folder, writing while the file is
+/// open, renaming when the day changes. A mock could test none of them.
 /// </summary>
 public class FileLogTests : IDisposable
 {
@@ -21,7 +21,7 @@ public class FileLogTests : IDisposable
 
     private string Read() => File.ReadAllText(Path.Combine(_dir, FileLog.CurrentFileName));
 
-    /// <summary>⚠️ ফোল্ডারটা **নেই** — প্রথম বুটে ঠিক এই অবস্থাটাই থাকে।</summary>
+    /// <summary>The folder does **not exist**, which is exactly the state at first boot.</summary>
     [Fact]
     public void ফোল্ডার_না_থাকলেও_লেখে()
     {
@@ -46,17 +46,17 @@ public class FileLogTests : IDisposable
         Assert.Contains("INFO ", text);
         Assert.Contains("WARN ", text);
         Assert.Contains("ERROR", text);
-        // ⚠️ এক্সসেপশনের ধরন ও বার্তা দুটোই — শুধু "bad" লিখলে লগ পড়ে
-        //    কেউ বুঝত না আসলে কী ঘটেছে।
+        // Both the exception type and the message: with just "bad", nobody reading the
+        // log would understand what really happened.
         Assert.Contains("InvalidOperationException", text);
         Assert.Contains("boom", text);
     }
 
     /// <summary>
-    /// ⚠️ লগ লেখা কখনোই কলারকে ফেলতে পারবে না। এখানে ফোল্ডারের জায়গায়
-    /// একটা **ফাইল** বসিয়ে দেওয়া হয়েছে — `Directory.CreateDirectory`
-    /// ছুড়বে। ছোড়াটা উপরে পৌঁছালে সিঙ্ক ওয়ার্কার মরত, অর্থাৎ লগের সমস্যা
-    /// ডেটা হারানোর সমস্যা হয়ে যেত।
+    /// Careful: writing the log must never take the caller down. Here a **file** is put
+    /// where the folder should be, so `Directory.CreateDirectory` throws. If that
+    /// reached the caller the sync worker would die, turning a log problem into a data-loss
+    /// problem.
     /// </summary>
     [Fact]
     public void লিখতে_না_পারলেও_ছোড়ে_না()
@@ -86,15 +86,15 @@ public class FileLogTests : IDisposable
     }
 
     /// <summary>
-    /// ⭐ দিন বদলালে চলতি ফাইলটা তারিখওয়ালা নামে সরে। এখানে সেটা সরাসরি
-    /// পরীক্ষা করা যায় না (ঘড়ি বদলানো যাবে না), তাই নাম-পড়ার নিয়মটাই
-    /// যাচাই — ছাঁটাইয়ের গোটা হিসাবটা এর উপরেই দাঁড়ানো।
+    /// When the day changes the current file is renamed with a date. That cannot be
+    /// tested directly here (the clock cannot be changed), so the name-parsing rule is
+    /// what is checked; the whole retention calculation rests on it.
     /// </summary>
     [Theory]
     [InlineData("agent-2026-08-12.log", true)]
-    [InlineData("agent-2026-13-40.log", false)]  // অসম্ভব তারিখ
-    [InlineData("agent.log", false)]             // চলতি ফাইল — কখনো মুছবে না
-    [InlineData("outbox-drops.log", false)]      // ⚠️ অন্য মডিউলের লগ
+    [InlineData("agent-2026-13-40.log", false)]  // impossible date
+    [InlineData("agent.log", false)]             // the current file: never deleted
+    [InlineData("outbox-drops.log", false)]      // another module's log
     [InlineData("outbox-drops.log.1", false)]
     [InlineData("watchdog.log", false)]
     public void শুধু_নিজের_আর্কাইভই_চেনে(string name, bool expected) =>
@@ -105,12 +105,12 @@ public class FileLogTests : IDisposable
         Assert.Equal(new DateOnly(2026, 8, 12), FileLog.DayFromName("agent-2026-08-12.log"));
 
     /**
-     * ⚠️⚠️ রানবুক অ্যাডমিনকে `Get-Content …gent.log` চালাতে বলে, আর
-     * **Windows PowerShell 5.1 BOM ছাড়া ফাইলকে ANSI ধরে** — তখন প্রতিটা
-     * `·` `—` `✅` ভেঙে `Â·` `â€”` `âœ…` হয়ে দেখায়। ফাইলটা ঠিকই লেখা,
-     * শুধু পড়াই যায় না।
+     * Careful: the runbook tells the admin to run `Get-Content …gent.log`, and
+     * **Windows PowerShell 5.1 treats a file without a BOM as ANSI**, so every
+     * `·` `—` `✅` shows up broken as `Â·` `â€”` `âœ…`. The file is written correctly;
+     * it just cannot be read.
      *
-     * ⭐ ১২ আগস্ট আসল মেশিনে চালিয়ে ধরা পড়েছে — টেস্টে নয়, চোখে।
+     * Caught by running it on a real machine, by eye, not by a test.
      */
     [Fact]
     public void নতুন_ফাইলের_শুরুতে_utf8_bom_বসে()
@@ -125,7 +125,7 @@ public class FileLogTests : IDisposable
         Assert.Equal(0xBF, raw[2]);
     }
 
-    /** ⚠️ প্রতি লাইনে বসালে মাঝখানে BOM জমত আর লেখাগুলো নষ্ট হতো */
+    /** Writing it on every line would pile up BOMs in the middle and corrupt the text. */
     [Fact]
     public void bom_একবারই_বসে()
     {

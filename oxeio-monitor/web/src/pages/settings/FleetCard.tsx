@@ -15,18 +15,18 @@ import {
 import { Chip } from '../../components/ui';
 
 /**
- * **কোন PC কোন বিল্ডে** *(১৮ আগস্ট ২০২৬)*।
+ * **Which PC is on which build.**
  *
- * ⚠️⚠️ **এটা "Devices" পর্দার প্রত্যাবর্তন নয়** — সেটা মালিক নিজেই তুলে
- * দিতে বলেছিলেন (G89: *"ami Devices ei option tai chai na, eta full
- * system take complex banacche"*), আর কারণটা এখনো ঠিক: একই প্রশ্নের উত্তর
- * দুই পর্দায় খুঁজতে হতো।
+ * Careful: **this is not the "Devices" screen coming back**; the owner asked for
+ * that to be removed (he said he did not want the Devices option because it made
+ * the whole system more complex), and the reason still holds: the same question had
+ * to be looked up on two screens.
  *
- * ⭐ তাই তালিকাটা **এই ট্যাবেই**, যার নিজের বর্ণনাই লেখা *"Which build
- * each PC is offered"* — প্রশ্নটা যেখানে ওঠে, উত্তরটাও সেখানে। আর
- * ইচ্ছাকৃতভাবে **শুধু দেখার**: কোনো revoke/restore বোতাম নেই, কারণ এজেন্ট
- * বন্ধ-চালু হয় Staff সারিতে ("Turn agent on")। বোতাম বসালে ঠিক সেই
- * দুই-পর্দার দ্বিধাই ফিরে আসত।
+ * Important: so the list is **in this tab**, whose own description reads *"Which
+ * build each PC is offered"*: the answer is where the question arises. And it is
+ * deliberately **view only**: no revoke/restore buttons, because switching an agent
+ * off and on happens in the Staff row ("Turn agent on"). Adding buttons would bring
+ * back exactly that two-screen dilemma.
  */
 export function FleetCard({ versions }: { versions: AgentVersionView[] }) {
   const { data, loading, error, reload } = useApi(
@@ -36,9 +36,9 @@ export function FleetCard({ versions }: { versions: AgentVersionView[] }) {
 
   const newest = newestOffered(versions);
   /**
-   * ⚠️ `new Date()` রেন্ডারের সময়েই নেওয়া হয় — "চুপ" হিসাবটা ২৪ ঘণ্টার
-   * মাপে, তাই এক-দু সেকেন্ডের হেরফের এখানে অর্থহীন। মাসের হিসাবে এটা
-   * করা যেত না, কিন্তু এখানে আলাদা ঘড়ি টানার দরকার নেই।
+   * Careful: `new Date()` is taken at render time: the "silent" check is on a
+   * 24-hour scale, so a second or two of drift is meaningless here. Month-based
+   * logic could not do this, but here there is no need to pull in a separate clock.
    */
   const groups = fleetGroups(data ?? [], newest, new Date());
   const tally = fleetTally(groups);
@@ -61,9 +61,9 @@ export function FleetCard({ versions }: { versions: AgentVersionView[] }) {
       {tally.total > 0 && (
         <>
           {/*
-            ⚠️ কিছুই প্রকাশ করা না থাকলে (বা সব halted) অগ্রগতির বারটা
-               দেখানো হয় না — "১৩/১৩ নতুন বিল্ডে" লেখাটা তখন **মিথ্যা**
-               হতো; লক্ষ্যই নেই বলে কেউ হালনাগাদও নয়।
+            Careful: when nothing is published (or everything is halted) the progress
+               bar is not shown: the text "13/13 on the newest build" would then be
+               **false**; with no target, nobody is current either.
           */}
           {newest !== null && <RolloutBar tally={tally} newest={newest} />}
           <FleetTable groups={groups} />
@@ -74,13 +74,13 @@ export function FleetCard({ versions }: { versions: AgentVersionView[] }) {
 }
 
 /**
- * ⭐⭐ **রোলআউট কতদূর — না গুনেই।**
+ * **How far the rollout is, without counting.**
  *
- * ⚠️ তিনটে ভাগ, দুটো নয়: `behind` PC-গুলো **নিজে থেকেই** আপডেট নেবে
- * (অপেক্ষাই যথেষ্ট), কিন্তু `stranded`-গুলোয় কাউকে গিয়ে MSI বসাতে হবে।
- * একসাথে "পুরোনো" বললে ওই করণীয়ের তফাতটাই হারিয়ে যেত — আর ঠিক সেই
- * তফাতটা না জানার কারণেই ১৮ আগস্ট ধরে নেওয়া হয়েছিল যে `partial` করলেই
- * সবাই আপডেট পাবে ([09 § ৩ভ৯](../../../../docs/09-Build-Log.md))।
+ * Careful: three groups, not two: `behind` PCs **will update themselves** (waiting
+ * is enough), but for `stranded` ones someone must go and install the MSI. Calling
+ * both "old" would lose that difference in what to do, and it was not knowing that
+ * difference that led to assuming on 18 August that `partial` would update everyone
+ * (see the Build Log).
  */
 function RolloutBar({
   tally,
@@ -101,8 +101,8 @@ function RolloutBar({
         </span>
       </div>
 
-      {/* ⚠️ `flex` + শতাংশ প্রস্থ — একটা `<div>`-এ gradient দিলে ভাগগুলোর
-          সীমানা ঝাপসা হতো, আর এখানে সীমানাটাই তথ্য */}
+      {/* Careful: `flex` + percentage widths; a gradient on one `<div>` would blur the
+          group boundaries, and here the boundary is the information */}
       <div className="flex h-2.5 overflow-hidden rounded-full bg-line">
         <div style={{ width: pct(tally.newest) }} className="bg-ok" />
         <div style={{ width: pct(tally.behind) }} className="bg-idle" />
@@ -120,7 +120,7 @@ function RolloutBar({
   );
 }
 
-/** ⚠️ শূন্য হলে দেখানোই হয় না — "০ টা পুরোনো" পড়তে সময় লাগে, বুঝতে লাগে না */
+/** Careful: not shown at zero; "0 old" takes time to read and no time to understand */
 function Key({ tone, n, label }: { tone: string; n: number; label: string }) {
   if (n === 0) return null;
 
@@ -133,7 +133,7 @@ function Key({ tone, n, label }: { tone: string; n: number; label: string }) {
   );
 }
 
-/** টেবিলের সারি — সাথে কোন দলে আছে আর দলের প্রথম কিনা */
+/** A table row, with which group it is in and whether it is the group's first */
 interface Flat extends FleetRow {
   group: FleetGroup;
   first: boolean;
@@ -160,8 +160,8 @@ function FleetTable({ groups }: { groups: FleetGroup[] }) {
                 empCode={r.employee.empCode}
               />
             ) : (
-              // ⚠️ কর্মীর সাথে যুক্ত নয় এমন ডিভাইসও দেখানো হয় — লুকিয়ে
-              //    ফেললে ফ্লিটের গোনাটা পাশের কলামের সাথে মিলত না
+              // Careful: devices not linked to an employee are shown too; hiding them
+              //    would make the fleet count disagree with the neighbouring column
               <span className="text-ink-3">Not linked to anyone</span>
             ),
         },
@@ -191,9 +191,9 @@ function FleetTable({ groups }: { groups: FleetGroup[] }) {
           key: 'flag',
           header: '',
           /*
-            ⭐ সারিতে চিহ্ন কেবল তখনই, যখন **এই সারিটার নিজের** কিছু বলার
-               আছে। ভার্সন কতটা পিছিয়ে সেটা উপরের ব্যান্ডেই লেখা, তাই
-               প্রতি সারিতে একই কথা আবার বসালে সেটা তথ্য নয়, গোলমাল।
+            Important: a flag on a row only when **this row itself** has something to
+               say. How far behind the version is is written in the band above, so
+               repeating the same thing on every row is noise, not information.
           */
           render: (r) =>
             r.quiet || r.issues.length > 0 ? (
@@ -214,10 +214,10 @@ function FleetTable({ groups }: { groups: FleetGroup[] }) {
 }
 
 /**
- * ⭐ দলের মাথায় এক লাইন — ভার্সন, কতগুলো, আর **করণীয়**।
+ * One line at the top of a group: the version, how many, and **what to do**.
  *
- * ⚠️ করণীয়টা লেখা থাকা জরুরি: "০.৩.৭ · ৫টা PC" পড়ে বোঝা যায় না যে ওই
- * পাঁচটায় গিয়ে হাতে বসাতে হবে, অথচ সেটাই একমাত্র উপায়।
+ * Careful: the action must be written: reading "0.3.7 - 5 PCs" does not reveal that
+ * someone must go and install on those five by hand, which is the only way.
  */
 function VersionBand({ group }: { group: FleetGroup }) {
   const n = group.rows.length;

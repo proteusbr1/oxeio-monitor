@@ -5,13 +5,12 @@ using oXeio.Core.Time;
 namespace oXeio.Agent.Ui;
 
 /// <summary>
-/// tray-তে দেখানো সংখ্যা ও সময়ের রূপ। পর্দার সব লেখা ইংরেজি, অঙ্কও ASCII।
+/// Number and time formats shown in the tray. All on-screen text is English, digits are ASCII.
 ///
-/// ⚠️ csproj-এ <c>InvariantGlobalization=true</c>। মানে <c>new CultureInfo(...)</c>
-/// চুপচাপ invariant হয়ে যায়, কোনো এক্সসেপশন ছাড়াই — তাই কালচারের উপর কোনো
-/// নির্ভরতা রাখা হয় না, প্রতিটা <c>ToString</c>-এ স্পষ্ট করে
-/// <see cref="CultureInfo.InvariantCulture"/> দেওয়া। মেশিনের locale যা-ই হোক,
-/// স্টাফ আর ড্যাশবোর্ড হুবহু একই সংখ্যা দেখে।
+/// Important: the csproj sets <c>InvariantGlobalization=true</c>, so <c>new CultureInfo(...)</c>
+/// silently becomes invariant without any exception. We therefore depend on no culture and
+/// pass <see cref="CultureInfo.InvariantCulture"/> explicitly to every <c>ToString</c>.
+/// Whatever the machine's locale, staff and the dashboard see exactly the same numbers.
 /// </summary>
 internal static class UiText
 {
@@ -25,11 +24,11 @@ internal static class UiText
         value.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>
-    /// টার্গেট ঘণ্টা — পূর্ণ সংখ্যা হলে দশমিক ছাড়া, নইলে এক ঘর।
+    /// Target hours: no decimal for a whole number, otherwise one decimal place.
     ///
-    /// ⚠️ "২০৮.০ hours" লেখা মানে স্টাফকে বোঝানো যে দশমিকটা গুরুত্বপূর্ণ, অথচ
-    /// টার্গেট প্রায় সবসময়ই গোল সংখ্যা। আধা-ঘণ্টার টার্গেট (২০৭.৫) থাকলে
-    /// সেটা লুকানোও যাবে না — তাই দুটো রূপ।
+    /// Writing "208.0 hours" would suggest the decimal matters, yet the target is almost
+    /// always a round number. A half-hour target (207.5) must not be hidden either, hence the
+    /// two forms.
     /// </summary>
     public static string Hours(double hours)
     {
@@ -40,16 +39,15 @@ internal static class UiText
             : hours.ToString("0.#", CultureInfo.InvariantCulture);
     }
 
-    /// <summary>ঘণ্টা:মিনিট — যেমন <c>127:30</c>।</summary>
+    /// <summary>Hours:minutes, e.g. <c>127:30</c>.</summary>
     public static string Duration(TimeSpan span)
     {
-        // ঋণাত্মক সময় দেখানোর কোনো মানে নেই; ভুল হিসাব এলে শূন্য দেখানোই ভালো
+        // Showing negative time makes no sense; if a bad calculation arrives, show zero
         if (span < TimeSpan.Zero) span = TimeSpan.Zero;
 
-        // ⚠️ এখানে <c>span.Hours</c> নয়, <c>span.TotalHours</c>। Hours ২৪-এ ফিরে
-        //    শূন্য থেকে শুরু করে, তাই মাসের ১২৭ ঘণ্টা "৭:৩০" হয়ে দেখাত — অর্থাৎ
-        //    যে সংখ্যাটার জন্য পুরো সিস্টেম, সেটাই ভুল আসত, আর দেখতে সম্পূর্ণ
-        //    বিশ্বাসযোগ্য লাগত।
+        // Use <c>span.TotalHours</c>, not <c>span.Hours</c>. Hours wraps to zero at 24, so
+        // 127 hours in a month would show as "7:30": the number the whole system exists for
+        // would be wrong while looking completely believable.
         var hours = (int)span.TotalHours;
         var minutes = span.Minutes;
 
@@ -58,17 +56,17 @@ internal static class UiText
     }
 
     /// <summary>
-    /// ঘণ্টা:মিনিট:<b>সেকেন্ড</b> — যেমন <c>2:27:14</c>।
+    /// Hours:minutes:<b>seconds</b>, e.g. <c>2:27:14</c>.
     ///
-    /// ⭐ মালিকের চাওয়া (১৮ আগস্ট): "আজকের হিসাব" হিরো সংখ্যাটা সেকেন্ড
-    /// পর্যন্ত দেখাক। ⚠️ শুধু ওই একটাই জায়গায় — টার্গেট-তুলনার বারগুলোয়
-    /// (<c>2:27 / 8:00</c>) সেকেন্ড শুধু নয়েজ, তাই ওখানে <see cref="Duration"/>।
+    /// The owner asked for the "today's total" hero number to show seconds. Only in that one
+    /// place: in the target-comparison bars (<c>2:27 / 8:00</c>) seconds are just noise, so
+    /// those use <see cref="Duration"/>.
     /// </summary>
     public static string DurationLong(TimeSpan span)
     {
         if (span < TimeSpan.Zero) span = TimeSpan.Zero;
 
-        // ⚠️ Duration()-এর মতোই TotalHours — span.Hours ২৪-এ শূন্যে ফেরে
+        // TotalHours as in Duration(); span.Hours wraps to zero at 24
         var hours = (int)span.TotalHours;
 
         return hours.ToString(CultureInfo.InvariantCulture) + ":" +
@@ -77,20 +75,19 @@ internal static class UiText
     }
 
     /// <summary>
-    /// <c>3:59:22</c> → <c>("3:59", ":22")</c> — হিরো সংখ্যার সেকেন্ড অংশটা
-    /// আলাদা করে, যাতে ওটা <b>অর্ধেক মাপে</b> আঁকা যায়
-    /// (<see cref="TrayFontRole.HeroSeconds"/>)।
+    /// <c>3:59:22</c> → <c>("3:59", ":22")</c>. Splits off the seconds part of the hero
+    /// number so it can be drawn at <b>half size</b> (<see cref="TrayFontRole.HeroSeconds"/>).
     ///
-    /// ⭐ নিয়মটা এখানে, আঁকার কোডে নয় — এটা একটা <b>সিদ্ধান্ত</b>
-    /// ("কোথা থেকে সেকেন্ড শুরু"), বিন্যাস নয়, আর তাই টেস্টযোগ্য।
+    /// The rule lives here, not in the drawing code: it is a <b>decision</b> ("where do the
+    /// seconds start"), not layout, and so it is testable.
     ///
-    /// ⚠️⚠️ <b>শেষ</b> কোলনটাই খোঁজা হয়, প্রথমটা নয়। <c>3:59:22</c>-এ
-    /// প্রথম কোলন ধরলে <c>:59:22</c> পুরোটাই ছোট হয়ে যেত — অর্থাৎ মিনিটও।
+    /// Important: the <b>last</b> colon is searched for, not the first. Taking the first colon
+    /// in <c>3:59:22</c> would shrink all of <c>:59:22</c>, minutes included.
     ///
-    /// ⚠️ দুটোর কম কোলন থাকলে (যেমন <c>3:59</c>) সেকেন্ড নেই, তাই লেজ খালি —
-    /// তখন পুরোটাই হিরো মাপে আঁকা হয়। এই পথটা আজ কেউ ডাকে না, কিন্তু
-    /// <see cref="Duration"/> কোনোদিন হিরোতে বসলে চুপচাপ ভাঙার চেয়ে
-    /// ঠিকঠাক দেখানোই ভালো।
+    /// With fewer than two colons (e.g. <c>3:59</c>) there are no seconds, so the tail is
+    /// empty and the whole figure is drawn at hero size. Nothing calls this path today, but if
+    /// <see cref="Duration"/> ever ends up in the hero it is better to render correctly than
+    /// to break silently.
     /// </summary>
     public static (string Head, string Tail) SplitSeconds(string figure)
     {
@@ -99,13 +96,13 @@ internal static class UiText
         var last = figure.LastIndexOf(':');
         var first = figure.IndexOf(':');
 
-        // ⚠️ `last == first` মানে কোলন একটাই — ওটা ঘণ্টা:মিনিট, সেকেন্ড নয়
+        // `last == first` means there is only one colon: that is hours:minutes, not seconds
         if (last <= 0 || last == first) return (figure, string.Empty);
 
         return (figure[..last], figure[last..]);
     }
 
-    /// <summary>০.৬১ → <c>61%</c>। ১-এর উপরে ক্ল্যাম্প করা হয় না (ADR — বাড়তি কাজ অদৃশ্য নয়)।</summary>
+    /// <summary>0.61 → <c>61%</c>. Not clamped above 1 (ADR: extra work must not be invisible).</summary>
     public static string Percent(double ratio)
     {
         if (double.IsNaN(ratio) || double.IsInfinity(ratio)) ratio = 0;
@@ -118,11 +115,11 @@ internal static class UiText
     }
 
     /// <summary>
-    /// ঢাকার ঘড়িতে <c>HH:MM</c>।
+    /// <c>HH:MM</c> on the Dhaka clock.
     ///
-    /// ⚠️ <c>ToLocalTime()</c> নয়। মেশিনের টাইমজোন ভুল বসানো থাকতে পারে (নতুন PC-তে
-    /// প্রায়ই থাকে), আর তখন স্টাফ যে "শেষ সিঙ্ক" দেখত সেটা সার্ভারের হিসাবের সাথে
-    /// মিলত না — অথচ সংখ্যাটা নিখুঁত দেখাত।
+    /// Not <c>ToLocalTime()</c>. The machine's time zone may be set wrongly (often the case on
+    /// a new PC), and then the "last sync" staff saw would not match the server's records,
+    /// while the number looked perfectly fine.
     /// </summary>
     public static string Clock(DateTimeOffset instant)
     {
@@ -131,7 +128,7 @@ internal static class UiText
                local.Minute.ToString("00", CultureInfo.InvariantCulture);
     }
 
-    /// <summary>ঢাকার তারিখ — যেমন <c>9 August 2026</c>।</summary>
+    /// <summary>The Dhaka date, e.g. <c>9 August 2026</c>.</summary>
     public static string WorkDate(DateTimeOffset instant)
     {
         var date = DhakaTime.WorkDateOf(instant);
@@ -140,19 +137,19 @@ internal static class UiText
     }
 
     /// <summary>
-    /// সর্বোচ্চ <paramref name="max"/> UTF-16 একক পর্যন্ত ছেঁটে দেয়।
+    /// Truncates to at most <paramref name="max"/> UTF-16 units.
     ///
-    /// ⚠️ সরাসরি <c>Substring</c> করা যাবে না। লেখা ইংরেজি হলেও এখানে ✅/⚠ জাতীয়
-    /// চিহ্ন আসে, আর স্টাফের নামে যেকোনো হরফ থাকতে পারে — surrogate pair-এর
-    /// মাঝখানে কাটলে পড়ে থাকে একটা অর্ধেক কোড-পয়েন্ট, যেটা রেন্ডারার আবর্জনা
-    /// হিসেবে আঁকে। তাই কাটাকাটি হয় text element (grapheme) সীমানায়।
+    /// A plain <c>Substring</c> is not allowed. Although the text is English, symbols such as
+    /// the check mark or warning sign appear here, and staff names can contain any character.
+    /// Cutting in the middle of a surrogate pair leaves half a code point, which the renderer
+    /// draws as garbage. So cuts happen at text element (grapheme) boundaries.
     /// </summary>
     public static string Truncate(string text, int max)
     {
         if (max <= 0) return string.Empty;
         if (string.IsNullOrEmpty(text) || text.Length <= max) return text;
 
-        // শেষে একটা '…' বসবে, তাই তার জায়গা আগেই রেখে দেওয়া
+        // A '…' goes at the end, so reserve room for it up front
         var budget = max - 1;
         var kept = 0;
 

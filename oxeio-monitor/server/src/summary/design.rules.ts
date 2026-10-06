@@ -1,118 +1,119 @@
 /**
- * **দৈনিক ডিজাইনের হিসাব** *(২১ আগস্ট ২০২৬)* — খাঁটি নিয়ম, কোনো I/O নেই।
+ * **Daily design count**: pure rules, no I/O.
  *
- * ⚠️⚠️ **কেন এটা আদৌ সম্ভব হলো।** oXeio সময় মাপে, উৎপাদন নয় — তাই মালিকের
- * প্রশ্ন *"২৫টা ডিজাইনের টার্গেট কীভাবে ট্র্যাক করব?"*-র উত্তর হওয়ার কথা
- * ছিল "নতুন কিছু বানাতে হবে"। কিন্তু মাঠের ডেটা দেখে বেরোল উত্তরটা
- * **ইতিমধ্যেই জমা হচ্ছে**: এজেন্ট জানালার শিরোনাম রাখে, আর ডিজাইনারদের
- * ফাইলের নাম শুরু হয় কাজের নম্বর দিয়ে —
+ * Careful: **why this was possible at all.** oXeio measures time, not output,
+ * so the owner's question *"how do we track a target of 25 designs?"* should
+ * have meant "something new must be built". But the field data showed the
+ * answer is **already being collected**: the agent keeps the window title,
+ * and designers' file names start with the job number:
  *
  * ```
  * 37933-Woodcock Bird Vintage Illustration T-Shirt.ai @ 54 % (RGB/Preview)
  * ```
  *
- * ⭐ অর্থাৎ নতুন এজেন্ট নয়, স্টাফের বাড়তি কোনো কাজ নয়, কোনো বোতাম নয় —
- * শুধু যা আছে তা পড়া।
+ * So: no new agent, no extra work for staff, no button; just reading what is
+ * already there.
  *
- * ⚠️⚠️ **মালিকের শর্ত (২১ আগস্ট):** শিরোনাম পড়া যাবে, কিন্তু **কেবল
- * ডিজাইন-অ্যাপের**, আর **কেবল সামনের নম্বরটা** — ডিজাইনের নাম কোথাও জমা
- * হবে না, পর্দায়ও যাবে না। এই ফাইলের কোনো ফাংশন নাম ফেরত দেয় না, আর
- * সেটা দুর্ঘটনা নয়।
+ * Careful: **the owner's condition:** the title may be read, but **only for
+ * design apps** and **only the leading number**. The design name is stored
+ * nowhere and never shown. No function in this file returns the name, and
+ * that is not an accident.
  */
 
 /**
- * ⭐ কেবল এই অ্যাপগুলোর শিরোনাম দেখা হয়।
+ * Only the titles of these apps are looked at.
  *
- * ⚠️⚠️ শ্বেততালিকা, কালোতালিকা নয় — নতুন কোনো অ্যাপ এলে সে **নিজে থেকে
- * পড়ার আওতায় আসবে না**। উল্টো করলে একদিন কারো ব্রাউজার বা চ্যাটের
- * শিরোনাম চুপচাপ এই হিসাবে ঢুকে পড়ত, আর সেটা ঠিক সেই কনটেন্ট-পড়া যা
- * README-তে "কখনোই নয়" বলা।
+ * Careful: an allowlist, not a blocklist; a new app does **not enter by
+ * itself**. The other way round, someone's browser or chat title would one
+ * day slip into this calculation, which is exactly the content-reading the
+ * README says "never" about.
  */
 export const DESIGN_APPS = ['illustrator.exe', 'photoshop.exe'] as const;
 
 /**
- * ⚠️ ৩–৭ অঙ্ক, আর **পরে আর অঙ্ক থাকতে পারবে না** (`(?!\d)`)।
+ * Careful: 3-7 digits, and **no further digit may follow** (`(?!\d)`).
  *
- * ⭐ **দুইয়ের কম নয়** ইচ্ছাকৃতভাবে: মাঠে `4 [Converted].eps` ধাঁচের
- * ফাইল আছে, আর ওগুলো কাজের নম্বর নয়।
+ * **Not fewer than three**, deliberately: the field has files like
+ * `4 [Converted].eps`, and those are not job numbers.
  *
- * ⚠️⚠️ **সীমানা যাচাইটাই এই নিয়মের প্রাণ** *(২২ আগস্ট ২০২৬)*। আগে লেখা ছিল
- * `/^(\d{3,6})/` — সীমানা ছাড়া। ফলে সাত অঙ্কের সংখ্যা পেলে সে **প্রথম ছয়টা
- * কেটে নিত** — আর তাতে দুটো বড় ভুল হতো:
+ * Careful: **the boundary check is the heart of this rule.** It used to be
+ * `/^(\d{3,6})/`, with no boundary. A seven-digit number then **had its first
+ * six digits cut off**, which caused two big mistakes:
  *
- * | ফাইল | আগে | এখন |
+ * | file | before | now |
  * |---|---|---|
- * | `1000042-Bird.ai` | `100004` ⚠️ | `1000042` ✅ |
- * | `1000043-Cat.ai` | `100004` ⚠️ **একই** | `1000043` ✅ |
- * | `10163372_181.eps` *(স্টক)* | `101633` ⚠️ গোনা হতো | বাদ ✅ |
+ * | `1000042-Bird.ai` | `100004` (wrong) | `1000042` (right) |
+ * | `1000043-Cat.ai` | `100004` (wrong, **the same**) | `1000043` (right) |
+ * | `10163372_181.eps` *(stock)* | `101633` (wrong, counted) | skipped (right) |
  *
- * ⚠️⚠️ পরপর দশটা কাজ (`1000040`–`1000049`) **একটা বলে গোনা হতো**।
- * মাঠে ধরা পড়েছে `design_credits`-এ ৬৬টা ছয়-অঙ্কের সারি দেখে — `101633`,
- * `104116`, `105091` — যেগুলো হুবহু স্টক ফাইলের নামের প্রথম ছয় অঙ্ক।
+ * Careful: ten consecutive jobs (`1000040`-`1000049`) **were counted as one**.
+ * Found in the field from 66 six-digit rows in `design_credits` (`101633`,
+ * `104116`, `105091`), which were exactly the first six digits of stock file names.
  *
- * ⚠️ সাতের বেশি নয়: ওগুলো তারিখ বা স্টক-আইডি (`10163372_181`)। কাজের নম্বর
- * শুরু হয়েছে ১০,০০,০০০ থেকে — সাত অঙ্কে দিনে ~৫০০টা হিসাবে প্রায় ১৩ বছর চলবে।
+ * Careful: not more than seven: those would be dates or stock IDs
+ * (`10163372_181`). Job numbers start at 1,000,000; at ~500 a day, seven
+ * digits will last about 13 years.
  *
- * ⭐ **সাত-অঙ্কের স্টক আইডি (`1050918_OL5I`) এখনও এই নিয়মে পড়ে** — সেটা
- * `design_credits`-এ একটা বাড়তি সারি বানাবে। ⚠️ কিন্তু **টার্গেটে ভুল
- * চিহ্ন বসাতে পারবে না**, কারণ সেখানে মিলানো হয় **ওই ডিজাইনারের নিজের
- * বরাদ্দ নম্বরের সাথে** (`markStartedByJobNumbers`)।
+ * **A seven-digit stock ID (`1050918_OL5I`) still matches this rule.** It
+ * will create an extra row in `design_credits`. But it **cannot put a wrong
+ * mark on a target**, because targets are matched against **that designer's
+ * own assigned numbers** (`markStartedByJobNumbers`).
  */
 const DESIGN_ID = /^(\d{3,7})(?!\d)/;
 
 /**
- * ⭐⭐ **উপরের নিয়মটার SQL যমজ** *(৯ সেপ্টেম্বর ২০২৬)*।
+ * **The SQL twin of the rule above.**
  *
- * ⚠️⚠️ **একই নিয়ম দুই ভাষায় লেখা — আর এই রেপোতে ঠিক এভাবেই বাগ জন্মায়।**
- * তবু বিকল্প ছিল না: "এই জব-নম্বরের ফাইলে কত সময় গেছে" প্রশ্নটার উত্তর
- * ১,৫৪,০০০ সারির `app_usage` থেকে **ডাটাবেসেই** বের করতে হয় (TypeScript-এ
- * টেনে আনলে প্রতিটা পাতা লোডে ৫৩ MB আসত)।
+ * Careful: **one rule written in two languages, and this is exactly how bugs
+ * are born in this repo.** There was no alternative, though: "how much time
+ * went on files with this job number" has to be answered from the 154,000-row
+ * `app_usage` **inside the database** (pulling it into TypeScript would bring
+ * 53 MB on every page load).
  *
- * ⭐ তাই নকলটা লুকোনো হয়নি, **পাশাপাশি বসানো হয়েছে** — আর একটা e2e টেস্ট
- * দুটোকে একই তালিকার উপর চালিয়ে মিলিয়ে দেখে
- * ([file-trace.e2e.spec.ts](../../test/file-trace.e2e.spec.ts))। একটা
- * বদলে অন্যটা না বদলালে টেস্টটা লাল হয়।
+ * So the duplicate is not hidden but **placed side by side**, and an e2e test
+ * runs both over the same list and compares them
+ * ([file-trace.e2e.spec.ts](../../test/file-trace.e2e.spec.ts)). If one
+ * changes without the other, the test goes red.
  *
- * ⚠️ Postgres-এর ARE `(?!…)` বোঝে (৯.০ থেকে), তাই সীমানা-যাচাইটা হুবহু
- * একই — আর ওটাই এই নিয়মের প্রাণ (উপরের টেবিলটা দেখুন)।
+ * Careful: Postgres ARE understands `(?!...)` (since 9.0), so the boundary
+ * check is identical, and that is the heart of this rule (see the table above).
  */
 export const DESIGN_ID_SQL = '^([0-9]{3,7})(?![0-9])';
 
 /**
- * ⚠️⚠️ **এই দুটো লেখা `migration.sql`-এর ইনডেক্সের সাথে অক্ষরে অক্ষরে
- * মিলতে হয়**, নইলে Postgres ইনডেক্সটা **ব্যবহারই করবে না** — কোনো এরর
- * নয়, কেবল প্রতিটা কোয়েরি ১.৫ সেকেন্ড।
+ * Careful: **these two strings must match the index in `migration.sql`
+ * character for character**, otherwise Postgres will **not use the index at
+ * all**: no error, only every query taking 1.5 seconds.
  *
- * ⭐ সেটাও টেস্টে ধরা পড়ে: `EXPLAIN`-এ ইনডেক্সের নাম আছে কি না দেখা হয়।
+ * A test catches that too: `EXPLAIN` is checked for the index name.
  */
 export const DESIGN_ID_SQL_EXPR = `substring(btrim(window_title) FROM '${DESIGN_ID_SQL}')`;
 
-/** ⭐ শ্বেততালিকাটা এখান থেকেই আসে — অ্যাপ যোগ হলে দুটো পথ একসাথে বদলায় */
+/** The allowlist comes from here, so adding an app changes both paths together. */
 export const DESIGN_APPS_SQL = `lower(process_name) IN (${DESIGN_APPS.map(
   (a) => `'${a}'`,
 ).join(', ')})`;
 
 /**
- * ⚠️ উপরের লেখা দুটো সরাসরি SQL-এ বসে (bind parameter হলে ইনডেক্স খাটত
- * না), তাই কোটেশন ঢুকে পড়ার পথটা বন্ধ করে রাখা — ধ্রুবক বলে এটা আজ
- * অসম্ভব, কিন্তু আগামীকালের সম্পাদনার জন্য।
+ * Careful: the two strings above go straight into SQL (a bind parameter would
+ * stop the index being used), so the path for a quote to slip in is closed.
+ * Being constants it is impossible today, but this is for tomorrow's edits.
  */
 if (`${DESIGN_ID_SQL_EXPR}${DESIGN_APPS_SQL}`.includes("';")) {
   throw new Error('DESIGN_ID_SQL: unexpected quote');
 }
 
 /**
- * শিরোনাম থেকে ডিজাইনের নম্বর — না পেলে `null`।
+ * The design number from a title; `null` if there is none.
  *
- * ⚠️ `Untitled-1*`, `Template.ai`, স্টক ফাইল আর `.psd` স্তর-ফাইলগুলো
- * এমনিতেই বাদ পড়ে, কারণ ওরা অঙ্ক দিয়ে শুরু হয় না। ⭐ মাঠে মেপে দেখা
- * গেছে ডিজাইন-অ্যাপের সময়ের **~৪৭%** নম্বরওয়ালা ফাইলে, বাকিটা
- * প্রস্তুতির কাজ (আপস্কেল, স্টক, টেমপ্লেট) — অর্থাৎ নম্বরওয়ালা ফাইলই
- * চূড়ান্ত ডিজাইন।
+ * Careful: `Untitled-1*`, `Template.ai`, stock files and `.psd` layer files
+ * drop out by themselves, since they do not start with a digit. Measured in
+ * the field: about **47%** of design-app time is in numbered files; the rest
+ * is preparation (upscale, stock, template), so numbered files are the final designs.
  *
- * ⚠️ **জানা মিথ্যা-ইতিবাচক:** `2026 Calendar Design.ai` ধাঁচের নাম বছরটাকে
- * নম্বর ধরে নেবে। ব্যবসার নম্বরগুলো পাঁচ অঙ্কের (৩৭৯৩৩) বলে এটা বিরল,
- * তবু সংখ্যা হঠাৎ বাড়লে এই দিকটা আগে দেখবেন।
+ * Careful: **known false positive:** a name like `2026 Calendar Design.ai`
+ * will take the year as a number. Business numbers are five digits (37933),
+ * so this is rare, but if the count suddenly jumps, look here first.
  */
 export function designIdOf(
   processName: string,
@@ -127,28 +128,28 @@ export function designIdOf(
 }
 
 /**
- * ⭐⭐ **এই সীমা থেকে উপরে নম্বরটা "বরাদ্দ করা" হতেই হবে** *(২২ আগস্ট ২০২৬)*।
+ * **From this limit upward the number must be "assigned"**.
  *
- * ⚠️⚠️ কেন দরকার হলো: `DESIGN_ID` সাত অঙ্ক পর্যন্ত নেয় (কাজের নম্বর
- * ১০,০০,০০০ থেকে শুরু), কিন্তু **সাত অঙ্কের স্টক-আইডিও আছে** —
- * `1536601_4406`, `5524618`, `9937760`। মাঠে এক দিনেই চারটে ঢুকেছিল।
+ * Careful: why it was needed: `DESIGN_ID` accepts up to seven digits (job
+ * numbers start at 1,000,000), but **seven-digit stock IDs exist too**:
+ * `1536601_4406`, `5524618`, `9937760`. Four came in on a single day in the field.
  *
- * ⭐ পার্থক্য করার নিখুঁত উপায়: অঙ্ক গুনে অনুমান নয়, **তালিকায় আছে কি না
- * দেখা**। সাত অঙ্কের নম্বর তখনই ডিজাইন, যখন সেটা সত্যিই কারো হাতে দেওয়া
- * কাজের নম্বর।
+ * The reliable way to tell them apart is not guessing from digit count but
+ * **checking whether it is in the list**. A seven-digit number is a design
+ * only when it is really a job number handed to someone.
  *
- * ⚠️ ছয় অঙ্ক বা তার কম **এই শর্তের বাইরে** — পুরোনো কাজগুলোর (৩৭৯৩৩
- * ধাঁচের) কোনো টার্গেট-সারি নেই, ওগুলোকে শর্তে ফেললে পুরো ইতিহাস
- * নীরবে শূন্য হয়ে যেত।
+ * Careful: six digits or fewer are **outside this condition**: older jobs
+ * (the 37933 kind) have no target rows, and putting them under this
+ * condition would silently zero the whole history.
  */
 export const KNOWN_JOB_FROM = 1_000_000;
 
 /**
- * সাত অঙ্ক বা তার বেশি হলে **কেবল জানা কাজের নম্বরই** টেকে।
+ * At seven digits or more, **only known job numbers** survive.
  *
- * ⚠️ `known` খালি হলে (যেমন টার্গেট চালু হওয়ার আগের দিনগুলোয়) সাত-অঙ্কের
- *    সব নম্বরই বাদ পড়ে — সেটাই ঠিক, কারণ তখন ওগুলো স্টক-আইডি ছাড়া আর
- *    কিছু হতে পারত না।
+ * Careful: when `known` is empty (for example on days before targets went
+ * live) every seven-digit number is dropped; that is right, since then they
+ * could only have been stock IDs.
  */
 export function keepKnownLongIds(
   ids: ReadonlySet<string>,
@@ -168,24 +169,25 @@ export function keepKnownLongIds(
 }
 
 /**
- * একদিনের সব শিরোনাম থেকে **অনন্য** ডিজাইন-নম্বর, আর প্রতিটার পাশে
- * **সেদিন সবচেয়ে আগে যে মুহূর্তে সেটা পর্দায় দেখা গেছে**।
+ * The **unique** design numbers from all of one day's titles, and beside
+ * each the **earliest moment that day it appeared on screen**.
  *
- * ⚠️ একই ডিজাইনে সারাদিনে বহুবার ফেরা হয় (মাঠে ৩৮৭৩টা সারিতে ১৫৫৩টা
- * আলাদা শিরোনাম), তাই সারি গুনলে সংখ্যাটা অর্থহীন হতো।
+ * Careful: the same design is revisited many times a day (in the field,
+ * 1,553 distinct titles in 3,873 rows), so counting rows would give a
+ * meaningless number.
  *
- * ⭐⭐⭐ **মুহূর্তটা এখানেই বেরোয়** *(৬ সেপ্টেম্বর ২০২৬, G163)*।
+ * **The moment comes out here.**
  *
- * ⚠️⚠️ আগে এই ফাংশনটা কেবল একটা `Set` ফেরত দিত, আর কলার তখন
- * `design_targets.started_at`-এ **কর্মদিবসের লেবেলটা** বসিয়ে দিত —
- * অর্থাৎ প্রতিটা টার্গেটের "কাজ শুরু" হয়ে যেত ঢাকার সকাল ৬টা।
- * মাঠে **৭১১টার ৭১১টাই** ওই এক মুহূর্তে বসে ছিল, আর প্রত্যেকটাই তার
- * নিজের `assigned_at`-এর **আগে** (বণ্টন হয় সকাল ৮টায়)।
+ * Careful: this function used to return only a `Set`, and the caller then
+ * wrote **the work-day label** into `design_targets.started_at`, so every
+ * target's "work started" became 6 am Dhaka time. In the field **all 711 of
+ * 711** sat at that one moment, and every one was **before** its own
+ * `assigned_at` (assignment happens at 8 am).
  *
- * ⭐ উত্তরটা অনুমান করার দরকারই ছিল না — `app_usage.started_at` ঠিক
- * ওই মুহূর্তটাই ধরে রাখে: শিরোনামে নম্বরটা প্রথম যখন দেখা গেল।
- * ⚠️ আর এটা <b>ব্যাকফিলেও</b> ঠিক থাকে: পুরোনো দিন নতুন করে হিসাব
- * করালেও সংখ্যাটা ওই দিনেরই, "আজ"-এর নয়।
+ * There was no need to guess: `app_usage.started_at` holds exactly that
+ * moment, when the number first appeared in a title.
+ * Careful: this also holds up <b>in a backfill</b>: recomputing an old day
+ * still gives that day's number, not "today's".
  */
 export function designFirstSeenInDay(
   rows: readonly {
@@ -200,7 +202,7 @@ export function designFirstSeenInDay(
     const id = designIdOf(row.processName, row.windowTitle);
     if (id === null) continue;
 
-    // ⚠️ সবচেয়ে **আগের** মুহূর্তটা — সারিগুলো কোনো ক্রমেই আসতে পারে
+    // Careful: the **earliest** moment; rows can arrive in any order.
     const known = first.get(id);
     if (known === undefined || row.startedAt < known) first.set(id, row.startedAt);
   }
@@ -209,38 +211,40 @@ export function designFirstSeenInDay(
 }
 
 /**
- * ⭐⭐ **টার্গেট কেবল ডিজাইনারের।**
+ * **Targets are for designers only.**
  *
- * ⚠️⚠️ `null` ধরন মানে "এখনো বসানো হয়নি" — তাকে **ছেড়ে দেওয়া হয়**, শূন্য
- * ধরা হয় না। নইলে ধরন বসানোর আগ পর্যন্ত প্রত্যেকে রোজ "০/২৫" হয়ে
- * তালিকায় উঠত, আর সেটা একটা অভিযোগ, তথ্য নয়।
+ * Careful: a `null` type means "not set yet" and is **skipped**, not treated
+ * as zero. Otherwise, until types were set, everyone would show up daily as
+ * "0/25" in the list, and that is an accusation, not information.
  */
 export function hasDesignTarget(staffType: string | null | undefined): boolean {
   return staffType === 'designer';
 }
 
 /**
- * ⭐⭐ **ওই কর্মীর দৈনিক ডিজাইন-টার্গেট কত** *(২৩ আগস্ট ২০২৬)*।
+ * **What this employee's daily design target is.**
  *
  * ```
- * তার নিজের সংখ্যা বসানো থাকলে → সেটাই
- * নইলে                          → পলিসির সংখ্যা (২৫)
- * দুটোর কোনোটাই না থাকলে        → ০ (টার্গেট নেই)
+ * own number set           -> that
+ * otherwise                -> the policy's number (25)
+ * neither                  -> 0 (no target)
  * ```
  *
- * ⚠️⚠️ **`?? ` ব্যবহার হয়েছে, `||` নয় — আর পার্থক্যটা এখানে আসল।**
- * কর্মীর ঘরে **০** বসানো মানে *"এর টার্গেট বন্ধ"*, আর সেটা একটা বৈধ
- * সিদ্ধান্ত (schema-তেও তাই লেখা)। `||` দিলে ওই ০ চুপচাপ পলিসির ২৫-এ
- * ফিরে যেত — অর্থাৎ মালিক টার্গেট বন্ধ করতে চাইলেও পারতেন না।
+ * Careful: **`??` is used, not `||`, and the difference is real here.**
+ * Setting **0** on an employee means *"switch this person's target off"*,
+ * which is a valid decision (the schema says so too). With `||` that 0 would
+ * silently fall back to the policy's 25, so the owner could not switch a
+ * target off even if they wanted to.
  *
- * ⚠️ **`null` মানে "বসানো হয়নি", "শূন্য" নয়** — তাই খালি ঘর রাখলে
- * পলিসির সংখ্যাটাই খাটে, আর পলিসি বদলালে সবার সাথে সেও বদলায়।
+ * Careful: **`null` means "not set", not "zero"**: so leaving the field empty
+ * applies the policy's number, and when the policy changes this person
+ * changes with everyone else.
  *
- * ⭐ **এক জায়গায় লেখা, চার জায়গায় ব্যবহার** (Live Board · Telegram
- * ডাইজেস্ট · কর্মীর নিজের পাতা · অ্যাটেনডেন্স)। আগে লাইনটা
- * `policy?.dailyDesignTarget ?? 0` হয়ে **তিন জায়গায় হাতে লেখা** ছিল,
- * অথচ কর্মীর নিজের ঘরটা কেউ পড়তই না — কলামটা বানানো হয়েছিল, ভরার
- * পথও ছিল না, পড়ার পথও না।
+ * **Written in one place, used in four** (Live Board, Telegram digest, the
+ * employee's own page, attendance). The line `policy?.dailyDesignTarget ?? 0`
+ * used to be **hand-written in three places**, while nobody read the
+ * employee's own field: the column existed, but had neither a way to fill it
+ * nor a way to read it.
  */
 export function designTargetOf(
   own: number | null | undefined,
@@ -250,27 +254,26 @@ export function designTargetOf(
 }
 
 /**
- * ⭐⭐⭐ **একদিনে সর্বোচ্চ কতগুলো "শেষ" বলা যাবে** *(মালিকের নিয়ম,
- * ৯ সেপ্টেম্বর ২০২৬: "kono designer daily 25 tar beshi design complete
- * korte parbena")* — `null` মানে **কোনো সীমা নেই**।
+ * **The maximum number of "done" marks allowed in a day** (the owner's rule:
+ * no designer may complete more than 25 designs a day); `null` means **no limit**.
  *
- * ⚠️⚠️ সীমাটা `designTargetOf()`-এর সংখ্যাই, আলাদা কোনো ধ্রুবক নয়। দুটো
- * আলাদা সংখ্যা রাখলে একদিন কারো টার্গেট ৩০ করা হতো আর সীমা ২৫-এই আটকে
- * থাকত — অর্থাৎ টার্গেট ছোঁয়াই অসম্ভব হয়ে যেত।
+ * Careful: the limit is `designTargetOf()`'s number itself, not a separate
+ * constant. With two different numbers, someone's target could be raised to
+ * 30 while the limit stayed at 25, and reaching the target would become impossible.
  *
- * | কে | সীমা | কেন |
+ * | who | limit | why |
  * |---|---|---|
- * | ডিজাইনার, টার্গেট ২৫ | **২৫** | নিয়মটা যাঁদের জন্য |
- * | ডিজাইনার, টার্গেট **০** | নেই | ০ = *"এর টার্গেট বন্ধ"*, শাস্তি নয় |
- * | ম্যানেজার (OX-01) | নেই | তাঁর টার্গেটই নেই; মাঠে তিনি দিনে ৪৪ পর্যন্ত করেন |
+ * | designer, target 25 | **25** | the people the rule is for |
+ * | designer, target **0** | none | 0 = *"this person's target is off"*, not a penalty |
+ * | manager (OX-01) | none | has no target; in the field does up to 44 a day |
  *
- * ⚠️⚠️ **সীমাটা কেবল ডিজাইনারের নিজের হাতে-চাপা বোতামে।** মালিক বা
- * ম্যানেজার কারো হয়ে চিহ্ন দিলে এটা খাটে না — নইলে ভুল সংশোধনের পথটাই
- * বন্ধ হয়ে যেত, আর অডিটে (`completed_by_id`) কে করেছে সেটা এমনিতেই লেখা
- * থাকে।
+ * Careful: **the limit applies only to the designer's own hand-pressed
+ * button.** It does not apply when the owner or a manager marks on someone's
+ * behalf, otherwise the way to correct mistakes would be closed, and the
+ * audit (`completed_by_id`) records who did it anyway.
  *
- * ⚠️ মাঠে মেপে দেখা *(২৩ আগস্ট–৯ সেপ্টেম্বর)*: ১,৬৮৭টা "শেষ"-এর মধ্যে
- * এই সীমা আটকাত **১৩টা** (০.৮%) — সবই OX-09 (৯) ও OX-08 (৪)।
+ * Careful: measured in the field (23 August to 9 September): of 1,687 "done"
+ * marks, this limit would have blocked **13** (0.8%), all OX-09 (9) and OX-08 (4).
  */
 export function dailyCompletionCap(
   staffType: string | null | undefined,
@@ -286,29 +289,29 @@ export function dailyCompletionCap(
 
 export interface DesignView {
   done: number;
-  /** ⚠️ `null` = **এই কর্মীর কোনো ডিজাইন-টার্গেট নেই** — শূন্য টার্গেট নয় */
+  /** Careful: `null` = **this employee has no design target**, which is not a zero target. */
   target: number | null;
-  /** টার্গেট না থাকলে সবসময় `false` — "ব্যর্থ" নয়, "প্রযোজ্য নয়" */
+  /** Always `false` when there is no target: "not applicable", not "failed". */
   met: boolean;
 }
 
 /**
- * পর্দায় কী দেখাব — **তিনটে আলাদা অবস্থা**, দুটো নয় *(মালিকের বাছাই, ২২ আগস্ট)*।
+ * What to show on screen: **three separate states**, not two (the owner's choice).
  *
- * | কে | কী দেখায় | কেন |
+ * | who | what is shown | why |
  * |---|---|---|
- * | ডিজাইনার, টার্গেট আছে | `24 / 25` + ✅ | মাপা হচ্ছে |
- * | অন্য কেউ, তবু ডিজাইন করেছেন | শুধু `43` | ⭐ সংখ্যাটা **আসল**, লুকোনো মানে তথ্য হারানো |
- * | কেউ ডিজাইন করেননি | কিছুই না | "০" পড়তে অভিযোগের মতো লাগে |
+ * | designer with a target | `24 / 25` + tick | being measured |
+ * | anyone else who still designed | just `43` | the number is **real**; hiding it loses data |
+ * | someone who did no design | nothing | "0" reads like an accusation |
  *
- * ⚠️⚠️ **মাঝের সারিটাই মালিকের সিদ্ধান্ত** *(২২ আগস্ট)*। ঘটনাটা ছিল:
- * ম্যানেজার (OX-01) নিজেও ডিজাইন করেন — তিন দিনে **৪৩টা**। ধরন
- * `manager` বসানোর পর সংখ্যাটা সব পর্দা থেকে উধাও হয়ে যাচ্ছিল, অথচ
- * কাজটা সত্যি। ⭐ তাই "কত হলো" আর "টার্গেট ছুঁল কি না" — দুটো আলাদা
- * প্রশ্ন হিসেবেই থাকল।
+ * Careful: **the middle row is the owner's decision.** The case was: the
+ * manager (OX-01) also designs, **43** in three days. After the type was set
+ * to `manager`, the number vanished from every screen although the work was
+ * real. So "how many were done" and "did they reach the target" stay as two
+ * separate questions.
  *
- * ⚠️ টার্গেট ছাড়া কারো `met` কখনো `true` হয় না, আর সেটা ইচ্ছাকৃত:
- * ✅ চিহ্নটার মানে "টার্গেট ছোঁয়া", আর টার্গেট না থাকলে ছোঁয়ার কিছু নেই।
+ * Careful: `met` is never `true` for someone without a target, deliberately:
+ * the tick means "target reached", and with no target there is nothing to reach.
  */
 export function designView(
   staffType: string | null | undefined,

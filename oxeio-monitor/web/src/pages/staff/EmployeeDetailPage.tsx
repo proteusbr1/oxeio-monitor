@@ -20,34 +20,33 @@ import { TimelineBar } from './TimelineBar';
 import { TopUsage } from './TopUsage';
 
 /**
- * E04 · E05 · D07 · D08 — একজন কর্মীর একটা দিন (`/staff/:id`)।
+ * E04 · E05 · D07 · D08 — one employee's single day (`/staff/:id`).
  *
- * ⭐ তারিখটা **URL-এ** থাকে (`/staff/3?date=2026-08-09`)। ফলে ম্যানেজার
- * লিঙ্কটা কাউকে পাঠালে সে ঠিক ওই দিনটাই দেখে — "কোন তারিখের কথা বলছেন?"
- * প্রশ্নটাই আর ওঠে না। `replace: true` দেওয়া, নইলে ◀ ▶ পাঁচবার চাপলে
- * ব্যাক বোতামে পাঁচবার পিছোতে হতো।
+ * The date lives **in the URL** (`/staff/3?date=2026-08-09`), so when a manager
+ * sends the link, the recipient sees exactly that day and nobody has to ask
+ * "which date do you mean?". It uses `replace: true`, otherwise pressing the
+ * previous/next arrows five times would take five Back clicks to undo.
  *
- * ⭐ চারটে অংশ **আলাদা করে** ডেটা আনে। একটা endpoint ব্যর্থ হলে বা ৪০৩
- * দিলে বাকি তিনটে দেখা যায় — একটা বড় try/catch হলে একটামাত্র ভুলে গোটা
- * পাতা সাদা হয়ে যেত।
+ * The four sections fetch their data **separately**. If one endpoint fails or
+ * returns 403, the other three still show; one big try/catch would blank the
+ * whole page on a single failure.
  *
- * ⚠️ চারটে endpoint-ই owner + manager (`role = employee` ৪০৩ পাবে, আর
- * `<ErrorBox>` তখন "You don't have access" দেখায়)। এই পাতায় owner-only কিছু
- * নেই — বেতন এখানে দেখানোই হয় না, চাওয়াও হয় না।
+ * Careful: all four endpoints are owner + manager (`role = employee` gets 403,
+ * and `<ErrorBox>` then shows "You don't have access"). Nothing on this page is
+ * owner-only: pay is never shown here and never requested.
  *
- * ⭐ **J08 এখন আছে** *(১২ আগস্ট)* — আগে এখানে লেখা ছিল "সার্ভারে
- * `GET /employees/:id/time-adjustments` বলে কোনো রুট নেই", আর সেটা সত্যি
- * ছিল: টেবিলটা schema-তে থাকলেও পড়া বা লেখার কোনো API ছিল না (G35)।
- * রুট তিনটেই এখন তৈরি, তাই তালিকাটা বসানো হলো।
+ * The time-adjustments list (J08) is here now. The three routes
+ * (`GET /employees/:id/time-adjustments` and friends) exist on the server; the
+ * table used to have no read or write API at all (G35).
  *
- * ⚠️ সংশোধনের অংশটা **তারিখ-নিরপেক্ষ**, পাতার বাকি সব একটা দিনের। ইচ্ছাকৃত:
- * সংশোধন কম হয়, আর "গত মাসে কিছু দেওয়া হয়েছিল কি" প্রশ্নের উত্তর দিন ধরে
- * খুঁজতে হলে কেউ খুঁজতই না।
+ * Careful: the adjustments section is **not tied to the date**, while the rest
+ * of the page is one day. This is intentional: adjustments are rare, and
+ * answering "was anything granted last month?" day by day would never happen.
  */
 export function EmployeeDetailPage() {
   const { id } = useParams();
   const [params, setParams] = useSearchParams();
-  /** রিফ্রেশ বোতাম — চারটে অংশকেই আবার আনতে বলে */
+  /** Refresh button: asks all four sections to fetch again */
   const [nonce, setNonce] = useState(0);
 
   const employeeId = Number(id);
@@ -55,8 +54,8 @@ export function EmployeeDetailPage() {
 
   const today = todayInDhaka();
   const raw = params.get('date');
-  // ⚠️ URL-এ যা-ই থাকুক, অবৈধ বা ভবিষ্যতের তারিখ সার্ভারে পাঠানো হয় না —
-  //    ৪০০ দেখানোর চেয়ে চুপচাপ আজকের দিনে ফিরে আসা ভালো
+  // Careful: whatever the URL says, an invalid or future date is never sent to
+  // the server. Quietly falling back to today beats showing a 400.
   const date = raw && isValidWorkDate(raw) && raw <= today ? raw : today;
 
   const {
@@ -68,7 +67,7 @@ export function EmployeeDetailPage() {
     (signal) =>
       validId
         ? getEmployee(employeeId, signal)
-        : // ⚠️ NaN পাঠালে সার্ভারের ParseIntPipe ৪০০ দিত — নেটওয়ার্কেই যাওয়া হয় না
+        : // NaN would get a 400 from the ParseIntPipe, so never go to the network
           Promise.reject(new Error("That staff link isn't valid")),
     [employeeId, validId, nonce],
   );
@@ -88,8 +87,8 @@ export function EmployeeDetailPage() {
     );
   }
 
-  // ⭐ কর্মীই না পাওয়া গেলে নিচের চারটে অংশও একই ৪০৪/৪০৩ দেখাত — চারটে
-  //    এরর বাক্স পরপর সাজিয়ে রাখার চেয়ে একটাই যথেষ্ট।
+  // If the employee itself is not found, the four sections below would show the
+  // same 404/403 four times; one error box is enough.
   if (loading && !employee) {
     return (
       <Page title="Staff member">
@@ -118,10 +117,11 @@ export function EmployeeDetailPage() {
           <span className="num">{formatDate(date)}</span>, {weekdayOf(date)}
           {date === today ? ' (Today)' : ''}
           {/*
-            ⚠️ এখানে "Inactive", "Idle" নয়। অভিধানে নিষ্ক্রিয় → Idle, কিন্তু
-               ওটা লাইভ বোর্ডের **এই মুহূর্তের অবস্থা**। এখানকার `status`
-               কর্মীর রেকর্ড চালু আছে কি না — কেউ চাকরি ছেড়ে গেলে "Idle"
-               লেখা হতো, আর ম্যানেজার ভাবত লোকটা এখন বসে আছে।
+            Careful: this says "Inactive", not "Idle". The dictionary maps
+               inactive to Idle, but that is the live board's **current state**.
+               The `status` here means whether the employee record is active; a
+               person who left the company would read "Idle" and a manager would
+               think they were sitting there right now.
           */}
           {employee.status === 'inactive' ? ' · Inactive staff' : ''}
         </>
@@ -129,8 +129,8 @@ export function EmployeeDetailPage() {
       actions={
         <>
           {/*
-            ⚠️ `label` স্পষ্ট করে পাঠানো — `<DatePicker>`-এর ডিফল্ট লেবেলটা
-               অন্য ফাইলে, আর সেটা বদলানোর আগেই এই পাতাটা যেন পুরো ইংরেজি থাকে।
+            Careful: `label` is passed explicitly. The default label of `<DatePicker>`
+               lives in another file; this keeps the page fully English even before that changes.
           */}
           <DatePicker
             value={date}
@@ -154,14 +154,15 @@ export function EmployeeDetailPage() {
         <ScoreCard employeeId={employeeId} date={date} nonce={nonce} />
         <TopUsage employeeId={employeeId} date={date} nonce={nonce} />
 
-        {/* ⭐ ঘণ্টা-সংশোধন ছবির **আগে**: এটা সংখ্যার ব্যাখ্যা, আর উপরের
-            সংখ্যাগুলো পড়ার পরপরই "ওইদিন এজেন্ট বন্ধ ছিল" প্রশ্নটা ওঠে। */}
+        {/* The hours-adjustment section goes **before** the pictures: it explains the
+            numbers, and right after reading the numbers above the question "was the
+            agent off that day?" comes up. */}
         <Adjustments employeeId={employeeId} nonce={nonce} />
 
-        {/* ⭐ ছবিগুলো সবার শেষে, ইচ্ছাকৃতভাবে। সংখ্যাগুলো (কত ঘণ্টা, কোন
-            ঘণ্টায়, কোন সাইটে) আগে পড়া উচিত — ছবি আগে থাকলে চোখ ওখানেই
-            আটকে যেত, আর এই সিস্টেমের সিদ্ধান্তগুলো সংখ্যার উপর দাঁড়ানো,
-            ছবির উপর নয়। ছবি প্রমাণ, প্রধান পরিমাপ নয়। */}
+        {/* The pictures come last, on purpose. The numbers (how many hours, which
+            hour, which site) should be read first; with pictures earlier the eye
+            would stick to them, and this system's decisions rest on the numbers,
+            not the pictures. Pictures are evidence, not the main measure. */}
         <DayShots employeeId={employeeId} date={date} nonce={nonce} />
       </div>
     </Page>

@@ -11,9 +11,9 @@ import {
 } from './signed-url';
 
 /**
- * খাঁটি ফাংশনগুলোর (signed-url.ts) চারপাশে পাতলা একটা মোড়ক — এর একমাত্র
- * কাজ সিক্রেটটা ধরে রাখা। হিসাবের কোনো লজিক এখানে নেই, কারণ সিক্রেট
- * ঢুকলেই জিনিসটা আর DB ছাড়া টেস্ট করা যেত না।
+ * Thin wrapper around the pure functions in signed-url.ts. Its only job is to
+ * hold the secret. No calculation logic lives here, because once the secret
+ * is involved the code could no longer be tested without the DB.
  */
 @Injectable()
 export class SignedUrlService implements OnModuleInit {
@@ -23,19 +23,19 @@ export class SignedUrlService implements OnModuleInit {
 
   onModuleInit(): void {
     /**
-     * ⭐ আলাদা `SCREENSHOT_URL_SECRET` দেওয়া যায়, না দিলে `JWT_SECRET`।
+     * `SCREENSHOT_URL_SECRET` can be set separately; otherwise `JWT_SECRET`.
      *
-     * ⚠️ একই কাঁচা সিক্রেট হলেও চাবি দুটো আলাদা — `deriveSigningKey`
-     *    label মিশিয়ে নতুন চাবি বানায়। তাই স্ক্রিনশটের টোকেন দিয়ে কখনো
-     *    সেশন বানানো যাবে না, উল্টোটাও না।
+     * Careful: even with the same raw secret the keys differ.
+     * `deriveSigningKey` mixes in a label, so a screenshot token can never
+     * be used to create a session, or the reverse.
      */
     const raw =
       this.config.get<string>('SCREENSHOT_URL_SECRET') ??
       this.config.get<string>('JWT_SECRET');
 
     if (!raw || raw.length < 32) {
-      // TokenService-এর মতোই fail fast — দুর্বল সিক্রেটে সই করা মানে
-      // যে-কেউ নিজের হাতে যেকোনো স্ক্রিনশটের লিঙ্ক বানিয়ে নিতে পারবে।
+      // Fail fast, like TokenService: signing with a weak secret would let
+      // anyone forge a link to any screenshot.
       throw new Error(
         'SCREENSHOT_URL_SECRET / JWT_SECRET is unset or shorter than 32 characters. Check .env.',
       );
@@ -53,11 +53,11 @@ export class SignedUrlService implements OnModuleInit {
   }
 
   /**
-   * গ্যালারির প্রতিটি ছবির জন্য যে লিঙ্কটা রেসপন্সে যায়।
+   * The link sent in the response for each gallery photo.
    *
-   * ⚠️ ইচ্ছাকৃতভাবে **relative** — ফ্রন্টএন্ড `/api` কে সার্ভারে প্রক্সি করে
-   *    (vite.config.ts), আর SameSite=Strict cookie-র জন্য একই origin থাকাটা
-   *    জরুরি। এখানে absolute URL বানালে হোস্টনেম বদলালেই সব লিঙ্ক ভাঙত।
+   * Careful: deliberately **relative**. The frontend proxies `/api` to the
+   * server (vite.config.ts), and the SameSite=Strict cookie needs the same
+   * origin. An absolute URL would break every link when the hostname changes.
    */
   urlFor(
     screenshotId: bigint,

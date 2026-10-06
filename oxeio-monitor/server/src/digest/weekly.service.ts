@@ -24,20 +24,22 @@ import {
   type WeeklyWindow,
 } from './weekly.rules';
 
-/** লেটারহেড ও ইমেইলের শিরোনামে যা আছে — `digest.service.ts`-এর সাথে একই env */
+/** What is on the letterhead and in the email subject; same env as `digest.service.ts` */
 const DEFAULT_ORG_NAME = 'oXeio Monitoring';
 
 /**
- * ⭐ `TelegramOutcome`-এর তিনটে মানই এখানে খাটে, **আর একটা বাড়ে**:
- * `chat_not_private` — কনফিগার করা আছে, পাঠানোও যেত, কিন্তু গন্তব্যটা
- * ব্যক্তিগত চ্যাট নয় বলে ইচ্ছাকৃতভাবে পাঠানো হয়নি (`weeklyGateOf()`)।
+ * All three `TelegramOutcome` values apply here, **plus one more**:
+ * `chat_not_private`: it is configured and could have been sent, but the
+ * destination is not a private chat, so it was deliberately not sent
+ * (`weeklyGateOf()`).
  *
- * ⚠️⚠️ এর জন্য `not_configured` ফেরত দেওয়া যেত **না** — টোকেন ও chat id
- * দুটোই তো আছে। ভুল কারণ ফেরত দিলে লগ দেখে মালিক টোকেন খুঁজতেন, অথচ
- * সমস্যাটা সম্পূর্ণ অন্য। এক সংখ্যা, এক সংজ্ঞা (নিয়ম ২)।
+ * `not_configured` could **not** be returned for this: the token and chat id
+ * are both set. A wrong reason would send the owner hunting for the token from
+ * the log, when the problem is something else entirely. One number, one
+ * definition (rule 2).
  *
- * ⚠️ `TelegramOutcome` থাকে `alerts/telegram.channel.ts`-এ, ওই ফাইলটা এই
- * কাজের আওতার বাইরে — তাই মানটা এখানে **যোগ** করা হয়েছে, ওখানে নয়।
+ * `TelegramOutcome` lives in `alerts/telegram.channel.ts`, which was outside
+ * the scope of this work, so the value is **added** here, not there.
  */
 export type WeeklyOutcome = TelegramOutcome | 'chat_not_private';
 
@@ -47,59 +49,59 @@ export interface WeeklyDigestResult {
   employees: number;
   withData: number;
   behind: number;
-  /** যতজনের অন্তত একটা দিন দেখাই হয়নি */
+  /** How many people had at least one day that was never observed */
   withGaps: number;
-  /** রিপোর্ট থেকে বাদ পড়া কর্মী (inactive, অথচ `left_on` খালি) */
+  /** Staff left out of the report (inactive, yet `left_on` empty) */
   excluded: number;
   outcome: WeeklyOutcome;
-  /** বার্তার দৈর্ঘ্য ও কতগুলো নাম ছাঁটা পড়ল — লগ দেখে সীমার চাপ বোঝা যায় */
+  /** Message length and how many names were trimmed; the log shows how close the limit is */
   chars: number;
   hidden: number;
 }
 
 /**
- * **R3** — সাপ্তাহিক সারাংশ, owner-এর টেলিগ্রামে।
+ * **R3**: the weekly summary, to the owner's Telegram.
  *
- * ⚠️⚠️ **গন্তব্য বাছার কোনো ক্ষমতা এই ফাইলের নেই — কিন্তু "না পাঠানোর"
- * ক্ষমতা আছে।** বার্তাটায় নাম ধরে ধরে "কে পিছিয়ে" লেখা থাকে; সেটা দলের
- * গ্রুপে গেলে সাপ্তাহিক প্রকাশ্য অপমান, একবার পাঠানো হলে আর ফেরানো যায়
- * না, আর মানুষ চাকরি ছাড়ে ঠিক এই কারণে।
+ * **This file has no power to choose a destination, but it does have the power
+ * to "not send".** The message lists "who is behind" by name; if it went to the
+ * team's group it would be a weekly public humiliation, impossible to take back
+ * once sent, and people quit for exactly this reason.
  *
- * ⚠️⚠️ চ্যাটটা `TELEGRAM_CHAT_ID`, অর্থাৎ **অ্যালার্টের সাথে ভাগ করা**।
- * অ্যালার্টে কেবল হোস্টনেম ও ধরন যায় বলে অনেকে ওখানে দলের গ্রুপ বসিয়ে
- * রাখেন — আর তখন প্রথম শুক্রবারেই র‍্যাঙ্কিংটা সেখানে চলে যেত। আগে এখানে
- * তিন জায়গায় "কর্মীদের গ্রুপে নয়" **লেখা** ছিল, কিন্তু কোডে কোনো প্রহরী
- * ছিল না; এখন `weeklyGateOf()` পাঠানোর ঠিক আগে দাঁড়ায় (`runOnce()`)।
- * ⭐ মালিক সজ্ঞানে গ্রুপে চাইলে `WEEKLY_DIGEST_ALLOW_GROUP=true`।
+ * The chat is `TELEGRAM_CHAT_ID`, i.e. **shared with alerts**. Since alerts
+ * carry only hostname and type, many people put the team's group there, and
+ * then the ranking would have gone to it on the very first Friday. "Not in the
+ * staff group" used to be **written** in three places here, but no guard in the
+ * code; now `weeklyGateOf()` stands right before sending (`runOnce()`).
+ * If the owner knowingly wants the group, `WEEKLY_DIGEST_ALLOW_GROUP=true`.
  *
- * ⭐ সংখ্যাগুলো তৈরি হয় **`ReportsService` দিয়েই** (F01 + F02), ঠিক দৈনিক
- * ডাইজেস্টের মতো। নিজে `daily_summary` পড়ে ঘণ্টা বা টার্গেট বানালে ছুটির
- * ক্যালেন্ডারের আরেকটা বাস্তবায়ন দাঁড়াত, আর টেলিগ্রাম ও রিপোর্ট দু-রকম
- * ঘণ্টা বলত।
+ * The numbers are produced **through `ReportsService`** (F01 + F02), exactly
+ * like the daily digest. Reading `daily_summary` directly to build hours or
+ * targets would create another implementation of the holiday calendar, and
+ * Telegram and the report would state different hours.
  *
- * ⚠️ `PrismaService` তবু ইনজেক্ট করা — **একটিমাত্র** কাজে: কোন দিনের সারি
- * আদৌ লেখা হয়েছিল তা জানা (`observedDays()`)। ওটা সংখ্যা নয়, অস্তিত্ব, আর
- * রিপোর্টের ধরনে ওটা প্রকাশ করার কোনো ঘর নেই — F01 "সারি নেই" ও "সারি
- * আছে, ০ ঘণ্টা" দুটোকেই `no_activity` বলে। ⚠️ এখানে আর কোনো কোয়েরি যোগ
- * করবেন না; ঘণ্টার দ্বিতীয় উৎস তৈরি হওয়ার শুরুটা ঠিক এভাবেই হয়।
+ * `PrismaService` is still injected for **exactly one** job: knowing which
+ * days had a row written at all (`observedDays()`). That is existence, not a
+ * number, and the report format has no place to expose it: F01 calls both "no
+ * row" and "row exists, 0 hours" `no_activity`. Do not add any other query
+ * here; this is exactly how a second source of hours begins.
  *
- * ⚠️ এই ক্লাস **throw করতে পারে** — `ReportsService` active work policy না
- * পেলে ৫০০ ছোড়ে। ব্যতিক্রম ধরা হয় `WeeklyDigestJob`-এ, একটাই জায়গায়
- * (শিডিউলড ডাক আর হাতে ডাক দুটোরই), `DigestJob`-এর মতোই।
+ * This class **can throw**: `ReportsService` throws a 500 if it finds no
+ * active work policy. The exception is caught in `WeeklyDigestJob`, in one
+ * place (for both scheduled and manual calls), like `DigestJob`.
  */
 @Injectable()
 export class WeeklyDigestService {
   private readonly logger = new Logger(WeeklyDigestService.name);
   private readonly orgName: string;
   /**
-   * ⚠️ `TELEGRAM_CHAT_ID` এখানে **দ্বিতীয়বার** পড়া হচ্ছে (`TelegramChannel`-ও
-   * পড়ে), আর সেটা ইচ্ছাকৃত: গন্তব্য পাহারা দিতে গন্তব্যটা জানা লাগে, অথচ
-   * চ্যানেল ওটা `private` রাখে আর ওই ফাইল এই কাজের আওতার বাইরে।
+   * `TELEGRAM_CHAT_ID` is read here a **second time** (`TelegramChannel` reads
+   * it too), on purpose: guarding the destination requires knowing it, but the
+   * channel keeps it `private` and that file was outside the scope of this work.
    *
-   * ⚠️⚠️ এটা কোনো **সংখ্যার** দ্বিতীয় সংজ্ঞা নয় — পাঠানোর কাজটা আগের
-   * মতোই কেবল চ্যানেলই করে, এখানে শুধু "পাঠানো হবে কি না" ঠিক হয়। তবু
-   * নির্ভরতাটা সত্যি: চ্যানেল কোনোদিন অন্য চলক থেকে chat id নিলে এই
-   * প্রহরী নীরবে ভুল চ্যাট পাহারা দেবে।
+   * This is not a second definition of any **number**: as before, only the
+   * channel does the sending, and here it is only decided "whether to send".
+   * Still, the dependency is real: if the channel ever took the chat id from
+   * another variable, this guard would silently guard the wrong chat.
    */
   private readonly gate: WeeklyGate;
   private readonly digestEmailTo: string | undefined;
@@ -119,8 +121,8 @@ export class WeeklyDigestService {
       config.get<string>(WEEKLY_ALLOW_GROUP_ENV),
     );
 
-    // ⭐ **চালুর সময়েই** বলা হয়, শুক্রবার সন্ধ্যায় নয় — নইলে মালিক জানতেন
-    //    কেবল প্রথম বার্তাটা না আসার পরে, অর্থাৎ সাত দিন দেরিতে।
+    // Said **at startup**, not on Friday evening; otherwise the owner would find
+    // out only after the first message failed to arrive, seven days late.
     if (!this.gate.send) {
       this.logger.warn(
         `Weekly summary is blocked — ${this.gate.blockedBecause}`,
@@ -129,8 +131,8 @@ export class WeeklyDigestService {
   }
 
   /**
-   * ⚠️ কখনো throw করে না — `AlertMailer.send()`ও করে না। সাপ্তাহিক জবটা
-   * এর উপর দাঁড়িয়ে, আর SMTP বন্ধ থাকা মানে হিসাব হারানো নয়।
+   * Never throws; `AlertMailer.send()` does not either. The weekly job rests on
+   * this, and SMTP being down does not mean losing the figures.
    */
   private async sendByEmail(text: string): Promise<'sent' | 'not_configured' | 'failed'> {
     if (!this.mailer.configured) return 'not_configured';
@@ -145,8 +147,8 @@ export class WeeklyDigestService {
       owners: owners.map((o) => o.email),
     });
 
-    // ⚠️ ঠিকানা না থাকলে চুপচাপ ফেরা — `AlertMailer` এমনিতেও একবার লগে
-    //    লিখবে, দুবার লেখার মানে নেই।
+    // No address: return quietly. `AlertMailer` will log it once anyway; there
+    // is no point writing it twice.
     if (to.length === 0) return 'not_configured';
 
     return this.mailer.send(to, `${this.orgName} — weekly summary`, text);
@@ -157,22 +159,24 @@ export class WeeklyDigestService {
     const message = weeklyMessage(weekly, this.orgName);
 
     /**
-     * ⭐⭐ **প্রহরীটা এখানে, সংখ্যা গোনার পরে।** আগে বসালে অবরুদ্ধ সপ্তাহে
-     * সারাংশটা তৈরিই হতো না, আর নিচের লগে লেখার মতো কিছু থাকত না — অথচ
-     * অবরুদ্ধ সপ্তাহেই ওটা সবচেয়ে বেশি দরকার: বার্তাটা তখন **কেবল** লগে
-     * থাকে, আর সপ্তাহে একবারের হিসাব হারিয়ে গেলে ফেরত পাওয়ার পথ নেই।
+     * **The guard is here, after the numbers are counted.** Placed earlier, in
+     * a blocked week the summary would not even be built and there would be
+     * nothing to write in the log below; yet a blocked week is when it is
+     * needed most: the message then lives **only** in the log, and if a weekly
+     * figure is lost there is no way to get it back.
      */
     /**
-     * ⭐⭐ **Teams টেলিগ্রামের বিকল্প নয়, পাশাপাশি।** যেটা কনফিগ করা আছে
-     * সেটাই পায়; দুটোই থাকলে দুটোই পায়।
+     * **Teams is not an alternative to Telegram, but alongside it.** Whichever
+     * is configured gets it; if both are, both get it.
      *
-     * ⚠️⚠️ **Teams-এর নিজস্ব প্রহরী নেই — ইচ্ছাকৃত।** টেলিগ্রামের প্রহরীটা
-     * (`weeklyGateOf`) আছে কারণ ওখানে ভুল করে **গ্রুপ চ্যাটে** কর্মীর নাম ও
-     * ঘণ্টা চলে যেতে পারত। Teams-এর webhook একটা নির্দিষ্ট চ্যানেলে বাঁধা —
-     * মালিক নিজে যেটা বেছে বসিয়েছেন, আর সেটা বদলাতে হলে `.env` ছুঁতে হয়।
+     * **Teams deliberately has no guard of its own.** Telegram's guard
+     * (`weeklyGateOf`) exists because there an employee's names and hours could
+     * go into a **group chat** by mistake. A Teams webhook is bound to one
+     * specific channel: the one the owner chose and set up, and changing it
+     * means touching `.env`.
      *
-     * ⚠️ তাই টেলিগ্রাম অবরুদ্ধ থাকলেও Teams পাঠানো হয়: দুটো আলাদা ঝুঁকি,
-     * একটার শাস্তি অন্যটার উপর চাপানো যায় না।
+     * So Teams is sent even when Telegram is blocked: they are two different
+     * risks, and one's penalty cannot be put on the other.
      */
     const teamsOutcome = await this.teams.send(
       `${this.orgName} — weekly summary`,
@@ -180,15 +184,15 @@ export class WeeklyDigestService {
     );
 
     /**
-     * ⭐⭐ **ইমেইল — তৃতীয় চ্যানেল, আর এটাই একমাত্র যেটা সবসময় পাওয়া যায়।**
+     * **Email is the third channel, and the only one that is always available.**
      *
-     * ⚠️ মালিকের Teams **ফ্রি/ব্যক্তিগত অ্যাকাউন্ট** (Communities), আর
-     * সেখানে incoming webhook বলে কিছু নেই — Workflows কেবল work/school
-     * অ্যাকাউন্টে আসে। টেলিগ্রামও সবার থাকে না। কিন্তু SMTP এমনিতেই
-     * কনফিগ করা, কারণ অ্যালার্ট ওই পথেই যায়।
+     * The owner's Teams is a **free/personal account** (Communities), and there
+     * is no incoming webhook there; Workflows only come with work/school
+     * accounts. Not everyone has Telegram either. But SMTP is configured anyway,
+     * because alerts go that way.
      *
-     * ⚠️⚠️ প্রাপক ম্যানেজার **নন** — সারাংশে প্রতিটা কর্মীর নাম ও ঘণ্টা
-     * থাকে, আর সেটা owner-only পর্দার সমান জিনিস (`digest.recipients.ts`)।
+     * The recipient is **not** a manager: the summary has every employee's name
+     * and hours, the same as an owner-only screen (`digest.recipients.ts`).
      */
     const emailOutcome = await this.sendByEmail(message.text);
 
@@ -197,9 +201,10 @@ export class WeeklyDigestService {
       : 'chat_not_private';
 
     /**
-     * ⚠️ Teams-এ গেছে অথচ টেলিগ্রাম অবরুদ্ধ — এই অবস্থায় নিচের "পুরো
-     * বার্তাটা লগে" শাখাটা আর দরকার নেই, কারণ সারাংশটা হারায়নি। কিন্তু
-     * খবরটা লেখা থাকা দরকার, নইলে লগ পড়ে মনে হতো কিছুই পাঠানো হয়নি।
+     * Sent to Teams while Telegram is blocked: in this state the "whole message
+     * to the log" branch below is no longer needed, since the summary was not
+     * lost. But the fact should be written down, otherwise the log would make it
+     * look as if nothing was sent.
      */
     if (emailOutcome === 'sent') {
       this.logger.log(`Weekly summary emailed · ${weekly.from} → ${weekly.to}`);
@@ -222,21 +227,22 @@ export class WeeklyDigestService {
     }
 
     /**
-     * ⚠️ টেলিগ্রাম না থাকলে (বা পাঠানো না গেলে) **ক্র্যাশ নয়, লগ** — আর
-     * পুরো বার্তাটাই লগে যায়, শুধু "পাঠানো গেল না" নয়। জবটা সপ্তাহে একবার
-     * চলে; বার্তাটা না রাখলে ওই সপ্তাহের সারাংশ চিরতরে হারিয়ে যেত, আর
-     * পরে টোকেন ঠিক করে পেছনের সপ্তাহ ফিরে পাওয়ার কোনো উপায় নেই।
+     * If Telegram is missing (or the send fails), **a log entry, not a crash**,
+     * and the whole message goes to the log, not just "could not send". The job
+     * runs once a week; without keeping the message, that week's summary would
+     * be lost for good, and there is no way to recover a past week after fixing
+     * the token.
      *
-     * ⚠️ লগে যাওয়াটা নিরাপদ, কারণ বার্তায় কেবল নাম ও ঘণ্টা — কোনো ডোমেইন,
-     * অ্যাপের নাম বা স্ক্রিনশটের পথ নেই (`weekly.rules.ts` দেখুন)।
+     * Logging it is safe, because the message has only names and hours: no
+     * domains, app names or screenshot paths (see `weekly.rules.ts`).
      */
     if (outcome === 'sent') {
       this.logger.log(
         `Weekly summary sent · ${weekly.from} → ${weekly.to} · ` +
           `${weekly.totals.employees} staff (${weekly.totals.withData} with data) · ` +
           `${weekly.behind.length} behind · ${message.text.length} chars` +
-          // ⚠️ ফাঁক ও বাদ পড়া কর্মী লগেও ওঠে — বার্তাটা কেন "ছোট" দেখাচ্ছে
-          //    তার উত্তর পরে খুঁজতে গেলে লগই একমাত্র জায়গা
+          // Gaps and excluded staff go in the log too: to find out later why the
+          // message looks "small", the log is the only place
           (weekly.totals.withGaps > 0
             ? ` · ${weekly.totals.withGaps} with unobserved days`
             : '') +
@@ -254,15 +260,15 @@ export class WeeklyDigestService {
     return resultOf(weekly, message, outcome);
   }
 
-  /** ⭐ শুধু সংখ্যা — না পাঠিয়েই টেস্ট বা ভবিষ্যতের কোনো প্রিভিউ ডাকতে পারে */
+  /** Only the numbers: tests or a future preview can call it without sending */
   async collect(now: Date = new Date()): Promise<Weekly> {
     const window = weeklyWindow(now);
 
     const [daily, week, observed] = await Promise.all([
       /**
-       * ⚠️ F01 চাওয়া হয় **পুরো উইন্ডোর**, শুধু আজকের দিনের নয়। দিনভিত্তিক
-       * টার্গেট ছাড়া প্রত্যাশা থেকে "আজ" আর "যে দিন দেখা হয়নি" — দুটোর
-       * একটাও বাদ দেওয়া যায় না, আর F02 পুরো সপ্তাহের একটাই টার্গেট দেয়।
+       * F01 is requested for the **whole window**, not just today. Without a
+       * per-day target, neither "today" nor "days that were not observed" can be
+       * dropped from the expectation, and F02 gives a single target for the whole week.
        */
       this.reports.attendance({ from: window.from, to: window.to }),
       this.reports.summary({
@@ -281,35 +287,34 @@ export class WeeklyDigestService {
       week: week.rows,
       observed,
       /**
-       * ⚠️ `meta` আগে ফেলে দেওয়া হতো, আর তাতে `excludedEmployees` হারাত —
-       * অর্থাৎ যাঁরা `status=inactive` অথচ `left_on` খালি বলে রিপোর্টেই
-       * ওঠেন না, তাঁরা টেলিগ্রামেও অদৃশ্য থাকতেন। রিপোর্ট ইচ্ছে করেই নাম
-       * ধরে জানায়; সাপ্তাহিক বার্তাও এখন তাই করে।
+       * `meta` used to be thrown away, losing `excludedEmployees`: those with
+       * `status=inactive` and an empty `left_on`, who do not appear in the report
+       * at all, were invisible in Telegram too. The report deliberately names
+       * them; the weekly message now does too.
        *
-       * ⭐ `week.meta` নেওয়া হলো, `daily.meta` নয় — দুটো একই (একই রেঞ্জ,
-       * একই `context()`), তাই যেকোনো একটাই যথেষ্ট।
+       * `week.meta` is taken, not `daily.meta`: they are identical (same range,
+       * same `context()`), so either one is enough.
        */
       excludedEmployees: week.meta.excludedEmployees,
     });
   }
 
   /**
-   * ⭐⭐ কোন (কর্মী, দিন) জোড়া সার্ভার **আসলেই দেখেছে**।
+   * Which (employee, day) pairs the server **actually observed**.
    *
-   * ⚠️ এই একটামাত্র প্রশ্নের উত্তর `ReportsService` দিতে পারে না, তাই এখানে
-   * সরাসরি DB পড়া হয়। F01 "সারি নেই" আর "সারি আছে, ০ ঘণ্টা" দুটোকেই
-   * `no_activity` বলে (`reports.service.ts`), অথচ পার্থক্যটাই এই বার্তার
-   * সবচেয়ে জরুরি তথ্য: `refreshDate()` প্রতিদিন প্রতিটি সক্রিয় কর্মীর সারি
-   * লেখে, তাই সারি থাকা = ওই দিনটা মাপা হয়েছে।
+   * `ReportsService` cannot answer this one question, so the DB is read
+   * directly here. F01 calls both "no row" and "row exists, 0 hours"
+   * `no_activity` (`reports.service.ts`), yet that difference is the most
+   * important fact in this message: `refreshDate()` writes a row for every
+   * active employee every day, so a row existing = that day was measured.
    *
-   * ⭐ **এখান থেকে একটাও সংখ্যা আসে না** — কেবল অস্তিত্ব। ঘণ্টা, টার্গেট,
-   * কর্মদিবস সবই আগের মতো F01/F02 থেকেই, তাই "এক সংখ্যা, এক সংজ্ঞা"
-   * অক্ষত: ছুটি বা টার্গেটের দ্বিতীয় কোনো বাস্তবায়ন এখানে জন্মায়নি।
+   * **No number comes from here**, only existence. Hours, targets and work days
+   * all still come from F01/F02, so "one number, one definition" is intact: no
+   * second implementation of holidays or targets was born here.
    *
-   * ⚠️ কর্মী ধরে ছাঁকা হয় না — সারি অল্প (কর্মী × ৭), আর `employeeId`
-   * দিয়ে মেলানোয় অতিরিক্ত সারি থাকলেও ক্ষতি নেই। ছাঁকতে গেলে রিপোর্টের
-   * কর্মী-তালিকার জন্য অপেক্ষা করতে হতো, অর্থাৎ তিনটে কোয়েরি আর
-   * সমান্তরালে চলত না।
+   * Not filtered by employee: rows are few (employees × 7), and extra rows do
+   * no harm when matching by `employeeId`. Filtering would mean waiting for the
+   * report's employee list, i.e. three queries that no longer run in parallel.
    */
   private async observedDays(window: WeeklyWindow): Promise<ObservedDay[]> {
     const rows = await this.prisma.dailySummary.findMany({
@@ -322,8 +327,8 @@ export class WeeklyDigestService {
       select: { employeeId: true, workDate: true },
     });
 
-    // ⚠️ `workDate` UTC-মধ্যরাত (`@db.Date`), তাই `toIsoDate()` — F01-এর
-    //    `date` ঠিক একই ফাংশনে তৈরি, নইলে চাবিদুটো কখনো মিলত না
+    // `workDate` is UTC midnight (`@db.Date`), hence `toIsoDate()`: F01's `date`
+    // is made by the very same function, otherwise the two keys would never match
     return rows.map((r) => ({
       employeeId: r.employeeId,
       date: toIsoDate(r.workDate),
@@ -332,10 +337,10 @@ export class WeeklyDigestService {
 }
 
 /**
- * ⭐ ফলটা **একটাই জায়গায়** বানানো হয় — পাঠানো হোক, আটকে যাক বা ব্যর্থ
- * হোক। দুই শাখায় দুটো object literal থাকলে একটায় নতুন ঘর যোগ করে অন্যটায়
- * ভুলে যাওয়াটা সময়ের ব্যাপার মাত্র, আর তখন `outcome` ভেদে ফলের আকার
- * বদলে যেত।
+ * The result is built in **one place**, whether sent, blocked or failed. With
+ * two object literals in two branches, adding a field to one and forgetting
+ * the other is only a matter of time, and then the result's shape would vary
+ * with `outcome`.
  */
 function resultOf(
   weekly: Weekly,

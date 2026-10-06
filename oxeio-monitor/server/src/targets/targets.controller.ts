@@ -41,29 +41,29 @@ import {
 
 class BulkDto {
   /**
-   * ⭐⭐ **ছাদ ৫০ লাখ অক্ষর** *(২৩ আগস্ট ২০২৬, মালিকের চাওয়া)* — আগে ছিল
-   * ৬০,০০০ (~৫০০টা URL)।
+   * Ceiling of 5 million characters. It used to be 60,000 (about 500 URLs).
    *
-   * ⭐ ৫০ লাখ অক্ষরে ~৪৫,০০০ Amazon URL ধরে। গবেষকেরা রোজ ~৫০০ তোলেন,
-   * তাই বাস্তবে এটা "সীমা নেই"-এর সমান।
+   * 5 million characters hold about 45,000 Amazon URLs. Researchers add about
+   * 500 a day, so in practice this is the same as "no limit".
    *
-   * ⚠️⚠️ **তবু একটা ছাদ রাখা হয়েছে, আর সেটা ইচ্ছাকৃত।** সীমা পুরোপুরি
-   * তুলে দিলে কেউ ভুল করে ৫০০ MB-র একটা ফাইল পেস্ট করলে সার্ভার সেটা
-   * মেমোরিতে তুলে পার্স করতে বসত — আর তখন গোটা অফিসের এজেন্টরাও ডেটা
-   * পাঠাতে পারত না। ⭐ ছাদটা মানুষকে আটকানোর জন্য নয়, দুর্ঘটনা আটকানোর জন্য।
+   * Careful: a ceiling is kept on purpose. With no limit at all, someone
+   * pasting a 500 MB file by mistake would make the server load and parse it
+   * in memory, and then the whole office's agents could not send data either.
+   * The ceiling is there to stop accidents, not people.
    *
-   * ⚠️ HTTP বডির ছাদ (৮ MB, `app.setup.ts`) এর **চেয়ে বড়** রাখা হয়েছে,
-   * নইলে বেশি পেস্ট করলে Express-এর নীরব ৪১৩ আসত, এই বার্তাটা নয়।
+   * It is deliberately larger than the HTTP body limit (8 MB, `app.setup.ts`);
+   * otherwise a bigger paste would get Express's silent 413 instead of this
+   * message.
    */
   @IsString() @MaxLength(5_000_000)
   text!: string;
 }
 
 /**
- * ⭐⭐ **একসাথে অনেকগুলো মোছা** *(২৯ আগস্ট ২০২৬)*।
+ * Delete many at once.
  *
- * ⚠️ `@Type(() => Number)` ছাড়া JSON-এর `["12"]` স্ট্রিং হয়েই থাকত আর
- *    `IsInt` ফেল করত — অথচ ভুলটা পর্দার নয়, রূপান্তরের।
+ * Careful: without `@Type(() => Number)`, a JSON `["12"]` would stay a string
+ * and fail `IsInt`, though the mistake is in the conversion, not the screen.
  */
 class DeleteManyDto {
   @IsArray()
@@ -74,49 +74,49 @@ class DeleteManyDto {
   @Min(1, { each: true })
   ids!: number[];
 
-  /** ⭐ Skip-এর সাথে একই তিনটে — `targets.rules.ts`-এর `DROP_REASONS` */
+  /** The same three as Skip: `DROP_REASONS` in `targets.rules.ts` */
   @IsIn([...DROP_REASONS])
   reason!: DropReason;
 }
 
 class ListQueryDto {
-  /** ⚠️ `deleted`-ও আছে — নইলে মালিক মরা ASIN-গুলো খুঁজেই পেতেন না */
+  /** `deleted` is included too; otherwise the owner could never find dead ASINs */
   @IsOptional() @IsIn(['pool', 'assigned', 'done', 'skipped', 'deleted'])
   status?: DesignTargetStatus;
 
   /**
-   * ⭐ **ASIN বা Job নম্বর** *(৬ সেপ্টেম্বর ২০২৬)*।
+   * ASIN or job number.
    *
-   * ⚠️ URL আর চলে না — মালিকের সিদ্ধান্ত। পর্দা লিঙ্ক পেস্ট করলে
-   *    সরাসরি বলে দেয়, নীরবে খালি তালিকা দেখায় না।
+   * URLs no longer work (owner's decision). If a link is pasted, the screen
+   * says so directly instead of silently showing an empty list.
    */
   @IsOptional() @IsString() @MaxLength(200)
   q?: string;
 
-  /** ⚠️ `@Type` ছাড়া query string-এর `"2"` স্ট্রিং হয়েই থাকত */
+  /** Without `@Type`, `"2"` from the query string would stay a string */
   @IsOptional() @Type(() => Number) @IsInt() @Min(1)
   page?: number;
 
-  /** ⭐ কোন ডিজাইনারের — `employees.id` *(২৩ আগস্ট)* */
+  /** Which designer: `employees.id` */
   @IsOptional() @Type(() => Number) @IsInt() @Min(1)
   staffId?: number;
 
   /**
-   * ⭐ কে এনেছেন — `users.id` *(২৫ আগস্ট)*।
+   * Who brought them in: `users.id`.
    *
-   * ⚠️⚠️ উপরেরটার সাথে **আলাদা id-র জগৎ** — ওটা `employees`, এটা `users`।
-   * নাম দুটো পাশাপাশি রাখা হয়েছে ঠিক এই কারণেই: এক নজরে যেন দেখা যায়
-   * ওরা এক জিনিস নয়।
+   * Careful: this is a different id space from the one above (that is
+   * `employees`, this is `users`). The two names sit side by side for exactly
+   * this reason: so it is obvious at a glance that they are not the same thing.
    */
   @IsOptional() @Type(() => Number) @IsInt() @Min(1)
   addedById?: number;
 
   /**
-   * ⭐ তারিখের সীমা — **শেষ যা ঘটেছে** তার দিন ধরে।
+   * Date range, by the day of the last thing that happened.
    *
-   * ⚠️ `YYYY-MM-DD` ছাড়া কিছু নেওয়া হয় না: আলগা পার্সিং মানে
-   * `03-04-2026` কারো কাছে মার্চ, কারো কাছে এপ্রিল — আর ভুল ফল
-   * "কিছু পাওয়া গেল না" হয়ে দেখা দিত, ভুল বলে নয়।
+   * Only `YYYY-MM-DD` is accepted. With loose parsing, `03-04-2026` would be
+   * March to some and April to others, and the wrong result would show up as
+   * "nothing found", not as a mistake.
    */
   @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/, {
     message: "from must be a date like 2026-08-23",
@@ -129,20 +129,20 @@ class ListQueryDto {
   to?: string;
 
   /**
-   * ⭐⭐ **কাজের ধাপ ধরে ছাঁকনি** *(২৪ আগস্ট ২০২৬)* — গবেষকের রোজকার
-   * কিউ দুটো।
+   * Filter by work stage: the researcher's two daily queues.
    *
-   * ⚠️ `status` দিয়ে এটা করা যায় না: `uploaded`/`live` কোনো **অবস্থা**
-   *    নয়, **তারিখ** — আর সেটা ইচ্ছাকৃত, নইলে সারিটা `done` থেকে সরে
-   *    গিয়ে সব "কতগুলো ডিজাইন হয়েছে" গণনা নীরবে কমে যেত।
+   * This cannot be done with `status`: `uploaded`/`live` are not states but
+   * dates, on purpose. Otherwise the row would leave `done` and every "how
+   * many designs were made" count would silently drop.
    */
   /**
-   * ⚠️ `no_file` বাকিগুলোর মতো **ধাপ নয়** *(৯ সেপ্টেম্বর ২০২৬)* — কাজের
-   * শেকলে ওর কোনো ঘর নেই। এটা একটা **প্রশ্ন**: "শেষ বলা হয়েছে, অথচ
-   * ফাইলটা কখনো খোলা হয়নি এমন কোনগুলো?"
+   * Careful: `no_file` is not a stage like the others, since it has no slot
+   * in the work chain. It is a question: "which targets were marked done but
+   * the file was never opened?"
    *
-   * ⭐ তবু একই ঘরেই বসেছে, কারণ ছাঁকনি-খোঁজা-পাতা সবই হুবহু এক — আলাদা
-   * endpoint বানালে ওই তিনটে জিনিস দ্বিতীয়বার লিখতে হতো।
+   * It still sits in the same field because filtering, searching and paging
+   * are exactly the same; a separate endpoint would have needed those three
+   * written a second time.
    */
   @IsOptional()
   @IsIn(['to_check', 'to_fix', 'to_upload', 'to_live', 'to_review', 'no_file'])
@@ -162,10 +162,10 @@ class UpdateTargetDto {
 
 class CheckedDto {
   /**
-   * ⭐ `true` = বানান ঠিক আছে · `false` = ভুল পাওয়া গেছে।
+   * `true` = spelling is correct, `false` = a mistake was found.
    *
-   * ⚠️ ঐচ্ছিক করা হয়নি ইচ্ছাকৃতভাবে — ডিফল্ট বসালে ভুল করে খালি পাঠালে
-   * সেটা নীরবে "ঠিক আছে" হয়ে যেত, আর ভুল ডিজাইন Amazon-এ চলে যেত।
+   * Deliberately not optional: with a default, sending nothing by mistake
+   * would silently become "ok", and a wrong design would go to Amazon.
    */
   @IsBoolean()
   ok!: boolean;
@@ -173,12 +173,12 @@ class CheckedDto {
 
 class LiveDto {
   /**
-   * ⭐ লাইভ হওয়া **নতুন** পণ্যের ASIN — ঐচ্ছিক।
+   * ASIN of the new product that went live. Optional.
    *
-   * ⚠️⚠️ গবেষকের আনা নমুনা ASIN-এর সাথে গুলিয়ে ফেলা যাবে না; এটা
-   * আমাদের নিজের বিক্রয়যোগ্য পণ্যের। ⚠️ ঐচ্ছিক রাখা হয়েছে কারণ হাতে
-   * না থাকলেও "লাইভ হয়েছে" বলা যাওয়া উচিত — নইলে ঘরটা ভরার জন্য কেউ
-   * ভুল কিছু বসিয়ে দিত।
+   * Careful: do not confuse it with the sample ASIN the researcher brought;
+   * this is our own sellable product. It is optional because "gone live"
+   * should be reportable even without it in hand; otherwise someone would put
+   * in something wrong just to fill the field.
    */
   @IsOptional() @IsString() @Matches(/^[A-Z0-9]{10}$/, {
     message: 'liveAsin must be a 10-character Amazon ASIN',
@@ -187,15 +187,16 @@ class LiveDto {
 }
 
 /**
- * ⭐⭐ **"কেন বাদ দিলেন"** *(মালিকের চাওয়া, ৩১ আগস্ট ২০২৬)*।
+ * "Why did you drop it".
  *
- * ⚠️⚠️ আগে ছিল `@IsOptional()` মুক্ত-লেখা, আর ফল: মাঠে ৯৩টা skipped
- * সারির **একটাতেও** কারণ লেখা ছিল না — পর্দা কোনোদিন কিছু পাঠায়ইনি।
- * ⭐ এখন তিনটে বাছাইয়ের একটা, আর **বাধ্যতামূলক**: পর্দায় বোতামটাই কারণ,
- * তাই না-পাঠানোর কোনো পথ নেই।
+ * Careful: this used to be free text behind `@IsOptional()`, and the result
+ * was that none of the 93 skipped rows in the field had a reason: the screen
+ * never sent one. Now it is a choice of three, and mandatory: on screen the
+ * button is the reason, so there is no way to not send it.
  *
- * ⚠️ তালিকাটা `targets.rules.ts`-এ এক জায়গায় — Skip ও Delete দুই পথেই
- * একই তিনটে, নইলে একদিন একটায় নতুন কারণ যোগ হতো আর অন্যটায় নয়।
+ * The list lives in one place, `targets.rules.ts`: the same three for both
+ * Skip and Delete, otherwise one day a reason would be added to one and not
+ * the other.
  */
 class DropReasonDto {
   @IsIn([...DROP_REASONS])
@@ -203,19 +204,18 @@ class DropReasonDto {
 }
 
 /**
- * **ডিজাইন-টার্গেট** *(২২ আগস্ট ২০২৬)*।
+ * Design targets.
  *
- * ⚠️⚠️ **এই কন্ট্রোলারে `@Roles()` বসানো হয়নি ইচ্ছাকৃতভাবে** — কারণ
- * অনুমতিটা পোর্টালের রোল ধরে নয়, **কাজের ধরন** ধরে (গবেষক ঢোকেন
- * `employee` হিসেবে)। পাহারাটা `TargetsService.assertCanSubmit()`-এ,
- * আর সেখানেই তার কারণ লেখা।
+ * Careful: this controller deliberately has no `@Roles()`. Permission goes by
+ * kind of work, not portal role (researchers log in as `employee`). The guard
+ * is in `TargetsService.assertCanSubmit()`, where the reason is written too.
  */
 @RequiresFeature('designTargets')
 @Controller('design-targets')
 export class TargetsController {
   constructor(private readonly targets: TargetsService) {}
 
-  /** ⭐ একবারে ৫০০টা URL — গবেষক · ম্যানেজার · মালিক */
+  /** Up to 500 URLs at once: researcher, manager, owner */
   @Post('bulk')
   bulk(
     @CurrentUser() actor: SessionUser,
@@ -226,10 +226,10 @@ export class TargetsController {
   }
 
   /**
-   * ⭐⭐ **পুরো তালিকা** — মালিক · ম্যানেজার · গবেষক *(২৩ আগস্ট)*।
+   * The full list: owner, manager, researcher.
    *
-   * ⚠️ পাহারাটা এখানে **হাতে ডাকা**, `@Roles()` দিয়ে নয় — গবেষকের রোল
-   * `employee`, তাই ডেকোরেটর দিয়ে তাঁকে আলাদা করা যায় না।
+   * Careful: the guard is called by hand here, not through `@Roles()`. The
+   * researcher's role is `employee`, so a decorator cannot single them out.
    */
   @Get()
   async list(@CurrentUser() actor: SessionUser, @Query() q: ListQueryDto) {
@@ -238,15 +238,16 @@ export class TargetsController {
   }
 
   /**
-   * ⚠️ এখানেও একই পাহারা। আগে এটা **খোলা ছিল** — যেকোনো কর্মী পুলের
-   * সংখ্যা পড়তে পারতেন। বড় ফাঁস নয়, কিন্তু একই পর্দার দুটো রুটে দুই
-   * নিয়ম থাকলে একদিন ভুলটা বড় জায়গায় হতো।
+   * Careful: the same guard here too. This used to be open, so any staff
+   * member could read the pool counts. Not a big leak, but with two rules on
+   * two routes of the same screen, one day the mistake would land somewhere
+   * bigger.
    */
   /**
-   * ⭐⭐ **কে কতগুলো এনেছেন** *(মালিকের চাওয়া, ২৫ আগস্ট)*।
+   * How many each person has brought in.
    *
-   * ⚠️ `designers`-এর মতো এটাও কেবল ড্রপডাউন ভরার জন্য, কিন্তু সংখ্যাটা
-   * সঙ্গে যায় — মালিক একটাও ক্লিক না করেই উত্তরটা পেয়ে যান।
+   * Like `designers`, this only fills a dropdown, but the number comes along,
+   * so the owner gets the answer without a single click.
    */
   @Get('adders')
   async adders(@CurrentUser() actor: SessionUser) {
@@ -254,7 +255,7 @@ export class TargetsController {
     return this.targets.adders();
   }
 
-  /** ⭐ ছাঁকনির ড্রপডাউনের জন্য — owner · manager · গবেষক *(২৩ আগস্ট)* */
+  /** For the filter dropdown: owner, manager, researcher */
   @Get('designers')
   async designers(@CurrentUser() actor: SessionUser) {
     await this.targets.assertCanUse(actor);
@@ -268,10 +269,10 @@ export class TargetsController {
   }
 
   /**
-   * ⭐ তালিকা সম্পাদনা — owner · manager · গবেষক *(২৩ আগস্ট)*।
+   * Edit the list: owner, manager, researcher.
    *
-   * ⚠️ ASIN বদলানোর কোনো পথ **নেই** — ওটা সারিটার পরিচয়; বদলালে
-   * ডুপ্লিকেট-প্রহরীর ভিত্তিই নড়ে যেত।
+   * There is no way to change the ASIN: it is the row's identity, and
+   * changing it would shake the foundation of the duplicate guard.
    */
   @Patch(':id')
   async update(
@@ -284,18 +285,17 @@ export class TargetsController {
   }
 
   /**
-   * ⭐⭐ **বেছে বেছে মুছে ফেলা** *(মালিকের চাওয়া, ২৯ আগস্ট ২০২৬:
-   * "not found asin gula delete korar time e select kora zabe")*।
+   * Delete selected rows.
    *
-   * ⚠️⚠️ **`POST`, `DELETE` নয়** — বডিসহ `DELETE` অনেক প্রক্সি ও
-   * ক্লায়েন্ট নীরবে ফেলে দেয়, আর তখন "কিছুই মুছল না" বলে বাগ খুঁজতে
-   * হতো। ⭐ এই কন্ট্রোলারের বাকি কাজগুলোও (`:id/checked`, `distribute`)
-   * POST — নিয়মটা এক জায়গায় এক।
+   * Careful: `POST`, not `DELETE`. Many proxies and clients silently drop the
+   * body of a `DELETE`, and then we would be hunting a "nothing was deleted"
+   * bug. The other actions in this controller (`:id/checked`, `distribute`)
+   * are POST too, so the rule is the same everywhere.
    *
-   * ⚠️ পাহারা `assertCanUse` (owner · manager · গবেষক), নিচের একক
-   * `@Delete(':id')`-এর মতোই — দুটো পথ একই কাজ করে, তাই দুই রকম
-   * পাহারা বসালে একদিন একটা দিয়ে অন্যটা ফাঁকি দেওয়া যেত। ⭐ পর্দায়
-   * বোতামটা কেবল owner/manager দেখেন (`mayDelete`)।
+   * Careful: the guard is `assertCanUse` (owner, manager, researcher), like
+   * the single `@Delete(':id')` below. Both paths do the same job, so with
+   * two different guards one could be used to dodge the other. On screen only
+   * the owner and manager see the button (`mayDelete`).
    */
   @Post('delete')
   async deleteMany(
@@ -308,15 +308,15 @@ export class TargetsController {
   }
 
   /**
-   * ⭐ একটা সারি — উপরের বাল্ক পথেরই এক-সদস্যের রূপ।
+   * One row: the single-item form of the bulk path above.
    *
-   * ⚠️⚠️ **এটা আর সত্যিকারের `DELETE` নয়** *(২৯ আগস্ট)*। সারিটা থেকে
-   * যায়, অবস্থা হয় `deleted` — নইলে `asin` UNIQUE প্রহরীটাও মুছে যেত
-   * আর মরা ASIN কাল আবার পুলে ঢুকত।
+   * Careful: this is no longer a real `DELETE`. The row stays and its status
+   * becomes `deleted`; otherwise the `asin` UNIQUE guard would vanish too and
+   * a dead ASIN would re-enter the pool tomorrow.
    */
 /**
-   * ⚠️ বডিসহ `DELETE` অনেক প্রক্সি ফেলে দেয়, তাই কারণটা **query-তে**
-   * (`?reason=not_found`) — একটা ছোট, চেনা মান, আর ওতে ব্যক্তিগত কিছু নেই।
+   * Many proxies drop the body of a `DELETE`, so the reason goes in the query
+   * (`?reason=not_found`): a small, known value with nothing personal in it.
    */
   @Delete(':id')
   async remove(
@@ -330,25 +330,26 @@ export class TargetsController {
   }
 
   /**
-   * ⭐ হাতে বণ্টন — রোজ সকালের জবের **পাশাপাশি**, বিকল্প নয়।
+   * Manual distribution: in addition to the daily morning job, not instead.
    *
-   * ⚠️ owner/manager-only: বণ্টন একবার হয়ে গেলে ফেরানো যায় না (নম্বর
-   * বসে যায়), তাই বোতামটা সবার হাতে থাকা উচিত নয়।
+   * Owner/manager only: once distributed it cannot be undone (numbers get
+   * assigned), so the button should not be in everyone's hands.
    */
   /**
-   * ⭐⭐ **"আপলোড হয়েছে"** *(২৩ আগস্ট ২০২৬)* — owner · manager · গবেষক।
+   * "Uploaded": owner, manager, researcher.
    *
-   * ⚠️ ডিজাইনার নন: ফাইল বানানো আর Amazon-এ পাঠানো দুটো আলাদা কাজ, আর
-   *    দ্বিতীয়টা যিনি করেন তিনিই বলবেন।
+   * Not the designer: making the file and sending it to Amazon are two
+   * separate jobs, and whoever does the second is the one to say so.
    */
   /**
-   * ⭐⭐ **"বানান দেখলাম"** *(ADR-038, ২৫ আগস্ট ২০২৬)* — সুমাইয়ার কাজ।
+   * "Spelling checked" (ADR-038): the proofreader's job.
    *
-   * ⚠️ পাহারা `assertCanUse` — owner · manager · **গবেষক**। সুমাইয়ার রোল
-   *    `employee`, তাই রোল দিয়ে এটা করা যেত না; ধরন দিয়েই হয়।
-   *    ⭐ ডিজাইনার নিজের কাজ নিজে পাশ করাতে পারেন না, আর সেটাই উদ্দেশ্য।
+   * Careful: the guard is `assertCanUse`: owner, manager, researcher. The
+   * proofreader's role is `employee`, so a role could not do this; the kind of
+   * work does. A designer cannot approve their own work, which is the point.
    *
-   * ⚠️ `ok: false` মানে ভুল পাওয়া গেছে — সারিটা তখন "ঠিক করতে হবে" কিউতে।
+   * `ok: false` means a mistake was found; the row then goes to the "to fix"
+   * queue.
    */
   @Post(':id/checked')
   async checked(
@@ -361,9 +362,10 @@ export class TargetsController {
   }
 
   /**
-   * ⭐ **"ঠিক করেছি"** — বেলালের কাজ।
+   * "Fixed": the fixer's job.
    *
-   * ⚠️⚠️ ডিজাইনের মালিকানা **বদলায় না** — কে ঠিক করলেন সেটা আলাদা ঘরে।
+   * Careful: ownership of the design does not change; who fixed it is stored
+   * in a separate field.
    */
   @Post(':id/fixed')
   async fixed(
@@ -375,13 +377,12 @@ export class TargetsController {
   }
 
   /**
-   * ⭐⭐ **"দেখে নিয়েছি"** *(মালিকের চাওয়া, ৩১ আগস্ট ২০২৬:
-   * "ami and manager ei delete and skip deya design gula alada vabe
-   * management korte paruk")*।
+   * "Reviewed": lets the owner and manager manage the designs that were
+   * deleted or skipped separately.
    *
-   * ⚠️⚠️ **owner ও manager ব্যতীত কেউ নয় — `assertCanUse` দিয়ে হতো না।**
-   * ওই পাহারায় গবেষকও পড়েন, অথচ মালিক স্পষ্ট করে দুজনের কথা
-   * বলেছেন — ডিজাইনার কেন skip দিলেন সেটা দল সামলানোর প্রশ্ন।
+   * Careful: owner and manager only, and `assertCanUse` would not do. That
+   * guard also admits researchers, but the owner named exactly these two:
+   * why a designer skipped is a team-management question.
    */
   @Roles(UserRole.owner, UserRole.manager)
   @Post(':id/reviewed')
@@ -401,7 +402,7 @@ export class TargetsController {
     return this.targets.markUploaded(id, new Date());
   }
 
-  /** ⭐ **"Amazon-এ লাইভ"** — সাথে নতুন পণ্যের ASIN (ঐচ্ছিক) */
+  /** "Live on Amazon", with the new product's ASIN (optional) */
   @Post(':id/live')
   async live(
     @CurrentUser() actor: SessionUser,
@@ -413,16 +414,15 @@ export class TargetsController {
   }
 
   /**
-   * ⭐⭐ **"শেষ" ফিরিয়ে নেওয়া** *(মালিকের রিপোর্ট, ২৫ আগস্ট:
-   * "vule kew colplete press kore felole byak anote paren na")*।
+   * Take back a "done".
    *
-   * ⚠️⚠️ `PATCH :id { status: 'assigned' }` দিয়ে এটা করা **যায় না** —
-   * ওই পথ কেবল `status` বদলায়, `completedAt` মোছে না। আর কিউগুলো
-   * `completedAt` ধরে চলে, তাই সারিটা "হাতে আছে" দেখাত অথচ আপলোডের
-   * কিউতে বসেই থাকত।
+   * Careful: `PATCH :id { status: 'assigned' }` cannot do this. That path only
+   * changes `status` and does not clear `completedAt`. The queues run on
+   * `completedAt`, so the row would show "in hand" while still sitting in the
+   * upload queue.
    *
-   * ⚠️ ডিজাইনারের নিজের Undo আলাদা রুটে (`/me/targets/:id/undone`) —
-   * ওখানে আজকের দিনের সীমা আছে, এখানে নেই।
+   * The designer's own Undo is a separate route (`/me/targets/:id/undone`),
+   * which has a same-day limit; this one has none.
    */
   @Post(':id/undone')
   async undone(
@@ -442,10 +442,10 @@ export class TargetsController {
 }
 
 /**
- * **ডিজাইনারের নিজের টার্গেট** — `/me`-র নিচে।
+ * The designer's own targets, under `/me`.
  *
- * ⚠️ আলাদা কন্ট্রোলার, কারণ পথটাও আলাদা (`/me/targets`), আর এখানে
- * কোনো রোল-পাহারা লাগে না: প্রত্যেকে **কেবল নিজের** তালিকাই পান।
+ * A separate controller because the path is different (`/me/targets`), and
+ * no role guard is needed here: everyone gets only their own list.
  */
 @RequiresFeature('designTargets')
 @Controller('me/targets')
@@ -458,12 +458,12 @@ export class MyTargetsController {
   }
 
   /**
-   * ⭐ "এটা বাদ দিলাম" — মালিকের বাছাই ছিল **দুটোই** (নিজে থেকে ধরা
-   * **আর** ডিজাইনারের শুধরানো)।
+   * "I dropped this": the owner chose to have both (caught by the designer
+   * themselves and corrected by the designer).
    *
-   * ⚠️ বাদ দেওয়া টার্গেট পুলে **ফেরত যায় না** — নইলে পরদিন আবার কারো
-   * হাতে পড়ত, আর সে-ও হয়তো একই কারণে বাদ দিত। মালিক তালিকায় দেখে
-   * সিদ্ধান্ত নেবেন।
+   * Careful: a dropped target does not go back to the pool. Otherwise it
+   * would land in someone's hand the next day, and they might drop it for the
+   * same reason. The owner reviews the list and decides.
    */
   @Post(':id/skip')
   skip(
@@ -475,10 +475,10 @@ export class MyTargetsController {
   }
 
   /**
-   * "শেষ করেছি" — হাতে চিহ্ন।
+   * "I finished": a manual mark.
    *
-   * ⚠️ সাধারণত এটা লাগেই না: ফাইলের নামে কাজের নম্বর বসালে সিস্টেম নিজেই
-   * ধরে ফেলে। এটা সেই ক্ষেত্রগুলোর জন্য যেখানে নম্বর বসাতে ভুল হয়েছে।
+   * Usually not needed: if the job number is in the file name, the system
+   * notices by itself. This is for cases where the number was entered wrongly.
    */
   @Post(':id/done')
   done(
@@ -489,12 +489,12 @@ export class MyTargetsController {
   }
 
   /**
-   * ⭐⭐ **"ভুল করে চেপে ফেলেছি"** *(মালিকের রিপোর্ট, ২৫ আগস্ট:
-   * "onek somoy vule kew colplete press kore felole byak anote paren na")*।
+   * "I pressed it by mistake".
    *
-   * ⚠️ **আজকের** কাজ, **নিজের** সারি, আর শেকলে এগোয়নি — তিনটে শর্তই
-   * সার্ভিসে। পুরোনো ভুল মালিক ফেরাবেন, ডিজাইনার নন: গতকালেরটা ফেরালে
-   * গতকালের সংখ্যাও বদলে যেত।
+   * Careful: it must be today's work, the person's own row, and not yet moved
+   * along the chain. All three conditions are in the service. The owner
+   * reverses older mistakes, not the designer: reversing yesterday's would
+   * change yesterday's numbers.
    */
   @Post(':id/undone')
   undone(
@@ -510,9 +510,9 @@ export class MyTargetsController {
 }
 
 /**
- * ⚠️ owner ও manager-এর `employeeId` সাধারণত `null` — তাঁরা কর্মীর সারিতে
- * বাঁধা নন, তাই তাঁদের "নিজের টার্গেট" বলে কিছু নেই। `me.service.ts`-এর
- * একই নিয়ম, একই বার্তা।
+ * The `employeeId` of an owner or manager is usually `null`: they are not tied
+ * to a staff row, so they have no "own targets". Same rule and same message as
+ * `me.service.ts`.
  */
 function employeeIdOf(actor: SessionUser): number {
   if (actor.employeeId === null) {

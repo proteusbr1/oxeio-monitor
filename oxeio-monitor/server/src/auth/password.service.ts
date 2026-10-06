@@ -6,13 +6,13 @@ import { hash, verify } from '@node-rs/argon2';
 import { buildTempPassword, TEMP_PASSWORD_CHARS } from './temp-password';
 
 /**
- * argon2id — I04।
+ * argon2id, I04.
  *
- * `Algorithm` enum ইচ্ছাকৃতভাবে import করা হয়নি: @node-rs/argon2 ওটাকে
- * `.d.ts`-এ `const enum` হিসেবে দেয়, যা মডিউলের বাইরে থেকে নিরাপদে ব্যবহার করা যায় না।
- * argon2id লাইব্রেরির ডিফল্ট, তাই আলাদা করে দেওয়ার দরকারও নেই।
+ * The `Algorithm` enum is deliberately not imported: @node-rs/argon2 ships it
+ * as a `const enum` in the `.d.ts`, which cannot be used safely from outside
+ * the module. argon2id is the library default, so there is no need to pass it explicitly.
  *
- * প্যারামিটার OWASP-এর সুপারিশ: m = 19 MiB · t = 2 · p = 1
+ * Parameters follow the OWASP recommendation: m = 19 MiB, t = 2, p = 1
  */
 export const ARGON2_OPTIONS = {
   memoryCost: 19456,
@@ -30,20 +30,20 @@ export class PasswordService {
     try {
       return await verify(hashed, plain, ARGON2_OPTIONS);
     } catch {
-      // হ্যাশ ভাঙা বা অন্য ফরম্যাটের হলে — ব্যর্থ ধরাই নিরাপদ
+      // A broken hash or one in another format: safest to treat it as a failure
       return false;
     }
   }
 
   /**
-   * owner যখন কারো পাসওয়ার্ড রিসেট করে (G33) — একবারই দেখানো হয়,
-   * কোথাও plaintext-এ জমা থাকে না।
+   * When the owner resets someone's password (G33): shown only once, never
+   * stored in plaintext anywhere.
    *
-   * ⚠️⚠️ আগে ছিল `randomBytes(12).toString('base64url')` — গোপনীয়তায়
-   * নিখুঁত, ব্যবহারে ভাঙা। `l/I/1` আর `O/0` পাশাপাশি থাকায় স্টাফ এজেন্টের
-   * জানালায় টাইপ করতে গিয়ে বারবার ভুল করতেন, আর ৫ বার ভুলেই ১৫ মিনিটের
-   * লকআউট — ফলে মনে হতো **রিসেটটাই কাজ করছে না**
-   * ([temp-password.ts](./temp-password.ts))।
+   * Careful: this used to be `randomBytes(12).toString('base64url')`, perfect
+   * for secrecy and broken in use. With `l/I/1` and `O/0` side by side, staff
+   * mistyped it again and again in the agent window, and 5 wrong attempts meant
+   * a 15-minute lockout, so it looked as if **the reset itself was not working**
+   * ([temp-password.ts](./temp-password.ts)).
    */
   generateTempPassword(): string {
     return buildTempPassword(randomBytes(TEMP_PASSWORD_CHARS));

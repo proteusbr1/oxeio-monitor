@@ -8,32 +8,32 @@ using oXeio.Core.Agent;
 namespace oXeio.Agent.Storage;
 
 /// <summary>
-/// H08 — এজেন্টের নিজের লগ ফাইল, ৭ দিন / ৫০ MB সীমা সহ।
+/// The agent's own log file, limited to 7 days / 50 MB.
 ///
-/// ⚠️⚠️ <b>এতদিন এই ফাইলটার কোনো অস্তিত্বই ছিল না।</b> <see cref="ISyncLog"/>-এর
-/// একমাত্র বাস্তবায়ন ছিল <c>ConsoleSyncLog</c>, আর প্রজেক্ট <c>WinExe</c> —
-/// অর্থাৎ কনসোলই নেই। ফলে এজেন্টের প্রতিটা লাইন <b>শূন্যে</b> যেত:
-/// এনরোলমেন্ট ব্যর্থ, টোকেন বাতিল, ৪২২ প্রত্যাখ্যান, আপডেট নামানো — কিছুরই
-/// কোনো চিহ্ন থাকত না। অথচ <c>deploy/README.md</c> সমস্যা হলে
-/// <c>agent.log</c> পড়তে বলত, আর ফাইলটা কোনোদিন লেখাই হয়নি।
+/// Important: <b>this file used to not exist at all.</b> The only implementation of
+/// <see cref="ISyncLog"/> was <c>ConsoleSyncLog</c>, and the project is <c>WinExe</c>, so
+/// there is no console. Every agent line therefore went <b>nowhere</b>: failed enrollment,
+/// revoked token, 422 rejections, update downloads, none of it left a trace. Yet
+/// <c>deploy/README.md</c> told people to read <c>agent.log</c> when something went wrong,
+/// and that file had never been written.
 ///
-/// ⭐ <b>নাম দুরকম, ইচ্ছাকৃতভাবে:</b>
+/// <b>Two kinds of file name, on purpose:</b>
 /// <list type="bullet">
-/// <item>চলতি ফাইল সবসময় <c>agent.log</c> — রানবুকে একটাই পাথ বলা যায়,
-/// আর IT-কে "আজকের তারিখ বসিয়ে নিন" বলতে হয় না।</item>
-/// <item>দিন বদলালে সেটা <c>agent-YYYY-MM-DD.log</c> নামে সরে যায় —
-/// তাতেই ৭ দিনের হিসাবটা তারিখ থেকেই পড়া যায়, ফাইলের mtime-এর উপর
-/// ভরসা করতে হয় না (mtime কপি/ব্যাকআপে বদলে যায়)।</item>
+/// <item>The current file is always <c>agent.log</c>: the runbook can name a single path,
+/// and IT does not have to be told to "fill in today's date".</item>
+/// <item>When the day changes it is renamed to <c>agent-YYYY-MM-DD.log</c>, so the 7-day
+/// count can be read from the date in the name and does not depend on the file's mtime
+/// (mtime changes on copy/backup).</item>
 /// </list>
 ///
-/// ⚠️ এই ক্লাসের কোনো মেথড <b>কখনো ছোড়ে না</b>। লগ লিখতে না পারা (ডিস্ক
-/// ভরা, ফাইল লক) মানে এজেন্ট থামা নয় — নইলে লগের সমস্যা ডেটা হারানোর
-/// সমস্যা হয়ে যেত।
+/// Careful: <b>no method of this class ever throws</b>. Failing to write the log (disk full,
+/// file locked) must not stop the agent; otherwise a logging problem would become a
+/// data-loss problem.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class FileLog : ISyncLog
 {
-    /// <summary>চলতি ফাইলের নাম — রানবুক ঠিক এটাই বলে।</summary>
+    /// <summary>Name of the current file; the runbook says exactly this.</summary>
     public const string CurrentFileName = "agent.log";
 
     private const string ArchivePrefix = "agent-";
@@ -45,24 +45,23 @@ internal sealed class FileLog : ISyncLog
     private readonly UTF8Encoding _utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
     /// <summary>
-    /// ⚠️⚠️ <b>নতুন ফাইলের শুরুতে UTF-8 BOM বসাতেই হয়।</b>
+    /// Important: <b>a UTF-8 BOM must be written at the start of a new file.</b>
     ///
-    /// রানবুক অ্যাডমিনকে বলে <c>Get-Content …gent.log -Tail 50</c> চালাতে,
-    /// আর <b>Windows PowerShell 5.1 BOM ছাড়া ফাইলকে ANSI ধরে</b> — তখন
-    /// প্রতিটা <c>·</c> <c>—</c> <c>✅</c> ভেঙে <c>Â·</c> <c>â€”</c>
-    /// <c>âœ…</c> হয়ে দেখায়। ফাইলটা ঠিকই লেখা, শুধু পড়াই যায় না — আর
-    /// যিনি সমস্যা খুঁজতে লগ খুলেছেন তিনি প্রথমেই ভাবেন ফাইলটাই নষ্ট।
+    /// The runbook tells admins to run <c>Get-Content …gent.log -Tail 50</c>, and
+    /// <b>Windows PowerShell 5.1 treats a file without a BOM as ANSI</b>, so every
+    /// <c>·</c> <c>—</c> <c>✅</c> shows up garbled as <c>Â·</c> <c>â€”</c>
+    /// <c>âœ…</c>. The file is written correctly but cannot be read, and whoever opened
+    /// the log to find a problem first assumes the file itself is corrupt.
     ///
-    /// ⚠️ Notepad-এও একই — BOM ছাড়া সে ANSI ধরে।
+    /// Notepad does the same: without a BOM it assumes ANSI.
     ///
-    /// ⭐ ঠিক এই ভুলটাই আজ সকালে <c>installer/build.ps1</c>-এ ধরা পড়েছে,
-    /// উল্টো পিঠ থেকে: BOM না থাকায় PowerShell স্ক্রিপ্টটা <b>পার্সই</b>
-    /// করতে পারেনি। একই দিনে দুবার — তাই নিয়মটা এখানে লিখে রাখা:
-    /// <b>Windows-এ যে টেক্সট ফাইল মানুষ পড়বে, তাতে BOM দাও।</b>
+    /// The same mistake was caught in <c>installer/build.ps1</c> from the opposite side:
+    /// with no BOM, PowerShell could not <b>parse</b> the script at all. So the rule is
+    /// written down here: <b>give any text file that people will read on Windows a BOM.</b>
     /// </summary>
     private static readonly byte[] Bom = [0xEF, 0xBB, 0xBF];
 
-    /// <summary>কোন দিনের লেখা চলছে — বদলালেই ঘোরাতে হবে।</summary>
+    /// <summary>The day currently being written; when it changes, the file must be rolled.</summary>
     private DateOnly _openDay;
 
     public FileLog(string logsDirectory)
@@ -70,10 +69,9 @@ internal sealed class FileLog : ISyncLog
         _directory = logsDirectory;
         _path = Path.Combine(logsDirectory, CurrentFileName);
 
-        // ⚠️ শুরুতেই চলতি ফাইলের **আসল** দিনটা জেনে নেওয়া হয়, আজকের তারিখ
-        //    ধরে নেওয়া হয় না। PC তিন দিন বন্ধ থাকলে ফাইলটা তিন দিনের
-        //    পুরোনো — ধরে নিলে আজকের লেখা ওই পুরোনো ফাইলেই যোগ হতো আর
-        //    দিনের ভাগটা এলোমেলো হয়ে যেত।
+        // Careful: at startup we find out the file's real day instead of assuming today.
+        // If the PC was off for three days the file is three days old; assuming today would
+        // append today's lines to that old file and mess up the split by day.
         _openDay = ExistingDay() ?? DateOnly.FromDateTime(DateTime.Now);
     }
 
@@ -88,9 +86,9 @@ internal sealed class FileLog : ISyncLog
             : $"{message} — {error.GetType().Name}: {error.Message}");
 
     /// <summary>
-    /// এজেন্ট চালু হওয়ার সময়ের এক লাইন — কোন ভার্সন, কোন সার্ভার, ডেটা
-    /// কোথায়। ⭐ সমস্যা খুঁজতে গিয়ে প্রথম প্রশ্নগুলো এগুলোই, আর এই লাইনটা
-    /// না থাকলে লগের বাকি অংশ পড়ে বোঝার উপায় থাকত না সেটা কোন রানের।
+    /// One line when the agent starts: which version, which server, where the data is.
+    /// These are the first questions when investigating a problem, and without this line
+    /// there would be no way to tell which run the rest of the log belongs to.
     /// </summary>
     public void Startup(string version, string serverUrl, string dataRoot)
     {
@@ -112,14 +110,14 @@ internal sealed class FileLog : ISyncLog
                     CultureInfo.InvariantCulture,
                     $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}  {level}  {message}{Environment.NewLine}");
 
-                // ⚠️ FileShare.ReadWrite — IT লগটা খুলে রাখলেও (Notepad,
-                //    Get-Content -Wait) যেন লেখা আটকে না যায়। এই ফাইল
-                //    আমাদের কাছে শুধু লেখার জায়গা, সত্যের উৎস নয়।
+                // Careful: FileShare.ReadWrite, so that writing is not blocked even when IT has
+                // the log open (Notepad, Get-Content -Wait). For us this file is only a place
+                // to write, not a source of truth.
                 using var stream = new FileStream(
                     _path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite, 4096, FileOptions.None);
 
-                // ⚠️ শুধু **ফাঁকা ফাইলে** — প্রতিবার লিখলে মাঝখানে BOM জমত
-                //    আর লাইনগুলো নষ্ট হতো। দিন বদলে নতুন ফাইল হলে আবার বসে।
+                // Careful: only on an empty file. Writing it every time would leave BOMs in
+                // the middle and corrupt lines. It is written again when a new day starts a file.
                 if (stream.Length == 0) stream.Write(Bom, 0, Bom.Length);
 
                 var bytes = _utf8.GetBytes(line);
@@ -127,18 +125,18 @@ internal sealed class FileLog : ISyncLog
             }
             catch (Exception)
             {
-                // ইচ্ছাকৃত নীরবতা — উপরের ডক দেখুন
+                // deliberate silence; see the class doc above
             }
         }
     }
 
     /// <summary>
-    /// দিন বদলে থাকলে চলতি ফাইলটা তারিখওয়ালা নামে সরিয়ে দেয়, তারপর
-    /// পুরোনোগুলো ছাঁটে।
+    /// If the day has changed, moves the current file to a dated name, then prunes the old
+    /// ones.
     ///
-    /// ⚠️ ছাঁটাই শুধু <b>ঘোরানোর সময়</b> হয়, প্রতি লাইনে নয় — দিনে একবার।
-    /// প্রতি লাইনে করলে প্রতিটা লগ-লেখায় একটা ডিরেক্টরি স্ক্যান হতো, আর
-    /// ব্যস্ত দিনে সেটা হাজারবার।
+    /// Careful: pruning happens only <b>when rolling</b>, once a day, not on every line.
+    /// Doing it per line would scan a directory on every log write, thousands of times on
+    /// a busy day.
     /// </summary>
     private void RollIfNewDay()
     {
@@ -153,27 +151,27 @@ internal sealed class FileLog : ISyncLog
                     _directory,
                     $"{ArchivePrefix}{_openDay:yyyy-MM-dd}{ArchiveSuffix}");
 
-                // ⚠️ overwrite: true — ঘড়ি পিছিয়ে গিয়ে একই তারিখ দুবার এলে
-                //    Move ছুড়ত, আর তখন লগ লেখা **স্থায়ীভাবে** বন্ধ হয়ে যেত
-                //    (প্রতি লাইনে আবার একই ব্যর্থ Move)।
+                // Careful: overwrite: true. If the clock moves back and the same date comes
+                // twice, Move would throw and log writing would stop permanently (the same
+                // failing Move on every line).
                 File.Move(_path, archive, overwrite: true);
             }
         }
         catch (Exception)
         {
-            // ঘোরাতে না পারলে ফাইলটা বড় হতে থাকবে — লেখা বন্ধ হওয়ার চেয়ে ভালো
+            // If rolling fails the file just keeps growing; better than stopping writes
         }
 
-        // ⚠️ _openDay বদলানো হয় **সব ক্ষেত্রেই**, Move ব্যর্থ হলেও। নইলে
-        //    প্রতিটা লাইনে আবার একই ব্যর্থ Move চেষ্টা হতো।
+        // Careful: _openDay is updated in every case, even if Move failed. Otherwise every
+        // line would retry the same failing Move.
         _openDay = today;
 
         Prune(today);
     }
 
     /// <summary>
-    /// ৭ দিন / ৫০ MB — সিদ্ধান্তটা <see cref="LogRetention"/>-এর, এখানে
-    /// শুধু ডিস্কের কাজটুকু।
+    /// 7 days / 50 MB. The decision belongs to <see cref="LogRetention"/>; this method only
+    /// does the disk work.
     /// </summary>
     private void Prune(DateOnly today)
     {
@@ -201,17 +199,17 @@ internal sealed class FileLog : ISyncLog
                 }
                 catch (Exception)
                 {
-                    // একটা ফাইল মুছতে না পারলে বাকিগুলো তো যাক
+                    // if one file cannot be deleted, let the rest go on
                 }
             }
         }
         catch (Exception)
         {
-            // ছাঁটাই না হলে ডিস্ক একটু বেশি নেবে — লগ থেমে যাওয়ার চেয়ে ভালো
+            // if pruning fails the disk fills slightly more; better than the log stopping
         }
     }
 
-    /// <summary>চলতি ফাইলটার শেষ লেখার দিন। না থাকলে <c>null</c>।</summary>
+    /// <summary>The day of the current file's last write. <c>null</c> if it does not exist.</summary>
     private DateOnly? ExistingDay()
     {
         try
@@ -226,11 +224,11 @@ internal sealed class FileLog : ISyncLog
     }
 
     /// <summary>
-    /// <c>agent-2026-08-12.log</c> → ২০২৬-০৮-১২।
+    /// <c>agent-2026-08-12.log</c> → 2026-08-12.
     ///
-    /// ⚠️ নাম থেকে পড়া হয়, mtime থেকে নয়। ফাইল কপি করলে, ব্যাকআপ থেকে
-    /// ফেরালে বা robocopy চালালে mtime বদলে যায় — তখন সাত দিনের পুরোনো লগ
-    /// হঠাৎ "আজকের" হয়ে যেত আর কোনোদিন মুছত না।
+    /// Careful: read from the name, not from the mtime. Copying the file, restoring from a
+    /// backup or running robocopy changes the mtime, and a seven-day-old log would suddenly
+    /// become "today's" and never be deleted.
     /// </summary>
     internal static DateOnly? DayFromName(string fileName)
     {

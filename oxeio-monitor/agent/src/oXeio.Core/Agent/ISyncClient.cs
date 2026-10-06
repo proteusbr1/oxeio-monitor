@@ -3,32 +3,32 @@ using oXeio.Core.Models;
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// ⭐ সার্ভারের সাথে কথা বলার একমাত্র দরজা — এক endpoint, এক মেথড।
+/// The only door to the server: one endpoint, one method.
 ///
-/// <b>চুক্তি (ইমপ্লিমেন্টেশনকে এগুলো মানতেই হবে):</b>
+/// <b>Contract (implementations must honor all of these):</b>
 /// <list type="number">
-/// <item>কোনো মেথড <b>এক্সসেপশন ছোড়ে না</b>। নেটওয়ার্ক ব্যর্থতা এখানে স্বাভাবিক
-///       অবস্থা, ব্যতিক্রম নয় — <see cref="SyncResult{T}"/> দেখুন।</item>
-/// <item>প্রতিটি রিকোয়েস্টে <see cref="SyncLimits.ClientTimeHeader"/> হেডার যাবে,
-///       GET-এও। সার্ভার এখান থেকেই clock drift মাপে; না পাঠালে drift অ্যালার্ট
-///       ভুল হবে আর সেটা কেউ দেখবেও না।</item>
-/// <item><see cref="EnrollAsync"/> ছাড়া সব কলে <c>Authorization: Bearer</c>।</item>
-/// <item>৪০৩-এর বডিতে <c>{ command: "revoke" }</c> পেলে
-///       <see cref="SyncOutcome.Revoked"/> ফেরাতে হবে, রিট্রাই নয়।</item>
-/// <item>টাইমআউট নিজে সামলাতে হবে। ⚠️ <c>HttpClient</c>-এর ডিফল্ট ১০০ সেকেন্ড
-///       টাইমআউট বেশি — একটা ঝুলে থাকা কানেকশন পুরো সিঙ্ক লুপকে দুই মিনিট
-///       আটকে রাখে, আর তখন কিউ বাড়তেই থাকে।</item>
+/// <item>No method <b>throws</b>. A network failure is a normal state here, not an
+///       exception: see <see cref="SyncResult{T}"/>.</item>
+/// <item>Every request carries the <see cref="SyncLimits.ClientTimeHeader"/> header, GETs
+///       included. The server measures clock drift from it; without it the drift alert would
+///       be wrong and nobody would notice.</item>
+/// <item>All calls except <see cref="EnrollAsync"/> send <c>Authorization: Bearer</c>.</item>
+/// <item>A 403 body containing <c>{ command: "revoke" }</c> must return
+///       <see cref="SyncOutcome.Revoked"/>, not a retry.</item>
+/// <item>Timeouts must be handled here. <c>HttpClient</c>'s default 100-second timeout is too
+///       long: one hung connection blocks the whole sync loop for two minutes while the
+///       queue keeps growing.</item>
 /// </list>
 ///
-/// ⚠️ ইমপ্লিমেন্টেশন <b>একটাই</b> <c>HttpClient</c> ব্যবহার করবে, সারা জীবনের জন্য।
-/// প্রতি কলে নতুন বানালে সপ্তাহখানেকে socket exhaustion — আর প্রসেসটা তো
-/// সপ্তাহের পর সপ্তাহ চলবেই।
+/// The implementation must use <b>one</b> <c>HttpClient</c> for its whole lifetime. Creating a
+/// new one per call leads to socket exhaustion within about a week, and the process will
+/// certainly run for weeks on end.
 /// </summary>
 public interface ISyncClient
 {
     /// <summary>
-    /// enroll-এর পর বা ডিস্ক থেকে পড়ে টোকেন বসানো। null দিলে টোকেন মুছে যায়।
-    /// টোকেন ছাড়া <see cref="EnrollAsync"/> ছাড়া বাকি সব কল ৪০১ পাবে।
+    /// Sets the token after enroll or after reading it from disk. Passing null clears it.
+    /// Without a token every call except <see cref="EnrollAsync"/> gets a 401.
     /// </summary>
     void SetDeviceToken(string? deviceToken);
 
@@ -36,8 +36,8 @@ public interface ISyncClient
         EnrollRequest request, CancellationToken ct = default);
 
     /// <summary>
-    /// ⭐ স্টাফের নিজের লগইন দিয়ে enroll। ⚠️ ২০০ পেলেও কাজ শেষ নাও হতে
-    /// পারে — <see cref="EnrollLoginResponse.NeedsTotp"/> দেখুন।
+    /// Enroll using the staff member's own login. Careful: a 200 may not mean the work is done;
+    /// see <see cref="EnrollLoginResponse.NeedsTotp"/>.
     /// </summary>
     Task<SyncResult<EnrollLoginResponse>> EnrollWithLoginAsync(
         EnrollLoginRequest request, CancellationToken ct = default);
@@ -48,9 +48,9 @@ public interface ISyncClient
         HeartbeatRequest request, CancellationToken ct = default);
 
     /// <summary>
-    /// ⚠️ <paramref name="segments"/> <see cref="SyncLimits.MaxBatchSize"/>-এর বেশি
-    /// হলে সার্ভার পুরো ব্যাচটাই ৪০০ দেবে — অর্থাৎ একটা বড় ব্যাচ পাঠানোর ভুলে
-    /// পাঁচশো সারি "স্থায়ী প্রত্যাখ্যান" হয়ে মুছে যেত। ভাগ করার দায়িত্ব কলারের।
+    /// If <paramref name="segments"/> exceeds <see cref="SyncLimits.MaxBatchSize"/> the server
+    /// returns 400 for the whole batch, so one oversized batch would turn five hundred rows
+    /// into a "permanent rejection" and delete them. Splitting is the caller's job.
     /// </summary>
     Task<SyncResult<IngestAck>> SendSegmentsAsync(
         IReadOnlyList<ActivitySegment> segments, CancellationToken ct = default);
@@ -64,23 +64,23 @@ public interface ISyncClient
         IReadOnlyList<AgentEventRecord> events, CancellationToken ct = default);
 
     /// <summary>
-    /// একবারে একটাই ছবি — multipart, <c>meta</c> + <c>file</c>।
+    /// One picture at a time: multipart, <c>meta</c> + <c>file</c>.
     ///
-    /// <paramref name="webpPath"/> ডিস্কের ফাইল; ইমপ্লিমেন্টেশন সেটা
-    /// <b>স্ট্রিম</b> করবে, পুরোটা মেমরিতে তুলবে না।
+    /// <paramref name="webpPath"/> is a file on disk; the implementation must
+    /// <b>stream</b> it and not load all of it into memory.
     ///
-    /// ⚠️ ফাইলটা না থাকলে বা <see cref="SyncLimits.MaxScreenshotBytes"/>-এর বড় হলে
-    /// নেটওয়ার্কে না গিয়েই <see cref="SyncOutcome.Permanent"/> ফেরাতে হবে —
-    /// নইলে একটা হারানো ফাইলের জন্য ওই সারি চিরকাল রিট্রাই হয়ে কিউ আটকে রাখত।
+    /// If the file is missing or larger than <see cref="SyncLimits.MaxScreenshotBytes"/>, return
+    /// <see cref="SyncOutcome.Permanent"/> without touching the network; otherwise a lost file
+    /// would make that row retry forever and block the queue.
     /// </summary>
     Task<SyncResult<ScreenshotAck>> SendScreenshotAsync(
         ScreenshotRecord meta, string webpPath, CancellationToken ct = default);
 
-    /// <summary>২০৪ = হালনাগাদ আছে; তখন Success কিন্তু <c>Value</c> null।</summary>
+    /// <summary>204 = up to date; then Success but <c>Value</c> is null.</summary>
     Task<SyncResult<UpdateOffer>> CheckUpdateAsync(
         string currentVersion, CancellationToken ct = default);
 
-    /// <summary>MSI নামিয়ে <paramref name="destinationPath"/>-এ রাখে ও হ্যাশ হিসাব করে।</summary>
+    /// <summary>Downloads the MSI to <paramref name="destinationPath"/> and computes its hash.</summary>
     Task<SyncResult<UpdateDownload>> DownloadUpdateAsync(
         string version, string destinationPath, CancellationToken ct = default);
 }

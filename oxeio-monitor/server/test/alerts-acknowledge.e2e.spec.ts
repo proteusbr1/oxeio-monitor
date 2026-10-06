@@ -13,13 +13,13 @@ import {
 } from './setup/harness';
 
 /**
- * **"Seen all" — একসাথে সব খোলা অ্যালার্ট acknowledge।**
+ * "Seen all": acknowledge every open alert at once.
  *
- * ⚠️⚠️ মালিকের অভিযোগ থেকে: G01 ("এজেন্ট চুপ") ১২টা PC-তে বারবার এলে
- * ১১৮টা ওয়ার্নিং জমে, আর এক-এক করে "Seen" চাপা যন্ত্রণা।
+ * From the owner's complaint: when G01 ("agent silent") fires repeatedly on
+ * 12 PCs, 118 warnings pile up, and pressing "Seen" one by one is a pain.
  *
- * ⭐ এই ফাইলটা দুটো জিনিস পাহারা দেয়: বাল্ক-ack **সত্যিই** সব খোলা সারি
- * ছোঁয়, আর **আগে দেখা** সারির ইতিহাস (কে প্রথম দেখেছিল) অটুট রাখে।
+ * This file guards two things: bulk-ack really touches every open row, and
+ * it keeps the history of rows that were already seen (who saw them first).
  */
 let h: Harness;
 let owner: Session;
@@ -55,8 +55,8 @@ const ackAll = () =>
     .set('X-CSRF-Token', owner.csrf);
 
 describe('POST /alerts/acknowledge-all', () => {
-  /** ⭐⭐ মূল দাবি — সব খোলা সারি এক ক্লিকে seen হয়। */
-  it('সব খোলা অ্যালার্ট একসাথে acknowledge হয়', async () => {
+  /** The main claim: every open row becomes seen with one click. */
+  it('all open alerts are acknowledged at once', async () => {
     await seedAlert();
     await seedAlert();
     await seedAlert();
@@ -69,12 +69,13 @@ describe('POST /alerts/acknowledge-all', () => {
   });
 
   /**
-   * ⚠️⚠️ **আগে দেখা সারি ছোঁয়া হয় না।** নইলে "কে প্রথম দেখেছিল" ইতিহাসটা
-   * এই এক ক্লিকে মুছে যেত — আর ঘণ্টা-সংশোধনের প্রমাণও নড়ে যেত।
+   * Careful: rows already seen are not touched. Otherwise the "who saw it
+   * first" history would be wiped by this one click, and the evidence for
+   * hour corrections would shift too.
    */
-  it('আগে acknowledge করা সারির ইতিহাস অটুট থাকে', async () => {
-    // ⚠️ সরাসরি একটা **আগে-দেখা** সারি বসানো — কে ও কখন দেখেছিল, নির্দিষ্ট
-    //    করে। (কন্ট্রোলার owner-only, তাই ম্যানেজার দিয়ে ack করানো যায় না।)
+  it('the history of previously acknowledged rows stays intact', async () => {
+    // Insert a previously seen row directly, fixing who saw it and when.
+    // (The controller is owner-only, so a manager cannot be used to ack.)
     const seenBy = await h.prisma.user.findFirstOrThrow({
       where: { email: MANAGER_EMAIL },
     });
@@ -84,26 +85,26 @@ describe('POST /alerts/acknowledge-all', () => {
       acknowledgedAt: seenAt,
     });
 
-    await seedAlert(); // একটা এখনো খোলা
+    await seedAlert(); // one still open
 
     const res = await ackAll().expect(200);
-    // শুধু বাকি একটাই গোনা হয়, আগেরটা নয়
+    // Only the one remaining is counted, not the earlier one
     expect(res.body.count).toBe(1);
 
     const after = await h.prisma.alert.findUniqueOrThrow({
       where: { id: already.id },
     });
-    expect(after.acknowledgedById).toBe(seenBy.id); // owner-এ বদলায়নি
+    expect(after.acknowledgedById).toBe(seenBy.id); // not changed to the owner
     expect(after.acknowledgedAt?.getTime()).toBe(seenAt.getTime());
   });
 
-  it('কিছু খোলা না থাকলে count শূন্য, এরর নয়', async () => {
+  it('with nothing open, count is zero, not an error', async () => {
     const res = await ackAll().expect(200);
     expect(res.body.count).toBe(0);
   });
 
-  /** ⚠️ owner-only — ম্যানেজারও নয় (কন্ট্রোলারের `@Roles(owner)`) */
-  it('ম্যানেজার পারেন না', async () => {
+  /** Owner-only, not even the manager (the controller's `@Roles(owner)`) */
+  it('a manager cannot', async () => {
     const manager = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
     await manager.http
       .post('/api/v1/alerts/acknowledge-all')
@@ -112,11 +113,11 @@ describe('POST /alerts/acknowledge-all', () => {
   });
 
   /**
-   * ⚠️ রুট-মেলানোর ফাঁদ: `acknowledge-all` যেন `:id/acknowledge`-এর
-   * `:id` হিসেবে না পড়ে। পড়লে এটা "acknowledge-all নামের অ্যালার্ট খুঁজে
-   * পাওয়া গেল না" ৪০৪/৪০০ দিত। ২০০ + count মানে সঠিক রুটে গেছে।
+   * A route-matching trap: `acknowledge-all` must not be read as the `:id` of
+   * `:id/acknowledge`. If it were, this would give a 404/400 "no alert named
+   * acknowledge-all found". 200 plus count means it went to the right route.
    */
-  it('acknowledge-all আলাদা রুট, :id হিসেবে পড়ে না', async () => {
+  it('acknowledge-all is its own route, not read as :id', async () => {
     await seedAlert();
     const res = await ackAll().expect(200);
     expect(res.body).toHaveProperty('count');

@@ -29,14 +29,14 @@ import {
 } from './dto';
 
 /**
- * R21 — জামানতের owner-এর দিক (`/api/v1/deposits`)।
+ * The owner's side of security deposits (`/api/v1/deposits`).
  *
- * ⚠️⚠️ পুরো ক্লাসটা **owner-only**, ম্যানেজারও নয় — জামানত সরাসরি বেতনের
- * অংশ, আর বেতনের কোনো সংখ্যা ম্যানেজারের নাগালে নেই
- * ([ADR-023](../../../docs/05-Options-Decisions.md) · ADR-027)।
+ * Careful: the whole class is **owner-only**, not even managers — the deposit
+ * is part of salary directly, and no salary figure is within a manager's reach
+ * ([ADR-023](../../../docs/05-Options-Decisions.md) · ADR-027).
  *
- * ⭐ স্টাফ নিজের জমাটা দেখেন `GET /api/v1/me/deposit`-এ — সেখানে কেবল
- * **নিজের** সংখ্যা, আর কারো নয়।
+ * Staff see their own deposit at `GET /api/v1/me/deposit` — only **their own**
+ * numbers there, nobody else's.
  */
 @Roles(UserRole.owner)
 @RequiresFeature('deposits')
@@ -44,7 +44,7 @@ import {
 export class DepositsController {
   constructor(private readonly deposits: DepositsService) {}
 
-  /** নিয়ম ও সবার জমা — এক কলেই, কারণ পর্দাটা দুটোই একসাথে দেখায় */
+  /** The rule and everyone's deposits — in one call, because the screen shows both together */
   @Get()
   balances(): Promise<{ rows: DepositBalance[]; policy: DepositPolicyView }> {
     return this.deposits.balances();
@@ -60,14 +60,15 @@ export class DepositsController {
   }
 
   /**
-   * ⭐⭐ `PATCH /api/v1/deposits/:employeeId/start` — এই কর্মীর জামানত
-   * কোন মাস থেকে কাটা শুরু।
+   * `PATCH /api/v1/deposits/:employeeId/start` — the month this employee's
+   * deposit deductions start.
    *
-   * ⚠️ `yearMonth: null` পাঠালে নিয়মের সাধারণ শুরুর মাসে ফিরে যায়।
+   * Careful: sending `yearMonth: null` goes back to the policy's general start month.
    *
-   * ⚠️⚠️ মাস **এগিয়ে** দিলে তার আগের কিস্তিগুলো খাতা থেকে মুছে যায় — এটাই
-   * এই রুটের আসল কাজ (ভুল সংশোধন)। কতগুলো গেল সেটা রেসপন্সে ফেরত আসে,
-   * যাতে পর্দা মালিককে সত্যিটা দেখাতে পারে।
+   * Careful: moving the month **forward** removes the earlier instalments from
+   * the ledger — that is the real job of this route (correcting a mistake). How
+   * many were removed comes back in the response, so the screen can show the
+   * owner the truth.
    */
   @Patch(':employeeId/start')
   setStart(
@@ -80,19 +81,20 @@ export class DepositsController {
   }
 
   /**
-   * `POST /api/v1/deposits/:employeeId/settle` — ফেরত বা বাজেয়াপ্ত।
+   * `POST /api/v1/deposits/:employeeId/settle` — refund or forfeit.
    *
-   * ⚠️ সিদ্ধান্তটা মালিকের; সিস্টেম শুধু নোটিশের দিন গুনে সারিতে লিখে
-   * রাখে। ⚠️ দ্বিতীয়বার ডাকলে ৪০৯ — টাকা দুবার ফেরত দেওয়ার হিসাব
-   * কোথাও লেখা থাকত না।
+   * Careful: the decision is the owner's; the system only counts the notice
+   * days and records them on the row. Careful: a second call gives 409 —
+   * otherwise nowhere would record that the money was refunded twice.
    */
   /**
-   * `GET /api/v1/deposits/:employeeId/months` — একজনের মাস-ধরে খাতা।
+   * `GET /api/v1/deposits/:employeeId/months` — one person's month-by-month ledger.
    *
-   * ⚠️⚠️ **এটা ছাড়া মালিক নিজের খাতাই দেখতে পেতেন না।** পাতায় ছিল কেবল
-   * যোগফল (*"2 months held · ৳500"*), আর সেই দুটো সংখ্যা একসাথে পড়লে
-   * অর্থহীন হতে পারে — মাঠে ঠিক তাই হয়েছিল (একটা মাস ৳০ ছিল)। মাসগুলো
-   * এতদিন কেবল **কর্মীর নিজের** পাতায় (`/me/deposit`) দেখা যেত।
+   * Careful: **without this the owner could not see the ledger itself.** The
+   * page had only the total (*"2 months held · ৳500"*), and read together those
+   * two numbers can be meaningless — which is what happened in the field (one
+   * month was ৳0). Until now the months were visible only on **the employee's
+   * own** page (`/me/deposit`).
    */
   @Get(':employeeId/months')
   months(
@@ -102,11 +104,12 @@ export class DepositsController {
   }
 
   /**
-   * `PATCH /api/v1/deposits/:employeeId/instalment` — ভুল অঙ্ক সংশোধন।
+   * `PATCH /api/v1/deposits/:employeeId/instalment` — correct a wrong amount.
    *
-   * ⚠️⚠️ এতদিন এর **কোনো পথই ছিল না** — `ensureLedger()` বিদ্যমান সারি
-   * কখনো হালনাগাদ করে না (ইচ্ছাকৃত), তাই ভুল অঙ্ক চিরকাল বসে থাকত।
-   * ⭐ কারণ (`reason`) বাধ্যতামূলক, আর বন্ধ মাসে বা নিষ্পত্তির পরে নয়।
+   * Careful: until now there was **no way to do this** — `ensureLedger()` never
+   * updates an existing row (deliberately), so a wrong amount stayed forever.
+   * The reason (`reason`) is mandatory, and it is not allowed in a closed
+   * month or after settlement.
    */
   @Patch(':employeeId/instalment')
   correct(

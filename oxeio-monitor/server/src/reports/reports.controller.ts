@@ -13,16 +13,16 @@ import type {
 } from './reports.types';
 
 /**
- * F01 · F02 · F04 · F05 · F08 — রিপোর্ট ও Excel এক্সপোর্ট।
+ * F01 · F02 · F04 · F05 · F08: reports and Excel export.
  *
- * ⚠️ ভূমিকা **ক্লাস-লেভেলে** বসানো (মেথডে নয়): owner ও manager দুজনেই
- * রিপোর্ট দেখতে ও নামাতে পারেন (§ ৪.৩), কিন্তু স্টাফ নয়। পরে কেউ নতুন
- * রিপোর্ট যোগ করলে সেটাও আপনাআপনি এই দুজনেই সীমাবদ্ধ থাকবে — মেথডে
- * লিখলে নতুন endpoint নীরবে সবার নাগালে চলে যেত।
+ * The roles are set **at class level** (not on methods): owner and manager can
+ * both view and download reports (§ 4.3), but staff cannot. If someone adds a
+ * new report later it is automatically limited to these two; written on a
+ * method, a new endpoint would silently end up within everyone's reach.
  *
- * ⚠️ পে-রোল এখানে **নেই** — `/reports/payroll` আলাদা মডিউলে, owner-only।
- * এক কন্ট্রোলারে এনে ফেললে এই ক্লাস-লেভেল `@Roles`-এর ভেতরে manager-ও
- * বেতনের শিট পেয়ে যেতেন।
+ * Payroll is **not** here: `/reports/payroll` is in a separate module,
+ * owner-only. Brought into this controller, managers would get the salary sheet
+ * too, inside this class-level `@Roles`.
  */
 @Roles(UserRole.owner, UserRole.manager)
 @Controller('reports')
@@ -66,8 +66,8 @@ export class ReportsController {
 
   /**
    * F04 — `GET /api/v1/reports/productivity?from=&to=&format=json|xlsx`
-   * ⚠️ এখানে `pdf` নেই — `ProductivityQuery` DTO-তেই আটকানো, তাই
-   *    `?format=pdf` একটা পরিষ্কার ৪০০ পায়, চুপচাপ JSON নয়।
+   * Careful: no `pdf` here. `ProductivityQuery` blocks it in the DTO itself, so
+   * `?format=pdf` gets a clear 400, not quietly JSON.
    */
   @Get('productivity')
   async productivity(
@@ -83,17 +83,18 @@ export class ReportsController {
 }
 
 /**
- * ⭐ হেডার `StreamableFile`-এর অপশনেই দেওয়া হয়, `@Res()` দিয়ে নয়। `@Res()`
- * ধরিয়ে দিলে ওই হ্যান্ডলারে Nest-এর নিজের রেসপন্স-পাইপলাইন (ইন্টারসেপ্টর,
- * সিরিয়ালাইজেশন) বন্ধ হয়ে যায় — অথচ একই মেথডের JSON শাখাটার ওটাই দরকার।
+ * The headers are given in `StreamableFile`'s options, not via `@Res()`. Taking
+ * `@Res()` switches off Nest's own response pipeline (interceptors,
+ * serialisation) for that handler, yet the same method's JSON branch needs it.
  *
- * ⚠️ MIME আর নাম **দুটোই সার্ভিসের দেওয়া** (`ReportFile`)। এখানে ফরম্যাট
- *    দেখে আবার MIME বাছলে একদিন `.pdf` ফাইল `xlsx` MIME নিয়ে যেত, আর
- *    ব্রাউজার ওটা Excel দিয়ে খুলতে গিয়ে "ফাইল নষ্ট" বলত।
+ * Careful: the MIME and the name are **both given by the service**
+ * (`ReportFile`). Picking the MIME again here from the format could one day
+ * send a `.pdf` file with the `xlsx` MIME, and the browser would try to open
+ * it in Excel and say "file corrupt".
  *
- * ⚠️ ফাইলের নাম ASCII (`reports.download.ts`-এর `reportFilename`) —
- *    Content-Disposition-এ বাংলা নাম দিতে হলে RFC 5987 এনকোডিং লাগত,
- *    নইলে ক্লায়েন্ট ভাঙা নামে সেভ করত।
+ * The file name is ASCII (`reportFilename` in `reports.download.ts`): a
+ * non-ASCII name in Content-Disposition would need RFC 5987 encoding,
+ * otherwise clients would save it under a broken name.
  */
 function download(file: ReportFile): StreamableFile {
   return new StreamableFile(file.buffer, {

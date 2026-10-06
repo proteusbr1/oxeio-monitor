@@ -1,61 +1,62 @@
-/** httpOnly — ব্রাউজারের JS কখনো পড়তে পারবে না (ADR-016, XSS-এ টোকেন চুরি ঠেকাতে) */
+/** httpOnly: browser JS can never read it (ADR-016, to stop token theft via XSS) */
 export const SESSION_COOKIE = 'oxeio_session';
 
 /**
- * CSRF-এর double-submit টোকেন। ইচ্ছাকৃতভাবে httpOnly **নয়** —
- * ফ্রন্টএন্ডকে এটা পড়ে `X-CSRF-Token` হেডারে ফেরত পাঠাতে হয়।
+ * The CSRF double-submit token. Deliberately **not** httpOnly: the frontend
+ * has to read it and send it back in the `X-CSRF-Token` header.
  */
 export const CSRF_COOKIE = 'oxeio_csrf';
 export const CSRF_HEADER = 'x-csrf-token';
 
-/** I09 — ৩০ মিনিট নিষ্ক্রিয় থাকলে সেশন শেষ */
+/** I09: the session ends after 30 minutes of inactivity */
 export const SESSION_TTL_MIN = 30;
 
 /**
- * প্রতি রিকোয়েস্টে নতুন টোকেন ইস্যু করলে অযথা খরচ।
- * এই সময়ের বেশি পুরোনো হলে তবেই cookie নতুন করে বসে (sliding window)।
+ * Issuing a new token on every request is wasteful. The cookie is re-set only
+ * once the token is older than this (sliding window).
  */
 export const SESSION_REFRESH_AFTER_MIN = 5;
 
 /**
- * I09 — মেয়াদ শেষের কত আগে "আর ১ মিনিট" সতর্কবার্তা।
- * ⚠️ কাজের মাঝপথে চুপচাপ লগআউট নয় — এই জানালাটাই ইউজারকে একটা ক্লিকে
- *    সেশন বাঁচানোর সুযোগ দেয়।
+ * I09: how long before expiry the "1 minute left" warning appears.
+ * Careful: no silent logout in the middle of work; this window is what lets
+ * the user save the session with one click.
  */
 export const IDLE_WARN_BEFORE_SEC = 60;
 
 /**
- * I11 — ব্রুট-ফোর্স।
+ * I11: brute-force protection.
  *
- * ⚠️⚠️ **মানগুলো এখান থেকে সরে গেছে** — `login-throttle.config.ts`-এ, আর
- * `.env` দিয়ে বদলানো যায় (`LOGIN_MAX_FAILS`, `LOGIN_LOCK_MINUTES`)।
- * এখানে ছিল ৫ বার / ১৫ মিনিট, আর ১৫ জনের অফিসে সেটা সুরক্ষা নয়, বাধা
- * হয়ে দাঁড়িয়েছিল: পাসওয়ার্ড রিসেটের পর স্টাফ কয়েকবার ভুল টাইপ করলেই
- * "Try again in 13 minutes" — আর মনে হতো রিসেটটাই কাজ করেনি।
+ * Careful: **the values moved out of here** to `login-throttle.config.ts`,
+ * and can be changed through `.env` (`LOGIN_MAX_FAILS`, `LOGIN_LOCK_MINUTES`).
+ * They used to be 5 attempts / 15 minutes, and in a 15-person office that was
+ * not protection but an obstacle: after a password reset, a staff member
+ * mistyping a few times got "Try again in 13 minutes", and it looked as if the
+ * reset itself had not worked.
  *
- * ⚠️ কোনো ধ্রুবক এখানে ফিরিয়ে আনবেন না — দুই জায়গায় দুই মাপ থাকলে কোনটা
- * আসলে খাটছে সেটা আর বলা যেত না।
+ * Careful: do not bring any constant back here. With two sizes in two places
+ * nobody could tell which one is actually in force.
  */
 
-/** পাসওয়ার্ডের সর্বনিম্ন দৈর্ঘ্য */
+/** Minimum password length */
 export const MIN_PASSWORD_LENGTH = 10;
 
 // ══════════════════ I06 — TOTP 2FA ══════════════════
 
-/** authenticator অ্যাপে যে নামে অ্যাকাউন্টটা দেখাবে */
+/** The name under which the account shows in the authenticator app */
 export const TOTP_ISSUER = 'oXeio Monitor';
 
-/** RFC 6238-এর ডিফল্ট — Google Authenticator, Authy, 1Password সবাই এটাই ধরে */
+/** The RFC 6238 defaults: Google Authenticator, Authy and 1Password all assume these */
 export const TOTP_DIGITS = 6;
 export const TOTP_PERIOD = 30;
 
 /**
- * ⚠️ ±১ ধাপ (±৩০ সেকেন্ড) সহনশীলতা। ফোনের ঘড়ি কয়েক সেকেন্ড এদিক-ওদিক
- *    থাকা স্বাভাবিক; ০ রাখলে বহু বৈধ কোড অকারণে বাতিল হতো।
+ * Careful: a tolerance of +-1 step (+-30 seconds). A phone clock being a few
+ * seconds off is normal; with 0, many valid codes would be rejected for no reason.
  */
 export const TOTP_WINDOW = 1;
 
-/** ⭐ ফোন হারালে ঢোকার একমাত্র পথ — একবারই দেখানো হয় */
+/** The only way in if the phone is lost; shown just once */
 export const RECOVERY_CODE_COUNT = 10;
-/** ১০ অক্ষর × ৫ বিট = ৫০ বিট এনট্রপি */
+/** 10 characters x 5 bits = 50 bits of entropy */
 export const RECOVERY_CODE_LENGTH = 10;

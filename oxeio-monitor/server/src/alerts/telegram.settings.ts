@@ -1,16 +1,17 @@
 /**
- * **টেলিগ্রামের সেটিং** — খাঁটি নিয়ম, কোনো I/O নেই।
+ * **Telegram settings.** Pure rules, no I/O.
  *
- * ⚠️⚠️ **কেন এটা দরকার হলো:** টোকেন ও চ্যাট আইডি ছিল কেবল `.env`-এ, অর্থাৎ
- * বদলাতে হলে VPS-এ SSH করে ফাইল সম্পাদনা করে কনটেইনার রিস্টার্ট। মালিকের
- * পক্ষে সেটা কার্যত অসম্ভব — আর ফল হলো, টেলিগ্রাম একবার ভুল হলে সেটা
- * মাসের পর মাস ভুলই থেকে যেত।
+ * Why it was needed: the token and chat id lived only in `.env`, so changing
+ * them meant SSH to the VPS, editing the file and restarting the container.
+ * That is practically impossible for the owner, and the result was that a
+ * wrong Telegram setting stayed wrong for months.
  *
- * ⭐ এখন ডাটাবেসে, পর্দা থেকে বদলানো যায়। `.env` **fallback হিসেবে থাকে** —
- * পুরোনো ইনস্টলেশনে কিছু ভাঙে না, আর ডাটাবেস খালি থাকলে আগের আচরণই চলে।
+ * It now lives in the database and can be changed from the screen. `.env`
+ * **stays as a fallback**: nothing breaks on old installations, and when the
+ * database is empty the earlier behavior continues.
  */
 
-/** ডাটাবেসে `settings` টেবিলে এই চাবিতে বসে */
+/** The key used in the database `settings` table */
 export const TELEGRAM_SETTING_KEY = 'telegram';
 
 export interface TelegramSettings {
@@ -19,26 +20,26 @@ export interface TelegramSettings {
 }
 
 /**
- * ⚠️⚠️ **পর্দায় যা যায় — টোকেন কখনো নয়।**
+ * **What goes to the screen: never the token.**
  *
- * ব্রাউজারে পাঠালে সেটা DevTools, প্রক্সি লগ, বা স্ক্রিন শেয়ারে দেখা যেত।
- * তাই কেবল **শেষ চারটে অক্ষর** — মালিক যেন মিলিয়ে নিতে পারেন কোনটা বসানো
- * আছে, কিন্তু কেউ যেন ওটা দিয়ে বট চালাতে না পারে।
+ * Sent to the browser, it would show up in DevTools, proxy logs or screen
+ * shares. So only the **last four characters**: enough for the owner to check
+ * which one is set, but not enough for anyone to run the bot with it.
  */
 export interface TelegramSettingsView {
   configured: boolean;
-  /** `…4821` — টোকেন বসানো না থাকলে `null` */
+  /** `...4821`; `null` if no token is set */
   tokenHint: string | null;
-  /** ⭐ চ্যাট আইডি গোপন নয়, তাই পুরোটাই যায় — ওটা দিয়ে কিছু করা যায় না */
+  /** The chat id is not secret, so all of it is sent; nothing can be done with it alone */
   chatId: string;
-  /** ⚠️ `.env` থেকে আসছে না ডাটাবেস থেকে — মালিকের জানা দরকার কোনটা খাটছে */
+  /** Whether it comes from `.env` or the database; the owner needs to know which applies */
   source: 'database' | 'env' | 'none';
 }
 
 /**
- * ⚠️ চার অক্ষরের কম হলে কিছুই দেখানো হয় না। খুব ছোট টোকেন মানে হয় ভুল
- * বসানো, নয় পরীক্ষার মান — দুই ক্ষেত্রেই অংশ দেখিয়ে লাভ নেই, আর
- * পুরোটা দেখিয়ে ফেলার ঝুঁকি থাকে।
+ * Nothing is shown if shorter than four characters. A very short token is
+ * either a mistake or a test value; in both cases showing a part gains
+ * nothing, and there is a risk of showing all of it.
  */
 export function tokenHint(token: string): string | null {
   const trimmed = token.trim();
@@ -48,12 +49,11 @@ export function tokenHint(token: string): string | null {
 }
 
 /**
- * ডাটাবেস ও `.env` মিলিয়ে **কোনটা আসলে খাটবে**।
+ * Combines the database and `.env` to decide **which one actually applies**.
  *
- * ⭐⭐ ডাটাবেস জিতবে, কিন্তু **কেবল দুটো ঘরই ভরা থাকলে**। একটা ভরা আর
- * একটা খালি রেখে দিলে টেলিগ্রাম আধা-কনফিগার হয়ে চুপচাপ বন্ধ থাকত, অথচ
- * `.env`-এ কাজ করা মান বসেই আছে — অর্থাৎ পর্দায় হাত দিয়ে জিনিসটা
- * **ভাঙানো** যেত।
+ * The database wins, but **only if both fields are filled**. If one were
+ * filled and the other empty, Telegram would be half-configured and quietly
+ * off while a working value still sits in `.env`, so the screen could be used to **break** it.
  */
 export function resolveTelegram(
   db: Partial<TelegramSettings> | null,
@@ -77,11 +77,11 @@ export function resolveTelegram(
 }
 
 /**
- * পর্দার জন্য ছবি।
+ * The view for the screen.
  *
- * ⚠️ `source` পাঠানো হয় ইচ্ছাকৃতভাবে: `.env`-এ মান থাকা অবস্থায় মালিক
- * পর্দায় নতুন মান বসালে কোনটা খাটছে সেটা না জানালে তিনি ভাবতেন সেভ
- * হয়নি — অথচ হয়েছে, শুধু অন্যটা জিতছে না।
+ * Careful: `source` is sent deliberately. When `.env` has a value and the
+ * owner enters a new one on screen, without being told which one applies they
+ * would think it had not saved, when it had, and the other one just is not winning.
  */
 export function telegramView(
   resolved: ReturnType<typeof resolveTelegram>,

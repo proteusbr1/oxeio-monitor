@@ -5,21 +5,21 @@ import { idleStateAt, shouldPingSession, type IdleState } from './idle';
 import { sessionPolicy } from './twoFactorApi';
 
 /**
- * সার্ভার sliding window বসায় ৫ মিনিট পরপর (`SESSION_REFRESH_AFTER_MIN`)।
- * ⚠️ এর চেয়ে ঘন ঘন টোকা দিলে শুধু অকারণ ট্রাফিক; বিরল দিলে সক্রিয়
- *    ব্যবহারকারীর টোকেনই মরে যেত।
+ * The server moves the sliding window every 5 minutes (`SESSION_REFRESH_AFTER_MIN`).
+ * Careful: pinging more often than that only adds pointless traffic; pinging
+ * less often would let an active user's token expire.
  */
 const PING_EVERY_MS = 5 * 60 * 1000;
 
-/** সার্ভার না পাওয়া গেলে এগুলোই ধরে নেওয়া হয় — সার্ভারের ডিফল্টের সমান */
+/** Assumed when the server cannot be reached; equal to the server's defaults. */
 const FALLBACK_TIMEOUT_MS = 30 * 60 * 1000;
 const FALLBACK_WARN_MS = 60 * 1000;
 
 /**
- * ⚠️ `scroll` ইচ্ছাকৃতভাবে **নেই** — জড়তায় চলতে থাকা স্ক্রল (touchpad
- *    momentum) পর্দার সামনে কেউ না থাকলেও ইভেন্ট ছুড়তে থাকে।
- * ⚠️ `mousemove` আছে, কারণ শুধু পড়তে থাকা ব্যবহারকারী আর কিছুই করে না —
- *    কিন্তু নিচের থ্রটল ছাড়া এটা সেকেন্ডে ৬০ বার state বদলাত।
+ * Careful: `scroll` is deliberately absent. Momentum scrolling (touchpad) keeps
+ * firing events even when nobody is at the screen.
+ * Careful: `mousemove` is included, because a user who is only reading does
+ * nothing else, but without the throttle below it would change state 60 times a second.
  */
 const ACTIVITY_EVENTS = [
   'mousemove',
@@ -29,29 +29,29 @@ const ACTIVITY_EVENTS = [
   'wheel',
 ] as const;
 
-/** একাধিক ট্যাবে সক্রিয়তা ভাগ করার চাবি */
+/** Key for sharing activity across multiple tabs. */
 const SHARED_KEY = 'oxeio:lastActivity';
 
-/** state বদলানোর সর্বনিম্ন ব্যবধান — নইলে প্রতি মাউস নড়াচড়ায় রি-রেন্ডার */
+/** Minimum interval between state updates; otherwise every mouse movement re-renders. */
 const THROTTLE_MS = 5_000;
 
 export interface IdleLogout extends IdleState {
-  /** "এখনো আছি" — সতর্কবার্তার বোতাম আর যেকোনো ক্লিক এটাই ডাকে */
+  /** "I'm still here": the warning's button and any click call this. */
   stayLoggedIn: () => void;
 }
 
 /**
- * I09 — ৩০ মিনিট নিষ্ক্রিয়তায় অটো-লগআউট, ১ মিনিট আগে সতর্কবার্তা।
+ * I09: automatic logout after 30 minutes of inactivity, with a warning 1 minute before.
  *
- * ⚠️ **কাজের মাঝপথে চুপচাপ লগআউট নয়** — এটাই এই হুকের পুরো কারণ। সার্ভার
- *    এমনিতেই টোকেন মেরে ফেলত, কিন্তু ব্যবহারকারী সেটা জানত পরের ক্লিকে,
- *    হঠাৎ লগইন পর্দা দেখে — মাঝপথে থাকা কাজসহ।
+ * Careful: no silent logout in the middle of work; that is the whole reason for
+ * this hook. The server would kill the token anyway, but the user would find out
+ * on the next click, suddenly facing the login screen, with unfinished work.
  *
- * ⭐ তিনটে কাজ একসাথে:
- *    ১· সক্রিয়তা মাপা (থ্রটল করে, ট্যাবের মধ্যে ভাগ করে)
- *    ২· সক্রিয় থাকলে সার্ভারকে টোকা দেওয়া — নইলে "পর্দায় সক্রিয় অথচ
- *       টোকেন মৃত" অবস্থা তৈরি হতো (দেখুন নিচের `me()` কল)
- *    ৩· সময় ফুরালে `onExpire`
+ * It does three things at once:
+ *   1. Measures activity (throttled, shared across tabs)
+ *   2. Pings the server while the user is active; otherwise you get "active on
+ *      screen but token dead" (see the `me()` call below)
+ *   3. Calls `onExpire` when time runs out
  */
 export function useIdleLogout(
   enabled: boolean,
@@ -68,14 +68,14 @@ export function useIdleLogout(
   const lastPingRef = useRef(Date.now());
   const lastWriteRef = useRef(0);
   /**
-   * ⚠️ ref-এ রাখা: `onExpire` বদলালেও নিচের effect আবার চালু হবে না।
-   *    dependency-তে রাখলে প্রতিটা রেন্ডারে ইভেন্ট লিসেনার খোলা-বন্ধ হতো
-   *    আর কাউন্টডাউন প্রতিবার শূন্য থেকে শুরু হতো।
+   * Careful: kept in a ref so the effect below does not restart when `onExpire`
+   * changes. In the dependencies, the event listeners would be removed and added on
+   * every render and the countdown would restart from zero each time.
    */
   const expireRef = useRef(onExpire);
   expireRef.current = onExpire;
 
-  // সার্ভারের আসল সংখ্যা — না পেলে ফলব্যাক (এটা এরর দেখানোর মতো কিছু নয়)
+  // The server's real numbers; fall back if missing (not worth showing an error for)
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
@@ -96,14 +96,14 @@ export function useIdleLogout(
     const now = Date.now();
     lastActivityRef.current = now;
 
-    // ⚠️ প্রতিবার localStorage-এ লিখলে mousemove-এ সেকেন্ডে ৬০টা লেখা হতো
+    // Careful: writing to localStorage every time would mean 60 writes a second on mousemove
     if (now - lastWriteRef.current >= THROTTLE_MS) {
       lastWriteRef.current = now;
       try {
         localStorage.setItem(SHARED_KEY, String(now));
       } catch {
-        // ⚠️ প্রাইভেট মোড বা কোটা শেষ হলে localStorage ছোড়ে। ট্যাবের মধ্যে
-        //    ভাগাভাগি হারানো চলে, কিন্তু লগআউটের হিসাব ভাঙা চলে না।
+        // Careful: localStorage throws in private mode or when the quota is full.
+        // Losing the cross-tab sharing is acceptable; breaking the logout timing is not.
       }
     }
 
@@ -112,7 +112,7 @@ export function useIdleLogout(
     );
   }, [timeoutMs]);
 
-  // ── সক্রিয়তা শোনা ──────────────────────────────────────────────
+  // ── Listening for activity ──────────────────────────────────────
   useEffect(() => {
     if (!enabled) return;
 
@@ -120,8 +120,8 @@ export function useIdleLogout(
     const onActivity = (): void => {
       const now = Date.now();
       if (now < throttleUntil) {
-        // ⚠️ থ্রটলের ভেতরেও সময়টা এগিয়ে রাখা দরকার — নইলে টানা মাউস নাড়তে
-        //    থাকা ব্যবহারকারীর `lastActivity` সবসময় ৫ সেকেন্ড পুরোনো থাকত
+        // Careful: time must advance even inside the throttle; otherwise for a user
+        // moving the mouse continuously, `lastActivity` would always be 5 seconds old
         lastActivityRef.current = now;
         return;
       }
@@ -134,9 +134,9 @@ export function useIdleLogout(
     }
 
     /**
-     * ⚠️ অন্য ট্যাবে কাজ করলে এই ট্যাবটাও জাগে। এটা না থাকলে দুটো ট্যাব
-     *    খোলা রেখে একটায় কাজ করা ব্যবহারকারী অন্যটায় লগআউট হতো — আর
-     *    সেশন cookie যেহেতু ভাগাভাগি, তখন **দুটোই** বন্ধ হয়ে যেত।
+     * Careful: working in another tab wakes this tab too. Without it, a user with two
+     * tabs open who works in one would be logged out in the other, and since the
+     * session cookie is shared, both would be closed.
      */
     const onStorage = (e: StorageEvent): void => {
       if (e.key !== SHARED_KEY || e.newValue === null) return;
@@ -160,23 +160,23 @@ export function useIdleLogout(
     };
   }, [enabled, markActive, timeoutMs]);
 
-  // ── প্রতি সেকেন্ডে হিসাব ─────────────────────────────────────────
+  // ── Per-second calculation ─────────────────────────────────────
   useEffect(() => {
     if (!enabled) return;
 
-    // লগইনের ঠিক পরের মুহূর্ত থেকে গোনা শুরু — পুরোনো অবস্থা নিয়ে নয়
+    // Counting starts right after login, not from some old state
     lastActivityRef.current = Date.now();
     lastPingRef.current = Date.now();
 
-    // ⚠️ মেয়াদ ফুরানোর পর `onExpire` **একবারই**। এই পাহারাটা না থাকলে
-    //    লগআউট শেষ হওয়ার আগ পর্যন্ত প্রতি সেকেন্ডে একটা করে কল যেত।
+    // Careful: `onExpire` runs once after expiry. Without this guard it would be
+    // called every second until the logout finished.
     let fired = false;
 
     /**
-     * ⚠️ কাউন্টডাউন `setInterval`-এর টিক **গোনে না**, শুধু ঘড়ি দেখে।
-     *    ট্যাব পেছনে গেলে বা ল্যাপটপ ঘুমালে ব্রাউজার টাইমার ধীর করে দেয়
-     *    (১ মিনিট পর্যন্ত) — টিক গুনলে ২ ঘণ্টা পরে জেগে ওঠা মেশিনেও
-     *    "আর ২৯ মিনিট বাকি" দেখাত, অথচ সার্ভারের টোকেন কবেই মৃত।
+     * Careful: the countdown does not count `setInterval` ticks, it only looks at the
+     * clock. When a tab goes to the background or a laptop sleeps, the browser slows
+     * timers (up to 1 minute); counting ticks would show "29 minutes left" on a
+     * machine that woke after 2 hours, though the server's token died long ago.
      */
     const tick = (): void => {
       const now = Date.now();
@@ -193,16 +193,16 @@ export function useIdleLogout(
       fired = false;
 
       /**
-       * ⚠️ টোকা দিতে `me()` — `session-policy` নয়। ওটা `@Public()`, অর্থাৎ
-       *    JwtAuthGuard-এ ঢোকেই না, তাই সেশনের sliding window সরাত না।
-       *    ফলে পর্দায় সক্রিয় কিন্তু API-তে নীরব ব্যবহারকারী (যেমন একটা
-       *    রিপোর্ট পড়ছে) ৩০ মিনিট পর হঠাৎ লগআউট হয়ে যেত।
+       * Careful: the ping is `me()`, not `session-policy`. That one is `@Public()`, so
+       * it never enters JwtAuthGuard and would not move the session's sliding window.
+       * A user active on screen but quiet toward the API (say, reading a report) would
+       * then be logged out suddenly after 30 minutes.
        *
-       * ⚠️ `lastActivity >= lastPing` — অর্থাৎ **শেষ টোকার পর সত্যিই কিছু
-       *    হয়েছে** কি না। এই শর্ত ছাড়া নিষ্ক্রিয় ট্যাবও ২৯ মিনিট ধরে প্রতি
-       *    ৫ মিনিটে টোকা দিয়ে যেত, আর সার্ভারের টোকেন বারবার সরে যেত।
-       *    তখন ব্রাউজার হঠাৎ বন্ধ হলে (ক্র্যাশ, force quit) সেশনটা শেষ
-       *    কাজের ৩০ মিনিট নয়, প্রায় ৫৫ মিনিট পর্যন্ত বেঁচে থাকত।
+       * Careful: `lastActivity >= lastPing` checks that something really happened since
+       * the last ping. Without that condition an idle tab would also ping every 5
+       * minutes for 29 minutes, and the server's token would keep moving. Then, if the
+       * browser closed abruptly (crash, force quit), the session would survive for
+       * about 55 minutes instead of 30 minutes after the last real work.
        */
       if (
         next.phase === 'active' &&
@@ -210,8 +210,8 @@ export function useIdleLogout(
         shouldPingSession(lastPingRef.current, now, PING_EVERY_MS)
       ) {
         lastPingRef.current = now;
-        // ব্যর্থ হলে চুপ — সেশন সত্যিই মরে থাকলে পরের আসল রিকোয়েস্টের
-        // ৪০১ গ্লোবাল হ্যান্ডলারকে জাগিয়ে দেবে
+        // Silent on failure: if the session really is dead, the 401 of the next real
+        // request will wake the global handler
         void me().catch(() => undefined);
       }
     };
@@ -222,8 +222,8 @@ export function useIdleLogout(
   }, [enabled, timeoutMs, warnMs]);
 
   const stayLoggedIn = useCallback(() => {
-    lastWriteRef.current = 0; // অন্য ট্যাবগুলোকেও সাথে সাথে জানানো
-    lastPingRef.current = 0; // ⚠️ সাথে সাথেই সার্ভারের উইন্ডোও সরাতে হবে
+    lastWriteRef.current = 0; // tell the other tabs right away too
+    lastPingRef.current = 0; // Careful: the server's window must move right away too
     markActive();
   }, [markActive]);
 

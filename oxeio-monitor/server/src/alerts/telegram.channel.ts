@@ -23,8 +23,8 @@ import {
 } from './telegram.settings';
 
 /**
- * ⚠️ ইচ্ছাকৃতভাবে **কম** কলাম। `title` বা `detail` এখানে আনাই হয় না —
- *    যা টেনে আনা হয় না, তা ভুল করে পাঠানোও যায় না।
+ * Deliberately **few** columns. `title` and `detail` are not even fetched
+ * here: what is not pulled in cannot be sent by mistake.
  */
 const SWEEP_SELECT = {
   id: true,
@@ -40,42 +40,42 @@ type SweepAlert = Prisma.AlertGetPayload<{ select: typeof SWEEP_SELECT }>;
 export type TelegramOutcome = 'sent' | 'not_configured' | 'failed';
 
 /**
- * **G08** — অ্যালার্টের টেলিগ্রাম চ্যানেল।
+ * **G08**: the Telegram channel for alerts.
  *
- * ⭐ **ইমেইলের প্রতিদ্বন্দ্বী নয়, দ্বিতীয় স্তর।** `AlertDispatcher` আগে
- * নিজের কাজ শেষ করে (`channels_sent` খালি থেকে `email`/`log`/`email_failed`
- * হয়), তারপর এই sweep ওই সারিগুলোর উপর দিয়ে যায় আর `telegram` চিহ্নটা
- * **যোগ** করে।
+ * **Not a rival to email, but a second layer.** `AlertDispatcher` does its
+ * own job first (`channels_sent` goes from empty to `email`/`log`/`email_failed`),
+ * then this sweep goes over those rows and **adds** the `telegram` tag.
  *
- * ⚠️ ক্রমটা উল্টো করা যেত না। dispatcher তোলে ঠিক সেই সারিগুলো যেগুলোর
- *    `channels_sent` **খালি**, আর লেখার সময় সে পুরো অ্যারেটা বদলে দেয়
- *    (`channelsSent: [channel]`)। টেলিগ্রাম আগে চিহ্ন বসালে সারিটা আর
- *    খালি থাকত না — অ্যালার্টটা তখন কোনোদিন ইমেইলে যেত না, অথচ
- *    টেলিগ্রামে গেছে বলে সব ঠিক মনে হতো। ইমেইলই মূল চ্যানেল (owner-এর
- *    ইনবক্স, বিস্তারিত সহ); টেলিগ্রাম শুধু "এখনই তাকান" বলার জন্য।
+ * Careful: the order could not be reversed. The dispatcher picks exactly the
+ * rows whose `channels_sent` is **empty**, and when writing it replaces the
+ * whole array (`channelsSent: [channel]`). If Telegram tagged first, the row
+ * would no longer be empty, so the alert would never go by email, yet
+ * everything would look fine because it went to Telegram. Email is the main
+ * channel (the owner's inbox, with details); Telegram is only for saying "look now".
  *
- * ⭐ **বার্তায় কী যায় সেটা `ops.rules.ts` ঠিক করে, এই ফাইল নয়।**
- * টেলিগ্রাম বাইরের সেবা — বার্তা ওদের সার্ভারে জমে, আর গ্রুপে যে-কেউ
- * থাকতে পারে। তাই অ্যালার্টের ফ্রি-টেক্সট কখনোই পাঠানো হয় না, শুধু
- * টাইপের লেবেল + হোস্টনেম + সময় (allowlist, `telegramLine`)।
+ * **What goes into the message is decided by `ops.rules.ts`, not this
+ * file.** Telegram is an external service: messages are stored on their
+ * servers, and anyone can be in the group. So an alert's free text is never
+ * sent, only the type label + hostname + time (an allowlist, `telegramLine`).
  *
- * ⚠️ টোকেন বা chat id না থাকলে পুরো জিনিসটা **চুপচাপ বন্ধ** — SMTP-র
- *    মতোই। ক্র্যাশ নয়, প্রতি মিনিটে অভিযোগও নয়।
+ * Careful: without a token or chat id the whole thing **stays quietly off**,
+ * like SMTP. No crash and no complaint every minute.
  */
 @Injectable()
 export class TelegramChannel {
   private readonly logger = new Logger(TelegramChannel.name);
   /**
-   * ⚠️⚠️ `.env`-এর মান **fallback**, চূড়ান্ত নয়। আসল মান আসে ডাটাবেস
-   * থেকে (`settings` টেবিল), কারণ মালিক পর্দা থেকে বদলাতে পারেন।
+   * Careful: the `.env` value is a **fallback**, not final. The real value
+   * comes from the database (the `settings` table), because the owner can
+   * change it from the screen.
    *
-   * ⚠️ তাই মানটা আর কনস্ট্রাক্টরে **জমিয়ে রাখা যায় না** — বদলালে
-   * সার্ভার রিস্টার্ট না করা পর্যন্ত পুরোনোটাই চলত, আর মালিক ভাবতেন
-   * সেভ হয়নি। প্রতিবার পাঠানোর আগে পড়া হয়।
+   * So the value **cannot be cached in the constructor**: after a change the
+   * old one would keep being used until a server restart, and the owner would
+   * think it had not saved. It is read before every send.
    */
   private readonly envToken: string;
   private readonly envChatId: string;
-  /** ⚠️ ইন-মেমরি, dispatcher-এর মতোই — রিস্টার্ট মানে কনফিগ ঠিক করা হয়েছে */
+  /** In-memory, like the dispatcher: a restart means the config was fixed */
   private readonly attempts = new Map<string, number>();
 
   constructor(
@@ -85,9 +85,9 @@ export class TelegramChannel {
     this.envToken = config.get<string>('TELEGRAM_BOT_TOKEN')?.trim() ?? '';
     this.envChatId = config.get<string>('TELEGRAM_CHAT_ID')?.trim() ?? '';
 
-    // ⚠️ এখানে আর "বন্ধ" বলা যায় না — ডাটাবেসে মান থাকতে পারে, আর
-    //    কনস্ট্রাক্টরে await করা যায় না। ভুল করে "বন্ধ" লিখলে মালিক
-    //    পর্দায় বসানো কনফিগ থাকা সত্ত্বেও লগ দেখে বিভ্রান্ত হতেন।
+    // Careful: we cannot say "off" here. The database may hold a value, and
+    // the constructor cannot await. Wrongly writing "off" would confuse the
+    // owner reading the log even though the config is set on screen.
     if (this.envToken.length === 0 || this.envChatId.length === 0) {
       this.logger.log(
         'No TELEGRAM_* in .env — the Telegram channel will use whatever is set on the Settings page (G08)',
@@ -96,9 +96,9 @@ export class TelegramChannel {
   }
 
   /**
-   * ⚠️ এখন এটা **async** — ডাটাবেস দেখতে হয়। পুরোনো সমার্থক getter রাখা
-   * হয়নি ইচ্ছাকৃতভাবে: থাকলে কেউ ভুল করে সেটাই ডাকত আর `.env`-এর বাসি
-   * উত্তর পেত, নীরবে।
+   * Now **async**, because it has to look at the database. The old synchronous
+   * getter was deliberately not kept: if it existed someone would call it by
+   * mistake and silently get the stale `.env` answer.
    */
   async resolve(): Promise<TelegramSettings | null> {
     let stored: Partial<TelegramSettings> | null = null;
@@ -109,8 +109,8 @@ export class TelegramChannel {
       });
       stored = (row?.value as Partial<TelegramSettings> | undefined) ?? null;
     } catch (err) {
-      // ⚠️ ডাটাবেস পড়া না গেলে `.env`-এ ফেরা — টেলিগ্রাম বন্ধ হয়ে
-      //    যাওয়ার চেয়ে পুরোনো কনফিগে চলা ভালো।
+      // Careful: if the database cannot be read, fall back to `.env`; running
+      // on old config is better than Telegram going off.
       this.logger.warn(
         `Could not read the Telegram setting, using .env: ${
           err instanceof Error ? err.message : String(err)
@@ -125,8 +125,8 @@ export class TelegramChannel {
   }
 
   /**
-   * এক দফা sweep — ফেরত দেয় কতগুলো অ্যালার্টের নিষ্পত্তি হলো।
-   * ⚠️ কখনো throw করে না।
+   * One sweep; returns how many alerts were settled.
+   * Careful: it never throws.
    */
   async runOnce(now = new Date()): Promise<number> {
     const settings = await this.resolve();
@@ -134,18 +134,18 @@ export class TelegramChannel {
 
     const pending = await this.prisma.alert.findMany({
       where: {
-        // ⭐ ইমেইলের পালা শেষ হয়েছে এমন সারিই — বিস্তারিত কারণ ক্লাসের ডকে
+        // Only rows whose email turn is over; the reason is in the class doc
         channelsSent: { isEmpty: false },
         /**
-         * ⭐⭐ **চুপ করানো ধরনগুলো এখানেই ছাঁকা হয়** *(১৮ আগস্ট)* —
-         * `agent_down` দিনে ~৩৯ বার উঠত, আর তাতে বাকি সব বার্তা চাপা
-         * পড়ত (`TELEGRAM_MUTED_TYPES`-এর নোট)।
+         * **Muted types are filtered out right here.** `agent_down` used to
+         * fire about 39 times a day, burying every other message (see the
+         * note on `TELEGRAM_MUTED_TYPES`).
          *
-         * ⚠️ WHERE-এ ছাঁকা হয়, তুলে এনে বাদ দেওয়া হয় না — নইলে প্রতি
-         * sweep-এ ১০টার ব্যাচ ওই সারিগুলোতেই ভরে যেত আর সত্যিকারের
-         * অ্যালার্ট কোনোদিন সামনের সারিতে আসত না।
-         * ⚠️ চিহ্ন বসানোরও দরকার নেই: ২৪ ঘণ্টার জানালা পেরোলে সারিগুলো
-         * এমনিতেই আর বিবেচনায় আসে না।
+         * Careful: they are filtered in the WHERE, not fetched and then
+         * dropped. Otherwise each sweep's batch of 10 would fill with those
+         * rows and real alerts would never reach the front.
+         * Careful: tagging is not needed either: once past the 24-hour window
+         * the rows are no longer considered anyway.
          */
         type: { notIn: [...TELEGRAM_MUTED_TYPES] },
         NOT: {
@@ -183,28 +183,28 @@ export class TelegramChannel {
   }
 
   /**
-   * ⚠️ কখনো throw করে না, আর **কখনো URL লগ করে না** — URL-এর ভেতরেই
-   *    bot টোকেন থাকে, আর ওই টোকেন হাতে পেলে যে-কেউ ওই গ্রুপে যা খুশি
-   *    পাঠাতে পারে। Telegram-এর ত্রুটি বার্তাও মাঝে মাঝে URL ফিরিয়ে দেয়,
-   *    তাই বার্তাটা থেকেও টোকেনটা ছেঁকে ফেলা হয়।
+   * Careful: it never throws, and **never logs the URL**. The bot token is
+   * inside the URL, and anyone holding that token can post anything to that
+   * group. Telegram's error messages sometimes echo the URL back, so the
+   * token is scrubbed from the message too.
    */
   async send(text: string): Promise<TelegramOutcome> {
     return this.post(text, null);
   }
 
   /**
-   * ⭐⭐ **monospace বার্তা** *(১৮ আগস্ট)* — কেবল দৈনিক রিপোর্টের জন্য।
+   * **Monospace message**, for the daily report only.
    *
-   * ⚠️⚠️ **কেন `send()`-এর ভেতরে একটা ফ্ল্যাগ নয়, আলাদা মেথড:** উপরের
-   * `send()`-এর প্লেইন-টেক্সট হওয়াটা একটা **সুরক্ষা**, খামখেয়াল নয় —
-   * অ্যালার্টের বার্তায় হোস্টনেম বসে, আর `DESKTOP_A_B`-র আন্ডারস্কোরগুলো
-   * Markdown/HTML মোডে গোটা বার্তাটা ৪০০ করে দিতে পারত। আলাদা মেথড রাখলে
-   * কেউ ভুল করে অ্যালার্টকেও HTML মোডে পাঠাতে পারবে না।
+   * Careful: **why a separate method rather than a flag inside `send()`:**
+   * the plain-text nature of `send()` above is a **safeguard**, not a whim.
+   * Alert messages contain hostnames, and the underscores in `DESKTOP_A_B`
+   * could make Markdown/HTML mode turn the whole message into a 400. With a
+   * separate method nobody can send an alert in HTML mode by mistake.
    *
-   * ⚠️⚠️ **ব্যর্থ হলে প্লেইন টেক্সটে আবার** — একটা ফরম্যাটিং সমস্যার দাম
-   * কখনোই *"সেদিনের রিপোর্টটাই গেল না"* হওয়া উচিত নয়। ⚠️ দ্বিতীয়বারের
-   * জন্য `<pre>` মোড়কটা কলার খুলে দেয় (`plainFallback`), নইলে পাঠক
-   * কাঁচা ট্যাগ দেখতেন।
+   * Careful: **on failure it retries as plain text.** A formatting problem
+   * must never cost "that day's report did not go out". For the second
+   * attempt the caller strips the `<pre>` wrapper (`plainFallback`), otherwise
+   * the reader would see raw tags.
    */
   async sendHtml(html: string, plainFallback: string): Promise<TelegramOutcome> {
     const outcome = await this.post(html, 'HTML');
@@ -215,10 +215,10 @@ export class TelegramChannel {
   }
 
   /**
-   * ⚠️ কখনো throw করে না, আর **কখনো URL লগ করে না** — URL-এর ভেতরেই
-   *    bot টোকেন থাকে, আর ওই টোকেন হাতে পেলে যে-কেউ ওই গ্রুপে যা খুশি
-   *    পাঠাতে পারে। Telegram-এর ত্রুটি বার্তাও মাঝে মাঝে URL ফিরিয়ে দেয়,
-   *    তাই বার্তাটা থেকেও টোকেনটা ছেঁকে ফেলা হয়।
+   * Careful: it never throws, and **never logs the URL**. The bot token is
+   * inside the URL, and anyone holding that token can post anything to that
+   * group. Telegram's error messages sometimes echo the URL back, so the
+   * token is scrubbed from the message too.
    */
   private async post(
     text: string,
@@ -236,8 +236,8 @@ export class TelegramChannel {
           body: JSON.stringify({
             chat_id: settings.chatId,
             text,
-            // ⚠️ ডিফল্টে কোনো parse_mode নেই — প্লেইন টেক্সট। Markdown দিলে
-            //    হোস্টনেমের একটা `_` গোটা বার্তাটা ৪০০ করে দিত।
+            // Careful: no parse_mode by default, so plain text. With Markdown a
+            // single `_` in a hostname would turn the whole message into a 400.
             ...(parseMode === null ? {} : { parse_mode: parseMode }),
             disable_web_page_preview: true,
           }),
@@ -263,20 +263,21 @@ export class TelegramChannel {
   }
 
   /**
-   * ⭐⭐ **R26 — ফাইল পাঠানো** (Excel/PDF)। `send()`-এর যমজ, একই চুক্তি:
-   * প্রতিবার নতুন করে সেটিংস পড়ে, কখনো throw করে না, কখনো টোকেন লগ করে না।
+   * **R26: sending a file** (Excel/PDF). The twin of `send()` with the same
+   * contract: it re-reads the settings every time, never throws and never logs the token.
    *
-   * ⚠️⚠️ <b>কোনো `headers` দেওয়া হয়নি — আর সেটা ইচ্ছাকৃত।</b> `fetch`
-   * নিজেই `FormData` দেখে `multipart/form-data; boundary=…` বসায়। উপরের
-   * `send()`-এর মতো হাতে `content-type` লিখলে boundary-টা হারিয়ে যেত, আর
-   * Telegram প্রতিবার ৪০০ দিত — দেখতে লাগত টোকেনের সমস্যা।
+   * Careful: <b>no `headers` are passed, and that is deliberate.</b> `fetch`
+   * sees the `FormData` and sets `multipart/form-data; boundary=...` itself.
+   * Writing `content-type` by hand, as `send()` above does, would lose the
+   * boundary, and Telegram would return 400 every time, looking like a token problem.
    *
-   * ⚠️ `Blob`, স্ট্রিম নয়: Node-এ স্ট্রিম-বডি multipart মোড়কের সাথে চলে না।
-   *    `Buffer` নিজেই `Uint8Array`, তাই সরাসরি `BlobPart` হিসেবে চলে।
+   * Careful: a `Blob`, not a stream: in Node a stream body does not work with
+   * the multipart wrapper. A `Buffer` is itself a `Uint8Array`, so it works
+   * directly as a `BlobPart`.
    *
-   * ⚠️ কোনো retry নেই — ইচ্ছাকৃত। ৪২৯-এ Telegram `retry_after` দেয়, কিন্তু
-   *    এখানে ঘুমোলে একটা রিকোয়েস্ট ৬০ সেকেন্ড ধরে আটকে থাকত। ব্যর্থতা
-   *    কলারকে ফেরত দেওয়া হয়, সিদ্ধান্ত তার।
+   * Careful: no retry, deliberately. On 429 Telegram gives `retry_after`, but
+   * sleeping here would hold a request for 60 seconds. The failure is returned
+   * to the caller, whose decision it is.
    */
   async sendDocument(
     doc: { bytes: Buffer; filename: string; contentType?: string },
@@ -285,7 +286,8 @@ export class TelegramChannel {
     const settings = await this.resolve();
     if (settings === null) return 'not_configured';
 
-    // ⚠️ আগে মাপা, তারপর পাঠানো — নইলে পুরো আপলোড খরচ করে তবে জানা যেত
+    // Careful: measure first, then send; otherwise we would only learn the size
+    // after paying for the whole upload
     if (doc.bytes.byteLength > TELEGRAM_DOCUMENT_MAX_BYTES) {
       this.logger.error(
         `Telegram-এ পাঠানো গেল না — ফাইলটা বড় (${doc.filename}, ` +
@@ -295,7 +297,7 @@ export class TelegramChannel {
       return 'failed';
     }
 
-    // ⚠️ নামটা ছেঁকে নেওয়া — উদ্ধৃতি বা নিউলাইন multipart হেডারই ভেঙে দিত
+    // Careful: the name is sanitized; a quote or newline would break the multipart header itself
     const filename =
       doc.filename.replace(/[^A-Za-z0-9._-]/g, '').slice(0, 120) || 'report';
     const text = (caption ?? '').trim().slice(0, TELEGRAM_CAPTION_MAX);
@@ -303,7 +305,7 @@ export class TelegramChannel {
     try {
       const form = new FormData();
       form.append('chat_id', settings.chatId);
-      // ⚠️ খালি ক্যাপশন **পাঠানোই হয় না** — খালি স্ট্রিং পাঠালে ৪০০
+      // Careful: an empty caption is **not sent at all**; an empty string gives a 400
       if (text) form.append('caption', text);
       form.append(
         'document',
@@ -343,7 +345,7 @@ export class TelegramChannel {
     }
   }
 
-  /** ⚠️ পুরো অ্যারে বদলানো হয় না — আগেরটার সাথে **যোগ** করা হয় */
+  /** Careful: the whole array is not replaced; the tag is **added** to the existing one */
   private async tag(pending: SweepAlert[], tag: string): Promise<void> {
     for (const a of pending) {
       try {
@@ -381,11 +383,11 @@ export class TelegramChannel {
   }
 
   /**
-   * টোকেনটা যেন কোনো লগ লাইনে না থাকে।
+   * Keeps the token out of every log line.
    *
-   * ⚠️ টোকেন এখন **প্যারামিটার**, ফিল্ড নয় — মানটা আর জমিয়ে রাখা হয় না
-   * (পর্দা থেকে বদলাতে পারে)। কলার যেখানে টোকেন জানে, ঠিক সেখান থেকেই
-   * দিতে হবে।
+   * Careful: the token is now a **parameter**, not a field, because the value
+   * is no longer cached (it can change from the screen). The caller must pass
+   * it from exactly where it knows the token.
    */
   private static scrub(text: string, token: string): string {
     return token ? text.split(token).join('***') : text;

@@ -6,16 +6,16 @@ using oXeio.Core.Agent;
 namespace oXeio.Agent.Sync;
 
 /// <summary>
-/// প্রতিটা রিকোয়েস্টে <c>x-client-time</c> ও <c>Authorization</c> বসায়।
+/// Adds <c>x-client-time</c> and <c>Authorization</c> to every request.
 ///
-/// ⭐ <b>কেন হ্যান্ডলারে, প্রতিটা মেথডে হাতে নয়:</b> নয়টা মেথডের একটাতে হেডার
-/// বসাতে ভুলে গেলে সেটা কম্পাইল হয়, চলে, আর নীরবে ভুল করে — GET-গুলোতে
-/// ভুলে যাওয়াটাই সবচেয়ে স্বাভাবিক। এখানে বসালে ভুলে যাওয়ার পথই নেই।
+/// <b>Why in a handler, not by hand in each method:</b> if you forget to add the header in
+/// one of nine methods, it compiles, runs, and silently does the wrong thing; forgetting
+/// it on the GETs is the most natural mistake. Adding it here leaves no way to forget.
 /// </summary>
 internal sealed class SyncHeadersHandler : DelegatingHandler
 {
     /// <summary>
-    /// একমাত্র <c>POST /agent/enroll</c>-এ টোকেন যায় না (তখন টোকেন থাকেই না)।
+    /// Only <c>POST /agent/enroll</c> sends no token (there is no token yet).
     /// </summary>
     internal static readonly HttpRequestOptionsKey<bool> Anonymous = new("oXeio.sync.anonymous");
 
@@ -28,13 +28,13 @@ internal sealed class SyncHeadersHandler : DelegatingHandler
     protected override Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        // ⭐ ইচ্ছাকৃতভাবে wall-clock (UtcNow), monotonic নয়। সার্ভার এখান থেকেই
-        //    ডিভাইসের ঘড়ির drift মাপে — অর্থাৎ মাপার বস্তুটাই PC-র ভুল ঘড়ি।
-        //    monotonic ঘড়ি দিলে drift সবসময় শূন্য দেখাত আর ঘড়ি এগিয়ে-পিছিয়ে
-        //    থাকা মেশিন কোনোদিন ধরা পড়ত না।
+        // Deliberately wall-clock (UtcNow), not monotonic. The server measures the device's
+        // clock drift from this, so the thing being measured is the PC's wrong clock itself.
+        // A monotonic clock would always show zero drift and a machine whose clock is ahead
+        // or behind would never be caught.
         //
-        // ⚠️ Remove আগে — redirect বা রিট্রাইয়ে একই বার্তা দুবার গেলে দুটো হেডার
-        //    যেত আর সার্ভার প্রথমটা পড়ে ভুল drift হিসাব করত।
+        // Careful: Remove first. On a redirect or retry the same message could go twice with
+        // two headers, and the server would read the first one and compute a wrong drift.
         request.Headers.Remove(SyncLimits.ClientTimeHeader);
         request.Headers.TryAddWithoutValidation(
             SyncLimits.ClientTimeHeader,

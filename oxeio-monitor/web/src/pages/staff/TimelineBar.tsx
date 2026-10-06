@@ -20,32 +20,32 @@ import {
 } from '../../lib/format';
 
 /**
- * E04 — একজনের একদিনের টাইমলাইন বার।
+ * E04 — one person's timeline bar for one day.
  *
- * ⭐⚠️ **ডিভাইস অনুযায়ী আলাদা সারি।** একজনের দুটো PC চললে সেগমেন্টগুলো
- * সময়ে **overlap** করে (`dashboard.service.ts` ইচ্ছাকৃতভাবে যোগফল রাখে,
- * UNION নয়)। সবগুলো একটাই বারে আঁকলে দুটো সেগমেন্ট একটার উপর আরেকটা বসে
- * যেত — বারটা তখন পড়াই যায় না, আর কেউ বুঝতেই পারত না যে দুটো মেশিন চলছে।
- * তাই `deviceId` ধরে সারি ভাগ করা।
+ * Important: **a separate row per device.** When one person's two PCs run,
+ * their segments **overlap** in time (`dashboard.service.ts` deliberately keeps
+ * the sum, not a UNION). Drawing them all in one bar would stack one segment on
+ * another, making the bar unreadable and hiding that two machines were running.
+ * Hence the rows are split by `deviceId`.
  *
- * ⭐ রঙের নিয়ম: **নিরেট `ink` = গোনা হওয়া কাজ, ধূসর = গোনা হয়নি**। এখানে
- * সলিড লাল নেই — নিষ্ক্রিয় থাকা ভুল নয়, শুধু গোনা হয় না।
+ * Colour rule: **solid `ink` = counted work, grey = not counted**. There is no
+ * solid red here: being idle is not wrong, it just is not counted.
  *
- * ⚠️ পর্দার লেখায় "কালো" শব্দটা আর নেই। Midnight থিমে `--color-ink`
- * প্রায় সাদা (#e8ecf1) — "Black = counted work" লিখলে সেটা গাঢ় থিমে
- * সরাসরি মিথ্যে হতো, অথচ কেউ ধরতেও পারত না যে লেখাটা পুরোনো থিমের।
- * তাই লেখা হয় "Solid / grey", রঙের নাম নয়।
+ * Careful: the on-screen text no longer says "black". In the Midnight theme
+ * `--color-ink` is almost white (#e8ecf1), so "Black = counted work" would
+ * flatly lie in the dark theme and nobody could tell the text was left over
+ * from the old theme. So the text says "Solid / grey", not a colour name.
  */
 
-/** ⚠️ Asia/Dhaka = UTC+06:00, DST নেই — `lib/format.ts`-এর ঠিক একই ধ্রুবক */
+/** Careful: Asia/Dhaka = UTC+06:00, no DST; the same constant as in `lib/format.ts` */
 const MINUTES_PER_DAY = 24 * 60;
 
 /**
- * বারের সর্বনিম্ন প্রস্থ, মিনিটে।
+ * Minimum width of the bar, in minutes.
  *
- * ⚠️ কেউ ২০ মিনিট কাজ করলে জানালাটা ২০ মিনিটের হলে ওই একরত্তি সময় পুরো
- * পর্দাজুড়ে ছড়িয়ে যেত — দেখে মনে হতো সারাদিন কাজ হয়েছে। ছ-ঘণ্টার
- * সর্বনিম্ন জানালা সেই বিভ্রমটা আটকায়।
+ * Careful: if someone worked 20 minutes and the window were 20 minutes, that
+ * sliver of time would spread across the whole screen and look like a full
+ * day's work. A six-hour minimum window prevents that illusion.
  */
 const MIN_WINDOW_MIN = 6 * 60;
 
@@ -56,10 +56,10 @@ const SEG_LABEL: Record<SegmentState, string> = {
 };
 
 /**
- * ⚠️ তিনটে অবস্থাকে তিনটে **আলাদা করে চেনা যায় এমন** চেহারা দিতে হবে।
- * idle আর locked দুটোই "গোনা হয়নি", কিন্তু কারণ আলাদা — একটায় মানুষ ছিল,
- * অন্যটায় ছিল না। কাছাকাছি দুটো ধূসর দিলে কেউ পার্থক্যটা ধরতে পারত না,
- * তাই locked-এ সরু বর্ডার বসানো।
+ * Careful: the three states need three **distinguishable** looks. Idle and
+ * locked are both "not counted" but for different reasons: in one a person was
+ * there, in the other not. Two similar greys would hide the difference, so
+ * locked gets a thin border.
  */
 const SEG_CLASS: Record<SegmentState, string> = {
   active: 'bg-ink',
@@ -69,10 +69,10 @@ const SEG_CLASS: Record<SegmentState, string> = {
 
 interface Span {
   seg: TimelineSegment;
-  /** ঢাকার ওই দিনের ০০:০০ থেকে মিনিট — মধ্যরাত পেরোলে ঋণাত্মক বা ১৪৪০+ */
+  /** Minutes from 00:00 of that day in Dhaka; negative or 1440+ past midnight */
   fromMin: number;
   toMin: number;
-  /** কোন সারিতে বসবে, ১ থেকে শুরু */
+  /** Which row it goes in, starting from 1 */
   device: number;
 }
 
@@ -87,10 +87,10 @@ interface View {
   winFrom: number;
   winTo: number;
   ticks: number[];
-  /** কোনো সেগমেন্ট এই দিনের বাইরে চলে গেছে — বলতেই হবে */
+  /** A segment ran outside this day; this must be said */
   clipped: boolean;
   multiDevice: boolean;
-  /** "এখন" রেখাটা জানালার ভেতরে পড়লে তার মিনিট, নইলে `null` */
+  /** Minute of the "now" line if it falls inside the window, otherwise `null` */
   nowMin: number | null;
 }
 
@@ -101,7 +101,7 @@ export function TimelineBar({
 }: {
   employeeId: number;
   date: string;
-  /** পেজের রিফ্রেশ বোতাম চাপলে বাড়ে */
+  /** Increments when the page's refresh button is pressed */
   nonce: number;
 }) {
   const { data, error, loading, reload } = useApi(
@@ -127,8 +127,8 @@ export function TimelineBar({
         />
       ) : (
         <TimelineBody
-          // ⚠️ key না দিলে তারিখ বদলালেও hover-এ ধরে রাখা পুরোনো সেগমেন্টটা
-          //    নিচের লাইনে বসে থাকত — আগের দিনের সময় নতুন দিনের নিচে।
+          // Careful: without a key, after a date change a segment still held by hover
+          // would stay in the line below: the previous day's time under the new day.
           key={`${data.employeeId}:${data.date}`}
           timeline={data}
         />
@@ -145,9 +145,9 @@ function TimelineBody({ timeline }: { timeline: Timeline }) {
   const clamp = (m: number): number =>
     Math.min(view.winTo, Math.max(view.winFrom, m));
   const leftPct = (m: number): number => ((clamp(m) - view.winFrom) / span) * 100;
-  // ⚠️ ৩০ সেকেন্ডের সেগমেন্ট শূন্য-প্রস্থে মিলিয়ে যেত। সর্বনিম্ন প্রস্থ দিলে
-  //    ওটা সামান্য বড় দেখায়, কিন্তু **অদৃশ্য হওয়ার চেয়ে সেটা ভালো** —
-  //    ফাঁকা বার দেখে কেউ ভাবত ডেটাই আসেনি।
+  // Careful: a 30-second segment would vanish at zero width. A minimum width
+  // makes it look slightly larger, but **that beats being invisible**: an
+  // empty bar would make people think no data arrived.
   const widthPct = (s: Span): number =>
     Math.max(0.4, ((clamp(s.toMin) - clamp(s.fromMin)) / span) * 100);
 
@@ -171,9 +171,9 @@ function TimelineBody({ timeline }: { timeline: Timeline }) {
           tone="muted"
         />
         {/*
-          ⚠️ ডিভাইসের সংখ্যা এখানে `unit` হিসেবে বসানো হয়নি — "7" আর "2"
-             পাশাপাশি বসে "7 2" পড়া যেত। একাধিক ডিভাইস হলে কথাটা নিচের
-             সতর্কবার্তায় পুরো বাক্যে বলা আছে।
+          Careful: the device count is not passed as `unit` here: "7" and "2"
+             side by side would read "7 2". With several devices the message is
+             spelled out in a full sentence in the warning below.
         */}
         <Stat
           label={view.multiDevice ? 'Devices' : 'Segments'}
@@ -191,9 +191,9 @@ function TimelineBody({ timeline }: { timeline: Timeline }) {
               {view.rows.map((row) => (
                 <div key={row.deviceId} className="flex items-center gap-2">
                   {/*
-                    ⚠️ E12 — ফোনে "Device" শব্দটা বাদ, শুধু সংখ্যা। ৩৬০px
-                       পর্দায় ৬৪px লেবেল কলাম বারটাকে ১৯০px-এ নামিয়ে আনত,
-                       আর তখন সেগমেন্টগুলো আলাদা করে চেনাই যেত না।
+                    Careful: E12 — on a phone the word "Device" is dropped, only the
+                       number remains. On a 360px screen a 64px label column would shrink
+                       the bar to 190px and the segments could no longer be told apart.
                   */}
                   {view.multiDevice && (
                     <span
@@ -228,14 +228,14 @@ function TimelineBody({ timeline }: { timeline: Timeline }) {
                           onFocus={() => setHover(s)}
                           onBlur={() => setHover(null)}
                           /*
-                           * ⚠️ ফোনের জন্য। নিচের স্থির লাইনটা ইচ্ছাকৃতভাবে
-                           *    ভাসমান টুলটিপের বদলে বসানো হয়েছিল, যাতে
-                           *    ছোঁয়াতেও পড়া যায় — কিন্তু ওটা ভরত শুধু
-                           *    `mouseenter`/`focus` থেকে, আর Safari বোতামে
-                           *    ট্যাপ করলে ফোকাস দেয় না। ফলে সেগমেন্টে চাপ
-                           *    দিয়ে ফোনে কিছুই দেখা যেত না, আর `title`
-                           *    টুলটিপও ছোঁয়ার পর্দায় কখনো ওঠে না —
-                           *    অর্থাৎ দিনের বিস্তারিত ফোনে সম্পূর্ণ অদৃশ্য।
+                           * Careful: this is for phones. The fixed line below was
+                           *    deliberately used instead of a floating tooltip so it
+                           *    can be read by touch, but it was filled only from
+                           *    `mouseenter`/`focus`, and Safari does not focus a
+                           *    button when tapped. So tapping a segment on a phone
+                           *    showed nothing, and the `title` tooltip never appears on
+                           *    a touch screen either: the day's detail was completely
+                           *    invisible on phones.
                            */
                           onClick={() => setHover(s)}
                           className={`absolute top-0 bottom-0 focus:outline-2 focus:outline-brand focus:[outline-offset:-2px] ${SEG_CLASS[s.seg.state]}`}
@@ -260,7 +260,7 @@ function TimelineBody({ timeline }: { timeline: Timeline }) {
               ))}
             </div>
 
-            {/* ঘণ্টার অক্ষ — ট্র্যাকের সাথে মিলিয়ে রাখতে লেবেল কলামের সমান ফাঁক */}
+            {/* Hour axis: same gap as the label column to line up with the track */}
             <div className={view.multiDevice ? 'ml-10 sm:ml-18' : ''}>
               <div className="relative mt-1.5 h-4">
                 {view.ticks.map((m, i) => (
@@ -284,10 +284,10 @@ function TimelineBody({ timeline }: { timeline: Timeline }) {
             </div>
 
             {/*
-              ⭐ hover-এর তথ্য একটা **স্থির লাইনে** বসে, ভাসমান টুলটিপে নয়।
-                 ভাসমান টুলটিপ ফোনে ছোঁয়াই যায় না (E12), আর সরু সেগমেন্টের
-                 উপর সেটা পর্দার বাইরে চলে যেত। লাইনটার উচ্চতা ধরা থাকে,
-                 নইলে মাউস নাড়ালেই নিচের সব লাফাত।
+              The hover information sits in a **fixed line**, not a floating
+                 tooltip. A floating tooltip cannot be touched on a phone (E12), and
+                 over a narrow segment it would go off-screen. The line's height is
+                 reserved, otherwise moving the mouse would make everything below jump.
             */}
             <div className="mt-3 min-h-5 text-[12px] text-ink-2">
               {hover ? (
@@ -310,7 +310,7 @@ function TimelineBody({ timeline }: { timeline: Timeline }) {
                   {SEG_LABEL[state]}
                 </span>
               ))}
-              {/* ⚠️ রঙের নাম নয় — Midnight থিমে `ink` প্রায় সাদা (ফাইলের মাথা দেখুন) */}
+              {/* Not a colour name: in Midnight `ink` is almost white (see file header) */}
               <span>Solid = counted work · grey = not counted</span>
             </div>
           </div>
@@ -338,13 +338,13 @@ function TimelineBody({ timeline }: { timeline: Timeline }) {
 }
 
 /**
- * সেগমেন্টগুলো থেকে আঁকার মতো একটা ছবি বানানো।
+ * Builds a drawable picture from the segments.
  *
- * ⚠️ পুরো ফাংশনটা বিশুদ্ধ (`useMemo`-তে বসে) — এখানে কোনো `new Date()`
- *    ছাড়া আর কোনো পার্শ্বপ্রতিক্রিয়া নেই।
+ * Careful: the whole function is pure (it lives in `useMemo`); apart from
+ *    `new Date()` it has no side effects.
  */
 function buildView(t: Timeline): View {
-  // ⚠️ `parseWorkDate` UTC-midnight দেয়; ৬ ঘণ্টা পিছিয়ে নিলে ঢাকার ০০:০০
+  // Careful: `parseWorkDate` gives UTC midnight; moving back 6 hours gives 00:00 in Dhaka
   const parsed = parseWorkDate(t.date);
   const dayStartMs = (parsed?.getTime() ?? 0) - workOffsetMs();
   const minuteOf = (iso: string): number =>
@@ -355,8 +355,8 @@ function buildView(t: Timeline): View {
 
   for (const seg of t.segments) {
     const fromMin = minuteOf(seg.startedAt);
-    // ⚠️ ঘড়ি পিছিয়ে গেলে `endedAt < startedAt` হতে পারে (সার্ভারও এই
-    //    সম্ভাবনা ধরে রাখে) — ঋণাত্মক প্রস্থ আঁকলে বারটা উল্টো দিকে ছড়াত
+    // Careful: if the clock goes backwards, `endedAt < startedAt` can happen (the
+    //    server allows for it too); drawing a negative width would spread the bar backwards
     const toMin = Math.max(fromMin, minuteOf(seg.endedAt));
 
     if (fromMin < 0 || toMin > MINUTES_PER_DAY) clipped = true;
@@ -384,8 +384,8 @@ function buildView(t: Timeline): View {
     }
   }
 
-  // ⚠️ জানালাটা দিনের ভেতরেই রাখা হয় — বাইরে ছড়ালে অক্ষে "-01:00" বসত,
-  //    আর সেটা কেউ পড়ে বুঝত না। বাইরে পড়া অংশটুকু `clipped` দিয়ে বলা হয়।
+  // Careful: the window is kept inside the day; spilling outside would put "-01:00"
+  //    on the axis, which nobody could read. The part outside is reported via `clipped`.
   let winFrom = clampTo(Math.floor(lo / 60) * 60);
   let winTo = clampTo(Math.ceil(hi / 60) * 60);
 
@@ -399,9 +399,9 @@ function buildView(t: Timeline): View {
   const ticks: number[] = [];
   for (let m = winFrom; m < winTo; m += step * 60) ticks.push(m);
 
-  // ⚠️ শেষ দাগটা সবসময় জানালার ডান প্রান্তে (`winTo`)। শুধু push করলে
-  //    ২১:০০ আর ২২:০০ গায়ে গায়ে বসে একটার উপর আরেকটা লেখা পড়ত, তাই
-  //    আধা-ধাপের কম বাকি থাকলে শেষ দাগটাকে **সরিয়ে** দেওয়া হয়।
+  // Careful: the last tick is always at the window's right edge (`winTo`). Just
+  //    pushing would put 21:00 and 22:00 side by side, one written over the other,
+  //    so if less than half a step remains the last tick is **replaced**.
   const last = ticks[ticks.length - 1];
   if (winTo - last < step * 60) ticks[ticks.length - 1] = winTo;
   else ticks.push(winTo);
@@ -423,7 +423,7 @@ function clampTo(minutes: number): number {
   return Math.min(MINUTES_PER_DAY, Math.max(0, minutes));
 }
 
-/** মিনিট → `'14:00'`। ১৪৪০ → `'24:00'` (মকআপের অক্ষও তাই)। */
+/** Minutes to `'14:00'`. 1440 becomes `'24:00'` (the mockup's axis does the same). */
 function clockOf(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = Math.round(minutes % 60);

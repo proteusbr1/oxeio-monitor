@@ -4,14 +4,14 @@ import { DepositsController } from './deposits.controller';
 import { DepositsService } from './deposits.service';
 
 /**
- * R21 — সিকিউরিটি মানি (জামানত)।
+ * Security money (deposit).
  *
- * ⭐ `DepositsService` **export করা হয়** — দুজন কলার আছে: পে-রোলের শিট
- * (কর্তনের সারি) আর কর্মীর নিজের পাতা (`/me/deposit`)। হিসাবটা নকল করে
- * লিখলে একদিন দুটো পর্দা দুই সংখ্যা দেখাত, আর কোনটা সত্যি তা বলার উপায়
- * থাকত না।
+ * `DepositsService` is **exported** — it has two callers: the payroll sheet
+ * (deduction rows) and the employee's own page (`/me/deposit`). If the
+ * calculation were copied, one day the two screens would show two numbers,
+ * with no way to say which is true.
  *
- * ⚠️ `PrismaModule` ও `AuditModule` `@Global`, তাই আলাদা import লাগে না।
+ * Careful: `PrismaModule` and `AuditModule` are `@Global`, so no separate import is needed.
  */
 @Module({
   controllers: [DepositsController],

@@ -5,27 +5,27 @@ using oXeio.Core.Tracking;
 namespace oXeio.Core.Tests;
 
 /// <summary>
-/// ছবি তোলার চারটে শর্ত — A04 · A04b · H06।
+/// The four conditions for taking a picture: A04, A04b, H06.
 ///
-/// ⚠️ শর্তগুলো আগে <c>AgentHost.CaptureSlotAsync</c>-এ guard clause হিসেবে
-/// ছড়ানো ছিল, আর ওখানে কোনো টেস্ট পৌঁছাত না। ফল: <b>revoke-এর শর্তটা
-/// কোনোদিন লেখাই হয়নি</b>, আর বাতিল করা ডিভাইসে ছবি উঠতেই থাকত।
+/// Careful: the conditions used to be scattered as guard clauses inside
+/// <c>AgentHost.CaptureSlotAsync</c>, where no test could reach them. Result: <b>the
+/// revoke condition was never written at all</b>, and revoked devices kept taking pictures.
 /// </summary>
 public class CaptureGateTests
 {
-    private static readonly CaptureWindow Day = CaptureWindow.Default; // ০৭:০০–২৩:০০
+    private static readonly CaptureWindow Day = CaptureWindow.Default; // 07:00-23:00
 
-    /// <summary>ঢাকার দুপুর ১২টা — উইন্ডোর ভেতরে (UTC+৬, তাই ০৬:০০ UTC)।</summary>
+    /// <summary>12:00 noon in Dhaka: inside the window (UTC+6, so 06:00 UTC).</summary>
     private static readonly DateTimeOffset Noon =
         new(2026, 8, 12, 6, 0, 0, TimeSpan.Zero);
 
-    /// <summary>ঢাকার রাত ২টা — উইন্ডোর বাইরে।</summary>
+    /// <summary>2 AM in Dhaka: outside the window.</summary>
     private static readonly DateTimeOffset Night =
         new(2026, 8, 11, 20, 0, 0, TimeSpan.Zero);
 
-    // ⚠️ নাম দিয়ে ডাকা হয়, `true`/`false` নয়। পাঁচটা প্যারামিটারের মধ্যে
-    //    পরপর দুটো bool — `Check(state, true, false, …)` পড়ে কোনটা কী বোঝার
-    //    কোনো উপায় থাকত না, আর উল্টে লিখলে টেস্টটা তবু পাস করত।
+    // Careful: called by name, not with `true`/`false`. With two bools in a row among
+    // five parameters, `Check(state, true, false, …)` gives no way to tell which is
+    // which, and writing them the wrong way round would still pass the test.
     private const bool Enrolled = true;
     private const bool NotEnrolled = false;
     private const bool Revoked = true;
@@ -43,7 +43,7 @@ public class CaptureGateTests
             CaptureGate.Verdict.NotActive,
             CaptureGate.Check(state, Enrolled, NotRevoked, Day, Noon));
 
-    /// <summary>⚠️ A04b — রাত ২টায় কাজ করলে সময় গোনা হয়, কিন্তু ছবি ওঠে না।</summary>
+    /// <summary>A04b: working at 2 AM counts as time, but no picture is taken.</summary>
     [Fact]
     public void উইন্ডোর_বাইরে_ছবি_নয়() =>
         Assert.Equal(
@@ -51,8 +51,8 @@ public class CaptureGateTests
             CaptureGate.Check(SegmentState.Active, Enrolled, NotRevoked, Day, Night));
 
     /// <summary>
-    /// ⭐⭐ H06 — এই শর্তটাই এতদিন ছিল না। বাতিল করা ডিভাইসে শুধু আপলোড
-    /// থামত; ছবি উঠত আর ছাঁটাই হওয়া কর্মীর PC-তে জমতে থাকত।
+    /// H06: this condition was missing until now. On a revoked device only the upload
+    /// stopped; pictures were still taken and piled up on a dismissed employee's PC.
     /// </summary>
     [Fact]
     public void বাতিল_ডিভাইসে_ছবি_নয়() =>
@@ -61,8 +61,8 @@ public class CaptureGateTests
             CaptureGate.Check(SegmentState.Active, Enrolled, Revoked, Day, Noon));
 
     /// <summary>
-    /// ⚠️ revoke সবচেয়ে আগে দেখা হয়। নইলে বাতিল ডিভাইসে "ছবি ওঠেনি কেন"
-    /// প্রশ্নের উত্তর আসত "ও তখন idle ছিল" — সত্যি, কিন্তু আসল কারণ নয়।
+    /// Careful: revoke is checked first. Otherwise the answer to "why was no picture
+    /// taken on the revoked device?" would be "it was idle then": true, but not the real reason.
     /// </summary>
     [Fact]
     public void বাতিলের_কারণটাই_আগে_বলা_হয়() =>
@@ -70,18 +70,18 @@ public class CaptureGateTests
             CaptureGate.Verdict.Revoked,
             CaptureGate.Check(SegmentState.Idle, Enrolled, Revoked, Day, Night));
 
-    /// <summary>২৪ ঘণ্টার উইন্ডোতেও (ADR-011c-র বাইরে গেলে) revoke জেতে।</summary>
+    /// <summary>Revoke wins even inside the 24-hour window (outside ADR-011c).</summary>
     [Fact]
     public void সবসময়_খোলা_উইন্ডোতেও_বাতিল_আটকায়() =>
         Assert.False(
             CaptureGate.Allows(SegmentState.Active, Enrolled, Revoked, CaptureWindow.Always, Night));
 
-    // ── সাইন ইন হওয়ার আগে ──────────────────────────────────────────────────
+    // ── before sign-in ──────────────────────────────────────────────────────
 
     /**
-     * ⭐⭐ <b>revoke-এর ঠিক পাশের ভুলটা।</b> ইনস্টলের পর সাইন-ইন জানালা
-     * খোলা থাকা অবস্থাতেই ছবি উঠত — অথচ যে এখনো সাইন ইনই করেনি, তার নামে
-     * ছবি জমা রাখার কোনো ভিত্তি নেই। মালিক ০.৩.৩-এ ধরেছেন।
+     * <b>The mistake right next to revoke.</b> After install, pictures were taken while
+     * the sign-in window was still open, yet there is no basis for storing pictures
+     * under the name of someone who has not even signed in. The owner caught this in 0.3.3.
      */
     [Fact]
     public void সাইন_ইন_না_করা_থাকলে_ছবি_নয়() =>
@@ -89,7 +89,9 @@ public class CaptureGateTests
             CaptureGate.Verdict.NotEnrolled,
             CaptureGate.Check(SegmentState.Active, NotEnrolled, NotRevoked, Day, Noon));
 
-    /// <summary>⚠️ কারণটাও আগে বলা হয় — "ও তখন idle ছিল" আসল উত্তর নয়।</summary>
+    /// <summary>
+    /// The reason is stated first too: "it was idle then" is not the real answer.
+    /// </summary>
     [Fact]
     public void সাইন_ইনের_কারণটাই_আগে_বলা_হয়() =>
         Assert.Equal(
@@ -97,10 +99,10 @@ public class CaptureGateTests
             CaptureGate.Check(SegmentState.Idle, NotEnrolled, NotRevoked, Day, Night));
 
     /**
-     * ⚠️⚠️ <b>দুটোই সত্যি হলে revoke জেতে</b> — আর সেটা কল্পনার অবস্থা নয়:
-     * revoke করলে টোকেন মুছে যায়, তাই ডিভাইসটা একই সাথে "enrolled নয়"।
-     * উল্টো হলে বাতিল মেশিনে স্টাফকে বলা হতো "সাইন ইন করুন", অর্থাৎ অফিস
-     * যেটা বন্ধ করেছে সেটাই চালু করতে বলা।
+     * Careful: <b>if both are true, revoke wins</b>, and that is not a hypothetical:
+     * revoking deletes the token, so the device is at the same time "not enrolled".
+     * The other way round, staff on a revoked machine would be told "sign in", which is
+     * asking them to switch on what the office switched off.
      */
     [Fact]
     public void দুটোই_সত্যি_হলে_বাতিলের_কথাই_বলা_হয়() =>

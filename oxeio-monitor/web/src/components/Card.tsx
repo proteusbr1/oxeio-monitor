@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
 
 /**
- * সাদা কার্ড — পেজের প্রতিটা আলাদা অংশ এর ভেতরে বসে।
+ * White card: every separate section of a page sits inside one.
  *
- * ⚠️ ভেতরে টেবিল বা চার্ট বসালে `padded={false}` দিন, নইলে `<Table>`-এর
- *    নিজের স্ক্রল-ফ্রেমের সাথে দুটো প্যাডিং জমে গিয়ে মোবাইলে জায়গা নষ্ট হয়।
+ * Careful: when putting a table or chart inside, pass `padded={false}`; otherwise
+ * the `<Table>`'s own scroll frame stacks a second padding on top, which wastes
+ * space on mobile.
  */
 export function Card({
   title,
@@ -14,7 +15,7 @@ export function Card({
   padded = true,
 }: {
   title?: ReactNode;
-  /** শিরোনামের নিচে ছোট ব্যাখ্যা */
+  /** Short explanation under the title. */
   hint?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
@@ -41,18 +42,18 @@ export function Card({
 }
 
 /**
- * একটা সংখ্যার টাইল (মকআপের `.stat`)।
+ * A number tile (the mockup's `.stat`).
  *
- * ⭐ রঙের নিয়ম: `tone="counted"` = নিরেট `ink` (গোনা হওয়া কাজ), `"muted"`
- * = ধূসর (গোনা হয়নি), `"attention"` = লাল (ঘাটতি, এজেন্ট বন্ধ)। ⚠️ সব
- * টাইল লাল করে দিলে লাল রঙের মানেই হারিয়ে যায় — একটা পর্দায় একটার বেশি
- * লাল টাইল রাখবেন না।
+ * Color rule: `tone="counted"` = solid `ink` (counted work), `"muted"` = grey (not
+ * counted), `"attention"` = red (shortfall, agent off). Careful: if every tile
+ * is red, red loses its meaning; keep no more than one red tile on a screen.
  *
- * ⚠️ `ink`-কে "কালো" ভাববেন না — Midnight থিমে ওটা প্রায় সাদা (#e8ecf1)।
- * পার্থক্যটা **নিরেট বনাম ম্লান**, কালো বনাম ধূসর নয়; পর্দার লেখাতেও তাই
- * রঙের নাম না লিখে "Solid / grey" লেখা হয়।
+ * Careful: do not think of `ink` as "black"; in the Midnight theme it is almost
+ * white (#e8ecf1). The difference is solid vs faded, not black vs grey, so
+ * on-screen text says "Solid / grey" instead of naming colors.
  *
- * ⚠️ `value` সবসময় `.num` ক্লাসে বসে — নইলে ঘণ্টার হিসাব প্রতি রিফ্রেশে লাফাত।
+ * Careful: `value` always gets the `.num` class; otherwise hour figures would
+ * jump on every refresh.
  */
 export function Stat({
   label,
@@ -63,25 +64,25 @@ export function Stat({
 }: {
   label: ReactNode;
   value: ReactNode;
-  /** `/15` বা `%` — ছোট করে পাশে বসে */
+  /** `/15` or `%`; sits small beside the value. */
   unit?: ReactNode;
   /**
-   * ⭐⭐ সংখ্যার নিচে **এক লাইনের প্রেক্ষাপট** — মকআপ ক-এর টাইলে যা ছিল
-   * ("১ কর্মদিবস পেরিয়েছে", "টার্গেট ৮ঘ", "সব heartbeat তাজা")।
+   * A one-line context under the number, as in mockup A's tiles ("1 workday
+   * elapsed", "target 8h", "all heartbeats fresh").
    *
-   * ⚠️⚠️ এটা সাজসজ্জা নয়। একটা কাঁচা সংখ্যা প্রায়ই **দুভাবে পড়া যায়**, আর
-   * তখন মানুষ যেটা ভয় পান সেটাই ধরে নেন: "pace −৬ঘ" ভয়ংকর শোনায় যতক্ষণ না
-   * জানা যায় মাসের **একটাই** কর্মদিবস পেরিয়েছে। ⭐ নিয়মটা তাই — এখানে
-   * বসবে কেবল সেই কথাটা যা **সংখ্যাটাকে ভুল পড়া থেকে বাঁচায়**, ফাঁকা
-   * থাকলে কিছুই নয়। "সব ঠিক আছে" জাতীয় আশ্বাস এখানে নিষিদ্ধ।
+   * Careful: this is not decoration. A raw number can often be read two ways, and
+   * people then assume the one they fear: "pace -6h" sounds alarming until you
+   * know only one workday of the month has elapsed. So the rule: put here only the
+   * sentence that keeps the number from being misread, and leave it empty
+   * otherwise. Reassurance like "all good" is banned here.
    */
   sub?: ReactNode;
   /**
-   * ⚠️⚠️ `attention` (লাল) **পর্দায় একটাই** — নইলে লাল রঙের মানেই হারিয়ে
-   *    যায়। যা "ভালো নয় কিন্তু জরুরিও নয়" (যেমন pace পিছিয়ে থাকা), তার
-   *    জন্য `behind` — হলুদ, ঠিক যেভাবে বোর্ডের বাকি জায়গায় `idle` মানে
-   *    "চলছে, কিন্তু গোনা হচ্ছে না"। দুটোকে এক রঙে দেখালে মালিক আর আলাদা
-   *    করতে পারতেন না কোনটায় এখনই হাত দিতে হবে।
+   * Careful: there is only one `attention` (red) per screen; otherwise red loses
+   * its meaning. For things that are "not good but not urgent" (such as pace being
+   * behind) use `behind`, which is yellow, just as `idle` elsewhere on the board
+   * means "running, but not counted". If both were the same color the owner could
+   * not tell which one needs attention right now.
    */
   tone?: 'counted' | 'muted' | 'attention' | 'behind';
 }) {
@@ -96,7 +97,7 @@ export function Stat({
 
   return (
     <div className="bg-surface px-3.5 py-2.5">
-      {/* ⭐ মকআপের `.kpi .lbl` — ছোট, বড় হাতের, ফাঁকা-অক্ষরে */}
+      {/* The mockup's `.kpi .lbl`: small, uppercase, letter-spaced */}
       <div className="text-[9px] tracking-[0.07em] text-ink-3 uppercase">
         {label}
       </div>
@@ -107,9 +108,9 @@ export function Stat({
         )}
       </div>
       {/*
-        ⚠️ `min-h` নেই — যে টাইলে প্রেক্ষাপট নেই সেখানে খালি জায়গা রাখা
-           হয় না। গ্রিডের সারি এমনিতেই সবচেয়ে লম্বা টাইলের মাপে মেলে,
-           তাই সবগুলোর নিচের কিনারা এক থাকে।
+        Careful: no `min-h`; a tile with no context does not reserve empty space.
+           Grid rows already match the tallest tile's height anyway,
+           so all the bottom edges line up.
       */}
       {sub && (
         <div className="mt-0.5 text-[11px] leading-snug text-ink-3">{sub}</div>
@@ -119,25 +120,22 @@ export function Stat({
 }
 
 /**
- * `<Stat>`-গুলোর গ্রিড — এক পিক্সেল ফাঁক দিয়ে বানানো রেখা (মকআপের `.summary`)।
- * E12 — ফোনে নিজে থেকেই কম কলামে নেমে আসে।
+ * Grid of `<Stat>`s: lines made with a one-pixel gap (the mockup's `.summary`).
+ * E12: drops to fewer columns on its own on a phone.
  */
 export function StatRow({ children }: { children: ReactNode }) {
   /*
-    ⭐⭐ **মকআপ ক-এর KPI সারি — টাইলের মাঝে শুধু খাড়া রেখা, বাক্স নয়।**
-
-    ⚠️ এখানে আগে গোটা সারিটার চারপাশে বর্ডার + `rounded-xl` ছিল, অর্থাৎ
-    দেখতে আরেকটা কার্ড। মকআপে ওটা কার্ড নয় — পাতার **মাথা**, আর তাই
-    নিচের আসল কার্ডগুলোর সাথে প্রতিযোগিতা করে না।
-
-    ⚠️⚠️ **আর এখানে আমি একবার উল্টো দিকে গিয়েছিলাম** — বর্ডারটা তুলে
-    `border-y` করে দিয়েছিলাম, "মকআপে বাক্স নেই" ভেবে। মকআপের CSS আসলে
-    বলে `border: 1px solid var(--line); border-radius: 8px` — বাক্সটা
-    আছেই। ⭐ চোখে আন্দাজ না করে **CSS-টা পড়ে** ধরা পড়েছে।
-
-    ⭐ `gap-px` + পটভূমির রং = ভাগ-রেখা, বর্ডার নয়। বর্ডার দিলে ফোনে
-    সারি বদলানোর সময় দুটো রেখা পাশাপাশি পড়ে মোটা দেখাত।
-  */
+   * The KPI row from mockup A: only vertical lines between the tiles, no boxes
+   * around each.
+   *
+   * Careful: this row is the head of the page, not a card, so it must not compete
+   * with the real cards below. It does have an outer border and rounding: the
+   * mockup's CSS says `border: 1px solid var(--line); border-radius: 8px`. This
+   * was settled by reading the CSS, not by eyeballing the mockup.
+   *
+   * `gap-px` plus the background color makes the dividing lines. Real borders
+   * would double up when rows wrap on a phone and look thick.
+   */
   return (
     <div className="grid grid-cols-[repeat(auto-fit,minmax(126px,1fr))] gap-px overflow-hidden rounded-lg border border-line bg-line">
       {children}

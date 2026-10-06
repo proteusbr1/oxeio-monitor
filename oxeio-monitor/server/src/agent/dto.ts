@@ -22,10 +22,10 @@ import {
 import { MAX_BATCH_SIZE } from './agent.constants';
 
 /**
- * ⚠️ `clientUuid` ইচ্ছাকৃতভাবে `@IsOptional()` —
- * স্পেক § ৪.১ বলে "না থাকলে 422", কিন্তু ValidationPipe ছুড়বে 400।
- * তাই উপস্থিতি যাচাই সার্ভিসে করা হয় (`assertClientUuids`), যাতে
- * স্পেকের বলা স্ট্যাটাসটাই যায়। ফরম্যাট ভুল হলে অবশ্য 400-ই হবে।
+ * Careful: `clientUuid` is deliberately `@IsOptional()`.
+ * Spec § 4.1 says "422 if missing", but ValidationPipe would throw 400.
+ * So presence is checked in the service (`assertClientUuids`), so that the
+ * status the spec asks for is the one returned. A malformed value is still a 400.
  */
 class WithClientUuid {
   @IsOptional()
@@ -36,15 +36,16 @@ class WithClientUuid {
 // ── enroll ──────────────────────────────────────────────────────────────────
 
 /**
- * মেশিনটা কে, কোথায় — **দুটো enrollment পথেরই** সাধারণ অংশ।
+ * Who and where the machine is: the part common to **both enrollment paths**.
  *
- * ⚠️ আলাদা বেস ক্লাসে রাখা হয়েছে যাতে দুটো DTO-তে ঘরগুলো নকল করতে না
- * হয়। নকল করলে একদিন একটায় `machineGuid`-এর দৈর্ঘ্যসীমা বদলাত আর
- * অন্যটায় নয়, আর পার্থক্যটা ধরা পড়ত কেবল ওই পথে বসানো মেশিনগুলোয়।
+ * Careful: kept in a separate base class so the fields are not duplicated in
+ * the two DTOs. If duplicated, one day `machineGuid`'s length limit would change
+ * in one and not the other, and the difference would show only on machines
+ * enrolled through that path.
  *
- * ⚠️ `@nestjs/mapped-types`-এর `OmitType()` দিয়েও করা যেত, কিন্তু ওটা
- * এই রিপোর নির্ভরতার তালিকায় নেই — একটা ঘর ভাগ করার জন্য নতুন প্যাকেজ
- * টানা হয়নি (ঘরের নিয়ম)।
+ * Careful: `OmitType()` from `@nestjs/mapped-types` could also do it, but it is
+ * not in this repo's dependencies; a new package was not pulled in just to
+ * share some fields (project rule).
  */
 class EnrollFactsDto {
   @IsString()
@@ -55,7 +56,7 @@ class EnrollFactsDto {
   @MaxLength(200)
   windowsUsername!: string;
 
-  /** হার্ডওয়্যার-ভিত্তিক স্থায়ী আইডি — PC বদলালে বদলায় */
+  /** Hardware-based permanent id; changes if the PC is replaced. */
   @IsString()
   @MaxLength(200)
   machineGuid!: string;
@@ -65,7 +66,7 @@ class EnrollFactsDto {
   @IsOptional() @IsInt() @Min(1) @Max(8) monitors?: number;
 }
 
-/** H05 — একবার ব্যবহার্য কোড দিয়ে (স্ক্রিপ্টেড রোলআউটের পথ) */
+/** H05 - with a single-use code (the scripted rollout path). */
 export class EnrollDto extends EnrollFactsDto {
   @IsString()
   @MaxLength(64)
@@ -73,12 +74,12 @@ export class EnrollDto extends EnrollFactsDto {
 }
 
 /**
- * ⭐ কোডের বদলে **স্টাফের নিজের লগইন** দিয়ে ডিভাইস যোগ করা।
+ * Add a device with **the staff member's own login** instead of a code.
  *
- * ⚠️ পাসওয়ার্ডে কোনো `@MinLength` নেই, ইচ্ছাকৃতভাবে। যাচাইটা
- * `AuthService.login()`-এ, আর সেখানে ভুল পাসওয়ার্ড ও ছোট পাসওয়ার্ড
- * **একই** উত্তর পায়। এখানে আলাদা করে আটকালে ৪০০ বনাম ৪০১ দেখে বাইরে
- * থেকে বোঝা যেত কোন অ্যাকাউন্টের পাসওয়ার্ড কত ছোট।
+ * Careful: the password deliberately has no `@MinLength`. Validation is in
+ * `AuthService.login()`, where a wrong password and a short password get the
+ * **same** answer. Rejecting here would let an outsider tell 400 from 401 and
+ * learn how short an account's password is.
  */
 export class EnrollLoginDto extends EnrollFactsDto {
   @IsEmail()
@@ -89,7 +90,7 @@ export class EnrollLoginDto extends EnrollFactsDto {
   @MaxLength(200)
   password!: string;
 
-  /** I06 — 2FA চালু থাকলে ছ-অঙ্কের কোড। প্রথম দফায় থাকে না। */
+  /** I06 - the six-digit code when 2FA is on. Absent on the first attempt. */
   @IsOptional()
   @IsString()
   @MaxLength(10)
@@ -112,13 +113,13 @@ export class HeartbeatDto {
   configVersion?: string;
 
   /**
-   * ⭐ এজেন্ট নিজে কোন ভার্সনে চলছে।
+   * The version the agent itself is running.
    *
-   * enroll-এর সময় একবার বসানো হয়, কিন্তু আপগ্রেডের পর সেটা পুরোনোই থেকে
-   * যেত। ⚠️ এটা শুধু ড্যাশবোর্ডের সৌন্দর্যের ব্যাপার নয় — heartbeat
-   * **এই সংখ্যা দেখেই** ঠিক করে আপডেট অফার করবে কি না। স্টেল থাকলে
-   * সার্ভার আপডেট হয়ে যাওয়া এজেন্টকেও একই আপডেট বারবার অফার করত
-   * ([G59](../../../docs/08-Gap-Analysis.md))।
+   * It is set once at enroll, but used to stay old after an upgrade.
+   * Careful: this is not just dashboard cosmetics; the heartbeat decides whether
+   * to offer an update **by looking at this number**. If stale, the server would
+   * keep offering the same update to an agent that had already updated
+   * ([G59](../../../docs/08-Gap-Analysis.md)).
    */
   @IsOptional() @IsString() @MaxLength(50)
   agentVersion?: string;
@@ -144,7 +145,7 @@ export class SegmentDto extends WithClientUuid {
   @Type(() => Date) @IsDate()
   endedAt!: Date;
 
-  /** monotonic clock থেকে — ঘড়ি বদলালেও অটুট (§ ৩.২) */
+  /** From the monotonic clock; survives clock changes (§ 3.2). */
   @IsInt() @Min(0) @Max(86_400)
   durationSec!: number;
 
@@ -175,21 +176,22 @@ export class AppUsageDto extends WithClientUuid {
   @IsOptional() @IsString() @MaxLength(260) appName?: string;
   @IsOptional() @IsString() @MaxLength(1000) windowTitle?: string;
 
-  /** ⚠️ শুধু ডোমেইন — ফুল URL কখনো নয় (ADR-013) */
+  /** Careful: domain only, never a full URL (ADR-013). */
   @IsOptional() @IsString() @MaxLength(260) domain?: string;
 
   @IsOptional() @IsBoolean() isBrowser?: boolean;
 
   /**
-   * ⭐ **R22a** — খণ্ডটা কোন অবস্থায় দেখা হয়েছে।
+   * **R22a** - the state in which the fragment was seen.
    *
-   * ⚠️⚠️ **`@IsOptional()` অপরিহার্য** — ফ্লিটের পুরোনো এজেন্ট (০.৩.৭/০.৩.৮)
-   * এই ঘরটা পাঠায় না। বাধ্যতামূলক করলে তাদের প্রতিটা ব্যাচ **৪০০** খেত,
-   * আর ৪০০ মানে এজেন্টের কাছে Permanent — সে ডেটাটা **মুছে ফেলত** (G49)।
-   * অর্থাৎ এক লাইনের ভুলে গোটা অফিসের অ্যাপ-হিসাব হারাত।
+   * Careful: **`@IsOptional()` is essential.** Older agents in the fleet
+   * (0.3.7/0.3.8) do not send this field. If it were required, every batch from
+   * them would get a **400**, and a 400 means Permanent to the agent, which
+   * **deletes the data** (G49). A one-line mistake would lose the whole
+   * office's app usage.
    *
-   * ⭐ না এলে ডাটাবেসের ডিফল্ট `active` বসে, আর সেটাই সঠিক: পুরোনো এজেন্ট
-   * কেবল ACTIVE অবস্থাতেই রেকর্ড করত।
+   * When absent, the database default `active` is used, and that is correct:
+   * old agents recorded only in the ACTIVE state.
    */
   @IsOptional() @IsIn(['active', 'idle', 'locked']) state?: 'active' | 'idle' | 'locked';
 }
@@ -225,12 +227,12 @@ export class EventBatchDto {
 
 // ── screenshot ──────────────────────────────────────────────────────────────
 
-/** multipart-এর `meta` অংশ (JSON string হিসেবে আসে) */
+/** The `meta` part of multipart (arrives as a JSON string). */
 export class ScreenshotMetaDto extends WithClientUuid {
   @Type(() => Date) @IsDate()
   slotStart!: Date;
 
-  /** স্লটের ভেতরে আসল র‍্যান্ডম সময় */
+  /** The actual random time within the slot. */
   @Type(() => Date) @IsDate()
   capturedAt!: Date;
 

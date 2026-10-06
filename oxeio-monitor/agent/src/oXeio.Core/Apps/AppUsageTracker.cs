@@ -4,36 +4,35 @@ using oXeio.Core.Time;
 
 namespace oXeio.Core.Apps;
 
-/// <summary>এক মুহূর্তে সামনে থাকা উইন্ডো — Win32 থেকে যা পড়া যায়।</summary>
+/// <summary>The window in front at one moment: whatever can be read from Win32.</summary>
 public sealed record WindowSample
 {
-    /// <summary>যেমন <c>chrome.exe</c>। খালি হলে নমুনাটাই বাদ।</summary>
+    /// <summary>E.g. <c>chrome.exe</c>. If empty, the sample is dropped.</summary>
     public required string ProcessName { get; init; }
 
-    /// <summary>যেমন "Google Chrome"। না পেলে <c>null</c>।</summary>
+    /// <summary>E.g. "Google Chrome". <c>null</c> if not found.</summary>
     public string? AppName { get; init; }
 
     public string? WindowTitle { get; init; }
 
-    /// <summary>address bar থেকে পড়া কাঁচা লেখা — এখানে এখনো ফুল URL থাকতে পারে।</summary>
+    /// <summary>Raw text read from the address bar: it may still hold a full URL here.</summary>
     public string? RawUrl { get; init; }
 
     public bool IsBrowser { get; init; }
 }
 
 /// <summary>
-/// কোন অ্যাপে কতক্ষণ (D01–D04)।
+/// Which app, for how long (D01–D04).
 ///
-/// <b>প্ল্যাটফর্ম-মুক্ত</b> — Win32 থেকে পড়ার কাজটা
-/// <c>oXeio.Agent/Apps/</c>-এ; এখানে শুধু নিয়ম, তাই পুরোটা ইউনিট টেস্টে
-/// যাচাই করা যায়।
+/// <b>Platform-free:</b> reading from Win32 is done in <c>oXeio.Agent/Apps/</c>; only the
+/// rules are here, so all of it can be verified in unit tests.
 ///
-/// চারটে নিয়ম:
+/// Four rules:
 /// <list type="number">
-/// <item>একই উইন্ডো টানা থাকলে একটাই রেকর্ড — প্রতি সেকেন্ডে নয়</item>
-/// <item><b>৫ সেকেন্ডের কম হলে বাদ</b> (D04) — alt-tab-এর ঝড় ফিল্টার হয়</item>
-/// <item>ACTIVE না থাকলে কিছুই গোনা হয় না — idle সময়ে কোন অ্যাপ সামনে ছিল সেটা অর্থহীন</item>
-/// <item>ফুল URL কখনো বেরোয় না — শুধু ডোমেইন ([ADR-013](../../../../docs/05-Options-Decisions.md))</item>
+/// <item>While the same window stays in front there is a single record, not one per second</item>
+/// <item><b>Under 5 seconds is dropped</b> (D04): this filters alt-tab storms</item>
+/// <item>Nothing is counted unless ACTIVE: which app was in front during idle time is meaningless</item>
+/// <item>A full URL never goes out, only the domain ([ADR-013](../../../../docs/05-Options-Decisions.md))</item>
 /// </list>
 /// </summary>
 public sealed class AppUsageTracker(
@@ -42,16 +41,16 @@ public sealed class AppUsageTracker(
     Func<Guid>? newUuid = null)
 {
     /// <summary>
-    /// D04 — এর চেয়ে কম সময় সামনে থাকলে রেকর্ডই হয় না।
+    /// D04: if the window was in front for less than this, no record is made.
     ///
-    /// alt-tab করে ফাইল খুঁজতে গিয়ে কেউ ১০টা উইন্ডো ছুঁয়ে যায়; প্রতিটা
-    /// রেকর্ড হলে রিপোর্টে ১০টা এক-সেকেন্ডের সারি বসত আর আসল ছবিটা ঢেকে যেত।
+    /// Someone alt-tabbing to look for a file touches 10 windows; recording each would put ten
+    /// one-second rows in the report and bury the real picture.
     /// </summary>
     public static readonly TimeSpan DefaultMinDuration = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// সেগমেন্টের মতোই — টানা এক অ্যাপে কাজ করলেও রেকর্ড নিয়মিত বেরোবে,
-    /// নইলে ক্র্যাশে পুরোটা হারাত ([G53](../../../../docs/08-Gap-Analysis.md))।
+    /// As with segments: even while working in one app for a long time, records come out
+    /// regularly, or a crash would lose all of it ([G53](../../../../docs/08-Gap-Analysis.md)).
     /// </summary>
     public static readonly TimeSpan DefaultMaxDuration = TimeSpan.FromMinutes(5);
 
@@ -63,53 +62,52 @@ public sealed class AppUsageTracker(
     private DateTimeOffset _openedAt;
 
     /// <summary>
-    /// ⭐ <b>R22a</b> — খোলা খণ্ডটা কোন অবস্থায় শুরু হয়েছিল।
+    /// <b>R22a</b>: the state in which the open slice started.
     ///
-    /// ⚠️ অবস্থা বদলালে খণ্ডটা <b>ওখানেই কেটে</b> নতুন করে শুরু হয় — নইলে
-    /// একটা সারি অর্ধেক ACTIVE অর্ধেক IDLE হয়ে বসত, আর "এই সময়টা গোনা
-    /// হবে কি না" প্রশ্নের কোনো একক উত্তর থাকত না।
+    /// When the state changes the slice is <b>cut right there</b> and a new one starts.
+    /// Otherwise one row would be half ACTIVE and half IDLE, and the question "does this time
+    /// count" would have no single answer.
     /// </summary>
     private SegmentState _openState = SegmentState.Active;
 
     /// <summary>
-    /// এখন যে উইন্ডোটা গোনা হচ্ছে — ডায়াগনস্টিক ও A07-এর জন্য।
+    /// The window being counted right now: for diagnostics and A07.
     ///
-    /// ⚠️ ACTIVE ছাড়া এটা সবসময় <c>null</c>, কারণ <see cref="Observe"/>
-    /// অন্য স্টেটে খোলা রেকর্ড বন্ধ করে দেয়। স্ক্রিনশটও শুধু ACTIVE-এ ওঠে
-    /// (A04), তাই ছবির সাথে জোড়া লাগাতে গিয়ে আলাদা কোনো শর্ত লাগে না।
+    /// Always <c>null</c> unless ACTIVE, because <see cref="Observe"/> closes the open record
+    /// in other states. Screenshots are taken only while ACTIVE too (A04), so no extra
+    /// condition is needed when pairing this with a picture.
     /// </summary>
     public WindowSample? Current => _open;
 
-    /// <summary>এখন কোন উইন্ডো গোনা হচ্ছে — ডায়াগনস্টিকের জন্য।</summary>
+    /// <summary>Which window is being counted now: for diagnostics.</summary>
     public string? CurrentProcess => _open?.ProcessName;
 
     /// <summary>
-    /// প্রতিটি নমুনায় ডাকা হয় (উইন্ডো বদলালে, বা নিয়মিত টিকে)।
+    /// Called on every sample (when the window changes, or on the regular tick).
     /// </summary>
-    /// <param name="sample">এখন সামনে যা আছে। কিছু না থাকলে <c>null</c>।</param>
-    /// <param name="state">এজেন্টের এখনকার স্টেট — ACTIVE ছাড়া গোনা হয় না।</param>
+    /// <param name="sample">What is in front now. <c>null</c> if nothing.</param>
+    /// <param name="state">The agent's current state: nothing is counted unless ACTIVE.</param>
     public IReadOnlyList<AppUsageRecord> Observe(
         WindowSample? sample, DateTimeOffset now, SegmentState state)
     {
         var closed = new List<AppUsageRecord>();
 
         /**
-         * ⭐⭐ <b>R22a — IDLE-এও দেখা হয়, কিন্তু গোনা হয় না।</b>
+         * <b>R22a: IDLE is observed too, but not counted.</b>
          *
-         * আগে এখানে শর্ত ছিল <c>state != Active</c>, অর্থাৎ ACTIVE ছাড়ার
-         * সাথে সাথেই সব বন্ধ। ⚠️⚠️ ফলে idle সেগমেন্টের ভেতরে একটাও সারি
-         * থাকত না — মাঠে মেপে দেখা গেছে যেটুকু overlap দেখা যেত তার গড়
-         * ছিল ৫৯ সেকেন্ড, অর্থাৎ শুধু সেগমেন্টের মাথার ভুতুড়ে অংশ।
-         * তাতে "এই idle সময়টায় সামনে কী ছিল?" প্রশ্নের উত্তর হারাত, আর
-         * মিটিং চেনার কোনো উপায় থাকত না।
+         * The condition here used to be <c>state != Active</c>, so everything closed the moment
+         * ACTIVE was left. As a result no row existed inside an idle segment: measured in the
+         * field, the overlap that did show up averaged 59 seconds, just the ghost at the head of
+         * the segment. That lost the answer to "what was in front during this idle time?" and
+         * left no way to recognize meetings.
          *
-         * ⚠️ <b>LOCKED এখনো বাদ</b> — পর্দা লক থাকলে সামনে কোনো উইন্ডোই
-         * নেই, আর তখন যা পড়া যেত সেটা লক-স্ক্রিন। এটা গোপনীয়তার দিক থেকেও
-         * ঠিক: লক করে উঠে যাওয়া মানুষটার পর্দা পড়ার কোনো কারণ নেই।
+         * <b>LOCKED is still excluded</b>: with the screen locked no window is in front, and
+         * what could be read then was the lock screen. This is also right for privacy: there is
+         * no reason to read the screen of someone who locked it and walked away.
          *
-         * ⚠️⚠️ আর "লাঞ্চে Excel খোলা রেখে যাওয়া কাজ নয়" নিয়মটা <b>ভাঙেনি</b>:
-         * ওই খণ্ডগুলো এখন <c>State = Idle</c> নিয়ে জমা হয়, আর পড়ার প্রতিটা
-         * জায়গা কেবল ACTIVE ছাঁকে। রেকর্ড থাকা আর গোনা হওয়া — দুটো আলাদা।
+         * The rule "leaving Excel open and going to lunch is not work" is <b>not broken</b>:
+         * those slices are now stored with <c>State = Idle</c>, and every place that reads them
+         * filters to ACTIVE only. Being recorded and being counted are two different things.
          */
         if (state == SegmentState.Locked || sample is null)
         {
@@ -123,8 +121,8 @@ public sealed class AppUsageTracker(
             return closed;
         }
 
-        // ⚠️ অবস্থা বদলেছে — খণ্ডটা এখানেই কেটে নতুন অবস্থায় শুরু, নইলে
-        //    একটা সারি অর্ধেক ACTIVE অর্ধেক IDLE হয়ে বসত।
+        // The state changed: cut the slice here and start in the new state, or one row would
+        // be half ACTIVE and half IDLE.
         if (state != _openState)
         {
             Close(closed, now);
@@ -132,7 +130,7 @@ public sealed class AppUsageTracker(
             return closed;
         }
 
-        // একই উইন্ডো — শুধু লম্বা হলে ভাগ করা
+        // Same window: only split if it has grown long
         if (SameWindow(_open, sample))
         {
             SplitIfLong(closed, now);
@@ -144,7 +142,7 @@ public sealed class AppUsageTracker(
         return closed;
     }
 
-    /// <summary>এজেন্ট বন্ধ হচ্ছে বা সেশন শেষ — যা খোলা আছে বন্ধ করো।</summary>
+    /// <summary>The agent is stopping or the session is ending: close whatever is open.</summary>
     public IReadOnlyList<AppUsageRecord> CloseAll(DateTimeOffset now)
     {
         var closed = new List<AppUsageRecord>();
@@ -152,17 +150,17 @@ public sealed class AppUsageTracker(
         return closed;
     }
 
-    // ── ভেতরের কাজ ──────────────────────────────────────────────────────────
+    // ── Internals ───────────────────────────────────────────────────────────
 
     /// <summary>
-    /// দুটো নমুনা একই "ব্যবহার" কি না।
+    /// Whether two samples are the same "use".
     ///
-    /// ⚠️ ব্রাউজারে <b>ডোমেইন বদলালে নতুন রেকর্ড</b>, যদিও প্রসেস একই।
-    /// নইলে সারাদিন একটাই "chrome.exe ৮ ঘণ্টা" সারি থাকত আর D08
-    /// (টপ ১০ সাইট) বলে কিছু বানানোই যেত না।
+    /// In a browser a <b>changed domain means a new record</b> even though the process is the
+    /// same. Otherwise there would be one "chrome.exe 8 hours" row all day and D08 (top 10
+    /// sites) could not be built at all.
     ///
-    /// টাইটেল বদলালে নতুন রেকর্ড নয় — একই পেজে স্ক্রল করলেও টাইটেল বদলায়,
-    /// আর তাতে রেকর্ডের সংখ্যা অকারণে ফুলে উঠত।
+    /// A changed title is not a new record: scrolling on the same page changes the title,
+    /// and the record count would swell for no reason.
     /// </summary>
     private static bool SameWindow(WindowSample a, WindowSample b) =>
         string.Equals(a.ProcessName, b.ProcessName, StringComparison.OrdinalIgnoreCase)
@@ -187,7 +185,7 @@ public sealed class AppUsageTracker(
             _openedAt = boundary;
         }
 
-        // মধ্যরাত পেরোলেও ভাগ — এক রেকর্ড দুই work_date-এ থাকতে পারে না
+        // Split at midnight too: one record cannot span two work_dates
         var midnight = DhakaTime.NextLocalMidnight(_openedAt);
         while (midnight <= now)
         {
@@ -213,7 +211,7 @@ public sealed class AppUsageTracker(
 
         var duration = to - from;
 
-        // D04 — ৫ সেকেন্ডের কম হলে রেকর্ডই হয় না
+        // D04: under 5 seconds, no record is made
         if (duration < _min) return;
 
         var isPrivate = DomainParser.LooksPrivate(_open.WindowTitle);
@@ -227,15 +225,15 @@ public sealed class AppUsageTracker(
             ProcessName = _open.ProcessName,
             AppName = _open.AppName,
 
-            // ⚠️ ব্যক্তিগত ব্রাউজিংয়ে টাইটেলও যায় না — টাইটেলে পেজের নাম
-            //    থাকে, অর্থাৎ ওটা রাখা মানে ঘুরিয়ে একই তথ্য রাখা।
+            // Private browsing drops the title too: the title holds the page name, so keeping
+            // it would keep the same information indirectly.
             WindowTitle = isPrivate ? null : _open.WindowTitle,
             Domain = isPrivate ? null : DomainParser.Extract(_open.RawUrl),
             IsBrowser = _open.IsBrowser,
 
-            // ⭐ R22a — কোন অবস্থায় দেখা হয়েছে। ⚠️ `state` প্যারামিটার নয়,
-            //    `_openState`: খণ্ডটা যে অবস্থায় **শুরু** হয়েছিল সেটাই তার
-            //    অবস্থা, আর অবস্থা বদলালে খণ্ডটা এমনিতেই কেটে যায় (Observe)।
+            // R22a: the state it was observed in. Use `_openState`, not the `state` parameter:
+            // the state the slice **started** in is its state, and when the state changes the
+            // slice is cut anyway (Observe).
             State = _openState,
         });
     }

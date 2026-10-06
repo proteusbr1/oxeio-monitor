@@ -6,11 +6,11 @@ public class RestartLadderTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 8, 10, 9, 0, 0, TimeSpan.Zero);
 
-    // ── প্রথম চেষ্টা সাথে সাথেই ──────────────────────────────────────────────
+    // ── the first attempt is immediate ──────────────────────────────────────
 
     /// <summary>
-    /// H01-এর গ্রহণযোগ্যতার শর্ত: Task Manager থেকে kill → ৩০ সেকেন্ডে ফিরে আসে।
-    /// প্রথমবারেই ব্যাকঅফ বসালে সেটা মিথ্যা হয়ে যেত।
+    /// H01's acceptance condition: kill it from Task Manager and it comes back within
+    /// 30 seconds. Putting a backoff on the very first attempt would make that false.
     /// </summary>
     [Fact]
     public void প্রথম_ক্র্যাশে_সাথে_সাথেই_চালু_করা_যায়()
@@ -21,7 +21,7 @@ public class RestartLadderTests
         Assert.Equal(TimeSpan.Zero, ladder.TimeUntilNextLaunch(T0));
     }
 
-    // ── মইয়ের ধাপ ───────────────────────────────────────────────────────────
+    // ── ladder steps ────────────────────────────────────────────────────────
 
     [Theory]
     [InlineData(1, 30)]
@@ -40,8 +40,8 @@ public class RestartLadderTests
     }
 
     /// <summary>
-    /// এখানে throw করা মানে watchdog-ই মরে যাওয়া — অর্থাৎ পাহারাদারবিহীন মেশিন,
-    /// আর সেটা ঘটত ঠিক সেই মেশিনে যেটা সবচেয়ে বেশিদিন ভেঙে পড়ে আছে।
+    /// Throwing here would kill the watchdog itself, leaving a machine with no
+    /// supervisor, and it would happen on exactly the machine that has been broken the longest.
     /// </summary>
     [Fact]
     public void বহু_ব্যর্থতাতেও_overflow_হয়_না()
@@ -65,9 +65,9 @@ public class RestartLadderTests
     }
 
     /// <summary>
-    /// ⚠️ চালু করার চেষ্টাই গোনা বাড়ায়, "চালু হয়েছে" নয়। <c>Process.Start</c>
-    /// ছুড়ে দিলেও (exe নেই, AV ব্লক করেছে) মই এগোতে হবে — নইলে প্রতি ৩০ সেকেন্ডে
-    /// চিরকাল চেষ্টা চলত।
+    /// Careful: it is the attempt to start that raises the count, not "it started".
+    /// Even if <c>Process.Start</c> throws (exe missing, blocked by AV) the ladder must
+    /// advance; otherwise it would retry every 30 seconds forever.
     /// </summary>
     [Fact]
     public void প্রতিটা_লঞ্চ_আগেই_ব্যর্থ_ধরা_হয়()
@@ -79,7 +79,7 @@ public class RestartLadderTests
         Assert.Equal(1, ladder.Failures);
     }
 
-    // ── হাল ছাড়া ও ঠান্ডা হওয়া ──────────────────────────────────────────────
+    // ── giving up and cooling off ───────────────────────────────────────────
 
     [Fact]
     public void পাঁচবার_চেষ্টার_পর_হাল_ছাড়ে()
@@ -91,9 +91,9 @@ public class RestartLadderTests
     }
 
     /// <summary>
-    /// ⚠️ হাল ছাড়া মানে চিরতরে থামা নয়। থামলে AV আপডেটে exe লক হয়ে থাকার মতো
-    /// সাময়িক সমস্যায় ১৫টা PC-র প্রত্যেকটায় একজন মানুষকে যেতে হতো, আর ততক্ষণ
-    /// কারো সময় গোনা হতো না।
+    /// Careful: giving up does not mean stopping for good. If it did, a temporary problem
+    /// such as the exe being locked by an AV update would need a person to visit every
+    /// one of the 15 PCs, and nobody's time would be counted until then.
     /// </summary>
     [Fact]
     public void ঠান্ডা_হওয়ার_পর_আবার_একবার_চেষ্টা_করে()
@@ -105,8 +105,8 @@ public class RestartLadderTests
         Assert.True(ladder.MayLaunch(now + coolOff));
     }
 
-    /// <summary>ঠান্ডা হওয়ার ব্যবধান মইয়ের সবচেয়ে বড় ধাপের চেয়ে ছোট হলে
-    /// "হাল ছাড়া" আসলে চেষ্টা বাড়িয়ে দিত।</summary>
+    /// <summary>If the cool-off interval were shorter than the ladder's biggest step,
+    /// "giving up" would actually increase the attempts.</summary>
     [Fact]
     public void ঠান্ডা_হওয়ার_সময়_সবচেয়ে_বড়_ধাপের_চেয়ে_বড়()
     {
@@ -119,7 +119,7 @@ public class RestartLadderTests
         var ladder = LaunchUntilExhausted(out var now);
         var coolOff = ladder.Policy.CoolOff;
 
-        // ঠান্ডা হওয়ার পর একবার চেষ্টা — সেটাও ব্যর্থ
+        // one attempt after the cool-off; that fails too
         var probe = now + coolOff;
         ladder.RecordLaunch(probe);
 
@@ -128,7 +128,7 @@ public class RestartLadderTests
         Assert.True(ladder.MayLaunch(probe + coolOff));
     }
 
-    // ── অ্যালার্ম ────────────────────────────────────────────────────────────
+    // ── alarm ───────────────────────────────────────────────────────────────
 
     [Fact]
     public void অ্যালার্ম_চিহ্ন_মনে_রাখা_হয়()
@@ -140,11 +140,11 @@ public class RestartLadderTests
         Assert.True(ladder.AlarmRaised);
     }
 
-    // ── রিসেট ───────────────────────────────────────────────────────────────
+    // ── reset ───────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// "একবার চালু হয়েছে" রিসেট করে না — ক্র্যাশ-লুপে প্রসেসটা বারবার চালু
-    /// হয়ই। শুধু টানা সুস্থ থাকাই গোনা।
+    /// "Has started once" does not reset it: in a crash loop the process starts again
+    /// and again anyway. Only continuous health counts.
     /// </summary>
     [Fact]
     public void অল্প_সময়_সুস্থ_থাকলে_মই_রিসেট_হয়_না()
@@ -174,8 +174,8 @@ public class RestartLadderTests
         Assert.True(ladder.MayLaunch(now));
     }
 
-    /// <summary>সপ্তাহে একবার ক্র্যাশ করা এজেন্ট যেন এক মাস পর "হাল ছাড়া"
-    /// অবস্থায় পৌঁছে না যায়।</summary>
+    /// <summary>An agent that crashes once a week must not reach the "given up" state
+    /// after a month.</summary>
     [Fact]
     public void মাঝেমধ্যে_ক্র্যাশ_জমে_হাল_ছাড়ায়_না()
     {
@@ -194,11 +194,12 @@ public class RestartLadderTests
         Assert.False(ladder.IsExhausted);
     }
 
-    // ── ঘড়ির গোলমাল ────────────────────────────────────────────────────────
+    // ── clock trouble ───────────────────────────────────────────────────────
 
     /// <summary>
-    /// ⚠️ কলার ভুল করে দেয়াল-ঘড়ি দিলে আর কেউ ঘড়ি পিছিয়ে দিলে watchdog নীরবে
-    /// চিরতরে অপেক্ষায় বসে থাকত — পাহারা আছে বলে সবাই ভাবত, আসলে নেই।
+    /// Careful: if a caller wrongly passes the wall clock and someone sets the clock
+    /// back, the watchdog would silently wait forever: everyone thinks supervision is
+    /// there, when it is not.
     /// </summary>
     [Fact]
     public void ঘড়ি_পিছিয়ে_গেলেও_আটকে_থাকে_না()
@@ -219,14 +220,14 @@ public class RestartLadderTests
         ladder.RecordLaunch(T0);
 
         ladder.Observe(healthy: true, T0 + TimeSpan.FromHours(1));
-        ladder.Observe(healthy: true, T0);           // ঘড়ি পিছিয়ে গেল
+        ladder.Observe(healthy: true, T0);           // the clock went back
 
-        Assert.Equal(1, ladder.Failures);            // ভুয়া রিসেট হয়নি
+        Assert.Equal(1, ladder.Failures);            // no bogus reset happened
         ladder.Observe(healthy: true, T0 + RestartPolicy.Default.StabilityWindow);
         Assert.Equal(0, ladder.Failures);
     }
 
-    // ── সেটিং যাচাই ─────────────────────────────────────────────────────────
+    // ── settings validation ─────────────────────────────────────────────────
 
     [Fact]
     public void অসম্ভব_সেটিং_নাকচ_হয়()
@@ -234,25 +235,25 @@ public class RestartLadderTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new RestartPolicy(
             TimeSpan.Zero, 3, TimeSpan.FromMinutes(15), 5, TimeSpan.FromHours(6), TimeSpan.FromMinutes(10)));
 
-        // সিলিং base-এর চেয়ে ছোট
+        // the ceiling is smaller than the base
         Assert.Throws<ArgumentOutOfRangeException>(() => new RestartPolicy(
             TimeSpan.FromMinutes(5), 3, TimeSpan.FromSeconds(30), 5, TimeSpan.FromHours(6), TimeSpan.FromMinutes(10)));
 
-        // হাল ছাড়ার আগে অন্তত একবার চেষ্টা করতেই হবে
+        // there must be at least one attempt before giving up
         Assert.Throws<ArgumentOutOfRangeException>(() => new RestartPolicy(
             TimeSpan.FromSeconds(30), 3, TimeSpan.FromMinutes(15), 0, TimeSpan.FromHours(6), TimeSpan.FromMinutes(10)));
 
-        // ঠান্ডা হওয়ার সময় সবচেয়ে বড় ধাপের চেয়ে ছোট
+        // the cool-off time is smaller than the biggest step
         Assert.Throws<ArgumentOutOfRangeException>(() => new RestartPolicy(
             TimeSpan.FromSeconds(30), 3, TimeSpan.FromMinutes(15), 5, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(10)));
     }
 
-    // ── সহায়ক ───────────────────────────────────────────────────────────────
+    // ── helpers ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// পাঁচবার চালু করে প্রতিবারই ব্যর্থ — মই ফুরিয়ে যাওয়া পর্যন্ত।
-    /// <paramref name="now"/> ফেরে <b>শেষ লঞ্চের মুহূর্ত</b>, কারণ ঠান্ডা হওয়ার
-    /// সময় ওখান থেকেই গোনা হয়।
+    /// Starts five times, failing every time, until the ladder is exhausted.
+    /// <paramref name="now"/> comes back as <b>the moment of the last launch</b>, since
+    /// the cool-off is counted from there.
     /// </summary>
     private static RestartLadder LaunchUntilExhausted(out DateTimeOffset now)
     {

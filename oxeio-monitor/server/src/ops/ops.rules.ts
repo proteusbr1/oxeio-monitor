@@ -1,12 +1,13 @@
 /**
- * ব্যাকআপ ও হেলথের সব **সিদ্ধান্ত** — খাঁটি ফাংশনে, কোনো I/O ছাড়া।
+ * All the **decisions** about backup and health, as pure functions with no I/O.
  *
- * এখানে কোনো `fs`, কোনো Prisma, কোনো `new Date()` নেই — সময় সবসময়
- * প্যারামিটারে আসে। কারণ এই ফাইলের প্রশ্নগুলোর ভুল উত্তরগুলো সবই **নীরব**:
- * ভুল নাম মানে ঘোরানোর নিয়ম ফাইলটাকে চিনবেই না, ভুল ঘোরানোর নিয়ম মানে
- * শেষ ভালো কপিটা মুছে যাওয়া, আর ভুল verdict মানে ব্যাকআপ ছাড়া মাসের পর মাস
- * চলা। তিনটেই ধরা পড়ে ঠিক সেদিন, যেদিন আর কিছু করার থাকে না — তাই
- * সিদ্ধান্তটুকু ডাটাবেস বা ডিস্ক থেকে আলাদা করে পরীক্ষাযোগ্য রাখা হয়েছে।
+ * There is no `fs`, no Prisma, no `new Date()` here; time always arrives as a
+ * parameter. The wrong answers to this file's questions are all **silent**:
+ * a wrong name means the rotation rule will not recognise the file, a wrong
+ * rotation rule deletes the last good copy, and a wrong verdict means running
+ * for months without a backup. All three are discovered on exactly the day when
+ * nothing can be done, so the decision logic is kept separate from the database
+ * and disk, and testable.
  */
 
 import { DHAKA_OFFSET_MIN } from '../agent/util/dhaka-time';
@@ -29,21 +30,22 @@ const DAY_MS = 86_400_000;
 const OFFSET_MS = DHAKA_OFFSET_MIN * MINUTE_MS;
 
 // ════════════════════════════════════════════════════════════════════════════
-// ১. ব্যাকআপের নাম — ⭐ নামটাই একমাত্র মেটাডেটা
+// 1. Backup names: the name is the only metadata
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * ⭐ ফাইলের নামেই তারিখ, আর সেটাই ঘোরানোর একমাত্র সূত্র।
+ * The date is in the file name, and that is the only basis for rotation.
  *
- * `mtime` ধরে ঘোরানো যেত, কিন্তু এক্সটার্নাল ড্রাইভে কপি করলে বা ফাইল
- * পুনরুদ্ধার করলে `mtime` বদলে যায় — তখন ছয় মাসের পুরোনো ব্যাকআপকেও
- * "আজকের" মনে হতো এবং সেটা কোনোদিন ঘুরত না। নাম বদলায় না।
+ * Rotating by `mtime` would be possible, but copying to the external drive or
+ * restoring a file changes `mtime`; a six-month-old backup would then look like
+ * "today's" and never rotate out. The name does not change.
  *
- * ⚠️ তারিখ ঢাকার সময়ে। রাত ২:৩০-এর ডাম্প UTC-তে আগের দিন ২০:৩০ — নাম
- *    UTC ধরে বানালে ফাইলের তারিখ আর "কোন রাতের ব্যাকআপ" এক দিন সরে যেত।
+ * Careful: the date is Dhaka time. The 02:30 dump is 20:30 the previous day in
+ * UTC; building the name from UTC would shift the file's date, and "which
+ * night's backup", by one day.
  *
- * ⚠️ নামে ঘণ্টা-মিনিটও আছে। শুধু তারিখ রাখলে একই দিনে হাতে চালানো দ্বিতীয়
- *    ব্যাকআপ প্রথমটাকে চুপচাপ overwrite করত।
+ * Careful: the name has hours and minutes too. With only a date, a second
+ * backup run by hand on the same day would silently overwrite the first.
  */
 export function backupFileName(now: Date): string {
   const s = new Date(now.getTime() + OFFSET_MS);
@@ -54,19 +56,19 @@ export function backupFileName(now: Date): string {
   return `${BACKUP_PREFIX}-${stamp}${BACKUP_EXT}`;
 }
 
-/** নামের ঠিক এই আকারটাই ব্যাকআপ বলে গোনা হয় — আর কিছু নয় */
+/** Exactly this name shape counts as a backup, nothing else */
 const NAME_RE = new RegExp(
   `^${BACKUP_PREFIX}-(\\d{4})-(\\d{2})-(\\d{2})-(\\d{2})(\\d{2})` +
     `${BACKUP_EXT.replace(/\./g, '\\.')}$`,
 );
 
 /**
- * নাম → কোন মুহূর্তের ব্যাকআপ। চেনা না গেলে `null`।
+ * Name → the moment of the backup. `null` if not recognised.
  *
- * ⚠️ `null` ফেরত মানে "এটা আমাদের ফাইল নয়" — আর ঘোরানোর নিয়ম ঠিক
- *    সেগুলোকেই **ছোঁয় না**। ব্যাকআপ ফোল্ডারে মানুষের রাখা একটা
- *    `restore-note.txt` বা হাতে নেওয়া `before-migration.dump` যেন
- *    কোনোদিন এই জবের হাতে না মোছে।
+ * Careful: returning `null` means "this is not our file", and the rotation rule
+ * **does not touch** such files. A `restore-note.txt` a person left in the
+ * backup folder, or a `before-migration.dump` taken by hand, must never be
+ * deleted by this job.
  */
 export function parseBackupName(name: string): Date | null {
   const m = NAME_RE.exec(name);
@@ -82,9 +84,9 @@ export function parseBackupName(name: string): Date | null {
   );
   const at = new Date(localUtc - OFFSET_MS);
 
-  // ⚠️ `2026-13-45` regex-এ পাশ করে যেত (দুই অঙ্ক), কিন্তু Date.UTC সেটাকে
-  //    নীরবে পরের মাসে গড়িয়ে দিত। তখন একটা আজেবাজে নাম "ভবিষ্যতের ব্যাকআপ"
-  //    হিসেবে গোনা হতো এবং চিরকাল রক্ষা পেত। তাই ফিরে মিলিয়ে দেখা হয়।
+  // Careful: `2026-13-45` would pass the regex (two digits each), but Date.UTC
+  // would silently roll it into the next month. A junk name would then count as
+  // a "backup from the future" and be protected forever. So it is round-tripped.
   return backupFileName(at) === name ? at : null;
 }
 
@@ -92,7 +94,7 @@ export function isBackupFile(name: string): boolean {
   return parseBackupName(name) !== null;
 }
 
-/** অসম্পূর্ণ ডাম্প — `oxeio-….dump.enc.part` */
+/** An incomplete dump: `oxeio-….dump.enc.part` */
 export function isPartFile(name: string): boolean {
   return (
     name.endsWith(BACKUP_PART_EXT) &&
@@ -105,7 +107,7 @@ export interface BackupFile {
   at: Date;
 }
 
-/** চেনা ব্যাকআপগুলো, **নতুন থেকে পুরোনো** ক্রমে */
+/** The recognised backups, in **newest to oldest** order */
 export function listBackups(names: readonly string[]): BackupFile[] {
   const files: BackupFile[] = [];
   for (const name of names) {
@@ -116,25 +118,24 @@ export function listBackups(names: readonly string[]): BackupFile[] {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ২. ঘোরানোর নিয়ম — ⭐ এই ফাইলের সবচেয়ে বিপজ্জনক ফাংশন
+// 2. Rotation rule: the most dangerous function in this file
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * ⭐ কোন ব্যাকআপগুলো মুছে ফেলা যাবে।
+ * Which backups may be deleted.
  *
- * তিনটে পাহারা, তিনটেই আলাদা বিপদ ঠেকায়:
+ * Three guards, each preventing a different danger:
  *
- *  ১. **নাম না মিললে ছোঁয়াই হয় না** — ব্যাকআপ ফোল্ডারে অন্য যা-ই থাক
- *     (`README-restore.txt`, হাতে নেওয়া ডাম্প, `.sha256` সাইডকার),
- *     সেগুলো এই জবের বিষয় নয়।
- *  ২. ⭐ **সবচেয়ে নতুন কয়েকটা সবসময় থাকে** (`keepMin`) — বয়স যাই হোক।
- *     ব্যাকআপ ৪০ দিন ধরে ব্যর্থ হলে সরল বয়স-নিয়মটা শেষ ভালো কপিটাই
- *     মুছে ফেলত। ঠিক যেদিন ব্যাকআপ দরকার, সেদিন ডিস্ক ঝকঝকে খালি।
- *  ৩. বাকিদের মধ্যে শুধু `keepDays`-এর চেয়ে পুরোনোগুলো যায়।
+ *  1. **A name that does not match is never touched.** Whatever else is in the
+ *     backup folder (`README-restore.txt`, a dump taken by hand, a `.sha256`
+ *     sidecar) is not this job's business.
+ *  2. **The newest few always stay** (`keepMin`), whatever their age. If
+ *     backups fail for 40 days, the simple age rule would delete the last good
+ *     copy: exactly when a backup is needed, the disk is spotless and empty.
+ *  3. Among the rest, only those older than `keepDays` go.
  *
- * ⚠️ ভবিষ্যতের তারিখওয়ালা ফাইল (সার্ভারের ঘড়ি পিছিয়ে গেলে) সবচেয়ে নতুন
- *    হিসেবেই গোনা হয়, ফলে রক্ষা পায় — ভুলটা মুছে ফেলার দিকে নয়, রেখে
- *    দেওয়ার দিকে।
+ * Careful: a file dated in the future (if the server clock goes back) counts as
+ * the newest and so is protected; the mistake errs toward keeping, not deleting.
  */
 export function backupsToDelete(
   names: readonly string[],
@@ -152,16 +153,16 @@ export function backupsToDelete(
 }
 
 /**
- * অনাথ `.sha256` — যার ব্যাকআপটাই আর নেই।
+ * An orphan `.sha256`: one whose backup no longer exists.
  *
- * ⚠️ সাইডকারটা লেখা হয় ডাম্পের **আগে** (integrity ছাড়া ব্যাকআপ যেন এক
- *    মুহূর্তও না থাকে)। ঠিক ওই দুই rename-এর মাঝখানে প্রসেস মরে গেলে
- *    সাইডকারটা পড়ে থাকে, আর তার ব্যাকআপ কোনোদিন আসে না। ছোট ফাইল,
- *    কিন্তু বছরের পর বছর জমে ফোল্ডারটা এমন হতো যেখানে কোনটা আসল
- *    ব্যাকআপ তাই বোঝা যেত না।
+ * Careful: the sidecar is written **before** the dump (so a backup is never
+ * without integrity data, even for a moment). If the process dies between those
+ * two renames, the sidecar is left behind and its backup never arrives. A small
+ * file, but piling up over years the folder would become one where you cannot
+ * tell which are the real backups.
  *
- * ⚠️ শুধু সেগুলোই, যাদের নামের বাকি অংশটা **আমাদের প্যাটার্নে** পড়ে।
- *    কারো নিজের রাখা `notes.sha256` এই তালিকায় কখনো আসবে না।
+ * Careful: only those whose remaining name part fits **our pattern**. Someone's
+ * own `notes.sha256` will never be in this list.
  */
 export function orphanSidecars(names: readonly string[]): string[] {
   const present = new Set(names);
@@ -175,11 +176,11 @@ export function orphanSidecars(names: readonly string[]): string[] {
 }
 
 /**
- * পড়ে থাকা অসম্পূর্ণ ডাম্প — প্রসেস মাঝপথে মরে গেলে যা থেকে যায়।
+ * Leftover incomplete dumps: what remains if the process dies midway.
  *
- * ⚠️ এখানে `mtime` ব্যবহার করা হয়েছে, নামের তারিখ নয় — কারণ প্রশ্নটা
- *    "কোন রাতের ব্যাকআপ" নয়, "এটা কি **এখনো লেখা হচ্ছে**"। চলতি ডাম্পের
- *    ফাইলটাও `.part`, আর সেটা মুছে ফেলা মানে চলমান ব্যাকআপ নষ্ট করা।
+ * Careful: this uses `mtime`, not the date in the name, because the question is
+ * not "which night's backup" but "is it **still being written**". The file of a
+ * running dump is also `.part`, and deleting it would ruin the backup in progress.
  */
 export function stalePartFiles(
   entries: readonly { name: string; mtime: Date }[],
@@ -193,36 +194,36 @@ export function stalePartFiles(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ৩. G04 — ব্যাকআপ নিয়ে কখন কথা বলব
+// 3. G04: when to speak up about backups
 // ════════════════════════════════════════════════════════════════════════════
 
 export type BackupProblem =
-  /** `BACKUP_PASSPHRASE` নেই — ব্যাকআপ চলছেই না */
+  /** No `BACKUP_PASSPHRASE`: backups are not running at all */
   | 'not_configured'
-  /** শেষ চেষ্টাটা ব্যর্থ হয়েছে */
+  /** The last attempt failed */
   | 'failed'
-  /** কখনো একটাও সফল ব্যাকআপ হয়নি */
+  /** Not a single backup has ever succeeded */
   | 'never'
-  /** সফল হয়েছিল, কিন্তু অনেক আগে — জবটা আর চলছে না */
+  /** It succeeded, but long ago: the job is no longer running */
   | 'stale'
-  /** ডাম্প হয়েছে, কিন্তু এক্সটার্নাল ড্রাইভে কপি হয়নি (K03) */
+  /** The dump was made, but not copied to the external drive (K03) */
   | 'copy_failed';
 
 export interface BackupState {
-  /** `BACKUP_PASSPHRASE` আছে কি না — না থাকলে ⭐ ব্যাকআপ চালানোই হয় না */
+  /** Whether `BACKUP_PASSPHRASE` exists; if not, backups are not run at all */
   configured: boolean;
   lastAttemptAt: Date | null;
   lastOutcome: 'ok' | 'failed' | null;
   lastSuccessAt: Date | null;
-  /** টানা কতবার ব্যর্থ — সফল হলেই ০ */
+  /** How many failures in a row; 0 as soon as one succeeds */
   consecutiveFailures: number;
-  /** K03 — শেষ কপির ফল। `null` = কপি কনফিগারই করা হয়নি */
+  /** K03: result of the last copy. `null` = no copy is configured at all */
   lastCopyOutcome: 'ok' | 'failed' | null;
   /**
-   * কবে থেকে আমরা দেখছি (সার্ভার বুট বা প্রথম রেকর্ড)।
+   * Since when we have been watching (server boot or first record).
    *
-   * ⚠️ এটা ছাড়া সদ্য ইনস্টল করা সার্ভার প্রথম মিনিটেই "ব্যাকআপ হয়নি" বলে
-   *    চেঁচাত — অথচ প্রথম ব্যাকআপের সময়ই তখনো আসেনি।
+   * Without it a freshly installed server would shout "no backup" in its first
+   * minute, when the first backup's time has not even come.
    */
   observedSince: Date | null;
 }
@@ -235,15 +236,16 @@ export interface BackupVerdict {
 }
 
 /**
- * ⭐ **সফল হলে কিছুই বলে না** — `null` ফেরত।
+ * **Says nothing on success**: returns `null`.
  *
- * এটাই G04-এর মূল কথা। "ব্যাকআপ হয়েছে" রোজ জানালে ওই মেইলটা এক সপ্তাহেই
- * ফিল্টারে চলে যায়, আর তার সাথে যেদিন **হয়নি** সেই বার্তাটাও। নীরবতা
- * এখানে ইতিবাচক খবর, আর সেই নীরবতাই খবরটাকে মূল্য দেয়।
+ * This is the heart of G04. Reporting "backup done" every day sends that mail
+ * to a filter within a week, and with it the message for the day it **did not**
+ * happen. Silence here is the good news, and that silence is what gives the
+ * message its value.
  *
- * severity বাড়ে দুই দিনে (`criticalDays`) — কারণ একরাতের ব্যর্থতা প্রায়ই
- * সাময়িক (ড্রাইভ খোলা ছিল না, ডিস্ক ভরা), কিন্তু টানা দুই রাত মানে কেউ
- * দেখেইনি, আর তখন প্রতিটা দিন পুনরুদ্ধারযোগ্য অতীতকে আরেকদিন পিছিয়ে দেয়।
+ * Severity rises after two days (`criticalDays`): a one-night failure is often
+ * temporary (drive not plugged in, disk full), but two nights in a row means
+ * nobody looked, and then each day pushes back the recoverable past by another day.
  */
 export function backupVerdict(
   state: BackupState,
@@ -261,14 +263,14 @@ export function backupVerdict(
 
   const stale = sinceSuccessMs === null || sinceSuccessMs >= staleHours * HOUR_MS;
 
-  // ⚠️ `consecutiveFailures` সরাসরি দিনের সাথে তুলনা করা হচ্ছে — জবটা দিনে
-  //    একবারই চলে বলে "টানা ২ বার ব্যর্থ" ≈ "টানা ২ দিন"। কেউ হাতে বারবার
-  //    চালিয়ে গেলে গোনাটা দ্রুত বাড়ত, কিন্তু তখন severity বাড়াই কাম্য —
-  //    ভুলটা চেঁচানোর দিকে, চুপ থাকার দিকে নয়।
+  // Careful: `consecutiveFailures` is compared directly with days. The job runs
+  // once a day, so "2 failures in a row" is about "2 days in a row". If someone
+  // ran it by hand repeatedly the count would rise fast, but a higher severity
+  // is desirable then: the mistake errs toward shouting, not toward silence.
   const escalated =
     state.consecutiveFailures >= criticalDays ||
     (sinceSuccessMs !== null && sinceSuccessMs >= criticalDays * DAY_MS) ||
-    // কখনো সফল হয়নি, অথচ আমরা দেখছি দুদিনের বেশি — এটাও গুরুতর
+    // Never succeeded, yet we have been watching for over two days: serious too
     (state.lastSuccessAt === null &&
       state.observedSince !== null &&
       now.getTime() - state.observedSince.getTime() >= criticalDays * DAY_MS);
@@ -280,14 +282,14 @@ export function backupVerdict(
     daysSinceSuccess,
   });
 
-  // ⭐ কনফিগই নেই — সবচেয়ে জোরে বলার মতো অবস্থা, কারণ এখানে কিছু "ব্যর্থ"
-  //    হয়নি; ব্যাকআপ ব্যাপারটাই ঘটছে না, আর সেটা নীরবে ঘটছে।
+  // No config at all is the state to shout loudest about: nothing "failed";
+  // backing up is not happening at all, and it is happening silently.
   if (!state.configured) return withSeverity('not_configured');
 
   if (state.lastOutcome === 'failed') return withSeverity('failed');
 
   if (state.lastSuccessAt === null) {
-    // এখনো কিছুই ঘটেনি, আর দেখাও শুরু হয়েছে সবে — চুপ থাকাই ঠিক
+    // Nothing has happened yet and we have only just started watching: staying quiet is right
     if (
       state.lastAttemptAt === null &&
       (state.observedSince === null ||
@@ -300,9 +302,9 @@ export function backupVerdict(
 
   if (stale) return withSeverity('stale');
 
-  // ⚠️ ডাম্প ঠিকঠাক, কিন্তু এক্সটার্নাল ড্রাইভে যায়নি — এটাও ব্যর্থতা।
-  //    একই ডিস্কে পড়ে থাকা ব্যাকআপ ওই ডিস্কটা মরে গেলে কোনো কাজেই আসে না,
-  //    অথচ ড্যাশবোর্ডে "ব্যাকআপ ঠিক আছে" দেখাত।
+  // The dump is fine but did not reach the external drive: that is a failure
+  // too. A backup sitting on the same disk is useless if that disk dies, yet the
+  // dashboard would say "backup is fine".
   if (state.lastCopyOutcome === 'failed') {
     return { ...withSeverity('copy_failed'), severity: 'warning' };
   }
@@ -310,7 +312,7 @@ export function backupVerdict(
   return null;
 }
 
-/** অ্যালার্টের শিরোনাম ও বিস্তারিত — ⚠️ কোনো পাথ, পাসফ্রেজ বা হোস্ট নয় */
+/** Alert title and detail. Careful: no paths, passphrases or hosts. */
 export function backupAlertText(verdict: BackupVerdict): {
   title: string;
   detail: string;
@@ -359,20 +361,20 @@ export function backupAlertText(verdict: BackupVerdict): {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ৪. K04 — সার্ভার হেলথের verdict
+// 4. K04: the server health verdict
 // ════════════════════════════════════════════════════════════════════════════
 
 export type HealthStatus = 'ok' | 'degraded' | 'down';
 
 export interface HealthFacts {
   dbUp: boolean;
-  /** `null` = ডিস্কের তথ্য পড়া যায়নি */
+  /** `null` = disk info could not be read */
   diskUsedPct: number | null;
-  /** ⭐ G04-এর ঠিক **একই** verdict — দুই জায়গায় দুরকম হিসাব হতে পারে না */
+  /** Exactly the **same** verdict as G04; the two places cannot calculate differently */
   backup: BackupVerdict | null;
   activeDevices: number;
   silentDevices: number;
-  /** এখনো কোনো চ্যানেলে যায়নি এমন অ্যালার্ট */
+  /** Alerts not yet sent on any channel */
   pendingAlerts: number;
   /**
    * Screenshot store, when it is not the local disk (STORAGE_DRIVER=s3):
@@ -384,18 +386,18 @@ export interface HealthFacts {
 
 export interface HealthVerdict {
   status: HealthStatus;
-  /** মানুষের পড়ার মতো সমস্যার তালিকা — খালি মানে সব ঠিক */
+  /** Human-readable list of problems; empty means everything is fine */
   problems: string[];
 }
 
 /**
- * ⭐ "চুপ থাকা ডিভাইস" কখনোই status খারাপ করে না — শুধু গোনা হয়।
+ * "Silent devices" never worsen the status; they are only counted.
  *
- * সন্ধ্যা ৭টায় সবার PC বন্ধ, অর্থাৎ পনেরোটার মধ্যে পনেরোটাই চুপ। সেটাকে
- * "degraded" বললে হেলথ পাতাটা প্রতিদিন সন্ধ্যা থেকে সকাল পর্যন্ত লাল
- * থাকত — আর যে জিনিস অর্ধেক সময় লাল, সেটা কেউ আর দেখে না। কোন নীরবতাটা
- * আসলে খবর সেটা G01 (`isExpectedSilence`) ইতিমধ্যেই ঠিক করে; এখানে
- * তার একটা বোকা সংস্করণ বসানো মানে দুটো উত্তর, দুটোই অবিশ্বাস্য।
+ * At 19:00 everyone's PC is off, so fifteen of fifteen are silent. Calling that
+ * "degraded" would keep the health page red every day from evening to morning,
+ * and something red half the time is something nobody looks at. Which silence
+ * is really news is already decided by G01 (`isExpectedSilence`); adding a
+ * dumber version of it here would give two answers, both unreliable.
  */
 export function healthVerdict(facts: HealthFacts): HealthVerdict {
   const problems: string[] = [];
@@ -434,20 +436,21 @@ export function healthVerdict(facts: HealthFacts): HealthVerdict {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ৫. G08 — টেলিগ্রামে কতটুকু যাবে
+// 5. G08: how much goes to Telegram
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * ⭐ টেলিগ্রামের বার্তা **allowlist** দিয়ে বানানো হয়, denylist দিয়ে নয়।
+ * Telegram messages are built with an **allowlist**, not a denylist.
  *
- * টেলিগ্রাম একটা বাইরের সেবা — বার্তাটা Telegram-এর সার্ভারে জমা থাকে, আর
- * গ্রুপে যে-কেউ থাকতে পারে। তাই অ্যালার্টের `title`/`detail` **কখনোই**
- * হুবহু পাঠানো হয় না; ওগুলো ফ্রি-টেক্সট, আর ভবিষ্যতে কেউ একটা নতুন
- * অ্যালার্টে ডোমেইন, উইন্ডোর শিরোনাম বা টাকার অঙ্ক ঢোকালে denylist সেটা
- * চিনত না — আর ফাঁসটা নীরবে ঘটত, প্রতিদিন।
+ * Telegram is an outside service: the message is stored on Telegram's servers,
+ * and anyone can be in the group. So an alert's `title`/`detail` is **never**
+ * sent as it is; they are free text, and if someone later put a domain, a
+ * window title or a money amount in a new alert, a denylist would not recognise
+ * it, and the leak would happen silently, every day.
  *
- * এখানে যা যায়: **টাইপের লেবেল · হোস্টনেম · কখন**। ব্যস।
- * কর্মীর নাম যায় না, কারণ "কে কী করেনি" কখনোই বাইরের চ্যানেলের বিষয় নয়।
+ * What goes here: **the type label, the hostname, when**. That is all.
+ * Staff names do not go, because "who did not do what" is never a matter for an
+ * outside channel.
  */
 const TYPE_LABELS: Readonly<Record<string, string>> = {
   agent_down: 'Agent silent',
@@ -457,18 +460,19 @@ const TYPE_LABELS: Readonly<Record<string, string>> = {
   backup_failed: 'Backup failed',
   clock_drift: 'Agent clock has drifted',
   no_activity_today: 'Someone has no work all day',
-  // ⚠️ এখানে আগে লেখা ছিল "Multiple staff on one device" — ঠিক **উল্টো**
-  //    কথা। G32-র ঘটনা একজন স্টাফের দুটো ডিভাইস, একটা ডিভাইসে দুজন নয়।
-  //    টেলিগ্রামে ওই লেবেলটাই যেত, আর যে পড়ত সে ভুল PC-তে খুঁজতে যেত।
+  // This used to say "Multiple staff on one device", the exact **opposite**.
+  // G32's case is one staff member on two devices, not two people on one
+  // device. That label went to Telegram, and whoever read it looked at the
+  // wrong PC.
   device_overlap: 'One person on two devices',
 };
 
 /**
- * হোস্টনেম ছেঁকে নেওয়া।
+ * Filters the hostname.
  *
- * ⚠️ শুধু `A–Z a–z 0–9 . _ -` রাখা হয়, আর ৩২ অক্ষরে কাটা। হোস্টনেমের
- *    কলামটা যেকোনো স্ট্রিং নিতে পারে — এজেন্ট যা পাঠায় তাই বসে। কেউ
- *    হোস্টনেমে বাঁকা কিছু বসালে সেটা যেন সরাসরি বাইরে না যায়।
+ * Careful: only `A–Z a–z 0–9 . _ -` are kept, cut to 32 characters. The
+ * hostname column can take any string, whatever the agent sends. If someone
+ * puts something twisted in a hostname, it must not go straight outside.
  */
 export function safeHostname(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -483,7 +487,7 @@ export interface TelegramAlertFacts {
   createdAt: Date;
 }
 
-/** একটা অ্যালার্টের এক লাইন — ⚠️ title/detail এখানে ঢোকে না, ইচ্ছাকৃতভাবে */
+/** One alert's single line. Careful: title/detail deliberately never go in here */
 export function telegramLine(alert: TelegramAlertFacts, now: Date): string {
   const label = TYPE_LABELS[alert.type] ?? 'Alert';
   const mark = alert.severity === 'critical' ? '🔴' : '🟡';
@@ -498,9 +502,9 @@ export function telegramLine(alert: TelegramAlertFacts, now: Date): string {
 }
 
 /**
- * পুরো বার্তা। ⚠️ `parse_mode` ছাড়া প্লেইন টেক্সট হিসেবেই পাঠানো হয় —
- * Markdown/HTML দিলে হোস্টনেমের একটা `_` বা `<` গোটা বার্তাটা Telegram-এর
- * পার্সারে ভেঙে দিত (400), অর্থাৎ ঠিক যে অ্যালার্টটা জরুরি সেটাই যেত না।
+ * The whole message. Careful: it is sent as plain text, without `parse_mode`:
+ * with Markdown/HTML a single `_` or `<` in a hostname would break the whole
+ * message in Telegram's parser (400), so the very alert that is urgent would not go out.
  */
 export function telegramMessage(
   alerts: readonly TelegramAlertFacts[],
@@ -515,7 +519,7 @@ export function telegramMessage(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ৬. DATABASE_URL ভাঙা — pg_dump-কে যা যা দিতে হয়
+// 6. Splitting DATABASE_URL: what pg_dump needs
 // ════════════════════════════════════════════════════════════════════════════
 
 export interface PgConnection {
@@ -527,13 +531,13 @@ export interface PgConnection {
 }
 
 /**
- * `postgresql://user:pass@host:5432/db?schema=public` → pg_dump-এর অংশগুলো।
+ * `postgresql://user:pass@host:5432/db?schema=public` → the parts for pg_dump.
  *
- * ⚠️ ইউজারনেম ও পাসওয়ার্ড **ডিকোড** করা হয়। `URL` ওগুলো percent-encoded
- *    অবস্থায় ফেরত দেয়, তাই `p@ss` লেখা থাকে `p%40ss` হিসেবে। ডিকোড না
- *    করলে pg_dump ভুল পাসওয়ার্ড পাঠাত আর ব্যাকআপ প্রতি রাতে
- *    "authentication failed" বলে ব্যর্থ হতো — অথচ অ্যাপ নিজে দিব্যি চলত,
- *    কারণ Prisma ডিকোডটা করে। কারণ খুঁজে পাওয়া কঠিন এমন ব্যর্থতা।
+ * Careful: the username and password are **decoded**. `URL` returns them
+ * percent-encoded, so `p@ss` is written as `p%40ss`. Without decoding, pg_dump
+ * would send the wrong password and the backup would fail every night with
+ * "authentication failed", while the app itself ran fine because Prisma does
+ * the decoding. A failure whose cause is hard to find.
  */
 export function parsePgUrl(raw: string | undefined | null): PgConnection | null {
   if (!raw) return null;
@@ -553,8 +557,8 @@ export function parsePgUrl(raw: string | undefined | null): PgConnection | null 
   if (!database) return null;
 
   return {
-    // ⚠️ `hostname`, `host` নয় — `host` পোর্টসহ আসে, আর IPv6-এ `[::1]`
-    //    বন্ধনী সমেত। pg_dump-এর `-h` দুটোরই কোনোটা চায় না।
+    // `hostname`, not `host`: `host` comes with the port, and for IPv6 `[::1]`
+    // with brackets. pg_dump's `-h` wants neither.
     host: url.hostname || 'localhost',
     port: url.port || '5432',
     user: decode(url.username) || 'postgres',
@@ -567,7 +571,7 @@ function decode(value: string): string {
   try {
     return decodeURIComponent(value);
   } catch {
-    // অবৈধ `%` সিকোয়েন্স — যা আছে তাই ফেরত, নইলে পুরো ব্যাকআপ আটকে যেত
+    // An invalid `%` sequence: return it as it is, otherwise the whole backup would be stuck
     return value;
   }
 }

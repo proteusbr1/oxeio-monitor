@@ -8,15 +8,16 @@ import type { PrismaService } from '../src/prisma/prisma.service';
 import { MonthDeliveryService } from '../src/reports/month-delivery.service';
 
 /**
- * ⭐⭐ **R1 — মাস বন্ধ করা।**
+ * R1 — closing a month.
  *
- * ⚠️⚠️ যে বিপদটা এই ফিচার ঠেকায়: `monthly_summary`-র সংখ্যা প্রতিবার
- * নতুন করে গোনা হয়, আর গোনার সময় **ওই মুহূর্তের** ছুটির তালিকা পড়া হয়।
- * তাই বেতন দিয়ে দেওয়ার পরেও একটা ছুটির তারিখ নড়লে d ও D বদলে যেত —
- * আর কোন সংখ্যায় বেতন হয়েছিল তা প্রমাণ করার উপায় থাকত না।
+ * The danger this feature prevents: the numbers in `monthly_summary` are
+ * recomputed every time, and the computation reads the holiday list as it is
+ * at that moment. So even after pay was disbursed, a holiday date moving
+ * would change d and D — and there would be no way to prove which numbers
+ * the pay was based on.
  *
- * ⭐ এখানকার টেস্টগুলো **সীমানার** — কারণ ভুলগুলো সীমানাতেই: চলতি মাস
- * বন্ধ করা, দুবার বন্ধ করা, ভুল ছাঁদের চাবি।
+ * The tests here are about boundaries, because the mistakes are at the
+ * boundaries: closing the current month, closing twice, a wrongly shaped key.
  */
 
 const OWNER: SessionUser = {
@@ -46,9 +47,9 @@ function makeService(closures: Record<string, { closedAt: Date; closedBy: string
   };
 
   /**
-   * ⭐ **R26** — মাস বন্ধ হলে হিসাবের ফাইল পাঠানো হয়। এখানে সেটা নকল,
-   * আর নকলটাই যথেষ্ট: কলটা fire-and-forget, তাই `close()`-এর ফল ওর উপর
-   * নির্ভর করে না। ⚠️ কিন্তু ডাকা **হচ্ছে কি না** সেটা পরীক্ষা করা যায়।
+   * R26 — when a month is closed, the accounts file is sent. Here it is a
+   * fake, and the fake is enough: the call is fire-and-forget, so `close()`'s
+   * result does not depend on it. But whether it is called can be tested.
    */
   const delivery = {
     deliverClosedMonth: vi.fn().mockResolvedValue({
@@ -71,14 +72,14 @@ function makeService(closures: Record<string, { closedAt: Date; closedBy: string
 
 describe('MonthCloseService', () => {
   beforeEach(() => {
-    // ⚠️ "আজ" স্থির করা — নইলে টেস্টটা মাস বদলালেই ভাঙত, আর ভাঙার কারণ
-    //    দেখে মনে হতো কোড ভুল, অথচ ক্যালেন্ডার এগিয়েছে।
+    // Fix "today" — otherwise the test would break when the month changed, and
+    // from the failure it would look like the code was wrong, when the calendar had just moved on.
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-03T12:00:00Z'));
   });
 
-  describe('বন্ধ করা', () => {
-    it('শেষ হয়ে যাওয়া মাস বন্ধ হয়', async () => {
+  describe('closing', () => {
+    it('a finished month is closed', async () => {
       const { svc, audit } = makeService();
       const row = await svc.close(OWNER, '2026-08', 'বেতন ৩ সেপ্টেম্বর দেওয়া', '1.2.3.4');
 
@@ -91,9 +92,9 @@ describe('MonthCloseService', () => {
     });
 
     /**
-     * ⭐⭐ **R26** — বন্ধ করার পর হিসাবের ফাইল পাঠানো হয়।
+     * R26 — after closing, the accounts file is sent.
      */
-    it('বন্ধ হলে ওই মাসের রিপোর্ট পাঠানো হয়', async () => {
+    it('on closing, that month\'s report is sent', async () => {
       const { svc, delivery } = makeService();
       await svc.close(OWNER, '2026-08', undefined, 'ip');
 
@@ -101,12 +102,12 @@ describe('MonthCloseService', () => {
     });
 
     /**
-     * ⚠️⚠️ **সবচেয়ে জরুরি R26 টেস্ট।** ডেলিভারি ভেঙে গেলেও মাস-বন্ধ করাটা
-     * সফলই থাকে — সারিটা তার আগেই commit হয়ে গেছে। উল্টোটা হলে মালিক
-     * ৫০০ দেখতেন, আবার চেষ্টা করে ৪০৯ পেতেন ("মাস তো বন্ধই"), আর কোথাও
-     * কিছু ভাঙেনি বোঝার উপায় থাকত না।
+     * The most important R26 test. Even if delivery fails the month stays
+     * closed — the row was committed before it. If it were the other way, the
+     * owner would see a 500, retry and get 409 ("the month is already
+     * closed"), and have no way to tell that nothing was broken.
      */
-    it('⭐ রিপোর্ট পাঠাতে ব্যর্থ হলেও মাস বন্ধই থাকে', async () => {
+    it('even if sending the report fails the month stays closed', async () => {
       const { svc, delivery } = makeService();
       delivery.deliverClosedMonth.mockRejectedValueOnce(new Error('telegram down'));
 
@@ -114,27 +115,28 @@ describe('MonthCloseService', () => {
 
       expect(row.yearMonth).toBe('2026-08');
 
-      // ⚠️⚠️ মাইক্রোটাস্ক, `setImmediate` নয় — এই স্পেকে fake timers চালু
-      //    (উপরে `vi.useFakeTimers()`), তাই macrotask কোনোদিন চলত না আর
-      //    টেস্টটা ৩০ সেকেন্ড ঝুলে টাইমআউট করত।
+      // A microtask, not `setImmediate` — fake timers are on in this spec
+      // (`vi.useFakeTimers()` above), so a macrotask would never run and the
+      // test would hang for 30 seconds and time out.
       await Promise.resolve();
       await Promise.resolve();
       expect(delivery.deliverClosedMonth).toHaveBeenCalledWith('2026-08');
     });
 
     /**
-     * ⚠️⚠️ **সবচেয়ে জরুরি টেস্ট।** চলতি মাস বন্ধ করা গেলে আজকের ঘণ্টাগুলো
-     * আর যোগ হতো না — আর ব্যর্থতাটা হতো নীরব: কেউ বলত "আজকের ঘণ্টা উঠছে
-     * না", আর কারণ খুঁজতে কেউ মাস-বন্ধের পাতায় আসত না।
+     * The most important test. If the current month could be closed, today's
+     * hours would stop being added — and the failure would be silent: someone
+     * would say "today's hours are not showing up" and nobody would come to
+     * the month-close page to look for the cause.
      */
-    it('⭐ চলতি মাস বন্ধ করা যায় না', async () => {
+    it('the current month cannot be closed', async () => {
       const { svc } = makeService();
       await expect(svc.close(OWNER, '2026-09', undefined, 'ip')).rejects.toThrow(
         BadRequestException,
       );
     });
 
-    it('ভবিষ্যতের মাসও নয়', async () => {
+    it('nor a future month', async () => {
       const { svc } = makeService();
       await expect(svc.close(OWNER, '2026-12', undefined, 'ip')).rejects.toThrow(
         BadRequestException,
@@ -142,10 +144,10 @@ describe('MonthCloseService', () => {
     });
 
     /**
-     * ⭐ দ্বিতীয়বার বন্ধ করলে **প্রথমজনের নাম-তারিখই থাকে** — রেকর্ডটা
-     * বদলে গেলে "কখন জমাট হয়েছিল" প্রশ্নের উত্তর হারাত।
+     * Closing a second time keeps the first person's name and date — if the
+     * record changed, the answer to "when was it frozen" would be lost.
      */
-    it('দুবার বন্ধ করা যায় না, আর প্রথম রেকর্ডটাই থাকে', async () => {
+    it('cannot be closed twice, and the first record stays', async () => {
       const { svc, prisma } = makeService({
         '2026-08': { closedAt: new Date('2026-09-01T09:00:00Z'), closedBy: 'first@example.com', note: null },
       });
@@ -157,7 +159,7 @@ describe('MonthCloseService', () => {
     });
 
     it.each(['2026-8', '2026-13', '26-08', 'aug-2026', ''])(
-      'ভুল ছাঁদের চাবি ফিরিয়ে দেয় — %s',
+      'a wrongly shaped key is rejected — %s',
       async (bad) => {
         const { svc } = makeService();
         await expect(svc.close(OWNER, bad, undefined, 'ip')).rejects.toThrow(
@@ -166,7 +168,7 @@ describe('MonthCloseService', () => {
       },
     );
 
-    it('খালি নোট `null` হয়ে যায়, খালি স্ট্রিং নয়', async () => {
+    it('an empty note becomes `null`, not an empty string', async () => {
       const { svc, prisma } = makeService();
       await svc.close(OWNER, '2026-08', '   ', 'ip');
       expect(prisma.monthClosure.create).toHaveBeenCalledWith(
@@ -175,19 +177,19 @@ describe('MonthCloseService', () => {
     });
   });
 
-  describe('খোলা', () => {
-    it('বন্ধ না থাকলে ৪০৪', async () => {
+  describe('opening', () => {
+    it('404 when it is not closed', async () => {
       const { svc } = makeService();
       await expect(svc.reopen(OWNER, '2026-08', 'ip')).rejects.toThrow(NotFoundException);
     });
 
     /**
-     * ⚠️⚠️ খোলার audit সারিতে **পুরোনো বন্ধের তথ্য** থাকতেই হবে — সারিটা
-     * DB থেকে মুছে যায়, তাই ওটাই একমাত্র জায়গা যেখানে "কে কখন বন্ধ
-     * করেছিল" টিকে থাকে। না রাখলে বেতনের পর মাস খুলে সংখ্যা বদলানোর
-     * ইতিহাসটাই অসম্পূর্ণ হতো।
+     * The audit row for opening must hold the old closing details — the row
+     * is deleted from the DB, so this is the only place where "who closed it
+     * and when" survives. Without it, the history of changing numbers after
+     * pay by reopening the month would be incomplete.
      */
-    it('⭐ খোলার রেকর্ডে পুরোনো বন্ধের তথ্য থাকে', async () => {
+    it('the opening record keeps the old closing details', async () => {
       const { svc, audit } = makeService({
         '2026-08': { closedAt: new Date('2026-09-01T09:00:00Z'), closedBy: 'first@example.com', note: null },
       });

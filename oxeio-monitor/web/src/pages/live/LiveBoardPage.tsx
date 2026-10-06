@@ -19,7 +19,8 @@ import { FewestHours, MonthCard, TopPerformers, WeekBars } from './WeekAndMonth'
 import { isWorking } from './onTheClock';
 import { dayDuty } from './roster';
 
-// লাইভ অবস্থা ১৫ সেকেন্ডে; ভারী চার্ট/রিপোর্ট দুই মিনিটে। ছবি এখানে আনা হয় না।
+// Live state every 15 seconds; heavy charts/reports every two minutes.
+// Images are not fetched here.
 const BOARD_REFRESH_MS = 15_000;
 const CHART_REFRESH_MS = 120_000;
 const LEADER_WINDOWS = [{ id: '30d', label: '30 days' }, { id: 'all', label: 'All time' }] as const;
@@ -29,7 +30,8 @@ export function LiveBoardPage() {
   const { features } = useFeatures();
   const canViewBoard = user?.role === 'owner' || user?.role === 'manager';
   const isOwner = user?.role === 'owner';
-  // ভূমিকার শর্ত একই থাকে; অনুমতি না থাকলে কোনো protected endpoint-এ কল নয়।
+  // The role condition stays the same; without permission, no call to any
+  // protected endpoint.
   const board = usePolling((signal) => canViewBoard ? getLiveBoard(signal) : Promise.resolve(null), BOARD_REFRESH_MS, [canViewBoard]);
   const pulse = usePolling((signal) => canViewBoard ? getTeamPulse(signal) : Promise.resolve(null), CHART_REFRESH_MS, [canViewBoard]);
   const trend = usePolling((signal) => canViewBoard ? getTeamTrend(signal) : Promise.resolve(null), CHART_REFRESH_MS, [canViewBoard]);
@@ -109,7 +111,8 @@ function StudioStat({ label, value, unit, note, tone }: { label: string; value: 
   return <div className="studio-stat"><p className="studio-stat-label">{label}</p><div className={`studio-stat-value${tone === 'warning' ? ' text-idle-ink' : tone === 'ok' ? ' text-ok' : ''}`}>{value}{unit && <small>{unit}</small>}</div><p className="studio-stat-note">{note}</p></div>;
 }
 
-// প্রতিটা স্বাধীন ডেটা-উৎসের ব্যর্থতা দেখায়; পুরোনো সফল উত্তর মুছে দেয় না।
+// Shows the failure of each independent data source; does not erase an older
+// successful answer.
 function DataPanel({ result, children }: { result: Pick<ApiResult<unknown>, 'data' | 'error' | 'reload'>; children: ReactNode }) {
   if (!result.data) return <div className="p-5">{result.error ? <ErrorBox error={result.error} retry={result.reload} /> : <Loading label="Loading summary…" />}</div>;
   return <>{result.error && <p role="status" className="px-5 pb-3 text-xs text-idle-ink">Couldn’t refresh this summary. Showing its last successful update. <button type="button" onClick={result.reload} className="tap underline">Retry</button></p>}{children}</>;

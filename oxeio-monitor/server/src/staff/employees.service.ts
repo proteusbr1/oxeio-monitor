@@ -26,20 +26,20 @@ import {
 } from './redact';
 
 /**
- * কর্মী-কোড বসাতে সর্বোচ্চ কতবার চেষ্টা (§ `createWithGeneratedCode`)।
+ * Maximum attempts to assign an employee code (see `createWithGeneratedCode`).
  *
- * ⚠️ পাঁচ — কারণ প্রতিটা ব্যর্থতার মানে ঠিক ওই মুহূর্তে আরেকজন মালিক
- *    কর্মী যোগ করেছেন। পরপর পাঁচবার সেটা ঘটা ১৫ জনের অফিসে কার্যত অসম্ভব;
- *    বেশি রাখলে আসল কোনো গোলমাল ঢাকা পড়ত।
+ * Careful: five, because each failure means another owner added an employee
+ * at that very moment. Five times in a row is practically impossible in a
+ * 15-person office; a higher number would hide a real problem.
  */
 const CODE_ATTEMPTS = 5;
 
 /**
- * P2002-টা কি **কোডের** সংঘাত, নাকি ইমেইলের?
+ * Is this P2002 a conflict on the **code**, or on the email?
  *
- * ⚠️ দুটো UNIQUE কলামই একই এরর কোড দেয়। আলাদা না করলে ইমেইল ডুপ্লিকেট
- *    হলেও পাঁচবার নতুন কোড বানানোর চেষ্টা হতো — একই ৪০৯, শুধু পাঁচগুণ
- *    দেরিতে।
+ * Careful: both UNIQUE columns raise the same error code. Without telling
+ * them apart, a duplicate email would still trigger five attempts at a new
+ * code: the same 409, only five times slower.
  */
 function isEmpCodeConflict(err: unknown): boolean {
   if (
@@ -56,9 +56,10 @@ function isEmpCodeConflict(err: unknown): boolean {
 }
 
 /**
- * ⚠️ একটাই select, সব জায়গায় একই। আলাদা আলাদা জায়গায় কলাম বাছলে কোথাও
- * না কোথাও `monthlySalary` ঢুকে যেত আর `redact` কিছু বুঝত না — কারণ
- * redact তখন এমন একটা ফিল্ড ছেঁকে ফেলার কথা ভাবত যেটা তার হাতে আসেইনি।
+ * Careful: one select, the same everywhere. If columns were picked in
+ * different places, `monthlySalary` would leak in somewhere and `redact`
+ * would not notice, since it would never have been handed a field it should
+ * have filtered out.
  */
 const EMPLOYEE_SELECT = {
   id: true,
@@ -68,7 +69,7 @@ const EMPLOYEE_SELECT = {
   designation: true,
   department: true,
   staffType: true,
-  /** ⭐ তার নিজের ডিজাইন-টার্গেট — `null` মানে পলিসিরটা খাটবে (২৩ আগস্ট) */
+  /** Their own design target; `null` means the policy's value applies. */
   dailyDesignTarget: true,
   policyId: true,
   monthlySalary: true,
@@ -80,44 +81,44 @@ const EMPLOYEE_SELECT = {
   createdAt: true,
 
   /**
-   * ⭐ **সেটআপ কতদূর এগিয়েছে** — এজেন্ট বসানোর আগে দুটো জিনিস লাগে:
-   * তার একটা লগইন, আর তারপর একটা enrolled ডিভাইস।
+   * **How far setup has got.** Before the agent can be installed, two things
+   * are needed: a login for the person, then an enrolled device.
    *
-   * ⚠️ আগে এর কোনোটাই তালিকায় আসত না, তাই মালিককে ১৫টা সারিতে একে একে
-   * ক্লিক করে দেখতে হতো কার অ্যাকাউন্ট খোলা হয়েছে আর কার হয়নি — আর
-   * ভুলে একজন বাদ পড়লে সেটা ধরা পড়ত ওই PC-তে গিয়ে, যখন সে সাইন ইন
-   * করতে পারত না।
+   * Careful: neither used to appear in the list, so the owner had to click
+   * through 15 rows to see whose account was opened and whose was not. If one
+   * was missed, it showed only at that PC, when the person could not sign in.
    *
-   * ⭐ `_count` ব্যবহার করা হয়েছে, সারি টেনে নয় — ইউজারের ইমেইল বা
-   * ডিভাইসের টোকেন এই রেসপন্সে ঢোকার কোনো কারণ নেই।
+   * It uses `_count` rather than fetching rows: the user's email or the
+   * device token has no reason to be in this response.
    */
   /**
-   * ⚠️⚠️ `_count` ছিল, কিন্তু ওটা দিয়ে **দুই রকম গোনা যায় না** — Prisma
-   * একই রিলেশনের ছাঁকা-গোনা একবারই দেয়। অথচ দরকার দুটোই: সচল ডিভাইস
-   * আছে কি না, আর বাতিল ডিভাইস আছে কি না। নইলে "কখনো এজেন্ট বসেনি" আর
-   * "এজেন্ট বন্ধ করে দেওয়া" আলাদা করা যেত না — অথচ প্রথমটায় PC-তে গিয়ে
-   * বসাতে হয়, দ্বিতীয়টায় সারিতেই একটা বোতাম।
+   * Careful: `_count` was there, but it **cannot do two kinds of counting**;
+   * Prisma gives only one filtered count per relation. Both are needed: is
+   * there an active device, and is there a revoked device. Otherwise "an agent
+   * was never installed" and "the agent was switched off" cannot be told
+   * apart, yet the first needs a visit to the PC and the second needs just a
+   * button on the row.
    *
-   * ⭐ তাই সারি টানা হয়, কিন্তু **শুধু `status`** — hostname, token,
-   * machineGuid কিছুই আসে না। `_count`-এর মূল প্রতিশ্রুতিটা (whitelist)
-   * অক্ষুণ্ন, শুধু আকারটা বদলেছে।
+   * So rows are fetched, but **only `status`**: no hostname, token or
+   * machineGuid. The main promise of `_count` (a whitelist) still holds; only
+   * the shape changed.
    */
   devices: { select: { status: true } },
 
   /**
-   * ⭐ portal অ্যাকাউন্ট — **id ও ইমেইল**, শুধু "আছে কি নেই" নয়।
+   * The portal account: **id and email**, not just "exists or not".
    *
-   * ⚠️ id ছাড়া পর্দা থেকে পাসওয়ার্ড রিসেট বা ইমেইল বদলানো যেত না
-   * (`/users/:id/…` দুটোই id চায়)। ⭐ `resetUserPassword()` ওয়েবের
-   * API-তে লেখাই ছিল, কিন্তু **কেউ ডাকত না** — কারণ ডাকার মতো id-ই
-   * রেসপন্সে আসত না।
+   * Careful: without the id, the screen could not reset a password or change
+   * the email (both `/users/:id/...` routes need the id). `resetUserPassword()`
+   * was already written in the web API but **nobody called it**, because the
+   * response did not carry an id to call it with.
    *
-   * ⚠️ `passwordHash` বা `totpSecret` **নেওয়া হয় না** — whitelist,
-   * `redact.ts`-এর একই যুক্তি।
+   * Careful: `passwordHash` and `totpSecret` are **not selected**: a
+   * whitelist, same reasoning as `redact.ts`.
    */
   portalUsers: {
-    // ⚠️ `role`-ও লাগে — পর্দায় ড্রপডাউনটা **বর্তমান** ভূমিকা দেখিয়ে
-    //    খুলতে হয়, নইলে না বদলেও "সেভ" চাপলে ভুল ভূমিকা বসে যেত।
+    // Careful: `role` is needed too. The screen's dropdown must open showing
+    // the **current** role, otherwise pressing "save" without changing it would set a wrong role.
     select: { id: true, email: true, role: true },
     orderBy: { id: 'asc' },
     take: 1,
@@ -133,22 +134,22 @@ export class EmployeesService {
     private readonly audit: AuditService,
   ) {}
 
-  // ── পড়া (owner + manager) ─────────────────────────────────────────────────
+  // -- Reads (owner + manager) ---------------------------------------------------
 
   /**
-   * পরের কর্মী-কোডটা **আগেভাগে দেখানোর** জন্য — নতুন কর্মীর ফর্মে।
+   * To **show the next employee code in advance**, in the new-employee form.
    *
-   * ⚠️ এটা প্রতিশ্রুতি নয়, **পূর্বাভাস**। আসল কোড বসে `create()`-এ, সেভ
-   * করার মুহূর্তে; দুজন মালিক একসাথে যোগ করলে একজন পরেরটা পাবেন। তাই
-   * পর্দায় লেখাটাও "next" — "your code will be" নয়।
+   * Careful: this is a **forecast**, not a promise. The real code is assigned
+   * in `create()` at save time; if two owners add at once, one gets the next
+   * one. That is why the screen text says "next", not "your code will be".
    *
-   * ⚠️⚠️ `where` ইচ্ছাকৃতভাবে **নেই** — active ও inactive, দুটোই লাগে।
-   * শুধু active নিলে ছাঁটাই হওয়া কারো কোড আবার পরামর্শ হতো, আর সেভ করতে
-   * গিয়ে ৪০৯; অথচ পর্দায় (active ফিল্টারে) ওই কোডের কাউকে দেখা যেত না,
-   * তাই কারণটা বোঝাই যেত না।
+   * Careful: there is deliberately **no `where`**; active and inactive are
+   * both needed. With only active ones, a departed employee's code would be
+   * suggested again and saving would give 409, while nobody with that code
+   * shows on screen (active filter), so the cause would be unclear.
    *
-   * ⭐ শুধু `empCode` তোলা হয় — নাম বা বেতন এই কলে ঢোকার কোনো কারণ নেই,
-   * আর ম্যানেজারও এটা ডাকে।
+   * Only `empCode` is selected: name or salary have no reason to enter this
+   * call, and managers call it too.
    */
   async nextCode(): Promise<{ code: string }> {
     const rows = await this.prisma.employee.findMany({
@@ -186,9 +187,9 @@ export class EmployeesService {
       orderBy: { empCode: 'asc' },
     });
 
-    // ⚠️ targetId এখানে কোনো একজনের id নয় — গোটা তালিকাটাই লক্ষ্য।
-    //    `list` লেখা থাকলে audit-এ "কে পুরো তালিকার বেতন দেখল" আর
-    //    "কে একজনেরটা দেখল" আলাদা করে পড়া যায়।
+    // Careful: targetId here is not one person's id; the whole list is the
+    // target. With `list` written there, the audit log can tell "who viewed
+    // everyone's salary" from "who viewed one person's".
     await this.recordSalaryRead(actor, ip, rows, 'list');
 
     return { rows: toEmployeeViews(rows, actor.role), total: rows.length };
@@ -206,7 +207,7 @@ export class EmployeesService {
     return toEmployeeView(row, actor.role);
   }
 
-  // ── লেখা (owner-only) ─────────────────────────────────────────────────────
+  // -- Writes (owner only) ------------------------------------------------------
 
   async create(
     actor: SessionUser,
@@ -252,18 +253,18 @@ export class EmployeesService {
       await this.assertPolicyExists(dto.policyId);
     }
 
-    // ⚠️ `undefined` = "হাত দিও না", `null` = "মুছে দাও" — দুটো আলাদা।
-    //    সব ফিল্ড একসাথে বসিয়ে দিলে না-পাঠানো ফিল্ডগুলো null হয়ে যেত।
-    // ⚠️ `empCode` ইচ্ছাকৃতভাবে নেই — কোড বসে একবার, `create()`-এ।
+    // Careful: `undefined` = "leave alone", `null` = "clear"; they differ.
+    // Assigning every field at once would turn unsent fields into null.
+    // `empCode` is deliberately absent: the code is set once, in `create()`.
     const data: Prisma.EmployeeUpdateInput = {};
     if (dto.fullName !== undefined) data.fullName = dto.fullName;
     if (dto.email !== undefined) data.email = dto.email;
     if (dto.designation !== undefined) data.designation = dto.designation;
     if (dto.department !== undefined) data.department = dto.department;
-    // ⚠️ `null`-ও একটা বৈধ মান (ধরন তুলে নেওয়া), তাই `!== undefined`
+    // Careful: `null` is a valid value too (removing the type), hence `!== undefined`.
     if (dto.staffType !== undefined) data.staffType = dto.staffType;
     if (dto.monthlySalary !== undefined) data.monthlySalary = dto.monthlySalary;
-    // ⚠️ `null`-ও বৈধ মান — "নিজের সংখ্যা মুছে পলিসিতে ফেরাও"
+    // Careful: `null` is valid too: "clear their own number and fall back to the policy".
     if (dto.dailyDesignTarget !== undefined) {
       data.dailyDesignTarget = dto.dailyDesignTarget;
     }
@@ -278,8 +279,8 @@ export class EmployeesService {
           : { connect: { id: dto.policyId } };
     }
 
-    // ⚠️ `empCode` আর এখানে আসতে পারে না (DTO-তে ঘরটাই নেই), তাই বাকি
-    //    একমাত্র UNIQUE হলো ইমেইল।
+    // `empCode` can no longer arrive here (the DTO has no such field), so
+    // the only remaining UNIQUE is the email.
     const row = await this.prisma.employee
       .update({ where: { id }, data, select: EMPLOYEE_SELECT })
       .catch((err: unknown) => {
@@ -290,9 +291,9 @@ export class EmployeesService {
         );
       });
 
-    // ⚠️ Prisma-র update input-এ relation-টার নাম `policy`, কলামের নাম নয়।
-    //    সরাসরি key তুলে দিলে audit-এ `policy` লেখা থাকত আর API-র
-    //    `policyId`-র সাথে মিলত না।
+    // Careful: in Prisma's update input the relation is named `policy`, not the
+    // column name. Passing the key straight would write `policy` into the audit
+    // log, which would not match the API's `policyId`.
     const changed = Object.keys(data)
       .filter((k) => k !== 'monthlySalary')
       .map((k) => (k === 'policy' ? 'policyId' : k));
@@ -321,16 +322,16 @@ export class EmployeesService {
   }
 
   /**
-   * ⚠️ **ডিলিট নয়, deactivate** — কারো সারি মুছলে তার মাসের হিসাব,
-   * স্ক্রিনশট আর audit trail সব অনাথ হয়ে যেত (FK-ও আটকাত)।
+   * Careful: **deactivate, not delete.** Deleting a row would orphan that
+   * person's monthly totals, screenshots and audit trail (the FKs would also block it).
    *
-   * ⭐ শুধু status বদলানো যথেষ্ট নয়। কেউ চলে গেছে অথচ তার PC-তে এজেন্ট
-   * চলছে — মানে চাকরি ছেড়ে দেওয়া একজন মানুষের স্ক্রিনশট উঠতেই থাকত।
-   * তাই একই লেনদেনে:
-   *   · তার সব active ডিভাইস revoke,
-   *   · অব্যবহৃত enrollment code-গুলোর মেয়াদ শেষ (নইলে নতুন PC-তে তার
-   *     নামে এজেন্ট বসানো যেত),
-   *   · তার portal অ্যাকাউন্ট নিষ্ক্রিয়।
+   * Changing only the status is not enough. If someone has left but the agent
+   * is still running on their PC, screenshots of a person who quit would keep
+   * coming. So in the same transaction:
+   *   - all their active devices are revoked,
+   *   - unused enrollment codes are expired (otherwise the agent could be
+   *     installed on a new PC in their name),
+   *   - their portal account is disabled.
    */
   async deactivate(
     actor: SessionUser,
@@ -344,7 +345,7 @@ export class EmployeesService {
     });
     if (!before) throw new NotFoundException('Staff member not found');
     if (before.status === 'inactive') {
-      // ⚠️ চুপচাপ আবার চালালে আগের `leftOn` মুছে আজকের তারিখ বসে যেত
+      // Careful: running it again silently would overwrite the earlier `leftOn` with today.
       throw new ConflictException(
         'This staff member has already been deactivated',
       );
@@ -368,8 +369,8 @@ export class EmployeesService {
           data: { status: 'revoked' },
         });
 
-        // মেয়াদ "এখন" বসিয়ে দেওয়া — মুছে ফেলা নয়, কারণ কোনটা কখন
-        // ইস্যু হয়েছিল সেটাও ইতিহাসের অংশ
+        // Set the expiry to "now" instead of deleting, since when each code
+        // was issued is part of the history.
         const codes = await tx.enrollmentCode.updateMany({
           where: { employeeId: id, usedAt: null, expiresAt: { gt: now } },
           data: { expiresAt: now },
@@ -413,9 +414,9 @@ export class EmployeesService {
   }
 
   /**
-   * ⚠️ ডিভাইসগুলো নিজে থেকে আবার চালু হয় **না** — ইচ্ছাকৃত। ফিরে আসা
-   * কর্মীর জন্য নতুন enrollment code দেওয়াই স্বাভাবিক পথ; পুরোনো টোকেন
-   * আপনাআপনি জেগে ওঠা মানে ওই মেশিনটা এখনো তারই আছে ধরে নেওয়া।
+   * Careful: devices are deliberately **not** switched back on. For a
+   * returning employee the normal path is a new enrollment code; letting old
+   * tokens wake up by themselves would assume that machine is still theirs.
    */
   async reactivate(
     actor: SessionUser,
@@ -432,23 +433,23 @@ export class EmployeesService {
     }
 
     /**
-     * ⚠️⚠️ **portal লগইনটাও ফিরিয়ে দিতে হয় — এটাই আগে বাদ পড়েছিল।**
+     * Careful: **the portal login must be restored too. This was missed at first.**
      *
-     * `deactivate()` কর্মীর `users` সারিতে `is_active = false` বসায়।
-     * এখানে সেটা ফেরানো হতো না, ফলে যা ঘটত:
+     * `deactivate()` sets `is_active = false` on the employee's `users` row.
+     * Without restoring it here, this happened:
      *
-     *   ১· Staff পর্দায় কর্মী **Active** দেখাত
-     *   ২· "Reset password" চাপলে **সফল** হতো, নতুন পাসওয়ার্ডও দেখাত
-     *   ৩· কিন্তু লগইনে সবসময় *"Email or password is incorrect"*
+     *   1. The Staff screen showed the employee as **Active**
+     *   2. "Reset password" **succeeded** and showed a new password
+     *   3. But login always said *"Email or password is incorrect"*
      *
-     * ⚠️ কারণ `login()` পাসওয়ার্ডের সাথে `user.isActive`-ও মেলায়, আর
-     *    ব্যর্থতার বার্তা ইচ্ছাকৃতভাবে একই রাখা হয় (user enumeration
-     *    ঠেকাতে)। ফলে **কারণটা জানার কোনো উপায়ই ছিল না** — মালিক বারবার
-     *    রিসেট করতেন আর প্রতিবার একই বার্তা পেতেন।
+     * Careful: `login()` checks `user.isActive` along with the password, and
+     * the failure message is deliberately the same (to prevent user
+     * enumeration). So there was **no way to learn the cause**: the owner
+     * would reset again and again and get the same message every time.
      *
-     * ⭐ ডিভাইস ইচ্ছাকৃতভাবে ফেরে না (উপরের মন্তব্য), কিন্তু লগইন আর
-     *    ডিভাইস এক জিনিস নয়: লগইন ছাড়া কর্মী **এজেন্টে সাইন ইনই করতে
-     *    পারেন না**, অর্থাৎ ফিরে আসার পথটাই বন্ধ থাকে।
+     * Devices deliberately stay off (see the comment above), but login and
+     * device are not the same thing: without a login the employee **cannot
+     * even sign in to the agent**, so the way back stays closed.
      */
     const [row, portal] = await this.prisma.$transaction([
       this.prisma.employee.update({
@@ -468,8 +469,8 @@ export class EmployeesService {
       targetType: ADMIN_TARGET.employee,
       targetId: id,
       ipAddress: ip,
-      // ⚠️ কতগুলো লগইন ফিরল সেটাও লেখা — deactivate-এ `portalDisabled`
-      //    লেখা হয়, তাই জোড়াটা audit-এ মিলিয়ে দেখা যায়
+      // Careful: also record how many logins were restored. `deactivate` records
+      // `portalDisabled`, so the pair can be matched up in the audit log.
       meta: {
         op: 'reactivate',
         empCode: before.empCode,
@@ -481,22 +482,21 @@ export class EmployeesService {
   }
 
   /**
-   * ⭐ **এই কর্মীর এজেন্ট আবার চালু করা** — বন্ধ হয়ে যাওয়া ডিভাইসগুলো ফেরানো।
+   * **Turn this employee's agent back on**: restore devices that were switched off.
    *
-   * ⚠️⚠️ **কেন কর্মী ধরে, ডিভাইস ধরে নয়:** মালিক "ডিভাইস #৬১" নিয়ে ভাবেন
-   * না, ভাবেন "Belal-এর PC" নিয়ে। আলাদা একটা Devices পর্দা রাখলে একই
-   * প্রশ্নের উত্তর দুই জায়গায় খুঁজতে হতো, আর মালিকের ভাষায় বললে সেটা
-   * "পুরো সিস্টেমটাকে জটিল করে দিচ্ছিল"।
+   * Careful: why per employee, not per device: the owner thinks of "Belal's
+   * PC", not "device #61". A separate Devices screen would mean looking in two
+   * places for the answer to one question, and make the whole system more complicated.
    *
-   * ⚠️ এটা দরকার হয় কারণ `deactivate()` কর্মীর সব ডিভাইস revoke করে, আর
-   * `reactivate()` সেগুলো **ইচ্ছাকৃতভাবে ফেরায় না** — ফিরে আসা কর্মীর
-   * পুরোনো টোকেন আপনাআপনি জেগে ওঠা উচিত নয়। ফলে বোর্ডে তিনি চিরকাল
-   * "Offline" থাকতেন, অথচ এজেন্ট তাঁর PC-তে দিব্যি চলছে।
+   * Careful: this is needed because `deactivate()` revokes all of an
+   * employee's devices and `reactivate()` deliberately does not bring them
+   * back (a returning employee's old token must not wake up by itself). So
+   * on the board they would stay "Offline" forever while the agent runs fine on their PC.
    *
-   * ⚠️⚠️ **হারিয়ে যাওয়া ল্যাপটপে এটা চালাবেন না** — revoke `token_hash`
-   * মোছে না, শুধু দরজা বন্ধ করে। ফেরালে **পুরোনো টোকেনটাই আবার জেগে
-   * ওঠে**, অর্থাৎ যে ল্যাপটপটা ধরে আছে সে-ও ফিরে আসে। ওই ক্ষেত্রে
-   * কর্মীকে নিষ্ক্রিয় রাখুন, আর নতুন মেশিনে নতুন করে সাইন ইন করান।
+   * Careful: **do not run this for a lost laptop.** Revoking does not erase
+   * `token_hash`, it only closes the door. Restoring makes **the old token
+   * itself live again**, so whoever holds that laptop comes back too. In
+   * that case keep the employee inactive and have them sign in fresh on a new machine.
    */
   async turnAgentOn(
     actor: SessionUser,
@@ -510,9 +510,9 @@ export class EmployeesService {
     if (!employee) throw new NotFoundException('Staff member not found');
 
     /**
-     * ⚠️ নিষ্ক্রিয় কর্মীর ডিভাইস ফেরানো যায় না — নইলে ছাঁটাই হওয়া কারো
-     *    মেশিন আবার ঘণ্টা পাঠাতে শুরু করত, অথচ Staff পর্দায় তিনি
-     *    "Inactive"। আগে তাঁকে ফেরান, তারপর এজেন্ট।
+     * Careful: an inactive employee's devices cannot be restored, otherwise
+     * a departed person's machine would start sending hours again while the
+     * Staff screen says "Inactive". Reactivate them first, then the agent.
      */
     if (employee.status !== 'active') {
       throw new ConflictException(
@@ -525,8 +525,8 @@ export class EmployeesService {
       data: { status: 'active' },
     });
 
-    // ⚠️ কিছুই বদলায়নি — audit-এ ঘটনা লেখা হয় না, নইলে ইতিহাসে এমন সারি
-    //    জমত যেখানে আসলে কিছু ঘটেনি।
+    // Careful: nothing changed, so no audit event is written; otherwise the
+    // history would collect rows where nothing actually happened.
     if (count === 0) return { restored: 0 };
 
     await this.audit.record({
@@ -544,15 +544,15 @@ export class EmployeesService {
     return { restored: count };
   }
 
-  // ── ভেতরের সাহায্যকারী ────────────────────────────────────────────────────
+  // -- Internal helpers -------------------------------------------------------
 
   /**
-   * ⭐ বেতন **দেখাও** একটা ঘটনা (ADR-023) — payroll শিটের মতোই এখানেও
-   * লেখা থাকে কে কখন দেখল।
+   * **Viewing salary** is an event (ADR-023): as on the payroll sheet, it is
+   * recorded who viewed it and when.
    *
-   * ⚠️ শুধু তখনই লেখা হয় যখন সত্যিই একটা সংখ্যা বেরিয়ে গেছে। নইলে
-   * ম্যানেজারের প্রতিটা পেজ-লোড আর বেতন বসানো নেই এমন তালিকাও
-   * audit_log ভরিয়ে ফেলত, আর আসল ঘটনাগুলো তার নিচে চাপা পড়ত।
+   * Careful: recorded only when a number was really disclosed. Otherwise
+   * every manager page load, and lists with no salary set, would flood
+   * audit_log and bury the real events.
    */
   private async recordSalaryRead(
     actor: SessionUser,
@@ -575,16 +575,16 @@ export class EmployeesService {
   }
 
   /**
-   * ⭐⭐ **বেতন বদলালে পুরোনো মানটা রেখে দেওয়া** *(২৩ আগস্ট ২০২৬)*।
+   * **Keep the old value when a salary changes.**
    *
-   * ⚠️⚠️ আগে কেবল audit-এ "কত থেকে কত" লেখা হতো, আর পে-রোল বেতন পড়ত
-   * `employees.monthly_salary` থেকে — **লাইভ**। ফলে কারো বেতন বাড়ালে
-   * **বন্ধ মাসের পে-রোলও নীরবে বদলে যেত**, আর যে কাগজে বেতন দেওয়া
-   * হয়েছিল তার সাথে আর মিলত না। audit বলত বদলটা হয়েছে, কিন্তু শিট
-   * নতুন সংখ্যাতেই ছাপা হতো।
+   * Careful: previously only "from X to Y" went into the audit log, while
+   * payroll read salary live from `employees.monthly_salary`. So raising
+   * someone's salary **silently changed closed months' payroll too**, and it
+   * no longer matched the paper the salary was paid on. The audit log said
+   * the change happened, but the sheet was printed with the new number.
    *
-   * ⚠️ `from === null` হলে সারি বসে **না** — আগে কোনো বেতনই ছিল না, তাই
-   *    "পুরোনো মান" বলে কিছু নেই (নতুন কর্মী)।
+   * Careful: no row is written when `from === null`: there was no salary
+   * before, so there is no "old value" (a new employee).
    */
   private async recordSalaryChange(
     actor: SessionUser,
@@ -609,8 +609,8 @@ export class EmployeesService {
             throughMonth: supersededThrough(yearMonth, closed !== null),
           },
         },
-        // ⚠️ একই মাসে দুবার বদলালে **প্রথম** মানটাই থাকা উচিত — ওটাই ওই
-        //    মাস পর্যন্ত সত্যিই চলেছিল। তাই `update` খালি।
+        // Careful: if changed twice in one month, the **first** value should
+        // stay; it is what really applied up to that month. Hence an empty `update`.
         update: {},
         create: {
           employeeId,
@@ -627,8 +627,8 @@ export class EmployeesService {
       targetType: ADMIN_TARGET.employeeSalary,
       targetId: employeeId,
       ipAddress: ip,
-      // audit-log নিজেই owner-only, তাই আসল অঙ্কটা এখানে রাখা নিরাপদ —
-      // আর "কত থেকে কত" না লিখলে অডিটের অর্ধেক মানে থাকত না
+      // The audit log is itself owner-only, so storing the real amount here is
+      // safe, and without "from X to Y" half the audit would lose its meaning.
       meta: { op: 'update_salary', from, to },
     });
   }
@@ -639,19 +639,19 @@ export class EmployeesService {
       where: { id: policyId },
       select: { id: true },
     });
-    // ⚠️ FK ভাঙলে Prisma P2003 ছুড়ত আর সেটা ৫০০ হয়ে যেত — এখানেই ধরা
+    // Careful: a broken FK would make Prisma throw P2003 and become a 500; caught here instead.
     if (!policy) {
       throw new BadRequestException('There is no work policy with this policyId');
     }
   }
 
   /**
-   * ⭐ সই করা মনিটরিং পলিসি রেকর্ড করা — **রোলআউটের একমাত্র শর্ত**।
+   * Record the signed monitoring policy: **the one rollout precondition**.
    *
-   * ⚠️ এতদিন এই পথটা ছিল না: কলাম ছিল, API পড়ত, ওয়েবে টাইপ করা ছিল —
-   * শুধু **বসানোর কোনো উপায় ছিল না**। অর্থাৎ "সই ছাড়া কারো PC-তে এজেন্ট
-   * বসবে না" শর্তটা সিস্টেমে রেকর্ডই করা যেত না, আর ছ-মাস পরে কেউ
-   * জিজ্ঞেস করলে উত্তর থাকত শুধু কাগজের ফাইলে।
+   * Careful: this path used to be missing. The column existed, the API read
+   * it, the web had the type, but there was **no way to set it**. So the rule
+   * "no agent goes on anyone's PC without a signature" could not be recorded
+   * in the system, and six months later the answer would live only in a paper file.
    */
   async setPolicySigned(
     actor: SessionUser,
@@ -666,17 +666,17 @@ export class EmployeesService {
     if (!before) throw new NotFoundException('Staff member not found');
 
     /**
-     * ⚠️ তারিখটা **ঢাকার মধ্যরাত** হিসেবে বসে, বসানোর মুহূর্ত নয়।
-     * কলামটা `timestamptz`, তাই মুহূর্ত বসালে "৩ আগস্ট সই" রেকর্ডটা
-     * টাইমজোন বদলালে ২ বা ৪ আগস্ট দেখাত — একটা আইনি নথির তারিখ হিসেবে
-     * সেটা অগ্রহণযোগ্য।
+     * Careful: the date is stored as **Dhaka midnight**, not the moment of
+     * entry. The column is `timestamptz`, so storing the moment would make a
+     * record of "signed 3 August" show 2 or 4 August when the time zone
+     * changes, which is unacceptable for the date of a legal document.
      */
     const when = signedOn
       ? this.calendarDate(signedOn, 'signedOn')
       : workDateOf(new Date());
 
-    // ⚠️ ভবিষ্যতের তারিখ নয় — কাগজ সই হওয়ার আগেই রেকর্ড হয়ে গেলে
-    //    গোটা শর্তটার মানেই থাকে না।
+    // Careful: no future dates. If it could be recorded before the paper is
+    // signed, the whole precondition would mean nothing.
     if (when.getTime() > workDateOf(new Date()).getTime()) {
       throw new BadRequestException('The signing date cannot be in the future');
     }
@@ -696,7 +696,8 @@ export class EmployeesService {
       meta: {
         empCode: before.empCode,
         signedOn: when.toISOString().slice(0, 10),
-        // ⚠️ আগেরটাও রাখা — দ্বিতীয়বার বসানো মানে হয় সংশোধন, নয় ভুল
+        // Careful: keep the previous value too; a second signing is either a
+        // correction or a mistake.
         previous: before.policySignedAt?.toISOString().slice(0, 10) ?? null,
       },
     });
@@ -707,11 +708,12 @@ export class EmployeesService {
   }
 
   /**
-   * ভুল করে বসানো সই তুলে নেওয়া।
+   * Undo a wrongly entered signature.
    *
-   * ⚠️ ডিলিট নয়, **শূন্য করা** — আর ঘটনাটা audit-এ থাকে। সই "ছিল, তারপর
-   * তুলে নেওয়া হলো" আর "কোনোদিন ছিল না" — দুটো সম্পূর্ণ আলাদা ব্যাপার,
-   * বিশেষ করে যদি ইতিমধ্যে ওই PC-তে এজেন্ট বসে গিয়ে থাকে।
+   * Careful: it **clears** the value rather than deleting, and the event
+   * stays in the audit log. "The signature existed and was then withdrawn" and
+   * "there never was one" are completely different things, especially if the
+   * agent has already been installed on that PC.
    */
   async clearPolicySigned(
     actor: SessionUser,
@@ -752,20 +754,20 @@ export class EmployeesService {
   }
 
   /**
-   * ⭐⭐ কর্মী-কোড **এখানেই** বসে — ক্লায়েন্ট কিছু বলে না, বলতেও পারে না
-   * (`CreateEmployeeDto`-তে ঘরটাই নেই)।
+   * The employee code is assigned **here**; the client says nothing and
+   * cannot (`CreateEmployeeDto` has no such field).
    *
-   * ⚠️⚠️ "সর্বোচ্চ কোড পড়া" আর "নতুন সারি বসানো" — দুটো আলাদা কল, আর
-   * মাঝের ফাঁকটা আসল। দুজন মালিক একসাথে যোগ করলে দুজনেই একই `OX-13`
-   * পড়তে পারেন; দ্বিতীয় INSERT-এ `emp_code` UNIQUE ভেঙে P2002 আসে।
-   * তখন **আবার গুনে আবার চেষ্টা** — সংঘাতটাই সংকেত।
+   * Careful: "read the max code" and "insert the new row" are two separate
+   * calls, and the gap between them is real. If two owners add at once, both
+   * may read the same `OX-13`; the second INSERT breaks the `emp_code` UNIQUE
+   * and raises P2002. Then **count again and retry**: the conflict is the signal.
    *
-   * ⚠️ ট্রানজেকশনে মুড়লে সমস্যাটা যেত না: Postgres-এর ডিফল্ট
-   * READ COMMITTED-এ দুটো ট্রানজেকশন একই সর্বোচ্চ মান পড়তে পারে, আর
-   * সংঘাত ধরা পড়ত COMMIT-এ — অর্থাৎ ঠিক এখানেই, শুধু আরও দেরিতে।
+   * Careful: wrapping it in a transaction would not remove the problem. Under
+   * Postgres's default READ COMMITTED two transactions can read the same
+   * maximum, and the conflict would surface at COMMIT, i.e. right here, only later.
    *
-   * ⚠️ চেষ্টার সীমা আছে। অসীম লুপ একটা ভাঙা UNIQUE বা অদ্ভুত কোড-ধাঁচকে
-   * হ্যাং-এ বদলে দিত, আর মালিক শুধু ঘুরন্ত চাকা দেখতেন।
+   * Careful: attempts are limited. An endless loop would turn a broken UNIQUE
+   * or an odd code format into a hang, and the owner would only see a spinner.
    */
   private async createWithGeneratedCode(
     dto: CreateEmployeeDto,
@@ -776,10 +778,10 @@ export class EmployeesService {
       designation: dto.designation ?? null,
       department: dto.department ?? null,
       staffType: dto.staffType ?? null,
-      // ⚠️ null = "নিজের সংখ্যা নেই" → পলিসির টার্গেট খাটবে, শূন্য নয়
+      // Careful: null = "no own number", so the policy's target applies, not zero.
       dailyDesignTarget: dto.dailyDesignTarget ?? null,
       policyId: dto.policyId ?? null,
-      // ⭐ স্ট্রিং সরাসরি Decimal-এ — মাঝপথে কোনো float নেই
+      // The string goes straight into Decimal; no float on the way.
       monthlySalary: dto.monthlySalary ?? null,
       joinedOn: dto.joinedOn
         ? this.calendarDate(dto.joinedOn, 'joinedOn')
@@ -795,36 +797,38 @@ export class EmployeesService {
           select: EMPLOYEE_SELECT,
         });
       } catch (err: unknown) {
-        // ⚠️ কেবল **কোডের** সংঘাতে আবার চেষ্টা। ইমেইলের সংঘাতে বারবার
-        //    চেষ্টা করলে একই ৪০৯ পাঁচবার আসত, শুধু পাঁচগুণ দেরিতে।
+        // Careful: retry only on a **code** conflict. Retrying on an email
+        // conflict would return the same 409 five times, only five times slower.
         if (attempt < CODE_ATTEMPTS && isEmpCodeConflict(err)) continue;
         throw this.translateUniqueViolation(err, empCode, dto.email);
       }
     }
 
-    // ⚠️ এখানে পৌঁছানো মানে পরপর কয়েকবার হেরে যাওয়া — অস্বাভাবিক, তাই
-    //    চুপ করে না থেকে স্পষ্ট বার্তা।
+    // Careful: reaching here means losing several times in a row, which is
+    // abnormal, so a clear message instead of silence.
     throw new ConflictException(
       'Could not assign an employee code — too many staff were added at the same moment. Please try again.',
     );
   }
 
   /**
-   * ⭐⭐ **বেতন একমাত্র owner-এর** ([ADR-023](../../../docs/05-Options-Decisions.md),
-   * স্পেক § ৪.৩) — ম্যানেজার কর্মী যোগ ও এডিট করতে পারেন, বেতন নয়।
+   * **Salary belongs to the owner alone**
+   * ([ADR-023](../../../docs/05-Options-Decisions.md), spec section 4.3).
+   * Managers can add and edit employees, but not salary.
    *
-   * ⚠️⚠️ এই পাহারাটা ছাড়া অবস্থাটা দুটোর চেয়েও খারাপ হতো: `redact.ts`
-   * ম্যানেজারের **রেসপন্স থেকে** বেতন ছেঁকে ফেলে, কিন্তু কেউ তো
-   * `monthlySalary` **পাঠাতে** পারে। ফলে ম্যানেজার এমন একটা ঘরে লিখতে
-   * পারতেন যেটা তিনি পড়তেও পারেন না — আর ভুল বসালে সেটা নিজে দেখেও
-   * ধরতে পারতেন না।
+   * Careful: without this guard the situation would be worse than either
+   * option: `redact.ts` filters salary **out of the manager's response**, but
+   * anyone can still **send** `monthlySalary`. A manager could write to a
+   * field they cannot even read, and if they entered it wrongly they could not
+   * notice it themselves.
    *
-   * ⚠️ ৪০৩, নীরবে বাদ দেওয়া নয়। ফিল্ডটা চুপচাপ ফেলে দিলে ম্যানেজার
-   * ভাবতেন বেতন বসে গেছে, আর ভুলটা ধরা পড়ত মাসের শেষে পে-রোলে।
+   * Careful: 403, not a silent drop. Quietly discarding the field would make
+   * the manager think the salary was saved, and the mistake would surface at
+   * month-end in payroll.
    *
-   * ⚠️ `undefined` আর `null` আলাদা: ফিল্ড **না পাঠানো** স্বাভাবিক (হাত
-   * দিচ্ছেন না), কিন্তু `null` পাঠানো মানে "বেতন মুছে দাও" — সেটাও বেতনে
-   * হাত দেওয়া, তাই সমান নিষিদ্ধ।
+   * Careful: `undefined` and `null` differ. **Not sending** the field is
+   * normal (they are not touching it), but sending `null` means "clear the
+   * salary", which is also touching salary, so it is equally forbidden.
    */
   private assertMaySetSalary(
     actor: SessionUser,
@@ -849,8 +853,9 @@ export class EmployeesService {
       const raw: unknown = err.meta?.target;
       const target = Array.isArray(raw) ? raw.join(',') : String(raw ?? '');
 
-      // ⚠️ দুটো UNIQUE কলামই একই P2002 দেয়। কোনটা সংঘাত করল না বললে
-      //    ব্যবহারকারী "ডুপ্লিকেট" দেখে empCode বদলাতে থাকত, অথচ দোষ email-এর।
+      // Careful: both UNIQUE columns give the same P2002. Without saying which
+      // one conflicted, the user would see "duplicate" and keep changing
+      // empCode when the email is at fault.
       if (target.includes('email')) {
         return new ConflictException(
           `The email "${email}" is already registered to someone else`,

@@ -14,18 +14,19 @@ import { diskUsedPct, diskVerdict, humanBytes } from './alerts.rules';
 import { AlertsService } from './alerts.service';
 
 /**
- * G03 — সার্ভারের নিজের ডিস্ক ৮০% / ৯৫% ভরে গেলে সতর্কতা।
+ * G03: warn when the server's own disk is 80% / 95% full.
  *
- * ⭐ যে ড্রাইভে স্ক্রিনশট জমে সেটাই দেখা হয় (`STORAGE_ROOT`), সিস্টেম ড্রাইভ নয়।
- * দিনে ১৫ জনের ছবি জমে ওই ড্রাইভটাই ভরে, আর ভরে গেলে যা হয় সেটা নিছক
- * "ছবি জমছে না" নয় — এজেন্টের আপলোড ব্যর্থ হয়, ইনজেস্ট আটকায়, ঘণ্টার
- * হিসাব ফাঁকা যায়। তাই এটাকে সাধারণ housekeeping অ্যালার্ট ভাবা ভুল।
+ * It watches the drive where screenshots accumulate (`STORAGE_ROOT`), not the
+ * system drive. With 15 people's pictures coming in every day, that drive is
+ * the one that fills up, and when it does the result is not merely "pictures
+ * are not saved": agent uploads fail, ingest stalls and hours go uncounted. So
+ * it is wrong to treat this as an ordinary housekeeping alert.
  */
 @Injectable()
 export class DiskCheck {
   private readonly logger = new Logger(DiskCheck.name);
   private readonly storageRoot: string;
-  /** ⚠️ পথ না পাওয়ার অভিযোগ একবারই লগে যাবে, প্রতি ১৫ মিনিটে নয় */
+  /** The unreadable-path complaint is logged once, not every 15 minutes */
   private warnedUnreadable = false;
 
   constructor(
@@ -55,8 +56,8 @@ export class DiskCheck {
         {
           type: verdict.type,
           severity: verdict.severity,
-          // ⚠️ ডিস্ক কোনো ডিভাইস বা কর্মীর ব্যাপার নয় — দুটোই null, ফলে
-          //    throttle-এর key-তে শুধু type-টাই থাকে (সার্ভারপ্রতি একটাই)।
+          // Disk is not about a device or an employee: both null, so the
+          // throttle key holds only the type (one per server).
           deviceId: null,
           employeeId: null,
           title:
@@ -66,8 +67,8 @@ export class DiskCheck {
           detail:
             `${this.storageRoot} has ${humanBytes(freeBytes)} free ` +
             `(of ${humanBytes(totalBytes)}). ` +
-            // ⚠️ with screenshots in a bucket this disk holds the database and
-            //    the backups, not the images — the advice has to say so
+            // With screenshots in a bucket this disk holds the database and
+            // the backups, not the images, so the advice has to say so
             (this.storage.driver === 's3'
               ? verdict.severity === 'critical'
                 ? `Past ${DISK_CRITICAL_PCT}% — screenshots are in ${this.storage.location}, so this is the database and the backups. Remove old backups now.`
@@ -88,11 +89,11 @@ export class DiskCheck {
   }
 
   /**
-   * ⚠️ `STORAGE_ROOT` এখনো তৈরি না হলে `statfs` ছুড়ে দেয়। সেক্ষেত্রে ড্রাইভের
-   *    রুট দেখা হয় — সংখ্যাটা একই ভলিউমের, আর অ্যালার্টটাই আসল উদ্দেশ্য।
-   *    দুটোই ব্যর্থ হলে **চুপচাপ থেমে যায়**: ডিস্ক পড়তে না পারা কোনো
-   *    অ্যালার্টযোগ্য ঘটনা নয়, আর এখান থেকে exception ছুড়লে টাইমার মরে
-   *    গিয়ে বাকি চেকগুলোও বন্ধ হয়ে যেত।
+   * If `STORAGE_ROOT` has not been created yet, `statfs` throws. In that case
+   * the drive root is checked: the number is for the same volume, and raising
+   * the alert is the real goal. If both fail it **stops quietly**: being
+   * unable to read the disk is not an alertable event, and throwing from here
+   * would kill the timer and stop the other checks too.
    */
   private async readStats(): Promise<{
     blocks: number;

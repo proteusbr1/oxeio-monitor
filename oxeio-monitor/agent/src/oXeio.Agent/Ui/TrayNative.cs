@@ -4,53 +4,53 @@ using System.Runtime.Versioning;
 namespace oXeio.Agent.Ui;
 
 /// <summary>
-/// tray-র নিজের P/Invoke।
+/// The tray's own P/Invoke.
 ///
-/// <c>Native/User32.cs</c>-এ না রেখে এখানে রাখা হয়েছে কারণ ওই ফাইলটা ট্র্যাকিং ও
-/// ক্যাপচারের মডিউলের — এক ফাংশনের জন্য অন্য মডিউলের ফাইল ছোঁয়ার দরকার নেই।
-/// নাম আলাদা রাখা হয়েছে যাতে দুটো <c>partial class User32</c> একই সদস্য নিয়ে
-/// সংঘাত না বাধায়।
+/// It lives here rather than in <c>Native/User32.cs</c> because that file belongs to the
+/// tracking and capture modules; there is no need to touch another module's file for one
+/// function. The name is kept different so that two <c>partial class User32</c> declarations
+/// do not clash over the same member.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static partial class TrayNative
 {
     /// <summary>
-    /// <see cref="System.Drawing.Bitmap.GetHicon"/> যে HICON দেয় সেটা <b>আমাদের</b>
-    /// সম্পত্তি — GDI নিজে থেকে ছাড়ে না।
+    /// The HICON returned by <see cref="System.Drawing.Bitmap.GetHicon"/> is <b>our</b>
+    /// property; GDI does not release it by itself.
     ///
-    /// ⚠️ <c>Icon.FromHandle</c> হ্যান্ডেলের মালিকানা নেয় না, আর তার
-    /// <c>Dispose()</c> হ্যান্ডেলটা ধ্বংসও করে না। তাই প্রতিটা তৈরি করা HICON-এর
-    /// বিপরীতে ঠিক একবার এই কলটা লাগবে, নইলে প্রতি আইকনে একটা করে GDI হ্যান্ডেল
-    /// জমতে থাকবে — সপ্তাহের পর সপ্তাহ চলা মেশিনে যেটা ১০,০০০-এর সীমা ছোঁয়ার
-    /// পর প্রক্রিয়াটা আর কোনো উইন্ডোই আঁকতে পারে না।
+    /// Careful: <c>Icon.FromHandle</c> does not take ownership of the handle, and its
+    /// <c>Dispose()</c> does not destroy the handle either. So every HICON created needs
+    /// exactly one call to this, otherwise one GDI handle would leak per icon; on a machine
+    /// running for weeks, once the 10,000 limit is reached the process can no longer draw
+    /// any window.
     /// </summary>
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool DestroyIcon(nint hIcon);
 
     /// <summary>
-    /// টাইটেল বার গাঢ় করা (<c>DWMWA_USE_IMMERSIVE_DARK_MODE</c>)।
+    /// Darkens the title bar (<c>DWMWA_USE_IMMERSIVE_DARK_MODE</c>).
     ///
-    /// ⚠️ জানালার শরীর আমরা নিজেরা আঁকি, কিন্তু <b>টাইটেল বার আঁকে Windows</b>।
-    /// Midnight-এ আঁকা কালো জানালার মাথায় একটা সাদা পটি বসলে সেটা ডিজাইন নয়,
-    /// ভাঙা জিনিস মনে হয় — আর স্টাফ ভাবে এজেন্টে গোলমাল।
+    /// Careful: we draw the window body ourselves, but <b>Windows draws the title bar</b>.
+    /// A white strip on top of a black window drawn in Midnight looks broken rather than
+    /// designed, and staff would think something is wrong with the agent.
     /// </summary>
     [LibraryImport("dwmapi.dll")]
     internal static partial int DwmSetWindowAttribute(
         nint hwnd, int attribute, ref int value, int size);
 
-    /// <summary>Windows 10 2004+ ও 11-এ এই নম্বরটাই।</summary>
+    /// <summary>This is the number on Windows 10 2004+ and 11.</summary>
     private const int UseImmersiveDarkMode = 20;
 
     /// <summary>
-    /// ⚠️ 1809–1903-এ অ্যাট্রিবিউটের নম্বর ছিল <b>19</b>, পরে বদলে ২০ হয়। কোন
-    /// বিল্ড কোনটা চেনে সেটা যাচাই করার সস্তা উপায় নেই, তাই দুটোই চেষ্টা করা
-    /// হয় — অচেনা নম্বরে DWM শুধু একটা HRESULT ফেরত দেয়, কিছু ভাঙে না।
-    /// আমাদের সর্বনিম্ন লক্ষ্য 1809, তাই দুটোই দরকার।
+    /// Careful: on 1809-1903 the attribute number was <b>19</b>, later changed to 20. There is
+    /// no cheap way to check which build recognizes which, so both are tried; for an unknown
+    /// number DWM just returns an HRESULT and nothing breaks.
+    /// Our minimum target is 1809, so both are needed.
     /// </summary>
     private const int UseImmersiveDarkModeLegacy = 19;
 
-    /// <summary>ব্যর্থ হলে চুপচাপ — টাইটেল বার হালকা থাকবে, জানালা তবু চলবে।</summary>
+    /// <summary>Silent on failure: the title bar stays light, the window still works.</summary>
     internal static void TryUseDarkTitleBar(nint hwnd)
     {
         if (hwnd == 0) return;
@@ -66,7 +66,7 @@ internal static partial class TrayNative
         }
         catch (DllNotFoundException)
         {
-            // dwmapi.dll নেই — Server Core-এ হতে পারে
+            // dwmapi.dll is missing; possible on Server Core
         }
         catch (EntryPointNotFoundException)
         {

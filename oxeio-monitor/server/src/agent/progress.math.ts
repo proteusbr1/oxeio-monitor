@@ -1,17 +1,17 @@
 /**
- * **B05b** — tray-র "এগিয়ে / পিছিয়ে" সংখ্যাটার খাঁটি অংশ (§ ২.১-খ)।
+ * **B05b** - the pure part of the tray's "ahead / behind" number (§ 2.1-b).
  *
- * ⭐ আলাদা ফাইলে, কারণ `ProgressService` প্রতিটি heartbeat-এ চলে — অর্থাৎ
- * ১৫টা PC × ৩০ সেকেন্ড = দিনে ~২১,৬০০ বার। এই সূত্রটা ভুল হলে ভুলটা
- * সবার tray-তে সারাদিন জ্বলজ্বল করত, অথচ ধরার একমাত্র উপায় হতো DB ভরে
- * heartbeat পাঠানো। এখানে থাকায় DB ছাড়াই পরীক্ষা করা যায়।
+ * Kept in its own file because `ProgressService` runs on every heartbeat:
+ * 15 PCs x every 30 seconds = about 21,600 times a day. A wrong formula would
+ * show on every tray all day, and the only way to catch it would be to fill the
+ * DB with heartbeats. Here it can be tested without the DB.
  *
- * ⭐⭐ **সূত্রটা এখন এই ফাইলের নিজের নয়** — `summary.math.ts`-এর
- * `proratedExpectedSec()`। আগে এখানে হুবহু একই গণিত হাতে লেখা ছিল, আর
- * সেটাই ছিল আসল ঝুঁকি: মাসিক rollup-এর সূত্র বদলালে tray চুপচাপ পুরোনো
- * উত্তর দিতেই থাকত, আর কর্মী নিজের tray-তে যা দেখেন owner ড্যাশবোর্ডে তার
- * চেয়ে আলাদা সংখ্যা দেখতেন। এই ফাইল এখন শুধু **heartbeat-এর নিরাপত্তা**
- * যোগ করে (নিচের নোট), গণিত নয়।
+ * **The formula no longer lives in this file**; it is `proratedExpectedSec()`
+ * in `summary.math.ts`. The same math used to be hand-written here, and that
+ * was the real risk: if the monthly rollup formula changed, the tray would
+ * quietly keep giving the old answer, and the number staff saw on their tray
+ * would differ from what the owner saw on the dashboard. This file now adds
+ * only the **heartbeat safety** (see the note below), not the math.
  */
 
 import { proratedExpectedSec } from '../summary/summary.math';
@@ -19,44 +19,46 @@ import { proratedExpectedSec } from '../summary/summary.math';
 const SEC_PER_HOUR = 3600;
 
 export interface PaceInput {
-  /** worked + owner-এর সংশোধন (§ ২.১-ঙ) — ঋণাত্মক হলে ০ ধরা হয় */
+  /** worked + the owner's adjustments (§ 2.1-e); a negative value counts as 0. */
   creditedSec: number;
-  /** work policy থেকে, হার্ডকোড ২০৮ নয় (⭐ G37-এর পর **তার prorated** টার্গেট) */
+  /** From the work policy, not hardcoded 208 (after G37, **their prorated** target). */
   monthlyTargetHours: number;
-  /** পুরো মাসে **তার** কত কর্মদিবস (সাপ্তাহিক ছুটি ও `holidays` বাদে) */
+  /** Workdays in the whole month for **them** (excluding weekly off days and `holidays`). */
   expectedWorkdays: number;
   /**
-   * কত কর্মদিবস **শেষ হয়ে গেছে** — `summary.math.ts`-এর `elapsedWorkdays()`
-   * থেকেই আসতে হবে।
+   * How many workdays have **already finished**; must come from
+   * `elapsedWorkdays()` in `summary.math.ts`.
    *
-   * ⚠️ "মাসের ১ তারিখ থেকে **আজ ধরে**" **নয়** — এখানে আগে তাই লেখা ছিল,
-   * আর `ProgressService` সত্যিই তাই গুনত। দুটো ভুল ওতে ছিল:
-   *   ১· আজকের দিনটা প্রত্যাশায় ধরা হতো, তাই ভোরবেলা tray "পিছিয়ে"
-   *      দেখাত আর সন্ধ্যায় নিজে থেকেই ঠিক হয়ে যেত।
-   *   ২· ট্র্যাকিং শুরুর আগের দিনগুলোও গোনা হতো, তাই এজেন্ট বসার আগের
-   *      না-দেখা দিনগুলো কর্মীর ঘাটতি হয়ে দাঁড়াত।
-   * ফলে tray আর Monthly পাতা ~৮৯ ঘণ্টা আলাদা বলত।
+   * Careful: it is **not** "from the 1st of the month **through today**". That
+   * is what this used to say, and `ProgressService` really counted that way,
+   * which had two bugs:
+   *   1. Today was counted as expected, so the tray showed "behind" in the
+   *      morning and fixed itself by evening.
+   *   2. Days before tracking began were counted too, so unseen days from
+   *      before the agent was installed became the employee's deficit.
+   * As a result the tray and the Monthly page differed by about 89 hours.
    */
   workdaysElapsed: number;
   /**
-   * ⭐ R2 — ওই মাসে তার অনুমোদিত ছুটির কর্মদিবস।
+   * R2 - the workdays they have approved leave for in that month.
    *
-   * ⚠️ tray-তেও এটা লাগে, নইলে ছুটি থেকে ফিরে কেউ tray-তে "পিছিয়ে"
-   *    দেখতেন আর Live Board-এ "ঠিক আছে" — আর tray-ই সেই পর্দা যেটা তিনি
-   *    সারাদিন দেখেন।
+   * Careful: the tray needs this too. Otherwise someone back from leave would
+   * see "behind" on the tray and "on track" on the Live Board, and the tray is
+   * the screen they look at all day.
    */
   leaveWorkdays?: number;
 }
 
 /**
- * আজ পর্যন্ত কত সেকেন্ড হওয়ার কথা ছিল।
+ * How many seconds should have been worked up to today.
  *
- * ⚠️ `summary.math.ts`-এর `rollupMonth()` ইচ্ছাকৃতভাবে ডাকা হয় না, যদিও
- * expected-এর সূত্র এক। ওটা `targetSec <= 0` পেলে `RangeError` ছোড়ে —
- * মাসিক rollup-এ সেটাই ঠিক (জোরে ভাঙা ভালো), কিন্তু heartbeat-এর পথে একটা
- * ভুল কনফিগ করা work policy তখন ওই কর্মীর **প্রতিটা** heartbeat-কে ৫০০
- * বানিয়ে দিত — অর্থাৎ একটা ভুল সংখ্যার শাস্তি হতো পুরো ট্র্যাকিং বন্ধ।
- * তাই শুধু সংখ্যাটুকু (`proratedExpectedSec`) নেওয়া হয়, যেটা ছোড়ে না।
+ * Careful: `rollupMonth()` in `summary.math.ts` is deliberately not called,
+ * although the expected-seconds formula is the same. It throws a `RangeError`
+ * when `targetSec <= 0`. That is right for the monthly rollup (failing loudly is
+ * good), but on the heartbeat path a misconfigured work policy would turn
+ * **every** heartbeat of that employee into a 500, so one bad number would stop
+ * all tracking. So only the number itself (`proratedExpectedSec`) is used,
+ * which does not throw.
  */
 export function expectedSecOf(input: PaceInput): number {
   return proratedExpectedSec({
@@ -68,11 +70,11 @@ export function expectedSecOf(input: PaceInput): number {
 }
 
 /**
- * `credited − expected`; ধনাত্মক = এগিয়ে, ঋণাত্মক = পিছিয়ে।
+ * `credited - expected`; positive = ahead, negative = behind.
  *
- * ⚠️ `credited` ০-তে আটকানো — `payroll.math.ts`-এর মতোই কারণে। একজনের
- * বড় কর্তন `credited`-কে ঋণাত্মক করে ফেললে tray দেখাত "−৩১২ ঘণ্টা
- * পিছিয়ে", যা কারো কাছেই কোনো অর্থ বহন করে না।
+ * Careful: `credited` is clamped at 0, for the same reason as in
+ * `payroll.math.ts`. If one person's large deduction made `credited` negative,
+ * the tray would show "-312 hours behind", which means nothing to anyone.
  */
 export function paceSecOf(input: PaceInput): number {
   return Math.max(0, input.creditedSec) - expectedSecOf(input);

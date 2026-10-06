@@ -2,22 +2,23 @@ import type { UsageReport } from '../../api/activity';
 import { formatDuration, pctOf } from '../../lib/format';
 
 /**
- * E15 — **আজ দলটা কোন অ্যাপে সময় দিয়েছে**, সাজানো তালিকা।
+ * Today's sorted list of which apps the team spent time in.
  *
- * ⭐⭐ **রং দিয়ে পরিচয় বোঝানো হয় না, নাম দিয়ে বোঝানো হয়।** এই বোর্ডে
- * সবুজ = ঠিক আছে, হলুদ = নিষ্ক্রিয়, লাল = মনোযোগ দরকার — তিনটেই **অবস্থার**
- * রং। ওগুলো দিয়ে "কোন অ্যাপ কোনটা" রাঙালে অ্যালার্টের লাল আর চার্টের লাল
- * এক হয়ে যেত, আর তখন লাল দেখে আর বোঝা যেত না এখনই হাত দিতে হবে কি না।
+ * Important: identity is shown by name, not by colour. On this board green = fine,
+ * yellow = idle, red = needs attention; all three are **status** colours. Using them
+ * to colour "which app is which" would make the alert red and the chart red the same,
+ * and red would no longer tell you whether to act right now.
  *
- * ⚠️ বাকি কোন হিউ নিরাপদ, সেটা চোখে আন্দাজ না করে মেপে দেখা হয়েছে (CVD
- * সিমুলেশন, OKLab ΔE): নীল↔বেগুনি **১.৪–৫.৫** — কালার-ব্লাইন্ড চোখে কার্যত
- * একই রং। নীল↔কমলা **২৪–৩১** — নিরাপদ। অর্থাৎ অবস্থার তিনটে রং বাদ দিলে
- * পরিচয়ের জন্য কার্যত **দুটোই স্লট** খোলা, আর পাঁচটা অ্যাপ রাঙানোর মতো
- * যথেষ্ট নয়।
+ * Careful: which other hues are safe was measured, not eyeballed (CVD simulation,
+ * OKLab ΔE): blue vs purple is **1.4-5.5**, practically the same colour to
+ * colour-blind eyes; blue vs orange is **24-31**, which is safe. So after removing
+ * the three status colours only **two slots** are really free for identity, and
+ * that is not enough to colour five apps.
  *
- * ⭐ তাই এখানে **একটাই হিউ, স্বচ্ছতার ধাপে** — ক্রমটা বোঝায় বারের দৈর্ঘ্য ও
- * তালিকার অবস্থান, রঙের ভিন্নতা নয়। এটা রঙের সীমা মেনে নেওয়া নয়, বরং
- * বেশি পড়ার মতো: পাঁচটা আলাদা হিউ মনে রাখতে হয়, একটা ক্রম চোখেই পড়ে।
+ * Important: so there is **one hue in opacity steps**. The order conveys bar length
+ * and list position, not colour difference. This is not giving in to the colour
+ * limit; it reads better: five distinct hues must be memorised, one ordering is
+ * seen at a glance.
  */
 export function TopApps({ usage }: { usage: UsageReport }) {
   const rows = usage.rows.slice(0, 5);
@@ -31,9 +32,9 @@ export function TopApps({ usage }: { usage: UsageReport }) {
   }
 
   /**
-   * ⚠️ হর **`totalSec`**, তালিকার যোগফল নয় — তালিকা দিয়ে ভাগ করলে সবসময়
-   *    ১০০% হতো, আর "টপ ৫-ই সব" এমন একটা মিথ্যা তৈরি হতো। নিচের "everything
-   *    else" সারিটাও সেই কারণেই।
+   * Careful: the denominator is **`totalSec`**, not the sum of the list. Dividing by
+   *    the list would always give 100% and imply "the top 5 are everything". The
+   *    "everything else" row below exists for the same reason.
    */
   const total = usage.totalSec;
   const shown = rows.reduce((s, r) => s + r.seconds, 0);
@@ -47,9 +48,9 @@ export function TopApps({ usage }: { usage: UsageReport }) {
             <span className="truncate">
               {row.label}
               {/*
-                ⚠️ `mixed` — `chrome.exe`-এর ভেতরে ইউটিউবও আছে, ডকুমেন্টেশনও।
-                   একটামাত্র ক্যাটাগরি দেখানো তখন মিথ্যা হতো, তাই কিছুই
-                   দেখানো হয় না — শুধু বলা হয় যে ভেতরে মেশানো।
+                Careful: `mixed` means `chrome.exe` contains both YouTube and
+                   documentation. Showing a single category would then be false, so
+                   none is shown; it only says the contents are mixed.
               */}
               {row.mixed && (
                 <span className="ml-1.5 text-[10.5px] text-ink-3">mixed</span>
@@ -64,7 +65,7 @@ export function TopApps({ usage }: { usage: UsageReport }) {
               className="h-full rounded-full bg-data"
               style={{
                 width: `${pctOf(row.seconds, total)}%`,
-                // ⭐ ক্রমই একমাত্র সংকেত — উপরেরটা নিরেট, নিচেরগুলো ক্রমে হালকা
+                // Important: order is the only signal; top bar solid, the rest fade
                 opacity: 1 - i * 0.16,
               }}
             />

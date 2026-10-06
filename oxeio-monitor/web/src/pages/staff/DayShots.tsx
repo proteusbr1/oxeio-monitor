@@ -9,16 +9,17 @@ import { Lightbox } from '../screenshots/Lightbox';
 import { useFreshUrls, type FreshUrls } from '../screenshots/useFreshUrls';
 
 /**
- * ওই দিনের স্ক্রিনশট, কর্মীর নিজের পাতায় ([07 § ৫](../../../../docs/07-Technical-Spec.md))।
+ * The day's screenshots, on the employee's own page ([07 § 5](../../../../docs/07-Technical-Spec.md)).
  *
- * ⭐ <b>কেন গ্যালারি পাতা থাকা সত্ত্বেও এটা দরকার:</b> কারো একটা দিন নিয়ে
- * প্রশ্ন উঠলে — "এই ৩ ঘণ্টায় কী হয়েছিল" — উত্তরটা টাইমলাইন, ঘণ্টা-চার্ট
- * আর ছবি <b>একসাথে</b> দেখলে তবেই মেলে। আলাদা পাতায় গিয়ে আবার স্টাফ ও
- * তারিখ বেছে নিতে হলে কেউ মেলাতই না।
+ * <b>Why this is needed even though a gallery page exists:</b> when someone
+ * questions a day ("what happened in these 3 hours?"), the answer only comes
+ * from seeing the timeline, the hourly chart and the pictures <b>together</b>.
+ * If you had to go to another page and pick the staff member and date again,
+ * nobody would bother cross-checking.
  *
- * ⚠️ এই কলটা <b>audit-এ লেখা হয়</b> (I08) — "কে আমার স্ক্রিনশট দেখল"
- * প্রশ্নের উত্তর এখান থেকেই তৈরি হয়। তাই পোলিং নেই, আর তারিখ/কর্মী
- * বদলালে তবেই আবার ডাকা হয়।
+ * Important: this call is <b>written to the audit log</b> (I08); the "who
+ * viewed my screenshots" answer is built from it. So there is no polling, and
+ * it is only called again when the date or employee changes.
  */
 export function DayShots({
   employeeId,
@@ -31,9 +32,9 @@ export function DayShots({
 }) {
   const [open, setOpen] = useState<number | null>(null);
 
-  // ⭐ লিঙ্কের মেয়াদ (৫ মিনিট, I07) সামলানোর কাজটা গ্যালারি পাতার সাথে
-  //    **একই হুকে** — নিজে আবার লিখলে একদিন দুটো আলাদা আচরণ হতো, আর
-  //    "কোন পাতায় ছবি ভাঙে" ধরনের বাগ শুরু হতো।
+  // The signed-link expiry (5 minutes, I07) is handled by the **same hook**
+  // as the gallery page. Re-implementing it here would eventually give two
+  // different behaviours and "pictures break on one page only" bugs.
   const urls = useFreshUrls({ employeeId, date });
 
   const { data, error, loading, reload } = useApi(
@@ -54,8 +55,8 @@ export function DayShots({
       >
         <Empty
           title="No screenshots for this day"
-          // ⚠️ "কিছু নেই" বললে মনে হতো সিস্টেম ভাঙা। তিনটে **স্বাভাবিক**
-          //    কারণই এখানে লেখা, যাতে কেউ অকারণে আইটিকে না ডাকে।
+          // Careful: saying just "nothing here" would look like a broken system.
+          // The three **normal** reasons are spelled out so nobody calls IT for nothing.
           hint="Pictures are only taken while someone is working, and only between 07:00 and 23:00. A day off or an idle day has none."
         />
       </Card>
@@ -68,9 +69,9 @@ export function DayShots({
         title="Screenshots"
         hint={`${data?.total ?? items.length} this day · click to enlarge`}
       >
-        {/* ⚠️ প্রথম পাতাটাই দেখানো হয় — একদিনে ১৯২টা পর্যন্ত ছবি হতে পারে
-            (১৬ ঘণ্টা × ১২)। সব একসাথে আনলে audit log-ও ভরত, ব্রাউজারও বসত।
-            পুরোটা দরকার হলে গ্যালারি পাতা আছে। */}
+        {/* Careful: only the first page is shown. A day can have up to 192
+            pictures (16 hours x 12). Fetching them all would flood the audit
+            log and bog down the browser. The gallery page has the full set. */}
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
           {items.map((shot, i) => (
             <Thumb
@@ -122,8 +123,9 @@ function Thumb({
       className="group relative overflow-hidden rounded-md border border-line bg-paper transition hover:border-brand focus:border-brand focus:outline-none"
     >
       {dead ? (
-        // ⚠️ signed URL ৫ মিনিটে মরে (I07)। ভাঙা আইকনের বদলে কারণটা লেখা —
-        //    নইলে দশ মিনিট খোলা রাখা ট্যাবে সব ছবি নীরবে ভাঙা দেখাত।
+        // Careful: the signed URL dies after 5 minutes (I07). We show the reason
+        // instead of a broken icon; otherwise a tab left open for ten minutes
+        // would show every picture silently broken.
         <span className="grid aspect-video place-items-center px-1 text-center text-[10px] text-ink-3">
           Picture is gone
         </span>

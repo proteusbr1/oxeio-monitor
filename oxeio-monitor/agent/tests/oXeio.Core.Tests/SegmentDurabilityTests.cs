@@ -4,8 +4,8 @@ using oXeio.Core.Tracking;
 namespace oXeio.Core.Tests;
 
 /// <summary>
-/// টানা কাজ করলেও সেগমেন্ট যেন নিয়মিত বন্ধ হয়ে কিউয়ে যায় — নইলে
-/// বিদ্যুৎ গেলে ওই পুরো সময়টা হারাত।
+/// Even during continuous work, segments must close regularly and go to the queue;
+/// otherwise a power cut would lose that whole stretch.
 /// </summary>
 public class SegmentDurabilityTests
 {
@@ -14,7 +14,7 @@ public class SegmentDurabilityTests
 
     private static readonly TimeSpan Threshold = TimeSpan.FromSeconds(60);
 
-    /// <summary>এক সেকেন্ড অন্তর টিক, সবসময় ইনপুট আসছে (টানা কাজ)।</summary>
+    /// <summary>A tick every second, input always arriving (continuous work).</summary>
     private static List<ActivitySegment> RunBusy(IdleStateMachine m, TimeSpan span)
     {
         var all = new List<ActivitySegment>();
@@ -30,7 +30,7 @@ public class SegmentDurabilityTests
 
         var closed = RunBusy(m, TimeSpan.FromMinutes(17));
 
-        // ৫ মিনিট করে ভাগ — ১৭ মিনিটে ৩টা পূর্ণ সেগমেন্ট
+        // split every 5 minutes: 3 full segments in 17 minutes
         Assert.Equal(3, closed.Count);
         Assert.All(closed, s => Assert.Equal(SegmentState.Active, s.State));
         Assert.All(closed, s => Assert.Equal(300, s.DurationSec));
@@ -46,7 +46,7 @@ public class SegmentDurabilityTests
 
         Assert.Equal(17 * 60, closed.Sum(s => s.DurationSec));
 
-        // পরপর সাজানো, ফাঁক নেই, ওভারল্যাপ নেই
+        // in order, no gaps, no overlaps
         for (var i = 1; i < closed.Count; i++)
             Assert.Equal(closed[i - 1].EndedAt, closed[i].StartedAt);
     }
@@ -54,8 +54,8 @@ public class SegmentDurabilityTests
     [Fact]
     public void প্রতিটি_ভাগের_আলাদা_uuid_থাকে()
     {
-        // একই uuid হলে সার্ভার দ্বিতীয়টাকে ডুপ্লিকেট ভেবে ফেলে দিত —
-        // অর্থাৎ ভাগ করার পরেও সময় হারাত
+        // With the same uuid the server would take the second as a duplicate and drop
+        // it, so time would still be lost even after splitting
         var m = new IdleStateMachine(Threshold, T0);
 
         var closed = RunBusy(m, TimeSpan.FromMinutes(17));
@@ -68,7 +68,7 @@ public class SegmentDurabilityTests
     {
         var m = new IdleStateMachine(Threshold, T0);
 
-        // ৪ মিনিট কাজ, তারপর idle-এ যাওয়া
+        // 4 minutes of work, then going idle
         RunBusy(m, TimeSpan.FromMinutes(4));
         var closed = m.Tick(T0.AddMinutes(5), TimeSpan.FromSeconds(61), locked: false, screenFrozen: false);
 
@@ -79,8 +79,8 @@ public class SegmentDurabilityTests
     [Fact]
     public void নিষ্ক্রিয়_সময়ও_ভাগ_হয়()
     {
-        // কেউ লাঞ্চে গেলে IDLE সেগমেন্টও ঘণ্টাখানেক খোলা থাকত। ওটা কাজের
-        // সময় নয়, কিন্তু ক্র্যাশে হারালে পরে "ওই সময়টা কী ছিল" বোঝা যেত না।
+        // When someone goes to lunch an IDLE segment would stay open for an hour. That
+        // is not work time, but if a crash lost it, it would later be unclear what that time was.
         var m = new IdleStateMachine(Threshold, T0);
         var all = new List<ActivitySegment>();
 
@@ -100,10 +100,10 @@ public class SegmentDurabilityTests
     }
 
     /// <summary>
-    /// ⭐ সবচেয়ে জরুরি টেস্ট। ভাগ করার পর retro-adjust (B04) যেন অক্ষত থাকে।
+    /// The most important test: after splitting, retro-adjust (B04) must stay intact.
     ///
-    /// শেষ ৬০ সেকেন্ড আগেই আলাদা সেগমেন্ট হিসেবে বেরিয়ে গেলে আর পিছিয়ে গিয়ে
-    /// কাটা যেত না — নিষ্ক্রিয় সময়টা নীরবে **কাজ হিসেবে গোনা** হয়ে যেত।
+    /// If the last 60 seconds had already left as a separate segment, it could no longer
+    /// be cut backwards, and the idle time would silently be **counted as work**.
     /// </summary>
     [Fact]
     public void ভাগ_করার_পরেও_retro_adjust_পুরো_ষাট_সেকেন্ড_কাটে()
@@ -111,11 +111,11 @@ public class SegmentDurabilityTests
         var m = new IdleStateMachine(Threshold, T0);
         var all = new List<ActivitySegment>();
 
-        // ঠিক ভাগের সীমানা পেরিয়ে আরও কিছুক্ষণ কাজ, তারপর হাত সরিয়ে নেওয়া
+        // work a little past the exact split boundary, then hands off
         for (var s = 1; s <= 7 * 60; s++)
             all.AddRange(m.Tick(T0.AddSeconds(s), TimeSpan.Zero, locked: false, screenFrozen: false));
 
-        // এবার ৬০ সেকেন্ড নিষ্ক্রিয়
+        // now 60 seconds idle
         for (var s = 7 * 60 + 1; s <= 8 * 60; s++)
         {
             var idleFor = TimeSpan.FromSeconds(s - 7 * 60);
@@ -126,9 +126,9 @@ public class SegmentDurabilityTests
 
         var worked = all.Where(x => x.CountsAsWork).Sum(x => x.DurationSec);
 
-        // ৮ মিনিটের শেষ ৬০ সেকেন্ড নিষ্ক্রিয় ছিল, আর retro-adjust ঠিক
-        // ওইটুকুই বাদ দেয় — এক সেকেন্ড বেশিও নয়, কমও নয় (B04)।
-        // ভাগ করার পরেও যোগফল একই থাকতে হবে।
+        // The last 60 seconds of the 8 minutes were idle, and retro-adjust removes
+        // exactly that much: not a second more or less (B04).
+        // The sum must stay the same after splitting too.
         Assert.Equal(7 * 60, worked);
     }
 

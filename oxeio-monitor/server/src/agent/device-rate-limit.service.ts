@@ -13,11 +13,11 @@ interface Window {
 }
 
 /**
- * ডিভাইসপ্রতি সহজ fixed-window rate limit (স্পেক § ৪.১)।
+ * Simple per-device fixed-window rate limit (spec § 4.1).
  *
- * উদ্দেশ্য নিরাপত্তা নয় — টোকেন তো যাচাই হয়েই গেছে। উদ্দেশ্য হলো
- * বাগ-খাওয়া বা লুপে আটকে যাওয়া এজেন্ট যেন সার্ভার ডুবিয়ে না দেয়।
- * তাই ইন-মেমরিই যথেষ্ট।
+ * The goal is not security, since the token is already verified. The goal is
+ * to stop a buggy or looping agent from flooding the server.
+ * In-memory is therefore enough.
  */
 @Injectable()
 export class DeviceRateLimitService {

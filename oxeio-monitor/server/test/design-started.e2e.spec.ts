@@ -13,30 +13,30 @@ import {
 } from './setup/harness';
 
 /**
- * ⭐⭐⭐ **"কাজ শুরু" চিহ্নটা আসল মুহূর্তেই বসে** *(৬ সেপ্টেম্বর ২০২৬, G163)*।
+ * The "work started" mark is set at the real instant (6 September 2026, G163).
  *
- * ⚠️⚠️ **যে বাগটা এই ফাইলটা পাহারা দেয়:** `claimDesigns()` টার্গেটে
- * "কাজ শুরু" বসাতে গিয়ে `markStartedByJobNumbers(..., workDate)` ডাকত —
- * অর্থাৎ `now: Date` ঘরে **কর্মদিবসের লেবেল**। লেবেলটা UTC-মধ্যরাত,
- * যেটা আসলে **ঢাকার ভোর ৬টা**। ফলে প্রতিটা টার্গেটের `started_at` বসত
- * ওই এক মুহূর্তে।
+ * The bug this file guards: when `claimDesigns()` set "work started" on a
+ * target it called `markStartedByJobNumbers(..., workDate)`, which put the
+ * work-day label into the `now: Date` slot. The label is UTC midnight, which
+ * is really 6 AM Dhaka time. So every target's `started_at` landed on that
+ * single instant.
  *
- * ⚠️⚠️ মাঠের হিসাব: `started_at` আছে এমন **৭১১টা সারির ৭১১টাতেই** ঘড়ি
- * ঠিক `০৬:০০:০০` — সব মিলিয়ে **একটাই** আলাদা সময়। আর প্রত্যেকটাই তার
- * নিজের `assigned_at`-এর **আগে**, কারণ বণ্টন চলে সকাল ৮টায়। পর্দায়
- * সেটা দেখাত *"Started 5 hours ago"* — জব খোলার ঠিক সেকেন্ডেই।
+ * Field numbers: in all 711 of the 711 rows with `started_at`, the clock was
+ * exactly `06:00:00` — one single distinct time in total. And every one was
+ * before its own `assigned_at`, because distribution runs at 8 AM. The screen
+ * showed "Started 5 hours ago" the very second the job was opened.
  *
- * ⭐ সংখ্যাটা অনুমান করার দরকারই ছিল না: `app_usage.started_at` ঠিক ওই
- * মুহূর্তটা ধরে রাখে যখন শিরোনামে নম্বরটা প্রথম দেখা গেছে।
+ * The number never had to be guessed: `app_usage.started_at` holds exactly
+ * the instant the number was first seen in a title.
  *
- * ⚠️ **এই ফাইলে কোনো পিন-করা তারিখ নেই** (G140) — সব ফিক্সচার "আজ"-এর
- * সাপেক্ষে, আর দিনের ভেতরের ঘণ্টাগুলো `atDhakaHour()` দিয়ে বসানো।
+ * This file has no pinned dates (G140) — every fixture is relative to
+ * "today", and hours within the day are placed with `atDhakaHour()`.
  */
 let h: Harness;
 let summary: SummaryService;
 
 const HOUR_MS = 3600_000;
-/** ⚠️ ঢাকা UTC+৬ — লেবেল থেকে আসল মুহূর্তে যেতে এটুকু বাদ */
+/** Dhaka is UTC+6 — subtract this to go from the label to the real instant */
 const DHAKA_OFFSET_MS = 6 * HOUR_MS;
 
 const JOB = 1_000_042;
@@ -57,11 +57,11 @@ beforeEach(async () => {
 const today = () => workDateOf(dhakaNoon());
 
 /**
- * ঢাকার ওই দিনের নির্দিষ্ট ঘণ্টার **আসল মুহূর্ত**।
+ * The real instant of a given hour on that Dhaka day.
  *
- * ⚠️⚠️ `dayLabel` একটা লেবেল — ঢাকার দিনটাকে UTC-মধ্যরাত হিসেবে লেখা।
- * ওই দিনের ঢাকা-মধ্যরাত শুরু হয় লেবেলের **৬ ঘণ্টা আগে**। এটাই সেই
- * পার্থক্য যেটা গুলিয়ে গিয়ে G163 হয়েছিল।
+ * `dayLabel` is a label — the Dhaka day written as UTC midnight. That day's
+ * Dhaka midnight starts 6 hours before the label. Mixing up the two is what
+ * caused G163.
  */
 const atDhakaHour = (dayLabel: Date, hour: number): Date =>
   new Date(dayLabel.getTime() - DHAKA_OFFSET_MS + hour * HOUR_MS);
@@ -91,7 +91,7 @@ async function designerWithDevice(): Promise<{
   return { employeeId, deviceId: device.id };
 }
 
-/** ওই ডিজাইনারের নামে বরাদ্দ একটা টার্গেট */
+/** A target assigned to that designer */
 async function assignedTarget(employeeId: number, assignedAt: Date): Promise<void> {
   const owner = await h.prisma.user.findFirstOrThrow();
 
@@ -107,7 +107,7 @@ async function assignedTarget(employeeId: number, assignedAt: Date): Promise<voi
   });
 }
 
-/** শিরোনামে নম্বরটা নিয়ে একটা `app_usage` সারি */
+/** An `app_usage` row with the number in the title */
 async function sawFile(
   who: { employeeId: number; deviceId: number },
   workDate: Date,
@@ -131,14 +131,14 @@ async function sawFile(
 
 const targetRow = () => h.prisma.designTarget.findFirstOrThrow();
 
-describe('G163 — "কাজ শুরু" আসল মুহূর্তেই বসে', () => {
+describe('G163 — "work started" is set at the real instant', () => {
   /**
-   * ⭐⭐⭐ **এই ফাইলের মূল টেস্ট।**
+   * The main test of this file.
    *
-   * ⚠️ পুরোনো কোডে এখানে বসত `day` (লেবেল) — অর্থাৎ ঢাকার ভোর ৬টা,
-   *    অথচ ফাইলটা খোলা হয়েছে বেলা ১১টায়।
+   * The old code set `day` (the label) here — i.e. 6 AM Dhaka time, although
+   * the file was opened at 11 AM.
    */
-  it('⭐ ফাইলটা যখন প্রথম খোলা হয়েছে, সেই মুহূর্তটাই বসে', async () => {
+  it('the instant the file was first opened is what gets set', async () => {
     const who = await designerWithDevice();
     const day = today();
     const openedAt = atDhakaHour(day, 11);
@@ -153,12 +153,12 @@ describe('G163 — "কাজ শুরু" আসল মুহূর্তে�
   });
 
   /**
-   * ⭐⭐⭐ **বাগটার নিজের আঙুলের ছাপ** — "শুরু" কখনো "বরাদ্দ"-এর আগে নয়।
+   * The bug's own fingerprint: "started" is never before "assigned".
    *
-   * ⚠️⚠️ মাঠে ৭১১টার ৭১১টাই এই নিয়মটা ভাঙত: বণ্টন সকাল ৮টায়, আর চিহ্ন
-   * বসত ভোর ৬টায়। এই একটা দাবি ওই পুরো শ্রেণির ভুলটা ধরে।
+   * In the field all 711 of 711 broke this rule: distribution at 8 AM, mark
+   * set at 6 AM. This one claim catches the whole class of mistake.
    */
-  it('⭐ "শুরু" কখনো "বরাদ্দ"-এর আগে নয়', async () => {
+  it('"started" is never before "assigned"', async () => {
     const who = await designerWithDevice();
     const day = today();
     const assignedAt = atDhakaHour(day, 8);
@@ -174,11 +174,11 @@ describe('G163 — "কাজ শুরু" আসল মুহূর্তে�
   });
 
   /**
-   * ⚠️⚠️ **ঢাকার ভোর ৬টা নয়** — বাগটার হুবহু আঙুলের ছাপ। এই দাবিটা
-   * আলাদা করে লেখা, কারণ উপরের দুটো ঠিক থাকলেও কেউ একদিন আবার লেবেল
-   * পাঠালে ওই মানটাই ফিরে আসত।
+   * Not 6 AM Dhaka time — the bug's exact fingerprint. Written separately
+   * because even if the two above hold, someone sending the label again one
+   * day would bring that value back.
    */
-  it('⭐ কর্মদিবসের লেবেলটা (ঢাকার ভোর ৬টা) বসে না', async () => {
+  it('the work-day label (6 AM Dhaka time) is not what gets set', async () => {
     const who = await designerWithDevice();
     const day = today();
 
@@ -192,16 +192,16 @@ describe('G163 — "কাজ শুরু" আসল মুহূর্তে�
   });
 
   /**
-   * ⚠️ একই ফাইলে সারাদিনে বহুবার ফেরা হয় — চিহ্নটা **প্রথমবারের**
-   *    মুহূর্তে বসে, শেষবারের নয়।
+   * The same file is returned to many times a day — the mark is set at the
+   * first instant, not the last.
    */
-  it('⭐ দিনে বহুবার খোলা হলেও প্রথমবারের মুহূর্ত', async () => {
+  it('opened many times in a day, it is the first instant', async () => {
     const who = await designerWithDevice();
     const day = today();
     const first = atDhakaHour(day, 10);
 
     await assignedTarget(who.employeeId, atDhakaHour(day, 8));
-    // ⚠️ ইচ্ছাকৃতভাবে উল্টো ক্রমে বসানো — "শেষেরটা রাখো" লিখলে লাল হতো
+    // Deliberately inserted in reverse order — "keep the last" would turn this red
     await sawFile(who, day, atDhakaHour(day, 16));
     await sawFile(who, day, first);
     await sawFile(who, day, atDhakaHour(day, 13));
@@ -212,14 +212,14 @@ describe('G163 — "কাজ শুরু" আসল মুহূর্তে�
   });
 
   /**
-   * ⭐⭐ **পুরোনো দিন নতুন করে হিসাব করালেও সংখ্যাটা ওই দিনেরই।**
+   * Recalculating an old day still gives that day's number.
    *
-   * ⚠️⚠️ এটাই সেই ফাঁদ যেটা সরল ফিক্স (`workDate`-এর বদলে `now`) মিস
-   * করত: `drainDirty()` গতকালের দিন **আজকের** ঘড়ি নিয়ে চালায়, তাই
-   * `now` বসালে ২ তারিখের ডিজাইনে ৬ তারিখের সময় বসত — অর্থাৎ
-   * `started_at > completed_at`, নতুন একটা অসম্ভব সারি।
+   * This is the trap a simple fix (`now` instead of `workDate`) would miss:
+   * `drainDirty()` runs yesterday's day with today's clock, so using `now`
+   * would put the 6th's time on a design from the 2nd — i.e.
+   * `started_at > completed_at`, a new impossible row.
    */
-  it('⭐ গতকালের দিন আজ হিসাব করালেও সময়টা গতকালেরই', async () => {
+  it('recalculating yesterday today still gives yesterday\'s time', async () => {
     const who = await designerWithDevice();
     const yesterday = new Date(today().getTime() - 24 * HOUR_MS);
     const openedAt = atDhakaHour(yesterday, 15);
@@ -227,7 +227,7 @@ describe('G163 — "কাজ শুরু" আসল মুহূর্তে�
     await assignedTarget(who.employeeId, atDhakaHour(yesterday, 8));
     await sawFile(who, yesterday, openedAt);
 
-    // ⚠️ `now` আজকের — ঠিক যেভাবে `drainDirty()` ডাকে
+    // `now` is today's — exactly how `drainDirty()` calls it
     await summary.refreshDate(yesterday, dhakaNoon());
 
     const after = await targetRow();
@@ -235,8 +235,8 @@ describe('G163 — "কাজ শুরু" আসল মুহূর্তে�
     expect(workDateOf(after.startedAt!).getTime()).toBe(yesterday.getTime());
   });
 
-  /** ⚠️ একবার চিহ্ন বসলে সেটা আর নড়ে না — "কবে শুরু" রোজ সরত না */
-  it('দ্বিতীয়বার হিসাব করালে চিহ্নটা নড়ে না', async () => {
+  /** Once the mark is set it never moves — "when started" must not shift daily */
+  it('recalculating again does not move the mark', async () => {
     const who = await designerWithDevice();
     const day = today();
     const openedAt = atDhakaHour(day, 10);

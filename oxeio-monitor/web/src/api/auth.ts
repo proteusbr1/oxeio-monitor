@@ -12,18 +12,19 @@ export interface Me {
   mustChangePassword: boolean;
   lastLoginAt: string | null;
   /**
-   * ⭐ ডিজাইন-টার্গেট জমা দিতে পারেন কি না *(২২ আগস্ট)*।
+   * Whether the user may submit design targets.
    *
-   * ⚠️⚠️ সার্ভারের তৈরি উত্তর, কাঁচা `staffType` নয় — নিয়মটা ("owner ·
-   * manager · অথবা researcher") ওয়েবে আবার লিখলে একদিন দুটো দু-রকম বলত,
-   * আর কেউ মেনু দেখে ৪০৩ পেতেন।
+   * Important: this is computed by the server, not derived from the raw `staffType`.
+   * Writing the rule ("owner, manager or researcher") again in the web app would
+   * eventually give two different answers, and someone would see a menu entry that
+   * returns 403.
    */
   canAddTargets: boolean;
   /**
-   * ⭐ **বানান যাচাই করতে পারেন কি না** *(ADR-038, ২৫ আগস্ট ২০২৬)*।
+   * Whether the user may check spelling (ADR-038).
    *
-   * ⚠️ `canAddTargets`-এর থেকে আলাদা — সব গবেষক টার্গেট জমা দিতে পারেন,
-   * কিন্তু বানান দেখেন কেবল যাঁকে মালিক টিক দিয়েছেন।
+   * Different from `canAddTargets`: every researcher may submit targets, but only
+   * researchers the owner has explicitly ticked get to review spelling.
    */
   canProofread: boolean;
 }
@@ -35,7 +36,7 @@ export function login(
   return api('/auth/login', {
     method: 'POST',
     body: { email, password },
-    // ভুল পাসওয়ার্ডের 401 যেন গ্লোবাল লগআউট ট্রিগার না করে
+    // Wrong-password 401s must not trigger a global logout.
     silent401: true,
   });
 }
@@ -97,27 +98,27 @@ export function changePassword(
 }
 
 /**
- * ⭐⭐ **গোটা দলের ডেটা কে দেখেন** — কেবল মালিক ও ম্যানেজার।
+ * Who may see the whole team's data: only owners and managers.
  *
- * ⚠️⚠️ শর্তটা **হ্যাঁ-তালিকা**, আর সেটাই এই ফাংশনের গোটা কারণ। ২৫ আগস্ট
- * পর্যন্ত পাঁচটা পর্দায় লেখা ছিল `role === 'employee'` — অর্থাৎ *"স্টাফ
- * নয় মানে সব দেখেন"*। ⭐ `researcher` রোল যোগ করার সময় ধরা পড়ল যে
- * নতুন যেকোনো রোল তখন **সবকিছুর দিকেই** পড়ত: সবার স্ক্রিনশট, সবার
- * রিপোর্ট, খোঁজার বাক্স। কোনো কম্পাইল-এরর হতো না।
+ * Important: the condition is an allow-list, which is the whole reason this
+ * function exists. Five screens used to check `role === 'employee'`, i.e. "not
+ * staff means sees everything". When the `researcher` role was added, it turned
+ * out every new role would fall on the "sees everything" side: everyone's
+ * screenshots, everyone's reports, the search box. There was no compile error.
  *
- * ⚠️ সার্ভারও ঠিক একই দিকে ঘোরানো হয়েছে (`resolveEmployeeScope`,
- * `assertCanSee`) — পর্দা একমাত্র রক্ষী নয়, প্রথম রক্ষী।
+ * The server is turned the same way (`resolveEmployeeScope`, `assertCanSee`).
+ * The screen is not the only guard, it is the first one.
  */
 export function seesEveryone(role: Role | undefined | null): boolean {
   return role === 'owner' || role === 'manager';
 }
 
 /**
- * ⭐ লগইনের পর — বা "পাওয়া যায়নি" থেকে — কে কোথায় নামেন।
+ * Where each role lands after login, or after a "not found".
  *
- * ⚠️ গবেষক `/me`-তে নামলে প্রথম যা দেখতেন তা চারটে **ঘণ্টার** টাইল,
- * একটাও তাঁর কাজের নয় (২৪ আগস্ট)। ⚠️ ডিজাইনার Design Pool-এ নামলে
- * দেখতেন গোটা দলের কাজ — তাঁর জিনিস নয়।
+ * Careful: a researcher landing on `/me` used to see four hours-based tiles, none
+ * of them relevant to their work. A designer landing on the Design Pool saw the
+ * whole team's work, not their own.
  */
 export function homePathFor(
   role: Role | undefined | null,

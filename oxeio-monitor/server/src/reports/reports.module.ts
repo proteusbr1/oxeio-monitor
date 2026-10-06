@@ -7,43 +7,42 @@ import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
 
 /**
- * F01 · F02 · F04 · F05 · F08।
+ * F01 · F02 · F04 · F05 · F08.
  *
- * ⚠️ `PayrollModule` (F03) আলাদা — ওটা owner-only আর `monthly_salary` পড়ে।
+ * `PayrollModule` (F03) is separate: it is owner-only and reads `monthly_salary`.
  *
- * ⚠️ `ActivityModule` এখানে **import করা হয় না**, অথচ F04 এখন
- *    `activity/activity.math.ts` ব্যবহার করে — দুটোয় কোনো বিরোধ নেই।
- *    `activity.math.ts` খাঁটি ফাংশনের ফাইল, কোনো `@Injectable` নয়; তাই
- *    সেটা import করা মানে একটা **সংজ্ঞা** ভাগ করা, DI গ্রাফ জোড়া লাগানো নয়।
- *    ⭐ এটাই ছিল উদ্দেশ্য: productivity-র হিসাব একটাই জায়গায় থাকবে
- *    (ADR — 09 § ৪), কিন্তু কোয়েরি ও রুট আলাদা থাকবে।
+ * `ActivityModule` is **not** imported here, even though F04 now uses
+ * `activity/activity.math.ts`; the two do not conflict. `activity.math.ts` is a
+ * file of pure functions, not an `@Injectable`, so importing it shares one
+ * **definition**, it does not join up the DI graph. That was the whole point:
+ * the productivity calculation lives in one place (ADR, 09 § 4), while queries
+ * and routes stay separate.
  *
- * ⚠️ ক্যাটাগরির নিয়ম **প্রয়োগ** (ingest) আর নিয়মের **ফল পড়া** (রিপোর্ট)
- *    এখনো দুটো আলাদা কাজ — F04 নিজের `app_categories` কোয়েরি নিজেই করে,
- *    `AppCategoryService`-এর ক্যাশ ছোঁয় না (কারণ সেখানে ভুল regex-ওয়ালা
- *    রুল বাদ পড়ে, অথচ পুরোনো সারিতে ওই id বসানোই আছে)।
+ * Applying category rules (ingest) and reading the rules' results (reports) are
+ * still two separate jobs: F04 runs its own `app_categories` query and does not
+ * touch `AppCategoryService`'s cache (because there a rule with a bad regex is
+ * dropped, yet old rows still carry that id).
  */
 @Module({
   controllers: [ReportsController],
   /**
-   * ⚠️ `AlertMailer` ও `TelegramChannel` এখানে **আবার প্রোভাইড করা হয়েছে**,
-   *    `AlertsModule` import করে নয় — কারণ `AlertsModule` ওদুটো export করে
-   *    না (শুধু `AlertsService`)। ⭐ ঠিক এই পথটাই `DigestModule` আগে
-   *    নিয়েছে, আর সেখানকার মন্তব্যে কারণও লেখা আছে। দুটোই stateless
-   *    ট্রান্সপোর্ট (প্রতি কলে সেটিংস পড়ে), তাই দ্বিতীয় ইনস্ট্যান্সে কোনো
-   *    অবস্থা ভাগ হয় না।
+   * `AlertMailer` and `TelegramChannel` are **provided again** here, not by
+   * importing `AlertsModule`, because `AlertsModule` does not export them (only
+   * `AlertsService`). `DigestModule` took exactly this path earlier, and the
+   * comment there gives the reason. Both are stateless transports (they read
+   * settings on every call), so a second instance shares no state.
    */
   providers: [ReportsService, MonthDeliveryService, AlertMailer, TelegramChannel],
   /**
-   * ⭐ F07 (`DigestModule`) এই সার্ভিসটাই ডাকে — নিজে `daily_summary` পড়ে
-   * টার্গেট বের করে না। ফলে দৈনিক ইমেইল আর ছাপা রিপোর্ট **কখনো দুই রকম
-   * ঘণ্টা বলবে না**; ছুটির ক্যালেন্ডার বা দৈনিক টার্গেটের ভাগ বদলালে
-   * দুটোই একসাথে বদলায়।
+   * F07 (`DigestModule`) calls this very service; it does not read
+   * `daily_summary` and work out the target itself. So the daily email and the
+   * printed report **never state two different hours**; if the holiday calendar
+   * or the daily target's split changes, both change together.
    *
-   * ⚠️ export মানে শুধু সার্ভিস, কন্ট্রোলার নয় — role-এর দেয়াল
-   * (`@Roles(owner, manager)`) কন্ট্রোলারেই বসানো, আর সেটা এখানেই থাকে।
-   * যে মডিউল সার্ভিসটা ব্যবহার করে তার **নিজের** দায়িত্ব কাকে দেখাবে
-   * সেটা ঠিক করা (ডাইজেস্ট তাই ডিফল্টে শুধু owner-দের ইমেইল করে)।
+   * Exporting means only the service, not the controller: the role wall
+   * (`@Roles(owner, manager)`) is placed on the controller and stays there. The
+   * module that uses the service is **itself** responsible for deciding who it
+   * shows (so the digest by default emails only owners).
    */
   exports: [ReportsService, MonthDeliveryService],
 })

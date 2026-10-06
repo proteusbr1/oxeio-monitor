@@ -7,26 +7,26 @@ import { testDatabaseUrl } from './test/setup/test-db-url';
 
 export default defineConfig({
   /**
-   * ⚠️ SWC ছাড়া NestJS-এর DI টেস্টে ভাঙে।
-   * Vitest ট্রান্সপাইল করে esbuild দিয়ে, আর esbuild `emitDecoratorMetadata`
-   * সমর্থন করে না — ফলে `design:paramtypes` মেটাডেটা তৈরি হয় না এবং
-   * কনস্ট্রাক্টরের সব injection `undefined` হয়ে আসে।
+   * Careful: without SWC, NestJS DI breaks in tests.
+   * Vitest transpiles with esbuild, which does not support
+   * `emitDecoratorMetadata`, so no `design:paramtypes` metadata is emitted and
+   * every constructor injection comes through as `undefined`.
    */
   plugins: [swc.vite({ module: { type: 'es6' } })],
   test: {
     environment: 'node',
-    // `*.e2e.spec.ts` ছাড়াও সাধারণ `*.spec.ts` — খাঁটি ফাংশনের টেস্ট
-    // (যেমন payroll.math) ডাটাবেস ছাড়াই চলে, কিন্তু একই কমান্ডে চলা দরকার।
+    // Plain `*.spec.ts` files run too, not just `*.e2e.spec.ts`: pure-function
+    // tests (e.g. payroll.math) need no database but must run in the same command.
     include: ['test/**/*.spec.ts'],
     globalSetup: ['./test/setup/global-setup.ts'],
-    // সব টেস্ট একই ডাটাবেস ব্যবহার করে, তাই ফাইলগুলো একের পর এক চলবে
+    // All tests share one database, so files run one after another
     fileParallelism: false,
     hookTimeout: 60_000,
     testTimeout: 30_000,
     env: {
       NODE_ENV: 'test',
       DATABASE_URL: testDatabaseUrl(),
-      // স্ক্রিনশট টেস্ট যেন সত্যিকারের storage-এ ফাইল না ফেলে
+      // Keep screenshot tests from writing files into the real storage
       STORAGE_ROOT: resolve(import.meta.dirname, '.tmp-test-storage'),
       JWT_SECRET:
         process.env.JWT_SECRET ??

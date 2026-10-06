@@ -2,30 +2,29 @@ import { api } from './client';
 import { qs } from './query';
 
 /**
- * E01 · E02 · E04 · E05 — লাইভ বোর্ড, দিনের টাইমলাইন, ঘণ্টার চার্ট।
+ * E01, E02, E04, E05: live board, day timeline, hourly chart.
  *
- * সার্ভারের উৎস: `server/src/dashboard/` (live.controller.ts ·
- * employee-activity.controller.ts · dashboard.service.ts)।
+ * Server source: `server/src/dashboard/` (live.controller.ts,
+ * employee-activity.controller.ts, dashboard.service.ts).
  *
- * ⚠️ তিনটেই **owner + manager**। `role = employee` এখানে ঢুকলে ৪০৩ পাবে।
+ * Careful: all three are owner + manager only. `role = employee` gets a 403.
  */
 
 /**
- * কার্ডের চারটে রঙ।
-/**
- * কার্ডের **তিনটে** অবস্থা।
+ * The three states of a card.
  *
- * ⚠️⚠️ **`agent_down` তুলে দেওয়া হয়েছে** *(১৭ আগস্ট)*। বোর্ড কোনোদিনই
- * নিশ্চিত করে বলতে পারত না এজেন্ট "মরেছে" নাকি "PC বন্ধ" — বিদায়ী
- * ইভেন্টটা এজেন্ট ডিস্কে লিখে রাখে আর পাঠায় পরের বার চালু হলে। দুবার
- * এই নিয়ম মাঠে ভেঙেছে, আর দুবারই সৎ মানুষ লাল দেখিয়েছে।
+ * Careful: `agent_down` was removed. The board could never say for certain whether
+ * the agent had "died" or the PC was simply switched off: the agent writes the
+ * shutdown event to disk and only sends it the next time it starts. This rule
+ * broke twice in the field, and both times an honest person was shown red.
  *
- * ⭐ এজেন্ট সত্যিই ভাঙলে খবরটা আসে **অ্যালার্ট** হয়ে (`AgentDownCheck`),
- * যেখানে সাথে ব্যাখ্যাও থাকে — "no shutdown event arrived either"।
+ * When the agent really does break, the news arrives as an alert
+ * (`AgentDownCheck`), which comes with an explanation ("no shutdown event arrived
+ * either").
  */
 export type LiveStatus = 'active' | 'idle' | 'offline';
 
-/** টাইমলাইনের সেগমেন্টে অবশ্য `locked` আলাদা থাকে */
+/** Timeline segments do keep `locked` as a separate state. */
 export type SegmentState = 'active' | 'idle' | 'locked';
 
 export interface LiveCard {
@@ -33,88 +32,94 @@ export interface LiveCard {
   empCode: string;
   fullName: string;
   designation: string | null;
-  /** ⭐ কাজের ধরন — কেবল এর উপরেই ডিজাইনের টার্গেট বসে (২১ আগস্ট) */
+  /** Kind of work; design targets apply only to this. */
   staffType: 'designer' | 'researcher' | 'manager' | null;
   /**
-   * আজ কতগুলো **নতুন** ডিজাইন। ⚠️ ডিজাইনার না হলে সবসময় ০ — সেটা
-   * "কাজ করেননি" নয়, "এই মাপটা তাঁর জন্য নয়"; পর্দা তাই ঘরটাই খালি রাখে।
-   * ⚠️ সারাংশ-রিফ্রেশে হালনাগাদ হয় (~১৫ মিনিট), ঘণ্টার মতো লাইভ নয়।
+   * How many new designs today. Careful: always 0 for non-designers. That does not
+   * mean "did no work", it means "this measure is not for them", so the screen
+   * leaves the cell empty. Updated on the summary refresh (~15 minutes), not live
+   * like the hours.
    */
-  /** ⭐ আজ কতগুলো ডিজাইন-ফাইল **খোলা** হয়েছে */
+  /** How many design files were opened today. */
   designsDone: number;
-  /** ⭐ আজ কতগুলো টার্গেট **শেষ** বলা হয়েছে (Complete বোতাম) */
+  /** How many targets were marked finished today (the Complete button). */
   designsFinished: number;
-  /** ⚠️ ০ মানে টার্গেট বন্ধ */
+  /** Careful: 0 means the target is switched off. */
   designTargetPerDay: number;
   status: LiveStatus;
-  /** ঢাকার আজকের দিনে গোনা সেকেন্ড */
+  /** Seconds counted for today in Dhaka. */
   todayWorkedSec: number;
 
   /**
-   * ⭐ এক কর্মদিবসের টার্গেট — লাইভ বোর্ডের রিং এখন **এটার** বিপরীতে
-   * (`todayWorkedSec / dailyTargetSec`), মাসের ২০৮ ঘণ্টার নয়।
+   * One workday's target. The live board ring is now measured against this
+   * (`todayWorkedSec / dailyTargetSec`), not against the monthly 208 hours.
    *
-   * ⚠️ ৮ ঘণ্টা কোনো ধ্রুবক **নয়**, বের করা সংখ্যা: মাসিক টার্গেট ÷ ওই
-   *    মাসের কর্মদিবস (`dashboard.service.ts` → `reports.range.ts`-এর
-   *    `dailyTargetSec`)। আগস্ট ২০২৬-এ ২০৮ ÷ ২৬ = ৮ ঘণ্টা, কিন্তু ২৭
-   *    কর্মদিবসের মাসে ৭ঘ ৪২মি। ক্লায়েন্টে ৮ হার্ডকোড করলে কোনো কোনো মাসে
-   *    টার্গেট নীরবে ভুল দেখাত — এই ভুলটাই মাসিক পাতায় ধরা পড়েছে
-   *    (২০৮ vs ২১৬)। **সংখ্যাটা সবসময় এই ফিল্ড থেকে নিন।**
+   * Careful: 8 hours is not a constant, it is a derived number: monthly target
+   * divided by the month's workdays (`dashboard.service.ts`, `dailyTargetSec` in
+   * `reports.range.ts`). In August 2026 that is 208 / 26 = 8 hours, but in a month
+   * with 27 workdays it is 7h 42m. Hard-coding 8 on the client would silently show
+   * the wrong target in some months; this exact mistake was caught on the monthly
+   * page (208 vs 216). Always take the number from this field.
    *
-   * ⚠️ কর্মীভেদে আলাদা: সাপ্তাহিক ছুটির বার ও মাসিক টার্গেট নীতিতে বাঁধা,
-   *    তাই বোর্ডের সবার জন্য একটাই সংখ্যা ধরে নেওয়া যাবে না।
+   * It differs per employee: the weekly day off and the monthly target are tied to
+   * the policy, so one number cannot be assumed for everyone on the board.
    */
   dailyTargetSec: number;
 
   /**
-   * আজ **এই কর্মীর** কর্মদিবস কি না — সাপ্তাহিক ছুটি ও সরকারি ছুটি দুটোই
-   * এখানে `false`।
+   * Whether today is a workday for this employee. Both the weekly day off and
+   * public holidays make it `false`.
    *
-   * ⚠️ ছুটির দিনে "0h / 8h" দেখানো অন্যায় — ওই দিনে তার কিছু করার কথাই
-   *    নয়। `false` হলে টার্গেটের বদলে "day off" লেখা হয় (`TeamRoster`)।
+   * Careful: showing "0h / 8h" on a day off is unfair, since they are not expected
+   * to do anything that day. When `false`, "day off" is shown instead of the target
+   * (`TeamRoster`).
    *
-   * ⚠️ কোনটা — সাপ্তাহিক ছুটি না সরকারি ছুটি — সেটা `/live` **বলে না**,
-   *    শুধু bool। তাই কার্ডে নিরপেক্ষ "Day off" লেখা হয়; একটা বেছে নিলে
-   *    অর্ধেক দিন ভুল শব্দ বসত।
+   * Careful: `/live` does not say which one it is (weekly day off or public
+   * holiday), only a bool. So the card shows a neutral "Day off"; picking one
+   * would use the wrong word half the time.
    *
-   * ⚠️ এটা ব্লক নয় — ছুটির দিনে কেউ কাজ করলে `todayWorkedSec` পুরোপুরি
-   *    গোনা হয় (§ ২.১-খ), তাই ঘণ্টাটা তখনো দেখানো হয়।
+   * Careful: this is not a block. If someone works on a day off, `todayWorkedSec`
+   * is counted in full (section 2.1-b), so the hours are still shown.
    */
   todayIsWorkday: boolean;
 
   /**
-   * ⭐⭐ **G130 (R2)** — আজ তিনি অনুমোদিত ছুটিতে কি না।
+   * G130: whether the employee is on approved leave today.
    *
-   * ⚠️⚠️ উপরের `todayIsWorkday` **অফিসের** ক্যালেন্ডার (শুক্রবার · সরকারি
-   * ছুটি), ব্যক্তিগত ছুটি ওতে নেই। তাই ছুটিতে থাকা কর্মীর কার্ডে ফুটত
-   * "0h / 8h" — দেখতে হুবহু ফাঁকি দেওয়া মানুষের মতো, অথচ সংখ্যাগুলো
-   * (টার্গেট, pace) তাঁকে অনেক আগেই ছাড় দিয়েছে।
+   * Careful: `todayIsWorkday` above reflects the office calendar (Friday, public
+   * holidays), not personal leave. So an employee on leave showed "0h / 8h" on the
+   * card, which looks exactly like someone slacking, while the numbers (target,
+   * pace) had excused them long ago.
    *
-   * ⚠️ পড়ার নিয়মটা `pages/live/roster.ts`-এর `dayDuty()`-তে, একটাই জায়গায়।
+   * The rule for reading this lives in one place: `dayDuty()` in
+   * `pages/live/roster.ts`.
    */
   onLeaveToday: boolean;
 
-  /** ⚠️ মাসের হিসাব এখন গৌণ (ছোট করে নিচে) — কিন্তু **বেতনের ভিত্তি এটাই** */
+  /**
+   * Careful: the monthly figure is now secondary (shown small below), but it is
+   * the basis of pay.
+   */
   monthWorkedSec: number;
   monthTargetSec: number;
   /**
-   * শেষ heartbeat, ISO instant। কোনো ডিভাইস কখনো সাড়া না দিলে `null`।
-   * ⚠️ সার্ভারে টাইপটা `Date`, কিন্তু JSON-এ এটা **স্ট্রিং** হয়ে আসে।
+   * Last heartbeat, ISO instant. `null` if no device has ever responded.
+   * Careful: the server type is `Date`, but in JSON it arrives as a string.
    */
   lastHeartbeatAt: string | null;
 
   /**
-   * ⭐ `lastHeartbeatAt === null` **কেন** — সেটার ব্যাখ্যা।
+   * Explains why `lastHeartbeatAt === null`.
    *
-   * ⚠️ এটা ছাড়া কার্ড "Never checked in" লিখত, অথচ কারণটা হতে পারত
-   * "ডিভাইসটা বন্ধ করে দেওয়া হয়েছে"। ফল ছিল একটা স্ববিরোধী কার্ড:
-   * উপরে ১৬:৫০-এর স্ক্রিনশট, নিচে "কখনো সাড়া দেয়নি"।
+   * Careful: without it the card said "Never checked in", when the real reason
+   * could be "the device has been deactivated". That produced a self-contradicting
+   * card: a 16:50 screenshot above, "never responded" below.
    */
   agentPresence: 'never_installed' | 'switched_off' | 'installed';
 }
 
 export interface LiveBoard {
-  /** ঢাকার আজকের কর্মদিবস, `YYYY-MM-DD` */
+  /** Today's workday in Dhaka, `YYYY-MM-DD`. */
   workDate: string;
   /** ISO instant */
   generatedAt: string;
@@ -122,14 +127,14 @@ export interface LiveBoard {
 }
 
 export interface TimelineSegment {
-  /** ⚠️ স্ট্রিং — সার্ভারে BigInt, JS number-এ ধরে না */
+  /** Careful: a string. The server uses BigInt, which a JS number cannot hold. */
   id: string;
   deviceId: number;
   state: SegmentState;
   /** ISO instant */
   startedAt: string;
   endedAt: string;
-  /** monotonic ঘড়ি থেকে — দেয়ালঘড়ির ব্যবধানের সমান নাও হতে পারে */
+  /** From a monotonic clock; may not equal the wall-clock interval. */
   durationSec: number;
 }
 
@@ -143,136 +148,140 @@ export interface Timeline {
   totals: { activeSec: number; idleSec: number; lockedSec: number };
 }
 
-/** E01 — সাত দিনের চার্টের একটা দিন (`GET /live/trend`) */
+/** E01: one day of the seven-day chart (`GET /live/trend`). */
 export interface TrendDay {
-  /** ঢাকার কর্মদিবস, `YYYY-MM-DD` */
+  /** Workday in Dhaka, `YYYY-MM-DD`. */
   date: string;
   workedSec: number;
   /**
-   * ⭐⭐ ওই দিন আমরা আদৌ দেখছিলাম কি না।
+   * Whether we were actually watching on that day.
    *
-   * ⚠️ `false` মানে "কেউ কাজ করেনি" **নয়** — মানে ট্র্যাকিংই শুরু হয়নি।
-   * চার্টে তাই ওই দিনগুলো ভরাট বার নয়, **ডটেড রূপরেখা**।
+   * Careful: `false` does not mean "nobody worked", it means tracking had not
+   * started. So the chart draws those days as dotted outlines, not filled bars.
    */
   tracked: boolean;
   /**
-   * ⭐⭐ **ওই দিনে কতগুলো ডিজাইন শেষ হয়েছে** *(৫ সেপ্টেম্বর ২০২৬)*।
+   * How many designs were finished on that day.
    *
-   * ⚠️ **"শেষ", "খোলা" নয়** — মালিকের বাছাই *(২৩ আগস্ট, ADR-037)*। ফাইল
-   * খোলার সংখ্যা মাঠে বিভ্রান্তি তৈরি করেছিল: ১৯টা ফাইলে ৪৪ মিনিট দিয়ে
-   * "১৬" দেখাত।
+   * Careful: "finished", not "opened" (the owner's choice, ADR-037). Counting
+   * opened files caused confusion in the field: 44 minutes across 19 files showed
+   * "16".
    */
   designsFinished: number;
 
-  /** কতজনের সত্যিই টার্গেট ছিল — শূন্য মানে সবারই ছুটি */
+  /** How many people really had a target; zero means everyone is on leave. */
   expectedStaff: number;
   targetSec: number;
 }
 
-/** E01 — চলতি মাসের কার্ড (`GET /live/trend`) */
+/** E01: the current month's card (`GET /live/trend`). */
 export interface TrendMonth {
   yearMonth: string;
   creditedSec: number;
   targetSec: number;
-  /** ⚠️ **ট্র্যাকিং শুরুর দিন থেকে** প্রত্যাশিত, মাসের ১ তারিখ থেকে নয় */
+  /** Careful: expected from the day tracking started, not from the 1st of the month. */
   expectedSec: number;
-  /** credited − expected · ধনাত্মক = এগিয়ে */
+  /** credited minus expected; positive = ahead. */
   paceSec: number;
   trackedFrom: string | null;
 
   /**
-   * ⭐⭐ **G111 — যোগফলটা কতজনের।**
+   * G111: how many people the total covers.
    *
-   * ⚠️⚠️ যাঁর একটাও শেষ-হওয়া কর্মদিবস দেখা হয়নি, তাঁর `expected_sec` ০,
-   * তাই তাঁর **পুরো টার্গেটটাই** উপরের যোগফল থেকে নীরবে বাদ — অর্থাৎ দল
-   * যত পিছিয়ে বোর্ড তার চেয়ে **কম** দেখায়। সংখ্যাটা বাদ দেওয়া হয়নি,
-   * **বলা** হয়েছে: কার্ডে পাশে লেখা থাকে কতজন এর বাইরে।
+   * Careful: anyone with no finished workday observed yet has `expected_sec` 0, so
+   * their whole target is silently left out of the total above. The board therefore
+   * shows the team as less behind than it is. The number is not hidden, it is
+   * stated: the card says beside it how many people are outside it.
    */
   observedStaff: number;
-  /** ⚠️ ০ হলে পর্দায় কিছুই লেখা হয় না — নইলে রোজ একটা অর্থহীন লাইন */
+  /**
+   * Careful: when 0, nothing is written on screen; otherwise there would be a
+   * meaningless line every day.
+   */
   notObservedStaff: number;
 }
 
-/** E01 — **আজীবন** সবচেয়ে বেশি ঘণ্টা যাঁদের */
+/** E01: the people with the most hours of all time. */
 export interface TrendLeader {
   employeeId: number;
   fullName: string;
-  /** ⭐ সব মাস মিলিয়ে — চলতি মাসের নয় */
+  /** Across all months, not just the current one. */
   creditedSec: number;
 }
 
 /**
- * ⭐ **সবচেয়ে কম ঘণ্টা** — নামের সাথে **কত দিনে** সেটাও আসে।
+ * Fewest hours: each name comes with the number of days it covers.
  *
- * ⚠️⚠️ `daysCounted` ছাড়া সংখ্যাটা মিথ্যা বলত: "৪ ঘণ্টা" পড়ে যে কেউ ধরে
- * নিতেন লোকটা কাজ করেননি, অথচ তিনি হয়তো ছুটিতে ছিলেন।
+ * Careful: without `daysCounted` the number would lie. Anyone reading "4 hours"
+ * would assume the person did not work, when they may have been on leave.
  */
 export interface TrendLaggard {
   employeeId: number;
   fullName: string;
   creditedSec: number;
-  /** কত দিনে কিছু গোনা হয়েছে — জানালার ভেতরে */
+  /** Number of days with anything counted, inside the window. */
   daysCounted: number;
 }
 
 export interface TeamTrend {
-  /** সবসময় ৭টা, আজ সহ — পুরোনো আগে */
+  /** Always 7, including today; oldest first. */
   days: TrendDay[];
   month: TrendMonth;
   /**
-   * ⭐ সর্বোচ্চ পাঁচজন, **আজীবন** বেশি ঘণ্টা উপরে।
+   * Top five, most all-time hours first.
    *
-   * ⚠️ যিনি আগে যোগ দিয়েছেন তিনি স্থায়ীভাবে উপরে থাকেন — নতুন কেউ
-   *    ধরতে পারেন না। কার্ডে প্রতিটা নামের পাশে আসল ঘণ্টাটা লেখা থাকে,
-   *    যাতে ক্রমটা কীসের উপর দাঁড়ানো সেটা পর্দাতেই দেখা যায়।
+   * Careful: whoever joined earlier stays on top permanently and newcomers cannot
+   * catch up. Each name on the card shows the real hours, so the screen itself
+   * shows what the order is based on.
    */
   leaders: TrendLeader[];
   /**
-   * ⭐⭐ শেষ ৩০ দিনের ক্রম — কার্ডে **এটাই ডিফল্ট**।
+   * Ranking for the last 30 days; this is the card's default.
    *
-   * ⚠️ আজীবনের তালিকায় যিনি আগে যোগ দিয়েছেন তিনি স্থায়ীভাবে উপরে থাকেন
-   *    (ঘণ্টা জমে, কমে না), তাই ওটা "কে ভালো করছে"-র বদলে "কে বেশিদিন
-   *    আছে" বলে। ৩০ দিনের জানালা সবাইকে একই মাপে আনে।
+   * Careful: in the all-time list, whoever joined earlier stays on top for good
+   * (hours accumulate, never fall), so it says "who has been here longest" rather
+   * than "who is doing well". The 30-day window puts everyone on the same scale.
    */
   leaders30: TrendLeader[];
   /**
-   * ⭐⭐ **সবচেয়ে কম ঘণ্টা যাঁদের** *(৩০ আগস্ট ২০২৬)* — নিচ থেকে পাঁচজন।
+   * Fewest hours: the bottom five.
    *
-   * ⚠️ শূন্য ঘণ্টার কর্মীও থাকেন, আর সেটাই সবচেয়ে জরুরি সারি — তাই
-   * `leaders`-এর `creditedSec > 0` ছাঁকনিটা এখানে নেই।
+   * Careful: staff with zero hours are included, and they are the most important
+   * row, so the `creditedSec > 0` filter that `leaders` uses is absent here.
    */
   laggards: TrendLaggard[];
-  /** ⭐ উপরের তালিকা কত দিনের জানালায় — লেখাটা সার্ভারের সংখ্যা ধরেই বসে */
+  /** The window, in days, that the list above covers; the text relies on the server's number. */
   laggardDays: number;
 }
 
-/** E01 — দলের দিনের ছন্দের এক ঘণ্টা (`GET /live/pulse`) */
+/** E01: one hour of the team's day rhythm (`GET /live/pulse`). */
 export interface TeamHour {
-  /** ঢাকার স্থানীয় ঘণ্টা, ০–২৩ */
+  /** Local hour in Dhaka, 0-23. */
   hour: number;
-  /** ওই ঘণ্টায় দলের মোট গোনা সেকেন্ড */
+  /** The team's total counted seconds in that hour. */
   activeSec: number;
   /**
-   * ওই ঘণ্টায় কতজন কিছু না কিছু কাজ করেছেন।
+   * How many people did any work at all in that hour.
    *
-   * ⚠️ চার্টে **আঁকা হয় না** — একই অক্ষে দুটো মাপ বসালে সেটা dual-axis
-   * হয়ে যেত, আর ওটা চার্টের সবচেয়ে চেনা মিথ্যা। সংখ্যাটা hover-এ থাকে,
-   * কারণ "৬ ঘণ্টা" মানে ছ-জন এক ঘণ্টা না একজন ছ-ঘণ্টা — সেটা আলাদা গল্প।
+   * Careful: not drawn on the chart. Putting two measures on one axis would make it
+   * a dual-axis chart, which is the best-known lie in charting. The number is in
+   * the hover, because "6 hours" could be six people for an hour or one person for
+   * six hours, which are different stories.
    */
   people: number;
 }
 
 export interface TeamPulse {
-  /** ঢাকার কর্মদিবস, `YYYY-MM-DD` */
+  /** Workday in Dhaka, `YYYY-MM-DD`. */
   date: string;
-  /** ⭐ সবসময় ২৪টা — খালি ঘণ্টাও শূন্য নিয়ে থাকে */
+  /** Always 24 entries; empty hours are present with zero. */
   hours: TeamHour[];
   totalActiveSec: number;
   peakPeople: number;
 }
 
 export interface HourlyBucket {
-  /** ঢাকার স্থানীয় ঘণ্টা, ০–২৩ */
+  /** Local hour in Dhaka, 0-23. */
   hour: number;
   activeSec: number;
 }
@@ -280,52 +289,53 @@ export interface HourlyBucket {
 export interface HourlyChart {
   employeeId: number;
   date: string;
-  /** ⭐ সবসময় ২৪টা — খালি ঘণ্টাও `activeSec: 0` নিয়ে থাকে */
+  /** Always 24 entries; empty hours carry `activeSec: 0`. */
   buckets: HourlyBucket[];
   totalActiveSec: number;
 }
 
 /**
- * E01/E02 — `GET /api/v1/live`
+ * E01/E02: `GET /api/v1/live`
  *
- * ⭐ `usePolling(getLiveBoard, 30_000, [])` — ৩০ সেকেন্ডে রিফ্রেশ।
+ * `usePolling(getLiveBoard, 30_000, [])` refreshes every 30 seconds.
  *
- * ⚠️ `todayWorkedSec`/`monthWorkedSec` **যোগফল**, UNION নয় — কেউ একইসাথে
- *    দুই PC চালালে ওই সময়টা দুবার গোনা হয়। ইচ্ছাকৃত (এজেন্টের tray-তেও
- *    একই সংখ্যা দেখানো হয়), আর ১৫ মিনিটের বেশি overlap-এ `device_overlap`
- *    অ্যালার্ট ওঠে। এই endpoint-এ কোনো `caveat` ফিল্ড আসে না।
+ * Careful: `todayWorkedSec` and `monthWorkedSec` are sums, not a UNION. If someone
+ * runs two PCs at once, that time counts twice. This is intentional (the agent's
+ * tray shows the same number), and an overlap over 15 minutes raises a
+ * `device_overlap` alert. This endpoint returns no `caveat` field.
  */
 export function getLiveBoard(signal?: AbortSignal): Promise<LiveBoard> {
   return api<LiveBoard>('/live', { signal });
 }
 
 /**
- * E01 — `GET /api/v1/live/pulse` · দলের দিনের ছন্দ, ২৪টা ঘণ্টা।
+ * E01: `GET /api/v1/live/pulse`, the team's day rhythm, 24 hours.
  *
- * ⚠️ বোর্ডের সাথে **এক তালে রিফ্রেশ হয় না** (`/live` ৩০ সেকেন্ড, এটা
- *    ধীরে) — এক ঘণ্টার বালতি ৩০ সেকেন্ডে একবার আনা মানে একই উত্তর
- *    ১২০ বার আনা।
+ * Careful: it does not refresh in step with the board (`/live` every 30 seconds,
+ * this one slower). Fetching an hourly bucket every 30 seconds would mean
+ * fetching the same answer 120 times.
  */
 export function getTeamPulse(signal?: AbortSignal): Promise<TeamPulse> {
   return api<TeamPulse>('/live/pulse', { signal });
 }
 
 /**
- * E01 — `GET /api/v1/live/trend` · সাত দিন ও চলতি মাস।
+ * E01: `GET /api/v1/live/trend`, seven days and the current month.
  *
- * ⚠️ `pulse`-এর মতোই ধীরে ডাকা হয় — দিনের যোগফল ও মাসের rollup দুটোই
- *    ১৫ মিনিটের জবে তৈরি হয় (K06), তাই ৩০ সেকেন্ডে ডাকা নিরর্থক।
+ * Careful: called slowly, like `pulse`. Both the daily totals and the monthly
+ * rollup are built by the 15-minute job (K06), so calling every 30 seconds is
+ * pointless.
  */
 export function getTeamTrend(signal?: AbortSignal): Promise<TeamTrend> {
   return api<TeamTrend>('/live/trend', { signal });
 }
 
 /**
- * E04 — `GET /api/v1/employees/:id/timeline?date=YYYY-MM-DD`
+ * E04: `GET /api/v1/employees/:id/timeline?date=YYYY-MM-DD`
  *
- * ⚠️ `date` না দিলে সার্ভার ঢাকার আজকের দিন ধরে। কিন্তু পেজে তারিখ
- *    বাছাই থাকলে `todayInDhaka()` দিয়ে স্পষ্ট করে পাঠানোই ভালো — নইলে
- *    ব্যবহারকারীর বাছা তারিখ আর দেখানো ডেটা আলাদা হয়ে যেতে পারে।
+ * Careful: if `date` is omitted, the server uses today in Dhaka. But when the page
+ * has a date picker, send it explicitly with `todayInDhaka()`; otherwise the date
+ * the user picked and the data shown can drift apart.
  */
 export function getTimeline(
   employeeId: number,

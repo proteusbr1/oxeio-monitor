@@ -2,28 +2,28 @@ import { api } from './client';
 import { qs } from './query';
 
 /**
- * D06–D09 — ক্যাটাগরির নিয়ম, দৈনিক productivity স্কোর, টপ অ্যাপ/সাইট,
- * টিম-ভিত্তিক সাইট সারাংশ।
+ * D06–D09 — category rules, the daily productivity score, top apps/sites,
+ * the team-wide site summary.
  *
- * সার্ভারের উৎস: `server/src/activity/` (activity.controller.ts ·
- * activity.service.ts · activity.math.ts · category.controller.ts)।
+ * Server source: `server/src/activity/` (activity.controller.ts ·
+ * activity.service.ts · activity.math.ts · category.controller.ts).
  *
- * ⚠️ `/activity/*` — owner + manager। `/categories/*` — **owner-only**
- *    (নিয়ম বদলানো মানে সবার রিপোর্টের সংখ্যা বদলে দেওয়া)।
+ * Careful: `/activity/*` is owner + manager. `/categories/*` is **owner-only**
+ *    (changing a rule changes everyone's report numbers).
  *
- * ⚠️ **এখানকার কোনো সংখ্যা বেতনের হিসাবে ঢোকে না।** কেউ সারাদিন
- *    "unproductive" থাকলেও তার ঘণ্টা অক্ষত (docs/09 § ৪)।
+ * **No number here feeds into pay.** Someone who is "unproductive" all day
+ *    keeps all their hours (docs/09 section 4).
  */
 
 export type Productivity = 'productive' | 'neutral' | 'unproductive';
 export type MatchType = 'process' | 'domain' | 'title_regex';
 
 /**
- * সেকেন্ডের চারটে ঝুড়ি।
+ * Four buckets of seconds.
  *
- * ⭐ `unknownSec` আলাদা ঝুড়ি, `neutralSec`-এর অংশ নয়। "জানি না" আর
- * "জানি, এবং নিরপেক্ষ" এক নয় — মিলিয়ে ফেললে অচেনা প্রতিটা অ্যাপ নীরবে
- * স্কোরের হর বাড়িয়ে দিত।
+ * `unknownSec` is its own bucket, not part of `neutralSec`. "Unknown" and
+ * "known, and neutral" are different — merging them would silently inflate the
+ * score's denominator with every unrecognised app.
  */
 export interface SecondBuckets {
   productiveSec: number;
@@ -33,19 +33,19 @@ export interface SecondBuckets {
 }
 
 export interface ProductivityScore extends SecondBuckets {
-  /** productive + neutral + unproductive — স্কোরের **হর** */
+  /** productive + neutral + unproductive — the score's **denominator** */
   categorizedSec: number;
   /** categorized + unknown */
   totalSec: number;
   /**
-   * ⭐⚠️ **হর শূন্য হলে `null`, শূন্য নয়।** `0%` লিখলে "কিছুই productive
-   * করেনি" বোঝাত, অথচ সত্যিটা "বলার মতো তথ্যই নেই"। `formatPct()` এটা
-   * সামলায় — নিজে `?? 0` লিখবেন না।
+   * **`null` when the denominator is zero, not zero.** Writing `0%` would
+   * mean "was not productive at all", while the truth is "there is no data to
+   * speak of". `formatPct()` handles this — do not write `?? 0` yourself.
    */
   scorePct: number | null;
   /**
-   * ⭐ মোট সময়ের কত শতাংশ অচেনা। স্কোরের পাশে এটা **সবসময়** দেখাতে হবে —
-   * ৯০% সময় অচেনা হলে ১০০% স্কোরও অর্থহীন।
+   * What percentage of total time is unrecognised. Always show it **next to
+   * the score** — if 90% of the time is unknown, even a 100% score means nothing.
    */
   unknownPct: number;
 }
@@ -60,53 +60,53 @@ export interface EmployeeProductivity {
   empCode: string;
   fullName: string;
   /**
-   * ⚠️ যেসব দিনে একটাও সারি নেই সেই দিন **তালিকায় থাকে না** — শূন্য সারি
-   *    বানানো হয় না। ফাঁকা দিন ছুটি না অনুপস্থিতি, সেটা এখান থেকে বোঝা যায় না।
+   * Days with no rows at all are **left out of the list** — no zero rows are
+   *    created. From here you cannot tell whether a gap is leave or absence.
    */
   days: DailyScore[];
   total: ProductivityScore;
 }
 
 /**
- * D07। ⚠️ `reports.ts`-এর `ProductivityReport` (F04) **আলাদা জিনিস** —
- * ওটা অ্যাপ/সাইট ভিত্তিক ছাপার রিপোর্ট, এটা দিনে-দিনে স্কোর।
+ * D07. `ProductivityReport` (F04) in `reports.ts` is a **different thing**:
+ * that is the printed app/site-based report; this is the day-by-day score.
  */
 export interface DailyProductivityReport {
   from: string;
   to: string;
-  /** ⭐ যাদের একটাও সারি নেই তারাও থাকেন — নইলে "এজেন্ট বন্ধ" আর "সব ঠিক" একরকম দেখাত */
+  /** People with no rows at all are included too — otherwise "agent off" and "all fine" would look alike */
   employees: EmployeeProductivity[];
-  /** ⚠️ নিচের OVERLAP_CAVEAT — পেজে দেখাতে হবে */
+  /** See OVERLAP_CAVEAT below — the page must show it */
   caveat: string;
 }
 
 export interface UsageTally {
-  /** স্বাভাবিক করা কী (ছোট হাতের, সাইটে `www.` ছাড়া) */
+  /** The normalised key (lower case; for sites without `www.`) */
   key: string;
-  /** দেখানোর নাম — নিশ্চিত হলে রুলের নাম, নইলে কী-টাই */
+  /** Display name — the rule's name when it is certain, otherwise the key itself */
   label: string;
   seconds: number;
-  /** দুই দশমিক ঘণ্টা, স্ট্রিং — `formatHoursAsDuration()` দিয়ে দেখান */
+  /** Hours with two decimals, as a string — show it with `formatHoursAsDuration()` */
   hours: string;
   records: number;
   buckets: SecondBuckets;
-  /** সবচেয়ে বড় **জানা** ঝুড়ি; কিছু জানা না থাকলে `null` */
+  /** The largest **known** bucket; `null` when nothing is known */
   category: Productivity | null;
   /**
-   * ⚠️ একাধিক জানা ক্যাটাগরি মিশে আছে। `chrome.exe`-এর ভেতরে youtube আর
-   * github দুটোই — একটামাত্র ক্যাটাগরি দেখানো তখন মিথ্যে হতো।
+   * Several known categories are mixed together. `chrome.exe` contains both
+   * youtube and github — showing a single category would then be false.
    */
   mixed: boolean;
-  /** **সব** কী-র মোট সময়ের শতাংশ (টপ-১০-এর যোগফলের নয়) */
+  /** Share of the total time of **all** keys (not of the top-10 sum) */
   sharePct: number;
 }
 
 export interface UsageReport {
   rows: UsageTally[];
-  /** রেঞ্জের **সব** কী মিলিয়ে মোট */
+  /** Total over **all** keys in the range */
   totalSec: number;
   distinctKeys: number;
-  /** ⭐ টপ তালিকার বাইরে পড়ে যাওয়া সময় — এটা না দেখালে "টপ ১০"-ই যেন সব */
+  /** Time that fell outside the top list — without showing it, "top 10" would look like everything */
   otherSec: number;
 }
 
@@ -116,7 +116,7 @@ export interface TopReport {
   employeeId: number | null;
   apps: UsageReport;
   sites: UsageReport;
-  /** ⚠️ অ্যাপ ও সাইটের সময় **যোগ করা যাবে না** — একই সময়ের দুই রকম কাটাছেঁড়া */
+  /** App time and site time **cannot be added** — two different cuts of the same time */
   caveat: string;
 }
 
@@ -127,7 +127,7 @@ export interface TeamSiteRow {
   mixed: boolean;
   totalSec: number;
   hours: string;
-  /** ⭐ কতজন কর্মী — `employees === 1` হলে এটা টিমের অভ্যাস নয়, একজনের */
+  /** How many employees — if `employees === 1`, this is one person's habit, not the team's */
   employees: number;
   topEmployeeId: number | null;
   topEmployeeSec: number;
@@ -146,16 +146,16 @@ export interface TeamReport {
 }
 
 export interface RangeQuery {
-  /** না দিলে চলতি মাসের ১ তারিখ */
+  /** Defaults to the 1st of the current month */
   from?: string;
-  /** না দিলে ঢাকার আজকের তারিখ */
+  /** Defaults to today's date in Dhaka */
   to?: string;
 }
 
 /**
  * D07 — `GET /api/v1/activity/productivity?employeeId=&from=&to=`
  *
- * `employeeId` না দিলে সব active কর্মী।
+ * Without `employeeId`, all active employees.
  */
 export function getDailyProductivity(
   query: RangeQuery & { employeeId?: number } = {},
@@ -168,7 +168,7 @@ export function getDailyProductivity(
 
 /**
  * D08 — `GET /api/v1/activity/top?employeeId=&from=&to=&limit=`
- * ⚠️ `limit` সর্বোচ্চ ৫০, ডিফল্ট ১০।
+ * Careful: `limit` is at most 50, default 10.
  */
 export function getTopUsage(
   query: RangeQuery & { employeeId?: number; limit?: number } = {},
@@ -178,7 +178,7 @@ export function getTopUsage(
 }
 
 
-// ── D06 · ক্যাটাগরির নিয়ম (owner-only) ──────────────────────────────────────
+// ── D06 · Category rules (owner-only) ────────────────────────────────────────
 
 export interface CategoryRuleView {
   id: number;
@@ -186,13 +186,13 @@ export interface CategoryRuleView {
   pattern: string;
   displayName: string;
   category: Productivity;
-  /** ⚠️ **ছোট সংখ্যা আগে জেতে** — ব্রাউজারের রুল ২০০, বাকিদের ১০০ */
+  /** **The smaller number wins** — the browser's rule is 200, the rest 100 */
   priority: number;
 }
 
 export interface CategoryDeleteResult {
   deleted: CategoryRuleView;
-  /** ⚠️ কত সারি এই মোছার ফলে "অচেনা" হয়ে গেল — পর্দায় দেখানো দরকার */
+  /** How many rows became "unknown" because of this delete — the screen should show it */
   orphanedRows: number;
   hint: string;
 }
@@ -205,7 +205,7 @@ export function listCategories(
 
 export interface CreateCategoryBody {
   matchType: MatchType;
-  /** `code.exe` · `youtube.com` · regex। ⚠️ ডোমেইনে ফুল URL দিলে ৪০০ */
+  /** `code.exe` · `youtube.com` · regex. A full URL in a domain gives a 400 */
   pattern: string;
   displayName: string;
   category: Productivity;
@@ -230,11 +230,11 @@ export function deleteCategory(id: number): Promise<CategoryDeleteResult> {
 }
 
 /**
- * পুরোনো সারিগুলোতে নিয়ম আবার বসানো।
+ * Re-apply the rules to old rows.
  *
- * ⚠️ নিয়ম **যোগ** করার পর `onlyUnmatched: true` যথেষ্ট (অনেক দ্রুত)।
- *    নিয়ম **বদলানো বা মোছার** পর `false` লাগে, নইলে পুরোনো সিদ্ধান্ত
- *    বসানো সারিগুলো পুরোনোই থেকে যেত।
+ * After **adding** a rule, `onlyUnmatched: true` is enough (much faster).
+ * After **changing or deleting** a rule, use `false`, otherwise rows that were
+ *    already assigned would keep their old decision.
  */
 export function recategorize(
   onlyUnmatched = true,

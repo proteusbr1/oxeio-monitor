@@ -6,9 +6,9 @@ public class WatchdogPolicyTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 8, 10, 9, 0, 0, TimeSpan.Zero);
 
-    private const long Now = 3_600_000;   // বুট থেকে ১ ঘণ্টা, unbiased ms
+    private const long Now = 3_600_000;   // 1 hour since boot, unbiased ms
 
-    /// <summary>সুস্থ এজেন্ট — lock ধরা, হার্টবিট ৫ সেকেন্ড পুরোনো।</summary>
+    /// <summary>A healthy agent: lock held, heartbeat 5 seconds old.</summary>
     private static AgentObservation Healthy => new()
     {
         ProbeSucceeded = true,
@@ -21,7 +21,7 @@ public class WatchdogPolicyTests
         ShuttingDown = false,
     };
 
-    // ── স্বাভাবিক পথ ────────────────────────────────────────────────────────
+    // ── the normal path ─────────────────────────────────────────────────────
 
     [Fact]
     public void সুস্থ_থাকলে_কিছুই_করা_হয়_না()
@@ -45,8 +45,8 @@ public class WatchdogPolicyTests
     }
 
     /// <summary>
-    /// ⭐ এই মডিউলের আসল কারণ: প্রসেসটা বেঁচে আছে, তবু কাজ করছে না।
-    /// শুধু "প্রসেস আছে কি না" দেখা watchdog এই ব্যর্থতাটা কোনোদিন ধরত না।
+    /// The real reason for this module: the process is alive yet not working. A
+    /// watchdog that only checks "does the process exist" would never catch this failure.
     /// </summary>
     [Fact]
     public void হার্টবিট_বাসি_হলে_মেরে_আবার_চালু_করা_হয়()
@@ -82,9 +82,9 @@ public class WatchdogPolicyTests
     }
 
     /// <summary>
-    /// রিবুটের পর হার্টবিট ফাইল ডিস্কে থেকে যায় কিন্তু unbiased কাউন্টার শূন্য
-    /// থেকে শুরু হয়। "ভবিষ্যতের" টাইমস্ট্যাম্পকে তাজা ধরলে watchdog মৃত এজেন্টকে
-    /// সুস্থ ভেবে বসে থাকত।
+    /// After a reboot the heartbeat file stays on disk but the unbiased counter starts
+    /// from zero. If a "future" timestamp were treated as fresh, the watchdog would sit
+    /// there thinking a dead agent was healthy.
     /// </summary>
     [Fact]
     public void আগের_বুটের_হার্টবিট_তাজা_ধরা_হয়_না()
@@ -94,11 +94,12 @@ public class WatchdogPolicyTests
         Assert.Equal(AgentHealth.Wedged, WatchdogPolicy.Classify(obs, AgentLiveness.StaleAfter));
     }
 
-    // ── যেখানে হাত দেওয়াই ভুল ───────────────────────────────────────────────
+    // ── where touching anything is wrong ────────────────────────────────────
 
     /// <summary>
-    /// ⚠️ probe ব্যর্থ মানে "lock খালি" নয়। খালি ধরে নিলে দ্বিতীয় এজেন্ট চালু হতো
-    /// আর দুজন মিলে একই ঘণ্টা দুবার গুনত — পে-রোল নষ্ট, কেউ টেরও পেত না।
+    /// Careful: a failed probe does not mean "lock free". If it were treated as free, a
+    /// second agent would start and the two would count the same hour twice: payroll
+    /// ruined, and nobody would notice.
     /// </summary>
     [Fact]
     public void probe_ব্যর্থ_হলে_কখনোই_চালু_করা_হয়_না()
@@ -112,9 +113,9 @@ public class WatchdogPolicyTests
     }
 
     /// <summary>
-    /// ⚠️ Session 0 থেকে চালু করলে সন্তানও Session 0-তে যায়, আর সেখানে এজেন্টের
-    /// SessionGuard তাকে সাথে সাথে বন্ধ করে দেয় — নিশ্চিত-ব্যর্থ প্রসেসের অন্তহীন
-    /// ঝড়, ১৫টা PC-তে একসাথে।
+    /// Careful: a child started from Session 0 also lands in Session 0, where the
+    /// agent's SessionGuard shuts it down immediately: an endless storm of certain-to-fail
+    /// processes, on 15 PCs at once.
     /// </summary>
     [Fact]
     public void সেশন_শূন্যে_চালু_করা_হয়_না()
@@ -138,7 +139,9 @@ public class WatchdogPolicyTests
         Assert.Equal(WatchdogReason.ShuttingDown, d.Reason);
     }
 
-    /// <summary>শাটডাউনে এজেন্ট মরাটা ব্যর্থতা নয় — মইয়ের একটা ধাপ নষ্ট হওয়া চলবে না।</summary>
+    /// <summary>
+    /// The agent dying at shutdown is not a failure; it must not waste a ladder step.
+    /// </summary>
     [Fact]
     public void শাটডাউনে_স্থিরতার_হিসাব_নষ্ট_হয়_না()
     {
@@ -153,9 +156,9 @@ public class WatchdogPolicyTests
     }
 
     /// <summary>
-    /// lock ধরা আছে কিন্তু pid জানা নেই — অন্য সেশনের এজেন্ট, বা AV/ব্যাকআপ
-    /// ফাইলটা ধরে রেখেছে। ভুল করে অপেক্ষা করার খরচ ৩০ সেকেন্ড; ভুল করে দ্বিতীয়টা
-    /// চালু করার খরচ দুবার গোনা ঘণ্টা।
+    /// The lock is held but the pid is unknown: an agent in another session, or AV/backup
+    /// holding the file. Waiting by mistake costs 30 seconds; starting a second one by
+    /// mistake costs an hour counted twice.
     /// </summary>
     [Fact]
     public void অচেনা_কেউ_লক_ধরে_থাকলে_মারাও_হয়_না_চালুও_হয়_না()
@@ -169,7 +172,7 @@ public class WatchdogPolicyTests
         Assert.Equal(WatchdogReason.ForeignInstance, d.Reason);
     }
 
-    // ── ঝড় ঠেকানো ───────────────────────────────────────────────────────────
+    // ── preventing the storm ────────────────────────────────────────────────
 
     [Fact]
     public void চালু_করার_পরপরই_আবার_চালু_করা_হয়_না()
@@ -188,8 +191,9 @@ public class WatchdogPolicyTests
     }
 
     /// <summary>
-    /// ⭐ startup-এ ক্র্যাশ করা এজেন্ট: সরল watchdog এখানে সেকেন্ডে দুবার প্রসেস
-    /// বানাতে থাকত। এই টেস্ট বলে — পাঁচবারের পর সেটা থামে আর দৃশ্যমান সংকেত ওঠে।
+    /// An agent that crashes at startup: a naive watchdog would spawn a process twice a
+    /// second here. This test says that after five attempts it stops and a visible signal is
+    /// raised.
     /// </summary>
     [Fact]
     public void বারবার_ব্যর্থ_হলে_একবারই_অ্যালার্ম_ওঠে()
@@ -212,14 +216,16 @@ public class WatchdogPolicyTests
 
         ladder.MarkAlarmRaised();
 
-        // ⚠️ দ্বিতীয়বার আর অ্যালার্ম নয় — নইলে প্রতি ৩০ সেকেন্ডে লগ ভরে যেত
-        //    আর গুরুত্বপূর্ণ লাইনগুলো rotate হয়ে হারিয়ে যেত।
+        // Careful: no alarm the second time; otherwise the log would fill every 30
+        // seconds and the important lines would rotate away.
         var after = WatchdogPolicy.Decide(missing, ladder, now);
         Assert.Equal(WatchdogAction.Hold, after.Action);
         Assert.Equal(WatchdogReason.CoolOffPending, after.Reason);
     }
 
-    /// <summary>হাল ছাড়া মানে চিরতরে থামা নয় — ৬ ঘণ্টা পর ঠিক একবার চেষ্টা।</summary>
+    /// <summary>
+    /// Giving up does not mean stopping for good: exactly one attempt after 6 hours.
+    /// </summary>
     [Fact]
     public void ঠান্ডা_হওয়ার_পর_একবার_চেষ্টা_হয়()
     {

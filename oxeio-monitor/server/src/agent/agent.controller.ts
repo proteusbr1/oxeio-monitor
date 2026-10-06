@@ -59,10 +59,10 @@ type AgentCommand =
   | 'revoke';
 
 /**
- * এজেন্টের সব endpoint।
+ * All agent endpoints.
  *
- * ক্লাস-লেভেলে `@Public()` — কারণ এগুলো ড্যাশবোর্ডের JWT/CSRF দিয়ে নয়,
- * **device token** দিয়ে সুরক্ষিত (`DeviceAuthGuard`)। দুটো আলাদা জগৎ।
+ * `@Public()` at class level, because these are protected by the **device
+ * token** (`DeviceAuthGuard`), not the dashboard's JWT/CSRF. Two separate worlds.
  */
 @Public()
 @Controller('agent')
@@ -79,7 +79,7 @@ export class AgentController {
     private readonly capabilities: CapabilityHealthService,
   ) {}
 
-  /** ইনস্টলের সময় একবার — এখানে টোকেন নেই, enrollment code-ই পরিচয় (H05) */
+  /** Once, at install time. No token yet; the enrollment code is the identity (H05). */
   @Post('enroll')
   @HttpCode(HttpStatus.CREATED)
   enroll(@Body() dto: EnrollDto): Promise<EnrollResult> {
@@ -87,18 +87,19 @@ export class AgentController {
   }
 
   /**
-   * ⭐⭐ **স্টাফ নিজের ইমেইল-পাসওয়ার্ড দিয়ে নিজের PC যোগ করে।**
+   * **Staff add their own PC using their own email and password.**
    *
-   * ⚠️ এটাই এখন সাধারণ পথ; কোডেরটা (`/enroll`) থাকে স্ক্রিপ্টেড
-   * রোলআউটের জন্য। কেন — `EnrollmentService.enrollWithLogin()` দেখুন।
+   * This is now the normal path; the code-based one (`/enroll`) remains for
+   * scripted rollouts. For why, see `EnrollmentService.enrollWithLogin()`.
    *
-   * ⚠️⚠️ `@Ip()` **দিতেই হবে**, আর সেটা নিছক লগের জন্য নয়:
-   * `AuthService.login()` ওই IP ধরেই brute-force throttle করে। খালি
-   * স্ট্রিং পাঠালে সব চেষ্টা একই বালতিতে পড়ত — অর্থাৎ একটা ভুল
-   * পাসওয়ার্ড দিলে **গোটা অফিসের** enrollment আটকে যেত।
+   * Careful: `@Ip()` **is required**, and not just for logging:
+   * `AuthService.login()` throttles brute-force attempts by that IP. Passing an
+   * empty string would put all attempts in one bucket, so one wrong password
+   * would block enrollment for **the whole office**.
    *
-   * ⚠️ ২০০ ফেরে, ২০১ নয়। উত্তরটা দু-রকম হতে পারে (ডিভাইস তৈরি হলো, নাকি
-   * 2FA কোড চাই) — "তৈরি হয়েছে" বলাটা তখন অর্ধেক ক্ষেত্রে মিথ্যা হতো।
+   * Careful: it returns 200, not 201. The answer can be one of two things (a
+   * device was created, or a 2FA code is needed), and saying "created" would be
+   * false half the time.
    */
   @Post('enroll-login')
   @HttpCode(HttpStatus.OK)
@@ -137,12 +138,13 @@ export class AgentController {
       commands.push('reload_config');
     }
 
-    // ⭐ এজেন্ট যে ভার্সন বলছে সেটাই সত্য — ডাটাবেসেরটা নয়।
+    // The version the agent reports is the truth, not the database's.
     //
-    // ⚠️ ক্রমটা গুরুত্বপূর্ণ: **আগে** হালনাগাদ, **তারপর** আপডেট অফারের
-    //    সিদ্ধান্ত। উল্টো করলে সদ্য আপডেট হওয়া এজেন্টকেও পুরোনো ভার্সন
-    //    ধরে আরেকবার একই আপডেট অফার করা হতো — আর সে আপডেট করে আবার
-    //    heartbeat পাঠাত, অর্থাৎ অসীম লুপ ([G59](../../../docs/08-Gap-Analysis.md))।
+    // Careful, the order matters: update the record **first**, **then** decide on
+    // an update offer. Reversed, an agent that has just updated would be treated
+    // as still on the old version and offered the same update again; it would
+    // update and send another heartbeat, an infinite loop
+    // ([G59](../../../docs/08-Gap-Analysis.md)).
     const runningVersion = dto.agentVersion?.trim() || device.agentVersion;
 
     await this.recordHeartbeatState(device, dto.state, runningVersion);
@@ -157,10 +159,11 @@ export class AgentController {
       if (offer) commands.push('update_agent');
     }
 
-    // ⏳ capture_now / pause_tracking-এর জন্য একটা কমান্ড-কিউ টেবিল লাগবে —
-    //    ড্যাশবোর্ড থেকে চাপা বাটনটা কোথাও জমা থাকতে হয় (A09, Phase 6)।
-    // ⭐ এজেন্ট নিজে মাসের হিসাব জানে না — রিবুটের পর তার কাউন্টার শূন্য।
-    //    tray-তে সত্যি সংখ্যা দেখাতে হলে সেটা এখান থেকেই যেতে হবে।
+    // TODO: capture_now / pause_tracking need a command-queue table; a button
+    //    pressed on the dashboard has to be stored somewhere (A09, Phase 6).
+    // The agent does not know the month's totals itself: its counter resets to
+    //    zero after a reboot. To show the true number on the tray, it must come
+    //    from here.
     const progress = device.employeeId
       ? await this.progress.forEmployee(device.employeeId)
       : null;
@@ -169,20 +172,21 @@ export class AgentController {
   }
 
   /**
-   * ⭐ heartbeat-এর `state` এখানেই `devices`-এ জমা হয় — Live Board-এর রঙ
-   * এটার উপরেই দাঁড়ানো। এর আগে মানটা নেওয়া হতো কিন্তু কোথাও লেখা হতো না,
-   * তাই বোর্ড শেষ `activity_segments` সারি থেকে **অনুমান** করত; এজেন্ট
-   * সেগমেন্ট ব্যাচে পাঠায় বলে ওই অনুমান কয়েক মিনিট পুরোনো।
+   * The heartbeat `state` is stored in `devices` here; the Live Board's colour
+   * depends on it. Before this, the value was received but never written, so the
+   * board **guessed** from the last `activity_segments` row; since the agent
+   * sends segments in batches, that guess was several minutes stale.
    *
-   * ⚠️ `lastState` ও `agentVersion` দুটোই **বদলালে তবেই** SET-এ ঢোকে, কিন্তু
-   *    `lastStateAt` প্রতিবারই বসে — কারণ "কখন বলেছিল" না জানলে মানটা এখনো
-   *    বিশ্বাসযোগ্য কি না বোঝার কোনো উপায় নেই। বন্ধ হয়ে যাওয়া এজেন্টের শেষ
-   *    কথা ছিল `active`; সময় ছাড়া সেটা কলামে বসে থাকত আর কার্ড **চিরকাল
-   *    সবুজ** দেখাত (`dashboard.math.ts` → `freshReportedState`)।
+   * Careful: `lastState` and `agentVersion` go into the SET **only when they
+   *    change**, but `lastStateAt` is written every time. Without knowing "when
+   *    it said so" there is no way to tell whether the value can still be
+   *    trusted. A stopped agent's last word was `active`; without a timestamp
+   *    that would sit in the column and the card would show **green forever**
+   *    (`dashboard.math.ts` -> `freshReportedState`).
    *
-   * ⭐ তিনটে কলামই **একটাই** UPDATE-এ। আলাদা করলে ১৫ ডিভাইস × ৩০ সে. =
-   *    দিনে ২১,৬০০ heartbeat-এ ২১,৬০০ বাড়তি round-trip হতো — G59-এর
-   *    ঠিক একই শিক্ষা, শুধু উল্টো দিক থেকে।
+   * All three columns go in **one** UPDATE. Separately, 15 devices x every 30 s
+   *    = 21,600 heartbeats a day would cost 21,600 extra round-trips; the same
+   *    lesson as G59, from the opposite direction.
    */
   private async recordHeartbeatState(
     device: Device,
@@ -193,21 +197,23 @@ export class AgentController {
 
     if (state !== device.lastState) data.lastState = state;
 
-    // ⚠️ ভার্সন না এলে আগেরটা **মুছে যায় না** — পুরোনো এজেন্ট ফিল্ডটা
-    //    চেনে না, আর null বসিয়ে দিলে তার আপডেট অফারই বন্ধ হয়ে যেত (G59)।
+    // Careful: when no version arrives, the previous one is **not erased**. An
+    //    old agent does not know the field, and writing null would stop its
+    //    update offers (G59).
     if (runningVersion && runningVersion !== device.agentVersion) {
       data.agentVersion = runningVersion;
 
       /**
-       * ⭐⭐ **রোলআউট নিজে থেকে এগোনোর একমাত্র প্রমাণ** *(৫ সেপ্টেম্বর ২০২৬)*।
+       * **The only proof that a rollout advances by itself.**
        *
-       * ⚠️⚠️ সময়টা বসে **কেবল ভার্সন বদলালে** — প্রতি heartbeat-এ নয়।
-       * প্রতিবার বসালে ঘড়িটা রোজ শূন্য থেকে শুরু হতো, আর "ছ-ঘণ্টা ধরে
-       * টিকে আছে" শর্তটা **কোনোদিনই** সত্যি হতো না; রোলআউট চিরকাল
-       * canary-তেই আটকে থাকত, অর্থাৎ যে সমস্যাটা সারানো হচ্ছে সেটাই
-       * ফিরে আসত, কেবল আরও নীরবে।
+       * Careful: the time is set **only when the version changes**, not on every
+       * heartbeat. Setting it every time would restart the clock daily, so the
+       * "has survived six hours" condition would **never** become true; the
+       * rollout would stay stuck at canary forever, and the very problem being
+       * fixed would come back, only more quietly.
        *
-       * ⚠️ `if`-এর ভেতরে রাখাটা তাই ঘটনাচক্রে নয় — শর্তটাই সংজ্ঞা।
+       * Careful: so being inside the `if` is not an accident; the condition is
+       * the definition.
        */
       data.agentVersionSince = new Date();
     }
@@ -255,17 +261,18 @@ export class AgentController {
   @Post('screenshots')
   @HttpCode(HttpStatus.CREATED)
   /**
-   * ⭐ **A06 — `FileInterceptor` নয়, `FileFieldsInterceptor`।** আগেরটা
-   * ঠিক একটাই অংশ নিত, তাই এজেন্টের পাঠানো `thumb` অংশটা multer নীরবে
-   * ফেলে দিত আর `ingest()`-এ কোনোদিন পৌঁছাত না — থাম্বনেইলের পুরো কোডটা
-   * লেখা থাকত, চলত না, আর `thumb_path` চিরকাল null থাকত।
+   * **A06 - `FileFieldsInterceptor`, not `FileInterceptor`.** The latter takes
+   * exactly one part, so multer silently dropped the agent's `thumb` part and it
+   * never reached `ingest()`. The whole thumbnail code was written but never
+   * ran, and `thumb_path` stayed null forever.
    *
-   * ⚠️ `maxCount: 1` **দুটোতেই** — নইলে একই নামে অনেকগুলো অংশ পাঠিয়ে
-   *    মেমরিতে যত খুশি বাফার জমানো যেত (`limits.fileSize` প্রতি ফাইলে
-   *    খাটে, মোটে নয়)।
+   * Careful: `maxCount: 1` on **both**; otherwise many parts with the same name
+   * could fill memory with buffers (`limits.fileSize` applies per file, not in
+   * total).
    *
-   * ⚠️ শুধু `file` থাকা রিকোয়েস্টও এটা মেনে নেয়, তাই থাম্বনেইল না চেনা
-   *    পুরোনো এজেন্ট অক্ষত থাকে — গ্যালারি তখন ফুল ছবিতে ফেরত যায়।
+   * Careful: a request with only `file` is still accepted, so old agents that do
+   * not know thumbnails keep working; the gallery then falls back to the full
+   * image.
    */
   @UseInterceptors(
     FileFieldsInterceptor(
@@ -299,8 +306,8 @@ export class AgentController {
   }
 
   /**
-   * multipart-এ `meta` আসে JSON স্ট্রিং হিসেবে, তাই গ্লোবাল ValidationPipe
-   * ওটাকে ছুঁতে পারে না — হাতে parse ও validate করতে হয়।
+   * In multipart, `meta` arrives as a JSON string, so the global ValidationPipe
+   * cannot touch it; it must be parsed and validated by hand.
    */
   private async parseMeta(raw: string): Promise<ScreenshotMetaDto> {
     if (!raw) throw new BadRequestException('The `meta` part is missing');
@@ -335,20 +342,20 @@ export class AgentController {
       current ?? device.agentVersion ?? '0.0.0',
       device.machineGuid,
       /**
-       * ⭐⭐⭐ **`device.id` ছাড়া "First to" কোনোদিন কাজ করেনি**
-       * *(৫ সেপ্টেম্বর ২০২৬)*।
+       * **Without `device.id`, "First to" never worked.**
        *
-       * ⚠️⚠️ ঘরটা `offerFor()`-এ যোগ হয়েছিল ১ সেপ্টেম্বর, আর **heartbeat
-       * কলারটা** হালনাগাদ হয়েছিল — কিন্তু এই কলারটা হয়নি। ফলে
-       * `deviceId` এখানে `undefined`, `isPilot` চিরকাল `false`।
+       * Careful: the field was added to `offerFor()`, and the **heartbeat
+       * caller** was updated, but this caller was not. So `deviceId` is
+       * `undefined` here and `isPilot` was always `false`.
        *
-       * ⚠️⚠️ ব্যর্থতাটা বিশেষভাবে বিভ্রান্তিকর ছিল, কারণ **অর্ধেক কাজ
-       * করত**: heartbeat (যে `device.id` পাঠায়) বেছে দেওয়া PC-কে
-       * `update_agent` কমান্ড পাঠাত, অর্থাৎ এজেন্ট জানত আপডেট আছে —
-       * তারপর সে এখানে এসে `204 No Content` পেত। কোনো এরর নয়, কোনো
-       * লগ নয়, শুধু একটা আপডেট যেটা কোনোদিন নামত না।
+       * Careful: the failure was especially confusing because it **half worked**:
+       * the heartbeat (which sends `device.id`) sent the chosen PC an
+       * `update_agent` command, so the agent knew an update existed, then came
+       * here and got `204 No Content`. No error, no log, just an update that
+       * never downloaded.
        *
-       * ⭐ সেজন্যই OX-05 ০.৪.১০ আগে পাননি, যদিও ফিচারটা ওঁর জন্যই লেখা।
+       * That is why OX-05 did not get 0.4.10 earlier, although the feature was
+       * written for them.
        */
       device.id,
     );
@@ -360,18 +367,18 @@ export class AgentController {
   }
 
   /**
-   * ⚠️ **`StreamableFile` ফেরত দিতেই হবে — `stream.pipe(res)` করে `void`
-   *    ফেরত দিলে চলবে না।**
+   * Careful: **it must return a `StreamableFile`; calling `stream.pipe(res)` and
+   *    returning `void` does not work.**
    *
-   * `passthrough: true` মানে সাড়াটা Nest-ই পাঠাবে। হ্যান্ডলার `void`
-   * ফেরত দিলে Nest সাথে সাথে সাড়া **শেষ** করে দিত — pipe একটা বাইটও
-   * লেখার আগেই। বাইরে থেকে সব ঠিক দেখাত: `200 OK`, `Content-Length:
-   * 65139658`, কোনো এরর লগ নেই — কিন্তু শরীরে **শূন্য বাইট**, আর
-   * ক্লায়েন্ট পেত `CURLE_PARTIAL_FILE`।
+   * `passthrough: true` means Nest sends the response. If the handler returns
+   * `void`, Nest **ends** the response immediately, before pipe has written a
+   * single byte. From outside everything looks fine: `200 OK`,
+   * `Content-Length: 65139658`, no error in the log, but **zero bytes** in the
+   * body, and the client gets `CURLE_PARTIAL_FILE`.
    *
-   * ⭐ অর্থাৎ H04-এর MSI নামানোর ধাপটা কোনোদিন কাজ করেনি। ধরা পড়েনি
-   *    কারণ endpoint-টা কখনো সত্যিকারের HTTP দিয়ে ডাকা হয়নি — ইউনিট
-   *    টেস্টে `pipe` ডাকা হয়েছে কি না দেখলে এটা কখনোই ধরা পড়ত না।
+   * So the MSI download step of H04 never worked. It went unnoticed because the
+   * endpoint was never called over real HTTP; a unit test that only checks
+   * whether `pipe` was called could never have caught it.
    */
   @UseGuards(DeviceAuthGuard)
   @Get('update/download')

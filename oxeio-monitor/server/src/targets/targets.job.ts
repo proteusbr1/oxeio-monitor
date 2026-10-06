@@ -7,29 +7,29 @@ import { JOB_TIMEZONE, RunLock, SCHEDULING_ENABLED } from '../summary/scheduling
 import { TargetsService } from './targets.service';
 
 /**
- * ⭐ রোজ সকাল **৮টা (ঢাকা)** — পুল থেকে ডিজাইনারদের মধ্যে বণ্টন
- * *(মালিকের বাছাই, ২২ আগস্ট)*।
+ * Every day at 08:00 (Dhaka): distribute targets from the pool among designers.
  *
- * ⚠️ সময়টা কাজ শুরুর একটু আগে: এসে বসেই তালিকা তৈরি পাওয়া যায়, আর
- * কাউকে কিছু চাপতে হয় না।
+ * The time is shortly before work starts, so the list is ready when people sit
+ * down and nobody has to press anything.
  *
- * ⚠️ `timeZone` ছাড়া cron সার্ভারের নিজের টাইমজোনে চলত (Docker-এ UTC),
- * অর্থাৎ "সকাল ৮টা" হতো ঢাকার দুপুর ২টা।
+ * Without `timeZone`, cron would run in the server's own timezone (UTC in
+ * Docker), so "8 am" would be 2 pm in Dhaka.
  *
- * ⚠️ `disabled` **আর** নিচের `if` — দুটো তালা, দুটোই দরকার। টেস্টে
- * একবার টিক করলেই শেয়ার্ড DB-তে অন্য কারো ফিক্সচারে বণ্টন বসে যেত।
+ * Careful: `disabled` and the `if` below are two locks and both are needed.
+ * Without them, one tick during tests would distribute into other people's
+ * fixtures on the shared DB.
  *
- * ⚠️⚠️ **ছুটির দিনেও চলে, আর সেটা ইচ্ছাকৃত।** টার্গেট বরাদ্দ কোনো
- * ঘণ্টা গোনে না; ছুটির দিনে বাদ দিলে শনিবার সকালে কারো হাত খালি
- * থাকত। যাঁর হাতে ইতিমধ্যেই ৩০টা আছে, তিনি এমনিতেই কিছু পান না।
+ * Important: it also runs on holidays, on purpose. Target allocation does not
+ * count hours; skipping holidays would leave some hands empty on Saturday
+ * morning. Someone who already holds 30 gets nothing anyway.
  */
 @Injectable()
 export class TargetsJob {
   private readonly logger = new Logger(TargetsJob.name);
   private readonly lock = new RunLock();
-  /** ⚠️ আলাদা তালা — ফেরত ও বণ্টন কখনো একে অন্যকে আটকাবে না */
+  /** Separate lock so returning and distributing never block each other */
   private readonly returnLock = new RunLock();
-  /** ⚠️ টপ-আপেরও নিজের তালা — ঘণ্টার টিক যেন বণ্টনকে আটকে না রাখে */
+  /** Top-up has its own lock so the hourly tick never blocks distribution */
   private readonly topUpLock = new RunLock();
 
   constructor(
@@ -54,18 +54,18 @@ export class TargetsJob {
   }
 
   /**
-   * ⭐⭐ **দিন শেষে — না-করা টার্গেট পুলে ফেরত** *(মালিকের নিয়ম, ২২ আগস্ট)*।
+   * End of day: return untouched targets to the pool.
    *
-   * ⚠️⚠️ **রাত ১১:৫৫, সকাল ৮টা নয় — আর সময়টা ইচ্ছাকৃত।** বণ্টনের ঠিক
-   * আগে ফেরত নিলে সকাল ৭টায় কাজ শুরু করা কারো হাত থেকে টার্গেট **টেনে
-   * নেওয়া** হতো। রাতে করলে সকালের তালিকা পরিষ্কার হয়েই থাকে।
+   * Important: 23:55, not 08:00, on purpose. Returning right before the
+   * morning distribution would pull targets out of the hands of someone who
+   * started work at 07:00. Doing it at night leaves the morning list clean.
    *
-   * ⚠️ মধ্যরাতের **আগে**, কারণ তারিখ ঘুরলে "আজ ছোঁয়া হয়েছে কি না"
-   * প্রশ্নটার উত্তর বদলে যেত — আর তখন আজকের কাজ-চলতি টার্গেটগুলোও
-   * ফেরত চলে যেত।
+   * It runs before midnight because once the date rolls over, the answer to
+   * "was this touched today?" changes, and today's in-progress targets would
+   * be returned as well.
    *
-   * ⚠️ ছুটির দিনেও চলে: বরাদ্দ ঘণ্টা গোনে না, আর ছুটির দিনে হাত ভরে
-   * রাখার কোনো কারণ নেই।
+   * Also runs on holidays: allocation does not count hours, and there is no
+   * reason to keep hands full on a holiday.
    */
   @Cron('0 55 23 * * *', {
     name: 'design-target-return',
@@ -79,20 +79,20 @@ export class TargetsJob {
   }
 
   /**
-   * ⭐⭐⭐ **কাজের সময়ে ঘণ্টায় একবার হাত দেখে নেওয়া** *(৯ সেপ্টেম্বর ২০২৬)*।
+   * Hourly check of each designer's hand during working hours.
    *
-   * ⚠️⚠️ **এটা সকালের বণ্টনের নকল নয়** — ওটা সবাইকে ৩০-এ তোলে, এটা কেবল
-   * তাঁকেই ছোঁয় যিনি আজ ২৫ ছুঁতে পারবেন না। হাত ভরা থাকলে `topUpSize()`
-   * ০ ফেরত দেয়, তাই বেশিরভাগ টিকে কিছুই ঘটে না।
+   * Important: this is not a copy of the morning distribution. That one tops
+   * everybody up to 30; this only touches people who could not reach 25 today.
+   * If a hand is full, `topUpSize()` returns 0, so most ticks do nothing.
    *
-   * ⚠️ ঘটনার সাথে সাথে চালানো (`markDone`/`skip`-এর পরে) **যথেষ্ট নয়**:
-   * যাঁর হাতে একটাও নেই তিনি কিছু চাপতেই পারেন না, আর ঠিক তাঁর কথাই
-   * নিয়মটা বলে। মাঠে ওই দশা হয় যখন সকালে পুলে কম থাকে — `allocationSizes`
-   * কর্মী-কোডের ক্রমে দেয়, আর শেষজন কিছুই পান না।
+   * Running only after an event (`markDone`/`skip`) is not enough: someone with
+   * zero targets can never trigger one, yet they are exactly who the rule is
+   * for. This happens when the pool is short in the morning, because
+   * `allocationSizes` serves staff in code order and the last person gets none.
    *
-   * ⭐ ৯টা–৭টা, কারণ এর বাইরে কেউ কাজ করেন না আর পুল ঘাঁটার মানে নেই।
-   * ⚠️ মিনিট ৫-এ, ঠিক ঘণ্টায় নয় — অন্য জবগুলোর সাথে একসাথে চললে
-   *    ডাটাবেসে অকারণ ভিড় হতো।
+   * 9:00-19:00 only, since nobody works outside that and scanning the pool is
+   * pointless. Minute 5 rather than on the hour, to avoid needless database
+   * load when other jobs run at the same time.
    */
   @Cron('0 5 9-19 * * *', {
     name: 'design-target-top-up',
@@ -105,7 +105,7 @@ export class TargetsJob {
     await this.topUpOnce();
   }
 
-  /** টেস্ট বা হাতে চালানোর জন্য। ⚠️ কখনো throw করে না। */
+  /** For tests or manual runs. Never throws. */
   async topUpOnce(now: Date = new Date()): Promise<void> {
     await this.topUpLock.run(async () => {
       try {
@@ -119,7 +119,7 @@ export class TargetsJob {
     });
   }
 
-  /** টেস্ট বা হাতে চালানোর জন্য। ⚠️ কখনো throw করে না। */
+  /** For tests or manual runs. Never throws. */
   async returnOnce(now: Date = new Date()): Promise<void> {
     await this.returnLock.run(async () => {
       try {
@@ -133,7 +133,7 @@ export class TargetsJob {
     });
   }
 
-  /** টেস্ট বা হাতে চালানোর জন্য। ⚠️ কখনো throw করে না। */
+  /** For tests or manual runs. Never throws. */
   async runOnce(now: Date = new Date()): Promise<void> {
     await this.lock.run(async () => {
       try {

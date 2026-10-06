@@ -41,19 +41,19 @@ import {
 const MIN = 60_000;
 const HOUR = 60 * MIN;
 
-/** ঢাকার একটা নির্দিষ্ট মুহূর্ত বানানো — UTC+6, কোনো DST নেই */
+/** Builds a specific instant in Dhaka: UTC+6, no DST */
 function dhaka(iso: string): Date {
   return new Date(`${iso}+06:00`);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ⭐ বন্যা ঠেকানো — এই ব্লকটাই সবচেয়ে জরুরি
+// Flood prevention: this block is the most important
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('throttle — একই ডিভাইসের একই কারণে ৬ ঘণ্টায় একটাই', () => {
+describe('throttle: one per device per cause in 6 hours', () => {
   const now = new Date('2026-08-11T10:00:00Z');
 
-  it('ডিভাইস আলাদা হলে key আলাদা, টাইপ আলাদা হলেও', () => {
+  it('a different device gives a different key, and so does a different type', () => {
     expect(dedupeKey({ type: 'agent_down', deviceId: 1 })).not.toBe(
       dedupeKey({ type: 'agent_down', deviceId: 2 }),
     );
@@ -62,13 +62,13 @@ describe('throttle — একই ডিভাইসের একই কারণ
     );
   });
 
-  it('deviceId null আর deviceId অনুপস্থিত — একই key', () => {
+  it('deviceId null and deviceId absent give the same key', () => {
     expect(dedupeKey({ type: 'disk_warning', deviceId: null })).toBe(
       dedupeKey({ type: 'disk_warning' }),
     );
   });
 
-  it('৫ ঘণ্টা ৫৯ মিনিট আগেরটা এখনো আটকায়, ৬ ঘণ্টা ১ মিনিট আগেরটা নয়', () => {
+  it('one from 5 hours 59 minutes ago still blocks, one from 6 hours 1 minute ago does not', () => {
     const almost = new Date(now.getTime() - (THROTTLE_HOURS * HOUR - MIN));
     const past = new Date(now.getTime() - (THROTTLE_HOURS * HOUR + MIN));
 
@@ -76,21 +76,21 @@ describe('throttle — একই ডিভাইসের একই কারণ
     expect(isThrottled(past, now)).toBe(false);
   });
 
-  it('আগে কিছুই না থাকলে আটকায় না', () => {
+  it('nothing blocks when there was nothing before', () => {
     expect(isThrottled(null, now)).toBe(false);
     expect(isThrottled(undefined, now)).toBe(false);
   });
 
   /**
-   * ⚠️ সার্ভারের ঘড়ি পিছিয়ে গেলে `lastRaisedAt` ভবিষ্যতে পড়ে যায়। তখন ভুলটা
-   * চুপ থাকার দিকে হওয়া দরকার — নইলে ঘড়ি ঠিক হওয়া পর্যন্ত প্রতি টিকে
-   * অ্যালার্ট বেরোত।
+   * If the server clock goes backwards, `lastRaisedAt` ends up in the future.
+   * Then the mistake should lean towards staying quiet; otherwise an alert
+   * would fire on every tick until the clock is fixed.
    */
-  it('ভবিষ্যতের সময় থাকলেও চুপ থাকে', () => {
+  it('stays quiet even with a future time', () => {
     expect(isThrottled(new Date(now.getTime() + HOUR), now)).toBe(true);
   });
 
-  it('throttleFloor আর nextAllowedAt ঠিক ৬ ঘণ্টার দুই পাশে', () => {
+  it('throttleFloor and nextAllowedAt sit exactly 6 hours either side', () => {
     expect(now.getTime() - throttleFloor(now).getTime()).toBe(
       THROTTLE_HOURS * HOUR,
     );
@@ -101,25 +101,25 @@ describe('throttle — একই ডিভাইসের একই কারণ
 });
 
 /**
- * ⭐⭐⭐ **দিনভিত্তিক অ্যালার্ট — দিনে একটাই** *(৬ সেপ্টেম্বর ২০২৬, G166)*।
+ * Day-scoped alerts: one per day (G166).
  *
- * ⚠️⚠️ **যে বাগটা এই ব্লকটা পাহারা দেয়:** `device_overlap` ও
- * `synthetic_input` — দুটোই গোটা ঢাকা-দিনের কথা বলে, দুটোই চলে **প্রতি
- * ঘণ্টায়**, আর দুটোই প্রতিবার গোটা দিনের সেগমেন্ট আবার পড়ে। শর্তটা
- * একবার সত্যি হলে দিনের বাকি সব টিকেও সত্যি, অথচ throttle-এর জানালা
- * মোটে ৬ ঘণ্টা আর key-তে দিনটা নেই। ফল: **একই ঘটনার জন্য দিনে ৩–৪টা**
- * অভিন্ন অ্যালার্ট, প্রত্যেকটা আলাদা ইমেইল।
+ * The bug this block guards: `device_overlap` and `synthetic_input` both
+ * speak about the whole Dhaka day, both run every hour, and both re-read the
+ * whole day's segments each time. Once the condition is true it stays true
+ * on every later tick that day, yet the throttle window is only 6 hours and
+ * the key has no day in it. Result: 3-4 identical alerts a day for one
+ * event, each a separate email.
  *
- * ⚠️ মাঠের প্রমাণ একই পথে চলা `agent_down`-এ: ২২ আগস্ট **১৩টা**
- * (ডিভাইস, কর্মী) জোড়ার প্রত্যেকটা ঠিক **৪বার**, ৬ ঘণ্টা পরপর।
+ * Field evidence on `agent_down`, which runs the same way: on 22 August,
+ * each of 13 (device, employee) pairs got exactly 4, six hours apart.
  */
-describe('G166 — দিনভিত্তিক অ্যালার্ট দিনে একবারই', () => {
-  /** ⚠️ ঢাকার দুপুর ২টা = UTC ০৮:০০ */
+describe('G166: day-scoped alerts fire only once a day', () => {
+  /** 2 pm in Dhaka = 08:00 UTC */
   const noon = new Date('2026-09-07T08:00:00Z');
-  /** ওই ঢাকা-দিনের শুরু = UTC আগের দিন ১৮:০০ */
+  /** Start of that Dhaka day = 18:00 UTC the day before */
   const dayStart = new Date('2026-09-06T18:00:00Z');
 
-  it('ধরনগুলো ঠিক এই দুটোই', () => {
+  it('the types are exactly these two', () => {
     expect([...DAY_SCOPED_TYPES].sort()).toEqual([
       'device_overlap',
       'synthetic_input',
@@ -127,19 +127,19 @@ describe('G166 — দিনভিত্তিক অ্যালার্ট �
   });
 
   /**
-   * ⚠️⚠️ **এটাই সেই ভুলটার পাহারা যেটা এই প্রকল্পে সবচেয়ে বেশিবার
-   * হয়েছে।** `workDateOf()` একটা **লেবেল** — UTC-মধ্যরাত। ওটাকে মুহূর্ত
-   * ধরলে সীমানা বসত ঢাকার **ভোর ৬টায়**, আর মাঝরাত–ভোর ৬টার মধ্যে ওঠা
-   * অ্যালার্টের পুনরাবৃত্তি ঠিক আগের মতোই বেরিয়ে যেত।
+   * This guards the mistake made most often in this project. `workDateOf()`
+   * is a label, i.e. UTC midnight. Treating it as an instant would put the
+   * boundary at 06:00 Dhaka, and a repeat of an alert raised between
+   * midnight and 06:00 would slip out just as before.
    */
-  it('⭐ মেঝেটা ঢাকার মধ্যরাত, ভোর ৬টা নয়', () => {
+  it('the floor is Dhaka midnight, not 06:00', () => {
     expect(alertFloor('device_overlap', noon).toISOString()).toBe(
       dayStart.toISOString(),
     );
   });
 
-  it('⭐ ১৯ ঘণ্টা আগের অ্যালার্টও একই দিনের হলে আটকায়', () => {
-    // ঢাকার ভোর ১টা — ৬ ঘণ্টার জানালার অনেক বাইরে, তবু একই দিন
+  it('an alert from 19 hours ago still blocks if it is the same day', () => {
+    // 01:00 in Dhaka: far outside the 6-hour window, yet the same day
     const earlier = new Date('2026-09-06T19:00:00Z');
 
     expect(isThrottled(earlier, noon)).toBe(false);
@@ -147,24 +147,24 @@ describe('G166 — দিনভিত্তিক অ্যালার্ট �
     expect(isThrottledFor('synthetic_input', earlier, noon)).toBe(true);
   });
 
-  /** ⚠️ চিরকাল চুপ নয় — নতুন ঢাকা-দিন মানে নতুন ঘটনা */
-  it('⭐ আগের দিনের অ্যালার্ট আজকেরটাকে আটকায় না', () => {
-    // গতকাল ঢাকার রাত ১১টা
+  /** Not silent forever: a new Dhaka day means a new event */
+  it('yesterday\'s alert does not block today\'s', () => {
+    // Last night at 11 pm in Dhaka
     const lastNight = new Date('2026-09-06T17:00:00Z');
 
     expect(isThrottledFor('device_overlap', lastNight, noon)).toBe(false);
   });
 
   /**
-   * ⚠️⚠️ **মধ্যরাতের ঠিক পরে জানালাটা ছোট হয়ে যায় না।** দিনের শুরু
-   * তখন মাত্র কয়েক মিনিট আগে, তাই কেবল সেটাই ব্যবহার করলে রাত ১১:৫৯-এর
-   * অ্যালার্টের পুনরাবৃত্তি ১২:০১-এ বেরিয়ে যেত। মেঝে সবসময় **দুটোর
-   * মধ্যে যেটা আগের**।
+   * Right after midnight the window does not shrink. The day start is then
+   * only a few minutes back, so using it alone would let a repeat of an
+   * 11:59 pm alert slip out at 12:01. The floor is always the earlier of the
+   * two.
    */
-  it('⭐ মধ্যরাতের পরপরও ৬ ঘণ্টার জানালা টিকে থাকে', () => {
-    // ঢাকার রাত ১২:১০
+  it('the 6-hour window survives right after midnight', () => {
+    // 00:10 in Dhaka
     const justAfter = new Date('2026-09-06T18:10:00Z');
-    // ঢাকার আগের রাত ১১:৫০
+    // 23:50 the night before in Dhaka
     const justBefore = new Date('2026-09-06T17:50:00Z');
 
     expect(alertFloor('device_overlap', justAfter).getTime()).toBe(
@@ -174,11 +174,12 @@ describe('G166 — দিনভিত্তিক অ্যালার্ট �
   });
 
   /**
-   * ⚠️⚠️ **`agent_down` ইচ্ছাকৃতভাবে বাইরে।** ওটা দিনের কথা বলে না —
-   * বলে *"এই মুহূর্তে PC-টা চুপ"*। তিন দিন বন্ধ থাকা PC-র জন্য রোজ
-   * মনে করিয়ে দেওয়াটাই চাওয়া। এখানে নীরবতার চেয়ে শব্দ ভালো।
+   * `agent_down` is deliberately left out. It does not speak about the day;
+   * it says "this PC is silent right now". A reminder every day for a PC
+   * that is off for three days is what is wanted. Here noise is better than
+   * silence.
    */
-  it('⭐ agent_down-এর জানালা আগের মতোই ৬ ঘণ্টা', () => {
+  it('the agent_down window is 6 hours as before', () => {
     const earlier = new Date('2026-09-06T19:00:00Z');
 
     expect(alertFloor('agent_down', noon).getTime()).toBe(
@@ -188,7 +189,7 @@ describe('G166 — দিনভিত্তিক অ্যালার্ট �
   });
 });
 
-describe('suppressFlood — এক দফার প্রার্থীদের ছেঁকে নেওয়া', () => {
+describe('suppressFlood: filtering one round\'s candidates', () => {
   const now = new Date('2026-08-11T10:00:00Z');
 
   const candidate = (deviceId: number): AlertKey => ({
@@ -196,7 +197,7 @@ describe('suppressFlood — এক দফার প্রার্থীদে�
     deviceId,
   });
 
-  it('DB-তে টাটকা অ্যালার্ট থাকলে ওই ডিভাইসেরটা বাদ যায়', () => {
+  it('if the DB has a fresh alert, that device\'s is dropped', () => {
     const last = new Map([
       [dedupeKey(candidate(1)), new Date(now.getTime() - HOUR)],
     ]);
@@ -207,11 +208,12 @@ describe('suppressFlood — এক দফার প্রার্থীদে�
   });
 
   /**
-   * ⭐ সবচেয়ে গুরুত্বপূর্ণ টেস্ট। ১৫ মিনিটের জানালায় একই PC-র তিনটে
-   * agent_stop ইভেন্ট থাকলে DB-তে তখনো কিছুই বসেনি, তাই DB-ভিত্তিক
-   * throttle তিনটেকেই ছেড়ে দিত — আর একই সেকেন্ডে তিনটে অ্যালার্ট বসত।
+   * The most important test. If three agent_stop events for the same PC
+   * fall in a 15-minute window, nothing is in the DB yet, so the DB-based
+   * throttle would let all three through, and three alerts would be written
+   * in the same second.
    */
-  it('একই দফার ভেতরে একই key বারবার এলে একটাই থাকে', () => {
+  it('the same key coming repeatedly within one round leaves only one', () => {
     const kept = suppressFlood(
       [candidate(7), candidate(7), candidate(7)],
       new Map(),
@@ -221,11 +223,11 @@ describe('suppressFlood — এক দফার প্রার্থীদে�
     expect(kept).toHaveLength(1);
   });
 
-  it('খালি তালিকায় খালি ফল', () => {
+  it('an empty list gives an empty result', () => {
     expect(suppressFlood([], new Map(), now)).toEqual([]);
   });
 
-  it('একজন কর্মীর দুই ডিভাইস আলাদা করে গোনা হয়', () => {
+  it('one employee\'s two devices are counted separately', () => {
     const kept = suppressFlood(
       [
         { type: 'agent_down', deviceId: 1, employeeId: 3 },
@@ -240,46 +242,46 @@ describe('suppressFlood — এক দফার প্রার্থীদে�
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ঢাকার সময়
+// Dhaka time
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('ঢাকার সময়', () => {
-  it('স্থানীয় ঘণ্টা UTC নয়', () => {
-    // ২০:৩০ ঢাকা = ১৪:৩০ UTC
+describe('Dhaka time', () => {
+  it('local hour, not UTC', () => {
+    // 20:30 Dhaka = 14:30 UTC
     expect(dhakaHourOf(new Date('2026-08-11T14:30:00Z'))).toBe(20);
   });
 
-  it('মধ্যরাতের পরপর ঘণ্টা ০', () => {
+  it('the hour right after midnight is 0', () => {
     expect(dhakaHourOf(dhaka('2026-08-11T00:05:00'))).toBe(0);
   });
 
   /**
-   * ⚠️ ২০২৬-০৮-১১ মঙ্গলবার → ISO ২। `weekly_off_day`-তে শুক্র = ৫, কিন্তু
-   * `getUTCDay()` শুক্রবারকে ৫-ই বলে অথচ রবিবারকে ০ — শুধু রবিবারেই ভুলটা
-   * ধরা পড়ত, তাই দুটোই মিলিয়ে দেখা হচ্ছে।
+   * 2026-08-11 is a Tuesday, ISO 2. In `weekly_off_day` Friday = 5, but
+   * `getUTCDay()` also says 5 for Friday yet 0 for Sunday: the mistake would
+   * show only on Sunday, so both are checked.
    */
-  it('ISO দিন — সোম ১ … রবি ৭', () => {
-    expect(dhakaIsoWeekday(dhaka('2026-08-11T12:00:00'))).toBe(2); // মঙ্গল
-    expect(dhakaIsoWeekday(dhaka('2026-08-14T12:00:00'))).toBe(5); // শুক্র
-    expect(dhakaIsoWeekday(dhaka('2026-08-16T12:00:00'))).toBe(7); // রবি
+  it('ISO day: Monday 1 ... Sunday 7', () => {
+    expect(dhakaIsoWeekday(dhaka('2026-08-11T12:00:00'))).toBe(2); // Tuesday
+    expect(dhakaIsoWeekday(dhaka('2026-08-14T12:00:00'))).toBe(5); // Friday
+    expect(dhakaIsoWeekday(dhaka('2026-08-16T12:00:00'))).toBe(7); // Sunday
   });
 
-  it('UTC-তে আগের দিন হলেও ঢাকার দিনই গোনা হয়', () => {
-    // ঢাকায় শুক্রবার ভোর ৫টা = UTC-তে বৃহস্পতিবার ২৩:০০
+  it('the Dhaka day is counted even when UTC is on the previous day', () => {
+    // 05:00 Friday in Dhaka = 23:00 Thursday in UTC
     expect(dhakaIsoWeekday(new Date('2026-08-13T23:00:00Z'))).toBe(5);
   });
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// G01 — এজেন্ট চুপ
+// G01: agent silent
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * ⭐⭐ **অফিস খোলা আছে কি না** — `agent_down` কখন চুপ থাকবে (২২ আগস্ট ২০২৬)।
+ * Whether the office is open: when `agent_down` stays quiet (22 August 2026).
  *
- * ⚠️ ২০২৬-০৮-২৪ সোমবার (ISO ১), ২০২৬-০৮-২৮ শুক্রবার (ISO ৫)।
+ * 2026-08-24 is a Monday (ISO 1), 2026-08-28 a Friday (ISO 5).
  */
-describe('অফিস সময়ের বাইরে agent_down চুপ', () => {
+describe('agent_down is quiet outside office hours', () => {
   const OFFICE = { officeFrom: '09:00', officeTo: '18:00' };
   const open = (iso: string, extra = {}) =>
     isOfficeOpen({
@@ -290,80 +292,80 @@ describe('অফিস সময়ের বাইরে agent_down চুপ',
       ...extra,
     });
 
-  it('অফিস সময়ে খোলা', () => {
+  it('open during office hours', () => {
     expect(open('2026-08-24T09:00:00')).toBe(true);
     expect(open('2026-08-24T13:30:00')).toBe(true);
     expect(open('2026-08-24T17:59:00')).toBe(true);
   });
 
-  /** ⭐ ঠিক ৬টা **বন্ধ** — জানালাটা `[from, to)`, নইলে ১৮:০০-এ একটা অ্যালার্ট গলত */
-  it('ঠিক শেষ মুহূর্তে বন্ধ', () => {
+  /** Exactly 6 pm is closed: the window is `[from, to)`, or an alert would leak at 18:00 */
+  it('closed at the exact last moment', () => {
     expect(open('2026-08-24T18:00:00')).toBe(false);
   });
 
-  it('সকাল ৯টার আগে ও সন্ধ্যার পরে বন্ধ', () => {
+  it('closed before 9 am and after the evening', () => {
     expect(open('2026-08-24T08:59:00')).toBe(false);
     expect(open('2026-08-24T18:01:00')).toBe(false);
     expect(open('2026-08-24T23:30:00')).toBe(false);
     expect(open('2026-08-24T03:00:00')).toBe(false);
   });
 
-  /** ⚠️ মাঠে যে তিনটে গুচ্ছ মাপা হয়েছিল — ১৮টা, ০০টা, ০৬টা — তিনটেই বন্ধ */
-  it('মাঠে মাপা তিনটে গুচ্ছই এখন চুপ', () => {
+  /** The three clusters measured in the field (18:00, 00:00, 06:00) are all closed */
+  it('the three clusters measured in the field are now quiet', () => {
     expect(open('2026-08-24T18:00:00')).toBe(false);
     expect(open('2026-08-25T00:00:00')).toBe(false);
     expect(open('2026-08-25T06:00:00')).toBe(false);
   });
 
-  it('সাপ্তাহিক ছুটির দিনে সারাদিনই বন্ধ', () => {
+  it('closed all day on the weekly day off', () => {
     expect(open('2026-08-28T11:00:00')).toBe(false);
   });
 
-  it('ক্যালেন্ডারের ছুটিতেও বন্ধ', () => {
+  it('closed on a calendar holiday too', () => {
     expect(open('2026-08-24T11:00:00', { isHoliday: true })).toBe(false);
   });
 
   /**
-   * ⚠️⚠️ এই তিনটেই একই কথা বলে: **সময় জানা না থাকলে খোলা ধরা হয়**।
-   * ভুলের দুটো দিকই খারাপ, কিন্তু সমান নয় — বেশি অ্যালার্ট বিরক্তিকর,
-   * নীরবে বন্ধ হয়ে যাওয়া পাহারা বিপজ্জনক।
+   * These three all say the same thing: when the time is unknown, treat it
+   * as open. Both directions of error are bad, but not equally: extra alerts
+   * are annoying, a watch that silently turns off is dangerous.
    */
-  it('সময় না বসানো থাকলে সারাদিন খোলা', () => {
+  it('open all day when no time is set', () => {
     expect(open('2026-08-24T23:00:00', { officeFrom: null, officeTo: null }))
       .toBe(true);
     expect(open('2026-08-24T23:00:00', { officeFrom: '09:00', officeTo: null }))
       .toBe(true);
   });
 
-  it('বেঠিক লেখা সময়ও খোলা ধরা হয়', () => {
+  it('a badly written time is treated as open too', () => {
     expect(open('2026-08-24T23:00:00', { officeFrom: '9am', officeTo: '6pm' }))
       .toBe(true);
     expect(open('2026-08-24T23:00:00', { officeFrom: '25:00', officeTo: '18:00' }))
       .toBe(true);
   });
 
-  /** ⚠️ উল্টো জানালা (শেষ ≤ শুরু) — বন্ধ নয়, খোলা */
-  it('উল্টো জানালা খোলা ধরা হয়', () => {
+  /** An inverted window (end <= start) is open, not closed */
+  it('an inverted window is treated as open', () => {
     expect(open('2026-08-24T03:00:00', { officeFrom: '18:00', officeTo: '09:00' }))
       .toBe(true);
     expect(open('2026-08-24T03:00:00', { officeFrom: '09:00', officeTo: '09:00' }))
       .toBe(true);
   });
 
-  /** ⭐ সাপ্তাহিক ছুটি না থাকলে (null) শুক্রবারও কর্মদিবস */
-  it('সাপ্তাহিক ছুটি null হলে শুক্রবারও খোলা', () => {
+  /** With no weekly day off (null), Friday is a working day too */
+  it('with the weekly day off null, Friday is open too', () => {
     expect(open('2026-08-28T11:00:00', { weeklyOffDays: [] })).toBe(true);
   });
 });
 
 /**
- * ⭐⭐ **অফিস খোলার পর ১৫ মিনিট ছাড়** *(২৩ আগস্ট ২০২৬)*।
+ * A 15-minute grace after the office opens (23 August 2026).
  *
- * ⚠️⚠️ মাঠে মাপা: আজ সবাই কাজ শুরু করেছেন ০৮:৪৮–০৯:০৩-এর মধ্যে, অথচ ঠিক
- * ৯:০০-এ **ছটা** অ্যালার্ট উঠেছিল — আর ছটার সবাই ৯:০৯-এর মধ্যে ফিরে
- * এসেছিলেন। একটাও আসল ছিল না।
+ * Measured in the field: today everyone started work between 08:48 and
+ * 09:03, yet at exactly 9:00 six alerts were raised, and all six came back
+ * by 9:09. Not one was real.
  */
-describe('অফিস খোলার পর ছাড় — সবার হাজির থাকার সময়', () => {
+describe('grace after opening: the time when everyone is present', () => {
   const OFFICE = { officeFrom: '09:00', officeTo: '18:00' };
   const watch = (iso: string, extra = {}) =>
     isAgentWatchOpen({
@@ -374,42 +376,43 @@ describe('অফিস খোলার পর ছাড় — সবার হ�
       ...extra,
     });
 
-  /** ⚠️⚠️ ঠিক ৯:০০ — অফিস খোলা, কিন্তু এখনো কারো হাজির থাকার কথা নয় */
-  it('৯:০০-এ অফিস খোলা, তবু পাহারা শুরু হয় না', () => {
+  /** Exactly 9:00: the office is open, but nobody is expected to be present yet */
+  it('at 9:00 the office is open, yet the watch does not start', () => {
     expect(isOfficeOpen({ now: dhaka('2026-08-24T09:00:00'), ...OFFICE,
       weeklyOffDays: [5], isHoliday: false })).toBe(true);
     expect(watch('2026-08-24T09:00:00')).toBe(false);
   });
 
-  it('১৪ মিনিট পরেও নয়, ১৫ মিনিটে হ্যাঁ', () => {
+  it('not even after 14 minutes, yes at 15 minutes', () => {
     expect(watch('2026-08-24T09:14:00')).toBe(false);
     expect(watch('2026-08-24T09:15:00')).toBe(true);
   });
 
   /**
-   * ⚠️⚠️ **ছাড় কেবল শুরুতে, শেষে নয়** — বিকেলে কারো PC হঠাৎ বন্ধ হয়ে
-   * যাওয়া সত্যিকারের খবর, আর ছুটির আগে সেটা চাপা পড়া উচিত নয়।
+   * The grace is only at the start, not at the end: a PC suddenly switching
+   * off in the afternoon is real news, and should not be suppressed before
+   * closing time.
    */
-  it('বিকেলে পাহারা পুরোদমে, শেষ মুহূর্ত পর্যন্ত', () => {
+  it('the afternoon watch is at full strength, up to the last moment', () => {
     expect(watch('2026-08-24T13:00:00')).toBe(true);
     expect(watch('2026-08-24T17:59:00')).toBe(true);
     expect(watch('2026-08-24T18:00:00')).toBe(false);
   });
 
-  it('অফিস বন্ধ থাকলে ছাড়ের প্রশ্নই ওঠে না', () => {
+  it('when the office is closed, the question of grace does not arise', () => {
     expect(watch('2026-08-24T22:00:00')).toBe(false);
-    expect(watch('2026-08-28T10:00:00')).toBe(false); // শুক্রবার
+    expect(watch('2026-08-28T10:00:00')).toBe(false); // Friday
     expect(watch('2026-08-24T10:00:00', { isHoliday: true })).toBe(false);
   });
 
-  /** ⭐ সময় বসানো না থাকলে "খোলার পর" বলে কোনো মুহূর্তই নেই, তাই ছাড়ও নেই */
-  it('অফিসের সময় না থাকলে সারাদিনই পাহারা', () => {
+  /** With no time set there is no "after opening" moment, so no grace either */
+  it('with no office hours, the watch is all day', () => {
     expect(watch('2026-08-24T03:00:00', { officeFrom: null, officeTo: null }))
       .toBe(true);
   });
 
-  /** ⚠️ ছাড় বদলানো যায় — টেস্টে ০ দিলে আচরণ `isOfficeOpen`-এর সমান */
-  it('ছাড় ০ হলে অফিস খোলার সাথে সাথেই পাহারা', () => {
+  /** The grace can be changed: giving 0 in a test makes behaviour equal to `isOfficeOpen` */
+  it('with grace 0, the watch starts the moment the office opens', () => {
     expect(
       isAgentWatchOpen(
         { now: dhaka('2026-08-24T09:00:00'), ...OFFICE, weeklyOffDays: [5], isHoliday: false },
@@ -419,7 +422,7 @@ describe('অফিস খোলার পর ছাড় — সবার হ�
   });
 });
 
-describe('G01 — নীরবতার ব্যাখ্যা আছে কি না', () => {
+describe('G01: whether the silence has an explanation', () => {
   const now = new Date('2026-08-11T14:00:00Z');
   const silentSince = new Date(now.getTime() - 30 * MIN);
 
@@ -430,22 +433,23 @@ describe('G01 — নীরবতার ব্যাখ্যা আছে ক�
     ...over,
   });
 
-  it('বিদায়ী ইভেন্ট ছাড়া ৩০ মিনিটের নীরবতা = অ্যালার্ট', () => {
+  it('30 minutes of silence with no goodbye event = an alert', () => {
     expect(agentDownCandidates([device()], now)).toHaveLength(1);
   });
 
   /**
-   * ⭐ এটা না থাকলে প্রতিদিন সন্ধ্যায় প্রত্যেকের PC বন্ধ হওয়ামাত্র
-   * বারোটা অ্যালার্ট যেত — চেকটা সবসময় সত্যি বলেও অকেজো হয়ে যেত।
+   * Without this, every evening the moment everyone's PC shut down, twelve
+   * alerts would go out: the check would always be telling the truth and
+   * still be useless.
    */
-  it('শেষ খবরটাই যদি logoff হয়, নীরবতা স্বাভাবিক', () => {
+  it('if the last news is a logoff, the silence is normal', () => {
     const d = device({ lastCleanStopAt: silentSince });
     expect(isExpectedSilence(d)).toBe(true);
     expect(agentDownCandidates([d], now)).toHaveLength(0);
   });
 
-  it('logoff-এর পর এজেন্ট ফিরে এসে আবার চুপ হলে অ্যালার্ট হয়', () => {
-    // দুপুরে logoff, বিকেলে আবার ডেটা এসেছে, তারপর নীরবতা
+  it('an alert is raised if the agent returns after a logoff and goes silent again', () => {
+    // Logoff at noon, data again in the afternoon, then silence
     const d = device({
       lastCleanStopAt: new Date(now.getTime() - 5 * HOUR),
       lastSeenAt: silentSince,
@@ -454,25 +458,25 @@ describe('G01 — নীরবতার ব্যাখ্যা আছে ক�
     expect(agentDownCandidates([d], now)).toHaveLength(1);
   });
 
-  it('১০ মিনিটের কম চুপ থাকলে কিছুই হয় না', () => {
+  it('nothing happens with less than 10 minutes of silence', () => {
     const d = device({ lastSeenAt: new Date(now.getTime() - 9 * MIN) });
     expect(agentDownCandidates([d], now)).toHaveLength(0);
   });
 
   /**
-   * ⚠️ কখনো কিছু পাঠায়নি এমন ডিভাইস এনরোলমেন্টের সমস্যা, "এজেন্ট বন্ধ" নয়।
-   * অ্যালার্ট দিলে ইনস্টল না করা প্রতিটা ডিভাইস চিরকাল অভিযোগ করত।
+   * A device that never sent anything is an enrollment problem, not "agent
+   * down". Alerting would make every device never installed complain forever.
    */
-  it('lastSeenAt নেই এমন ডিভাইস বাদ', () => {
+  it('a device with no lastSeenAt is left out', () => {
     expect(agentDownCandidates([device({ lastSeenAt: null })], now)).toEqual([]);
   });
 
-  it('silentMinutes মিনিট গোনে, lastSeenAt না থাকলে null', () => {
+  it('silentMinutes counts minutes, and null if there is no lastSeenAt', () => {
     expect(silentMinutes(silentSince, now)).toBe(30);
     expect(silentMinutes(null, now)).toBeNull();
   });
 
-  it('সার্ভার সবে উঠলে চেকটাই করা হয় না', () => {
+  it('right after the server boots the check is not done at all', () => {
     const booted = new Date(now.getTime() - 5 * MIN);
     expect(isWithinStartupGrace(booted, now)).toBe(true);
     expect(
@@ -482,12 +486,12 @@ describe('G01 — নীরবতার ব্যাখ্যা আছে ক�
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// G01 (ফেরত) — ফিরে এলে alert নিজে বন্ধ
+// G01 (return): when it comes back, the alert closes itself
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('recoveredAlertIds — ফিরে আসা এজেন্টের খোলা alert বন্ধযোগ্য', () => {
+describe('recoveredAlertIds: an open alert of a returned agent can be closed', () => {
   const now = new Date('2026-08-11T14:00:00Z');
-  const cameBack = new Date(now.getTime() - 2 * MIN); // ১০ মিনিটের কম → ফিরেছে
+  const cameBack = new Date(now.getTime() - 2 * MIN); // under 10 minutes: it came back
   const stillSilent = new Date(now.getTime() - 30 * MIN);
 
   const open = (
@@ -499,35 +503,35 @@ describe('recoveredAlertIds — ফিরে আসা এজেন্টের 
     ...over,
   });
 
-  it('আবার কথা-বলা active ডিভাইসের alert বন্ধযোগ্য', () => {
+  it('the alert of an active device talking again can be closed', () => {
     expect(recoveredAlertIds([open()], now)).toEqual([1n]);
   });
 
-  /** ⭐ agentDownCandidates()-এর ঠিক আয়না: এখনো চুপ থাকলে বন্ধ নয় */
-  it('এখনো চুপ থাকলে বন্ধ করা হয় না', () => {
+  /** The exact mirror of agentDownCandidates(): not closed while still silent */
+  it('is not closed while still silent', () => {
     expect(recoveredAlertIds([open({ lastSeenAt: stillSilent })], now)).toEqual(
       [],
     );
   });
 
-  /** ⚠️ revoke করা ডিভাইসের চুপ থাকাটাই উদ্দেশ্য — সাম্প্রতিক হলেও বন্ধ নয় */
-  it('revoke করা ডিভাইস বাদ', () => {
+  /** A revoked device is meant to be silent: not closed even if recent */
+  it('a revoked device is left out', () => {
     expect(recoveredAlertIds([open({ deviceActive: false })], now)).toEqual([]);
   });
 
-  it('lastSeenAt নেই এমন কিছু বন্ধ হয় না', () => {
+  it('nothing without lastSeenAt is closed', () => {
     expect(recoveredAlertIds([open({ lastSeenAt: null })], now)).toEqual([]);
   });
 
-  /** ⚠️ সীমানা ঠিক silence-floor-এ — raise আর resolve যেন একই দাগে না লাগে */
-  it('ঠিক silence-floor-এ থাকলেও ফিরে এসেছে ধরা হয়', () => {
+  /** The boundary is exactly at the silence floor: raise and resolve must not hit the same line */
+  it('even exactly at the silence floor it counts as returned', () => {
     const atFloor = new Date(now.getTime() - AGENT_SILENCE_MIN * MIN);
     expect(recoveredAlertIds([open({ lastSeenAt: atFloor })], now)).toEqual([
       1n,
     ]);
   });
 
-  it('মিশ্র তালিকায় শুধু ফিরে-আসাগুলোর id ফেরে', () => {
+  it('in a mixed list only the ids of those that came back are returned', () => {
     const ids = recoveredAlertIds(
       [
         open({ alertId: 10n, lastSeenAt: cameBack }),
@@ -540,16 +544,16 @@ describe('recoveredAlertIds — ফিরে আসা এজেন্টের 
     expect(ids).toEqual([10n, 13n]);
   });
 
-  it('খালি তালিকায় খালি ফল', () => {
+  it('an empty list gives an empty result', () => {
     expect(recoveredAlertIds([], now)).toEqual([]);
   });
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// G02 — হস্তক্ষেপ
+// G02: tampering
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('G02 — agent_stop স্বাভাবিক নাকি হস্তক্ষেপ', () => {
+describe('G02: whether agent_stop is normal or tampering', () => {
   const at = new Date('2026-08-11T12:00:00Z');
 
   const stop = (over: Partial<StopEvent> = {}): StopEvent => ({
@@ -559,57 +563,56 @@ describe('G02 — agent_stop স্বাভাবিক নাকি হস্�
     ...over,
   });
 
-  it('পাশে logoff থাকলে স্বাভাবিক', () => {
+  it('normal when a logoff is alongside', () => {
     const context = [
       stop({ type: 'logoff', occurredAt: new Date(at.getTime() + 30_000) }),
     ];
     expect(isTamperStop(stop(), context)).toBe(false);
   });
 
-  it('আশেপাশে কিছু না থাকলে হস্তক্ষেপ', () => {
+  it('tampering when nothing is nearby', () => {
     expect(isTamperStop(stop(), [])).toBe(true);
   });
 
-  /** ⚠️ অন্য PC-র shutdown দিয়ে এই PC-র agent_stop ব্যাখ্যা করা যাবে না */
-  it('অন্য ডিভাইসের shutdown কোনো ছাড় দেয় না', () => {
+  /** Another PC's shutdown cannot explain this PC's agent_stop */
+  it('another device\'s shutdown gives no exemption', () => {
     const context = [stop({ deviceId: 2, type: 'shutdown' })];
     expect(isTamperStop(stop(), context)).toBe(true);
   });
 
-  it('১০ মিনিট আগের shutdown জানালার বাইরে', () => {
+  it('a shutdown 10 minutes earlier is outside the window', () => {
     const context = [
       stop({ type: 'shutdown', occurredAt: new Date(at.getTime() - 10 * MIN) }),
     ];
     expect(isTamperStop(stop(), context)).toBe(true);
   });
 
-  it('আনইনস্টল কখনোই স্বাভাবিক নয় — shutdown পাশে থাকলেও', () => {
+  it('uninstall is never normal, even with a shutdown alongside', () => {
     const context = [stop({ type: 'shutdown' })];
     expect(isTamperStop(stop({ type: 'uninstall' }), context)).toBe(true);
     expect(isTamperStop(stop({ type: 'agent_uninstall' }), context)).toBe(true);
   });
 
-  it('আনইনস্টল critical, শুধু বন্ধ করা warning', () => {
+  it('uninstall is critical, merely stopping is a warning', () => {
     expect(tamperSeverity('uninstall')).toBe('critical');
     expect(tamperSeverity('agent_stop')).toBe('warning');
   });
 
   /**
-   * ⭐⭐⭐ **এজেন্ট নিজের আপডেট বসানোও একটা স্বাভাবিক বন্ধ**
-   * *(৫ সেপ্টেম্বর ২০২৬)*।
+   * The agent installing its own update is also a normal stop (5 September 2026).
    *
-   * ⚠️⚠️ **এতদিন এটা একটা নীরব মিথ্যা অ্যালার্ট ছিল।** MSI আপডেটের সময়
-   * Windows-এর Restart Manager এজেন্টকে বন্ধ করায় (`ENDSESSION_CLOSEAPP`)।
-   * তখন `agent_stop` ঠিকই যেত, কিন্তু পাশে `logoff`/`shutdown` কিছুই
-   * থাকত না — কারণ PC বন্ধ হচ্ছিল না। ফলে **প্রতিটা আপডেট একটা
-   * `agent_killed` warning তুলত**, অর্থাৎ কেউ আপডেট বসালেই তাকে
-   * হস্তক্ষেপকারী বলে দাগানো হতো।
+   * Careful: until now this was a silent false alert. During an MSI update,
+   * Windows' Restart Manager makes the agent close (`ENDSESSION_CLOSEAPP`).
+   * The `agent_stop` did go out, but with no `logoff`/`shutdown` alongside,
+   * because the PC was not shutting down. So every update raised an
+   * `agent_killed` warning, i.e. whoever installed an update was marked as
+   * tampering.
    *
-   * ⭐ হাতে একটা-দুটো PC আপডেট করলে সেটা চোখে পড়ত না। কিন্তু রোলআউট নিজে
-   * থেকে এগোতে শুরু করার পর একসাথে ১২টা মিথ্যা অ্যালার্ট — আর তার পরেই
-   * কেউ আর অ্যালার্ট পড়ত না, অর্থাৎ G02 কার্যত অকেজো হয়ে যেত।
+   * Updating one or two PCs by hand, nobody noticed. But once the rollout
+   * began to advance by itself, 12 false alerts came at once, and after that
+   * nobody read alerts, so G02 would have become useless in practice.
    */
-  it('⭐ পাশে agent_update থাকলে স্বাভাবিক — আপডেট হস্তক্ষেপ নয়', () => {
+  it('normal when agent_update is alongside: an update is not tampering', () => {
     const context = [
       stop({ type: 'agent_update', occurredAt: new Date(at.getTime() + 5_000) }),
     ];
@@ -617,59 +620,60 @@ describe('G02 — agent_stop স্বাভাবিক নাকি হস্�
   });
 
   /**
-   * ⚠️⚠️ **ছাড়টা সংকীর্ণ, আর সেটাই নকশা।** `agent_update` কেবল তখনই যায়
-   * যখন Windows নিজে আমাদের বন্ধ করাচ্ছে। কেউ Task Manager থেকে প্রসেসটা
-   * মেরে দিলে ওটা যায় না — তাই আসল হস্তক্ষেপ আগের মতোই ধরা পড়ে।
+   * Careful: the exemption is narrow, and that is the design. `agent_update`
+   * is sent only when Windows itself makes us close. If someone kills the
+   * process from Task Manager it is not sent, so real tampering is caught as
+   * before.
    *
-   * ⭐ এই টেস্টটাই বলে দেয় ছাড়টা কতটুকু: একটা নাম যোগ করা হয়েছে,
-   *    পাহারাটা আলগা করা হয়নি।
+   * This test shows how much the exemption covers: one name was added, and
+   * the guard was not loosened.
    */
-  it('⭐ আপডেট ছাড়া বন্ধ এখনো হস্তক্ষেপই', () => {
+  it('a stop without an update is still tampering', () => {
     expect(isTamperStop(stop(), [])).toBe(true);
   });
 
-  /** ⚠️ অন্য PC-র আপডেট এই PC-র agent_stop ব্যাখ্যা করে না */
-  it('অন্য ডিভাইসের agent_update কোনো ছাড় দেয় না', () => {
+  /** Another PC's update does not explain this PC's agent_stop */
+  it('another device\'s agent_update gives no exemption', () => {
     const context = [stop({ deviceId: 2, type: 'agent_update' })];
     expect(isTamperStop(stop(), context)).toBe(true);
   });
 
-  /** ⚠️ আনইনস্টলের কোনো ছাড় নেই — আপডেট পাশে থাকলেও */
-  it('আপডেটের পাশেও আনইনস্টল হস্তক্ষেপই', () => {
+  /** Uninstall has no exemption, even with an update alongside */
+  it('uninstall next to an update is still tampering', () => {
     const context = [stop({ type: 'agent_update' })];
     expect(isTamperStop(stop({ type: 'agent_uninstall' }), context)).toBe(true);
   });
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// G03 — ডিস্ক
+// G03: disk
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('G03 — ডিস্কের শতাংশ ও স্তর', () => {
+describe('G03: disk percentage and level', () => {
   /**
-   * ⭐ হর হিসেবে মোট ব্লক নয়, `used + bavail`।
-   * ১০০০ ব্লকের ৫০ root-এর জন্য সরানো, ৮০০ ব্যবহৃত, ১৫০ সাধারণ ব্যবহারকারীর
-   * জন্য খালি → `df` বলে ৮৪.২%, অথচ মোট দিয়ে ভাগ করলে ৮০%। দ্বিতীয়টা ধরলে
-   * ডিস্ক আসলে ভরে যাওয়ার পরেও আমাদের হিসাব ৯৫% পেরোত না।
+   * The denominator is `used + bavail`, not total blocks. Of 1000 blocks, 50
+   * are reserved for root, 800 used, 150 free for ordinary users: `df` says
+   * 84.2%, while dividing by the total gives 80%. Going with the second, our
+   * figure would not pass 95% even after the disk was really full.
    */
-  it('root-এর জন্য সরিয়ে রাখা ব্লক বাদ দিয়ে হিসাব হয়', () => {
+  it('calculates leaving out the blocks reserved for root', () => {
     const pct = diskUsedPct({ blocks: 1000, bfree: 200, bavail: 150, bsize: 4096 });
     expect(pct).toBeCloseTo(84.2, 1);
 
     const naive = ((1000 - 200) / 1000) * 100;
-    expect(naive).toBe(80); // যা হতো
+    expect(naive).toBe(80); // what it would have been
   });
 
-  it('একদম খালি আর একদম ভরা', () => {
+  it('completely empty and completely full', () => {
     expect(diskUsedPct({ blocks: 100, bfree: 100, bavail: 100, bsize: 512 })).toBe(0);
     expect(diskUsedPct({ blocks: 100, bfree: 0, bavail: 0, bsize: 512 })).toBe(100);
   });
 
-  it('শূন্য আকারের ভলিউমে ভাগ করে NaN আসে না', () => {
+  it('dividing by a zero-size volume does not give NaN', () => {
     expect(diskUsedPct({ blocks: 0, bfree: 0, bavail: 0, bsize: 4096 })).toBe(0);
   });
 
-  it('স্তরের সীমানা — ঠিক ৮০ ও ঠিক ৯৫ ধরা পড়ে', () => {
+  it('level boundaries: exactly 80 and exactly 95 are caught', () => {
     expect(diskVerdict(DISK_WARN_PCT - 0.1)).toBeNull();
     expect(diskVerdict(DISK_WARN_PCT)?.type).toBe('disk_warning');
     expect(diskVerdict(94.9)?.type).toBe('disk_warning');
@@ -678,16 +682,17 @@ describe('G03 — ডিস্কের শতাংশ ও স্তর', () =>
   });
 
   /**
-   * ⭐ ৮০% আর ৯৫%-এর type আলাদা বলেই throttle-এর key আলাদা — তাই গুরুতর
-   * খবরটা আগের সতর্কতার ছায়ায় ৬ ঘণ্টা চাপা পড়ে থাকে না।
+   * Because 80% and 95% have different types, their throttle keys differ, so
+   * the serious news is not suppressed for 6 hours in the shadow of the
+   * earlier warning.
    */
-  it('warning আর critical আলাদা throttle key পায়', () => {
+  it('warning and critical get different throttle keys', () => {
     expect(dedupeKey({ type: 'disk_warning' })).not.toBe(
       dedupeKey({ type: 'disk_critical' }),
     );
   });
 
-  it('বাইট মানুষের পড়ার মতো হয়', () => {
+  it('bytes come out human-readable', () => {
     expect(humanBytes(0)).toBe('0 B');
     expect(humanBytes(1024)).toBe('1.0 KB');
     expect(humanBytes(1024 ** 3 * 1.5)).toBe('1.5 GB');
@@ -695,32 +700,32 @@ describe('G03 — ডিস্কের শতাংশ ও স্তর', () =>
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// G06 — সারাদিন কোনো কাজ নেই
+// G06: no activity all day
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('G06 — কখন "আজ কেউ কাজ করেনি" বলা হবে', () => {
+describe('G06: when "nobody worked today" is declared', () => {
   /**
-   * ⭐⭐⭐ **অনুমোদিত ছুটির দিনে অ্যালার্ট নয়** *(৬ সেপ্টেম্বর ২০২৬, G157)*।
+   * No alert on an approved leave day (6 September 2026, G157).
    *
-   * ⚠️⚠️ এই ফাইলের উপরের নোটে এতদিন লেখা ছিল *"ছুটির কোনো ব্যবস্থা এই
-   * সিস্টেমে নেই"* — আর সেটা এক মাস ধরে বাসি। ছুটির খাতা এসেছে R2/G130-তে,
-   * কিন্তু অ্যালার্টের কোনো পরীক্ষা কোনোদিন `leaves` টেবিলটা পড়েনি।
+   * The note at the top of this file used to say "there is no leave system
+   * in this system", and that had been stale for a month. The leave register
+   * arrived in R2/G130, but no alert test ever read the `leaves` table.
    *
-   * ⚠️ মাঠে মেপে দেখা: মাত্র **৩টা** ছুটির দিনে **১১টা** মিথ্যা অ্যালার্ট।
+   * Measured in the field: on just 3 leave days, 11 false alerts.
    */
-  it('⭐ অনুমোদিত ছুটির দিনে অ্যালার্ট ওঠে না', () => {
+  it('no alert on an approved leave day', () => {
     expect(shouldFlagNoActivity(input({ onLeave: true }))).toBe(false);
   });
 
   /**
-   * ⚠️⚠️ **দ্বিতীয় টেস্টটাই আসল পাহারা** — প্রথমটা একা থাকলে সবসময়
-   * `false` ফেরত দিয়েও সবুজ থাকা যেত।
+   * The second test is the real guard: on its own, the first could stay green
+   * even by always returning `false`.
    */
-  it('⭐ ছুটি না থাকলে আগের মতোই অ্যালার্ট ওঠে', () => {
+  it('without leave the alert is raised as before', () => {
     expect(shouldFlagNoActivity(input({ onLeave: false }))).toBe(true);
   });
 
-  const evening = dhaka('2026-08-11T19:00:00'); // মঙ্গলবার সন্ধ্যা ৭টা
+  const evening = dhaka('2026-08-11T19:00:00'); // Tuesday 7 pm
 
   const input = (over: Partial<NoActivityInput> = {}): NoActivityInput => ({
     workedSegments: 0,
@@ -733,66 +738,67 @@ describe('G06 — কখন "আজ কেউ কাজ করেনি" বল�
     ...over,
   });
 
-  it('সন্ধ্যায়, কর্মদিবসে, কোনো কাজ নেই → অ্যালার্ট', () => {
+  it('evening, working day, no work: an alert', () => {
     expect(shouldFlagNoActivity(input())).toBe(true);
   });
 
-  it('একটা সেগমেন্ট থাকলেও অ্যালার্ট নয়', () => {
+  it('no alert even with a single segment', () => {
     expect(shouldFlagNoActivity(input({ workedSegments: 1 }))).toBe(false);
   });
 
   /**
-   * ⭐ ছুটির দিন বাদ না দিলে প্রতি শুক্রবার বারোটা মিথ্যা অ্যালার্ট — মাসে
-   * চারবার। ওই অভ্যাসেই মানুষ অ্যালার্ট পড়া বন্ধ করে দেয়।
+   * Without excluding the weekly day off, there would be twelve false alerts
+   * every Friday, four times a month. That habit is how people stop reading
+   * alerts.
    */
-  it('সাপ্তাহিক ছুটির দিনে চুপ', () => {
+  it('quiet on the weekly day off', () => {
     const friday = dhaka('2026-08-14T19:00:00');
     expect(shouldFlagNoActivity(input({ now: friday }))).toBe(false);
   });
 
-  it('পলিসিতে সাপ্তাহিক ছুটি না থাকলে শুক্রবারেও অ্যালার্ট হয়', () => {
+  it('an alert on Friday too if the policy has no weekly day off', () => {
     const friday = dhaka('2026-08-14T19:00:00');
     expect(
       shouldFlagNoActivity(input({ now: friday, weeklyOffDays: [] })),
     ).toBe(true);
   });
 
-  it('ক্যালেন্ডারের ছুটিতে চুপ', () => {
+  it('quiet on a calendar holiday', () => {
     expect(shouldFlagNoActivity(input({ isHoliday: true }))).toBe(false);
   });
 
   /**
-   * ⚠️ জানালা না থাকলে মধ্যরাতের পরপরই নতুন দিনের হিসাবে সবাইকে
-   * "কাজ করেনি" পাওয়া যেত — অর্থাৎ প্রতি রাতে বারোটা অ্যালার্ট।
+   * Without the window, right after midnight everyone would be found "not
+   * working" in the new day's count, i.e. twelve alerts every night.
    */
-  it('সকালে বা মধ্যরাতে প্রশ্নটাই করা হয় না', () => {
+  it('in the morning or at midnight the question is not even asked', () => {
     expect(shouldFlagNoActivity(input({ now: dhaka('2026-08-11T09:00:00') }))).toBe(false);
     expect(shouldFlagNoActivity(input({ now: dhaka('2026-08-11T00:30:00') }))).toBe(false);
     expect(shouldFlagNoActivity(input({ now: dhaka('2026-08-11T22:30:00') }))).toBe(false);
   });
 
-  it('জানালার সীমানা — ১৮:০০ ভেতরে, ২২:০০ বাইরে', () => {
+  it('window boundaries: 18:00 inside, 22:00 outside', () => {
     expect(isNoActivityWindow(dhaka('2026-08-11T18:00:00'))).toBe(true);
     expect(isNoActivityWindow(dhaka('2026-08-11T21:59:00'))).toBe(true);
     expect(isNoActivityWindow(dhaka('2026-08-11T22:00:00'))).toBe(false);
   });
 
   /**
-   * ⚠️ জানালা (৪ ঘণ্টা) throttle-এর (৬ ঘণ্টা) চেয়ে ছোট — এতে একজনের জন্য
-   * দিনে একটার বেশি অ্যালার্ট গাণিতিকভাবেই অসম্ভব।
+   * The window (4 hours) is shorter than the throttle (6 hours), so more than
+   * one alert a day for one person is mathematically impossible.
    */
-  it('জানালা throttle জানালার চেয়ে ছোট', () => {
+  it('the window is shorter than the throttle window', () => {
     const windowHours = 22 - 18;
     expect(windowHours).toBeLessThan(THROTTLE_HOURS);
   });
 
-  it('আগামীকাল যোগ দেওয়া কর্মীর জন্য অ্যালার্ট নয়', () => {
+  it('no alert for an employee who joins tomorrow', () => {
     expect(
       shouldFlagNoActivity(input({ joinedOn: new Date('2026-08-20T00:00:00Z') })),
     ).toBe(false);
   });
 
-  it('গতকাল চলে যাওয়া কর্মীর জন্য অ্যালার্ট নয়, শেষ দিনটায় হয়', () => {
+  it('no alert for an employee who left yesterday, but there is on the last day', () => {
     expect(
       shouldFlagNoActivity(input({ leftOn: new Date('2026-08-10T00:00:00Z') })),
     ).toBe(false);

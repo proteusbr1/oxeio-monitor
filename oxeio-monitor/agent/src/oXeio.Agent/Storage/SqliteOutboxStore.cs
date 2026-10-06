@@ -7,52 +7,53 @@ using oXeio.Core.Agent;
 namespace oXeio.Agent.Storage;
 
 /// <summary>
-/// ⭐ <see cref="IOutboxStore"/>-এর SQLite বাস্তবায়ন — এক সপ্তাহের ইন্টারনেট
-/// বিভ্রাটে অফিসের বেতনের হিসাব বাঁচবে কি না, সেটা এই ফাইলটাই ঠিক করে।
+/// The SQLite implementation of <see cref="IOutboxStore"/>. Whether a week-long internet
+/// outage costs the office its payroll data is decided by this file.
 ///
-/// <b>lease/ack চক্রটা কোন ধাপে মরলে কী হয়</b> (প্রতিটা ধাপে kill করে ভাবুন):
+/// <b>What happens if the process dies at each step of the lease/ack cycle</b> (kill it at
+/// every step and think it through):
 /// <code>
-/// ১. LeaseAsync  — সারি জায়গাতেই, শুধু lease_id বসল (এক ট্রানজেকশন)।
-///                  এখন মরলে: সারি "ধার নেওয়া" অবস্থায় থাকে। পরের স্টার্টআপে
-///                  সব লিজ ছেড়ে দেওয়া হয় → আবার আপলোড হবে। ক্ষতি নেই।
-/// ২. HTTP POST   — মরলে: সার্ভার হয়তো লিখেছে, হয়তো লেখেনি। সারি টিকে আছে,
-///                  তাই আবার যাবে; clientUuid-এ সার্ভার ডিডুপ করবে। ক্ষতি নেই।
-/// ৩. AckAsync    — সারি DELETE + commit। commit-এর আগে মরলে ধাপ ২-এর মতোই।
-///                  commit-এর পরে, .webp মোছার আগে মরলে ফাইলটা অনাথ হয় —
-///                  <see cref="SweepOrphanFilesAsync"/> পরের স্টার্টআপে তুলে নেয়।
+/// 1. LeaseAsync  - the row stays where it is, only lease_id is set (one transaction).
+///                  Dying now: the row stays "leased". At the next startup all leases
+///                  are released, so it is uploaded again. No harm.
+/// 2. HTTP POST   - dying here: the server may or may not have written it. The row
+///                  survives, so it is sent again; the server dedupes on clientUuid. No harm.
+/// 3. AckAsync    - row DELETE + commit. Dying before the commit is the same as step 2.
+///                  Dying after the commit but before the .webp is deleted leaves the file
+///                  orphaned; <see cref="SweepOrphanFilesAsync"/> picks it up at the next
+///                  startup.
 /// </code>
-/// অর্থাৎ কোনো ধাপেই ডেটা <b>হারায় না</b>; সবচেয়ে খারাপ ফল হলো একবার বাড়তি
-/// পাঠানো, যেটার দাম শূন্য (§ IOutboxStore-এর ডক)।
+/// So data is <b>never lost</b> at any step; the worst outcome is one extra send, which
+/// costs nothing (see the IOutboxStore doc).
 ///
-/// <b>থ্রেডিং:</b> দুটো কানেকশন।
+/// <b>Threading:</b> two connections.
 /// <list type="bullet">
-/// <item><b>লেখার</b> কানেকশন একটাই, আর <see cref="_writeGate"/> (SemaphoreSlim)
-/// সেটাকে একবারে একজনের হাতে রাখে। ট্র্যাকিং থ্রেড Enqueue করে আর সিঙ্ক ওয়ার্কার
-/// lease/ack করে — SQLite কানেকশন অবজেক্ট থ্রেড-সেফ নয়, তাই এই গেটটা
-/// আলোচনার বিষয় নয়, বাধ্যতামূলক।</item>
-/// <item><b>পড়ার</b> কানেকশন আলাদা, <see cref="_readGate"/>-এ। tray প্রতি কয়েক
-/// সেকেন্ডে গভীরতা চায়; একই গেটে ফেললে ৫০০ সারির একটা ব্যাচ-ইনসার্টের পেছনে
-/// tray আটকে থাকত। WAL-এ পড়া আর লেখা একসাথে চলে, তাই আলাদা কানেকশন মানেই
-/// tray কখনো লেখার জন্য অপেক্ষা করে না।</item>
+/// <item>There is exactly one <b>write</b> connection, and <see cref="_writeGate"/>
+/// (SemaphoreSlim) hands it to one caller at a time. The tracking thread enqueues and the
+/// sync worker leases/acks; a SQLite connection object is not thread-safe, so this gate is
+/// not up for debate, it is mandatory.</item>
+/// <item>The <b>read</b> connection is separate, behind <see cref="_readGate"/>. The tray
+/// asks for the depth every few seconds; on the same gate it would be stuck behind a
+/// 500-row batch insert. In WAL, reads and writes run together, so a separate connection
+/// means the tray never waits for a write.</item>
 /// </list>
-/// গেট দুটো <c>async</c>, তাই অপেক্ষা করতে গিয়ে কোনো থ্রেড ব্লক হয় না।
+/// Both gates are <c>async</c>, so no thread is blocked while waiting.
 ///
-/// ⚠️ ভেতরে সিঙ্ক্রোনাস ADO.NET কল ব্যবহার করা হয়েছে (<c>ExecuteReader</c>,
-/// <c>ExecuteNonQuery</c>) — ইচ্ছাকৃত। SQLite-এ সত্যিকারের অ্যাসিঙ্ক I/O নেই;
-/// <c>ExecuteNonQueryAsync</c> ভেতরে ওই একই ব্লকিং কলই করে, শুধু একটা বাড়তি
-/// state machine জুড়ে দেয়। বাইরের API অ্যাসিঙ্ক রাখা হয়েছে ইন্টারফেসের জন্য
-/// আর গেটে অপেক্ষাটা সত্যিই অ্যাসিঙ্ক বলে।
+/// Careful: synchronous ADO.NET calls (<c>ExecuteReader</c>, <c>ExecuteNonQuery</c>) are
+/// used inside on purpose. SQLite has no real async I/O; <c>ExecuteNonQueryAsync</c> makes
+/// the same blocking call internally and just adds an extra state machine. The outer API is
+/// async because of the interface and because waiting on the gate really is async.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class SqliteOutboxStore : IOutboxStore
 {
-    /// <summary>একই এররের লগ কত ঘন ঘন। ডিস্ক ভরে গেলে সেকেন্ডে একবার লিখে ডিস্ক আরও ভরানো চলবে না।</summary>
+    /// <summary>How often the same error is logged. Once a second would fill an already full disk.</summary>
     private static readonly TimeSpan ErrorLogWindow = TimeSpan.FromMinutes(1);
 
-    /// <summary>লিজ চাওয়ার সময় ভুল করে ০ বা ঋণাত্মক দিলে এটাই ধরা হয়।</summary>
+    /// <summary>Used when a lease is requested with 0 or a negative duration by mistake.</summary>
     private static readonly TimeSpan DefaultLeaseFor = TimeSpan.FromMinutes(5);
 
-    /// <summary>ড্রপ-লগে সর্বোচ্চ কতটা সারি ধরে ধরে লেখা হবে; এর বেশি হলে শুধু সারাংশ।</summary>
+    /// <summary>Most rows written individually to the drop log; beyond that, only a summary.</summary>
     private const int MaxDropLogLines = 50;
 
     private readonly SqliteConnection _write;
@@ -77,32 +78,32 @@ internal sealed class SqliteOutboxStore : IOutboxStore
         _drops = drops;
     }
 
-    /// <summary>স্ক্রিনশট লেখার মডিউল এখান থেকেই গন্তব্য পাথ নেবে — নিজে ফোল্ডার বানাবে না।</summary>
+    /// <summary>The screenshot writer takes destination paths from here; it creates no folders itself.</summary>
     public OutboxPaths Paths { get; }
 
     /// <summary>
-    /// শেষবার লেখা ব্যর্থ হওয়ার কারণ (সাধারণত ডিস্ক ভরা), না হলে null।
-    /// সিঙ্ক ওয়ার্কার এটা দেখে তখনই একটা ছাঁটাই-পাস চালাতে পারে, আর tray
-    /// স্বাস্থ্য "Degraded" দেখাতে পারে।
+    /// Why the last write failed (usually a full disk), otherwise null.
+    /// The sync worker can see this and run a trimming pass right away, and the tray can
+    /// show health as "Degraded".
     /// </summary>
     public string? LastWriteError { get; private set; }
 
     public DateTimeOffset? LastWriteErrorAt { get; private set; }
 
-    /// <summary>ড্রপ-লগের পাথ — স্টার্টআপে একবার দেখিয়ে দেওয়ার জন্য।</summary>
+    /// <summary>The drop-log path, shown once at startup.</summary>
     public string DropLogPath => _drops.FilePath;
 
-    // ── খোলা ────────────────────────────────────────────────────────────────
+    // ── opening ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// আউটবক্স খোলা। স্টার্টআপে একবার। সিঙ্ক্রোনাস, কারণ এর পরে আর কিছুই
-    /// শুরু হতে পারে না — অ্যাসিঙ্ক করলে শুধু ভান হতো।
+    /// Opens the outbox. Once, at startup. Synchronous, because nothing else can start after
+    /// it; making it async would only be pretense.
     ///
-    /// ⚠️ ফাইলটা নষ্ট থাকলে (পাওয়ার-লস-এর সময় ফাইল সিস্টেম নিজেই ভুল লিখেছে,
-    /// বা AV ফাইলটা কেটে দিয়েছে) এখানে ব্যতিক্রম ছুড়ে দিলে এজেন্ট প্রতিবার
-    /// চালু হয়ে সঙ্গে সঙ্গে মরত — অর্থাৎ ওই মেশিন <b>চিরতরে</b> ট্র্যাকিং হারাত।
-    /// তাই নষ্ট ফাইল পাশে সরিয়ে রেখে নতুন DB বানানো হয়: যা জমেছিল তা যায়
-    /// (এবং সেটা ড্রপ-লগে লেখা থাকে), কিন্তু কাল থেকে হিসাব আবার চলে।
+    /// Careful: if the file is corrupt (the file system itself wrote wrongly during a power
+    /// loss, or AV truncated the file) and we threw here, the agent would die immediately on
+    /// every start, so that machine would lose tracking <b>for good</b>. So a corrupt file is
+    /// moved aside and a new DB is created: what had accumulated is lost (and recorded in the
+    /// drop log), but from tomorrow the accounting runs again.
     /// </summary>
     public static SqliteOutboxStore Open(OutboxPaths? paths = null, Action<string>? log = null)
     {
@@ -142,9 +143,9 @@ internal sealed class SqliteOutboxStore : IOutboxStore
 
     private static SqliteConnection OpenConnection(string dbPath)
     {
-        // ⚠️ Pooling বন্ধ। কানেকশন দুটো প্রসেসের আয়ু জুড়ে খোলা থাকে, তাই পুলে
-        // কোনো লাভ নেই; উল্টো Dispose-এর পরেও পুল ফাইলটা ধরে রাখত আর নষ্ট DB
-        // পাশে সরানোর সময় "file in use" দিত।
+        // Careful: pooling is off. The two connections stay open for the life of the process,
+        // so a pool gains nothing; worse, even after Dispose the pool would hold the file and
+        // moving a corrupt DB aside would fail with "file in use".
         var cs = new SqliteConnectionStringBuilder
         {
             DataSource = dbPath,
@@ -160,9 +161,9 @@ internal sealed class SqliteOutboxStore : IOutboxStore
     }
 
     /// <summary>
-    /// খোলার আগে একবার স্বাস্থ্য পরীক্ষা। নষ্ট হলে DB (এবং তার -wal/-shm)
-    /// পাশে সরিয়ে রাখা হয় — মুছে ফেলা হয় না, কারণ পরে হাতে উদ্ধারের সুযোগ
-    /// রাখাটাই সস্তা।
+    /// A health check once before opening. If corrupt, the DB (and its -wal/-shm) is moved
+    /// aside, not deleted, because keeping a chance of manual recovery later is the cheap
+    /// option.
     /// </summary>
     private static void QuarantineIfCorrupt(OutboxPaths paths, Action<string> log, DropLog drops)
     {
@@ -205,7 +206,7 @@ internal sealed class SqliteOutboxStore : IOutboxStore
         log("⚠️ " + line);
     }
 
-    // ── জমা ─────────────────────────────────────────────────────────────────
+    // ── enqueue ─────────────────────────────────────────────────────────────
 
     private const string InsertSql = """
         INSERT INTO outbox (client_uuid, kind, enqueued_at_ms, payload, file_path, size_bytes)
@@ -214,13 +215,12 @@ internal sealed class SqliteOutboxStore : IOutboxStore
         """;
 
     /// <summary>
-    /// ⚠️ এখানে <paramref name="ct"/> ইচ্ছাকৃতভাবে গেটে দেওয়া হয় না।
-    /// শাটডাউনের টোকেন বাতিল হয়ে গেলে যদি Enqueue ছুড়ে দিত, তাহলে ঠিক
-    /// বন্ধ হওয়ার মুহূর্তে তৈরি হওয়া সেগমেন্টগুলো — অর্থাৎ যেগুলো সবচেয়ে নতুন
-    /// আর কেবল RAM-এ আছে — চিরতরে হারাত। গেটটা কয়েক মিলিসেকেন্ডের বেশি ধরা
-    /// থাকে না, তাই অপেক্ষা করে লিখে ফেলাই নিরাপদ।
+    /// Careful: <paramref name="ct"/> is deliberately not passed to the gate. If Enqueue
+    /// threw when the shutdown token is cancelled, the segments created right at shutdown,
+    /// the newest ones that exist only in RAM, would be lost for good. The gate is never held
+    /// for more than a few milliseconds, so waiting and writing is safe.
     ///
-    /// ব্যর্থ হলে ফেরত দেয় <c>-1</c>, ছুড়ে দেয় না (ডিস্ক ভরার আচরণ, নিচে দেখুন)।
+    /// Returns <c>-1</c> on failure instead of throwing (disk-full behavior, see below).
     /// </summary>
     public async Task<long> EnqueueAsync(OutboxItem item, CancellationToken ct = default)
     {
@@ -239,9 +239,9 @@ internal sealed class SqliteOutboxStore : IOutboxStore
 
             if (changed > 0) return LastRowId();
 
-            // ON CONFLICT DO NOTHING — একই clientUuid আগেই সারিতে আছে।
-            // এটা ব্যর্থতা নয়, বরং কাম্য: প্রোডিউসার ক্র্যাশ করে একই রেকর্ড
-            // আবার জমা দিলে দুটো কপি ডিস্ক খায়, অথচ সার্ভার শেষমেশ একটাই রাখে।
+            // ON CONFLICT DO NOTHING: the same clientUuid is already in the queue.
+            // That is not a failure but desirable: if a producer crashes and enqueues the
+            // same record again, two copies would eat disk, yet the server keeps only one.
             return FindRowIdByUuid(item.ClientUuid);
         }
         catch (SqliteException ex)
@@ -256,8 +256,8 @@ internal sealed class SqliteOutboxStore : IOutboxStore
     }
 
     /// <summary>
-    /// এক ট্রানজেকশনে অনেকগুলো। ব্যর্থ হলে ফেরত দেয় <c>0</c> — অর্ধেক ঢোকা
-    /// ব্যাচ কখনো তৈরি হয় না (ইন্টারফেসের শর্ত)।
+    /// Many rows in one transaction. Returns <c>0</c> on failure; a half-inserted batch
+    /// never exists (an interface requirement).
     /// </summary>
     public async Task<int> EnqueueManyAsync(IReadOnlyList<OutboxItem> items, CancellationToken ct = default)
     {
@@ -273,8 +273,8 @@ internal sealed class SqliteOutboxStore : IOutboxStore
             cmd.Transaction = tx;
             cmd.CommandText = InsertSql;
 
-            // প্যারামিটার একবারই তৈরি, তারপর শুধু মান বদলানো — ৫০০ বার
-            // নতুন কমান্ড বানালে ৫০০ বার SQL প্রস্তুত করতে হতো।
+            // Parameters are created once and only the values change; creating a new command
+            // 500 times would mean preparing the SQL 500 times.
             var pUuid = cmd.Parameters.AddWithValue("$uuid", "");
             var pKind = cmd.Parameters.AddWithValue("$kind", "");
             var pAt = cmd.Parameters.AddWithValue("$at", 0L);
@@ -310,15 +310,15 @@ internal sealed class SqliteOutboxStore : IOutboxStore
         }
     }
 
-    // ── ধার নেওয়া ───────────────────────────────────────────────────────────
+    // ── leasing ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// ⚠️ ক্রম <c>row_id</c> ধরে, <c>enqueued_at_ms</c> ধরে নয় — যদিও ইন্টারফেস
-    /// বলেছে "পুরোনো আগে"। কারণ: ইউজার (বা NTP) ঘড়ি পিছিয়ে দিলে পরে তৈরি
-    /// হওয়া সারির টাইমস্ট্যাম্প আগের সারির চেয়ে ছোট হয়ে যায়, আর তখন সময় ধরে
-    /// সাজালে ব্যাকলগ এলোমেলো ক্রমে সার্ভারে যেত। row_id (AUTOINCREMENT) হলো
-    /// খাঁটি সন্নিবেশ-ক্রম, যা কোনো ঘড়ির উপর নির্ভর করে না — ব্যবহারিকভাবে
-    /// সেটাই "পুরোনো আগে"-র সঠিক সংজ্ঞা।
+    /// Careful: ordered by <c>row_id</c>, not <c>enqueued_at_ms</c>, even though the
+    /// interface says "oldest first". Reason: if a user (or NTP) sets the clock back, a row
+    /// created later gets a timestamp smaller than an earlier row's, and sorting by time
+    /// would send the backlog to the server out of order. row_id (AUTOINCREMENT) is pure
+    /// insertion order, independent of any clock, so in practice it is the correct
+    /// definition of "oldest first".
     /// </summary>
     public async Task<OutboxLease?> LeaseAsync(
         OutboundKind kind, int maxItems, TimeSpan leaseFor, DateTimeOffset now,
@@ -374,16 +374,16 @@ internal sealed class SqliteOutboxStore : IOutboxStore
 
             if (entries.Count == 0)
             {
-                // commit করা হয়নি — using dispose নিজেই rollback করবে।
+                // Not committed; disposing the using block rolls back by itself.
                 return null;
             }
 
             using (var upd = _write.CreateCommand())
             {
                 upd.Transaction = tx;
-                // "AND lease_id IS NULL" বাড়তি সুরক্ষা: একই ট্রানজেকশনের ভেতরে
-                // অবস্থা বদলানোর কথা নয়, কিন্তু শর্তটা রাখলে কোনো অবস্থাতেই
-                // অন্যের লিজ ছিনিয়ে নেওয়া সম্ভব হয় না।
+                // "AND lease_id IS NULL" is extra protection: state is not supposed to change
+                // within the same transaction, but keeping the condition makes it impossible
+                // to steal someone else's lease in any circumstance.
                 upd.CommandText = """
                     UPDATE outbox
                        SET lease_id = $lid, lease_expires_ms = $exp
@@ -422,7 +422,7 @@ internal sealed class SqliteOutboxStore : IOutboxStore
         }
     }
 
-    // ── লিজ শেষ করা ─────────────────────────────────────────────────────────
+    // ── finishing a lease ───────────────────────────────────────────────────
 
     /// <inheritdoc/>
     public Task AckAsync(Guid leaseId, CancellationToken ct = default) =>
@@ -433,19 +433,20 @@ internal sealed class SqliteOutboxStore : IOutboxStore
         CompleteLeaseAsync(leaseId, string.IsNullOrWhiteSpace(reason) ? "(no reason given)" : reason);
 
     /// <summary>
-    /// ack আর abandon-এর SQL এক — পার্থক্য শুধু ড্রপ-লগে। এক জায়গায় রাখা
-    /// হয়েছে যাতে ভবিষ্যতে একটার ফাইল-মোছা ঠিক করে অন্যটার ভুলে যাওয়া না হয়।
+    /// The SQL for ack and abandon is the same; the difference is only in the drop log. It is
+    /// kept in one place so that fixing the file deletion in one does not get forgotten in
+    /// the other.
     ///
-    /// <b>ক্রম:</b> আগে সারি DELETE + commit, <b>তারপর</b> ফাইল আনলিংক।
-    /// উল্টোটা করলে (আগে ফাইল) commit-এর আগে মরলে সারিটা এমন একটা ফাইল
-    /// দেখাত যা নেই, আর পরের আপলোড "file missing" বলে Permanent হয়ে ড্রপ-লগে
-    /// মিথ্যা বিপদসংকেত লিখত — অথচ ডেটা তো সার্ভারে পৌঁছেই গেছে।
-    /// এই ক্রমে সবচেয়ে খারাপ ফল একটাই অনাথ .webp, আর সেটা
-    /// <see cref="SweepOrphanFilesAsync"/> তুলে নেয়।
+    /// <b>Order:</b> first DELETE the row + commit, <b>then</b> unlink the file. The other way
+    /// round (file first), dying before the commit would leave a row pointing at a file that
+    /// no longer exists, and the next upload would say "file missing", become Permanent and
+    /// write a false alarm to the drop log, even though the data had reached the server.
+    /// With this order the worst outcome is a single orphaned .webp, which
+    /// <see cref="SweepOrphanFilesAsync"/> picks up.
     ///
-    /// ⚠️ <c>ct</c> নেওয়া হয় না: এই কলটা মানে সার্ভার ইতিমধ্যেই ডেটা নিয়ে
-    /// নিয়েছে। শাটডাউনে বাতিল করলে সারিগুলো থেকে যেত আর পরের বার পুরোটা
-    /// আবার পাঠানো হতো — নিরীহ, কিন্তু অকারণ।
+    /// Careful: no <c>ct</c> is taken. This call means the server has already accepted the
+    /// data. If a shutdown cancelled it, the rows would stay and the next run would send the
+    /// whole batch again; harmless, but pointless.
     /// </summary>
     private async Task CompleteLeaseAsync(Guid leaseId, string? reason)
     {
@@ -487,9 +488,9 @@ internal sealed class SqliteOutboxStore : IOutboxStore
 
             if (rows == 0)
             {
-                // অজানা বা ফুরিয়ে যাওয়া লিজ — ইন্টারফেস বলেছে চুপচাপ উপেক্ষা করতে।
-                // কিন্তু abandon-এর ক্ষেত্রে সেটাও জানা দরকার, নইলে "মুছেছি ভেবেছিলাম"
-                // অবস্থা তৈরি হয়।
+                // Unknown or expired lease: the interface says to ignore it quietly. For
+                // abandon, though, we need to know, otherwise we end up in the state
+                // "I thought I had deleted it".
                 if (reason is not null)
                     _drops.Write($"ABANDON\tlease {lid} not found (expired and returned?)\t{reason}");
                 return;
@@ -525,9 +526,9 @@ internal sealed class SqliteOutboxStore : IOutboxStore
     }
 
     /// <summary>
-    /// সাময়িক ব্যর্থতা — লিজ ছেড়ে দেওয়া, attempts বাড়ানো, notBefore বসানো।
-    /// ⚠️ <c>ct</c> নেওয়া হয় না: এটা না চললে সারিগুলো লিজ ফুরোনো পর্যন্ত
-    /// আটকে থাকত, অর্থাৎ শাটডাউনের বাতিল-টোকেন পরের রিট্রাইকে দেরি করাত।
+    /// Transient failure: releases the lease, bumps attempts, sets notBefore.
+    /// Careful: no <c>ct</c> is taken. If this did not run, the rows would stay stuck until
+    /// the lease expires, so a cancelled shutdown token would delay the next retry.
     /// </summary>
     public async Task RetryAsync(Guid leaseId, DateTimeOffset notBefore, CancellationToken ct = default)
     {
@@ -562,10 +563,10 @@ internal sealed class SqliteOutboxStore : IOutboxStore
     }
 
     /// <summary>
-    /// ⚠️ এখানে <c>attempts</c> বাড়ানো হয় না, ইচ্ছাকৃতভাবে। ফুরিয়ে যাওয়া লিজ
-    /// মানে সাধারণত প্রসেস মরে গিয়ে আবার চালু হয়েছে — সার্ভার কিছু বলেনি।
-    /// attempts বাড়ালে রিবুটের ঠিক পরেই ব্যাকঅফ শুরু হতো, অথচ ঠিক তখনই
-    /// জমে থাকা ব্যাকলগ দ্রুত পাঠানো দরকার।
+    /// Careful: <c>attempts</c> is deliberately not incremented here. An expired lease
+    /// usually means the process died and restarted; the server said nothing.
+    /// Incrementing attempts would start backoff right after a reboot, exactly when the
+    /// accumulated backlog needs to go out quickly.
     /// </summary>
     public async Task<int> ReclaimExpiredLeasesAsync(DateTimeOffset now, CancellationToken ct = default)
     {
@@ -600,15 +601,15 @@ internal sealed class SqliteOutboxStore : IOutboxStore
     }
 
     /// <summary>
-    /// স্টার্টআপে <b>সব</b> লিজ ছেড়ে দেওয়া, মেয়াদ যাই হোক।
+    /// Releases <b>all</b> leases at startup, whatever their expiry.
     ///
-    /// যুক্তি: এজেন্ট মেশিনে একটাই চলে (SessionGuard কনসোল সেশনে বাঁধে), তাই
-    /// এই মুহূর্তে DB-তে যেসব লিজ আছে সেগুলো সবই <i>মরে যাওয়া</i> প্রসেসের।
-    /// মেয়াদ ফুরোনোর জন্য অপেক্ষা করলে রিবুটের পর ৫ মিনিট ধরে ওই ব্যাচটা
-    /// আটকে থাকত — কোনো লাভ ছাড়াই।
+    /// Reasoning: only one agent runs per machine (SessionGuard binds to the console
+    /// session), so every lease in the DB right now belongs to a <i>dead</i> process.
+    /// Waiting for expiry would leave that batch stuck for 5 minutes after a reboot, for
+    /// no benefit.
     ///
-    /// ⚠️ ধরে নেওয়াটা ভুল হলেও (কোনোভাবে দুটো ইনস্ট্যান্স) সবচেয়ে খারাপ ফল
-    /// একই ব্যাচ দুবার পাঠানো, যেটা clientUuid-এর কারণে নিরীহ।
+    /// Careful: even if the assumption is wrong (somehow two instances), the worst outcome
+    /// is sending the same batch twice, which is harmless thanks to clientUuid.
     /// </summary>
     private void ReclaimAllLeases()
     {
@@ -626,13 +627,12 @@ internal sealed class SqliteOutboxStore : IOutboxStore
     }
 
     /// <summary>
-    /// এই বিল্ড চেনে না এমন <c>kind</c>-এর সারি মুছে ফেলা।
+    /// Deletes rows whose <c>kind</c> this build does not recognize.
     ///
-    /// এটা কেবল ডাউনগ্রেডে সম্ভব (নতুন এজেন্ট নতুন ধরনের সারি লিখে গেছে,
-    /// তারপর পুরোনো এজেন্ট চালু হয়েছে)। রেখে দিলে সারিগুলো কোনোদিন লিজ পেত না,
-    /// অথচ <see cref="OutboxBudget"/>-এর জরিপেও ধরা পড়ত না — অর্থাৎ এমন জায়গা
-    /// দখল করে থাকত যা কোনো নিয়মে কখনো ফেরত আসত না। ড্রপ-লগে লেখা হয় বলে
-    /// অন্তত নীরব নয়।
+    /// This is only possible after a downgrade (a newer agent wrote a new kind of row, then an
+    /// older agent started). If kept, those rows would never get leased and would not show up
+    /// in the <see cref="OutboxBudget"/> survey either, so they would occupy space that no rule
+    /// would ever reclaim. They are written to the drop log, so at least it is not silent.
     /// </summary>
     private void PurgeUnknownKinds()
     {
@@ -676,7 +676,7 @@ internal sealed class SqliteOutboxStore : IOutboxStore
         }
     }
 
-    // ── জরিপ ও গভীরতা (পড়ার কানেকশন) ───────────────────────────────────────
+    // ── survey and depth (read connection) ──────────────────────────────────
 
     public async Task<OutboxDepth> GetDepthAsync(CancellationToken ct = default)
     {
@@ -689,8 +689,8 @@ internal sealed class SqliteOutboxStore : IOutboxStore
         }
         catch (SqliteException ex)
         {
-            // tray-র জন্য গভীরতা না পাওয়া মানে শুধু টুলটিপ ফাঁকা — ট্র্যাকিং
-            // থামানোর কারণ নয়।
+            // For the tray, not getting the depth only means an empty tooltip; it is not a
+            // reason to stop tracking.
             _log($"⚠️ could not read the outbox depth — {ex.Message}");
             return OutboxDepth.Empty;
         }
@@ -701,9 +701,9 @@ internal sealed class SqliteOutboxStore : IOutboxStore
     }
 
     /// <summary>
-    /// এক পাসে GROUP BY — চারটা আলাদা COUNT চালানোর দরকার নেই।
-    /// ধার নেওয়া সারিও গোনা হয়: সেগুলো এখনো সার্ভারে পৌঁছায়নি, তাই
-    /// "কত বাকি"-র হিসাবে অবশ্যই থাকবে।
+    /// One GROUP BY pass; no need to run four separate COUNTs.
+    /// Leased rows are counted too: they have not reached the server yet, so they must be
+    /// part of the "how much is left" figure.
     /// </summary>
     private static OutboxDepth ReadDepth(SqliteConnection conn)
     {
@@ -734,8 +734,9 @@ internal sealed class SqliteOutboxStore : IOutboxStore
     }
 
     /// <summary>
-    /// পুরো আউটবক্সের হালকা জরিপ। ⚠️ payload আনা হয় না — এক সপ্তাহ অফলাইন
-    /// থাকা মেশিনে লাখখানেক সারির JSON RAM-এ তুললে ছাঁটাই করতে গিয়েই OOM হতো।
+    /// A light survey of the whole outbox. Careful: the payload is not fetched; loading the
+    /// JSON of a hundred thousand rows from a machine that was offline for a week would
+    /// cause an OOM just while trimming.
     /// </summary>
     public async Task<IReadOnlyList<OutboxEntryInfo>> SurveyAsync(CancellationToken ct = default)
     {
@@ -778,14 +779,14 @@ internal sealed class SqliteOutboxStore : IOutboxStore
         }
     }
 
-    // ── ছাঁটাই ──────────────────────────────────────────────────────────────
+    // ── trimming ────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// <see cref="OutboxBudget.Plan"/>-এর সিদ্ধান্ত কার্যকর করা।
+    /// Carries out the decisions of <see cref="OutboxBudget.Plan"/>.
     ///
-    /// ⚠️ প্রতিটা DELETE-এ <c>AND lease_id IS NULL</c> — জরিপ আর মোছার মাঝখানে
-    /// সিঙ্ক ওয়ার্কার ওই সারিটা ধার নিয়ে ফেলতে পারে, আর তখন নিচ থেকে .webp
-    /// সরিয়ে নিলে চলতি আপলোড ভেঙে পড়ত।
+    /// Careful: <c>AND lease_id IS NULL</c> on every DELETE. Between the survey and the
+    /// delete the sync worker may lease that row, and removing the .webp from under it would
+    /// break the upload in progress.
     /// </summary>
     public async Task<int> EvictAsync(IReadOnlyList<long> rowIds, string reason, CancellationToken ct = default)
     {
@@ -826,7 +827,7 @@ internal sealed class SqliteOutboxStore : IOutboxStore
 
                     using (var reader = sel.ExecuteReader())
                     {
-                        if (!reader.Read()) continue;   // নেই, বা এইমাত্র ধার নেওয়া হয়েছে
+                        if (!reader.Read()) continue;   // gone, or just leased
 
                         kind = reader.GetString(0);
                         uuid = reader.GetString(1);
@@ -836,9 +837,9 @@ internal sealed class SqliteOutboxStore : IOutboxStore
 
                     pDel.Value = rowId;
 
-                    // ⚠️ হিসাব DELETE-এর *পরে* — SELECT আর DELETE-এর মাঝে সারিটা
-                    // ধার নেওয়া হয়ে গেলে DELETE ০ ফেরত দেয়, আর তখন ওই বাইটগুলো
-                    // "খালি হয়েছে" বলে গোনা হলে বাজেটের হিসাব ভুল দিকে যেত।
+                    // Careful: count after the DELETE. If the row got leased between the
+                    // SELECT and the DELETE, the DELETE returns 0, and counting those bytes
+                    // as "freed" would skew the budget accounting.
                     if (del.ExecuteNonQuery() == 0) continue;
 
                     deleted++;
@@ -880,16 +881,17 @@ internal sealed class SqliteOutboxStore : IOutboxStore
     }
 
     /// <summary>
-    /// জরিপ → <see cref="OutboxBudget.Plan"/> → ছাঁটাই, এক কলে। সিঙ্ক ওয়ার্কার
-    /// শুধু এটাই ডাকবে (স্টার্টআপে একবার, তারপর ঘণ্টায় একবার আর
-    /// <see cref="LastWriteError"/> দেখা দিলেই সঙ্গে সঙ্গে)।
+    /// Survey, then <see cref="OutboxBudget.Plan"/>, then trim, in one call. The sync worker
+    /// calls only this (once at startup, then hourly, and immediately whenever
+    /// <see cref="LastWriteError"/> appears).
     ///
-    /// দুটো তালিকা আলাদা করে <see cref="EvictAsync"/>-এ পাঠানো হয় ইচ্ছাকৃতভাবে —
-    /// ড্রপ-লগে "পুরোনো হয়ে বাদ" আর "জায়গা নেই বলে বাদ" আলাদা দেখালে তবেই বোঝা
-    /// যায় রিটেনশন বাড়াতে হবে নাকি ডিস্ক।
+    /// The two lists are passed to <see cref="EvictAsync"/> separately on purpose: with
+    /// "dropped for age" and "dropped for lack of space" shown separately in the drop log, you
+    /// can tell whether retention or the disk needs increasing.
     ///
-    /// ⚠️ হিসাবটা শুধু সারিতে থাকা <c>size_bytes</c> ধরে। ডিস্কে পড়ে থাকা অনাথ
-    /// .webp এতে গোনা হয় না — সেগুলোর দায়িত্ব <see cref="SweepOrphanFilesAsync"/>-এর।
+    /// Careful: the accounting only uses <c>size_bytes</c> of rows in the queue. Orphaned
+    /// .webp files on disk are not counted; <see cref="SweepOrphanFilesAsync"/> is
+    /// responsible for those.
     /// </summary>
     public async Task<EvictionPlan> EnforceBudgetAsync(
         OutboxBudget budget, DateTimeOffset now, CancellationToken ct = default)
@@ -917,11 +919,11 @@ internal sealed class SqliteOutboxStore : IOutboxStore
     }
 
     /// <summary>
-    /// ⚠️ ছাঁটাইয়ের পর SQLite নিজে থেকে ফাইলটা ছোট করে না — মুক্ত পেজগুলো
-    /// ভেতরেই পড়ে থাকে। auto_vacuum=INCREMENTAL থাকায় আমরা মাঝে মাঝে সেগুলো
-    /// OS-কে ফেরত দিতে পারি। পুরো <c>VACUUM</c> ডাকা হয় না ইচ্ছাকৃতভাবে:
-    /// ওটা পুরো DB-র একটা কপি বানায় (অর্থাৎ ডিস্ক ভরা অবস্থায় ঠিক তখনই ব্যর্থ
-    /// হতো যখন সবচেয়ে দরকার) আর পুরোটা সময় ডাটাবেস লক করে রাখে।
+    /// Careful: after trimming, SQLite does not shrink the file by itself; freed pages stay
+    /// inside. Because auto_vacuum=INCREMENTAL is set, we can hand them back to the OS now
+    /// and then. A full <c>VACUUM</c> is deliberately not called: it makes a copy of the
+    /// whole DB (so it would fail on a full disk exactly when it is needed most) and locks
+    /// the database throughout.
     /// </summary>
     private void MaybeIncrementalVacuum()
     {
@@ -936,23 +938,23 @@ internal sealed class SqliteOutboxStore : IOutboxStore
         }
         catch (SqliteException)
         {
-            // auto_vacuum=NONE হলে এটা নিছক no-op/এরর — কোনো ক্ষতি নেই।
+            // With auto_vacuum=NONE this is just a no-op/error; no harm.
         }
     }
 
-    // ── অনাথ ফাইল ───────────────────────────────────────────────────────────
+    // ── orphan files ────────────────────────────────────────────────────────
 
     /// <summary>
-    /// ডিস্কে পড়ে থাকা যেসব .webp-র কোনো সারি নেই, সেগুলো মোছা। ফেরত দেয় কতগুলো গেল।
+    /// Deletes .webp files on disk that have no row. Returns how many were removed.
     ///
-    /// এগুলো তৈরি হয় দুইভাবে: (ক) ack-এর commit আর ফাইল-মোছার মাঝখানে প্রসেস
-    /// মরলে, (খ) স্ক্রিনশট লেখা হয়ে গেছে কিন্তু সারিতে ঢোকানোর আগেই মরেছে।
-    /// দুটোই বিরল, কিন্তু অনাথ ফাইল <b>কোনো বাজেটের হিসাবে ধরা পড়ে না</b> —
-    /// অর্থাৎ এটা এমন ফুটো যা মাসের পর মাস চলতে পারে আর কেউ টেরও পায় না।
+    /// They arise in two ways: (a) the process dies between the ack commit and the file
+    /// deletion, (b) a screenshot was written but the process died before the row was
+    /// inserted. Both are rare, but orphaned files are <b>not counted in any budget</b>, so
+    /// this is a leak that could go on for months without anyone noticing.
     ///
-    /// ⚠️ <paramref name="grace"/> ছাড়া চালানো যাবে না: ক্যাপচার মডিউল ফাইল
-    /// লিখে তারপর Enqueue করে; ওই কয়েক মিলিসেকেন্ডে ঝাড়ু দিলে সদ্য তোলা
-    /// ছবিটাই মুছে যেত।
+    /// Careful: must not be run without <paramref name="grace"/>: the capture module writes
+    /// the file and then enqueues; sweeping in those few milliseconds would delete the
+    /// screenshot just taken.
     /// </summary>
     public async Task<int> SweepOrphanFilesAsync(
         DateTimeOffset now, TimeSpan? grace = null, CancellationToken ct = default)
@@ -972,9 +974,9 @@ internal sealed class SqliteOutboxStore : IOutboxStore
             {
                 var known1 = reader.GetString(0);
                 known.Add(NormalizePath(known1));
-                // ⚠️ থাম্বনেইলও `*.webp`, তাই একে "চেনা" না বললে ঝাড়ুদার
-                //    প্রতিটা থাম্বনেইল অনাথ ভেবে মুছে দিত — আর কেউ বুঝতই না
-                //    কেন গ্যালারি হঠাৎ আবার ধীর হয়ে গেল (A06)।
+                // Careful: thumbnails are `*.webp` too; without marking them as known the
+                // sweeper would treat every thumbnail as an orphan and delete it, and nobody
+                // would understand why the gallery suddenly became slow again.
                 known.Add(NormalizePath(OutboxPaths.ThumbPathFor(known1)));
             }
         }
@@ -1024,7 +1026,7 @@ internal sealed class SqliteOutboxStore : IOutboxStore
         return removed;
     }
 
-    // ── বন্ধ করা ────────────────────────────────────────────────────────────
+    // ── closing ─────────────────────────────────────────────────────────────
 
     public async ValueTask DisposeAsync()
     {
@@ -1034,17 +1036,17 @@ internal sealed class SqliteOutboxStore : IOutboxStore
         await _writeGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
         try
         {
-            // ⚠️ TRUNCATE checkpoint — WAL-এর সব কিছু মূল ফাইলে লিখে WAL-টা
-            // শূন্য করে দেয়। এটা না করলে পরের স্টার্টআপে রিকভারি চালাতে হতো
-            // (নিরাপদ, তবু ধীর), আর ব্যাকআপ সফটওয়্যার শুধু .db কপি করে নিলে
-            // WAL-এ পড়ে থাকা শেষ কয়েক দিনের সারি ব্যাকআপে যেত না।
+            // Careful: a TRUNCATE checkpoint writes everything in the WAL into the main file
+            // and resets the WAL to zero. Without it the next startup would have to run
+            // recovery (safe, but slow), and if backup software copies only the .db, the last
+            // few days of rows left in the WAL would not be in the backup.
             using var cmd = _write.CreateCommand();
             cmd.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
             cmd.ExecuteNonQuery();
         }
         catch (SqliteException)
         {
-            // বন্ধ করার সময় ব্যর্থ হলেও কিছু করার নেই — ডেটা ইতিমধ্যে commit করা।
+            // Nothing to do if this fails at close; the data is already committed.
         }
         finally
         {
@@ -1057,7 +1059,7 @@ internal sealed class SqliteOutboxStore : IOutboxStore
         _readGate.Dispose();
     }
 
-    // ── ছোট সহায়ক ───────────────────────────────────────────────────────────
+    // ── small helpers ───────────────────────────────────────────────────────
 
     private long LastRowId()
     {
@@ -1086,10 +1088,10 @@ internal sealed class SqliteOutboxStore : IOutboxStore
     }
 
     /// <summary>
-    /// সারি মুছে যাওয়ার পর তার .webp। ⚠️ ব্যর্থতা গিলে ফেলা হয়: ফাইলটা AV
-    /// বা ইনডেক্সার ধরে রাখলে মোছা যায় না, কিন্তু সারি তো ইতিমধ্যেই গেছে —
-    /// এখানে ব্যতিক্রম ছুড়লে পুরো ack/evict পথটা ভাঙত। যা পড়ে রইল তা
-    /// <see cref="SweepOrphanFilesAsync"/> পরে তুলে নেবে।
+    /// The .webp after its row is gone. Careful: failures are swallowed: if AV or an indexer
+    /// holds the file it cannot be deleted, but the row is already gone, and throwing here
+    /// would break the whole ack/evict path. Whatever is left behind,
+    /// <see cref="SweepOrphanFilesAsync"/> picks up later.
     /// </summary>
     private void DeleteFiles(List<string> files)
     {
@@ -1097,8 +1099,8 @@ internal sealed class SqliteOutboxStore : IOutboxStore
         {
             try
             {
-                File.Delete(file);   // না থাকলে ব্যতিক্রম দেয় না
-                // A06 — সাথে তার থাম্বনেইলও, নইলে ওগুলো চিরকাল জমত
+                File.Delete(file);   // does not throw if it does not exist
+                // Also its thumbnail, otherwise those would pile up forever
                 File.Delete(OutboxPaths.ThumbPathFor(file));
             }
             catch (IOException) { }
@@ -1107,16 +1109,16 @@ internal sealed class SqliteOutboxStore : IOutboxStore
     }
 
     /// <summary>
-    /// লেখা ব্যর্থ — সাধারণত ডিস্ক ভরা (SQLITE_FULL) বা ACL (SQLITE_READONLY)।
+    /// A write failed, usually a full disk (SQLITE_FULL) or an ACL problem (SQLITE_READONLY).
     ///
-    /// ⚠️ এখানে ব্যতিক্রম ছড়ানো <b>হয় না</b>। ট্র্যাকিং থ্রেড প্রতি মিনিটে
-    /// Enqueue করে; সেখান থেকে ছুড়লে থ্রেডটা মরত আর মেশিনটা চুপচাপ কিছুই
-    /// গোনা বন্ধ করত। বদলে: এই সেকেন্ডের রেকর্ডটা হারায় (দুঃখজনক, কিন্তু
-    /// সীমিত), <see cref="LastWriteError"/> সেট হয় যাতে tray "Degraded"
-    /// দেখায়, আর সিঙ্ক ওয়ার্কার এটা দেখে বাজেট-ছাঁটাই চালিয়ে জায়গা করতে পারে।
+    /// Careful: exceptions are <b>not</b> propagated from here. The tracking thread enqueues
+    /// every minute; throwing from there would kill the thread and the machine would quietly
+    /// stop counting anything. Instead: this second's record is lost (sad, but bounded),
+    /// <see cref="LastWriteError"/> is set so the tray shows "Degraded", and the sync worker
+    /// can see it and run a budget trim to make room.
     ///
-    /// লগও থ্রটল করা — ডিস্ক ভরে যাওয়ার কারণেই যদি ব্যর্থতা হয়, তাহলে
-    /// সেকেন্ডে একটা করে লগ লাইন লিখে সমস্যাটা আরও বাড়ানো হতো।
+    /// The log is throttled too: if the failure is caused by a full disk, writing one log
+    /// line per second would make the problem worse.
     /// </summary>
     private void NoteWriteFailure(SqliteException ex, int lostItems, OutboundKind? kind)
     {
@@ -1156,10 +1158,10 @@ internal sealed class SqliteOutboxStore : IOutboxStore
     }
 
     /// <summary>
-    /// ⚠️ <c>Enum.TryParse</c> সংখ্যাও মেনে নেয় — "0" দিলে সেটা নিঃশব্দে
-    /// <see cref="OutboundKind.Segment"/> হয়ে যেত। আমরা সবসময় নাম লিখি, তাই
-    /// প্রথম অক্ষর সংখ্যা হলে সেটা নষ্ট ডেটা, আর সেটাকে সেগমেন্ট বানানো
-    /// মানে ভুল endpoint-এ আবর্জনা পাঠানো।
+    /// Careful: <c>Enum.TryParse</c> also accepts numbers; "0" would silently become
+    /// <see cref="OutboundKind.Segment"/>. We always write the name, so a first character
+    /// that is a digit means corrupt data, and turning it into a segment would send garbage
+    /// to the wrong endpoint.
     /// </summary>
     private static bool TryParseKind(string text, out OutboundKind kind)
     {
@@ -1183,10 +1185,10 @@ internal sealed class SqliteOutboxStore : IOutboxStore
     }
 
     /// <summary>
-    /// ⚠️ unix ms, UTC-তে। DateTimeOffset-এর অফসেট হারায় — ইচ্ছাকৃত। সারির
-    /// বয়সের হিসাব আর <c>not_before</c>-এর তুলনা দুটোই নিখুঁত UTC মুহূর্ত
-    /// চায়; আসল টাইমস্ট্যাম্প (অফসেটসহ) payload-এর JSON-এই থেকে যায়, আর
-    /// সার্ভারে সেটাই যায়।
+    /// Careful: unix ms, in UTC. The DateTimeOffset's offset is lost; that is deliberate.
+    /// Both the row-age calculation and the <c>not_before</c> comparison want an exact UTC
+    /// instant; the real timestamp (with offset) stays in the payload JSON, and that is what
+    /// goes to the server.
     /// </summary>
     private static long ToMs(DateTimeOffset value) => value.ToUnixTimeMilliseconds();
 

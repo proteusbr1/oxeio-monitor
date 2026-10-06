@@ -7,17 +7,17 @@ import { TargetsJob } from './targets.job';
 import { TargetsService } from './targets.service';
 
 /**
- * **ডিজাইন-টার্গেট** *(২২ আগস্ট ২০২৬)* — জমা · বণ্টন · শেষ হওয়া।
+ * Design targets: submission, distribution, completion.
  *
- * ⚠️ `ScheduleModule.forRoot()` এখানে **নেই** — `SummaryModule` ওটা
- * global করে রেখেছে। দ্বিতীয় একটা forRoot বসালে দুটো explorer একই
- * `@Cron` দুবার রেজিস্টার করত, আর তখন বণ্টন দিনে দুবার চলত।
+ * Note: `ScheduleModule.forRoot()` is deliberately not imported here;
+ * `SummaryModule` already makes it global. A second forRoot would register
+ * every `@Cron` twice and distribution would run twice a day.
  */
 @Module({
   imports: [AuditModule],
   controllers: [TargetsController, MyTargetsController],
   providers: [TargetsService, TargetsJob, FileTraceService],
-  // ⭐ `SummaryService` এটা ডাকে — ফাইলের নাম থেকে টার্গেট বন্ধ করতে
+  // `SummaryService` calls this to close targets based on file names
   exports: [TargetsService],
 })
 export class TargetsModule {}

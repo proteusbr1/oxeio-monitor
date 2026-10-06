@@ -11,18 +11,18 @@ import {
 } from '../src/alerts/synthetic-input.rules';
 
 /**
- * **G46 — মাউস-জিগলার ধরা।**
+ * **G46 — catching the mouse jiggler.**
  *
- * ⚠️⚠️ এই ফাইলের ভুলের দুটো দিক, আর দুটোই খারাপ:
- *   · **কম ধরলে** ফিচারটা নীরবে অকেজো — কেউ সারাদিন ঠকিয়ে যাবে
- *   · **বেশি ধরলে** নির্দোষ কর্মী সন্দেহে পড়বেন, আর সেটা আরও খারাপ
+ * This file's mistakes have two sides, and both are bad:
+ *   · **catching too little** makes the feature silently useless — someone can cheat all day
+ *   · **catching too much** puts innocent staff under suspicion, which is worse
  *
- * ⭐ তাই মিথ্যা-ইঙ্গিতের টেস্টগুলো এখানে অন্তত ততটাই গুরুত্ব পায়।
+ * So the false-positive tests matter here at least as much.
  */
 const T0 = new Date('2026-08-16T03:00:00.000Z');
 const at = (min: number) => new Date(T0.getTime() + min * 60_000);
 
-/** একটানা ACTIVE খণ্ড বানানো — `每` খণ্ড ৫ মিনিট, স্কোর দেওয়া যায় */
+/** Builds unbroken ACTIVE spans — each span is 5 minutes, and a score can be given */
 function run(
   fromMin: number,
   toMin: number,
@@ -46,23 +46,23 @@ const win = (fromMin: number, toMin: number, key: string): WindowSpan => ({
 });
 
 describe('mergeActive', () => {
-  it('পাশাপাশি খণ্ড এক স্ট্রেচ হয়', () => {
+  it('adjacent spans form one stretch', () => {
     expect(mergeActive(run(0, 30))).toHaveLength(1);
   });
 
-  /** ⚠️ idle বিরতি স্ট্রেচ ভাঙে — এটাই মানুষ ও যন্ত্রের আসল তফাত */
-  it('ফাঁক থাকলে আলাদা স্ট্রেচ', () => {
+  /** An idle break splits the stretch — the real difference between a person and a machine */
+  it('a gap makes separate stretches', () => {
     const segments = [...run(0, 30), ...run(45, 75)];
 
     expect(mergeActive(segments)).toHaveLength(2);
   });
 
   /**
-   * ⚠️⚠️ কয়েক সেকেন্ডের ফাঁক সহ্য করতেই হবে — খণ্ডগুলো সেকেন্ডে গোল করা,
-   * তাই ঠিক পিঠোপিঠি বসে না। না করলে প্রতিটা স্ট্রেচ ভেঙে যেত আর নিয়মটা
-   * **কোনোদিন** কাউকে ধরত না।
+   * A gap of a few seconds must be tolerated — spans are rounded to seconds,
+   * so they never sit exactly back to back. Without this, every stretch would
+   * break and the rule would **never** catch anyone.
    */
-  it('কয়েক সেকেন্ডের ফাঁক ভাঙে না', () => {
+  it('a gap of a few seconds does not break it', () => {
     const segments: ActiveSegment[] = [
       { startedAt: at(0), endedAt: at(5), inputScore: 100 },
       { startedAt: new Date(at(5).getTime() + 3000), endedAt: at(10), inputScore: 100 },
@@ -71,13 +71,13 @@ describe('mergeActive', () => {
     expect(mergeActive(segments)).toHaveLength(1);
   });
 
-  it('ক্রম এলোমেলো থাকলেও ঠিক জোড়া লাগে', () => {
+  it('still joins up correctly when the order is shuffled', () => {
     const segments = [...run(20, 40), ...run(0, 20)];
 
     expect(mergeActive(segments)).toHaveLength(1);
   });
 
-  it('খালি তালিকায় কিছুই নেই', () => {
+  it('nothing in an empty list', () => {
     expect(mergeActive([])).toEqual([]);
   });
 });
@@ -85,23 +85,23 @@ describe('mergeActive', () => {
 describe('distinctWindows', () => {
   const usage = [win(0, 60, 'chrome|Inbox'), win(60, 120, 'chrome|Docs')];
 
-  it('আলাদা শিরোনাম আলাদা করে গোনে', () => {
+  it('counts different titles separately', () => {
     expect(distinctWindows(at(0), at(120), usage)).toBe(2);
   });
 
   /**
-   * ⚠️ সীমানায় বসা উইন্ডোও গোনা হয় — পুরোপুরি ভেতরে থাকতে হয় না। নইলে
-   * গোনাটা কম দেখাত, আর **নির্দোষ মানুষ সন্দেহে পড়তেন**।
+   * A window sitting on the boundary counts too — it need not be fully inside.
+   * Otherwise the count would look low, and **innocent people would fall under suspicion**.
    */
-  it('আংশিক মিললেও গোনা হয়', () => {
+  it('counts even when only partly matching', () => {
     expect(distinctWindows(at(30), at(90), usage)).toBe(2);
   });
 
-  it('বাইরের উইন্ডো গোনা হয় না', () => {
+  it('a window outside is not counted', () => {
     expect(distinctWindows(at(200), at(260), usage)).toBe(0);
   });
 
-  it('একই চাবি দুবার এলে একবারই', () => {
+  it('the same key arriving twice counts once', () => {
     const repeated = [win(0, 30, 'ps|Windows PowerShell'), win(30, 60, 'ps|Windows PowerShell')];
 
     expect(distinctWindows(at(0), at(60), repeated)).toBe(1);
@@ -109,23 +109,23 @@ describe('distinctWindows', () => {
 });
 
 describe('scoreSpread', () => {
-  it('সর্বোচ্চ ও সর্বনিম্নের ব্যবধান', () => {
+  it('the spread between the maximum and minimum', () => {
     expect(scoreSpread(run(0, 15, (i) => [60, 90, 100][i]))).toBe(40);
   });
 
-  it('সব সমান হলে শূন্য', () => {
+  it('zero when all are equal', () => {
     expect(scoreSpread(run(0, 30, 99))).toBe(0);
   });
 
   /**
-   * ⚠️⚠️ স্কোর না থাকলে `null` — **শূন্য নয়**। শূন্য ধরলে "ওঠানামা নেই"
-   * মনে হতো, আর সেটাই সন্দেহের শর্ত; অর্থাৎ তথ্যের অভাবকে প্রমাণ ধরা হতো।
+   * `null` when there is no score — **not zero**. Treating it as zero would look
+   * like "no variation", which is the suspicion condition; lack of data would be taken as proof.
    */
-  it('স্কোর না থাকলে null', () => {
+  it('null when there is no score', () => {
     expect(scoreSpread(run(0, 30, null))).toBeNull();
   });
 
-  it('কিছু খণ্ডে স্কোর না থাকলে বাকিগুলো ধরে হিসাব', () => {
+  it('when some spans have no score, computes from the rest', () => {
     const segments: ActiveSegment[] = [
       { startedAt: at(0), endedAt: at(5), inputScore: null },
       { startedAt: at(5), endedAt: at(10), inputScore: 80 },
@@ -136,12 +136,12 @@ describe('scoreSpread', () => {
   });
 });
 
-describe('findSyntheticInput — যাকে ধরা উচিত', () => {
+describe('findSyntheticInput — who should be caught', () => {
   /**
-   * ⭐⭐ **আসল ঘটনার নকল।** মালিকের পাঠানো স্ক্রিপ্টটা ঠিক এটাই করে:
-   * প্রতি মিনিটে `SendKeys("{F15}")`, PowerShell খোলা, কোনো বিরতি নেই।
+   * **A copy of the real incident.** The script the owner sent does exactly
+   * this: `SendKeys("{F15}")` every minute, PowerShell open, no break.
    */
-  it('তিন ঘণ্টা একটানা, এক উইন্ডো, সমান স্কোর — ধরা পড়ে', () => {
+  it('three hours unbroken, one window, equal score — caught', () => {
     const segments = run(0, 180, 98);
     const usage = [win(0, 180, 'powershell|Windows PowerShell')];
 
@@ -153,14 +153,14 @@ describe('findSyntheticInput — যাকে ধরা উচিত', () => {
     expect(found[0].scoreSpread).toBe(0);
   });
 
-  it('স্কোরে সামান্য ওঠানামা থাকলেও ধরা পড়ে', () => {
+  it('caught even with slight variation in the score', () => {
     const segments = run(0, 150, (i) => (i % 2 === 0 ? 98 : 100));
 
     expect(findSyntheticInput(segments, [win(0, 150, 'ps|x')])).toHaveLength(1);
   });
 
-  /** ⚠️ দিনে দুবার চালালে দুটোই আলাদা করে ধরা পড়ে */
-  it('একই দিনে দুটো স্ট্রেচ হলে দুটোই', () => {
+  /** Running twice in a day catches both separately */
+  it('two stretches on the same day gives both', () => {
     const segments = [...run(0, 130, 99), ...run(200, 330, 99)];
     const usage = [win(0, 130, 'ps|x'), win(200, 330, 'ps|x')];
 
@@ -168,65 +168,65 @@ describe('findSyntheticInput — যাকে ধরা উচিত', () => {
   });
 });
 
-describe('findSyntheticInput — যাকে ধরা যাবে না', () => {
+describe('findSyntheticInput — who must not be caught', () => {
   /**
-   * ⚠️⚠️ **সবচেয়ে জরুরি টেস্ট।** মানুষ থামে — চা, বাথরুম, কারো ডাক।
-   * একটা বিরতিই স্ট্রেচ ভেঙে দেয়, আর দুটো টুকরোর কোনোটাই সীমা ছোঁয় না।
+   * **The most important test.** People stop — tea, bathroom, someone calling.
+   * One break splits the stretch, and neither piece reaches the limit.
    */
-  it('মাঝে একবার থামলে ধরা পড়ে না', () => {
+  it('not caught when they stop once in the middle', () => {
     const segments = [...run(0, 55, 99), ...run(70, 125, 99)];
 
     expect(findSyntheticInput(segments, [win(0, 125, 'ps|x')])).toHaveLength(0);
   });
 
   /**
-   * ⭐ ডিজাইনার তিন ঘণ্টা এক ফাইলে কাজ করতে পারেন — কিন্তু তাঁর হাত
-   * অসমান, আর শিরোনামও বদলায়। তাই তিনি ধরা পড়েন না।
+   * A designer can work three hours in one file — but their hand is uneven
+   * and the title changes too. So they are not caught.
    */
-  it('একটানা কাজ কিন্তু হাত অসমান — ধরা পড়ে না', () => {
+  it('unbroken work but an uneven hand — not caught', () => {
     const segments = run(0, 180, (i) => 60 + ((i * 7) % 40));
 
     expect(findSyntheticInput(segments, [win(0, 180, 'ai|design')])).toHaveLength(0);
   });
 
-  it('উইন্ডো বদলালে ধরা পড়ে না', () => {
+  it('not caught when the window changes', () => {
     const usage = [win(0, 90, 'chrome|Inbox'), win(90, 180, 'chrome|Docs')];
 
     expect(findSyntheticInput(run(0, 180, 99), usage)).toHaveLength(0);
   });
 
-  it('সময় কম হলে ধরা পড়ে না', () => {
+  it('not caught when the time is short', () => {
     expect(findSyntheticInput(run(0, 45, 99), [win(0, 45, 'ps|x')])).toHaveLength(0);
   });
 
   /**
-   * ⚠️⚠️ স্কোর না জানলে **সন্দেহ করা হয় না**। পুরোনো এজেন্ট বা মাইগ্রেশনের
-   * পরের সারিতে `input_score` null থাকতে পারে — তথ্যের অভাবকে প্রমাণ ধরলে
-   * একদিন গোটা দল একসাথে অভিযুক্ত হতো।
+   * When the score is unknown, **do not suspect**. After an old agent or a
+   * migration, `input_score` can be null in rows — treating lack of data as
+   * proof would one day accuse the whole team at once.
    */
-  it('স্কোর না জানলে ধরা পড়ে না', () => {
+  it('not caught when the score is unknown', () => {
     expect(findSyntheticInput(run(0, 200, null), [win(0, 200, 'ps|x')])).toHaveLength(0);
   });
 
   /**
-   * ⚠️⚠️ **শূন্য উইন্ডো মানে "জানা নেই", "বদলায়নি" নয়।** `app_usage` না
-   * এলে শূন্য পাওয়া যায়, আর সেটাকে "একই উইন্ডো" ধরলে তথ্যের অভাবই
-   * অভিযোগ হয়ে দাঁড়াত।
+   * **An empty window means "unknown", not "unchanged".** Without `app_usage`
+   * the result is empty, and treating that as "the same window" would turn
+   * lack of data into an accusation.
    *
-   * ⭐ এতে ফাঁকির পথ খোলে না — কেউ ইচ্ছে করে `app_usage` থামালে সেটা
-   * আরও জোরালো লক্ষণ, আর সেটা `agent_tamper`-এর কাজ, এই নিয়মের নয়।
+   * This opens no loophole — if someone stops `app_usage` on purpose, that is a
+   * much stronger sign, and it is the job of `agent_tamper`, not of this rule.
    */
-  it('foreground তথ্য একেবারে না থাকলে ধরা পড়ে না', () => {
+  it('not caught when there is no foreground information at all', () => {
     expect(findSyntheticInput(run(0, 200, 99), [])).toHaveLength(0);
   });
 
-  it('খালি দিনে কিছুই নেই', () => {
+  it('nothing on an empty day', () => {
     expect(findSyntheticInput([], [])).toEqual([]);
   });
 });
 
-describe('সীমাগুলো বদলানো যায়', () => {
-  it('কড়া সীমা দিলে ছোট স্ট্রেচও ধরা পড়ে', () => {
+describe('the limits can be changed', () => {
+  it('a stricter limit catches even short stretches', () => {
     const found = findSyntheticInput(run(0, 40, 99), [win(0, 40, 'ps|x')], {
       ...DEFAULT_SYNTHETIC_LIMITS,
       minStretchSec: 30 * 60,
@@ -235,8 +235,8 @@ describe('সীমাগুলো বদলানো যায়', () => {
     expect(found).toHaveLength(1);
   });
 
-  /** ⚠️ ১৬ আগস্ট ২ → ১ ঘণ্টা — দেরিতে ধরা মানে ততক্ষণ ভুল ঘণ্টা জমা */
-  it('ডিফল্ট সীমা এক ঘণ্টা', () => {
+  /** Changed from 2 to 1 hour — catching late means wrong hours accumulate meanwhile */
+  it('the default limit is one hour', () => {
     expect(DEFAULT_SYNTHETIC_LIMITS.minStretchSec).toBe(60 * 60);
   });
 });

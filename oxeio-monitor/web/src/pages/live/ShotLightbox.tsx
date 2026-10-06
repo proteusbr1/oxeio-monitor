@@ -6,15 +6,14 @@ import { Button } from '../../components/Page';
 import { formatBytes, formatDateTime } from '../../lib/format';
 
 /**
- * E03 — থাম্বনেইলে ক্লিক করলে ফুল ছবি।
+ * E03: clicking a thumbnail shows the full image.
  *
- * ⭐ `shot` আসে **প্যারেন্টের সর্বশেষ ডেটা থেকে**, কোনো কপি ধরে রাখা হয় না।
- *    তাই "আবার আনুন" চাপলে নতুন টোকেনসহ নতুন URL এখানেও নিজে থেকেই বসে
- *    যায়। ছবিটা state-এ জমিয়ে রাখলে মেয়াদ ফুরোনো লিঙ্কটাই আটকে থাকত আর
- *    রিফ্রেশ করেও কিছু হতো না।
+ * `shot` comes from the parent's latest data; no copy is kept. So when "fetch
+ * again" is pressed, the new URL with the new token lands here by itself. Keeping
+ * the image in state would pin the expired link, and refreshing would do nothing.
  *
- * ⚠️ `shot` `null` হতে পারে — রিফ্রেশের পর ওই কর্মীর ছবি শেষ পাতা থেকে
- *    সরে যেতে পারে। তখন মোডালটা হুট করে বন্ধ না করে কী হয়েছে সেটা বলা হয়।
+ * Careful: `shot` can be `null`: after a refresh that employee's image may drop
+ * off the last page. The modal then says what happened instead of suddenly closing.
  */
 export function ShotLightbox({
   card,
@@ -38,8 +37,8 @@ export function ShotLightbox({
     };
     document.addEventListener('keydown', onKey);
 
-    // ⚠️ পেছনের বোর্ডটা স্ক্রল হওয়া বন্ধ — ফোনে মোডাল খোলা রেখে আঙুল
-    //    টানলে নিচের পাতাটাই সরত, আর মনে হতো ছবিটা আটকে গেছে।
+    // Careful: the board behind stops scrolling; on a phone, with the modal open,
+    // dragging a finger would move the page below and make the image seem stuck.
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
@@ -61,16 +60,17 @@ export function ShotLightbox({
         role="dialog"
         aria-modal="true"
         aria-label={`Latest screenshot of ${card.fullName}`}
-        // ⚠️ ভেতরে ক্লিক করলে যেন বন্ধ না হয় — ছবিটা দেখতে গিয়ে ভুল করে
-        //    মোডাল বন্ধ হয়ে যাওয়াটা বিরক্তিকর।
+        // Careful: a click inside must not close it; closing the modal by accident
+        // while looking at the image is annoying.
         onClick={(e) => e.stopPropagation()}
         /**
-         * ⭐ মোডালটা পর্দার **~৯২%** জুড়ে *(১৮ আগস্ট, মালিকের অনুরোধে)*।
+         * The modal covers about 92% of the screen.
          *
-         * ⚠️ আগে ছিল `max-w-4xl` (৮৯৬px) — চওড়া পর্দায় ১৯২০×১০৮০ স্ক্রিনশট
-         *    ৮৯৬px-এ নামিয়ে দেখাত, চারপাশে অনেক ফাঁকা, আর ছবির লেখা পড়াই
-         *    যেত না। এখন `92vw` (ছাদ ১৮০০px, যাতে আল্ট্রাওয়াইডে হাস্যকর বড়
-         *    না হয় — অথচ ১৯২০px পর্দায় ছাদ বাধে না, পুরো ৯২% পায়)।
+         * Careful: it used to be `max-w-4xl` (896px): on a wide screen a 1920x1080
+         * screenshot was shrunk to 896px with lots of empty space around, and the text in
+         * the image could not be read. Now it is `92vw` (capped at 1800px so it does not
+         * become absurdly big on ultrawide; on a 1920px screen the cap does not bind and
+         * the full 92% applies).
          */
         className="flex max-h-[92vh] w-[92vw] max-w-[1800px] flex-col overflow-hidden rounded-xl border border-line bg-surface"
       >
@@ -122,17 +122,16 @@ export function ShotLightbox({
               alt={`Latest screenshot of ${card.fullName}`}
               onError={() => setBroken(true)}
               /**
-               * ⚠️⚠️ আগে ছিল `h-auto w-full` — **কোনো সীমাই ছিল না**।
-               *    `w-full` ছবিটাকে সবসময় পাত্রের পুরো প্রস্থে টেনে দিত,
-               *    আর উচ্চতা সেই অনুপাতে যত খুশি বাড়ত। চওড়া পর্দায়
-               *    ১৯২০×১০৮০ ছবি পাত্র ছাপিয়ে যেত, আর দেখতে হতো স্ক্রল করে।
+               * Careful: this used to be `h-auto w-full`, with no limit at all. `w-full` always
+               * stretched the image to the container's full width and the height grew
+               * proportionally as far as it liked. On a wide screen a 1920x1080 image overflowed
+               * the container and had to be scrolled.
                *
-               * ⭐ Gallery-র লাইটবক্সে নিয়মটা আলাদা ছিল — **দুটো লাইটবক্স
-               *    দুই নিয়মে চলছিল**, আর সেটাই আসল গোড়া। এখন দুটোতেই একই
-               *    viewport-ভিত্তিক সীমা।
+               * The Gallery's lightbox had a different rule: the two lightboxes ran on two
+               * rules, and that was the real root. Now both use the same viewport-based limit.
                *
-               * ⚠️ `w-auto` — ছোট ছবি জোর করে টেনে বড় করা হয় না, নইলে
-               *    থাম্বনেইল ঝাপসা হয়ে ফুলে উঠত।
+               * Careful: `w-auto`: small images are not stretched up by force; otherwise a
+               * thumbnail would swell up blurry.
                */
               style={{ maxHeight: 'calc(92vh - 7rem)' }}
               className="mx-auto block h-auto w-auto max-w-full object-contain"
@@ -143,7 +142,8 @@ export function ShotLightbox({
         {shot && (
           <footer className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line px-4 py-2.5 text-[11.5px] text-ink-3">
             {shot.activeApp && <span className="truncate">{shot.activeApp}</span>}
-            {/* ⚠️ শুধু উইন্ডোর শিরোনাম ও ডোমেইন — ফুল URL কখনো জমাই হয় না (§ ৭) */}
+            {/* Careful: only the window title and the domain; the full URL is never
+                stored (section 7) */}
             {shot.activeTitle && (
               <span className="min-w-0 flex-1 truncate" title={shot.activeTitle}>
                 {shot.activeTitle}

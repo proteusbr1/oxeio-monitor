@@ -23,18 +23,18 @@ import {
 import { CreateCategoryDto, RecategorizeDto, UpdateCategoryDto } from './dto';
 
 /**
- * D06 — মালিকের ক্যাটাগরি রুল (`/api/v1/categories`, স্পেক § ৪.২)।
+ * D06 - the owner's category rules (`/api/v1/categories`, spec § 4.2).
  *
- * ⭐ **owner ও manager** *(মালিকের সিদ্ধান্ত, ১৫ আগস্ট; আগে owner-only)* —
- * রোজকার কাজ, আর নতুন ডোমেইন শ্রেণিভুক্ত করতে owner-কে ডাকতে হলে
- * "কত শতাংশ অচেনা" সংখ্যাটা বাড়তেই থাকত।
+ * Open to **owner and manager** (it used to be owner-only). This is day-to-day
+ * work, and needing the owner to classify every new domain kept the
+ * "percent unknown" figure growing.
  *
- * ⚠️ role এখনো **ক্লাস-লেভেলে**, মেথডে নয় — পরে নতুন endpoint যোগ হলে
- * সেটাও একই নিয়মে থাকবে, কেউ আলাদা করে ভাবতে ভুলে গেলেও।
+ * Careful: the role is still set at **class level**, not per method, so any
+ * endpoint added later follows the same rule even if nobody thinks about it.
  *
- * ⚠️⚠️ মনে রাখা দরকার, ক্যাটাগরির নিয়ম বদলানো মানে **সবার রিপোর্টের
- * সংখ্যা বদলে দেওয়া** — বিশেষত `recategorize` পুরোনো সারিগুলোকেও নতুন
- * নিয়মে ফেলে। ⭐ তাই প্রতিটা বদল `audit_log`-এ নাম ধরে লেখা থাকে।
+ * Careful: changing a category rule **changes everyone's report numbers**,
+ * especially `recategorize`, which re-applies the new rules to old rows too.
+ * So every change is written to `audit_log` with the actor's name.
  */
 @Roles(UserRole.owner, UserRole.manager)
 @Controller('categories')
@@ -57,10 +57,11 @@ export class CategoryController {
   }
 
   /**
-   * ⚠️ এই রুটটা `PATCH /categories/:id`-এর **আগে** ঘোষণা করা হয়নি বলে
-   * সমস্যা নেই — পথ দুটো আলাদা HTTP মেথডে। কিন্তু `POST /categories`
-   * আর `POST /categories/recategorize`-এর মধ্যে ক্রম গুরুত্বপূর্ণ হতো
-   * যদি কখনো `POST /categories/:id` যোগ হয়; তখন এটাকে উপরে তুলতে হবে।
+   * Careful: declaring this route after `PATCH /categories/:id` is fine,
+   * because the two use different HTTP methods. But if `POST /categories/:id`
+   * is ever added, the order of `POST /categories` and
+   * `POST /categories/recategorize` starts to matter, and this one must then be
+   * moved above it.
    */
   @Post('recategorize')
   @HttpCode(HttpStatus.OK)
@@ -83,9 +84,9 @@ export class CategoryController {
   }
 
   /**
-   * ⚠️ ২০৪ নয়, ২০০ — রেসপন্সে **কত সারি অচেনা হয়ে গেল** সেটা ফেরত যায়।
-   * ২০৪ দিলে মালিক জানতেন না যে একটা রুল মোছার ফলে হাজার সারি D07-এর
-   * হিসাবের বাইরে চলে গেল।
+   * Careful: 200, not 204. The response returns **how many rows became
+   * unknown**. With 204 the owner would not learn that deleting one rule pushed
+   * a thousand rows out of the D07 calculation.
    */
   @Delete(':id')
   @HttpCode(HttpStatus.OK)

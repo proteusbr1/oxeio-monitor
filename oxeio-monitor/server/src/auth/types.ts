@@ -1,16 +1,16 @@
 import type { UserRole } from '@prisma/client';
 import type { Request } from 'express';
 
-/** JWT-তে যা থাকে, আর যা `req.user`-এ বসে */
+/** What is in the JWT, and what goes onto `req.user` */
 export interface SessionUser {
   userId: number;
   email: string;
   role: UserRole;
-  /** role = employee হলে কোন স্টাফ; নইলে null */
+  /** Which staff member if role = employee; otherwise null */
   employeeId: number | null;
-  /** true হলে পাসওয়ার্ড না বদলানো পর্যন্ত কিছুই করা যাবে না */
+  /** When true nothing can be done until the password is changed */
   mustChangePw: boolean;
-  /** টোকেন কখন ইস্যু হয়েছিল (epoch seconds) — sliding refresh-এর জন্য */
+  /** When the token was issued (epoch seconds), for the sliding refresh */
   issuedAt: number;
 }
 

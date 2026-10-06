@@ -14,12 +14,12 @@ import {
 } from './setup/harness';
 
 /**
- * **G46** — `synthetic_input` অ্যালার্ট সত্যিই ওঠে কি না।
+ * **G46** — whether the `synthetic_input` alert really fires.
  *
- * ⚠️⚠️ ইউনিট টেস্ট (`synthetic-input.spec.ts`) **নিয়মটা** পাহারা দেয়; এই
- * ফাইল পাহারা দেয় **প্রযোজকটাকে**। এই প্রকল্পে ঠিক এখানেই বারবার ফাঁক
- * থেকেছে — G32-এ টাইপ, লেবেল, ফিল্টার সবই ছিল, শুধু অ্যালার্টটা **কেউ
- * বসাত না**। নিয়ম লিখে ফেলা আর নিয়মটা চলা এক কথা নয়।
+ * The unit test (`synthetic-input.spec.ts`) guards **the rule**; this file
+ * guards **the producer**. This is exactly where this project has repeatedly
+ * had a gap — in G32 the type, label and filter all existed, only nobody
+ * **raised the alert**. Writing a rule and the rule actually running are not the same.
  */
 let h: Harness;
 let check: SyntheticInputCheck;
@@ -27,22 +27,22 @@ let employeeId: number;
 let deviceId: number;
 
 /**
- * ⭐⭐ **দুটো আলাদা "এখন", আর সেটা ইচ্ছাকৃত (G140)।**
+ * **Two different "now"s, and that is deliberate (G140).**
  *
- * - `workDate` আসে `dhakaNoon()` থেকে — ফিক্সচারের কর্মদিবস, দুই সীমানা
- *   থেকেই ১২ ঘণ্টা দূরে, তাই মধ্যরাতে দিন ঘুরে গিয়ে ভাঙে না।
- * - `runOnce()` পায় **আসল ঘড়ি**, কারণ throttle মেলানো হয় অ্যালার্টের
- *   `created_at`-এর সাথে — আর সেটা **ডাটাবেসের** `now()` থেকে আসে।
+ * - `workDate` comes from `dhakaNoon()` — the fixture's working day, 12 hours
+ *   from both boundaries, so it does not break when the day rolls over at midnight.
+ * - `runOnce()` gets the **real clock**, because the throttle is compared with
+ *   the alert's `created_at` — which comes from the **database's** `now()`.
  *
- * ⚠️⚠️ দুটো এক করে দুপুর পাঠানো হয়েছিল, আর টেস্ট সাথে সাথেই ধরিয়ে দিল:
- * ভোরে চালালে দুপুর আর DB-র `created_at`-এর ফারাক ৬ ঘণ্টার
- * `THROTTLE_HOURS` ছাড়িয়ে যেত, তাই "দ্বিতীয়বার চালালে আর বসে না"
- * দাবিটা ভাঙত। ⭐ অ্যাপের ঘড়ি আর ডাটাবেসের ঘড়ি এক না হলে পিন করা
- * মুহূর্ত বসানো যায় না — এটাই `realNow()`-এর একমাত্র বৈধ কারণ।
+ * Once the two were merged and noon was passed in, and the test caught it at once:
+ * run early in the morning, the gap between noon and the DB's `created_at` exceeded
+ * the 6-hour `THROTTLE_HOURS`, so the claim "a second run raises nothing more"
+ * broke. If the app clock and the database clock differ, a pinned moment cannot
+ * be used — that is the only valid reason for `realNow()`.
  */
 const workDate = workDateOf(dhakaNoon());
 
-/** ওই কর্মদিবসের ভেতরে একটা মুহূর্ত (ঢাকার ঘড়িতে) */
+/** A moment inside that working day (on the Dhaka clock) */
 const at = (hour: number, minute = 0): Date =>
   new Date(workDate.getTime() + (hour - 6) * 3_600_000 + minute * 60_000);
 
@@ -59,7 +59,7 @@ async function makeDevice(hostname: string): Promise<number> {
   return device.id;
 }
 
-/** ৫ মিনিটের ACTIVE খণ্ড, `from` থেকে `to` পর্যন্ত ভরে দেওয়া */
+/** 5-minute ACTIVE spans, filled in from `from` to `to` */
 async function activeRun(
   from: Date,
   to: Date,
@@ -135,12 +135,12 @@ beforeEach(async () => {
   deviceId = await makeDevice('PC-SI');
 });
 
-describe('G46 — নকল ইনপুট ধরা', () => {
+describe('G46 — catching fake input', () => {
   /**
-   * ⭐⭐ **মালিকের পাঠানো স্ক্রিপ্টটার হুবহু নকল:** প্রতি মিনিটে
-   * `SendKeys("{F15}")`, PowerShell খোলা, কোনো বিরতি নেই।
+   * **An exact copy of the script the owner sent:** `SendKeys("{F15}")` every
+   * minute, PowerShell open, no break.
    */
-  it('তিন ঘণ্টা একটানা, এক উইন্ডো — অ্যালার্ট ওঠে', async () => {
+  it('three hours unbroken, one window — the alert fires', async () => {
     await activeRun(at(10), at(13), 98);
     await window(at(10), at(13), 'powershell.exe', 'Windows PowerShell');
 
@@ -153,8 +153,8 @@ describe('G46 — নকল ইনপুট ধরা', () => {
     expect(row.title).toContain('Belal Hossain');
   });
 
-  /** ⭐ ঘটনাটা যাচাই করার মতো তথ্য `meta`-তে থাকে */
-  it('meta-তে কখন থেকে কখন, আর কোন সীমায়', async () => {
+  /** `meta` holds the information needed to verify the incident */
+  it('meta says from when to when, and within which limits', async () => {
     await activeRun(at(9), at(12), 100);
     await window(at(9), at(12), 'powershell.exe', 'Windows PowerShell');
 
@@ -170,11 +170,11 @@ describe('G46 — নকল ইনপুট ধরা', () => {
   });
 
   /**
-   * ⚠️⚠️ **মানুষ থামে।** একটা বিরতিই স্ট্রেচ ভেঙে দেয় — আর এই টেস্টটাই
-   * ঠিক করে দেয় নির্দোষ কেউ সন্দেহে পড়বেন কি না।
+   * **People stop.** A single break splits the stretch — and this test is
+   * exactly what decides whether an innocent person falls under suspicion.
    */
-  it('মাঝে বিরতি থাকলে অ্যালার্ট ওঠে না', async () => {
-    // ⚠️ দুটো টুকরোই সীমার (১ ঘণ্টা) নিচে — একটা বিরতিই যথেষ্ট
+  it('no alert when there is a break in the middle', async () => {
+    // Both pieces are below the limit (1 hour) — one break is enough
     await activeRun(at(10), at(10, 50), 98);
     await activeRun(at(11, 10), at(12), 98);
     await window(at(10), at(12), 'powershell.exe', 'Windows PowerShell');
@@ -183,7 +183,7 @@ describe('G46 — নকল ইনপুট ধরা', () => {
     expect(await alerts()).toHaveLength(0);
   });
 
-  it('উইন্ডো বদলালে অ্যালার্ট ওঠে না', async () => {
+  it('no alert when the window changes', async () => {
     await activeRun(at(10), at(13), 98);
     await window(at(10), at(11, 30), 'chrome.exe', 'Inbox');
     await window(at(11, 30), at(13), 'chrome.exe', 'Docs');
@@ -191,8 +191,8 @@ describe('G46 — নকল ইনপুট ধরা', () => {
     expect(await check.runOnce(realNow())).toBe(0);
   });
 
-  it('হাত অসমান হলে অ্যালার্ট ওঠে না', async () => {
-    // ⚠️ প্রতি খণ্ডে আলাদা স্কোর দিতে হবে, তাই এক ঘণ্টা করে দুই দফা
+  it('no alert when the hand is uneven', async () => {
+    // Each span needs its own score, so two rounds of one hour each
     await activeRun(at(10), at(11), 62);
     await activeRun(at(11), at(13), 97);
     await window(at(10), at(13), 'illustrator.exe', 'poster.ai');
@@ -201,14 +201,14 @@ describe('G46 — নকল ইনপুট ধরা', () => {
   });
 
   /**
-   * ⚠️⚠️ **দুই ডিভাইস আলাদা করে দেখা হয়।** না করলে একজনের দুটো PC-র খণ্ড
-   * মিশে গিয়ে একটা লম্বা "একটানা" স্ট্রেচ বানাত, আর দুই মেশিনে কাজ করা
-   * সৎ কর্মীই সন্দেহে পড়তেন (G32-এর সাথে সরাসরি সংঘর্ষ)।
+   * **Two devices are looked at separately.** Otherwise one person's spans on
+   * two PCs would merge into one long "unbroken" stretch, and an honest employee
+   * working on two machines would fall under suspicion (a direct clash with G32).
    */
-  it('দুই ডিভাইসের সময় মিলিয়ে ফেলা হয় না', async () => {
+  it('the times of two devices are not merged', async () => {
     const second = await makeDevice('PC-SI-2');
 
-    // ⚠️ আলাদা করে দেখলে দুটোই সীমার নিচে; মিলিয়ে ফেললে ১ ঘণ্টা ছাড়াত
+    // Separately both are below the limit; merged they would exceed 1 hour
     await activeRun(at(10), at(10, 50), 98);
     await window(at(10), at(10, 50), 'powershell.exe', 'Windows PowerShell');
     await activeRun(at(10, 50), at(11, 40), 98, second);
@@ -217,22 +217,22 @@ describe('G46 — নকল ইনপুট ধরা', () => {
     expect(await check.runOnce(realNow())).toBe(0);
   });
 
-  /** ⚠️ `app_usage` না এলে সন্দেহ করা হয় না — না-জানা প্রমাণ নয় */
-  it('foreground তথ্য না থাকলে অ্যালার্ট ওঠে না', async () => {
+  /** Without `app_usage` there is no suspicion — not knowing is not proof */
+  it('no alert when there is no foreground information', async () => {
     await activeRun(at(10), at(13), 98);
 
     expect(await check.runOnce(realNow())).toBe(0);
   });
 
-  it('কিছুই না থাকলে চুপচাপ শূন্য', async () => {
+  it('quietly zero when there is nothing at all', async () => {
     expect(await check.runOnce(realNow())).toBe(0);
   });
 
   /**
-   * ⚠️ একই ঘটনায় বারবার অ্যালার্ট নয় — throttle। নইলে ঘণ্টায় একটা করে
-   * অ্যালার্ট আসত, আর কিছুদিনেই কেউ আর অ্যালার্ট পড়ত না।
+   * No repeated alerts for the same incident — throttle. Otherwise one alert
+   * would arrive every hour, and within days nobody would read alerts any more.
    */
-  it('দুবার চালালেও একটাই অ্যালার্ট', async () => {
+  it('running twice still gives just one alert', async () => {
     await activeRun(at(10), at(13), 98);
     await window(at(10), at(13), 'powershell.exe', 'Windows PowerShell');
 

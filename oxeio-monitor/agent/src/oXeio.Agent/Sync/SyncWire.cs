@@ -4,20 +4,20 @@ using oXeio.Core.Models;
 namespace oXeio.Agent.Sync;
 
 /// <summary>
-/// তারে যা যায় ঠিক তার আকৃতি — Core-এর রেকর্ডগুলো সরাসরি সিরিয়ালাইজ করা হয় না।
+/// The exact shape of what goes on the wire; Core's records are not serialized directly.
 ///
-/// ⭐⚠️ <b>কেন এই বাড়তি স্তর:</b> System.Text.Json <b>সব</b> public getter লেখে,
-/// computed প্রপার্টিসহ। <see cref="ActivitySegment"/>-এ আছে
-/// <see cref="ActivitySegment.WorkDate"/> আর <see cref="ActivitySegment.CountsAsWork"/> —
-/// সরাসরি পাঠালে JSON-এ <c>workDate</c> ও <c>countsAsWork</c>ও চলে যেত। NestJS-এ
-/// <c>forbidNonWhitelisted</c> চালু থাকলে অচেনা ফিল্ড মানেই ৪০০, আর ৪০০ মানে
-/// <see cref="SyncOutcome.Permanent"/> — অর্থাৎ ৫০০টা সেগমেন্ট চিরতরে মুছে যেত।
-/// কেউ Core-এ একটা নিরীহ computed প্রপার্টি যোগ করলেই সেটা ঘটত, আর কোথাও
-/// কোনো কম্পাইলার সতর্কবার্তা থাকত না।
+/// Important: <b>why this extra layer:</b> System.Text.Json writes <b>every</b> public getter,
+/// computed properties included. <see cref="ActivitySegment"/> has
+/// <see cref="ActivitySegment.WorkDate"/> and <see cref="ActivitySegment.CountsAsWork"/>;
+/// sent directly, <c>workDate</c> and <c>countsAsWork</c> would also end up in the JSON. With
+/// <c>forbidNonWhitelisted</c> on in NestJS an unknown field means a 400, and a 400 means
+/// <see cref="SyncOutcome.Permanent"/>, so 500 segments would be deleted for good.
+/// Someone adding one harmless computed property to Core would trigger it, and there would be
+/// no compiler warning anywhere.
 ///
-/// তাই নিয়ম: <b>সার্ভারে যা পাঠানো হয় তার প্রতিটা ফিল্ড এখানে হাতে লেখা।</b>
-/// (উল্টো দিকে, অর্থাৎ পড়ার সময়, Core-এর রেকর্ডে সরাসরি deserialize করা নিরাপদ —
-/// অচেনা ফিল্ড STJ এমনিতেই বাদ দেয়।)
+/// So the rule: <b>every field that is sent to the server is written by hand here.</b>
+/// (In the other direction, when reading, deserializing straight into Core's records is safe;
+/// STJ drops unknown fields anyway.)
 /// </summary>
 internal static class SyncWire
 {
@@ -60,16 +60,16 @@ internal static class SyncWire
     }
 
     /// <summary>
-    /// ⚠️ <b>সার্ভারের enum ছোট হাতের অক্ষরে</b> — <c>active / idle / locked</c>।
-    /// দেখুন <c>server/prisma/schema.prisma</c>-র <c>enum SegmentState</c>;
-    /// Postgres enum আর <c>@IsEnum()</c> দুটোই case-sensitive।
+    /// Careful: <b>the server's enum is lowercase</b>: <c>active / idle / locked</c>.
+    /// See <c>enum SegmentState</c> in <c>server/prisma/schema.prisma</c>;
+    /// both the Postgres enum and <c>@IsEnum()</c> are case-sensitive.
     ///
-    /// C#-এর <c>SegmentState.Active</c> সরাসরি পাঠালে <c>"Active"</c> যেত, আর
-    /// বড় হাতে <c>"ACTIVE"</c> পাঠালেও একই ফল: <b>৪০০</b>। আর ৪০০ মানে
-    /// <see cref="SyncOutcome.Permanent"/> — অর্থাৎ ব্যাচটা রিট্রাই না হয়ে
-    /// <b>মুছে</b> যেত। একটা অক্ষরের ভুলে মাসের পে-রোল ডেটা হারাত।
+    /// Sending C#'s <c>SegmentState.Active</c> directly would send <c>"Active"</c>, and
+    /// uppercase <c>"ACTIVE"</c> gives the same result: <b>400</b>. And a 400 means
+    /// <see cref="SyncOutcome.Permanent"/>, so the batch would be <b>deleted</b> instead of
+    /// retried. One wrong letter would lose a month of payroll data.
     ///
-    /// রূপান্তরটা এই একটাই জায়গায় — segments আর heartbeat দুটোই এখান থেকে নেয়।
+    /// The conversion lives in this one place; segments and heartbeat both use it.
     /// </summary>
     internal static string StateToWire(SegmentState state) => state switch
     {
@@ -77,9 +77,9 @@ internal static class SyncWire
         SegmentState.Idle => "idle",
         SegmentState.Locked => "locked",
 
-        // ⚠️ অজানা স্টেটে ডিফল্ট বসানো হয় না। আগে এখানে "ACTIVE" ফিরত —
-        //    অর্থাৎ নতুন কোনো স্টেট যোগ হলে সেটা নীরবে **কাজের সময়** হিসেবে
-        //    গোনা হতো। সার্ভারে ভুল ডেটা পাঠানোর চেয়ে এখানেই থেমে যাওয়া ভালো।
+        // Careful: no default for an unknown state. This used to return "ACTIVE", so any new
+        // state added later would silently count as **work time**. Stopping here is better
+        // than sending wrong data to the server.
         _ => throw new ArgumentOutOfRangeException(
             nameof(state), state, "No server representation is defined for this state"),
     };
@@ -104,11 +104,11 @@ internal static class SyncWire
         public bool? IsBrowser { get; init; }
 
         /**
-         * ⭐ <b>R22a</b> — খণ্ডটা কোন অবস্থায় দেখা হয়েছে (`active` / `idle`)।
+         * Which state the interval was observed in (`active` / `idle`).
          *
-         * ⚠️ ছোট হাতের স্ট্রিং, কারণ সার্ভারের enum-ও তাই (`SegmentState`)।
-         *    `.ToString()` দিলে `Active` যেত আর `@IsEnum` ৪০০ দিত — আর ৪০০
-         *    মানে Permanent, অর্থাৎ পুরো ব্যাচটা মুছে ফেলা হতো (G49)।
+         * Careful: a lowercase string, because the server's enum is too (`SegmentState`).
+         * `.ToString()` would send `Active` and `@IsEnum` would return a 400, and a 400
+         * means Permanent, so the whole batch would be deleted.
          */
         public required string State { get; init; }
     }
@@ -124,8 +124,8 @@ internal static class SyncWire
                 StartedAt = i.StartedAt,
                 EndedAt = i.EndedAt,
                 DurationSec = i.DurationSec,
-                // ⚠️ সার্ভারের @MaxLength ছাড়ালে পুরো ব্যাচ ৪০০ খায়, আর ৪০০ মানে
-                //    Permanent — ডেটা মুছে ফেলা হয় (G49)। তাই দৈর্ঘ্য এখানেই বাঁধা।
+                // Careful: exceeding the server's @MaxLength gives the whole batch a 400, and
+                // a 400 means Permanent, so data is deleted. Hence the length is capped here.
                 ProcessName = Clamp(i.ProcessName, 260)!,
                 AppName = Clamp(i.AppName, 260),
                 WindowTitle = Clamp(i.WindowTitle, 1000),
@@ -139,24 +139,24 @@ internal static class SyncWire
     }
 
     /// <summary>
-    /// সার্ভারের সীমার মধ্যে ছাঁটা।
+    /// Trims to within the server's limits.
     ///
-    /// ⚠️ এই স্ট্রিংগুলোর কোনোটাই আমাদের লেখা নয় — <c>appName</c> আসে
-    /// এক্সিকিউটেবলের version resource থেকে, <c>domain</c> আসে address bar থেকে।
-    /// যেকোনো লম্বা মান ঢুকতে পারে, আর একটা লম্বা মান পুরো ব্যাচকে ৪০০ করিয়ে
-    /// দিত। ছাঁটা তথ্য অসম্পূর্ণ, কিন্তু হারানো তথ্যের চেয়ে ভালো।
+    /// Careful: none of these strings is written by us: <c>appName</c> comes from the
+    /// executable's version resource, <c>domain</c> from the address bar. Any long value can
+    /// get in, and one long value would give the whole batch a 400. Trimmed data is
+    /// incomplete, but better than lost data.
     /// </summary>
     private static string? Clamp(string? value, int max) =>
         value is null || value.Length <= max ? value : value[..max];
 
     /// <summary>
-    /// ⭐ শেষ প্রহরী: পুরো URL কখনোই নেটওয়ার্কে ওঠে না — শুধু ডোমেইন।
+    /// The last guard: a full URL never goes onto the network, only the domain.
     ///
-    /// ব্রাউজার টাইটেল/URL থেকে ডোমেইন বের করার কাজ app-tracking মডিউলের, কিন্তু
-    /// এই নিষেধটা (পুরো URL জমা রাখা যাবে না) সিস্টেমের একটা <b>কঠিন</b> নিয়ম।
-    /// একটা মডিউলের বাগে <c>https://bank.com/account/12345?token=…</c> চলে এলে সেটা
-    /// সার্ভারের ডেটাবেসে বসে যেত আর ফেরানোর উপায় থাকত না। তাই দরজার মুখেই ছাঁটা হয়,
-    /// এমনকি "এমনটা হওয়ার কথা নয়" জেনেও।
+    /// Extracting the domain from the browser title/URL is the app-tracking module's job, but
+    /// the prohibition (never store a full URL) is a <b>hard</b> rule of the system.
+    /// If a bug in one module let <c>https://bank.com/account/12345?token=…</c> through, it
+    /// would end up in the server's database with no way to take it back. So it is trimmed at
+    /// the door, even knowing "this is not supposed to happen".
     /// </summary>
     internal static string? DomainOnly(string? domain)
     {
@@ -170,11 +170,11 @@ internal static class SyncWire
         var path = value.IndexOfAny(PathStarters);
         if (path >= 0) value = value[..path];
 
-        // user:pass@host — credential যেন কোনোভাবেই না যায়
+        // user:pass@host: credentials must never go out in any way
         var at = value.LastIndexOf('@');
         if (at >= 0) value = value[(at + 1)..];
 
-        // পোর্ট ছাঁটা, কিন্তু IPv6 ([::1]) হাতে না দিয়ে — একাধিক ':' থাকলে ছোঁয়া হয় না
+        // Strip the port, but leave IPv6 ([::1]) alone: if there is more than one ':' do not touch it
         var colon = value.LastIndexOf(':');
         if (colon > 0 && value.IndexOf(':') == colon) value = value[..colon];
 
@@ -209,7 +209,7 @@ internal static class SyncWire
                 Type = e.Type,
                 OccurredAt = e.OccurredAt,
 
-                // খালি ডিকশনারি পাঠানোর মানে নেই; null হলে ফিল্ডটাই বাদ যাবে
+                // No point sending an empty dictionary; if null the field is left out
                 Meta = e.Meta is { Count: > 0 } ? e.Meta : null,
             });
         }
@@ -233,9 +233,9 @@ internal static class SyncWire
     {
         State = StateToWire(request.State),
 
-        // ⚠️ ০–৮৬৪০০-র বাইরে হলে সার্ভার ৪০০ দেয়। heartbeat-এর ৪০০ কোনো ডেটা
-        //    মোছে না, কিন্তু তখন কমান্ডও আসে না — অর্থাৎ revoke পৌঁছাত না।
-        //    তাই সন্দেহজনক মানকে এখানেই সীমার ভেতরে বসানো হয়।
+        // Careful: outside 0-86400 the server returns a 400. A 400 on a heartbeat deletes no
+        // data, but then commands do not arrive either, so a revoke would not get through.
+        // So a suspect value is clamped into the range here.
         ActiveSecToday = Math.Clamp(request.ActiveSecToday, 0, 86_400),
 
         QueueDepth = request.QueueDepth is { } d ? Math.Max(0, d) : null,
@@ -267,8 +267,8 @@ internal static class SyncWire
     };
 
     /// <summary>
-    /// ⚠️ সার্ভারের `EnrollLoginDto`-র ঘরগুলোই — নাম বা আকার বদলালে
-    /// দু-পাশে একসাথে বদলাতে হবে।
+    /// Careful: these are exactly the fields of the server's `EnrollLoginDto`; if names or
+    /// shapes change, both sides must change together.
     /// </summary>
     internal sealed record EnrollLoginDto
     {
@@ -285,11 +285,11 @@ internal static class SyncWire
 
     internal static EnrollLoginDto EnrollLogin(EnrollLoginRequest request) => new()
     {
-        // ⚠️ ইমেইলের সামনে-পিছনে ফাঁকা জায়গা কেটে দেওয়া হয়: মানুষ কপি-পেস্ট
-        //    করলে প্রায়ই একটা স্পেস চলে আসে, আর সার্ভারে সেটা "অচেনা ইমেইল"
-        //    হয়ে ৪০১ দিত — স্টাফ তখন পাসওয়ার্ড নিয়ে সন্দেহ করত।
+        // Careful: whitespace around the email is trimmed. People copy-pasting often bring
+        // along a space, and the server would see an "unknown email" and answer 401, making
+        // staff suspect their password.
         Email = request.Email.Trim(),
-        // ⚠️ পাসওয়ার্ড **Trim করা হয় না** — শেষের স্পেসও পাসওয়ার্ডের অংশ
+        // Careful: the password is **not trimmed**; a trailing space is part of the password
         Password = request.Password,
         Totp = string.IsNullOrWhiteSpace(request.Totp) ? null : request.Totp.Trim(),
         Hostname = request.Hostname,
@@ -303,8 +303,8 @@ internal static class SyncWire
     // ── screenshot meta ─────────────────────────────────────────────────────
 
     /// <summary>
-    /// multipart-এর <c>meta</c> অংশ। ⚠️ এটা JSON <b>স্ট্রিং</b> হয়ে যায়,
-    /// JSON অবজেক্ট হয়ে নয় — <see cref="HttpSyncClient.SendScreenshotAsync"/> দেখুন।
+    /// The <c>meta</c> part of the multipart. Careful: it becomes a JSON <b>string</b>, not a
+    /// JSON object; see <see cref="HttpSyncClient.SendScreenshotAsync"/>.
     /// </summary>
     internal sealed record ScreenshotMetaDto
     {
@@ -327,22 +327,22 @@ internal static class SyncWire
         Width = meta.Width,
         Height = meta.Height,
 
-        // ⚠️ app usage-এর মতোই দৈর্ঘ্য এখানেই বাঁধা (G60) — সার্ভারের সীমা
-        //    `activeApp` ২৬০, `activeTitle` ১০০০। ছাড়ালে ৪০০, আর স্ক্রিনশটে
-        //    ৪০০ মানে Permanent: ছবিটা কিউ থেকে **মুছে** যেত, অথচ দোষ ছিল
-        //    কেবল একটা লম্বা উইন্ডো-টাইটেলের। নামটা আসে অন্য প্রোগ্রামের
-        //    version resource থেকে — আমাদের হাতে নয়।
+        // Careful: lengths are capped here just like app usage. The server's limits are
+        // `activeApp` 260 and `activeTitle` 1000. Exceeding them gives a 400, and a 400 on a
+        // screenshot means Permanent: the image would be **deleted** from the queue, when the
+        // only fault was one long window title. The name comes from another program's
+        // version resource, not from us.
         ActiveApp = Clamp(meta.ActiveApp, 260),
         ActiveTitle = Clamp(meta.ActiveTitle, 1000),
     };
 
-    // ── যা পড়া হয় ───────────────────────────────────────────────────────────
+    // ── what is read ────────────────────────────────────────────────────────
 
     /// <summary>
-    /// heartbeat-এর উত্তর। কমান্ড তারে snake_case স্ট্রিং, C#-এ enum — তাই
-    /// <see cref="HeartbeatResponse"/>-এ সরাসরি deserialize করা যায় না।
-    /// অচেনা কমান্ড <see cref="AgentCommands.Parse"/>-এ null হয়ে বাদ পড়ে,
-    /// ফলে ভবিষ্যতের সার্ভার নতুন কমান্ড পাঠালেও পুরোনো এজেন্ট ভাঙে না।
+    /// The heartbeat response. Commands are snake_case strings on the wire and enums in C#,
+    /// so it cannot be deserialized straight into <see cref="HeartbeatResponse"/>.
+    /// An unknown command becomes null in <see cref="AgentCommands.Parse"/> and is dropped,
+    /// so an old agent does not break when a future server sends a new command.
     /// </summary>
     internal sealed record HeartbeatResponseDto
     {
@@ -350,23 +350,23 @@ internal static class SyncWire
         public string? ConfigVersion { get; init; }
 
         /// <summary>
-        /// ⚠️ <b>এই ফিল্ডটা ছিল না, আর সেটা নীরব বাগ ছিল।</b> সার্ভার
-        /// (<c>agent.controller.ts</c>) প্রতিটা heartbeat-এর উত্তরে
-        /// <c>progress</c> পাঠায়, কিন্তু DTO-তে ঘরটাই না থাকায় STJ সেটা
-        /// চুপচাপ ফেলে দিত। ফলে <see cref="HeartbeatResponse.Progress"/>
-        /// চিরকাল null, আর tray-তে "এ মাসে" চিরকাল <b>০ ঘণ্টা</b> —
-        /// অথচ সার্ভারে সংখ্যাটা ঠিকই ছিল। J03/J04 দুটোই এর উপর দাঁড়িয়ে।
+        /// Careful: <b>this field was missing, and that was a silent bug.</b> The server
+        /// (<c>agent.controller.ts</c>) sends <c>progress</c> in every heartbeat response, but
+        /// with no slot for it in the DTO, STJ quietly dropped it. So
+        /// <see cref="HeartbeatResponse.Progress"/> was always null, and the tray showed
+        /// <b>0 hours</b> for "this month" forever, even though the number on the server was
+        /// right. The monthly milestone and pace features both rest on this.
         /// </summary>
         public ProgressDto? Progress { get; init; }
     }
 
     /// <summary>
-    /// ⚠️ <see cref="EmployeeProgress"/>-এ সরাসরি deserialize করা হয় না, যদিও
-    /// এটা পড়ার দিক। ওই রেকর্ডের তিনটে সদস্য <c>required</c>, আর .NET ৭+ এ
-    /// required সদস্য JSON-এ না থাকলে STJ <c>JsonException</c> ছোড়ে। সার্ভার
-    /// একদিন একটা ফিল্ড ঐচ্ছিক করলেই তখন <b>পুরো heartbeat-এর উত্তর</b>
-    /// (কমান্ড, revoke, configVersion সহ) পড়া যেত না — অগ্রগতির একটা ঘর হারানোর
-    /// শাস্তি হতো ট্র্যাকিং কমান্ড হারানো। তাই তারের দিকে সব nullable।
+    /// Careful: not deserialized straight into <see cref="EmployeeProgress"/>, even though it
+    /// is the read side. That record has three <c>required</c> members, and in .NET 7+ STJ
+    /// throws <c>JsonException</c> if a required member is missing from the JSON. If the
+    /// server one day made a field optional, <b>the whole heartbeat response</b> (commands,
+    /// revoke, configVersion included) could not be read; losing one progress field would
+    /// cost us the tracking commands. So everything on the wire side is nullable.
     /// </summary>
     internal sealed record ProgressDto
     {
@@ -377,7 +377,7 @@ internal static class SyncWire
         public int? DailyTargetSec { get; init; }
         public int? Week7ActiveSec { get; init; }
         public int? Week7TargetSec { get; init; }
-        /// <summary>⭐ G111 — দেখুন <see cref="EmployeeProgress.Observed"/></summary>
+        /// <summary>See <see cref="EmployeeProgress.Observed"/>.</summary>
         public bool? Observed { get; init; }
     }
 
@@ -401,12 +401,12 @@ internal static class SyncWire
     }
 
     /// <summary>
-    /// ডিভাইসের সাথে কর্মী যুক্ত না থাকলে সার্ভার <c>progress: null</c> পাঠায় —
-    /// তখন null-ই ফেরে, শূন্য ভরা একটা অবজেক্ট নয়।
+    /// When the device has no employee linked, the server sends <c>progress: null</c>; then
+    /// null is returned, not an object filled with zeros.
     ///
-    /// ⚠️ <c>monthlyTargetHours ≤ 0</c> হলেও পুরোটা বাতিল। শূন্য টার্গেট নিয়ে
-    /// <see cref="AgentStatus.MonthlyProgress"/> ০ ফেরত দেয়, অর্থাৎ যে মানুষ
-    /// পুরো মাস কাজ করেছে তার প্রগ্রেস বার সারা মাস খালি দেখাত।
+    /// Careful: the whole thing is also discarded if <c>monthlyTargetHours ≤ 0</c>. With a zero
+    /// target <see cref="AgentStatus.MonthlyProgress"/> returns 0, so a person who worked the
+    /// whole month would see an empty progress bar all month.
     /// </summary>
     private static EmployeeProgress? ToProgress(ProgressDto? dto)
     {
@@ -420,15 +420,15 @@ internal static class SyncWire
             MonthlyTargetHours = target,
             PaceSec = dto.PaceSec,
 
-            // ⚠️ এগুলো `Math.Max(0, …)` দিয়ে ঢাকা হয় **না** — null থাকা মানে
-            //    "পুরোনো সার্ভার বলেনি", আর ০ মানে "আজ ছুটি"। শূন্যে নামিয়ে
-            //    দিলে দুটো এক হয়ে যেত (দেখুন EmployeeProgress.DailyTargetSec)।
+            // Careful: these are **not** wrapped in `Math.Max(0, …)`. null means "an old server
+            // did not say", and 0 means "day off today". Flattening to zero would make the two
+            // the same (see EmployeeProgress.DailyTargetSec).
             DailyTargetSec = dto.DailyTargetSec is { } d && d >= 0 ? d : null,
             Week7ActiveSec = dto.Week7ActiveSec is { } a && a >= 0 ? a : null,
             Week7TargetSec = dto.Week7TargetSec is { } w && w >= 0 ? w : null,
 
-            // ⚠️ null-ই রাখা হয় যদি সার্ভার না বলে — ⭐ পুরোনো সার্ভারের সাথে
-            //    আচরণ অবিকল আগের মতো থাকে (EmployeeProgress.Observed দেখুন)।
+            // Careful: stays null if the server does not say, so behavior with an old server is
+            // exactly as before (see EmployeeProgress.Observed).
             Observed = dto.Observed,
         };
     }

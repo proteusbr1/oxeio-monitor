@@ -23,11 +23,12 @@ import {
 import { HolidayImportModal } from './HolidayImport';
 
 /**
- * ছুটি — `CRUD /holidays`।
+ * Holidays — `CRUD /holidays`.
  *
- * ⚠️ পুরো E10-এ এটাই একমাত্র সত্যিকারের DELETE, আর সেটা নিরীহ নয়: ছুটি
- * মুছলে ওই মাসের কর্মদিবস বেড়ে যায়, ফলে **সবার pace পিছিয়ে যায়** — কেউ
- * কোনো কাজ না করেও। তাই নিশ্চিত করার বাক্সে কথাটা স্পষ্ট লেখা।
+ * Careful: this is the only real DELETE in the whole settings area, and it is not
+ * harmless: deleting a holiday adds working days to that month, so **everyone's
+ * pace falls behind** without anyone doing anything differently. The confirmation
+ * box therefore says so explicitly.
  */
 
 const TYPE_OPTIONS = [
@@ -109,10 +110,10 @@ export function HolidaysSection() {
 
         <div className="flex flex-wrap items-end gap-2">
           {/*
-            ⚠️ সংখ্যার ইনপুট বাক্স নয়, ◀ ▶ — কারণ বাক্সটা controlled রাখলে
-               "2026" মুছে "2027" টাইপ করার মাঝপথে ("2", "20") মানটা সীমার
-               বাইরে পড়ত, state বদলাত না, আর কার্সারের নিচে বছরটা লাফিয়ে
-               আগেরটায় ফিরে যেত। বছর বদলানো এমনিতেই এক-দুই ধাপের কাজ।
+            Careful: ◀ ▶ buttons, not a number input. With a controlled input, typing
+               "2027" over "2026" passes through "2" and "20", which are out of range;
+               state would not change and the year under the cursor would jump back
+               to the old value. Changing the year is only a step or two anyway.
           */}
           <div>
             <span className="mb-1 block text-[11.5px] text-ink-3">Year</span>
@@ -256,10 +257,11 @@ function HolidayForm({
 
   const { busy, error, run } = useMutation();
 
-  // ⚠️ `weekdayOf()` অচেনা তারিখে `''` দেয় — তাই ফাঁকা হলে hint বসানোই
-  //    হয় না, নইলে শিরোনামের নিচে একটা শূন্য লাইন ঝুলে থাকত।
-  // ⚠️ আগে এর সাথে "বার" প্রত্যয় জোড়া হতো; ইংরেজি UI-তে বারের নামটাই
-  //    যথেষ্ট, আর `format.ts` ইংরেজিতে গেলে "Monবার" হয়ে যেত।
+  // Careful: `weekdayOf()` returns `''` for an unrecognised date, so the hint is not
+  //    rendered when empty; otherwise an empty line would hang under the heading.
+  // Careful: a Bengali suffix used to be appended to this; in the English UI the
+  //    weekday name alone is enough, and it would have become "Mon<suffix>" once
+  //    `format.ts` went English.
   const weekday = weekdayOf(holidayDate);
 
   return (

@@ -23,24 +23,22 @@ import {
 import { Adjustments } from '../staff/Adjustments';
 
 /**
- * **J05 · J08 · ADR-011e** — স্টাফের নিজের পাতা।
+ * The employee's own page.
  *
- * ⚠️⚠️ tray-র মেনুতে **"My data"** আইটেমটা প্রথম দিন থেকেই ছিল, আর সেটা
- * চাপলে ব্রাউজার খুলে ৪০৪ দেখাত — পাতাটা কোনোদিন বানানোই হয়নি। অর্থাৎ
- * স্বচ্ছতার প্রতিশ্রুতিটা প্রতিদিন স্টাফের চোখের সামনে ছিল, আর
- * প্রতিদিনই ভাঙত।
+ * Careful: the tray menu has had a **"My data"** item since day one, and clicking
+ * it opened the browser to a 404; the page had never been built. So the
+ * transparency promise was in front of staff every day, and broken every day.
  *
- * ⭐ <b>পাতাটার একটাই কাজ: "আমার সম্পর্কে সিস্টেম কী জানে" — এক জায়গায়।</b>
- * তাই এখানে চারটে জিনিস, আর তার বেশি কিছু নয়:
- *   ১· আজ ও মাসের ঘণ্টা (tray-র হুবহু একই সংখ্যা)
- *   ২· দিনে দিনে তালিকা — ছুটিসহ, ফাঁকা দিনসহ
- *   ৩· ঘণ্টা-সংশোধন, কারণসহ (J08)
- *   ৪· নিজের ছবি ও নীতিমালার শর্ত
+ * Important: <b>the page has one job: "what does the system know about me", in one
+ * place.</b> So it has four things and nothing more:
+ *   1. Today's and the month's hours (the exact same numbers as the tray)
+ *   2. A day-by-day list, including leave and empty days
+ *   3. Hour adjustments, with reasons
+ *   4. Their own screenshots and the policy's terms
  *
- * ⚠️ **কোনো বোতাম নেই** — না "সময় দাবি করুন", না "ব্যাখ্যা দিন"। একটা
- * বসালেই সেটা approval workflow-র প্রথম ধাপ হতো, যেটা এই সিস্টেমে
- * ইচ্ছাকৃতভাবে নেই (ADR-011d)। tray জানালাতেও ঠিক এই কারণেই কোনো বোতাম
- * নেই।
+ * Careful: **no buttons**: no "claim time", no "give an explanation". Adding one
+ * would be the first step of an approval workflow, which this system deliberately
+ * does not have (ADR-011d). The tray window has no buttons for the same reason.
  */
 export function MyDataPage() {
   const { user } = useAuth();
@@ -48,11 +46,11 @@ export function MyDataPage() {
   const today = todayInDhaka();
 
   /**
-   * ⚠️ owner ও manager-এর `users.employee_id` সাধারণত null — তাঁরা কর্মীর
-   * সারিতে বাঁধা নন। সার্ভার তাঁদের ৪০৩ বলে, কিন্তু সেটা পর্দায় আসত
-   * *"You don't have access"* হয়ে — অথচ owner-এর কাছে ওই বাক্যটা
-   * বিভ্রান্তিকর (তাঁর তো সবেতেই access)। আসল কথাটা অন্য: **তাঁর নিজের
-   * বলে কোনো ঘণ্টা নেই**। তাই রিকোয়েস্টটা পাঠানোই হয় না।
+   * Careful: an owner's and a manager's `users.employee_id` is normally null; they
+   * are not tied to an employee row. The server returns 403 for them, but that
+   * would show on screen as *"You don't have access"*, which is misleading to an
+   * owner (who has access to everything). The real point is different: **they have
+   * no hours of their own**. So the request is never sent.
    */
   const linked = user?.employeeId != null;
 
@@ -62,9 +60,10 @@ export function MyDataPage() {
   );
 
   /**
-   * ⚠️ **রোলিং ৩০ দিন, "চলতি মাস" নয়।** মাসের ১ তারিখে চলতি-মাস দেখালে
-   * তালিকায় একটাই সারি থাকত, আর ঠিক তখনই মানুষ গত মাসের শেষ দিনগুলো
-   * মেলাতে চায়। উপরের সংখ্যাগুলো অবশ্য মাসেরই — ওটাই চুক্তির একক (O8)।
+   * Careful: **rolling 30 days, not "the current month".** Showing the current
+   * month on the 1st would leave one row in the list, and that is exactly when
+   * people want to cross-check the last days of last month. The numbers above are
+   * for the month though; that is the contract's unit (O8).
    */
   const from = shiftWorkDate(today, -29);
   const days = useApi(
@@ -73,12 +72,12 @@ export function MyDataPage() {
   );
 
   /**
-   * ⭐⭐ **R21 — নিজের জামানত।** মালিকের চাওয়া ছিল ঠিক এটাই: *"প্রতিটা
-   * স্টাফ তার ড্যাশবোর্ডে তার কত টাকা জমল সেটাও দেখতে পাবে"*।
+   * **Their own deposit.** This is exactly what the owner wanted: *"every staff
+   * member can also see on their dashboard how much money of theirs has built up"*.
    *
-   * ⚠️ আলাদা কল, `summary`-র সাথে জোড়া নয় — জামানত না থাকলেও (নিয়ম বন্ধ,
-   * বা তিনি নতুন) বাকি পাতাটা যেন দিব্যি চলে। এক কলে মিশিয়ে দিলে একটার
-   * ব্যর্থতা অন্যটাকেও ফাঁকা করে দিত।
+   * Careful: a separate call, not joined to `summary`, so that the rest of the page
+   * works fine even when there is no deposit (rule off, or they are new). Mixing
+   * them into one call would let one's failure blank out the other too.
    */
   const deposit = useApi(
     (signal) =>
@@ -126,14 +125,14 @@ export function MyDataPage() {
               value={<Duration seconds={p.week7ActiveSec} />}
             />
             {/*
-              ⭐ পুরো পাতায় **একটাই** সম্ভাব্য লাল টাইল — পিছিয়ে থাকা।
-              ⚠️ এগিয়ে থাকলে লাল নয়; সব টাইল লাল করলে লালের মানেই হারায়।
+              Important: **only one** possible red tile on the whole page: being behind.
+              Careful: not red when ahead; making every tile red would erase red's meaning.
             */}
             {/*
-              ⭐⭐ **G111** — "এখনো দেখা হয়নি" আর "এগিয়ে আছি" এক নয়।
-              ⚠️⚠️ আগে এই টাইল নতুন কর্মীর প্রথম দিনে "Ahead 0s" দেখাত।
-                 সংখ্যাটা মিথ্যা ছিল না, বাক্যটা ছিল — কারণ তাঁর একটাও
-                 শেষ-হওয়া কর্মদিবস তখনো দেখা হয়নি।
+              "Not yet observed" and "ahead" are not the same.
+              Careful: this tile used to show "Ahead 0s" on a new employee's first day.
+                 The number was not a lie, the sentence was: not one of their
+                 workdays had been observed to the end yet.
             */}
             {p.observed ? (
               <Stat
@@ -152,10 +151,10 @@ export function MyDataPage() {
           </StatRow>
 
           {/*
-            ⭐⭐ **নিজের ডিজাইন-টার্গেট** *(২২ আগস্ট)* — সবার উপরে, কারণ
-               ডিজাইনারের রোজকার কাজ এখান থেকেই শুরু হয়।
-            ⚠️ যাঁর কোনো টার্গেট নেই তাঁর পাতায় কার্ডটা **বসেই না** —
-               গবেষকের পাতায় একটা খালি বাক্স বসিয়ে লাভ নেই।
+            **Their own design target**: at the very top, because a designer's daily
+               work starts here.
+            Careful: for someone with no target the card **is not rendered**; an
+               empty box on a researcher's page is pointless.
           */}
           {features.designTargets && <MyTargets />}
 
@@ -183,9 +182,10 @@ export function MyDataPage() {
 
                 <div className="min-w-[180px] flex-1 space-y-3">
                   {/*
-                    ⚠️ ছুটির দিনে দৈনিক টার্গেট ০ — তখন খালি বার নয়, একটা
-                       বাক্য। খালি বার "আজও ৮ ঘণ্টা বাকি" বলে তাড়া দিত,
-                       অথচ আজ কিছু করার কথাই নেই। tray জানালাতেও একই নিয়ম।
+                    Careful: on a day off the daily target is 0; show a sentence, not an
+                       empty bar. An empty bar says "8 hours still to go today" and
+                       nags, when nothing is expected today. The tray window follows
+                       the same rule.
                   */}
                   {p.dailyTargetSec > 0 ? (
                     <Line
@@ -210,18 +210,18 @@ export function MyDataPage() {
             </Card>
 
             {/*
-              ⭐ **স্বচ্ছতার ঘর।** নীতিমালায় স্টাফকে যা লিখিতভাবে বলা
-              হয়েছে, তার সংখ্যাগুলো এখানেই — খুঁজতে যেতে হয় না।
-              ⚠️ ছবির মেয়াদ সার্ভার থেকে আসে, হাতে লেখা নয়; নীতি বদলালে
-                 পাতাটা পুরোনো প্রতিশ্রুতি দেখাত।
+              **Transparency box.** The numbers that staff were told in writing in
+              the policy are here, so they need not hunt for them.
+              Careful: the screenshot retention comes from the server, not written by
+                 hand; if the policy changed, the page would show an old promise.
             */}
             {/*
-              ⭐⭐ **R21 — জমা কত।** ⚠️ কার্ডটা তখনই দেখা যায় যখন সত্যিই
-                 কিছু জমেছে (বা নিষ্পত্তি হয়েছে) — শূন্য নিয়ে একটা কার্ড
-                 বসিয়ে রাখলে সেটা কেবল প্রশ্ন তৈরি করত।
-              ⚠️ এখানে বেতনের কোনো সংখ্যা নেই, আর সেটা নিয়ম ভাঙে না:
-                 অঙ্কটা তাঁর নিজের টাকা, বেতনের হিসাব নয়। এটা থেকে কারো
-                 বেতন বের করা যায় না।
+              **Deposit total.** Careful: the card appears only when something has
+                 really accumulated (or been settled); a card showing zero would only
+                 raise questions.
+              Careful: no salary figure here, and that does not break the rule: the
+                 amount is their own money, not a pay calculation. Nobody's salary can
+                 be worked out from it.
             */}
             {deposit.data &&
               (deposit.data.totalPaisa > 0 || deposit.data.settlement) && (
@@ -258,9 +258,9 @@ export function MyDataPage() {
                   )}
 
                   {/*
-                    ⭐ মাস ধরে তালিকাটাও থাকে — "কোন মাসে কাটা হয়েছে"
-                       প্রশ্নের উত্তর নিজের পাতাতেই থাকা দরকার, নইলে
-                       মিলিয়ে দেখতে মালিকের কাছে যেতে হতো।
+                    The month-by-month list is also here: the answer to "which month was
+                       it deducted" should be on their own page, or they would have to go
+                       to the owner to check.
                   */}
                   {deposit.data.months.length > 0 && (
                     <ul className="mt-3 divide-y divide-line border-t border-line text-[13px]">
@@ -327,10 +327,10 @@ export function MyDataPage() {
           </Card>
 
           {/*
-          ⭐ J08 — নিজের সংশোধন, কারণসহ। কম্পোনেন্টটা owner-এর পাতার
-          সাথে **ভাগ করা**: owner ওখানে যোগ করার বোতামও পান, স্টাফ শুধু
-          তালিকাটা দেখেন (`isOwner` ভেতরেই যাচাই হয়)। দুটো আলাদা
-          কম্পোনেন্ট লিখলে একদিন দুই পাতায় দুই রকম কারণ দেখাত।
+          Adjustments to their own hours, with reasons. The component is **shared**
+          with the owner's page: the owner gets the add button there, staff only see
+          the list (`isOwner` is checked inside). Writing two separate components
+          would one day show different reasons on the two pages.
         */}
           {user?.employeeId != null && (
             <Adjustments employeeId={user.employeeId} nonce={0} />
@@ -373,25 +373,26 @@ function Row({ term, children }: { term: string; children: React.ReactNode }) {
 }
 
 /**
- * ⚠️⚠️ **নিচের যোগফলটা এখানে কষা হয় না** *(৬ সেপ্টেম্বর ২০২৬, G162)*।
+ * Careful: **the total below is not computed here.**
  *
- * আগে হতো — `rows.filter(...).reduce(...)` — আর তাতে তিনটে আলাদা কারণে
- * উপরের *"This month"* টাইলের সাথে মিলত না: তালিকাটা রোলিং ৩০ দিনের
- * (৩১ তারিখে ১ তারিখটা আসতই না), সংশোধন কেবল নিচেরটায় ঢুকত, আর দুই
- * PC-তে একসাথে কাজ করলে নিচেরটা সময়টা দুবার গুনত।
+ * It used to be (`rows.filter(...).reduce(...)`), and it disagreed with the
+ * *"This month"* tile above for three separate reasons: the list is a rolling 30
+ * days (on the 31st the 1st would not appear), adjustments only entered the lower
+ * one, and with work on two PCs at once the lower one counted the time twice.
  *
- * ⭐ এখন সংখ্যাটা সার্ভারের — ঠিক যেটা দিয়ে সে pace কষে।
+ * Important: now the number is the server's, exactly what it uses to compute pace.
  *
- * ⚠️ তাই এটা **উপরের সারিগুলোর যোগফল নয়**, মাসের যোগফল। মাসের ৩১
- * তারিখে তালিকা শুরু হয় ২ তারিখ থেকে, অথচ সংখ্যাটা ১ তারিখও ধরে —
- * এটাই চাওয়া, আর লেবেলটাও তাই *"This month"* বলে, "Total" নয়।
+ * Careful: so this is **not the sum of the rows above**, it is the month's sum. On
+ * the 31st the list starts from the 2nd while the number also includes the 1st;
+ * that is intended, and the label says *"This month"*, not "Total".
  */
 function DayTable({ rows, monthCreditedSec }: {
   rows: MyDay[];
   /**
-   * ⚠️ **`undefined` মানে "জানি না", ০ নয়।** উপরের সারাংশ কলটা আলাদা —
-   *    সেটা ব্যর্থ হলেও এই তালিকাটা আসতে পারে। তখন ০ লিখলে পর্দা বলত
-   *    "এ মাসে কিছুই করোনি", অথচ সত্যিটা "সংখ্যাটা আনা যায়নি"।
+   * Careful: **`undefined` means "unknown", not 0.** The summary call above is
+   *    separate; this list can arrive even if that failed. Writing 0 then would
+   *    make the screen say "you did nothing this month", when the truth is "the
+   *    number could not be fetched".
    */
   monthCreditedSec: number | undefined;
 }) {
@@ -399,7 +400,7 @@ function DayTable({ rows, monthCreditedSec }: {
     <Table
       rows={rows}
       rowKey={(r) => r.workDate}
-      // ⚠️ ছুটির দিন ম্লান — "কাজ করোনি" নয়, "করার কথা ছিল না"
+      // Careful: days off are dimmed: not "did not work" but "was not expected to"
       rowMuted={(r) => r.isOffDay && r.workedSec === 0}
       columns={[
         {
@@ -428,8 +429,8 @@ function DayTable({ rows, monthCreditedSec }: {
           header: 'Correction',
           align: 'right',
           render: (r) =>
-            // ⚠️ শূন্য হলে ড্যাশ — `+0:00` লিখলে প্রতিটা সারিতে মনে হতো
-            //    কিছু একটা বদলানো হয়েছে
+            // Careful: a dash at zero; writing `+0:00` would make every row look
+            //    as if something had changed
             r.adjustmentSec === 0 ? (
               <span className="text-ink-3">—</span>
             ) : (
@@ -457,8 +458,8 @@ function DayTable({ rows, monthCreditedSec }: {
         <tr>
           <td className="px-3 py-2 text-[12.5px] text-ink-3">
             This month so far
-            {/* ⚠️ কোন কলামের যোগফল সেটা লেখা থাকে — নইলে পাঠক
-                "Worked"-এর যোগফল ভেবে মেলাতে বসতেন (G162) */}
+            {/* Careful: which column the total is for is written out; otherwise readers
+                would try to reconcile it as the sum of "Worked" (G162) */}
             <span className="text-ink-3/70"> · counted</span>
           </td>
           <td colSpan={3} className="px-3 py-2 text-right">

@@ -5,16 +5,16 @@ using oXeio.Core.Tracking;
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// সার্ভার থেকে আসা কনফিগ — <c>GET /agent/config</c> ও enroll-এর উত্তরে।
-/// সার্ভারের <c>agent-config.service.ts</c>-এর <c>AgentConfig</c>-এর হুবহু প্রতিরূপ।
+/// Config from the server, returned by <c>GET /agent/config</c> and by enroll.
+/// An exact mirror of <c>AgentConfig</c> in the server's <c>agent-config.service.ts</c>.
 ///
-/// ⚠️ এটাই এজেন্টের <b>একমাত্র</b> কনফিগ টাইপ। নিজের মডিউলের জন্য আরেকটা
-/// বানাবেন না — দুটো থাকলে একটা মডিউল পুরোনো idleThreshold নিয়ে চলবে আর
-/// আরেকটা নতুন, আর দুজনের গোনা ঘণ্টা মিলবে না।
+/// Important: this is the agent's <b>only</b> config type. Do not create another for your
+/// own module: with two, one module would run on an old idleThreshold and the other on the
+/// new one, and their counted hours would not match.
 ///
-/// সব ফিল্ড nullable নয় কিন্তু <c>init</c> — কনফিগ একবার তৈরি হয়ে অপরিবর্তিত
-/// থাকে, বদলাতে হলে নতুন ইনস্ট্যান্স। মাঝপথে ফিল্ড বদলালে ট্র্যাকিং লুপ আর
-/// ক্যাপচার লুপ একই টিকে দুই রকম কনফিগ দেখত।
+/// Fields are non-nullable but <c>init</c>: a config is built once and never changes; to
+/// change it, create a new instance. If fields changed midway, the tracking loop and the
+/// capture loop would see two different configs in the same tick.
 /// </summary>
 public sealed record AgentConfig
 {
@@ -22,13 +22,13 @@ public sealed record AgentConfig
 
     public required int SlotMinutes { get; init; }
 
-    /// <summary><c>"HH:MM"</c> — null মানে ২৪ ঘণ্টাই ছবি ওঠে (ADR-011c)।</summary>
+    /// <summary><c>"HH:MM"</c>. Null means screenshots are taken 24 hours a day (ADR-011c).</summary>
     public string? ScreenshotFrom { get; init; }
 
     /// <inheritdoc cref="ScreenshotFrom"/>
     public string? ScreenshotTo { get; init; }
 
-    /// <summary>v1-এ সবসময় <c>"Asia/Dhaka"</c> — <see cref="oXeio.Core.Time.DhakaTime"/> দেখুন।</summary>
+    /// <summary>Always <c>"Asia/Dhaka"</c> in v1, see <see cref="oXeio.Core.Time.DhakaTime"/>.</summary>
     public required string Timezone { get; init; }
 
     /// <summary>
@@ -47,10 +47,10 @@ public sealed record AgentConfig
     public required ScreenshotConfig Screenshot { get; init; }
 
     /// <summary>
-    /// enroll করার আগে বা কনফিগ পড়তে না পারলে এটা দিয়েই চলবে।
+    /// Used before enrolling, or when the config cannot be read.
     ///
-    /// ⚠️ কনফিগ না পেলে ট্র্যাকিং <b>থামানো যাবে না</b> — তাহলে সার্ভার ডাউন
-    /// থাকা মানেই সবার ঘণ্টা শূন্য। ডিফল্ট নিয়ে চলতে থাকুন, কনফিগ এলে বদলাবে।
+    /// Careful: tracking <b>must not stop</b> when no config is available, or a server outage
+    /// would zero everyone's hours. Keep running on the defaults; they change when a config arrives.
     /// </summary>
     public static AgentConfig Default => new()
     {
@@ -74,21 +74,21 @@ public sealed record AgentConfig
     };
 
     /// <summary>
-    /// <see cref="ScreenshotFrom"/>/<see cref="ScreenshotTo"/> → <see cref="CaptureWindow"/>।
+    /// <see cref="ScreenshotFrom"/>/<see cref="ScreenshotTo"/> → <see cref="CaptureWindow"/>.
     ///
-    /// এখানে একবারই লেখা হলো যাতে প্রতিটা মডিউল নিজের মতো করে "HH:MM" পার্স না করে —
-    /// একজন <c>DateTime.Parse</c> লিখলেই বাংলাদেশি লোকেলে সেটা অন্য মানে দাঁড়াত।
+    /// Written once here so that modules do not each parse "HH:MM" their own way: one
+    /// <c>DateTime.Parse</c> would mean something different under a Bangladeshi locale.
     /// </summary>
     public CaptureWindow ToCaptureWindow() =>
         new(ParseHhMm(ScreenshotFrom), ParseHhMm(ScreenshotTo));
 
-    /// <summary>ভুল বা অনুপস্থিত মান null — অর্থাৎ "সীমা নেই", ক্র্যাশ নয়।</summary>
+    /// <summary>A bad or missing value gives null, meaning "no limit", not a crash.</summary>
     public static TimeOnly? ParseHhMm(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
 
-        // ⚠️ ফরম্যাটে ':' কালচার-নির্ভর time separator। InvariantCulture ছাড়া
-        //    এটা কোনো কোনো লোকেলে '.' খুঁজত আর সব সময়েই null ফেরত দিত।
+        // The ':' in the format is the culture-dependent time separator. Without
+        // InvariantCulture it would look for '.' in some locales and always return null.
         return TimeOnly.TryParseExact(
             value, @"HH\:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
             ? parsed
@@ -100,7 +100,7 @@ public sealed record AppTrackingConfig
 {
     public required bool Enabled { get; init; }
 
-    /// <summary>এর কম সময়ের অ্যাপ ধরা হয় না — alt-tab-এর নয়েজ বাদ দিতে।</summary>
+    /// <summary>Apps shorter than this are not counted, to drop alt-tab noise.</summary>
     public required int MinDurationSec { get; init; }
 }
 
@@ -120,15 +120,15 @@ public sealed record ScreenshotConfig
     [System.Text.Json.Serialization.JsonIgnore]
     public bool IsEnabled => Enabled != false;
 
-    /// <summary>সার্ভার শুধু <c>"webp"</c> নেয় — অন্য কিছু হলে ৪১৫।</summary>
+    /// <summary>The server only accepts <c>"webp"</c>; anything else gets a 415.</summary>
     public required string Format { get; init; }
 
-    /// <summary>০–১০০।</summary>
+    /// <summary>0 to 100.</summary>
     public required int Quality { get; init; }
 
-    /// <summary>এর চেয়ে চওড়া হলে ছোট করে নেওয়া হয়।</summary>
+    /// <summary>Wider images are scaled down to this width.</summary>
     public required int MaxWidth { get; init; }
 
-    /// <summary>সব মনিটরের আলাদা আলাদা ছবি, নাকি শুধু প্রাইমারি।</summary>
+    /// <summary>A separate image per monitor, or the primary only.</summary>
     public required bool AllMonitors { get; init; }
 }

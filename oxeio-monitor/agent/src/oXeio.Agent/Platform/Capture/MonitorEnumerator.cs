@@ -15,17 +15,17 @@ internal readonly record struct MonitorInfo(
     public int Width => Bounds.Width;
     public int Height => Bounds.Height;
 
-    /// <summary>১০০% = ৯৬ DPI। ১৫০% হলে ১৪৪।</summary>
+    /// <summary>100% = 96 DPI. At 150% it is 144.</summary>
     public double Scale => Dpi / 96.0;
 }
 
 /// <summary>
-/// এখন কোন কোন মনিটর লাগানো আছে।
+/// Which monitors are currently attached.
 ///
-/// ⚠️ <b>প্রতিবার নতুন করে গোনা হয়, কখনো ক্যাশ করা হয় না।</b> ল্যাপটপ ডক/আনডক
-/// করলে বা মনিটর খুলে-লাগালে পুরোনো তালিকা ধরে ক্যাপচার করলে নেই এমন মনিটরের
-/// কালো ছবি আসত, আর নতুন মনিটর একেবারেই বাদ পড়ত — প্রসেস যতদিন চলে ততদিন।
-/// গুনতে মাইক্রোসেকেন্ড লাগে, ক্যাশ করার কোনো কারণই নেই।
+/// Careful: <b>counted afresh every time, never cached.</b> If a laptop is docked/undocked or a
+/// monitor is plugged/unplugged, capturing from an old list would give black images of a monitor
+/// that does not exist, and a new monitor would be missed entirely, for as long as the process
+/// runs. Counting takes microseconds, so there is no reason to cache.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static unsafe class MonitorEnumerator
@@ -46,7 +46,7 @@ internal static unsafe class MonitorEnumerator
             handle.Free();
         }
 
-        // বাঁ থেকে ডানে সাজানো — monitor_index যেন রান-টু-রান একই থাকে
+        // sorted left to right, so monitor_index stays the same from run to run
         list.Sort((a, b) => a.Bounds.Left != b.Bounds.Left
             ? a.Bounds.Left.CompareTo(b.Bounds.Left)
             : a.Bounds.Top.CompareTo(b.Bounds.Top));
@@ -77,9 +77,9 @@ internal static unsafe class MonitorEnumerator
         }
         catch
         {
-            // কলব্যাক থেকে ব্যতিক্রম নেটিভ কোডে গেলে প্রসেস মরে যাবে
+            // an exception going from the callback into native code would kill the process
         }
 
-        return 1; // চালিয়ে যাও
+        return 1; // continue
     }
 }

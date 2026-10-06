@@ -21,25 +21,25 @@ import { formatAgo, formatDateTime } from '../../lib/format';
 import { Chip, MiniButton, Notice, ServerError, useMutation } from '../../components/ui';
 
 /**
- * **G01–G07 · K04** — অ্যালার্ট ও সার্ভারের হেলথ।
+ * G01-G07, K04: alerts and server health.
  *
- * ⚠️⚠️ `api/alerts.ts` ফাইলটা অনেক আগেই লেখা হয়েছিল — টাইপ, লেবেল,
- * ফিল্টার, `openCount` সব — কিন্তু **কোনো পাতা সেটা ব্যবহার করত না**।
- * অর্থাৎ সার্ভার নিয়ম মেনে অ্যালার্ট তুলত, ইমেইলও পাঠাত, কিন্তু
- * ড্যাশবোর্ডে ঢুকে মালিক একটাও দেখতে পেতেন না। ইমেইল মিস হলে ঘটনাটা
- * চিরতরে হারাত।
+ * Careful: `api/alerts.ts` was written long ago (types, labels, filters,
+ * `openCount`, everything), but no page used it. So the server raised alerts
+ * according to the rules and even sent emails, yet the owner could not see a
+ * single one on the dashboard. If an email was missed, the incident was lost
+ * for good.
  *
- * ⭐ হেলথটা **একই পাতায়**, আলাদা কোথাও নয়: "কিছু কি ভাঙা?" প্রশ্নের
- * উত্তর দু-জায়গায় ভাগ থাকলে মানুষ একটাও খুলত না।
+ * The health sits on the same page, not elsewhere: if the answer to "is anything
+ * broken?" were split across two places, people would open neither.
  */
 export function AlertsPage() {
   const { user } = useAuth();
   const [showAll, setShowAll] = useState(false);
 
   /**
-   * ⚠️ পোলিং, একবারের `useApi` নয় — এই পাতাটা খুলে রেখে দেওয়া হয়
-   * (ইনসিডেন্টের সময় দ্বিতীয় মনিটরে)। ⭐ `usePolling` লুকোনো ট্যাবে
-   * নিজেই থেমে যায়, তাই সারারাত খোলা থাকলেও সার্ভারে ঝড় ওঠে না।
+   * Careful: polling, not a one-shot `useApi`; this page is left open (on a second
+   * monitor during an incident). `usePolling` stops by itself in a hidden tab, so
+   * even if left open all night it does not storm the server.
    */
   const alerts = usePolling(
     (signal) => listAlerts({ status: showAll ? 'all' : 'open' }, signal),
@@ -88,17 +88,17 @@ export function AlertsPage() {
           padded={false}
           actions={
             /*
-              ⭐ **"Seen all"** — এক ক্লিকে সব খোলা অ্যালার্ট দেখা *(১৮ আগস্ট)*।
-                 G01 ("এজেন্ট চুপ") ১২টা PC-তে বারবার এলে ১১৮টা ওয়ার্নিং জমে,
-                 আর এক-এক করে চাপা যন্ত্রণা।
-
-              ⚠️ শুধু **খোলা** থাকলে দেখানো হয় (`openCount > 0`) — সব দেখা
-                 থাকলে বোতামটাই বসে না, নইলে "কিছু নেই" অবস্থায় একটা নিষ্ক্রিয়
-                 বোতাম বিভ্রান্তি করত।
-
-              ⚠️ নিশ্চিত-প্রম্পট — এটা একসাথে অনেকগুলো ছোঁয়, তাই ভুল ক্লিকে
-                 যেন গোটা তালিকা নীরবে seen না হয়ে যায়।
-            */
+             * "Seen all": mark every open alert as seen with one click.
+             * When G01 ("agent silent") fires repeatedly across 12 PCs, 118 warnings pile up,
+             * and pressing them one by one is torture.
+             *
+             * Careful: shown only when something is open (`openCount > 0`). When all are
+             * seen the button is not rendered; a disabled button in the "nothing here" state
+             * would confuse.
+             *
+             * Careful: a confirm prompt: this touches many rows at once, so a wrong click
+             * must not mark the whole list seen silently.
+             */
             (alerts.data?.openCount ?? 0) > 0 ? (
               <MiniButton
                 disabled={ackAll.busy}
@@ -156,8 +156,9 @@ function AlertTable({
       <Table
         rows={rows}
         rowKey={(r) => r.id}
-        // ⚠️ acknowledge **বা** সার্ভার নিজে-বন্ধ করা সারি ম্লান — কিন্তু
-        //    **থেকে যায়**, কারণ ইতিহাসটাই পরে ঘণ্টা সংশোধনের প্রমাণ (ADR-011e)
+        // Careful: rows that were acknowledged, or closed by the server itself, are
+        // dimmed but stay: the history is later the evidence for hour corrections
+        // (ADR-011e)
         rowMuted={(r) => r.acknowledgedAt !== null || r.resolvedAt !== null}
         columns={[
           {
@@ -185,7 +186,7 @@ function AlertTable({
                 <div className="font-medium">
                   {ALERT_TYPE_LABEL[r.type as AlertType] ?? r.type}
                 </div>
-                {/* ⭐ শিরোনামে নাম/হোস্টনেম থাকে — ওটাই কাজের তথ্য */}
+                {/* The title carries the name/hostname: that is the useful information */}
                 <div className="text-[12.5px] text-ink-2">{r.title}</div>
                 {r.detail && (
                   <div className="mt-0.5 max-w-prose text-[12px] text-ink-3">
@@ -216,8 +217,8 @@ function AlertTable({
                   {r.channelsSent.join(', ')}
                 </span>
               ) : (
-                // ⚠️ "কোথাও যায়নি" আর "ইমেইল গেছে" — পার্থক্যটা জরুরি:
-                //    SMTP বন্ধ থাকলে এই কলামটাই একমাত্র সূত্র
+                // Careful: "went nowhere" and "email sent" are different, and the difference
+                // matters: when SMTP is down, this column is the only clue
                 <span className="text-[12px] text-ink-3">—</span>
               ),
           },
@@ -232,10 +233,10 @@ function AlertTable({
                 </span>
               ) : r.resolvedAt ? (
                 /*
-                  ⭐ সার্ভার **নিজে** বন্ধ করেছে (এজেন্ট ফিরে এসেছে) — কোনো
-                     বোতাম নয়, কারণ "দেখার" কিছু নেই। সারিটা ইতিহাসে থেকে যায়
-                     (Show all-এ), কিন্তু খোলা গোনায় ঢোকে না।
-                */
+                 * Closed by the server itself (the agent came back): no button, because there is
+                 * nothing to "see". The row stays in history (under Show all) but does not count
+                 * as open.
+                 */
                 <span
                   className="text-[12px] text-ink-3"
                   title={`Resolved on its own — ${formatDateTime(r.resolvedAt)}`}
@@ -263,8 +264,8 @@ function AlertTable({
 }
 
 /**
- * ⭐ হেলথটা উপরে, ছোট করে — অ্যালার্ট **ঘটনা**, হেলথ **অবস্থা**। দুটো
- * এক তালিকায় মেশালে "এখন কী ভাঙা" প্রশ্নের উত্তর খুঁজে পাওয়া যেত না।
+ * Health goes on top, small: an alert is an event, health is a state. Mixing them
+ * in one list would make "what is broken right now" hard to answer.
  */
 function HealthCard({
   data,
@@ -287,9 +288,9 @@ function HealthCard({
       actions={
         <div className="flex gap-2">
           {/*
-            ⭐ দুটো বোতামই "চোখে দেখার" জন্য: যে ব্যাকআপ কখনো পরীক্ষা
-            করা হয়নি সেটা ব্যাকআপ নয়, অনুমান। একই যুক্তি retention-এও —
-            নীতিমালায় স্টাফকে "৯০ দিন পর ছবি মুছে যাবে" বলা আছে।
+            Both buttons are for "seeing with your own eyes": a backup that has never
+            been tested is not a backup, it is a guess. The same reasoning applies to
+            retention: staff are told in the policy that "screenshots are deleted after 90 days".
           */}
           <MiniButton
             disabled={jobs.busy}
@@ -371,8 +372,8 @@ function HealthCard({
               label="Agents quiet"
               value={data.devices.silent}
               unit={`of ${data.devices.active}`}
-              // ⚠️ লাল নয়: রাতে সবাই চুপ থাকাই স্বাভাবিক, আর তাতে
-              //    status-ও খারাপ হয় না (সার্ভারের নিয়ম)
+              // Careful: not red: everyone being silent at night is normal, and it does not
+              // make the status bad either (a server rule)
               tone={data.devices.silent > 0 ? 'muted' : 'counted'}
             />
           </StatRow>

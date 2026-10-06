@@ -7,26 +7,27 @@ import {
 import { elapsedWorkdays } from '../src/summary/summary.math';
 
 /**
- * ⭐⭐ **E01 — সাত দিনের ফিতের প্রত্যাশা।**
+ * **E01 — the seven-day strip's expectation.**
  *
- * ⚠️⚠️ যে বাগটা এই ফাইল ঠেকায়: ফিতের টার্গেট গোনা হতো `daily_summary`
- * **সারি দেখে** (`day_type !== 'holiday'`)। কিন্তু ছুটির দিনে কেউ এক ঘণ্টা
- * কাজ করলে `dayTypeOf()` দিনটাকে `worked` লেখে — তাই ওই ছুটির দিনটাই একটা
- * পুরো কর্মদিবসের প্রত্যাশা হয়ে যেত। কেউ শুক্রবার দু-ঘণ্টা কাজ করলে ওই
- * দিনের চার্টে তাঁর নামে পুরো দিনের টার্গেট-বার আঁকা হতো: **ছুটির দিনে
- * কাজ করার শাস্তি।** মাসের কার্ডে এটা আগেই সারানো হয়েছিল, ফিতেয় হয়নি।
+ * The bug this file prevents: the strip's target used to be counted by
+ * **looking at `daily_summary` rows** (`day_type !== 'holiday'`). But if
+ * someone worked an hour on a holiday, `dayTypeOf()` writes the day as
+ * `worked` — so that very holiday would become the expectation of a full
+ * working day. If someone worked two hours on a Friday, the chart for that
+ * day would draw a full-day target bar in their name: **a penalty for
+ * working on a holiday.** This was fixed earlier on the monthly card, but not on the strip.
  *
- * ⭐ শেষ describe-টা সবচেয়ে জরুরি: ফিতে আর মাসের কার্ড **একই সংজ্ঞা**
- * ব্যবহার করছে কি না, সেটা `elapsedWorkdays()`-এর সাথে মিলিয়ে দেখা হয়।
+ * The last describe is the most important: whether the strip and the monthly
+ * card use **the same definition** is checked against `elapsedWorkdays()`.
  *
- * **পরীক্ষার সপ্তাহ — ৮ থেকে ১৪ আগস্ট ২০২৬:** ৮ শনি … ১৪ শুক্র।
- * সাপ্তাহিক ছুটি শুক্রবার (ISO ৫) হলে ওই সপ্তাহে ছুটির দিন কেবল ১৪ তারিখ।
+ * **Test week — 8 to 14 August 2026:** the 8th is Saturday … the 14th Friday.
+ * With the weekly day off on Friday (ISO 5), the only holiday that week is the 14th.
  */
 
-/** UTC-মধ্যরাত — Prisma-র `@db.Date` ও `workDateOf()` দুটোই এই ছাঁদে */
+/** UTC midnight — both Prisma's `@db.Date` and `workDateOf()` have this shape */
 const day = (iso: string): Date => new Date(`${iso}T00:00:00.000Z`);
 
-/** ৮ ঘণ্টার দৈনিক টার্গেট, শুক্রবার ছুটি, জুলাই থেকে দেখা হচ্ছে */
+/** Daily target of 8 hours, Friday off, observed since July */
 function staff(over: Partial<TrendStaff> = {}): TrendStaff {
   return {
     employeeId: 1,
@@ -41,16 +42,16 @@ function staff(over: Partial<TrendStaff> = {}): TrendStaff {
 
 const NO_HOLIDAYS: ReadonlySet<number> = new Set<number>();
 
-describe('trendDayExpectation — ⚠️⚠️ ছুটির দিনে কাজ করলে শাস্তি নয়', () => {
-  it('⭐⭐ সাপ্তাহিক ছুটির দিনে কোনো টার্গেট নেই — কাজ হয়ে থাকলেও', () => {
-    // শুক্রবার ১৪ আগস্ট। পুরোনো কোড `day_type` দেখত, আর কাজ হয়ে থাকলে
-    // ওটা `worked` — তাই পুরো ৮ ঘণ্টার টার্গেট বসে যেত।
+describe('trendDayExpectation — no penalty for working on a holiday', () => {
+  it('no target on the weekly day off — even if work was done', () => {
+    // Friday 14 August. The old code looked at `day_type`, and if work had been
+    // done that was `worked` — so a full 8-hour target would be set.
     expect(trendDayExpectation(day('2026-08-14'), [staff()], NO_HOLIDAYS)).toEqual(
       { expectedStaff: 0, targetSec: 0 },
     );
   });
 
-  it('⭐⭐ সরকারি ছুটির দিনেও একই — ক্যালেন্ডারই শেষ কথা', () => {
+  it('the same on a public holiday — the calendar has the last word', () => {
     const holidays = new Set([day('2026-08-12').getTime()]);
 
     expect(
@@ -58,13 +59,13 @@ describe('trendDayExpectation — ⚠️⚠️ ছুটির দিনে ক�
     ).toEqual({ expectedStaff: 0, targetSec: 0 });
   });
 
-  it('সাধারণ কর্মদিবসে পুরো টার্গেট', () => {
+  it('the full target on a normal working day', () => {
     expect(trendDayExpectation(day('2026-08-13'), [staff()], NO_HOLIDAYS)).toEqual(
       { expectedStaff: 1, targetSec: 8 * 3600 },
     );
   });
 
-  it('⚠️ `weeklyOffDay: null` মানে প্রতিটি দিনই কর্মদিবস (schema-র নিয়ম)', () => {
+  it('`weeklyOffDay: null` means every day is a working day (schema rule)', () => {
     const everyDay = staff({ weeklyOffDays: [] });
 
     expect(
@@ -74,8 +75,8 @@ describe('trendDayExpectation — ⚠️⚠️ ছুটির দিনে ক�
   });
 });
 
-describe('trendDayExpectation — ⭐ না-দেখা দিন কারো ঘাটতি নয়', () => {
-  it('⚠️⚠️ কর্মীর নিজের ট্র্যাকিং-শুরুর আগের দিনে প্রত্যাশা নেই', () => {
+describe("trendDayExpectation — an unobserved day is nobody's shortfall", () => {
+  it("no expectation on a day before the employee's own tracking start", () => {
     const late = staff({ trackedFrom: day('2026-08-13') });
 
     expect(
@@ -83,7 +84,7 @@ describe('trendDayExpectation — ⭐ না-দেখা দিন কারো
     ).toEqual({ expectedStaff: 0, targetSec: 0 });
   });
 
-  it('ট্র্যাকিং-শুরুর দিনটা নিজেই ধরা হয়', () => {
+  it('the tracking start day itself counts', () => {
     const late = staff({ trackedFrom: day('2026-08-13') });
 
     expect(
@@ -91,7 +92,7 @@ describe('trendDayExpectation — ⭐ না-দেখা দিন কারো
     ).toBe(1);
   });
 
-  it('⚠️ কখনো দেখাই হয়নি (`trackedFrom: null`) — কোনো দিনেরই প্রত্যাশা নেই', () => {
+  it('never observed (`trackedFrom: null`) — no day has an expectation', () => {
     const unseen = staff({ trackedFrom: null });
 
     expect(
@@ -100,8 +101,8 @@ describe('trendDayExpectation — ⭐ না-দেখা দিন কারো
   });
 });
 
-describe('trendDayExpectation — কর্মকালের বাইরে প্রত্যাশা নেই', () => {
-  it('যোগ দেওয়ার আগের দিন গোনা হয় না', () => {
+describe('trendDayExpectation — no expectation outside the employment period', () => {
+  it('the day before joining is not counted', () => {
     const fresh = staff({ joinedOn: day('2026-08-13') });
 
     expect(
@@ -112,7 +113,7 @@ describe('trendDayExpectation — কর্মকালের বাইরে �
     ).toBe(1);
   });
 
-  it('চলে যাওয়ার পরের দিন গোনা হয় না', () => {
+  it('the day after leaving is not counted', () => {
     const gone = staff({ leftOn: day('2026-08-12') });
 
     expect(
@@ -124,9 +125,9 @@ describe('trendDayExpectation — কর্মকালের বাইরে �
   });
 });
 
-describe('trendDayExpectation — দল', () => {
-  it('⭐ কর্মীভেদে ছুটির বার আলাদা — যোগফলটাই দলের টার্গেট', () => {
-    // শুক্রবার ১৪ আগস্ট: প্রথমজনের ছুটি, দ্বিতীয়জনের নয়
+describe('trendDayExpectation — team', () => {
+  it("days off differ per employee — the sum is the team's target", () => {
+    // Friday 14 August: a day off for the first, not for the second
     const friday = staff({ employeeId: 1, weeklyOffDays: [5] });
     const sunday = staff({
       employeeId: 2,
@@ -139,14 +140,14 @@ describe('trendDayExpectation — দল', () => {
     ).toEqual({ expectedStaff: 1, targetSec: 6 * 3600 });
   });
 
-  it('⚠️ কেউ না থাকলে শূন্য — আর সেটা সত্যিই "সবার ছুটি"', () => {
+  it('zero when nobody is there — and that really is "everyone is off"', () => {
     expect(trendDayExpectation(day('2026-08-14'), [], NO_HOLIDAYS)).toEqual({
       expectedStaff: 0,
       targetSec: 0,
     });
   });
 
-  it('⚠️ ভগ্নাংশ এখানে round হয় না — যোগফল কলারে গিয়ে একবারই round হয়', () => {
+  it('fractions are not rounded here — the sum is rounded once, in the caller', () => {
     const odd = staff({ dailyTargetSec: 208 * 3600 / 27 });
 
     expect(
@@ -156,16 +157,16 @@ describe('trendDayExpectation — দল', () => {
 });
 
 /**
- * ⭐⭐ **ফিতে আর মাসের কার্ড — এক সংজ্ঞা।**
+ * **The strip and the monthly card — one definition.**
  *
- * `elapsedWorkdays()` (মাসের `expected_sec`-এর উৎস) আর
- * `trendDayExpectation()` দুটোই একই প্রশ্নের উত্তর দেয়: "ওই দিনটা তার
- * প্রত্যাশায় গোনা হবে কি?" ⚠️ **দুটো ইচ্ছাকৃত পার্থক্য বাকি**, আর নিচের
- * শেষ দুটো টেস্ট ঠিক সেগুলোই লিখে রাখে — যাতে কেউ ভুল করে "সমান করতে"
- * গিয়ে বোর্ডে "আজ সবার ছুটি" লিখে না ফেলে।
+ * `elapsedWorkdays()` (the source of the month's `expected_sec`) and
+ * `trendDayExpectation()` both answer the same question: "will that day count
+ * in their expectation?" **Two deliberate differences remain**, and the last
+ * two tests below write down exactly those — so that nobody, trying to "make
+ * them equal", ends up writing "everyone is off today" on the board.
  */
-describe('⭐⭐ ফিতে ও মাসের কার্ড এক নিয়মে', () => {
-  /** ওই এক দিনের জানালা — `elapsedWorkdays()`-কে এক দিনের প্রশ্ন করা */
+describe('the strip and the monthly card follow one rule', () => {
+  /** A window of that one day — asking `elapsedWorkdays()` a one-day question */
   const monthlySaysExpected = (
     date: Date,
     s: TrendStaff,
@@ -185,7 +186,7 @@ describe('⭐⭐ ফিতে ও মাসের কার্ড এক নি�
 
   const TOMORROW = day('2026-08-15');
 
-  it('শেষ হয়ে যাওয়া প্রতিটা দিনে দুটো এক কথা বলে', () => {
+  it('on every finished day the two say the same thing', () => {
     const cases: Array<[string, TrendStaff, ReadonlySet<number>]> = [
       ['2026-08-13', staff(), NO_HOLIDAYS],
       ['2026-08-14', staff(), NO_HOLIDAYS],
@@ -201,40 +202,40 @@ describe('⭐⭐ ফিতে ও মাসের কার্ড এক নি�
 
       expect(
         [iso, ribbon],
-        // ⚠️ ব্যর্থ হলে কোন দিনটা তা দেখা যাওয়া চাই — নইলে সাতটা কেস
-        //    একই বার্তায় মিশে যেত
+        // If it fails we must be able to see which day — otherwise the seven
+        //    cases would blur into one message
         `${iso} — ফিতে ও কার্ড আলাদা কথা বলছে`,
       ).toEqual([iso, monthlySaysExpected(day(iso), s, TOMORROW, holidays)]);
     }
   });
 
   /**
-   * ⚠️⚠️ দ্বিতীয় (ও শেষ) অমিলটা এখানে লিখে রাখা — কারণ পাওয়া যাওয়ার
-   * চেয়ে না-লেখা অমিল ভবিষ্যতে বেশি ক্ষতি করে।
+   * The second (and last) mismatch is written down here — because an unwritten
+   * mismatch does more harm in future than one that has been found.
    *
-   * ⭐ পর্দায় এটা কখনো দেখা যায় না: `teamTrend()` কেবল সেই কর্মীদেরই
-   * পাঠায় যাঁদের চলতি মাসের `monthly_summary` সারি আছে, আর `refreshDate()`
-   * দৈনিক ও মাসিক সারি একসাথে লেখে — তাই "মাসিক সারি আছে কিন্তু একটাও
-   * দৈনিক সারি নেই" অবস্থাটাই তৈরি হয় না।
+   * It is never visible on screen: `teamTrend()` sends only those employees
+   * who have a `monthly_summary` row for the current month, and `refreshDate()`
+   * writes the daily and monthly rows together — so the state "a monthly row
+   * exists but not a single daily row" never arises.
    */
-  it('⚠️ কখনো না-দেখা কর্মী — এখানে প্রত্যাশা নেই, `elapsedWorkdays()`-এ আছে', () => {
+  it('a never-observed employee — no expectation here, but there is in `elapsedWorkdays()`', () => {
     const unseen = staff({ trackedFrom: null });
     const date = day('2026-08-13');
 
     expect(trendDayExpectation(date, [unseen], NO_HOLIDAYS).expectedStaff).toBe(0);
-    // ⚠️ ওখানে `null` মানে "সীমাটা জানা নেই", তাই জানালা সংকুচিত হয় না
+    // There `null` means "the limit is unknown", so the window is not narrowed
     expect(monthlySaysExpected(date, unseen, TOMORROW)).toBe(true);
   });
 
-  it('⚠️⚠️ **আজ** — কর্মকাল-সীমার বাইরে দ্বিতীয় ইচ্ছাকৃত পার্থক্য', () => {
+  it('**today** — the second deliberate difference, outside the employment-period limit', () => {
     const today = day('2026-08-13');
     const s = staff();
 
-    // মাসের কার্ড: আজ শেষ হয়নি, তাই "এ পর্যন্ত কত হওয়ার কথা ছিল"-তে নেই
+    // Monthly card: today has not finished, so it is not in "how much was expected so far"
     expect(monthlySaysExpected(today, s, today)).toBe(false);
 
-    // ফিতে: ওই দিনটার টার্গেট আছেই — দিনটা কেবল এখনো চলছে।
-    // ⚠️ এটাকে ০ করলে `WeekAndMonth.tsx` আজকের বারটাকে "day off" লিখত।
+    // Strip: that day's target is there — the day is just still running.
+    // Setting it to 0 would make `WeekAndMonth.tsx` label today's bar "day off".
     expect(
       trendDayExpectation(today, [s], NO_HOLIDAYS).expectedStaff,
     ).toBe(1);

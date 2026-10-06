@@ -1,37 +1,37 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// A05 — কিউয়ের ডিস্ক-বাজেট কখন প্রয়োগ করতে হবে।
+/// A05: when the queue's disk budget must be applied.
 ///
-/// ⭐ নিয়মটা <see cref="oXeio.Core.Agent.OutboxBudget"/>-এর ডকে লেখাই ছিল:
-/// <i>"স্টার্টআপে একবার, তারপর ঘণ্টায় একবার আর <c>LastWriteError</c> দেখা
-/// দিলেই সঙ্গে সঙ্গে"</i>। ⚠️ কিন্তু নিয়মটা কোথাও **কোড হয়ে ওঠেনি** —
-/// কলারটাই লেখা হয়নি, তাই গোটা বাজেট-ব্যবস্থা তৈরি হয়ে অচল পড়ে ছিল।
+/// The rule was already written in the <see cref="oXeio.Core.Agent.OutboxBudget"/> doc:
+/// <i>"once at startup, then once an hour, and immediately whenever <c>LastWriteError</c>
+/// shows up"</i>. But the rule was never **turned into code**: the caller was never
+/// written, so the whole budget system was built and sat idle.
 ///
-/// এখানে থাকায় তিনটে শাখাই ইউনিট টেস্টে ধরা যায়।
+/// With it here, all three branches can be covered by unit tests.
 /// </summary>
 public static class OutboxSweep
 {
     public enum Reason
     {
-        /// <summary>এখন দরকার নেই।</summary>
+        /// <summary>Not needed now.</summary>
         No,
 
-        /// <summary>এজেন্ট সবে চালু — কিউ কতটা বেড়েছে কেউ জানে না।</summary>
+        /// <summary>The agent has just started: nobody knows how much the queue has grown.</summary>
         Startup,
 
-        /// <summary>নিয়মিত ঝাড়ু।</summary>
+        /// <summary>The regular sweep.</summary>
         Due,
 
         /// <summary>
-        /// ⭐ লেখা ব্যর্থ হয়েছে — ডিস্ক ভরে গেছে, ঠিক এখনই জায়গা দরকার।
-        /// ঘণ্টার অপেক্ষায় থাকলে মাঝের সময়টুকুর ডেটা নীরবে হারাত।
+        /// A write failed: the disk is full and space is needed right now. Waiting for the
+        /// hourly sweep would silently lose the data of the time in between.
         /// </summary>
         WriteFailed,
     }
 
     /// <param name="lastSweep">
-    /// শেষ কবে চলেছে। কখনো না চললে <see cref="DateTimeOffset.MinValue"/>।
+    /// When it last ran. <see cref="DateTimeOffset.MinValue"/> if it never has.
     /// </param>
     public static Reason Check(
         DateTimeOffset lastSweep,
@@ -39,13 +39,13 @@ public static class OutboxSweep
         TimeSpan every,
         bool hasWriteError)
     {
-        // ⚠️ লেখা ব্যর্থ হওয়াটা সবার আগে — ওটাই একমাত্র জরুরি অবস্থা।
+        // A write failure comes first: it is the only emergency.
         if (hasWriteError) return Reason.WriteFailed;
 
         if (lastSweep == DateTimeOffset.MinValue) return Reason.Startup;
 
-        // ⚠️ `>=`, `>` নয় — ঠিক এক ঘণ্টার মাথায় চললে ঝাড়ুটা প্রতিবার এক
-        //    টিক করে পিছিয়ে যেত, আর দিন শেষে কয়েকবার কম চলত।
+        // `>=`, not `>`: with `>` a sweep that ran at exactly one hour would slip back by one
+        // tick every time, and run a few times fewer by the end of the day.
         return now - lastSweep >= every ? Reason.Due : Reason.No;
     }
 

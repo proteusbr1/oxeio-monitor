@@ -1,21 +1,21 @@
 namespace oXeio.Core.Tracking;
 
 /// <summary>
-/// ⭐ ঘুমিয়ে থাকা সময় যেন কাজ হিসেবে না গোনা হয় (G3)।
+/// Sleeping time must not be counted as work (G3).
 ///
-/// <b>মূল নীতি: ঘড়িই সত্যের উৎস, ইভেন্ট শুধু দ্রুত জানার উপায়।</b>
-/// suspend ইভেন্ট না এলে "তাহলে নিশ্চয়ই কাজ হচ্ছিল" — এমন কোনো পথ রাখা হয়নি।
-/// কারণ ব্যাটারি ফুরিয়ে বা তাপে PC ঘুমালে Windows কোনো নোটিফিকেশনই পাঠায় না।
+/// <b>Core principle: the clock is the source of truth, events are only a quick way to find
+/// out.</b> There is no path that says "no suspend event, so work must have been happening".
+/// When a PC sleeps from a flat battery or heat, Windows sends no notification at all.
 ///
-/// তিনটে স্বাধীন মাপ মিলিয়ে দেখা হয়:
+/// Three independent measures are compared:
 /// <list type="bullet">
-/// <item><b>biased</b> — <c>GetTickCount64</c>, ঘুমের সময়টাও গোনে</item>
-/// <item><b>unbiased</b> — <c>QueryUnbiasedInterruptTime</c>, ঘুমের সময় গোনে না</item>
-/// <item><b>monotonic</b> — QPC, ঘড়ি বদলালেও অটুট</item>
+/// <item><b>biased</b>: <c>GetTickCount64</c>, counts the sleep time too</item>
+/// <item><b>unbiased</b>: <c>QueryUnbiasedInterruptTime</c>, does not count sleep time</item>
+/// <item><b>monotonic</b>: QPC, intact even if the clock is changed</item>
 /// </list>
-/// দুটোর ব্যবধান বেশি হলেই বোঝা যায় মাঝখানে PC ঘুমিয়ে ছিল — কোনো ইভেন্ট লাগে না।
+/// A large gap between the two shows that the PC was asleep in between, with no event needed.
 ///
-/// ল্যাপটপ বিকেল ৫টায় বন্ধ করে সকাল ৯টায় খুললে এটাই ১৬ ঘণ্টার ভুয়া কাজ ঠেকায়।
+/// If a laptop is shut at 5 p.m. and opened at 9 a.m., this is what prevents 16 hours of bogus work.
 /// </summary>
 public sealed class SleepGapDetector
 {
@@ -27,8 +27,8 @@ public sealed class SleepGapDetector
     private ulong _lastUnbiasedMs;
     private DateTimeOffset _lastMonotonic;
 
-    /// <param name="interval">টিকের প্রত্যাশিত ব্যবধান (সাধারণত ১ সেকেন্ড)।</param>
-    /// <param name="tolerance">টাইমারের স্বাভাবিক ঢিলেমি মেনে নেওয়ার গুণক।</param>
+    /// <param name="interval">The expected gap between ticks (normally 1 second).</param>
+    /// <param name="tolerance">A factor allowing for the timer's normal slack.</param>
     public SleepGapDetector(TimeSpan interval, double tolerance = 1.5)
     {
         if (interval <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(interval));
@@ -38,8 +38,8 @@ public sealed class SleepGapDetector
         _tolerance = tolerance;
     }
 
-    /// <param name="BiasedMs">GetTickCount64 — ঘুমের সময় সহ।</param>
-    /// <param name="UnbiasedMs">QueryUnbiasedInterruptTime — ঘুমের সময় ছাড়া।</param>
+    /// <param name="BiasedMs">GetTickCount64: includes sleep time.</param>
+    /// <param name="UnbiasedMs">QueryUnbiasedInterruptTime: excludes sleep time.</param>
     /// <param name="Monotonic">MonotonicClock.Now।</param>
     public readonly record struct Sample(
         ulong BiasedMs,
@@ -48,10 +48,10 @@ public sealed class SleepGapDetector
 
     public readonly record struct Gap(
         bool Detected,
-        /// <summary>শেষ যে মুহূর্তে PC সত্যিই জেগে ছিল — সেগমেন্ট এখানেই বন্ধ হবে।</summary>
+        /// <summary>The last moment the PC was really awake: the segment closes here.</summary>
         DateTimeOffset SuspendedAt,
         DateTimeOffset ResumedAt,
-        /// <summary>biased − unbiased — অর্থাৎ কতক্ষণ ঘুমিয়ে ছিল।</summary>
+        /// <summary>biased minus unbiased, i.e. how long it slept.</summary>
         TimeSpan SleptFor)
     {
         public static readonly Gap None = default;
@@ -72,8 +72,8 @@ public sealed class SleepGapDetector
 
         var cap = _interval.TotalMilliseconds * _tolerance;
 
-        // biased লাফ দিয়েছে মানে দেয়াল-ঘড়ির সময় গেছে; monotonic লাফ দিয়েছে মানেও তাই।
-        // যেকোনো একটাই যথেষ্ট — কারণ S0ix-এ প্রসেসটাই জমে যায়, টাইমারই চলে না।
+        // biased jumping means wall-clock time passed; monotonic jumping means the same.
+        // Either one is enough, because in S0ix the process itself freezes and no timer runs.
         var detected = biasedMs > cap || monoMs > cap;
 
         var gap = detected
@@ -88,7 +88,7 @@ public sealed class SleepGapDetector
         return gap;
     }
 
-    /// <summary>ইভেন্ট থেকে ঘুম জানা গেলে ঘড়ির হিসাব নতুন করে শুরু করতে হয়।</summary>
+    /// <summary>When sleep is learned from an event, the clock calculation must start afresh.</summary>
     public void Reset() => _primed = false;
 
     private void Remember(Sample s)
@@ -98,7 +98,7 @@ public sealed class SleepGapDetector
         _lastMonotonic = s.Monotonic;
     }
 
-    /// <summary>কাউন্টার পিছিয়ে গেলে (হওয়ার কথা নয়) শূন্য ধরা হয়, ঋণাত্মক নয়।</summary>
+    /// <summary>If a counter goes backwards (it should not) it is treated as zero, not negative.</summary>
     private static double Delta(ulong now, ulong before) =>
         now >= before ? now - before : 0d;
 }

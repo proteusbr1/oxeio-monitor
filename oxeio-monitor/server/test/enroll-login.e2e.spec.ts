@@ -16,23 +16,24 @@ import {
 } from './setup/harness';
 import { resolveThrottle } from '../src/auth/login-throttle.config';
 
-/** ⚠️ চলমান কনফিগ থেকেই — টেস্টে সংখ্যা হার্ডকোড করলে সেটিং বদলালেই ভাঙত */
+/** From the running config — hardcoding the number in the test would break whenever the setting changed */
 const THROTTLE = resolveThrottle({
   maxFails: process.env.LOGIN_MAX_FAILS,
   lockMinutes: process.env.LOGIN_LOCK_MINUTES,
 });
 
 /**
- * ⭐⭐ **স্টাফ নিজের ইমেইল-পাসওয়ার্ড দিয়ে নিজের PC যোগ করে।**
+ * Staff add their own PC with their own email and password.
  *
- * ⚠️ enrollment code-এর ব্যবস্থায় মালিককে প্রতিটা PC-র জন্য আলাদা কোড
- * বানাতে হতো আর **হাতে মেলাতে** হতো কোন কোড কোন মেশিনে। ভুল মিললে কোনো
- * এরর আসত না — একজনের ঘণ্টা আরেকজনের নামে জমা হতো, আর ধরা পড়ত মাস শেষে।
+ * With enrollment codes the owner had to create a separate code for each PC
+ * and match by hand which code went to which machine. A wrong match raised
+ * no error — one person's hours were credited to another, and it was caught
+ * only at month end.
  *
- * ⚠️ কিন্তু এই সরল পথটার দাম আছে: এটা একটা **পাসওয়ার্ড নেওয়ার
- * endpoint**, আর এখানে cookie বা CSRF কিছুই নেই। তাই এই ফাইলের অর্ধেক
- * টেস্ট সুবিধা নিয়ে নয়, **রক্ষাকবচ** নিয়ে — ভুল পাসওয়ার্ড, বন্ধ
- * অ্যাকাউন্ট, 2FA, আর brute-force throttle।
+ * But this simpler path has a price: it is a password-accepting endpoint,
+ * and there is no cookie or CSRF here. So half the tests in this file are
+ * about safeguards, not convenience — wrong password, disabled account, 2FA,
+ * and the brute-force throttle.
  */
 let h: Harness;
 let employeeId: number;
@@ -82,8 +83,8 @@ beforeEach(async () => {
   });
 });
 
-describe('POST /agent/enroll-login — সফল পথ', () => {
-  it('স্টাফের লগইনে ডিভাইস টোকেন আসে', async () => {
+describe('POST /agent/enroll-login — success path', () => {
+  it('a staff login returns a device token', async () => {
     const res = await enrollLogin({
       ...facts(),
       email: STAFF_EMAIL,
@@ -98,16 +99,16 @@ describe('POST /agent/enroll-login — সফল পথ', () => {
     const device = await h.prisma.device.findUniqueOrThrow({
       where: { id: res.body.deviceId },
     });
-    // ⭐ যে লগইন করল, ডিভাইসটা তারই নামে — এটাই গোটা বদলটার কারণ
+    // The device is under the name of whoever logged in — this is the reason for the whole change
     expect(device.employeeId).toBe(employeeId);
     expect(device.monitors).toBe(2);
   });
 
   /**
-   * ⚠️ **টোকেনটা শুধু একবারই যায়** — সার্ভারে কেবল sha256। এখানে সেটা
-   * মিলিয়ে দেখা: রেসপন্সের প্লেইন টোকেনটা ডাটাবেসের কলামে নেই।
+   * The token goes out only once — the server keeps only the sha256. This
+   * checks that: the plain token in the response is not in the database column.
    */
-  it('প্লেইন টোকেন ডাটাবেসে জমা হয় না', async () => {
+  it('the plain token is not stored in the database', async () => {
     const res = await enrollLogin({
       ...facts(),
       email: STAFF_EMAIL,
@@ -121,7 +122,7 @@ describe('POST /agent/enroll-login — সফল পথ', () => {
     expect(device.tokenHash).toHaveLength(64); // sha256 hex
   });
 
-  it('টোকেনটা সত্যিই কাজ করে — heartbeat ২০০', async () => {
+  it('the token really works — heartbeat 200', async () => {
     const enrolled = await enrollLogin({
       ...facts(),
       email: STAFF_EMAIL,
@@ -138,11 +139,11 @@ describe('POST /agent/enroll-login — সফল পথ', () => {
   });
 
   /**
-   * ⚠️ একই PC-তে আবার সাইন ইন করলে **নতুন সারি নয়**, আগেরটাই হালনাগাদ
-   * (`machineGuid` দিয়ে upsert)। নইলে প্রতিবার এজেন্ট রিইনস্টলে ডিভাইসের
-   * তালিকা ফুলে যেত, আর "কোনটা আসল" বলা যেত না।
+   * Signing in again on the same PC updates the existing row, not a new one
+   * (upsert on `machineGuid`). Otherwise every agent reinstall would bloat
+   * the device list and nobody could say which one is real.
    */
-  it('একই মেশিনে দ্বিতীয়বার — একই ডিভাইস, নতুন টোকেন', async () => {
+  it('second time on the same machine — same device, new token', async () => {
     const guid = randomUUID();
     const first = await enrollLogin({
       ...facts({ machineGuid: guid }),
@@ -158,8 +159,8 @@ describe('POST /agent/enroll-login — সফল পথ', () => {
     expect(second.body.deviceId).toBe(first.body.deviceId);
     expect(second.body.deviceToken).not.toBe(first.body.deviceToken);
 
-    // ⚠️ পুরোনো টোকেনটা এখন অচল — নইলে PC হাতবদল হলেও পুরোনো টোকেন
-    //    দিয়ে ডেটা পাঠানো যেত
+    // The old token is now dead — otherwise even after a PC changed hands,
+    // data could still be sent with the old token
     const stale = await h
       .http()
       .post('/api/v1/agent/heartbeat')
@@ -168,8 +169,8 @@ describe('POST /agent/enroll-login — সফল পথ', () => {
     expect(stale.status).toBe(401);
   });
 
-  /** ছ-মাস পরে "এই মেশিনটা কীভাবে যোগ হয়েছিল" — উত্তরটা ইভেন্টেই থাকে */
-  it('agent_start ইভেন্টে লেখা থাকে কোন পথে বসল', async () => {
+  /** Six months later, "how was this machine added?" — the answer is in the event */
+  it('the agent_start event records which path it came through', async () => {
     await enrollLogin({
       ...facts(),
       email: STAFF_EMAIL,
@@ -183,8 +184,8 @@ describe('POST /agent/enroll-login — সফল পথ', () => {
   });
 });
 
-describe('POST /agent/enroll-login — রক্ষাকবচ', () => {
-  it('ভুল পাসওয়ার্ডে ৪০১, আর কোনো ডিভাইস বসে না', async () => {
+describe('POST /agent/enroll-login — safeguards', () => {
+  it('wrong password gives 401, and no device is created', async () => {
     const res = await enrollLogin({
       ...facts(),
       email: STAFF_EMAIL,
@@ -195,9 +196,9 @@ describe('POST /agent/enroll-login — রক্ষাকবচ', () => {
     expect(await h.prisma.device.count()).toBe(0);
   });
 
-  /** ⚠️ "ইউজার নেই" আর "পাসওয়ার্ড ভুল" — একই বার্তা, নইলে কোন ইমেইলগুলো
-   *  আসল তা বাইরে থেকে গুনে বের করা যেত */
-  it('অচেনা ইমেইলেও একই ৪০১', async () => {
+  /** "No such user" and "wrong password" give the same message, otherwise
+   *  which emails are real could be counted from outside */
+  it('an unknown email gets the same 401', async () => {
     const unknown = await enrollLogin({
       ...facts(),
       email: 'nobody@test.local',
@@ -213,7 +214,7 @@ describe('POST /agent/enroll-login — রক্ষাকবচ', () => {
     expect(unknown.body.message).toBe(wrong.body.message);
   });
 
-  it('নিষ্ক্রিয় অ্যাকাউন্টে ৪০১', async () => {
+  it('a deactivated account gives 401', async () => {
     await h.prisma.user.update({
       where: { email: STAFF_EMAIL },
       data: { isActive: false },
@@ -228,11 +229,11 @@ describe('POST /agent/enroll-login — রক্ষাকবচ', () => {
   });
 
   /**
-   * ⭐ owner ও manager-এর `users.employee_id` null — তাঁদের নামে কর্মীর
-   * সারি নেই, তাই ঘণ্টা জমা করার জায়গাও নেই। ৪০১ নয় **৪০৩**, আর
-   * বার্তাটা কাজের: "এই PC-র স্টাফ অ্যাকাউন্ট দিয়ে সাইন ইন করুন"।
+   * The `users.employee_id` of owner and manager is null — there is no staff
+   * row in their name, so nowhere to accumulate hours. It is 403, not 401,
+   * and the message is actionable: "sign in with a staff account on this PC".
    */
-  it('owner বা manager-এর অ্যাকাউন্টে ৪০৩', async () => {
+  it('403 for an owner or manager account', async () => {
     for (const [email, password] of [
       [OWNER_EMAIL, OWNER_PASSWORD],
       [MANAGER_EMAIL, MANAGER_PASSWORD],
@@ -245,16 +246,16 @@ describe('POST /agent/enroll-login — রক্ষাকবচ', () => {
   });
 
   /**
-   * ⭐⭐ **brute force।** endpoint-টায় cookie নেই, CSRF নেই — অর্থাৎ
-   * পাসওয়ার্ড অনুমান করার সবচেয়ে সহজ দরজা এটাই হতে পারত। যাচাইটা
-   * `AuthService.login()`-এ হওয়ায় লগইনের throttle-টাও আপনাআপনি প্রযোজ্য।
+   * Brute force. The endpoint has no cookie and no CSRF, so it could have
+   * been the easiest door for guessing passwords. Because the check happens
+   * in `AuthService.login()`, the login throttle applies automatically.
    */
-  it.skipIf(!THROTTLE.enabled)('বারবার ভুল দিলে অ্যাকাউন্ট তালাবন্ধ হয়', async () => {
+  it.skipIf(!THROTTLE.enabled)('repeated wrong attempts lock the account', async () => {
     /**
-     * ⚠️ এই টেস্টের জন্য **আলাদা ও অনন্য** একটা ইমেইল। throttle-এর
-     * কাউন্টার ইন-মেমরিতে (`email|ip`), আর `resetDatabase()` সেটা মোছে না
-     * — তাই সাধারণ স্টাফ অ্যাকাউন্টটা তালাবন্ধ করে দিলে **পরের প্রতিটা
-     * টেস্ট** ৪২৯ পেত। `auth.e2e.spec.ts`-ও ঠিক এই কৌশলেই চলে।
+     * A separate, unique email for this test. The throttle counter is
+     * in-memory (`email|ip`) and `resetDatabase()` does not clear it — so
+     * locking the ordinary staff account would give every following test a
+     * 429. `auth.e2e.spec.ts` uses exactly the same trick.
      */
     const email = `locked-${uniqueSuffix()}@test.local`;
     const password = 'another-password-123';
@@ -271,9 +272,9 @@ describe('POST /agent/enroll-login — রক্ষাকবচ', () => {
     });
 
     /**
-     * ⚠️⚠️ সংখ্যাটা আর হার্ডকোড নয় — এটা এখন `.env`-এর সেটিং। আগে "৫"
-     * বসানো ছিল, তাই ডিফল্ট নরম করার সাথে সাথেই টেস্ট ভেঙেছে, অথচ
-     * আচরণ ঠিকই ছিল। টেস্ট নিয়ম পাহারা দিক, একটা সংখ্যা নয়।
+     * The number is no longer hardcoded — it is now a `.env` setting. "5" used
+     * to be hardcoded, so the test broke the moment the default was softened,
+     * although the behaviour was right. The test should guard the rule, not a number.
      */
     const codes: number[] = [];
     for (let i = 0; i <= THROTTLE.maxFails; i++) {
@@ -286,14 +287,14 @@ describe('POST /agent/enroll-login — রক্ষাকবচ', () => {
     );
     expect(codes[THROTTLE.maxFails]).toBe(429);
 
-    // ⚠️ তালা পড়ার পর **ঠিক পাসওয়ার্ডও** আটকায় — নইলে তালাটার মানেই থাকত না
+    // After the lock, even the right password is blocked — otherwise the lock would mean nothing
     const right = await enrollLogin({ ...facts(), email, password });
     expect(right.status).toBe(429);
 
     expect(await h.prisma.device.count()).toBe(0);
   });
 
-  it('ব্যর্থ চেষ্টা audit_log-এ ওঠে', async () => {
+  it('failed attempts appear in audit_log', async () => {
     await h.prisma.auditLog.deleteMany({});
 
     await enrollLogin({
@@ -308,12 +309,12 @@ describe('POST /agent/enroll-login — রক্ষাকবচ', () => {
     expect(rows).toHaveLength(1);
   });
 
-  it('ঘর বাদ দিলে ৪০০', async () => {
+  it('400 when a field is missing', async () => {
     const res = await enrollLogin({ email: STAFF_EMAIL, password: STAFF_PASSWORD });
     expect(res.status).toBe(400);
   });
 
-  it('ইমেইল না হলে ৪০০', async () => {
+  it('400 when it is not an email', async () => {
     const res = await enrollLogin({
       ...facts(),
       email: 'rakib',
@@ -325,17 +326,17 @@ describe('POST /agent/enroll-login — রক্ষাকবচ', () => {
 
 describe('POST /agent/enroll-login — 2FA', () => {
   /**
-   * ⚠️ 2FA চালু থাকলে প্রথম উত্তরে ডিভাইস তৈরি হয় **না**, শুধু
-   * `needs_totp` — এজেন্ট তখন ছ-অঙ্কের ঘরটা দেখায়। ৪০১ দিলে স্টাফ
-   * "পাসওয়ার্ড ভুল" পড়ে বারবার ঠিক পাসওয়ার্ডই টাইপ করে যেত।
+   * With 2FA on, the first reply does not create a device, only
+   * `needs_totp` — the agent then shows the six-digit field. If it returned
+   * 401, staff would read "wrong password" and keep typing the right one.
    */
-  it('2FA চালু থাকলে কোড চায়, ডিভাইস বসে না', async () => {
+  it('with 2FA on it asks for the code and creates no device', async () => {
     await h.prisma.user.update({
       where: { email: STAFF_EMAIL },
       data: {
-        // ⚠️ খামের আকৃতি `src/auth/totp.ts`-এর `TotpEnvelope` — ভুল
-        //    আকৃতি দিলে `decodeEnvelope` ছোড়ে (fail-closed), আর টেস্টটা
-        //    ৫০০ পেয়ে "2FA কাজ করছে" বলে ভুল আশ্বাস দিত
+        // The envelope shape is `TotpEnvelope` in `src/auth/totp.ts` — a wrong
+        // shape makes `decodeEnvelope` throw (fail-closed), and the test would
+        // get a 500 and falsely reassure that "2FA works"
         totpSecret: JSON.stringify({
           v: 1,
           secret: 'JBSWY3DPEHPK3PXP',
@@ -360,36 +361,36 @@ describe('POST /agent/enroll-login — 2FA', () => {
 });
 
 /**
- * ⭐⭐ **একটা ডিভাইস-সারি একজনেরই — নীরবে হাতবদল হবে না।**
+ * A device row belongs to one person — it never changes hands silently.
  *
- * ⚠️⚠️ আসল অফিসে ধরা পড়া বাগ: দুজন কর্মীর PC পালা করে "হঠাৎ offline"
- * হয়ে যেত, আর Staff পর্দায় তাঁদের সারি ফিরে যেত "Ready to install"-এ।
- * কারণ `upsert`-এর চাবি ছিল কেবল `machineGuid`, আর সংঘাতে `employeeId`
- * ও `tokenHash` দুটোই লিখে দেওয়া হতো — তাই একই GUID পাঠানো দুটো মেশিনের
- * মধ্যে একটাই সারি হাতবদল করত।
+ * A bug caught in the real office: two staff members' PCs alternately went
+ * "suddenly offline", and their rows on the Staff screen went back to "Ready
+ * to install". The `upsert` key was only `machineGuid`, and on conflict both
+ * `employeeId` and `tokenHash` were overwritten, so one row changed hands
+ * between two machines that sent the same GUID.
  *
- * ⚠️ `machineGuid` আসে Windows-এর রেজিস্ট্রি থেকে, আর সেটা **ডিস্ক-ইমেজ
- * ক্লোনে হুবহু কপি হয়** — অর্থাৎ অফিসে একটা PC সাজিয়ে বাকিগুলোয় ইমেজ
- * বসালেই সবার GUID এক।
+ * `machineGuid` comes from the Windows registry and is copied exactly by a
+ * disk-image clone — set up one PC in the office and image the rest, and
+ * everyone has the same GUID.
  */
 /**
- * ⭐⭐ **ডিভাইসের পরিচয়: মেশিন + যিনি বসেছেন।**
+ * Device identity: the machine plus whoever signed in.
  *
- * ⚠️⚠️ আসল অফিসে ধরা পড়া বাগ: দুজন কর্মীর ট্র্যাকিং পালা করে "হঠাৎ
- * offline" হয়ে যেত, আর Staff পর্দায় তাঁদের সারি ফিরে যেত "Ready to
- * install"-এ। কারণ `upsert`-এর চাবি ছিল কেবল `machineGuid`, আর সংঘাতে
- * `employeeId` ও `tokenHash` দুটোই লিখে দেওয়া হতো — তাই একই GUID পাঠানো
- * দুটো এজেন্টের মধ্যে একটাই সারি হাতবদল করত।
+ * A bug caught in the real office: two staff members' tracking alternately
+ * went "suddenly offline", and their rows on the Staff screen went back to
+ * "Ready to install". The `upsert` key was only `machineGuid`, and on
+ * conflict both `employeeId` and `tokenHash` were overwritten, so one row
+ * changed hands between two agents sending the same GUID.
  *
- * ⚠️ `machineGuid` **মেশিনের, ব্যবহারকারীর নয়** — তাই একই PC-তে দুজন
- * স্টাফ আলাদা Windows অ্যাকাউন্টে কাজ করলেও ওটা এক। অফিসের লগেই ধরা
- * পড়েছে: `DESKTOP-BJNQ6OF`-এ "Intern" ও "Intern 2"।
+ * `machineGuid` belongs to the machine, not the user — so with two staff on
+ * one PC under different Windows accounts it is the same. The office log
+ * showed it: "Intern" and "Intern 2" on `DESKTOP-BJNQ6OF`.
  */
-describe('POST /agent/enroll-login — ডিভাইসের পরিচয়', () => {
+describe('POST /agent/enroll-login — device identity', () => {
   const OTHER_EMAIL = 'sadia@test.local';
   const OTHER_PASSWORD = 'other-password-123';
 
-  /** দ্বিতীয় একজন কর্মী + তার portal লগইন */
+  /** A second staff member + their portal login */
   const addOtherStaff = async (): Promise<number> => {
     const policy = await h.prisma.workPolicy.findFirstOrThrow();
     const other = await h.prisma.employee.create({
@@ -411,10 +412,10 @@ describe('POST /agent/enroll-login — ডিভাইসের পরিচয�
   };
 
   /**
-   * ⭐⭐ **এটাই আসল দাবি** — অফিসে ঠিক এটাই ঘটছে: এক PC, দুজন স্টাফ,
-   * আলাদা Windows অ্যাকাউন্ট। দুজনেরই আলাদা সারি হওয়া চাই।
+   * The real claim — this is exactly what happens in the office: one PC, two
+   * staff, different Windows accounts. Each must get a separate row.
    */
-  it('এক PC, দুই Windows অ্যাকাউন্ট → দুজনেরই আলাদা ডিভাইস', async () => {
+  it('one PC, two Windows accounts -> a separate device for each', async () => {
     const otherId = await addOtherStaff();
     const guid = randomUUID();
 
@@ -435,16 +436,16 @@ describe('POST /agent/enroll-login — ডিভাইসের পরিচয�
     expect(second.body.deviceId).not.toBe(first.body.deviceId);
     expect(await h.prisma.device.count()).toBe(2);
 
-    // ⭐ দুজনের ঘণ্টা আলাদা সারিতে — কেউ কারোটা কাড়ে না
+    // Each person's hours are in a separate row — nobody takes anyone else's
     expect(await h.prisma.device.count({ where: { employeeId } })).toBe(1);
     expect(await h.prisma.device.count({ where: { employeeId: otherId } })).toBe(1);
   });
 
   /**
-   * ⭐ ক্লোন করা ডিস্ক-ইমেজ — দুটো আলাদা PC, একই `MachineGuid`।
-   * hostname আলাদা বলে দুটো সারি, দুজনেই চলেন।
+   * A cloned disk image — two different PCs, the same `MachineGuid`. The
+   * hostnames differ, so there are two rows and both people keep working.
    */
-  it('একই GUID কিন্তু আলাদা PC → দুটো সারি', async () => {
+  it('same GUID but different PCs -> two rows', async () => {
     const otherId = await addOtherStaff();
     const guid = randomUUID();
 
@@ -465,10 +466,10 @@ describe('POST /agent/enroll-login — ডিভাইসের পরিচয�
   });
 
   /**
-   * ⚠️ যেটা এখনো আটকানো: **একই Windows অ্যাকাউন্ট** দুজন ভাগ করে নিলে।
-   * তখন দুজনের ঘণ্টা এক সারিতে মিশে যেত আর আলাদা করা যেত না।
+   * What is still blocked: two people sharing the same Windows account. Their
+   * hours would merge into one row and could not be separated.
    */
-  it('একই Windows অ্যাকাউন্টে দ্বিতীয় কর্মী এলে ৪০৯, প্রথমজনের সব অটুট', async () => {
+  it('a second staff member on the same Windows account gets 409, the first one\'s data intact', async () => {
     const otherId = await addOtherStaff();
     const same = facts({ hostname: 'PC-07', windowsUsername: 'shared' });
 
@@ -496,13 +497,13 @@ describe('POST /agent/enroll-login — ডিভাইসের পরিচয�
       where: { id: first.body.deviceId },
     });
     expect(after.employeeId).toBe(employeeId);
-    // ⭐ টোকেনও বদলায়নি — প্রথমজনের এজেন্ট চলতেই থাকে
+    // The token did not change either — the first person's agent keeps running
     expect(after.tokenHash).toBe(before.tokenHash);
     expect(await h.prisma.device.count({ where: { employeeId: otherId } })).toBe(0);
   });
 
-  /** ⭐ একই কর্মী আবার বসালে আগের মতোই চলে — এটা ভাঙা যাবে না */
-  it('একই কর্মী আবার ইনস্টল করলে সারিটাই হালনাগাদ হয়', async () => {
+  /** The same staff member installing again works as before — this must not break */
+  it('the same staff member reinstalling updates the row', async () => {
     const same = facts({ monitors: 2 });
 
     const first = await enrollLogin({
@@ -530,10 +531,10 @@ describe('POST /agent/enroll-login — ডিভাইসের পরিচয�
   });
 
   /**
-   * ⭐ বৈধ হস্তান্তর — একই Windows অ্যাকাউন্ট অন্য কেউ পেলে মালিক আগে
-   * revoke করবেন, তারপর নতুন কর্মী নিতে পারেন।
+   * A valid handover — if someone else is to take over the same Windows
+   * account, the owner revokes first, then the new staff member can take it.
    */
-  it('revoke করা ডিভাইস নতুন কর্মী নিতে পারেন', async () => {
+  it('a revoked device can be taken by a new staff member', async () => {
     const otherId = await addOtherStaff();
     const same = facts({ hostname: 'PC-07', windowsUsername: 'shared' });
 

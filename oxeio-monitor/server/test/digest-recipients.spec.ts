@@ -3,59 +3,60 @@ import { describe, expect, it } from 'vitest';
 import { digestRecipients } from '../src/digest/digest.recipients';
 
 /**
- * সাপ্তাহিক সারাংশ **কার কাছে যাবে**।
+ * Who the weekly digest goes to.
  *
- * ⚠️⚠️ নিয়মটা ছোট, কিন্তু ভুলটা ফেরানো যায় না: এই বার্তায় প্রতিটা কর্মীর
- * **নাম ও ঘণ্টা** থাকে। একবার ভুল ঠিকানায় গেলে ইমেইল ফিরিয়ে আনা যায় না।
+ * The rule is short, but a mistake cannot be undone: this message contains
+ * every staff member's name and hours. Once an email goes to the wrong
+ * address it cannot be recalled.
  */
 describe('digestRecipients', () => {
   const owners = ['owner@oxeio.local'];
 
-  it('স্পষ্ট তালিকা থাকলে সেটাই', () => {
+  it('an explicit list wins when present', () => {
     expect(digestRecipients({ explicit: 'boss@x.com', owners })).toEqual([
       'boss@x.com',
     ]);
   });
 
-  it('না থাকলে সক্রিয় owner-রা', () => {
+  it('otherwise the active owners', () => {
     expect(digestRecipients({ explicit: undefined, owners })).toEqual(owners);
   });
 
-  it('খালি স্ট্রিংও "না থাকা"', () => {
+  it('an empty string also counts as "not set"', () => {
     expect(digestRecipients({ explicit: '   ', owners })).toEqual(owners);
   });
 
-  it('কমা দিয়ে একাধিক', () => {
+  it('several, comma-separated', () => {
     expect(
       digestRecipients({ explicit: 'a@x.com, b@x.com', owners }),
     ).toEqual(['a@x.com', 'b@x.com']);
   });
 
   /**
-   * ⚠️ `.env`-এ বাড়তি কমা খুব সাধারণ — না ছাঁকলে খালি ঠিকানায় SMTP
-   * ছুড়ত, আর গোটা পাঠানোটাই ব্যর্থ হতো।
+   * Extra commas in `.env` are very common — without filtering, SMTP would
+   * be handed an empty address and the whole send would fail.
    */
-  it('ফাঁকা ঘর বাদ যায়', () => {
+  it('blank entries are dropped', () => {
     expect(
       digestRecipients({ explicit: 'a@x.com,,  ,b@x.com', owners }),
     ).toEqual(['a@x.com', 'b@x.com']);
   });
 
-  /** ⚠️ একই ঠিকানা দুবার থাকলে একজন দুটো কপি পেতেন */
-  it('ডুপ্লিকেট একবারই', () => {
+  /** The same address twice would give one person two copies */
+  it('duplicates once only', () => {
     expect(
       digestRecipients({ explicit: 'a@x.com, a@x.com', owners }),
     ).toEqual(['a@x.com']);
   });
 
-  /** ⚠️ বড়-ছোট হাতের তফাতেও একই ঠিকানা */
-  it('ছোট-বড় হাত মিলিয়ে ডুপ্লিকেট ধরা পড়ে', () => {
+  /** The same address in different letter case */
+  it('duplicates are caught regardless of case', () => {
     expect(
       digestRecipients({ explicit: 'A@x.com, a@x.com', owners }),
     ).toEqual(['A@x.com']);
   });
 
-  it('owner-দের তালিকাতেও ডুপ্লিকেট ছাঁকা হয়', () => {
+  it('duplicates are also filtered in the owners list', () => {
     expect(
       digestRecipients({
         explicit: undefined,
@@ -64,8 +65,8 @@ describe('digestRecipients', () => {
     ).toEqual(['o@x.com', 'p@x.com']);
   });
 
-  /** ⚠️ কেউ না থাকলে খালি — কলার তখন পাঠানোর চেষ্টাই করে না */
-  it('কেউ না থাকলে খালি তালিকা', () => {
+  /** With nobody, empty — the caller then does not even try to send */
+  it('an empty list when there is nobody', () => {
     expect(digestRecipients({ explicit: undefined, owners: [] })).toEqual([]);
   });
 });

@@ -6,13 +6,13 @@ import { MeController } from './me.controller';
 import { MeService } from './me.service';
 
 /**
- * **J04 · J05 · J08** — কর্মীর নিজের পাতা।
+ * **J04 · J05 · J08** — the employee's own page.
  *
- * ⚠️ `AgentModule` ইমপোর্ট করা হয়েছে শুধু `ProgressService`-এর জন্য।
- * নকল করে আরেকটা হিসাব লিখলে একদিন tray আর ওয়েব দুই সংখ্যা দেখাত —
- * আর যে ফিচারের পুরো উদ্দেশ্য আস্থা, সেটাই তখন আস্থা ভাঙত।
+ * Careful: `AgentModule` is imported only for `ProgressService`. A duplicate
+ * calculation would one day make the tray and the web show two different numbers,
+ * which would break trust, the whole point of this feature.
  *
- * ⚠️ `PrismaModule` `@Global`, তাই আলাদা import লাগে না।
+ * Careful: `PrismaModule` is `@Global`, so it needs no separate import.
  */
 @Module({
   imports: [AgentModule, DepositsModule],

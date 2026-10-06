@@ -10,25 +10,25 @@ import {
 } from './setup/harness';
 
 /**
- * ⭐⭐ **সাত দিনের ফিতেয় "কতগুলো ডিজাইন শেষ হয়েছে"** *(৫ সেপ্টেম্বর ২০২৬)*।
+ * **"How many designs were finished" on the seven-day strip.**
  *
- * মালিকের চাওয়া: বোর্ডে *"Where Today Went"*-এর উপরে শেষ ৭ দিনে রোজ কতগুলো
- * ডিজাইন হচ্ছে।
+ * The owner's request: above *"Where Today Went"* on the board, how many
+ * designs get done each day over the last 7 days.
  *
- * ⚠️⚠️ **সংখ্যাটা "শেষ", "খোলা" নয়** — আর এটাই মালিকের নিজের আগের বাছাই
- * *(২৩ আগস্ট, ADR-037)*। `design_credits` বলে কতগুলো ফাইল **খোলা** হয়েছে,
- * আর সেই সংখ্যাটা মাঠে বিভ্রান্তি তৈরি করেছিল: ম্যানেজার ১৯টা ফাইলে ৪৪
- * মিনিট দিয়ে "১৬" দেখাচ্ছিলেন। তাই এখানে কেবল `completed_at`।
+ * **The number is "finished", not "opened"** — and that is the owner's own
+ * earlier choice (23 August, ADR-037). `design_credits` says how many files
+ * were **opened**, and that number caused confusion in the field: a manager
+ * showed "16" after spending 44 minutes on 19 files. So only `completed_at` is used here.
  *
- * ⚠️⚠️ **আসল ঝুঁকি দিনের সীমানায়।** `completed_at` timestamptz, আর ওই
- * টেবিলে `work_date` কলাম নেই — তাই বালতি করতে হয় ঢাকার দিন ধরে। এই
- * ফাইলের বেশিরভাগ টেস্ট ঠিক সেই সীমানার দুই পাশ পরীক্ষা করে।
+ * **The real risk is at the day boundary.** `completed_at` is a timestamptz,
+ * and that table has no `work_date` column — so the bucketing must go by the
+ * Dhaka day. Most tests in this file check both sides of exactly that boundary.
  */
 let h: Harness;
 let dashboard: DashboardService;
 
 const HOUR_MS = 3600_000;
-/** ⚠️ ঢাকা UTC+৬ — লেবেল (`workDateOf`) থেকে আসল মুহূর্তে যেতে এটুকু বাদ */
+/** Dhaka is UTC+6 — subtract this to go from the label (`workDateOf`) to the real moment */
 const DHAKA_OFFSET_MS = 6 * HOUR_MS;
 
 beforeAll(async () => {
@@ -44,16 +44,16 @@ beforeEach(async () => {
   await resetDatabase(h.prisma, h.app);
 });
 
-/** ঢাকার আজকের কর্মদিবস — লেবেল হিসেবে (UTC-মধ্যরাত) */
+/** Today's working day in Dhaka — as a label (UTC midnight) */
 const today = () => workDateOf(dhakaNoon());
 
 /**
- * একটা ঢাকা-দিনের ভেতরে নির্দিষ্ট ঘণ্টার **আসল মুহূর্ত**।
+ * The **real moment** of a given hour inside one Dhaka day.
  *
- * ⚠️⚠️ এই ফাংশনটাই এই ফাইলের কেন্দ্র। `dayLabel` একটা **লেবেল** —
- * ঢাকার দিনটাকে UTC-মধ্যরাত হিসেবে লেখা। ওই দিনের ঢাকা-মধ্যরাত শুরু হয়
- * লেবেলের **৬ ঘণ্টা আগে**। এটা গুলিয়ে ফেললে সব সীমানা-টেস্ট নীরবে ভুল
- * দিকে সরে যেত, আর সবুজ থাকত।
+ * This function is the centre of the file. `dayLabel` is a **label** — the
+ * Dhaka day written as UTC midnight. That day's Dhaka midnight starts **6
+ * hours before the label**. Getting this wrong would silently shift every
+ * boundary test the wrong way, and they would stay green.
  */
 function atDhakaHour(dayLabel: Date, hour: number): Date {
   return new Date(dayLabel.getTime() - DHAKA_OFFSET_MS + hour * HOUR_MS);
@@ -66,7 +66,7 @@ async function finishedAt(when: Date | null): Promise<void> {
 
   await h.prisma.designTarget.create({
     data: {
-      // ⚠️ ঠিক ১০ অক্ষর, বড় হাতে — `targets.rules.ts`-এর নিয়ম
+      // Exactly 10 characters, upper case — the rule in `targets.rules.ts`
       asin: `B${String(asinCounter).padStart(9, '0')}`,
       addedById: owner.id,
       status: when === null ? 'pool' : 'done',
@@ -77,8 +77,8 @@ async function finishedAt(when: Date | null): Promise<void> {
 
 const daysOf = async () => (await dashboard.teamTrend()).days;
 
-describe('সাত দিনের ফিতে — কতগুলো ডিজাইন শেষ হয়েছে', () => {
-  it('আজ শেষ হওয়া ডিজাইন আজকের ঘরে বসে', async () => {
+describe('seven-day strip — how many designs were finished', () => {
+  it("a design finished today goes into today's slot", async () => {
     await finishedAt(atDhakaHour(today(), 11));
     await finishedAt(atDhakaHour(today(), 15));
 
@@ -88,7 +88,7 @@ describe('সাত দিনের ফিতে — কতগুলো ডি�
     expect(todayRow.designsFinished).toBe(2);
   });
 
-  it('প্রতিটা দিন নিজের ঘরে — মিশে যায় না', async () => {
+  it('each day in its own slot — they do not mix', async () => {
     const t = today();
     await finishedAt(atDhakaHour(new Date(t.getTime() - 2 * 86_400_000), 12));
     await finishedAt(atDhakaHour(new Date(t.getTime() - 1 * 86_400_000), 12));
@@ -102,24 +102,24 @@ describe('সাত দিনের ফিতে — কতগুলো ডি�
   });
 
   /**
-   * ⭐⭐⭐ **এই ফাইলের সবচেয়ে জরুরি টেস্ট — ঢাকার মধ্যরাতের দুই পাশ।**
+   * **The most important test of this file — both sides of Dhaka midnight.**
    *
-   * ⚠️⚠️ ঢাকার ২৩:৩০ মানে UTC-তে **১৭:৩০, একই দিনে**; আর ঢাকার ০০:৩০ মানে
-   * UTC-তে **১৮:৩০, আগের দিনে**। কেউ যদি UTC-র দিন ধরে বালতি করত, তাহলে
-   * ঢাকার **মধ্যরাত থেকে ভোর ৬টার** মধ্যে শেষ হওয়া প্রতিটা ডিজাইন
-   * **আগের দিনের ঘরে** পড়ত — অর্থাৎ রাত জেগে শেষ করা কাজ গতকালের খাতায়
-   * যোগ হতো। সংখ্যাটা ভুল হতো, কিন্তু কোনো এরর উঠত না।
+   * 23:30 in Dhaka is **17:30 the same day** in UTC; 00:30 in Dhaka is **18:30
+   * the previous day** in UTC. If someone bucketed by the UTC day, every design
+   * finished between **Dhaka midnight and 6 a.m.** would fall in **the previous
+   * day's slot** — work finished late at night would be added to yesterday's
+   * book. The number would be wrong, but no error would be raised.
    *
-   * ⚠️ ছ-ঘণ্টার ওই জানালাটা ছোট শোনায়, কিন্তু এই অফিসে ডিজাইন প্রায়ই
-   *    রাত ১২টার পরেও শেষ হয় — আর ঠিক ওই সারিগুলোই ভুল দিনে যেত।
+   * That six-hour window sounds small, but in this office designs often finish
+   *    after midnight — and exactly those rows would go to the wrong day.
    */
-  it('⭐ ঢাকার রাত ১১:৩০ আজকের ঘরে, রাত ১২:৩০ কালকের', async () => {
+  it("Dhaka 11:30 p.m. goes in today's slot, 12:30 a.m. in tomorrow's", async () => {
     const t = today();
     const yesterday = new Date(t.getTime() - 86_400_000);
 
-    // গতকালের ঢাকা-রাত ১১:৩০ → গতকালের ঘরে
+    // Yesterday's Dhaka 11:30 p.m. → yesterday's slot
     await finishedAt(atDhakaHour(yesterday, 23.5));
-    // আজকের ঢাকা-রাত ১২:৩০ → আজকের ঘরে
+    // Today's Dhaka 12:30 a.m. → today's slot
     await finishedAt(atDhakaHour(t, 0.5));
 
     const days = await daysOf();
@@ -129,10 +129,10 @@ describe('সাত দিনের ফিতে — কতগুলো ডি�
   });
 
   /**
-   * ⚠️ জানালার বাইরেরটা গোনা হয় না — নইলে ফিতের প্রথম দিনটা একটা
-   *    "বাকি সব" ঝুড়ি হয়ে যেত, আর সংখ্যাটা রোজ বাড়তেই থাকত।
+   * Anything outside the window is not counted — otherwise the strip's first
+   *    day would become an "everything else" bucket, and the number would keep growing every day.
    */
-  it('⭐ সাত দিনের বাইরে শেষ হওয়া ডিজাইন ফিতেয় আসে না', async () => {
+  it('a design finished outside the seven days does not appear on the strip', async () => {
     const t = today();
     await finishedAt(atDhakaHour(new Date(t.getTime() - 20 * 86_400_000), 12));
 
@@ -143,11 +143,11 @@ describe('সাত দিনের ফিতে — কতগুলো ডি�
   });
 
   /**
-   * ⭐⭐ **শেষ না হওয়া টার্গেট গোনা হয় না** — এটাই "খোলা বনাম শেষ"-এর
-   * পাহারা। ⚠️ কেউ যদি একদিন `completedAt` বাদ দিয়ে `status` বা
-   * `design_credits` ধরে গুনতে শুরু করেন, এই টেস্টটাই ভাঙবে।
+   * **A target that is not finished is not counted** — this guards "open vs
+   * finished". If someone one day drops `completedAt` and starts counting by
+   * `status` or `design_credits`, this test breaks.
    */
-  it('⭐ পুলে পড়ে থাকা টার্গেট "শেষ" নয়', async () => {
+  it('a target lying in the pool is not "finished"', async () => {
     await finishedAt(null);
     await finishedAt(null);
     await finishedAt(atDhakaHour(today(), 12));
@@ -157,7 +157,7 @@ describe('সাত দিনের ফিতে — কতগুলো ডি�
     expect(days.at(-1)!.designsFinished).toBe(1);
   });
 
-  it('কিছু শেষ না হলে প্রতিটা ঘর ০ — `undefined` নয়', async () => {
+  it('every slot is 0 when nothing is finished — not `undefined`', async () => {
     const days = await daysOf();
 
     expect(days).toHaveLength(7);

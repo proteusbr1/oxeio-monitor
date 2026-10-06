@@ -1,49 +1,51 @@
 /**
- * তিনটে শিডিউলড জবের (K06 · K05 · K01) সাধারণ রক্ষাকবচ।
+ * Shared safeguards for the three scheduled jobs (summary refresh, day close, retention).
  *
- * ⚠️ এখানে `process.env` সরাসরি পড়া হয়েছে, `ConfigService` দিয়ে নয় — ইচ্ছাকৃত।
- * `@Cron(...)` ডেকোরেটরের অপশনগুলো **ক্লাস ডিফাইন হওয়ার সময়ে**, অর্থাৎ ফাইল
- * ইমপোর্ট হওয়ার মুহূর্তেই হিসাব হয়ে যায় — Nest-এর DI কনটেইনার তখনো জন্মায়নি।
- * ফলে ওখানে ইনজেক্ট করা কোনো সার্ভিস পাওয়া সম্ভব নয়।
+ * Careful: `process.env` is read directly here, not through `ConfigService`,
+ * on purpose. The options of the `@Cron(...)` decorator are evaluated **when
+ * the class is defined**, i.e. the moment the file is imported, before Nest's
+ * DI container exists. No injected service can be reached there.
  */
 
 import { WORK_TIMEZONE } from '../agent/util/dhaka-time';
 
 /**
- * ⭐ টেস্টে সিডিউলার সম্পূর্ণ বন্ধ।
+ * The scheduler is completely off in tests.
  *
- * ⚠️ এটাই এই মডিউলের সবচেয়ে জরুরি লাইন। টেস্ট চলাকালীন retention জব একবার
- * টিক করলে ফিক্সচারের স্ক্রিনশট **ও ডিস্কের ফাইল** মুছে যেত, আর ব্যর্থ টেস্টটা
- * অন্য কোথাও দেখা দিত — কারণ খুঁজে বের করা প্রায় অসম্ভব হতো।
+ * Careful: this is the most important line in the module. If the retention
+ * job ticked once during a test, it would delete fixture screenshots **and
+ * the files on disk**, and the failing test would show up somewhere else,
+ * with a cause that is almost impossible to find.
  */
 export const SCHEDULING_ENABLED = process.env.NODE_ENV !== 'test';
 
 /**
- * ⚠️ প্রতিটি দৈনিক `@Cron`-এ এটা দিতেই হবে। না দিলে cron সার্ভারের নিজের
- * টাইমজোনে (Docker-এ প্রায় সবসময় UTC) চলত — "রাত ০০:১৫" তখন বাস্তবে
- * সন্ধ্যা ৬:১৫ হতো, অর্থাৎ দিন-ক্লোজ জব দিনের মাঝখানে চলে গিয়ে অসম্পূর্ণ
- * দিনকে "চূড়ান্ত" বলে দাগিয়ে দিত।
+ * Careful: every daily `@Cron` must pass this. Without it cron would run in
+ * the server's own time zone (almost always UTC in Docker), so "00:15 at
+ * night" would really be 6:15 pm, and the day-close job would run in the
+ * middle of the day and mark an incomplete day as "final".
  */
 // Same zone as every work date (`WORK_TIMEZONE`, default Asia/Dhaka)
 export const JOB_TIMEZONE = WORK_TIMEZONE;
 
-/** একটা জব এক সময়ে একবারই — একই প্রসেসের ভেতরে। */
+/** A job runs only once at a time, within the same process. */
 export class RunLock {
   private running = false;
 
   /**
-   * চললে `null`, নইলে `fn()`-এর ফল।
+   * `null` if already running, otherwise the result of `fn()`.
    *
-   * ⚠️ প্রসেসের **ভেতরের** পাহারা মাত্র। `@Cron`-এর `waitForCompletion`
-   * পরপর দুই টিক আটকায়, কিন্তু টেস্ট বা ভবিষ্যতের কোনো admin endpoint
-   * সরাসরি `runOnce()` ডাকলে সেটা টিকের সাথে overlap করতে পারত।
+   * Careful: this guards only **inside** the process. `@Cron`'s
+   * `waitForCompletion` stops two consecutive ticks, but a test or a future
+   * admin endpoint calling `runOnce()` directly could overlap with a tick.
    *
-   * ⚠️ একাধিক **ইনস্ট্যান্স** এটা ঠেকায় না। v1-এ `oxeio-api` কনটেইনার
-   * একটাই (07 § ৬.১), তাই এটুকুই যথেষ্ট। কখনো scale-out করলে Postgres
-   * advisory lock লাগবে — আর তখন ⚠️ মনে রাখতে হবে `pg_advisory_lock`
-   * **সেশন-ভিত্তিক**: Prisma-র pool থেকে unlock অন্য কানেকশনে গেলে লক
-   * ছাড়বেই না। তখন `$transaction`-এর ভেতরে `pg_try_advisory_xact_lock`
-   * ব্যবহার করতে হবে, যেটা commit-এ নিজেই ছাড়ে।
+   * Careful: it does not stop multiple **instances**. In v1 there is a single
+   * `oxeio-api` container (07 section 6.1), so this is enough. If it is ever
+   * scaled out, a Postgres advisory lock will be needed, and then remember
+   * that `pg_advisory_lock` is **session-based**: if unlock goes to another
+   * connection from Prisma's pool, the lock is never released. Use
+   * `pg_try_advisory_xact_lock` inside a `$transaction` instead; it releases
+   * itself on commit.
    */
   async run<T>(fn: () => Promise<T>): Promise<T | null> {
     if (this.running) return null;
@@ -52,8 +54,8 @@ export class RunLock {
     try {
       return await fn();
     } finally {
-      // finally ছাড়া একবার ব্যতিক্রম হলেই জবটা চিরতরে "চলছে" অবস্থায়
-      // আটকে যেত, আর সার্ভার রিস্টার্ট না করা পর্যন্ত আর কখনো চলত না
+      // Without `finally`, a single exception would leave the job stuck as
+      // "running" forever, and it would never run again until a server restart.
       this.running = false;
     }
   }

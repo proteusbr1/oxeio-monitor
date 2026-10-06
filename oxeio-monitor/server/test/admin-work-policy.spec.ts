@@ -8,52 +8,52 @@ import {
   hhmmToMinutes,
 } from '../src/calendar/work-policy.rules';
 
-describe('ক্যাপচার উইন্ডো — ADR-011c-র সীমা', () => {
-  it('০৭:০০–২৩:০০ মেনে নেয়', () => {
+describe('capture window: the ADR-011c limits', () => {
+  it('accepts 07:00-23:00', () => {
     expect(captureWindowProblem('07:00', '23:00')).toBeNull();
     expect(captureWindowProblem('09:00', '18:00')).toBeNull();
   });
 
   /**
-   * ⭐ পণ্যের কঠিন নিয়ম: রাত ২টায় ল্যাপটপে ব্যক্তিগত কাজের ছবি উঠবে না।
-   * এটাই একমাত্র জায়গা যেখানে একজন মানুষ ওই সীমা বদলাতে পারে।
+   * A hard product rule: no screenshots of personal activity on a laptop at
+   * 2 am. This is the only place where a person can change that limit.
    */
-  it('এক মিনিট আগে শুরু করলেও নাকচ', () => {
+  it('rejects starting one minute early', () => {
     expect(captureWindowProblem('06:59', '23:00')).toContain('ADR-011c');
   });
 
-  it('এক মিনিট পরে শেষ করলেও নাকচ', () => {
+  it('rejects ending one minute late', () => {
     expect(captureWindowProblem('07:00', '23:01')).toContain('ADR-011c');
   });
 
-  it('২৪ ঘণ্টা করার চেষ্টা নাকচ', () => {
+  it('rejects an attempt at 24 hours', () => {
     expect(captureWindowProblem('00:00', '23:59')).not.toBeNull();
   });
 
   /**
-   * ⚠️ শুরু = শেষ মানে শূন্য দৈর্ঘ্যের উইন্ডো — এজেন্ট একটাও ছবি তুলত না,
-   * অথচ ড্যাশবোর্ডে সব ঠিকঠাক দেখাত। "কেউ বন্ধ করে দিয়েছে" আর "কাজ করছে
-   * না" আলাদা করা যেত না।
+   * Start = end means a zero-length window: the agent would take no
+   * screenshots, yet the dashboard would look fine. "Someone switched it off"
+   * could not be told apart from "not working".
    */
-  it('শুরু আর শেষ এক হলে নাকচ', () => {
+  it('rejects start equal to end', () => {
     expect(captureWindowProblem('09:00', '09:00')).toContain('must be before');
   });
 
-  it('উল্টো উইন্ডো নাকচ', () => {
+  it('rejects an inverted window', () => {
     expect(captureWindowProblem('18:00', '09:00')).toContain('must be before');
   });
 
-  it('ফরম্যাট ভুল হলে কোনটা ভুল সেটাও বলে', () => {
+  it('on a bad format it also says which one is wrong', () => {
     expect(captureWindowProblem('7:00', '23:00')).toContain('window start');
     expect(captureWindowProblem('07:00', '২৩:০০')).toContain('window end');
     expect(captureWindowProblem('07:00', '25:00')).toContain('window end');
   });
 
   /**
-   * ⭐ ডিফল্টটাই যদি অবৈধ হয়ে যায়, তাহলে ক্যাপচার উইন্ডো না দিলে নীরবে
-   * নিয়মভাঙা কনফিগ বসে যেত — আর কোনো টেস্ট সেটা ধরত না।
+   * If the default itself became invalid, then omitting the capture window
+   * would silently install a rule-breaking config, and no test would catch it.
    */
-  it('ডিফল্ট উইন্ডোটা নিজেই বৈধ', () => {
+  it('the default window is itself valid', () => {
     expect(
       captureWindowProblem(
         DEFAULT_CAPTURE_WINDOW.screenshotFrom,
@@ -66,15 +66,15 @@ describe('ক্যাপচার উইন্ডো — ADR-011c-র সীম
 });
 
 describe('hhmmToMinutes', () => {
-  it('মধ্যরাত থেকে মিনিট গোনে', () => {
+  it('counts minutes from midnight', () => {
     expect(hhmmToMinutes('00:00')).toBe(0);
     expect(hhmmToMinutes('07:00')).toBe(420);
     expect(hhmmToMinutes('23:59')).toBe(1439);
   });
 
-  it('ভুল ফরম্যাটে null — শূন্য নয়', () => {
-    // ⚠️ শূন্য ফেরত দিলে '০০:০০' আর 'আবর্জনা' এক হয়ে যেত, আর আবর্জনা
-    //    মধ্যরাত ধরে নিয়ে উইন্ডো নীরবে খুলে যেত
+  it('returns null on a bad format, not zero', () => {
+    // Returning zero would make '00:00' and garbage the same, and garbage
+    // would be taken as midnight, silently opening the window
     expect(hhmmToMinutes('abc')).toBeNull();
     expect(hhmmToMinutes('24:00')).toBeNull();
     expect(hhmmToMinutes('07:60')).toBeNull();

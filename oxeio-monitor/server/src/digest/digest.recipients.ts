@@ -1,28 +1,29 @@
 /**
- * সাপ্তাহিক সারাংশ **কার কাছে যাবে** — খাঁটি নিয়ম, কোনো I/O নেই।
+ * **Who receives** the weekly summary — a pure rule, no I/O.
  *
- * ⭐ আলাদা ফাইল, কারণ নিয়মটা ছোট হলেও ভুলটা বড়: এই বার্তায় প্রতিটা
- * কর্মীর **নাম ও ঘণ্টা** থাকে। ভুল ঠিকানায় গেলে ফেরানো যায় না।
+ * A separate file, because the rule is small but the mistake is big: this
+ * message contains each employee's **name and hours**. Once sent to the wrong
+ * address it cannot be taken back.
  *
- * ⚠️⚠️ **ম্যানেজারদের পাঠানো হয় না** — অ্যালার্টের ঠিক একই যুক্তিতে
- * (`alerts.dispatcher.ts`)। সারাংশটা owner-only পর্দার সমান জিনিস; ইমেইলে
- * পাঠিয়ে role-এর দেয়ালটা ফাঁকি দেওয়া চলবে না।
+ * Careful: **managers are not sent it** — the same reasoning as alerts
+ * (`alerts.dispatcher.ts`). The summary is the same thing as an owner-only
+ * screen; sending it by email must not sidestep the role wall.
  */
 
 export interface DigestRecipientsInput {
-  /** `DIGEST_EMAIL_TO` — কমা দিয়ে আলাদা করা, না দিলে খালি */
+  /** `DIGEST_EMAIL_TO` — comma-separated, empty if not given */
   explicit: string | undefined;
-  /** সক্রিয় owner-দের ইমেইল */
+  /** Emails of the active owners */
   owners: readonly string[];
 }
 
 /**
- * ⭐ স্পষ্ট তালিকা থাকলে সেটাই, নইলে সক্রিয় owner-রা — অ্যালার্টের
- * `recipients()`-এর হুবহু একই ক্রম, যাতে দুটো আলাদা জায়গায় দুই রকম
- * আচরণ না দাঁড়ায়।
+ * The explicit list if there is one, otherwise the active owners — in exactly
+ * the same order as the alerts' `recipients()`, so two places never end up
+ * behaving differently.
  *
- * ⚠️ ফাঁকা ঘর ও ডুপ্লিকেট ছেঁকে ফেলা হয়: `.env`-এ `a@x.com,,a@x.com`
- * লেখা থাকলে একজনের কাছে দুবার যেত, আর একটা খালি ঠিকানায় SMTP ছুড়ত।
+ * Careful: blank entries and duplicates are filtered out: with `a@x.com,,a@x.com`
+ * in `.env`, one person would get it twice, and SMTP would be thrown an empty address.
  */
 export function digestRecipients(input: DigestRecipientsInput): string[] {
   const explicit = (input.explicit ?? '')
@@ -32,7 +33,7 @@ export function digestRecipients(input: DigestRecipientsInput): string[] {
 
   const chosen = explicit.length > 0 ? explicit : input.owners;
 
-  // ⚠️ ছোট হাতের করে তুলনা — `A@x.com` আর `a@x.com` একই ঠিকানা
+  // Careful: compared in lower case — `A@x.com` and `a@x.com` are the same address
   const seen = new Set<string>();
   const out: string[] = [];
 

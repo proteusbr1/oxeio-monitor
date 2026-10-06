@@ -1,77 +1,76 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// ⭐⭐ <b>অবস্থা বদলালে সার্ভারকে কখন জানানো হবে।</b> খাঁটি নিয়ম, কোনো I/O নেই।
+/// <b>When to tell the server that the state changed.</b> Pure rules, no I/O.
 ///
-/// ⚠️⚠️ <b>এটা একটা বাস্তব অভিযোগ থেকে এসেছে।</b> মালিক জানালেন: idle
-/// থাকা অবস্থায় মাউস নাড়ালে, ক্লিক করলে বা কি-বোর্ড চাপলেও বোর্ডে
-/// "Working" আসতে <b>১০–১৫ সেকেন্ড</b> লাগে।
+/// <b>This came from a real complaint.</b> The owner reported that after being idle, moving
+/// the mouse, clicking or pressing a key still took <b>10-15 seconds</b> to show "Working"
+/// on the board.
 ///
-/// কারণটা বাগ ছিল না, ছিল <b>ছন্দ</b>: এজেন্ট এক সেকেন্ডেই টের পায়, কিন্তু
-/// সার্ভার জানে কেবল heartbeat-এ — আর সেটা যায় ১৫ সেকেন্ড পরপর। কর্মী
-/// ফিরে এসে কাজ শুরু করেছেন, অথচ বোর্ড তখনো বলছে তিনি থেমে আছেন।
+/// It was not a bug but the <b>rhythm</b>: the agent notices within a second, but the server
+/// only learns on a heartbeat, which goes out every 15 seconds. The employee had come back and
+/// started working while the board still said they had stopped.
 ///
-/// ⚠️ ছোট দেরি মনে হলেও ক্ষতিটা বিশ্বাসের: মালিক পর্দায় দেখেন একজন
-/// "Idle", অথচ পাশে গিয়ে দেখেন তিনি টাইপ করছেন। দু-বার এমন হলে গোটা
-/// বোর্ডের উপরই আর ভরসা থাকে না।
+/// A short delay sounds minor, but the damage is to trust: the owner sees someone as "Idle"
+/// on screen, then walks over and finds them typing. After that happens twice, the whole
+/// board is no longer trusted.
 ///
-/// ⭐ তাই অবস্থা বদলালে <b>সাথে সাথেই</b> একটা heartbeat — কিন্তু
-/// <see cref="MinGap"/>-এর চেয়ে ঘন ঘন নয়।
+/// So when the state changes a heartbeat goes out <b>immediately</b>, but never more often
+/// than <see cref="MinGap"/>.
 /// </summary>
 public static class HeartbeatUrgency
 {
     /// <summary>
-    /// ⚠️⚠️ দুটো heartbeat-এর মধ্যে সর্বনিম্ন ব্যবধান।
+    /// The minimum interval between two heartbeats.
     ///
-    /// এটা না থাকলে অবস্থা দোদুল্যমান হলে (কেউ এক সেকেন্ড কাজ করে, এক
-    /// সেকেন্ড থামে — পড়তে পড়তে টুকে নেওয়ার সময় খুবই স্বাভাবিক) এজেন্ট
-    /// সেকেন্ডে সেকেন্ডে সার্ভারে ধাক্কা দিত। ১৫টা PC মিলে সেটা সার্ভারের
-    /// উপর ঢেউ, আর লাভ শূন্য — মানুষের চোখে ৩ সেকেন্ড আর ০ সেকেন্ড এক।
+    /// Without it, a flapping state (someone works for a second, stops for a second, which is
+    /// very normal when taking notes while reading) would make the agent hit the server every
+    /// second. Across 15 PCs that is a wave on the server for zero gain: to a human eye 3
+    /// seconds and 0 seconds are the same.
     /// </summary>
     public static readonly TimeSpan MinGap = TimeSpan.FromSeconds(3);
 
     /// <summary>
-    /// পরের heartbeat কতক্ষণ পরে।
+    /// How long until the next heartbeat.
     /// </summary>
-    /// <param name="now">এখন (monotonic ঘড়ি)।</param>
-    /// <param name="lastBeatAt">শেষ heartbeat কখন গিয়েছিল।</param>
-    /// <param name="normal">স্বাভাবিক ব্যবধান (সার্ভারের কনফিগ থেকে)।</param>
-    /// <param name="stateChanged">শেষ heartbeat-এর পর অবস্থা বদলেছে কি না।</param>
+    /// <param name="now">Now (monotonic clock).</param>
+    /// <param name="lastBeatAt">When the last heartbeat went out.</param>
+    /// <param name="normal">The normal interval (from the server's config).</param>
+    /// <param name="stateChanged">Whether the state changed since the last heartbeat.</param>
     public static TimeSpan Next(
         DateTimeOffset now,
         DateTimeOffset lastBeatAt,
         TimeSpan normal,
         bool stateChanged)
     {
-        // অবস্থা বদলায়নি — স্বাভাবিক ছন্দেই চলুক
+        // The state did not change: keep the normal rhythm
         if (!stateChanged) return Remaining(now, lastBeatAt, normal);
 
         /**
-         * ⚠️ বদলেছে, কিন্তু এইমাত্র একটা beat গেছে — তবু <see cref="MinGap"/>
-         * পর্যন্ত অপেক্ষা। ⭐ শূন্য ফেরত দিলে দোদুল্যমান অবস্থায় লুপটা
-         * অনবরত ঘুরত।
+         * It changed, but a beat has only just gone out, so still wait until <see cref="MinGap"/>.
+         * Returning zero would make the loop spin non-stop while the state flaps.
          */
         var since = now - lastBeatAt;
 
-        // ⚠️⚠️ ঋণাত্মক মানে ঘড়ি পিছিয়েছে — শেষ beat "ভবিষ্যতে"। তখন
-        //    `MinGap - since` দাঁড়াত মিনিট বা ঘণ্টায়, অর্থাৎ জরুরি খবরটাই
-        //    সবচেয়ে বেশি দেরিতে যেত।
+        // Negative means the clock went backwards and the last beat is "in the future". Then
+        // `MinGap - since` would come out as minutes or hours, so the urgent news would be
+        // the most delayed of all.
         if (since < TimeSpan.Zero) return TimeSpan.Zero;
 
         return since < MinGap ? MinGap - since : TimeSpan.Zero;
     }
 
     /**
-     * ⚠️⚠️ <b>দুই দিকেই ছাঁটা হয়, আর দ্বিতীয়টা একটা টেস্ট ধরিয়ে দিয়েছে।</b>
+     * <b>Clamped on both sides, and the second side was caught by a test.</b>
      *
-     * প্রথম সংস্করণে কেবল ঋণাত্মক দিকটা সামলানো ছিল। কিন্তু আসল বিপদ
-     * উল্টো দিকে: ঘড়ি পিছিয়ে গেলে (NTP সংশোধন) <c>lastBeatAt</c> হয়ে যায়
-     * <b>ভবিষ্যতের</b> সময়, আর তখন অপেক্ষা দাঁড়াত ১০ মিনিটের ঘড়ি-লাফে
-     * <b>৬১৫ সেকেন্ড</b> — heartbeat বন্ধ, আর G01 ("এজেন্ট ১০ মিনিট চুপ")
-     * প্রতিটা মেশিনে জ্বলে উঠত।
+     * The first version only handled the negative side. The real danger is the other way:
+     * when the clock steps back (NTP correction), <c>lastBeatAt</c> becomes a time in the
+     * <b>future</b>, and with a 10-minute clock jump the wait would come out as
+     * <b>615 seconds</b>: heartbeats stop, and G01 ("agent silent for 10 minutes") fires on
+     * every machine.
      *
-     * ⭐ তাই ছাদটা <c>normal</c> — একটা স্বাভাবিক ব্যবধানের বেশি অপেক্ষা
-     * কোনো অবস্থাতেই যুক্তিসঙ্গত নয়।
+     * So the ceiling is <c>normal</c>: waiting longer than one normal interval is never
+     * reasonable.
      */
     private static TimeSpan Remaining(
         DateTimeOffset now,

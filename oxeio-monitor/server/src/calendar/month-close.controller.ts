@@ -18,11 +18,11 @@ import {
 } from './month-close.service';
 
 /**
- * R1 — `/api/v1/months` · **owner-only**।
+ * R1: `/api/v1/months`, **owner-only**.
  *
- * ⚠️ ম্যানেজার নয়, ইচ্ছাকৃতভাবে: মাস বন্ধ করা মানে বেতনের ভিত্তি স্থির
- * করা, আর ম্যানেজার বেতনের সংখ্যা দেখেনই না (§ ৪.৩)। যিনি ফল দেখেন না,
- * তিনি ফলটা জমাটও করতে পারেন না।
+ * Careful: not managers, deliberately: closing a month fixes the basis of
+ * pay, and managers do not see payroll numbers at all (§ 4.3). Someone who
+ * does not see the result cannot freeze the result either.
  */
 @Roles(UserRole.owner)
 @Controller('months')
@@ -45,9 +45,9 @@ export class MonthCloseController {
   }
 
   /**
-   * ⚠️ `DELETE`, `POST …/reopen` নয় — খোলা মানে বন্ধ-করার রেকর্ডটা
-   * **তুলে নেওয়া**, নতুন কিছু তৈরি নয়। ⭐ তবু audit-এ দুটো সারিই থেকে
-   * যায়, তাই ইতিহাস মোছে না।
+   * Careful: `DELETE`, not `POST .../reopen`: reopening means **taking away**
+   * the closing record, not creating anything new. Even so, both rows stay in
+   * the audit, so history is not erased.
    */
   @Delete(':yearMonth')
   reopen(

@@ -1,55 +1,55 @@
 import type { AgentVersionView, DeviceView } from '../../api/agent';
 
 /**
- * **ফ্লিটের ভার্সন — কে কোথায় দাঁড়িয়ে।**
+ * **Fleet versions: who stands where.**
  *
- * ⚠️⚠️ **কেন এটা দরকার হলো — মাঠের প্রশ্ন, ১৮ আগস্ট।** মালিক জানতে
- * চাইলেন *"kon staff er pc te kon ver er agent"* — আর উত্তরটা পর্দার
- * **কোথাও ছিল না**। `GET /api/v1/devices` রুটটা সবই ফেরায়, ওয়েবে
- * `DeviceView` টাইপটাও লেখা ছিল, কিন্তু ওই রুট কেউ কোনোদিন ডাকেনি —
- * *চুক্তি লেখা আছে, কলার লেখা হয়নি*-র আরেকটা রূপ।
+ * Careful — why this was needed: the owner asked "which agent version is on which
+ * staff member's PC", and the answer was **nowhere on screen**. The route
+ * `GET /api/v1/devices` returns everything and the web even had a `DeviceView`
+ * type, but nobody ever called that route: another case of a contract written
+ * with no caller.
  *
- * ⚠️ **নতুন "Devices" পর্দা নয়** (G89 — মালিক নিজেই ওটা তুলে দিতে
- * বলেছিলেন)। এই তালিকা বসে **Agent updates**-এর ভেতরে, যার নিজের
- * বর্ণনাই লেখা *"Which build each PC is offered"*।
+ * Careful: **not a new "Devices" screen** (the owner asked for that one to be
+ * removed). This list sits inside **Agent updates**, whose own description reads
+ * *"Which build each PC is offered"*.
  *
- * ⭐ সিদ্ধান্তগুলো এখানে, খাঁটি ও টেস্টযোগ্য — বিশেষ করে ভার্সন তুলনা,
- * যেটা স্ট্রিং হিসেবে করলে **০.৪.১০ < ০.৪.৯** হয়ে যেত।
+ * Important: the decisions live here, pure and testable, above all the version
+ * comparison, which as a string comparison would make **0.4.10 < 0.4.9**.
  */
 
 /**
- * ⭐⭐ **০.৪.১-এর আগের এজেন্ট নিজে থেকে আপডেট নিতে পারে না।**
+ * **Agents older than 0.4.1 cannot update themselves.**
  *
- * ⚠️⚠️ ট্রে-তে "Install update" মেনুটা এসেছে **০.৪.১-এ**
- * ([09 § ৩ভ৯](../../../../docs/09-Build-Log.md)); ০.৩.৭-এর `UpdateStager`
- * MSI নামায় ঠিকই, কিন্তু `msiexec` চালানোর কোনো পথ নেই। মানে ওই PC-গুলোয়
- * রোলআউট `all` করলেও কিচ্ছু ঘটে না — ফাইলটা নেমে পড়ে থাকে, আর কেউ জানে
- * না। ⭐ তাই ওদের আলাদা করে দেখানো হয়: ওখানে **হাতে বসানো ছাড়া উপায় নেই**।
+ * Careful: the tray's "Install update" menu arrived in **0.4.1** (see the Build Log).
+ * The `UpdateStager` in 0.3.7 does download the MSI but has no way to run
+ * `msiexec`. So setting the rollout to `all` does nothing on those PCs: the file
+ * downloads and sits there, and nobody knows. Important: so they are shown
+ * separately: for them **a manual install is the only way**.
  */
 export const TRAY_UPDATE_MIN = '0.4.1';
 
 /**
- * এতক্ষণ চুপ থাকলে সারিতে চিহ্ন বসে।
+ * How long a device may stay silent before its row is flagged.
  *
- * ⚠️ এটা `agent_down` অ্যালার্টের **প্রতিদ্বন্দ্বী নয়** — ওটা ১০ মিনিটে
- * বাজে, আর ওটাই "এখন ডাউন কি না" প্রশ্নের মালিক। এখানকার প্রশ্ন আলাদা:
- * *"এই PC-র ভার্সনটা কি আদৌ তাজা খবর?"* একটা চালু এজেন্ট প্রতি ৫ মিনিটে
- * সাড়া দেয়, তাই **পুরো একটা দিন** চুপ মানে মেশিনটা বন্ধ বা ভাঙা — আর
- * ২৪ ঘণ্টা বাছা হয়েছে যাতে **সারারাত বন্ধ থাকা কখনো এতে না পড়ে**
- * (সন্ধ্যা ৬টা → সকাল ৯টা = ১৫ ঘণ্টা)।
+ * Careful: this is **not a rival** of the `agent_down` alert, which fires at 10
+ * minutes and owns the question "is it down now". The question here is different:
+ * *"is this PC's version even fresh news?"* A running agent responds every 5
+ * minutes, so **a whole day** of silence means the machine is off or broken. 24
+ * hours was chosen so that **being off overnight never lands here** (6pm to 9am =
+ * 15 hours).
  */
 export const QUIET_HOURS = 24;
 
 /**
- * ⭐ সার্ভারের `isNewer()`-এর হুবহু নকল (`server/src/agent/rollout.ts`)।
+ * Important: an exact copy of the server's `isNewer()` (`server/src/agent/rollout.ts`).
  *
- * ⚠️⚠️ **স্ট্রিং তুলনা এখানে ভুল**, আর ভুলটা নীরব: `'0.4.10' < '0.4.9'`
- * বর্ণক্রমে সত্যি। আজ কোনো ক্ষতি হতো না (এখনো ০.৪.৯), কিন্তু পরের
- * রিলিজেই গোটা পর্দাটা উল্টো বলত — সবচেয়ে নতুন বিল্ডটাকে "পিছিয়ে"
- * দেখাত।
+ * Careful: **string comparison is wrong here**, and silently so: `'0.4.10' < '0.4.9'`
+ * is true alphabetically. It would do no harm today (still 0.4.9), but at the next
+ * release the whole screen would say the opposite, showing the newest build as
+ * "behind".
  *
- * ⚠️ দুই জায়গায় দু-রকম হলে সার্ভার যাকে আপডেট অফার করত, পর্দা তাকেই
- * "up to date" বলত — তাই নিয়মটা এক রাখা হয়েছে, কপি করেই।
+ * Careful: if the two differ, the screen would call "up to date" a PC the server
+ * would offer an update to; so the rule is kept identical, by copying.
  */
 export function compareVersion(a: string, b: string): number {
   const x = a.split('.').map((n) => parseInt(n, 10) || 0);
@@ -65,16 +65,16 @@ export function compareVersion(a: string, b: string): number {
 }
 
 /**
- * ⭐⭐ **কোন বিল্ডটা "সবচেয়ে নতুন" — সার্ভার যেভাবে বাছে, ঠিক সেভাবেই।**
+ * **Which build is "newest": exactly the way the server picks.**
  *
- * ⚠️⚠️ `UpdateService.offerFor` বাছে **প্রকাশের সময় ধরে** (`releasedAt
- * desc`), ভার্সন নম্বর ধরে নয় — আর `halted` বাদ দিয়ে। এখানে ভার্সন নম্বর
- * ধরে বাছলে দুটো আলাদা "নতুন" জন্মাত: পর্দা একটাকে লক্ষ্য বলত, সার্ভার
- * আরেকটা বিলি করত। তাই তালিকাটা যে ক্রমে আসে (API-ও `releasedAt desc`)
- * সেই ক্রমেই প্রথম non-halted সারিটা নেওয়া হয়।
+ * Careful: `UpdateService.offerFor` picks **by release time** (`releasedAt desc`),
+ * not by version number, and skips `halted`. Picking by version number here would
+ * create two different "newest" builds: the screen would call one the target and
+ * the server would hand out another. So it takes the first non-halted row in the
+ * order the list arrives in (the API is also `releasedAt desc`).
  *
- * ⚠️ সব ভার্সন halted থাকলে `null` — তখন কেউ "পিছিয়ে" নয়, কারণ
- * এগোনোর জায়গাই নেই।
+ * Careful: if every version is halted it is `null`; then nobody is "behind",
+ * because there is nowhere to advance to.
  */
 export function newestOffered(
   versions: readonly AgentVersionView[],
@@ -83,37 +83,37 @@ export function newestOffered(
 }
 
 /**
- * একটা PC লক্ষ্যের তুলনায় কোথায়।
+ * Where one PC stands relative to the target.
  *
- * - `newest` — লক্ষ্যেই আছে
- * - `behind` — পিছিয়ে, কিন্তু **নিজে থেকেই** আপডেট নিতে পারবে
- * - `stranded` — এত পুরোনো যে ট্রে-তে আপডেটের মেনুই নেই; হাতে বসাতে হবে
- * - `unknown` — এজেন্ট কখনো নিজের ভার্সন বলেনি
+ * - `newest`: on the target
+ * - `behind`: behind, but **can update itself**
+ * - `stranded`: so old its tray has no update menu; must be installed by hand
+ * - `unknown`: the agent never reported its version
  */
 export type FleetLag = 'newest' | 'behind' | 'stranded' | 'unknown';
 
 /**
- * ⚠️ `newest === null` (সব ভার্সন halted, বা কিছুই প্রকাশ করা হয়নি) মানে
- * **লক্ষ্যই নেই**, তাই কেউ পিছিয়েও নেই। ⚠️⚠️ কিন্তু তখন পর্দায় "up to
- * date" লেখা **মিথ্যা** হতো — কেউ হালনাগাদ নয়, শুধু মাপার কিছু নেই।
- * সেই কারণে পর্দাটা ওই অবস্থায় চিহ্ন ও অগ্রগতির বার দুটোই লুকিয়ে রাখে
- * (`FleetCard`); এখানে শুধু "পিছিয়ে নেই" বলাটুকুই যথেষ্ট।
+ * Careful: `newest === null` (every version halted, or nothing published) means
+ * **there is no target**, so nobody is behind either. Careful, though: showing
+ * "up to date" on screen then would be **false**; nobody is current, there is just
+ * nothing to measure against. So in that state the screen hides both the marker
+ * and the progress bar (`FleetCard`); here, just saying "not behind" is enough.
  */
 export function lagOf(version: string | null, newest: string | null): FleetLag {
   if (version === null) return 'unknown';
   if (newest === null || compareVersion(version, newest) >= 0) return 'newest';
 
   /**
-   * ⚠️ `>= 0` — শুধু `=== 0` নয়। কেউ হাতে **লক্ষ্যের চেয়েও নতুন** একটা
-   * বিল্ড বসালে (আমরা নিজেরাই যেটা করি) সে "পিছিয়ে" নয়; অথচ সমান-না-হলেই
-   * পিছিয়ে ধরলে পর্দা তাকে লাল দেখাত।
+   * Careful: `>= 0`, not only `=== 0`. If someone installs a build **newer than the
+   * target** by hand (which we do ourselves) they are not "behind"; treating
+   * anything not equal as behind would show them in red.
    */
   return compareVersion(version, TRAY_UPDATE_MIN) >= 0 ? 'behind' : 'stranded';
 }
 
 /**
- * ⚠️ কখনো সাড়া না দিলেও "চুপ" — `null` মানে এখানে "সমস্যা নেই" নয়।
- * এনরোল হয়ে একবারও না বলা এজেন্ট ঠিক ততটাই অদৃশ্য।
+ * Careful: never responding still counts as "silent"; `null` here does not mean
+ * "no problem". An agent that enrolled and never spoke is just as invisible.
  */
 export function isQuiet(lastSeenAt: string | null, now: Date): boolean {
   if (lastSeenAt === null) return true;
@@ -126,7 +126,7 @@ export function isQuiet(lastSeenAt: string | null, now: Date): boolean {
 
 export interface FleetRow {
   deviceId: number;
-  /** কারো সাথে যুক্ত না থাকলে `null` — তবু সারিটা দেখানো হয় */
+  /** `null` if not linked to anyone; the row is still shown */
   employee: { empCode: string; fullName: string } | null;
   hostname: string;
   windowsUsername: string;
@@ -197,26 +197,26 @@ export function capabilityIssues(
 }
 
 export interface FleetGroup {
-  /** `null` মানে এজেন্ট নিজের ভার্সন বলেনি */
+  /** `null` means the agent did not report its version */
   version: string | null;
   lag: FleetLag;
   rows: FleetRow[];
 }
 
 /**
- * ⭐⭐ **ভার্সন ধরে দল, নতুন থেকে পুরোনো** — মালিকের বাছাই (১৮ আগস্ট)।
+ * **Groups by version, newest to oldest.**
  *
- * এভাবে সাজালে "৫০% বলেছিলাম, কতদূর পৌঁছাল?" প্রশ্নটার উত্তর **না গুনেই**
- * দেখা যায়, আর এই ট্যাবের কাজই তো সেটা।
+ * Sorted this way, "I said 50%, how far did it get?" can be answered **without
+ * counting**, and that is the whole job of this tab.
  *
- * ⚠️⚠️ **কেবল `active` ডিভাইস** — কারণ পাশের টেবিলের "PCs on it" কলামটাও
- * তাই গোনে (`agent-versions.service.ts`, `where: { status: 'active' }`)।
- * revoke করা PC ধরলে **একই পর্দায় দুটো আলাদা সংখ্যা** বসত, আর তখন কোনটা
- * সত্যি সেটা বোঝার উপায় থাকত না — এই প্রকল্পে ঠিক ওই ভুলটা একবার
- * হয়েছে (G88)।
+ * Careful: **only `active` devices**, because the neighbouring table's "PCs on it"
+ * column counts the same way (`agent-versions.service.ts`, `where: { status:
+ * 'active' }`). Counting revoked PCs would put **two different numbers on one
+ * screen** with no way to tell which is true; this project has made exactly that
+ * mistake once (G88).
  *
- * ⚠️ দলের **ভেতরে** ক্রম `empCode` ধরে, ঘণ্টা বা শেষ-সাড়া ধরে নয় — এটা
- * মানুষ খোঁজার তালিকা, র‌্যাঙ্কিং নয়।
+ * Careful: **inside** a group the order is by `empCode`, not by hours or last
+ * response; this is a list for finding people, not a ranking.
  */
 export function fleetGroups(
   devices: readonly DeviceView[],
@@ -250,10 +250,10 @@ export function fleetGroups(
       version,
       lag: lagOf(version, newest),
       rows: rows.sort((a, b) => {
-        // ⚠️ কর্মীর সাথে যুক্ত নয় এমন ডিভাইস শেষে — নইলে খালি ঘরগুলো
-        //    তালিকার মাথায় বসে পড়ত। ⚠️ শর্তটা **আলাদা করে** লেখা, কোনো
-        //    বড়-অক্ষরের সেন্টিনেল দিয়ে নয়: localeCompare-এর ক্রম লোকেল
-        //    ধরে বদলায়, তাই সেন্টিনেল একদিন মাঝখানে বসে যেতে পারত।
+        // Careful: devices not linked to an employee go last; otherwise the empty cells
+        //    would sit at the top of the list. Careful: the condition is written
+        //    **explicitly**, not with a high-letter sentinel: `localeCompare` order
+        //    changes by locale, so a sentinel could one day land in the middle.
         if ((a.employee === null) !== (b.employee === null)) {
           return a.employee === null ? 1 : -1;
         }
@@ -265,7 +265,7 @@ export function fleetGroups(
   );
 
   return groups.sort((a, b) => {
-    // ⚠️ অজানা ভার্সন সবার শেষে — ওটা কোনো "দল" নয়, একটা ফাঁক
+    // Careful: unknown version goes last; it is not a "group", it is a gap
     if (a.version === null) return 1;
     if (b.version === null) return -1;
     return compareVersion(b.version, a.version);
@@ -281,11 +281,11 @@ export interface FleetTally {
 }
 
 /**
- * উপরের বারটার জন্য গোনা।
+ * Counts for the bar above.
  *
- * ⭐ `stranded` আলাদা করে গোনা হয় কারণ **করণীয় আলাদা**: `behind` PC-গুলো
- * নিজে থেকেই আপডেট নেবে (অপেক্ষা করলেই হয়), `stranded`-গুলোয় কাউকে গিয়ে
- * MSI বসাতে হবে। দুটোকে একসাথে "পুরোনো" বললে ওই তফাতটাই হারাত।
+ * Important: `stranded` is counted separately because **the action differs**:
+ * `behind` PCs will update themselves (just wait), while for `stranded` someone must
+ * go and install the MSI. Calling both "old" would lose that difference.
  */
 export function fleetTally(groups: readonly FleetGroup[]): FleetTally {
   const tally: FleetTally = {

@@ -15,16 +15,17 @@ import {
 } from './setup/harness';
 
 /**
- * **PATCH /users/:id/email** — স্টাফের লগইন ইমেইল ("ইউজারনেম") বদলানো।
+ * **PATCH /users/:id/email** — changing a staff member's login email ("username").
  *
- * ⚠️⚠️ **কেন এটা দরকার হলো:** portal অ্যাকাউন্ট খোলার সময় ইমেইলটা হাতে
- * টাইপ করতে হয়। ভুল হলে ওই অ্যাকাউন্ট চিরকাল ভুল ঠিকানায় আটকে থাকত —
- * বদলানোর কোনো পথই ছিল না। ১৫ জনের জন্য একবার করে টাইপ করলে অন্তত একটা
- * টাইপো হওয়াই স্বাভাবিক।
+ * Why this was needed: when a portal account is opened the email is typed
+ * by hand. If it was wrong, that account stayed stuck on the wrong address
+ * forever — there was no way to change it. Typed once each for 15 people,
+ * at least one typo is only natural.
  *
- * ⭐ সাথে ধরা পড়েছে আরেকটা: `resetUserPassword()` ওয়েবের API-তে **লেখাই
- * ছিল, কিন্তু কেউ ডাকত না** — কারণ ডাকার মতো `userId` রেসপন্সেই আসত না।
- * অর্থাৎ স্টাফ পাসওয়ার্ড ভুলে গেলে মালিকের কিছুই করার ছিল না।
+ * Another thing was caught alongside: `resetUserPassword()` was written in
+ * the web API but nobody called it — because the response did not even
+ * carry a `userId` to call it with. So if staff forgot their password the
+ * owner could do nothing.
  */
 let h: Harness;
 let owner: Session;
@@ -64,7 +65,7 @@ const patch = (id: number, email: string) =>
     .send({ email });
 
 describe('PATCH /users/:id/email', () => {
-  it('ইমেইল বদলায়', async () => {
+  it('changes the email', async () => {
     const res = await patch(userId, 'rakib@oxeio.local').expect(200);
 
     expect(res.body.email).toBe('rakib@oxeio.local');
@@ -73,31 +74,32 @@ describe('PATCH /users/:id/email', () => {
   });
 
   /**
-   * ⚠️ লগইন case-insensitive হওয়া উচিত, তাই সংরক্ষণও lowercase-এ। নইলে
-   * `Rakib@…` দিয়ে অ্যাকাউন্ট খুললে সে `rakib@…` লিখে ঢুকতে পারত না, আর
-   * কারণটা পর্দায় কোথাও লেখা থাকত না।
+   * Login should be case-insensitive, so storage is lowercase too. Otherwise
+   * an account opened with `Rakib@…` could not log in by typing `rakib@…`,
+   * and the reason would not be written anywhere on screen.
    */
-  it('lowercase করে রাখে', async () => {
+  it('stores it lowercase', async () => {
     const res = await patch(userId, 'Rakib@OXeio.Local').expect(200);
     expect(res.body.email).toBe('rakib@oxeio.local');
   });
 
   /**
-   * ⚠️ সামনে-পিছনে ফাঁকা জায়গা থাকলে `@IsEmail()` ৪০০ দেয় — রিপোর মোট
-   * অন্য সব DTO-র মতোই (কোথাও `@Transform` দিয়ে trim করা নেই)। এই
-   * একটা রুটে ব্যতিক্রম করলে পরে কেউ ধরে নিত সবখানেই trim হয়।
-   * ⭐ পর্দা থেকে সমস্যা হয় না — ওখানে `email.trim()` করে পাঠানো হয়।
+   * With leading/trailing spaces `@IsEmail()` gives 400 — the same as every
+   * other DTO in the repo (nowhere is there a `@Transform` trim). Making an
+   * exception on this one route would make someone later assume trimming
+   * happens everywhere. The screen has no problem — it sends `email.trim()`.
    */
-  it('ফাঁকা জায়গাসহ পাঠালে ৪০০ — রিপোর অন্য রুটগুলোর মতোই', async () => {
+  it('sending with spaces gives 400 — like the repo\'s other routes', async () => {
     await patch(userId, '  rakib@oxeio.local  ').expect(400);
   });
 
   /**
-   * ⚠️⚠️ **পাসওয়ার্ড ছোঁয়া হয় না** — এটাই সবচেয়ে জরুরি শর্ত। ইমেইলের
-   * বানান ঠিক করতে গিয়ে কারো পাসওয়ার্ড বদলে গেলে সে পরদিন ঢুকতেই পারত
-   * না, আর কেউ বুঝত না কেন। তাই রিসেট আলাদা রুটে, আলাদা বোতামে।
+   * The password is not touched — the most important condition. If fixing an
+   * email's spelling changed someone's password, they could not log in the
+   * next day and nobody would know why. So reset is a separate route, a
+   * separate button.
    */
-  it('পাসওয়ার্ড অপরিবর্তিত থাকে', async () => {
+  it('the password stays unchanged', async () => {
     const before = await h.prisma.user.findUniqueOrThrow({ where: { id: userId } });
 
     await patch(userId, 'rakib@oxeio.local').expect(200);
@@ -107,28 +109,28 @@ describe('PATCH /users/:id/email', () => {
     expect(after.mustChangePw).toBe(before.mustChangePw);
   });
 
-  /** ⚠️ অন্যের ইমেইল দিলে ৪০৯ — নইলে Prisma-র P2002 পর্দায় যেত */
-  it('অন্য অ্যাকাউন্টের ইমেইল দিলে ৪০৯', async () => {
+  /** Someone else's email gives 409 — otherwise Prisma's P2002 would reach the screen */
+  it('another account\'s email gives 409', async () => {
     await patch(userId, OWNER_EMAIL).expect(409);
 
     const row = await h.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     expect(row.email).toBe(START);
   });
 
-  it('একই ইমেইল দিলে কিছুই ভাঙে না', async () => {
+  it('the same email breaks nothing', async () => {
     await patch(userId, START).expect(200);
   });
 
-  it('ইমেইল না হলে ৪০০', async () => {
+  it('400 when it is not an email', async () => {
     await patch(userId, 'not-an-email').expect(400);
   });
 
-  it('অচেনা ইউজারে ৪০৪', async () => {
+  it('404 for an unknown user', async () => {
     await patch(999_999, 'x@test.local').expect(404);
   });
 
-  /** ⚠️ লগইন বদলানো owner-এর কাজ — ম্যানেজারের নয় */
-  it('ম্যানেজার পারে না', async () => {
+  /** Changing a login is the owner's job — not the manager's */
+  it('a manager cannot', async () => {
     const manager = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
 
     await manager.http
@@ -138,8 +140,8 @@ describe('PATCH /users/:id/email', () => {
       .expect(403);
   });
 
-  /** ⭐ কে কার লগইন বদলেছে — পরে মেলানোর একমাত্র উপায় */
-  it('audit_log-এ আগের ও নতুন, দুটোই ওঠে', async () => {
+  /** Who changed whose login — the only way to reconcile later */
+  it('both the old and the new value appear in audit_log', async () => {
     await h.prisma.auditLog.deleteMany({});
 
     await patch(userId, 'rakib@oxeio.local').expect(200);
@@ -153,8 +155,8 @@ describe('PATCH /users/:id/email', () => {
     expect(meta.to).toBe('rakib@oxeio.local');
   });
 
-  /** ⭐ বদলের পর নতুন ইমেইল দিয়েই ঢোকা যায় — আসল দাবিটা এটাই */
-  it('নতুন ইমেইল দিয়ে সত্যিই লগইন হয়', async () => {
+  /** After the change, logging in with the new email works — this is the real claim */
+  it('logging in with the new email really works', async () => {
     await patch(userId, 'rakib@oxeio.local').expect(200);
 
     await h
@@ -165,13 +167,13 @@ describe('PATCH /users/:id/email', () => {
   });
 });
 
-describe('GET /employees — portal অ্যাকাউন্টের id ও ইমেইল', () => {
+describe('GET /employees — portal account id and email', () => {
   /**
-   * ⚠️ এই দুটো ফিল্ড ছাড়া পর্দা থেকে রিসেট বা ইমেইল বদলানো **করাই যেত না**
-   * (`/users/:id/…` দুটোই id চায়)। ঠিক এই কারণেই `resetUserPassword()`
-   * লেখা থাকা সত্ত্বেও কোনোদিন ডাকা হয়নি।
+   * Without these two fields, reset or email change could not be done from
+   * the screen at all (both `/users/:id/...` need the id). That is exactly
+   * why `resetUserPassword()` was never called despite being written.
    */
-  it('portalUserId ও portalEmail আসে', async () => {
+  it('portalUserId and portalEmail come back', async () => {
     const res = await owner.http.get('/api/v1/employees?status=all').expect(200);
     const row = (res.body.rows as Record<string, unknown>[]).find(
       (r) => r.empCode === 'LG-001',
@@ -181,7 +183,7 @@ describe('GET /employees — portal অ্যাকাউন্টের id ও 
     expect(row.portalEmail).toBe(START);
   });
 
-  it('অ্যাকাউন্ট না থাকলে দুটোই null', async () => {
+  it('both are null when there is no account', async () => {
     await createEmployeeWithCode(h.prisma, 'LG-NONE');
 
     const res = await owner.http.get('/api/v1/employees?status=all').expect(200);
@@ -193,8 +195,8 @@ describe('GET /employees — portal অ্যাকাউন্টের id ও 
     expect(row.portalEmail).toBeNull();
   });
 
-  /** ⚠️ পাসওয়ার্ডের হ্যাশ বা TOTP গোপন কখনো রেসপন্সে নয় */
-  it('গোপন কিছু রেসপন্সে যায় না', async () => {
+  /** A password hash or TOTP secret is never in a response */
+  it('nothing secret goes into the response', async () => {
     const res = await owner.http.get('/api/v1/employees?status=all').expect(200);
     const raw = JSON.stringify(res.body);
 

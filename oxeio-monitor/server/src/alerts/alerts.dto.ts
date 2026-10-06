@@ -5,16 +5,16 @@ import { IsEnum, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { ALERT_TYPE_VALUES, type AlertType } from './alerts.constants';
 
 /**
- * `GET /api/v1/alerts`-এর কোয়েরি।
+ * Query for `GET /api/v1/alerts`.
  *
- * ⚠️ গ্লোবাল ValidationPipe-এ `forbidNonWhitelisted` চালু, তাই এখানে না থাকা
- *    কোনো প্যারামিটার পাঠালে ৪০০ আসবে — ড্যাশবোর্ডে নতুন ফিল্টার যোগ করার
- *    আগে সেটা এই ক্লাসেও যোগ করতে হবে।
+ * Careful: the global ValidationPipe has `forbidNonWhitelisted` on, so sending
+ * a parameter not declared here returns 400. Before adding a new filter in the
+ * dashboard, add it to this class too.
  */
 export class ListAlertsDto {
   /**
-   * ডিফল্ট `open` — কারণ তালিকাটার উদ্দেশ্যই "এখনো যেগুলো দেখা বাকি"।
-   * পুরোনো সব দেখতে হলে স্পষ্ট করে `all` চাইতে হবে।
+   * Defaults to `open`, because the list exists to show "what is still to be
+   * reviewed". To see all older ones, ask for `all` explicitly.
    */
   @IsOptional()
   @IsIn(['open', 'all'])
@@ -34,7 +34,7 @@ export class ListAlertsDto {
   @Min(1)
   page?: number;
 
-  /** ⚠️ সর্বোচ্চ ২০০ — নইলে একটা রিকোয়েস্টেই হাজার হাজার সারি টেনে আনা যেত */
+  /** Maximum 200, otherwise one request could pull thousands of rows */
   @IsOptional()
   @Type(() => Number)
   @IsInt()

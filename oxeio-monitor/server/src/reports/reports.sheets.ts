@@ -21,15 +21,15 @@ import {
 } from './reports.types';
 
 /**
- * F05 — কোন রিপোর্টের শিট দেখতে কেমন হবে (কলাম, চওড়া, লেবেল)।
+ * F05: what each report's sheet looks like (columns, widths, labels).
  *
- * সার্ভিস থেকে আলাদা রাখার কারণ: কলামের ক্রম বা নাম বদলানো একটা **ছাপার**
- * সিদ্ধান্ত, কোয়েরির নয়। একই ফাইলে থাকলে "একটা কলাম যোগ করো" বলতেই
- * ডাটাবেস-কোডের মাঝখানে হাত পড়ত।
+ * Kept apart from the service because changing column order or names is a
+ * **presentation** decision, not a query one. In the same file, "add a column"
+ * would mean reaching into the middle of the database code.
  *
- * ⚠️ এখানকার লেবেল শুধু **দেখানোর জন্য**; JSON API-তে যায় মেশিন-পাঠ্য
- *    মান (`worked`, `weekly_off`)। উল্টোটা করলে ফ্রন্টএন্ডকে দেখানোর
- *    স্ট্রিং মিলিয়ে শর্ত লিখতে হতো।
+ * The labels here are **for display only**; the JSON API carries machine-readable
+ * values (`worked`, `weekly_off`). The other way round, the frontend would have
+ * to write conditions matching display strings.
  */
 
 const DAY_TYPE_LABEL: Record<DayType, string> = {
@@ -55,23 +55,23 @@ export function attendanceWorkbook(report: AttendanceReport): Promise<Buffer> {
   const columns: ExcelColumn<AttendanceRow>[] = [
     { header: 'Emp code', width: 14, value: (r) => r.empCode },
     { header: 'Name', width: 26, value: (r) => r.fullName },
-    // ⭐ ধরনটা আগে — শ্রেণিকরণ এখন এটাই (২২ আগস্ট)
+    // Type first: it is now the classification
     { header: 'Staff type', width: 14, value: (r) => r.staffType },
-    // ⚠️ ঘরটা ফর্ম থেকে তুলে দেওয়া হয়েছে, তাই নতুন কর্মীর জন্য খালি
+    // The cell was removed from the form, so it is empty for new employees
     { header: 'Department', width: 18, value: (r) => r.department },
     { header: 'Date', width: 13, value: (r) => r.date },
     { header: 'Day type', width: 16, value: (r) => DAY_TYPE_LABEL[r.dayType] },
     /**
-     * ⭐⭐ **G130** — কেন সেদিন কাজ হয়নি, সেটা কাগজেই লেখা থাকে।
+     * **G130**: why no work was done that day is written on the paper itself.
      *
-     * ⚠️⚠️ পাশের `Status` ঘরে তখন "No activity" — শুধু ওটা পড়ে যে কেউ
-     * ধরে নিতেন লোকটা আসেননি। ⭐ ছুটি সংখ্যাগুলো আগেই ঠিক করে দিয়েছে
-     * (টার্গেট ০), কিন্তু কাগজটা মিটিংয়ে যায় আর সেখানে সংখ্যা নয়, সারিটা
-     * পড়া হয়।
+     * The neighbouring `Status` cell then says "No activity", and anyone reading
+     * only that would assume the person did not come. Leave already fixed the
+     * numbers (target 0), but the paper goes to meetings, where the row is read,
+     * not the numbers.
      *
-     * ⚠️ **ছুটি না হলে ঘরটা খালি**, "No" নয় — ৩১ সারির কলামজুড়ে "No"
-     * লিখলে চোখ ওটা পড়াই বন্ধ করে দিত, আর তখন যে দু-একটা "Yes" আছে
-     * সেগুলোই হারাত।
+     * **The cell is empty when it is not leave**, not "No": "No" down a column
+     * of 31 rows would make the eye stop reading it, and then the one or two
+     * "Yes" entries would be lost.
      */
     { header: 'On leave', width: 10, value: (r) => (r.onLeave ? 'Yes' : null) },
     { header: 'Status', width: 16, value: (r) => DAY_STATUS_LABEL[r.status] },
@@ -81,15 +81,15 @@ export function attendanceWorkbook(report: AttendanceReport): Promise<Buffer> {
     hours('Target (hours)', (r: AttendanceRow) => r.targetHours),
     hours('Idle (hours)', (r: AttendanceRow) => r.idleHours),
     /*
-      ⭐ ডিজাইনের সংখ্যা *(২১ আগস্ট)* — মালিকের ২৫-এর টার্গেট।
-      ⚠️ ডিজাইনার না হলে ঘরটা **খালি**, ০ নয়: স্প্রেডশিটে ০ মানে "মেপে
-         শূন্য পাওয়া গেছে", আর সেটা এখানে মিথ্যা হতো।
+      The design count: the owner's target of 25.
+      If the person is not a designer the cell is **empty**, not 0: in a
+      spreadsheet 0 means "measured and found zero", which would be false here.
     */
     /**
-     * ⭐ কতগুলো ডিজাইন **শেষ** হয়েছে (Complete বোতাম)।
+     * How many designs were **completed** (the Complete button).
      *
-     * ⚠️⚠️ ফাইল **খোলা** গোনা হয় না *(মালিকের সিদ্ধান্ত, ২৩ আগস্ট)* —
-     * ওই গণনা "যে বানায়" আর "যে দেখে" দুজনকে আলাদা করতে পারত না।
+     * Opening a file is **not** counted (owner's decision): that count could not
+     * tell "the one who makes" from "the one who views".
      */
     { header: 'Designs', width: 10, value: (r: AttendanceRow) => r.designsDone },
   ];
@@ -99,10 +99,10 @@ export function attendanceWorkbook(report: AttendanceReport): Promise<Buffer> {
     [
       ...infoRows('Attendance (F01)', report.meta),
       ['Total worked (hours)', String(report.totals.workedHours)],
-      // ⚠️ লেবেলে "days listed" — সংখ্যাটা উপরের Target কলামের যোগফল,
-      //    "এ পর্যন্ত কত হওয়ার কথা ছিল" নয়। শুধু "Total target" লেখা
-      //    থাকলে পাঠক ওটাকেই ঘাটতির ভিত্তি ধরে নিতেন, অথচ এতে এজেন্ট
-      //    বসার আগের দিনগুলোও আছে (`AttendanceReport.totals`-এর নোট)।
+      // The label says "days listed": this is the sum of the Target column above,
+      // not "how much was due up to now". With only "Total target" a reader would
+      // take it as the basis of the shortfall, though it includes days before the
+      // agent was installed (see the note on `AttendanceReport.totals`).
       ['Total target · days listed (hours)', String(report.totals.targetHours)],
     ],
   );
@@ -123,11 +123,11 @@ export function summaryWorkbook(report: SummaryReport): Promise<Buffer> {
     hours('Worked (hours)', (r: SummaryRow) => r.workedHours),
     hours('Adjustment (hours)', (r: SummaryRow) => r.adjustmentHours),
     hours('Credited (hours)', (r: SummaryRow) => r.creditedHours),
-    // ⚠️⚠️ তিনটে হেডারই স্পষ্ট করে বলে **কোন সংখ্যার বিপরীতে** মাপা:
-    //    টার্গেট এই দিনগুলোর, কিন্তু ঘাটতি কেবল সেই দিনগুলোর যেগুলো দেখা
-    //    হয়েছে ও শেষ হয়েছে। শুধু "Target/Shortfall" লেখা থাকলে পাঠক
-    //    বিয়োগ করে মেলাতে গিয়ে ভাবতেন হিসাবে ভুল আছে — অথচ দুটো দুই
-    //    প্রশ্নের উত্তর (`SummaryRow`-এর নোট)।
+    // All three headers say clearly **what the number is measured against**:
+    // the target covers these days, but the shortfall only covers days that were
+    // observed and have finished. With just "Target/Shortfall" a reader would
+    // subtract to reconcile and think the figures were wrong, though the two
+    // answer two different questions (see the note on `SummaryRow`).
     hours('Target · days shown (hours)', (r: SummaryRow) => r.targetHours),
     hours(
       'Shortfall vs expected so far (hours)',
@@ -146,8 +146,8 @@ export function summaryWorkbook(report: SummaryReport): Promise<Buffer> {
         `Summary (F02) · ${monthly ? 'Monthly' : 'Weekly'}`,
         report.meta,
       ),
-      // ⭐ নোটটা ফাইলের ভেতরেই থাকে। শুধু JSON-এ রাখলে যিনি শিটটা খোলেন
-      //    তিনি জানতেনই না, আর নিজের মতো একটা হার বসিয়ে ফেলতেন।
+      // The note stays inside the file. If it were only in the JSON, whoever opens
+      // the sheet would not know, and would put in a rate of their own.
       ['Overtime hours', OVERTIME_NOTE],
     ],
   );
@@ -167,9 +167,9 @@ export function productivityWorkbook(
     { header: 'Name', width: 24, value: (r) => r.displayName },
     { header: 'Category', width: 16, value: (r) => CATEGORY_LABEL[r.category] },
     {
-      // ⚠️ পাশের ক্যাটাগরিটা তখন শুধু **সবচেয়ে বড় ভাগ**, একক সত্য নয় —
-      //    chrome.exe-এ github.com আর youtube.com দুটোই থাকে। কলামটা না
-      //    থাকলে "chrome.exe — Productive" পড়ে কেউ নিশ্চিন্ত হয়ে যেতেন।
+      // The category next to it is then only the **biggest share**, not a single
+      // truth: chrome.exe covers both github.com and youtube.com. Without this
+      // column someone reading "chrome.exe — Productive" would feel reassured.
       header: 'Mixed category',
       width: 16,
       value: (r) => (r.mixed ? 'Yes' : '—'),
@@ -210,14 +210,14 @@ export function productivityWorkbook(
       value: (r) => r.productiveSharePct,
     },
     {
-      // ⭐ স্কোর ও অচিহ্নিত শতাংশ **পাশাপাশি** — ৯০% সময় অচেনা হলে ১০০%
-      //    স্কোরও অর্থহীন, কিন্তু একা স্কোরটা দেখলে সেটা দারুণ দেখাত
+      // Score and uncategorised percentage **side by side**: if 90% of the time
+      // is unknown, even a 100% score means nothing, yet the score alone looks great
       header: 'Productivity score (%)',
       width: 22,
       numFmt: NUM_FMT_2,
-      // ⚠️ চিহ্নিত সময় শূন্য হলে `null` — শূন্য নয়। Excel-এ ঘরটা **খালি**
-      //    থাকে, আর সেটাই ঠিক: "০%" বলত কেউ কিছুই productive করেনি, অথচ
-      //    সত্যিটা হলো বলার মতো কোনো তথ্যই নেই।
+      // `null` when the categorised time is zero, not zero. In Excel the cell is
+      // **empty**, and that is right: "0%" would say nobody was productive, when
+      // the truth is there is nothing to say at all.
       value: (r) => r.productivityScorePct,
     },
     {
@@ -237,8 +237,8 @@ export function productivityWorkbook(
       ...infoRows('Productivity (F04)', report.meta),
       ['Total tracked time (hours)', String(report.totalTrackedHours)],
       ['Uncategorized time (hours)', String(report.uncategorizedHours)],
-      // ⭐ পণ্যের কঠিন নিয়মটা শিটেই লেখা থাকে — কেউ যেন "unproductive ঘণ্টা
-      //    কেটে নাও" বলার সময় ভাবতে বাধ্য হন যে সংখ্যাটা বেতনের জন্য নয়।
+      // The product's hard rule is written on the sheet: whoever says "deduct the
+      // unproductive hours" must stop to think that this number is not for salary.
       [
         'Note',
         'Categories are for viewing only — they have no effect on salary or target calculations',
@@ -247,12 +247,12 @@ export function productivityWorkbook(
   );
 }
 
-/** ঘণ্টার কলাম — সবসময় সংখ্যা, দুই দশমিকে দেখানো (F05-এর মূল নিয়ম) */
+/** The hours column: always a number, shown with two decimals (F05's core rule) */
 function hours<T>(header: string, value: (row: T) => number): ExcelColumn<T> {
   return { header, width: 22, numFmt: NUM_FMT_2, value };
 }
 
-/** প্রতিটি ওয়ার্কবুকের "Info" শিট — রেঞ্জ, ছাঁটাই, বাদ পড়া কর্মী */
+/** The "Info" sheet of every workbook: range, truncation, excluded staff */
 function infoRows(title: string, meta: ReportMeta): [string, string][] {
   const rows: [string, string][] = [
     ['Report', title],
@@ -262,8 +262,8 @@ function infoRows(title: string, meta: ReportMeta): [string, string][] {
   ];
 
   if (meta.clampedToToday) {
-    // ⚠️ ছাঁটাইটা ফাইলেই লেখা থাকে — নইলে কেউ "৩১ আগস্ট পর্যন্ত" ভেবে
-    //    ১১ তারিখের ডেটা নিয়ে সিদ্ধান্ত নিত
+    // The clamping is written in the file; otherwise someone would think "up to
+    // 31 August" and make decisions on data only up to the 11th
     rows.push([
       'Note',
       `Requested through ${meta.requestedTo}; future days were excluded, so this shows up to ${meta.to}`,
@@ -275,16 +275,16 @@ function infoRows(title: string, meta: ReportMeta): [string, string][] {
   }
 
   /**
-   * ⭐⭐ G108 — অনিশ্চয়তাটা **ফাইলের ভেতরে** যায়, শুধু JSON-এ নয়।
+   * G108: the uncertainty goes **inside the file**, not only in JSON.
    *
-   * ⚠️⚠️ সংখ্যাগুলো ভুল নয়, কিন্তু ওরা একটা **অনুমানের উপর দাঁড়ানো** —
-   * আর সেটা এতদিন কেবল ছুটির *নামে* ছিল (`(সম্ভাব্য)`), রিপোর্টে নয়।
-   * যিনি শিটটা নামিয়ে অ্যাকাউন্টসে পাঠান তিনি জানতেনই না যে ওই মাসের
-   * কর্মদিবস — আর তাই `d ÷ D` — এখনো নড়তে পারে।
+   * The numbers are not wrong, but they **rest on an assumption**, and until
+   * now that was only in the holiday's *name* (`(সম্ভাব্য)`, "probable"), not in
+   * the report. Whoever downloads the sheet and sends it to accounts would not
+   * know that the month's work days, and so `d ÷ D`, can still move.
    *
-   * ⚠️ সংখ্যাটা `meta` থেকেই আসে, নতুন করে গোনা হয় না: গুনলে অনিশ্চয়তার
-   * **দ্বিতীয় একটা সংজ্ঞা** দাঁড়াত, আর একদিন রিপোর্ট ও পে-রোল দুই তালিকা
-   * দেখাত।
+   * The number comes from `meta` and is not counted again: counting would make a
+   * **second definition of uncertainty**, and one day the report and payroll
+   * would show two lists.
    */
   const approx = approximateHolidayNote(meta.approximateHolidayDates);
   if (approx !== null) rows.push(['Holiday dates not final', approx]);

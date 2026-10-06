@@ -1,46 +1,45 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// দুটো কনফিগের মধ্যে <b>কী কী</b> বদলেছে — খাঁটি হিসাব, কোনো পার্শ্বপ্রতিক্রিয়া নেই।
+/// <b>What</b> changed between two configs: pure computation, no side effects.
 ///
-/// ⭐ <b>কেন আলাদা টাইপ:</b> কনফিগ প্রয়োগ করার কাজটা <c>AgentHost</c>-এ,
-/// যেখানে Win32, থ্রেড আর tray সব জড়ানো — ওখানে বসে "কোনটা বদলালে কী করতে
-/// হবে" যাচাই করা যায় না। সিদ্ধান্তটুকু এখানে থাকায় প্রতিটা শাখা ইউনিট
-/// টেস্টে ধরা যায়।
+/// <b>Why a separate type:</b> applying a config happens in <c>AgentHost</c>, where Win32,
+/// threads and the tray are all tangled together, so "what must be done when X changes" cannot
+/// be verified there. With the decision here, every branch can be covered by unit tests.
 ///
-/// ⚠️ <b>যা বদলায়নি তাতে হাত দেওয়া চলবে না</b> — এটাই এই টাইপের গোটা কারণ।
-/// idle থ্রেশহোল্ড বদলাতে চলতি সেগমেন্ট বন্ধ করতে হয়; অ্যাপ ট্র্যাকিং
-/// বদলাতে খোলা রেকর্ড বন্ধ করতে হয়। "কনফিগ এসেছে, সব নতুন করে বসাই" লিখলে
-/// সার্ভারে কেউ Settings-এ **save** চাপলেই ১৫টা PC-র সবার সেগমেন্ট অকারণে
-/// কাটা পড়ত — আর দিনে কয়েকবার সেটা হলে রিপোর্ট ভরে যেত টুকরো সারিতে।
+/// <b>Do not touch what did not change.</b> That is the whole reason for this type. Changing
+/// the idle threshold means closing the current segment; changing app tracking means closing
+/// the open record. If the code were "a config arrived, reset everything", then whenever
+/// someone pressed **Save** in the server's Settings, the segments on all 15 PCs would be cut
+/// for no reason, and a few times a day that would fill the reports with fragment rows.
 /// </summary>
 public readonly record struct ConfigChange
 {
-    /// <summary>A04b — ছবির সময়সীমা (<c>07:00–23:00</c>)।</summary>
+    /// <summary>A04b: the screenshot time window (<c>07:00–23:00</c>).</summary>
     public bool CaptureWindow { get; init; }
 
-    /// <summary>A01 — স্লটের দৈর্ঘ্য।</summary>
+    /// <summary>A01: the slot length.</summary>
     public bool Slots { get; init; }
 
-    /// <summary>D01–D04 — অ্যাপ ট্র্যাকিং চালু/বন্ধ হলো।</summary>
+    /// <summary>D01–D04: app tracking was switched on/off.</summary>
     public bool AppTrackingToggled { get; init; }
 
-    /// <summary>D04 — কত কম সময় উপেক্ষা করা হবে।</summary>
+    /// <summary>D04: how short a duration is ignored.</summary>
     public bool AppMinDuration { get; init; }
 
-    /// <summary>B02 — নিষ্ক্রিয়তার সীমা। ⚠️ সবচেয়ে ব্যয়বহুল বদল।</summary>
+    /// <summary>B02: the idle limit. Careful: the most expensive change.</summary>
     public bool IdleThreshold { get; init; }
 
-    /// <summary>heartbeat-এর ব্যবধান — পরের delay থেকেই কার্যকর, কিছু বন্ধ করতে হয় না।</summary>
+    /// <summary>Heartbeat interval: takes effect from the next delay, nothing needs closing.</summary>
     public bool Heartbeat { get; init; }
 
-    /// <summary>কিছু কি আদৌ বদলেছে?</summary>
+    /// <summary>Did anything change at all?</summary>
     public bool Any =>
         CaptureWindow || Slots || AppTrackingToggled || AppMinDuration || IdleThreshold || Heartbeat;
 
     /// <summary>
-    /// চলতি সেগমেন্ট বা খোলা রেকর্ড বন্ধ করতে হবে কি না — অর্থাৎ বদলটা
-    /// "নিখরচার" নয়।
+    /// Whether the current segment or open record must be closed, i.e. the change is not
+    /// "free".
     /// </summary>
     public bool TouchesTracking => IdleThreshold || AppTrackingToggled || AppMinDuration;
 
@@ -51,20 +50,20 @@ public readonly record struct ConfigChange
 
         return new ConfigChange
         {
-            // ⚠️ স্ট্রিং তুলনা Ordinal — "07:00" আর "7:00" আলাদা মান, আর
-            //    culture-নির্ভর তুলনা এখানে অর্থহীন।
+            // Strings are compared Ordinal: "07:00" and "7:00" are different values, and a
+            // culture-sensitive comparison is meaningless here.
             CaptureWindow =
                 !string.Equals(old.ScreenshotFrom, now.ScreenshotFrom, StringComparison.Ordinal) ||
                 !string.Equals(old.ScreenshotTo, now.ScreenshotTo, StringComparison.Ordinal),
 
-            // ⚠️ শূন্য বা ঋণাত্মক স্লট "বদল" হিসেবে গোনা হয় না — SlotScheduler
-            //    ওতে ছুড়ে ফেলত, আর একটা ভুল কনফিগ পুরো ক্যাপচার লুপ নামিয়ে দিত।
+            // A zero or negative slot does not count as a "change": SlotScheduler would reject
+            // it, and one bad config would take the whole capture loop down.
             Slots = now.SlotMinutes > 0 && now.SlotMinutes != old.SlotMinutes,
 
             AppTrackingToggled = old.AppTracking.Enabled != now.AppTracking.Enabled,
 
-            // ⚠️ শুধু চালু থাকা অবস্থাতেই অর্থবহ — বন্ধ থাকলে সীমা বদলানোর
-            //    জন্য কিছু বন্ধ করার নেই।
+            // Meaningful only while enabled: when off, there is nothing to close to change
+            // the limit.
             AppMinDuration =
                 now.AppTracking.Enabled &&
                 old.AppTracking.Enabled &&

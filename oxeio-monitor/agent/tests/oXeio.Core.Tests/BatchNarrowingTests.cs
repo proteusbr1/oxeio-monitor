@@ -13,8 +13,8 @@ public class BatchNarrowingTests
     [Fact]
     public void সাময়িক_ব্যর্থতায়_মাপ_বদলায়_না()
     {
-        // নেটওয়ার্ক গেলে ব্যাচের কোনো দোষ নেই — ছোট করলে লিংক ফেরার পর
-        // নিষ্কাশন অকারণে ধীর হতো
+        // When the network is down the batch is not at fault; shrinking it would make
+        // the drain needlessly slow after the link returns
         var n = new BatchNarrowing(500);
 
         n.OnTransient();
@@ -50,8 +50,8 @@ public class BatchNarrowingTests
 
         Assert.Equal(1, n.Current);
 
-        // ৫০০ → ২৫০ → ১২৫ → ৬২ → ৩১ → ১৫ → ৭ → ৩ → ১ — মোট ৮ ধাপ।
-        // সংখ্যাটা এখানে লেখা আছে যাতে কেউ ভাগের নিয়ম বদলালে টেস্ট ধরে ফেলে।
+        // 500 -> 250 -> 125 -> 62 -> 31 -> 15 -> 7 -> 3 -> 1: 8 steps in total.
+        // The number is written here so that a change to the halving rule is caught by the test.
         Assert.Equal(8, steps);
     }
 
@@ -79,8 +79,9 @@ public class BatchNarrowingTests
     }
 
     /// <summary>
-    /// এটা না থাকলে একটা বেঠিক রেকর্ডের পর সারা জীবন একটা-একটা করে পাঠানো হতো।
-    /// ৫০,০০০ সারির ব্যাকলগ তখন প্রতি মিনিটে ৫৫টার সীমায় আটকে ১৫ ঘণ্টার বেশি নিত।
+    /// Without this, after one bad record everything would be sent one at a time for
+    /// the rest of time. A backlog of 50,000 rows would then be stuck at the limit of
+    /// 55 per minute and take over 15 hours.
     /// </summary>
     [Fact]
     public void খারাপ_রেকর্ড_ফেলার_পর_পুরো_মাপে_ফেরে()
@@ -97,7 +98,7 @@ public class BatchNarrowingTests
     [Theory]
     [InlineData(0, 1)]
     [InlineData(-5, 1)]
-    [InlineData(1000, 500)] // সার্ভারের সীমার বেশি চাওয়া যায় না
+    [InlineData(1000, 500)] // cannot ask for more than the server's limit
     public void অসম্ভব_মাপ_সীমার_মধ্যে_আটকায়(int given, int expected)
     {
         Assert.Equal(expected, new BatchNarrowing(given).Current);

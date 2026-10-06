@@ -14,15 +14,16 @@ import {
 } from '../src/targets/targets.rules';
 
 /**
- * **ডিজাইনের টার্গেট** *(২২ আগস্ট ২০২৬)*।
+ * **Design targets.**
  *
- * ⚠️⚠️ এই ফাইলের সবচেয়ে জরুরি দাবি একটাই: **একই পণ্যের আলাদা URL যেন
- * আলাদা টার্গেট না হয়**। হলে তিনজন ডিজাইনার একই পণ্যের ডিজাইন বানাতেন —
- * তিন দিনের কাজ নষ্ট, আর কেউ ধরতেই পারত না।
+ * The single most important claim of this file: **different URLs of the same
+ * product must not become different targets**. If they did, three designers
+ * would make designs for the same product — three days of work wasted, and
+ * nobody could tell.
  */
 
-describe('asinOf — URL থেকে পরিচয়', () => {
-  /** ⭐⭐ মাঠের নমুনা (মালিকের দেওয়া) আর তার আশেপাশের চেনা রূপগুলো */
+describe('asinOf — identity from a URL', () => {
+  /** Field samples (supplied by the owner) and the familiar forms around them */
   it.each([
     ['https://www.amazon.com/dp/B0DJBD22LW', 'B0DJBD22LW'],
     ['https://www.amazon.com/dp/B0DJBD22LW/', 'B0DJBD22LW'],
@@ -32,19 +33,19 @@ describe('asinOf — URL থেকে পরিচয়', () => {
     ],
     ['https://www.amazon.com/gp/product/B0DJBD22LW?th=1', 'B0DJBD22LW'],
     ['https://www.amazon.com/gp/aw/d/B0DJBD22LW', 'B0DJBD22LW'],
-    // ⚠️ একই ASIN সব দেশে এক — TLD বাঁধা হয়নি
+    // The same ASIN is the same in every country — the TLD is not pinned
     ['https://www.amazon.co.uk/dp/B0DJBD22LW', 'B0DJBD22LW'],
     ['https://amazon.de/dp/b0djbd22lw', 'B0DJBD22LW'],
-    // ⭐ খালি ASIN পেস্ট করলেও চলে — লোকে মাঝে মাঝে তাই করে
+    // Pasting a bare ASIN works too — people sometimes do that
     ['B0DJBD22LW', 'B0DJBD22LW'],
   ])('%s → %s', (url, asin) => {
     expect(asinOf(url)).toEqual({ asin });
   });
 
   /**
-   * ⚠️⚠️ **এটাই গোটা ব্যবস্থার ভিত্তি** — তিনটে আলাদা URL, একই ASIN।
+   * **This is the foundation of the whole scheme** — three different URLs, one ASIN.
    */
-  it('একই পণ্যের তিন রকম URL একই পরিচয় দেয়', () => {
+  it('three URL forms of the same product give the same identity', () => {
     const forms = [
       'https://www.amazon.com/dp/B0DJBD22LW',
       'https://www.amazon.com/Funny-Cat/dp/B0DJBD22LW/ref=sr_1_3',
@@ -56,48 +57,48 @@ describe('asinOf — URL থেকে পরিচয়', () => {
   });
 
   /**
-   * ⚠️ ছোট লিঙ্ক থেকে ASIN বের করা **যায় না** — Amazon-কে জিজ্ঞেস না করে
-   * উপায় নেই, আর সার্ভার থেকে বাইরের সাইটে কল এই পণ্য করে না। ⭐ তাই
-   * আলাদা কারণ, যাতে পর্দায় করণীয়টা বলা যায়।
+   * An ASIN **cannot** be extracted from a short link — the only way is to ask
+   * Amazon, and this product does not call outside sites from the server. So it
+   * is a distinct reason, so the screen can say what to do.
    */
   it.each(['https://amzn.to/3xYzAbC', 'https://a.co/d/abc123'])(
-    'ছোট লিঙ্ক আলাদা কারণে বাতিল — %s',
+    'short link rejected with its own reason — %s',
     (url) => {
       expect(asinOf(url)).toEqual({ reason: 'short_link' });
     },
   );
 
-  it('Amazon নয় এমন লিঙ্ক', () => {
+  it('a link that is not Amazon', () => {
     expect(asinOf('https://etsy.com/listing/123456')).toEqual({
       reason: 'not_amazon',
     });
   });
 
-  /** ⚠️ Amazon-এর সব URL-এ ASIN থাকে না (সার্চ পাতা, ক্যাটাগরি) */
-  it('Amazon হলেও ASIN না থাকলে', () => {
+  /** Not every Amazon URL has an ASIN (search pages, categories) */
+  it('Amazon but without an ASIN', () => {
     expect(asinOf('https://www.amazon.com/s?k=cat+t-shirt')).toEqual({
       reason: 'no_asin',
     });
   });
 
-  it('খালি লাইনে ক্র্যাশ নয়', () => {
+  it('an empty line does not crash', () => {
     expect(asinOf('   ')).toEqual({ reason: 'no_asin' });
   });
 });
 
-describe('amazonUrl — ASIN থেকে ঠিকানা', () => {
+describe('amazonUrl — address from an ASIN', () => {
   /**
-   * ⭐⭐ মালিকের নিয়ম *(২২ আগস্ট)*: *"amora jekono asin `/dp/`-এর পরে
-   * বসিয়ে দিলেই ঝামেলা শেষ"*। ⚠️ তাই মূল URL জমা **রাখা হয় না** — ওটা
-   * রাখলে একই জিনিসের দুটো রূপ টেবিলে থাকত (একজনেরটা `?th=1`সহ,
-   * আরেকজনেরটা `ref=sr_1_3`সহ)।
+   * The owner's rule: any ASIN can simply be put after `/dp/` and the problem
+   * is over. So the original URL is **not stored** — keeping it would leave two
+   * forms of the same thing in the table (one with `?th=1`, another with
+   * `ref=sr_1_3`).
    */
-  it('স্বাভাবিক ঠিকানা বানায়', () => {
+  it('builds the normal address', () => {
     expect(amazonUrl('B0DJBD22LW')).toBe('https://www.amazon.com/dp/B0DJBD22LW');
   });
 
-  /** ⭐ যেকোনো রূপে পেস্ট করলেও ফেরত আসে একটাই ঠিকানা */
-  it('যেভাবেই পেস্ট হোক, ঠিকানা এক', () => {
+  /** Pasted in any form, the same single address comes back */
+  it('whichever way it is pasted, the address is the same', () => {
     const forms = [
       'https://www.amazon.com/Funny-Cat/dp/B0DJBD22LW/ref=sr_1_3',
       'https://www.amazon.co.uk/gp/product/B0DJBD22LW?th=1',
@@ -111,12 +112,12 @@ describe('amazonUrl — ASIN থেকে ঠিকানা', () => {
   });
 });
 
-describe('parseBulk — একবারে ৫০০টা', () => {
+describe('parseBulk — 500 at once', () => {
   /**
-   * ⚠️⚠️ **পেস্টের ভেতরের ডুপ্লিকেটও ধরা হয়।** দুটো আলাদা সার্চ থেকে একই
-   * পণ্য আসা খুব সাধারণ, আর না ধরলে ডাটাবেসে ঢোকানোই থমকে যেত।
+   * **Duplicates inside the paste are caught too.** The same product coming
+   * from two different searches is very common, and uncaught it would stall the database insert.
    */
-  it('একই ASIN দুবার থাকলে দ্বিতীয়টা বাতিল', () => {
+  it('if the same ASIN appears twice, the second is rejected', () => {
     const { accepted, rejected } = parseBulk(
       [
         'https://www.amazon.com/dp/B0DJBD22LW',
@@ -128,12 +129,12 @@ describe('parseBulk — একবারে ৫০০টা', () => {
     expect(accepted.map((a) => a.asin)).toEqual(['B0DJBD22LW', 'B0AAAA1111']);
     expect(rejected).toHaveLength(1);
     expect(rejected[0].reason).toBe('duplicate_in_paste');
-    // ⚠️ লাইন নম্বর ১ থেকে গোনা — পর্দায় দেখানোর জন্য
+    // Line numbers count from 1 — they are shown on screen
     expect(rejected[0].line).toBe(2);
   });
 
-  /** ⚠️ খালি লাইন **ভুল নয়** — ৫০০ লাইনের পেস্টে ওগুলো থাকেই */
-  it('খালি লাইন নীরবে বাদ, বাতিলের তালিকায় নয়', () => {
+  /** An empty line is **not an error** — a 500-line paste always has some */
+  it('empty lines are silently skipped, not in the rejected list', () => {
     const { accepted, rejected } = parseBulk(
       '\n\nhttps://www.amazon.com/dp/B0DJBD22LW\n\n   \n',
     );
@@ -143,11 +144,11 @@ describe('parseBulk — একবারে ৫০০টা', () => {
   });
 
   /**
-   * ⚠️⚠️ **ব্যর্থ লাইন ফেলে দেওয়া হয় না, ফেরত দেওয়া হয় — কারণসহ।**
-   * ৫০০টার মধ্যে ৭টা বাদ পড়লে গবেষকের জানা দরকার কোন ৭টা; নইলে তিনি
-   * সেগুলো আবার সংগ্রহ করতে পারতেন না।
+   * **Failed lines are not dropped, they are returned — with the reason.**
+   * If 7 of 500 are rejected, the researcher needs to know which 7; otherwise
+   * they could not collect them again.
    */
-  it('বাতিলের সাথে লাইন, লেখা আর কারণ — তিনটেই', () => {
+  it('a rejection carries the line, the text and the reason — all three', () => {
     const { rejected } = parseBulk('https://etsy.com/listing/1\nhttps://amzn.to/x');
 
     expect(rejected).toEqual([
@@ -156,7 +157,7 @@ describe('parseBulk — একবারে ৫০০টা', () => {
     ]);
   });
 
-  it('৫০০ লাইনেও চলে', () => {
+  it('works with 500 lines too', () => {
     const lines = Array.from(
       { length: 500 },
       (_, i) => `https://www.amazon.com/dp/B${String(i).padStart(9, '0')}`,
@@ -168,17 +169,17 @@ describe('parseBulk — একবারে ৫০০টা', () => {
 
 describe('JOB_NUMBER_START', () => {
   /**
-   * ⚠️⚠️ **মাঠে মাপা সংখ্যা, বেছে নেওয়া নয়।** ডিজাইনারদের ফাইলে এখন
-   * সবচেয়ে বড় নম্বর **৯,৭৩,০৬৫** (ছয় অঙ্ক); সাত অঙ্কের একটাও নেই।
-   * এই ধ্রুবক ওর নিচে নামলে পুরোনো কোনো ফাইল ভুল করে "শেষ হয়েছে" বলে
-   * ধরা পড়ত — আর ভুলটা নীরব হতো।
+   * **A number measured in the field, not picked.** In the designers' files the
+   * largest number now is **973,065** (six digits); there is not a single
+   * seven-digit one. If this constant fell below that, some old file would be
+   * wrongly reported as "finished" — and the mistake would be silent.
    */
-  it('মাঠে দেখা সবচেয়ে বড় নম্বরের উপরে', () => {
+  it('above the largest number seen in the field', () => {
     expect(JOB_NUMBER_START).toBeGreaterThan(973_065);
   });
 });
 
-describe('topUpSize — আজ আর কতগুলো দিতে হবে', () => {
+describe('topUpSize — how many still to give today', () => {
   const T = 25;
   const at = (completedToday: number, openCount: number, issuedToday = 0) =>
     topUpSize({
@@ -190,60 +191,61 @@ describe('topUpSize — আজ আর কতগুলো দিতে হবে'
     });
 
   /**
-   * ⭐⭐⭐ **মালিকের বলা অবস্থাটা** — হাত পুরো খালি *(৯ সেপ্টেম্বর ২০২৬)*।
+   * **The state the owner described** — hand completely empty.
    *
-   * ⚠️ ৩০:২৫ অনুপাত ধরে পুরো ৩০ ফেরত আসে, ঠিক সকালের বণ্টনের মতো।
+   * With the 30:25 ratio the full 30 comes back, just like the morning allocation.
    */
-  it('⭐⭐⭐ হাত খালি, কিছুই শেষ হয়নি → পুরো ৩০', () => {
+  it('hand empty, nothing finished → the full 30', () => {
     expect(at(0, 0)).toBe(30);
   });
 
   /**
-   * ⭐⭐⭐ **এটাই আসল কাজের অবস্থা।** ২০টা বাদ দিয়ে ১০টা শেষ করে হাত
-   * খালি — টার্গেটে পৌঁছতে আরও ১৫ লাগে, আর বাদ দেওয়ার জায়গাসহ ১৮।
+   * **This is the real working state.** Skip 20, finish 10 and the hand is
+   * empty — 15 more are needed to reach the target, and 18 including room for skips.
    */
-  it('⭐⭐⭐ ১০ শেষ, হাত খালি → বাকি ১৫-র জন্য ১৮', () => {
+  it('10 finished, hand empty → 18 for the remaining 15', () => {
     expect(at(10, 0)).toBe(18);
   });
 
   /**
-   * ⭐⭐⭐ **হাত ভরা থাকলে কিছুই দেওয়া হয় না** — আর মাঠে এটাই স্বাভাবিক
-   * অবস্থা: ৭ ও ৮ সেপ্টেম্বরে সবার হাতে ছিল ১৭–২৯টা।
+   * **Nothing is given when the hand is full** — and in the field this is the
+   * normal state: on 7 and 8 September everyone held 17–29.
    */
-  it('⭐⭐⭐ হাতে যথেষ্ট আছে → ০', () => {
+  it('enough in hand → 0', () => {
     expect(at(0, 30)).toBe(0);
     expect(at(10, 20)).toBe(0);
   });
 
-  /** ⭐ হাতে কিছু আছে, তবু যথেষ্ট নয় — ঘাটতিটুকুই দেওয়া হয় */
-  it('⭐⭐ হাতে ৫, দরকার ১৮ → বাকি ১৩', () => {
+  /** Something in hand but still not enough — only the shortfall is given */
+  it('5 in hand, 18 needed → the remaining 13', () => {
     expect(at(10, 5)).toBe(13);
   });
 
   /**
-   * ⚠️⚠️ **টার্গেট ছোঁয়া হয়ে গেলে আর কিছুই নয়** — নইলে নিয়ম দুটো
-   * পরস্পরকে কাটত: সীমা বলত "আর শেষ কোরো না", আর এটা আরও কাজ ঢালত।
+   * **Once the target is reached, nothing more** — otherwise the two rules would
+   * cancel each other: the limit says "stop finishing", and this would pour in more work.
    */
-  it('⭐⭐⭐ টার্গেট ছোঁয়া হয়ে গেছে → ০, হাত খালি হলেও', () => {
+  it('target already reached → 0, even if the hand is empty', () => {
     expect(at(25, 0)).toBe(0);
     expect(at(32, 0)).toBe(0);
   });
 
-  /** ⚠️ টার্গেট নেই যাঁর (ম্যানেজার) — সকালের বণ্টনই যথেষ্ট */
-  it('⭐⭐ টার্গেট ০ → কখনো কিছু দেওয়া হয় না', () => {
+  /** Someone with no target (a manager) — the morning allocation is enough */
+  it('target 0 → nothing is ever given', () => {
     expect(topUpSize({ staffType: 'designer', completedToday: 0, openCount: 0, issuedToday: 0, dailyTarget: 0 })).toBe(0);
   });
 
 
   /**
-   * ⭐⭐⭐ **গেটটা ফাংশনের ভেতরে, কলারে নয়** *(৯ সেপ্টেম্বর ২০২৬)*।
+   * **The gate is inside the function, not in the caller.**
    *
-   * ⚠️⚠️ `DESIGN_WORK_STAFF_TYPES`-এ ম্যানেজারও আছেন, তাই তিনিও সকালের
-   * বণ্টন পান — আর `designTargetOf()` তাঁর জন্যও পলিসির **২৫** ফেরত দেয়।
-   * গেটটা কলারে থাকলে একদিন কেউ ভুলে যেতেন, আর মাঠে দিনে ৪৪ করা
-   * ম্যানেজার নীরবে ২৫-টার্গেটের ডিজাইনার হয়ে যেতেন।
+   * `DESIGN_WORK_STAFF_TYPES` includes the manager, so they get the morning
+   * allocation too — and `designTargetOf()` returns the policy's **25** for them
+   * as well. With the gate in the caller, someone would one day forget it, and
+   * a manager who does 44 a day in the field would silently become a designer
+   * with a target of 25.
    */
-  it('⭐⭐⭐ ম্যানেজারের টপ-আপ নেই — টার্গেটের সংখ্যা যাই হোক', () => {
+  it('no top-up for a manager — whatever the target number', () => {
     expect(
       topUpSize({
         staffType: 'manager',
@@ -256,33 +258,33 @@ describe('topUpSize — আজ আর কতগুলো দিতে হবে'
   });
 
   /**
-   * ⭐⭐⭐ **দিনের ছাদ — নইলে প্রতিটা Skip এক-এক করে ভরপাই হতো।**
+   * **The daily ceiling — otherwise every Skip would be refilled one by one.**
    *
-   * ⚠️⚠️ হাতে ৩০, কিছুই শেষ হয়নি → চাই ৩০ → দেওয়া হয় ০। একটা বাদ দিলেই
-   * হাতে ২৯ → আবার ১টা, আবার বাদ → আবার ১টা। ছাদ ছাড়া কেউ একদিনে গোটা
-   * পুল ঘেঁটে ফেলতে পারতেন।
+   * 30 in hand, nothing finished → want 30 → give 0. Skip one and the hand is
+   * 29 → give 1 again, skip again → 1 again. Without a ceiling someone could
+   * churn through the whole pool in one day.
    */
-  it('⭐⭐⭐ একটা Skip ঠিক একটাই ফেরত আনে, আর ছাদ ফুরালে কিছুই নয়', () => {
-    // ⭐ হাতে ২৯, কিছুই শেষ হয়নি → ঘাটতি ১
+  it('one Skip brings back exactly one, and nothing once the ceiling is used up', () => {
+    // 29 in hand, nothing finished → shortfall 1
     expect(at(0, 29)).toBe(1);
-    // ⚠️ আজ ইতিমধ্যেই ৬০টা দেওয়া হয়ে গেছে — ছাদ ফুরিয়েছে
+    // 60 already given today — the ceiling is used up
     expect(at(0, 29, MAX_ISSUED_PER_DAY)).toBe(0);
   });
 
-  it('⭐⭐ ছাদের কাছাকাছি এলে যতটুকু বাকি, ততটুকুই', () => {
+  it('near the ceiling, only what is left', () => {
     expect(at(10, 0, MAX_ISSUED_PER_DAY - 4)).toBe(4);
   });
 
-  /** ⚠️ অনুপাতটা টার্গেটের সাথে বদলায়, ১.২ ধ্রুবক নয় */
-  it('⭐⭐ টার্গেট ৩০ হলে অনুপাতটাও সাথে যায়', () => {
+  /** The ratio changes with the target, 1.2 is not a constant */
+  it('with a target of 30 the ratio moves with it', () => {
     expect(topUpSize({ staffType: 'designer', completedToday: 0, openCount: 0, issuedToday: 0, dailyTarget: 30 })).toBe(30);
     expect(topUpSize({ staffType: 'designer', completedToday: 15, openCount: 0, issuedToday: 0, dailyTarget: 30 })).toBe(15);
   });
 });
 
-describe('allocationSizes — কাকে কতগুলো', () => {
-  /** ⚠️ হাতে থাকা টার্গেট বাদ দিয়ে — নইলে সপ্তাহে দুশো জমে যেত */
-  it('হাতে যা আছে তা বাদ দিয়ে ৩০ পূর্ণ করা হয়', () => {
+describe('allocationSizes — who gets how many', () => {
+  /** Excluding targets already in hand — otherwise two hundred would pile up in a week */
+  it('30 is filled up after excluding what is in hand', () => {
     const sizes = allocationSizes(
       [
         { employeeId: 1, openCount: 0 },
@@ -294,16 +296,17 @@ describe('allocationSizes — কাকে কতগুলো', () => {
 
     expect(sizes.get(1)).toBe(30);
     expect(sizes.get(2)).toBe(8);
-    // ⚠️ যাঁর হাত ভরা, তাঁর সারিই বসে না — "০" পাঠানোর মানে নেই
+    // Someone whose hand is full gets no row at all — no point sending "0"
     expect(sizes.has(3)).toBe(false);
   });
 
   /**
-   * ⚠️⚠️ **পুল ফুরিয়ে গেলে যতটা আছে ততটাই** — আর ক্রমটা কলারের দেওয়া
-   * (কর্মী-কোড), র‍্যান্ডম নয়। ঘাটতির দিনে কে পাবে সেটা অনুমেয় থাকা
-   * দরকার, নইলে রোজ আলাদা লোক বঞ্চিত হতেন আর কেউ কারণ বলতে পারত না।
+   * **When the pool runs out, as many as there are** — and the order is the one
+   * the caller supplies (employee code), not random. On a shortage day it must
+   * be predictable who gets them, otherwise a different person would be left out
+   * each day and nobody could say why.
    */
-  it('পুলে কম থাকলে ক্রম মেনে যতটা পারা যায়', () => {
+  it('when the pool is short, as many as possible in order', () => {
     const sizes = allocationSizes(
       [
         { employeeId: 1, openCount: 0 },
@@ -316,56 +319,55 @@ describe('allocationSizes — কাকে কতগুলো', () => {
     expect(sizes.get(2)).toBe(10);
   });
 
-  it('পুল খালি হলে কেউ কিছু পায় না', () => {
+  it('when the pool is empty, nobody gets anything', () => {
     expect(allocationSizes([{ employeeId: 1, openCount: 0 }], 0).size).toBe(0);
   });
 
-  /** ⭐ ডিজাইনার না থাকলেও ক্র্যাশ নয় */
-  it('কেউ না থাকলে খালি', () => {
+  /** No crash even with no designers */
+  it('empty when there is nobody', () => {
     expect(allocationSizes([], 500).size).toBe(0);
   });
 });
 
 
 /**
- * ⭐⭐ **কারা টার্গেট-অংশটা ব্যবহার করতে পারেন** *(২৫ আগস্ট ২০২৬)*।
+ * **Who may use the targets part.**
  *
- * ⚠️⚠️ এই describe-টার আসল কাজ **হ্যাঁ-তালিকা পাহারা দেওয়া**। সূত্রটা
- * যদি কোনোদিন `role !== employee` ধাঁচে ফিরে যায়, তাহলে `UserRole`-এ
- * বসা **পরের** নতুন মানটা নীরবে ঢুকে পড়বে — ঠিক যেমনটা ২৫ আগস্ট
- * `researcher` বসানোর সময় স্ক্রিনশট ও বেতন-সমন্বয়ে ধরা পড়েছিল।
- * ⭐ তাই নিচে "কে পারেন" নয়, **"কে পারেন না"** সেটাও লেখা আছে।
+ * The real job of this describe is **guarding the allow-list**. If the rule
+ * ever goes back to a `role !== employee` shape, the **next** new `UserRole`
+ * value would slip in silently — just as `researcher` slipped into screenshots
+ * and pay adjustments when it was added.
+ * So below, **who may not** is written down too, not only who may.
  */
-describe('canUseTargets — কে টার্গেট-অংশ ছুঁতে পারেন', () => {
-  it('মালিক পারেন', () => {
+describe('canUseTargets — who may touch the targets part', () => {
+  it('the owner may', () => {
     expect(canUseTargets(UserRole.owner)).toBe(true);
   });
 
-  it('ম্যানেজার পারেন', () => {
+  it('a manager may', () => {
     expect(canUseTargets(UserRole.manager)).toBe(true);
   });
 
-  it('⭐ গবেষক পারেন — এটাই ২৫ আগস্টের গোটা বদল', () => {
+  it('a researcher may — this is the whole change', () => {
     expect(canUseTargets(UserRole.researcher)).toBe(true);
   });
 
   /**
-   * ⚠️⚠️ **সবচেয়ে জরুরি দাবি।** ডিজাইনার গোটা দলের পুল দেখেন না — তিনি
-   * নিজের ৩০টা দেখেন `/me/targets`-এ। এটা ভাঙলে ন-জন ডিজাইনার হঠাৎ
-   * একে অপরের কাজ দেখতে ও বদলাতে পারতেন।
+   * **The most important claim.** A designer does not see the whole team's pool —
+   * they see their own 30 in `/me/targets`. If this broke, nine designers could
+   * suddenly see and change each other's work.
    */
-  it('⚠️ ডিজাইনার (employee) পারেন না', () => {
+  it('a designer (employee) may not', () => {
     expect(canUseTargets(UserRole.employee)).toBe(false);
   });
 
   /**
-   * ⚠️⚠️ **সূত্রটা সত্যিই হ্যাঁ-তালিকা কি না, সেটাই এখানে মাপা হচ্ছে।**
-   * `UserRole`-এর প্রতিটা মান ধরে ধরে দেখা হয়, আর যেগুলোর নাম তালিকায়
-   * নেই সেগুলো **অবশ্যই** `false` হতে হবে। কেউ যদি একদিন সূত্রটা
-   * `!== employee` করে দেন, এই টেস্টটা তখনই লাল হবে — enum-এ নতুন মান
-   * বসার দিন নয়, তারও আগে।
+   * This measures whether the rule really is an allow-list. Every `UserRole`
+   * value is walked through, and those not in the list **must** be `false`. If
+   * someone changes the rule to `!== employee`, this test turns red at once —
+   * before a new enum value is ever added, not on the day it is.
    */
-  it('⭐⭐ তালিকার বাইরের প্রতিটা ভূমিকা "না"', () => {
+  it('every role outside the list is "no"', () => {
     const allowed = new Set<string>([
       UserRole.owner,
       UserRole.manager,

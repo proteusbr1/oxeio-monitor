@@ -20,7 +20,7 @@ import { normaliseOffDays } from '../summary/weekly-off';
 export interface WorkPolicyView {
   id: number;
   name: string;
-  /** ⭐ একমাত্র টার্গেট। টাকা নয়, তাই সংখ্যা হিসেবেই যায়। */
+  /** The only target. Not money, so it goes as a number. */
   monthlyTargetHours: number;
   expectedWorkdays: number;
   weeklyOffDays: readonly number[];
@@ -28,16 +28,16 @@ export interface WorkPolicyView {
   screenshotTo: string | null;
   /** false = no screenshots for this policy; the jiggler check keeps running */
   screenshotsEnabled: boolean;
-  /** ⭐ অফিস কখন খোলা — `agent_down` অ্যালার্টের জানালা। null = সারাদিন খোলা */
+  /** When the office is open: the window for the `agent_down` alert. null = open all day */
   officeFrom: string | null;
   officeTo: string | null;
   idleThresholdSec: number;
-  /** ⭐ ডিজাইনারের দৈনিক টার্গেট — কেবল `staffType = designer`-এ খাটে */
+  /** The designer's daily target; applies only to `staffType = designer` */
   dailyDesignTarget: number;
   slotMinutes: number;
   timezone: string;
   isActive: boolean;
-  /** কতজন কর্মী এই পলিসিতে আছে — deactivate করার আগে এটাই দেখার জিনিস */
+  /** How many staff are on this policy: this is what to check before deactivating */
   employeeCount: number;
 }
 
@@ -69,11 +69,11 @@ export class WorkPoliciesService {
   }
 
   /**
-   * ⭐ ক্যাপচার উইন্ডো না দিলে ০৭:০০–২৩:০০ বসে।
+   * If no capture window is given, 07:00-23:00 is set.
    *
-   * ⚠️ স্কিমা বলে `NULL` মানে ২৪ ঘণ্টা ছবি — কিন্তু সেটা ADR-011c
-   * সরাসরি ভাঙে (রাত ২টার ব্যক্তিগত কাজের ছবি)। তাই এই পথ দিয়ে কখনো
-   * `NULL` বসানো যায় না; ফিল্ডটা খালি রাখলে অনুমোদিত উইন্ডোটাই বসে।
+   * Careful: the schema says `NULL` means pictures 24 hours, but that directly
+   * breaks ADR-011c (pictures of personal activity at 2 AM). So `NULL` can
+   * never be set through this path; leaving the field empty sets the approved window.
    */
   async create(
     actor: SessionUser,
@@ -97,9 +97,8 @@ export class WorkPoliciesService {
         weeklyOffDays: normaliseOffDays(dto.weeklyOffDays ?? []),
         screenshotFrom,
         screenshotTo,
-        // ⚠️ ডিফল্ট বসানো হয় **না** — খালি মানে "সারাদিন খোলা", অর্থাৎ
-        //    আগের আচরণ। নতুন পলিসিতে চুপচাপ অ্যালার্ট বন্ধ হয়ে যাওয়ার
-        //    চেয়ে বেশি অ্যালার্ট নিরাপদ।
+        // Careful: no default is set: empty means "open all day", the earlier
+        // behavior. More alerts is safer than alerts quietly turning off on a new policy.
         officeFrom: dto.officeFrom ?? null,
         officeTo: dto.officeTo ?? null,
         ...(dto.idleThresholdSec === undefined
@@ -136,9 +135,9 @@ export class WorkPoliciesService {
     const before = await this.prisma.workPolicy.findUnique({ where: { id } });
     if (!before) throw new NotFoundException('Work policy not found');
 
-    // ⚠️ শুধু একটা প্রান্ত পাঠালে পুরোনোটার সাথে মিলিয়ে যাচাই করতে হবে।
-    //    নতুনটুকু আলাদা করে দেখলে "শুরু ২২:০০" বৈধ মনে হতো, অথচ পুরোনো
-    //    শেষ ছিল ২৩:০০ নয়, ১৮:০০ — উইন্ডোটা উল্টে যেত।
+    // Careful: if only one end is sent, it must be validated against the old
+    // one. Looking at the new part alone would make "start 22:00" seem valid
+    // when the old end was 18:00, not 23:00: the window would invert.
     const screenshotFrom =
       dto.screenshotFrom ??
       before.screenshotFrom ??
@@ -150,11 +149,11 @@ export class WorkPoliciesService {
     this.assertWindow(screenshotFrom, screenshotTo);
 
     /**
-     * ⭐ অফিসের সময়ও একই ভাবে **মিলিয়ে** যাচাই — শুধু একটা প্রান্ত এলে
-     * পুরোনোটার সাথে জোড়া বেঁধে দেখতে হয়।
+     * The office hours are validated **together** in the same way: if only one
+     * end comes, it has to be paired with the old one.
      *
-     * ⚠️ পার্থক্য একটাই: এখানে **খালি রাখা বৈধ** (= সারাদিন খোলা), তাই
-     * দুটোর একটাও না থাকলে যাচাইয়ের প্রশ্নই ওঠে না।
+     * Careful: one difference: **leaving them empty is valid** here (= open
+     * all day), so if neither is present there is no question of validating.
      */
     const officeFrom = dto.officeFrom ?? before.officeFrom;
     const officeTo = dto.officeTo ?? before.officeTo;
@@ -197,8 +196,8 @@ export class WorkPoliciesService {
       targetType: ADMIN_TARGET.workPolicy,
       targetId: id,
       ipAddress: ip,
-      // ⭐ কোন কনফিগ বদলাল সেটা এজেন্টে পৌঁছে যায় (config version hash বদলে
-      //    যায়), তাই "কে idle threshold ৬০ থেকে ৬০০ করল" প্রশ্নের উত্তর লাগে
+      // Which config changed reaches the agent (the config version hash
+      // changes), so "who changed idle threshold from 60 to 600" needs an answer
       meta: { op: 'update', fields: Object.keys(dto), name: row.name },
     });
 
@@ -206,8 +205,8 @@ export class WorkPoliciesService {
   }
 
   /**
-   * ⚠️ ডিলিট নয় — `is_active = false`। পলিসির দিকে employees FK দিয়ে
-   * তাকিয়ে আছে, আর পুরোনো মাসের হিসাব কোন টার্গেটে হয়েছিল সেটাও ইতিহাস।
+   * Careful: not a delete, `is_active = false`. Employees point at the policy
+   * through an FK, and which target an old month was calculated on is history too.
    */
   async deactivate(
     actor: SessionUser,
@@ -223,12 +222,12 @@ export class WorkPoliciesService {
       throw new ConflictException('This policy has already been deactivated');
     }
 
-    // ⭐⚠️ সবচেয়ে বড় ফাঁদ। `AgentConfigService.build(null)` policy না পেলে
-    //     `findFirst({ isActive: true })` করে, আর কিছু না পেলে ছুড়ে দেয়
-    //     "কোনো active work policy নেই"। অর্থাৎ শেষ active পলিসিটা
-    //     নিষ্ক্রিয় করলে যেসব কর্মীর `policy_id` খালি, তাদের **প্রতিটা
-    //     এজেন্টের config sync ও enroll ভেঙে পড়ত** — আর ভাঙত অন্য
-    //     মডিউলে, তাই কারণ খুঁজে পেতে দিন লেগে যেত।
+    // The biggest trap. When `AgentConfigService.build(null)` gets no policy
+    // it does `findFirst({ isActive: true })`, and if it finds nothing it
+    // throws "no active work policy". So deactivating the last active policy
+    // would break **every agent's config sync and enroll** for staff whose
+    // `policy_id` is empty, and it would break in another module, so finding
+    // the cause could take days.
     const activeCount = await this.prisma.workPolicy.count({
       where: { isActive: true },
     });
@@ -238,9 +237,9 @@ export class WorkPoliciesService {
       );
     }
 
-    // ⚠️ কর্মী এখনো এটার দিকে তাকিয়ে থাকলে নিষ্ক্রিয় পলিসিই তাদের এজেন্ট
-    //    চালাত (`build(policyId)` isActive দেখে না) — "নিষ্ক্রিয়" শব্দটা
-    //    তখন মিথ্যা হয়ে যেত।
+    // Careful: if staff still point at it, the deactivated policy would keep
+    // running their agent (`build(policyId)` does not check isActive), and the
+    // word "inactive" would be a lie.
     if (before._count.employees > 0) {
       throw new ConflictException(
         `${before._count.employees} staff are still on this policy — move them to another policy first`,
@@ -265,18 +264,19 @@ export class WorkPoliciesService {
   }
 
   /**
-   * ⭐⭐ **G85 — বন্ধ করার কোডের সাথে খোলার কোডও।**
+   * **G85: the reopening code alongside the closing code.**
    *
-   * এতদিন `deactivate()` ছিল, `reactivate()` ছিল না। ফলে একবার নিষ্ক্রিয়
-   * করা পলিসি **চিরতরে** নিষ্ক্রিয় থাকত, আর ফেরার একমাত্র পথ ছিল
-   * সার্ভারে বসে SQL।
+   * Until now `deactivate()` existed and `reactivate()` did not. So a policy
+   * that was deactivated stayed that way **for good**, and the only way back
+   * was SQL on the server.
    *
-   * ⚠️ ক্ষতিটা কর্মীর লগইনের মতো তীব্র নয় (G84) — পলিসি নিষ্ক্রিয় করতে
-   * গেলে আগে সব কর্মীকে সরাতে হয়, তাই কেউ আটকে যান না। কিন্তু ভুল করে
-   * চাপলে ফেরার পথ নেই, আর সেটা পর্দায় কোথাও লেখা থাকে না।
+   * Careful: the harm is not as sharp as with staff login (G84): to
+   * deactivate a policy all staff must first be moved off it, so nobody gets
+   * stuck. But once pressed by mistake there is no way back, and nothing on
+   * screen says so.
    *
-   * ⭐ ধরা পড়েছে G84 সারানোর পর নিয়মটা লিখে রেখে **একই চোখে বাকি কোড
-   * দেখতে গিয়ে** — মাঠে ধরা পড়ার অপেক্ষা না করে।
+   * Found after fixing G84, by writing the rule down and **reviewing the rest
+   * of the code with the same eye**, rather than waiting to hit it in the field.
    */
   async reactivate(
     actor: SessionUser,
@@ -307,13 +307,14 @@ export class WorkPoliciesService {
     });
 
     /**
-     * ⚠️ কর্মী-সংখ্যা এখানে `before`-এর গোনা থেকেই আসে, শূন্য ধরে নয়।
+     * Careful: the staff count here comes from `before`'s count, not an
+     * assumed zero.
      *
-     * `deactivate()`-এ `toView(row, 0)` লেখা **ঠিক**, কারণ সে শূন্য না
-     * হলে চলতেই দেয় না। কিন্তু এখানে শূন্য ধরে নেওয়া হতো একটা অনুমান —
-     * নিষ্ক্রিয় পলিসিতে কর্মী থাকা সম্ভব (কেউ SQL দিয়ে বসিয়ে দিলে, বা
-     * ভবিষ্যতে নিয়ম বদলালে), আর তখন পর্দা "0 staff" দেখাত অথচ বাস্তবে
-     * তাঁরা আছেন।
+     * Writing `toView(row, 0)` in `deactivate()` is **right**, because it
+     * refuses to proceed unless the count is zero. But assuming zero here
+     * would be a guess: a deactivated policy can have staff (if someone put
+     * them there with SQL, or the rule changes later), and the screen would
+     * show "0 staff" while they are in fact there.
      */
     return toView(row, before._count.employees);
   }
@@ -328,9 +329,9 @@ function toView(policy: WorkPolicy, employeeCount: number): WorkPolicyView {
   return {
     id: policy.id,
     name: policy.name,
-    // Decimal → number। ⚠️ টাকা হলে এটা করা যেত না, কিন্তু ঘণ্টা টাকা নয়,
-    // আর `AgentConfigService`ও ঠিক এভাবেই এজেন্টকে পাঠায় — দুই জায়গায়
-    // দুই রকম হলে ড্যাশবোর্ড আর এজেন্ট আলাদা সংখ্যা দেখাত।
+    // Decimal -> number. Careful: this could not be done for money, but hours
+    // are not money, and `AgentConfigService` sends the agent exactly this way;
+    // if the two differed, the dashboard and the agent would show different numbers.
     monthlyTargetHours: Number(policy.monthlyTargetHours),
     expectedWorkdays: policy.expectedWorkdays,
     weeklyOffDays: policy.weeklyOffDays,

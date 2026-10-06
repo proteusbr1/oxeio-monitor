@@ -5,11 +5,11 @@ using oXeio.Core.Models;
 namespace oXeio.Agent.Tests;
 
 /// <summary>
-/// টুলটিপের <b>অগ্রাধিকার ক্রম</b>।
+/// The tooltip's <b>priority order</b>.
 ///
-/// ⚠️⚠️ এখানে টেস্ট করার আসল জিনিসটা লেখা নয়, <b>ক্রম</b> — কোন খবরটা
-/// ৬৩ ঘরের মধ্যে জায়গা পাবে। ভুল ক্রম মানে সবচেয়ে জরুরি খবরটাই কেটে যাওয়া,
-/// আর সেটা কোনো কম্পাইলার ধরে না।
+/// Careful: what is really being tested here is not the text but the <b>order</b>:
+/// which message gets a place within the 63 characters. A wrong order means the most
+/// important message gets cut off, and no compiler catches that.
 /// </summary>
 public class TrayTooltipTests
 {
@@ -34,10 +34,10 @@ public class TrayTooltipTests
         Assert.Contains("Working", TrayTooltip.Build(Status()), StringComparison.Ordinal);
 
     /**
-     * ⭐⭐ <b>এই ফাইলের মূল টেস্ট।</b> সাইন ইন না করা থাকলে আউটবক্স খালি,
-     * তাই <c>SyncHealthPolicy</c> সুস্থ (<c>Ok</c>) বলে — আর সুস্থ পথে
-     * টুলটিপ লিখত "Working · 0:00 today"। অর্থাৎ যে একটামাত্র কারণে কিছুই
-     * হচ্ছিল না, ঠিক সেটাই ছিল পর্দার একমাত্র অদৃশ্য জিনিস।
+     * <b>The main test of this file.</b> When not signed in the outbox is empty, so
+     * <c>SyncHealthPolicy</c> says healthy (<c>Ok</c>), and on the healthy path the
+     * tooltip would say "Working · 0:00 today". So the one reason nothing was happening
+     * was exactly the one invisible thing on screen.
      */
     [Fact]
     public void সাইন_ইন_না_করা_থাকলে_সেটাই_প্রথমে()
@@ -49,8 +49,8 @@ public class TrayTooltipTests
     }
 
     /// <summary>
-    /// ⚠️ শুধু "Not signed in" নয় — স্টাফকে জানতে হবে <b>এখন ঘণ্টা জমছে না</b>,
-    /// নইলে বার্তাটা নিরীহ শোনায় আর সে সাইন ইন করতে দেরি করে।
+    /// Careful: not just "Not signed in"; staff must know that <b>hours are not being
+    /// recorded right now</b>, otherwise the message sounds harmless and they sign in late.
     /// </summary>
     [Fact]
     public void বার্তায়_ঘণ্টা_না_জমার_কথা_আছে() =>
@@ -60,9 +60,9 @@ public class TrayTooltipTests
             StringComparison.OrdinalIgnoreCase);
 
     /**
-     * ⚠️ revoke সাইন-ইনের চেয়েও আগে। revoke করলে টোকেন মুছে যায়, তাই
-     * <c>Enrolled</c> তখন মিথ্যা — দুটো শর্তই সত্যি। ক্রম উল্টে গেলে বাতিল
-     * মেশিনে স্টাফ পড়ত "সাইন ইন করুন"।
+     * Careful: revoke comes even before sign-in. Revoking deletes the token, so
+     * <c>Enrolled</c> is then false, and both conditions are true. If the order flipped,
+     * staff on a revoked machine would read "sign in".
      */
     [Fact]
     public void বাতিল_হলে_সাইন_ইনের_কথা_নয়()
@@ -74,14 +74,16 @@ public class TrayTooltipTests
         Assert.DoesNotContain("Sign in", text, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>⚠️ টুলটিপ কখনোই খালি হতে পারে না — খালি szTip মানে hover-এ কিছুই নেই।</summary>
+    /// <summary>
+    /// Careful: the tooltip can never be empty; an empty szTip means nothing on hover.
+    /// </summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public void টুলটিপ_কখনো_খালি_নয়(bool enrolled) =>
         Assert.False(string.IsNullOrWhiteSpace(TrayTooltip.Build(Status(enrolled))));
 
-    /// <summary>৬৩ ঘরের সীমা — Win32-র <c>NOTIFYICONDATA.szTip</c>।</summary>
+    /// <summary>The 63-character limit of Win32 <c>NOTIFYICONDATA.szTip</c>.</summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

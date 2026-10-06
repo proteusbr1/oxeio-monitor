@@ -18,13 +18,13 @@ import {
 } from './setup/harness';
 
 /**
- * **ডিজাইন-টার্গেট — জমা ও বণ্টন** *(২২ আগস্ট ২০২৬)*।
+ * **Design targets — submission and allocation.**
  *
- * ⚠️⚠️ এই ফাইলের সবচেয়ে জরুরি দুটো দাবি:
- * ১· **গবেষক জমা দিতে পারেন, সাধারণ ডিজাইনার পারেন না** — আর দুজনেরই
- *    পোর্টাল রোল `employee`, তাই সাধারণ রোল-পাহারা এটা করতে পারত না।
- * ২· **একটা টার্গেট কখনো দুজনের হাতে পড়ে না** — পড়লে দুজন একই ডিজাইন
- *    বানাতেন, আর কেউ ধরতেই পারত না।
+ * The two most important claims of this file:
+ * 1. **A researcher can submit, an ordinary designer cannot** — and both have
+ *    the portal role `employee`, so the ordinary role guard could not do this.
+ * 2. **A target never lands in two people's hands** — otherwise two people
+ *    would make the same design and nobody could tell.
  */
 
 let h: Harness;
@@ -44,14 +44,14 @@ beforeEach(async () => {
   await resetDatabase(h.prisma, h.app);
 });
 
-/** কর্মী + পোর্টাল অ্যাকাউন্ট — ধরনসহ */
+/** Employee + portal account — with the staff type */
 /**
- * কর্মী + পোর্টাল অ্যাকাউন্ট।
+ * Employee + portal account.
  *
- * ⚠️⚠️ `staffType` আর `role` **দুটোই** নেওয়া হয়, আর সেটাই এই
- * হেল্পারের গোটা কথা: ওরা আলাদা জিনিস। `staffType` বলে **কী কাজ
- * করেন**, `role` বলে **কী দেখতে পান**। নিচের টেস্টগুলো ইচ্ছাকৃতভাবে
- * দুটোকে মিলিয়ে-অমিলিয়ে দেখে।
+ * Both `staffType` and `role` are taken, and that is the whole point of this
+ * helper: they are different things. `staffType` says **what work they do**,
+ * `role` says **what they can see**. The tests below deliberately try the two
+ * in matching and mismatching combinations.
  */
 async function staff(
   empCode: string,
@@ -70,7 +70,7 @@ async function staff(
       passwordHash: await hashPassword('staff-password-123'),
       role,
       employeeId: employee.id,
-      // ⚠️ `false` না দিলে লগইনের পর "পাসওয়ার্ড বদলান" দেয়ালে আটকে যেত
+      // Without `false` they would be stuck at the "change password" wall after login
       mustChangePw: false,
     },
   });
@@ -83,19 +83,19 @@ const post = (session: Session, path: string, body: object) =>
 
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('POST /design-targets/bulk — কে জমা দিতে পারেন', () => {
+describe('POST /design-targets/bulk — who may submit', () => {
   /**
-   * ⭐⭐ **এই describe-টা ২৫ আগস্ট উল্টে গেছে, আর ইতিহাসটা কাজে লাগে।**
+   * **This describe was flipped around, and the history is useful.**
    *
-   * আগে এখানে লেখা ছিল: *"গবেষক ও ডিজাইনার দুজনেরই পোর্টাল রোল
-   * `employee` — তাই `@Roles()` দিয়ে একজনকে ঢোকানো আর অন্যজনকে আটকানো
-   * **সম্ভবই নয়**। অনুমতিটা কাজের ধরন ধরে।"*
+   * It used to say: *"Researcher and designer both have the portal role
+   * `employee` — so letting one in and keeping the other out with `@Roles()` is
+   * **impossible**. The permission follows the type of work."*
    *
-   * ⭐ মালিক সেই ভিতটাই সরিয়ে দিলেন — *"researcher and designer same kaj
-   * kore na, tai eder access o same hobe na"*। এখন গবেষক একটা **ভূমিকা**,
-   * আর অনুমতিটা ভূমিকা ধরেই।
+   * The owner then removed that very foundation: researcher and designer do
+   * different work, so their access should differ too. Now the researcher is a
+   * **role**, and the permission follows the role.
    */
-  it('গবেষক (রোল) পারেন', async () => {
+  it('a researcher (role) may', async () => {
     await staff('OX-R1', 'researcher', 'r1@test.local', 'researcher');
     const session = await loginReady(h, 'r1@test.local', 'staff-password-123');
 
@@ -107,7 +107,7 @@ describe('POST /design-targets/bulk — কে জমা দিতে পার�
     expect(res.body.poolSize).toBe(2);
   });
 
-  it('ডিজাইনার পারেন না', async () => {
+  it('a designer may not', async () => {
     await staff('OX-D1', 'designer', 'd1@test.local');
     const session = await loginReady(h, 'd1@test.local', 'staff-password-123');
 
@@ -117,17 +117,17 @@ describe('POST /design-targets/bulk — কে জমা দিতে পার�
   });
 
   /**
-   * ⚠️⚠️ **কাজের ধরন আর অধিকার এক জিনিস নয় — এই টেস্টটাই সেই সীমানা।**
+   * **Type of work and right of access are not the same thing — this test is that boundary.**
    *
-   * কারো `staff_type` "গবেষক" অথচ পোর্টালের ভূমিকা এখনো `employee` হলে
-   * তিনি ঢুকতে পারবেন **না**। ⭐ শোনায় কড়া, কিন্তু উল্টোটা আরও খারাপ:
-   * তাহলে অধিকার দুই টেবিলে ভাগ হয়ে থাকত, আর ঠিক সেটাই ২৪ আগস্টের
-   * গণ্ডগোলটা সম্ভব করেছিল (ADR-038)।
+   * If someone's `staff_type` is "researcher" but their portal role is still
+   * `employee`, they will **not** get in. That sounds harsh, but the opposite is
+   * worse: the right would be split across two tables, and that is exactly what
+   * made the mess possible (ADR-038).
    *
-   * ⚠️ মালিক যাতে অন্ধকারে না থাকেন, Settings → Staff-এ দুটো না মিললে
-   * একটা বার্তা ওঠে — পর্দা চুপ করে থাকে না।
+   * So the owner is not left in the dark: when the two do not match, Settings →
+   * Staff shows a message — the screen does not stay silent.
    */
-  it('⭐⭐ ধরন গবেষক অথচ ভূমিকা staff — পারেন না', async () => {
+  it('type researcher but role staff — may not', async () => {
     await staff('OX-R2', 'researcher', 'r2@test.local', 'employee');
     const session = await loginReady(h, 'r2@test.local', 'staff-password-123');
 
@@ -136,8 +136,8 @@ describe('POST /design-targets/bulk — কে জমা দিতে পার�
     }).expect(403);
   });
 
-  /** ⭐ উল্টোটাও সত্যি — ভূমিকাই শেষ কথা, ধরন নয় */
-  it('ভূমিকা গবেষক অথচ ধরন ডিজাইনার — পারেন', async () => {
+  /** The reverse is true too — the role has the last word, not the type */
+  it('role researcher but type designer — may', async () => {
     await staff('OX-D2', 'designer', 'd2b@test.local', 'researcher');
     const session = await loginReady(h, 'd2b@test.local', 'staff-password-123');
 
@@ -146,7 +146,7 @@ describe('POST /design-targets/bulk — কে জমা দিতে পার�
     }).expect(201);
   });
 
-  it('মালিক ও ম্যানেজার পারেন', async () => {
+  it('the owner and manager may', async () => {
     for (const [email, password] of [
       [OWNER_EMAIL, OWNER_PASSWORD],
       [MANAGER_EMAIL, MANAGER_PASSWORD],
@@ -159,13 +159,13 @@ describe('POST /design-targets/bulk — কে জমা দিতে পার�
   });
 });
 
-describe('POST /design-targets/bulk — ডুপ্লিকেট', () => {
+describe('POST /design-targets/bulk — duplicates', () => {
   /**
-   * ⚠️⚠️ **৫০০টার মধ্যে একটা পুরোনো ASIN থাকলেই গোটা ব্যাচ বাতিল** —
-   * `skipDuplicates` ছাড়া ঠিক সেটাই হতো, আর গবেষকের দিনের কাজ জমা
-   * হতো না।
+   * **A single old ASIN among 500 would cancel the whole batch** — which is
+   * exactly what happened without `skipDuplicates`, and the researcher's day of
+   * work would not be submitted.
    */
-  it('আগের ব্যাচে থাকা ASIN আবার দিলে ব্যাচ বাঁচে', async () => {
+  it('giving an ASIN already in an earlier batch saves the batch', async () => {
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     await post(owner, '/api/v1/design-targets/bulk', {
@@ -181,8 +181,8 @@ describe('POST /design-targets/bulk — ডুপ্লিকেট', () => {
     expect(res.body.poolSize).toBe(3);
   });
 
-  /** ⭐ একই পণ্যের আলাদা URL — ডুপ্লিকেট হিসেবেই ধরা পড়ে */
-  it('একই ASIN-এর অন্য রূপ দিলেও নতুন সারি নয়', async () => {
+  /** Different URLs of the same product — caught as a duplicate */
+  it('another form of the same ASIN does not make a new row', async () => {
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     await post(owner, '/api/v1/design-targets/bulk', {
@@ -197,8 +197,8 @@ describe('POST /design-targets/bulk — ডুপ্লিকেট', () => {
     expect(await h.prisma.designTarget.count()).toBe(1);
   });
 
-  /** ⚠️ বাতিল লাইনগুলো কারণসহ ফেরত — নইলে কোনগুলো হারাল কেউ জানত না */
-  it('বাতিল লাইন কারণসহ ফেরত আসে', async () => {
+  /** Rejected lines come back with the reason — otherwise nobody would know which were lost */
+  it('rejected lines come back with the reason', async () => {
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     const res = await post(owner, '/api/v1/design-targets/bulk', {
@@ -214,7 +214,7 @@ describe('POST /design-targets/bulk — ডুপ্লিকেট', () => {
 
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('বণ্টন', () => {
+describe('allocation', () => {
   async function seedPool(count: number) {
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     await post(owner, '/api/v1/design-targets/bulk', {
@@ -223,10 +223,10 @@ describe('বণ্টন', () => {
   }
 
   /**
-   * ⚠️⚠️ **একটা টার্গেট কখনো দুজনের হাতে পড়ে না।** পড়লে দুজন একই ডিজাইন
-   * বানাতেন — আর সেটা ধরা পড়ত কেবল ডেলিভারির সময়।
+   * **A target never lands in two people's hands.** If it did, two people
+   * would make the same design — and it would be caught only at delivery.
    */
-  it('প্রত্যেকে ৩০টা, আর কোনো টার্গেট দুবার নয়', async () => {
+  it('30 each, and no target twice', async () => {
     await staff('OX-D1', 'designer', 'd1@test.local');
     await staff('OX-D2', 'designer', 'd2@test.local');
     await seedPool(100);
@@ -239,7 +239,7 @@ describe('বণ্টন', () => {
     });
 
     expect(rows).toHaveLength(60);
-    // ⚠️ প্রতিটা সারি ঠিক একজনের — `id` অনন্য, তাই সংখ্যাটাই দাবি
+    // Every row belongs to exactly one person — `id` is unique, so the count is the claim
     expect(new Set(rows.map((r) => r.id)).size).toBe(60);
 
     const perDesigner = new Map<number | null, number>();
@@ -250,11 +250,11 @@ describe('বণ্টন', () => {
   });
 
   /**
-   * ⚠️⚠️ **কাজের নম্বর ১০ লাখের উপরে, আর কখনো দুবার নয়।** নিচে নামলে
-   * ডিজাইনারদের পুরোনো ফাইল (সবচেয়ে বড় ৯,৭৩,০৬৫) ভুল করে টার্গেট
-   * বন্ধ করে দিত।
+   * **Job numbers are above a million, and never repeated.** If they fell
+   * lower, the designers' old files (the largest being 973,065) would wrongly
+   * close a target.
    */
-  it('কাজের নম্বর অনন্য আর ১০ লাখের উপরে', async () => {
+  it('job numbers are unique and above a million', async () => {
     await staff('OX-D1', 'designer', 'd1@test.local');
     await seedPool(40);
 
@@ -272,8 +272,8 @@ describe('বণ্টন', () => {
     expect(Math.min(...numbers)).toBeGreaterThanOrEqual(JOB_NUMBER_START);
   });
 
-  /** ⚠️ হাত ভরা থাকলে আর দেওয়া হয় না — নইলে সপ্তাহে দুশো জমত */
-  it('দ্বিতীয়বার চালালে কিছুই যোগ হয় না', async () => {
+  /** No more is given when the hand is full — otherwise two hundred would pile up in a week */
+  it('running a second time adds nothing', async () => {
     await staff('OX-D1', 'designer', 'd1@test.local');
     await seedPool(100);
 
@@ -285,8 +285,8 @@ describe('বণ্টন', () => {
     expect(await h.prisma.designTarget.count({ where: { status: 'assigned' } })).toBe(30);
   });
 
-  /** ⚠️ পুল খালি হলেও ক্র্যাশ নয় — গবেষক ছুটিতে থাকলে এটাই ঘটে */
-  it('পুল খালি হলে চুপচাপ কিছুই হয় না', async () => {
+  /** No crash when the pool is empty — this is what happens when the researcher is on leave */
+  it('when the pool is empty, quietly nothing happens', async () => {
     await staff('OX-D1', 'designer', 'd1@test.local');
 
     expect((await h.app.get(TargetsService).distribute()).assigned).toBe(0);
@@ -295,17 +295,18 @@ describe('বণ্টন', () => {
 
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('ফাইলের নাম থেকে "কাজ শুরু" ধরা', () => {
+describe('detecting "work started" from the file name', () => {
   /**
-   * ⭐⭐ কোনো বোতাম ছাড়াই — ডিজাইনার বরাদ্দ নম্বরটা ফাইলের নামে বসালেই
-   * টার্গেট বন্ধ।
+   * With no button at all — as soon as the designer puts the assigned number
+   * in the file name, the target is marked.
    */
   /**
-   * ⚠️⚠️ **এটা "শেষ" নয়, "শুরু"** — আর তফাতটাই এখানকার মূল কথা *(সারানো
-   * ২৩ আগস্ট)*। শিরোনামে নম্বরটা দেখা যায় ফাইল **খোলার** মুহূর্তে; আগে
-   * ওটাকে "শেষ" ধরায় টার্গেট খোলামাত্র বন্ধ হয়ে যেত।
+   * **This is "start", not "finish"** — and that difference is the whole point
+   * here (fixed 23 August). The number shows in the title at the moment the
+   * file is **opened**; it used to be treated as "finish", so a target closed
+   * the moment it was opened.
    */
-  it('নিজের নম্বরে নিজের টার্গেটে "শুরু" চিহ্ন বসে, বন্ধ হয় না', async () => {
+  it('with their own number on their own target, a "started" mark is set, it does not close', async () => {
     const designer = await staff('OX-D1', 'designer', 'd1@test.local');
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     await post(owner, '/api/v1/design-targets/bulk', { text: URL_OF(1) }).expect(201);
@@ -322,26 +323,25 @@ describe('ফাইলের নাম থেকে "কাজ শুরু" ধ
 
     expect(closed).toBe(1);
     const after = await h.prisma.designTarget.findFirstOrThrow();
-    // ⭐ এখনো ডিজাইনারের হাতেই — শেষ বলেন তিনি নিজে
+    // Still in the designer's hands — they say "finished" themselves
     expect(after.status).toBe('assigned');
     expect(after.completedAt).toBeNull();
 
     /**
-     * ⭐⭐⭐ **যে মুহূর্তটা দেওয়া হয়েছে, ঠিক সেটাই বসে** *(G163)*।
+     * **Exactly the moment that was given is the one stored** (G163).
      *
-     * ⚠️⚠️ আগে এখানে কেবল `not.toBeNull()` লেখা ছিল — আর ওই দুর্বল
-     * দাবিটাই বাগটাকে বছরভর লুকিয়ে রেখেছিল: কলার কর্মদিবসের **লেবেল**
-     * পাঠাত (ঢাকার ভোর ৬টা), টেস্ট তবু সবুজ থাকত। মাঠে ৭১১টার ৭১১টাই
-     * ওই এক মুহূর্তে বসে ছিল।
+     * This used to be just `not.toBeNull()` — and that weak claim hid the bug
+     * for a year: the caller sent the working day's **label** (6 a.m. Dhaka)
+     * and the test stayed green. In the field, all 711 of 711 were stored at that one moment.
      */
     expect(after.startedAt?.toISOString()).toBe(seenAt.toISOString());
   });
 
   /**
-   * ⚠️⚠️ **একজনের ফাইল আরেকজনের টার্গেট বন্ধ করতে পারে না।** নম্বর
-   * দুজনের কাছে থাকার কথা নয়, কিন্তু "কথা নয়" আর "পারবে না" এক নয়।
+   * **One person's file cannot close another's target.** The number is not
+   * supposed to be in two people's hands, but "not supposed to" is not the same as "cannot".
    */
-  it('অন্যের নম্বর দিয়ে কিছু বন্ধ হয় না', async () => {
+  it("nothing is closed with someone else's number", async () => {
     await staff('OX-D1', 'designer', 'd1@test.local');
     const other = await staff('OX-D2', 'designer', 'd2@test.local');
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
@@ -351,22 +351,22 @@ describe('ফাইলের নাম থেকে "কাজ শুরু" ধ
     await targets.distribute();
 
     const row = await h.prisma.designTarget.findFirstOrThrow();
-    // ⚠️ সারিটা OX-D1-এর (কর্মী-কোডের ক্রমে প্রথম), কিন্তু বন্ধ করার
-    //    চেষ্টা করছেন OX-D2
+    // The row belongs to OX-D1 (first in employee-code order), but OX-D2 is
+    //    the one trying to close it
     const closed = await targets.markStartedByJobNumbers(
       other.id,
       new Map([[String(row.jobNumber), dhakaNoon()]]),
     );
 
     expect(closed).toBe(0);
-    // ⚠️ চিহ্নটাই বসেনি — অন্যের ফাইল কিছুই ছুঁতে পারে না
+    // The mark was not even set — someone else's file cannot touch anything
     expect((await h.prisma.designTarget.findFirstOrThrow()).startedAt).toBeNull();
   });
 });
 
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('দিন শেষে পুলে ফেরত', () => {
+describe('return to the pool at day end', () => {
   async function seed(count: number) {
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     await post(owner, '/api/v1/design-targets/bulk', {
@@ -375,14 +375,14 @@ describe('দিন শেষে পুলে ফেরত', () => {
   }
 
   const TODAY = dhakaNoon();
-  /** ⚠️ নতুন লাইন — সরাসরি লিখলে escaping-এ ভুল হয় */
+  /** New lines — writing them directly gets the escaping wrong */
   const BR = String.fromCharCode(10);
 
   /**
-   * ⭐⭐ মালিকের নিয়ম *(২২ আগস্ট)*: *"din sheshe baki design gula amar
-   * main list e back asbe"* — ৩০টা দেওয়া, ১৫টা করা, বাকি ১৫ ফেরত।
+   * The owner's rule: whatever designs are left at day end come back to the
+   * main list — 30 given, 15 done, the remaining 15 return.
    */
-  it('না-করা টার্গেট পুলে ফেরে', async () => {
+  it('targets not done return to the pool', async () => {
     await staff('OX-D1', 'designer', 'd1@test.local');
     await seed(40);
 
@@ -394,18 +394,19 @@ describe('দিন শেষে পুলে ফেরত', () => {
 
     expect(returned).toBe(30);
     expect(await h.prisma.designTarget.count({ where: { status: 'pool' } })).toBe(40);
-    // ⚠️ কারো হাতে আর কিছু নেই
+    // Nobody has anything left in hand
     expect(
       await h.prisma.designTarget.count({ where: { assignedToId: { not: null } } }),
     ).toBe(0);
   });
 
   /**
-   * ⚠️⚠️ **এই ফাইলের সবচেয়ে জরুরি টেস্ট।** কেউ একটা ডিজাইন খুলে কাজ শুরু
-   * করেছেন কিন্তু আজ শেষ করতে পারেননি — সরল নিয়মে ওটাও ফিরে যেত, আর কাল
-   * অন্য কারো হাতে পড়ত। দুজনের শ্রম নষ্ট, আর কেউ বুঝতই না কেন।
+   * **The most important test in this file.** Someone opened a design and
+   * started work but could not finish today — under the simple rule that one
+   * would go back too and land with someone else tomorrow. Two people's work
+   * wasted, and nobody would understand why.
    */
-  it('আজ ছোঁয়া টার্গেট ফেরত যায় না', async () => {
+  it('a target touched today is not returned', async () => {
     const designer = await staff('OX-D1', 'designer', 'd1@test.local');
     await seed(40);
 
@@ -418,7 +419,7 @@ describe('দিন শেষে পুলে ফেরত', () => {
       take: 2,
     });
 
-    // ⭐ "ছোঁয়া" = ফাইলটা খোলা হয়েছে, অর্থাৎ নম্বরটা আজকের ক্রেডিটে আছে
+    // "Touched" = the file was opened, i.e. the number is in today's credit
     await h.prisma.designCredit.create({
       data: {
         employeeId: designer.id,
@@ -438,11 +439,11 @@ describe('দিন শেষে পুলে ফেরত', () => {
   });
 
   /**
-   * ⚠️⚠️ **কাজের নম্বর মুছে যায় না।** নম্বরটা ASIN-এর, বরাদ্দের নয় —
-   * মুছলে সিরিয়াল অকারণে ফুরাত, আর পুরোনো ফাইলের নাম কোনোদিন কিছুর
-   * সাথে মিলত না।
+   * **The job number is not erased.** The number belongs to the ASIN, not to
+   * the allocation — erasing it would burn serials for nothing, and old file
+   * names would never match anything again.
    */
-  it('ফেরত এলেও নম্বর একই থাকে, আর পরের বার নতুন নম্বর বসে না', async () => {
+  it('even when returned the number stays the same, and no new number is set the next time', async () => {
     await staff('OX-D1', 'designer', 'd1@test.local');
     await seed(40);
 
@@ -468,8 +469,8 @@ describe('দিন শেষে পুলে ফেরত', () => {
     for (const b of before) expect(byId.get(b.id)).toBe(b.jobNumber);
   });
 
-  /** ⚠️ শেষ হয়ে যাওয়া টার্গেট ফেরত যায় না — ওটা আর কারো কাজ নয় */
-  it('শেষ ও বাদ দেওয়া টার্গেট ছোঁয়া হয় না', async () => {
+  /** A finished target is not returned — it is nobody's work any more */
+  it('finished and dropped targets are not touched', async () => {
     const designer = await staff('OX-D1', 'designer', 'd1@test.local');
     await seed(40);
 
@@ -482,9 +483,9 @@ describe('দিন শেষে পুলে ফেরত', () => {
       take: 2,
     });
     /**
-     * ⚠️ তৃতীয় প্যারামিটার = **কে চেপেছেন** *(২৩ আগস্ট)*। এই টেস্টের
-     * প্রশ্ন "কে" নয়, "কতগুলো ফেরত যায়" — তাই যেকোনো বৈধ user চলবে,
-     * কিন্তু FK মানতে হবে বলে ডাটাবেস থেকেই নেওয়া হয়।
+     * The third parameter is **who pressed it**. This test's question is not
+     * "who" but "how many go back", so any valid user will do — it is taken
+     * from the database because the FK must be satisfied.
      */
     const anyUser = await h.prisma.user.findFirstOrThrow({ select: { id: true } });
     await targets.markDone(designer.id, mine[0].id, anyUser.id);
@@ -498,13 +499,14 @@ describe('দিন শেষে পুলে ফেরত', () => {
   });
 });
 
-describe('শুরু হওয়া টার্গেট', () => {
+describe('started targets', () => {
   /**
-   * ⚠️⚠️ **কাজ চলছে এমন টার্গেট রাতে ফেরত যায় না।** "আজ ছোঁয়া" শর্তটা
-   * এর চেয়ে সংকীর্ণ ছিল: তিন দিন ধরে চলা কাজ যেদিন কেউ ফাইলটা খোলেনি,
-   * সেদিনই ফেরত চলে যেত — আর কাল অন্য কারো হাতে পড়ত।
+   * **A target with work in progress does not go back at night.** The
+   * "touched today" condition was narrower than this: work running for three
+   * days would go back on the day nobody opened the file, and land with
+   * someone else tomorrow.
    */
-  it('আগে শুরু হওয়া টার্গেট পরের দিনও হাতে থাকে', async () => {
+  it('a target started earlier is still in hand the next day', async () => {
     const designer = await staff('OX-D1', 'designer', 'd1@test.local');
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     await post(owner, '/api/v1/design-targets/bulk', {
@@ -517,7 +519,7 @@ describe('শুরু হওয়া টার্গেট', () => {
     const one = await h.prisma.designTarget.findFirstOrThrow({
       where: { assignedToId: designer.id },
     });
-    // ⭐ গতকাল শুরু হয়েছিল, আজ কেউ ফাইলটা খোলেনি
+    // Started yesterday, nobody opened the file today
     await h.prisma.designTarget.update({
       where: { id: one.id },
       data: { startedAt: dhakaNoon(-1) },
@@ -533,13 +535,13 @@ describe('শুরু হওয়া টার্গেট', () => {
   });
 });
 
-describe('কাজের নম্বর', () => {
+describe('job number', () => {
   /**
-   * ⭐⭐ **প্রতিটা টার্গেটেই নম্বর, জমা দেওয়ার মুহূর্ত থেকেই**
-   * *(২৩ আগস্ট, মালিকের চাওয়া)*। আগে নম্বর বসত বরাদ্দের সময়, তাই পুলে
-   * পড়ে থাকা সারির কোনো পরিচয় থাকত না।
+   * **Every target has a number, from the moment it is submitted.** It used
+   * to be set at allocation time, so a row sitting in the pool had no
+   * identity.
    */
-  it('পুলে বসেই নম্বর পায়, আর সব আলাদা', async () => {
+  it('gets a number as soon as it is in the pool, and all are different', async () => {
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     await post(owner, '/api/v1/design-targets/bulk', {
       text: [URL_OF(1), URL_OF(2), URL_OF(3)].join(String.fromCharCode(10)),
@@ -555,8 +557,8 @@ describe('কাজের নম্বর', () => {
     expect(new Set(rows.map((r) => r.jobNumber)).size).toBe(3);
   });
 
-  /** ⚠️ বরাদ্দ হলেও নম্বরটা **বদলায় না** — ওটা ASIN-এর, বরাদ্দের নয় */
-  it('বরাদ্দের পরেও নম্বর একই থাকে', async () => {
+  /** The number does **not change** on allocation — it belongs to the ASIN, not to the allocation */
+  it('the number stays the same after allocation', async () => {
     await staff('OX-D1', 'designer', 'd1@test.local');
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     await post(owner, '/api/v1/design-targets/bulk', { text: URL_OF(1) }).expect(201);
@@ -571,29 +573,27 @@ describe('কাজের নম্বর', () => {
 });
 
 /**
- * ⭐⭐ **গবেষকের দুটো কিউ** *(G-workflow, ২৪ আগস্ট ২০২৬)*।
+ * **The researcher's two queues** (G-workflow).
  *
- * ⚠️⚠️ **কেন কাটা-তারিখ:** ২২ আগস্টের ইমপোর্টে ২৭,৫০৯টা পুরোনো `done`
- * সারি ঢুকেছে যেগুলো অনেক আগেই Amazon-এ গেছে, কিন্তু তখন Uploaded
- * বোতামটাই ছিল না। সীমা না দিলে কিউতে দাঁড়াত ২৭,৬৪১ — কিউ নয়, পাহাড়।
+ * **Why a cut-off date:** the 22 August import brought in 27,509 old `done`
+ * rows that went to Amazon long ago, but there was no Uploaded button at the
+ * time. Without a limit the queue would stand at 27,641 — not a queue, a mountain.
  *
- * ⭐ এই describe-টা সেই সীমার পাহারা: চিপের সংখ্যা আর তালিকার সংখ্যা
- * **এক** কি না, আর পুরোনো সারি সত্যিই বাদ পড়ে কি না।
+ * This describe guards that limit: whether the chip count and the list count
+ * are the **same**, and whether old rows really drop out.
  */
 /**
- * ⭐⭐⭐ **Design Pool-এ খোঁজা — ASIN বা Job নম্বর** *(৬ সেপ্টেম্বর ২০২৬,
- * মালিকের চাওয়া)*।
+ * **Searching the Design Pool — by ASIN or Job number.**
  *
- * ⚠️⚠️ **কেন দরকার হলো:** পর্দায় প্রতিটা সারির নিচে Job নম্বরটা বড় করে
- * লেখা থাকে (`Job 1016878`), অথচ ওটা দিয়ে খোঁজার কোনো উপায় ছিল না —
- * একমাত্র পরিচয় ছিল ASIN। অর্থাৎ পর্দা একটা নম্বর দেখাত যেটা দিয়ে
- * কিছুই করা যেত না।
+ * **Why it was needed:** the screen shows the Job number large under every
+ * row (`Job 1016878`), yet there was no way to search by it — the only
+ * identity was the ASIN. So the screen showed a number you could do nothing with.
  *
- * ⚠️⚠️ **আর URL দিয়ে খোঁজা তুলে দেওয়া হয়েছে** — মালিকের সিদ্ধান্ত।
- * আগে `asinOf()` দিয়ে লিঙ্ক থেকে ASIN বের করা হতো।
+ * **Searching by URL has been removed** — the owner's decision. It used to
+ * extract the ASIN from the link with `asinOf()`.
  */
-describe('Design Pool-এ খোঁজা — ASIN বা Job নম্বর', () => {
-  /** তিনটে টার্গেট বসিয়ে তাদের ASIN ও Job নম্বর ফেরত দেয় */
+describe('searching the Design Pool — by ASIN or Job number', () => {
+  /** Sets up three targets and returns their ASINs and Job numbers */
   async function seed() {
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     await post(owner, '/api/v1/design-targets/bulk', {
@@ -611,7 +611,7 @@ describe('Design Pool-এ খোঁজা — ASIN বা Job নম্বর', 
   const search = (session: Session, q: string) =>
     session.http.get(`/api/v1/design-targets?q=${encodeURIComponent(q)}`);
 
-  it('ASIN দিয়ে খোঁজা যায়', async () => {
+  it('can search by ASIN', async () => {
     const { owner, rows } = await seed();
 
     const res = await search(owner, rows[0].asin).expect(200);
@@ -621,12 +621,12 @@ describe('Design Pool-এ খোঁজা — ASIN বা Job নম্বর', 
   });
 
   /**
-   * ⭐⭐⭐ **এই describe-এর মূল টেস্ট** — এটাই নতুন ক্ষমতাটা।
+   * **The main test of this describe** — it is the new capability.
    *
-   * ⚠️ Job নম্বর মেলানো হয় **হুবহু**, `contains` দিয়ে নয় — কলামটা `Int`,
-   *    আর সংখ্যার আংশিক মিল মানুষের কাছে কোনো অর্থ বহন করে না।
+   * The Job number is matched **exactly**, not with `contains` — the column is
+   *    `Int`, and a partial match of a number means nothing to a person.
    */
-  it('⭐ Job নম্বর দিয়েও খোঁজা যায়', async () => {
+  it('can search by Job number too', async () => {
     const { owner, rows } = await seed();
     const target = rows[1];
 
@@ -638,11 +638,11 @@ describe('Design Pool-এ খোঁজা — ASIN বা Job নম্বর', 
   });
 
   /**
-   * ⚠️⚠️ **অন্য কারো নম্বর দিলে অন্য কারো সারি** — নইলে টেস্টটা
-   * "যেকোনো একটা সারি ফিরছে" দেখেই সবুজ হয়ে যেত, আর খোঁজাটা আদৌ
-   * নম্বর ধরে হচ্ছে কি না বোঝা যেত না।
+   * **Another person's number gives another person's row** — otherwise the
+   * test would go green just from seeing "some row came back", and we could not
+   * tell whether the search actually goes by number.
    */
-  it('⭐ ভিন্ন Job নম্বর ভিন্ন সারি আনে', async () => {
+  it('a different Job number brings a different row', async () => {
     const { owner, rows } = await seed();
 
     const first = await search(owner, String(rows[0].jobNumber)).expect(200);
@@ -654,23 +654,23 @@ describe('Design Pool-এ খোঁজা — ASIN বা Job নম্বর', 
   });
 
   /**
-   * ⚠️⚠️ **URL দিয়ে আর পাওয়া যায় না** — এটাই সিদ্ধান্তটার পাহারা।
-   * কেউ `asinOf()` ফিরিয়ে আনলে এই টেস্টটাই লাল হবে।
+   * **No longer found by URL** — this guards that decision.
+   * If someone brings `asinOf()` back, this test turns red.
    */
-  it('⭐ লিঙ্ক দিয়ে খোঁজা আর চলে না', async () => {
+  it('searching by link no longer works', async () => {
     const { owner, rows } = await seed();
 
     const res = await search(owner, URL_OF(1)).expect(200);
 
     expect(res.body.total).toBe(0);
-    // ⚠️ অথচ ওই ASIN-টা টেবিলে আছেই — বাদ পড়ছে কেবল খোঁজার নিয়মে
+    // Yet that ASIN is in the table — it is excluded only by the search rule
     expect(rows.some((r) => URL_OF(1).endsWith(r.asin))).toBe(true);
   });
 
   /**
-   * ⚠️ ছোট হাতে লিখলেও চলে — মানুষ ASIN কপি করে সব রকমভাবে।
+   * Lower case works too — people copy the ASIN in all kinds of ways.
    */
-  it('ছোট হাতের ASIN-ও চলে', async () => {
+  it('a lower-case ASIN works too', async () => {
     const { owner, rows } = await seed();
 
     const res = await search(owner, rows[0].asin.toLowerCase()).expect(200);
@@ -679,11 +679,11 @@ describe('Design Pool-এ খোঁজা — ASIN বা Job নম্বর', 
   });
 
   /**
-   * ⚠️⚠️ **`Int`-এর সীমার চেয়ে বড় সংখ্যা ৫০০ ছুড়ত।** `job_number`
-   * কলামটা `Int`, তাই ২,১৪৭,৪৮৩,৬৪৭-এর বড় কিছু Prisma-তে পাঠালে
-   * কোয়েরিই ভেঙে যেত — অথচ ব্যবহারকারী কেবল একটা লম্বা সংখ্যা লিখেছেন।
+   * **A number beyond the `Int` range used to throw a 500.** The `job_number`
+   * column is `Int`, so sending anything above 2,147,483,647 to Prisma broke
+   * the query — although the user had only typed a long number.
    */
-  it('⭐ অতি-বড় সংখ্যাতেও ভেঙে পড়ে না', async () => {
+  it('does not fall over even with a huge number', async () => {
     const { owner } = await seed();
 
     const res = await search(owner, '99999999999999').expect(200);
@@ -692,15 +692,15 @@ describe('Design Pool-এ খোঁজা — ASIN বা Job নম্বর', 
   });
 });
 
-describe('গবেষকের কিউ — আপলোড ও লাইভের অপেক্ষায়', () => {
+describe("researcher's queue — waiting for upload and live", () => {
   const targetsOf = () => h.app.get(TargetsService);
 
-  /** ওই ASIN-এর সারিতে completedAt বসানো — কাটা-তারিখের এদিক বা ওদিক */
+  /** Sets completedAt on that ASIN's row — on either side of the cut-off date */
   /**
-   * ⚠️⚠️ **চাবি ASIN, কাজের নম্বর নয়।** প্রথমে `JOB_NUMBER_START + n`
-   * ধরেছিলাম, আর CI ধরিয়ে দিল: নম্বরটা sequence থেকে আসে, আর একই
-   * ফাইলের আগের describe-গুলো নম্বর খরচ করে ফেলে। ⭐ ASIN আমরা নিজেরাই
-   * বসাই (`URL_OF(n)`), তাই ওটাই একমাত্র নিশ্চিত চাবি।
+   * **The key is the ASIN, not the job number.** At first I assumed
+   * `JOB_NUMBER_START + n`, and CI caught it: the number comes from a
+   * sequence, and earlier describes in the same file use up numbers. We set
+   * the ASIN ourselves (`URL_OF(n)`), so it is the only reliable key.
    */
   const ASIN_OF = (n: number) => `B${String(n).padStart(9, '0')}`;
 
@@ -718,10 +718,10 @@ describe('গবেষকের কিউ — আপলোড ও লাইভ�
     }).expect(201);
   });
 
-  it('⚠️⚠️ কাটা-তারিখের আগের "শেষ" কিউতে ওঠে না', async () => {
-    // ২২ আগস্ট — সীমার আগে, অর্থাৎ ইমপোর্ট করা পুরোনো কাজ
+  it('"finished" before the cut-off date does not get into the queue', async () => {
+    // 22 August — before the limit, i.e. old imported work
     await markDoneAt(1, '2026-08-22T10:00:00+06:00');
-    // ২৩ আগস্ট — সীমার দিনেই, অর্থাৎ গোনা হবে
+    // 23 August — exactly on the limit day, so it counts
     await markDoneAt(2, '2026-08-23T10:00:00+06:00');
 
     const page = await targetsOf().list({ stage: 'to_upload' });
@@ -731,10 +731,10 @@ describe('গবেষকের কিউ — আপলোড ও লাইভ�
   });
 
   /**
-   * ⭐⭐ **সবচেয়ে জরুরি টেস্ট** — চিপে লেখা সংখ্যা আর ক্লিক করে পাওয়া
-   * তালিকা এক না হলে কেউ আর কোনো সংখ্যাই বিশ্বাস করবে না।
+   * **The most important test** — if the number written on the chip and the
+   * list you get by clicking it differ, nobody will trust any number again.
    */
-  it('চিপের সংখ্যা আর তালিকার সংখ্যা হুবহু এক', async () => {
+  it('the chip count and the list count are exactly the same', async () => {
     await markDoneAt(1, '2026-08-23T10:00:00+06:00');
     await markDoneAt(2, '2026-08-24T10:00:00+06:00');
     await markDoneAt(3, '2026-08-22T10:00:00+06:00');
@@ -748,7 +748,7 @@ describe('গবেষকের কিউ — আপলোড ও লাইভ�
     expect(page.total).toBe(stats.toUpload);
   });
 
-  it('আপলোড হয়ে গেলে সারিটা প্রথম কিউ ছেড়ে দ্বিতীয়টায় যায়', async () => {
+  it('once uploaded, the row leaves the first queue and goes to the second', async () => {
     await markDoneAt(1, '2026-08-23T10:00:00+06:00');
 
     const row = await h.prisma.designTarget.findUniqueOrThrow({
@@ -768,8 +768,8 @@ describe('গবেষকের কিউ — আপলোড ও লাইভ�
     expect(stats.toLive).toBe(1);
   });
 
-  /** ⚠️ `to_live`-এ কাটা-তারিখ **নেই** — ওখানে পুরোনো সারির সমস্যা নেই */
-  it('লাইভ-কিউতে কাটা-তারিখ খাটে না', async () => {
+  /** `to_live` has **no** cut-off date — old rows are not a problem there */
+  it('the cut-off date does not apply to the live queue', async () => {
     await markDoneAt(1, '2025-01-10T10:00:00+06:00');
     const row = await h.prisma.designTarget.findUniqueOrThrow({
       where: { asin: ASIN_OF(1) },
@@ -782,19 +782,20 @@ describe('গবেষকের কিউ — আপলোড ও লাইভ�
 });
 
 /**
- * ⭐⭐ **বানান-যাচাইয়ের শেকল** *(ADR-038, ২৫ আগস্ট ২০২৬)*।
+ * **The spell-check chain** (ADR-038).
  *
- * ডিজাইনার "শেষ" বলার পর কাজ শেষ হয় না — কেউ বানান দেখেন, ভুল পেলে
- * কেউ ঠিক করেন, তারপর ফাইলটা Amazon-এ যায়। মাঠে এটা হয়ই; সিস্টেম
- * এতদিন জানত না, তাই *"কোনগুলো দেখা বাকি"* কেউ বলতে পারত না।
+ * Once a designer says "finished", the work is not over — someone checks the
+ * spelling, someone fixes any mistake found, then the file goes to Amazon. This
+ * happens in the field; the system did not know, so nobody could say
+ * *"which ones are still to be checked"*.
  *
- * ⚠️⚠️ যন্ত্র বানান **পড়ে না** — কেবল হিসাব রাখে।
+ * The machine does **not** read spelling — it only keeps the count.
  */
-describe('বানান-যাচাই — দেখা, ভুল পাওয়া, ঠিক করা', () => {
+describe('spell-check — checked, mistake found, fixed', () => {
   const svc = () => h.app.get(TargetsService);
   const ASIN_OF = (n: number) => `B${String(n).padStart(9, '0')}`;
 
-  /** ওই সারিতে `completedAt` বসানো — কাটা-তারিখের পরে */
+  /** Sets `completedAt` on that row — after the cut-off date */
   async function finished(n: number): Promise<number> {
     const row = await h.prisma.designTarget.update({
       where: { asin: ASIN_OF(n) },
@@ -804,11 +805,11 @@ describe('বানান-যাচাই — দেখা, ভুল পাও�
   }
 
   /**
-   * যিনি বোতাম চাপবেন — owner-ই যথেষ্ট।
+   * Whoever presses the button — the owner is enough.
    *
-   * ⚠️ এই describe-টা **সার্ভিস সরাসরি** ডাকে, তাই HTTP-র পাহারা
-   * (`assertCanProofread`) এখানে চলেই না — কে পারেন সেটা নিচের আলাদা
-   * describe-এ দেখা হয়েছে। এখানকার প্রশ্ন কেবল *নিয়ম* ঠিক আছে কি না।
+   * This describe calls the **service directly**, so the HTTP guard
+   * (`assertCanProofread`) does not run here at all — who may do it is
+   * checked in the separate describe below. The only question here is whether the *rule* is right.
    */
   let actorId: number;
 
@@ -823,7 +824,7 @@ describe('বানান-যাচাই — দেখা, ভুল পাও�
     actorId = u.id;
   });
 
-  it('শেষ হওয়া ডিজাইন যাচাইয়ের কিউতে বসে', async () => {
+  it('a finished design enters the check queue', async () => {
     await finished(1);
 
     const [stats, page] = await Promise.all([
@@ -836,7 +837,7 @@ describe('বানান-যাচাই — দেখা, ভুল পাও�
     expect(page.rows[0].asin).toBe(ASIN_OF(1));
   });
 
-  it('বানান ঠিক থাকলে কিউ ছাড়ে, ঠিক-করার কিউতে যায় না', async () => {
+  it('when the spelling is right it leaves the queue and does not go to the fix queue', async () => {
     const id = await finished(1);
 
     await svc().markChecked(id, true, actorId, dhakaNoon());
@@ -844,16 +845,16 @@ describe('বানান-যাচাই — দেখা, ভুল পাও�
     const stats = await svc().stats();
     expect(stats.toCheck).toBe(0);
     expect(stats.toFix).toBe(0);
-    // ⭐ ঠিক ছিল, তাই আপলোডের কিউতে থাকে
+    // It was fine, so it stays in the upload queue
     expect(stats.toUpload).toBe(1);
   });
 
   /**
-   * ⭐⭐ **মালিকের সিদ্ধান্তের পাহারা** *(২৫ আগস্ট)* — ভুল পাওয়া অথচ
-   * ঠিক-না-হওয়া ডিজাইন **আপলোডের কিউ থেকে বাদ**। জানা-ভাঙা জিনিস
-   * Amazon-এ যাবে না।
+   * **Guards the owner's decision** — a design with a mistake found but not
+   * yet fixed is **out of the upload queue**. Something known to be broken
+   * must not go to Amazon.
    */
-  it('⚠️⚠️ ভুল পাওয়া ডিজাইন আপলোডের কিউ থেকে বাদ থাকে', async () => {
+  it('a design with a mistake found stays out of the upload queue', async () => {
     const id = await finished(1);
     await finished(2);
 
@@ -868,12 +869,12 @@ describe('বানান-যাচাই — দেখা, ভুল পাও�
     expect(stats.toFix).toBe(1);
     expect(toFix.rows[0].asin).toBe(ASIN_OF(1));
 
-    // ⭐ ২ নম্বরটা এখনো দেখাই হয়নি — তবু আপলোডের কিউতে আছে
+    // No. 2 has not even been checked yet — still in the upload queue
     expect(stats.toUpload).toBe(1);
     expect(toUpload.rows[0].asin).toBe(ASIN_OF(2));
   });
 
-  it('ঠিক করার পর আবার আপলোডের কিউতে ফেরে', async () => {
+  it('after being fixed it returns to the upload queue', async () => {
     const id = await finished(1);
     await svc().markChecked(id, false, actorId, dhakaNoon());
     expect((await svc().stats()).toUpload).toBe(0);
@@ -886,12 +887,12 @@ describe('বানান-যাচাই — দেখা, ভুল পাও�
   });
 
   /**
-   * ⚠️⚠️ **ডিজাইনের মালিকানা কখনো বদলায় না** — এই টেস্টটাই সেই
-   * সিদ্ধান্তের পাহারা। বেলাল ঠিক করলে কাজটা তাঁর নামে চলে গেলে
-   * তাঁর সংখ্যা ফুলে যেত — ২৩ আগস্টের গোটা তদন্তটা শুরুই হয়েছিল
-   * ঠিক এমন একটা সংখ্যা দেখে।
+   * **Ownership of a design never changes** — this test guards that
+   * decision. If the work moved to the fixer's name when they fixed it, their
+   * count would swell — the whole investigation of 23 August started exactly
+   * from seeing such a number.
    */
-  it('⭐⭐ ঠিক করলেও ডিজাইন মূল ডিজাইনারেরই থাকে', async () => {
+  it('even when fixed, the design stays with the original designer', async () => {
     const designer = await staff('OX-D9', 'designer', 'd9@test.local');
     const id = await finished(1);
     await h.prisma.designTarget.update({
@@ -907,19 +908,19 @@ describe('বানান-যাচাই — দেখা, ভুল পাও�
     expect(row.fixedById).toBe(actorId);
   });
 
-  /** ⚠️ দুবার চাপলে তারিখ সরে না — নইলে "কবে দেখা হয়েছিল" লাফ দিত */
-  it('আবার চাপলে তারিখ বদলায় না', async () => {
+  /** Pressing twice does not move the date — otherwise "when it was checked" would jump */
+  it('pressing again does not change the date', async () => {
     const id = await finished(1);
     await svc().markChecked(id, true, actorId, new Date('2026-08-24T10:00:00+06:00'));
     await svc().markChecked(id, false, actorId, new Date('2026-08-25T10:00:00+06:00'));
 
     const row = await h.prisma.designTarget.findUniqueOrThrow({ where: { id } });
     expect(row.checkedAt?.toISOString()).toBe(new Date('2026-08-24T10:00:00+06:00').toISOString());
-    // ⭐ দ্বিতীয় চাপে "ভুল" বসেনি — প্রথম রায়ই থাকে
+    // The second press did not set "mistake" — the first verdict stays
     expect(row.errorFoundAt).toBeNull();
   });
 
-  it('শেষ না হওয়া ডিজাইন যাচাই করা যায় না', async () => {
+  it('an unfinished design cannot be checked', async () => {
     const row = await h.prisma.designTarget.findUniqueOrThrow({
       where: { asin: ASIN_OF(1) },
     });
@@ -928,7 +929,7 @@ describe('বানান-যাচাই — দেখা, ভুল পাও�
     ).rejects.toThrow();
   });
 
-  it('ভুল না থাকলে "ঠিক করেছি" বলা যায় না', async () => {
+  it('"fixed" cannot be said when there is no mistake', async () => {
     const id = await finished(1);
     await svc().markChecked(id, true, actorId, dhakaNoon());
 
@@ -938,23 +939,23 @@ describe('বানান-যাচাই — দেখা, ভুল পাও�
 
 
 /**
- * ⭐⭐ **কে বানান দেখতে পারেন** *(২৫ আগস্ট ২০২৬)*।
+ * **Who may check spelling.**
  *
- * ### ⚠️⚠️ এই describe-টা এক দিনে দুবার লেখা হয়েছে
+ * ### This describe was written twice in one day
  *
- * **সকালে** মালিক বললেন *"ami chai ei access ami manager and sumaiya
- * pak"* — তাই পাহারাটা ছিল `employees.can_proofread` টিক-ঘর ধরে, অর্থাৎ
- * **ব্যক্তি ধরে**, আর তখন এখানকার টেস্টগুলো ঠিক সেটাই মাপত।
+ * **In the morning** the owner said only he, the manager and one named person
+ * should have this access — so the guard went by the `employees.can_proofread`
+ * checkbox, i.e. **by person**, and the tests here measured exactly that.
  *
- * **পরে** বললেন *"sob researcher ra sei access gula pabe... researcher
- * and designer same kaj kore na, tai eder access o same hobe na"*।
- * ⭐ অর্থাৎ প্রশ্নটা কখনোই *"কোন মানুষ"* ছিল না, ছিল *"কোন কাজ"* —
- * আর সেটা ভূমিকার প্রশ্ন। টিক-ঘরটা এক দিন বেঁচে মুছে গেছে।
+ * **Later** he said all researchers get the same access: researcher and
+ * designer do different work, so their access should differ.
+ * So the question was never *"which person"*, it was *"which work"* — and that
+ * is a question of role. The checkbox lived for one day and was deleted.
  */
-describe('বানান-যাচাইয়ের অধিকার — HTTP পাহারা', () => {
+describe('spell-check rights — HTTP guard', () => {
   const ASIN_OF = (n: number) => `B${String(n).padStart(9, '0')}`;
 
-  /** যাচাইয়ের জন্য তৈরি একটা সারি — শেষ হওয়া, না-দেখা */
+  /** A row made for checking — finished, not yet looked at */
   async function ready(): Promise<number> {
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     await post(owner, '/api/v1/design-targets/bulk', {
@@ -968,7 +969,7 @@ describe('বানান-যাচাইয়ের অধিকার — HTT
     return row.id;
   }
 
-  it('⭐ গবেষক দেখতে ও ঠিক করতে পারেন', async () => {
+  it('a researcher can check and fix', async () => {
     const id = await ready();
     await staff('OX-R8', 'researcher', 'r8@test.local', 'researcher');
     const session = await loginReady(h, 'r8@test.local', 'staff-password-123');
@@ -984,14 +985,14 @@ describe('বানান-যাচাইয়ের অধিকার — HTT
   });
 
   /**
-   * ⚠️⚠️ **দ্বিতীয় গবেষকও পারেন — এটাই ২৫ আগস্টের বদলটা।**
+   * **A second researcher can too — this is the 25 August change.**
    *
-   * সকালে ঠিক এই টেস্টটার উল্টোটা লেখা ছিল (`.expect(403)`), কারণ তখন
-   * অধিকার ছিল টিক-ঘরে আর টিক ছিল একজনের। মালিক নিয়মটা বদলেছেন, তাই
-   * টেস্টটাও উল্টেছে — ⭐ কোডের সাথে টেস্ট মেলানো হয়নি, **সিদ্ধান্তের**
-   * সাথে মেলানো হয়েছে।
+   * In the morning the opposite of this test was written (`.expect(403)`),
+   * because the right sat in a checkbox and the tick belonged to one person.
+   * The owner changed the rule, so the test flipped too — it was matched not to
+   * the code but to the **decision**.
    */
-  it('⭐⭐ দ্বিতীয় গবেষকও পারেন — কারো টিকের অপেক্ষা নেই', async () => {
+  it("a second researcher can too — no waiting for anyone's tick", async () => {
     const id = await ready();
     await staff('OX-R9', 'researcher', 'r9@test.local', 'researcher');
     const session = await loginReady(h, 'r9@test.local', 'staff-password-123');
@@ -1001,8 +1002,8 @@ describe('বানান-যাচাইয়ের অধিকার — HTT
     }).expect(201);
   });
 
-  /** ⚠️ ম্যানেজারের কোনো `employees` সারিই নেই — রোল দিয়েই পান */
-  it('ম্যানেজার পারেন', async () => {
+  /** A manager has no `employees` row at all — they get it through the role */
+  it('a manager can', async () => {
     const id = await ready();
     const session = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
 
@@ -1014,7 +1015,7 @@ describe('বানান-যাচাইয়ের অধিকার — HTT
     expect(row.checkedAt).not.toBeNull();
   });
 
-  it('⚠️ ডিজাইনার পারেন না', async () => {
+  it('a designer cannot', async () => {
     const id = await ready();
     await staff('OX-D7', 'designer', 'd7@test.local');
     const session = await loginReady(h, 'd7@test.local', 'staff-password-123');
@@ -1028,8 +1029,8 @@ describe('বানান-যাচাইয়ের অধিকার — HTT
     expect(row.checkedAt).toBeNull();
   });
 
-  /** ⭐ সেশনেও পতাকা দুটো যায় — পর্দা বোতাম লুকোয় ওগুলো দেখে */
-  it('সেশনে canAddTargets ও canProofread ঠিক আসে', async () => {
+  /** Both flags go in the session too — the screen looks at them to hide the button */
+  it('the session carries canAddTargets and canProofread correctly', async () => {
     await staff('OX-RA', 'researcher', 'ra@test.local', 'researcher');
     await staff('OX-D8', 'designer', 'd8@test.local');
 
@@ -1050,18 +1051,18 @@ describe('বানান-যাচাইয়ের অধিকার — HTT
 
 
 /**
- * ⭐⭐ **কে টার্গেটটা এনেছেন** *(মালিকের চাওয়া, ২৫ আগস্ট ২০২৬:
- * "Design Pool e ke target list add koreche seta ami dekhote cai")*।
+ * **Who brought the target** (owner's request: the owner wants to see who
+ * added each target to the Design Pool).
  *
- * ⚠️⚠️ এখানকার সবচেয়ে সূক্ষ্ম দাবিটা **দুটো আলাদা id-র জগৎ** নিয়ে:
- * `assignedToId → employees`, `addedById → users`। সংখ্যাগুলো ছোট আর
- * পাশাপাশি, তাই একটার জায়গায় অন্যটা বসানো সহজ — আর তখন কোনো এরর হয়
- * না, কেবল **ভুল মানুষের সারি** আসে।
+ * The subtlest claim here is about **two separate worlds of ids**:
+ * `assignedToId → employees`, `addedById → users`. The numbers are small and
+ * close together, so it is easy to put one in place of the other — and then
+ * there is no error, only **the wrong person's rows** come back.
  */
-describe('কে এনেছেন — তালিকা, ছাঁকনি ও গণনা', () => {
+describe('who brought it — list, filter and count', () => {
   const svc = () => h.app.get(TargetsService);
 
-  it('সারিতে কে এনেছেন সেটা থাকে, ভূমিকাসহ', async () => {
+  it('the row says who brought it, with the role', async () => {
     await staff('OX-RB', 'researcher', 'rb@test.local', 'researcher');
     const session = await loginReady(h, 'rb@test.local', 'staff-password-123');
 
@@ -1076,11 +1077,11 @@ describe('কে এনেছেন — তালিকা, ছাঁকনি �
   });
 
   /**
-   * ⚠️⚠️ **এই টেস্টটাই দুই id-র জগতের পাহারা।** গবেষকের `users.id` আর
-   * ডিজাইনারের `employees.id` আলাদা সংখ্যা; ছাঁকনিতে ভুলটা বসালে
-   * এখানেই ধরা পড়বে।
+   * **This test guards the two-id-worlds problem.** The researcher's `users.id`
+   * and the designer's `employees.id` are different numbers; if the filter
+   * gets it wrong, it will be caught here.
    */
-  it('⭐⭐ কে এনেছেন ধরে ছাঁকা যায়', async () => {
+  it('can be filtered by who brought it', async () => {
     await staff('OX-RC', 'researcher', 'rc@test.local', 'researcher');
     const them = await loginReady(h, 'rc@test.local', 'staff-password-123');
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
@@ -1099,7 +1100,7 @@ describe('কে এনেছেন — তালিকা, ছাঁকনি �
     expect(researcher?.count).toBe(2);
     expect(adders.find((a) => a.role === 'owner')?.count).toBe(1);
 
-    // ⭐ সবচেয়ে বেশি যিনি এনেছেন তিনি আগে
+    // The one who brought the most comes first
     expect(adders[0].count).toBe(2);
 
     const only = await svc().list({ addedById: researcher!.id });
@@ -1109,13 +1110,13 @@ describe('কে এনেছেন — তালিকা, ছাঁকনি �
     }
   });
 
-  /** ⚠️ কেউ কিছু না আনলে তালিকাটা খালি — ড্রপডাউন খালিই থাকে, ভাঙে না */
-  it('কিছু না থাকলে খালি তালিকা', async () => {
+  /** If nobody brought anything the list is empty — the dropdown stays empty, it does not break */
+  it('empty list when there is nothing', async () => {
     expect(await svc().adders()).toEqual([]);
   });
 
-  /** ⭐ ডিজাইনার এই রুটটাও ছুঁতে পারেন না — `assertCanUse`-এর নিচেই */
-  it('ডিজাইনার adders দেখতে পান না', async () => {
+  /** A designer cannot touch this route either — it sits right under `assertCanUse` */
+  it('a designer cannot see adders', async () => {
     await staff('OX-D9B', 'designer', 'd9b@test.local');
     const session = await loginReady(h, 'd9b@test.local', 'staff-password-123');
 
@@ -1125,26 +1126,26 @@ describe('কে এনেছেন — তালিকা, ছাঁকনি �
 
 
 /**
- * ⭐⭐ **"ভুল করে Complete চেপে ফেলেছি"** *(মালিকের রিপোর্ট, ২৫ আগস্ট:
- * "onek somoy vule kew colplete press kore felole byak anote paren na")*।
+ * **"I pressed Complete by mistake"** (owner's report: someone often presses
+ * Complete by mistake and cannot undo it).
  *
- * ⚠️⚠️ মূল কারণটা ছিল **দেখতেই না পাওয়া**: `mine()` কেবল `assigned`
- * সারি পাঠাত, তাই Complete চাপার সাথে সাথে জিনিসটা পর্দা থেকে উধাও।
- * ফেরানোর বোতাম দূরে থাক — সারিটাই আর খুঁজে পাওয়া যেত না।
+ * The root cause was **not being able to see it at all**: `mine()` sent only
+ * `assigned` rows, so the moment Complete was pressed the item vanished from
+ * the screen. Never mind an undo button — the row could not even be found.
  */
-describe('Complete ফিরিয়ে নেওয়া', () => {
+describe('undoing Complete', () => {
   const svc = () => h.app.get(TargetsService);
   const ASIN_OF = (n: number) => `B${String(n).padStart(9, '0')}`;
 
   /**
-   * একজন ডিজাইনার, তাঁর হাতে একটা টার্গেট।
+   * One designer, with one target in hand.
    *
-   * ⚠️⚠️ **মালিকের সেশনটা ফেরত দেওয়া হয়, আর সেটাই এখানকার আসল ফাঁদ।**
-   * harness-এ owner-এর `mustChangePw: true`, তাই `loginReady` প্রথম
-   * লগইনেই পাসওয়ার্ড বদলে `…-changed` করে দেয়। ⭐ এক টেস্টে দ্বিতীয়বার
-   * `loginReady(OWNER_PASSWORD)` ডাকলে তাই **৪০১** — আর বার্তাটা
-   * ("expected 200, got 401") টেস্টের আসল দাবির সাথে কোনো সম্পর্কই
-   * রাখে না, তাই কারণ খুঁজতে সময় যায়।
+   * **The owner's session is returned, and that is the real trap here.**
+   * In the harness the owner has `mustChangePw: true`, so `loginReady` changes
+   * the password to `…-changed` on the first login. Calling
+   * `loginReady(OWNER_PASSWORD)` a second time in one test therefore gives a
+   * **401** — and the message ("expected 200, got 401") has no relation to the
+   * test's real claim, so finding the cause wastes time.
    */
   async function assigned(n: number, reuse?: Session) {
     const owner = reuse ?? (await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD));
@@ -1166,18 +1167,18 @@ describe('Complete ফিরিয়ে নেওয়া', () => {
     return { id: row.id, designer, session, owner };
   }
 
-  it('⭐ শেষ করার পরেও সারিটা নিজের তালিকায় থাকে', async () => {
+  it('after finishing, the row stays in their own list', async () => {
     const { id, designer, session } = await assigned(1);
 
     await post(session, `/api/v1/me/targets/${id}/done`, {}).expect(201);
 
     const mine = await svc().mine(designer.id);
     expect(mine).toHaveLength(1);
-    // ⭐ কিন্তু এখন "হাতে আছে" নয় — শেষ করা
+    // But it is no longer "in hand" — it is finished
     expect(mine[0].completedAt).not.toBeNull();
   });
 
-  it('⭐⭐ Undo চাপলে আবার হাতে ফেরে', async () => {
+  it('pressing Undo puts it back in hand', async () => {
     const { id, designer, session } = await assigned(1);
     await post(session, `/api/v1/me/targets/${id}/done`, {}).expect(201);
 
@@ -1186,19 +1187,19 @@ describe('Complete ফিরিয়ে নেওয়া', () => {
     const row = await h.prisma.designTarget.findUniqueOrThrow({ where: { id } });
     expect(row.status).toBe('assigned');
     /**
-     * ⚠️⚠️ **তিনটেই মুছতে হয়।** কিউগুলো `status` ধরে নয়, `completedAt`
-     * ধরে চলে — শুধু অবস্থা ফেরালে সারিটা "হাতে আছে" দেখাত অথচ
-     * আপলোডের কিউতে বসেই থাকত।
+     * **All three must be cleared.** The queues run on `completedAt`, not on
+     * `status` — restoring only the status would show the row as "in hand"
+     * while it still sat in the upload queue.
      */
     expect(row.completedAt).toBeNull();
     expect(row.completedVia).toBeNull();
     expect(row.completedById).toBeNull();
 
-    // ⭐ কাজটা তাঁরই থাকে — পুলে ফিরে যায় না
+    // The work stays theirs — it does not go back to the pool
     expect(row.assignedToId).toBe(designer.id);
   });
 
-  it('⚠️ কিউ থেকেও বেরিয়ে যায়', async () => {
+  it('it also leaves the queue', async () => {
     const { id, session } = await assigned(1);
     await post(session, `/api/v1/me/targets/${id}/done`, {}).expect(201);
     expect((await svc().stats()).toUpload).toBe(1);
@@ -1211,11 +1212,11 @@ describe('Complete ফিরিয়ে নেওয়া', () => {
   });
 
   /**
-   * ⚠️⚠️ **এই টেস্টটাই সবচেয়ে জরুরি।** বানান দেখা হয়ে গেলে ওটা আর
-   * "ভুলে চাপা" নয় — ফেরালে বানান-কিউ আর আপলোডের সংখ্যা একসাথে
-   * মিথ্যে হয়ে যেত।
+   * **This is the most important test.** Once the spelling has been checked,
+   * it is no longer an "accidental press" — undoing would make the spell-check
+   * queue and the upload count lie together.
    */
-  it('⭐⭐ বানান দেখা হয়ে গেলে আর ফেরানো যায় না', async () => {
+  it('once the spelling has been checked, it cannot be undone', async () => {
     const { id, session, owner } = await assigned(1);
     await post(session, `/api/v1/me/targets/${id}/done`, {}).expect(201);
 
@@ -1227,8 +1228,8 @@ describe('Complete ফিরিয়ে নেওয়া', () => {
     expect(row.status).toBe('done');
   });
 
-  /** ⚠️ গতকালেরটা ফেরালে গতকালের সংখ্যাও বদলে যেত */
-  it('গতকালের কাজ ডিজাইনার ফেরাতে পারেন না', async () => {
+  /** Undoing yesterday's would change yesterday's count too */
+  it("a designer cannot undo yesterday's work", async () => {
     const { id, session } = await assigned(1);
     await post(session, `/api/v1/me/targets/${id}/done`, {}).expect(201);
     await h.prisma.designTarget.update({
@@ -1239,8 +1240,8 @@ describe('Complete ফিরিয়ে নেওয়া', () => {
     await post(session, `/api/v1/me/targets/${id}/undone`, {}).expect(409);
   });
 
-  /** ⭐ কিন্তু মালিক পারেন — পুরোনো ভুল শোধরানোই ওই রুটটার কাজ */
-  it('⭐ মালিক পুরোনো Complete-ও ফেরাতে পারেন', async () => {
+  /** But the owner can — correcting old mistakes is the job of that route */
+  it('the owner can undo even an old Complete', async () => {
     const { id, designer, session, owner } = await assigned(1);
     await post(session, `/api/v1/me/targets/${id}/done`, {}).expect(201);
     await h.prisma.designTarget.update({
@@ -1256,10 +1257,10 @@ describe('Complete ফিরিয়ে নেওয়া', () => {
     expect(row.assignedToId).toBe(designer.id);
   });
 
-  /** ⚠️⚠️ অন্যের সারি ছোঁয়া যায় না — id অনুমান করেও নয় */
-  it('অন্যের টার্গেট ফেরানো যায় না', async () => {
+  /** Someone else's row cannot be touched — not even by guessing the id */
+  it("someone else's target cannot be undone", async () => {
     const first = await assigned(1);
-    // ⚠️ মালিকের সেশনটা পুনর্ব্যবহার — উপরের টীকা দেখুন
+    // Reuses the owner's session — see the note above
     const mine = await assigned(2, first.owner);
     const id = first.id;
     await post(mine.session, `/api/v1/me/targets/${mine.id}/done`, {}).expect(201);
@@ -1268,18 +1269,18 @@ describe('Complete ফিরিয়ে নেওয়া', () => {
   });
 
   /**
-   * ⭐⭐⭐ **Undo audit log-এ বসে** *(মালিকের প্রশ্নে যোগ হয়েছে, ২৫ আগস্ট:
-   * "ei access ta ki designer der pawa uchit?")*।
+   * **Undo is written to the audit log** (added after the owner asked whether
+   * designers should have this access).
    *
-   * ⚠️⚠️ এটাই একমাত্র কাজ যা **নিজের চিহ্ন মুছে দেয়** — `completedAt`,
-   * `completedVia`, `completedById` তিনটেই `null` হয়ে যায়, অর্থাৎ কাজটা
-   * কখনো শেষ হয়েছিল সেই প্রমাণটাই সারি থেকে উধাও। ⭐ লগ না থাকলে কেউ
-   * রোজ Complete → Undo → Complete করলেও কেউ দেখতে পেত না।
+   * This is the only action that **erases its own trace** — `completedAt`,
+   * `completedVia` and `completedById` all become `null`, so the proof that
+   * the work was ever finished disappears from the row. Without the log, nobody
+   * could see someone doing Complete → Undo → Complete every day.
    *
-   * ⚠️ meta-তে **মুছে ফেলা মানগুলোই** থাকতে হয়, নইলে লগটা শুধু বলত
-   * "কিছু একটা ফেরানো হয়েছে" — কী, সেটা নয়।
+   * The meta must hold **the erased values**, otherwise the log would only say
+   * "something was undone" — not what.
    */
-  it('⭐⭐ Undo audit log-এ বসে, মুছে ফেলা মানসহ', async () => {
+  it('Undo is written to the audit log, with the erased values', async () => {
     const { id, session, designer } = await assigned(1);
     await post(session, `/api/v1/me/targets/${id}/done`, {}).expect(201);
 
@@ -1300,14 +1301,14 @@ describe('Complete ফিরিয়ে নেওয়া', () => {
     const meta = entry.meta as Record<string, unknown>;
     expect(meta.asin).toBe(ASIN_OF(1));
     expect(meta.assignedToId).toBe(designer.id);
-    // ⭐ যা মুছে গেছে — সারিতে এগুলো আর নেই, লগই একমাত্র জায়গা
+    // What was erased — the row no longer has these, the log is the only place
     expect(meta.completedVia).toBe('manual');
     expect(meta.completedById).toBe(doneRow.completedById);
     expect(meta.completedAt).toBe(doneRow.completedAt?.toISOString());
   });
 
-  /** ⚠️ ব্যর্থ Undo লগে বসে না — নইলে লগটা চেষ্টায় ভরে যেত */
-  it('আটকে যাওয়া Undo লগে বসে না', async () => {
+  /** A failed Undo is not logged — otherwise the log would fill up with attempts */
+  it('a blocked Undo is not logged', async () => {
     const { id, session, owner } = await assigned(1);
     await post(session, `/api/v1/me/targets/${id}/done`, {}).expect(201);
     await post(owner, `/api/v1/design-targets/${id}/checked`, { ok: true }).expect(201);
@@ -1319,8 +1320,8 @@ describe('Complete ফিরিয়ে নেওয়া', () => {
     ).toBe(0);
   });
 
-  /** ⭐ দুবার চাপলে ভাঙে না — দ্বিতীয়বারেও "ঠিক আছে" */
-  it('দুবার Undo চাপলে ভাঙে না', async () => {
+  /** Pressing twice does not break — "fine" the second time too */
+  it('pressing Undo twice does not break', async () => {
     const { id, session } = await assigned(1);
     await post(session, `/api/v1/me/targets/${id}/done`, {}).expect(201);
 
@@ -1331,20 +1332,20 @@ describe('Complete ফিরিয়ে নেওয়া', () => {
 
 
 /**
- * ⭐⭐ **ম্যানেজারও রোজ ৩০টা পান** *(মালিকের নির্দেশ, ২৬ আগস্ট:
- * "belal er jonoo daily 30 ta design distribute korba")*।
+ * **The manager gets 30 a day too** (owner's instruction: distribute 30
+ * designs daily for the manager as well).
  *
- * ⚠️⚠️ এখানকার আসল দাবি দুটো, আর দুটো **আলাদা** প্রশ্ন:
- *   ১· কাজ **পান** কি না      → হ্যাঁ, ডিজাইনারদের মতোই ৩০টা
- *   ২· কাজের **মাপকাঠিতে** বাঁধা কি না → না, তাঁর দৈনিক টার্গেট নেই
+ * The real claims here are two, and they are **separate** questions:
+ *   1. Does the manager **get** work? → yes, 30 like the designers
+ *   2. Is the manager bound to the work **yardstick**? → no, no daily target
  *
- * ⭐ তিনি সপ্তাহে ১-২ দিন ডিজাইন করেন, তাই বাকি দিনগুলোয় "পিছিয়ে"
- * দেখানো মিথ্যা হতো। দুটো এক করে ফেলাই এখানকার সবচেয়ে সহজ ভুল।
+ * They design 1-2 days a week, so showing them "behind" on the other days
+ * would be false. Merging the two is the easiest mistake to make here.
  */
-describe('বণ্টন — ম্যানেজারও পান', () => {
+describe('allocation — the manager gets it too', () => {
   const svc = () => h.app.get(TargetsService);
 
-  /** ⚠️ উপরের describe-এর `seedPool` এখানে পৌঁছায় না — ওটা ওর ভেতরে */
+  /** `seedPool` of the describe above does not reach here — it is inside that one */
   async function fillPool(count: number) {
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     await post(owner, '/api/v1/design-targets/bulk', {
@@ -1352,7 +1353,7 @@ describe('বণ্টন — ম্যানেজারও পান', () => {
     }).expect(201);
   }
 
-  it('⭐⭐ ম্যানেজার ডিজাইনারদের সমান ৩০টা পান', async () => {
+  it('the manager gets 30, same as the designers', async () => {
     await staff('OX-D1', 'designer', 'd1@test.local');
     await staff('OX-M1', 'manager', 'm1@test.local');
     await fillPool(100);
@@ -1370,8 +1371,8 @@ describe('বণ্টন — ম্যানেজারও পান', () => {
     expect([...per.values()]).toEqual([30, 30]);
   });
 
-  /** ⚠️ গবেষক পান না — তিনি টার্গেট **আনেন**, করেন না */
-  it('গবেষক বণ্টনে নেই', async () => {
+  /** A researcher does not get any — they **bring** targets, they do not do them */
+  it('the researcher is not in the allocation', async () => {
     await staff('OX-R1', 'researcher', 'r1@test.local');
     await fillPool(100);
 
@@ -1379,13 +1380,13 @@ describe('বণ্টন — ম্যানেজারও পান', () => {
   });
 
   /**
-   * ⭐⭐ **রোজ কাজ না করলেও স্তূপ জমে না** — এটাই মালিকের দ্বিতীয়
-   * বাক্যটার ("weekly 1-2 din design kore") উত্তর।
+   * **No pile builds up even if they do not work every day** — this answers
+   * the owner's second sentence (they design 1-2 days a week).
    *
-   * ⚠️ শর্তটা **খোলা হয়েছে কি না**, "শেষ হয়েছে কি না" নয় — যে ফাইলটা
-   * তিনি আজ ধরেছেন অথচ শেষ করতে পারেননি, সেটা তাঁর হাতেই থাকে।
+   * The condition is whether it was **opened**, not whether it was
+   * "finished" — a file they picked up today but could not finish stays in their hand.
    */
-  it('⭐⭐ না-ছোঁয়া ডিজাইন রাতে পুলে ফেরে', async () => {
+  it('an untouched design returns to the pool at night', async () => {
     const manager = await staff('OX-M2', 'manager', 'm2@test.local');
     await fillPool(100);
     await svc().distribute();
@@ -1403,8 +1404,8 @@ describe('বণ্টন — ম্যানেজারও পান', () => {
     ).toBe(100);
   });
 
-  /** ⭐ কিন্তু যেটা তিনি খুলেছেন সেটা তাঁর হাতেই থাকে */
-  it('খোলা ডিজাইন ফেরত যায় না', async () => {
+  /** But one they opened stays in their hand */
+  it('an opened design is not returned', async () => {
     const manager = await staff('OX-M3', 'manager', 'm3@test.local');
     await fillPool(100);
     await svc().distribute();
@@ -1428,21 +1429,20 @@ describe('বণ্টন — ম্যানেজারও পান', () => {
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * **মরা ASIN মুছে ফেলা** *(২৯ আগস্ট ২০২৬, মালিকের রিপোর্ট: "pool er kiso
- * asin amazon e page nei… sei page gula sorry not found on amazon")*।
+ * **Deleting dead ASINs** (owner's report: some ASINs in the pool have no page
+ * on Amazon — "Sorry, not found").
  *
- * ⚠️⚠️ **এই describe-এর আসল দাবি একটাই: মোছা মানে ভুলে যাওয়া নয়।**
- * আগে Delete ছিল সত্যিকারের `DELETE`, আর তাতে সারির সাথে `asin` UNIQUE
- * প্রহরীটাও চলে যেত — কাল কেউ ওই মরা ASIN আবার পেস্ট করলে সেটা নতুন কাজ
- * হিসেবে ঢুকত, বণ্টনে যেত, আর ডিজাইনার আবার গিয়ে দেখতেন "Sorry, not
- * found"। ⭐ নিচের দ্বিতীয় টেস্টটাই সেই চক্রের পাহারা।
+ * **The one real claim of this describe: deleting does not mean forgetting.**
+ * Delete used to be a real `DELETE`, which removed the `asin` UNIQUE guard
+ * along with the row — if someone pasted that dead ASIN again tomorrow, it
+ * would enter as new work, be allocated, and a designer would again find
+ * "Sorry, not found". The second test below guards that cycle.
  */
-describe('মরা ASIN মুছে ফেলা', () => {
+describe('deleting dead ASINs', () => {
   /**
-   * ⚠️⚠️ **সেশনটা ফেরত দেওয়া হয়, আর সেটা ইচ্ছাকৃত** — একই টেস্টে
-   * দ্বিতীয়বার `loginReady()` ডাকলে ৪০১ আসে (২৫ আগস্টের শিক্ষা,
-   * `0a96d75`)। ⭐ তাই পুল ভরার সময় যে সেশনটা তৈরি হলো, টেস্ট সেটাই
-   * ব্যবহার করে।
+   * **The session is returned, and that is deliberate** — calling
+   * `loginReady()` a second time in one test gives a 401 (lesson of 25 August,
+   * `0a96d75`). So the test uses the session created while filling the pool.
    */
   async function seedPool(count: number): Promise<Session> {
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
@@ -1460,7 +1460,7 @@ describe('মরা ASIN মুছে ফেলা', () => {
       })
     ).map((r) => r.id);
 
-  it('সারিটা থেকে যায়, কিন্তু আর বণ্টনে যায় না', async () => {
+  it('the row stays, but no longer gets allocated', async () => {
     await staff('OX-D1', 'designer', 'd1@test.local');
     const owner = await seedPool(5);
 
@@ -1471,7 +1471,7 @@ describe('মরা ASIN মুছে ফেলা', () => {
 
     expect(res.body).toEqual({ deleted: 2, keptDone: 0 });
 
-    // ⭐ পাঁচটাই টেবিলে — মোছা হয়নি, দাগানো হয়েছে
+    // All five are in the table — not deleted, marked
     expect(await h.prisma.designTarget.count()).toBe(5);
     expect(
       await h.prisma.designTarget.count({ where: { status: 'deleted' } }),
@@ -1485,10 +1485,10 @@ describe('মরা ASIN মুছে ফেলা', () => {
   });
 
   /**
-   * ⚠️⚠️ **গোটা বদলের কারণ এই একটা টেস্ট।** সারিটা না থাকলে
-   * `ON CONFLICT (asin) DO NOTHING` কিছুই ঠেকাত না।
+   * **This one test is the reason for the whole change.** Without the row,
+   * `ON CONFLICT (asin) DO NOTHING` would block nothing.
    */
-  it('মোছা ASIN আবার পেস্ট করলে পুলে ফেরে না', async () => {
+  it('a deleted ASIN pasted again does not return to the pool', async () => {
     const owner = await seedPool(1);
 
     await post(owner, '/api/v1/design-targets/delete', {
@@ -1508,10 +1508,10 @@ describe('মরা ASIN মুছে ফেলা', () => {
   });
 
   /**
-   * ⚠️⚠️ শেষ হয়ে যাওয়া কাজ মুছলে ডিজাইনারের দিনের গোনা কমে যেত, আর
-   * আপলোডের কিউ থেকেও জিনিসটা নীরবে হারাত।
+   * Deleting finished work would lower the designer's count for the day, and
+   * the item would silently disappear from the upload queue too.
    */
-  it('শেষ হয়ে যাওয়া সারি ছোঁয়া হয় না, আর সেটা গুনে বলা হয়', async () => {
+  it('finished rows are not touched, and that is counted and reported', async () => {
     const owner = await seedPool(2);
     const [first, second] = await ids();
 
@@ -1533,10 +1533,10 @@ describe('মরা ASIN মুছে ফেলা', () => {
   });
 
   /**
-   * ⭐⭐ **সবচেয়ে দরকারি ক্ষেত্র** — ডিজাইনার লিঙ্কটা খুলে তবেই বোঝেন
-   * পাতাটা নেই, অর্থাৎ সারিটা তখন তাঁর **হাতে**।
+   * **The most useful case** — the designer opens the link and only then
+   * realises the page is gone, so the row is **in their hand** at that point.
    */
-  it('হাতে থাকা সারি মুছলে তালিকা থেকে সরে, আর পরের বণ্টনে বদলি আসে', async () => {
+  it('deleting a row in hand removes it from the list, and a replacement comes at the next allocation', async () => {
     const designer = await staff('OX-D1', 'designer', 'd1@test.local');
     const owner = await seedPool(31);
     const targets = h.app.get(TargetsService);
@@ -1552,13 +1552,13 @@ describe('মরা ASIN মুছে ফেলা', () => {
 
     expect(await targets.mine(designer.id)).toHaveLength(29);
 
-    // ⭐ হাতের গোনা ২৯, পুলে পড়ে আছে ১ — তাই বদলিটা এমনিতেই আসে
+    // The in-hand count is 29, 1 is left in the pool — so the replacement comes anyway
     await targets.distribute();
     expect(await targets.mine(designer.id)).toHaveLength(30);
   });
 
-  /** ⚠️ একই id দুবার এলে সংখ্যাটা বাড়িয়ে দেখাত */
-  it('একই id দুবার দিলে একবারই গোনা হয়', async () => {
+  /** The same id arriving twice would inflate the count */
+  it('giving the same id twice counts it once', async () => {
     const owner = await seedPool(1);
     const [only] = await ids();
 
@@ -1570,8 +1570,8 @@ describe('মরা ASIN মুছে ফেলা', () => {
     expect(res.body.deleted).toBe(1);
   });
 
-  /** ⚠️ দ্বিতীয়বার মুছলে audit-এ দ্বিতীয় সারি বসত, অথচ কিছুই ঘটেনি */
-  it('আগে মোছা সারি আবার মুছলে কিছুই ঘটে না', async () => {
+  /** A second delete would add a second audit row, though nothing happened */
+  it('deleting an already deleted row again does nothing', async () => {
     const owner = await seedPool(1);
     const only = await ids();
 
@@ -1590,8 +1590,8 @@ describe('মরা ASIN মুছে ফেলা', () => {
     ).toBe(1);
   });
 
-  /** ⭐ একক পথটাও একই কাজ করে — দুটো আলাদা আচরণ থাকলে একদিন একটা ভুল হতো */
-  it('একক DELETE-ও সারি মোছে না, দাগায়', async () => {
+  /** The single route does the same — two different behaviours would one day go wrong */
+  it('the single DELETE does not remove the row either, it marks it', async () => {
     const owner = await seedPool(1);
     const [only] = await ids();
 
@@ -1609,14 +1609,14 @@ describe('মরা ASIN মুছে ফেলা', () => {
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * **"কেন বাদ দিলেন" — তিনটে কারণ, দুই পথে এক** *(৩১ আগস্ট ২০২৬, মালিকের
- * চাওয়া: "'Not Found, Copyright, Events' eigula add kore dao… kono designer
- * skip press korleO tar kache same 3 ta option dibe")*।
+ * **"Why was it dropped" — three reasons, one for both routes** (owner's
+ * request: add "Not Found, Copyright, Events"; a designer pressing Skip
+ * should get the same 3 options).
  *
- * ⚠️⚠️ সবচেয়ে জরুরি দাবি: **কারণ ছাড়া কোনো পথ নেই**। আগে ঘরটা ঐচ্ছিক ছিল,
- * আর ফল — মাঠে ৯৩টা skipped সারির একটাতেও কারণ লেখা ছিল না।
+ * The most important claim: **there is no route without a reason**. The field
+ * used to be optional, and as a result none of the 93 skipped rows in the field had a reason.
  */
-describe('বাদ দেওয়ার কারণ', () => {
+describe('reason for dropping', () => {
   async function seedPool(count: number): Promise<Session> {
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     await post(owner, '/api/v1/design-targets/bulk', {
@@ -1625,7 +1625,7 @@ describe('বাদ দেওয়ার কারণ', () => {
     return owner;
   }
 
-  it('Delete-এ কারণ সারিতে বসে', async () => {
+  it('on Delete the reason is stored on the row', async () => {
     const owner = await seedPool(1);
     const row = await h.prisma.designTarget.findFirstOrThrow();
 
@@ -1641,8 +1641,8 @@ describe('বাদ দেওয়ার কারণ', () => {
     expect(after.dropReason).toBe('copyright');
   });
 
-  /** ⚠️⚠️ কারণ ছাড়া মোছার পথ থাকলে ঘরটা আবার খালি পড়ে থাকত */
-  it('কারণ ছাড়া Delete আটকে যায়', async () => {
+  /** With a route that deletes without a reason, the field would be empty again */
+  it('Delete without a reason is rejected', async () => {
     const owner = await seedPool(1);
     const row = await h.prisma.designTarget.findFirstOrThrow();
 
@@ -1656,8 +1656,8 @@ describe('বাদ দেওয়ার কারণ', () => {
     ).toBe('pool');
   });
 
-  /** ⚠️ তালিকার বাইরের কারণ নেওয়া যাবে না — নইলে গোনা অর্থহীন হতো */
-  it('অচেনা কারণ আটকে যায়', async () => {
+  /** A reason outside the list cannot be accepted — otherwise the counts would mean nothing */
+  it('an unknown reason is rejected', async () => {
     const owner = await seedPool(1);
     const row = await h.prisma.designTarget.findFirstOrThrow();
 
@@ -1667,8 +1667,8 @@ describe('বাদ দেওয়ার কারণ', () => {
     }).expect(400);
   });
 
-  /** ⭐⭐ ডিজাইনারের Skip — একই তিনটে কারণ, একই ঘর */
-  it('Skip-এ কারণ একই ঘরে বসে', async () => {
+  /** The designer's Skip — the same three reasons, the same field */
+  it('on Skip the reason goes in the same field', async () => {
     const designer = await staff('OX-D1', 'designer', 'd1@test.local');
     await seedPool(1);
     await h.app.get(TargetsService).distribute();
@@ -1691,7 +1691,7 @@ describe('বাদ দেওয়ার কারণ', () => {
     expect(after.dropReason).toBe('events');
   });
 
-  it('কারণ ছাড়া Skip আটকে যায়', async () => {
+  it('Skip without a reason is rejected', async () => {
     const designer = await staff('OX-D1', 'designer', 'd1@test.local');
     await seedPool(1);
     await h.app.get(TargetsService).distribute();
@@ -1717,13 +1717,14 @@ describe('বাদ দেওয়ার কারণ', () => {
   });
 
   /**
-   * ⭐⭐ **Undelete — সারিটা পুলে ফেরে, আর কারণটাও মুছে যায়** *(মালিকের
-   * নির্দেশ, ৩১ আগস্ট: "delete kora design e only un delete show korbe")*।
+   * **Undelete — the row returns to the pool, and the reason is erased too**
+   * (owner's instruction: a deleted design should show only Undelete).
    *
-   * ⚠️⚠️ কারণ না মুছলে সারিটা পুলে ফিরেও "Not Found" বলে দাগানো থাকত,
-   * আর পরের বণ্টনে যিনি পেতেন তিনি একটা মীমাংসিত সতর্কবার্তা দেখতেন।
+   * If the reason were not erased, the row would return to the pool still
+   * marked "Not Found", and whoever got it at the next allocation would see a
+   * warning that was already settled.
    */
-  it('পুলে ফেরালে কারণটাও মুছে যায়', async () => {
+  it('when returned to the pool, the reason is erased too', async () => {
     const owner = await seedPool(1);
     const row = await h.prisma.designTarget.findFirstOrThrow();
 
@@ -1745,8 +1746,8 @@ describe('বাদ দেওয়ার কারণ', () => {
     expect(back.dropReason).toBeNull();
   });
 
-  /** ⭐ কারণটা তালিকাতেও যায় — নইলে পর্দায় দেখানোর উপায় থাকত না */
-  it('তালিকার সারিতে কারণটা ফেরত আসে', async () => {
+  /** The reason goes into the list too — otherwise there would be no way to show it on screen */
+  it('the list row returns the reason', async () => {
     const owner = await seedPool(1);
     const row = await h.prisma.designTarget.findFirstOrThrow();
 
@@ -1766,15 +1767,15 @@ describe('বাদ দেওয়ার কারণ', () => {
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * **বাদ-যাওয়া ডিজাইনের রিভিউ কিউ** *(৩১ আগস্ট ২০২৬, মালিকের চাওয়া: "ami and
- * manager ei delete and skip deya design gula alada vabe management korte
- * paruk")*।
+ * **Review queue for dropped designs** (owner's request: the owner and the
+ * manager should be able to manage the designs that were deleted or skipped).
  *
- * ⚠️⚠️ সবচেয়ে জরুরি দাবি দ্বিতীয়টা: **কারণ ছাড়া পুরোনো সারি কিউতে ওঠে না**।
- * নইলে প্রথম দিনেই ৯৭টা সারি নিয়ে কিউ শুরু হতো — আর পাহাড় দেখলে কেউ
- * শুরুই করে না (২৪ আগস্টে আপলোড-কিউতে ঠিক এই ভুলটা হয়েছিল)।
+ * The most important claim is the second: **old rows without a reason do not
+ * enter the queue**. Otherwise the queue would start on day one with 97 rows —
+ * and nobody starts when they see a mountain (the upload queue made exactly
+ * this mistake on 24 August).
  */
-describe('রিভিউ কিউ — বাদ-যাওয়া ডিজাইন', () => {
+describe('review queue — dropped designs', () => {
   async function seedPool(count: number): Promise<Session> {
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     await post(owner, '/api/v1/design-targets/bulk', {
@@ -1786,7 +1787,7 @@ describe('রিভিউ কিউ — বাদ-যাওয়া ডিজ�
   const queue = (session: Session) =>
     session.http.get('/api/v1/design-targets?stage=to_review').expect(200);
 
-  it('কারণসহ মোছা সারি কিউতে ওঠে', async () => {
+  it('a row deleted with a reason enters the queue', async () => {
     const owner = await seedPool(2);
     const [first] = (
       await h.prisma.designTarget.findMany({
@@ -1807,15 +1808,15 @@ describe('রিভিউ কিউ — বাদ-যাওয়া ডিজ�
   });
 
   /**
-   * ⚠️⚠️ **এই টেস্টটাই কিউটাকে ব্যবহারযোগ্য রাখে।** কারণ চাওয়ার ব্যবস্থা
-   * ৩১ আগস্টের, তাই তার আগের `skipped` সারিতে কিছুই লেখা নেই — ম্যানেজারের
-   * "দেখে নেওয়ার" কিছুই নেই।
+   * **This test keeps the queue usable.** The reason requirement dates from
+   * 31 August, so `skipped` rows before it have nothing written — there is
+   * nothing for the manager to "look over".
    */
-  it('কারণ ছাড়া পুরোনো সারি কিউতে ওঠে না', async () => {
+  it('old rows without a reason do not enter the queue', async () => {
     const owner = await seedPool(1);
     const row = await h.prisma.designTarget.findFirstOrThrow();
 
-    // ⚠️ পুরোনো সারির নকল — অবস্থা `skipped`, কিন্তু কারণ নেই
+    // A fake old row — status `skipped`, but no reason
     await h.prisma.designTarget.update({
       where: { id: row.id },
       data: { status: 'skipped', dropReason: null },
@@ -1824,7 +1825,7 @@ describe('রিভিউ কিউ — বাদ-যাওয়া ডিজ�
     expect((await queue(owner)).body.rows).toHaveLength(0);
   });
 
-  it('"দেখে নিয়েছি" চাপলে কিউ থেকে সরে যায়, কিন্তু অবস্থা বদলায় না', async () => {
+  it('pressing "seen" removes it from the queue, but the status does not change', async () => {
     const owner = await seedPool(1);
     const row = await h.prisma.designTarget.findFirstOrThrow();
 
@@ -1840,14 +1841,14 @@ describe('রিভিউ কিউ — বাদ-যাওয়া ডিজ�
     const after = await h.prisma.designTarget.findUniqueOrThrow({
       where: { id: row.id },
     });
-    // ⭐ স্বীকৃতি, সিদ্ধান্ত নয় — সারিটা `deleted`-ই থাকে
+    // An acknowledgement, not a decision — the row stays `deleted`
     expect(after.status).toBe('deleted');
     expect(after.reviewedAt).not.toBeNull();
     expect(after.reviewedById).not.toBeNull();
   });
 
-  /** ⚠️ চিপের সংখ্যা আর তালিকার সংখ্যা আলাদা হলে দুটোই অবিশ্বাস্য হয়ে যায় */
-  it('চিপের সংখ্যা আর তালিকার সংখ্যা হুবহু এক', async () => {
+  /** If the chip count and the list count differ, both become unbelievable */
+  it('the chip count and the list count are exactly the same', async () => {
     const owner = await seedPool(3);
     const ids = (
       await h.prisma.designTarget.findMany({
@@ -1867,10 +1868,10 @@ describe('রিভিউ কিউ — বাদ-যাওয়া ডিজ�
   });
 
   /**
-   * ⚠️⚠️ পুলে ফিরলে চিহ্নটাও মুছে যায় — নইলে ভবিষ্যতে কেউ আবার Skip করলে
-   * সারিটা **কিউতেই উঠত না**, পুরোনো একটা চিহ্নের কারণে।
+   * When it returns to the pool the mark is erased too — otherwise if someone
+   * skipped it again later, the row **would not enter the queue** because of an old mark.
    */
-  it('পুলে ফেরালে "দেখা হয়েছে" চিহ্নও মুছে যায়', async () => {
+  it('when returned to the pool, the "seen" mark is erased too', async () => {
     const owner = await seedPool(1);
     const row = await h.prisma.designTarget.findFirstOrThrow();
 
@@ -1893,8 +1894,8 @@ describe('রিভিউ কিউ — বাদ-যাওয়া ডিজ�
     expect(back.reviewedById).toBeNull();
   });
 
-  /** ⚠️ গবেষক নন — মালিকের কথা ছিল "ami and manager" */
-  it('গবেষক "দেখে নিয়েছি" চাপতে পারেন না', async () => {
+  /** Not the researcher — the owner said "the owner and the manager" */
+  it('a researcher cannot press "seen"', async () => {
     const owner = await seedPool(1);
     const row = await h.prisma.designTarget.findFirstOrThrow();
     await post(owner, '/api/v1/design-targets/delete', {

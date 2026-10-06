@@ -40,11 +40,12 @@ import {
   summaryWorkbook,
 } from './reports.sheets';
 /**
- * ⚠️⚠️ **`countWorkdays` ও `monthBoundsOf` এখানে ইচ্ছাকৃতভাবে import করা
- * হয় না।** দৈনিক টার্গেটের হর পলিসির `expected_workdays`, ক্যালেন্ডার
- * থেকে গোনা কোনো সংখ্যা নয় — আর ঠিক ওই দুটো ফাংশন হাতের কাছে থাকাতেই
- * একদিন হরটা ক্যালেন্ডারে ফিরে গিয়েছিল। কর্মদিবস গোনার দরকার হলে
- * `targetSecIn()` নিজেই গুনে নেয় (সেটা লব, হর নয়)।
+ * `countWorkdays` and `monthBoundsOf` are **deliberately not imported here.**
+ * The denominator of the daily target is the policy's `expected_workdays`, not
+ * a number counted from the calendar, and it was exactly because those two
+ * functions were at hand that the denominator once slid back to the calendar.
+ * If counting work days is needed, `targetSecIn()` does it itself (that is the
+ * numerator, not the denominator).
  */
 import {
   approximateHolidayDates,
@@ -85,32 +86,33 @@ const HOUR = 3600;
 const DEFAULT_TOP = 25;
 
 /**
- * লেটারহেডে ছাপা প্রতিষ্ঠানের নাম।
- * ⚠️ `ORG_NAME` না থাকলে ফাঁকা লেটারহেড নয় — অন্তত পণ্যের নামটা বসে,
- *    কারণ শিরোনামহীন একটা কাগজ কোন কোম্পানির তা কেউ বলতে পারত না।
+ * The organisation's name printed on the letterhead.
+ * Careful: if `ORG_NAME` is missing the letterhead is not blank; at least the
+ * product's name goes in, because a paper with no heading could not say whose company it is.
  */
 const DEFAULT_ORG_NAME = 'oXeio Monitoring';
 
-// ── ভেতরের সহায়ক টাইপ ──────────────────────────────────────────────────────
+// ── Internal helper types ───────────────────────────────────────────────────
 
 interface ResolvedEmployee {
   id: number;
   empCode: string;
   fullName: string;
   department: string | null;
-  /** ⭐ কাজের ধরন — ডিজাইনের কলামটা কেবল ডিজাইনারদের জন্য ভরে (২১ আগস্ট) */
+  /** Kind of work: the designs column is filled only for designers */
   staffType: 'designer' | 'researcher' | 'manager' | null;
   joinedOn: Date | null;
   leftOn: Date | null;
   monthlyTargetSec: number;
   weeklyOffDays: readonly number[];
   /**
-   * ⭐⭐ এক কর্মদিবসের টার্গেট = মাসিক ÷ পলিসির `expected_workdays`।
+   * One work day's target = monthly ÷ the policy's `expected_workdays`.
    *
-   * ⚠️ কর্মীপ্রতি **একবারই** বের করা হয় এবং মাস বদলালেও বদলায় না — ঠিক
-   *    এই ধ্রুবকতাটাই `prorate()`-এর সাথে মিল রাখে। আগে এটা মাসভেদে
-   *    বদলাত (হর ছিল ওই মাসের ক্যালেন্ডার কর্মদিবস), আর তাতে একই কর্মীর
-   *    একই মাসে রিপোর্ট বলত ৭.৭০ ঘণ্টা, tray বলত ৮.০০।
+   * Worked out **once** per employee and does not change when the month
+   * changes: this very constancy is what keeps it in line with `prorate()`. It
+   * used to vary by month (the denominator was that month's calendar work
+   * days), so for the same employee in the same month the report said 7.70
+   * hours and the tray said 8.00.
    */
   dailyTargetSec: number;
 }
@@ -120,50 +122,49 @@ interface ReportContext {
   employees: ResolvedEmployee[];
   excluded: string[];
   /**
-   * ⭐⭐ যে ছুটির তারিখগুলোর উপর এই রিপোর্টের হর দাঁড়ানো, তার মধ্যে যেগুলো
-   * এখনো পাকা নয় ('YYYY-MM-DD')। ঠিক সেই সারিগুলো থেকেই আসে যেগুলো দিয়ে
-   * কর্মদিবস গোনা হয়েছে — এক সংখ্যা, এক সংজ্ঞা।
+   * Of the holiday dates this report's denominator rests on, those that are not
+   * final yet ('YYYY-MM-DD'). They come from exactly the rows the work days
+   * were counted with: one number, one definition.
    */
   approximateHolidayDates: string[];
   /**
-   * ⭐⭐ কর্মীপ্রতি "এ পর্যন্ত কত হওয়ার কথা ছিল", ঘণ্টায় — `ReportMeta.expectedHours`।
-   * সংজ্ঞা ও কেন সার্ভারে, দুটোই ওই টাইপের নোটে।
+   * Per employee, "how much was due so far", in hours: `ReportMeta.expectedHours`.
+   * The definition, and why it is on the server, are both in that type's note.
    */
   expectedHours: Record<number, number>;
   /**
-   * ⭐⭐ কর্মীপ্রতি **এই পরিসরের মোট টার্গেট**, ঘণ্টায় — অফিস-ডে × দৈনিক
-   * টার্গেট, শুক্রবার · সরকারি ছুটি · তার নিজের ছুটি বাদ। সংজ্ঞা
-   * `ReportMeta.targetHoursInRange`-এর নোটে।
+   * Per employee, **the total target of this span**, in hours: office days ×
+   * daily target, minus Fridays, public holidays and their own leave. The
+   * definition is in the note on `ReportMeta.targetHoursInRange`.
    */
   targetHoursInRange: Record<number, number>;
-  /** ⭐ G111 — কর্মীপ্রতি: একটাও শেষ-হওয়া কর্মদিবস দেখা হয়েছে কি না */
+  /** G111: per employee, whether at least one finished work day has been observed */
   observed: Record<number, boolean>;
-  /** ⭐ G110 — কর্মীপ্রতি ট্র্যাকিং-শুরুর দিন, **শুধু আঁকার জন্য** */
+  /** G110: per employee, the day tracking started, **only for drawing** */
   trackedFrom: Record<number, string | null>;
-  /** ওই কর্মীর ওই দিনের টার্গেট, সেকেন্ডে (ছুটির দিনে ০) */
+  /** That employee's target for that day, in seconds (0 on a leave day) */
   targetSecOf(employee: ResolvedEmployee, date: Date): number;
   /**
-   * ⭐⭐ ওই পরিসরের **প্রত্যাশা**, সেকেন্ডে — অর্থাৎ পরিসরের যেটুকু
-   * `elapsedWindow()`-এর ভেতরে পড়ে কেবল সেটুকুর টার্গেট।
+   * The span's **expectation**, in seconds: the target of only that part of
+   * the span that falls inside `elapsedWindow()`.
    *
-   * ⚠️ `targetSecOf()`-এর যোগফলের চেয়ে এটা **ছোট বা সমান**, আর ফারাকটা
-   *    ইচ্ছাকৃত: ট্র্যাকিং শুরুর আগের দিন আর আজকের অসমাপ্ত দিনটা টার্গেটে
-   *    আছে, প্রত্যাশায় নেই। কারও ঘাটতি মাপা হয় **কেবল** এই সংখ্যাটার
-   *    বিপরীতে — না-দেখা দিন কারো ব্যর্থতা নয়।
+   * It is **less than or equal to** the sum of `targetSecOf()`, and the
+   * difference is deliberate: the days before tracking started and today's
+   * unfinished day are in the target but not the expectation. A shortfall is
+   * measured **only** against this number; an unobserved day is nobody's failure.
    */
   expectedSecOf(employee: ResolvedEmployee, span: DateSpan): number;
   /**
-   * ⭐⭐ **G130 (R2)** — ওই কর্মীর ওই দিনটা অনুমোদিত ছুটি কি না।
+   * **G130 (R2)**: whether that day is approved leave for that employee.
    *
-   * ⚠️⚠️ সংখ্যায় ছুটি অনেক আগেই পৌঁছেছে (টার্গেট ০, প্রত্যাশা ০), কিন্তু
-   * **লেবেলে পৌঁছায়নি** — ফলে ছুটির দিনটা দেখতে হুবহু একটা শূন্য-ঘণ্টার
-   * কর্মদিবসের মতো। সংখ্যা মিথ্যা বলছিল না, কিন্তু **কারণটাও বলছিল না**,
-   * আর "ও ওই দিন কেন কাজ করেনি" প্রশ্নের উত্তর খুঁজতে Settings → Leave-এ
-   * যেতে হতো।
+   * Leave reached the numbers long ago (target 0, expectation 0) but **did not
+   * reach the label**, so a leave day looked exactly like a zero-hour work day.
+   * The number was not lying, but it **did not give the reason**, and to answer
+   * "why did they not work that day" you had to go to Settings → Leave.
    *
-   * ⚠️ ঠিক **সেই** `leaveBy` সেট থেকেই আসে যেটা দিয়ে টার্গেট ০ করা হয়েছে
-   * (`targetSecOf`) — এক সংজ্ঞা। আলাদা কোয়েরি করলে একদিন ব্যাজ থাকত অথচ
-   * টার্গেট কাটা যেত না, বা উল্টোটা।
+   * It comes from exactly **the same** `leaveBy` set that zeroes the target
+   * (`targetSecOf`): one definition. With a separate query, one day the badge
+   * would be there while the target was not cut, or the reverse.
    */
   onLeaveOn(employee: ResolvedEmployee, date: Date): boolean;
   ruleOf(employee: ResolvedEmployee): WorkdayRule;
@@ -171,15 +172,14 @@ interface ReportContext {
 }
 
 /**
- * F01–F02/F04/F05/F08 — রিপোর্ট ও Excel এক্সপোর্ট।
+ * F01–F02/F04/F05/F08: reports and Excel export.
  *
- * ⚠️ এখানে **কোনো টাকার হিসাব নেই**। বেতন-সংক্রান্ত সবকিছু `src/payroll/`-এ,
- *    আর সেখানেই `monthly_salary` পড়া হয় — ম্যানেজারও এই রিপোর্টগুলো দেখেন
- *    (§ ৪.৩), তাই এখানে একটা টাকার কলাম ঢুকলেই বেতন ফাঁস হতো।
+ * **There are no money calculations here.** Everything about salary is in
+ * `src/payroll/`, where `monthly_salary` is read; managers also see these
+ * reports (§ 4.3), so a money column slipping in here would leak salaries.
  *
- * ⚠️ **ক্যাটাগরি কখনো বেতনের হিসাবে ঢোকে না** — F04-এর productive/unproductive
- *    ভাগ শুধু দেখার জন্য; `worked_sec`, `credited_sec` বা টার্গেটে এর কোনো
- *    প্রভাব নেই।
+ * **Categories never enter the pay calculation**: F04's productive/unproductive
+ * split is for viewing only; it has no effect on `worked_sec`, `credited_sec` or the target.
  */
 @Injectable()
 export class ReportsService {
@@ -196,7 +196,7 @@ export class ReportsService {
       config.get<string>('ORG_NAME')?.trim() || DEFAULT_ORG_NAME;
   }
 
-  // ── F01 · অ্যাটেনডেন্স ────────────────────────────────────────────────────
+  // ── F01 · attendance ───────────────────────────────────────────────────────
 
   async attendance(q: ReportRangeQuery): Promise<AttendanceReport> {
     const ctx = await this.context(q);
@@ -222,17 +222,17 @@ export class ReportsService {
     );
 
     /**
-     * ⭐⭐ **কে কোন দিনে কতগুলো টার্গেট "শেষ" বলেছেন** *(২৩ আগস্ট ২০২৬,
-     * মালিকের চাওয়া)*।
+     * **How many targets each person marked "finished" on each day** (the
+     * owner's request).
      *
-     * ⚠️⚠️ `daily_summary`-তে এটা নেই, আর থাকার কথাও নয় — ওই টেবিল সময়ের
-     * হিসাব রাখে, আর এটা কাজের। তাই `design_targets` থেকে সরাসরি।
+     * `daily_summary` does not have this and should not: that table keeps time,
+     * and this is about work. So it is read straight from `design_targets`.
      *
-     * ⚠️ `completed_at` timestamptz, আর সারিগুলো **ঢাকার দিনে** ভাগ করতে
-     * হবে — তাই raw কুয়েরি; Prisma-র `groupBy` তারিখ কাটতে পারে না।
+     * `completed_at` is a timestamptz, and the rows must be split into **Dhaka
+     * days**, hence the raw query; Prisma's `groupBy` cannot cut dates.
      *
-     * ⭐ **একটাই কুয়েরি পুরো সীমার জন্য** — প্রতি সারিতে আলাদা করে গুনলে
-     * ৩০ দিন × ১৩ জন = ৩৯০টা কুয়েরি হতো (N+1)।
+     * **One query for the whole range**: counting per row separately would be
+     * 30 days × 13 people = 390 queries (N+1).
      */
     const finishedRows = await this.prisma.$queryRaw<
       { employee_id: number; work_date: Date; n: number }[]
@@ -249,8 +249,8 @@ export class ReportsService {
     `;
 
     /**
-     * ⚠️ চাবিটা `daily_summary`-র মতোই — UTC-মধ্যরাতের Date। raw কুয়েরি
-     *    `date` ফেরত দেয়, তাই ঘণ্টা-মিনিট ছেঁটে একই আকারে আনা হয়।
+     * The key is the same as `daily_summary`'s: a UTC-midnight Date. The raw
+     * query returns a `date`, so the hours and minutes are trimmed to the same shape.
      */
     const finishedByKey = new Map(
       finishedRows.map((r) => [
@@ -274,9 +274,9 @@ export class ReportsService {
       const rule = ctx.ruleOf(employee);
 
       for (const date of dates) {
-        // ⚠️ যোগ দেওয়ার আগের বা ছেড়ে যাওয়ার পরের দিনগুলো সারি হিসেবেই
-        //    আসে না। নইলে ২০ তারিখে যোগ দেওয়া কর্মীর নামে ১৯ দিনের
-        //    "কোনো কাজ নেই" আর পুরো টার্গেট বসে যেত।
+        // Days before joining or after leaving do not come as rows at all.
+        // Otherwise someone who joined on the 20th would get 19 days of "no
+        // activity" and a full target.
         if (!ctx.employedOn(employee, date)) continue;
 
         const summary = byKey.get(`${employee.id}|${date.getTime()}`);
@@ -293,35 +293,35 @@ export class ReportsService {
           date: toIsoDate(date),
           dayType: dayTypeOf(date, rule),
           /**
-           * ⭐⭐ **G130** — সংখ্যাটা আগেই ঠিক ছিল, এবার কারণটাও লেখা থাকে।
+           * **G130**: the number was already right; now the reason is written too.
            *
-           * ⚠️ `dayType`-এর ভেতরে ঢোকানো হয়নি ইচ্ছাকৃতভাবে: ছুটি একটা
-           * **কর্মদিবসেরই** ঘটনা, আর `dayType` বলে দিনটা অফিসের ক্যালেন্ডারে
-           * কী (কর্মদিবস · সাপ্তাহিক ছুটি · সরকারি ছুটি)। মিশিয়ে ফেললে
-           * "কজন কর্মদিবসে ছুটি নিলেন" আর গোনা যেত না।
+           * Deliberately not folded into `dayType`: leave is an event on a
+           * **work day**, while `dayType` says what the day is in the office
+           * calendar (work day, weekly off, public holiday). Mixed, "how many
+           * people took leave on work days" could no longer be counted.
            */
           onLeave: ctx.onLeaveOn(employee, date),
-          // ⭐ ডেটা না থাকা আর কাজ না করা — রিপোর্টে দুটোই "কোনো কাজ নেই"।
-          //    তবু সারিটা **থাকে**: অনুপস্থিতি বাদ দিয়ে দিলে সেটা রিপোর্টে
-          //    "তথ্য নেই" নয়, একেবারে অদৃশ্য হয়ে যেত।
+          // No data and no work both read "no activity" in the report. The row
+          // still **stays**: dropping absences would make them vanish from the
+          // report altogether, rather than show as "no data".
           status: worked > 0 ? 'worked' : 'no_activity',
           workedHours: secondsToHours(worked),
           idleHours: secondsToHours(summary?.idleSec ?? 0),
           adjustmentHours: secondsToHours(summary?.adjustmentSec ?? 0),
           creditedHours: secondsToHours(credited),
           /**
-           * ⚠️ ডিজাইন **না করলে** `null` (কলামটা খালি), শূন্য নয়।
-           * ⭐ ডিজাইনার না হয়েও কেউ করলে সংখ্যাটা ওঠে — ম্যানেজার নিজেও
-           * ডিজাইন করেন, আর সেটা লুকোনো মানে তথ্য হারানো (২২ আগস্ট)।
+           * `null` (the column is empty) if no designs were done, not zero.
+           * If someone who is not a designer does some, the number shows: a
+           * manager also designs, and hiding that would lose information.
            */
           /**
-           * ⭐ **কেবল "শেষ"** *(মালিকের সিদ্ধান্ত, ২৩ আগস্ট)* — আগে এখানে
-           * `daily_summary.designsDone` বসত, অর্থাৎ কতগুলো ফাইল **খোলা**
-           * হয়েছে। ⚠️ ওই সংখ্যা মাঠে বিভ্রান্তি তৈরি করেছিল: ম্যানেজার
-           * ১৯টা ফাইলে ৪৪ মিনিট দিয়ে "১৬" দেখাচ্ছিলেন।
+           * **Only "finished"** (owner's decision): `daily_summary.designsDone`
+           * used to go here, i.e. how many files were **opened**. That number
+           * caused confusion in the field: a manager with 44 minutes in 19 files
+           * was showing "16".
            *
-           * ⚠️ ০ হলে `null` — স্প্রেডশিটে ০ মানে "মেপে শূন্য পাওয়া গেছে",
-           * আর ডিজাইন-বহির্ভূত কর্মীর সারিতে সেটা মিথ্যা হতো।
+           * `null` when 0: in a spreadsheet 0 means "measured and found zero",
+           * which would be false on the row of someone outside design.
            */
           designsDone:
             finishedByKey.get(`${employee.id}|${date.getTime()}`) ?? null,
@@ -344,13 +344,13 @@ export class ReportsService {
         workedHours: secondsToHours(workedSec),
         creditedHours: secondsToHours(creditedSec),
         /**
-         * ⚠️⚠️ এটা **উপরের সারিগুলোর Target কলামের যোগফল**, "এ পর্যন্ত কত
-         * হওয়ার কথা ছিল" নয় (সেটা `meta.expectedHours`)। ওয়েবে ও PDF-এ
-         * সংখ্যাটা ঠিক ওই কলামের নিচে পাদটীকা হিসেবে বসে, তাই এটাকে
-         * প্রত্যাশার জানালায় নিলে **কলামটা আর যোগ হতো না** — একটা মোট
-         * যেটা নিজের কলামের সাথে মেলে না, সেটা যেকোনো ভুল সংখ্যার চেয়ে
-         * খারাপ। তাই ফারাকটা লেবেলে বলা হয় ("Target · days listed"), মোট
-         * বদলে নয়।
+         * This is **the sum of the Target column of the rows above**, not "how
+         * much was due so far" (that is `meta.expectedHours`). On the web and in
+         * the PDF the number sits as a footnote right under that column, so
+         * taking it from the expectation window would mean **the column no
+         * longer added up**: a total that does not match its own column is worse
+         * than any wrong number. So the difference is stated in the label
+         * ("Target · days listed"), not by changing the total.
          */
         targetHours: secondsToHours(targetSec),
         daysWithWork,
@@ -359,11 +359,12 @@ export class ReportsService {
   }
 
   /**
-   * F05 (xlsx) ও F06 (pdf) — একই রিপোর্ট, দুই মোড়ক।
+   * F05 (xlsx) and F06 (pdf): the same report, two wrappers.
    *
-   * ⭐ দুটো ফরম্যাট **একই `attendance()` কল** থেকে বানানো হয়। আলাদা কোয়েরি
-   * লিখলে একদিন একটা ফিল্টার শুধু একটাতে বসত, আর তখন একই রেঞ্জের Excel ও
-   * PDF দুই রকম যোগফল দেখাত — যেটা রিপোর্টে হতে পারে এমন সবচেয়ে খারাপ ভুল।
+   * Both formats are built from **the same `attendance()` call**. With separate
+   * queries a filter would one day land in only one, and then the Excel and
+   * PDF of the same range would show different totals, the worst mistake a
+   * report can have.
    */
   async attendanceFile(
     q: ReportRangeQuery,
@@ -384,7 +385,7 @@ export class ReportsService {
     });
   }
 
-  // ── F02 · সাপ্তাহিক / মাসিক সারাংশ ────────────────────────────────────────
+  // ── F02 · weekly / monthly summary ─────────────────────────────────────────
 
   async summary(q: SummaryQuery): Promise<SummaryReport> {
     const ctx = await this.context(q);
@@ -416,7 +417,7 @@ export class ReportsService {
       const weekStart = weekStartIsoDay(employee.weeklyOffDays);
       const rule = ctx.ruleOf(employee);
 
-      /** বালতির চাবি → জমতে থাকা হিসাব */
+      /** bucket key → the running totals */
       const buckets = new Map<
         string,
         {
@@ -438,10 +439,11 @@ export class ReportsService {
         let acc = buckets.get(bucket.key);
         if (!acc) {
           acc = {
-            // ⚠️ বালতির নিজের সীমা নয়, **যতটুকু আসলে হিসাবে এসেছে** সেটাই
-            //    দেখানো হয়। ১০ আগস্ট থেকে শুরু হওয়া রিপোর্টে '2026-08'
-            //    বালতির শুরু ১ আগস্ট লিখলে পাঠক ভাবতেন পুরো মাসের হিসাব
-            //    হাতে আছে, অথচ টার্গেট গোনা হয়েছে মাত্র ২২ দিনের।
+            // Not the bucket's own bounds but **what actually went into the
+            // calculation** is shown. In a report starting on 10 August, writing
+            // the '2026-08' bucket's start as 1 August would make the reader
+            // think the whole month's figures were in hand, though only 22 days
+            // of target were counted.
             start: date,
             end: date,
             workdays: 0,
@@ -468,33 +470,33 @@ export class ReportsService {
         a < b ? -1 : 1,
       )) {
         /**
-         * ⭐⭐ **ঘাটতির হর প্রত্যাশা, অতিরিক্তের হর টার্গেট — ইচ্ছাকৃতভাবে
-         * আলাদা, আর এটাই এই ফাইলের সবচেয়ে জরুরি সিদ্ধান্ত।**
+         * **The shortfall's denominator is the expectation and the overtime's
+         * is the target. Deliberately different, and this is the most important
+         * decision in this file.**
          *
-         * টার্গেট একটা **ক্যালেন্ডারের তথ্য**: এই দিনগুলোর জন্য কত ঘণ্টা
-         * ছিল। ঘাটতি একটা **মানুষ সম্পর্কে রায়**, আর রায় কেবল সেই
-         * দিনগুলোর উপর হতে পারে যেগুলো আমরা সত্যিই দেখেছি ও যেগুলো শেষ
-         * হয়েছে — তাই তার হর `expectedSecOf()`।
+         * The target is a **calendar fact**: how many hours there were for these
+         * days. A shortfall is a **verdict about a person**, and a verdict can
+         * only rest on days we really observed and that have finished, so its
+         * denominator is `expectedSecOf()`.
          *
-         * ⚠️⚠️ এটা না করলে যা হতো (আর গত রাউন্ডে হয়েছিল): Monthly পাতা
-         *    বলত "expected ৮ঘ · pace −২ঘ", অথচ **একই মাসের** Excel/PDF
-         *    বলত "target ৮৩.২ঘ · shortfall ৭৭.২ঘ" — কারণ ওতে এজেন্ট বসার
-         *    আগের দিনগুলোও ধরা ছিল। দুটোর মধ্যে মানুষ কাগজটাকেই বিশ্বাস
-         *    করে, আর কাগজটাই ছিল অভিযোগকারী।
+         * Without this, what happened last round would happen: the Monthly page
+         * said "expected 8h · pace −2h" while the Excel/PDF for **the same
+         * month** said "target 83.2h · shortfall 77.2h", because it also counted
+         * the days before the agent was installed. Between the two, people trust
+         * the paper, and the paper was the one accusing.
          *
-         * ⚠️ অতিরিক্ত মাপা হয় **পুরো টার্গেটের** বিপরীতে, প্রত্যাশার নয়।
-         *    প্রত্যাশা ধরলে আজকের কাজ করা ঘণ্টাগুলো (আজকের দিনটা
-         *    প্রত্যাশায় নেই) সবার নামে "অতিরিক্ত" হয়ে ছাপা হতো, অথচ
-         *    মাসের টার্গেটই এখনো ছোঁয়া হয়নি। "এগিয়ে আছি" আর "বেশি কাজ
-         *    করেছি" এক কথা নয়।
+         * Overtime is measured against **the full target**, not the expectation.
+         * With the expectation, hours worked today (today is not in the
+         * expectation) would print as "overtime" for everyone, though the
+         * month's target has not even been reached. "Ahead of pace" and "worked
+         * extra" are not the same thing.
          *
-         * ⭐ পর্ব শেষ হয়ে গেলে (গত মাসের রিপোর্ট) জানালা পুরো বালতিটাই
-         *    ঢাকে, অর্থাৎ প্রত্যাশা = টার্গেট আর দুটো হর মিলে যায় — তাই
-         *    পুরোনো মাসের ছাপা কাগজ এই বদলে নড়ে না।
+         * Once a period has ended (last month's report) the window covers the
+         * whole bucket, i.e. expectation = target and the two denominators
+         * coincide, so old months' printed papers do not move with this change.
          *
-         * ⚠️ দুটোই মেলানো হয় `credited_sec`-এর সাথে, `worked_sec`-এর সাথে
-         *    নয় (§ ২.১-ঙ) — নইলে owner-এর দেওয়া সংশোধন রিপোর্টে উধাও হয়ে
-         *    যেত।
+         * Both are compared with `credited_sec`, not `worked_sec` (§ 2.1-e);
+         * otherwise the owner's corrections would vanish from the report.
          */
         const expectedSec = ctx.expectedSecOf(employee, {
           from: acc.start,
@@ -549,28 +551,29 @@ export class ReportsService {
   // ── F04 · productivity ────────────────────────────────────────────────────
 
   /**
-   * ⭐ **productivity-র সংজ্ঞা একটাই, আর সেটা
-   * [activity.math.ts](../activity/activity.math.ts)-এ।** এই মেথড এখন শুধু
-   * সারি আনে আর ছাপার আকৃতিতে সাজায়।
+   * **There is one definition of productivity, and it is in
+   * [activity.math.ts](../activity/activity.math.ts).** This method now only
+   * fetches rows and arranges them into the printed shape.
    *
-   * আগে এখানে নিজের একটা `switch` ছিল যেটা সেকেন্ডগুলো
-   * productive/neutral/unproductive/uncategorized ভাগে ফেলত — অর্থাৎ
-   * `addSeconds()`-এর হুবহু নকল, শুধু আলাদা কোডে। রুট আলাদা বলে দুটো কখনো
-   * মুখোমুখি হতো না, কিন্তু **তারা ইতিমধ্যেই দু-রকম উত্তর দিত**: এখানে
-   * শতাংশের হরে অচিহ্নিত সময় ছিল, `scoreOf()`-এ ছিল না। কেউ প্রশ্ন করলে
-   * "কোনটা সত্যি" বলার কোনো উপায় থাকত না। এখন দুটো সংখ্যাই আসে একই
-   * `scoreOf()` থেকে, আর প্রত্যেকটার আলাদা নাম ও আলাদা মানে
-   * ([reports.types.ts](./reports.types.ts))।
+   * It used to have its own `switch` that put seconds into productive /
+   * neutral / unproductive / uncategorized, an exact copy of `addSeconds()` in
+   * different code. Being separate routes the two never met, but **they already
+   * gave different answers**: here the percentage's denominator included
+   * uncategorised time, in `scoreOf()` it did not. If anyone asked, there was
+   * no way to say "which one is true". Now both numbers come from the same
+   * `scoreOf()`, each with its own name and meaning
+   * ([reports.types.ts](./reports.types.ts)).
    *
-   * ⚠️ `window_title` কখনো select করা হয় না, আর ফুল URL কোথাও নেই — শুধু
-   *    `domain` (ADR-013)। টাইটেলে প্রায়ই পুরো লিংক বা ব্যক্তিগত ডকুমেন্টের
-   *    নাম থাকে; রিপোর্টে সেটা এলে ডোমেইন-only নিয়মটা কার্যত ফাঁকা হয়ে যেত।
+   * `window_title` is never selected and there is no full URL anywhere, only
+   * `domain` (ADR-013). A title often holds a whole link or a private
+   * document's name; if that reached the report, the domain-only rule would
+   * be effectively empty.
    *
-   * ⚠️ দুই ডিভাইস একসাথে চললে এখানে সময় দুইবার যোগ হতে পারে (§ ২.১-গ-র
-   *    UNION এখানে করা হয় না — এক বছরের রেঞ্জে লক্ষ সারি মেমরিতে টানতে হতো)।
-   *    ⭐ এতে কারো **টাকার** হিসাব নড়ে না: বেতন যায় `credited_sec` ধরে, আর
-   *    ওটা rollup-এ UNION করেই বসানো — এই রিপোর্ট শুধু "সময় কোথায় যাচ্ছে"
-   *    দেখায়।
+   * With two devices running at once, time may be added twice here (§ 2.1-c's
+   * UNION is not done here: a one-year range would pull hundreds of thousands
+   * of rows into memory). This does not move anyone's **money**: pay goes by
+   * `credited_sec`, which is set in the rollup with the UNION; this report only
+   * shows "where the time goes".
    */
   async productivity(q: ProductivityQuery): Promise<ProductivityReport> {
     const ctx = await this.context(q);
@@ -578,8 +581,8 @@ export class ReportsService {
     const where = {
       employeeId: { in: ids },
       workDate: { gte: ctx.range.from, lte: ctx.range.to },
-      // ⭐ R22a — শুধু ACTIVE-এ দেখা খণ্ড গোনা হয়। idle-এ দেখা সারি এখন
-      //    জমা হয় (মিটিং চেনার জন্য), কিন্তু কোনো হিসাবে যায় না।
+      // R22a: only segments seen while ACTIVE are counted. Rows seen while idle
+      // are now stored (to recognise meetings) but go into no calculation.
       segmentState: SegmentState.active,
     };
     const limit = q.limit ?? DEFAULT_TOP;
@@ -589,8 +592,8 @@ export class ReportsService {
         by: ['processName', 'domain', 'categoryId'],
         where,
         _sum: { durationSec: true },
-        // `foldUsage` কতগুলো সারি মিলেছে সেটাও গোনে — একটা ডোমেইনের ৩ ঘণ্টা
-        // ৪টা লম্বা খণ্ডে না ২০০টা ছোট খণ্ডে, দুটো খুব আলাদা অভ্যাস
+        // `foldUsage` counts how many rows matched too: 3 hours on one domain in
+        // 4 long segments or in 200 short ones are very different habits
         _count: { _all: true },
       }),
       this.prisma.appUsage.groupBy({
@@ -601,15 +604,17 @@ export class ReportsService {
       this.categoryMeta(),
     ]);
 
-    // ── টপ অ্যাপ ও সাইট
+    // ── Top apps and sites
     //
-    // ⚠️ প্রতিটা DB সারি **ঠিক একটা** তালিকায় যায়: ডোমেইন থাকলে সাইট,
-    //    নইলে অ্যাপ। এই ভাগটা এখানে TypeScript-এ করা হয়, দুটো আলাদা
-    //    কোয়েরিতে নয় — দুটো `where` লিখলে ফাঁকা-স্ট্রিং ডোমেইনের সারি
-    //    দুই দিকেই পড়ে যেত বা কোনো দিকেই না, আর মোট সময় নীরবে ভুল হতো।
-    // ⭐ এখানেই `/activity/top`-এর সাথে তফাত: ওখানে অ্যাপ ও সাইট **একই**
-    //    সময়ের দুই রকম কাটাছেঁড়া (chrome.exe-এর ভেতরেই youtube.com), তাই
-    //    যোগ করা যায় না। এখানে ভাগ দুটো পরস্পরছেদী, তাই যোগফলই মোট সময়।
+    // Every DB row goes into **exactly one** list: a site if it has a domain,
+    // otherwise an app. This split is done here in TypeScript, not in two
+    // separate queries: with two `where`s a row with an empty-string domain
+    // would fall into both lists or neither, and the total time would be
+    // silently wrong.
+    // This is where it differs from `/activity/top`: there, apps and sites are
+    // two different slicings of **the same** time (youtube.com inside
+    // chrome.exe), so they cannot be added. Here the two parts do not overlap,
+    // so their sum is the total time.
     const appGroups: UsageGroup[] = [];
     const siteGroups: UsageGroup[] = [];
 
@@ -635,17 +640,17 @@ export class ReportsService {
     const sites = foldUsage(siteGroups, meta, 'site', limit);
     const totalSec = apps.totalSec + sites.totalSec;
 
-    // ⚠️ প্রতিটা তালিকা থেকে টপ `limit` নিয়ে তারপর আবার `limit`-এ কাটা হয়।
-    //    এতে কিছু হারায় না — সব মিলিয়ে সেরা `limit`টা সবসময় দুই তালিকার
-    //    সেরা `limit`-এর ভেতরেই থাকে।
-    // ⚠️ সাজানো হয় **সেকেন্ড ধরে**, ঘণ্টা ধরে নয়। ঘণ্টা দুই দশমিকে গোল করা,
-    //    তাই ৩৫ সেকেন্ডের তফাত থাকা দুটো সারি সমান দেখাত আর ক্রমটা
-    //    বর্ণক্রমে গড়িয়ে যেত — অর্থাৎ ছোট সারিটা উপরে উঠে আসত।
+    // The top `limit` is taken from each list and then cut to `limit` again.
+    // Nothing is lost: the overall best `limit` is always within the best
+    // `limit` of the two lists.
+    // Sorted **by seconds**, not hours. Hours are rounded to two decimals, so
+    // two rows 35 seconds apart would look equal and the order would drift into
+    // alphabetical, so the smaller row would rise to the top.
     const top: ProductivityItem[] = [
       ...apps.rows.map((tally) => ({ tally, kind: 'app' as const })),
       ...sites.rows.map((tally) => ({ tally, kind: 'site' as const })),
     ]
-      // সমান হলে key-র বর্ণক্রম — একই রিপোর্ট দু-বার খুললে একই ক্রম
+      // On a tie, alphabetical by key: opening the same report twice gives the same order
       .sort(
         (a, b) =>
           b.tally.seconds - a.tally.seconds ||
@@ -654,7 +659,7 @@ export class ReportsService {
       .slice(0, limit)
       .map(({ tally, kind }) => itemOf(tally, kind, totalSec));
 
-    // ── কর্মীভিত্তিক ভাগ
+    // ── Per employee
     const perEmployee = new Map<number, SecondBuckets>();
 
     for (const row of byEmployee) {
@@ -667,16 +672,16 @@ export class ReportsService {
         perEmployee.set(row.employeeId, buckets);
       }
 
-      // ⚠️ `null` ক্যাটাগরি = **অচেনা**, neutral নয় — `addSeconds()` ওটাই
-      //    করে, আর দুটো মিলিয়ে ফেললে প্রতিটা অচেনা অ্যাপ নীরবে স্কোরের হর
-      //    বাড়িয়ে দিত (যত বেশি অচেনা, স্কোর তত কম, অথচ কারণটা অদৃশ্য)।
+      // A `null` category = **unknown**, not neutral: `addSeconds()` does that,
+      // and if the two were merged every unknown app would silently raise the
+      // score's denominator (the more unknown, the lower the score, the cause invisible).
       addSeconds(buckets, categoryOf(meta, row.categoryId), seconds);
     }
 
     let uncategorizedSec = 0;
     const rows: ProductivityEmployeeRow[] = ctx.employees.map((employee) => {
-      // ⭐ যাদের একটাও সারি নেই তারাও তালিকায় থাকেন — বাদ দিলে "এজেন্ট বন্ধ"
-      //    আর "সব ঠিক আছে" দেখতে একরকম হতো
+      // Those with no rows at all are in the list too: left out, "agent off" and
+      // "all fine" would look the same
       const score = scoreOf(perEmployee.get(employee.id) ?? emptyBuckets());
       uncategorizedSec += score.unknownSec;
 
@@ -704,7 +709,7 @@ export class ReportsService {
     };
   }
 
-  /** ⚠️ productivity-র PDF নেই — `ProductivityQuery` DTO-তেই আটকানো (F06) */
+  /** productivity has no PDF: `ProductivityQuery` blocks it in the DTO itself (F06) */
   async productivityFile(
     q: ProductivityQuery,
     actorUserId: number,
@@ -722,19 +727,19 @@ export class ReportsService {
     );
   }
 
-  // ── সাধারণ অংশ ────────────────────────────────────────────────────────────
+  // ── Common part ────────────────────────────────────────────────────────────
 
   /**
-   * তিনটি রিপোর্টেরই ভিত্তি: যাচাই করা রেঞ্জ, কর্মীর তালিকা, ছুটির ক্যালেন্ডার
-   * এবং প্রতিটি দিনের টার্গেট।
+   * The basis of all three reports: the validated range, the list of employees,
+   * the holiday calendar and each day's target.
    */
   private async context(q: ReportRangeQuery): Promise<ReportContext> {
     let range: ReportRange;
     try {
       range = parseReportRange(q.from, q.to);
     } catch (err) {
-      // খাঁটি ফাংশন RangeError ছোড়ে (payroll.math-এর মতো); HTTP-র ভাষায়
-      // অনুবাদ শুধু এখানেই হয়
+      // The pure function throws RangeError (like payroll.math); translation
+      // into HTTP language happens only here
       if (err instanceof RangeError) throw new BadRequestException(err.message);
       throw err;
     }
@@ -757,12 +762,13 @@ export class ReportsService {
           status: true,
           joinedOn: true,
           leftOn: true,
-          // ⚠️ `monthlySalary` এখানে **নেই** এবং কখনো যোগ করা যাবে না —
-          //    ম্যানেজারও এই endpoint ডাকেন
+          // `monthlySalary` is **not** here and must never be added: managers
+          // call this endpoint too
           policy: {
-            // ⭐⭐ `expectedWorkdays` — দৈনিক টার্গেটের **হর**। এটা না আনলে
-            //    এখানে আবার ক্যালেন্ডার থেকে গোনা কর্মদিবস বসত, আর ঠিক
-            //    সেটাই ছিল রিপোর্ট ও tray-র দুই সংখ্যার উৎস।
+            // `expectedWorkdays` is the **denominator** of the daily target.
+            // Without fetching it, the calendar-counted work days would creep in
+            // here again, which was exactly the source of the two numbers in
+            // the report and the tray.
             select: {
               monthlyTargetHours: true,
               expectedWorkdays: true,
@@ -787,9 +793,9 @@ export class ReportsService {
     const excluded: string[] = [];
 
     for (const e of employeeRows) {
-      // ⚠️ inactive অথচ `left_on` খালি — কবে থেকে ছিলেন না তা জানা নেই, তাই
-      //    রেঞ্জজুড়ে শূন্য সারি বসিয়ে দিলে ভুল ছবি দাঁড়াত। বাদ যান, কিন্তু
-      //    নাম meta-তে যায়।
+      // Inactive yet `left_on` empty: it is not known since when they were gone,
+      // so putting zero rows across the range would give a wrong picture. They
+      // are left out, but the name goes in meta.
       if (e.status === EmployeeStatus.inactive && e.leftOn === null) {
         excluded.push(e.fullName);
         continue;
@@ -797,8 +803,8 @@ export class ReportsService {
 
       const policy = e.policy ?? defaultPolicy;
       if (!policy) {
-        // ⭐ ২০৮ ধরে নেওয়া হয় না। কোনো policy না থাকলে টার্গেট **অজানা**,
-        //    আর অজানা টার্গেট দিয়ে ঘাটতি ছাপা মানে নীরবে একটা নীতি বানিয়ে ফেলা।
+        // 208 is not assumed. With no policy the target is **unknown**, and
+        // printing a shortfall against an unknown target would silently invent a policy.
         throw new InternalServerErrorException(
           'There is no active work policy — the target cannot be worked out',
         );
@@ -829,9 +835,9 @@ export class ReportsService {
       );
     }
 
-    // ⚠️ ছুটি আনা হয় **পুরো মাসগুলোর** জন্য, শুধু রেঞ্জের জন্য নয় — কারণ
-    //    দুটো, আর কোনোটাই দৈনিক টার্গেটের হর নয় (হর পলিসির ধ্রুবক):
-    //    `monthsIn()`-এর নোট দেখুন।
+    // Holidays are fetched for the **whole months**, not just the range, for two
+    // reasons, and neither is the daily target's denominator (that is the
+    // policy constant): see the note on `monthsIn()`.
     const months = monthsIn(range.from, range.to);
     const holidayRows = await this.prisma.holiday.findMany({
       where: {
@@ -840,8 +846,9 @@ export class ReportsService {
           lte: months[months.length - 1].last,
         },
       },
-      // ⚠️ `name`-ও আনা হয়, কারণ অনিশ্চয়তার চিহ্নটা ("(সম্ভাব্য)") নামেই
-      //    থাকে — আলাদা কলামে নয় (`prisma/holidays.data.ts`-এর মাথা দেখুন)।
+      // `name` is fetched too, because the uncertainty marker ("(সম্ভাব্য)",
+      // "probable") is in the name, not a separate column (see the top of
+      // `prisma/holidays.data.ts`).
       select: { holidayDate: true, name: true },
     });
     const holidays = new Set(holidayRows.map((h) => h.holidayDate.getTime()));
@@ -852,12 +859,12 @@ export class ReportsService {
     });
 
     /**
-     * ⭐⭐ R2 — **ছুটি, কর্মীপ্রতি।**
+     * **R2: leave, per employee.**
      *
-     * ⚠️ ছুটির দিনগুলো `holidays` সেটে ঢালা হয় **না**, যদিও তাতে নিচের
-     *    দুটো ফাংশনই এমনিতেই ঠিক হয়ে যেত। কারণ ওই একই সেট দিয়ে
-     *    `approximateHolidayDates()` চলে — অর্থাৎ একজনের ব্যক্তিগত ছুটি
-     *    রিপোর্টের পাদটীকায় "সরকারি ছুটি" হয়ে সবার চোখে পড়ত।
+     * Leave days are **not** poured into the `holidays` set, though the two
+     * functions below would then come out right anyway. The reason is that the
+     * same set feeds `approximateHolidayDates()`, so one person's personal leave
+     * would appear in the report's footnote as a "public holiday" for everyone to see.
      */
     const leaveRows = await this.prisma.leave.findMany({
       where: {
@@ -877,63 +884,63 @@ export class ReportsService {
     }
 
     /**
-     * ⭐⭐ **এক হার।** দিনটা কর্মদিবস হলে তার টার্গেট কর্মীর নিজের
-     * `dailyTargetSec` — মাস যাই হোক, ওই মাসে কটা ছুটি থাকুক না কেন।
+     * **One rate.** If the day is a work day, its target is the employee's own
+     * `dailyTargetSec`, whatever the month and however many holidays it has.
      *
-     * ⚠️⚠️ আগে এখানে হর ছিল **ওই মাসের ক্যালেন্ডার কর্মদিবস**, আর সেটাই
-     *    ছিল একই কর্মীর একই মাসে দুটো আলাদা দৈনিক টার্গেটের উৎস: tray ও
-     *    `monthly_summary` বলত ২০৮ ÷ ২৬ = ৮.০০ ঘণ্টা, রিপোর্ট বলত
-     *    ২০৮ ÷ ২৭ = ৭.৭০। আরও খারাপ, ছুটি বাড়লে রিপোর্টের দৈনিক টার্গেট
-     *    **বাড়ত** — অর্থাৎ ছুটি দিয়ে কর্মীর কোনো লাভই হতো না।
-     *    কেন পলিসির ধ্রুবকই সঠিক, তা `dailyTargetSec()`-এর নোটে।
+     * The denominator here used to be **that month's calendar work days**, and
+     * that was the source of two different daily targets for the same employee
+     * in the same month: the tray and `monthly_summary` said 208 ÷ 26 = 8.00
+     * hours, the report said 208 ÷ 27 = 7.70. Worse, more holidays **raised**
+     * the report's daily target, so a holiday gave the employee no benefit at all.
+     * Why the policy constant is right is in the note on `dailyTargetSec()`.
      */
     /**
-     * ⭐ G130 — ব্যাজ আর টার্গেট-কাটা **একই সেট** পড়ে, তাই দুটো কখনো
-     *    আলাদা কথা বলতে পারে না। ⚠️ `leaves` টেবিল সরাসরি, কোনো কলামে
-     *    লেখা হয় না — ছুটি মুছে দিলে ব্যাজও সাথে সাথেই যায়।
+     * G130: the badge and the target deduction read **the same set**, so the two
+     * can never disagree. The `leaves` table is read directly and nothing is
+     * written to any column: delete a leave and the badge goes at once.
      */
     const onLeaveOn = (employee: ResolvedEmployee, date: Date): boolean =>
       leaveBy.get(employee.id)?.has(date.getTime()) ?? false;
 
     const targetSecOf = (employee: ResolvedEmployee, date: Date): number => {
       if (!isWorkday(date, ruleOf(employee))) return 0;
-      // ⭐ R2 — ছুটির দিনে টার্গেট ০, ঠিক সাপ্তাহিক ছুটির দিনের মতোই
+      // R2: a leave day has target 0, just like a weekly off day
       if (onLeaveOn(employee, date)) return 0;
       return employee.dailyTargetSec;
     };
 
     /**
-     * ⭐⭐ **"এ পর্যন্ত কত হওয়ার কথা ছিল" — এখানেই, একবারই।**
+     * **"How much was due so far": here, once.**
      *
-     * ⚠️ জানালাটা নিজে বানানো হয় **না**: `summary.math.ts`-এর
-     *    `elapsedWindow()` ডাকা হয়, ঠিক যেটা মাসিক rollup আর tray ডাকে।
-     *    এখানে আবার `today − ১` লিখলে সেটাই হতো চতুর্থ সংজ্ঞা, আর ঠিক
-     *    এভাবেই আগের তিনটে জন্মেছিল।
+     * The window is **not** built by hand: `elapsedWindow()` from
+     * `summary.math.ts` is called, exactly as the monthly rollup and the tray
+     * call it. Writing `today − 1` again here would be a fourth definition, and
+     * that is exactly how the previous three were born.
      *
-     * ⭐ **ওই কর্মীর নিজের** ট্র্যাকিং-শুরু (তার সবচেয়ে পুরোনো
-     *    `daily_summary` সারি), সংস্থার প্রথম দিন নয় — নইলে যে কর্মীর
-     *    রেকর্ডই পরে তৈরি হয়েছে, তার আগের দিনগুলোও তার ঘাটতি হয়ে যেত।
+     * **That employee's own** tracking start (their oldest `daily_summary` row),
+     * not the organisation's first day; otherwise for someone whose record was
+     * created later, the days before it would also become their shortfall.
      *
-     * ⚠️⚠️ **যেটা এটা সারায় না** (`summary.math.ts` ও `progress.service.ts`-এর
-     *    একই নোট দেখুন): ১ অক্টোবর সক্রিয় হয়ে ৮ অক্টোবর এজেন্ট পাওয়া কর্মী।
-     *    `refreshDate()` প্রতিটি active কর্মীর সারি লেখে — ডেটা থাক বা না
-     *    থাক — তাই তার ট্র্যাকিং-শুরুও ১ অক্টোবরই বসে, আর এজেন্টহীন সাতটা
-     *    দিন **এখনো পুরো ঘাটতি**। এই জানালা প্রথম ইনস্টলের ফাঁকটা ঢাকে,
-     *    পরে যোগ দেওয়া কর্মীর ফাঁক নয় (G120)।
+     * **What this does not fix** (see the same note in `summary.math.ts` and
+     * `progress.service.ts`): someone active from 1 October who got the agent on
+     * 8 October. `refreshDate()` writes a row for every active employee, with
+     * data or without, so their tracking start also lands on 1 October, and the
+     * seven agentless days are **still a full shortfall**. This window covers
+     * the gap of the first install, not of an employee who joined later (G120).
      *
-     * ⚠️ যোগফলটা `targetSecIn()` দিয়ে — **কর্মদিবস × দৈনিক টার্গেট**, ঠিক
-     *    যেভাবে `prorate()` মাসের টার্গেট বের করে। দৈনিক টার্গেট এখন সব
-     *    মাসে এক, তাই এই গুণফল আর দিনে-দিনে যোগফল একই ঘণ্টা দেয় — অর্থাৎ
-     *    সংখ্যাটা পাতায় দেখা ঘরগুলোরই যোগফল। **দুটোই**
-     *    `test/reports.target.spec.ts` পাহারা দেয়; হর মাসভেদে বদলালে এই
-     *    সমতাটা ভাঙত, আর তখন গুণ করাটা ভুল হতো।
+     * The total uses `targetSecIn()`: **work days × daily target**, exactly how
+     * `prorate()` works out the month's target. The daily target is now the same
+     * in every month, so this product and the day-by-day sum give the same
+     * hours, i.e. the number is the sum of the cells seen on the page. **Both**
+     * are guarded by `test/reports.target.spec.ts`; if the denominator varied by
+     * month that equality would break, and multiplying would be wrong.
      */
     const trackedFrom = await trackedFromBy(
       this.prisma,
       employees.map((e) => e.id),
     );
 
-    // ⚠️ ঢাকার আজ — `parseReportRange()`-ও ঠিক এভাবেই ছাঁটাইয়ের সীমা বের করে
+    // Today in Dhaka: `parseReportRange()` finds the clamping limit exactly this way
     const today = workDateOf(new Date());
 
     const windowBy = new Map(
@@ -945,32 +952,33 @@ export class ReportsService {
           today,
           joinedOn: employee.joinedOn,
           leftOn: employee.leftOn,
-          // ⚠️⚠️ `?? today` — না-দেখা কর্মীর জানালা খালি, প্রত্যাশা ০ (G120)
+          // `?? today`: the window of an unseen employee is empty, expectation 0 (G120)
           trackingStartedOn: trackedFrom.get(employee.id) ?? today,
         }),
       ]),
     );
 
     /**
-     * ⭐⭐ **প্রত্যাশা মাপার একমাত্র জায়গা** — meta-র সংখ্যা আর সারির
-     * ঘাটতি, দুটোই এখান দিয়ে যায়। বালতিগুলোর প্রত্যাশা যোগ করলে ঠিক
-     * `meta.expectedHours`-ই ফেরে, কারণ বালতিগুলো রেঞ্জটাকে ভাগ করে নেয়।
+     * **The only place the expectation is measured**: the number in meta and the
+     * row's shortfall both go through here. Adding up the buckets' expectations
+     * returns exactly `meta.expectedHours`, because the buckets split the range.
      *
-     * ⚠️ জানালা `null` = খালি (আজ রেঞ্জের প্রথম দিন, বা তাকে এখনো একটা
-     *    শেষ-হওয়া দিনেও দেখা হয়নি) — তখন প্রত্যাশা ০, আর ০-এর বিপরীতে
-     *    কারও ঘাটতিও থাকতে পারে না। সেটাই কাম্য।
+     * A `null` window = empty (today is the range's first day, or they have not
+     * yet been seen on even one finished day); then the expectation is 0, and
+     * nobody can have a shortfall against 0. That is what we want.
      */
     /**
-     * ⭐⭐ **অফিস-ডে × দৈনিক টার্গেট − ছুটি** — এই প্রকল্পের একমাত্র
-     * টার্গেট-সূত্র, আর এখানে **একবারই** লেখা।
+     * **Office days × daily target − leave**: the project's only target
+     * formula, written **once** here.
      *
-     * ⚠️⚠️ আগে সূত্রটা দু-জায়গায় লেখা হতো, আর ঠিক সেভাবেই G117 জন্মেছিল:
-     * এক পাশে ছুটি বাদ যেত, অন্য পাশে যেত না। ⭐ এখন দুটো কলার (প্রত্যাশা
-     * আর পরিসরের টার্গেট) কেবল **আলাদা জানালা** পাঠায়, আলাদা অঙ্ক নয়।
+     * The formula used to be written in two places, and that is exactly how G117
+     * was born: leave was subtracted on one side and not the other. Now the two
+     * callers (the expectation and the span's target) only pass a **different
+     * window**, not a different calculation.
      *
-     * ⚠️ R2 — ছুটি আলাদা করে বাদ দিতে হয়, কারণ `targetSecIn()` গুণ করে
-     *    (দিনে-দিনে যোগ করে না)। না কাটলে meta-র সংখ্যা আর সারিগুলোর
-     *    যোগফল মিলত না — ওই সমতাটাই `test/reports.target.spec.ts` পাহারা দেয়।
+     * R2: leave has to be subtracted separately, because `targetSecIn()`
+     * multiplies (it does not add day by day). Without it the number in meta and
+     * the sum of the rows would not match; `test/reports.target.spec.ts` guards that equality.
      */
     const netTargetSecIn = (
       employee: ResolvedEmployee,
@@ -1010,20 +1018,20 @@ export class ReportsService {
     }
 
     /**
-     * ⭐⭐ **G111 — উপরের ০ কোন ধরনের ০, সেটা এখানেই ঠিক হয়।**
+     * **G111: which kind of 0 the 0 above is, is decided here.**
      *
-     * ⚠️⚠️ `expectedHours === 0` দুটো সম্পূর্ণ আলাদা কারণে হতে পারে:
-     * তাঁকে **এখনো একটা শেষ-হওয়া কর্মদিবসেও দেখা হয়নি**, নাকি দেখা
-     * হয়েছে কিন্তু ওই দিনগুলোয় তাঁর কোনো টার্গেটই ছিল না (সব ছুটি)।
-     * পর্দায় দুটোই "০ ঘাটতি" — অর্থাৎ টার্গেট পূরণের মতোই দেখায়।
+     * `expectedHours === 0` can come from two completely different causes: they
+     * have **not yet been seen on even one finished work day**, or they have
+     * been seen but had no target at all on those days (all leave). On screen
+     * both show as "0 shortfall", i.e. they look like a met target.
      *
-     * ⭐ পতাকাটা **`workdaysElapsed` থেকেই** আসে, `expectedHours` থেকে
-     * নয়। tray আর Live Board ঠিক এই একই সংখ্যা পড়ে (`isObserved`), তাই
-     * তিন পর্দা কখনো তিন রকম রায় দিতে পারে না।
+     * The flag comes **from `workdaysElapsed`**, not from `expectedHours`. The
+     * tray and Live Board read this same number (`isObserved`), so the three
+     * screens can never give three different verdicts.
      *
-     * ⚠️ ছুটির দিন লব থেকে বাদ (`leaveBy`) — ঠিক যেভাবে প্রত্যাশা গোনার
-     * সময় বাদ যায়। না দিলে ছুটি কাটিয়ে ফেরা কেউ "দেখা হয়েছে" দেখাতেন
-     * অথচ তাঁর প্রত্যাশা ০ — আবার সেই দুই কথা।
+     * Leave days are removed from the numerator (`leaveBy`), exactly as when
+     * counting the expectation. Otherwise someone back from leave would show as
+     * "observed" with an expectation of 0, the same two stories again.
      */
     const observed: Record<number, boolean> = {};
     const trackedFromMeta: Record<number, string | null> = {};
@@ -1036,7 +1044,7 @@ export class ReportsService {
             today,
             joinedOn: employee.joinedOn,
             leftOn: employee.leftOn,
-            // ⚠️⚠️ `?? today` — উপরের `windowBy`-র হুবহু একই ধার (G120)
+            // `?? today`: exactly the same borrowing as `windowBy` above (G120)
             trackingStartedOn: trackedFrom.get(employee.id) ?? today,
             weeklyOffDays: employee.weeklyOffDays,
             holidays,
@@ -1046,9 +1054,9 @@ export class ReportsService {
       });
 
       /**
-       * ⭐ G110 — **তারিখটা, নিয়মটা নয়।** পাতাটা এটা দিয়ে কেবল ঘর আঁকে
-       * ("এই দিনটায় আমরা দেখছিলামই না"); প্রত্যাশা এখনো `expectedHours`
-       * থেকেই আসে।
+       * G110: **the date, not the rule.** The page uses it only to draw cells
+       * ("we were not watching on this day"); the expectation still comes from
+       * `expectedHours`.
        */
       const seenFrom = trackedFrom.get(employee.id);
       trackedFromMeta[employee.id] =
@@ -1056,39 +1064,41 @@ export class ReportsService {
     }
 
     /**
-     * ⭐⭐ **এই পরিসরে তার মোট টার্গেট** — মালিকের নিয়ম *(২৩ আগস্ট ২০২৬)*:
-     * *"daily 8 ghonta kore, without holiday and friday"*, আর
-     * *"maser hisab na kore office day hisab koro"*।
+     * **Their total target in this span**, the owner's rule: 8 hours a day,
+     * excluding holidays and Fridays, counting office days, not months.
      *
-     * অর্থাৎ **অফিস-ডে গোনা হয়, মাস নয়** — যে ক-দিন দেখা হচ্ছে সেই
-     * পরিসরের কর্মদিবস × দৈনিক টার্গেট, শুক্রবার ও সরকারি ছুটি বাদ।
+     * So **office days are counted, not the month**: the span's work days ×
+     * the daily target, Fridays and public holidays excluded.
      *
-     * ⚠️⚠️ এটাই G117 সারাল: আগে এখানে বসত পলিসির **ফ্ল্যাট ২০৮**, অথচ
-     * অক্টোবরে অফিস-ডে ২৪ (= ১৯২ঘ)। ফলে রিপোর্ট ১৬ ঘণ্টার **ভুতুড়ে
-     * ঘাটতি** দেখাত, আর tray একই মাসে অন্য সংখ্যা বলত।
+     * This fixed G117: the policy's **flat 208** used to go here, yet in
+     * October there are 24 office days (= 192h). The report showed a **phantom
+     * shortfall** of 16 hours, while the tray said a different number for the same month.
      *
-     * ⭐ মাস ধরে না গোনায় *"কোন মাসের টার্গেট"* প্রশ্নটাই আর ওঠে না —
-     * এক মাস, আধা মাস, তিন মাস, সবেতেই সংখ্যাটার মানে এক।
+     * Because the month is not what is counted, the question "which month's
+     * target" no longer arises: for one month, half a month or three, the
+     * number means the same.
      *
-     * ⚠️ **ব্যক্তিগত ছুটিও বাদ** (`netTargetSecIn`) — নইলে সবেতন ছুটির
-     *    দিনগুলো ঘাটতি হয়ে দাঁড়াত, আর tray/`monthly_summary`/পে-রোলের
-     *    সাথে আবার দুই সংখ্যা হতো, কেবল উল্টো চিহ্নে।
+     * **Personal leave is also subtracted** (`netTargetSecIn`); otherwise paid
+     * leave days would become shortfall, and there would again be two numbers
+     * against the tray, `monthly_summary` and payroll, just with the opposite sign.
      *
-     * ⚠️ কর্মকালে ছাঁটা — জয়েনের আগের বা ছাড়ার পরের দিন কারো টার্গেট নয়।
-     *    ছেদ খালি হলে **০**, আর ০ একটা বৈধ উত্তর ("তার কোনো অফিস-ডে নেই")।
+     * Trimmed to the employment period: the days before joining or after leaving
+     * are nobody's target. If the overlap is empty the answer is **0**, and 0 is
+     * a valid answer ("they have no office days").
      *
-     * ⚠️⚠️ **জানালা `requestedTo`, `to` নয় — এটা নীরব পছন্দ নয়।**
+     * **The window is `requestedTo`, not `to`, and that is not a casual choice.**
      *
-     * `range.to` আজকের দিনে ছাঁটা (`clampedToToday`)। ওটা ধরলে ২৩ আগস্টে
-     * আগস্টের টার্গেট দাঁড়াত **১৬০ঘ** (২০ অফিস-ডে), অথচ আগস্টের টার্গেট
-     * ২০৮ — মাস শেষ হয়নি বলে টার্গেট ছোট হয়ে যায় না।
+     * `range.to` is clamped to today (`clampedToToday`). Using it, on 23 August
+     * August's target would come out as **160h** (20 office days), yet August's
+     * target is 208: a target does not shrink because the month has not ended.
      *
-     * ⭐ আর ছাঁটলে সংখ্যাটা কার্যত `expectedHours`-এর **নকল** হয়ে যেত, অথচ
-     * দুটোর কাজ আলাদা: এটা *"মোট কত হওয়ার কথা"* (অগ্রগতির হর), আর ওটা
-     * *"এ পর্যন্ত কত হওয়ার কথা"* (ঘাটতির মাপকাঠি)। একটাকে অন্যটার সমান
-     * করে দিলে Monthly পাতার অগ্রগতি-বার সারাদিন ১০০%-এর কাছে বসে থাকত।
+     * Clamped, the number would also become effectively a **copy** of
+     * `expectedHours`, though the two do different jobs: this is "how much is due
+     * in total" (the denominator of progress), and that is "how much is due so
+     * far" (the yardstick of shortfall). Making one equal the other would leave
+     * the Monthly page's progress bar sitting near 100% all day.
      *
-     * ⚠️ ধরা পড়েছে CI-তে, এই ফাইলের টেস্ট লাল হয়ে — প্রথমে `to` ধরা হয়েছিল।
+     * Caught in CI by a red test in this file's tests; `to` was used at first.
      */
     const targetHoursInRange: Record<number, number> = {};
     const targetSpan = { from: range.from, to: range.requestedTo };
@@ -1113,10 +1123,10 @@ export class ReportsService {
       onLeaveOn,
       expectedSecOf,
       /**
-       * ⭐⭐ **ঠিক সেই সারিগুলো**, যেগুলো দিয়ে উপরের `holidays` সেটটা — আর
-       * তাই মাসের কর্মদিবস ও দৈনিক টার্গেটের হর — বানানো হলো। আলাদা
-       * কোয়েরি করলে দুটো সংখ্যা দুই জায়গা থেকে আসত, আর একদিন (রেঞ্জ বা
-       * ফিল্টার একটু বদলালেই) দুটো আলাদা কথা বলত।
+       * **Exactly the rows** from which the `holidays` set above was built, and
+       * so the month's work days and the daily target's denominator. A separate
+       * query would bring the two numbers from two places, and one day (if the
+       * range or filter changed a little) they would say different things.
        */
       approximateHolidayDates: approximateHolidayDates(
         holidayRows.map((h) => ({ date: h.holidayDate, name: h.name })),
@@ -1132,17 +1142,16 @@ export class ReportsService {
   }
 
   /**
-   * id → ক্যাটাগরির পরিচয়। ~১১০টা সারি, তাই প্রতিবার পুরোটা পড়াই সবচেয়ে সহজ।
+   * id → category identity. About 110 rows, so reading all of it each time is simplest.
    *
-   * ⚠️ শুধু ব্যবহৃত id-গুলো আনা হয় **না** — `matchType` লাগে লেবেল বাছতে
-   *    (`foldUsage`-এর chrome.exe/YouTube ফাঁদ), আর সেই লেবেল বাছাই যেন
-   *    `/activity/top`-এর সাথে হুবহু এক থাকে সে জন্য ম্যাপটাও একই রকম
-   *    হওয়া দরকার।
+   * All ids are fetched, not only the used ones: `matchType` is needed to pick the
+   * label (`foldUsage`'s chrome.exe/YouTube trap), and for that label choice to
+   * stay exactly the same as `/activity/top`, the map has to be the same kind.
    *
-   * ⚠️ `AppCategoryService`-এর ক্যাশ ব্যবহার করা হয় না — ওটা `compile()` করা
-   *    রুল রাখে, আর ভুল regex-ওয়ালা রুলগুলো সেখানে বাদ পড়ে। রিপোর্টে ওই
-   *    রুলের id-ওয়ালা পুরোনো সারি থাকতেই পারে; ক্যাশ থেকে নিলে সেগুলো নীরবে
-   *    "অচেনা" দেখাত, অথচ ডাটাবেসে ক্যাটাগরি বসানোই আছে।
+   * `AppCategoryService`'s cache is not used: it holds `compile()`d rules, and
+   * rules with a bad regex are dropped there. A report may well have old rows
+   * carrying such a rule's id; taking from the cache would silently show them
+   * as "unknown", though the category is set in the database.
    */
   private async categoryMeta(): Promise<Map<number, CategoryMeta>> {
     const rows = await this.prisma.appCategory.findMany({
@@ -1162,11 +1171,13 @@ export class ReportsService {
   }
 
   /**
-   * ⭐ এক্সপোর্ট একটা ঘটনা — কে কোন রেঞ্জ কোন ফরম্যাটে নামিয়ে নিল, লেখা থাকবে (§ ৭)।
+   * An export is an event: who downloaded which range in which format is
+   * recorded (§ 7).
    *
-   * ⚠️ `format` আগে `'xlsx'` হার্ডকোড ছিল। PDF যোগ করার সময় সেটা না বদলালে
-   *    অডিট লগ **মিথ্যে** বলত — কেউ PDF নামালেও লেখা থাকত xlsx, আর "কে কী
-   *    নিয়েছে" প্রশ্নের উত্তর অডিট থেকেই আসার কথা।
+   * `format` used to be hardcoded as `'xlsx'`. Had that not been changed when
+   * PDF was added, the audit log would have **lied**: someone downloading a PDF
+   * would still be recorded as xlsx, yet "who took what" is supposed to be
+   * answered from the audit.
    */
   private async fileOf(
     report: string,
@@ -1193,12 +1204,12 @@ export class ReportsService {
 }
 
 /**
- * ⚠️ id ম্যাপে না থাকলে `null` — অর্থাৎ "অচেনা", crash নয়। foreign key
- * থাকায় এমন হওয়ার কথা নয়, কিন্তু একটা রুল মুছে ফেলার আর ম্যাপটা পড়ার
- * মাঝখানে এটা ঘটতে পারে, আর তখন গোটা রিপোর্ট ৫০০ দেওয়ার কোনো মানে নেই।
+ * `null` if the id is not in the map: "unknown", not a crash. With the foreign
+ * key it should not happen, but it can between a rule being deleted and the map
+ * being read, and then there is no reason for the whole report to give a 500.
  *
- * ⚠️ `activity.math.ts`-এও হুবহু এই নিয়মটা আছে, কিন্তু সেটা ফাইল-প্রাইভেট।
- * export হলে এই ছয় লাইন মুছে ফেলা যেত — নোটে লেখা আছে।
+ * `activity.math.ts` has exactly this rule too, but it is file-private. If it
+ * were exported these six lines could be deleted; the note says so.
  */
 function categoryOf(
   meta: ReadonlyMap<number, CategoryMeta>,
@@ -1209,11 +1220,11 @@ function categoryOf(
 }
 
 /**
- * `activity.math`-এর `UsageTally` → F04-এর সারি।
+ * `activity.math`'s `UsageTally` → an F04 row.
  *
- * ⚠️ `sharePct`-এর হর **দুই তালিকা মিলিয়ে মোট**, `foldUsage`-এর নিজের
- * মোট নয়। নইলে অ্যাপ ও সাইট আলাদাভাবে ১০০%-এ যোগ হতো আর এক টেবিলে
- * পাশাপাশি বসে শতাংশগুলোর যোগফল ২০০ দেখাত।
+ * The denominator of `sharePct` is the **total of both lists together**, not
+ * `foldUsage`'s own total. Otherwise apps and sites would each add up to 100%
+ * separately, and side by side in one table the percentages would sum to 200.
  */
 function itemOf(
   tally: UsageTally,
@@ -1224,8 +1235,8 @@ function itemOf(
     key: tally.key,
     kind,
     category: tally.category ?? 'uncategorized',
-    // `foldUsage` রুলের নাম না পেলে key-টাই লেবেল করে; F04-এর চুক্তি বলে
-    // "নিয়মে নাম না মিললে null"
+    // When `foldUsage` finds no rule name it uses the key as the label; F04's
+    // contract says "null if the rule has no name"
     displayName: tally.label === tally.key ? null : tally.label,
     mixed: tally.mixed,
     hours: secondsToHours(tally.seconds),
@@ -1233,13 +1244,13 @@ function itemOf(
   };
 }
 
-// ── ছোট সহায়ক ───────────────────────────────────────────────────────────────
+// ── Small helpers ───────────────────────────────────────────────────────────
 
 /**
- * ⭐ দিনের ধরন আর "কাজ হয়েছে কি না" আলাদা দুটি কলাম। এক কলামে মিলিয়ে দিলে
- * ছুটির দিনে করা কাজ হয় "ছুটি" হয়ে হারিয়ে যেত, নয়তো "কাজ হয়েছে" হয়ে
- * ছুটির তথ্যটাই মুছে যেত। ছুটির দিনে ঘণ্টা পুরোপুরি গোনা হয়, কিন্তু
- * টার্গেট ০ — তাই ওই দিনটা সরাসরি অতিরিক্ত হয়ে যায় (§ ২.১-খ, এটাই কাম্য)।
+ * The day's type and "was work done" are two separate columns. Merged into
+ * one, work done on a holiday would be lost as "holiday", or the holiday
+ * information would be wiped out as "worked". Hours on a holiday count in
+ * full but the target is 0, so that day goes straight to extra (§ 2.1-b, which is intended).
  */
 function dayTypeOf(date: Date, rule: WorkdayRule): DayType {
   if (rule.holidays.has(date.getTime())) return 'holiday';
@@ -1259,27 +1270,27 @@ function metaOf(ctx: ReportContext): ReportMeta {
     generatedAt: new Date().toISOString(),
     excludedEmployees: ctx.excluded,
 
-    // ⭐⭐ অনিশ্চয়তা সংখ্যা পর্যন্ত পৌঁছায়: এই মাসগুলোর কোন ছুটির তারিখ
-    //    এখনো পাকা নয়। ওগুলো নড়লে কর্মদিবস নড়ে, টার্গেট নড়ে, পে-রোলের
-    //    ভগ্নাংশও নড়ে — তাই চুপ করে থাকা যায় না।
+    // The uncertainty reaches the number: which of these months' holiday dates
+    // are not final yet. If they move, work days move, the target moves, and
+    // payroll's fraction moves, so we cannot stay silent.
     approximateHolidayDates: ctx.approximateHolidayDates,
 
-    // ⭐⭐ এই পরিসরে তার **আসল** টার্গেট — অফিস-ডে × দৈনিক টার্গেট (G117)।
-    // ⚠️ আগে এখানে বসত পলিসির ফ্ল্যাট ২০৮, যেটা কেবল ২৬ অফিস-ডের মাসে
-    //    ঠিক হতো; অক্টোবরে ২৪ দিন = ১৯২ঘ, অর্থাৎ ১৬ ঘণ্টার ভুতুড়ে ঘাটতি।
-    // ⭐ হিসাবটা `context()`-এ, `expectedHours`-এর সাথে **একই সূত্রে**।
+    // Their **real** target in this span: office days × daily target (G117).
+    // It used to be the policy's flat 208 here, which was only right for a
+    // month with 26 office days; October has 24 days = 192h, a phantom 16-hour shortfall.
+    // The calculation is in `context()`, on **the same formula** as `expectedHours`.
     targetHoursInRange: ctx.targetHoursInRange,
 
-    // ⭐⭐ "এ পর্যন্ত কত হওয়ার কথা ছিল" — জানালাটা `elapsedWindow()`-এর,
-    //    অর্থাৎ tray ও Live Board-এর সাথে হুবহু একই সংজ্ঞা।
+    // "How much was due so far": the window is `elapsedWindow()`'s, i.e. exactly
+    // the same definition as the tray and Live Board.
     expectedHours: ctx.expectedHours,
 
-    // ⭐⭐ G111 — উপরের ০ "টার্গেট পূরণ" নাকি "এখনো দেখাই হয়নি"।
-    //    সংখ্যা নয়, **অবস্থা** — নইলে পাতাটা নিজে অনুমান করত।
+    // G111: whether the 0 above is "target met" or "not observed yet". A
+    // **state**, not a number; otherwise the page would have to guess.
     observed: ctx.observed,
 
-    // ⭐ G110 — কবে থেকে দেখা শুরু। ⚠️ **শুধু আঁকার জন্য**; এটা দিয়ে
-    //    প্রত্যাশা গুনবেন না, ঠিক ওভাবেই আগের বাগটা জন্মেছিল।
+    // G110: since when we have been watching. **Only for drawing**; do not
+    // compute the expectation from it, which is how the earlier bug was born.
     trackedFrom: ctx.trackedFrom,
   };
 }

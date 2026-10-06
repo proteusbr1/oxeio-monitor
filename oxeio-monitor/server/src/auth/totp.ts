@@ -12,45 +12,47 @@ import {
 } from './auth.constants';
 
 /**
- * I06 — TOTP 2FA-র **খাঁটি** অংশ। এখানে ডাটাবেস নেই, Nest নেই, `Date.now()`
- * ইনজেক্ট করা যায় — তাই পুরোটা DB ছাড়াই টেস্ট করা যায় (`test/totp.spec.ts`)।
+ * I06: the **pure** part of TOTP 2FA. There is no database and no Nest here,
+ * and `Date.now()` can be injected, so all of it can be tested without a DB
+ * (`test/totp.spec.ts`).
  *
- * ⭐ সবচেয়ে বড় সিদ্ধান্ত: `users.totp_secret` একটাই `String?` কলাম, অথচ
- *    আমাদের চারটে জিনিস রাখতে হয় — সিক্রেট, "চালু কি না", রিকভারি কোডের
- *    হ্যাশ, আর শেষ ব্যবহৃত counter। স্কিমা বদলানো এই ফেজে সম্ভব নয়, তাই
- *    পুরোটা একটা JSON **খাম** হিসেবে ওই কলামেই বসে। লাভ: চারটে মান একই
- *    সারিতে, একই `UPDATE`-এ atomically বদলায় — আলাদা টেবিল হলে "কোড খরচ
- *    হলো কিন্তু counter বসল না" এমন আধাখেঁচড়া অবস্থা সম্ভব হতো।
- *    (ভবিষ্যতে আলাদা কলাম হলে `decodeEnvelope` অপরিবর্তিত রেখে শুধু
- *     পড়ার/লেখার জায়গা বদলালেই চলবে।)
+ * The biggest decision: `users.totp_secret` is a single `String?` column, yet
+ * we need to keep four things: the secret, "enabled or not", the recovery code
+ * hashes, and the last used counter. The schema cannot be changed in this
+ * phase, so all of it sits in that column as one JSON **envelope**. The
+ * benefit: the four values live in one row and change atomically in one
+ * `UPDATE`; with a separate table, a half-done state like "the code was
+ * consumed but the counter was not set" would be possible.
+ * (If separate columns come later, `decodeEnvelope` can stay unchanged and
+ * only the read/write places need to change.)
  */
 export interface TotpEnvelope {
   v: 1;
-  /** base32 — যা authenticator অ্যাপে যায় */
+  /** base32: what goes into the authenticator app */
   secret: string;
   /**
-   * ⚠️ `secret` থাকা আর 2FA **চালু** থাকা এক নয়। `POST /auth/2fa/setup`
-   *    সিক্রেট বসায় কিন্তু `enabled: false` রাখে — একটা কোড দিয়ে প্রমাণ
-   *    করার আগে চালু হলে কেউ QR স্ক্যান করতে ভুলে গিয়ে নিজের অ্যাকাউন্ট
-   *    থেকে চিরতরে তালাবদ্ধ হয়ে যেত।
+   * Careful: having a `secret` is not the same as 2FA being **enabled**.
+   * `POST /auth/2fa/setup` stores the secret but keeps `enabled: false`; if it
+   * were enabled before proving it with a code, someone who forgot to scan
+   * the QR would be locked out of their own account for good.
    */
   enabled: boolean;
-  /** রিকভারি কোডের sha256 — plaintext কোড কোথাও জমা হয় না */
+  /** sha256 of the recovery codes; plaintext codes are never stored anywhere */
   recoveryHashes: string[];
   /**
-   * ⚠️ replay ঠেকানোর একমাত্র উপায়। একই ৬ অঙ্ক ৩০ সেকেন্ড ধরে বৈধ থাকে;
-   *    কাঁধের উপর দিয়ে দেখে ফেলা কোড দিয়ে দ্বিতীয়বার ঢোকা যাবে না।
+   * Careful: the only way to stop replay. The same 6 digits stay valid for 30
+   * seconds; a code seen over someone's shoulder cannot be used to sign in a second time.
    */
   lastCounter: number;
 }
 
-/** নন-JSON, কিন্তু খালিও নয় — হাতে বসানো পুরোনো ফরম্যাটের সিক্রেট */
+/** Not JSON, but not empty either: a secret in the old format placed by hand */
 function legacyEnvelope(secret: string): TotpEnvelope {
   return {
     v: 1,
     secret,
-    // ⚠️ fail-closed: কেউ হাতে কলামে সিক্রেট বসালে সেটাকে "চালু" ধরাই
-    //    নিরাপদ। উল্টোটা ধরলে 2FA নীরবে বন্ধ হয়ে যেত।
+    // Careful: fail-closed. If someone puts a secret into the column by hand,
+    // treating it as "enabled" is the safe choice. The opposite would silently turn 2FA off.
     enabled: true,
     recoveryHashes: [],
     lastCounter: 0,
@@ -58,9 +60,9 @@ function legacyEnvelope(secret: string): TotpEnvelope {
 }
 
 /**
- * ⚠️ JSON হিসেবে পড়া গেল কিন্তু আকার মেলেনি — এখানে `null` ফেরত দিলে
- *    "2FA নেই" বোঝাত, অর্থাৎ বিকৃত ডেটা মানেই নিরাপত্তা উধাও। তাই ছুড়ে
- *    দেওয়া হয়: লগইন ব্যর্থ হবে, কিন্তু ফাঁক তৈরি হবে না।
+ * Careful: it parsed as JSON but the shape did not match. Returning `null`
+ * here would mean "no 2FA", i.e. corrupt data would make the protection
+ * vanish. So it throws: the login fails, but no gap is created.
  */
 export class TotpEnvelopeError extends Error {}
 
@@ -106,15 +108,15 @@ export function encodeEnvelope(env: TotpEnvelope): string {
   return JSON.stringify(env);
 }
 
-/** নতুন সিক্রেট — ২০ বাইট, RFC 4226-এর সুপারিশ */
+/** A new secret: 20 bytes, as RFC 4226 recommends */
 export function generateSecret(): string {
   return new Secret({ size: 20 }).base32;
 }
 
 /**
- * authenticator অ্যাপ যে লিংকটা QR থেকে পড়ে।
- * label-এ ইমেইল, issuer-এ প্রতিষ্ঠান — একই ফোনে দুটো অ্যাকাউন্ট থাকলে
- * অ্যাপে সেগুলো আলাদা করে চেনা যায়।
+ * The link the authenticator app reads from the QR.
+ * The email goes in the label and the organization in the issuer; with two
+ * accounts on one phone they can be told apart in the app.
  */
 export function buildOtpauthUri(secret: string, email: string): string {
   return URI.stringify(
@@ -133,18 +135,19 @@ export type TotpVerdict =
   | { ok: true; counter: number }
   | { ok: false; reason: 'malformed' | 'invalid' | 'replayed' };
 
-/** স্পেস, ড্যাশ, ইউনিকোড ফাঁকা — অ্যাপ থেকে কপি করলে এসবই সাথে আসে */
+/** Spaces, dashes, Unicode whitespace: all of these come along when copying from the app */
 export function normalizeTotpCode(input: string): string {
   return input.replace(/\D/g, '');
 }
 
 /**
- * ⚠️ তিনটে আলাদা "না" — আর তিনটেই আলাদা কারণে গুরুত্বপূর্ণ:
- *    `malformed` (৬ অঙ্ক নয়) · `invalid` (মেলেনি) · `replayed` (আগেই ব্যবহৃত)।
- *    কল করার জায়গা তিনটেকেই ব্যর্থতা ধরবে, কিন্তু লগে/অডিটে আলাদা দেখাবে।
+ * Careful: three different "no" answers, each important for its own reason:
+ *    `malformed` (not 6 digits), `invalid` (did not match), `replayed` (already used).
+ *    The caller treats all three as failures, but they show up separately in logs/audit.
  *
- * ⚠️ window = ±১ ধাপ (±৩০ সেকেন্ড)। ফোনের ঘড়ি কয়েক সেকেন্ড এগিয়ে/পিছিয়ে
- *    থাকা খুবই সাধারণ; ০ রাখলে অর্ধেক লগইন অকারণে ব্যর্থ হতো।
+ * Careful: window = +-1 step (+-30 seconds). A phone clock being a few
+ *    seconds ahead or behind is very common; with 0, half of all logins would
+ *    fail for no reason.
  */
 export function verifyTotpCode(
   env: Pick<TotpEnvelope, 'secret' | 'lastCounter'>,
@@ -172,29 +175,30 @@ export function verifyTotpCode(
   });
   if (delta === null) return { ok: false, reason: 'invalid' };
 
-  // delta = এখনকার counter থেকে কত ধাপ দূরে কোডটা মিলেছে
+  // delta = how many steps from the current counter the code matched
   const counter = TOTP.counter({ period: TOTP_PERIOD, timestamp: now }) + delta;
 
-  // ⚠️ `<=` — সমান হলেও না। একই ধাপের কোড দুবার চলবে না।
+  // Careful: `<=`, so equal is rejected too. A code from the same step cannot be used twice.
   if (counter <= env.lastCounter) return { ok: false, reason: 'replayed' };
 
   return { ok: true, counter };
 }
 
 /**
- * ⭐ রিকভারি কোড। ফোন হারানো/রিসেট হওয়া কাল্পনিক ঝুঁকি নয় — এটা ছাড়া
- *    owner নিজের সিস্টেম থেকে বেরিয়ে গেলে ভেতরে ঢোকার আর কোনো পথ থাকত না
- *    (ডাটাবেসে হাত দেওয়া ছাড়া)।
+ * Recovery codes. Losing or resetting the phone is not an imaginary risk:
+ *    without these, an owner locked out of their own system would have no way
+ *    back in (short of touching the database).
  *
- * ⚠️ বর্ণমালা থেকে `0 1 I O` বাদ — কাগজে লিখে রাখা কোড পড়তে গিয়ে ঠিক
- *    এই চারটেতেই ভুল হয়। বাকি থাকে ৮ অঙ্ক + ২৪ অক্ষর = **ঠিক ৩২**,
- *    আর সেটাই নিচের `% 32`-কে নিরপেক্ষ রাখে (২৫৬ ÷ ৩২ পুরোপুরি ভাগ যায়)।
- *    দৈর্ঘ্য ৩২ না হলে কিছু অক্ষর অন্যদের চেয়ে বেশিবার আসত — টেস্ট
- *    (`test/totp.spec.ts`) এই দৈর্ঘ্যটাই পাহারা দেয়।
+ * Careful: `0 1 I O` are removed from the alphabet; those are exactly the
+ *    four that get misread when reading a code written on paper. What is left
+ *    is 8 digits + 24 letters = **exactly 32**, and that is what keeps the
+ *    `% 32` below unbiased (256 / 32 divides evenly). If the length were not
+ *    32, some characters would come up more often than others; the test
+ *    (`test/totp.spec.ts`) guards this length.
  */
 export const RECOVERY_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
-/** `ABCDE-FGHJK` — মাঝের ড্যাশটা শুধু পড়ার সুবিধার্থে, হ্যাশে যায় না */
+/** `ABCDE-FGHJK`: the middle dash is only for readability and does not go into the hash */
 export function formatRecoveryCode(raw: string): string {
   const half = Math.ceil(raw.length / 2);
   return `${raw.slice(0, half)}-${raw.slice(half)}`;
@@ -214,16 +218,16 @@ export function generateRecoveryCodes(
   return codes;
 }
 
-/** ড্যাশ/স্পেস/ছোট হাতের অক্ষর — সব মিটিয়ে হ্যাশযোগ্য রূপ */
+/** Dashes/spaces/lower case: smoothed out into a hashable form */
 export function normalizeRecoveryCode(input: string): string {
   return input.toUpperCase().replace(/[^0-9A-Z]/g, '');
 }
 
 /**
- * ⭐ পাসওয়ার্ডের মতো argon2 নয়, sha256 — ইচ্ছাকৃত। রিকভারি কোড আমরা নিজেরাই
- *    বানাই, ১০ অক্ষর × ৫ বিট = ৫০ বিট এনট্রপি। ব্রুট-ফোর্স করার মতো
- *    "দুর্বল পছন্দ" এখানে সম্ভব নয়, তাই ধীর হ্যাশের দরকার নেই — আর
- *    লগইনের পথে ১০টা argon2 যাচাই মানে কয়েক সেকেন্ড দেরি।
+ * sha256, not argon2 as for passwords, deliberately. We generate recovery
+ *    codes ourselves: 10 characters x 5 bits = 50 bits of entropy. There is no
+ *    "weak choice" here that could be brute-forced, so a slow hash is not
+ *    needed, and 10 argon2 checks on the login path would add several seconds.
  */
 export function hashRecoveryCode(code: string): string {
   return createHash('sha256').update(normalizeRecoveryCode(code)).digest('hex');
@@ -231,13 +235,14 @@ export function hashRecoveryCode(code: string): string {
 
 export interface RecoveryVerdict {
   ok: boolean;
-  /** কোড খরচ হলে সেটা বাদ দেওয়া নতুন তালিকা */
+  /** The new list with the consumed code removed */
   remaining: string[];
 }
 
 /**
- * ⚠️ কোড **একবারই** চলে — তাই মিলে গেলে তালিকা থেকে বাদ দেওয়া অপরিহার্য।
- *    কল করার জায়গা `remaining` জমা না দিলে একই কাগজের কোড বারবার চলত।
+ * Careful: a code works **only once**, so removing it from the list when it
+ *    matches is essential. If the caller does not store `remaining`, the same
+ *    paper code would work again and again.
  */
 export function consumeRecoveryCode(
   hashes: readonly string[],
@@ -250,14 +255,14 @@ export function consumeRecoveryCode(
   let matched = -1;
 
   for (let i = 0; i < hashes.length; i += 1) {
-    // ⚠️ ভাঙা hex-এ `Buffer.from` ছোড়ে না, ছোট বাফার দেয় — আর
-    //    `timingSafeEqual` দৈর্ঘ্য না মিললে **ছোড়ে**। তাই আগে দৈর্ঘ্য দেখা।
+    // Careful: on malformed hex `Buffer.from` does not throw, it returns a shorter buffer, and
+    //    `timingSafeEqual` **throws** on a length mismatch. So check the length first.
     const stored = Buffer.from(hashes[i], 'hex');
     if (stored.length !== target.length) continue;
     if (timingSafeEqual(stored, target)) {
       matched = i;
-      // ⚠️ `break` নয় — তালিকার শুরুর দিকের কোড দ্রুত মেলে, শেষের দিকেরটা
-      //    দেরিতে; সেই সময়ের পার্থক্য থেকে "কত নম্বর কোড" ফাঁস হতে পারত।
+      // Careful: no `break`. A code early in the list matches quickly and one
+      //    late in the list matches slowly; that timing difference could leak "which code number".
     }
   }
 
@@ -269,34 +274,35 @@ export function consumeRecoveryCode(
   };
 }
 
-// ══════════════════ দুই পথ একসাথে ══════════════════
+// ══════════════════ Both paths together ══════════════════
 
 export interface SecondFactorAttempt {
-  /** authenticator অ্যাপের ৬ অঙ্ক */
+  /** The 6 digits from the authenticator app */
   totp?: string;
-  /** কাগজে লেখা একবার-ব্যবহার্য কোড */
+  /** The single-use code written on paper */
   recoveryCode?: string;
 }
 
 export type SecondFactorVerdict =
   | {
       ok: true;
-      /** ⚠️ খরচ হওয়া কোড/counter বসানো **নতুন** খাম — এটাই জমা দিতে হবে */
+      /** Careful: the **new** envelope with the consumed code/counter set; store this one */
       env: TotpEnvelope;
       usedRecoveryCode: boolean;
     }
   | { ok: false; reason: 'missing' | 'malformed' | 'invalid' | 'replayed' };
 
 /**
- * লগইনের দ্বিতীয় ধাপ — দুটো পথ এক জায়গায়।
+ * The second step of login: both paths in one place.
  *
- * ⭐ ফেরত দেওয়া `env`-টাই আসল কথা: TOTP-এ `lastCounter` এগোয়, রিকভারিতে
- *    কোডটা তালিকা থেকে বাদ যায়। কল করার জায়গা এটা জমা না দিলে replay
- *    ঠেকানো আর "একবার-ব্যবহার্য" — দুটোই কাগুজে থেকে যেত।
+ * The returned `env` is the point: with TOTP `lastCounter` advances, with
+ *    recovery the code is dropped from the list. If the caller does not store
+ *    it, both replay protection and "single use" would exist only on paper.
  *
- * ⚠️ `missing` আলাদা করে ফেরত আসে কারণ সেটা **ব্যর্থতা নয়** — কোড না
- *    দেওয়া মানে ব্যবহারকারী সবে প্রথম ধাপ পেরিয়েছে। ব্যর্থতা ধরলে
- *    প্রতিটা স্বাভাবিক লগইনই throttle-এর কাউন্টার বাড়াত।
+ * Careful: `missing` is returned separately because it is **not a failure**:
+ *    not giving a code means the user has only just passed the first step.
+ *    If it were treated as a failure, every normal login would bump the
+ *    throttle's counter.
  */
 export function verifySecondFactor(
   env: TotpEnvelope,
@@ -317,9 +323,9 @@ export function verifySecondFactor(
         env: { ...env, lastCounter: verdict.counter },
       };
     }
-    // ⚠️ রিকভারি কোড না দিলে এখানেই শেষ — আর তখন আসল কারণটাই ফেরত যায়
-    //    (`replayed` বার্তাটা ব্যবহারকারীকে "পরের কোডের জন্য অপেক্ষা করুন"
-    //     বলতে পারে, যেটা `invalid`-এর চেয়ে অনেক কাজের)।
+    // Careful: with no recovery code we stop here, and the real reason is
+    //    returned (the `replayed` message can tell the user "wait for the next
+    //     code", which is far more useful than `invalid`).
     if (recovery === '') return { ok: false, reason: verdict.reason };
   }
 

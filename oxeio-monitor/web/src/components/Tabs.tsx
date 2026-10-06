@@ -1,35 +1,32 @@
 /**
- * পেজের ভেতরের ট্যাবের সারি — রিপোর্ট (৩–৪টা) আর সেটিংস (৫টা) দুজনেই এটাই
- * ব্যবহার করে।
+ * A row of tabs inside a page: reports (3-4) and settings (5) both use this.
  *
- * ⭐ দুই এজেন্ট আলাদা করে প্রায় হুবহু একই markup লিখেছিল, আর সেটাই ছিল
- *    আসল ঝুঁকি: ট্যাব **রুট নয়**, তাই দেখতে এক না হলে ব্যবহারকারী ভাবত
- *    দুটো আলাদা জিনিস। এক জায়গায় থাকলে সরু লাল রেখার ওজন, ফাঁক আর ফোকাস
- *    রিং একসাথেই বদলায়।
+ * Two agents had separately written almost identical markup, and that was the
+ * real risk: tabs are not routes, so if they did not look the same, users would
+ * think they were two different things. With one place, the weight of the thin
+ * red line, the spacing and the focus ring change together.
  *
- * ⚠️ **সরু ব্র্যান্ড-লাল নিচের রেখা, সলিড লাল নয়** — বাছাই করা ট্যাব কোনো
- *    ভুল নয়, শুধু একটা পছন্দ। ভরাট লাল হলে প্রতিটা ট্যাব "সমস্যা" মনে হতো।
+ * Careful: a thin brand-red bottom line, not solid red. A selected tab is not an
+ * error, just a choice; with solid red every tab would feel like a "problem".
  *
- * ⚠️ E12 — সারিটা **নিজেই** আড়াআড়ি স্ক্রল করে (`overflow-x-auto`), পুরো
- *    পাতা নয়। ৩৭৫px-এ সেটিংসের পাঁচটা ট্যাব একসাথে আঁটে না।
+ * Careful: E12: the row itself scrolls horizontally (`overflow-x-auto`), not the
+ * whole page. At 375px the five Settings tabs do not fit together.
  *
- * ⚠️⚠️ **সাথে `overflow-y-hidden` — আর এটা বাদ দেওয়া যাবে না।**
+ * Careful: `overflow-y-hidden` goes with it, and it must not be dropped.
  *
- *    Tailwind-এর `overflow-x-auto` **দুই অক্ষেই** `auto` বসায়। ভেতরের
- *    বোতামগুলো (প্যাডিং + বাছাই করা ট্যাবের ২px নিচের রেখা) ঘরটার চেয়ে
- *    ঠিক **এক পিক্সেল** উঁচু হয়ে যায় — আর তাতেই ব্রাউজার একটা **উল্লম্ব
- *    scrollbar** এঁকে দেয়, যেটা আবার ১৫px চওড়া জায়গা কেড়ে নেয়
- *    (`clientWidth 1280 → 1265`)।
+ * Tailwind's `overflow-x-auto` sets `auto` on both axes. The inner buttons
+ * (padding + the 2px line under the selected tab) end up exactly one pixel taller
+ * than the container, and that is enough for the browser to draw a vertical
+ * scrollbar, which takes 15px of width (`clientWidth 1280 -> 1265`).
  *
- *    ⭐ ম্যাকে ধরা পড়ে না — ওখানে scrollbar ভাসমান ও প্রায় অদৃশ্য।
- *    Windows-এ ওটা তীরসহ মোটা বার, আর মালিকের পর্দায় "Add staff"-এর
- *    উপরে একটা অদ্ভুত ফাঁকা বাক্স হয়ে দাঁড়ায় (১৪ আগস্ট, তাঁর রিপোর্ট)।
+ * It does not show on a Mac, where scrollbars float and are nearly invisible. On
+ * Windows it is a thick bar with arrows, and on the owner's screen it appeared as
+ * a strange empty box above "Add staff" (reported by the owner). A flaw invisible
+ * on one developer's OS is obvious on another's, so "it looks fine here" is never proof.
  *
- *    ⚠️ এক ডেভেলপারের OS-এ অদৃশ্য একটা খুঁত অন্যের পর্দায় স্পষ্ট — তাই
- *    "আমার এখানে তো ঠিক দেখাচ্ছে" কখনো প্রমাণ নয়।
- *
- * ⚠️ `<Link>` নয়, `<button>` — ট্যাবগুলো আলাদা রুট নয়। নেভিগেশনের ট্যাব
- *    (উপরের হেডারে) `Layout.tsx`-এ, `NavLink` দিয়ে; দুটো গুলিয়ে ফেলবেন না।
+ * Careful: `<button>`, not `<Link>`; the tabs are not separate routes. The
+ * navigation tabs (in the header above) are in `Layout.tsx`, using `NavLink`;
+ * do not confuse the two.
  */
 export interface TabItem<T extends string> {
   id: T;
@@ -45,7 +42,7 @@ export function Tabs<T extends string>({
   items: readonly TabItem<T>[];
   active: T;
   onChange: (id: T) => void;
-  /** স্ক্রিন-রিডারের জন্য — "সেটিংসের অংশ", "রিপোর্টের ধরন" */
+  /** For screen readers: "part of Settings", "type of report". */
   label: string;
 }) {
   return (
@@ -61,8 +58,8 @@ export function Tabs<T extends string>({
             type="button"
             aria-current={selected ? 'page' : undefined}
             onClick={() => onChange(item.id)}
-            // ⚠️ `tap` — ফোনে ৪৪px (`index.css`)। ট্যাব ছিল ~৩৮px, আর
-            //    সারিটা আড়াআড়ি স্ক্রল করে বলে আঙুল এমনিতেই নড়ে থাকে।
+            // Careful: `tap`: 44px on a phone (`index.css`). Tabs were about 38px, and
+            // since the row scrolls sideways the finger is already moving anyway.
             className={`tap -mb-px border-b-2 px-3 py-2.5 text-[13px] whitespace-nowrap transition focus:outline-none focus:ring-2 focus:ring-brand/30 ${
               selected
                 ? 'border-brand font-semibold text-brand-ink'

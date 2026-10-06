@@ -33,7 +33,7 @@ import { StaffModule } from './staff/staff.module';
     ConfigModule.forRoot({ isGlobal: true, cache: true }),
     LoggerModule.forRoot({
       pinoHttp: {
-        // টেস্টে প্রতিটি রিকোয়েস্টের লগ আসল ফলাফল ঢেকে দেয়
+        // In tests, per-request logs would bury the real results
         level: process.env.NODE_ENV === 'test' ? 'silent' : 'info',
         transport:
           process.env.NODE_ENV === 'production' ||
@@ -41,7 +41,7 @@ import { StaffModule } from './staff/staff.module';
             ? undefined
             : { target: 'pino-pretty', options: { singleLine: true } },
         redact: {
-          // এজেন্টের টোকেন, সেশন cookie বা কারো পাসওয়ার্ড যেন কখনো লগে না ওঠে
+          // Agent tokens, session cookies and anyone's password must never reach the logs
           paths: [
             'req.headers.authorization',
             'req.headers.cookie',
@@ -76,16 +76,16 @@ import { StaffModule } from './staff/staff.module';
     DepositsModule,
     ReportsModule,
     ScreenshotsModule,
-    // ⚠️ SummaryModule নিজের ভেতরে ScheduleModule.forRoot() রাখে (টেস্টে বাদ পড়ে)।
-    // এখানে আলাদা করে forRoot() বসিয়ো না — দুটো explorer একই @Cron দুবার
-    // রেজিস্টার করতে গিয়ে bootstrap-এই "cron job already exists" দিয়ে ভাঙবে।
+    // Careful: SummaryModule keeps ScheduleModule.forRoot() inside itself (left out in tests).
+    // Do not add a separate forRoot() here: two explorers would register the same @Cron
+    // twice and bootstrap would fail with "cron job already exists".
     SummaryModule,
-    // ⭐ ডিজাইন-টার্গেট (২২ আগস্ট) — জমা · রোজকার বণ্টন · শেষ হওয়া
+    // Design targets: submission, daily distribution, completion
     TargetsModule,
     AlertsModule,
-    // ⚠️ OpsModule ও DigestModule দুটোরই `@Cron` আছে, কিন্তু explorer আসে
-    // উপরের SummaryModule-এর global forRoot() থেকে — তাই এদের **পরে** রাখা।
-    // (নির্ভরতাটা DI-তে অদৃশ্য বলে BackupJob bootstrap-এ নিজেই মিলিয়ে দেখে।)
+    // Careful: OpsModule and DigestModule both have `@Cron`, but the explorer comes from
+    // the global forRoot() of SummaryModule above, so these go **after** it.
+    // (The dependency is invisible to DI, so BackupJob checks it itself at bootstrap.)
     MeModule,
     OpsModule,
     DigestModule,

@@ -9,14 +9,14 @@ import { formatPct } from '../../lib/format';
 import { CATEGORY_LABEL, MetaNote, Pill } from './shared';
 
 /**
- * F04 — অ্যাপ/সাইট ভিত্তিক productivity রিপোর্ট।
+ * App/site-based productivity report.
  *
- * ⚠️ **নাম-সংঘাত**: `activity.ts`-এর `DailyProductivityReport` (D07) আলাদা
- *    জিনিস — ওটা দিনে-দিনে স্কোর, এটা কোন অ্যাপ/সাইটে কত সময়।
+ * Careful: name clash. `DailyProductivityReport` in `activity.ts` is a different
+ *    thing: it is a per-day score, while this one is time spent per app/site.
  *
- * ⭐ যা দেখানো হয় তা হলো ব্রাউজারের **ডোমেইন** (`github.com`), ফুল URL নয়
- *    — সার্ভার ফুল URL রাখেই না (ADR-013), আর উইন্ডো-টাইটেলও কখনো আসে না।
- *    এই পর্দায় নতুন কোনো "বিস্তারিত" কলাম যোগ করার আগে ওই নিয়মটা মনে রাখুন।
+ * Important: what is shown is the browser **domain** (`github.com`), not the full URL.
+ *    The server never stores full URLs (ADR-013), and window titles never arrive either.
+ *    Remember that rule before adding any new "detail" column to this screen.
  */
 export function ProductivityTab({
   from,
@@ -27,7 +27,7 @@ export function ProductivityTab({
   from: string;
   to: string;
   employeeId: number | null;
-  /** টপ কতটা অ্যাপ/সাইট — সার্ভারে সর্বোচ্চ ২০০ */
+  /** How many top apps/sites to return; the server caps it at 200 */
   limit: number;
 }) {
   const { data, error, loading, reload } = useApi(
@@ -59,7 +59,7 @@ export function ProductivityTab({
           <div className="truncate font-medium text-ink">
             {item.displayName ?? item.key}
           </div>
-          {/* নিয়মে দেওয়া নাম থাকলে আসল কী-টাও দেখানো হয়, নইলে মেলানো যেত না */}
+          {/* Show the real key too when a rule gives a custom name, or rows could not be matched */}
           {item.displayName && item.displayName !== item.key && (
             <div className="num truncate text-[11px] text-ink-3">{item.key}</div>
           )}
@@ -138,7 +138,7 @@ export function ProductivityTab({
       render: (row) => <Hours hours={row.unproductiveHours} />,
     },
     {
-      // ⚠️ ধূসর — এগুলো এখনো কোনো নিয়মে পড়েনি, খারাপ কিছু নয়
+      // Careful: grey — these have not matched any rule yet; nothing bad about them
       key: 'uncategorized',
       header: 'Uncategorized',
       align: 'right',
@@ -205,7 +205,7 @@ export function ProductivityTab({
             <Table
               columns={topColumns}
               rows={data.top}
-              // ⚠️ একই নামের অ্যাপ ও সাইট থাকতে পারে, তাই kind-ও কী-তে
+              // Careful: an app and a site can share a name, so kind is part of the key
               rowKey={(item) => `${item.kind}-${item.key}`}
             />
           )}
@@ -227,11 +227,11 @@ export function ProductivityTab({
       </div>
 
       {/*
-        ⚠️ এই বাক্যটা বাদ দেওয়া যাবে না। "উৎপাদনশীল অংশ"-এর হরে অচিহ্নিত
-           সময়ও আছে, তাই নতুন ক্যাটাগরি-নিয়ম যোগ হতে হতে সংখ্যাটা নিজে
-           থেকেই বাড়ে। না বললে কেউ ভাবত মানুষটার কাজ বদলেছে — আসলে শুধু
-           নিয়মের তালিকা বেড়েছে। আর `daily_summary`-র শতাংশের সাথেও এটা
-           হুবহু মিলবে না, সেটা ভুল নয়।
+        Careful: do not remove this sentence. The denominator of "productive share" also
+           includes unclassified time, so the number rises on its own as new category
+           rules are added. Without the note, people would think the person's work had
+           changed when only the rule list grew. It also will not match the
+           `daily_summary` percentage exactly, which is not an error.
       */}
       <Caveat>
         Productive share = productive ÷ total tracked time, and the denominator

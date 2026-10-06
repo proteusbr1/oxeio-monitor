@@ -8,18 +8,18 @@ import {
 } from '../src/screenshots/signed-url';
 
 /**
- * I07 — signed URL।
+ * I07: signed URLs.
  *
- * এখানে যা পরীক্ষা হয় তার প্রায় সবটাই **নীরব ভুলের** পরীক্ষা: মেয়াদ না
- * দেখলে, বা সইয়ের বাইরে কোনো ফিল্ড রাখলে কোথাও কোনো এরর ওঠে না — শুধু
- * একটা লিঙ্ক চিরকাল খোলা থেকে যায়, বা এক কর্মীর লিঙ্ক দিয়ে আরেকজনের
- * স্ক্রিনশট বেরিয়ে আসে।
+ * Almost everything tested here is about silent mistakes: if expiry is not
+ * checked, or a field is left outside the signature, no error is raised
+ * anywhere; a link just stays open forever, or one employee's link gives out
+ * another's screenshot.
  */
 
 const SECRET = 'test-only-secret-at-least-32-characters-long';
 const KEY = deriveSigningKey(SECRET);
 
-/** ২০২৬-০৮-১০ ১২:০০:০০ UTC — স্থির সময়, নইলে টেস্ট ঘড়ির উপর নির্ভর করত */
+/** 2026-08-10 12:00:00 UTC: a fixed time, otherwise the test would depend on the clock */
 const NOW = Date.UTC(2026, 7, 10, 12, 0, 0);
 
 function make(
@@ -41,23 +41,23 @@ function make(
   );
 }
 
-describe('signed URL — সই করা ও যাচাই', () => {
-  it('নিজের বানানো টোকেন নিজেই মেনে নেয়, আর দাবিগুলো অবিকৃত ফেরত আসে', () => {
+describe('signed URL: signing and verifying', () => {
+  it('accepts its own token, and the claims come back unchanged', () => {
     const token = make({ screenshotId: 9007199254740993n, viewerUserId: 3 });
     const result = verifyScreenshotToken(token, KEY, NOW);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    // ⚠️ আইডিটা ইচ্ছে করেই Number.MAX_SAFE_INTEGER-এর চেয়ে বড়। কোথাও
-    //    Number() হয়ে গেলে এখানেই ধরা পড়বে — নইলে বছর দুয়েক পরে,
-    //    যখন screenshots.id বড় হবে, ভুল ছবি সার্ভ হতো।
+    // The id is deliberately larger than Number.MAX_SAFE_INTEGER. If it is
+    // ever turned into a Number(), it is caught here; otherwise in a couple
+    // of years, when screenshots.id gets big, the wrong image would be served.
     expect(result.claims.screenshotId).toBe(9007199254740993n);
     expect(result.claims.viewerUserId).toBe(3);
     expect(result.claims.variant).toBe('full');
   });
 
-  it('কে চেয়েছিল সেটা টোকেনেই থাকে — audit-এর সাথে মেলানোর জন্য', () => {
+  it('who asked is in the token itself, to match against the audit', () => {
     const token = make({ viewerUserId: 11 });
     const result = verifyScreenshotToken(token, KEY, NOW);
 
@@ -66,23 +66,23 @@ describe('signed URL — সই করা ও যাচাই', () => {
 });
 
 /**
- * A06 — ৩২০px থাম্বনেইল আসার পর `variant` আর নিছক একটা লেবেল নয়: এখন
- * সত্যিই **দুটো আলাদা ফাইল** আছে, একটা ~১৫ KB আর একটা ~১৫০ KB। তাই
- * এখান থেকে variant-এর ভুল মানে হয় দশগুণ বেশি বাইট, নয় অননুমোদিত
- * ফুল-রেজ়লিউশন ছবি।
+ * A06: since the 320px thumbnail arrived, `variant` is no longer just a
+ * label: there are now two different files, one about 15 KB and one about
+ * 150 KB. So a wrong variant here means either ten times the bytes, or an
+ * unauthorised full-resolution image.
  */
-describe('signed URL — variant (A06)', () => {
-  it('thumb-এর টোকেন thumb হয়েই ফেরত আসে', () => {
+describe('signed URL: variant (A06)', () => {
+  it('a thumb token comes back as thumb', () => {
     const result = verifyScreenshotToken(make({ variant: 'thumb' }), KEY, NOW);
     expect(result.ok && result.claims.variant).toBe('thumb');
   });
 
   /**
-   * ⭐ একই ছবি, একই দর্শক, একই মুহূর্ত — তবু দুটো টোকেন **আলাদা**।
-   * এক হয়ে গেলে বুঝতে হবে variant সইয়ের বাইরে চলে গেছে, আর তখন
-   * গ্যালারির thumbUrl দিয়েই ফুল ছবি নামানো যেত।
+   * The same image, the same viewer, the same moment, yet the two tokens are
+   * different. If they became equal it would mean variant had moved outside
+   * the signature, and then the full image could be downloaded via the gallery's thumbUrl.
    */
-  it('একই ছবির thumb ও full টোকেন কখনো এক নয়', () => {
+  it('the thumb and full tokens of the same image are never equal', () => {
     const thumb = make({ variant: 'thumb' });
     const full = make({ variant: 'full' });
 
@@ -91,19 +91,20 @@ describe('signed URL — variant (A06)', () => {
     const t = thumb.split('.');
     const f = full.split('.');
 
-    // আইডি, মেয়াদ, দর্শক — তিনটেই হুবহু এক
+    // id, expiry, viewer: all three are exactly the same
     expect(t.slice(2, 5)).toEqual(f.slice(2, 5));
-    // পার্থক্য শুধু variant আর সই — অর্থাৎ সই variant-টাকে ঢেকে রেখেছে
+    // the only difference is variant and signature: so the signature covers variant
     expect(t[1]).not.toBe(f[1]);
     expect(t[5]).not.toBe(f[5]);
   });
 
   /**
-   * ⭐ সবচেয়ে সরল আক্রমণ: গ্যালারি প্রতিটা ছবির জন্য **দুটোই** লিঙ্ক
-   * পাঠায় (thumbUrl, fullUrl)। কেউ যদি ফুলের সইটা কেটে thumb-এর শরীরে
-   * বসায় — বা উল্টোটা — দুটোই ভাঙা চাই। সই পুরো শরীরের উপরে বলেই ভাঙে।
+   * The simplest attack: the gallery sends both links for every image
+   * (thumbUrl, fullUrl). If someone cuts the full signature and puts it on the
+   * thumb body, or the reverse, both must break. They break because the
+   * signature covers the whole body.
    */
-  it('এক variant-এর সই অন্য variant-এর শরীরে বসে না', () => {
+  it('one variant\'s signature does not fit on the other variant\'s body', () => {
     const thumb = make({ variant: 'thumb' }).split('.');
     const full = make({ variant: 'full' }).split('.');
 
@@ -115,17 +116,17 @@ describe('signed URL — variant (A06)', () => {
   });
 
   /**
-   * ⚠️ variant **টোকেনের ভেতরে**, `?variant=thumb` নামের আলাদা ক্যোয়ারি
-   * প্যারামিটারে নয়। প্যারামিটার হলে সইটা তাকে ছুঁতে পারত না, আর এক
-   * শব্দ বদলেই thumb → full হয়ে যেত। এই টেস্টটা সেই নকশাটাকেই আটকে
-   * রাখে: টোকেনের দ্বিতীয় অংশটাই একমাত্র জায়গা যেখানে variant থাকে।
+   * The variant is inside the token, not in a separate `?variant=thumb` query
+   * parameter. With a parameter the signature could not cover it, and changing
+   * one word would turn thumb into full. This test pins that design: the
+   * token's second part is the only place the variant lives.
    */
-  it('variant টোকেনের নির্দিষ্ট অংশেই থাকে — বাইরে নয়', () => {
+  it('the variant lives in a fixed part of the token, not outside it', () => {
     expect(make({ variant: 'thumb' }).split('.')[1]).toBe('t');
     expect(make({ variant: 'full' }).split('.')[1]).toBe('f');
   });
 
-  it('অজানা variant কোড কখনো পাশ করে না', () => {
+  it('an unknown variant code never passes', () => {
     for (const code of ['x', 'T', 'F', 'thumb', '']) {
       const parts = make({ variant: 'full' }).split('.');
       parts[1] = code;
@@ -134,8 +135,8 @@ describe('signed URL — variant (A06)', () => {
   });
 });
 
-describe('signed URL — মেয়াদ', () => {
-  it('৫ মিনিটের এক সেকেন্ড আগেও চলে', () => {
+describe('signed URL: expiry', () => {
+  it('still works one second before 5 minutes', () => {
     const token = make();
     const result = verifyScreenshotToken(
       token,
@@ -146,10 +147,10 @@ describe('signed URL — মেয়াদ', () => {
   });
 
   /**
-   * ⭐ এই টেস্টটাই I07-এর মূল কথা। মেয়াদ না দেখলে কোনো এরর হতো না —
-   * লিঙ্কটা শুধু চিরকাল কাজ করত, আর কেউ কোনোদিন টের পেত না।
+   * This test is the heart of I07. If expiry were not checked there would be
+   * no error: the link would just work forever, and nobody would ever notice.
    */
-  it('ঠিক ৫ মিনিটের মাথায় মেয়াদ শেষ ধরা হয়', () => {
+  it('expires exactly at the 5 minute mark', () => {
     const token = make();
     const result = verifyScreenshotToken(
       token,
@@ -161,31 +162,31 @@ describe('signed URL — মেয়াদ', () => {
     expect(!result.ok && result.reason).toBe('expired');
   });
 
-  it('৬ মিনিট পরে তো নয়ই', () => {
+  it('certainly not valid after 6 minutes', () => {
     const token = make();
     const result = verifyScreenshotToken(token, KEY, NOW + 6 * 60 * 1000);
     expect(!result.ok && result.reason).toBe('expired');
   });
 
   /**
-   * ⚠️ মেয়াদ সইয়ের **ভেতরে** আছে কি না — সেটার আসল পরীক্ষা এটাই।
-   * বাইরে থাকলে exp বদলে দিলে সই তবু মিলত, আর লিঙ্কটা অমর হয়ে যেত।
+   * Whether expiry is inside the signature: this is the real test of that. If
+   * outside, changing exp would still match the signature and the link would become immortal.
    */
-  it('মেয়াদ বাড়িয়ে দিলে সই আর মেলে না', () => {
+  it('extending the expiry breaks the signature', () => {
     const parts = make().split('.');
-    parts[3] = String(Number(parts[3]) + 86_400); // এক দিন বাড়ানো
+    parts[3] = String(Number(parts[3]) + 86_400); // extend by one day
 
     const result = verifyScreenshotToken(parts.join('.'), KEY, NOW);
     expect(!result.ok && result.reason).toBe('bad_signature');
   });
 });
 
-describe('signed URL — বদলে দেওয়া টোকেন', () => {
+describe('signed URL: tampered tokens', () => {
   /**
-   * ⭐ সবচেয়ে ভয়ের আক্রমণ: নিজের ছবির একটা বৈধ লিঙ্ক নিয়ে শুধু আইডিটা
-   * বদলে দেওয়া। সই আইডিটাকেও ঢেকে রাখে বলেই এটা ব্যর্থ হয়।
+   * The scariest attack: take a valid link for your own image and just change
+   * the id. It fails because the signature covers the id too.
    */
-  it('স্ক্রিনশট আইডি বদলালে ধরা পড়ে', () => {
+  it('changing the screenshot id is caught', () => {
     const parts = make({ screenshotId: 42n }).split('.');
     parts[2] = '43';
 
@@ -194,10 +195,10 @@ describe('signed URL — বদলে দেওয়া টোকেন', () =>
   });
 
   /**
-   * ⭐ থাম্বনেইলের লিঙ্ক দিয়ে ফুল ছবি টানা যায় কি না।
-   * variant সইয়ের ভেতরে না থাকলে এক অক্ষর বদলেই হয়ে যেত।
+   * Whether a full image can be pulled through a thumbnail link. If variant
+   * were not inside the signature, changing one character would do it.
    */
-  it('thumb → full বদলে দিলে ধরা পড়ে', () => {
+  it('changing thumb to full is caught', () => {
     const parts = make({ variant: 'thumb' }).split('.');
     expect(parts[1]).toBe('t');
     parts[1] = 'f';
@@ -206,15 +207,15 @@ describe('signed URL — বদলে দেওয়া টোকেন', () =>
     expect(!result.ok && result.reason).toBe('bad_signature');
   });
 
-  it('অন্য কারো নামে লিঙ্ক বানানো যায় না', () => {
+  it('a link cannot be made in someone else\'s name', () => {
     const parts = make({ viewerUserId: 7 }).split('.');
-    parts[4] = '1'; // owner সেজে
+    parts[4] = '1'; // posing as the owner
 
     const result = verifyScreenshotToken(parts.join('.'), KEY, NOW);
     expect(!result.ok && result.reason).toBe('bad_signature');
   });
 
-  it('সইয়ের এক অক্ষর বদলালেই বাতিল', () => {
+  it('changing one character of the signature rejects it', () => {
     const parts = make().split('.');
     const sig = parts[5];
     parts[5] = (sig[0] === 'A' ? 'B' : 'A') + sig.slice(1);
@@ -224,8 +225,8 @@ describe('signed URL — বদলে দেওয়া টোকেন', () =>
   });
 });
 
-describe('signed URL — ভুল সিক্রেট', () => {
-  it('অন্য সিক্রেটে বানানো টোকেন মানা হয় না', () => {
+describe('signed URL: wrong secret', () => {
+  it('a token made with another secret is not accepted', () => {
     const otherKey = deriveSigningKey(
       'another-secret-that-is-also-at-least-32-chars',
     );
@@ -240,19 +241,19 @@ describe('signed URL — ভুল সিক্রেট', () => {
   });
 
   /**
-   * ⭐ domain separation। কাঁচা সিক্রেট একই হলেও চাবি আলাদা হওয়ার কথা —
-   * নইলে ভবিষ্যতে অন্য কোনো মডিউল একই সিক্রেটে HMAC করলে তার টোকেন
-   * এখানেও খেটে যেত।
+   * Domain separation. Even with the same raw secret the key should differ;
+   * otherwise if another module later did HMAC with the same secret, its
+   * tokens would work here too.
    */
-  it('একই কাঁচা সিক্রেট থেকে বের করা চাবি কাঁচা সিক্রেটের সমান নয়', () => {
+  it('a key derived from the raw secret is not equal to the raw secret', () => {
     const derived = deriveSigningKey(SECRET);
     expect(derived.equals(Buffer.from(SECRET, 'utf8'))).toBe(false);
-    // একই ইনপুটে একই চাবি — নইলে সার্ভার রিস্টার্টে সব লিঙ্ক ভাঙত
+    // the same input gives the same key: otherwise a server restart would break all links
     expect(derived.equals(deriveSigningKey(SECRET))).toBe(true);
   });
 });
 
-describe('signed URL — গড়নই ভুল', () => {
+describe('signed URL: malformed shape', () => {
   it.each([
     ['খালি', ''],
     ['অংশ কম', 'v1.f.42.999'],
@@ -266,10 +267,10 @@ describe('signed URL — গড়নই ভুল', () => {
   });
 
   /**
-   * ⚠️ অজানা variant-এর ক্ষেত্রে সই আগেই ভাঙে (`bad_signature`), কারণ
-   * variant-ও সইয়ের ভেতরে। কোনটাই ফাঁক নয় — দুটোই "না"।
+   * For an unknown variant the signature breaks first (`bad_signature`),
+   * because variant is inside the signature too. Neither is a gap: both say "no".
    */
-  it('মেয়াদোত্তীর্ণ আর বিকৃত — দুটোতেই ok=false', () => {
+  it('expired and tampered: both give ok=false', () => {
     expect(verifyScreenshotToken('v1.f.1.1.1.abc', KEY, NOW).ok).toBe(false);
   });
 });

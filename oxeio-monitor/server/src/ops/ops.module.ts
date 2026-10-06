@@ -13,25 +13,24 @@ import { OpsScheduler } from './ops.scheduler';
 import { OffsiteSettingsController } from './offsite.controller';
 
 /**
- * **K02 · K03 · K04 · G04 · G08** — ব্যাকআপ, হেলথ, ব্যাকআপ-অ্যালার্ট, টেলিগ্রাম।
+ * **K02 · K03 · K04 · G04 · G08**: backup, health, backup alert, Telegram.
  *
- * ⚠️ `BackupCheck` (G04) আর `TelegramChannel` (G08) ফাইল হিসেবে
- *    `src/alerts/`-এ, কিন্তু provider হিসেবে **এখানে** — কারণ
- *    `alerts.module.ts` এই কাজের আওতার বাইরে ছিল। ঘরটা ঠিক জায়গায়
- *    নয়, আর সেটা জেনেই রাখা: দুটোকেই `AlertsModule`-এ সরানো উচিত।
- *    ⚠️ সরানোর দিন খেয়াল রাখতে হবে `AlertsModule` যেন `OpsModule`
- *    ইমপোর্ট না করে — তাহলে বৃত্ত (`Ops → Alerts → Ops`) তৈরি হবে,
- *    কারণ `BackupCheck` `BackupService` ব্যবহার করে।
+ * Careful: `BackupCheck` (G04) and `TelegramChannel` (G08) are files in
+ * `src/alerts/` but providers **here**, because `alerts.module.ts` was outside
+ * the scope of this work. They are not in the right place, knowingly: both
+ * should move to `AlertsModule`. On the day they move, make sure `AlertsModule`
+ * does not import `OpsModule`, or a cycle (`Ops → Alerts → Ops`) appears,
+ * because `BackupCheck` uses `BackupService`.
  *
- * ⚠️ এখানে `ScheduleModule.forRoot()` নেই — `SummaryModule` সেটা করে,
- *    আর forRoot global। দুবার করলে bootstrap-এই ভাঙে।
+ * There is no `ScheduleModule.forRoot()` here: `SummaryModule` does it, and
+ * forRoot is global. Doing it twice breaks bootstrap.
  *
- * ⚠️ `PrismaModule` `@Global`, তাই আলাদা import লাগে না।
+ * `PrismaModule` is `@Global`, so it needs no separate import.
  */
 @Module({
-  // ⚠️ `SummaryModule` শুধু `RetentionJob`-এর জন্য (K01-এর হাতে-চালানো
-  //    endpoint)। ওখানে `ScheduleModule.forRoot()` আছে, কিন্তু Nest মডিউল
-  //    singleton — ইমপোর্ট করলে সেটা দ্বিতীয়বার চলে না।
+  // `SummaryModule` is only for `RetentionJob` (the K01 manually triggered
+  // endpoint). It has `ScheduleModule.forRoot()`, but Nest modules are
+  // singletons: importing it does not run that a second time.
   imports: [AlertsModule, SummaryModule],
   controllers: [OpsController, OffsiteSettingsController],
   providers: [
@@ -43,7 +42,7 @@ import { OffsiteSettingsController } from './offsite.controller';
     OpsHealthService,
     OpsScheduler,
   ],
-  // টেস্ট বা ভবিষ্যতের admin endpoint যেন `runOnce()` ডাকতে পারে
+  // So tests or a future admin endpoint can call `runOnce()`
   exports: [BackupService, BackupJob, BackupStateStore, OpsHealthService, OpsScheduler],
 })
 export class OpsModule {}

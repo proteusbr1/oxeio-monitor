@@ -3,12 +3,13 @@ using oXeio.Core.Agent;
 namespace oXeio.Core.Tests;
 
 /// <summary>
-/// **I01** — সার্ট পিনিংয়ের সিদ্ধান্ত।
+/// **I01**: the certificate pinning decision.
 ///
-/// ⚠️⚠️ এই ফাইলের অর্ধেক টেস্ট একটাই ভুলের পাহারা: <b>পিন মিলেছে বলেই
-/// `true` বলে দেওয়া</b>। .NET-এ কলব্যাক বসানোর মানে তার নিজের সব যাচাই
-/// বন্ধ — হোস্টনেম, মেয়াদ, চেইন। পিন মিলে গেলেই ছেড়ে দিলে ওগুলো নীরবে
-/// চলে যেত, আর কেউ কোনোদিন টের পেত না, কারণ সংযোগ তো ঠিকই হচ্ছে।
+/// Careful: half the tests in this file guard against one mistake: <b>answering
+/// `true` just because the pin matched</b>. In .NET, installing the callback turns
+/// off all of .NET's own validation (hostname, expiry, chain). If we accepted whenever
+/// the pin matched, those checks would silently vanish and nobody would ever notice,
+/// because the connection would still work.
 /// </summary>
 public class CertificatePinTests
 {
@@ -36,10 +37,10 @@ public class CertificatePinTests
             CertificatePin.Check(Pins(PinA), PinB, chainOk: true));
 
     /**
-     * ⭐⭐ এই ফাইলের সবচেয়ে জরুরি টেস্ট। পিনটা মিলেছে, তবু **না** —
-     * কারণ হোস্টনেম মেলেনি, বা মেয়াদ শেষ, বা চেইন ভাঙা। কলব্যাক বসানোর
-     * পর .NET আর নিজে থেকে এগুলো দেখে না; না দেখলে একটা মেয়াদোত্তীর্ণ
-     * সার্ট চিরকাল চলত।
+     * The most important test in this file. The pin matches, yet the answer is **no**,
+     * because the hostname does not match, or the cert has expired, or the chain is
+     * broken. Once the callback is installed .NET no longer checks these on its own;
+     * without that check an expired certificate would work forever.
      */
     [Fact]
     public void পিন_মিললেও_চেইন_ভাঙা_থাকলে_প্রত্যাখ্যান() =>
@@ -54,9 +55,9 @@ public class CertificatePinTests
             CertificatePin.Check(Pins(PinA), null, chainOk: true));
 
     /**
-     * ⚠️ সার্ট নবায়নের দিন পুরোনো ও নতুন — দুটোই কিছুক্ষণ বৈধ থাকা দরকার।
-     * একটাই পিন রাখলে নবায়নের মুহূর্তে ১৫টা এজেন্ট একসাথে সংযোগ হারাত
-     * (রানবুক § ৭.১-এর ক্রমটাই এই কারণে)।
+     * Careful: on certificate renewal day both the old and the new pin must stay valid
+     * for a while. With a single pin, 15 agents would lose their connection at the same
+     * moment of renewal (which is why the runbook § 7.1 has its particular order).
      */
     [Fact]
     public void দুটো_পিনের_যেকোনো_একটা_মিললেই_চলে()
@@ -70,7 +71,7 @@ public class CertificatePinTests
             CertificatePin.Check(Pins(PinA, PinB), PinA, chainOk: true));
     }
 
-    /** ⚠️ base64 case-sensitive — এক অক্ষরের হেরফেরও আলাদা কী */
+    /** Careful: base64 is case-sensitive; a one-character difference is a different key */
     [Fact]
     public void তুলনাটা_অক্ষরের_ছাঁদ_মেনে_চলে() =>
         Assert.Equal(
@@ -88,10 +89,10 @@ public class CertificatePinTests
     }
 
     /**
-     * ⚠️ রেজিস্ট্রিতে হাতে বসানো মান প্রায়ই শেষে একটা কমা বা বাড়তি ফাঁকা
-     * জায়গা নিয়ে আসে। ছেঁকে না নিলে একটা **খালি স্ট্রিং** পিন হিসেবে
-     * ঢুকত — যা কোনোদিন কিছুর সাথে মিলত না, কিন্তু তালিকাটাকে "অখালি"
-     * বানিয়ে রাখত, অর্থাৎ পিনিং চালু অথচ সবসময় ব্যর্থ।
+     * Careful: values typed by hand into the registry often arrive with a trailing
+     * comma or extra whitespace. If not filtered, an **empty string** would enter as
+     * a pin: it would never match anything, but it would keep the list "non-empty",
+     * so pinning would be on and always failing.
      */
     [Fact]
     public void ফাঁকা_জায়গা_ও_বাড়তি_কমা_ছেঁকে_নেয()
@@ -107,7 +108,7 @@ public class CertificatePinTests
     public void একটা_পিনও_চলে() =>
         Assert.Single(CertificatePin.Parse(PinA));
 
-    /** প্রতিটা অবস্থার জন্য মানুষের পড়ার মতো একটা বাক্য থাকতেই হবে */
+    /** Every state must have a sentence a human can read */
     [Theory]
     [InlineData(CertificatePin.Verdict.Trusted)]
     [InlineData(CertificatePin.Verdict.PinMismatch)]

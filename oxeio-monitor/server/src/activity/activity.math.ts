@@ -3,67 +3,70 @@ import type { MatchType, Productivity } from '@prisma/client';
 import { MAX_REGEX_LENGTH } from './category-matcher';
 
 /**
- * D07–D09-এর সব হিসাব — স্কোর, শতাংশ, সাজানো, ভাঁজ করা। খাঁটি ফাংশন, কোনো I/O নেই।
+ * All the calculations for D07-D09: score, percentages, sorting, folding. Pure
+ * functions with no I/O.
  *
- * আলাদা ফাইলে রাখার কারণ [payroll.math.ts](../payroll/payroll.math.ts)-এর মতোই:
- * এখানকার প্রতিটা সিদ্ধান্ত ভুল হলে **কোথাও কোনো এরর উঠত না** — শুধু কারো
- * নামের পাশে একটা ভুল শতাংশ বসে থাকত। DB-র সাথে মিশে থাকলে এগুলো নিরিবিলি
- * পরীক্ষা করা যেত না।
+ * It is in its own file for the same reason as
+ * [payroll.math.ts](../payroll/payroll.math.ts): if any decision here were wrong,
+ * **no error would appear anywhere**; some person's name would just carry a wrong
+ * percentage. Mixed with the DB, these could not be tested in isolation.
  *
- * ⚠️ **ক্যাটাগরি কখনো বেতনের হিসাবে ঢোকে না** — এই ফাইলের কোনো সংখ্যা
- * `payroll` বা `credited_sec`-এর ধারেকাছে যায় না। কেউ সারাদিন "unproductive"
- * থাকলেও তার ঘণ্টা অক্ষত ([09 § ৪](../../../../docs/09-Build-Log.md))।
+ * Careful: **categories never enter pay calculations.** No number in this file
+ * goes anywhere near `payroll` or `credited_sec`. Someone who is "unproductive"
+ * all day still keeps their hours ([09 § 4](../../../../docs/09-Build-Log.md)).
  */
 
-/** D08-এর "টপ ১০" — ডিফল্ট, তবে endpoint-এ বদলানো যায়। */
+/** D08 "top 10": the default, but the endpoint can change it. */
 export const TOP_N = 10;
 
-/** এক অনুরোধে সর্বোচ্চ কত দিনের রেঞ্জ — নইলে একটা টাইপো পুরো টেবিল স্ক্যান করাত। */
+/** The longest date range per request; otherwise one typo would scan the whole table. */
 export const MAX_RANGE_DAYS = 366;
 
 const HOUR = 3600;
 
-// ── ঝুড়ি ও স্কোর (D07) ───────────────────────────────────────────────────────
+// ── Buckets and score (D07) ──────────────────────────────────────────────────
 
 /**
- * সেকেন্ডের চারটি ঝুড়ি।
+ * The four buckets of seconds.
  *
- * ⭐ **`unknownSec` আলাদা ঝুড়ি, `neutralSec`-এর অংশ নয়।** `categoryId = null`
- * মানে "আমরা জানি না", আর neutral মানে "জানি, এবং এটা নিরপেক্ষ"। দুটো
- * মিলিয়ে ফেললে অচেনা প্রতিটা অ্যাপ নিঃশব্দে স্কোরের হর বাড়িয়ে দিত —
- * অর্থাৎ যত বেশি অচেনা, স্কোর তত কম, অথচ কারণটা কোথাও দেখা যেত না।
+ * **`unknownSec` is its own bucket, not part of `neutralSec`.** `categoryId = null`
+ * means "we do not know", while neutral means "we know, and it is neutral". Merging
+ * them would let every unknown app silently inflate the score's denominator: the
+ * more unknown, the lower the score, with the reason visible nowhere.
  */
 export interface SecondBuckets {
   productiveSec: number;
   neutralSec: number;
   unproductiveSec: number;
-  /** মিল পাওয়া যায়নি — "জানি না"। কোনো হিসাবের হরে ঢোকে না। */
+  /** No match found: "we do not know". It enters no denominator. */
   unknownSec: number;
 }
 
 export interface ProductivityScore extends SecondBuckets {
-  /** productive + neutral + unproductive — স্কোরের **হর** এটাই */
+  /** productive + neutral + unproductive: this is the score's **denominator**. */
   categorizedSec: number;
   /** categorized + unknown */
   totalSec: number;
   /**
-   * productive ÷ categorized × ১০০।
+   * productive / categorized x 100.
    *
-   * ⚠️ **শূন্য হর হলে `null`, শূন্য নয়।** ০% বলত "এই লোক কিছুই productive
-   * করেনি", অথচ সত্যিটা হলো "বলার মতো কোনো তথ্যই নেই"। ছুটির দিনে বা
-   * এজেন্ট বন্ধ থাকা দিনে দুটোর পার্থক্য পুরো রিপোর্টের অর্থ বদলে দেয়।
+   * Careful: **`null` for a zero denominator, not zero.** 0% would say "this person
+   * did nothing productive", whereas the truth is "there is no information to
+   * report". On a day off or a day the agent was off, the difference changes the
+   * meaning of the whole report.
    */
   scorePct: number | null;
   /**
-   * মোট সময়ের কত শতাংশ অচেনা।
+   * What percentage of the total time is unknown.
    *
-   * ⭐ স্কোরের পাশে এটা **সবসময়** যায়। ৯০% সময় অচেনা হলে ১০০% স্কোরও
-   * অর্থহীন, কিন্তু শুধু স্কোরটা দেখলে সেটা দারুণ দেখাত।
+   * This **always** goes next to the score. If 90% of the time is unknown, even a
+   * 100% score means nothing, but looking at the score alone it would look great.
    *
-   * ⚠️ "কত শতাংশ অচেনা হলে স্কোরটা আর বিশ্বাসযোগ্য নয়" — সেই সীমাটা এখানে
-   * ধরে নেওয়া **হয়নি**। ওটা ব্যবসায়িক সিদ্ধান্ত, কেউ নেয়নি; নিজে থেকে
-   * একটা সংখ্যা বসালে সেটা নীরবে নীতি হয়ে যেত (payroll-এর OT-র মতোই)।
-   * দুটো সংখ্যা পাশাপাশি দেওয়া হয়, সিদ্ধান্ত যে দেখছে তার।
+   * Careful: the threshold "at what percent unknown is the score no longer
+   * trustworthy" is **not** assumed here. That is a business decision nobody has
+   * made; putting in a number ourselves would silently become policy (like the OT
+   * rule in payroll). The two numbers are given side by side, for whoever is making
+   * the decision.
    */
   unknownPct: number;
 }
@@ -73,9 +76,9 @@ export function emptyBuckets(): SecondBuckets {
 }
 
 /**
- * ⚠️ ঋণাত্মক সময় চুপচাপ মেনে নেওয়া হয় না। `duration_sec` DTO-তেই `@Min(0)`,
- * তাই এমনটা হওয়ার কথা নয় — কিন্তু হলে স্কোর ১০০% ছাড়িয়ে যেত বা ঋণাত্মক হতো,
- * আর কেউ কখনো ধরতে পারত না সংখ্যাটা কোথা থেকে এল।
+ * Careful: negative time is not silently accepted. `duration_sec` is `@Min(0)` in
+ * the DTO, so it should not happen, but if it did the score would exceed 100% or
+ * go negative, and nobody could ever trace where the number came from.
  */
 export function addSeconds(
   into: SecondBuckets,
@@ -97,7 +100,7 @@ export function addSeconds(
       into.unproductiveSec += seconds;
       break;
     default:
-      // null — মিল পাওয়া যায়নি
+      // null: no match found
       into.unknownSec += seconds;
       break;
   }
@@ -123,16 +126,16 @@ export function scoreOf(buckets: SecondBuckets): ProductivityScore {
       categorizedSec === 0
         ? null
         : round2((buckets.productiveSec * 100) / categorizedSec),
-    // মোট শূন্য হলে "০% অচেনা" বলা হয় — কারণ অচেনা সময় সত্যিই শূন্য।
-    // বিভ্রান্তি ঠেকায় পাশের `scorePct = null`, যেটা বলে তথ্যই নেই।
+    // When the total is zero we say "0% unknown", because the unknown time really
+    // is zero. The neighbouring `scorePct = null` prevents confusion by saying there is no data.
     unknownPct:
       totalSec === 0 ? 0 : round2((buckets.unknownSec * 100) / totalSec),
   };
 }
 
-// ── ক্যাটাগরির পরিচয় ─────────────────────────────────────────────────────────
+// ── Category identity ────────────────────────────────────────────────────────
 
-/** `app_categories`-এর যতটুকু রিপোর্ট বানাতে লাগে। */
+/** The part of `app_categories` needed to build reports. */
 export interface CategoryMeta {
   displayName: string;
   category: Productivity;
@@ -140,9 +143,10 @@ export interface CategoryMeta {
 }
 
 /**
- * ⚠️ id ম্যাপে না থাকলে `null` — অর্থাৎ "অচেনা", crash নয়। foreign key
- * থাকায় এমন হওয়ার কথা নয়, কিন্তু একটা রুল মুছে ফেলার আর ম্যাপটা পড়ার
- * মাঝখানে এটা ঘটতে পারে, আর তখন গোটা রিপোর্ট ৫০০ দেওয়ার কোনো মানে নেই।
+ * Careful: `null` if the id is not in the map, i.e. "unknown", not a crash. The
+ * foreign key means it should not happen, but it can between a rule being deleted
+ * and the map being read, and then there is no reason for the whole report to
+ * return 500.
  */
 function categoryOf(
   meta: ReadonlyMap<number, CategoryMeta>,
@@ -152,12 +156,12 @@ function categoryOf(
   return meta.get(categoryId)?.category ?? null;
 }
 
-// ── দৈনিক স্কোর (D07) ────────────────────────────────────────────────────────
+// ── Daily score (D07) ────────────────────────────────────────────────────────
 
-/** `groupBy(['employeeId','workDate','categoryId'])`-এর একটা সারি। */
+/** One row of `groupBy(['employeeId','workDate','categoryId'])`. */
 export interface DailyGroup {
   employeeId: number;
-  /** `@db.Date` — ঢাকার তারিখ, UTC-midnight হিসেবে জমা */
+  /** `@db.Date`: the Dhaka date, stored as a UTC midnight. */
   workDate: Date;
   categoryId: number | null;
   seconds: number;
@@ -174,12 +178,12 @@ export interface EmployeeDays {
 }
 
 /**
- * কর্মী → দিন → স্কোর।
+ * Employee -> day -> score.
  *
- * ⚠️ যেসব দিনে একটাও সারি নেই সেই দিনগুলো **থাকে না** — শূন্য স্কোরের সারি
- * বানানো হয় না। "ওইদিন কিছু করেনি" আর "ওইদিন এজেন্ট চলেনি / ছুটি ছিল"
- * এক নয়, আর app_usage থেকে দুটোর পার্থক্য বোঝার উপায় নেই। ফাঁকা দিন
- * ছুটি না কি অনুপস্থিতি — সেটা `daily_summary`-র `day_type`-এর কাজ।
+ * Careful: days with no rows at all **are absent**; no row with a zero score is
+ * made. "Did nothing that day" is not the same as "the agent did not run / it was a
+ * day off", and app_usage gives no way to tell them apart. Whether an empty day is
+ * leave or absence is the job of `day_type` in `daily_summary`.
  */
 export function foldDailyScores(
   groups: readonly DailyGroup[],
@@ -210,7 +214,7 @@ export function foldDailyScores(
     const total = emptyBuckets();
     const rows: DailyScore[] = [];
 
-    // তারিখ অনুযায়ী সাজানো — YYYY-MM-DD-তে লেক্সিকোগ্রাফিক ক্রমই কালানুক্রম
+    // Sorted by date: in YYYY-MM-DD, lexicographic order is chronological order
     for (const key of [...days.keys()].sort()) {
       const bucket = days.get(key)!;
       mergeBuckets(total, bucket);
@@ -223,11 +227,11 @@ export function foldDailyScores(
   return out;
 }
 
-// ── টপ অ্যাপ ও সাইট (D08) ────────────────────────────────────────────────────
+// ── Top apps and sites (D08) ─────────────────────────────────────────────────
 
-/** `groupBy(['processName'|'domain', 'categoryId'])`-এর একটা সারি। */
+/** One row of `groupBy(['processName'|'domain', 'categoryId'])`. */
 export interface UsageGroup {
-  /** কাঁচা `process_name` বা `domain` — যেমন এজেন্ট পাঠিয়েছে */
+  /** The raw `process_name` or `domain`, as the agent sent it. */
   key: string;
   categoryId: number | null;
   seconds: number;
@@ -235,43 +239,44 @@ export interface UsageGroup {
 }
 
 export interface UsageTally {
-  /** স্বাভাবিক করা কী (ছোট হাতের, সাইটে `www.` ছাড়া) */
+  /** The normalised key (lower case, without `www.` for sites). */
   key: string;
-  /** দেখানোর নাম — নিশ্চিত হলে রুলের `display_name`, নইলে কী-টাই */
+  /** The display name: the rule's `display_name` when sure, otherwise the key itself. */
   label: string;
   seconds: number;
   hours: string;
-  /** কতগুলো `app_usage` সারি এতে মিলেছে */
+  /** How many `app_usage` rows matched it. */
   records: number;
   buckets: SecondBuckets;
   /**
-   * সবচেয়ে বেশি সেকেন্ড যে ঝুড়িতে। জানা কিছু না থাকলে `null`।
-   * `mixed` সত্যি হলে এটা শুধু ইঙ্গিত — একক সত্য নয়।
+   * The bucket with the most seconds; `null` if nothing is known.
+   * When `mixed` is true this is only a hint, not a single truth.
    */
   category: Productivity | null;
   /**
-   * ⚠️ একাধিক **জানা** ক্যাটাগরি মিশে আছে কি না।
+   * Careful: whether more than one **known** category is mixed in.
    *
-   * `chrome.exe`-এর সারিগুলোর ক্যাটাগরি আসে **ডোমেইন** থেকে — youtube.com
-   * (unproductive) আর github.com (productive) দুটোই একই প্রসেসে। তাই
-   * অ্যাপের তালিকায় `chrome.exe`-কে একটামাত্র ক্যাটাগরি দেওয়া মিথ্যে হতো।
+   * The category of `chrome.exe`'s rows comes from the **domain**: youtube.com
+   * (unproductive) and github.com (productive) are both in the same process. So
+   * giving `chrome.exe` a single category in the app list would be a lie.
    */
   mixed: boolean;
-  /** **সব** কী-র মোট সময়ের কত শতাংশ (টপ-১০-এর যোগফলের নয়, নিচে দেখুন) */
+  /** What percentage of the total time of **all** keys (not of the top 10's sum; see below). */
   sharePct: number;
 }
 
 export interface UsageReport {
   rows: UsageTally[];
-  /** রেঞ্জের **সব** কী মিলিয়ে মোট — টপ ১০-এর যোগফল নয় */
+  /** The total across **all** keys in the range, not the top 10's sum. */
   totalSec: number;
-  /** কতগুলো আলাদা অ্যাপ/সাইট ছিল */
+  /** How many distinct apps/sites there were. */
   distinctKeys: number;
   /**
-   * ⭐ টপ তালিকার বাইরে পড়ে যাওয়া সময়।
+   * The time that fell outside the top list.
    *
-   * এটা ছাড়া "টপ ১০"-ই যেন সব — অথচ ৩০০টা সাইটের লেজে দিনের অর্ধেক
-   * সময় থাকতে পারে। সংখ্যাটা দেখা গেলে অন্তত জানা যায় কতটা দেখা হচ্ছে না।
+   * Without it, the "top 10" looks like everything, yet the tail of 300 sites can
+   * hold half the day's time. With this number visible, at least we know how much is
+   * not being seen.
    */
   otherSec: number;
 }
@@ -280,35 +285,35 @@ interface Accumulator {
   seconds: number;
   records: number;
   buckets: SecondBuckets;
-  /** categoryId → সেকেন্ড; লেবেল বাছতে লাগে */
+  /** categoryId -> seconds; needed to choose the label. */
   byCategoryId: Map<number, number>;
 }
 
 /**
- * প্রসেসের নাম স্বাভাবিক করা।
+ * Normalise a process name.
  *
- * ⚠️ Windows প্রসেসের নাম `Chrome.exe` বা `chrome.exe` — যেভাবেই আসতে পারে।
- * ছোট হাতের না করলে একই অ্যাপ দু-তিনটে আলাদা সারি হয়ে টপ ১০-এ জায়গা
- * নষ্ট করত, আর প্রত্যেকের সময় আসল সময়ের ভগ্নাংশ দেখাত।
- * ([category-matcher.ts](./category-matcher.ts) ম্যাচ করার সময় একই কাজ করে।)
+ * Careful: a Windows process name can arrive as `Chrome.exe` or `chrome.exe`.
+ * Without lower-casing, one app would become two or three rows, wasting places in
+ * the top 10, each showing a fraction of the real time.
+ * ([category-matcher.ts](./category-matcher.ts) does the same when matching.)
  */
 export function normalizeProcess(name: string): string {
   return name.trim().toLowerCase();
 }
 
 /**
- * ডোমেইন স্বাভাবিক করা — ছোট হাতের, শেষের ডট ছাঁটা, আর `www.` বাদ।
+ * Normalise a domain: lower case, trailing dot trimmed, and `www.` dropped.
  *
- * এজেন্ট (`DomainParser`) ইতিমধ্যেই ছোট হাতের করে দেয়, কিন্তু `www.` রাখে —
- * ঠিকই করে, ওটা তথ্য নষ্ট করার জায়গা নয়। রিপোর্টে অবশ্য `www.youtube.com`
- * আর `youtube.com` দুটো আলাদা সারি হলে টপ ১০ ভেঙে যেত।
+ * The agent (`DomainParser`) already lower-cases but keeps `www.`, which is right:
+ * that is not the place to throw information away. But in the report, if
+ * `www.youtube.com` and `youtube.com` were two rows, the top 10 would break.
  *
- * ⚠️ `www.` ছাঁটা হয় **শুধু তখনই** যখন বাকিটায় এখনো একটা ডট থাকে —
- * নইলে `www.com` (একটা আসল ডোমেইন) `com` হয়ে যেত।
+ * Careful: `www.` is trimmed **only when** the rest still contains a dot; otherwise
+ * `www.com` (a real domain) would become `com`.
  *
- * ⭐ এটা **শুধু দেখানোর** স্বাভাবিকীকরণ। ক্যাটাগরি ম্যাচিং এতে বদলায় না —
- * ওটা ইতিমধ্যেই লেবেলের সীমানায় মেলে, তাই `www.youtube.com` আর
- * `youtube.com` দুটোই একই রুলে পড়ে।
+ * This is **display-only** normalisation. It does not change category matching,
+ * which already matches on label boundaries, so `www.youtube.com` and `youtube.com`
+ * fall under the same rule.
  */
 export function normalizeDomain(domain: string): string {
   const value = domain.trim().toLowerCase().replace(/\.+$/, '');
@@ -319,20 +324,20 @@ export function normalizeDomain(domain: string): string {
   return value;
 }
 
-/** বেশি সেকেন্ড আগে; সমান হলে কী-র বর্ণক্রমে। */
+/** More seconds first; on a tie, alphabetical by key. */
 function bySecondsDesc(a: { seconds: number; key: string }, b: { seconds: number; key: string }): number {
   return b.seconds - a.seconds || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
 }
 
 /**
- * D08 — অ্যাপ বা সাইটের তালিকা।
+ * D08 - the list of apps or sites.
  *
- * ⚠️ **`kind` শুধু লেবেলের জন্য নয়।** অ্যাপের তালিকায় `chrome.exe`-এর
- * ক্যাটাগরি আসতে পারে একটা **domain** রুল থেকে; তখন রুলের `display_name`
- * ("YouTube") অ্যাপের নাম হিসেবে বসিয়ে দিলে তালিকায় লেখা থাকত
- * "YouTube — ৩ ঘণ্টা", অথচ সেটা আসলে ব্রাউজারের মোট সময়। তাই লেবেল
- * হিসেবে রুলের নাম নেওয়া হয় **শুধু তখনই** যখন রুলের `match_type`
- * তালিকার ধরনের সাথে মেলে, আর ওই কী-র সব সেকেন্ড একটামাত্র রুলের।
+ * Careful: **`kind` is more than a label.** In the app list, `chrome.exe`'s category
+ * can come from a **domain** rule; if the rule's `display_name` ("YouTube") were
+ * used as the app's name, the list would say "YouTube - 3 hours" although that is
+ * really the browser's total time. So the rule's name is used as the label **only
+ * when** the rule's `match_type` matches the list's kind, and all that key's
+ * seconds belong to a single rule.
  */
 export function foldUsage(
   groups: readonly UsageGroup[],
@@ -398,8 +403,8 @@ export function foldUsage(
       buckets: entry.buckets,
       category: dominant(entry.buckets),
       mixed: knownKinds(entry.buckets) > 1,
-      // ⚠️ হর **মোট** সময়, দেখানো ১০টার যোগফল নয়। নইলে শতাংশগুলো
-      //    সবসময় ১০০-তে মিলত আর লেজটা অদৃশ্য হয়ে যেত।
+      // Careful: the denominator is the **total** time, not the sum of the 10 shown.
+      //    Otherwise the percentages would always add up to 100 and the tail would vanish.
       sharePct: totalSec === 0 ? 0 : round2((entry.seconds * 100) / totalSec),
     });
   }
@@ -413,12 +418,12 @@ export function foldUsage(
 }
 
 /**
- * সবচেয়ে বড় **জানা** ঝুড়ি। সব জানা ঝুড়ি শূন্য হলে `null`।
+ * The largest **known** bucket; `null` if all known buckets are zero.
  *
- * ক্রম স্থির (productive → neutral → unproductive) যাতে ঠিক সমান হলেও ফল
- * প্রতিবার এক আসে — একই রিপোর্ট দু-বার খুললে দু-রকম দেখালে কেউ আর
- * সংখ্যাটা বিশ্বাস করত না। সমান হওয়াটা প্রায় অসম্ভব, আর হলে `mixed`
- * পতাকাটা এমনিতেই সত্যি থাকে।
+ * The order is fixed (productive -> neutral -> unproductive) so even an exact tie
+ * gives the same result every time; if opening the same report twice showed two
+ * different things, nobody would trust the number. A tie is nearly impossible, and
+ * if it happens the `mixed` flag is true anyway.
  */
 function dominant(buckets: SecondBuckets): Productivity | null {
   const order: Array<[Productivity, number]> = [
@@ -448,9 +453,9 @@ function knownKinds(buckets: SecondBuckets): number {
   );
 }
 
-// ── টিম-ভিত্তিক সাইট সারাংশ (D09) ────────────────────────────────────────────
+// ── Per-team site summary (D09) ──────────────────────────────────────────────
 
-/** `groupBy(['domain','employeeId','categoryId'])`-এর একটা সারি। */
+/** One row of `groupBy(['domain','employeeId','categoryId'])`. */
 export interface TeamGroup {
   domain: string;
   employeeId: number;
@@ -465,13 +470,14 @@ export interface TeamSiteRow {
   mixed: boolean;
   totalSec: number;
   hours: string;
-  /** কতজন কর্মী ওই সাইটে সময় দিয়েছেন */
+  /** How many employees spent time on that site. */
   employees: number;
   /**
-   * ⭐ সবচেয়ে বেশি সময় দেওয়া কর্মী ও তার সেকেন্ড।
+   * The employee who spent the most time, and their seconds.
    *
-   * এটা ছাড়া D09 বিপজ্জনক: একজনের ৬ ঘণ্টা "টিমের ৬ ঘণ্টা" হয়ে দেখাত,
-   * আর মালিক ভাবতেন পুরো টিমের অভ্যাস। `employees = 1` দেখলেই সেটা ধরা পড়ে।
+   * Without it D09 is dangerous: one person's 6 hours would show as "the team's 6
+   * hours", and the owner would think it was the whole team's habit. Seeing
+   * `employees = 1` exposes it.
    */
   topEmployeeId: number | null;
   topEmployeeSec: number;
@@ -541,7 +547,7 @@ export function foldTeamSites(
 
     let topEmployeeId: number | null = null;
     let topEmployeeSec = 0;
-    // ছোট employeeId আগে দেখা হয় — সমান সময় হলেও ফল স্থির থাকে
+    // The smaller employeeId is looked at first, so a tie in time still gives a stable result.
     for (const employeeId of [...entry.byEmployee.keys()].sort((a, b) => a - b)) {
       const sec = entry.byEmployee.get(employeeId)!;
       if (sec > topEmployeeSec) {
@@ -577,19 +583,19 @@ export function foldTeamSites(
   };
 }
 
-// ── রুলের প্যাটার্ন যাচাই (D06) ──────────────────────────────────────────────
+// ── Rule pattern validation (D06) ────────────────────────────────────────────
 
 /**
- * ⭐ মালিকের লেখা প্যাটার্নে সমস্যা আছে কি না — থাকলে বার্তা, নইলে `null`।
+ * Whether the pattern the owner wrote has a problem: a message if so, otherwise `null`.
  *
- * ⚠️ **এটা লেখার সময়ই ধরতে হয়।** `compile()` ভুল প্যাটার্ন **নীরবে বাদ**
- * দেয় (ingest ভেঙে পড়া ঠেকাতে, আর সেটাই ঠিক)। ফলে যাচাই না করলে মালিক
- * একটা রুল যোগ করতেন, তালিকায় সেটা দেখতেন, অথচ সেটা **কোনোদিন কিছুই
- * করত না** — কোথাও কোনো এরর নেই, শুধু সার্ভিস লগে একটা লাইন।
+ * Careful: **this must be caught at write time.** `compile()` **silently drops** a
+ * bad pattern (to stop ingest from breaking, and that is right). So without
+ * validation the owner would add a rule, see it in the list, and it would **never do
+ * anything**: no error anywhere, only one line in the service log.
  *
- * এটা খাঁটি ফাংশন হিসেবে এখানেই থাকে, কারণ সীমা (`MAX_REGEX_LENGTH`)
- * ম্যাচারের সাথে **এক** থাকতে হবে — দুই জায়গায় দুটো সংখ্যা থাকলে একদিন
- * একটা বদলাত, আর তখন যাচাই পাস করা রুলও নীরবে বাদ পড়ত।
+ * It stays here as a pure function because the limit (`MAX_REGEX_LENGTH`) must stay
+ * **the same** as the matcher's; with two numbers in two places, one day one would
+ * change, and then even a rule that passed validation would be dropped silently.
  */
 export function patternProblem(
   matchType: MatchType,
@@ -603,7 +609,7 @@ export function patternProblem(
 
   switch (matchType) {
     case 'process':
-      // পুরো পাথ কখনো মেলে না — `app_usage`-এ শুধু ফাইলের নাম জমা হয়
+      // A full path never matches; `app_usage` stores only the file name.
       if (value.includes('\\') || value.includes('/')) {
         return 'Give only the file name in a process pattern, not the full path (for example code.exe)';
       }
@@ -613,8 +619,8 @@ export function patternProblem(
       return null;
 
     case 'domain':
-      // ⚠️ ফুল URL কখনো জমা হয় না (ADR-013) — তাই '/'-ওয়ালা প্যাটার্ন
-      //    কোনোদিন মিলত না, আর মালিক ভাবতেন নিয়মটা কাজ করছে
+      // Careful: a full URL is never stored (ADR-013), so a pattern containing '/'
+      //    would never match, and the owner would think the rule was working
       if (value.includes('://') || value.includes('/')) {
         return 'Give the domain only, not the full URL (for example youtube.com)';
       }
@@ -639,25 +645,25 @@ export function patternProblem(
   }
 }
 
-// ── তারিখের রেঞ্জ ────────────────────────────────────────────────────────────
+// ── Date range ───────────────────────────────────────────────────────────────
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export interface WorkDateRange {
   from: Date;
   to: Date;
-  /** দুই প্রান্ত ধরে কত দিন */
+  /** How many days, counting both ends. */
   days: number;
 }
 
 /**
- * `work_date` (`@db.Date`) → `YYYY-MM-DD`।
+ * `work_date` (`@db.Date`) -> `YYYY-MM-DD`.
  *
- * ⚠️ **কোনো টাইমজোন রূপান্তর নয়।** কলামটা ইতিমধ্যেই ঢাকার তারিখ, UTC-midnight
- * হিসেবে জমা ([dhaka-time.ts](../agent/util/dhaka-time.ts)-এর `workDateOf`
- * ঠিক তাই বসায়)। এখানে আবার +৬ ঘণ্টা করলে বা `toLocaleDateString` ব্যবহার
- * করলে সার্ভারের টাইমজোন অনুযায়ী প্রতিটা তারিখ একদিন সরে যেত —
- * আর সেটা কেবল কিছু মেশিনে ধরা পড়ত।
+ * Careful: **no timezone conversion.** The column is already the Dhaka date, stored
+ * as a UTC midnight (that is exactly what `workDateOf` in
+ * [dhaka-time.ts](../agent/util/dhaka-time.ts) sets). Adding +6 hours again here, or
+ * using `toLocaleDateString`, would shift every date by a day depending on the
+ * server's timezone, and that would show up only on some machines.
  */
 export function toDateKey(date: Date): string {
   const pad = (n: number): string => String(n).padStart(2, '0');
@@ -665,11 +671,11 @@ export function toDateKey(date: Date): string {
 }
 
 /**
- * `YYYY-MM-DD` → ওই তারিখের UTC-midnight (`@db.Date`-এর সাথে তুলনীয়)।
+ * `YYYY-MM-DD` -> that date's UTC midnight (comparable with `@db.Date`).
  *
- * ⚠️ `new Date('2026-02-31')`-এর মতো `Date.UTC(2026, 1, 31)` চুপচাপ ৩ মার্চে
- * গড়িয়ে যায়। তাই ফিরে এসে মিলিয়ে দেখা হয় — নইলে ভুল তারিখের রিপোর্ট
- * সফলভাবে ফেরত আসত।
+ * Careful: like `new Date('2026-02-31')`, `Date.UTC(2026, 1, 31)` silently rolls over
+ * to 3 March. So the result is checked by converting back; otherwise a report for
+ * a wrong date would come back successfully.
  */
 export function parseWorkDate(text: string): Date {
   if (!DATE_PATTERN.test(text)) {
@@ -687,15 +693,15 @@ export function parseWorkDate(text: string): Date {
 }
 
 /**
- * রেঞ্জ ঠিক করা। কিছু না দিলে **চলতি মাসের ১ তারিখ → আজ**।
+ * Resolve the range. If nothing is given, **the 1st of the current month -> today**.
  *
- * `today` প্যারামিটার হিসেবে আসে (`workDateOf(new Date())` থেকে) যাতে
- * ফাংশনটা খাঁটি থাকে আর টেস্টে ঘড়ির উপর নির্ভর করতে না হয় — কারণ
- * ঘড়ি-নির্ভর টেস্ট রোজ রাত ১২টার পর ভাঙে ([09 § ৩অ.১১](../../../../docs/09-Build-Log.md))।
+ * `today` comes in as a parameter (from `workDateOf(new Date())`) so the function
+ * stays pure and tests need not depend on the clock; clock-dependent tests break
+ * every day after midnight ([09 § 3a.11](../../../../docs/09-Build-Log.md)).
  *
- * ⚠️ ভুল ইনপুটে `RangeError` ছোড়ে, `BadRequestException` নয় — খাঁটি ফাংশন
- * HTTP-র কিছু জানে না ([payroll.math.ts](../payroll/payroll.math.ts)-এর মতোই)।
- * সার্ভিস সেটাকে ৪০০-তে বদলায়।
+ * Careful: it throws `RangeError` on bad input, not `BadRequestException`; a pure
+ * function knows nothing about HTTP (same as
+ * [payroll.math.ts](../payroll/payroll.math.ts)). The service turns it into a 400.
  */
 export function resolveRange(
   from: string | undefined,
@@ -725,14 +731,14 @@ export function resolveRange(
   return { from: start, to: end, days };
 }
 
-// ── ছোট সহায়ক ────────────────────────────────────────────────────────────────
+// ── Small helpers ────────────────────────────────────────────────────────────
 
-/** শতাংশ দুই দশমিকে — নইলে JSON-এ 33.33333333333333 যেত। */
+/** Percentage to two decimals; otherwise JSON would carry 33.33333333333333. */
 export function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-/** সেকেন্ড → দেখানোর মতো ঘণ্টা (দুই দশমিক)। */
+/** Seconds -> hours for display (two decimals). */
 export function toHours(seconds: number): string {
   return (seconds / HOUR).toFixed(2);
 }

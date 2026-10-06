@@ -4,41 +4,41 @@ namespace oXeio.Core.Agent;
 
 // ── enroll ──────────────────────────────────────────────────────────────────
 
-/// <summary><c>POST /agent/enroll</c> — একমাত্র কল যাতে টোকেন লাগে না।</summary>
+/// <summary><c>POST /agent/enroll</c>: the only call that needs no token.</summary>
 public sealed record EnrollRequest
 {
-    /// <summary>অ্যাডমিনের দেওয়া একবার-ব্যবহার্য কোড, ২৪ ঘণ্টায় মেয়াদ শেষ (H05)।</summary>
+    /// <summary>A one-time code given by the admin, expires in 24 hours (H05).</summary>
     public required string EnrollmentCode { get; init; }
 
     public required string Hostname { get; init; }
     public required string WindowsUsername { get; init; }
 
-    /// <summary>হার্ডওয়্যার-ভিত্তিক স্থায়ী আইডি। সার্ভারে unique — একই মেশিন আবার enroll করলে চেনা যায়।</summary>
+    /// <summary>Hardware-based permanent id. Unique on the server: lets it recognize the same machine enrolling again.</summary>
     public required string MachineGuid { get; init; }
 
     public string? OsVersion { get; init; }
     public string? AgentVersion { get; init; }
 
-    /// <summary>১–৮। এর বাইরে হলে সার্ভার ৪০০ দেয়।</summary>
+    /// <summary>1 to 8. Outside that the server returns 400.</summary>
     public int? Monitors { get; init; }
 }
 
 /// <summary>
-/// ⭐ <c>POST /agent/enroll-login</c> — স্টাফ নিজের ইমেইল-পাসওয়ার্ড দিয়ে
-/// নিজের PC যোগ করে। কোড লাগে না।
+/// <c>POST /agent/enroll-login</c>: staff add their own PC using their own email and
+/// password. No code needed.
 ///
-/// ⚠️ <b>এটা একটা <c>record</c>, অর্থাৎ তার জেনারেটেড <c>ToString</c>
-/// পাসওয়ার্ডসহ সব ছাপে।</b> এই অবজেক্টটা <b>কখনো</b> লগে যাবে না —
-/// <c>EnrollmentClient</c>-এ ঠিক এই কারণেই <c>EnrollResponse</c>-ও লগে যায় না।
+/// <b>This is a <c>record</c>, so its generated <c>ToString</c> prints everything, password
+/// included.</b> This object must <b>never</b> be logged; for exactly this reason
+/// <c>EnrollmentClient</c> does not log <c>EnrollResponse</c> either.
 /// </summary>
 public sealed record EnrollLoginRequest
 {
     public required string Email { get; init; }
 
-    /// <summary>⚠️ শুধু তারে যায়, কোথাও জমা হয় না — টোকেনটাই জমা হয়।</summary>
+    /// <summary>Goes over the wire only and is never stored; the token is what gets stored.</summary>
     public required string Password { get; init; }
 
-    /// <summary>I06 — 2FA চালু থাকলে ছ-অঙ্কের কোড। প্রথম দফায় null।</summary>
+    /// <summary>I06: the six-digit code if 2FA is on. Null on the first round.</summary>
     public string? Totp { get; init; }
 
     public required string Hostname { get; init; }
@@ -50,15 +50,14 @@ public sealed record EnrollLoginRequest
 }
 
 /// <summary>
-/// ⚠️ উত্তরটা <b>দু-রকম</b> হতে পারে, আর দুটোই ২০০:
+/// The reply can be of <b>two kinds</b>, and both are 200:
 /// <list type="bullet">
-/// <item><c>Status = "needs_totp"</c> — 2FA চালু, কোড চাই। বাকি ঘর null।</item>
-/// <item><c>Status = null</c> — সফল, <c>DeviceToken</c> ও বাকি সব আছে।</item>
+/// <item><c>Status = "needs_totp"</c>: 2FA is on, a code is needed. The other fields are null.</item>
+/// <item><c>Status = null</c>: success, with <c>DeviceToken</c> and everything else.</item>
 /// </list>
 ///
-/// ⚠️ তাই ঘরগুলো nullable। <c>required</c> রাখলে "কোড চাই" উত্তরটা
-/// deserialize-এই ব্যর্থ হতো, আর এজেন্ট 2FA-ওয়ালা কোনো অ্যাকাউন্টে
-/// কোনোদিন enroll করতে পারত না।
+/// So the fields are nullable. With <c>required</c> the "code needed" reply would fail at
+/// deserialization, and the agent could never enroll on an account that has 2FA.
 /// </summary>
 public sealed record EnrollLoginResponse
 {
@@ -69,7 +68,7 @@ public sealed record EnrollLoginResponse
     public string? ConfigVersion { get; init; }
     public AgentConfig? Config { get; init; }
 
-    /// <summary>2FA-র ছ-অঙ্ক ছাড়া এগোনো যাবে না।</summary>
+    /// <summary>Cannot proceed without the six-digit 2FA code.</summary>
     public bool NeedsTotp => string.Equals(Status, "needs_totp", StringComparison.Ordinal);
 }
 
@@ -78,9 +77,9 @@ public sealed record EnrollResponse
     public required int DeviceId { get; init; }
 
     /// <summary>
-    /// ⚠️ এই একবারই আসে — সার্ভারে শুধু sha256 জমা থাকে। হারালে আবার enroll
-    /// করা ছাড়া উপায় নেই, আর নতুন enrollment code লাগবে। পাওয়ামাত্রই
-    /// DPAPI দিয়ে ডিস্কে লিখুন, তারপর বাকি কাজ।
+    /// Arrives only this once; the server stores only a sha256. If lost, the only way is to
+    /// enroll again, which needs a new enrollment code. Write it to disk with DPAPI the moment
+    /// it arrives, before anything else.
     /// </summary>
     public required string DeviceToken { get; init; }
 
@@ -93,7 +92,7 @@ public sealed record EnrolledEmployee(int Id, string EmpCode, string FullName);
 
 // ── config ──────────────────────────────────────────────────────────────────
 
-/// <summary><c>GET /agent/config</c>। <see cref="Version"/> কনফিগের sha256-এর প্রথম ১৬ অক্ষর।</summary>
+/// <summary><c>GET /agent/config</c>. <see cref="Version"/> is the first 16 characters of the config's sha256.</summary>
 public sealed record ConfigResponse
 {
     public required string Version { get; init; }
@@ -102,30 +101,30 @@ public sealed record ConfigResponse
 
 // ── heartbeat ───────────────────────────────────────────────────────────────
 
-/// <summary><c>POST /agent/heartbeat</c> — প্রতি <see cref="AgentConfig.HeartbeatSec"/> সেকেন্ডে।</summary>
+/// <summary><c>POST /agent/heartbeat</c>: every <see cref="AgentConfig.HeartbeatSec"/> seconds.</summary>
 public sealed record HeartbeatRequest
 {
     public required SegmentState State { get; init; }
 
     /// <summary>
-    /// ঢাকার আজকের দিনে এ পর্যন্ত ACTIVE সেকেন্ড। ০–৮৬৪০০ ছাড়ালে সার্ভার ৪০০ দেয়।
-    /// ⚠️ মধ্যরাতে (ঢাকার, UTC-র নয়) শূন্য হয় — <see cref="oXeio.Core.Time.DhakaTime"/>।
+    /// ACTIVE seconds so far on today's Dhaka calendar. Outside 0 to 86400 the server returns 400.
+    /// Resets to zero at midnight (Dhaka's, not UTC's); see <see cref="oXeio.Core.Time.DhakaTime"/>.
     /// </summary>
     public required int ActiveSecToday { get; init; }
 
-    /// <summary><see cref="OutboxDepth.ForHeartbeat"/>। কিউ বাড়তে থাকলে ড্যাশবোর্ড এখান থেকেই টের পায়।</summary>
+    /// <summary><see cref="OutboxDepth.ForHeartbeat"/>. The dashboard sees a growing queue from here.</summary>
     public int? QueueDepth { get; init; }
 
-    /// <summary>নিজের কনফিগের ভার্সন। না মিললে সার্ভার <see cref="AgentCommand.ReloadConfig"/> পাঠায়।</summary>
+    /// <summary>Its own config version. On a mismatch the server sends <see cref="AgentCommand.ReloadConfig"/>.</summary>
     public string? ConfigVersion { get; init; }
 
     /// <summary>
-    /// ⭐ এজেন্ট এখন কোন ভার্সনে চলছে।
+    /// The version the agent is running now.
     ///
-    /// enroll-এর সময় একবার পাঠানো হয়, কিন্তু আপগ্রেডের পর সার্ভারে সেটা
-    /// পুরোনোই থেকে যেত। ⚠️ সার্ভার **এই সংখ্যা দেখেই** ঠিক করে আপডেট অফার
-    /// করবে কি না — স্টেল থাকলে আপডেট হয়ে যাওয়া এজেন্টকেও একই আপডেট
-    /// বারবার অফার করা হতো ([G59](../../../../docs/08-Gap-Analysis.md))।
+    /// Sent once at enroll, but after an upgrade it would stay stale on the server. The server
+    /// decides <b>from this number alone</b> whether to offer an update; if it were stale, an
+    /// agent that had already updated would be offered the same update again and again
+    /// ([G59](../../../../docs/08-Gap-Analysis.md)).
     /// </summary>
     public string? AgentVersion { get; init; }
 
@@ -139,24 +138,24 @@ public sealed record HeartbeatRequest
 
 public sealed record HeartbeatResponse
 {
-    /// <summary>অচেনা কমান্ড <see cref="AgentCommands.Parse"/>-এ বাদ পড়ে যায়, তাই এই তালিকায় থাকে না।</summary>
+    /// <summary>Unknown commands are dropped in <see cref="AgentCommands.Parse"/>, so they are not in this list.</summary>
     public required IReadOnlyList<AgentCommand> Commands { get; init; }
 
     public required string ConfigVersion { get; init; }
 
     /// <summary>
-    /// ⭐ tray-তে "x ঘ / ২০৮ঘ" দেখানোর সংখ্যা — <b>সার্ভার থেকেই আসে</b>।
+    /// The numbers for the tray's "x h / 208h" display: <b>they come from the server</b>.
     ///
-    /// এজেন্ট নিজে এটা জানে না: সে শুধু নিজের চালু থাকার সময়টুকু গোনে, তাই
-    /// রিবুট বা আপডেটের পর তার হিসাব শূন্য। স্টাফ তখন দেখত মাসের কাজ মুছে
-    /// গেছে — অথচ ফিচারটার উদ্দেশ্যই আস্থা তৈরি করা।
+    /// The agent cannot know this itself: it counts only its own running time, so after a
+    /// reboot or update its count is zero. Staff would then see the month's work wiped, when
+    /// the whole point of the feature is to build trust.
     ///
-    /// ডিভাইসের সাথে কোনো কর্মী যুক্ত না থাকলে <c>null</c>।
+    /// <c>null</c> if no employee is attached to the device.
     /// </summary>
     public EmployeeProgress? Progress { get; init; }
 }
 
-/// <summary>সার্ভারের হিসাব — একাধিক PC ব্যবহার করলে সবগুলো যোগ হয়ে আসে (§ ২.১-গ)।</summary>
+/// <summary>The server's calculation; for several PCs they arrive summed (section 2.1(c)).</summary>
 public sealed record EmployeeProgress
 {
     public required int TodayActiveSec { get; init; }
@@ -164,50 +163,50 @@ public sealed record EmployeeProgress
     public required double MonthlyTargetHours { get; init; }
 
     /// <summary>
-    /// গতি (pace) — <c>credited − expected</c>, ধনাত্মক মানে এগিয়ে (07 § ২.১-খ)।
+    /// Pace: <c>credited - expected</c>, positive means ahead (07 section 2.1(b)).
     ///
-    /// ⭐ <b>ঐচ্ছিক, এবং সেটাই মূল কথা।</b> সঠিক হিসাবের জন্য কর্মদিবস গুনতে হয়,
-    /// আর কর্মদিবস মানে সাপ্তাহিক ছুটি <b>ও</b> <c>holidays</c> টেবিল — এজেন্ট
-    /// ছুটির তালিকা জানেই না। সার্ভার সংখ্যাটা পাঠালে tray সেটাই দেখায়; না
-    /// পাঠালে <c>MonthlyPace</c> একটা আনুমানিক হিসাব করে এবং জানালায় স্পষ্ট
-    /// করে "আনুমানিক" লেখে।
+    /// <b>Optional, and that is the point.</b> An exact figure needs working days counted,
+    /// and working days mean weekly days off <b>and</b> the <c>holidays</c> table, which the
+    /// agent knows nothing about. If the server sends the number, the tray shows it; if not,
+    /// <c>MonthlyPace</c> makes a rough estimate and the window clearly labels it
+    /// "approximate".
     ///
-    /// ⚠️ এখানে ডিফল্ট ০ বসানো <b>যাবে না</b>। ০ মানে "ঠিক লক্ষ্যে আছে", অর্থাৎ
-    /// সার্ভার চুপ থাকলে সবাইকে চিরকাল নিখুঁত দেখাত।
+    /// A default of 0 <b>must not</b> be set here. 0 means "exactly on target", so if the
+    /// server stayed silent everyone would look perfect forever.
     /// </summary>
     public int? PaceSec { get; init; }
 
     /// <summary>
-    /// আজকের টার্গেট, সেকেন্ডে — মাসিক ÷ ওই মাসের কর্মদিবস; ছুটির দিনে ০।
+    /// Today's target in seconds: monthly divided by that month's working days; 0 on a day off.
     ///
-    /// ⚠️ <c>null</c> মানে "পুরোনো সার্ভার, বলেনি"; <b>০ মানে "আজ ছুটি"</b>।
-    /// দুটোকে এক করে ফেললে ছুটির দিনে জানালাটা হয় বার-ই দেখাত না, নয়তো
-    /// ছুটির দিনে "৮ ঘণ্টা বাকি" বলে তাড়া দিত।
+    /// <c>null</c> means "old server, did not say"; <b>0 means "day off today"</b>. Conflating
+    /// the two would either show no bar at all on a day off, or nag with "8 hours left" on a
+    /// day off.
     /// </summary>
     public int? DailyTargetSec { get; init; }
 
-    /// <summary>গত ৭ দিনে (আজ ধরে) গোনা সেকেন্ড।</summary>
+    /// <summary>Seconds counted over the last 7 days (including today).</summary>
     public int? Week7ActiveSec { get; init; }
 
-    /// <summary>ওই ৭ দিনের কর্মদিবস × দৈনিক টার্গেট। "চলতি সপ্তাহ" নয়, রোলিং ৭ দিন।</summary>
+    /// <summary>Working days in those 7 days times the daily target. A rolling 7 days, not "this week".</summary>
     public int? Week7TargetSec { get; init; }
 
     /// <summary>
-    /// ⭐⭐ <b>G111</b> — তাঁর একটাও <b>শেষ হয়ে যাওয়া</b> কর্মদিবস এখনো দেখা
-    /// হয়েছে কি না।
+    /// <b>G111</b>: whether even one <b>finished</b> working day of this person has been
+    /// observed yet.
     ///
-    /// ⚠️⚠️ না দেখা হলে সার্ভারের <see cref="PaceSec"/> ঠিক <c>0</c>, আর ০
-    /// মানে "ঠিক লক্ষ্যে আছে" — অর্থাৎ নতুন কর্মীর প্রথম দিনে জানালাটা
-    /// "0:00 ahead" লিখত। সংখ্যাটা মিথ্যা নয়, বাক্যটা মিথ্যা।
+    /// If none has been observed, the server's <see cref="PaceSec"/> is exactly <c>0</c>, and 0
+    /// means "exactly on target", so on a new employee's first day the window would say
+    /// "0:00 ahead". The number is not false; the sentence is.
     ///
-    /// ⚠️⚠️ এই অবস্থায় <b>আনুমানিক হিসাবেও ফিরে যাওয়া যাবে না</b>
-    /// (<see cref="oXeio.Agent.Ui.MonthlyPace"/>) — ওটা মাসের ১ তারিখ থেকে
-    /// গোনে, তাই এমন দিনের ঘাটতি দেখাত যখন মাপার যন্ত্রটাই বসেনি। উত্তরটা
-    /// সংখ্যা নয়, <b>"এখনো বলার মতো কিছু ঘটেনি"</b>।
+    /// In this state the code also <b>must not fall back to the rough estimate</b>
+    /// (<see cref="oXeio.Agent.Ui.MonthlyPace"/>): that counts from the 1st of the month, so it
+    /// would show a shortfall for a day on which the measuring instrument was not even
+    /// installed. The answer is not a number but <b>"nothing to report yet"</b>.
     ///
-    /// ⚠️ <c>null</c> = পুরোনো সার্ভার বলেনি → আগের মতোই আচরণ ("দেখা হয়েছে"
-    /// ধরা হয়)। নইলে সার্ভার আপডেটের আগে প্রতিটা tray "এখনো দেখা হয়নি"
-    /// লিখত, অথচ সবার হিসাবই ঠিকঠাক চলছিল।
+    /// <c>null</c> = an old server did not say, so behave as before (treated as "observed").
+    /// Otherwise, before the server update every tray would say "not observed yet" even though
+    /// everyone's numbers were working fine.
     /// </summary>
     public bool? Observed { get; init; }
 }
@@ -215,19 +214,19 @@ public sealed record EmployeeProgress
 // ── ingest ──────────────────────────────────────────────────────────────────
 
 /// <summary>
-/// segments / app-usage / events — তিনটারই উত্তর।
+/// The reply for all three: segments / app-usage / events.
 ///
-/// ⚠️ <see cref="Duplicates"/> ব্যর্থতা <b>নয়</b>। ডুপ্লিকেট মানে আগের চেষ্টাটা
-/// আসলে পৌঁছেছিল, শুধু উত্তরটা আমরা পাইনি — অর্থাৎ ডেটা সার্ভারে আছে।
-/// দুটোকেই সফল ধরে ack করতে হবে (§ ২.১-ঘ)। না করলে ওই ব্যাচ চিরকাল
-/// রিট্রাই হতে থাকত আর কিউ কখনো খালি হতো না।
+/// <see cref="Duplicates"/> is <b>not</b> a failure. A duplicate means an earlier attempt did
+/// actually arrive and we only missed the reply, so the data is on the server.
+/// Both must be acked as success (section 2.1(d)). Otherwise that batch would be retried
+/// forever and the queue would never empty.
 /// </summary>
 public sealed record IngestAck
 {
     public required int Accepted { get; init; }
     public required int Duplicates { get; init; }
 
-    /// <summary>সার্ভার মধ্যরাতে ভাগ করেছে এমন রেকর্ডের সংখ্যা (G43)। এজেন্টের কিছু করার নেই।</summary>
+    /// <summary>Number of records the server split at midnight (G43). Nothing for the agent to do.</summary>
     public required int Split { get; init; }
 }
 
@@ -235,28 +234,28 @@ public sealed record ScreenshotAck
 {
     public required bool Accepted { get; init; }
 
-    /// <summary>একই <c>(device, slotStart, monitorIndex)</c> আগেই ছিল। এটাও সফল।</summary>
+    /// <summary>The same <c>(device, slotStart, monitorIndex)</c> already existed. Also a success.</summary>
     public required bool Duplicate { get; init; }
 
-    /// <summary>সার্ভারে ফাইলটা যেখানে বসেছে। শুধু লগের জন্য।</summary>
+    /// <summary>Where the file landed on the server. For the log only.</summary>
     public string? Path { get; init; }
 }
 
 // ── update ──────────────────────────────────────────────────────────────────
 
 /// <summary>
-/// <c>GET /agent/update?current=X</c>। ২০৪ এলে অফার নেই —
-/// তখন <see cref="SyncResult{T}.Value"/> null কিন্তু
-/// <see cref="SyncResult{T}.Outcome"/> <see cref="SyncOutcome.Success"/>।
+/// <c>GET /agent/update?current=X</c>. A 204 means no offer: then
+/// <see cref="SyncResult{T}.Value"/> is null but
+/// <see cref="SyncResult{T}.Outcome"/> is <see cref="SyncOutcome.Success"/>.
 /// </summary>
 public sealed record UpdateOffer
 {
     public required string Version { get; init; }
 
-    /// <summary>⚠️ MSI চালানোর আগে হ্যাশ মিলিয়ে দেখা বাধ্যতামূলক।</summary>
+    /// <summary>The hash must be checked before running the MSI. This is mandatory.</summary>
     public required string Sha256 { get; init; }
 
-    /// <summary>সার্ভার-সাপেক্ষ পাথ, যেমন <c>/api/v1/agent/update/download?version=1.2.0</c>।</summary>
+    /// <summary>A server-relative path, e.g. <c>/api/v1/agent/update/download?version=1.2.0</c>.</summary>
     public required string Url { get; init; }
 
     public required bool Mandatory { get; init; }
@@ -269,12 +268,12 @@ public sealed record UpdateOffer
     public string? Signature { get; init; }
 }
 
-/// <summary><c>GET /agent/update/download</c> শেষ হওয়ার পর — MSI ডিস্কে নামানো হয়ে গেছে।</summary>
+/// <summary><c>GET /agent/update/download</c> after it finishes: the MSI has been saved to disk.</summary>
 public sealed record UpdateDownload
 {
     public required string SavedPath { get; init; }
     public required long Bytes { get; init; }
 
-    /// <summary>নামানো ফাইলের আসল হ্যাশ। <see cref="UpdateOffer.Sha256"/>-এর সাথে না মিললে ফাইল মুছে ফেলুন।</summary>
+    /// <summary>The real hash of the downloaded file. If it does not match <see cref="UpdateOffer.Sha256"/>, delete the file.</summary>
     public required string Sha256 { get; init; }
 }

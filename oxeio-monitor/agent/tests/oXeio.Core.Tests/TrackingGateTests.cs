@@ -3,11 +3,11 @@ using oXeio.Core.Agent;
 namespace oXeio.Core.Tests;
 
 /// <summary>
-/// সময় গোনা হবে কি না — সাইন ইন ও revoke।
+/// Whether time is counted: sign-in and revoke.
 ///
-/// ⚠️⚠️ এই ফাইলটা লেখা হয়েছে একটা মাঠের বাগ থেকে: ০.৩.৩ বসানোর পর
-/// সাইন-ইন জানালা এসেছে, কিন্তু <b>সাইন ইন না করা অবস্থাতেও</b> tray-তে
-/// সবুজ "Working" দেখাচ্ছিল আর আউটবক্সে ৭টা সারি জমে গিয়েছিল।
+/// Careful: this file was written because of a field bug: after 0.3.3 the sign-in
+/// window appeared, but <b>even when not signed in</b> the tray showed a green
+/// "Working" and 7 rows piled up in the outbox.
 /// </summary>
 public class TrackingGateTests
 {
@@ -21,10 +21,10 @@ public class TrackingGateTests
         Assert.True(TrackingGate.Allows(Enrolled, NotRevoked));
 
     /**
-     * ⭐⭐ এই ফাইলের মূল টেস্ট। সাইন ইনের আগে গোনা শুরু হলে সময়টুকু
-     * আউটবক্সে জমত, আর স্টাফ সাইন ইন করামাত্র ডিভাইসটা তার নামে বাঁধা
-     * পড়ে ওই সময়টুকুও তার খাতায় চলে যেত — অর্থাৎ অ্যাডমিনের আধঘণ্টা
-     * অন্যের হাজিরায়।
+     * The main test of this file. If counting started before sign-in, the time would
+     * pile up in the outbox, and the moment staff signed in the device would be bound
+     * to their name and that time would go into their ledger too: half an hour of the
+     * admin's time on someone else's attendance.
      */
     [Fact]
     public void সাইন_ইন_না_করা_থাকলে_গোনা_নয়() =>
@@ -39,10 +39,10 @@ public class TrackingGateTests
             TrackingGate.Check(Enrolled, Revoked));
 
     /**
-     * ⚠️⚠️ <b>ক্রমের পাহারা।</b> revoke করলে <c>DeviceCredentials</c>
-     * টোকেন মুছে ফেলে, তাই ওই মুহূর্ত থেকে দুটো শর্তই সত্যি। উল্টো ক্রমে
-     * লিখলে বাতিল মেশিনে স্টাফ পড়ত "Sign in to start" — অফিস যেটা বন্ধ
-     * করেছে সেটাই আবার চালু করার নির্দেশ।
+     * Careful: <b>the order guard.</b> Revoking makes <c>DeviceCredentials</c> delete
+     * the token, so from that moment both conditions are true. Written in the other
+     * order, staff on a revoked machine would read "Sign in to start", which is an
+     * instruction to switch back on what the office switched off.
      */
     [Fact]
     public void দুটোই_সত্যি_হলে_বাতিল_জেতে() =>
@@ -50,7 +50,7 @@ public class TrackingGateTests
             TrackingGate.Verdict.Revoked,
             TrackingGate.Check(NotEnrolled, Revoked));
 
-    /// <summary>প্রতিটা অবস্থার জন্য স্টাফের পড়ার মতো একটা বাক্য থাকতেই হবে।</summary>
+    /// <summary>Every state must have a sentence staff can read.</summary>
     [Theory]
     [InlineData(TrackingGate.Verdict.Allowed)]
     [InlineData(TrackingGate.Verdict.NotEnrolled)]
@@ -59,9 +59,9 @@ public class TrackingGateTests
         Assert.False(string.IsNullOrWhiteSpace(TrackingGate.Explain(verdict)));
 
     /**
-     * ⚠️ বার্তাটা <b>কী করতে হবে</b> বলে, শুধু কী হচ্ছে না তা নয়। tray-র
-     * এই এক লাইনই স্টাফের একমাত্র ব্যাখ্যা — "Not enrolled" লিখলে সে
-     * জানতই না তার কিছু করার আছে।
+     * Careful: the message says <b>what to do</b>, not only what is not happening. This
+     * one tray line is staff's only explanation; writing "Not enrolled" would leave them
+     * unaware that there is anything for them to do.
      */
     [Fact]
     public void সাইন_ইনের_বার্তা_কাজটা_বলে() =>
@@ -71,12 +71,11 @@ public class TrackingGateTests
             StringComparison.Ordinal);
 
     /**
-     * ⭐⭐ <b>"কী করতে হবে" যথেষ্ট নয় — "কোথায়" ছাড়া সেটা শুধু দোষারোপ।</b>
+     * <b>"What to do" is not enough; without "where" it is just blame.</b>
      *
-     * ০.৩.৪-এ পর্দায় বড় করে লেখা ছিল "Sign in to start counting your
-     * hours", অথচ জানালায় সাইন ইন করার কোনো বোতামই ছিল না আর জানালাটা
-     * আসত শুধু চালু হওয়ার সময়। মালিকের জবাব ছিল এক লাইনের:
-     * <i>"sign in korar option nei"</i>।
+     * In 0.3.4 the screen said in large text "Sign in to start counting your hours",
+     * yet the window had no sign-in button at all, and the window appeared only at
+     * startup. The owner's reply was one line: there is no option to sign in.
      */
     [Fact]
     public void সাইন_ইনের_বার্তা_কোথায়_সেটাও_বলে() =>

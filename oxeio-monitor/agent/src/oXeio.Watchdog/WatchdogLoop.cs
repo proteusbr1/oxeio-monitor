@@ -9,23 +9,25 @@ using oXeio.Watchdog.Platform;
 namespace oXeio.Watchdog;
 
 /// <summary>
-/// ⭐ ৩০ সেকেন্ডের লুপ — দেখা, সিদ্ধান্ত, কাজ।
+/// The 30-second loop: observe, decide, act.
 ///
-/// সিদ্ধান্তের সব যুক্তি <see cref="WatchdogPolicy"/> আর <see cref="RestartLadder"/>-এ,
-/// অর্থাৎ Windows ছাড়াই টেস্ট করা যায়। এখানে শুধু বাইরের দুনিয়া পড়া আর
-/// সিদ্ধান্ত কার্যকর করা।
+/// All the decision logic lives in <see cref="WatchdogPolicy"/> and
+/// <see cref="RestartLadder"/>, so it can be tested without Windows. This class only
+/// reads the outside world and carries out the decisions.
 ///
-/// ⚠️ এই লুপ থেকে কোনো এক্সসেপশন বেরোতে পারবে না। পাহারাদার মরে গেলে কেউ আর
-/// কাউকে তোলে না, আর সেটা টের পাওয়া যায় সার্ভারে দশ মিনিট চুপ থাকার পর —
-/// যদি কেউ অ্যালার্ট পড়ে।
+/// Careful: no exception may escape this loop. If the watchdog dies nobody revives
+/// anybody, and that is noticed only after ten silent minutes on the server, if
+/// anyone reads the alert.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class WatchdogLoop
 {
-    /// <summary>kill করার পর প্রসেসটাকে মরার জন্য কতটা সময় দেওয়া হয়।</summary>
+    /// <summary>How long a killed process is given to die.</summary>
     private static readonly TimeSpan KillGrace = TimeSpan.FromSeconds(10);
 
-    /// <summary>কিছু না বদলালেও এতক্ষণ পরপর একটা করে লাইন — লগ যেন "মৃত" না লাগে।</summary>
+    /// <summary>
+    /// One line this often even if nothing changed, so the log does not look "dead".
+    /// </summary>
     private static readonly TimeSpan HeartbeatLogEvery = TimeSpan.FromHours(1);
 
     private readonly AgentPaths _paths;
@@ -35,9 +37,9 @@ internal sealed class WatchdogLoop
     private readonly RestartLadder _ladder = new();
     private readonly HeartbeatReader _heartbeat = new();
 
-    // ⚠️ MonotonicClock, DateTimeOffset.Now নয়। কেউ PC-র ঘড়ি পিছিয়ে দিলে
-    //    ঠান্ডা হওয়ার সময় কোনোদিন শেষ হতো না, আর watchdog নীরবে অকেজো
-    //    হয়ে বসে থাকত — লগে সব স্বাভাবিক দেখিয়ে।
+    // Careful: MonotonicClock, not DateTimeOffset.Now. If someone sets the PC clock
+    // back, the cool-off would never end and the watchdog would sit silently useless
+    // while the log looked normal.
     private readonly MonotonicClock _clock = MonotonicClock.StartNow();
 
     private (WatchdogAction Action, WatchdogReason Reason, AgentHealth Health) _lastLogged;
@@ -64,20 +66,20 @@ internal sealed class WatchdogLoop
             }
             catch (Exception ex)
             {
-                // এখানে পৌঁছানোর কথা নয় — নিচের প্রতিটা ধাপ নিজেই ধরে। তবু
-                // এই catch-টাই শেষ ভরসা: একটা অপ্রত্যাশিত বাগ যেন পাহারাদারকে
-                // চিরতরে থামিয়ে না দেয়।
+                // Should never get here, since each step below catches its own errors.
+                // Still, this catch is the last resort: an unexpected bug must not
+                // stop the watchdog for good.
                 _log.Write($"❌ Unexpected error in the tick: {ex.GetType().Name} — {ex.Message}");
             }
 
-            // থামার অনুরোধ এলে সাথে সাথেই বেরোনো যায় — Sleep হলে ৩০ সেকেন্ড
-            // অপেক্ষা করতে হতো, আর শাটডাউনে Windows ততক্ষণ অপেক্ষা করে না।
+            // A stop request lets us leave at once. With Sleep we would wait up to 30
+            // seconds, and Windows does not wait that long on shutdown.
         } while (!stop.WaitOne(period) && !StopRequested());
 
         _log.Write("Watch stopped");
     }
 
-    // ── এক টিক ──────────────────────────────────────────────────────────────
+    // ── one tick ────────────────────────────────────────────────────────────
 
     private void Tick()
     {
@@ -86,7 +88,7 @@ internal sealed class WatchdogLoop
 
         if (observation is null)
         {
-            // ঘড়িই পড়া গেল না — এই টিকে কোনো সিদ্ধান্ত নেওয়া নিরাপদ নয়।
+            // Could not even read the clock, so it is not safe to decide anything this tick.
             LogIfChanged(WatchdogAction.Hold, WatchdogReason.ProbeFailed, AgentHealth.Unknown,
                 "Could not read the unbiased clock — skipping this tick", now);
             return;
@@ -130,7 +132,9 @@ internal sealed class WatchdogLoop
         }
     }
 
-    /// <summary>বাইরের দুনিয়া থেকে এক টিকের সব তথ্য। ঘড়ি পড়া না গেলে null।</summary>
+    /// <summary>
+    /// Everything one tick needs from the outside world. Null if the clock cannot be read.
+    /// </summary>
     private AgentObservation? Observe()
     {
         if (Kernel32.UnbiasedMs() is not { } nowUnbiased) return null;
@@ -152,7 +156,7 @@ internal sealed class WatchdogLoop
         };
     }
 
-    // ── কাজ ─────────────────────────────────────────────────────────────────
+    // ── actions ─────────────────────────────────────────────────────────────
 
     private void Restart(int? pid, DateTimeOffset now)
     {
@@ -166,9 +170,9 @@ internal sealed class WatchdogLoop
 
         if (!AgentProcess.TryKill(victim, KillGrace, out var killDetail))
         {
-            // ⚠️ ব্যর্থ kill-ও মইয়ের একটা ধাপ খরচ করে। না করলে watchdog প্রতি
-            //    ৩০ সেকেন্ডে চিরকাল একটা না-মরা প্রসেসকে মারতে চেষ্টা করে যেত,
-            //    কোনো অ্যালার্ম না তুলেই — অর্থাৎ সমস্যাটা চিরকাল অদৃশ্য থাকত।
+            // Careful: a failed kill also costs a step on the ladder. Otherwise the
+            // watchdog would try every 30 seconds, forever, to kill a process that will
+            // not die, without ever raising an alarm, so the problem would stay invisible.
             _ladder.RecordLaunch(now);
             _log.Write($"⚠️ {killDetail} (attempt {_ladder.Failures}/{_ladder.Policy.GiveUpAfter})");
             return;
@@ -176,9 +180,9 @@ internal sealed class WatchdogLoop
 
         _log.Write($"   {killDetail}");
 
-        // ⚠️ মরতে থাকা প্রসেস কয়েক মিলিসেকেন্ড agent.lock ধরে রাখতে পারে।
-        //    সাথে সাথে চালু করলে নতুন এজেন্ট লক না পেয়ে বেরিয়ে যেত, আর মই
-        //    সেটাকে ব্যর্থতা হিসেবে গুনত। লক খালি হয়েছে দেখেই কেবল এগোনো।
+        // Careful: a dying process can hold agent.lock for a few milliseconds. Starting
+        // immediately would make the new agent fail to get the lock and exit, and the
+        // ladder would count that as a failure. We proceed only once the lock is seen free.
         if (InstanceLock.Probe(_paths.AgentLock) != LockProbe.Free)
         {
             _log.Write("   The lock has not been released yet — it will be started on the next tick");
@@ -192,9 +196,9 @@ internal sealed class WatchdogLoop
     {
         var exe = AgentPaths.ResolveAgentExecutable(_agentExeOverride);
 
-        // ⚠️ মই <b>আগে</b> এগোনো হয়, চালু করার আগে। exe নেই বা AV ব্লক করেছে —
-        //    এসব ক্ষেত্রে পরে গুনলে গোনা কখনো বাড়ত না আর লুপটা প্রতি ৩০ সেকেন্ডে
-        //    চিরকাল চেষ্টা করে যেত। ঠিক যে ঝড়টা ঠেকানোর কথা।
+        // Careful: the ladder advances <b>before</b> launching. If the exe is missing or
+        // antivirus blocked it, counting afterwards would never raise the count and the
+        // loop would retry every 30 seconds forever, exactly the storm this prevents.
         _ladder.RecordLaunch(now);
 
         if (exe is null)
@@ -211,14 +215,15 @@ internal sealed class WatchdogLoop
                    $"next one in {_ladder.TimeUntilNextLaunch(now).TotalSeconds:F0} s)");
     }
 
-    // ── থামার অনুরোধ ────────────────────────────────────────────────────────
+    // ── stop request ────────────────────────────────────────────────────────
 
     /// <summary>
-    /// ইনস্টলার/আনইনস্টলার <c>watchdog.stop</c> ফাইল বানিয়ে ভদ্রভাবে থামাতে পারে।
+    /// The installer/uninstaller can stop the watchdog gracefully by creating a
+    /// <c>watchdog.stop</c> file.
     ///
-    /// নামযুক্ত event ব্যবহার করা যেত না: SYSTEM হিসেবে চলা ইনস্টলার আর ইউজার
-    /// সেশনে চলা watchdog আলাদা namespace-এ থাকে, আর <c>Global\</c> নাম
-    /// তৈরি করতে স্ট্যান্ডার্ড ইউজারের privilege নেই।
+    /// A named event could not be used: an installer running as SYSTEM and a watchdog in
+    /// a user session live in different namespaces, and a standard user has no privilege
+    /// to create a <c>Global\</c> name.
     /// </summary>
     private bool StopRequested()
     {
@@ -232,18 +237,18 @@ internal sealed class WatchdogLoop
         }
         catch (Exception)
         {
-            // মুছতে না পারলেও থামা হচ্ছে — নইলে ফাইলটা রয়ে গিয়ে প্রতিবার
-            // চালু হওয়ার সাথে সাথেই থামাত।
+            // Stop even if the delete failed; otherwise the file would stay and stop the
+            // watchdog right after every start.
             return true;
         }
     }
 
-    // ── লগ ──────────────────────────────────────────────────────────────────
+    // ── log ─────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// শুধু <b>বদল</b> লেখা হয়। প্রতি টিকে লিখলে দিনে ২,৮৮০টা লাইন হতো,
-    /// লগ দিনে দুবার ঘুরত, আর দুই সপ্তাহ আগের যে ক্র্যাশটা খুঁজতে অ্যাডমিন
-    /// লগ খুলেছেন সেটাই মুছে যেত।
+    /// Only <b>changes</b> are written. Writing every tick would mean 2,880 lines a day,
+    /// the log would rotate twice a day, and the crash from two weeks ago that the admin
+    /// opened the log to find would be gone.
     /// </summary>
     private void LogIfChanged(
         WatchdogAction action, WatchdogReason reason, AgentHealth health, string message, DateTimeOffset now)

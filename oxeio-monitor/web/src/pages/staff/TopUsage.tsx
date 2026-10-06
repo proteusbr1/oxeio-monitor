@@ -8,21 +8,22 @@ import { Caveat, Empty, ErrorBox, Loading } from '../../components/States';
 import { formatCount, formatPct } from '../../lib/format';
 
 /**
- * D08 — টপ ১০ অ্যাপ ও টপ ১০ সাইট।
+ * D08 — top 10 apps and top 10 sites.
  *
- * ⭐⚠️ **সাইটে শুধু ডোমেইন।** সার্ভার পুরো URL জমাই করে না, উইন্ডোর
- * শিরোনামও পাঠায় না — কাজেই এখানে "কোন পেজ" বের করার কোনো চেষ্টা নেই, আর
- * থাকা উচিতও নয় (docs/09 § ৪-এর কঠিন নিয়ম)। কথাটা পর্দাতেও লেখা আছে,
- * কারণ যে কর্মীর ডেটা দেখা হচ্ছে তার এটা জানার অধিকার আছে।
+ * Important: **sites are domain only.** The server never stores the full URL
+ * and never sends the window title, so there is no attempt here to work out
+ * "which page", and there should not be (hard rule of docs/09 § 4). This is
+ * also stated on screen, because the employee whose data is viewed has a right
+ * to know.
  *
- * ⚠️ অ্যাপ আর সাইটের সময় **যোগ করা যাবে না** — `chrome.exe`-এর ৩ ঘণ্টার
- * ভেতরেই `youtube.com`-এর ১ ঘণ্টা বসে আছে। সার্ভারের `caveat` সেটাই বলে,
- * আর সেটা লুকোনো হয়নি।
+ * Careful: app time and site time **cannot be added**: the 1 hour of
+ * `youtube.com` sits inside the 3 hours of `chrome.exe`. The server's `caveat`
+ * says exactly that, and it is not hidden.
  */
 
 const TOP_LIMIT = 10;
 
-/** ⚠️ শব্দগুলো D07-এর `ScoreCard`-এর ব্রেকডাউনের সাথে হুবহু এক রাখতে হবে */
+/** Careful: the wording must match the `ScoreCard` breakdown of D07 exactly */
 const CAT_LABEL: Record<Productivity | 'unknown', string> = {
   productive: 'Productive',
   neutral: 'Neutral',
@@ -31,12 +32,12 @@ const CAT_LABEL: Record<Productivity | 'unknown', string> = {
 };
 
 /**
- * ⚠️ মকআপের `--st-*` মেনে: নিরেট `ink` · ধূসর · গাঢ় লাল · খালি।
+ * Careful: follows the mockup's `--st-*`: solid `ink` · grey · dark red · empty.
  *
- * ⚠️ "Uncategorised" বিন্দুটা `bg-paper`, `bg-surface` নয় — কার্ডের
- *    পটভূমিই `surface`, তাই surface বিন্দু দিলে সারিটা দেখে মনে হতো
- *    বিন্দুটা বসাতেই ভুলে গেছি। (Midnight থিমেও নিয়মটা একই: paper গাঢ়,
- *    surface তার চেয়ে হালকা — তফাতটা দুই থিমেই টিকে থাকে।)
+ * Careful: the "Uncategorised" dot is `bg-paper`, not `bg-surface`. The card's
+ *    background is already `surface`, so a surface dot would make the row look
+ *    as if the dot was forgotten. (The rule is the same in the Midnight theme:
+ *    paper is dark, surface lighter, so the difference survives in both themes.)
  */
 const CAT_CLASS: Record<Productivity | 'unknown', string> = {
   productive: 'bg-ink',
@@ -95,8 +96,8 @@ export function TopUsage({
               unitLabel="app"
             />
             {/*
-              ⚠️ hint-টা পর্দাতেই থাকতে হবে (docs/09 § ৪) — যার ডেটা দেখা
-                 হচ্ছে তার জানার অধিকার আছে যে পুরো URL কোথাও জমা হয় না।
+              Careful: the hint must stay on screen (docs/09 § 4): the person
+                 whose data is viewed has a right to know that the full URL is stored nowhere.
             */}
             <UsagePanel
               title="Top Sites"
@@ -125,8 +126,8 @@ function UsagePanel({
   report: UsageReport;
   emptyText: string;
   /**
-   * **একবচনে** — `'app'` / `'domain'`। বহুবচনের `s` নিচে নিজে বসে, তাই
-   * ⚠️ একটামাত্র ডোমেইন হলেও "1 apps" ধরনের ভাঙা ইংরেজি বেরোয় না।
+   * **Singular**: `'app'` / `'domain'`. The plural `s` is added below, so even
+   * a single domain does not produce broken English like "1 apps".
    */
   unitLabel: string;
 }) {
@@ -149,8 +150,8 @@ function UsagePanel({
           <Duration seconds={report.totalSec} tone="muted" />
         </span>
         {/*
-          ⭐ তালিকার বাইরে পড়ে যাওয়া সময় না দেখালে "টপ ১০"-ই যেন গোটা দিন
-             মনে হতো, অথচ সেটা দিনের অর্ধেকও হতে পারে।
+          Without showing the time that fell outside the list, the "top 10" would
+             look like the whole day, when it may be less than half of it.
         */}
         {report.otherSec > 0 && (
           <span>
@@ -182,9 +183,9 @@ function UsageRow({ row }: { row: UsageTally }) {
             {row.label}
           </span>
           {/*
-            ⚠️ `mixed` মানে এই কী-র ভেতরে একাধিক **জানা** ক্যাটাগরি মিশে আছে
-               (chrome.exe-এর ভেতরে github ও youtube দুটোই)। একটামাত্র রঙের
-               বিন্দু দেখিয়ে চুপ করে থাকলে সেটা মিথ্যে হতো।
+            Careful: `mixed` means several **known** categories are blended inside
+               this key (github and youtube both inside chrome.exe). Showing a
+               single colour dot and saying nothing would be a lie.
           */}
           {row.mixed && (
             <span className="flex-none rounded border border-line px-1 text-[10px] text-ink-3">

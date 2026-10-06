@@ -3,27 +3,28 @@ import { hasDesignTarget } from '../summary/design.rules';
 import { UserRole } from '@prisma/client';
 
 /**
- * **ডিজাইনের টার্গেট — খাঁটি নিয়ম** *(২২ আগস্ট ২০২৬)*, কোনো I/O নেই।
+ * Design targets: pure rules, no I/O.
  *
- * ⭐ গবেষকেরা রোজ ~৫০০টা Amazon T-shirt URL জমা করেন; সেখান থেকে
- * ডিজাইনারদের মধ্যে র‍্যান্ডম বণ্টন হয়, আর প্রত্যেকে একটা করে নিয়ে
- * নতুন ডিজাইন বানান।
+ * Researchers submit about 500 Amazon T-shirt URLs a day. These are randomly
+ * distributed among designers, and each designer takes one and makes a new
+ * design.
  *
- * ⚠️⚠️ **পরিচয় ASIN, URL নয়** — আর এটাই গোটা ব্যবস্থার ভিত্তি।
+ * Important: the identity is the ASIN, not the URL. The whole system rests on
+ * this.
  */
 
 /**
- * ⭐⭐ **ASIN — Amazon-এর পণ্য-পরিচয়, ঠিক ১০ অক্ষর।**
+ * ASIN: Amazon's product identity, exactly 10 characters.
  *
- * ⚠️⚠️ **একই পণ্যের URL অসংখ্য রকম হয়:**
+ * Careful: one product has countless URLs:
  * ```
  * https://www.amazon.com/dp/B0DJBD22LW
  * https://www.amazon.com/Funny-Cat-Shirt/dp/B0DJBD22LW/ref=sr_1_3?keywords=cat
  * https://www.amazon.com/gp/product/B0DJBD22LW?th=1
  * ```
- * তিনটেই **এক জিনিস**। URL ধরে ডুপ্লিকেট খুঁজলে তিনটেই আলাদা হিসেবে ঢুকত,
- * আর তিনজন ডিজাইনার একই পণ্যের ডিজাইন বানাতেন — অর্থাৎ তিন দিনের কাজ
- * নষ্ট। মালিকের শর্তটাই ছিল *"asin gula jeno unique hoy"*।
+ * All three are the same item. Deduplicating by URL would treat them as three,
+ * and three designers would design the same product, wasting three days of
+ * work. The owner's requirement was that ASINs must be unique.
  */
 const ASIN_PATTERNS = [
   /\/dp\/([A-Z0-9]{10})(?:[/?#]|$)/i,
@@ -32,7 +33,7 @@ const ASIN_PATTERNS = [
   /\/product\/([A-Z0-9]{10})(?:[/?#]|$)/i,
 ];
 
-/** ⚠️ খালি একটা ASIN পেস্ট করলেও চলবে — মাঝে মাঝে লোকে তাই করে */
+/** Pasting a bare ASIN also works; people sometimes do that */
 const BARE_ASIN = /^([A-Z0-9]{10})$/i;
 
 export type RejectReason =
@@ -43,18 +44,18 @@ export type RejectReason =
 
 export interface ParsedTarget {
   asin: string;
-  /** ইনপুটে কত নম্বর লাইনে ছিল — ভুল দেখানোর জন্য */
+  /** Line number in the input, used to point out mistakes */
   line: number;
 }
 
 /**
- * ⭐⭐ **ASIN থেকে URL বানানো হয়, URL জমা রাখা হয় না** *(মালিকের নিয়ম,
- * ২২ আগস্ট: "amora jekono asin `/dp/`-এর পরে বসিয়ে দিলেই ঝামেলা শেষ")*।
+ * URLs are built from the ASIN; the URL itself is not stored.
  *
- * ⚠️ প্রথমে ভেবেছিলাম মূল URL-টাও রেখে দেব ("কোথা থেকে এসেছিল")। কিন্তু
- * ওটা রাখার মানে হতো **একই জিনিসের দুটো রূপ** টেবিলে — একজন `?th=1`সহ
- * পেস্ট করলে সেটাই চিরকাল দেখাত, আরেকজনেরটা `ref=sr_1_3`সহ। ⭐ ASIN
- * সব দেশে ও সব রূপে এক, তাই একটাই স্বাভাবিক ঠিকানা যথেষ্ট।
+ * We first considered keeping the original URL too ("where it came from"),
+ * but that would put two forms of the same thing in the table: one person
+ * pastes it with `?th=1` and that is what shows forever, another with
+ * `ref=sr_1_3`. The ASIN is the same in every country and form, so one
+ * canonical address is enough.
  */
 export function amazonUrl(asin: string): string {
   return `https://www.amazon.com/dp/${asin}`;
@@ -67,12 +68,13 @@ export interface RejectedLine {
 }
 
 /**
- * একটা লাইন থেকে ASIN।
+ * Extracts the ASIN from one line.
  *
- * ⚠️ `amzn.to`/`a.co` ছোট লিঙ্ক থেকে ASIN **বের করা যায় না** — Amazon-কে
- * জিজ্ঞেস না করে জানার উপায় নেই, আর জিজ্ঞেস করা মানে সার্ভার থেকে বাইরের
- * সাইটে কল, যেটা এই পণ্য ইচ্ছাকৃতভাবে করে না। ⭐ তাই আলাদা কারণ দেখিয়ে
- * ফেরত — "কিছু একটা ভুল" নয়, "এই লিঙ্কটা খুলে আসল URL-টা দিন"।
+ * Careful: the ASIN cannot be extracted from `amzn.to`/`a.co` short links.
+ * The only way is to ask Amazon, which means a server call to an outside
+ * site, and this product deliberately does not do that. So they are rejected
+ * with their own reason: not "something is wrong" but "open this link and give
+ * the real URL".
  */
 export function asinOf(raw: string): { asin: string } | { reason: RejectReason } {
   const text = raw.trim();
@@ -83,8 +85,8 @@ export function asinOf(raw: string): { asin: string } | { reason: RejectReason }
 
   if (/(^|\/\/)(amzn\.to|a\.co)\//i.test(text)) return { reason: 'short_link' };
 
-  // ⚠️ যেকোনো amazon ডোমেইন (.com · .co.uk · .de) — TLD বাঁধা হয়নি,
-  //    কারণ একই ASIN সব দেশেই এক
+  // Any amazon domain (.com, .co.uk, .de): the TLD is not pinned, because
+  // the same ASIN is the same in every country
   if (!/(^|\/\/|\.)amazon\.[a-z.]{2,}\//i.test(text)) {
     return { reason: 'not_amazon' };
   }
@@ -98,16 +100,16 @@ export function asinOf(raw: string): { asin: string } | { reason: RejectReason }
 }
 
 /**
- * ⭐⭐ **একবারে ৫০০টা লাইন** — গবেষকের রোজকার কাজ।
+ * Up to 500 lines at once: the researcher's daily job.
  *
- * ⚠️⚠️ **পেস্টের ভেতরের ডুপ্লিকেটও ধরা হয়** (`duplicate_in_paste`), শুধু
- * ডাটাবেসেরটা নয়। একই তালিকায় একটা ASIN দুবার থাকা খুব সাধারণ (দুটো
- * আলাদা সার্চ থেকে একই পণ্য), আর সেটা না ধরলে `createMany` নিজেই
- * থমকে যেত।
+ * Careful: duplicates inside the paste are caught too (`duplicate_in_paste`),
+ * not only those in the database. The same ASIN twice in one list is common
+ * (the same product from two different searches), and without this
+ * `createMany` itself would stall.
  *
- * ⚠️ ব্যর্থ লাইনগুলো **ফেলে দেওয়া হয় না, ফেরত দেওয়া হয়** — কারণসহ।
- * ৫০০টার মধ্যে ৭টা বাদ পড়লে গবেষকের জানা দরকার **কোন ৭টা**, নইলে
- * তিনি সেগুলো আবার সংগ্রহ করতে পারতেন না।
+ * Rejected lines are returned with their reason, not dropped. If 7 of 500 are
+ * rejected, the researcher needs to know which 7, or could not collect them
+ * again.
  */
 export function parseBulk(text: string): {
   accepted: ParsedTarget[];
@@ -121,7 +123,7 @@ export function parseBulk(text: string): {
 
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i].trim();
-    // ⚠️ খালি লাইন নীরবে বাদ — ভুল নয়, আর ৫০০ লাইনের পেস্টে ওগুলো থাকেই
+    // Blank lines are skipped silently: not an error, and a 500-line paste has them
     if (raw.length === 0) continue;
 
     const result = asinOf(raw);
@@ -144,102 +146,100 @@ export function parseBulk(text: string): {
 }
 
 /**
- * ⭐⭐ **নতুন সিরিয়াল শুরু হয় ১০ লাখ থেকে — আর এটা মাপা সংখ্যা।**
+ * New serial numbers start at 1,000,000, a measured number.
  *
- * ⚠️⚠️ ডিজাইনাররা ফাইলের নামে যে নম্বর বসান সেটা আগে থেকেই আছে
- * (`37933-…T-Shirt.ai`)। মাঠে গোনা হয়েছে: **৭৮% পাঁচ অঙ্কের**
- * (১০,০০৮–৯৩,০৪১), আর সবচেয়ে বড় সংখ্যাটা **৯,৭৩,০৬৫** (ছয় অঙ্ক,
- * সম্ভবত স্টক ফাইলের আইডি)। সাত অঙ্কের একটাও নেই।
+ * Designers already put numbers in file names (`37933-...T-Shirt.ai`). Counted
+ * in the field: 78% are five digits (10,008 to 93,041) and the largest is
+ * 973,065 (six digits, probably a stock file ID). None has seven digits.
  *
- * ⭐ তাই ১০,০০,০০০ থেকে শুরু করলে **সংঘর্ষের সুযোগ কার্যত শূন্য**, আর
- * পুরোনো কোনো ফাইল ভুল করে "শেষ হয়ে গেছে" বলে ধরা পড়বে না।
+ * Starting at 1,000,000 therefore makes a collision practically impossible,
+ * and no old file will be wrongly detected as "finished".
  */
 export const JOB_NUMBER_START = 1_000_000;
 
 /**
- * ⚠️ একজন ডিজাইনারের হাতে একবারে কতগুলো টার্গেট থাকবে।
+ * How many targets one designer holds at a time.
  *
- * ⭐ তাঁর **দৈনিক টার্গেটের চেয়ে বেশি** (মালিকের বাছাই, ২২ আগস্ট): যাঁর
- * টার্গেট ২৫, তিনিও ৩০টা পান। বেছে নেওয়ার জায়গা থাকে, আর দু-একটা পছন্দ
- * না হলেও কাজ আটকায় না। ⚠️ ঠিক টার্গেটের সমান দিলে "বেছে নেওয়া" কথাটার
- * কোনো মানেই থাকত না।
+ * It is higher than their daily target (owner's choice): someone with a target
+ * of 25 still gets 30. This leaves room to choose, and a few unwanted ones do
+ * not block the work. Giving exactly the target would make "choosing"
+ * meaningless.
  */
 export const POOL_PER_DESIGNER = 30;
 
 /**
- * ⭐⭐ **রোজকার বণ্টন কারা পান** *(মালিকের নির্দেশ, ২৬ আগস্ট ২০২৬:
- * "belal er jonoo daily 30 ta design distribute korba")*।
+ * Who receives the daily distribution.
  *
- * ⚠️⚠️ **ম্যানেজার তালিকায় আছেন, আর সেটাই এখানকার একমাত্র সিদ্ধান্ত।**
- * অফিসের ম্যানেজার (OX-01) নিজেও ডিজাইন করেন — সপ্তাহে ১-২ দিন। এতদিন
- * শর্তটা ছিল কেবল `staffType === 'designer'`, তাই তিনি একটাও পেতেন না
- * আর হাতে বেছে নিতে হতো।
+ * Important: managers are on the list, and that is the only decision made
+ * here. The office manager (OX-01) designs too, 1-2 days a week. The condition
+ * used to be just `staffType === 'designer'`, so they got nothing and had to
+ * pick by hand.
  *
- * ⭐ **তাঁর নাম কোডে লেখা হয়নি** — নিয়মটা কাজের ধরন ধরে, যেমনটা এই
- * প্রকল্পের বাকি সব নিয়ম (২৫ আগস্টের শিক্ষা: `can_proofread` টিক-ঘরটা
- * ব্যক্তি ধরে লেখা হয়েছিল বলেই একদিনে মুছে ফেলতে হয়েছে)।
+ * Their name is not written in the code: the rule goes by kind of work, like
+ * every other rule in the project. (A `can_proofread` checkbox was once
+ * written per person and had to be removed within a day.)
  *
- * ⚠️ **রোজ কাজ না করলেও ক্ষতি নেই, আর সেটাই এটা নিরাপদ করে:**
- * রাত ১১:৫৫-এ `returnUnworked()` যে ডিজাইনগুলো কেউ **খোলেইনি** সেগুলো
- * পুলে ফেরত পাঠায়। তাই কারো হাতে স্তূপ জমে না, আর অন্যদের ভাগও আটকে
- * থাকে না — পুলে আজ ~৫২ দিনের কাজ, দশম একজনে তা ~৪৭ দিন।
+ * It is safe even if they do not work every day: at 23:55 `returnUnworked()`
+ * sends designs nobody opened back to the pool. So no one accumulates a pile
+ * and others' shares are not blocked. The pool holds about 52 days of work
+ * today, and a tenth person would use about 47 days of it.
  *
- * ⚠️⚠️ **তবু ম্যানেজারের কোনো দৈনিক টার্গেট নেই** — `hasDesignTarget()`
- * এখনো কেবল `designer` দেখে, ইচ্ছাকৃতভাবে। তিনি সপ্তাহে ১-২ দিন ডিজাইন
- * করেন, তাই বাকি দিনগুলোয় "পিছিয়ে" দেখানো **মিথ্যা** হতো। কাজ পাওয়া
- * আর কাজের মাপকাঠিতে বাঁধা পড়া — দুটো আলাদা প্রশ্ন, আর এখানে উত্তরও
- * আলাদা। ⭐ তাঁর করা সংখ্যাটা তবু সব পর্দায় দেখায়, খালি গোনা হিসেবে
- * (`designView`-এর মাঝের সারি, ২২ আগস্টের সিদ্ধান্ত)।
+ * Careful: even so, a manager has no daily target. `hasDesignTarget()` still
+ * checks only `designer`, on purpose. They design 1-2 days a week, so showing
+ * them "behind" on the other days would be false. Receiving work and being
+ * held to a work standard are separate questions with separate answers. Their
+ * completed count still shows on every screen, as a plain count (the middle
+ * row of `designView`).
  */
 export const DESIGN_WORK_STAFF_TYPES = ['designer', 'manager'] as const;
 
 /**
- * ⭐⭐ **"আপলোডের অপেক্ষায়" কিউ কোন দিন থেকে গোনা শুরু** *(মালিকের
- * সিদ্ধান্ত, ২৪ আগস্ট ২০২৬)*।
+ * The day the "waiting for upload" queue starts counting from.
  *
- * ⚠️⚠️ **কেন একটা কাটা-তারিখ লাগে।** ২২ আগস্টের ইমপোর্টে **২৭,৫০৯টা**
- * পুরোনো `done` সারি ঢুকেছে (সবচেয়ে পুরোনোটা জানুয়ারি ২০২৫) — ওগুলো
- * অনেক আগেই Amazon-এ গেছে, কিন্তু তখন Uploaded বোতামটাই ছিল না, তাই
- * ঘরটা খালি। সীমা না দিলে কিউতে দাঁড়াত **২৭,৬৪১** — সেটা কিউ নয়, পাহাড়;
- * আর পাহাড় দেখলে কেউ শুরুই করে না।
+ * Careful: why a cut-off date is needed. The import brought in 27,509 old
+ * `done` rows (the oldest from January 2025). They went to Amazon long ago,
+ * but the Uploaded button did not exist then, so the field is empty. Without
+ * a limit the queue would stand at 27,641, which is a mountain, not a queue,
+ * and nobody starts on a mountain.
  *
- * ⭐ ২৩ আগস্ট বাছা হয়েছে কারণ **ওই দিনই Complete বোতামটা মাঠে চলতে শুরু
- * করে** (২২ আগস্ট ০ চাপ → ২৩ আগস্ট ৫৩ চাপ)। অর্থাৎ এর পরের প্রতিটা
- * "শেষ" সত্যিই কারো হাতে চাপা, আর সেগুলোরই আপলোড বাকি থাকতে পারে।
+ * 23 August was chosen because that is the day the Complete button started
+ * being used in the field (0 presses on 22 August, 53 on 23 August). Every
+ * "done" after that was really pressed by someone, and those are the ones
+ * whose upload can still be pending.
  *
- * ⚠️ এটা **কেবল কিউ-এর ছাঁকনি** — সংখ্যা গোনা বা রিপোর্টে এর কোনো প্রভাব
- * নেই। পুরোনো সারিগুলো অক্ষত, চাইলে ASIN খুঁজে হাতে চিহ্নিত করা যায়।
+ * This is only a queue filter: it has no effect on counts or reports. The old
+ * rows are intact, and can be marked by hand by looking up the ASIN.
  */
 export const UPLOAD_QUEUE_FROM = '2026-08-23';
 
 /**
- * ⭐⭐ **ফাইলের চিহ্ন — তিনটে অবস্থা, দুটো নয়** *(৯ সেপ্টেম্বর ২০২৬)*।
+ * File trace: three states, not two.
  *
- * | ফেরত | কখন | পর্দায় |
+ * | Returns | When | Shown as |
  * |---|---|---|
- * | `> 0` | ওই নম্বরওয়ালা ফাইল এতক্ষণ খোলা ছিল | `18m` |
- * | `0` | **"শেষ" বলা হয়েছে, অথচ কখনো খোলা হয়নি** | `no trace` |
- * | `null` | ⚠️ বলা যায় না · এখনো শেষ বলা হয়নি · নম্বরই নেই | `—` |
+ * | `> 0` | the file with that number was open this long | `18m` |
+ * | `0` | said "done", yet the file was never opened | `no trace` |
+ * | `null` | cannot tell, not marked done yet, or no number | `—` |
  *
- * ⚠️⚠️ **শেষ দুটোকে এক করা যাবে না, আর এটাই এই ফাংশনের গোটা কারণ।**
- * `app_usage` শুরু হয়েছে ১৩ আগস্ট ২০২৬-এ, অথচ শেষ-হওয়া টার্গেট আছে
- * ২০২৫ সাল থেকে। এক করে দেখালে ওই ২৭ হাজার পুরোনো সারি *"ফাইল কখনো
- * খোলা হয়নি"* বলে দাঁড়াত — অর্থাৎ একটা **মিথ্যা অভিযোগ**, নীরবে,
- * প্রতিটা সারিতে।
+ * Careful: the last two must not be merged; that is the whole reason for this
+ * function. `app_usage` started on 13 August 2026, but finished targets go
+ * back to 2025. Merging them would show those 27 thousand old rows as "file
+ * never opened", a false accusation, silently, on every row.
  *
- * ⭐ [09-Build-Log § ৪](../../../docs/09-Build-Log.md)-এর নিয়মটার
- * উল্টো পিঠ: *"জানি না" কখনো ০ নয়* — এখানে ০-টা **আসল মাপ**, তাই
- * "জানি না"-র জন্য আলাদা ঘর লেগেছে।
+ * This is the flip side of the rule in
+ * [09-Build-Log section 4](../../../docs/09-Build-Log.md): "unknown is never
+ * 0". Here the 0 is a real measurement, so "unknown" needs its own value.
  *
- * ⚠️ কোন মুহূর্তটা ধরে বিচার: `completedAt ?? assignedAt`। শেষ-হওয়া
- * সারির জন্য শেষ হওয়ার মুহূর্ত, হাতে-থাকা সারির জন্য বরাদ্দের —
- * দুটোই ওই সারির **নিজের** সময়, আর পুলে পড়ে থাকা সারির জব-নম্বরই
- * থাকে না বলে সে এমনিতেই `null` পায়।
+ * Which moment is judged: `completedAt ?? assignedAt`. For a finished row it
+ * is the completion time, for a row in hand the assignment time. Both are the
+ * row's own time, and a row still in the pool has no job number, so it gets
+ * `null` anyway.
  *
- * ⚠️⚠️ **জানা সীমা:** ১৩–২৩ আগস্টের মাঝে শেষ হওয়া কোনো সারির ফাইল
- * ১৩ তারিখের *আগে* খোলা হয়ে থাকলে সেটা ভুল করে `0` দেখাবে। ⭐ কিউটা
- * (`no_file`) `UPLOAD_QUEUE_FROM`-এর পরে শুরু হয় বলে ওই দশ দিন
- * তালিকায় আসেই না; কলামে আসে, আর সেখানে সংখ্যাটা প্রসঙ্গ, রায় নয়।
+ * Careful, known limit: if a row finished between 13 and 23 August had its
+ * file opened before the 13th, it will wrongly show `0`. The queue (`no_file`)
+ * starts after `UPLOAD_QUEUE_FROM`, so those ten days never appear in the
+ * list; they do appear in the column, where the number is context, not a
+ * verdict.
  */
 export function fileSecOf(
   row: { jobNumber: number | null; completedAt: Date | null; assignedAt: Date | null },
@@ -255,80 +255,78 @@ export function fileSecOf(
   if (sec !== undefined && sec > 0) return sec;
 
   /**
-   * ⚠️⚠️ **শূন্যটা কেবল "শেষ" বলা সারিতেই একটা খবর।**
+   * Careful: zero is only news on a row that was marked "done".
    *
-   * হাতে থাকা কাজের ফাইল এখনো খোলা হয়নি — সেটা তো স্বাভাবিক, ওখানে
-   * বলার কিছু নেই (আর `Stage` ঘরটা এমনিতেই *"given"* লেখে)। কিন্তু
-   * পর্দায় দুটোই `0` হয়ে এলে সকালে বরাদ্দ পাওয়া প্রতিটা সারির পাশে
-   * *"no trace"* বসত — ⭐ একটা **অভিযোগ, সেখানে যেখানে কোনো দাবিই
-   * করা হয়নি**।
+   * A file in hand not having been opened yet is normal, and there is nothing
+   * to say there (the `Stage` column already says "given"). But if both came
+   * out as `0` on screen, every row assigned in the morning would show
+   * "no trace", an accusation where no claim was ever made.
    */
   return row.completedAt === null ? null : 0;
 }
 
 /**
- * ⭐⭐⭐ **একদিনে একজনকে সর্বোচ্চ কতগুলো টার্গেট দেওয়া যাবে**
- * *(৯ সেপ্টেম্বর ২০২৬)*।
+ * The most targets one person can be issued in a day.
  *
- * ⚠️⚠️ **এটা ছাড়া টপ-আপের কোনো ছাদ থাকত না, আর বাদ দেওয়া অসীমবার
- * ভরপাই হতো।** হিসাবটা কেবল **এই মুহূর্তের** অবস্থা দেখে: হাতে ৩০, কিছুই
- * শেষ হয়নি → চাই ৩০ → দেওয়া হয় ০। একটা বাদ দিলেই হাতে ২৯ → আবার ১টা।
- * আবার বাদ → আবার ১টা। অর্থাৎ **প্রতিটা Skip এক-এক করে ফেরত পেত**, আর
- * কেউ একদিনে গোটা পুল ঘেঁটে ফেলতে পারতেন।
+ * Careful: without this, top-up would have no ceiling and skipping could
+ * refill forever. The calculation looks only at the current state: 30 in
+ * hand, nothing finished means want 30, so give 0. Skip one and there are 29
+ * in hand, so give 1 again. Skip again, give 1 again. Every Skip would be
+ * replaced one for one, and someone could churn through the whole pool in a
+ * day.
  *
- * ⭐ ৬০ = ৩০-এর দ্বিগুণ। মাঠে বাদ দেওয়ার হার ৪–১৮%, তাই ২৫টা শেষ করতে
- * ৬০টার দরকার কোনোদিন পড়ে না — সীমাটা তাই সৎ কাজে কখনো লাগবে না,
- * কেবল অসীম লুপটা আটকাবে।
+ * 60 is twice 30. In the field the skip rate is 4-18%, so finishing 25 never
+ * needs 60 targets. The limit therefore never affects honest work and only
+ * stops the endless loop.
  */
 export const MAX_ISSUED_PER_DAY = POOL_PER_DESIGNER * 2;
 
 /**
- * ⭐⭐⭐ **আজ আর কতগুলো টার্গেট হাতে দিতে হবে** *(মালিকের নিয়ম,
- * ৯ সেপ্টেম্বর ২০২৬)* — ০ মানে কিছু দেওয়ার দরকার নেই।
+ * How many more targets to put in hand today. 0 means nothing to give.
  *
- * মালিকের কথাটা ছিল: *"complete + skip মিলিয়ে ৩০ হলে তার কাছে করার মতো
- * আর ডিজাইন নেই — তখন আরও কিছু দেবে, যাতে সে দৈনিক টার্গেট ২৫ ছুঁতে
- * পারে।"*
+ * The owner's rule: when complete + skip add up to 30, the person has no
+ * designs left to work on, so give more so they can reach the daily target of
+ * 25.
  *
- * ⚠️⚠️ **শর্তটা "হাত খালি" নয়, "টার্গেট ছোঁয়া সম্ভব কি না"** — আর
- * পার্থক্যটা মাঠে মেপে বেরিয়েছে। *"সব ৩০টা শেষ+বাদ"* অবস্থাটা কার্যত
- * ঘটেই না, কারণ **শুরু-হওয়া-কিন্তু-শেষ-হয়নি টার্গেট হাতেই থেকে যায়**
- * (`returnUnworked` ওগুলো ফেরত নেয় না)। ৭ ও ৮ সেপ্টেম্বরে ম্যানেজার
- * হাতে যে দুটো বণ্টন চালিয়েছিলেন, তখন কারো হাত খালি ছিল না — সবার
- * হাতে ছিল ১৭ থেকে ২৯টা।
+ * Careful: the condition is not "hand is empty" but "can the target still be
+ * reached". Measured in the field, the difference matters. "All 30 finished
+ * or skipped" practically never happens, because started-but-unfinished
+ * targets stay in hand (`returnUnworked` does not take them back). On 7 and 8
+ * September, when the manager ran two distributions by hand, nobody's hand
+ * was empty: everyone held between 17 and 29.
  *
- * ⭐ তাই শর্তটা লেখা হয়েছে মালিকের **উদ্দেশ্য** ধরে, বাক্য ধরে নয়:
- * *হাতে যা আছে তার সবটা শেষ করলেও যদি ২৫ ছোঁয়া না যায়, তবেই আরও দাও।*
- * ⚠️ হাত খালি হওয়ার অবস্থাটাও এর ভেতরেই পড়ে (`openCount === 0`), তাই
- * মালিকের বলা নিয়মটা বাদ পড়ে না — বরং তার চেয়ে আগে ধরা পড়ে।
+ * So the condition follows the owner's intent, not the sentence: if finishing
+ * everything in hand still cannot reach 25, give more. An empty hand
+ * (`openCount === 0`) falls inside this, so the owner's stated rule is not
+ * lost; it is caught earlier.
  *
- * ⚠️ **একই ৩০:২৫ অনুপাত** (`POOL_PER_DESIGNER / dailyTarget`) — বেছে
- * নেওয়ার জায়গা রাখার জন্য, ঠিক সকালের বণ্টনের মতো। মাঠে বাদ দেওয়ার হার
- * ৪–১৮%, তাই ঠিক ততগুলো দিলে অনেকেই আবার আটকে যেতেন।
+ * Careful: the same 30:25 ratio (`POOL_PER_DESIGNER / dailyTarget`) is used,
+ * to leave room to choose, as in the morning distribution. The skip rate is
+ * 4-18%, so giving exactly that many would leave many people stuck again.
  *
- * ⚠️ টার্গেট ০ বা ঋণাত্মক হলে কিছুই দেওয়া হয় না — ম্যানেজারের মতো
- * যাঁদের টার্গেট নেই, তাঁদের সকালের বণ্টনই যথেষ্ট।
+ * A target of 0 or less gives nothing. For people without a target, such as
+ * the manager, the morning distribution is enough.
  */
 export function topUpSize(
   state: {
     /**
-     * ⚠️⚠️ **কাজের ধরনটা এখানেই দেখা হয়, কলারে নয়।**
+     * Careful: the kind of work is checked here, not in the caller.
      *
-     * `DESIGN_WORK_STAFF_TYPES`-এ ম্যানেজারও আছেন, তাই তিনিও সকালের
-     * বণ্টন পান — অথচ `designTargetOf()` তাঁর জন্যও পলিসির **২৫** ফেরত
-     * দেয় (`hasDesignTarget()` আলাদা প্রশ্ন)। গেটটা কলারে রাখলে একদিন
-     * কেউ ভুলে যেতেন, আর ম্যানেজার নীরবে ২৫-টার্গেটের ডিজাইনার হয়ে
-     * যেতেন। ⭐ `dailyCompletionCap()` ঠিক এই কারণেই গেটটা নিজের ভেতরে
-     * রাখে; এটাও তা-ই করে।
+     * `DESIGN_WORK_STAFF_TYPES` includes the manager, so they also receive the
+     * morning distribution, yet `designTargetOf()` returns the policy's 25 for
+     * them too (`hasDesignTarget()` is a separate question). With the gate in
+     * the caller, someone would eventually forget it, and the manager would
+     * silently become a designer with a 25 target. `dailyCompletionCap()`
+     * keeps its gate inside for exactly this reason; this does the same.
      */
     staffType: string | null | undefined;
-    /** আজ ঢাকার দিনে কতগুলো "শেষ" বলা হয়েছে */
+    /** How many were marked done in today's Dhaka day */
     completedToday: number;
-    /** এখন হাতে কতগুলো `assigned` আছে */
+    /** How many `assigned` targets are in hand now */
     openCount: number;
-    /** ⭐ আজ ঢাকার দিনে তাঁকে **মোট** কতগুলো দেওয়া হয়েছে */
+    /** The total number issued to them in today's Dhaka day */
     issuedToday: number;
-    /** তাঁর দৈনিক ডিজাইন-টার্গেট (`designTargetOf`) */
+    /** Their daily design target (`designTargetOf`) */
     dailyTarget: number;
   },
   perDesigner = POOL_PER_DESIGNER,
@@ -336,16 +334,16 @@ export function topUpSize(
 ): number {
   if (!hasDesignTarget(state.staffType)) return 0;
   /**
-   * ⚠️⚠️ **টার্গেট ০ মানে টপ-আপও বন্ধ** — আর এটা একটা ফাঁদ যা লিখে
-   * রাখা দরকার: মালিক যদি কারো সীমা তুলতে চেয়ে টার্গেট ০ বসান, তিনি
-   * একই সাথে তাঁর টপ-আপও নীরবে বন্ধ করে দেবেন। ⭐ সকালের ৩০টা বণ্টন
-   * তবু চলে (`allocationSizes` টার্গেট দেখে না), তাই কেউ কাজহীন হয়ে
-   * পড়েন না।
+   * Careful: a target of 0 also switches top-up off. This is a trap worth
+   * writing down: if the owner sets someone's target to 0 to lift their limit,
+   * they silently switch off their top-up too. The morning distribution of 30
+   * still runs (`allocationSizes` does not look at the target), so nobody is
+   * left without work.
    */
   if (state.dailyTarget <= 0) return 0;
 
   const remaining = state.dailyTarget - state.completedToday;
-  // ⚠️ আজকের টার্গেট ছোঁয়া হয়ে গেছে — আর কিছু দেওয়ার মানে নেই
+  // Today's target is already reached; nothing more to give
   if (remaining <= 0) return 0;
 
   const want = Math.ceil((remaining * perDesigner) / state.dailyTarget);
@@ -356,19 +354,19 @@ export function topUpSize(
 
 export interface DesignerNeed {
   employeeId: number;
-  /** এখন হাতে কতগুলো `assigned` টার্গেট আছে */
+  /** How many `assigned` targets are in hand now */
   openCount: number;
 }
 
 /**
- * ⭐⭐ **কাকে কতগুলো দিতে হবে** — খাঁটি অঙ্ক, র‍্যান্ডম বাছাইয়ের আগে।
+ * How many each person should get: pure arithmetic, before the random pick.
  *
- * ⚠️ হাতে থাকা টার্গেট **বাদ দিয়ে** হিসাব: রোজ ৩০টা করে দিলে সপ্তাহখানেকে
- * কারো হাতে দুশো জমে যেত, আর পুল ফুরিয়ে যেত অকারণে।
+ * The count excludes targets already in hand. Giving 30 every day would pile
+ * up two hundred on someone within a week and drain the pool for nothing.
  *
- * ⚠️ পুলে যথেষ্ট না থাকলে **যতটা আছে ততটাই**, আর কে আগে পাবে সেটা
- * `needs`-এর ক্রম অনুযায়ী — কলার ওই ক্রম কর্মী-কোড ধরে দেয়, তাই
- * ঘাটতির দিনেও বণ্টন অনুমেয় থাকে, র‍্যান্ডম নয়।
+ * If the pool is short, give as many as exist; who goes first follows the
+ * order of `needs`. The caller supplies that order by staff code, so a
+ * shortage day is still predictable, not random.
  */
 export function allocationSizes(
   needs: readonly DesignerNeed[],
@@ -393,19 +391,20 @@ export function allocationSizes(
 }
 
 /**
- * ⭐⭐ **কারা টার্গেট-অংশটা ব্যবহার করতে পারেন** — মালিক · ম্যানেজার · গবেষক।
+ * Who can use the targets section: owner, manager, researcher.
  *
- * ⚠️⚠️ **সূত্রটা এক জায়গায় লেখা, আর সেটাই এই ফাংশনের গোটা কারণ।** একই
- * প্রশ্নের উত্তর তিন জায়গায় লাগে — সার্ভারের পাহারা (`assertCanUse`),
- * সেশনের পতাকা (`canAddTargets`, `canProofread`), আর সাইডবারের তালিকা।
- * তিন জায়গায় হাতে লিখলে একদিন একটা বদলাত আর বাকি দুটো নয়; ⭐ ২৪ আগস্ট
- * ঠিক সেটাই ঘটেছিল, শুধু তখন ভাগটা ছিল দুই *টেবিলে* (ADR-038)।
+ * Careful: the formula lives in one place, and that is the whole reason for
+ * this function. The same question is asked in three places: the server guard
+ * (`assertCanUse`), the session flags (`canAddTargets`, `canProofread`), and
+ * the sidebar list. Written by hand in three places, one would change one day
+ * and not the others. That is exactly what happened on 24 August, only then
+ * the split was across two tables (ADR-038).
  *
- * ⚠️ `employee` ইচ্ছাকৃতভাবে বাইরে — ডিজাইনার নিজের ৩০টা দেখেন
- * `/me/targets`-এ, গোটা দলের পুল তাঁর দেখার জিনিস নয়।
+ * `employee` is deliberately excluded: a designer sees their own 30 in
+ * `/me/targets`, and the whole team's pool is not theirs to see.
  *
- * ⚠️ খাঁটি ফাংশন, কোনো ডাটাবেস কল নেই — `UserRole` ইতিমধ্যেই সেশনে আছে,
- * আর `JwtAuthGuard` সেটা প্রতি ৫ মিনিটে ডাটাবেস থেকে তাজা করে নেয়।
+ * Pure function, no database call: `UserRole` is already in the session, and
+ * `JwtAuthGuard` refreshes it from the database every 5 minutes.
  */
 export function canUseTargets(role: UserRole): boolean {
   return (
@@ -416,27 +415,27 @@ export function canUseTargets(role: UserRole): boolean {
 }
 
 /**
- * ⭐⭐ **একটা টার্গেট কেন কাজের বাইরে গেল** *(মালিকের চাওয়া, ৩১ আগস্ট
- * ২০২৬: "'Not Found, Copyright, Events' eigula add kore dao")*।
+ * Why a target went out of work.
  *
- * ⚠️⚠️ **দুটো পথে একই তিনটে কারণ, আর এটাই এখানকার আসল সিদ্ধান্ত।**
- * ডিজাইনার Skip চাপেন, মালিক Delete চাপেন — কিন্তু প্রশ্নটা এক:
- * *"এটা কেন বাদ গেল?"* ⭐ দুই জায়গায় দুই তালিকা রাখলে একদিন একটায়
- * নতুন কারণ যোগ হতো আর অন্যটায় নয়, আর তখন গোনাই অসম্ভব হতো।
+ * Careful: both paths use the same three reasons, and that is the real
+ * decision here. A designer presses Skip and the owner presses Delete, but the
+ * question is the same: "why was this dropped?" Two lists in two places would
+ * eventually get a new reason in one and not the other, and counting would
+ * become impossible.
  *
- * ⚠️ **যন্ত্রের মান, পর্দার লেখা নয়** — `not_found` জমা হয়, `"Not Found"`
- * নয়। পর্দার লেখা বদলানো সস্তা; জমা-হয়ে-যাওয়া হাজারটা সারির মানে
- * বদলানো নয়।
+ * Careful: the value is machine-readable, not screen text: `not_found` is
+ * stored, not `"Not Found"`. Changing screen text is cheap; changing the
+ * meaning of thousands of stored rows is not.
  *
- * ⚠️ কারণটা **বাধ্যতামূলক** (পর্দায় বোতামটাই কারণ)। ঐচ্ছিক রাখলে
- * সবাই খালি রেখে দিতেন, আর ঘরটা আজকের `skipped_reason`-এর মতোই
- * ৯৩টা সারিতে NULL হয়ে পড়ে থাকত।
+ * The reason is mandatory (on screen the button is the reason). If optional,
+ * everyone would leave it blank and the field would sit NULL on 93 rows, like
+ * `skipped_reason` today.
  */
 export const DROP_REASONS = ['not_found', 'copyright', 'events'] as const;
 
 export type DropReason = (typeof DROP_REASONS)[number];
 
-/** ⚠️ বাইরের কাঁচা স্ট্রিং যাচাই — DTO ও সার্ভিস দুটোই এটাই ডাকে */
+/** Validates a raw string from outside; the DTO and the service both call this */
 export function isDropReason(raw: unknown): raw is DropReason {
   return (
     typeof raw === 'string' && (DROP_REASONS as readonly string[]).includes(raw)

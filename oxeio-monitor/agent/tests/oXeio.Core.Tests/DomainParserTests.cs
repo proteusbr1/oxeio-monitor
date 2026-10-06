@@ -16,8 +16,8 @@ public class DomainParserTests
     }
 
     /// <summary>
-    /// ⭐ এই টেস্টটাই সবচেয়ে জরুরি। ফুল URL-এ টোকেন, অ্যাকাউন্ট নম্বর,
-    /// সার্চ শব্দ — সব থাকে। একবার ডাটাবেসে বসে গেলে ফেরানোর উপায় নেই।
+    /// This is the most important test. A full URL holds tokens, account numbers,
+    /// search terms, everything. Once it lands in the database there is no way back.
     /// </summary>
     [Fact]
     public void পথ_query_কিছুই_বেরোয়_না()
@@ -38,13 +38,13 @@ public class DomainParserTests
     [Fact]
     public void IPv6_ঠিকানা_কেটে_যায়_না()
     {
-        // একাধিক ':' থাকায় পোর্ট-ছাঁটাই ছোঁয় না
+        // several ':' present, so the port trimming does not apply
         Assert.Equal("[::1]", DomainParser.Extract("http://[::1]/dashboard"));
     }
 
     /// <summary>
-    /// address bar-এ মানুষ সার্চও করে। ওগুলো "ডোমেইন" হিসেবে জমা হলে
-    /// সার্ভারে কার্যত সার্চ-ইতিহাস চলে যেত — যা কীলগিংয়েরই আরেক রূপ।
+    /// People search in the address bar too. If those were stored as a "domain", the
+    /// server would effectively get a search history, which is just another form of keylogging.
     /// </summary>
     [Theory]
     [InlineData("কীভাবে excel pivot table বানায়")]
@@ -69,7 +69,7 @@ public class DomainParserTests
         Assert.Null(DomainParser.Extract(null));
     }
 
-    // ── ব্যক্তিগত ব্রাউজিং ──────────────────────────────────────────────────
+    // ── private browsing ────────────────────────────────────────────────────
 
     [Theory]
     [InlineData("YouTube - Google Chrome (Incognito)")]

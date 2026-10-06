@@ -3,10 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { expectedSecOf, paceSecOf } from '../src/agent/progress.math';
 
 /**
- * B05b — tray-র "এগিয়ে / পিছিয়ে"।
+ * B05b: the tray's "ahead / behind".
  *
- * ⭐ এই সংখ্যাটা স্টাফ **রোজ** দেখে, তাই ভুল হলে সেটা নীরবে ভুল হতো না —
- * নীরবে অবিশ্বাস তৈরি করত। তাই সীমার কেসগুলোই এখানে বেশি।
+ * Staff see this number every day, so a wrong value would not stay silently
+ * wrong: it would quietly build distrust. That is why the boundary cases
+ * dominate here.
  */
 const BASE = {
   creditedSec: 0,
@@ -15,56 +16,57 @@ const BASE = {
   workdaysElapsed: 0,
 };
 
-describe('expectedSecOf — আজ পর্যন্ত কত হওয়ার কথা', () => {
-  it('মাসের শুরুতে (কোনো কর্মদিবস পেরোয়নি) প্রত্যাশা শূন্য', () => {
+describe('expectedSecOf: how much should be done by today', () => {
+  it('at the start of the month (no workday elapsed) the expectation is zero', () => {
     expect(expectedSecOf(BASE)).toBe(0);
   });
 
-  it('অর্ধেক কর্মদিবসে টার্গেটের ঠিক অর্ধেক', () => {
+  it('at half the workdays, exactly half the target', () => {
     expect(expectedSecOf({ ...BASE, workdaysElapsed: 13 })).toBe(
       (208 * 3600) / 2,
     );
   });
 
   /**
-   * ⭐ সবচেয়ে জরুরি কেস: মাসের **শেষ** কর্মদিবসে প্রত্যাশা ঠিক টার্গেটে
-   * গিয়ে ঠেকে, তার বেশিও নয় কমও নয়। না মিললে যে কর্মী পুরো মাস নিখুঁত
-   * কাজ করেছেন তিনিও শেষ দিনে "পিছিয়ে" দেখতেন।
+   * The most important case: on the last workday of the month the expectation
+   * lands exactly on the target, no more and no less. Otherwise an employee
+   * who worked perfectly all month would still show "behind" on the last day.
    */
-  it('মাসের শেষ কর্মদিবসে প্রত্যাশা = পুরো টার্গেট', () => {
+  it('on the last workday of the month the expectation = the full target', () => {
     expect(expectedSecOf({ ...BASE, workdaysElapsed: 26 })).toBe(208 * 3600);
   });
 
-  it('ছুটি বেশি হলে (কর্মদিবস কম) দৈনিক প্রত্যাশা বাড়ে, মোট টার্গেট বদলায় না', () => {
+  it('with more holidays the daily expectation rises, the total target does not', () => {
     const eid = { ...BASE, expectedWorkdays: 20, workdaysElapsed: 20 };
     expect(expectedSecOf(eid)).toBe(208 * 3600);
-    // ২০ দিনে ২০৮ ঘণ্টা মানে প্রতিদিন ১০.৪ ঘণ্টা
+    // 208 hours in 20 days is 10.4 hours a day
     expect(expectedSecOf({ ...eid, workdaysElapsed: 1 })).toBe(
       Math.round((208 * 3600) / 20),
     );
   });
 
   /**
-   * ⚠️ পুরো মাস ছুটি ঘোষণা করলে `expectedWorkdays === 0`। ভাগ না আটকালে
-   * `NaN` তারে যেত, আর এজেন্টের STJ `NaN` চেনে না — তখন heartbeat-এর
-   * **পুরো** উত্তরটাই (revoke কমান্ড সহ) পড়া যেত না।
+   * Declaring the whole month a holiday gives `expectedWorkdays === 0`. If the
+   * division were not guarded, `NaN` would go on the wire, and the agent's STJ
+   * does not understand `NaN`: then the entire heartbeat response (including
+   * the revoke command) could not be read.
    */
-  it('কর্মদিবস শূন্য হলে NaN নয়, ০', () => {
+  it('with zero workdays it gives 0, not NaN', () => {
     const out = expectedSecOf({ ...BASE, expectedWorkdays: 0 });
     expect(Number.isNaN(out)).toBe(false);
     expect(out).toBe(0);
   });
 
-  it('টার্গেট ০ বা ঋণাত্মক হলে ছোড়ে না, ০ দেয়', () => {
+  it('a target of 0 or negative does not throw, it gives 0', () => {
     expect(expectedSecOf({ ...BASE, monthlyTargetHours: 0 })).toBe(0);
     expect(expectedSecOf({ ...BASE, monthlyTargetHours: -8 })).toBe(0);
   });
 
-  it('পেরোনো দিন কর্মদিবসের চেয়ে বেশি হলেও প্রত্যাশা টার্গেট ছাড়ায় না', () => {
+  it('even with more elapsed days than workdays the expectation does not exceed the target', () => {
     expect(expectedSecOf({ ...BASE, workdaysElapsed: 99 })).toBe(208 * 3600);
   });
 
-  it('সবসময় পূর্ণসংখ্যা — সেকেন্ডের ভগ্নাংশ তারে যায় না', () => {
+  it('always an integer: fractions of a second do not go on the wire', () => {
     const out = expectedSecOf({
       ...BASE,
       monthlyTargetHours: 208,
@@ -75,28 +77,29 @@ describe('expectedSecOf — আজ পর্যন্ত কত হওয়া�
   });
 });
 
-describe('paceSecOf — এগিয়ে না পিছিয়ে', () => {
-  it('ঠিক প্রত্যাশা অনুযায়ী কাজ হলে গতি ঠিক ০', () => {
+describe('paceSecOf: ahead or behind', () => {
+  it('working exactly as expected gives a pace of exactly 0', () => {
     const input = { ...BASE, workdaysElapsed: 13 };
     expect(paceSecOf({ ...input, creditedSec: expectedSecOf(input) })).toBe(0);
   });
 
-  it('বেশি কাজ = ধনাত্মক (এগিয়ে)', () => {
+  it('more work = positive (ahead)', () => {
     const input = { ...BASE, workdaysElapsed: 10, creditedSec: 90 * 3600 };
     expect(paceSecOf(input)).toBeGreaterThan(0);
   });
 
-  it('কম কাজ = ঋণাত্মক (পিছিয়ে)', () => {
+  it('less work = negative (behind)', () => {
     const input = { ...BASE, workdaysElapsed: 10, creditedSec: 10 * 3600 };
     expect(paceSecOf(input)).toBeLessThan(0);
   });
 
   /**
-   * ⭐ § ২.১-ঙ (G35) — owner-এর সংশোধন গতিতে গোনা **হতেই হবে**। নইলে
-   * সার্ভারের দোষে ঘণ্টা হারানো স্টাফকে ঘণ্টা ফেরত দেওয়ার পরেও tray সারা
-   * মাস "পিছিয়ে" বলত, অথচ ড্যাশবোর্ড বলত এগিয়ে।
+   * Section 2.1(e) (G35): the owner's adjustment must be counted in the pace.
+   * Otherwise, after giving back hours a staff member lost through a server
+   * fault, the tray would still say "behind" all month while the dashboard
+   * said ahead.
    */
-  it('সংশোধনের ঘণ্টা যোগ হলে গতি এগোয়', () => {
+  it('when adjustment hours are added, the pace moves ahead', () => {
     const input = { ...BASE, workdaysElapsed: 10 };
     const without = paceSecOf({ ...input, creditedSec: 60 * 3600 });
     const withAdj = paceSecOf({ ...input, creditedSec: 60 * 3600 + 7200 });
@@ -104,19 +107,19 @@ describe('paceSecOf — এগিয়ে না পিছিয়ে', () => 
   });
 
   /**
-   * ⚠️ বড় কর্তন `credited`-কে ঋণাত্মক করে ফেললে tray দেখাত
-   * "−৩১২ ঘণ্টা পিছিয়ে" — কারো কাছেই যার কোনো অর্থ নেই।
+   * If a large deduction pushed `credited` negative, the tray would show
+   * "312 hours behind", which means nothing to anyone.
    */
-  it('credited ঋণাত্মক হলে ০ ধরা হয়, গতি অতল হয় না', () => {
+  it('a negative credited is treated as 0, so the pace does not plunge', () => {
     const input = { ...BASE, workdaysElapsed: 10, creditedSec: -500 * 3600 };
     expect(paceSecOf(input)).toBe(-expectedSecOf(input));
   });
 
-  it('মাসের শুরুতে কিছু না করলেও গতি ০ — প্রথম দিনেই "পিছিয়ে" নয়', () => {
+  it('doing nothing at the start of the month still gives pace 0: not "behind" on day one', () => {
     expect(paceSecOf({ ...BASE, workdaysElapsed: 0, creditedSec: 0 })).toBe(0);
   });
 
-  it('পুরো মাস ছুটি হলে যেকোনো কাজই এগিয়ে, কখনো NaN নয়', () => {
+  it('with the whole month a holiday, any work is ahead, and never NaN', () => {
     const out = paceSecOf({
       ...BASE,
       expectedWorkdays: 0,

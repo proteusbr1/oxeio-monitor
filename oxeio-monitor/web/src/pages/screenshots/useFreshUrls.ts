@@ -8,46 +8,45 @@ import {
 } from '../../api/screenshots';
 
 /**
- * I07 — ⭐ **মেয়াদ শেষ হয়ে যাওয়া signed URL নিজে থেকে সারিয়ে নেওয়া।**
+ * Automatically repairs signed URLs that have expired.
  *
- * সার্ভার প্রতিটা ছবির লিঙ্ক ৫ মিনিটের জন্য সই করে (দেখুন
- * `server/src/screenshots/signed-url.service.ts`)। কেউ গ্যালারি খুলে রেখে
- * চা খেতে গেলে ফিরে এসে **সব ছবি ভাঙা** দেখত — কোনো এরর বার্তা নয়, শুধু
- * ভাঙা আইকনের একটা গ্রিড। আর দেখে মনে হতো স্ক্রিনশটগুলোই হারিয়ে গেছে,
- * অথচ ফাইল সবই জায়গামতো আছে।
+ * The server signs each image link for 5 minutes (see
+ * `server/src/screenshots/signed-url.service.ts`). Someone who left the gallery
+ * open and went for tea would come back to **all images broken**: no error
+ * message, just a grid of broken icons, which looks as if the screenshots were
+ * lost even though every file is in place.
  *
- * ⭐ তাই ছবি লোড ব্যর্থ হলে **নীরবে** পুরো পাতাটা আবার আনা হয় (নতুন টোকেন
- * সহ) আর শুধু `src`-গুলো বদলে দেওয়া হয়। ব্যবহারকারীর কাছে ছবিটা এক
- * মুহূর্ত দেরিতে এসেছে — এর বেশি কিছু নয়। কোনো বোতাম টিপতে হয় না, কারণ
- * "রিফ্রেশ করুন" লেখা দেখানো মানেই দোষটা ব্যবহারকারীর ঘাড়ে চাপানো।
+ * Important: so when an image fails to load, the whole page is **silently** fetched
+ * again (with new tokens) and only the `src` values are swapped. To the user the
+ * image just arrived a moment late. No button to press, because showing "please
+ * refresh" would put the blame on the user.
  *
- * ⚠️ চেষ্টা **একবারই**। দ্বিতীয়বারও ব্যর্থ হলে "ছবিটা আর নেই" — কারণ তখন
- *    সমস্যাটা আর মেয়াদের নয়, ফাইলটাই নেই (retention job মুছেছে, বা ingest
- *    DB-তে সারি লিখে ডিস্কে লেখার আগে ক্র্যাশ করেছিল)। অসীম রিট্রাই করলে
- *    প্রতিটা সত্যিকারের হারানো ছবি সার্ভারে হাতুড়ি পেটাত।
+ * Careful: **one retry only.** If it fails a second time the image is "gone": the
+ * problem is no longer expiry, the file is missing (the retention job deleted it, or
+ * ingest wrote the DB row and crashed before writing to disk). Retrying forever
+ * would hammer the server for every genuinely lost image.
  *
- * ⚠️⚠️ **audit** — প্রতিটা রিফ্রেশ মানে একটা `GET /screenshots`, আর সেটা
- *    audit log-এ একটা সারি লেখে (I08, `screenshots.service.recordView`)।
- *    তাই এক পাতার ৬০টা ছবি একসাথে মরলেও রিফ্রেশ হয় **একবার**:
- *    `inFlightRef` সব ব্যর্থতাকে একটাই কলে জড়ো করে। এটা না থাকলে একবার
- *    ট্যাব ফেলে রাখলেই audit log-এ ৬০টা সারি ঢুকত, আর E11-এর ভিউয়ারে
- *    আসল ঘটনাগুলো তার নিচে চাপা পড়ে যেত।
+ * Careful: **audit.** Every refresh is a `GET /screenshots`, which writes one audit
+ * log row (`screenshots.service.recordView`). So even if 60 images on a page die
+ * together, the refresh happens **once**: `inFlightRef` collapses all failures into
+ * one call. Without it, leaving a tab open would put 60 rows in the audit log and
+ * bury the real events in the audit viewer.
  */
 
 export type ShotVariant = 'thumb' | 'full';
 
 export interface FreshUrls {
-  /** এই ছবির জন্য এখন যে লিঙ্কটা `<img src>`-এ বসবে */
+  /** The link that should go into `<img src>` for this image right now */
   urlOf: (item: GalleryItem, variant: ShotVariant) => string;
-  /** দুবার চেষ্টার পরেও এল না — "ছবিটা আর নেই" দেখানোর সময় */
+  /** Still failing after two tries; time to show "image no longer available" */
   isDead: (item: GalleryItem, variant: ShotVariant) => boolean;
-  /** `<img onError>` থেকে */
+  /** Call from `<img onError>` */
   reportError: (item: GalleryItem, variant: ShotVariant) => void;
-  /** `<img onLoad>` থেকে */
+  /** Call from `<img onLoad>` */
   reportLoad: (item: GalleryItem, variant: ShotVariant) => void;
 }
 
-/** `${id}:${variant}` — থাম্বনেইল আর ফুল ছবির হিসাব আলাদা রাখতে হয় */
+/** `${id}:${variant}`; thumbnail and full-size image are tracked separately */
 type Slot = string;
 
 const VARIANTS: readonly ShotVariant[] = ['thumb', 'full'];
@@ -65,26 +64,26 @@ function originalUrl(item: GalleryItem, variant: ShotVariant): string {
 
 export function useFreshUrls(query: GalleryQuery): FreshUrls {
   /**
-   * ⭐ নতুন লিঙ্কগুলো **আঠালো**: একবার বসলে আর পুরোনোটায় ফেরত যায় না।
-   * ফেরত গেলে ছবি লোড হওয়ার পর আবার মেয়াদ-শেষ লিঙ্কে ফিরে গিয়ে অসীম
-   * লুপ হতো — লোড, ভাঙা, লোড, ভাঙা।
+   * New links are **sticky**: once set they never revert to the old one. Reverting
+   * would send a loaded image back to the expired link and loop forever: load,
+   * break, load, break.
    */
   const [overrides, setOverrides] = useState(NO_URLS);
-  /** কোন ছবিটা তার শেষ সফল লোডের পর কতবার ব্যর্থ হয়েছে */
+  /** How many times each image has failed since its last successful load */
   const [tries, setTries] = useState(NO_TRIES);
 
-  // ⚠️ সিদ্ধান্তগুলো (রিফ্রেশ ডাকব কি না, মৃত ধরব কি না) নিতে হয় ইভেন্টের
-  //    ভেতরেই, রেন্ডারের অপেক্ষা না করে — তাই state-এর পাশে ref-আয়না।
+  // Careful: decisions (call refresh or not, treat as dead or not) must be made inside
+  //    the event, without waiting for a render, hence the refs mirroring the state.
   const overridesRef = useRef(overrides);
   const triesRef = useRef(tries);
-  /** যেগুলো এই মুহূর্তে পর্দায় আঁকা আছে — এদের `src` ছোঁয়া যাবে না */
+  /** Slots currently painted on screen; their `src` must not be touched */
   const paintedRef = useRef(new Set<Slot>());
   const inFlightRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const aliveRef = useRef(true);
 
   useEffect(() => {
-    // ⚠️ StrictMode-এ effect দুবার চলে, তাই প্রতিবার `true` বসাতেই হয়
+    // Careful: effects run twice in StrictMode, so `true` must be set every time
     aliveRef.current = true;
     return () => {
       aliveRef.current = false;
@@ -92,8 +91,8 @@ export function useFreshUrls(query: GalleryQuery): FreshUrls {
     };
   }, []);
 
-  // ⚠️ তারিখ/স্টাফ/পাতা বদলালে সব হিসাব শূন্য — আগের দিনের মৃত ছবির স্মৃতি
-  //    নিয়ে নতুন দিনের গ্রিড আঁকলে ভালো ছবিও "আর নেই" দেখাত।
+  // Careful: when date/staff/page changes, reset everything; drawing the new day's grid
+  //    with the old day's dead-image memory would show good images as "gone".
   useEffect(() => {
     overridesRef.current = NO_URLS;
     triesRef.current = NO_TRIES;
@@ -101,7 +100,7 @@ export function useFreshUrls(query: GalleryQuery): FreshUrls {
     inFlightRef.current = false;
     abortRef.current?.abort();
     abortRef.current = null;
-    // একই ধ্রুবক ফিরিয়ে দিলে React অকারণে আবার রেন্ডার করে না
+    // Returning the same constant stops React re-rendering needlessly
     setOverrides(NO_URLS);
     setTries(NO_TRIES);
   }, [query]);
@@ -111,7 +110,7 @@ export function useFreshUrls(query: GalleryQuery): FreshUrls {
     setTries(next);
   }, []);
 
-  /** রেন্ডার আর ইভেন্ট — দুই জায়গায় একই উত্তর দিতে হবে, তাই এক জায়গায় */
+  /** Render and event must give the same answer, so it lives in one place */
   const urlNow = useCallback(
     (item: GalleryItem, variant: ShotVariant) =>
       overridesRef.current.get(slotOf(item.id, variant)) ??
@@ -120,12 +119,12 @@ export function useFreshUrls(query: GalleryQuery): FreshUrls {
   );
 
   /**
-   * যারা একবার ব্যর্থ হয়ে নতুন লিঙ্কের অপেক্ষায় ছিল অথচ পেল না — তাদের আর
-   * ঝুলিয়ে রাখা যায় না।
+   * Images that failed once and waited for a new link but did not get one cannot
+   * be left hanging.
    *
-   * ⚠️ এটা না থাকলে ছবিটা চিরকাল "লোড হচ্ছে" অবস্থায় ঝুলে থাকত: না ছবি,
-   *    না বার্তা। আর ঠিক সেটাই ঘটত সবচেয়ে সাধারণ ক্ষেত্রে — DB-তে সারি
-   *    আছে কিন্তু ডিস্কে ফাইল নেই, তখন `/file` সাথে সাথেই ৪০৪ দেয়।
+   * Careful: without this the image would hang in "loading" forever: neither image
+   *    nor message. That is exactly what would happen in the most common case: the
+   *    DB row exists but the file is not on disk, so `/file` returns 404 at once.
    */
   const giveUpPending = useCallback(
     (gotFresh: ReadonlyMap<Slot, string>) => {
@@ -143,7 +142,7 @@ export function useFreshUrls(query: GalleryQuery): FreshUrls {
   );
 
   const refresh = useCallback(() => {
-    // ⭐ একসাথে ৬০টা ছবি মরলেও সার্ভারে যাবে একটাই কল (audit log-এর জন্য)
+    // Even if 60 images die at once, only one call reaches the server (audit log)
     if (inFlightRef.current) return;
     inFlightRef.current = true;
 
@@ -153,9 +152,9 @@ export function useFreshUrls(query: GalleryQuery): FreshUrls {
     void getGallery(query, controller.signal).then(
       (page) => {
         inFlightRef.current = false;
-        // ⚠️ রেসপন্সটা এসে গিয়ে `.then` সারিতে অপেক্ষা করার মধ্যেই তারিখ
-        //    বদলে যেতে পারে — তখন abort আর কিছু থামাতে পারে না। এই মিলটা
-        //    না দেখলে আগের দিনের লিঙ্ক নতুন দিনের গ্রিডে বসে যেত।
+        // Careful: the date may change after the response has arrived but while `.then`
+        //    is still queued; abort can no longer stop anything. Without this check, a
+        //    previous day's links would land in the new day's grid.
         if (!aliveRef.current || abortRef.current !== controller) return;
 
         const fresh = new Map<Slot, string>();
@@ -163,22 +162,22 @@ export function useFreshUrls(query: GalleryQuery): FreshUrls {
           for (const variant of VARIANTS) {
             const slot = slotOf(item.id, variant);
 
-            // ⚠️ যে ছবিটা এই মুহূর্তে পর্দায় আঁকা, তার `src` বদলালে সেটা
-            //    আবার নামতে শুরু করত — এক ঝলক ফাঁকা ঘর, কোনো লাভ ছাড়াই।
+            // Careful: changing `src` of an image painted right now would make it
+            //    start loading again: a flash of empty cell for no benefit.
             if (paintedRef.current.has(slot)) continue;
 
             const next = originalUrl(item, variant);
 
             /**
-             * ⚠️⚠️ **হুবহু একই লিঙ্ক ফিরে আসতে পারে।** টোকেনের মেয়াদ
-             * সেকেন্ডের নিখুঁততায় লেখা (`signed-url.ts` → `expiresAtSec`),
-             * তাই একই সেকেন্ডে দুবার সই করলে দুটো টোকেন অভিন্ন। ফাইলটা
-             * ডিস্কে নেই বলে `/file` তাৎক্ষণিক ৪০৪ দিলে ঠিক এটাই ঘটে:
-             * ব্যর্থতা আর রিফ্রেশ দুটোই এক সেকেন্ডের ভেতরে।
+             * Careful: **the exact same link can come back.** Token expiry is written to
+             * the second (`signed-url.ts` -> `expiresAtSec`), so signing twice within one
+             * second gives two identical tokens. This is exactly what happens when the
+             * file is not on disk and `/file` returns 404 immediately: failure and
+             * refresh both fall inside one second.
              *
-             * তখন `src` বদলায় না, ব্রাউজার আর চেষ্টাই করে না, আর ছবিটা
-             * চিরকাল নীরবে ভাঙা থেকে যেত। বাদ দিলে `giveUpPending` একে
-             * মৃত ধরে নেয় — আর ব্যবহারকারী অন্তত সত্যি কথাটা দেখতে পায়।
+             * Then `src` does not change, the browser does not retry, and the image
+             * would stay silently broken forever. When skipped, `giveUpPending` treats
+             * it as dead, and the user at least sees the truth.
              */
             if (next === urlNow(item, variant)) continue;
 
@@ -195,9 +194,9 @@ export function useFreshUrls(query: GalleryQuery): FreshUrls {
       },
       (err: unknown) => {
         inFlightRef.current = false;
-        // বাতিল হওয়া কল ব্যর্থতা নয় — পাতা বদলালেই এটা ঘটে
+        // A cancelled call is not a failure; this happens whenever the page changes
         if (isAbortError(err) || !aliveRef.current) return;
-        // রিফ্রেশই ব্যর্থ (নেটওয়ার্ক, ৪০৩) — অপেক্ষমাণ সবাইকে ছেড়ে দাও
+        // The refresh itself failed (network, 403): release everyone waiting
         giveUpPending(NO_URLS);
       },
     );
@@ -207,11 +206,11 @@ export function useFreshUrls(query: GalleryQuery): FreshUrls {
     (item: GalleryItem, variant: ShotVariant) => {
       const slot = slotOf(item.id, variant);
 
-      // ⚠️⚠️ ভেঙে যাওয়া ছবি আর "আঁকা" নয়। এটা না মুছলে যে ছবিটা একবার
-      //    ঠিকঠাক এসেছিল আর পরে মেয়াদ শেষে ভেঙেছে, রিফ্রেশে তাকে বাদ
-      //    দেওয়া হতো (আঁকা বলে) — ফলে নতুন লিঙ্ক পেত না, আর সাথে সাথেই
-      //    "ছবিটা আর নেই" দেখাত। অর্থাৎ ঠিক যে ক্ষেত্রটার জন্য এই পুরো
-      //    হুকটা লেখা, সেটাই ভাঙত।
+      // Careful: a broken image is no longer "painted". If this were not cleared, an
+      //    image that loaded fine and later broke on expiry would be skipped by the
+      //    refresh (as painted), so it would never get a new link and would at once show
+      //    "image no longer available". That is precisely the case this whole hook
+      //    exists for.
       paintedRef.current.delete(slot);
 
       const count = (triesRef.current.get(slot) ?? 0) + 1;
@@ -219,8 +218,8 @@ export function useFreshUrls(query: GalleryQuery): FreshUrls {
       next.set(slot, count);
       commitTries(next);
 
-      // ⚠️ শুধু প্রথম ব্যর্থতাতেই রিফ্রেশ। দ্বিতীয়বার মানে নতুন লিঙ্ক দিয়েও
-      //    হয়নি — সেটা মেয়াদের সমস্যা নয়, ফাইলটাই নেই।
+      // Careful: refresh only on the first failure. A second means even the new link
+      //    failed; that is not an expiry problem, the file is missing.
       if (count === 1) refresh();
     },
     [commitTries, refresh],
@@ -231,9 +230,9 @@ export function useFreshUrls(query: GalleryQuery): FreshUrls {
       const slot = slotOf(item.id, variant);
       paintedRef.current.add(slot);
 
-      // ⭐ সফল হলে গোনা শূন্য — লিঙ্ক আবার আধ ঘণ্টা পরে মরলে সেটা **নতুন**
-      // ঘটনা, আগেরটার শাস্তি বয়ে বেড়ানোর কিছু নেই। (`overrides` আঠালো বলে
-      // এতে পুরোনো মেয়াদ-শেষ লিঙ্কে ফিরে যাওয়ার ভয় নেই।)
+      // On success the count resets: if the link dies again half an hour later that is
+      // a **new** event, with no need to carry the old one's penalty. (`overrides` is
+      // sticky, so there is no risk of reverting to an old expired link.)
       if (!triesRef.current.has(slot)) return;
       const next = new Map(triesRef.current);
       next.delete(slot);

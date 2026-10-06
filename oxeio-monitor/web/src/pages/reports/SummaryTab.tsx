@@ -14,13 +14,12 @@ import {
 import { MAX_SHOWN_ROWS, MetaNote, SignedHours, TrimmedNote } from './shared';
 
 /**
- * F02 — সাপ্তাহিক/মাসিক সারাংশ: worked · target · shortfall · overtime।
+ * Weekly/monthly summary: worked, target, shortfall, overtime.
  *
- * ⭐⚠️ **অতিরিক্ত ঘণ্টার টাকা এখানে কখনো দেখানো হবে না** — শুধু ঘণ্টা।
- *    OT-র হার (১×, ১.৫×, নাকি কিছুই না) এখনো ঠিক হয়নি (open question O4)।
- *    পর্দায় একটা টাকার অঙ্ক বসিয়ে দিলে সেই হারটাই নীরবে কোম্পানির নীতি
- *    হয়ে যেত, অথচ সিদ্ধান্তটা কেউ নেয়নি। সার্ভারও তাই `overtimeNote`
- *    পাঠায় — সেটা নিচে হুবহু দেখানো হয়।
+ * Important: **money for overtime hours is never shown here**, only hours. The OT
+ *    rate (1x, 1.5x, or nothing) is not decided yet (open question O4). Putting an
+ *    amount on screen would silently become company policy though nobody decided
+ *    it. So the server also sends an `overtimeNote`, shown below verbatim.
  */
 export function SummaryTab({
   from,
@@ -56,10 +55,10 @@ export function SummaryTab({
   const shown = data.rows.slice(0, MAX_SHOWN_ROWS);
 
   /**
-   * ⚠️ মাসে `bucket` = `'2026-08'`, সপ্তাহে সপ্তাহ-শুরুর তারিখ। কিন্তু
-   *    `bucketStart`/`bucketEnd` **পুরো** মাস/সপ্তাহ নয় — রেঞ্জ ও কর্মকালের
-   *    যতটুকু ভেতরে পড়েছে ততটুকু। তাই সপ্তাহে দুই প্রান্তই দেখানো হয়,
-   *    নইলে "১০ আগস্ট থেকে সপ্তাহ" পড়ে কেউ ধরে নিত পুরো সাত দিনই আছে।
+   * Careful: for months `bucket` = `'2026-08'`, for weeks the week-start date. But
+   *    `bucketStart`/`bucketEnd` are **not** the full month/week: only the part that
+   *    falls inside the range and the employment period. So both ends are shown for
+   *    weeks, or "week from 10 August" would suggest all seven days are included.
    */
   const bucketLabel = (row: SummaryRow): string =>
     groupBy === 'month'
@@ -119,10 +118,10 @@ export function SummaryTab({
     },
     {
       /**
-       * ⚠️ হেডারে "days shown" — এটা এই সারির দিনগুলোর টার্গেট, "এ পর্যন্ত
-       *    কত হওয়ার কথা ছিল" নয়। শুধু "Target" লেখা থাকলে পাঠক পাশের
-       *    Counted থেকে বিয়োগ করে নিজের মতো একটা ঘাটতি বানিয়ে ফেলতেন —
-       *    আর সেই বানানো সংখ্যাটায় এজেন্ট বসার আগের দিনগুলোও থাকত।
+       * Careful: the header says "days shown": this is the target for this row's days,
+       *    not "how much should have been done so far". With just "Target", the
+       *    reader would subtract the adjacent Counted and invent a shortfall of their
+       *    own, one that includes days before the agent was installed.
        */
       key: 'target',
       header: 'Target · days shown',
@@ -130,9 +129,9 @@ export function SummaryTab({
       render: (row) => <Hours hours={row.targetHours} tone="muted" />,
     },
     {
-      // ⭐ বার পূর্ণ হলে **সবুজ** হয়ে যায় (`ProgressBar`-এর নিয়ম) — টার্গেট
-      //    ছোঁয়া কোনো সমস্যা নয়, তাই ওটা লাল থাকে না। চলতি অবস্থায়
-      //    নিরপেক্ষ `ink`; লাল এই টেবিলে শুধু ঘাটতির কলামে।
+      // Important: the bar turns **green** when full (a `ProgressBar` rule); reaching the
+      //    target is not a problem, so it is not red. While in progress it is neutral
+      //    `ink`; red appears in this table only in the shortfall column.
       key: 'pace',
       header: 'Progress',
       className: 'w-24',
@@ -145,12 +144,12 @@ export function SummaryTab({
       ),
     },
     {
-      // ⚠️ ঘাটতিই একমাত্র লাল সংখ্যা এই টেবিলে — লাল মানে "মনোযোগ দরকার",
-      //    আর সব কলাম লাল করলে লালের মানেই হারিয়ে যেত।
-      // ⚠️⚠️ হেডারে "vs expected" — সংখ্যাটা Target বিয়োগ Counted **নয়**।
-      //    সার্ভার এটা মাপে কেবল সেই দিনগুলোর বিপরীতে যেগুলো সত্যিই দেখা
-      //    হয়েছে ও শেষ হয়েছে (`SummaryRow.shortfallHours`)। কথাটা না
-      //    লিখলে টেবিলটা নিজেই নিজের সাথে অমিল দেখাত।
+      // Careful: shortfall is the only red number in this table: red means "needs
+      //    attention", and making every column red would erase its meaning.
+      // Careful: the header says "vs expected"; the number is **not** Target minus
+      //    Counted. The server measures it only against days that were actually
+      //    observed and have ended (`SummaryRow.shortfallHours`). Without saying so,
+      //    the table would seem to disagree with itself.
       key: 'shortfall',
       header: 'Shortfall vs expected',
       align: 'right',
@@ -179,9 +178,9 @@ export function SummaryTab({
   return (
     <>
       {/*
-        ⭐⭐ `hint`-এর বাক্যটাই এই টেবিলের চাবি: তিনটে সংখ্যা তিনটে আলাদা
-        প্রশ্নের উত্তর। এটা ছাড়া পাঠক Target থেকে Counted বিয়োগ করে মেলাতে
-        গিয়ে ভাবতেন Shortfall কলামে ভুল আছে।
+        Important: the `hint` sentence is the key to this table: the three numbers answer
+        three different questions. Without it the reader would subtract Counted from
+        Target, try to reconcile, and think the Shortfall column is wrong.
       */}
       <Card
         title={groupBy === 'month' ? 'Month by Month' : 'Week by Week'}
@@ -191,7 +190,7 @@ export function SummaryTab({
         <Table
           columns={columns}
           rows={shown}
-          // ⚠️ একই কর্মীর একাধিক বালতি আসে, তাই দুটোই কী-তে দরকার
+          // Careful: one employee gets several buckets, so both are needed in the key
           rowKey={(row) => `${row.employeeId}-${row.bucket}`}
         />
         {data.rows.length > shown.length && (
@@ -199,7 +198,7 @@ export function SummaryTab({
         )}
       </Card>
 
-      {/* ⭐ সার্ভারের নিজের বাক্য — এটাই O4-কে খোলা রাখে */}
+      {/* Important: the server's own sentence; this is what keeps O4 open */}
       <Caveat>{data.overtimeNote}</Caveat>
 
       <MetaNote meta={data.meta} />

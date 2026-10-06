@@ -25,10 +25,10 @@ export interface RaiseInput extends AlertKey {
 
 export interface AlertRow {
   /**
-   * ⚠️ স্ট্রিং, সংখ্যা নয়। `alerts.id` হলো BIGSERIAL, আর Prisma সেটা `bigint`
-   *    হিসেবে ফেরত দেয় — `JSON.stringify(1n)` সরাসরি TypeError ছোড়ে।
-   *    app.setup.ts-এ BigInt-এর কোনো গ্লোবাল সিরিয়ালাইজার বসানো নেই, তাই
-   *    এখানে হাতে না বদলালে প্রতিটা রিকোয়েস্ট ৫০০ হতো।
+   * A string, not a number. `alerts.id` is a BIGSERIAL and Prisma returns it as
+   * a `bigint`, and `JSON.stringify(1n)` throws a TypeError. app.setup.ts has
+   * no global BigInt serializer, so unless it is converted by hand here every
+   * request would return 500.
    */
   id: string;
   type: string;
@@ -43,7 +43,7 @@ export interface AlertRow {
   channelsSent: string[];
   acknowledgedAt: string | null;
   acknowledgedBy: string | null;
-  /** সার্ভার নিজে বন্ধ করেছে (এজেন্ট ফিরে এসেছে) — মানুষ acknowledge করেনি */
+  /** Closed by the server itself (the agent came back); a person did not acknowledge it */
   resolvedAt: string | null;
   createdAt: string;
 }
@@ -52,7 +52,7 @@ export interface AlertPage {
   total: number;
   page: number;
   limit: number;
-  /** এখনো acknowledge হয়নি এমন কতগুলো আছে — ফিল্টার যাই হোক */
+  /** How many are not yet acknowledged, whatever the filter */
   openCount: number;
   rows: AlertRow[];
 }
@@ -80,11 +80,12 @@ const ROW_SELECT = {
 type AlertWithNames = Prisma.AlertGetPayload<{ select: typeof ROW_SELECT }>;
 
 /**
- * G01–G07 — অ্যালার্ট তৈরি, তালিকা আর acknowledge।
+ * Alert creation, listing and acknowledge.
  *
- * ⭐ অ্যালার্ট বসানোর **একমাত্র** দরজা `raiseMany()`। প্রতিটা চেক নিজে
- * `prisma.alert.create()` ডাকলে throttle-টা প্রতিটা চেকে আলাদা করে লিখতে হতো,
- * আর একটা জায়গায় ভুল হলেই ওই কারণটা রাতারাতি শত শত অ্যালার্ট বানাত।
+ * `raiseMany()` is the **only** door for inserting alerts. If every check
+ * called `prisma.alert.create()` itself, the throttle would have to be written
+ * separately in each one, and a mistake in one place would turn that reason
+ * into hundreds of alerts overnight.
  */
 @Injectable()
 export class AlertsService {
@@ -92,19 +93,18 @@ export class AlertsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  /** একটা অ্যালার্ট — ফেরত `true` মানে সত্যিই বসেছে, `false` মানে throttle-এ আটকেছে */
+  /** One alert: `true` means it was really inserted, `false` means the throttle held it back */
   async raise(input: RaiseInput, now = new Date()): Promise<boolean> {
     return (await this.raiseMany([input], now)) === 1;
   }
 
   /**
-   * ⭐ বন্যা ঠেকানোর একমাত্র জায়গা।
+   * The only place flood control happens.
    *
-   * ⚠️ `clock_drift` এখানে দিয়ে বসানো হয় **না** — ওটা
-   *    src/agent/clock-drift.service.ts ইতিমধ্যেই বসায় (নিজস্ব throttle সহ)।
-   *    দুই জায়গা থেকে বসালে একই ঘটনার দুটো অ্যালার্ট হতো, আর দুটোই
-   *    আলাদাভাবে acknowledge করতে হতো। ওই অ্যালার্টগুলো আমরা শুধু
-   *    **পাঠাই** (AlertDispatcher), তৈরি করি না।
+   * Careful: `clock_drift` is **not** inserted through here. src/agent/clock-drift.service.ts
+   * already inserts it (with its own throttle). Inserting from two places
+   * would create two alerts for one event, each needing its own acknowledge.
+   * We only **send** those alerts (AlertDispatcher); we do not create them.
    */
   async raiseMany(inputs: readonly RaiseInput[], now = new Date()): Promise<number> {
     if (inputs.length === 0) return 0;
@@ -112,15 +112,15 @@ export class AlertsService {
     const types = [...new Set(inputs.map((i) => i.type))];
 
     /**
-     * ⚠️⚠️ **কুয়েরির মেঝেটাও পিছোতে হয়** *(৬ সেপ্টেম্বর ২০২৬, G166)*।
+     * **The query floor has to move back too.**
      *
-     * `suppressFlood()`-কে বড় জানালা দিলেই হতো না: পুরোনো সারিটা এই
-     * কুয়েরিতেই না উঠলে `lastRaisedByKey`-তে সে থাকত না, আর নিয়মটা
-     * "আগে কিছু ছিল না" ধরে নিয়ে অ্যালার্টটা বসিয়ে দিত। ছাঁকনিটা
-     * নীরবে কিছুই করত না।
+     * Giving `suppressFlood()` a bigger window would not be enough: if the old
+     * row is not fetched by this query it is missing from `lastRaisedByKey`,
+     * and the rule would assume "there was nothing before" and insert the
+     * alert. The filter would silently do nothing.
      *
-     * ⭐ সবচেয়ে পুরোনো মেঝেটাই নেওয়া হয় — প্রতিটা প্রার্থীকে পরে তার
-     * **নিজের** ধরনের মেঝের সাথে মেলানো হয় (`isThrottledFor`)।
+     * The oldest floor is the one used; each candidate is later compared with
+     * the floor for its **own** type (`isThrottledFor`).
      */
     const floor = types
       .map((type) => alertFloor(type, now))
@@ -144,7 +144,7 @@ export class AlertsService {
         deviceId: row.deviceId,
         employeeId: row.employeeId,
       });
-      // orderBy desc — প্রথমবার যেটা পাই সেটাই সর্বশেষ
+      // orderBy desc: the first one we meet is the latest
       if (!lastRaisedByKey.has(key)) lastRaisedByKey.set(key, row.createdAt);
     }
 
@@ -164,8 +164,8 @@ export class AlertsService {
         title: k.title,
         detail: k.detail ?? null,
         meta: k.meta,
-        // ⚠️ খালি — পাঠানোর কাজটা AlertDispatcher করে। এখানে ইমেইল পাঠালে
-        //    SMTP ধীর হলে চেকগুলোও ধীর হয়ে যেত।
+        // Empty: AlertDispatcher does the sending. Sending email here would slow
+        // the checks down whenever SMTP is slow.
         channelsSent: [],
       })),
     });
@@ -183,8 +183,8 @@ export class AlertsService {
     const limit = query.limit ?? DEFAULT_LIMIT;
 
     const where: Prisma.AlertWhereInput = {
-      // ⚠️ "open" = acknowledgedAt আর resolvedAt দুটোই NULL। সার্ভার নিজে বন্ধ
-      //    করা (resolved) সারি খোলা তালিকায় থাকলে গণনা আর তালিকা দ্বিমত করত।
+      // "open" = acknowledgedAt and resolvedAt are both NULL. If rows closed by
+      // the server (resolved) stayed in the open list, the count and the list would disagree.
       ...(query.status === 'all' ? {} : { acknowledgedAt: null, resolvedAt: null }),
       ...(query.type ? { type: query.type } : {}),
       ...(query.severity ? { severity: query.severity } : {}),
@@ -192,8 +192,8 @@ export class AlertsService {
 
     const [total, openCount, rows] = await Promise.all([
       this.prisma.alert.count({ where }),
-      // ⭐ ব্যাজ ও "N still open"-এর একমাত্র উৎস — resolved বাদ না দিলে
-      //    ফিরে-আসা এজেন্টের বন্ধ alert-ও সংখ্যাটা বাড়িয়ে রাখত।
+      // The only source for the badge and "N still open". Without excluding
+      // resolved, alerts closed for returned agents would keep inflating the number.
       this.prisma.alert.count({ where: { acknowledgedAt: null, resolvedAt: null } }),
       this.prisma.alert.findMany({
         where,
@@ -208,27 +208,27 @@ export class AlertsService {
   }
 
   /**
-   * ⭐ acknowledge করা idempotent, আর **প্রথমজনের নামই থেকে যায়**।
+   * Acknowledge is idempotent, and **the first person's name stays**.
    *
-   * দ্বিতীয়বার ডাকলে নতুন নাম বসিয়ে দিলে "কে আসলে সাড়া দিয়েছিল" তথ্যটা
-   * নীরবে মুছে যেত — অথচ অ্যালার্টের গোটা উদ্দেশ্যই ওই জবাবদিহি।
+   * Overwriting it with a new name on a second call would silently erase "who
+   * actually responded", and that accountability is the whole point of an alert.
    */
   /**
-   * ⭐ **একসাথে সব খোলা অ্যালার্ট "দেখেছি"** — G01-এর মতো একই জিনিস
-   * ১২টা PC-তে বারবার এলে এক-এক করে চাপা যন্ত্রণা।
+   * **Mark every open alert as seen at once.** When the same thing keeps
+   * arriving on 12 PCs, as with G01, pressing them one by one is a chore.
    *
-   * ⚠️⚠️ শুধু **এখনো acknowledge হয়নি** এমনগুলো (`acknowledgedAt: null`)।
-   * আগে দেখা সারির `acknowledgedBy`/সময় বদলানো হয় না — নইলে "কে প্রথম
-   * দেখেছিল" ইতিহাসটা এই এক ক্লিকে মুছে যেত।
+   * Careful: only the ones **not yet acknowledged** (`acknowledgedAt: null`).
+   * The `acknowledgedBy`/time of an already-seen row is not changed, otherwise
+   * this one click would erase the "who saw it first" history.
    *
-   * ⚠️ কিছুই **ডিলিট হয় না** — acknowledge মানে কেবল "পড়া হয়েছে"। তাই
-   * ঘণ্টা-সংশোধনের প্রমাণ (`evidence_alert_id`) অটুট থাকে।
+   * Careful: nothing is **deleted**. Acknowledge only means "read", so the
+   * evidence for hour adjustments (`evidence_alert_id`) stays intact.
    */
   async acknowledgeAll(userId: number): Promise<{ count: number }> {
     const { count } = await this.prisma.alert.updateMany({
-      // ⚠️ শুধু সত্যিকারের **খোলা** সারি — acknowledgedAt আর resolvedAt দুটোই
-      //    NULL। নইলে confirm-এ দেখানো সংখ্যা (openCount, resolved বাদ) আর
-      //    সার্ভার যা ছোঁয় তা মিলত না।
+      // Only truly **open** rows: acknowledgedAt and resolvedAt both NULL.
+      // Otherwise the number shown in the confirm (openCount, which excludes
+      // resolved) would not match what the server touches.
       where: { acknowledgedAt: null, resolvedAt: null },
       data: { acknowledgedById: userId, acknowledgedAt: new Date() },
     });
@@ -237,13 +237,15 @@ export class AlertsService {
   }
 
   /**
-   * ⭐ **সার্ভার নিজে অ্যালার্ট বন্ধ করা** — কোনো মানুষ "দেখেছি" বলেনি,
-   * অবস্থাটাই কেটে গেছে (এজেন্ট ফিরে এসেছে)। তাই `acknowledgedAt` নয়, আলাদা
-   * `resolvedAt` — "কে প্রথম দেখেছিল" ইতিহাস অটুট থাকে, আর ঘণ্টা-সংশোধনের
-   * প্রমাণও (`evidence_alert_id`) নড়ে না। কিছুই ডিলিট হয় না।
+   * **The server closing an alert itself.** No person said "seen"; the
+   * condition simply went away (the agent came back). So it uses a separate
+   * `resolvedAt`, not `acknowledgedAt`: the "who saw it first" history stays
+   * intact and the evidence for hour adjustments (`evidence_alert_id`) is
+   * untouched. Nothing is deleted.
    *
-   * ⚠️ idempotent: আগে-বন্ধ সারি আবার ছোঁয়া হয় না (`resolvedAt: null` শর্ত),
-   *    নইলে প্রতি টিকে reason ও সময় নতুন করে বসে যেত।
+   * Careful: idempotent. Already-closed rows are not touched again (the
+   * `resolvedAt: null` condition), otherwise the reason and time would be
+   * overwritten on every tick.
    */
   /** Every open alert of one type — for a check that no longer applies */
   async resolveOpenOfType(
@@ -301,9 +303,10 @@ export class AlertsService {
 }
 
 /**
- * ⚠️ `ParseIntPipe` ব্যবহার করা হয়নি — আইডি BIGINT, আর `Number` ৯,০০৭
- * ট্রিলিয়নের পরে নীরবে ভুল মান দেয়। বাস্তবে এত অ্যালার্ট হবে না, কিন্তু
- * "বাস্তবে হবে না" ধরে নিয়ে লেখা কোডই পরে সবচেয়ে অদ্ভুত বাগ বানায়।
+ * Careful: `ParseIntPipe` is not used. The id is a BIGINT, and `Number`
+ * silently gives wrong values beyond 9,007 trillion. That many alerts will not
+ * happen in practice, but code written on the assumption that "it won't
+ * happen" is what produces the strangest bugs later.
  */
 function parseAlertId(raw: string): bigint {
   if (!/^\d{1,19}$/.test(raw)) {

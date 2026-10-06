@@ -8,24 +8,24 @@ import {
 } from './reports.pdf.text';
 
 /**
- * F06 — PDF তৈরির ইঞ্জিন (pdfkit)। কোন রিপোর্ট দেখতে কেমন হবে সেটা
- * [reports.pages.ts](./reports.pages.ts)-এ, ঠিক যেভাবে Excel-এ
- * `reports.excel.ts` (ইঞ্জিন) আর `reports.sheets.ts` (লেআউট) আলাদা।
+ * F06: the PDF-building engine (pdfkit). What each report looks like is in
+ * [reports.pages.ts](./reports.pages.ts), just as in Excel `reports.excel.ts`
+ * (engine) and `reports.sheets.ts` (layout) are separate.
  *
- * ⭐ **PDF-এর ভাষা ইংরেজি** — কারণ ও তার একমাত্র বিকল্প
- * [reports.pdf.text.ts](./reports.pdf.text.ts)-এর মাথায় লেখা আছে। এক
- * বাক্যে: pdfkit-এর বিল্ট-ইন ফন্টে বাংলা **নীরবে ফাঁকা** ছাপে, আর
- * রেপোতে কোনো বাংলা ফন্ট নেই।
+ * **The PDF's language is English**; the reason and the only alternative are
+ * written at the top of [reports.pdf.text.ts](./reports.pdf.text.ts). In one
+ * sentence: pdfkit's built-in font prints Bengali **silently blank**, and the
+ * repo has no Bengali font.
  *
- * ⚠️ এখানে কোনো ডাটাবেস বা HTTP নেই — শুধু ইনপুট → Buffer। ফলে PDF-এর
- * চেহারা বদলাতে গিয়ে কোয়েরির কোডে হাত পড়ে না।
+ * No database or HTTP here, only input → Buffer. So changing how the PDF looks
+ * does not touch the query code.
  */
 
-/** A4 ল্যান্ডস্কেপ — ৯–১২টা কলাম পোর্ট্রেটে আঁটে না, আঁটাতে গেলে ফন্ট এত
- *  ছোট হতো যে ছাপা কাগজে সংখ্যা পড়া যেত না */
+/** A4 landscape: 9-12 columns do not fit in portrait, and squeezing them in would
+ *  make the font so small the numbers could not be read on paper */
 const PAGE = { size: 'A4' as const, layout: 'landscape' as const, margin: 36 };
 
-/** ল্যান্ডস্কেপ A4-এর ভেতরের প্রস্থ (৮৪২pt − দুই পাশে ৩৬pt) */
+/** Inner width of landscape A4 (842pt − 36pt on each side) */
 export const CONTENT_WIDTH = 770;
 
 const FONT = 'Helvetica';
@@ -39,14 +39,14 @@ const NOTE_SIZE = 7.5;
 
 const ROW_HEIGHT = 12.5;
 const HEAD_HEIGHT = 15;
-/** ঘরের ভেতরে দু-পাশে ফাঁক — নইলে সংখ্যা কলামের দাগ ছুঁয়ে থাকত */
+/** Gap on both sides inside a cell, otherwise numbers would touch the column line */
 const CELL_PAD = 3;
 
 export interface PdfColumn<T> {
   header: string;
-  /** পয়েন্টে — সবগুলোর যোগফল `CONTENT_WIDTH` হওয়া উচিত */
+  /** In points; the sum of all of them should be `CONTENT_WIDTH` */
   width: number;
-  /** সংখ্যার কলাম ডানে — নইলে দশমিক বিন্দু এক লাইনে দাঁড়ায় না */
+  /** Number columns on the right, otherwise decimal points do not line up */
   align?: 'left' | 'right';
   value: (row: T) => string;
 }
@@ -63,7 +63,7 @@ export interface PdfTable {
   rows: readonly unknown[];
 }
 
-/** টাইপ-নিরাপদ কলাম সংজ্ঞা → ইঞ্জিনের জেনেরিকহীন রূপ (sheetOf-এর মতোই) */
+/** Type-safe column definition → the engine's generic-free form (like sheetOf) */
 export function tableOf<T>(
   columns: PdfColumn<T>[],
   rows: readonly T[],
@@ -80,31 +80,31 @@ export function tableOf<T>(
 }
 
 export interface LetterheadSpec {
-  /** প্রতিষ্ঠানের নাম — `ORG_NAME` থেকে */
+  /** The organisation's name, from `ORG_NAME` */
   orgName: string;
-  /** রিপোর্টের নাম, ইংরেজিতে */
+  /** The report's name, in English */
   reportTitle: string;
   rangeFrom: string;
   rangeTo: string;
-  /** ISO — ঢাকার সময়ে ছাপা হয় */
+  /** ISO; printed in Dhaka time */
   generatedAt: string;
 }
 
 export interface PdfSpec {
   letterhead: LetterheadSpec;
   table: PdfTable;
-  /** টেবিলের নিচে সংক্ষিপ্ত মোট (লেবেল, মান) */
+  /** A short total under the table (label, value) */
   totals?: [string, string][];
-  /** ছাপার আগে/পরে যা জানানো দরকার — সতর্কতা, নীতি, ছাঁটাই */
+  /** What needs to be said before/after the print: warnings, policy, truncation */
   notes?: string[];
 }
 
 /**
- * PDF বানিয়ে Buffer ফেরত দেয়।
+ * Builds the PDF and returns a Buffer.
  *
- * ⚠️ pdfkit stream-এ লেখে, তাই `end` ইভেন্ট না ধরে Buffer পাওয়া যায় না।
- * `doc.end()` ডাকার **আগে** লিসেনার বসাতে হয় — নইলে ছোট ডকুমেন্টে
- * প্রথম chunk-টা হারিয়ে যেতে পারত আর ফাইল ভাঙা বেরোত।
+ * pdfkit writes to a stream, so the Buffer cannot be had without catching the
+ * `end` event. The listener has to be attached **before** calling `doc.end()`;
+ * otherwise in a small document the first chunk could be lost and the file come out broken.
  */
 export async function buildPdf(spec: PdfSpec): Promise<Buffer> {
   const doc = new PDFDocument({
@@ -151,8 +151,8 @@ function render(doc: PDFKit.PDFDocument, spec: PdfSpec): void {
     y = tableRow(doc, columns, row, y);
   }
 
-  // ⭐ শূন্য সারিও একটা ফল — খালি পাতা দেখে কেউ যেন "রিপোর্ট ভেঙেছে"
-  //    না ভাবেন
+  // A zero-row result is a result too: nobody looking at an empty page should
+  // think "the report broke"
   if (shown.length === 0) {
     doc
       .font(FONT)
@@ -200,7 +200,7 @@ function letterhead(
       { width: CONTENT_WIDTH },
     );
 
-  // শিরোনাম আর টেবিলের মাঝে একটা দাগ — ছাপা কাগজে এটাই "লেটারহেড শেষ"
+  // A line between the heading and the table: on paper this is "the letterhead ends here"
   const lineY = doc.y + 4;
   doc
     .moveTo(left, lineY)
@@ -246,13 +246,13 @@ function tableRow(
 }
 
 /**
- * এক সারির সব ঘর বসানো।
+ * Placing all the cells of one row.
  *
- * ⚠️ প্রতিটা ঘরে `width` **আর** `lineBreak: false` — দুটোই দরকার।
- * `lineBreak` না থাকলে লম্বা নাম নিজে থেকে পরের লাইনে নেমে যেত আর
- * সারিগুলো একে অন্যের উপর ছাপা হতো; `width` না থাকলে লেখা পাশের
- * কলামের উপরে গড়িয়ে যেত। তার আগে `truncateToWidth` দিয়ে কেটেও নেওয়া
- * হয়, যাতে কাটা জায়গায় `...` দেখা যায় — pdfkit নিজে চুপচাপ কাটে।
+ * Every cell gets `width` **and** `lineBreak: false`; both are needed. Without
+ * `lineBreak` a long name would wrap onto the next line by itself and rows would
+ * print over each other; without `width` the text would run over the
+ * neighbouring column. Before that it is cut with `truncateToWidth`, so the
+ * cut spot shows `...`; pdfkit itself cuts silently.
  */
 function cells(
   doc: PDFKit.PDFDocument,
@@ -293,7 +293,7 @@ function footer(
   const bottom = doc.page.height - doc.page.margins.bottom - 18;
   let y = startY + 8;
 
-  // ⚠️ পাদটীকা যেন পাতার নিচে গিয়ে কাটা না পড়ে — জায়গা না থাকলে নতুন পাতা
+  // The footnotes must not be cut off at the bottom of the page: a new page if there is no room
   if (y + (spec.totals?.length ?? 0) * 11 + notes.length * 20 > bottom) {
     doc.addPage();
     y = doc.page.margins.top;
@@ -319,11 +319,12 @@ function footer(
 }
 
 /**
- * প্রতি পাতার নিচে "Page n of m"।
+ * "Page n of m" at the bottom of every page.
  *
- * ⭐ `bufferPages: true` ছাড়া এটা অসম্ভব — মোট কত পাতা হবে সেটা শেষ সারি
- * ছাপার আগে জানা যায় না, অথচ সংখ্যাটা লিখতে হয় **প্রথম** পাতাতেও।
- * ছাপা রিপোর্টে পাতার সংখ্যা না থাকলে এক পাতা হারিয়ে গেলে কেউ টেরই পেত না।
+ * This is impossible without `bufferPages: true`: the total page count is not
+ * known before the last row is printed, yet the number has to be written on the
+ * **first** page too. Without page numbers on a printed report, nobody would
+ * notice if a page went missing.
  */
 function pageNumbers(doc: PDFKit.PDFDocument, head: LetterheadSpec): void {
   const range = doc.bufferedPageRange();
@@ -336,9 +337,9 @@ function pageNumbers(doc: PDFKit.PDFDocument, head: LetterheadSpec): void {
       .font(FONT)
       .fontSize(7)
       .fillColor('#777777')
-      // ⚠️ বিভাজক ASCII `|` — `·` WinAnsi-তে আছে বটে, কিন্তু পাদটীকাটা
-      //    `toPdfText()` দিয়ে যায় না, তাই এখানে ASCII-র বাইরে কিছু না
-      //    রাখাই একমাত্র নিশ্চিত পথ
+      // The separator is ASCII `|`: `·` does exist in WinAnsi, but the footer
+      // does not go through `toPdfText()`, so keeping everything within ASCII
+      // is the only sure way
       .text(
         `${head.orgName} | ${head.reportTitle} | ${head.rangeFrom} to ${head.rangeTo}`,
         doc.page.margins.left,

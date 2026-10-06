@@ -4,19 +4,19 @@ using System.Runtime.Versioning;
 namespace oXeio.Watchdog.Native;
 
 /// <summary>
-/// watchdog-এর যেটুকু Win32 লাগে, ঠিক সেটুকুই।
-/// ⚠️ oXeio.Agent-এর Native/ থেকে কপি করা হয়েছে, রেফারেন্স নেওয়া হয়নি —
-/// পাহারাদার আর পাহারা-দেওয়া প্রসেসের মধ্যে কোনো কম্পাইল-টাইম বন্ধন থাকা চলবে না।
+/// Exactly the Win32 the watchdog needs, and no more.
+/// This was copied from oXeio.Agent's Native/, not referenced: there must be no compile-time
+/// link between the guard and the process being guarded.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static partial class Kernel32
 {
     /// <summary>
-    /// ঘুমের সময় <b>গোনে না</b>, ১০০ ন্যানোসেকেন্ড এককে।
+    /// Does <b>not count</b> sleep time, in 100-nanosecond units.
     ///
-    /// ⚠️ হার্টবিটের বয়স মাপতে এটাই ব্যবহার হয়, <c>GetTickCount64</c> নয়।
-    /// GetTickCount64 ঘুমের সময়টাও গোনে, তাই ল্যাপটপ রাতভর ঘুমিয়ে সকালে উঠলে
-    /// হার্টবিট ৮ ঘণ্টা বাসি দেখাত — জেগে ওঠার সেকেন্ডেই সুস্থ এজেন্ট খুন হতো।
+    /// This, not <c>GetTickCount64</c>, is what measures the heartbeat's age. GetTickCount64
+    /// counts sleep time too, so a laptop that slept overnight would show an 8-hour-stale
+    /// heartbeat on waking, and a healthy agent would be killed the second it woke.
     /// </summary>
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -29,17 +29,17 @@ internal static partial class Kernel32
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool ProcessIdToSessionId(uint dwProcessId, out uint pSessionId);
 
-    /// <summary>ফিজিক্যাল কনসোলে এখন কোন সেশন। কেউ লগঅন না থাকলে 0xFFFFFFFF।</summary>
+    /// <summary>Which session is on the physical console now. 0xFFFFFFFF if nobody is logged on.</summary>
     [LibraryImport("kernel32.dll")]
     internal static partial uint WTSGetActiveConsoleSessionId();
 
     internal const uint InvalidSessionId = 0xFFFF_FFFFu;
 
     /// <summary>
-    /// এক-শটের CLI মোডে (<c>--install-task</c>) আউটপুট যেন elevated prompt-এ
-    /// দেখা যায়। WinExe-র নিজের কনসোল নেই, তাই বাবার কনসোলে জুড়ে নেওয়া হয়।
-    /// ⚠️ প্রথম <c>Console</c> ব্যবহারের আগেই ডাকতে হবে — .NET একবার হ্যান্ডেল
-    /// ধরে ফেললে পরে আর বদলায় না।
+    /// In the one-shot CLI mode (<c>--install-task</c>), so that the output is visible in the
+    /// elevated prompt. A WinExe has no console of its own, so it attaches to the parent's.
+    /// It must be called before the first use of <c>Console</c>: once .NET has taken the
+    /// handle it does not change later.
     /// </summary>
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -48,11 +48,11 @@ internal static partial class Kernel32
     internal const uint AttachParentProcess = 0xFFFF_FFFFu;
 
     /// <summary>
-    /// unbiased ঘড়ি মিলিসেকেন্ডে। পড়া না গেলে <c>null</c>।
+    /// The unbiased clock in milliseconds. <c>null</c> if it cannot be read.
     ///
-    /// ⚠️ ব্যর্থ হলে ০ বা −1 ফেরানো যাবে না। ০ মানে "বুটের মুহূর্ত" — তখন
-    /// প্রতিটা হার্টবিট "ভবিষ্যতের" দেখাত, অর্থাৎ সব এজেন্ট জমে গেছে ধরা হতো
-    /// আর গোটা বহর একসাথে রিস্টার্ট হতো। null দিলে কলার গোটা টিকটাই বাদ দেয়।
+    /// On failure it must not return 0 or -1. 0 means "the moment of boot", so every heartbeat
+    /// would look like it is "in the future", all agents would be taken as wedged, and the
+    /// whole fleet would restart at once. With null the caller skips the whole tick.
     /// </summary>
     internal static long? UnbiasedMs() =>
         QueryUnbiasedInterruptTime(out var ticks) ? (long)(ticks / 10_000UL) : null;

@@ -5,7 +5,7 @@ import { PayrollController } from './payroll.controller';
 import { PayrollService } from './payroll.service';
 
 @Module({
-  // ⭐ R21 — শিটে জামানতের সারি বসাতে `DepositsService` লাগে
+  // R21: the sheet needs `DepositsService` to add the deposit rows
   imports: [DepositsModule],
   controllers: [PayrollController],
   providers: [PayrollService],

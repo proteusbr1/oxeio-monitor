@@ -3,11 +3,11 @@ using oXeio.Core.Agent;
 namespace oXeio.Core.Tests;
 
 /// <summary>
-/// পর্দার চলন্ত ঘড়ি (<see cref="LiveDuration"/>)।
+/// The moving clock on screen (<see cref="LiveDuration"/>).
 ///
-/// ⚠️⚠️ মালিকের অভিযোগ থেকে: <i>"0.4.7 e login korar pore sec change hocche na"</i>।
-/// অঙ্কে সেকেন্ড বসানো হয়েছিল, কিন্তু গোনা সংখ্যাটা নিজে লাফিয়ে বাড়ে
-/// (heartbeat / সেগমেন্ট বন্ধ), তাই পর্দায় কিছুই নড়ত না।
+/// Careful: this came from the owner's complaint that after login in 0.4.7 the seconds
+/// did not change. Seconds had been added to the digits, but the counted number itself
+/// jumps (heartbeat / segment close), so nothing moved on screen.
 /// </summary>
 public class LiveDurationTests
 {
@@ -16,7 +16,9 @@ public class LiveDurationTests
 
     private static TimeSpan Min(double m) => TimeSpan.FromMinutes(m);
 
-    /// <summary>⭐⭐ মূল দাবি — গোনা সংখ্যা না বদলালেও ঘড়ি এগোয়।</summary>
+    /// <summary>
+    /// The main claim: the clock advances even when the counted number does not change.
+    /// </summary>
     [Fact]
     public void কাজ_চলাকালীন_সেকেন্ড_এগোয়()
     {
@@ -30,8 +32,9 @@ public class LiveDurationTests
     }
 
     /// <summary>
-    /// ⭐ idle-এ ঘড়ি থামা — নিয়মই "৬০ সেকেন্ড হাত না চললে গোনা বন্ধ"।
-    /// idle-এও চললে জানালা নিজের লেখা কথার বিরুদ্ধে যেত।
+    /// The clock stops when idle: the rule is "counting stops after 60 seconds without
+    /// hands on the machine". If it kept running while idle, the window would contradict its own
+    /// text.
     /// </summary>
     [Fact]
     public void Idle_হলে_ঘড়ি_থেমে_থাকে()
@@ -43,7 +46,7 @@ public class LiveDurationTests
         Assert.Equal(Min(120), shown);
     }
 
-    /// <summary>⚠️ anchor জানা না থাকলে এক সেকেন্ডও বানানো হয় না।</summary>
+    /// <summary>Careful: with no anchor known, not even one second is made up.</summary>
     [Fact]
     public void Anchor_না_থাকলে_কিছুই_যোগ_হয়_না()
     {
@@ -55,8 +58,8 @@ public class LiveDurationTests
     }
 
     /// <summary>
-    /// ⚠️⚠️ সবচেয়ে জরুরি পাহারা — সার্ভার চুপ হয়ে গেলে জানালা যেন নিজে থেকে
-    /// ঘণ্টার পর ঘণ্টা <b>বানিয়ে</b> না ফেলে। ছাদে ঠেকলে সংখ্যাটা জমে যায়।
+    /// The most important guard: if the server goes silent, the window must not
+    /// <b>invent</b> hours on its own. At the ceiling the number freezes.
     /// </summary>
     [Fact]
     public void পুরোনো_anchor_ছাদে_আটকায়()
@@ -69,17 +72,17 @@ public class LiveDurationTests
     }
 
     /// <summary>
-    /// ⭐⭐ heartbeat-এর সংখ্যা আপলোড হওয়া সেগমেন্টের যোগফল, তাই সেটা মাঝে
-    /// মাঝে আমাদের দেখানো সংখ্যার চেয়ে <b>কম</b> আসে। তখনো ঘড়ি পিছোবে না —
-    /// "কাজ করলাম, অথচ সময় কমে গেল" দেখলে গোটা ব্যবস্থাই অবিশ্বাস্য হতো।
+    /// The heartbeat's number is the sum of uploaded segments, so it sometimes comes in
+    /// <b>lower</b> than what we show. Even then the clock does not go backwards: seeing
+    /// "I worked, yet the time went down" would make the whole system unbelievable.
     /// </summary>
     [Fact]
     public void সংখ্যা_কম_এলেও_ঘড়ি_পিছোয়_না()
     {
         var live = new LiveDuration();
 
-        var before = live.Next(Min(120), T0, T0.AddMinutes(2), counting: true); // ১২২
-        // পরের heartbeat: সার্ভার বলল ১২১ (কিউয়ে কিছু পড়ে আছে)
+        var before = live.Next(Min(120), T0, T0.AddMinutes(2), counting: true); // 122
+        // next heartbeat: the server said 121 (something is still sitting in the queue)
         var after = live.Next(Min(121), T0.AddMinutes(2), T0.AddMinutes(2), counting: true);
 
         Assert.Equal(Min(122), before);
@@ -87,8 +90,8 @@ public class LiveDurationTests
     }
 
     /// <summary>
-    /// ⚠️ ঢাকার মধ্যরাতে আজকের হিসাব শূন্য হয়। তখন আগের মান ধরে রাখলে
-    /// জানালা কাল সারাদিন গতকালের মোট দেখাত।
+    /// Careful: at Dhaka midnight today's total resets to zero. Holding on to the
+    /// previous value then would make the window show yesterday's total all of tomorrow.
     /// </summary>
     [Fact]
     public void মধ্যরাতে_শূন্য_হলে_আবার_গোড়া_থেকে()
@@ -102,7 +105,7 @@ public class LiveDurationTests
         Assert.Equal(TimeSpan.Zero, afterMidnight);
     }
 
-    /// <summary>⚠️ মেশিনের ঘড়ি পিছিয়ে গেলে ঋণাত্মক সময় যোগ হয় না।</summary>
+    /// <summary>Careful: if the machine clock goes back, no negative time is added.</summary>
     [Fact]
     public void ঘড়ি_পিছিয়ে_গেলে_কিছু_যোগ_হয়_না()
     {
@@ -114,18 +117,17 @@ public class LiveDurationTests
     }
 
     /// <summary>
-    /// ⚠️⚠️ <b>মাঠের অভিযোগ — "sec barte barte atoke jacche"।</b>
+    /// <b>A field complaint: the seconds keep getting stuck.</b>
     ///
-    /// ০.৪.৮-এ <c>counted</c> আসত সার্ভারের heartbeat থেকে, যেটা সবসময়
-    /// <b>পিছিয়ে</b> (আপলোড বাকি সেগমেন্ট কিউয়ে)। নতুন heartbeat এলে candidate
-    /// আগের দেখানো মানের চেয়ে কম হতো, আর "পিছোবে না" নিয়মটা তখন ঘড়িটাকে
-    /// <b>আটকে রাখত</b> যতক্ষণ না candidate ওই মান ছাড়ায় — অর্থাৎ প্রতি
-    /// চক্রে কয়েক মিনিট থমকে থাকা।
+    /// In 0.4.8, <c>counted</c> came from the server's heartbeat, which is always
+    /// <b>behind</b> (segments awaiting upload sit in the queue). When a new heartbeat
+    /// arrived the candidate was lower than the value already shown, and the "no going
+    /// back" rule then <b>held the clock still</b> until the candidate passed that
+    /// value: a stall of a few minutes in every cycle.
     ///
-    /// ⭐ সমাধান: <c>counted</c> এখন হোস্ট দেয় খোলা সেগমেন্টসহ, তাই সেটা
-    /// নিজেই ধারাবাহিকভাবে বাড়ে। এই টেস্ট সেই ধারাবাহিকতাটাই পাহারা দেয়:
-    /// প্রতিটা সেকেন্ডে ঘড়ি <b>কঠোরভাবে</b> এগোবে, snapshot বদলানোর
-    /// মুহূর্তেও।
+    /// The fix: <c>counted</c> is now supplied by the host including the open segment,
+    /// so it grows continuously by itself. This test guards that continuity: the clock
+    /// advances <b>strictly</b> every second, including at the moment the snapshot changes.
     /// </summary>
     [Fact]
     public void Snapshot_বদলানোর_মুহূর্তেও_ঘড়ি_থামে_না()
@@ -133,13 +135,13 @@ public class LiveDurationTests
         var live = new LiveDuration();
         var previous = TimeSpan.MinValue;
 
-        // হোস্ট প্রতি ৫ মিনিটে নতুন snapshot দেয়; মাঝের সেকেন্ডগুলো জানালা গোনে
+        // the host gives a new snapshot every 5 minutes; the window counts the seconds between
         for (var second = 0; second <= 15 * 60; second++)
         {
-            var snapshotSecond = second / 300 * 300;          // শেষ snapshot কখন
+            var snapshotSecond = second / 300 * 300;          // when the last snapshot was
             var snapshotAt = T0.AddSeconds(snapshotSecond);
 
-            // ⭐ হোস্টের সংখ্যা খোলা সেগমেন্টসহ — snapshot-এর মুহূর্ত পর্যন্ত সঠিক
+            // the host's number includes the open segment, correct up to the snapshot moment
             var counted = Min(120) + TimeSpan.FromSeconds(snapshotSecond);
 
             var shown = live.Next(counted, snapshotAt, T0.AddSeconds(second), counting: true);
@@ -151,14 +153,15 @@ public class LiveDurationTests
             previous = shown;
         }
 
-        // ১৫ মিনিট কাজের পর ঠিক ১৫ মিনিটই বেড়েছে — এক সেকেন্ডও বেশি নয়
+        // after 15 minutes of work it grew by exactly 15 minutes, not one second more
         Assert.Equal(Min(135), previous);
     }
 
     /// <summary>
-    /// ⚠️ ছাদটা স্ট্যাটাস প্রকাশের সর্বোচ্চ ব্যবধানের (৫ মিনিট — heartbeat ও
-    /// <c>MaxSegmentLength</c> দুটোই) চেয়ে বড় হতেই হবে। সমান হলে ঘড়ি ঠিক
-    /// শেষ মুহূর্তে থমকে যেত — ০.৪.৮-এ ঠিক সেটাই হয়েছিল।
+    /// Careful: the ceiling must be larger than the maximum interval between status
+    /// publishes (5 minutes; the heartbeat and <c>MaxSegmentLength</c> are both that). If
+    /// equal, the clock would stall at the very last moment, which is exactly what
+    /// happened in 0.4.8.
     /// </summary>
     [Fact]
     public void ছাদ_প্রকাশের_ব্যবধানের_চেয়ে_বড়()
@@ -166,12 +169,14 @@ public class LiveDurationTests
         Assert.True(LiveDuration.MaxDrift > TimeSpan.FromMinutes(5));
     }
 
-    /// <summary>নতুন গোনা সংখ্যা এলে সেটাই ভিত্তি — ঘড়ি সেখান থেকে চলে।</summary>
+    /// <summary>
+    /// When a new counted number arrives it becomes the base; the clock runs from there.
+    /// </summary>
     [Fact]
     public void নতুন_সংখ্যা_এলে_সেখান_থেকেই_চলে()
     {
         var live = new LiveDuration();
-        live.Next(Min(120), T0, T0.AddSeconds(30), counting: true); // ১২০:৩০
+        live.Next(Min(120), T0, T0.AddSeconds(30), counting: true); // 120:30
 
         var t1 = T0.AddMinutes(1);
         var shown = live.Next(Min(125), t1, t1.AddSeconds(10), counting: true);

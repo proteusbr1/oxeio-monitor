@@ -21,8 +21,8 @@ import {
 } from './adjustments.dto';
 
 /**
- * স্টাফও নিজের সংশোধন দেখে (J08), তাই এখানে কোনো অভ্যন্তরীণ তথ্য নেই —
- * শুধু কী, কত, কেন, আর কে।
+ * Staff also see their own adjustments (J08), so there is no internal
+ * information here: only what, how much, why, and who.
  */
 export interface AdjustmentView {
   id: string;
@@ -37,23 +37,23 @@ export interface AdjustmentView {
   revokedAt: string | null;
   revokedBy: string | null;
   revokeReason: string | null;
-  /** এখনো গোনা হচ্ছে কি না — বাতিল হলে হয় না */
+  /** Whether it still counts; a revoked adjustment does not. */
   active: boolean;
 }
 
 /**
- * **B14 · G35 · ADR-011e** — সিস্টেমের দোষে হারানো ঘণ্টা ফেরত দেওয়া।
+ * **B14 · G35 · ADR-011e** - giving back hours lost through a system fault.
  *
- * ⚠️⚠️ এই মডিউলটা এতদিন **ছিলই না**, অথচ পড়ার দিকটা সম্পূর্ণ তৈরি:
- * `progress.service` (tray-র সংখ্যা), `summary.service` (rollup),
- * `payroll.math` (`credited = worked + adjustment`), `reports` — সবাই
- * `time_adjustments` পড়ত। কেউ কখনো একটা সারিও লিখত না, তাই যোগফলটা
- * চিরকাল ০ থাকত। ⭐ ফল: owner সিস্টেমের দোষে হারানো ঘণ্টা ফেরত দিতেই
- * পারতেন না, আর কোথাও কোনো ভুল দেখাত না।
+ * Careful: this module **did not exist** for a long time, although the read side
+ * was fully built: `progress.service` (the tray number), `summary.service`
+ * (rollup), `payroll.math` (`credited = worked + adjustment`) and `reports` all
+ * read `time_adjustments`. Nobody ever wrote a single row, so the sum stayed 0
+ * forever. The result: the owner could not give back hours lost through a
+ * system fault, and nothing showed an error.
  *
- * ⭐ **কাঁচা সেগমেন্ট কখনো ছোঁয়া হয় না।** সংশোধন আলাদা সারি হিসেবে বসে,
- * তাই "মেশিন কী দেখেছে" আর "মানুষ কী ঠিক করেছে" দুটো চিরকাল আলাদা থাকে।
- * সেগমেন্ট এডিট করলে সেটা আর অডিটযোগ্য থাকত না।
+ * **Raw segments are never touched.** An adjustment is a separate row, so "what
+ * the machine saw" and "what a person corrected" stay separate forever.
+ * Editing segments would make them unauditable.
  */
 @Injectable()
 export class AdjustmentsService {
@@ -90,16 +90,16 @@ export class AdjustmentsService {
     const workDate = parseCalendarDate(dto.workDate);
     if (!workDate) throw new BadRequestException('workDate is not a valid date');
 
-    // ⚠️ ভবিষ্যতের দিনে ঘণ্টা ফেরত দেওয়া যায় না — যেদিন এখনো আসেইনি,
-    //    সেদিনের "হারানো ঘণ্টা" বলে কিছু নেই।
+    // Careful: hours cannot be given back for a future day; a day that has not
+    // come yet has no "lost hours".
     if (workDate.getTime() > workDateOf(new Date()).getTime()) {
       throw new BadRequestException('workDate cannot be in the future');
     }
 
-    // ⭐ R1 — মাস বন্ধ থাকলে এখানেই থামে, DB-তে কিছু বসার আগে
+    // R1 - if the month is closed, stop here, before anything is written to the DB.
     await this.assertMonthOpen(workDate);
 
-    // প্রমাণের অ্যালার্টটা সত্যিই আছে কি না — ভুল আইডি দিলে FK ভেঙে ৫০০ হতো
+    // Check the proof alert really exists; a wrong id would break the FK and give a 500.
     if (dto.evidenceAlertId !== undefined) {
       const alert = await this.prisma.alert.findUnique({
         where: { id: BigInt(dto.evidenceAlertId) },
@@ -152,9 +152,10 @@ export class AdjustmentsService {
   }
 
   /**
-   * ⚠️ ডিলিট নয়, **revoke** — স্কিমাতেই ডিলিট রাখা হয়নি। "সংশোধনটা ছিল,
-   * পরে বাতিল হলো" আর "কোনোদিন ছিল না" — দুটো সম্পূর্ণ আলাদা ইতিহাস,
-   * বিশেষ করে যদি ওই মাসের বেতন ইতিমধ্যে দেওয়া হয়ে থাকে।
+   * Careful: **revoke, not delete**; the schema deliberately has no delete.
+   * "The adjustment existed and was later revoked" and "it never existed" are
+   * two completely different histories, especially if that month's pay has
+   * already been paid.
    */
   async revoke(
     actor: SessionUser,
@@ -175,10 +176,10 @@ export class AdjustmentsService {
     });
     if (!before) throw new NotFoundException('Adjustment not found');
 
-    // ⭐ R1 — বাতিলও মাসের যোগফল নড়ায়, তাই এখানেও একই প্রহরী
+    // R1 - a revoke also moves the month's sum, so the same guard applies here.
     await this.assertMonthOpen(before.workDate);
 
-    // ⚠️ দুবার বাতিল করলে দ্বিতীয়বারের কারণটা প্রথমটাকে চাপা দিত
+    // Careful: on a second revoke, the second reason would overwrite the first.
     if (before.revokedAt) {
       throw new BadRequestException('This adjustment is already revoked');
     }
@@ -214,10 +215,11 @@ export class AdjustmentsService {
   }
 
   /**
-   * J08 — স্টাফ **নিজের** সংশোধন কারণসহ দেখতে পাবে।
+   * J08 - staff can see **their own** adjustments, with the reason.
    *
-   * ⭐ এটাই ADR-011e-র শর্ত: ঘণ্টা ফেরত দেওয়াটা গোপন কোনো ব্যবস্থা নয়।
-   * যে সংখ্যাটা দিয়ে তার বেতন হিসাব হবে, সেটা কেন বদলেছে তা তার জানা চাই।
+   * This is the condition of ADR-011e: giving back hours is not a secret
+   * mechanism. Staff must be able to know why the number their pay is based on
+   * changed.
    */
   async list(actor: SessionUser, employeeId: number): Promise<AdjustmentView[]> {
     this.assertCanSee(actor, employeeId);
@@ -232,18 +234,19 @@ export class AdjustmentsService {
   }
 
   /**
-   * ⚠️ স্টাফের ক্ষেত্রে আইডি আসে **সেশন থেকে**, পথ থেকে নয় — আর অন্যের
-   * আইডি চাইলে চুপচাপ নিজেরটা দেওয়া হয় না (`screenshots.service`-এর
-   * `resolveEmployeeScope`-এর মতোই)। চুপচাপ বদলে দিলে পর্দায় অন্যের নাম
-   * নিয়ে নিজের ডেটা দেখাত।
+   * Careful: for staff the id comes **from the session**, not from the path,
+   * and a request for someone else's id is not silently answered with their own
+   * (same as `resolveEmployeeScope` in `screenshots.service`). Swapping it
+   * silently would show their own data under another person's name.
    */
   private assertCanSee(actor: SessionUser, employeeId: number): void {
     /**
-     * ⚠️⚠️ `screenshots.service`-এর `resolveEmployeeScope`-এর মতোই — শর্তটা
-     * **হ্যাঁ-তালিকা**। আগে লেখা ছিল `role !== employee`, আর ২৫ আগস্ট
-     * `researcher` রোল বসানোর সময় ধরা পড়ল যে নতুন যেকোনো রোল তখন এই
-     * পাহারাটা **পুরো এড়িয়ে যেত** — যে কারো বেতনের সমন্বয় খুলে যেত।
-     * ⚠️ এখানেও কন্ট্রোলারে `@Roles` নেই (ইচ্ছাকৃত), তাই এটাই একমাত্র পাহারা।
+     * Careful: like `resolveEmployeeScope` in `screenshots.service`, the
+     * condition is an **allow-list**. It used to read `role !== employee`, and
+     * when the `researcher` role was added we found that any new role would
+     * **skip this guard entirely**, opening anyone's pay adjustments.
+     * Careful: the controller has no `@Roles` here either (deliberately), so
+     * this is the only guard.
      */
     if (actor.role === UserRole.owner || actor.role === UserRole.manager) return;
 
@@ -259,28 +262,28 @@ export class AdjustmentsService {
   }
 
   /**
-   * ⭐ সংশোধনের পর ওই দিনের সারাংশ **সাথে সাথেই** নতুন করে বসানো হয়।
+   * After an adjustment, that day's summary is recomputed **immediately**.
    *
-   * ⚠️ না করলে tray-তে সংখ্যাটা সাথে সাথে বদলাত (progress.service কাঁচা
-   * `time_adjustments` পড়ে) কিন্তু রিপোর্ট ও হিটম্যাপ ১৫ মিনিট পুরোনো
-   * থাকত — অর্থাৎ owner ঘণ্টা ফেরত দিয়ে রিপোর্ট খুলে দেখতেন কিছুই
-   * বদলায়নি, আর ভাবতেন কাজটা হয়নি।
+   * Careful: without it, the tray number would change right away
+   * (progress.service reads raw `time_adjustments`) but reports and the heatmap
+   * would stay 15 minutes stale, so the owner would give back hours, open the
+   * report, see nothing changed and think it had not worked.
    *
-   * ব্যর্থ হলে শুধু লগ — সংশোধনটা ইতিমধ্যে DB-তে বসে গেছে, আর পরের
-   * নিয়মিত rollup (K06, ১৫ মিনিট) এমনিতেই ঠিক করে দেবে।
+   * On failure it only logs: the adjustment is already in the DB, and the next
+   * regular rollup (K06, every 15 minutes) will fix it anyway.
    */
   /**
-   * ⭐⭐ **R1 — বন্ধ মাসে ঘণ্টা নড়ে না।**
+   * **R1 - hours cannot move in a closed month.**
    *
-   * ⚠️⚠️ দুই জায়গাতেই ডাকতে হয় — **নতুন সংশোধনে আর বাতিলেও**। বাতিলটা
-   *    ভুলে যাওয়া সহজ, কিন্তু ওটাও মাসের যোগফল ঠিক ততটাই নড়ায়: যে
-   *    ঘণ্টা যোগ হয়েছিল, বাতিলে সেটা ফেরত যায়। শুধু `create`-এ প্রহরী
-   *    দিলে দরজাটা অর্ধেক বন্ধ থাকত — আর অর্ধেক বন্ধ দরজা খোলা দরজার
-   *    চেয়ে খারাপ, কারণ সবাই ভাবত বন্ধ।
+   * Careful: it must be called in both places, **for a new adjustment and for a
+   * revoke**. The revoke is easy to forget, but it moves the month's sum just as
+   * much: the hours that were added go back out. A guard only on `create` would
+   * leave the door half closed, which is worse than an open door because
+   * everyone would think it was shut.
    *
-   * ⚠️ ৪০৯ (Conflict), ৪০৩ নয় — ব্যবহারকারীর **অধিকার** আছে, কিন্তু
-   *    জিনিসটার **অবস্থা** এখন এটা মানে না। ৪০৩ দিলে মালিক ভাবতেন তাঁর
-   *    ভূমিকা কমে গেছে।
+   * Careful: 409 (Conflict), not 403. The user has the **right** to do this, but
+   * the **state** of the thing does not allow it now. A 403 would make the owner
+   * think their role had been reduced.
    */
   private async assertMonthOpen(workDate: Date): Promise<void> {
     const yearMonth = workDate.toISOString().slice(0, 7);
@@ -297,10 +300,10 @@ export class AdjustmentsService {
   }
 
   /**
-   * ⚠️⚠️ **`employeeId` আলাদা করে পাঠানো হয়, আর সেটাই এই মেথডের গোটা কথা**
-   * *(৬ সেপ্টেম্বর ২০২৬)*। rollup কেবল **active** কর্মীদের নিয়ে চলে, তাই
-   * নিষ্ক্রিয় কারো সংশোধন ডাটাবেসে বসেও `daily_summary`-তে পৌঁছাত না —
-   * পর্দায় দেখা যেত, বেতনে কিছুই বদলাত না, আর কোনো এরর উঠত না।
+   * Careful: **`employeeId` is passed separately, and that is the whole point
+   * of this method.** The rollup runs only for **active** staff, so an inactive
+   * person's adjustment would be stored but never reach `daily_summary`: it
+   * would show on screen, pay would not change, and no error would appear.
    */
   private async refresh(workDate: Date, employeeId: number): Promise<void> {
     try {
@@ -334,8 +337,9 @@ type AdjustmentRow = {
 };
 
 /**
- * ⚠️ `id` স্ট্রিং হয়ে যায় — `BigInt` `JSON.stringify`-তে ছুড়ে ফেলে, আর
- * তখন গোটা রেসপন্স ৫০০ হতো ([09 § ৩অ.১২](../../../docs/09-Build-Log.md))।
+ * Careful: `id` becomes a string. `BigInt` makes `JSON.stringify` throw, which
+ * used to turn the whole response into a 500
+ * ([09 § 3a.12](../../../docs/09-Build-Log.md)).
  */
 function toView(row: AdjustmentRow): AdjustmentView {
   return {

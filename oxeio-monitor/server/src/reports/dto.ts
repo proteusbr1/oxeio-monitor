@@ -10,19 +10,19 @@ import {
 
 import { MAX_RANGE_DAYS, type GroupBy } from './reports.range';
 
-/** json = ড্যাশবোর্ডের জন্য · xlsx = F05 ডাউনলোড · pdf = F06 ছাপার জন্য */
+/** json = for the dashboard · xlsx = F05 download · pdf = F06 for printing */
 export type ReportFormat = 'json' | 'xlsx' | 'pdf';
 
 const DATE_MESSAGE = 'Date must be in YYYY-MM-DD format';
 
 /**
- * ⚠️ গ্লোবাল ValidationPipe-এ `whitelist + forbidNonWhitelisted` চালু, তাই
- *    DTO-তে নেই এমন query param এলে ৪০০ হয়। ফলে `?form=xlsx` লিখে ফেললে
- *    চুপচাপ JSON পাওয়ার বদলে পরিষ্কার এরর আসে।
+ * The global ValidationPipe has `whitelist + forbidNonWhitelisted` on, so a
+ * query param missing from the DTO gives a 400. If someone types `?form=xlsx`
+ * they get a clear error instead of quietly receiving JSON.
  *
- * ⚠️ regex এখানে শুধু আকৃতি দেখে; ৩০ ফেব্রুয়ারি ধরা পড়ে `parseWorkDate()`-এ
- *    (reports.range.ts) — ক্যালেন্ডার যাচাই খাঁটি ফাংশনেই থাকে, দুই জায়গায়
- *    নয়।
+ * The regex only checks the shape here; 30 February is caught in
+ * `parseWorkDate()` (reports.range.ts): calendar validation lives in the pure
+ * function, not in two places.
  */
 export class ReportRangeQuery {
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: DATE_MESSAGE })
@@ -37,7 +37,7 @@ export class ReportRangeQuery {
   })
   format?: ReportFormat;
 
-  /** একজন স্টাফের রিপোর্ট চাইলে */
+  /** When a single staff member's report is wanted */
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -45,41 +45,42 @@ export class ReportRangeQuery {
   employeeId?: number;
 }
 
-/** F02 — সাপ্তাহিক/মাসিক সারাংশ */
+/** F02: weekly/monthly summary */
 export class SummaryQuery extends ReportRangeQuery {
   @IsOptional()
   @IsIn(['week', 'month'], { message: 'groupBy must be week or month' })
   groupBy?: GroupBy;
 }
 
-/** F04 — অ্যাপ/সাইট ভিত্তিক */
+/** F04: by app/site */
 export class ProductivityQuery extends ReportRangeQuery {
   /**
-   * ⭐ এখানে `pdf` **নেই** — F06 শুধু অ্যাটেনডেন্স ও সারাংশের জন্য।
+   * `pdf` is **not** allowed here: F06 is only for attendance and the summary.
    *
-   * ⚠️ সীমাটা **DTO-তেই**, কন্ট্রোলারে `if` দিয়ে নয়। কন্ট্রোলারে রাখলে
-   * `?format=pdf` চুপচাপ JSON ফেরত দিত (বা একটা খালি ফাইল), আর
-   * ব্যবহারকারী ভাবতেন ডাউনলোডটা ব্যর্থ হয়েছে। এখানে রাখায় উত্তরটা
-   * একটা পরিষ্কার ৪০০ — কোন ফরম্যাটগুলো চলে সেটাসহ।
+   * The limit lives **in the DTO**, not in an `if` in the controller. In the
+   * controller, `?format=pdf` would quietly return JSON (or an empty file), and
+   * the user would think the download failed. Here the answer is a clear 400,
+   * including which formats work.
    *
-   * (class-validator সাবক্লাসের ডেকোরেটরকে একই ধরনের inherited ডেকোরেটরের
-   * বদলি হিসেবে নেয়; বদলি হোক বা যোগ, দুই ক্ষেত্রেই `pdf` এখানে আটকায়।)
+   * (class-validator treats a subclass decorator as a replacement for an
+   * inherited decorator of the same kind; replace or add, `pdf` is blocked here
+   * either way.)
    */
   @IsOptional()
   @IsIn(['json', 'xlsx'], {
     message:
       'The productivity report has no PDF — format must be json or xlsx (use attendance or summary for printing)',
   })
-  // ⚠️ `= undefined` মুছবেন না। `useDefineForClassFields` চালু (target
-  //    ES2023), তাই ইনিশিয়ালাইজার ছাড়া বেস ক্লাসের ফিল্ড ওভাররাইড করা
-  //    TS2612। `declare` দিয়ে সমাধান করা যেত না — declare ফিল্ডে ডেকোরেটর
-  //    বসে না, আর ডেকোরেটরটাই তো এখানকার পুরো উদ্দেশ্য।
+  // Do not remove `= undefined`. `useDefineForClassFields` is on (target
+  // ES2023), so overriding a base-class field without an initialiser is
+  // TS2612. `declare` would not work: decorators cannot go on a declare field,
+  // and the decorator is the whole point here.
   override format?: ReportFormat = undefined;
 
   /**
-   * টপ কতটা অ্যাপ/সাইট ফেরত যাবে।
-   * ⚠️ সীমা না থাকলে এক বছরের রেঞ্জে হাজারো ডোমেইন একসাথে ফিরত —
-   *    রেসপন্স বিশাল হতো, অথচ কেউ ২০০-র নিচের সারি পড়ে না।
+   * How many top apps/sites to return.
+   * Without a limit, a one-year range would return thousands of domains at
+   * once; the response would be huge, yet nobody reads rows below 200.
    */
   @IsOptional()
   @Type(() => Number)
@@ -89,5 +90,5 @@ export class ProductivityQuery extends ReportRangeQuery {
   limit?: number;
 }
 
-/** এরর মেসেজে ব্যবহারের জন্য — DTO আর ডকুমেন্টেশন যেন এক সংখ্যা বলে */
+/** For use in error messages: the DTO and the documentation say the same number */
 export const MAX_REPORT_DAYS = MAX_RANGE_DAYS;

@@ -22,18 +22,18 @@ export interface CategoryRuleView {
   pattern: string;
   displayName: string;
   category: Productivity;
-  /** ছোট সংখ্যা আগে জেতে */
+  /** The smaller number wins. */
   priority: number;
 }
 
 export interface DeleteResult {
   deleted: CategoryRuleView;
   /**
-   * ⚠️ যত সারির ক্যাটাগরি এই মোছার ফলে `null` হয়ে গেল।
+   * Careful: how many rows had their category set to `null` by this delete.
    *
-   * FK-টা `ON DELETE SET NULL`, তাই ডাটাবেস নিজেই সারিগুলো "অচেনা" করে দেয়।
-   * সংখ্যাটা ফেরত না দিলে মালিক জানতেন না যে একটা রুল মুছে তিনি হাজার
-   * সারিকে D07-এর হিসাবের বাইরে ফেলে দিয়েছেন।
+   * The FK is `ON DELETE SET NULL`, so the database itself turns those rows
+   * into "unknown". Without returning the count, the owner would not learn that
+   * deleting one rule pushed a thousand rows out of the D07 calculation.
    */
   orphanedRows: number;
   hint: string;
@@ -49,20 +49,20 @@ const SELECT = {
 } as const;
 
 /**
- * D06 — মালিকের ক্যাটাগরি রুল।
+ * D06 - the owner's category rules.
  *
- * ⭐ **প্রতিটা mutation-এর পর `AppCategoryService.invalidate()` ডাকতেই হবে।**
- * নিয়মগুলো ৫ মিনিটের TTL-এ ক্যাশ করা থাকে; না ফেললে —
+ * **`AppCategoryService.invalidate()` must be called after every mutation.**
+ * The rules are cached with a 5-minute TTL; if the cache is not cleared:
  *
- * ১· নতুন বা বদলানো রুল পাঁচ মিনিট পর্যন্ত কিছুই করত না। মালিক দেখতেন
- *    রুলটা তালিকায় আছে অথচ ingest পুরোনো সিদ্ধান্তই বসাচ্ছে।
- * ২· **মুছে ফেলা রুলের id ক্যাশে বসে থাকত**, আর ingest সেই id দিয়ে insert
- *    করতে গিয়ে foreign key ভেঙে ৫০০ দিত — টানা পাঁচ মিনিট
- *    ([09 § ৩অ.১১](../../../../docs/09-Build-Log.md))।
+ * 1. A new or changed rule would do nothing for up to five minutes. The owner
+ *    would see the rule in the list while ingest kept applying the old decision.
+ * 2. **The id of a deleted rule would stay in the cache**, and ingest would
+ *    insert with that id, violate the foreign key and return a 500 for five
+ *    minutes straight ([09 § 3a.11](../../../../docs/09-Build-Log.md)).
  *
- * ⚠️ একাধিক API ইনস্ট্যান্স চললে `invalidate()` শুধু **নিজের** প্রসেসের
- * ক্যাশ ফেলে; বাকিদের জন্য TTL-ই ভরসা। v1-এ একটাই কন্টেইনার (§ ৬.১),
- * তাই এটা এখন সমস্যা নয় — কিন্তু স্কেল করলে হবে।
+ * Careful: with several API instances, `invalidate()` clears only **its own**
+ * process's cache; the others rely on the TTL. v1 has a single container
+ * (§ 6.1), so this is not a problem now, but it will be when scaling out.
  */
 @Injectable()
 export class CategoryService {
@@ -75,10 +75,10 @@ export class CategoryService {
   ) {}
 
   /**
-   * ম্যাচারের ক্রমেই তালিকা — যাতে মালিক ঠিক সেই ক্রমে দেখেন যে ক্রমে
-   * নিয়মগুলো আসলে জেতে ([category-matcher.ts](./category-matcher.ts)-এর
-   * `compile()`)। বর্ণক্রমে সাজালে "আমার নতুন রুলটা কেন জিতছে না" প্রশ্নের
-   * উত্তর তালিকা দেখে বোঝা যেত না।
+   * The list is in matcher order, so the owner sees the rules in the same order
+   * in which they actually win ([category-matcher.ts](./category-matcher.ts),
+   * `compile()`). Sorted alphabetically, the list would not answer "why is my
+   * new rule not winning?".
    */
   async list(): Promise<CategoryRuleView[]> {
     return this.prisma.appCategory.findMany({
@@ -108,8 +108,8 @@ export class CategoryService {
       select: SELECT,
     });
 
-    // ⭐ DB লেখার সাথে সাথেই — audit-এর আগে। audit ব্যর্থ হলেও (ওটা নিজে
-    //    গিলে ফেলে) ক্যাশ যেন কোনোভাবেই বাসি না থেকে যায়।
+    // Right after the DB write, before the audit. Even if the audit fails (it
+    // swallows its own errors), the cache must never be left stale.
     this.categories.invalidate();
 
     await this.audit.record({
@@ -140,8 +140,9 @@ export class CategoryService {
       throw new BadRequestException('No fields were given to change');
     }
 
-    // ⚠️ `matchType` বদলালে প্যাটার্ন আগের মতোই থাকতে পারে, কিন্তু নিয়ম
-    //    বদলে যায় — তাই যাচাই সবসময় **শেষ অবস্থার** উপর, শুধু যা এল তার উপর নয়।
+    // Careful: if `matchType` changes the pattern may stay the same while the
+    // rule changes, so validation is always on the **final state**, not just on
+    // what was submitted.
     const matchType = dto.matchType ?? before.matchType;
     const pattern = (dto.pattern ?? before.pattern).trim();
     this.assertPattern(matchType, pattern);
@@ -167,7 +168,7 @@ export class CategoryService {
       targetType: 'app_category',
       targetId: id,
       ipAddress: ip,
-      // ⭐ আগে-পরে দুটোই — নইলে অডিট থেকে শুধু জানা যেত "কেউ কিছু বদলেছিল"
+      // Both before and after; otherwise the audit would only say "someone changed something".
       meta: { op: 'update', before: ruleMeta(before), after: ruleMeta(rule) },
     });
 
@@ -185,7 +186,7 @@ export class CategoryService {
     });
     if (!rule) throw new NotFoundException(`No rule with id ${id}`);
 
-    // ⚠️ মোছার **আগে** গোনা — পরে গুনলে সব সারিতে ইতিমধ্যেই null বসে গেছে
+    // Count **before** deleting; afterwards every row already has null.
     const orphanedRows = await this.prisma.appUsage.count({
       where: { categoryId: id },
     });
@@ -219,24 +220,25 @@ export class CategoryService {
   }
 
   /**
-   * পুরোনো সারিতে নতুন নিয়ম বসানো।
+   * Apply the new rules to old rows.
    *
-   * ⚠️ **ক্যাটাগরি বসে ingest-এ, পড়ার সময় নয়** — তাই নিয়ম বদলালে পুরোনো
-   * সারিতে পুরোনো সিদ্ধান্তই বসে থাকে। সেটা না সরালে D07-এর স্কোর
-   * সপ্তাহের পর সপ্তাহ পুরোনো নিয়ম অনুযায়ী চলত, অথচ তালিকায় নতুন
-   * নিয়মটাই দেখা যেত।
+   * Careful: **the category is assigned at ingest, not when reading**, so after
+   * a rule change old rows keep the old decision. Unless that is corrected, the
+   * D07 score would follow the old rules for weeks while the list shows the new
+   * rule.
    *
-   * ⚠️ কাজটা **সিনক্রোনাস** — এক মাসে লাখখানেক সারিতে কয়েক সেকেন্ড লাগতে
-   * পারে। owner-only আর বিরল কাজ বলে ব্যাকগ্রাউন্ড queue বসানো হয়নি;
-   * বসালে "কখন শেষ হলো" জানানোর একটা গোটা ব্যবস্থা লাগত।
+   * Careful: this work is **synchronous**; about a hundred thousand rows a month
+   * can take several seconds. Since it is owner-only and rare, no background
+   * queue was added; one would need a whole mechanism to report "when it
+   * finished".
    */
   async recategorize(
     dto: RecategorizeDto,
     actorUserId: number,
     ip: string,
   ): Promise<{ scanned: number; changed: number }> {
-    // ⭐ আগে ক্যাশ ফেলা — নইলে পুরোনো নিয়ম দিয়েই "নতুন করে" বসানো হতো,
-    //    আর ফলাফলটা দেখতে সফল লাগত
+    // Clear the cache first; otherwise the old rules would be used to apply
+    // "new" ones, and the result would look successful.
     this.categories.invalidate();
 
     const result = await this.categories.recategorize({
@@ -256,8 +258,9 @@ export class CategoryService {
   }
 
   /**
-   * ⭐ লেখার সময়ই প্যাটার্ন যাচাই — কারণ `compile()` ভুল প্যাটার্ন **নীরবে
-   * বাদ** দেয়। যাচাই না করলে রুলটা তালিকায় থাকত অথচ কোনোদিন কিছু করত না।
+   * Validate the pattern at write time, because `compile()` **silently drops**
+   * an invalid pattern. Without validation the rule would sit in the list and
+   * never do anything.
    */
   private assertPattern(matchType: MatchType, pattern: string): void {
     const problem = patternProblem(matchType, pattern);
@@ -265,10 +268,10 @@ export class CategoryService {
   }
 
   /**
-   * ⚠️ একই (matchType, pattern) দু-বার থাকলে দ্বিতীয়টা কোনোদিন জিতত না
-   * (ম্যাচার শুধু **প্রথম মিল** নেয়)। মালিক তখন দ্বিতীয়টার ক্যাটাগরি বদলে
-   * বদলে দেখতেন কিছুই হচ্ছে না। ডাটাবেসে unique constraint নেই, তাই
-   * এখানেই ঠেকানো হয়।
+   * Careful: if the same (matchType, pattern) existed twice, the second would
+   * never win (the matcher takes only the **first hit**). The owner would keep
+   * changing the second one's category and see nothing happen. The database has
+   * no unique constraint, so it is prevented here.
    */
   private async assertNotDuplicate(
     matchType: MatchType,
@@ -292,7 +295,7 @@ export class CategoryService {
   }
 }
 
-/** অডিটে যা লেখা থাকে — পুরো সারি নয়, যেটুকু দেখে পরে বোঝা যাবে। */
+/** What the audit records: not the whole row, just enough to understand it later. */
 function ruleMeta(rule: CategoryRuleView): Record<string, string | number> {
   return {
     matchType: rule.matchType,

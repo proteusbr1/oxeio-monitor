@@ -24,14 +24,14 @@ import {
 } from './holidays.service';
 
 /**
- * `CRUD /api/v1/holidays` — **owner ও manager** *(মালিকের সিদ্ধান্ত,
- * ১৫ আগস্ট; আগে owner-only ছিল, স্পেক § ৪.২)*।
+ * `CRUD /api/v1/holidays`: **owner and manager** (the owner's decision on 15
+ * August; it used to be owner-only, spec § 4.2).
  *
- * ⚠️⚠️ ম্যানেজারকে দেওয়ার আগে জেনে রাখা দরকার **ছুটির তারিখ টাকা নাড়ায়**:
- * একটা তারিখ যোগ বা সরালে ওই মাসের কর্মদিবস (D) বদলায়, আর তাতে
- * `target_sec` · `expected_sec` · `pace_sec` আর পে-রোলের `d ÷ D` — সবই।
- * ⭐ ক্ষতিটা সীমিত রাখে দুটো জিনিস: বন্ধ মাস (E16/R1) আর ছোঁয়া যায় না,
- * আর প্রতিটা বদল `audit_log`-এ নাম ধরে লেখা থাকে।
+ * Careful: before giving this to a manager, know that **holiday dates move
+ * money**: adding or removing one date changes that month's workdays (D), and
+ * with it `target_sec`, `expected_sec`, `pace_sec` and payroll's `d / D`, all
+ * of it. Two things limit the damage: a closed month (E16/R1) can no longer
+ * be touched, and every change is written to `audit_log` by name.
  */
 @Roles(UserRole.owner, UserRole.manager)
 @Controller('holidays')
@@ -85,9 +85,9 @@ export class HolidaysController {
   }
 
   /**
-   * ⚠️ পুরো E10-এ এটাই একমাত্র সত্যিকারের DELETE — ছুটির সারির দিকে কোনো
-   * FK তাকিয়ে নেই। তবু মুছে ফেলা সারিটা audit meta-তে তোলা থাকে, কারণ
-   * ছুটি মুছলে ওই মাসে সবার pace পিছিয়ে যায়।
+   * Careful: this is the only real DELETE in all of E10: no FK points at the
+   * holiday row. Even so, the deleted row is kept in the audit meta, because
+   * deleting a holiday pushes everyone's pace back for that month.
    */
   @Delete(':id')
   @HttpCode(HttpStatus.OK)

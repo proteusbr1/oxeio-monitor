@@ -8,24 +8,23 @@ using oXeio.Agent.Ui;
 namespace oXeio.Agent.Tests;
 
 /// <summary>
-/// <b>হিরো সংখ্যার সেকেন্ড অংশ — অর্ধেক মাপে</b> <i>(১৮ আগস্ট ২০২৬)</i>।
+/// <b>The seconds part of the hero number, at half size.</b>
 ///
-/// মালিকের চাওয়া: <c>3:59:22</c>-এর <c>:22</c> অর্ধেক আকারে। ⚠️⚠️ কিন্তু
-/// "ছোট করে দিলাম" আর "দেখতে ঠিক লাগছে" এক কথা নয় — ছোট লেখাটা যদি
-/// baseline ছেড়ে উপরে বা নিচে সরে যায়, সেটা দেখতে ভাঙা লাগে, আর ওই ভুলটা
-/// কোনো কম্পাইলার ধরে না।
+/// The owner wants the <c>:22</c> of <c>3:59:22</c> at half size. Careful: "made it
+/// smaller" is not the same as "looks right". If the small text drifts up or down off
+/// the baseline, it looks broken, and no compiler catches that.
 ///
-/// ⭐⭐ তাই এখানে **সত্যিই এঁকে, পিক্সেল গুনে** যাচাই করা হয়: একটা
-/// bitmap-এ আঁকা হয়, তারপর কালি কোথায় পড়ল সেটা মেপে দেখা হয় লেখাটা
-/// কত উঁচু আর তার তলা কোথায়। ⚠️ GUI খোলা লাগে না, তাই CI-তেও চলে।
+/// So this really draws and **counts pixels**: it draws onto a bitmap, then measures
+/// where the ink landed to find how tall the text is and where its bottom is. No GUI
+/// needs to open, so it also runs in CI.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public class HeroSecondsTests
 {
-    // ── খাঁটি নিয়ম ──────────────────────────────────────────────────────────
+    // ── pure rules ──────────────────────────────────────────────────────────
 
     /// <summary>
-    /// ⚠️⚠️ <b>শেষ</b> কোলন, প্রথমটা নয় — প্রথমটা ধরলে মিনিটও ছোট হয়ে যেত।
+    /// Careful: the <b>last</b> colon, not the first; using the first would shrink the minutes too.
     /// </summary>
     [Theory]
     [InlineData("3:59:22", "3:59", ":22")]
@@ -37,9 +36,9 @@ public class HeroSecondsTests
     }
 
     /// <summary>
-    /// ⚠️ সেকেন্ড না থাকলে লেজ খালি — তখন পুরোটাই হিরো মাপে আঁকা হয়,
-    /// অর্ধেক নয়। (<c>Duration()</c> কোনোদিন হিরোতে বসলে যেন চুপচাপ
-    /// মিনিটটা ছোট না হয়ে যায়।)
+    /// Careful: with no seconds the tail is empty, so everything is drawn at hero size,
+    /// not half. (So that if <c>Duration()</c> is ever put in the hero, the minutes
+    /// do not silently shrink.)
     /// </summary>
     [Theory]
     [InlineData("3:59")]
@@ -50,11 +49,11 @@ public class HeroSecondsTests
         Assert.Equal(string.Empty, UiText.SplitSeconds(figure).Tail);
     }
 
-    // ── আঁকা ────────────────────────────────────────────────────────────────
+    // ── drawing ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// ⭐ ঠিক অর্ধেক — হাতে বসানো কোনো সংখ্যা নয়, তাই হিরোর মাপ বদলালে
-    /// সেকেন্ডও সঙ্গে যায়।
+    /// Exactly half: not a hand-set number, so when the hero size changes the seconds
+    /// follow.
     /// </summary>
     [Fact]
     public void SecondsFontIsExactlyHalfTheHero()
@@ -65,15 +64,15 @@ public class HeroSecondsTests
         var seconds = fonts.Get(TrayFontRole.HeroSeconds, 96);
 
         Assert.Equal(hero.Size / 2f, seconds.Size, 3);
-        // ⚠️ একই ফ্যামিলি ও style — নইলে দুটো অঙ্ক দুই পরিবারের দেখাত,
-        //    আর baseline মেলানোর হিসাবটাও ভেঙে পড়ত
+        // Careful: same family and style, otherwise the two digit groups would look
+        // like two families and the baseline alignment calculation would fall apart
         Assert.Equal(hero.FontFamily.Name, seconds.FontFamily.Name);
         Assert.Equal(hero.Style, seconds.Style);
     }
 
     /// <summary>
-    /// ⚠️ ১৫০% DPI-তেও অনুপাত একই — ফন্ট পিক্সেলে বানানো হয় বলে দুটোই
-    /// একসাথে বড় হয়।
+    /// Careful: the ratio is the same at 150% DPI too, because fonts are built in pixels
+    /// and both grow together.
     /// </summary>
     [Fact]
     public void TheHalfHoldsAtHighDpi()
@@ -87,12 +86,12 @@ public class HeroSecondsTests
     }
 
     /// <summary>
-    /// ⭐⭐ <b>আসল যাচাই — কালি মেপে।</b> ছোট অঙ্কটা সত্যিই প্রায় অর্ধেক
-    /// উঁচু, আর তার <b>তলা</b> বড় অঙ্কের তলার সাথে মেলে।
+    /// <b>The real check: measuring ink.</b> The small digits really are about half as
+    /// tall, and their <b>bottom</b> lines up with the bottom of the big digits.
     ///
-    /// ⚠️⚠️ দ্বিতীয় দাবিটাই এখানে জরুরি: মাপ ছোট করা সহজ, কিন্তু ছোট
-    /// লেখাটা baseline ছেড়ে ভেসে গেলে জানালাটা দেখতে ভাঙা লাগে — আর
-    /// এক সেকেন্ড পরপর নড়া একটা ভাসন্ত অঙ্ক চোখে লাগেই।
+    /// Careful: the second claim is the important one. Shrinking is easy, but if the
+    /// small text floats off the baseline the window looks broken, and a floating digit
+    /// that moves every second is hard to ignore.
     /// </summary>
     [Fact]
     public void SecondsSitOnTheSameBaselineAtHalfTheHeight()
@@ -101,9 +100,9 @@ public class HeroSecondsTests
         var hero = fonts.Get(TrayFontRole.Hero, 96);
         var seconds = fonts.Get(TrayFontRole.HeroSeconds, 96);
 
-        // ⚠️ `OwnerDrawnForm.AscentPx`-এর হিসাবটাই এখানে আবার লেখা হয়নি —
-        //    আঁকা হয় ওই কোডের নিয়মে, আর মাপা হয় **ছবি থেকে**। দুটো এক
-        //    হলে টেস্টটা নিজের সাথে নিজেই মিলত, আর কিছুই প্রমাণ হতো না।
+        // Careful: the `OwnerDrawnForm.AscentPx` calculation is not rewritten here.
+        // Drawing follows that code's rules, and measuring is done **from the image**.
+        // If the two were the same, the test would agree with itself and prove nothing.
         var heroTop = 20;
         var tailTop = heroTop + Ascent(hero) - Ascent(seconds);
 
@@ -126,18 +125,18 @@ public class HeroSecondsTests
         var bigHeight = big!.Value.Bottom - big.Value.Top;
         var smallHeight = small!.Value.Bottom - small.Value.Top;
 
-        // ⚠️ ঠিক অর্ধেক নয় — অঙ্কের আকার ফন্টের মাপের ঠিক সমানুপাতিক নয়
-        //    (hinting, rounding)। ±২০% যথেষ্ট ঢিলা, তবু "ছোট করা হয়নি"
-        //    ধরার জন্য যথেষ্ট আঁটও।
+        // Careful: not exactly half; the digit size is not exactly proportional to the
+        // font size (hinting, rounding). +-20% is loose enough, yet still tight enough
+        // to catch "was not made smaller".
         var ratio = (double)smallHeight / bigHeight;
         Assert.InRange(ratio, 0.40, 0.60);
 
-        // ⭐ তলা মেলে — ২px ঢিল, কারণ ':' আর অঙ্কের নিচের প্রান্ত হুবহু
-        //    এক পিক্সেলে শেষ হয় না
+        // The bottoms line up, with 2px slack, because ':' and the digits' lower edges
+        // do not end on exactly the same pixel
         Assert.InRange(Math.Abs(big.Value.Bottom - small.Value.Bottom), 0, 2);
     }
 
-    // ── সহায়ক ───────────────────────────────────────────────────────────────
+    // ── helpers ─────────────────────────────────────────────────────────────
 
     private const TextFormatFlags Flags =
         TextFormatFlags.NoPrefix | TextFormatFlags.WordBreak | TextFormatFlags.NoPadding;
@@ -151,8 +150,8 @@ public class HeroSecondsTests
     }
 
     /// <summary>
-    /// দেওয়া কলামগুলোর মধ্যে কালি কোন সারিতে শুরু আর কোথায় শেষ।
-    /// ⚠️ কালো পটভূমিতে সাদা লেখা, তাই "কালি" মানে যেকোনো অ-কালো পিক্সেল।
+    /// The row where ink starts and ends within the given columns.
+    /// Careful: it is white text on a black background, so "ink" means any non-black pixel.
     /// </summary>
     private static (int Top, int Bottom)? InkRows(Bitmap image, int fromX, int toX)
     {

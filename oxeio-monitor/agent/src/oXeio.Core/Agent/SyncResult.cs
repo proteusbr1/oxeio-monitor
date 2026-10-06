@@ -1,34 +1,33 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// <see cref="ISyncClient"/>-এর প্রতিটা কলের ফল।
+/// The result of every <see cref="ISyncClient"/> call.
 ///
-/// ⚠️ এখান থেকে কখনো এক্সসেপশন ছোড়া হয় না — নেটওয়ার্ক ব্যর্থতা এই সিস্টেমে
-/// ব্যতিক্রম নয়, স্বাভাবিক অবস্থা (সাইটের লাইন দিনের পর দিন বন্ধ থাকে)।
-/// এক্সসেপশন ছুড়লে সিঙ্ক লুপকে try/catch দিয়ে মুড়তে হতো, আর একটা ফসকে যাওয়া
-/// catch পুরো ওয়ার্কার থ্রেড মেরে দিত — সপ্তাহখানেক পর কেউ টের পেত।
+/// Exceptions are never thrown from here: a network failure is not an exception in this
+/// system but a normal state (a site's line stays down for days on end). Throwing would
+/// force the sync loop to be wrapped in try/catch, and one missed catch would kill the whole
+/// worker thread, which nobody would notice for about a week.
 /// </summary>
-/// <typeparam name="T">সফল হলে যা ফেরে। কিছু না ফিরলে <see cref="NoContent"/>।</typeparam>
+/// <typeparam name="T">What comes back on success. <see cref="NoContent"/> if nothing does.</typeparam>
 public sealed record SyncResult<T> where T : class
 {
     public required SyncOutcome Outcome { get; init; }
 
     /// <summary>
-    /// <see cref="SyncOutcome.Success"/> হলে ভরা থাকে — একটাই ব্যতিক্রম
-    /// <see cref="ISyncClient.CheckUpdateAsync"/>, যেখানে ২০৪ মানে "নতুন কিছু নেই"
-    /// আর তখন এটা null।
+    /// Filled when <see cref="SyncOutcome.Success"/>. The one exception is
+    /// <see cref="ISyncClient.CheckUpdateAsync"/>, where 204 means "nothing new" and this is null.
     /// </summary>
     public T? Value { get; init; }
 
-    /// <summary>রেসপন্স এলে তার স্ট্যাটাস; না এলে null। লগের জন্য।</summary>
+    /// <summary>The status if a response arrived; null if not. For the log.</summary>
     public int? StatusCode { get; init; }
 
-    /// <summary>মানুষের পড়ার মতো কারণ — লগ ও tray টুলটিপে যায়।</summary>
+    /// <summary>A human-readable reason: goes to the log and the tray tooltip.</summary>
     public string? Detail { get; init; }
 
     /// <summary>
-    /// সার্ভারের <c>Retry-After</c> হেডার (৪২৯/৫০৩)। থাকলে
-    /// <see cref="RetryPolicy"/>-র নিজের হিসাবের বদলে এটাকেই মানতে হবে।
+    /// The server's <c>Retry-After</c> header (429/503). If present it must be honored instead
+    /// of <see cref="RetryPolicy"/>'s own calculation.
     /// </summary>
     public TimeSpan? RetryAfter { get; init; }
 
@@ -54,8 +53,8 @@ public sealed record SyncResult<T> where T : class
 }
 
 /// <summary>
-/// "কিছুই ফেরে না" বোঝাতে। <c>SyncResult&lt;void&gt;</c> C#-এ লেখা যায় না,
-/// আর <c>SyncResult&lt;object&gt;</c> পড়ে কেউ বুঝত না সেখানে কী থাকার কথা।
+/// To express "nothing comes back". <c>SyncResult&lt;void&gt;</c> cannot be written in C#,
+/// and with <c>SyncResult&lt;object&gt;</c> nobody would know what was supposed to be there.
 /// </summary>
 public sealed record NoContent
 {

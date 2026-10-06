@@ -5,11 +5,12 @@ using oXeio.Agent.Native;
 namespace oXeio.Agent.Platform;
 
 /// <summary>
-/// এজেন্ট ভুল করে Session 0-তে (Windows Service হিসেবে) চললে
-/// <c>GetLastInputInfo</c> বুট থেকে বাড়তেই থাকে — অর্থাৎ প্রত্যেক স্টাফ চিরকাল
-/// "নিষ্ক্রিয়" দেখাবে, অথচ এজেন্ট দিব্যি চলবে আর রিপোর্টও পাঠাবে।
+/// If the agent mistakenly runs in Session 0 (as a Windows Service), <c>GetLastInputInfo</c> keeps
+/// growing from boot, so every staff member would show as "idle" forever, while the agent runs
+/// happily and sends reports.
 ///
-/// এই নীরব বিপর্যয়টা ঠেকাতে শুরুতেই যাচাই — ভুল সেশনে থাকলে সময় গোনাই হবে না।
+/// To prevent this silent disaster, it is checked right at the start: if in the wrong session, time
+/// is not counted at all.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static class SessionGuard

@@ -4,13 +4,13 @@ import { Button } from '../../components/Page';
 import { Modal, Notice } from '../../components/ui';
 
 /**
- * ⭐⚠️ রিকভারি কোড **এই একটিবারই** দেখা যাবে — সার্ভারে শুধু sha256 জমা।
+ * Careful: recovery codes can be seen this one time only; the server stores just a sha256.
  *
- * `ui.tsx`-এর `SecretModal` একটামাত্র গোপন মান দেখানোর জন্য; এখানে ১০টা,
- * তাই আলাদা। কিন্তু রক্ষাকবচগুলো হুবহু এক:
- *   ১· `dismissible={false}` — Escape বা বাইরে ক্লিকে বন্ধ হয় না
- *   ২· "সংরক্ষণ করেছি" টিক না পড়া পর্যন্ত বন্ধের বোতাম নিষ্ক্রিয়
- *   ৩· সমান-প্রস্থ অক্ষরে, বড় করে — টুকে নিতে গিয়ে যেন ভুল না হয়
+ * `SecretModal` in `ui.tsx` shows a single secret value; here there are 10, so
+ * this is separate. But the safeguards are exactly the same:
+ *   1. `dismissible={false}`: Escape or an outside click does not close it
+ *   2. The close button is disabled until the "I have saved it" box is ticked
+ *   3. Large, fixed-width characters, so copying by hand does not go wrong
  */
 export function RecoveryCodesModal({
   codes,
@@ -25,9 +25,9 @@ export function RecoveryCodesModal({
   const text = codes.join('\n');
 
   const copy = (): void => {
-    // ⚠️ `navigator.clipboard` শুধু নিরাপদ origin-এ (HTTPS বা localhost)।
-    //    http-এ চালালে এটা `undefined` — তখন বোতামটা নীরবে কিছুই করত না,
-    //    আর ব্যবহারকারী ভাবত কপি হয়ে গেছে।
+    // Careful: `navigator.clipboard` exists only on secure origins (HTTPS or
+    // localhost). Over http it is `undefined`; the button would then silently do
+    // nothing and the user would think the copy had happened.
     const clipboard = navigator.clipboard as Clipboard | undefined;
     if (!clipboard) {
       setCopyState('failed');

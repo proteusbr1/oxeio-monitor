@@ -1,27 +1,27 @@
 import type { LiveStatus } from '../api/dashboard';
 
 /**
- * E01 — কার্ডের **তিনটে** অবস্থা: কাজ করছেন · থেমে আছেন · নেই।
+ * E01: the card's three states: working, paused, absent.
  *
- * ⚠️⚠️ **এখানে একটা চতুর্থ অবস্থা ছিল — `agent_down`, সলিড লাল।** সেটা
- *    তুলে দেওয়া হয়েছে *(১৭ আগস্ট)*, কারণ বোর্ড কোনোদিনই নিশ্চিত করে
- *    বলতে পারত না এজেন্ট মরেছে নাকি PC বন্ধ। দুবার নিয়ম বদলেও ভুল
- *    থেকে গেছে, আর দুবারই বাড়ি চলে যাওয়া কর্মী লাল দেখিয়েছেন।
+ * Careful: there used to be a fourth state here, `agent_down`, solid red. It was
+ * removed because the board could never say for certain whether the agent had
+ * died or the PC was off. Even after the rule was changed twice, the mistake
+ * remained, and both times an employee who had gone home was shown in red.
  *
- * ⭐ **এখন তিনটেই কর্মীর কথা বলে, যন্ত্রের নয়।** যন্ত্রের খবর অ্যালার্টে,
- *    যেখানে এক লাইনের ব্যাখ্যা আঁটে — রঙে আঁটে না।
+ * Now all three speak about the employee, not the machine. Machine news goes to
+ * alerts, where a one-line explanation fits, which a color cannot hold.
  *
- * ⭐ **`active` সবুজ (`ok`), কালো নয়।** আগে কালো ছিল ("গোনা হওয়া কাজ"),
- *    কিন্তু Midnight থিমে পটভূমির সাথে মিশে গিয়ে বিন্দুটা প্রায় দেখাই
- *    যেত না। সবুজ · হলুদ · ধূসর — তিনটে সত্যিই আলাদা।
+ * `active` is green (`ok`), not black. It used to be black ("counted work"), but
+ * in the Midnight theme it blended into the background and the dot was almost
+ * invisible. Green, yellow, grey: three really different colors.
  *
- * ⚠️ রং তিনটে **`index.css`-এর টোকেন থেকেই** আসে (`ok`, `idle`,
- *    `offline`) — এখানে হেক্স লিখবেন না। লেখার জন্য
- *    `text-ok`/`text-idle`, ভরাট/বিন্দুতে `bg-ok`/`bg-idle`: index.css-এর
- *    সেতুটা `text-*` দুটোকে পড়ার মতো গাঢ় জোড়ায় পাঠায়।
+ * Careful: the three colors come from the `index.css` tokens (`ok`, `idle`,
+ * `offline`); do not write hex here. Use `text-ok`/`text-idle` for text and
+ * `bg-ok`/`bg-idle` for fills/dots: the bridge in index.css maps the two `text-*`
+ * tokens to a pair dark enough to read.
  *
- * ⚠️ **"Idle" ≠ "Inactive"** — এটা এই মুহূর্তের অবস্থা (কি-বোর্ড-মাউস
- *    চুপচাপ), চাকরি ছেড়ে যাওয়া নয়। ওটা `EmployeePicker`-এ "Inactive"।
+ * Careful: "Idle" is not "Inactive". This is the current moment's state (keyboard
+ * and mouse quiet), not having left the job; that is "Inactive" in `EmployeePicker`.
  */
 export const STATUS_LABEL: Record<LiveStatus, string> = {
   active: 'Working',
@@ -29,7 +29,7 @@ export const STATUS_LABEL: Record<LiveStatus, string> = {
   offline: 'Offline',
 };
 
-/** টুলটিপে "কেন এই রঙ" — ব্যবহারকারী অনুমান করতে বাধ্য হবে না */
+/** In the tooltip, "why this color", so the user does not have to guess. */
 const STATUS_HINT: Record<LiveStatus, string> = {
   active: 'Was active in the last segment',
   idle: 'Agent is running, but nothing recent',
@@ -60,9 +60,9 @@ export function StatusDot({
 }
 
 /**
- * ⚠️ তিনটেই **আউটলাইন** চিপ, কোনোটাই ভরাট নয়। আগে `agent_down` ভরাট লাল
- *    ছিল যাতে আলাদা করে চোখে পড়ে; সেটা উঠে যাওয়ায় এখন তিনটে সমান
- *    ওজনের — আর সেটাই ঠিক, কারণ তিনটেই সমান স্বাভাবিক ঘটনা।
+ * Careful: all three are outline chips, none is filled. `agent_down` used to be
+ * solid red so it stood out; with that gone all three have equal weight, and that
+ * is right, since all three are equally normal events.
  */
 const CHIP_CLASS: Record<LiveStatus, string> = {
   active: 'border-ok/45 bg-ok/10 text-ok',
@@ -70,7 +70,7 @@ const CHIP_CLASS: Record<LiveStatus, string> = {
   offline: 'border-line bg-surface text-ink-3',
 };
 
-/** নামসহ চিপ — কার্ডের মাথায় বা টেবিলের কলামে */
+/** Chip with the name: at the head of a card or in a table column. */
 export function StatusChip({ status }: { status: LiveStatus }) {
   return (
     <span
@@ -84,9 +84,9 @@ export function StatusChip({ status }: { status: LiveStatus }) {
 }
 
 /**
- * বোর্ডের নিচে রঙের ব্যাখ্যা।
- * ⚠️ এটা বাদ দেবেন না — বিন্দুর রঙের মানে কেউ অনুমান করতে পারে না, আর
- *    ভুল অনুমানের ফল হয় ভুল অভিযোগ।
+ * Color legend below the board.
+ * Careful: do not drop it. Nobody can guess what the dot colors mean, and a wrong
+ * guess leads to a wrong accusation.
  */
 export function StatusLegend() {
   const all: LiveStatus[] = ['active', 'idle', 'offline'];

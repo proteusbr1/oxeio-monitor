@@ -1,51 +1,51 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// আউটবক্সে ঢোকানোর জন্য তৈরি একটা সারি (এখনো row id নেই)।
+/// A row prepared for insertion into the outbox (no row id yet).
 ///
-/// <see cref="Payload"/> ইচ্ছাকৃতভাবে <b>স্ট্রিং</b>, টাইপ করা অবজেক্ট নয়।
-/// আউটবক্সকে জানতে দেওয়া হয়নি ভেতরে কী আছে — <see cref="Kind"/> দেখে সিঙ্ক
-/// ওয়ার্কার নিজে ডিসিরিয়ালাইজ করে। এতে নতুন কোনো endpoint যোগ করতে গেলে
-/// স্টোরের কোড বা স্কিমা ছুঁতে হয় না।
+/// <see cref="Payload"/> is deliberately a <b>string</b>, not a typed object. The outbox is
+/// not told what is inside; the sync worker deserializes it itself based on
+/// <see cref="Kind"/>. So adding a new endpoint does not mean touching the store's code or
+/// schema.
 ///
-/// ⚠️ সিরিয়ালাইজেশন <b>ফরওয়ার্ড-কম্প্যাটিবল</b> রাখতেই হবে। আপডেটের পর নতুন
-/// এজেন্ট পুরোনো এজেন্টের লেখা সারি পড়বে — অফলাইন থাকা মেশিনে ওই সারিগুলো
-/// কয়েক দিনের পুরোনো হতে পারে। ফিল্ডের নাম বদলানো মানে ওই ডেটা চিরতরে হারানো।
-/// তাই: নতুন ফিল্ড শুধু <i>যোগ</i> করুন, কখনো নাম বদলাবেন না বা মুছবেন না।
+/// Serialization must stay <b>forward-compatible</b>. After an update the new agent reads rows
+/// written by the old one; on a machine that was offline those rows can be several days old.
+/// Renaming a field means losing that data forever. So only <i>add</i> new fields; never
+/// rename or remove one.
 /// </summary>
 public sealed record OutboxItem
 {
-    /// <summary>সার্ভারের ডিডুপের চাবি। সারিতেও জমা থাকে, তাই রিট্রাইয়ে অপরিবর্তিত।</summary>
+    /// <summary>The server's dedup key. Also stored in the row, so it is unchanged on retry.</summary>
     public required Guid ClientUuid { get; init; }
 
     public required OutboundKind Kind { get; init; }
 
-    /// <summary>রেকর্ড <b>তৈরির</b> সময় — আপলোডের চেষ্টার সময় নয়। বয়স এখান থেকেই মাপা হয়।</summary>
+    /// <summary>When the record was <b>created</b>, not when an upload was tried. Age is measured from this.</summary>
     public required DateTimeOffset EnqueuedAt { get; init; }
 
-    /// <summary>রেকর্ডটার JSON। স্ক্রিনশটের ক্ষেত্রে <see cref="ScreenshotRecord"/>-এর JSON।</summary>
+    /// <summary>The record's JSON. For a screenshot, the JSON of <see cref="ScreenshotRecord"/>.</summary>
     public required string Payload { get; init; }
 
     /// <summary>
-    /// শুধু <see cref="OutboundKind.Screenshot"/>-এ — .webp ফাইলের পুরো পাথ।
-    /// বাকি সবার জন্য null।
+    /// Only for <see cref="OutboundKind.Screenshot"/>: the full path of the .webp file.
+    /// Null for everything else.
     /// </summary>
     public string? FilePath { get; init; }
 
     /// <summary>
-    /// ডিস্কে এই সারিটা মোটামুটি কত জায়গা নিচ্ছে (payload + ফাইল)।
-    /// <see cref="OutboxBudget"/> এই সংখ্যাটাই যোগ করে। আন্দাজ হলেও চলবে,
-    /// কিন্তু স্ক্রিনশটে ফাইলের আসল সাইজ বসানো জরুরি — নইলে ক্যাপ অর্থহীন।
+    /// Roughly how much disk this row takes (payload + file). <see cref="OutboxBudget"/> sums
+    /// this number. An estimate is acceptable, but for screenshots the file's real size must be
+    /// set, otherwise the cap is meaningless.
     /// </summary>
     public required long SizeBytes { get; init; }
 }
 
 /// <summary>
-/// আউটবক্স থেকে ফেরত আসা একটা সারি — <see cref="OutboxItem"/> + স্টোরের নিজস্ব হিসাব।
+/// A row returned from the outbox: <see cref="OutboxItem"/> plus the store's own bookkeeping.
 /// </summary>
 public sealed record OutboxEntry
 {
-    /// <summary>স্টোরের ভেতরের আইডি (SQLite rowid)। ack/evict এটাই ধরে চলে।</summary>
+    /// <summary>The store's internal id (SQLite rowid). ack/evict work from this.</summary>
     public required long RowId { get; init; }
 
     public required Guid ClientUuid { get; init; }
@@ -56,18 +56,18 @@ public sealed record OutboxEntry
     public required long SizeBytes { get; init; }
 
     /// <summary>
-    /// এ পর্যন্ত কতবার আপলোড ব্যর্থ হয়েছে। ০ = কখনো চেষ্টা হয়নি।
-    /// <see cref="RetryPolicy"/>-তে <c>attempt</c> হিসেবে এটাই যায়।
+    /// How many uploads have failed so far. 0 = never tried.
+    /// This is what goes to <see cref="RetryPolicy"/> as <c>attempt</c>.
     /// </summary>
     public required int Attempts { get; init; }
 }
 
 /// <summary>
-/// বাজেট হিসাবের জন্য হালকা সংস্করণ — <see cref="OutboxEntry.Payload"/> ছাড়া।
+/// A light version for budget calculation: without <see cref="OutboxEntry.Payload"/>.
 ///
-/// আলাদা টাইপ কেন: এক সপ্তাহ অফলাইন থাকা মেশিনে লাখখানেক সারি জমতে পারে।
-/// বাজেট মেলাতে গিয়ে প্রতিটার JSON স্ট্রিং RAM-এ তুললে ছাঁটাই করতে গিয়েই
-/// প্রসেসটা OOM-এ মরত — অর্থাৎ ঠিক যে সমস্যা ঠেকাতে এসেছি সেটাই ঘটাত।
+/// Why a separate type: a machine that was offline for a week can accumulate around a hundred
+/// thousand rows. Loading every JSON string into RAM to fit the budget would kill the process
+/// with OOM during the trim itself, causing exactly the problem it was meant to prevent.
 /// </summary>
 public readonly record struct OutboxEntryInfo(
     long RowId,
@@ -77,30 +77,30 @@ public readonly record struct OutboxEntryInfo(
     bool Leased);
 
 /// <summary>
-/// আপলোডের জন্য ধার নেওয়া এক ব্যাচ সারি।
+/// A batch of rows leased for upload.
 ///
-/// লিজ ফুরোনোর আগে <see cref="IOutboxStore.AckAsync"/>,
-/// <see cref="IOutboxStore.RetryAsync"/> বা <see cref="IOutboxStore.AbandonAsync"/>
-/// না ডাকলে সারিগুলো নিজে থেকেই আবার pending হয়ে যাবে।
+/// If <see cref="IOutboxStore.AckAsync"/>, <see cref="IOutboxStore.RetryAsync"/> or
+/// <see cref="IOutboxStore.AbandonAsync"/> is not called before the lease expires, the rows
+/// become pending again by themselves.
 /// </summary>
 public sealed record OutboxLease
 {
-    /// <summary>এই ধারের আইডি। ack/retry/abandon — সবই এটা দিয়ে।</summary>
+    /// <summary>The id of this lease. ack/retry/abandon all use it.</summary>
     public required Guid LeaseId { get; init; }
 
-    /// <summary>এক ব্যাচে এক ধরনের সারিই থাকে — এক endpoint, এক রিকোয়েস্ট।</summary>
+    /// <summary>A batch holds rows of one kind only: one endpoint, one request.</summary>
     public required OutboundKind Kind { get; init; }
 
     public required IReadOnlyList<OutboxEntry> Entries { get; init; }
 
-    /// <summary>এর পরে <see cref="IOutboxStore.ReclaimExpiredLeasesAsync"/> সারিগুলো ফিরিয়ে নেবে।</summary>
+    /// <summary>After this, <see cref="IOutboxStore.ReclaimExpiredLeasesAsync"/> takes the rows back.</summary>
     public required DateTimeOffset ExpiresAt { get; init; }
 
     public int Count => Entries.Count;
 }
 
 /// <summary>
-/// কিউতে কী পড়ে আছে — heartbeat-এর <c>queueDepth</c> আর tray টুলটিপে যায়।
+/// What is sitting in the queue: goes into the heartbeat's <c>queueDepth</c> and the tray tooltip.
 /// </summary>
 public readonly record struct OutboxDepth(
     int Segments,
@@ -112,8 +112,9 @@ public readonly record struct OutboxDepth(
     public int Total => Segments + AppUsage + Events + Screenshots;
 
     /// <summary>
-    /// heartbeat-এ যায়। সার্ভার ঋণাত্মক মানে না, আর কিউ খালি থাকলেও ০ পাঠানোই ভালো —
-    /// null পাঠালে ড্যাশবোর্ড "জানি না" আর "সব পাঠানো হয়ে গেছে" আলাদা করতে পারত না।
+    /// Goes in the heartbeat. The server does not accept negatives, and even when the queue is
+    /// empty sending 0 is better: with null the dashboard could not tell "unknown" from
+    /// "everything has been sent".
     /// </summary>
     public int ForHeartbeat => Total;
 

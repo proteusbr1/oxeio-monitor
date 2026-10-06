@@ -3,26 +3,26 @@ import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { sendCrash } from '../lib/crash-reports';
 
 /**
- * শেষ জাল — কোনো পেজ render করতে গিয়ে ছুড়ে ফেললে **পুরো অ্যাপটা মুছে যাওয়া**
- * ঠেকায়।
+ * The last safety net: stops the whole app from being wiped out when a page
+ * throws during render.
  *
- * ⭐ কেন এটা দরকার, সেটা হাতে চালিয়ে দেখা হয়েছে: `/employees/:id` যদি
- *    প্রত্যাশার চেয়ে আলাদা আকারের JSON ফেরত দেয়, ভেতরের একটা কম্পোনেন্ট
- *    `undefined.length` পড়তে গিয়ে ছোড়ে — আর React তখন গোটা গাছটা unmount
- *    করে দেয়। ফল: হেডার, নেভ, সব উধাও, `document.body` একদম খালি। ঠিক
- *    যে "সাদা পর্দা" দেখলে মনে হয় সিস্টেমটা ভেঙে গেছে, সেটাই।
+ * Why it is needed was verified by hand: if `/employees/:id` returns JSON of an
+ * unexpected shape, a component inside throws while reading `undefined.length`,
+ * and React then unmounts the whole tree. The result: header, nav, everything
+ * gone, `document.body` completely empty. That is exactly the "white screen" that
+ * makes it look as if the system has broken.
  *
- * ⚠️ এটা `<ErrorBox>`-এর বিকল্প নয়। **নেটওয়ার্কের ভুল** `useApi` ধরে,
- *    আর সেটাই স্বাভাবিক পথ। এই ক্লাসটা শুধু render-এর ভেতরের bug-এর জন্য —
- *    অর্থাৎ এটা দেখা যাওয়া মানেই কোথাও একটা আসল বাগ আছে, তাই বার্তাটা
- *    "একটু পরে দেখুন" নয়।
+ * Careful: this is not a replacement for `<ErrorBox>`. Network errors are caught
+ * by `useApi`, and that is the normal path. This class is only for bugs inside
+ * render, so seeing it means a real bug exists somewhere, which is why the
+ * message is not "try again in a moment".
  *
- * ⚠️ ক্লাস কম্পোনেন্ট, কারণ React-এ error boundary বানানোর হুক নেই —
- *    `componentDidCatch`/`getDerivedStateFromError` ছাড়া উপায় নেই।
+ * Careful: it is a class component because React has no hook for building an
+ * error boundary; `componentDidCatch`/`getDerivedStateFromError` are the only way.
  */
 interface Props {
   children: ReactNode;
-  /** রুট বদলালে এটা বদলায় — নিচে দেখুন */
+  /** Changes when the route changes; see below. */
   resetKey?: string;
 }
 
@@ -38,9 +38,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   /**
-   * ⚠️ কনসোলে লেখা হয় ইচ্ছাকৃতভাবে — অফিসের সার্ভারে কোনো error-tracking
-   *    সার্ভিস নেই, তাই ব্যবহারকারীর কাছ থেকে স্ক্রিনশট চাওয়া ছাড়া আর
-   *    কোনো উপায় থাকবে না। নীরবে গিলে ফেললে বাগটা কখনো খুঁজে পাওয়া যেত না।
+   * Careful: it is logged to the console on purpose. The office server has no
+   * error-tracking service, so asking the user for a screenshot would be the only
+   * other way. Swallowing it silently would mean the bug could never be found.
    */
   componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error('[oXeio] Error while rendering the page:', error, info.componentStack);
@@ -49,9 +49,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   /**
-   * ⭐ রুট বদলালে নিজে থেকেই সেরে ওঠে। নইলে একটা পেজে একবার ভুল হলে
-   *    ব্যবহারকারী অন্য ট্যাবে গিয়েও সেই ভুলের বার্তাটাই দেখত, আর মনে
-   *    করত পুরো ড্যাশবোর্ডটাই মরে গেছে।
+   * It recovers on its own when the route changes. Otherwise, after one error on a
+   * page, the user would see the same error message even after moving to another
+   * tab and would think the whole dashboard was dead.
    */
   componentDidUpdate(prev: Props): void {
     if (this.state.error && prev.resetKey !== this.props.resetKey) {
@@ -75,7 +75,7 @@ export class ErrorBoundary extends Component<Props, State> {
           The other tabs will still work. If it keeps happening, send a
           screenshot — this is a bug in the system, not something you did wrong.
         </p>
-        {/* ⚠️ কারিগরি বার্তাটা লুকোনো হয় না — ওটাই বাগটা খুঁজে পাওয়ার একমাত্র সূত্র */}
+        {/* Careful: the technical message stays visible; it is the only clue to the bug */}
         <pre className="num mt-3 overflow-x-auto rounded-md border border-line bg-surface px-3 py-2 text-left text-[11px] whitespace-pre-wrap text-ink-2">
           {error.message}
         </pre>

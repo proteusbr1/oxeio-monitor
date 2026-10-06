@@ -1,42 +1,42 @@
 import { api } from './client';
 
 /**
- * **J04 · J05 · J08** — কর্মীর **নিজের** ডেটা।
+ * The employee's own data (J04, J05, J08).
  *
- * ⭐⭐ <b>এখানে কোনো `employeeId` প্যারামিটার নেই, আর সেটাই মূল নকশা।</b>
- * সার্ভার আইডিটা সেশন থেকে নেয়, পথ থেকে নয় — তাই ওয়েব থেকে সহকর্মীর
- * ডেটা চাওয়ার কোনো **উপায়ই নেই**। অন্য কোনো ফাইলে `/me/...`-এ আইডি
- * জুড়বেন না।
+ * Important: there is no `employeeId` parameter here, and that is the core
+ * design. The server takes the id from the session, not the path, so the web
+ * app has no way to ask for a colleague's data. Never add an id to `/me/...`
+ * in any other file.
  *
- * ⚠️ টাইপগুলো `server/src/me/me.service.ts` পড়ে লেখা, অনুমান নয়।
+ * The types were written by reading `server/src/me/me.service.ts`, not guessed.
  */
 
-/** সার্ভারের `EmployeeProgress` — এজেন্টের tray-ও ঠিক এই সংখ্যাগুলোই পায় */
+/** The server's `EmployeeProgress`; the agent's tray gets exactly these numbers too. */
 export interface MyProgress {
   todayActiveSec: number;
   monthActiveSec: number;
   /**
-   * ⭐ মাসের **গোনা** ঘণ্টা — `monthActiveSec` + সংশোধন *(G162)*।
+   * Counted hours for the month: `monthActiveSec` plus corrections.
    *
-   * ⚠️ `monthActiveSec`-এর সাথে গুলিয়ে ফেলবেন না: টাইলে **worked**
-   *    দেখানো হয় (এজেন্টের tray-ও তাই দেখায়), আর তালিকার নিচের
-   *    যোগফলে **credited** — দুটো আলাদা প্রশ্ন।
+   * Do not confuse it with `monthActiveSec`: the tile shows "worked" (as the
+   * agent's tray does), while the list total below shows "credited". They answer
+   * two different questions.
    */
   monthCreditedSec: number;
   monthlyTargetHours: number;
-  /** + = এগিয়ে · − = পিছিয়ে (সেকেন্ডে) */
+  /** Positive = ahead, negative = behind (in seconds). */
   paceSec: number;
-  /** ⚠️ ছুটির দিনে ০ — তখন খালি বার নয়, একটা বাক্য দেখাতে হয় */
+  /** Careful: 0 on a day off. Show a sentence then, not an empty bar. */
   dailyTargetSec: number;
   week7ActiveSec: number;
   week7TargetSec: number;
   /**
-   * ⭐⭐ **G111** — তাঁর একটাও **শেষ হয়ে যাওয়া** কর্মদিবস দেখা হয়েছে কি না।
+   * Whether any finished workday has been counted for this person yet.
    *
-   * ⚠️⚠️ `false` হলে `paceSec` ০, আর টাইলটা তখন **"Ahead 0s"** লিখত —
-   * অর্থাৎ প্রথম দিনেই একটা প্রশংসা, যেটার পেছনে একটাও পর্যবেক্ষণ নেই।
-   * ⚠️ `paceSec === 0` দেখে অনুমান করবেন না: টার্গেট ঠিক ছুঁয়ে ফেলা
-   * মানুষেরও ০, আর তাঁর প্রাপ্য কথাটা সম্পূর্ণ আলাদা।
+   * Careful: when `false`, `paceSec` is 0 and the tile used to say "Ahead 0s",
+   * i.e. praise on day one with no observation behind it. Do not infer this from
+   * `paceSec === 0`: someone who exactly hit the target also has 0, and what they
+   * deserve to be told is completely different.
    */
   observed: boolean;
 }
@@ -50,7 +50,7 @@ export interface MySummary {
   };
   progress: MyProgress;
   policySignedAt: string | null;
-  /** ⭐ সার্ভার থেকেই আসে — পর্দায় হাতে লেখা হলে নীতি বদলালে মিথ্যা বলত */
+  /** Comes from the server; hand-written text on screen would lie if the policy changed. */
   screenshotRetentionDays: number;
 }
 
@@ -66,7 +66,7 @@ export function getMySummary(signal?: AbortSignal): Promise<MySummary> {
   return api<MySummary>('/me', { signal });
 }
 
-/** নতুন দিন আগে — সার্ভারই সেই ক্রমে পাঠায় */
+/** Newest day first; the server sends them in that order. */
 export function getMyDays(
   from: string,
   to: string,
@@ -79,11 +79,11 @@ export function getMyDays(
 }
 
 /**
- * **R21 — নিজের জামানত (সিকিউরিটি মানি)।**
+ * The employee's own security deposit.
  *
- * ⚠️ টাকার অঙ্ক **স্ট্রিং হিসেবে** আসে (`"500.00"`), সংখ্যা নয় — সার্ভারে
- * সব হিসাব পয়সায় (integer), আর JSON-এ number করে পাঠালে সেটা ভাসমান
- * দশমিকে গিয়ে কোনো কোনো অঙ্কে এক পয়সা এদিক-ওদিক হতো।
+ * Careful: money amounts arrive as strings (`"500.00"`), not numbers. The
+ * server does all calculation in integer minor units, and sending a JSON number
+ * could pass through floating-point decimals and be off by a cent for some amounts.
  */
 export interface MyDepositMonth {
   /** '2026-08' */
@@ -107,9 +107,9 @@ export interface MyDeposit {
   months: MyDepositMonth[];
   total: string;
   totalPaisa: number;
-  /** নিষ্পত্তি হয়ে গেলে খাতা বন্ধ — তখন `total` কেবল ইতিহাস */
+  /** Once settled the ledger is closed; `total` is then history only. */
   settlement: MyDepositSettlement | null;
-  /** ছাড়ার কত দিন আগে জানাতে হয় — পর্দায় শর্তটা লেখা থাকে */
+  /** How many days' notice is required before leaving; the screen shows the condition. */
   noticeDays: number;
 }
 

@@ -29,7 +29,7 @@ export class TokenService implements OnModuleInit {
   onModuleInit(): void {
     const secret = this.config.get<string>('JWT_SECRET');
     if (!secret || secret.length < 32) {
-      // fail fast — দুর্বল সিক্রেট নিয়ে সার্ভার ওঠার চেয়ে না ওঠাই ভালো
+      // Fail fast: better the server does not start than starts with a weak secret
       throw new Error(
         'JWT_SECRET is not set or is shorter than 32 characters. Check .env.',
       );
@@ -73,12 +73,12 @@ export class TokenService implements OnModuleInit {
         issuedAt: Number(payload.iat ?? 0),
       };
     } catch {
-      // মেয়াদ শেষ, স্বাক্ষর ভুল, বা বিকৃত টোকেন — সবই "লগইন নেই"
+      // Expired, wrong signature or malformed token: all mean "not logged in"
       return null;
     }
   }
 
-  /** সেশন cookie + CSRF cookie একসাথে বসায় */
+  /** Sets the session cookie and the CSRF cookie together */
   async issue(
     res: Response,
     user: Omit<SessionUser, 'issuedAt'>,
@@ -95,7 +95,7 @@ export class TokenService implements OnModuleInit {
     });
 
     res.cookie(CSRF_COOKIE, randomBytes(24).toString('base64url'), {
-      httpOnly: false, // ফ্রন্টএন্ডকে পড়তে হয় — এটাই double-submit-এর কৌশল
+      httpOnly: false, // the frontend must read it; this is the double-submit technique
       sameSite: 'strict',
       secure: this.secure,
       path: '/',

@@ -30,7 +30,7 @@ import {
  * Dashboard-editable settings, read once and kept in memory.
  *
  * ⚠️ The cache is cleared on every save from this process, and this
- *    process is the only writer (one `api` container, 07 § ৬.১) — so a save
+ *    process is the only writer (one `api` container, 07 § 6.1) — so a save
  *    is seen at once, without a database read per request.
  */
 @Injectable()

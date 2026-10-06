@@ -14,51 +14,51 @@ import {
 import { seesEveryone } from '../api/auth';
 
 /**
- * E14 — হেডারের গ্লোবাল সার্চ। `/` চাপলে ফোকাস।
+ * E14: the header's global search. Pressing `/` focuses it.
  *
- * ⭐ **সার্ভারে কল হয় সারা সেশনে একবার**, কি-স্ট্রোকে নয়। পনেরোজনের তালিকা
- * এতই ছোট যে সেটা একবার এনে ক্লায়েন্টে ফিল্টার করাই দ্রুততর — টাইপ করার
- * সময় প্রতিটা অক্ষরে একটা করে রিকোয়েস্ট গেলে ফলাফল এলোমেলো ক্রমে ফিরত
- * (debounce ছাড়া রেস), আর audit/অ্যাক্সেস লগও অকারণে ভরে যেত।
+ * The server is called once per session, not on every keystroke. A list of
+ * fifteen people is so small that fetching it once and filtering on the client is
+ * faster; a request per typed character would return results out of order (a
+ * race without debounce) and fill the audit/access log for no reason.
  *
- * ⭐ তালিকাটা আনা হয় **প্রথমবার বাক্সে ফোকাস পড়লে**, mount-এ নয়। হেডার
- * প্রতিটা পাতায় বসে; mount-এ আনলে যে কখনো সার্চ করে না তার জন্যও প্রতি
- * পেজ-লোডে একটা `GET /employees` যেত।
+ * The list is fetched the first time the box gets focus, not on mount. The header
+ * sits on every page; fetching on mount would send one `GET /employees` per page
+ * load even for someone who never searches.
  *
- * ⚠️ `role = employee` হলে বাক্সটা **থাকেই না** (`return null`)। তার দেখার
- *    মতো অন্য কেউ নেই, আর `GET /employees` তার জন্য ৪০৩ — বাক্সটা দেখালে
- *    সে টাইপ করত আর প্রতিবার একটা ব্যর্থ রিকোয়েস্ট পেত। (J05-এর একই যুক্তি
- *    যেভাবে গ্যালারিতে স্টাফ-ফিল্টারটা লুকোনো আছে।)
+ * Careful: for `role = employee` the box does not exist at all (`return null`).
+ * There is nobody else for them to look at, and `GET /employees` gives them a 403;
+ * showing the box would make them type and get a failed request every time. (The
+ * same reasoning as J05, as with the staff filter hidden in the gallery.)
  */
 export function GlobalSearch() {
   const { user } = useAuth();
-  // ⚠️ শর্তটা হ্যাঁ-তালিকা — `!== 'employee'` লিখলে গবেষকও গোটা দলের
-  //    নামের উপর খোঁজার বাক্স পেতেন (২৫ আগস্ট)।
+  // Careful: the condition is an allow-list. Writing `!== 'employee'` would give
+  // researchers a search box over the whole team's names too.
   if (!seesEveryone(user?.role)) return null;
   return <SearchBox />;
 }
 
-// ── খাঁটি অংশ (I/O নেই — এটুকুই DB বা DOM ছাড়া পরীক্ষা করা যায়) ─────────────
+// ── Pure part (no I/O; this much can be tested without the DB or DOM) ────────
 
 export interface ParsedQuery {
-  /** `YYYY-MM-DD`, তারিখ না পেলে `null` */
+  /** `YYYY-MM-DD`, or `null` if no date was found. */
   date: string | null;
-  /** তারিখটা বাদ দেওয়ার পর যা থাকে — নাম/কোড খোঁজার অংশ */
+  /** What remains after removing the date: the name/code part of the search. */
   text: string;
-  /** তারিখ পাওয়া গেছে, কিন্তু সেটা ঢাকার আজকের পরে */
+  /** A date was found, but it is after today in Dhaka. */
   future: boolean;
 }
 
 /**
- * লেখাটা ভেঙে "একটা তারিখ + বাকি লেখা" বানায়।
+ * Splits the text into "one date + the rest".
  *
- * ⭐ দুটো একসাথে লেখা যায় — `রাসিদ 2026-08-01` মানে "রাসিদের ১ আগস্টের দিন"।
- * এটাই সবচেয়ে কাজের ব্যবহার, কারণ ম্যানেজার সাধারণত জানেন **কার** কোন দিন
- * দেখতে চান।
+ * Both can be written together: "Rashid 2026-08-01" means "Rashid's day on 1
+ * August". This is the most useful form, because a manager usually knows whose
+ * day they want to see.
  *
- * ⚠️ পর্দার ভাষা ইংরেজি হলেও **নামগুলো বাংলাতেই থাকে** (DB-তে যেভাবে
- *    লেখা), তাই খোঁজার লেখাও বাংলা হবে। নিচের `fold()`-এর NFC নরমালাইজ
- *    সেই কারণেই টিকে আছে।
+ * Careful: although the screen language is English, names stay in Bengali (as
+ * written in the DB), so the search text will be Bengali too. That is why the NFC
+ * normalization in `fold()` below stays.
  */
 export function parseSearchQuery(raw: string, today: string): ParsedQuery {
   const tokens = raw.trim().split(/\s+/).filter((t) => t !== '');
@@ -68,10 +68,10 @@ export function parseSearchQuery(raw: string, today: string): ParsedQuery {
 
   for (const token of tokens) {
     /**
-     * ⚠️ **প্রথম তারিখটাই** নেওয়া হয়; দ্বিতীয়টা নাম হিসেবে খোঁজা হবে আর
-     *    কিছুই মিলবে না। ইচ্ছাকৃত: এখানে তারিখের রেঞ্জ বলে কিছু নেই, আর
-     *    `2026-08-01 2026-08-05` লিখলে চুপচাপ প্রথম দিনটা খুলে দিলে মনে
-     *    হতো রেঞ্জটা কাজ করেছে। রেঞ্জ রিপোর্ট পাতার জিনিস।
+     * Careful: only the first date is taken; the second is searched as a name and
+     * matches nothing. Intentional: there is no date range here, and if
+     * `2026-08-01 2026-08-05` quietly opened the first day, it would look as if the
+     * range worked. Ranges belong to the reports page.
      */
     if (date !== null) {
       rest.push(token);
@@ -91,21 +91,21 @@ export function parseSearchQuery(raw: string, today: string): ParsedQuery {
 }
 
 /**
- * একটা শব্দ তারিখ কি না।
+ * Whether a word is a date.
  *
- * ⭐ পর্দার ভাষা ইংরেজি, তাই `today` / `yesterday` চেনা হয় — কিন্তু বাংলা
- *    শব্দগুলোও **রেখে দেওয়া হলো**। যাঁরা এতদিন `গতকাল` লিখে অভ্যস্ত,
- *    তাঁদের কাছে ওটা হঠাৎ কাজ না করা নিছক ভাঙা মনে হতো, অথচ চিনে নিতে
- *    কারো কোনো ক্ষতি নেই।
+ * The screen language is English, so `today` / `yesterday` are recognised, but
+ * the Bengali words are kept. For people used to typing the Bengali word for
+ * "yesterday", it suddenly not working would look simply broken, and recognising
+ * it harms nobody.
  *
- * ⚠️ শুধু **"কাল"** নেওয়া হয় না — বাংলায় ওটা গতকাল *আর* আগামীকাল দুটোই
- *    বোঝায়। ভুল দিনের টাইমলাইন খুলে দেওয়ার চেয়ে শব্দটা না চেনা ভালো;
- *    না চিনলে ব্যবহারকারী তারিখটা লিখে দেবেন, আর ভুল দিনটা কেউ ধরতেই
- *    পারত না। ইংরেজিতেও একই কারণে **"tomorrow" নেই** — ভবিষ্যতের দিন
- *    এখানে দেখার কিছু নেই।
+ * Careful: the Bengali word "kal" alone is not accepted; in Bengali it means both
+ * yesterday and tomorrow. Not recognising a word beats opening the timeline of the
+ * wrong day: if it is not recognised the user will type the date, and nobody
+ * would ever notice the wrong day. For the same reason there is no "tomorrow" in
+ * English: a future day has nothing to look at here.
  */
 function parseDateToken(token: string, today: string): string | null {
-  // ⚠️ `toLowerCase()` — কেউ বাক্যের শুরুতে "Today" লিখলেও যেন চেনা যায়
+  // Careful: `toLowerCase()` so that "Today" at the start of a sentence is recognised too
   const word = token.toLowerCase();
   if (word === 'today' || token === 'আজ' || token === 'আজকে') return today;
   if (word === 'yesterday' || token === 'গতকাল') {
@@ -116,12 +116,11 @@ function parseDateToken(token: string, today: string): string | null {
   if (m === null) return null;
 
   /**
-   * ⭐ **চার অঙ্কের অংশটাই বছর** — তাই `2026-08-01` (ISO) আর `01/08/2026`
-   * (ঢাকায় যেভাবে লেখা হয়) দুটোই চলে, আর কোনটা দিন কোনটা মাস তা নিয়ে
-   * অনুমান করতে হয় না।
-   * ⚠️ দুই অঙ্কের বছর (`01/08/26`) নেওয়া হয় না: তিনটে সংখ্যার কোনটা বছর
-   *    সেটাই আর নিশ্চিত করে বলা যায় না, আর ভুল ধরলে অন্য একটা দিনের
-   *    টাইমলাইন খুলে যেত — দেখতে নিখুঁত, শুধু ভুল দিনের।
+   * The four-digit part is the year, so both `2026-08-01` (ISO) and `01/08/2026`
+   * (as written in Dhaka) work, with no guessing about which is day and which is month.
+   * Careful: two-digit years (`01/08/26`) are not accepted: with three numbers it
+   * is no longer certain which one is the year, and a wrong guess would open another
+   * day's timeline, one that looks perfect and is merely the wrong day.
    */
   let year: string;
   let month: string;
@@ -131,28 +130,29 @@ function parseDateToken(token: string, today: string): string | null {
   else return null;
 
   const iso = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  // ⚠️ `2026-02-31` এখানেই আটকায় — `parseWorkDate` ফিরে এসে মিলিয়ে দেখে,
-  //    নইলে `new Date()` চুপচাপ ৩ মার্চ বানিয়ে দিত
+  // Careful: `2026-02-31` is stopped here: `parseWorkDate` checks it on the way
+  // back; otherwise `new Date()` would quietly turn it into 3 March
   return isValidWorkDate(iso) ? iso : null;
 }
 
 /**
- * ⚠️ **NFC নরমালাইজ করা হয়, কারণ লেখাটা বাংলা।** বাংলার `ো` আর `ৌ`
- *    ইউনিকোডে দুভাবে লেখা যায় — একটা কোডপয়েন্ট, বা দুটো জোড়া। কি-বোর্ড
- *    ভেদে দুরকমই আসে। নরমালাইজ না করলে "রোজিনা" টাইপ করে "রোজিনা"-কেই
- *    খুঁজে পাওয়া যেত না, আর পর্দায় দুটো লেখা **অবিকল এক** দেখাত — এই ভুল
- *    কেউ কোনোদিন ধরতে পারত না।
+ * Careful: NFC normalization is applied because the text is Bengali. The vowel
+ * signs O and AU (U+09CB, U+09CC) can be written in Unicode in two ways: as one
+ * code point, or as two combined. Keyboards produce either. Without normalizing,
+ * typing a name would fail to find that very name, while the two texts look
+ * identical on screen, a mistake nobody could ever catch.
  */
 function fold(text: string): string {
   return text.normalize('NFC').toLowerCase();
 }
 
 /**
- * কতটা ভালো মিলল — ছোট মানে উপরে। না মিললে `null`।
+ * How good the match is: smaller means higher up. `null` if no match.
  *
- * ⚠️ চলে যাওয়া কর্মীও তালিকায় থাকেন (তাঁর পুরোনো দিন দেখতে হয়), কিন্তু
- *    সবসময় active-দের **নিচে** — নইলে একই নামের বিদায়ী কর্মী উপরে বসে
- *    যেতেন আর Enter চেপে ভুল লোকের পাতায় পৌঁছানো যেত।
+ * Careful: staff who have left are in the list too (their old days must be
+ * viewable), but always below the active ones. Otherwise a departed employee with
+ * the same name would sit on top and pressing Enter would land on the wrong
+ * person's page.
  */
 function rankOf(emp: EmployeeView, needle: string): number | null {
   const code = fold(emp.empCode);
@@ -165,11 +165,11 @@ function rankOf(emp: EmployeeView, needle: string): number | null {
   if (code === needle) rank = 0;
   else if (code.startsWith(needle)) rank = 1;
   /**
-   * ⚠️ ডাকনাম আগে, পদবি পরে। "রাসিদ" লিখলে **রাসিদুল ইসলাম** উপরে ওঠেন,
-   *    **মামুনুর রাসিদ** তার নিচে — দুজনেই থাকেন, কিন্তু ক্রমটা অনুমেয়।
-   *    দুটোকে এক ধাপে রাখলে টাই ভাঙত বর্ণানুক্রমে, আর Enter চেপে কার
-   *    পাতায় পৌঁছাবেন সেটা নামের বানানের উপর নির্ভর করত — ব্যবহারকারীর
-   *    চোখে নিছক এলোমেলো।
+   * Careful: given name first, family name after. Typing "Rashid" puts "Rashidul
+   * Islam" on top and "Mamunur Rashid" below it: both are there, but the order is
+   * predictable. With both at the same level the tie would break alphabetically,
+   * and whose page Enter lands on would depend on name spelling, which looks
+   * random to the user.
    */
   else if (words[0].startsWith(needle)) rank = 2;
   else if (words.some((word) => word.startsWith(needle))) rank = 3;
@@ -181,7 +181,7 @@ function rankOf(emp: EmployeeView, needle: string): number | null {
   return emp.status === 'inactive' ? rank + 10 : rank;
 }
 
-/** খালি `query` = সবাই (তারিখ-মাত্র খোঁজায় "কার দিন দেখবেন?") */
+/** Empty `query` = everyone (for a date-only search: "whose day do you want to see?"). */
 export function matchEmployees(
   rows: EmployeeView[],
   query: string,
@@ -204,9 +204,12 @@ export function matchEmployees(
     .map((row) => row.emp);
 }
 
-// ── বাক্সটা ─────────────────────────────────────────────────────────────────
+// ── The box ─────────────────────────────────────────────────────────────────
 
-/** ⚠️ মডিউল-স্তরে ধ্রুবক — প্রতি রেন্ডারে নতুন অ্যারে হলে `useMemo` অর্থহীন */
+/**
+ * Careful: a module-level constant; a new array on every render would make
+ * `useMemo` pointless.
+ */
 const NO_ROWS: EmployeeView[] = [];
 const NOT_FETCHED = { rows: NO_ROWS, total: 0 };
 
@@ -214,7 +217,7 @@ function SearchBox() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
-  /** একবার ফোকাস পড়েছে — তার আগে নেটওয়ার্কে যাওয়াই হয় না */
+  /** Focus has happened once; until then the network is not touched. */
   const [armed, setArmed] = useState(false);
   const [active, setActive] = useState(0);
 
@@ -227,8 +230,8 @@ function SearchBox() {
     [armed],
   );
 
-  // ⚠️ প্রতি রেন্ডারে নতুন করে গোনা, `useMemo`-তে নয় — ট্যাব সারারাত খোলা
-  //    থাকলে মাঝরাতে "আজ" বদলায়, আর memo সেটা কোনোদিন জানত না
+  // Careful: counted afresh on every render, not in `useMemo`: if a tab stays
+  // open all night, "today" changes at midnight and a memo would never know
   const today = todayInDhaka();
   const parsed = useMemo(() => parseSearchQuery(query, today), [query, today]);
 
@@ -236,19 +239,19 @@ function SearchBox() {
   const people = useMemo(() => {
     if (parsed.future) return NO_ROWS;
     if (parsed.text === '' && parsed.date === null) return NO_ROWS;
-    // তারিখ-মাত্র খোঁজায় সবাইকে দেখানো হয় — "কার দিন দেখবেন?"
+    // For a date-only search everyone is shown: "whose day do you want to see?"
     return matchEmployees(rows ?? NO_ROWS, parsed.text, parsed.text === '' ? 20 : 8);
   }, [rows, parsed]);
 
-  // ফলাফল বদলালে বাছাইটা উপরে ফেরে — নইলে ৫ নম্বর সারি বাছা অবস্থায় নতুন
-  // তালিকায় দুটো ফল থাকলে Enter কিছুই করত না
+  // When results change, the selection returns to the top; otherwise, if row 5
+  // was selected and the new list has two results, Enter would do nothing
   useEffect(() => setActive(0), [query]);
 
   const go = useCallback(
     (emp: EmployeeView) => {
       /**
-       * ⭐ তারিখটা URL-এ যায় (`/staff/3?date=2026-08-01`) — `EmployeeDetailPage`
-       * তারিখ ওখান থেকেই পড়ে, তাই লিঙ্কটা কাউকে পাঠালেও ঠিক ওই দিনটাই খোলে।
+       * The date goes in the URL (`/staff/3?date=2026-08-01`). `EmployeeDetailPage`
+       * reads the date from there, so a link sent to someone opens exactly that day.
        */
       navigate(
         parsed.date !== null && !parsed.future
@@ -263,11 +266,11 @@ function SearchBox() {
   );
 
   /**
-   * `/` — যেকোনো জায়গা থেকে বাক্সে।
+   * `/` focuses the box from anywhere.
    *
-   * ⚠️ কেউ অন্য কোনো ঘরে টাইপ করতে থাকলে তার `/` কেড়ে নেওয়া হয় না —
-   *    নইলে সেটিংসে পথ লিখতে গিয়ে প্রতিবার ফোকাস লাফিয়ে হেডারে চলে যেত।
-   * ⚠️ `preventDefault()` না দিলে ফায়ারফক্সের quick-find বারটাও খুলত।
+   * Careful: if someone is typing in another field, their `/` is not taken away;
+   * otherwise typing a path in settings would make focus jump to the header every time.
+   * Careful: without `preventDefault()`, Firefox's quick-find bar would open too.
    */
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -292,8 +295,8 @@ function SearchBox() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // বাইরে ক্লিক করলে বন্ধ। ⚠️ `mousedown`, `click` নয় — ফলাফলে ক্লিক করলে
-  // যেন প্যানেলটা আঙুলের নিচ থেকে সরে না যায়।
+  // Close on outside click. Careful: `mousedown`, not `click`, so that clicking
+  // a result does not make the panel move out from under the finger.
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent): void => {
@@ -310,7 +313,7 @@ function SearchBox() {
       return;
     }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      // ⚠️ নইলে ক্যারেট লেখার শুরু/শেষে লাফাত
+      // Careful: otherwise the caret would jump to the start/end of the text
       e.preventDefault();
       setOpen(true);
       if (people.length === 0) return;
@@ -330,9 +333,9 @@ function SearchBox() {
   return (
     <div ref={boxRef} className="relative order-last w-full sm:order-none sm:w-64">
       {/*
-        ⚠️ ফোনে বাক্সটা হেডারের **নিচের সারিতে** নেমে যায় (`order-last
-           w-full`)। একই সারিতে জোর করে রাখলে ৩৭৫px-এ লোগো, নাম আর লগআউট
-           চেপে গিয়ে সবকটাই অপঠ্য হতো (E12)।
+        Careful: on a phone the box drops to the header's lower row (`order-last
+           w-full`). Forcing it onto the same row would squeeze the logo, name and
+           logout together at 375px and make them all unreadable (E12).
       */}
       <input
         ref={inputRef}
@@ -375,8 +378,8 @@ function SearchBox() {
 }
 
 /**
- * ⭐ তিনটে অবস্থা এখানেও — লোড হচ্ছে · ভুল · **কিছু মিলল না**। শেষেরটা
- * ছাড়া টাইপ করে খালি বাক্স দেখে মনে হতো সার্চটাই ভেঙে গেছে।
+ * Three states here too: loading, error, and nothing found. Without the last one,
+ * typing and seeing an empty box would look as if the search itself were broken.
  */
 function Panel({
   parsed,
@@ -438,8 +441,8 @@ function Panel({
       {parsed.date !== null && (
         <p className="border-b border-line px-3 py-2 text-[11.5px] text-ink-3">
           {/*
-            ⚠️ `weekdayOf()` এখন `Mon` দেয়, তাই আগের মতো পরে "বার" জোড়া
-               হয় না — জুড়লে "Monবার" বসত।
+            Careful: `weekdayOf()` now returns `Mon`, so the Bengali word for "day"
+               is no longer appended after it; doing so would give "Mon" + that word.
           */}
           {formatDate(parsed.date)} · {weekdayOf(parsed.date)} —{' '}
           {parsed.text === '' ? 'whose day?' : "that day's timeline"}

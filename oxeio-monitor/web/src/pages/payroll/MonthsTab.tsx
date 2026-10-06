@@ -17,18 +17,18 @@ import {
 } from '../../components/ui';
 
 /**
- * R1 — **মাস বন্ধ করা।** owner-only (রুটটাও, `App.tsx`-এ)।
+ * Closing a month. Owner-only (the route too, in `App.tsx`).
  *
- * ⚠️⚠️ কেন এই পর্দাটা দরকার: মাস বন্ধ করাই একমাত্র জিনিস যা
- * `monthly_summary`-র সংখ্যাগুলো **স্থির** করে। ওটা ছাড়া ছুটির একটা তারিখ
- * নড়লেই গত মাসের d ও D বদলায় — আর পে-রোল ওখান থেকেই পড়ে, অর্থাৎ বেতন
- * দিয়ে দেওয়ার পরেও হিসাব নড়ে।
+ * Careful — why this screen is needed: closing a month is the only thing that
+ * **freezes** the `monthly_summary` numbers. Without it, moving one holiday date
+ * changes last month's d and D, and payroll reads from there, so the figures would
+ * shift even after salaries were paid.
  *
- * ⭐⭐ **তালিকাটা মাস ধরে, বন্ধ-রেকর্ড ধরে নয়** — সার্ভার কেবল বন্ধ মাসগুলো
- * ফেরায়, কিন্তু পর্দায় শেষ ১২ মাসই দেখানো হয়, প্রতিটার পাশে অবস্থা।
- * কারণ মালিকের প্রশ্নটা "কোনগুলো বন্ধ করেছি" নয়, **"কোনটা এখনো বাকি"** —
- * আর অনুপস্থিতি দিয়ে সেটা বোঝা যায় না। খালি তালিকা দেখিয়ে "সব ঠিক আছে"
- * ভাব তৈরি করা এই প্রকল্পে নিষিদ্ধ।
+ * Important: the list is **per month, not per closure record**. The server returns
+ * only closed months, but the screen shows the last 12 months, each with its status.
+ * The owner's question is not "which did I close" but **"which is still open"**, and
+ * absence cannot answer that. Showing an empty list that suggests "all fine" is
+ * forbidden in this project.
  */
 export function MonthsTab() {
   const { data, error, loading, reload } = useApi(listMonthClosures, []);
@@ -57,9 +57,9 @@ export function MonthsTab() {
           {months.map((ym) => {
             const row = closed.get(ym);
             /**
-             * ⚠️ চলতি মাস আলাদা করে দেখানো হয় — সার্ভার ওটা বন্ধ করতে দেয়
-             *    না (মাস এখনো চলছে), তাই বোতামটাও থাকা উচিত নয়। বোতাম
-             *    রেখে ৪০০ ফেরানো মানে ব্যবহারকারীকে একটা দেয়ালে পাঠানো।
+             * Careful: the current month is shown separately. The server will not close
+             *    it (the month is still running), so the button should not exist
+             *    either; showing it and returning a 400 would send the user into a wall.
              */
             const isCurrent = ym === currentMonth();
 
@@ -112,8 +112,8 @@ export function MonthsTab() {
         </ul>
 
         {/*
-          ⚠️ এই ব্যাখ্যাটা এখানে থাকা জরুরি, নইলে "বন্ধ" শব্দটা শুনে মনে
-             হতো ডেটা মুছে যাচ্ছে বা পর্দা বন্ধ হচ্ছে।
+          Careful: this explanation must stay, or the word "close" suggests that data
+             is deleted or the screen is closing.
         */}
         <Caveat>
           Closing a month freezes its totals: the daily rollup stops
@@ -160,9 +160,9 @@ export function MonthsTab() {
       )}
 
       {/*
-        ⚠️⚠️ খোলার জন্য নিশ্চিতকরণ — কারণ এটাই একমাত্র পথ যাতে **দেওয়া
-           বেতনের ভিত্তি** আবার নড়তে পারে। বন্ধ করার চেয়ে খোলাটা বেশি ভারী,
-           তাই বোতামটাও `danger`।
+        Careful: confirmation for reopening, because this is the only path that can
+           move the **basis of already-paid salaries** again. Reopening is heavier than
+           closing, so the button is `danger` too.
       */}
       {reopening && (
         <ConfirmDialog
@@ -192,16 +192,16 @@ export function MonthsTab() {
   );
 }
 
-/** ঢাকার আজকের মাস — `YYYY-MM` */
+/** The current month in Dhaka, as `YYYY-MM` */
 function currentMonth(): string {
   return dhakaNow().slice(0, 7);
 }
 
 /**
- * শেষ `n` মাস, নতুনটা আগে — চলতি মাস সহ।
+ * The last `n` months, newest first, including the current month.
  *
- * ⚠️ ঢাকার তারিখ ধরে, ব্রাউজারের নয়। নইলে মধ্যরাতের কাছাকাছি অন্য
- *    টাইমজোনের কেউ পর্দা খুললে তালিকাটা এক মাস পিছিয়ে/এগিয়ে দেখাত।
+ * Careful: uses the Dhaka date, not the browser's. Otherwise someone in another
+ *    timezone opening the screen near midnight would see the list a month off.
  */
 function lastMonths(n: number): string[] {
   const [y, m] = dhakaNow().slice(0, 7).split('-').map(Number);
@@ -213,7 +213,7 @@ function lastMonths(n: number): string[] {
   return out;
 }
 
-/** ⚠️ ঢাকা UTC+৬ — সার্ভারের সাথে একই দিন বোঝাতে */
+/** Careful: Dhaka is UTC+6; this keeps the same day as the server */
 function dhakaNow(): string {
   return new Date(Date.now() + workOffsetMs()).toISOString();
 }

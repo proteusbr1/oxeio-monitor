@@ -18,10 +18,10 @@ import { UpdateService } from './update.service';
 import { CapabilityHealthService } from './capability-health.service';
 
 @Module({
-  // ⚠️ `AuthModule` শুধু `AuthService`-এর জন্য — স্টাফের লগইন দিয়ে
-  //    enrollment (`/agent/enroll-login`)। পাসওয়ার্ড যাচাই, 2FA আর
-  //    brute-force throttle সব ওখানেই, নকল করে লেখা হয়নি।
-  // ⭐ `AuditModule` — রোলআউট নিজে থেকে এগোলে খাতায় লেখা থাকতে হয়
+  // Careful: `AuthModule` is here only for `AuthService`, to enroll with a
+  //    staff login (`/agent/enroll-login`). Password check, 2FA and brute-force
+  //    throttling all live there; they were not copied.
+  // `AuditModule`: when a rollout advances by itself, it must be written to the log.
   imports: [ActivityModule, AuditModule, AuthModule],
   controllers: [AgentController],
   providers: [
@@ -37,13 +37,13 @@ import { CapabilityHealthService } from './capability-health.service';
     ScreenshotIngestService,
     UpdateService,
   ],
-  // ⚠️ `ProgressService` export করা হয় **কর্মীর নিজের পাতার জন্য**
-  //    (`MeModule`) — tray আর ওয়েব যেন একই সংখ্যা দেখায়।
+  // Careful: `ProgressService` is exported **for the employee's own page**
+  //    (`MeModule`), so the tray and the web show the same number.
   /**
-   * ⭐ `UpdateService` export — `AdminModule`-এর ডাউনলোড রুট এটাই ব্যবহার
-   *    করে। ⚠️ কোডটা নকল করা হয়নি ইচ্ছাকৃতভাবে: `openMsi()` path-traversal
-   *    আটকায় (storage-এর বাইরের ফাইল দেওয়া যাবে না), আর ওই পাহারাটা দুই
-   *    জায়গায় থাকলে একদিন একটায় ঠিক হতো, অন্যটায় নয়।
+   * `UpdateService` is exported because `AdminModule`'s download route uses it.
+   * Careful: the code is deliberately not duplicated. `openMsi()` blocks path
+   * traversal (nothing outside storage may be served), and if that guard lived
+   * in two places one day it would be fixed in one and not the other.
    */
   exports: [AgentConfigService, ClockDriftService, ProgressService, UpdateService],
 })

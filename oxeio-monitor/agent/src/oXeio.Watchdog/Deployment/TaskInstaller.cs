@@ -6,15 +6,15 @@ using System.Text;
 namespace oXeio.Watchdog.Deployment;
 
 /// <summary>
-/// H02 — Task Scheduler-এ লগঅন টাস্ক বসানো।
+/// H02: installing the logon task in Task Scheduler.
 ///
-/// ⚠️ এটা <b>এক-শটের CLI মোড</b> (<c>--install-task</c>), ইনস্টলার একবার চালায়।
-/// পাহারার লুপ থেকে কখনো <c>schtasks</c> ডাকা হয় না: ওটা প্রতি ৩০ সেকেন্ডে
-/// একটা করে বাড়তি প্রসেস তৈরি করত, আর Task Scheduler-এর সার্ভিসে চাপ ফেলত —
-/// অথচ টাস্কটা তো একবার বসানোর জিনিস।
+/// This is a <b>one-shot CLI mode</b> (<c>--install-task</c>), run once by the installer.
+/// <c>schtasks</c> is never called from the guard loop: that would create an extra process
+/// every 30 seconds and load the Task Scheduler service, when the task is something you
+/// install once.
 ///
-/// XML-টা এমবেডেড রিসোর্স হিসেবে থাকে যাতে exe আর তার ডিপ্লয়মেন্ট নিয়ম
-/// কখনো আলাদা হয়ে না যায়।
+/// The XML lives as an embedded resource so the exe and its deployment rules can never drift
+/// apart.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static class TaskInstaller
@@ -23,7 +23,7 @@ internal static class TaskInstaller
 
     private const string ResourceName = "oXeio.Watchdog.Task.xml";
 
-    /// <summary>রিসোর্স থেকে XML, <c>{EXE}</c>/<c>{DIR}</c> বসানো ও মন্তব্য ছাঁটা।</summary>
+    /// <summary>The XML from the resource, with <c>{EXE}</c>/<c>{DIR}</c> filled in and comments stripped.</summary>
     public static string RenderXml(string exePath)
     {
         var raw = ReadResource();
@@ -34,7 +34,7 @@ internal static class TaskInstaller
             .Replace("{DIR}", Escape(dir.TrimEnd('\\')), StringComparison.Ordinal);
     }
 
-    /// <returns>প্রসেসের এক্সিট কোড — ০ মানে সফল।</returns>
+    /// <returns>The process exit code; 0 means success.</returns>
     public static int Install(string exePath, TextWriter output)
     {
         string temp;
@@ -42,9 +42,9 @@ internal static class TaskInstaller
         {
             temp = Path.Combine(Path.GetTempPath(), $"oXeio-watchdog-{Guid.NewGuid():N}.xml");
 
-            // ⚠️ UTF-16 (BOM সহ) — schtasks /XML UTF-8 ফাইলকে কিছু Windows
-            //    বিল্ডে "The task XML is malformed" বলে ফিরিয়ে দেয়, আর ভুলটা
-            //    XML-এ নয় বলে খুঁজে বের করতে ঘণ্টা যায়।
+            // UTF-16 (with BOM): on some Windows builds schtasks /XML rejects a UTF-8 file with
+            // "The task XML is malformed", and since the mistake is not in the XML it takes
+            // hours to find.
             File.WriteAllText(temp, RenderXml(exePath), new UnicodeEncoding(false, true));
         }
         catch (Exception ex)
@@ -66,7 +66,7 @@ internal static class TaskInstaller
         }
         finally
         {
-            try { File.Delete(temp); } catch (Exception) { /* temp ফাইল পড়ে থাকলে ক্ষতি নেই */ }
+            try { File.Delete(temp); } catch (Exception) { /* a leftover temp file does no harm */ }
         }
     }
 
@@ -77,15 +77,15 @@ internal static class TaskInstaller
         return code;
     }
 
-    // ── ভেতরের কাজ ──────────────────────────────────────────────────────────
+    // ── Internals ───────────────────────────────────────────────────────────
 
     private static int RunSchtasks(string arguments, TextWriter output)
     {
         try
         {
-            // ⚠️ পুরো পাথ — শুধু "schtasks" লিখলে PATH-এ বসানো একটা নকল exe
-            //    চলত। এই কমান্ড অ্যাডমিন হিসেবে চলে, তাই সেটা সরাসরি
-            //    privilege escalation।
+            // The full path: writing just "schtasks" would run a fake exe placed on the PATH.
+            // This command runs as administrator, so that would be direct privilege
+            // escalation.
             var exe = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.System), "schtasks.exe");
 
@@ -124,8 +124,8 @@ internal static class TaskInstaller
     {
         var assembly = Assembly.GetExecutingAssembly();
 
-        // নাম বদলে গেলেও যেন খুঁজে পায় — এমবেডেড রিসোর্সের নাম MSBuild-এর
-        // নিয়মে তৈরি হয়, আর ফাইল সরালে সেটা নীরবে বদলায়।
+        // So it is still found if the name changes: an embedded resource's name is built by
+        // MSBuild's rules, and silently changes when the file is moved.
         var name = Array.Find(
             assembly.GetManifestResourceNames(),
             n => n.EndsWith(ResourceName, StringComparison.OrdinalIgnoreCase)
@@ -142,10 +142,9 @@ internal static class TaskInstaller
     }
 
     /// <summary>
-    /// ⚠️ মন্তব্য ছেঁটে ফেলা হয়। XML-এ মন্তব্য বৈধ, কিন্তু Task Scheduler-এর
-    /// পার্সার নিয়ে ঝুঁকি নেওয়ার মানে হয় না — আর ব্যর্থ হলে সে শুধু বলে
-    /// "The task XML is malformed", কোন লাইনে সেটা বলে না। মন্তব্যগুলো
-    /// রিপোজিটরির ফাইলেই থেকে যায়, যেখানে ওগুলোর দরকার।
+    /// Comments are stripped. Comments are valid in XML, but there is no point risking Task
+    /// Scheduler's parser, and when it fails it only says "The task XML is malformed" without
+    /// saying which line. The comments stay in the repository file, where they are needed.
     /// </summary>
     private static string StripXmlComments(string xml)
     {
@@ -164,7 +163,7 @@ internal static class TaskInstaller
             builder.Append(xml, index, start - index);
 
             var end = xml.IndexOf("-->", start + 4, StringComparison.Ordinal);
-            if (end < 0) break;   // অসমাপ্ত মন্তব্য — বাকিটা বাদ
+            if (end < 0) break;   // unterminated comment: drop the rest
 
             index = end + 3;
         }
@@ -172,7 +171,7 @@ internal static class TaskInstaller
         return builder.ToString();
     }
 
-    /// <summary>পাথে <c>&amp;</c> বা <c>&lt;</c> থাকলে XML ভেঙে যেত।</summary>
+    /// <summary>An <c>&amp;</c> or <c>&lt;</c> in the path would break the XML.</summary>
     private static string Escape(string value) => value
         .Replace("&", "&amp;", StringComparison.Ordinal)
         .Replace("<", "&lt;", StringComparison.Ordinal)

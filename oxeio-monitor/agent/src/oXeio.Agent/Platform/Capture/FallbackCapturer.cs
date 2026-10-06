@@ -5,11 +5,11 @@ using oXeio.Core.Capture;
 namespace oXeio.Agent.Platform.Capture;
 
 /// <summary>
-/// প্রথমে DXGI, না পারলে GDI ([ADR-012c](../../../../docs/05-Options-Decisions.md))।
+/// DXGI first, GDI if that fails ([ADR-012c](../../../../docs/05-Options-Decisions.md)).
 ///
-/// দুটো ইঞ্জিন নিজেরা একে অন্যের কথা জানে না — কোনটা কখন ব্যবহার হবে সেই
-/// সিদ্ধান্ত এখানে, আর <b>কতক্ষণ পর আবার চেষ্টা হবে</b> সেটা
-/// <see cref="EngineFallbackPolicy"/>-তে (খাঁটি লজিক, ইউনিট টেস্ট করা)।
+/// The two engines do not know about each other; the decision of which to use when is here, and
+/// <b>how long before trying again</b> is in <see cref="EngineFallbackPolicy"/> (pure logic, unit
+/// tested).
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class FallbackCapturer(
@@ -23,7 +23,7 @@ internal sealed class FallbackCapturer(
 
     public string Name => $"{primary.Name}→{fallback.Name}";
 
-    /// <summary>বিরতি চললে কখন শেষ — ডায়াগনস্টিক টুলে দেখানোর জন্য।</summary>
+    /// <summary>When the pause ends, if one is in effect: to show in the diagnostic tool.</summary>
     public DateTimeOffset? PrimaryRestingUntil => _policy.RestingUntil;
 
     public CapturedFrame? Capture(MonitorInfo monitor)
@@ -39,15 +39,15 @@ internal sealed class FallbackCapturer(
                 return frame;
             }
 
-            // ⚠️ শুধু ইঞ্জিনের দোষ হলেই গোনা হয়। "পর্দায় কিছু নড়েনি" গুনলে
-            //    শান্ত অফিসের PC-তে DXGI স্থায়ীভাবে বিরতিতে চলে যেত, আর
-            //    ঠিক যখন কেউ ভিডিও চালাত তখনই সেটা ঘুমিয়ে থাকত।
+            // Careful: counted only when it is the engine's fault. If "nothing moved on screen"
+            // were counted, DXGI would go into a permanent pause on a quiet office PC, and it would
+            // be asleep exactly when someone played video.
             if (primary.LastFailureWasEngineFault) _policy.RecordFailure(now);
         }
 
-        // ⚠️ ফলব্যাক ব্যর্থ হলে null-ই ফেরে — এখানে আর কিছু করার নেই।
-        //    দুটো ইঞ্জিনই ব্যর্থ মানে সমস্যাটা ইঞ্জিনের নয় (সেশন ০, নেই এমন
-        //    মনিটর, বা লগঅফের মাঝপথ), আর সেটা ঢাকতে ভুয়া ছবি বানানো হয় না।
+        // Careful: if the fallback fails it still returns null: there is nothing more to do here.
+        // Both engines failing means the problem is not the engine's (session 0, a monitor that
+        // does not exist, or the middle of a logoff), and no fake image is made to cover it.
         return fallback.Capture(monitor);
     }
 

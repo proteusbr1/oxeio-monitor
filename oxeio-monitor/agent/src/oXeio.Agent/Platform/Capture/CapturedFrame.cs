@@ -2,7 +2,7 @@ using System.Runtime.Versioning;
 
 namespace oXeio.Agent.Platform.Capture;
 
-/// <summary>একটা মনিটরের কাঁচা ছবি — BGRA, top-down।</summary>
+/// <summary>The raw image of one monitor: BGRA, top-down.</summary>
 [SupportedOSPlatform("windows")]
 internal sealed class CapturedFrame(
     byte[] pixels, int width, int height, int stride, MonitorInfo monitor, string engine)
@@ -14,18 +14,18 @@ internal sealed class CapturedFrame(
     public MonitorInfo Monitor { get; } = monitor;
 
     /// <summary>
-    /// কোন ইঞ্জিন এই ছবিটা তুলেছে।
+    /// Which engine took this image.
     ///
-    /// প্রতি ছবির সাথে রাখা হয়, ইঞ্জিন-অবজেক্টের সাথে নয় — কারণ ফলব্যাকের কারণে
-    /// একই স্লটে এক মনিটর DXGI-তে আর আরেকটা GDI-তে উঠতে পারে। GDI-র ছবিতে
-    /// হার্ডওয়্যার-ত্বরিত ভিডিও কালো আসে, তাই "এই ছবিটা কালো কেন" প্রশ্নের
-    /// উত্তর ছবির সাথেই থাকা দরকার।
+    /// It is kept with each image, not with the engine object, because with the fallback one
+    /// monitor can be captured by DXGI and another by GDI in the same slot. In GDI images
+    /// hardware-accelerated video comes out black, so the answer to "why is this image black" needs
+    /// to travel with the image.
     /// </summary>
     public string Engine { get; } = engine;
 
     /// <summary>
-    /// OS নিজে জানিয়েছে যে DRM-সুরক্ষিত কনটেন্ট বাদ দেওয়া হয়েছে।
-    /// শুধু DXGI পথে জানা যায়; GDI-তে এর কোনো সমতুল্য নেই।
+    /// The OS itself reported that DRM-protected content was excluded. Only the DXGI path can know
+    /// this; GDI has no equivalent.
     /// </summary>
     public bool ProtectedContentMasked { get; init; }
 }
@@ -35,15 +35,16 @@ internal interface IScreenCapturer : IDisposable
 {
     string Name { get; }
 
-    /// <summary>ব্যর্থ হলে null — ব্যতিক্রম নয়, কারণ একটা মনিটর ব্যর্থ হলেও বাকিগুলো নেওয়া চাই।</summary>
+    /// <summary>On failure null, not an exception, because even if one monitor fails the others
+    /// should still be taken.</summary>
     CapturedFrame? Capture(MonitorInfo monitor);
 
     /// <summary>
-    /// শেষবার <c>null</c> ফেরার কারণ ইঞ্জিনের অক্ষমতা ছিল কি না।
+    /// Whether the last <c>null</c> was because of the engine's inability.
     ///
-    /// ডিফল্ট <c>true</c> — যে ইঞ্জিন এই পার্থক্যটা রাখে না, তার ব্যর্থতা
-    /// ব্যর্থতাই ধরা হবে। শুধু যার সত্যিই "এবার দেওয়ার মতো কিছু ছিল না" বলে
-    /// একটা বৈধ অবস্থা আছে, সে-ই এটা override করে।
+    /// The default is <c>true</c>: an engine that does not keep this distinction has its failures
+    /// counted as failures. Only one that really has a valid state of "nothing to give this time"
+    /// overrides it.
     /// </summary>
     bool LastFailureWasEngineFault => true;
 }

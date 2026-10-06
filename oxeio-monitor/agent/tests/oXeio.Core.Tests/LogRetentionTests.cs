@@ -3,12 +3,11 @@ using oXeio.Core.Agent;
 namespace oXeio.Core.Tests;
 
 /// <summary>
-/// H08 — লগ ফাইলের ৭ দিন / ৫০ MB সীমা।
+/// H08: the 7-day / 50 MB limit on log files.
 ///
-/// ⚠️ এখানকার প্রতিটা টেস্ট একটাই প্রশ্নের পাহারা: <b>কোন ফাইলটা মুছে
-/// ফেলা হবে</b>। এই একটা জায়গাতেই ভুল হলে ডেটা ফেরত আসে না — আর
-/// সমস্যাটা কেউ টের পায় সেদিন, যেদিন কোনো একটা PC-র গোলমাল খুঁজতে গিয়ে
-/// দেখা যায় লগে কিছুই নেই।
+/// Careful: every test here guards one question: <b>which file gets deleted</b>. A
+/// mistake in this one place cannot be undone, and nobody notices until the day
+/// someone looks in the log to chase a problem on some PC and finds nothing there.
 /// </summary>
 public class LogRetentionTests
 {
@@ -34,8 +33,9 @@ public class LogRetentionTests
         Assert.Empty(Plan([File(1), File(3), File(6)]));
 
     /// <summary>
-    /// ⚠️ সীমানাটা এখানেই: keepDays = ৭ মানে আজ + আগের ৬ দিন। সাত দিন
-    /// আগেরটা সপ্তম, তাই যায়। `&lt;` না লিখে `&lt;=` লিখলে আট দিন থাকত।
+    /// Careful: the boundary is here: keepDays = 7 means today plus the previous 6 days.
+    /// The file from seven days ago is the seventh, so it goes. Writing `&lt;=` instead of
+    /// `&lt;` would keep eight days.
     /// </summary>
     [Fact]
     public void সাত_দিনের_পুরোনো_যায়()
@@ -43,14 +43,14 @@ public class LogRetentionTests
         var doomed = Plan([File(6), File(7), File(30)]);
 
         Assert.Equal(2, doomed.Count);
-        Assert.Contains("agent-2026-08-05.log", doomed);  // ৭ দিন আগে
-        Assert.Contains("agent-2026-07-13.log", doomed);  // ৩০ দিন আগে
+        Assert.Contains("agent-2026-08-05.log", doomed);  // 7 days ago
+        Assert.Contains("agent-2026-07-13.log", doomed);  // 30 days ago
     }
 
     /// <summary>
-    /// ⚠️ ঘড়ি পিছিয়ে গেলে (NTP সংশোধন, BIOS-এর ব্যাটারি) ভবিষ্যতের
-    /// তারিখওয়ালা ফাইল থেকে যেতে পারে। মুছে দিলে ঘড়ির একটা ভুলে আজকের
-    /// লগই হারাত — অথচ ঠিক তখনই লগটা সবচেয়ে বেশি দরকার।
+    /// Careful: if the clock goes back (an NTP correction, a dead BIOS battery), files
+    /// dated in the future can remain. Deleting them would lose today's log because of a
+    /// clock error, exactly when the log is most needed.
     /// </summary>
     [Fact]
     public void ভবিষ্যতের_তারিখ_রেখে_দেওয়া_হয() =>
@@ -59,20 +59,20 @@ public class LogRetentionTests
     [Fact]
     public void বাজেট_ছাড়ালে_পুরোনোটা_আগে_যায়()
     {
-        // তিনটে ফাইল × ৪০ বাইট = ১২০, বাজেট ১০০ → একটা মুছলেই হয়
+        // three files x 40 bytes = 120, budget 100, so deleting one is enough
         var doomed = Plan(
             [File(1, 40), File(2, 40), File(3, 40)],
             maxBytes: 100);
 
         Assert.Single(doomed);
-        // ⭐ সবচেয়ে পুরোনোটা — নতুন লগ বেশি কাজে লাগে
+        // the oldest one: the newer log is more useful
         Assert.Equal("agent-2026-08-09.log", doomed[0]);
     }
 
     /// <summary>
-    /// ⭐ চলতি ফাইলটা বাজেটে **গোনা হয়**, যদিও সে নিজে কখনো মোছার
-    /// তালিকায় আসে না। না গুনলে আজকের ৪৯ MB-র লগের পাশে আরও ৫০ MB
-    /// আর্কাইভ থেকে যেত — অর্থাৎ সীমাটা কার্যত দ্বিগুণ হয়ে যেত।
+    /// The current file **counts** toward the budget, even though it never lands on
+    /// the delete list itself. If it were not counted, today's 49 MB log would sit
+    /// beside another 50 MB of archives, effectively doubling the limit.
     /// </summary>
     [Fact]
     public void চলতি_ফাইলটাও_বাজেটে_ধরা_হয়()
@@ -83,9 +83,9 @@ public class LogRetentionTests
     }
 
     /// <summary>
-    /// ⚠️ চলতি ফাইলটা একাই বাজেট ছাড়িয়ে গেলে আর কিছু করার নেই — সব
-    /// আর্কাইভ যায়, কিন্তু আজকেরটা থাকে। বাজেট রাখতে গিয়ে ওটা মুছলে ঠিক
-    /// সেই তথ্যটাই হারাত যেটার জন্য লগ রাখা।
+    /// Careful: if the current file alone exceeds the budget there is nothing more to
+    /// do: all archives go, but today's stays. Deleting it to meet the budget would lose
+    /// exactly the information the log exists to keep.
     /// </summary>
     [Fact]
     public void চলতি_ফাইল_একাই_বড়_হলে_সব_আর্কাইভ_যায়()
@@ -95,7 +95,10 @@ public class LogRetentionTests
         Assert.Equal(2, doomed.Count);
     }
 
-    /// <summary>একই ফাইল দুই ধাপে দুবার তালিকায় এলে কলার দুবার Delete ডাকত।</summary>
+    /// <summary>
+    /// If the same file appeared on the list twice across two steps, the caller would call
+    /// Delete twice.
+    /// </summary>
     [Fact]
     public void পুরোনো_আর_বড়_দুটো_শর্তেই_পড়লে_একবারই_আসে()
     {

@@ -3,28 +3,29 @@ import type { DesignView } from '../summary/design.rules';
 import type { Digest, DigestRow } from './digest.math';
 
 /**
- * **দৈনিক রিপোর্ট — টেলিগ্রামের নিজস্ব চেহারা** *(১৮ আগস্ট ২০২৬)*।
+ * **The daily report — Telegram's own look.**
  *
- * ⚠️⚠️ **কেন ইমেইলের লেখাটা এখানে চলে না।** এতদিন টেলিগ্রামে ইমেইলের বডি
- * **হুবহু** যেত — সব কর্মীর এক লম্বা তালিকা, তারপর "পিছিয়ে", তারপর আট
- * লাইনের *"How to read these numbers"*। ইমেইলে ওটা ঠিক (পড়া হয় বসে, একবার),
- * ফোনে নয়: গোটাটা একটা ধূসর দেয়াল, আর মালিকের আসল প্রশ্ন দুটো —
- * *"কে কত ঘণ্টা করল"* আর *"কে টার্গেট ছুঁল"* — ওর ভেতরে হারিয়ে যেত।
+ * Careful: **why the email text does not work here.** Until now the email body
+ * went to Telegram **verbatim** — one long list of all staff, then "behind",
+ * then eight lines of *"How to read these numbers"*. In email that is fine
+ * (read sitting down, once); on a phone it is not: the whole thing is a grey
+ * wall, and the owner's two real questions — *who worked how many hours* and
+ * *who reached the target* — got lost in it.
  *
- * ⭐ **তাই দল করে সাজানো**, মালিকের বাছাই অনুযায়ী: টার্গেট ছুঁয়েছেন → ছোঁননি
- * → আজ কিছুই করেননি → আজ ছুটি → মাসে পিছিয়ে। প্রশ্নটার উত্তর **না পড়েই**
- * দেখা যায়, কারণ প্রতিটা শিরোনামের পাশে সংখ্যা আছে।
+ * **So it is arranged in groups**, as the owner chose: reached the target →
+ * did not → did nothing today → off today → behind for the month. The answer
+ * can be seen **without reading**, because every heading has a count beside it.
  *
- * ⚠️⚠️ **ঘণ্টা ধরে সাজানো হয় না, কখনো।** সবাইকে ঘণ্টার ক্রমে বসালে এটা রোজ
- * সন্ধ্যায় একটা **লিডারবোর্ড** হয়ে উঠত — আর সেটা README-র "কখনোই নয়"
- * তালিকায় আছে। প্রতিটা দলের ভেতরে ক্রম **কর্মী-কোড ধরে**, ঠিক যেমন
- * রিপোর্টে ([10 § R22 নোট](../../../../docs/10-Roadmap.md))।
+ * Careful: **never sorted by hours.** Putting everyone in hours order would
+ * turn this into a daily **leaderboard** — and that is on the README's "never"
+ * list. Within each group the order is **by employee code**, exactly as in the
+ * report ([10 § R22 note](../../../../docs/10-Roadmap.md)).
  *
- * ⚠️ এখানেও **কোনো অ্যাপ, ডোমেইন বা স্ক্রিনশট নেই** — শুধু ঘণ্টা।
- * `digest.math.ts`-এর নিয়মটাই বহাল: টেলিগ্রাম বার্তা ফরওয়ার্ড হয়।
+ * Careful: **no app, domain or screenshot here either** — only hours. The
+ * rule from `digest.math.ts` holds: Telegram messages get forwarded.
  */
 
-/** `7.02` → `7h 01m`। ⚠️ দশমিক ঘণ্টা ফোনে পড়ে কেউ মিনিটে রূপান্তর করেন না */
+/** `7.02` → `7h 01m`. Careful: nobody reading decimal hours on a phone converts them to minutes */
 export function hm(hours: number): string {
   const total = Math.round(Math.abs(hours) * 60);
   const h = Math.floor(total / 60);
@@ -34,12 +35,13 @@ export function hm(hours: number): string {
 }
 
 /**
- * ⭐⭐ **সংখ্যা আগে, নাম পরে** — আর এটা সাজসজ্জা নয়।
+ * **Number first, name after** — and this is not decoration.
  *
- * ⚠️ নাম আগে বসালে কলামটা নামের দৈর্ঘ্য ধরে নড়ত ("Saifur" বনাম "Sk Nasif
- * Iqbal Shovon"), তাই সংখ্যাগুলো আর এক লাইনে থাকত না — অথচ **চোখ বুলিয়ে
- * সংখ্যা তুলনা করাই** এই বার্তার একমাত্র কাজ। ⭐ সংখ্যা আগে রাখলে লাইনের
- * দৈর্ঘ্যও ছোট থাকে (সর্বোচ্চ ~৩২ অক্ষর), তাই সরু ফোনেও ভাঁজ পড়ে না।
+ * Careful: with the name first, the column would shift with name length
+ * ("Saifur" versus "Sk Nasif Iqbal Shovon"), so the numbers would no longer
+ * line up — yet **comparing numbers at a glance** is the only job of this
+ * message. With the number first the line stays short too (about 32
+ * characters at most), so it does not wrap even on a narrow phone.
  */
 function line(row: DigestRow, showDelta = false): string {
   const worked = hm(row.todayHours).padStart(7);
@@ -47,20 +49,20 @@ function line(row: DigestRow, showDelta = false): string {
   if (!showDelta) return `  ${worked}  ${row.fullName}`;
 
   const gap = row.todayHours - row.todayTargetHours;
-  // ⚠️ U+2212 (মাইনাস), হাইফেন নয় — হাইফেন সংখ্যার পাশে ড্যাশের মতো দেখায়
+  // Careful: U+2212 (minus sign), not a hyphen — a hyphen looks like a dash next to a number
   const delta = `${gap < 0 ? '−' : '+'}${hmShort(gap)}`.padStart(7);
 
   return `  ${worked} ${delta}  ${row.fullName}`;
 }
 
 /**
- * ⚠️⚠️ **এক ঘণ্টার কম হলে শুধু মিনিট** — `0h 59m` নয়, `59m`।
+ * **Under an hour, minutes only** — `59m`, not `0h 59m`.
  *
- * সাজসজ্জা নয়, **জায়গার হিসাব**: সবচেয়ে লম্বা নামটা ২১ অক্ষর
- * ("Sk Nasif Iqbal Shovon"), আর তিন অক্ষর বাঁচালে গোটা লাইনটা ৪০-এর
- * ভেতরে থাকে। ⚠️ না বাঁচালে ৪১ হতো, আর সরু ফোনে ভাঁজ পড়ে কলামগুলোই
- * ভেঙে যেত — তখন monospace রাখার পুরো কারণটাই বৃথা। (এটা টেস্টে ধরা
- * পড়েছে, চোখে নয়।)
+ * Not decoration, a **space budget**: the longest name is 21 characters
+ * ("Sk Nasif Iqbal Shovon"), and saving three characters keeps the whole line
+ * within 40. Careful: without the saving it would be 41, and on a narrow phone
+ * the line would wrap and break the columns — making the whole reason for
+ * monospace pointless. (This was caught by a test, not by eye.)
  */
 function hmShort(hours: number): string {
   const total = Math.round(Math.abs(hours) * 60);
@@ -71,31 +73,31 @@ function hmShort(hours: number): string {
 
 export interface DigestExtras {
   /**
-   * আজ কর্মঘণ্টায় যতগুলো PC চুপ ছিল।
+   * How many PCs were silent during work hours today.
    *
-   * ⚠️⚠️ এই এক লাইনটাই `agent_down` অ্যালার্টের **গোটা টেলিগ্রাম উপস্থিতি**
-   * *(১৮ আগস্ট)*। আগে প্রতিটা নীরবতা আলাদা বার্তা হয়ে যেত — গত ২৪ ঘণ্টায়
-   * মাপা হয়েছে **৩৯টা**, সপ্তাহে ১৬৮টা। মালিকের কথায়: *"ami ei type er
-   * alart gula chaina"*। ⭐ অ্যালার্টগুলো মুছে ফেলা হয়নি, Alerts পাতায়
-   * আছে; শুধু ফোনে রোজকার বন্যাটা থামানো হয়েছে।
+   * Careful: this one line is the **whole Telegram presence** of the
+   * `agent_down` alert. Before, every silence became its own message — **39**
+   * were measured in the last 24 hours, 168 a week. The owner did not want
+   * this type of alert. The alerts were not deleted, they are on the Alerts
+   * page; only the daily flood on the phone was stopped.
    */
   silentPcs: number;
-  /** পাঠানোর সময় (ঢাকা), যেমন `18:30` — সংখ্যাগুলো কোন মুহূর্তের সেটা বলে */
+  /** Time of sending (Dhaka), such as `18:30` — says which moment the numbers are for */
   atTime: string;
   /**
-   * ⭐ ডিজাইনারদের আজকের সংখ্যা — `empCode` ধরে *(২১ আগস্ট)*।
+   * Today's numbers for designers — by `empCode`.
    *
-   * ⚠️ কেবল ডিজাইনারদেরই থাকে; বাকিদের এখানে এন্ট্রিই নেই। খালি ম্যাপ
-   * মানে "কারো ডিজাইন-টার্গেট নেই", আর তখন অংশটাই বসে না।
+   * Careful: only designers have them; others have no entry here. An empty map
+   * means "nobody has a design target", and then the section is not added at all.
    */
   designs?: ReadonlyMap<string, DesignView>;
 }
 
 /**
- * ⚠️ `parse_mode: 'HTML'`-এ পাঠানো হয় বলে **তিনটে অক্ষর escape করতেই হবে**।
- * কর্মীর নামে `&` থাকা অস্বাভাবিক নয় (`Ali & Co` ধাঁচের নাম), আর একটা
- * unescaped `<` গোটা বার্তাটাকে ৪০০ করে দিত — অর্থাৎ **সেদিনের রিপোর্টই
- * যেত না**।
+ * Careful: because it is sent with `parse_mode: 'HTML'`, **three characters
+ * must be escaped**. An `&` in an employee's name is not unusual (names like
+ * `Ali & Co`), and one unescaped `<` would make the whole message a 400 — so
+ * **that day's report would not go at all**.
  */
 export function escapeHtml(text: string): string {
   return text
@@ -105,9 +107,9 @@ export function escapeHtml(text: string): string {
 }
 
 /**
- * ⭐ কর্মী-কোড ধরে — `Digest.rows` এমনিতেই ওই ক্রমে, তাই এখানে আর সাজানো
- * হয় না। ⚠️ নতুন করে sort করলে সেটাই হতো ঘণ্টা-ক্রমে সাজিয়ে ফেলার
- * প্রথম সুযোগ।
+ * By employee code — `Digest.rows` is already in that order, so there is no
+ * sorting here. Careful: sorting anew would be the first opportunity to slip
+ * into hours order.
  */
 function pick(rows: readonly DigestRow[], test: (r: DigestRow) => boolean) {
   return rows.filter(test);
@@ -126,8 +128,8 @@ export function telegramDigest(
   const under = pick(working, (r) => r.todayHours > 0 && r.todayHours < r.todayTargetHours);
   const none = pick(working, (r) => r.todayHours === 0);
 
-  /** ⚠️ প্রতিদিনের টার্গেট সবার এক নয় (ছুটি, যোগদানের তারিখ) — তাই যেটা
-   *  সবচেয়ে বেশিবার এসেছে সেটাই দেখানো হয়, আর কেউ না থাকলে কিছুই নয় */
+  /** Careful: the daily target is not the same for everyone (leave, joining date) — so the
+   *  most common one is shown, and nothing if there is nobody */
   const target = working.length > 0 ? working[0].todayTargetHours : 0;
 
   const out: string[] = [
@@ -145,8 +147,8 @@ export function telegramDigest(
     group: readonly DigestRow[],
     showDelta: boolean,
   ) => {
-    // ⚠️ খালি দল **দেখানোই হয় না** — "NO WORK TODAY · 0" পড়তে সময় লাগে,
-    //    বুঝতে লাগে না, আর রোজ চারটে খালি শিরোনাম আবার সেই দেয়াল।
+    // Careful: an empty group is **not shown at all** — "NO WORK TODAY · 0" takes
+    //    time to read, not to understand, and four empty headings a day is that wall again.
     if (group.length === 0) return;
 
     out.push('', `${title} · ${group.length}`);
@@ -158,16 +160,16 @@ export function telegramDigest(
 
   if (none.length > 0) {
     out.push('', `⭕ NO WORK TODAY · ${none.length}`);
-    // ⚠️ এখানে ঘণ্টা লেখা হয় না — সবারই ০, আর শূন্যের কলাম কিছুই বলে না
+    // Careful: no hours are written here — all are 0, and a column of zeros says nothing
     for (const r of none) out.push(`  ${r.fullName}`);
   }
 
   /**
-   * ⭐ ছুটির লোকজনও লেখা হয়, যদিও তাঁদের নিয়ে করণীয় নেই।
+   * People on leave are listed too, although there is nothing to do about them.
    *
-   * ⚠️⚠️ না লিখলে **সংখ্যাগুলো মিলত না** — উপরে "১৩ জন" লেখা, নিচে
-   * ১১ জনের নাম, আর বাকি দুজন কোথায় গেলেন তার উত্তর নেই। ওই ফাঁকটা
-   * দেখতে হুবহু "এজেন্ট কাজ করছে না"-র মতো লাগত।
+   * Careful: without it **the numbers would not add up** — "13 staff" above,
+   * 11 names below, and no answer to where the other two went. That gap would
+   * look exactly like "the agent is not working".
    */
   if (off.length > 0) {
     out.push('', `🌴 OFF TODAY · ${off.length}`);
@@ -184,9 +186,10 @@ export function telegramDigest(
   }
 
   /**
-   * ⚠️ ব্যাখ্যা **দুই লাইন**, ইমেইলের আটটা নয়। যেটুকু ছাড়া সংখ্যাটা ভুল
-   * বোঝা যায় সেটুকুই: আজকের দাবি "পিছিয়ে"-তে ধরা হয়নি, আর এজেন্ট বসার
-   * আগের দিনগুলোও নয়। বাকিটা ইমেইলে ও ড্যাশবোর্ডে আছে।
+   * Careful: the explanation is **two lines**, not the email's eight. Just
+   * what is needed to avoid misreading the number: today's claim is not counted
+   * in "behind", nor are days before the agent was installed. The rest is in
+   * the email and on the dashboard.
    */
   if (digest.behind.length > 0) {
     out.push(
@@ -197,14 +200,14 @@ export function telegramDigest(
   }
 
   /**
-   * ⭐⭐ **আজকের ডিজাইন** *(২১ আগস্ট)* — মালিকের ২৫-এর টার্গেট।
+   * **Today's designs** — the owner's target of 25.
    *
-   * ⚠️ ঘণ্টার দলগুলোর **ভেতরে** ঢোকানো হয়নি ইচ্ছাকৃতভাবে: একজন ঘণ্টায়
-   * পিছিয়ে থেকেও ডিজাইনে টার্গেট ছুঁতে পারেন, আর উল্টোটাও। দুটো আলাদা
-   * মাপ, তাই আলাদা অংশ — নইলে "কে পিছিয়ে" প্রশ্নের দুটো উত্তর একসাথে
-   * মিশে যেত।
+   * Careful: deliberately **not put inside** the hours groups: someone can be
+   * behind on hours and still meet the design target, and the reverse. They
+   * are two different measures, so separate sections — otherwise two answers
+   * to "who is behind" would be mixed together.
    *
-   * ⚠️ ক্রম এখানেও কর্মী-কোড ধরে, সংখ্যা ধরে নয়।
+   * Careful: the order here too is by employee code, not by number.
    */
   const designRows = rows.filter((r) => extras.designs?.has(r.empCode));
 
@@ -215,10 +218,10 @@ export function telegramDigest(
       const d = extras.designs!.get(r.empCode)!;
 
       /**
-       * ⚠️⚠️ **টার্গেট না থাকলে শুধু সংখ্যা** *(মালিকের বাছাই, ২২ আগস্ট)*।
-       * ম্যানেজার নিজেও ডিজাইন করেন; সংখ্যাটা আসল, কিন্তু তাঁর কোনো
-       * টার্গেট নেই — তাই `/25`-ও নেই, ✅-ও নেই। ⭐ "কত হলো" আর "টার্গেট
-       * ছুঁল কি না" দুটো আলাদা প্রশ্নই থাকে।
+       * Careful: **with no target, just the number** (the owner's choice). The
+       * manager designs too; the number is real but he has no target — so no
+       * `/25` and no ✅. "How many were done" and "did they reach the target"
+       * remain two separate questions.
        */
       const left = d.target === null
         ? `${String(d.done).padStart(3)}     `
@@ -229,8 +232,8 @@ export function telegramDigest(
   }
 
   if (extras.silentPcs > 0) {
-    // ⚠️ দু-লাইনে — এক লাইনে ৫২ অক্ষর হয়ে যেত, আর তখন সরু ফোনে ভাঁজ
-    //    পড়ে নিচের কলামগুলোর সাথে জট পাকাত (টেস্টে ধরা পড়েছে)
+    // Careful: two lines — on one line it would be 52 characters, and on a narrow phone it
+    //    would wrap and tangle with the columns below (caught by a test)
     out.push(
       '',
       `🖥️ ${extras.silentPcs} ${extras.silentPcs === 1 ? 'PC went' : 'PCs went'} silent today`,
@@ -242,12 +245,11 @@ export function telegramDigest(
 }
 
 /**
- * ⭐ পুরো বার্তাটা একটা `<pre>` ব্লকে — এতে টেলিগ্রাম **monospace**-এ দেখায়,
- * আর তখনই কেবল সংখ্যার কলামগুলো সত্যিই এক লাইনে দাঁড়ায়।
+ * The whole message in one `<pre>` block — Telegram then shows it in
+ * **monospace**, and only then do the number columns really line up.
  *
- * ⚠️⚠️ পাঠানো ব্যর্থ হলে `TelegramChannel` **প্লেইন টেক্সটে আবার চেষ্টা
- * করে** — কারণ একটা ফরম্যাটিং সমস্যার দাম কখনোই "সেদিনের রিপোর্ট হারিয়ে
- * গেল" হওয়া উচিত নয়।
+ * Careful: if sending fails, `TelegramChannel` **retries in plain text** —
+ * because a formatting problem must never cost "that day's report was lost".
  */
 export function asPreBlock(text: string): string {
   return `<pre>${escapeHtml(text)}</pre>`;

@@ -1,51 +1,49 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// ⭐ <b>একটা খারাপ রেকর্ডের জন্য ৪৯৯টা ভালো রেকর্ড ফেলে দেওয়া যাবে না।</b>
+/// <b>One bad record must not cause 499 good ones to be thrown away.</b>
 ///
-/// সার্ভার পুরো ব্যাচ একসাথে যাচাই করে। ৫০০টার মধ্যে একটার
-/// <c>windowTitle</c> সীমার চেয়ে বড় হলে <b>পুরো ব্যাচেই</b> ৪০০ আসে, আর
-/// ৪০০ মানে <see cref="SyncOutcome.Permanent"/> — অর্থাৎ "এটা কোনোদিন
-/// নেওয়া হবে না, ফেলে দাও"।
+/// The server validates the whole batch at once. If one of 500 has a <c>windowTitle</c> over
+/// the limit, <b>the whole batch</b> gets a 400, and a 400 means <see cref="SyncOutcome.Permanent"/>:
+/// "this will never be accepted, drop it".
 ///
-/// সরল বাস্তবায়ন পুরো lease-টাই abandon করত। তাতে একটা বেঠিক রেকর্ডের দাম
-/// হতো <b>বাকি সবার কয়েক ঘণ্টার কাজের হিসাব</b> — আর সেটা কোথাও দেখা যেত না,
-/// কারণ সার্ভারের দিক থেকে সব স্বাভাবিক।
+/// A naive implementation would abandon the whole lease. One bad record would then cost
+/// <b>several hours of everyone else's work</b>, and nowhere would it show, because from the
+/// server's side everything is normal.
 ///
-/// তাই: <c>Permanent</c> পেলে ব্যাচ অর্ধেক করে আবার চেষ্টা। ৫০০ → ২৫০ → …
-/// → ১। মাত্র ১টা রেকর্ড নিয়েও <c>Permanent</c> এলে <b>তখনই</b> নিশ্চিত হওয়া
-/// যায় দোষটা ওই রেকর্ডেরই — সেটাই একমাত্র ফেলে দেওয়া হয়।
+/// So on <c>Permanent</c> the batch is halved and retried: 500 → 250 → … → 1. If a
+/// <c>Permanent</c> still comes back with just 1 record, it is <b>then</b> certain that the
+/// fault is that record's own, and only that one is dropped.
 ///
-/// ৫০০ থেকে ১-এ নামতে ৮ ধাপ। <see cref="RetryPolicy.Default"/>-এ চেষ্টার
-/// কোনো সীমা নেই (শুধু ৩০ দিনের বয়স), তাই এই ধাপগুলোয় কিছু হারায় না।
+/// Getting from 500 down to 1 takes 8 steps. <see cref="RetryPolicy.Default"/> has no limit on
+/// attempts (only the 30-day age), so nothing is lost in these steps.
 /// </summary>
 public sealed class BatchNarrowing(int fullSize)
 {
-    /// <summary>একটার নিচে নামা যায় না — ওটাই সবচেয়ে ছোট যাচাইযোগ্য একক।</summary>
+    /// <summary>Cannot go below one: that is the smallest verifiable unit.</summary>
     public const int MinSize = 1;
 
     private int _current = Guard(fullSize);
 
-    /// <summary>পরের বার কত রেকর্ড নিয়ে চেষ্টা করা হবে।</summary>
+    /// <summary>How many records the next attempt will use.</summary>
     public int Current => _current;
 
     /// <summary>
-    /// এখন একটামাত্র রেকর্ড নিয়ে চেষ্টা হচ্ছে — অর্থাৎ পরের
-    /// <c>Permanent</c> নিঃসন্দেহে ওই রেকর্ডেরই দোষ।
+    /// A single record is being tried right now, so the next <c>Permanent</c> is without doubt
+    /// that record's fault.
     /// </summary>
     public bool IsIsolated => _current <= MinSize;
 
-    /// <summary>ব্যাচ গেছে — পুরো মাপে ফিরে যাওয়া।</summary>
+    /// <summary>The batch went through: return to the full size.</summary>
     public void OnSuccess() => _current = Guard(fullSize);
 
     /// <summary>
-    /// সাময়িক ব্যর্থতা (নেটওয়ার্ক, ৫০০, ৪২৯) — মাপ <b>বদলানো হয় না</b>।
-    /// এতে ব্যাচের কোনো দোষ নেই, তাই ছোট করে লাভ নেই; বরং লিংক ফিরলে
-    /// পুরো মাপেই দ্রুত নিষ্কাশন হবে।
+    /// Temporary failure (network, 500, 429): the size is <b>not changed</b>. The batch is not
+    /// at fault, so shrinking gains nothing; when the link returns, draining at full size is faster.
     /// </summary>
     public void OnTransient() { }
 
-    /// <summary>ব্যাচে খারাপ রেকর্ড আছে — অর্ধেক করে আবার দেখা।</summary>
+    /// <summary>The batch contains a bad record: halve it and look again.</summary>
     public void OnPermanent()
     {
         if (_current <= MinSize) return;
@@ -53,11 +51,10 @@ public sealed class BatchNarrowing(int fullSize)
     }
 
     /// <summary>
-    /// খারাপ রেকর্ডটা ফেলে দেওয়ার পর — পুরো মাপে ফেরা।
+    /// After the bad record is dropped: return to the full size.
     ///
-    /// ⚠️ এখানে ফেরাটা জরুরি। না ফিরলে একটা বেঠিক রেকর্ডের পর সারা জীবন
-    /// একটা-একটা করে পাঠানো হতো; ৫০,০০০ সারির ব্যাকলগ তখন rate limit-এ
-    /// আটকে কয়েক দিনেও শেষ হতো না।
+    /// Important: this return matters. Without it, one bad record would mean sending one record
+    /// at a time forever; a backlog of 50,000 rows would hit the rate limit and take days.
     /// </summary>
     public void OnIsolatedDropped() => _current = Guard(fullSize);
 

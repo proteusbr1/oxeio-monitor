@@ -7,19 +7,19 @@ import type { SessionUser } from '../src/auth/types';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 /**
- * **G85 — বন্ধ করার কোডের সাথে খোলার কোডও।**
+ * **G85 — the code to open, along with the code to close.**
  *
- * `deactivate()` ছিল, `reactivate()` ছিল না। ফলে একবার নিষ্ক্রিয় করা
- * পলিসি **চিরতরে** নিষ্ক্রিয় থাকত, আর ফেরার একমাত্র পথ ছিল সার্ভারে
- * বসে SQL।
+ * `deactivate()` existed, `reactivate()` did not. So a policy once
+ * deactivated stayed deactivated **forever**, and the only way back was SQL on the server.
  *
- * ⭐ এটা মাঠে ধরা পড়েনি — ধরা পড়েছে **G84 সারানোর পর নিয়মটা লিখে রেখে
- * একই চোখে বাকি কোড দেখতে গিয়ে**। সেটাই নিয়ম লিখে রাখার আসল লাভ: একটা
- * বাগ সারানোর পর একই ধাঁচের বাকিগুলো খোঁজা যায়, পরেরটা মাঠে ধরা পড়ার
- * অপেক্ষা না করে।
+ * This was not caught in the field — it was caught **after the G84 fix, by
+ * writing the rule down and looking at the rest of the code with the same
+ * eyes**. That is the real gain of writing rules down: after fixing one bug
+ * you can look for others of the same shape, instead of waiting for the next
+ * to be caught in the field.
  *
- * ⭐ DB ছাড়াই টেস্ট, কারণ এখানকার প্রশ্নগুলো লজিকের: **কোন অবস্থায়
- * থামে, কী লেখে, আর কী ফেরত দেয়।**
+ * Tested without a DB, because the questions here are about logic: **when it
+ * stops, what it writes, and what it returns.**
  */
 
 const ACTOR = { userId: 1 } as unknown as SessionUser;
@@ -64,8 +64,8 @@ function makeService(overrides: {
   };
 }
 
-describe('G85 · work policy আবার সক্রিয় করা', () => {
-  it('নিষ্ক্রিয় পলিসি সক্রিয় হয়, আর ফেরত আসা view-তে সেটা দেখা যায়', async () => {
+describe('G85 · reactivating a work policy', () => {
+  it('an inactive policy becomes active, and that shows in the returned view', async () => {
     const { svc, update } = makeService({
       findUnique: { ...POLICY, _count: { employees: 0 } },
     });
@@ -79,7 +79,7 @@ describe('G85 · work policy আবার সক্রিয় করা', () =
     expect(view.isActive).toBe(true);
   });
 
-  it('নেই এমন পলিসিতে ৪০৪', async () => {
+  it('404 on a policy that does not exist', async () => {
     const { svc } = makeService({ findUnique: null });
 
     await expect(svc.reactivate(ACTOR, 99, '10.0.0.1')).rejects.toThrow(
@@ -88,11 +88,11 @@ describe('G85 · work policy আবার সক্রিয় করা', () =
   });
 
   /**
-   * ⚠️ আগে থেকেই সক্রিয় হলে ৪০৯ — নইলে audit log-এ এমন "বদল" জমত
-   * যেখানে আসলে কিছুই বদলায়নি, ঠিক যে কারণে ভূমিকা বদলের রুটেও
-   * একই মান বসালে কিছু লেখা হয় না (G87)।
+   * 409 if already active — otherwise the audit log would pile up "changes"
+   * where nothing really changed, just as the role-change route writes
+   * nothing when the same value is set (G87).
    */
-  it('আগে থেকেই সক্রিয় হলে ৪০৯, আর কিছুই লেখা হয় না', async () => {
+  it('409 if already active, and nothing is written', async () => {
     const { svc, update, record } = makeService({
       findUnique: { ...POLICY, isActive: true, _count: { employees: 0 } },
     });
@@ -104,7 +104,7 @@ describe('G85 · work policy আবার সক্রিয় করা', () =
     expect(record).not.toHaveBeenCalled();
   });
 
-  it('audit log-এ op ও নাম দুটোই যায়', async () => {
+  it('audit log gets both the op and the name', async () => {
     const { svc, record } = makeService({
       findUnique: { ...POLICY, _count: { employees: 0 } },
     });
@@ -122,14 +122,14 @@ describe('G85 · work policy আবার সক্রিয় করা', () =
   });
 
   /**
-   * ⚠️⚠️ সবচেয়ে সূক্ষ্ম টেস্ট। `deactivate()` শেষে `toView(row, 0)` লেখে,
-   * আর সেটা **ঠিক** — সে শূন্য না হলে চলতেই দেয় না।
+   * The subtlest test. `deactivate()` ends with `toView(row, 0)`, and that is
+   * **correct** — it does not proceed unless the count is zero.
    *
-   * কিন্তু এখানে শূন্য ধরে নেওয়া হতো একটা **অনুমান**: নিষ্ক্রিয় পলিসিতে
-   * কর্মী থাকা সম্ভব (কেউ SQL দিয়ে বসিয়ে দিলে, বা ভবিষ্যতে নিয়ম বদলালে),
-   * আর তখন পর্দা "0 staff" দেখাত অথচ বাস্তবে তাঁরা আছেন।
+   * But here, assuming zero would be an **assumption**: an inactive policy can
+   * have employees (if someone put them there via SQL, or if the rules change
+   * in future), and then the screen would show "0 staff" while they really exist.
    */
-  it('কর্মী-সংখ্যা আসল গোনা থেকেই আসে, শূন্য ধরে নয়', async () => {
+  it('the staff count comes from a real count, not an assumed zero', async () => {
     const { svc } = makeService({
       findUnique: { ...POLICY, _count: { employees: 12 } },
     });

@@ -1,40 +1,42 @@
 /**
- * I09 — নিষ্ক্রিয়তার **খাঁটি** হিসাব। `Date.now()` নেই, টাইমার নেই,
- * DOM নেই — সব সময় প্যারামিটার হিসেবে আসে, তাই DB ছাড়াই টেস্ট করা যায়।
+ * I09: the **pure** idle calculation. No `Date.now()`, no timers, no DOM:
+ * time always comes in as a parameter, so it can be tested without a DB.
  *
- * ⭐ সার্ভার আর ব্রাউজার দুই জায়গাতেই একই হিসাব দরকার, কিন্তু কারণ আলাদা:
- *    - সার্ভারে JWT-র মেয়াদ (`SESSION_TTL_MIN`) **আসল** তালা — ব্রাউজার
- *      যা-ই করুক, মেয়াদোত্তীর্ণ টোকেন গার্ড আটকে দেয়।
- *    - ব্রাউজারে এই হিসাবটা শুধু **ভদ্রতা**: চুপচাপ বেরিয়ে না দিয়ে
- *      ১ মিনিট আগে সতর্ক করা।
- *    ওয়েবে এর হুবহু নকল আছে (`web/src/auth/idle.ts`) — দুটো আলাদা npm
- *    প্যাকেজ বলে import করা যায় না। **এই ফাইলটাই সত্যের উৎস**; বদলালে
- *    ওখানেও বদলাতে হবে।
+ * The same calculation is needed on both the server and the browser, but for
+ * different reasons:
+ *    - On the server the JWT lifetime (`SESSION_TTL_MIN`) is the **real**
+ *      lock: whatever the browser does, the guard blocks an expired token.
+ *    - In the browser this calculation is only **courtesy**: warning 1 minute
+ *      ahead instead of quietly logging out.
+ *    The web has an exact copy of this (`web/src/auth/idle.ts`); they are
+ *    separate npm packages, so one cannot import the other. **This file is
+ *    the source of truth**; if it changes, change that one too.
  */
 
 export type IdlePhase =
-  /** স্বাভাবিক — সতর্কবার্তার সময় এখনো হয়নি */
+  /** Normal: not yet time for the warning */
   | 'active'
-  /** শেষ কয়েক সেকেন্ড — পর্দায় "আর x সেকেন্ড" দেখাতে হবে */
+  /** The last few seconds: the screen must show "x seconds left" */
   | 'warning'
-  /** সময় শেষ — লগআউট */
+  /** Time is up: logout */
   | 'expired';
 
 export interface IdleState {
   phase: IdlePhase;
-  /** আর কত মিলিসেকেন্ড বাকি; `expired` হলে ০ */
+  /** Milliseconds remaining; 0 when `expired` */
   msLeft: number;
 }
 
 /**
- * ⚠️ `lastActivityMs > nowMs` — অর্থাৎ ঘড়ি পিছিয়ে গেছে (ল্যাপটপ ঘুম থেকে
- *    ওঠা, NTP সিংক, টাইমজোন বদল)। বিয়োগটা তখন ঋণাত্মক হতো আর `msLeft`
- *    টাইমআউটের চেয়েও বড় দেখাত — তাই উপরে ছেঁটে দেওয়া। এটা না করলে
- *    সতর্কবার্তা কখনো আসত না।
+ * Careful: `lastActivityMs > nowMs` means the clock went backwards (a laptop
+ * waking from sleep, an NTP sync, a timezone change). The subtraction would
+ * then be negative and `msLeft` would look bigger than the timeout, so it is
+ * clamped above. Without this the warning would never appear.
  *
- * ⚠️ উল্টো দিকে ঘড়ি **এগিয়ে** গেলে (ঘুম থেকে ওঠা মেশিন) `msLeft` সরাসরি
- *    ০ হয়ে যায় → `expired`। এটাই চাওয়া: ল্যাপটপ বন্ধ করে ২ ঘণ্টা পরে
- *    খুললে সেশন ফিরে আসা উচিত নয়।
+ * Careful: in the other direction, if the clock jumps **forward** (a machine
+ * waking from sleep), `msLeft` goes straight to 0 -> `expired`. That is the
+ * intent: closing a laptop and opening it 2 hours later must not bring the
+ * session back.
  */
 export function idleStateAt(
   lastActivityMs: number,
@@ -46,22 +48,23 @@ export function idleStateAt(
   const msLeft = Math.max(0, timeoutMs - elapsed);
 
   if (msLeft <= 0) return { phase: 'expired', msLeft: 0 };
-  // `<=` — ঠিক সীমানায় দাঁড়ালেও সতর্কবার্তা দেখানোই নিরাপদ
+  // `<=`: even standing exactly on the boundary, showing the warning is the safe choice
   if (msLeft <= warnBeforeMs) return { phase: 'warning', msLeft };
   return { phase: 'active', msLeft };
 }
 
 /**
- * সার্ভারের sliding window ধরে রাখতে ব্রাউজারকে মাঝে মাঝে টোকা দিতে হয়।
+ * The browser has to nudge the server now and then to keep its sliding window alive.
  *
- * ⚠️ এটা না থাকলে একটা নীরব বাগ: ইউজার পর্দায় সক্রিয় (মাউস নড়ছে, স্ক্রল
- *    হচ্ছে) কিন্তু কোনো API কল হচ্ছে না — যেমন একটা রিপোর্ট পড়ছে। ব্রাউজার
- *    ভাবত "সক্রিয়", অথচ সার্ভারের টোকেন ৩০ মিনিটে মরে যেত, আর পরের
- *    ক্লিকে হঠাৎ লগইন পর্দা। তাই সক্রিয়তা থাকলে refresh উইন্ডোর ব্যবধানে
- *    একটা হালকা কল পাঠাতে হয়।
+ * Careful: without this there is a silent bug: the user is active on screen
+ * (mouse moving, scrolling) but no API call is happening, for example while
+ * reading a report. The browser would think "active", yet the server token
+ * would die at 30 minutes, and on the next click the login screen would
+ * suddenly appear. So while there is activity, a light call is sent at the
+ * refresh-window interval.
  *
- * ⚠️ শুধু **আসল সক্রিয়তার** সময়ই ডাকা হয় — নইলে খোলা রেখে যাওয়া ট্যাব
- *    চিরকাল সেশন বাঁচিয়ে রাখত, আর অটো-লগআউটের পুরো মানেই থাকত না।
+ * Careful: it is called only during **real activity**; otherwise a tab left
+ * open would keep the session alive forever, and auto-logout would mean nothing.
  */
 export function shouldPingSession(
   lastPingMs: number,

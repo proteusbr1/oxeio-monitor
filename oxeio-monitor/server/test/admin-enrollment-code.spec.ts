@@ -12,41 +12,43 @@ import {
   hashEnrollmentCode,
 } from '../src/devices/enrollment-code';
 
-describe('enrollment code — বর্ণমালা', () => {
+describe('enrollment code: alphabet', () => {
   /**
-   * ⭐ সংখ্যাটা নান্দনিক নয়, নিরাপত্তার। ৩২ না হলে `byte % length`-এ
-   * কিছু অক্ষর অন্যদের চেয়ে বেশি আসত (modulo bias)।
+   * The number is about security, not aesthetics. If it were not 32, some
+   * characters would come up more often than others in `byte % length`
+   * (modulo bias).
    */
-  it('ঠিক ৩২টি অক্ষর, আর ২৫৬ পুরোপুরি ভাগ যায়', () => {
+  it('exactly 32 characters, and 256 divides evenly', () => {
     expect(CODE_ALPHABET).toHaveLength(32);
     expect(256 % CODE_ALPHABET.length).toBe(0);
   });
 
   /**
-   * ⚠️ এই টেস্টটা আগে `toContain('O')` দাবি করত, আর সেটা উপরের
-   * "ঠিক ৩২টি অক্ষর" টেস্টের সাথেই সরাসরি সাংঘর্ষিক ছিল:
-   * 0/I/L তিনটে বাদ দিয়ে O রাখলে বর্ণমালা ৩৩ অক্ষরের হয়, আর তখন
-   * ২৫৬ % ৩৩ = ২৫ — অর্থাৎ প্রথম ২৫টা অক্ষর ৮ বার, বাকিগুলো ৭ বার আসত।
-   * ঠিক যে modulo bias-টা এড়ানোর জন্য ৩২ বাছা হয়েছিল, সেটাই ফিরে আসত।
+   * This test used to assert `toContain('O')`, which directly contradicted
+   * the "exactly 32 characters" test above: dropping 0/I/L but keeping O
+   * makes the alphabet 33 characters, and 256 % 33 = 25, so the first 25
+   * characters would come up 8 times and the rest 7 times. The very modulo
+   * bias that 32 was chosen to avoid would come back.
    *
-   * তাই **চারটেই** বাদ: `0` ও `O` (জোড়াটার দুই পাশই), `I` ও `L` (`1` আছে)।
-   * জোড়ার দুই সদস্যকেই বাদ দিলে কাগজ থেকে টাইপ করার সময় কোনো দিকেই
-   * ভুল হওয়ার সুযোগ থাকে না। ৩৬ − ৪ = ৩২, হিসাব মেলে।
+   * So all four are dropped: `0` and `O` (both sides of the pair), `I` and
+   * `L` (`1` stays). Dropping both members of a pair leaves no room for a
+   * mistake in either direction when typing from paper. 36 - 4 = 32, the
+   * numbers add up.
    */
-  it('চোখে-গোলানো অক্ষরগুলো বাদ — 0, O, I, L', () => {
+  it('look-alike characters are excluded: 0, O, I, L', () => {
     for (const ch of ['0', 'O', 'I', 'L']) {
       expect(CODE_ALPHABET).not.toContain(ch);
     }
-    // জোড়ার যে সদস্যটা রাখা হয়েছে
+    // The member of the pair that was kept
     expect(CODE_ALPHABET).toContain('1');
   });
 
-  it('কোনো অক্ষর দুবার নেই', () => {
+  it('no character appears twice', () => {
     expect(new Set(CODE_ALPHABET).size).toBe(CODE_ALPHABET.length);
   });
 
-  /** ০–২৫৫ প্রতিটা বাইট মেপে দেখা: প্রতিটা অক্ষর ঠিক ৮ বার আসে */
-  it('বাইটের সব মান সমানভাবে ভাগ হয় — কোনো পক্ষপাত নেই', () => {
+  /** Measure every byte from 0 to 255: each character comes up exactly 8 times */
+  it('all byte values are spread evenly, with no bias', () => {
     const hits = new Map<string, number>();
     for (let b = 0; b < 256; b += 1) {
       const ch = CODE_ALPHABET[b % CODE_ALPHABET.length];
@@ -58,14 +60,14 @@ describe('enrollment code — বর্ণমালা', () => {
   });
 });
 
-describe('enrollment code — কোড বানানো', () => {
-  it('একই বাইটে সবসময় একই কোড', () => {
+describe('enrollment code: generating the code', () => {
+  it('the same bytes always give the same code', () => {
     const bytes = Uint8Array.from({ length: 32 }, (_, i) => i * 7);
 
     expect(formatEnrollmentCode(bytes)).toBe(formatEnrollmentCode(bytes));
   });
 
-  it('দৈর্ঘ্য ১২, আর প্রতিটা অক্ষর বর্ণমালার ভেতরের', () => {
+  it('length is 12, and every character is inside the alphabet', () => {
     const bytes = Uint8Array.from({ length: 32 }, (_, i) => (i * 31) % 256);
     const code = formatEnrollmentCode(bytes);
 
@@ -74,30 +76,30 @@ describe('enrollment code — কোড বানানো', () => {
   });
 
   /**
-   * ⚠️ কোডে হাইফেন বা ফাঁকা জায়গা নেই — এজেন্ট কোডটা হুবহু hash করে,
-   * তাই `AB12-CD34` বনাম `AB12CD34` টাইপ করার ভুলটা ধরা যেত না।
+   * The code has no hyphen or space: the agent hashes the code exactly, so
+   * a typing mistake of `AB12-CD34` versus `AB12CD34` could not be caught.
    */
-  it('কোডে হাইফেন বা ফাঁকা জায়গা নেই', () => {
+  it('the code has no hyphen or space', () => {
     const code = formatEnrollmentCode(Uint8Array.from({ length: 16 }, () => 5));
 
     expect(code).toMatch(/^[A-Z0-9]{12}$/);
   });
 
-  it('বাইট কম পড়লে চুপচাপ ছোট কোড না দিয়ে থেমে যায়', () => {
-    // ⚠️ নীরবে ৮ অক্ষরের কোড বানালে এনট্রপি এক-তৃতীয়াংশে নেমে আসত,
-    //    আর কেউ টেরও পেত না
+  it('too few bytes throws instead of quietly giving a short code', () => {
+    // A silent 8-character code would drop the entropy to a third, and
+    // nobody would notice
     expect(() => formatEnrollmentCode(new Uint8Array(4))).toThrow(RangeError);
   });
 });
 
-describe('enrollment code — hash', () => {
+describe('enrollment code: hash', () => {
   /**
-   * ⚠️⚠️ এই টেস্টটাই `src/agent/enrollment.service.ts`-এর সাথে চুক্তি।
-   * ওখানে লেখা আছে `createHash('sha256').update(code.trim()).digest('hex')`।
-   * দুই পাশে অমিল হলে প্রতিটা enrollment নীরবে ব্যর্থ হতো, আর এজেন্ট
-   * শুধু "কোড ভুল বা মেয়াদোত্তীর্ণ" বলত।
+   * Important: this test is the contract with `src/agent/enrollment.service.ts`,
+   * which has `createHash('sha256').update(code.trim()).digest('hex')`.
+   * If the two sides disagree, every enrollment would silently fail and the
+   * agent would only say "code wrong or expired".
    */
-  it('এজেন্টের হিসাবের সাথে অক্ষরে অক্ষরে মেলে', () => {
+  it('matches the agent\'s calculation character for character', () => {
     const code = 'ABCD1234WXYZ';
     const asAgentDoesIt = createHash('sha256')
       .update(code.trim())
@@ -106,26 +108,26 @@ describe('enrollment code — hash', () => {
     expect(hashEnrollmentCode(code)).toBe(asAgentDoesIt);
   });
 
-  it('আগে-পরের ফাঁকা জায়গা উপেক্ষা করে (এজেন্টও `.trim()` করে)', () => {
+  it('ignores leading and trailing whitespace (the agent also calls `.trim()`)', () => {
     expect(hashEnrollmentCode('  ABCD1234WXYZ \n')).toBe(
       hashEnrollmentCode('ABCD1234WXYZ'),
     );
   });
 
   /**
-   * ⭐ **আগে এই টেস্টটা বাগটাকেই assert করত** — "ছোট হাতে অন্য hash হয়"
-   * লেখা ছিল, আর মন্তব্যে সেটাকে "জানা সীমাবদ্ধতা" বলা হয়েছিল।
+   * This test used to assert the bug itself: it said "lowercase gives a
+   * different hash" and the comment called that a "known limitation".
    *
-   * বাস্তবে সীমাবদ্ধতাটার দাম ছিল বেশি: কেউ কোড ছোট হাতে টাইপ করলে
-   * সার্ভার "enrollment code ভুল বা মেয়াদোত্তীর্ণ" বলত — আর ওই একই বার্তা
-   * আসে "কোড নেই", "ব্যবহার হয়ে গেছে" আর "মেয়াদ শেষ" তিনটেতেও (H05 · G18)।
-   * ফলে আসল কারণ খুঁজে পাওয়া প্রায় অসম্ভব ছিল।
+   * The limitation cost more than it seemed: if someone typed the code in
+   * lowercase, the server said "enrollment code wrong or expired", and the
+   * same message also comes for "no such code", "already used" and "expired"
+   * (H05, G18). So finding the real cause was nearly impossible.
    *
-   * ⚠️ বর্ণমালা পুরোটাই বড় হাতের, তাই `toUpperCase()` তৈরি হওয়া কোডে
-   * no-op — অর্থাৎ **আগের কোডগুলোর hash অক্ষত থাকে**, পুরোনো enrollment
-   * ভাঙে না।
+   * The alphabet is entirely uppercase, so `toUpperCase()` is a no-op on
+   * generated codes: the hashes of earlier codes stay intact, and old
+   * enrollments do not break.
    */
-  it('ছোট-বড় হাত যাই হোক, একই hash', () => {
+  it('the same hash whatever the letter case', () => {
     expect(hashEnrollmentCode('abcd1234wxyz')).toBe(
       hashEnrollmentCode('ABCD1234WXYZ'),
     );
@@ -135,7 +137,7 @@ describe('enrollment code — hash', () => {
     expect([...CODE_ALPHABET].every((ch) => ch === ch.toUpperCase())).toBe(true);
   });
 
-  it('কোড কখনো plaintext-এ ফেরত আসে না — hash ৬৪ অক্ষরের hex', () => {
+  it('the code never comes back as plaintext: the hash is 64 hex characters', () => {
     const hash = hashEnrollmentCode('ABCD1234WXYZ');
 
     expect(hash).toMatch(/^[0-9a-f]{64}$/);
@@ -143,8 +145,8 @@ describe('enrollment code — hash', () => {
   });
 });
 
-describe('enrollment code — মেয়াদ', () => {
-  it('ঠিক ২৪ ঘণ্টা (H05)', () => {
+describe('enrollment code: expiry', () => {
+  it('exactly 24 hours (H05)', () => {
     const now = new Date('2026-08-10T09:15:00.000Z');
 
     expect(enrollmentCodeExpiry(now).toISOString()).toBe(
@@ -153,7 +155,7 @@ describe('enrollment code — মেয়াদ', () => {
     expect(ENROLLMENT_CODE_TTL_MS).toBe(24 * 60 * 60 * 1000);
   });
 
-  it('মেয়াদ সবসময় ভবিষ্যতে', () => {
+  it('expiry is always in the future', () => {
     const now = dhakaNoon();
 
     expect(enrollmentCodeExpiry(now).getTime()).toBeGreaterThan(now.getTime());

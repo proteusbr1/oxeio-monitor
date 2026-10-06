@@ -5,7 +5,7 @@ namespace oXeio.Core.Tests;
 public class SlotSchedulerTests
 {
     private static readonly DateTimeOffset Nine =
-        new(2026, 8, 9, 3, 0, 0, TimeSpan.Zero); // ঢাকায় সকাল ৯টা
+        new(2026, 8, 9, 3, 0, 0, TimeSpan.Zero); // 9 AM in Dhaka
 
     [Fact]
     public void ছবি_সবসময়_নিজের_স্লটের_ভেতরেই_ওঠে()
@@ -26,7 +26,7 @@ public class SlotSchedulerTests
     {
         var s = new SlotScheduler(5, new Random(7));
 
-        // Next() সবসময় *পরের* স্লট দেয়, তাই ৯টার স্লটটা পেতে একটু আগে থেকে শুরু
+        // Next() always gives the *next* slot, so start a little early to get the 9 o'clock slot
         var at = Nine.AddMinutes(-5);
         var count = 0;
 
@@ -38,7 +38,7 @@ public class SlotSchedulerTests
             at = slot.SlotStart;
         }
 
-        Assert.Equal(24, count); // ঘণ্টায় ১২টা × ২
+        Assert.Equal(24, count); // 12 per hour x 2
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public class SlotSchedulerTests
             at = slot.FireAt;
         }
 
-        // অনুমান করা গেলে পুরো ব্যবস্থাটাই অর্থহীন (A01)
+        // if it could be predicted the whole scheme would be pointless (A01)
         Assert.True(gaps.Distinct().Count() > 25, "ব্যবধানগুলো যথেষ্ট আলাদা নয়");
     }
 

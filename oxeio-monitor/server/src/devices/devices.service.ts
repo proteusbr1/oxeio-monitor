@@ -21,12 +21,12 @@ import {
 } from './enrollment-code';
 
 /**
- * ⭐ whitelist — `tokenHash` ইচ্ছাকৃতভাবে **নেই**।
+ * Whitelist — `tokenHash` is deliberately **not** included.
  *
- * ⚠️ `include: { employee: true }` লিখলে পুরো সারিটা যেত, আর তাতে
- * `monthlySalary`ও থাকত। ডিভাইসের তালিকা ম্যানেজারের জন্য নয় বলে সেটা
- * এখনই বিপদ নয়, কিন্তু "কোন endpoint দিয়ে বেতন বেরোতে পারে" প্রশ্নের
- * উত্তর একটাই থাকা ভালো: কোনোটা দিয়েই নয়, শুধু বেছে নেওয়া ফিল্ড যায়।
+ * Careful: writing `include: { employee: true }` would send the whole row,
+ * including `monthlySalary`. The device list is not for managers, so that is
+ * not an immediate danger, but "which endpoint can leak salary" should have
+ * one answer: none — only selected fields go out.
  */
 const DEVICE_SELECT = {
   id: true,
@@ -46,13 +46,13 @@ const DEVICE_SELECT = {
   employee: { select: { id: true, empCode: true, fullName: true } },
 } satisfies Prisma.DeviceSelect;
 
-/** ⭐ টাইপটা select থেকেই জন্মায় — হাতে লেখা interface হলে দুটো আলাদা হয়ে যেত */
+/** The type is derived from the select — a hand-written interface would drift apart */
 export type DeviceView = Prisma.DeviceGetPayload<{
   select: typeof DEVICE_SELECT;
 }>;
 
 export interface EnrollmentCodeResult {
-  /** ⚠️ এই একবারই যাবে — সার্ভারে শুধু sha256 জমা থাকে */
+  /** Careful: sent this one time only — the server keeps just the sha256 */
   code: string;
   expiresAt: string;
   employee: { id: number; empCode: string; fullName: string };
@@ -78,7 +78,7 @@ export class DevicesService {
         ...(query.status === undefined ? {} : { status: query.status }),
       },
       select: DEVICE_SELECT,
-      // চুপ হয়ে যাওয়া এজেন্ট আগে দেখাই কাজে লাগে (G01 অ্যালার্টের সাথে মেলে)
+      // Silent agents first is the useful order (matches the G01 alert)
       orderBy: [{ status: 'asc' }, { lastSeenAt: 'desc' }],
     });
 
@@ -95,17 +95,17 @@ export class DevicesService {
   }
 
   /**
-   * H06 — দূর থেকে ডিভাইস বন্ধ।
+   * Remotely switch a device off.
    *
-   * ⚠️ ডিলিট নয়। ওই ডিভাইসের নামে work_sessions, activity_segments,
-   * screenshots — সবই FK দিয়ে বাঁধা; সারিটা মুছলে কারো মাসের ঘণ্টাই
-   * উবে যেত।
+   * Careful: not a delete. work_sessions, activity_segments and screenshots
+   * are all tied to the device by FK; deleting the row would make someone's
+   * month of hours vanish.
    *
-   * ⚠️ `tokenHash` মোছা হয় না, শুধু দরজা বন্ধ হয় — `DeviceAuthGuard`
-   * `status === 'revoked'` দেখে আটকায়। মানে **restore করলে পুরোনো
-   * টোকেনটাই আবার জেগে ওঠে**। ল্যাপটপ হারিয়ে গেলে তাই restore করবেন না;
-   * নতুন enrollment code দিন — enroll `machineGuid` দিয়ে upsert করে
-   * tokenHash বদলে দেয়, পুরোনো টোকেন তখন মরে।
+   * Careful: `tokenHash` is not erased, only the door is closed —
+   * `DeviceAuthGuard` blocks on `status === 'revoked'`. So **restoring wakes
+   * the old token again**. If a laptop is lost, do not restore; issue a new
+   * enrollment code — enroll upserts by `machineGuid` and replaces tokenHash,
+   * and the old token then dies.
    */
   async revoke(
     actor: SessionUser,
@@ -142,11 +142,12 @@ export class DevicesService {
   }
 
   /**
-   * আবার চালু।
+   * Switch back on.
    *
-   * ⚠️ `revoke_device` action-টা এখানে ব্যবহার করা হয়নি — একই action দিয়ে
-   * উল্টো কাজ লিখলে audit log পড়ে কেউ বুঝতেই পারত না কোনটা বন্ধ আর কোনটা
-   * খোলা। তাই `change_setting` + `meta.op = 'restore'`।
+   * Careful: the `revoke_device` action is not used here — recording the
+   * opposite act under the same action would leave anyone reading the audit
+   * log unable to tell which was off and which was on. So `change_setting` +
+   * `meta.op = 'restore'`.
    */
   async restore(
     actor: SessionUser,
@@ -163,9 +164,9 @@ export class DevicesService {
       throw new ConflictException('This device is already active');
     }
 
-    // ⚠️ নিষ্ক্রিয় কর্মীর ডিভাইস আবার চালু করা মানে চাকরি ছেড়ে দেওয়া
-    //    একজনের স্ক্রিনশট আবার উঠতে শুরু করা — deactivate যা বন্ধ করেছিল
-    //    সেটাই নীরবে ফিরে আসত।
+    // Careful: restoring an inactive employee's device means the screenshots of
+    // someone who left start again — what deactivate had stopped would
+    // silently come back.
     if (before.employeeId !== null) {
       const employee = await this.prisma.employee.findUnique({
         where: { id: before.employeeId },
@@ -197,10 +198,11 @@ export class DevicesService {
   }
 
   /**
-   * H05 — `POST /api/v1/devices/enrollment-code`।
+   * `POST /api/v1/devices/enrollment-code`.
    *
-   * ⚠️ কোডটা **একবারই** দেখানো হয়; ডাটাবেসে শুধু sha256। হারালে নতুন কোড
-   * বানাতে হবে, উদ্ধারের কোনো পথ নেই — সেটাই উদ্দেশ্য।
+   * Careful: the code is shown **only once**; the database holds just the
+   * sha256. If lost, a new code must be made, there is no way to recover it —
+   * that is the point.
    */
   async createEnrollmentCode(
     actor: SessionUser,
@@ -213,7 +215,7 @@ export class DevicesService {
     });
     if (!employee) throw new NotFoundException('Staff member not found');
 
-    // ⚠️ চলে যাওয়া কর্মীর নামে নতুন এজেন্ট বসানোর কোড দেওয়া যাবে না
+    // Careful: no code may be issued to enroll a new agent for an employee who has left
     if (employee.status === 'inactive') {
       throw new BadRequestException(
         `${employee.empCode} is inactive — an enrolment code cannot be issued for an inactive staff member`,
@@ -226,9 +228,9 @@ export class DevicesService {
 
     try {
       await this.prisma.$transaction(async (tx) => {
-        // ⭐ নতুন কোড দিলে আগেরগুলো তখনই মেয়াদোত্তীর্ণ। নইলে একই কর্মীর
-        //    নামে একসাথে কয়েকটা জীবন্ত কোড ঘুরত, আর "কোনটা কাকে দিয়েছিলাম"
-        //    প্রশ্নের উত্তর থাকত না।
+        // A new code expires the earlier ones immediately. Otherwise several live
+        // codes would circulate for the same employee, with no answer to
+        // "which one did I give to whom".
         await tx.enrollmentCode.updateMany({
           where: {
             employeeId: employee.id,
@@ -248,9 +250,9 @@ export class DevicesService {
         });
       });
     } catch (err) {
-      // ⚠️ codeHash UNIQUE। ৬০ বিটে সংঘর্ষ কার্যত অসম্ভব, কিন্তু হলে
-      //    চুপচাপ পুরোনো কোড আবার বিলি করার চেয়ে ৫০০ হয়ে ফেটে পড়া ভালো —
-      //    তখন এক কোডে দুজন enroll করতে পারত।
+      // Careful: codeHash is UNIQUE. A collision in 60 bits is practically
+      // impossible, but if it happens, blowing up with a 500 is better than
+      // quietly handing out an old code again — two people could enroll with one code.
       if (
         err instanceof Prisma.PrismaClientKnownRequestError &&
         err.code === 'P2002'
@@ -266,8 +268,8 @@ export class DevicesService {
       targetType: ADMIN_TARGET.employee,
       targetId: employee.id,
       ipAddress: ip,
-      // ⚠️ কোড বা তার hash কখনো audit meta-তে নয় — audit_log owner-only
-      //    হলেও ওটা লগ, গোপন কিছু রাখার জায়গা নয়
+      // Careful: neither the code nor its hash ever goes into the audit meta —
+      // even though audit_log is owner-only, it is a log, not a place for secrets
       meta: { empCode: employee.empCode, expiresAt: expiresAt.toISOString() },
     });
 

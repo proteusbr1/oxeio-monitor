@@ -2,14 +2,14 @@ import { Fragment } from 'react';
 import type { ReactNode } from 'react';
 
 /**
- * সাধারণ টেবিল।
+ * Generic table.
  *
- * ⚠️ E12 — চওড়া টেবিল ফোনে **নিজের ফ্রেমে স্ক্রল করে**, পুরো পাতা নয়।
- *    এটা না থাকলে অ্যাটেনডেন্স রিপোর্টের ৯টা কলাম গোটা পেজটাকেই আড়াআড়ি
- *    টেনে বড় করত, আর হেডার-নেভিগেশনও সরে যেত।
+ * Careful: E12: a wide table scrolls inside its own frame on a phone, not the
+ * whole page. Without this the attendance report's 9 columns would stretch the
+ * whole page sideways and the header navigation would shift too.
  *
- * ⭐ সংখ্যার কলামে `align: 'right'` দিন — ডানে সারিবদ্ধ সংখ্যা চোখে
- *    তুলনা করা যায়। `<Duration>`/`.num` এমনিতেই tabular-nums।
+ * Use `align: 'right'` for number columns: right-aligned numbers are easy to
+ * compare by eye. `<Duration>`/`.num` already use tabular-nums.
  *
  * ```tsx
  * <Table
@@ -28,7 +28,7 @@ export interface Column<T> {
   header: ReactNode;
   render: (row: T, index: number) => ReactNode;
   align?: 'left' | 'right' | 'center';
-  /** কলামের নিজস্ব ক্লাস — যেমন `w-32` বা `hidden sm:table-cell` */
+  /** The column's own class, e.g. `w-32` or `hidden sm:table-cell`. */
   className?: string;
 }
 
@@ -37,7 +37,7 @@ export function Table<T>({
   rows,
   rowKey,
   onRowClick,
-  /** সারি হালকা করে দেখানো — যেমন নিষ্ক্রিয় কর্মী */
+  /** Show the row dimmed, e.g. an inactive employee. */
   rowMuted,
   groupBefore,
   footer,
@@ -48,32 +48,33 @@ export function Table<T>({
   onRowClick?: (row: T) => void;
   rowMuted?: (row: T) => boolean;
   /**
-   * ⭐ কোনো সারির **আগে** একটা পূর্ণ-প্রস্থ ব্যান্ড — যেমন "Not working · 1"।
+   * A full-width band before a row, e.g. "Not working · 1".
    *
-   * ⚠️ দুটো আলাদা `<Table>` বসিয়ে ভাগ করা যেত না: দুটো টেবিলের কলাম
-   *    আলাদাভাবে মাপা হয়, তাই সংখ্যাগুলো আর এক লাইনে থাকত না — অথচ
-   *    সারিবদ্ধ সংখ্যাই টেবিলের একমাত্র কারণ।
+   * Careful: two separate `<Table>`s could not be used to split it. Each table
+   * sizes its columns independently, so the numbers would no longer line up, and
+   * aligned numbers are the only reason for a table.
    */
   groupBefore?: (row: T, index: number) => ReactNode;
-  /** যোগফলের সারি — `<tfoot>`-এ বসে, স্ক্রল করলেও কলামের সাথেই থাকে */
+  /** Total row: goes in `<tfoot>` and stays with the columns even when scrolled. */
   footer?: ReactNode;
 }) {
   const align = (a?: Column<T>['align']): string =>
     a === 'right' ? 'text-right' : a === 'center' ? 'text-center' : 'text-left';
 
   /**
-   * ⭐⭐ **প্রথম কলাম আটকানো (G124)।**
+   * Pin the first column (G124).
    *
-   * ⚠️ টেবিলটা `overflow-x-auto`-তে নিজের ফ্রেমে স্ক্রল করে — সেটা ভালো,
-   *    পুরো পাতা টানে না। কিন্তু Attendance রিপোর্টের ৯ কলামে ডানে সরালে
-   *    **কার সারি দেখছি সেটাই হারিয়ে যেত**, আর ফোনে প্রায় সবসময়ই সরাতে হয়।
-   * ⭐ নিয়মটা নতুন নয় — `HeatGrid` আগে থেকেই এটা করে; এখানে অনুপস্থিত
-   *    থাকাটাই ছিল অসম্পূর্ণ জোড়া।
+   * Careful: the table scrolls in its own `overflow-x-auto` frame, which is good
+   * because it does not drag the whole page. But with the Attendance report's 9
+   * columns, scrolling right made you lose track of which row you were looking at,
+   * and on a phone you almost always have to scroll. The rule is not new:
+   * `HeatGrid` already does this; its absence here was the incomplete half of the pair.
    *
-   * ⚠️ পটভূমি `bg-inherit`, কোনো নির্দিষ্ট রং নয়। `bg-surface` হার্ডকোড
-   *    করলে ক্লিকযোগ্য সারির `hover:bg-paper` প্রথম ঘরে পৌঁছাত না — সারিটা
-   *    আধখানা রং বদলাত, যা দেখতে ভাঙা লাগত। রংটা `<tr>`-এ বসিয়ে ঘরটাকে
-   *    উত্তরাধিকারে নিতে দেওয়াই একমাত্র পথ যাতে দুটো অবস্থাই ঠিক থাকে।
+   * Careful: the background is `bg-inherit`, not a specific color. Hard-coding
+   * `bg-surface` would stop a clickable row's `hover:bg-paper` from reaching the
+   * first cell, so half the row would change color, which looks broken. Putting
+   * the color on the `<tr>` and letting the cell inherit is the only way both
+   * states look right.
    */
   const stickyCol = 'sticky left-0 z-10 border-r border-line';
 
@@ -103,8 +104,8 @@ export function Table<T>({
           <Fragment key={rowKey(row, index)}>
             {band && (
               <tr className="bg-surface">
-                {/* ⚠️ `colSpan` — নইলে ব্যান্ডটা প্রথম কলামের ভেতরে ঢুকে
-                    যেত আর বাকি কলামগুলো ফাঁকা সারি হয়ে দাঁড়াত */}
+                {/* Careful: `colSpan`; otherwise the band would be squeezed into the first
+                    column and the other columns would become empty cells */}
                 <td colSpan={columns.length} className="px-3 pt-5 pb-2">
                   {band}
                 </td>
@@ -112,9 +113,9 @@ export function Table<T>({
             )}
             <tr
               onClick={onRowClick ? () => onRowClick(row) : undefined}
-              // ⚠️ `bg-surface` এখানে **বাধ্যতামূলক** — উপরের নোট দেখুন;
-              //    `<tr>`-এ রং না থাকলে sticky ঘরটা স্বচ্ছ হয়ে যেত আর
-              //    স্ক্রল করার সময় নিচের লেখা তার ভেতর দিয়ে দেখা যেত।
+              // Careful: `bg-surface` is mandatory here (see the note above); without a color
+              // on the `<tr>` the sticky cell would be transparent and text beneath would
+              // show through it while scrolling.
               className={`border-b border-line/70 bg-surface last:border-0 ${
                 onRowClick ? 'cursor-pointer hover:bg-paper' : ''
               } ${rowMuted?.(row) ? 'text-ink-3' : ''}`}
@@ -146,9 +147,9 @@ export function Table<T>({
 }
 
 /**
- * নাম + কোড — টেবিলের প্রথম কলামে যেভাবে বারবার লাগে।
- * ⚠️ কোডটা `.num`-এ, কারণ `OX-001` আর `OX-010` একই প্রস্থে থাকলে
- *    চোখে খুঁজে পাওয়া সহজ।
+ * Name + code: as repeatedly needed in a table's first column.
+ * Careful: the code is in `.num` because `OX-001` and `OX-010` at the same width
+ * are easier to find by eye.
  */
 export function PersonCell({
   fullName,
@@ -161,16 +162,16 @@ export function PersonCell({
   empCode?: string;
   note?: ReactNode;
   /**
-   * নামটা **মোটা ও সবুজ** করে দেখায় — তালিকায় চোখ বুলিয়েই আলাদা করা যায়।
+   * Shows the name bold and green, so it stands out when scanning the list.
    *
-   * ⭐ ঐচ্ছিক, তাই `PersonCell`-এর বাকি পাঁচটা ব্যবহার (রিপোর্ট, হিটম্যাপ)
-   *    অপরিবর্তিত থাকে।
+   * Optional, so the other five uses of `PersonCell` (reports, heatmap) stay unchanged.
    *
-   * ⚠️ **রঙই একমাত্র সংকেত নয়, মোটা হরফও** — বর্ণান্ধ কারো কাছে সবুজ আর
-   *    সাধারণ লেখা এক দেখাতে পারে, কিন্তু ওজনের তফাত সবাই দেখেন।
+   * Careful: color is not the only signal; so is the bold weight. For someone
+   * colour-blind, green and normal text can look the same, but everyone sees a
+   * difference in weight.
    */
   accent?: boolean;
-  /** hover করলে কেন আলাদা, সেটা বলে — নইলে রঙটা অব্যাখ্যাত থেকে যায় */
+  /** Says on hover why it differs; otherwise the color stays unexplained. */
   accentTitle?: string;
 }) {
   return (

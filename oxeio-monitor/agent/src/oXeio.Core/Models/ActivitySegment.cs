@@ -3,10 +3,10 @@ using oXeio.Core.Time;
 namespace oXeio.Core.Models;
 
 /// <summary>
-/// একটা বন্ধ হয়ে যাওয়া সেগমেন্ট — সার্ভারে <c>POST /agent/segments</c>-এ যাবে।
+/// A closed segment: goes to the server in <c>POST /agent/segments</c>.
 ///
-/// <see cref="ClientUuid"/> এজেন্টেই তৈরি হয় এবং queue-তে জমা থাকে, তাই
-/// রিট্রাইয়ে একই আইডি যায় — সার্ভার তখন ডুপ্লিকেট বাদ দিতে পারে (§ ২.১-ঘ)।
+/// <see cref="ClientUuid"/> is created in the agent and kept in the queue, so retries send
+/// the same id and the server can drop duplicates (section 2.1(d)).
 /// </summary>
 public sealed record ActivitySegment
 {
@@ -16,15 +16,15 @@ public sealed record ActivitySegment
     public required DateTimeOffset EndedAt { get; init; }
 
     /// <summary>
-    /// monotonic ঘড়ি থেকে মাপা — তাই PC-র ঘড়ি বদলালেও এই সংখ্যা অটুট।
+    /// Measured from the monotonic clock, so this number is intact even if the PC's clock changes.
     /// </summary>
     public required int DurationSec { get; init; }
 
-    /// <summary>০–১০০, ওই খণ্ডে কতটা অ্যাক্টিভ ছিল। কীলগিং নয় (B13)।</summary>
+    /// <summary>0 to 100: how active the person was in this slice. Not keylogging (B13).</summary>
     public int? InputScore { get; init; }
 
     public DateOnly WorkDate => DhakaTime.WorkDateOf(StartedAt);
 
-    /// <summary>একমাত্র <see cref="SegmentState.Active"/> ঘণ্টার হিসাবে যোগ হয়।</summary>
+    /// <summary>Only <see cref="SegmentState.Active"/> is added to the hours calculation.</summary>
     public bool CountsAsWork => State == SegmentState.Active;
 }

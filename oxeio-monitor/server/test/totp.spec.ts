@@ -28,14 +28,14 @@ import {
 } from '../src/auth/totp';
 
 /**
- * I06/I09-এর খাঁটি অংশের টেস্ট — ডাটাবেস, Nest, HTTP কিছুই লাগে না।
- * সময় সবসময় হাতে দেওয়া, তাই ফল স্থির।
+ * Tests for the pure parts of I06/I09 — no database, Nest or HTTP needed.
+ * Time is always passed in, so results are fixed.
  *
- * ⚠️ `resetDatabase()` এখানে নেই আর দরকারও নেই — এই ফাইলটা অন্য কোনো
- *    টেস্টের ফিক্সচার ছোঁয় না, তাই সমান্তরালে চললেও নিরাপদ।
+ * `resetDatabase()` is not here and is not needed — this file touches no
+ *    other test's fixtures, so it is safe even when run in parallel.
  */
 
-/** টেস্টের ভেতরে কোড বানাতে হয় — অ্যাপ যে অ্যালগরিদম ব্যবহার করে, সেটাই */
+/** The tests must generate codes themselves — with the same algorithm the app uses */
 function codeAt(secret: string, timestamp: number): string {
   return TOTP.generate({
     secret: Secret.fromBase32(secret),
@@ -57,25 +57,25 @@ function envelope(over: Partial<TotpEnvelope> = {}): TotpEnvelope {
   };
 }
 
-// ══════════════════ খাম (envelope) ══════════════════
+// ══════════════════ envelope ══════════════════
 
-describe('totp খাম — এক কলামে চারটে জিনিস', () => {
-  it('encode → decode-এ সব মান অবিকৃত ফেরে', () => {
+describe('totp envelope — four things in one column', () => {
+  it('encode → decode returns every value intact', () => {
     const env = envelope({ recoveryHashes: ['aa', 'bb'], lastCounter: 42 });
     expect(decodeEnvelope(encodeEnvelope(env))).toEqual(env);
   });
 
-  it('খালি/null মানে 2FA নেই', () => {
+  it('empty/null means no 2FA', () => {
     expect(decodeEnvelope(null)).toBeNull();
     expect(decodeEnvelope(undefined)).toBeNull();
     expect(decodeEnvelope('   ')).toBeNull();
   });
 
   /**
-   * ⚠️ এটাই সবচেয়ে জরুরি টেস্ট: হাতে বসানো পুরোনো সিক্রেটকে "চালু" ধরতে
-   *    হবে। "বন্ধ" ধরলে 2FA নীরবে উধাও হয়ে যেত আর কেউ টেরও পেত না।
+   * This is the most important test: an old secret set by hand must count as
+   *    "enabled". If treated as "off", 2FA would silently vanish and nobody would notice.
    */
-  it('JSON নয় এমন স্ট্রিং = পুরোনো ফরম্যাটের সিক্রেট, আর সেটা চালু', () => {
+  it('a non-JSON string = a secret in the old format, and it is enabled', () => {
     const env = decodeEnvelope('JBSWY3DPEHPK3PXP');
     expect(env?.enabled).toBe(true);
     expect(env?.secret).toBe('JBSWY3DPEHPK3PXP');
@@ -83,10 +83,10 @@ describe('totp খাম — এক কলামে চারটে জিনি
   });
 
   /**
-   * ⚠️ বিকৃত JSON-এ `null` ফেরালে "2FA নেই" বোঝাত — অর্থাৎ ডেটা নষ্ট হলে
-   *    নিরাপত্তাও উধাও। তাই ছোড়া হয়: লগইন ব্যর্থ হবে, ফাঁক তৈরি হবে না।
+   * Returning `null` for malformed JSON would mean "no 2FA" — i.e. if the data
+   *    is corrupted, security vanishes too. So it throws: login fails, no gap is created.
    */
-  it('ভাঙা JSON বা ভুল আকারে ছোড়ে — নীরবে 2FA বন্ধ হয় না', () => {
+  it('malformed JSON or wrong shape throws — 2FA is not silently turned off', () => {
     expect(() => decodeEnvelope('{oops')).toThrow(TotpEnvelopeError);
     expect(() => decodeEnvelope('{"secret":"AB"}')).toThrow(TotpEnvelopeError);
     expect(() => decodeEnvelope('{"secret":"","enabled":true,"recoveryHashes":[],"lastCounter":0}')).toThrow(
@@ -101,16 +101,16 @@ describe('totp খাম — এক কলামে চারটে জিনি
   });
 });
 
-// ══════════════════ সিক্রেট ও QR লিংক ══════════════════
+// ══════════════════ secret and QR link ══════════════════
 
-describe('সিক্রেট ও otpauth লিংক', () => {
-  it('সিক্রেট base32, ২০ বাইট = ৩২ অক্ষর', () => {
+describe('secret and otpauth link', () => {
+  it('the secret is base32, 20 bytes = 32 characters', () => {
     const s = generateSecret();
     expect(s).toMatch(/^[A-Z2-7]{32}$/);
     expect(generateSecret()).not.toBe(s);
   });
 
-  it('otpauth লিংকে issuer ও ইমেইল দুটোই থাকে', () => {
+  it('the otpauth link has both the issuer and the email', () => {
     const uri = buildOtpauthUri(generateSecret(), 'owner@oxeio.local');
     expect(uri.startsWith('otpauth://totp/')).toBe(true);
     expect(uri).toContain('issuer=oXeio%20Monitor');
@@ -120,36 +120,36 @@ describe('সিক্রেট ও otpauth লিংক', () => {
   });
 });
 
-// ══════════════════ TOTP যাচাই ══════════════════
+// ══════════════════ TOTP verification ══════════════════
 
-describe('TOTP যাচাই', () => {
+describe('TOTP verification', () => {
   const secret = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
-  const now = 1_760_000_000_000; // স্থির সময়, তাই ফলও স্থির
+  const now = 1_760_000_000_000; // fixed time, so the result is fixed too
 
-  it('এখনকার কোড মেলে আর counter ফেরত দেয়', () => {
+  it('the current code matches and returns the counter', () => {
     const v = verifyTotpCode(envelope({ secret }), codeAt(secret, now), now);
     expect(v.ok).toBe(true);
     if (v.ok) expect(v.counter).toBe(Math.floor(now / 1000 / TOTP_PERIOD));
   });
 
-  it('স্পেস/ড্যাশসহ কপি করা কোডও চলে', () => {
+  it('a code copied with spaces/dashes works too', () => {
     const code = codeAt(secret, now);
     const messy = `${code.slice(0, 3)} ${code.slice(3)}`;
     expect(verifyTotpCode(envelope({ secret }), messy, now).ok).toBe(true);
     expect(normalizeTotpCode(' 12-34 56 ')).toBe('123456');
   });
 
-  it('৬ অঙ্ক না হলে malformed', () => {
+  it('malformed if not 6 digits', () => {
     const v = verifyTotpCode(envelope({ secret }), '1234', now);
     expect(v).toEqual({ ok: false, reason: 'malformed' });
   });
 
-  it('ভাঙা সিক্রেটে malformed — ছোড়ে না', () => {
+  it('malformed on a broken secret — does not throw', () => {
     const v = verifyTotpCode(envelope({ secret: '!!!!' }), '123456', now);
     expect(v).toEqual({ ok: false, reason: 'malformed' });
   });
 
-  it('ভুল কোডে invalid', () => {
+  it('invalid on a wrong code', () => {
     const wrong = codeAt(secret, now) === '000000' ? '111111' : '000000';
     expect(verifyTotpCode(envelope({ secret }), wrong, now)).toEqual({
       ok: false,
@@ -158,10 +158,10 @@ describe('TOTP যাচাই', () => {
   });
 
   /**
-   * ⚠️ ±১ ধাপ সহনশীলতা — ফোনের ঘড়ি কয়েক সেকেন্ড এদিক-ওদিক থাকা স্বাভাবিক।
-   *    ০ রাখলে বহু বৈধ লগইন অকারণে ব্যর্থ হতো।
+   * Tolerance of ±1 step — a phone clock being a few seconds off is normal.
+   *    With 0, many valid logins would fail for no reason.
    */
-  it('±১ ধাপ (±৩০ সেকেন্ড) সহ্য করে, ±২ করে না', () => {
+  it('tolerates ±1 step (±30 seconds), not ±2', () => {
     const step = TOTP_PERIOD * 1000;
     expect(verifyTotpCode(envelope({ secret }), codeAt(secret, now - step), now).ok).toBe(true);
     expect(verifyTotpCode(envelope({ secret }), codeAt(secret, now + step), now).ok).toBe(true);
@@ -170,10 +170,10 @@ describe('TOTP যাচাই', () => {
   });
 
   /**
-   * ⚠️ replay — একই ৬ অঙ্ক ৩০ সেকেন্ড ধরে বৈধ থাকে। counter মনে না রাখলে
-   *    কাঁধের উপর দিয়ে দেখে ফেলা কোড দিয়ে দ্বিতীয়বার ঢোকা যেত।
+   * Replay — the same 6 digits stay valid for 30 seconds. Without remembering
+   *    the counter, a code seen over someone's shoulder could be used to log in a second time.
    */
-  it('একই কোড দুবার চলে না', () => {
+  it('the same code does not work twice', () => {
     const env = envelope({ secret });
     const code = codeAt(secret, now);
 
@@ -188,8 +188,8 @@ describe('TOTP যাচাই', () => {
     });
   });
 
-  /** পিছনের ধাপের কোড (window-এর ভেতরে হলেও) আর চলবে না */
-  it('আগের ধাপের কোডও replayed — counter এগিয়ে গেলে পিছনে ফেরা নেই', () => {
+  /** A code from an earlier step (even inside the window) must no longer work */
+  it('a code from an earlier step is replayed too — once the counter has moved on there is no going back', () => {
     const step = TOTP_PERIOD * 1000;
     const env = envelope({
       secret,
@@ -201,7 +201,7 @@ describe('TOTP যাচাই', () => {
     });
   });
 
-  it('পরের ধাপের কোড চলে — ঘড়ি সামান্য এগিয়ে থাকা ইউজার আটকায় না', () => {
+  it('a code from the next step works — a user whose clock runs slightly ahead is not locked out', () => {
     const step = TOTP_PERIOD * 1000;
     const env = envelope({
       secret,
@@ -212,23 +212,23 @@ describe('TOTP যাচাই', () => {
     if (v.ok) expect(v.counter).toBe(env.lastCounter + 1);
   });
 
-  it('২FA বন্ধ থাকলেও যাচাই কাজ করে — enable ধাপে ঠিক এটাই দরকার', () => {
+  it('verification works even when 2FA is off — exactly what the enable step needs', () => {
     const env = envelope({ secret, enabled: false });
     expect(verifyTotpCode(env, codeAt(secret, now), now).ok).toBe(true);
   });
 });
 
-// ══════════════════ রিকভারি কোড ══════════════════
+// ══════════════════ recovery codes ══════════════════
 
-describe('রিকভারি কোড', () => {
-  /** ⚠️ ৩২ না হলে `% length` কিছু অক্ষরকে বেশি বার বেছে নিত */
-  it('বর্ণমালা ঠিক ৩২ অক্ষর, আর 0/1/I/O নেই', () => {
+describe('recovery codes', () => {
+  /** If it were not 32, `% length` would pick some characters more often */
+  it('the alphabet is exactly 32 characters, with no 0/1/I/O', () => {
     expect(RECOVERY_ALPHABET).toHaveLength(32);
     expect(new Set(RECOVERY_ALPHABET).size).toBe(32);
     for (const ch of '01IO') expect(RECOVERY_ALPHABET).not.toContain(ch);
   });
 
-  it('ডিফল্টে ১০টা কোড, প্রতিটা ১০ অক্ষর + মাঝে ড্যাশ', () => {
+  it('by default 10 codes, each 10 characters + a dash in the middle', () => {
     const codes = generateRecoveryCodes();
     expect(codes).toHaveLength(RECOVERY_CODE_COUNT);
     for (const c of codes) {
@@ -238,7 +238,7 @@ describe('রিকভারি কোড', () => {
     expect(new Set(codes).size).toBe(RECOVERY_CODE_COUNT);
   });
 
-  it('ড্যাশ শুধু পড়ার সুবিধা — হ্যাশে ঢোকে না', () => {
+  it('the dash is only for readability — it does not go into the hash', () => {
     expect(formatRecoveryCode('ABCDEFGHJK')).toBe('ABCDE-FGHJK');
     expect(hashRecoveryCode('ABCDE-FGHJK')).toBe(hashRecoveryCode('abcdefghjk'));
     expect(hashRecoveryCode('a b c d e f g h j k')).toBe(
@@ -246,17 +246,17 @@ describe('রিকভারি কোড', () => {
     );
   });
 
-  it('হ্যাশ ৬৪ অক্ষরের hex — plaintext কোথাও থাকে না', () => {
+  it('the hash is 64 hex characters — plaintext is nowhere', () => {
     const h = hashRecoveryCode('ABCDE-FGHJK');
     expect(h).toMatch(/^[0-9a-f]{64}$/);
     expect(h).not.toContain('ABCDE');
   });
 
   /**
-   * ⚠️ মিলে গেলে তালিকা থেকে বাদ যাওয়া অপরিহার্য — নইলে একই কাগজের
-   *    কোড বারবার চলত, অর্থাৎ "একবার-ব্যবহার্য" কথাটাই মিথ্যা হতো।
+   * On a match the code must be removed from the list — otherwise the same
+   *    paper's code would work again and again, and "single-use" would be a lie.
    */
-  it('সঠিক কোড খরচ হয়ে যায়, দ্বিতীয়বার চলে না', () => {
+  it('a correct code is used up, and does not work a second time', () => {
     const codes = generateRecoveryCodes(3);
     const hashes = codes.map(hashRecoveryCode);
 
@@ -268,7 +268,7 @@ describe('রিকভারি কোড', () => {
     expect(consumeRecoveryCode(first.remaining, codes[1]).ok).toBe(false);
   });
 
-  it('ভুল কোডে তালিকা অক্ষত থাকে', () => {
+  it('the list stays intact on a wrong code', () => {
     const codes = generateRecoveryCodes(3);
     const hashes = codes.map(hashRecoveryCode);
     const v = consumeRecoveryCode(hashes, 'ZZZZZ-ZZZZZ');
@@ -276,31 +276,31 @@ describe('রিকভারি কোড', () => {
     expect(v.remaining).toEqual(hashes);
   });
 
-  it('খালি কোডে কখনো সফল নয় — খালি তালিকার সাথেও নয়', () => {
+  it('an empty code never succeeds — not even against an empty list', () => {
     expect(consumeRecoveryCode([], '').ok).toBe(false);
     expect(consumeRecoveryCode([hashRecoveryCode('ABCDEFGHJK')], '  -  ').ok).toBe(
       false,
     );
   });
 
-  it('ছোট হাতের অক্ষর আর বাড়তি স্পেসেও মেলে — কাগজ দেখে টাইপ করা কোড', () => {
+  it('lower-case letters and extra spaces still match — a code typed from paper', () => {
     const codes = generateRecoveryCodes(2);
     const hashes = codes.map(hashRecoveryCode);
     const sloppy = ` ${codes[0].toLowerCase().replace('-', ' ')} `;
     expect(consumeRecoveryCode(hashes, sloppy).ok).toBe(true);
   });
 
-  /** ভাঙা hex জমা থাকলেও যেন ছুড়ে না দেয় (timingSafeEqual দৈর্ঘ্যে ছোড়ে) */
-  it('তালিকায় ভাঙা হ্যাশ থাকলেও ছোড়ে না', () => {
+  /** Must not throw even if a broken hex is stored (timingSafeEqual throws on length) */
+  it('does not throw even if the list has a broken hash', () => {
     const code = generateRecoveryCodes(1)[0];
     const hashes = ['zz', '', hashRecoveryCode(code)];
     expect(consumeRecoveryCode(hashes, code).ok).toBe(true);
   });
 });
 
-// ══════════════════ দ্বিতীয় ধাপ — দুই পথ একসাথে ══════════════════
+// ══════════════════ second step — both paths together ══════════════════
 
-describe('verifySecondFactor — লগইনের দ্বিতীয় ধাপ', () => {
+describe('verifySecondFactor — the second step of login', () => {
   const secret = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
   const now = 1_760_000_000_000;
 
@@ -313,11 +313,11 @@ describe('verifySecondFactor — লগইনের দ্বিতীয় ধ
   }
 
   /**
-   * ⚠️ `missing` আলাদা হওয়া অপরিহার্য — এটাকে ব্যর্থতা ধরলে প্রতিটা
-   *    স্বাভাবিক লগইনই throttle-এর কাউন্টার বাড়াত, আর পাঁচবার লগইন করলেই
-   *    ১৫ মিনিটের তালা পড়ত।
+   * `missing` must be separate — if it were treated as a failure, every normal
+   *    login would raise the throttle counter, and five logins would lock
+   *    the account for 15 minutes.
    */
-  it('কিছুই না দিলে missing — invalid নয়', () => {
+  it('missing if nothing is given — not invalid', () => {
     const { env } = withCodes();
     expect(verifySecondFactor(env, {}, now)).toEqual({
       ok: false,
@@ -328,7 +328,7 @@ describe('verifySecondFactor — লগইনের দ্বিতীয় ধ
     );
   });
 
-  it('সঠিক TOTP-এ counter এগোয়, রিকভারি তালিকা অক্ষত', () => {
+  it('a correct TOTP advances the counter, the recovery list stays intact', () => {
     const { env } = withCodes();
     const v = verifySecondFactor(env, { totp: codeAt(secret, now) }, now);
     expect(v.ok).toBe(true);
@@ -338,7 +338,7 @@ describe('verifySecondFactor — লগইনের দ্বিতীয় ধ
     expect(v.env.recoveryHashes).toEqual(env.recoveryHashes);
   });
 
-  it('সঠিক রিকভারি কোডে সেটা বাদ যায়, counter অপরিবর্তিত', () => {
+  it('a correct recovery code is removed, the counter is unchanged', () => {
     const { env, codes } = withCodes();
     const v = verifySecondFactor(env, { recoveryCode: codes[2] }, now);
     expect(v.ok).toBe(true);
@@ -348,9 +348,9 @@ describe('verifySecondFactor — লগইনের দ্বিতীয় ধ
     expect(v.env.lastCounter).toBe(env.lastCounter);
   });
 
-  /** ⚠️ শুধু TOTP দিলে রিকভারি তালিকা ঘেঁটে দেখা যাবে না — নইলে ৬ অঙ্কের
-   *  ভুল কোডও দৈবক্রমে কোনো রিকভারি হ্যাশে মিলে যাওয়ার পথ খুলত */
-  it('ভুল TOTP আর কোনো রিকভারি কোড না থাকলে আসল কারণটাই ফেরে', () => {
+  /** With only a TOTP given, the recovery list must not be searched — otherwise a wrong
+   *  6-digit code could by chance match some recovery hash */
+  it('wrong TOTP and no recovery codes gives back the real reason', () => {
     const { env } = withCodes();
     expect(verifySecondFactor(env, { totp: '000000' }, now).ok).toBe(false);
     expect(verifySecondFactor(env, { totp: '12' }, now)).toEqual({
@@ -359,7 +359,7 @@ describe('verifySecondFactor — লগইনের দ্বিতীয় ধ
     });
   });
 
-  it('replay-এর কারণটা আলাদা করে ফেরে — ব্যবহারকারীকে বলার মতো বার্তা', () => {
+  it('the replay reason is returned separately — a message worth showing the user', () => {
     const { env } = withCodes();
     const used = { ...env, lastCounter: Math.floor(now / 1000 / TOTP_PERIOD) };
     expect(verifySecondFactor(used, { totp: codeAt(secret, now) }, now)).toEqual({
@@ -368,7 +368,7 @@ describe('verifySecondFactor — লগইনের দ্বিতীয় ধ
     });
   });
 
-  it('দুটোই ভুল হলে invalid, আর কিছুই খরচ হয় না', () => {
+  it('invalid if both are wrong, and nothing is used up', () => {
     const { env } = withCodes();
     const v = verifySecondFactor(
       env,
@@ -378,7 +378,7 @@ describe('verifySecondFactor — লগইনের দ্বিতীয় ধ
     expect(v).toEqual({ ok: false, reason: 'invalid' });
   });
 
-  it('অ্যাপের কোড ভুল হলেও রিকভারি কোড থাকলে সেটাই চলবে', () => {
+  it('even if the app code is wrong, a recovery code works if there is one', () => {
     const { env, codes } = withCodes();
     const v = verifySecondFactor(
       env,
@@ -390,35 +390,35 @@ describe('verifySecondFactor — লগইনের দ্বিতীয় ধ
   });
 });
 
-// ══════════════════ I09 — নিষ্ক্রিয়তা ══════════════════
+// ══════════════════ I09 — inactivity ══════════════════
 
-describe('নিষ্ক্রিয়তার হিসাব (I09)', () => {
+describe('inactivity arithmetic (I09)', () => {
   const TIMEOUT = SESSION_TTL_MIN * 60 * 1000;
   const WARN = IDLE_WARN_BEFORE_SEC * 1000;
   const t0 = 1_700_000_000_000;
 
-  it('সদ্য সক্রিয় = active, পুরো সময় বাকি', () => {
+  it('just activated = active, full time remaining', () => {
     expect(idleStateAt(t0, t0, TIMEOUT, WARN)).toEqual({
       phase: 'active',
       msLeft: TIMEOUT,
     });
   });
 
-  it('সতর্কতার জানালার ঠিক আগে এখনো active', () => {
+  it('just before the warning window, still active', () => {
     const s = idleStateAt(t0, t0 + TIMEOUT - WARN - 1, TIMEOUT, WARN);
     expect(s.phase).toBe('active');
   });
 
   /**
-   * ⚠️ ঠিক সীমানায় সতর্কবার্তা না দেখালে ইউজার শেষ মুহূর্তে কোনো
-   *    সতর্কতাই পেত না — কাজের মাঝপথে চুপচাপ লগআউট, যা নিষিদ্ধ।
+   * Without showing the warning exactly at the boundary, the user would get no
+   *    warning at all at the last moment — a silent logout mid-work, which is forbidden.
    */
-  it('ঠিক ১ মিনিট বাকি থাকতেই warning', () => {
+  it('warning exactly with 1 minute left', () => {
     const s = idleStateAt(t0, t0 + TIMEOUT - WARN, TIMEOUT, WARN);
     expect(s).toEqual({ phase: 'warning', msLeft: WARN });
   });
 
-  it('সময় ফুরালে expired, msLeft ঠিক ০', () => {
+  it('expired when time runs out, msLeft exactly 0', () => {
     expect(idleStateAt(t0, t0 + TIMEOUT, TIMEOUT, WARN)).toEqual({
       phase: 'expired',
       msLeft: 0,
@@ -430,19 +430,19 @@ describe('নিষ্ক্রিয়তার হিসাব (I09)', () => 
   });
 
   /**
-   * ⚠️ ঘড়ি পিছিয়ে গেলে (ঘুম থেকে ওঠা, NTP সিংক) বিয়োগটা ঋণাত্মক হতো আর
-   *    `msLeft` টাইমআউটের চেয়েও বড় দেখাত — সতর্কবার্তা কখনো আসত না।
+   * If the clock goes backwards (waking from sleep, NTP sync), the subtraction
+   *    would be negative and `msLeft` would look larger than the timeout — the warning would never come.
    */
-  it('ঘড়ি পিছিয়ে গেলেও msLeft টাইমআউটের বেশি হয় না', () => {
+  it('even if the clock goes backwards, msLeft does not exceed the timeout', () => {
     const s = idleStateAt(t0 + 60_000, t0, TIMEOUT, WARN);
     expect(s).toEqual({ phase: 'active', msLeft: TIMEOUT });
   });
 
-  it('সতর্কতার জানালা টাইমআউটের সমান হলে শুরু থেকেই warning', () => {
+  it('if the warning window equals the timeout, warning from the start', () => {
     expect(idleStateAt(t0, t0, TIMEOUT, TIMEOUT).phase).toBe('warning');
   });
 
-  it('keep-alive টোকা refresh ব্যবধানের আগে যায় না, পরে যায়', () => {
+  it('the keep-alive ping does not go before the refresh interval, and goes after it', () => {
     const refresh = 5 * 60 * 1000;
     expect(shouldPingSession(t0, t0 + refresh - 1, refresh)).toBe(false);
     expect(shouldPingSession(t0, t0 + refresh, refresh)).toBe(true);

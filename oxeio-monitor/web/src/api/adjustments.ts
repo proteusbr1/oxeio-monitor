@@ -1,19 +1,19 @@
 import { api } from './client';
 
 /**
- * **B14 · ADR-011e** — সিস্টেমের দোষে হারানো ঘণ্টা owner ফেরত দেন।
+ * **B14 · ADR-011e** — the owner gives back hours lost through the system's fault.
  *
- * ⚠️ এটা কোনো **অনুমোদন ব্যবস্থা নয়**। স্টাফ কিছু দাবি করে না, কোথাও
- * কিছু চাপে না — owner নিজে দেখে ঠিক করেন। একবার "claim" চালু হলে সেটা
- * পুরো approval workflow টেনে আনত, যেটা এই সিস্টেমে ইচ্ছাকৃতভাবে নেই
- * (§ ৪ · ADR-011d)।
+ * This is **not an approval system**. Staff claim nothing and press nothing;
+ * the owner looks and decides. Once a "claim" existed, it would drag in a full
+ * approval workflow, which this system deliberately does not have
+ * (section 4 · ADR-011d).
  */
 export interface AdjustmentView {
-  /** ⚠️ স্ট্রিং — সার্ভারে `BigInt`, JSON-এ সংখ্যা হিসেবে পাঠালে ভাঙত */
+  /** A string — `BigInt` on the server; sending a JSON number would break */
   id: string;
   employeeId: number;
   workDate: string;
-  /** + = ঘণ্টা ফেরত · − = কেটে নেওয়া */
+  /** + = hours given back · − = hours deducted */
   deltaSec: number;
   cause: AdjustmentCause;
   reason: string;
@@ -23,7 +23,7 @@ export interface AdjustmentView {
   revokedAt: string | null;
   revokedBy: string | null;
   revokeReason: string | null;
-  /** বাতিল হলে আর গোনা হয় না */
+  /** A revoked adjustment is no longer counted */
   active: boolean;
 }
 
@@ -36,8 +36,8 @@ export type AdjustmentCause =
   | 'other';
 
 /**
- * ⚠️ লেখাগুলো স্টাফও পড়ে (J08), তাই কারিগরি নয় — "agent_crash"-এর বদলে
- * "The agent crashed"। কারণটা তার নিজের ঘণ্টার ব্যাখ্যা।
+ * Staff read these labels too (J08), so no technical wording: "The agent
+ * crashed" instead of "agent_crash". The cause explains their own hours.
  */
 export const CAUSE_LABELS: Record<AdjustmentCause, string> = {
   agent_down: 'The agent was not running',
@@ -73,7 +73,7 @@ export function createAdjustment(
   });
 }
 
-/** ⚠️ ডিলিট নয় — সারিটা থেকে যায়, শুধু গোনা বন্ধ হয়। */
+/** Not a delete: the row stays, it just stops being counted. */
 export function revokeAdjustment(
   id: string,
   reason: string,

@@ -5,22 +5,23 @@ import { JOB_TIMEZONE, RunLock, SCHEDULING_ENABLED } from '../summary/scheduling
 import { DigestService, type DigestResult } from './digest.service';
 
 /**
- * F07 — প্রতিদিন সন্ধ্যা **৬:৩০ (ঢাকা)** ডাইজেস্ট।
+ * F07 — the daily digest at **6:30 pm (Dhaka)** every day.
  *
- * ⚠️ `timeZone` ছাড়া cron সার্ভারের নিজের টাইমজোনে চলত (Docker-এ প্রায়
- * সবসময় UTC) — "সন্ধ্যা ৬:৩০" তখন বাস্তবে ঢাকার রাত ১২:৩০ হতো, অর্থাৎ
- * ইমেইলটা পরদিনের ভোরে পৌঁছাত আর "আজকের ঘণ্টা" আসলে গতকালের হতো।
+ * Careful: without `timeZone` the cron would run in the server's own time zone
+ * (almost always UTC in Docker) — "6:30 pm" would then really be 12:30 am in
+ * Dhaka, so the email would arrive in the early hours of the next day and
+ * "today's hours" would really be yesterday's.
  *
- * ⚠️ `disabled` **আর** নিচের `if` — দুটো তালা, দুটোই দরকার
- * ([summary-refresh.job.ts](../summary/summary-refresh.job.ts)-এর একই নোট
- * দেখুন)। টেস্টে একবার টিক করলেই শেয়ার্ড DB-তে অন্য কারো ফিক্সচার ধরে
- * রিপোর্ট বানাতে গিয়ে টেস্ট এলোমেলোভাবে ভাঙত।
+ * Careful: `disabled` **and** the `if` below — two locks, both needed (see the
+ * same note in [summary-refresh.job.ts](../summary/summary-refresh.job.ts)).
+ * Otherwise a single tick in tests would pick up someone else's fixtures in
+ * the shared DB while building the report, and tests would break at random.
  *
- * ⚠️ `ScheduleModule.forRoot()` এখানে **বসানো হয়নি** — `SummaryModule`
- * ওটা করে আর সেটা global। দুবার `forRoot()` হলে দুটো explorer একই জব
- * দুবার রেজিস্টার করতে গিয়ে bootstrap-এই ভেঙে পড়ত, আর তার আগ পর্যন্ত
- * ইমেইল দিনে দুবার যেত। ফলে টেস্টে (যেখানে `SummaryModule` explorer-ই
- * বানায় না) এই `@Cron` নিছক মেটাডেটা।
+ * Careful: `ScheduleModule.forRoot()` is **not** placed here — `SummaryModule`
+ * does it and it is global. With two `forRoot()` calls, two explorers would
+ * register the same job twice and crash at bootstrap (and until then the email
+ * went out twice a day). So in tests (where `SummaryModule` builds no explorer)
+ * this `@Cron` is just metadata.
  */
 @Injectable()
 export class DigestJob {
@@ -41,13 +42,13 @@ export class DigestJob {
   }
 
   /**
-   * টেস্ট বা হাতে চালানোর জন্য।
+   * For tests or manual runs.
    *
-   * ⭐ **কখনো throw করে না।** ডাইজেস্ট মনিটরিংয়ের সহায়ক কাজ; একটা মৃত SMTP,
-   * কিংবা work policy মুছে ফেলার ফলে `ReportsService`-এর ছোড়া ৫০০ — কোনোটাই
-   * যেন ঘণ্টা গোনা বা এজেন্টের ডেটা নেওয়া থামিয়ে না দেয়। `setInterval`/cron
-   * কলব্যাক থেকে বেরিয়ে যাওয়া rejected promise Node-এ unhandled rejection,
-   * আর সেটা গোটা প্রসেস নামিয়ে দেয়।
+   * **Never throws.** The digest is a helper to monitoring; a dead SMTP, or a
+   * 500 thrown by `ReportsService` because the work policy was deleted — neither
+   * should stop hour counting or taking agent data. A rejected promise escaping
+   * a `setInterval`/cron callback is an unhandled rejection in Node, and that
+   * brings the whole process down.
    */
   async runOnce(now: Date = new Date()): Promise<DigestResult | null> {
     const result = await this.lock.run(async () => {
@@ -63,8 +64,8 @@ export class DigestJob {
     });
 
     if (result === null) {
-      // দুটো কারণে `null` হতে পারে — আগেরটা এখনো চলছে, বা উপরের catch।
-      // দুটোই লগে আলাদা করে দেখা যায়, তাই এখানে আর কিছু বলার নেই।
+      // `null` can mean two things — the previous run is still going, or the catch above.
+      // Both are visible separately in the log, so there is nothing more to say here.
       return null;
     }
 

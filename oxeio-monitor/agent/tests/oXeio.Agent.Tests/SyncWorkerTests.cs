@@ -64,9 +64,9 @@ public class SyncWorkerTests
     }
 
     /// <summary>
-    /// ⭐ এটাই সবচেয়ে জরুরি টেস্ট। ২০টার মধ্যে ১টা রেকর্ড বেঠিক — সার্ভার
-    /// পুরো ব্যাচেই ৪০০ দেয়। সরল বাস্তবায়ন ২০টাই ফেলে দিত, অর্থাৎ ১৯ জনের
-    /// কাজের হিসাব একজনের ভুলের জন্য হারাত।
+    /// This is the most important test. 1 of 20 records is bad, and the server returns
+    /// 400 for the whole batch. A naive implementation would drop all 20, losing 19
+    /// people's work records because of one person's mistake.
     /// </summary>
     [Fact]
     public async Task একটা_খারাপ_রেকর্ড_বাকিদের_ডোবায়_না()
@@ -77,16 +77,16 @@ public class SyncWorkerTests
 
         var worker = new SyncWorker(box, client, clock: () => T0);
 
-        // ব্যাচ অর্ধেক হতে হতে দোষীটা একা পড়ে — কয়েক চক্র লাগে
+        // The batch halves until the culprit is alone; it takes a few cycles
         for (var i = 0; i < 12; i++) await worker.DrainOnceAsync();
 
         Assert.Empty(box.RemainingUuids);
 
-        // ঠিক একটা বাদ পড়েছে, আর সেটা দোষীটাই
+        // Exactly one was dropped, and it is the culprit
         Assert.Single(box.Abandoned);
         Assert.Contains(Segment(7).ClientUuid.ToString(), box.Abandoned[0]);
 
-        // বাকি ১৯টা সার্ভারে পৌঁছেছে
+        // The other 19 reached the server
         Assert.Equal(19, client.AcceptedSegments);
     }
 
@@ -100,7 +100,7 @@ public class SyncWorkerTests
         var worker = new SyncWorker(box, client, clock: () => T0);
         for (var i = 0; i < 12; i++) await worker.DrainOnceAsync();
 
-        // প্রথম চেষ্টা পুরো ২০টা নিয়ে, তারপর ধাপে ধাপে ছোট
+        // The first attempt takes all 20, then it shrinks step by step
         Assert.Equal(20, client.SegmentBatchSizes[0]);
         Assert.Contains(1, client.SegmentBatchSizes);
         Assert.True(
@@ -121,7 +121,8 @@ public class SyncWorkerTests
         Assert.True(worker.Revoked);
         Assert.Empty(box.Abandoned);
 
-        // ⚠️ revoke ভুল করেও হতে পারে — সারিগুলো ফেরত পাওয়ার একমাত্র উপায় ওগুলো টিকে থাকা
+        // Careful: a revoke can be a mistake; the only way to get the rows back is for them to
+        // survive
         Assert.Equal(5, box.RemainingUuids.Count);
     }
 
@@ -160,7 +161,8 @@ public class SyncWorkerTests
 
         await worker.DrainOnceAsync();
 
-        // নষ্ট সারিটা বাদ পড়েছে, কিউ পরিষ্কার — মাথায় বসে সব আটকে রাখেনি
+        // The corrupt row was dropped and the queue is clear; it did not block everything at the
+        // head
         Assert.Empty(box.RemainingUuids);
         Assert.Single(box.Abandoned);
     }
@@ -185,8 +187,8 @@ public class SyncWorkerTests
         var client = new FakeSyncClient();
         await Worker(box, client).DrainOnceAsync();
 
-        // সেগমেন্ট গেছে; ছবিটা ফাইল না থাকায় বাদ পড়েছে — কিন্তু সেগমেন্টের
-        // পরে, আগে নয়
+        // The segment went; the image was dropped because its file does not exist, but
+        // after the segment, not before
         Assert.Equal(1, client.AcceptedSegments);
     }
 
@@ -203,16 +205,16 @@ public class SyncWorkerTests
     }
 
     /// <summary>
-    /// ⭐ G136 — বন্ধ হওয়ার সময় <c>DisposeAsync</c> full drain-এর আগে বিদায়ী
-    /// ইভেন্ট আলাদা করে পাঠায়। <see cref="SyncWorker.DrainKindOnceAsync"/>(Event)
-    /// শুধু ইভেন্ট পাঠায়, সেগমেন্ট ছোঁয় না — তাই বড় সেগমেন্ট-ব্যাকলগ থাকলেও
-    /// shutdown/agent_stop সার্ভারে পৌঁছায়, আর পরদিন মিথ্যা agent_down ওঠে না।
+    /// G136: on shutdown <c>DisposeAsync</c> sends the farewell events separately,
+    /// before the full drain. <see cref="SyncWorker.DrainKindOnceAsync"/>(Event) sends
+    /// only events and does not touch segments, so even with a large segment backlog
+    /// shutdown/agent_stop reaches the server, and no false agent_down appears the next day.
     /// </summary>
     [Fact]
     public async Task DrainKindOnce_শুধু_সেই_kind_পাঠায়()
     {
         var box = new FakeOutbox();
-        // পাঁচটা সেগমেন্ট আগে কিউয়ে — স্বাভাবিক drain-এ এগুলোই আগে যেত
+        // Five segments are queued first; a normal drain would send these first
         for (var i = 1; i <= 5; i++)
             await box.EnqueueAsync(OutboxCodec.Item(Segment(i), T0));
         await box.EnqueueAsync(OutboxCodec.Item(Event(1, AgentEventTypes.Shutdown), T0));
@@ -221,9 +223,9 @@ public class SyncWorkerTests
         var client = new FakeSyncClient();
         await Worker(box, client).DrainKindOnceAsync(OutboundKind.Event);
 
-        // বিদায়ী ইভেন্ট দুটো গেছে
+        // Both farewell events went
         Assert.Equal(2, client.AcceptedEvents);
-        // সেগমেন্টে হাত পড়েনি — সার্ভারে যায়নি, পাঁচটাই কিউয়ে
+        // Segments were not touched: not sent to the server, all five still queued
         Assert.Equal(0, client.AcceptedSegments);
         Assert.Equal(5, box.RemainingUuids.Count);
     }

@@ -6,33 +6,31 @@ using oXeio.Core.Capture;
 namespace oXeio.Agent.Platform.Capture;
 
 /// <summary>
-/// DXGI Desktop Duplication — প্রাথমিক ক্যাপচার ইঞ্জিন
-/// ([ADR-012c](../../../../docs/05-Options-Decisions.md))।
+/// DXGI Desktop Duplication: the primary capture engine
+/// ([ADR-012c](../../../../docs/05-Options-Decisions.md)).
 ///
-/// <b>GDI-র উপর যা দেয়:</b> হার্ডওয়্যার-ত্বরিত ভিডিও আর exclusive-fullscreen
-/// উইন্ডো আসল ছবি হিসেবে ওঠে, কালো নয়। উপরন্তু OS নিজেই বলে দেয় DRM কনটেন্ট
-/// বাদ পড়েছে কি না (<c>ProtectedContentMaskedOut</c>) — GDI-তে সেটা আন্দাজ
-/// করা ছাড়া উপায় ছিল না।
+/// <b>What it gives over GDI:</b> hardware-accelerated video and exclusive-fullscreen windows come
+/// out as the real image, not black. Also the OS itself says whether DRM content was excluded
+/// (<c>ProtectedContentMaskedOut</c>); with GDI there was no way except guessing.
 ///
-/// <b>যা দেয় না:</b> DRM-সুরক্ষিত উইন্ডো এখানেও কালোই আসবে। ওটা OS-এর
-/// কনটেন্ট সুরক্ষা, ক্যাপচার API-র সীমা নয় — আর সেটা ডিঙানোর চেষ্টা আমরা করব না।
+/// <b>What it does not give:</b> DRM-protected windows will still come out black here. That is the
+/// OS's content protection, not a limit of the capture API, and we will not try to get around it.
 ///
-/// <b>প্রতিবার পুরো চেইন নতুন করে বানানো হয় এবং ভাঙা হয়।</b> ৫ মিনিটে একবার
-/// ছবি তুলতে এটা কার্যত বিনামূল্যে, আর এতে রেজোলিউশন বদল, ডক/আনডক, মনিটর
-/// খোলা-লাগানো, GPU রিসেট আর ইউজার সুইচ — সবগুলোই আপনাআপনি সামলে যায়।
-/// চেইন ধরে রাখলে এর প্রতিটার জন্য আলাদা করে <c>ACCESS_LOST</c> সামলাতে হতো,
-/// আর একটা ভুল হলে সেই PC-তে মাসের পর মাস ছবি ওঠা বন্ধ থাকত — যেটা কেউ
-/// দেখতেও পেত না।
+/// <b>The whole chain is built afresh and torn down every time.</b> Taking an image once in 5
+/// minutes this is practically free, and it handles resolution changes, dock/undock, monitor
+/// plug/unplug, GPU resets and user switches automatically. Keeping the chain would require
+/// handling <c>ACCESS_LOST</c> separately for each of these, and one mistake would leave that PC
+/// without images for months, with nobody seeing it.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed unsafe class DuplicationCapturer : IScreenCapturer
 {
     /// <summary>
-    /// প্রতিবার ফ্রেমের জন্য কতক্ষণ অপেক্ষা।
+    /// How long to wait for a frame each time.
     ///
-    /// ভিডিও চললে ফ্রেম আসে ~১৬ মিলিসেকেন্ড অন্তর, তাই ২৫০ মি.সে. যথেষ্টেরও বেশি।
-    /// আর পর্দা স্থির থাকলে যত অপেক্ষাই করি ফ্রেম আসবে না — তাই দেরি করার
-    /// কোনো লাভ নেই, দ্রুত GDI-তে নেমে যাওয়াই ভালো।
+    /// When video is playing frames arrive about every 16 milliseconds, so 250 ms is more than
+    /// enough. And when the screen is still, no frame will come however long we wait, so there is
+    /// no gain in delaying; it is better to drop quickly to GDI.
     /// </summary>
     private const uint FrameTimeoutMs = 250;
 
@@ -41,23 +39,23 @@ internal sealed unsafe class DuplicationCapturer : IScreenCapturer
     public string Name => "DXGI";
 
     /// <summary>
-    /// ⭐ <b>"ছবি পাইনি" আর "এই মেশিনে DXGI চলে না" — দুটো এক জিনিস নয়।</b>
+    /// <b>"No image obtained" and "DXGI does not work on this machine" are not the same thing.</b>
     ///
-    /// পর্দা স্থির থাকলে DXGI ছবি দিতে পারে না, কিন্তু সেটা ইঞ্জিনের দোষ নয়।
-    /// এই পার্থক্যটা না রাখলে শান্ত অফিসের PC-তে টানা কয়েক স্লট পর DXGI
-    /// বিরতিতে চলে যেত ([EngineFallbackPolicy](../../../oXeio.Core/Capture/EngineFallbackPolicy.cs))
-    /// — অর্থাৎ যে মেশিনে কেউ ভিডিও দেখা শুরু করত, ঠিক তখনই DXGI ঘুমিয়ে থাকত।
+    /// When the screen is still DXGI cannot give an image, but that is not the engine's fault.
+    /// Without this distinction, on a quiet office PC DXGI would go on a pause after several slots
+    /// in a row ([EngineFallbackPolicy](../../../oXeio.Core/Capture/EngineFallbackPolicy.cs)), so
+    /// on a machine where someone then started watching video, DXGI would be asleep exactly then.
     /// </summary>
     public bool EngineFault { get; private set; }
 
     bool IScreenCapturer.LastFailureWasEngineFault => EngineFault;
 
     /// <summary>
-    /// শেষ চেষ্টাটা কোথায় গিয়ে থেমেছে।
+    /// Where the last attempt stopped.
     ///
-    /// ⚠️ চুক্তি অনুযায়ী ব্যর্থ হলে <c>null</c> ফেরে, ব্যতিক্রম নয় — তার মানে
-    /// কারণটা কোথাও না রাখলে চিরতরে হারিয়ে যেত। "এই PC-তে সবসময় GDI-তে নেমে
-    /// যাচ্ছে কেন" প্রশ্নের উত্তর একমাত্র এখানেই পাওয়া যাবে।
+    /// Careful: by contract it returns <c>null</c> on failure, not an exception, which means that
+    /// unless the reason is kept somewhere it would be lost for good. The answer to "why does this
+    /// PC always fall back to GDI" can be found only here.
     /// </summary>
     public string LastStep { get; private set; } = "not attempted yet";
 
@@ -68,10 +66,10 @@ internal sealed unsafe class DuplicationCapturer : IScreenCapturer
         nint desktop = 0, texture = 0, staging = 0;
         var mapped = false;
 
-        // ⚠️ ধরে নেওয়া হয় দোষ ইঞ্জিনেরই। যে ধাপগুলো আসলে দোষ নয় সেগুলো
-        //    নিজেরাই এটা মিথ্যা করে দেয় — উল্টোটা করলে নতুন কোনো ব্যর্থতার পথ
-        //    যোগ হলে সেটা নীরবে "দোষ নয়" হিসেবে গণ্য হতো, আর ফলব্যাক নীতি
-        //    কখনোই কাজে লাগত না।
+        // Careful: the fault is assumed to be the engine's. The steps that are really not at fault
+        // set this to false themselves. Doing it the other way round, any new failure path added
+        // later would silently count as "not at fault", and the fallback policy would never kick
+        // in.
         EngineFault = true;
 
         try
@@ -92,10 +90,10 @@ internal sealed unsafe class DuplicationCapturer : IScreenCapturer
             var hr = ((delegate* unmanaged[Stdcall]<nint, nint, nint*, int>)
                 ComCall.Method(output1, Dxgi.Output1_DuplicateOutput))(output1, device, &duplication);
 
-            // ⚠️ E_ACCESSDENIED মানে secure desktop (UAC/লক স্ক্রিন) সামনে আছে,
-            //    NOT_CURRENTLY_AVAILABLE মানে একসাথে ৪টি duplication-এর সীমা ছোঁয়া
-            //    হয়েছে — Teams/Zoom শেয়ার করলে বাস্তবেই ঘটে। দুটোই সাময়িক,
-            //    এই স্লটটা GDI-তে উঠবে।
+            // Careful: E_ACCESSDENIED means the secure desktop (UAC/lock screen) is in front, and
+            // NOT_CURRENTLY_AVAILABLE means the limit of 4 simultaneous duplications was hit, which
+            // does happen when Teams/Zoom is sharing. Both are temporary; this slot will be
+            // captured via GDI.
             if (hr < 0) return null;
 
             LastStep = "checking rotation";
@@ -114,9 +112,9 @@ internal sealed unsafe class DuplicationCapturer : IScreenCapturer
             ((delegate* unmanaged[Stdcall]<nint, D3D11_TEXTURE2D_DESC*, void>)
                 ComCall.Method(texture, D3D11.Texture2D_GetDesc))(texture, &desc);
 
-            // HDR মনিটরে ফরম্যাট R16G16B16A16_FLOAT হতে পারে। বাইটগুলোকে জোর
-            // করে BGRA ধরে নিলে ছবি আসত রঙিন আবর্জনা হিসেবে — যেটা দেখতে
-            // "ছবি উঠেছে"-র মতোই। তাই না বুঝলে হাত না দেওয়াই নিয়ম।
+            // On an HDR monitor the format may be R16G16B16A16_FLOAT. Forcing the bytes to be read
+            // as BGRA would give colourful garbage, which looks just like "an image was taken". So
+            // when we do not understand it, the rule is not to touch it.
             if (desc.Format != D3D11.FormatB8G8R8A8Unorm) return null;
 
             if (!TryCreateStaging(device, desc, ref staging)) return null;
@@ -124,8 +122,8 @@ internal sealed unsafe class DuplicationCapturer : IScreenCapturer
             ((delegate* unmanaged[Stdcall]<nint, nint, nint, void>)
                 ComCall.Method(context, D3D11.Context_CopyResource))(context, staging, texture);
 
-            // ⚠️ কপি করার **পরেই** ছাড়তে হবে, Map-এর আগে। ছেড়ে দিলে ডেস্কটপ
-            //    সারফেস অকার্যকর হয়ে যায় — আগে ছাড়লে কপি করার মতো কিছু থাকত না।
+            // Careful: release **right after** the copy, before Map. Releasing invalidates the
+            // desktop surface; releasing earlier would leave nothing to copy.
             ((delegate* unmanaged[Stdcall]<nint, int>)
                 ComCall.Method(duplication, Dxgi.Duplication_ReleaseFrame))(duplication);
 
@@ -136,9 +134,9 @@ internal sealed unsafe class DuplicationCapturer : IScreenCapturer
 
             mapped = true;
 
-            // ⚠️ ঘোরানো ডিসপ্লেতে মনিটরের মাপ (১০৮০×১৯২০) আর সারফেসের মাপ
-            //    (১৯২০×১০৮০) উল্টো। তাই ঘোরানোর **আগে** ক্ল্যাম্প করতে হলে
-            //    মনিটরের মাপটাও উল্টে নিতে হয় — নইলে ছবির অর্ধেক কেটে যেত।
+            // Careful: on a rotated display the monitor's size (1080x1920) and the surface's size
+            // (1920x1080) are swapped. So if clamping **before** rotating, the monitor's size must
+            // be swapped too, otherwise half the image would be cut off.
             var swapped = turns is 1 or 3;
             var wantW = swapped ? monitor.Height : monitor.Width;
             var wantH = swapped ? monitor.Width : monitor.Height;
@@ -164,15 +162,15 @@ internal sealed unsafe class DuplicationCapturer : IScreenCapturer
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // চুক্তি অনুযায়ী একটা মনিটর ব্যর্থ হলে null, ব্যতিক্রম নয় — বাকি
-            // মনিটরগুলোর ছবি যেন তবু ওঠে।
+            // By contract, if one monitor fails the result is null, not an exception, so the other
+            // monitors' images are still taken.
             return null;
         }
         finally
         {
-            // ⚠️ Unmap বাদ পড়লে staging টেক্সচার চিরকাল map হয়ে থাকে আর এই
-            //    প্রসেসের বাকি জীবনে প্রতিটা Map ব্যর্থ হয়। ভুলটা দেখা দেয়
-            //    কয়েক সপ্তাহ পরে, অন্য কোনো উপসর্গ হিসেবে।
+            // Careful: if Unmap is skipped, the staging texture stays mapped forever and every Map
+            // fails for the rest of this process's life. The mistake shows up weeks later, as some
+            // other symptom.
             if (mapped && context != 0 && staging != 0)
             {
                 ((delegate* unmanaged[Stdcall]<nint, nint, uint, void>)
@@ -192,13 +190,13 @@ internal sealed unsafe class DuplicationCapturer : IScreenCapturer
         }
     }
 
-    // ── ধাপগুলো ─────────────────────────────────────────────────────────────
+    // ── Steps ────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// এই HMONITOR কোন অ্যাডাপ্টারের কোন আউটপুটে — সব অ্যাডাপ্টার ঘুরে খোঁজা।
+    /// Which adapter and which output this HMONITOR belongs to: searched across all adapters.
     ///
-    /// ⚠️ ডিফল্ট (০ নম্বর) অ্যাডাপ্টার ধরে নেওয়া যায় না। হাইব্রিড গ্রাফিক্সের
-    /// ল্যাপটপে বিল্ট-ইন পর্দা এক অ্যাডাপ্টারে আর বাইরের মনিটর অন্যটাতে থাকে।
+    /// Careful: the default (number 0) adapter cannot be assumed. On a hybrid-graphics laptop the
+    /// built-in screen is on one adapter and the external monitor on another.
     /// </summary>
     private static bool TryFindOutput(nint hMonitor, ref nint factory, ref nint adapter, ref nint output)
     {
@@ -216,7 +214,7 @@ internal sealed unsafe class DuplicationCapturer : IScreenCapturer
             if (((delegate* unmanaged[Stdcall]<nint, uint, nint*, int>)
                     ComCall.Method(factory, Dxgi.Factory1_EnumAdapters1))(factory, ai, &a) < 0)
             {
-                return false; // DXGI_ERROR_NOT_FOUND — অ্যাডাপ্টার শেষ
+                return false; // DXGI_ERROR_NOT_FOUND: no more adapters
             }
 
             for (uint oi = 0; ; oi++)
@@ -225,7 +223,7 @@ internal sealed unsafe class DuplicationCapturer : IScreenCapturer
                 if (((delegate* unmanaged[Stdcall]<nint, uint, nint*, int>)
                         ComCall.Method(a, Dxgi.Adapter_EnumOutputs))(a, oi, &o) < 0)
                 {
-                    break; // এই অ্যাডাপ্টারের আউটপুট শেষ
+                    break; // no more outputs on this adapter
                 }
 
                 DXGI_OUTPUT_DESC desc;
@@ -253,7 +251,7 @@ internal sealed unsafe class DuplicationCapturer : IScreenCapturer
 
         var hr = D3D11.D3D11CreateDevice(
             adapter,
-            D3D11.DriverTypeUnknown, // ⚠️ অ্যাডাপ্টার দিলে UNKNOWN বাধ্যতামূলক
+            D3D11.DriverTypeUnknown, // Careful: UNKNOWN is mandatory when an adapter is passed
             0,
             D3D11.CreateDeviceFlags,
             null, 0,
@@ -267,7 +265,7 @@ internal sealed unsafe class DuplicationCapturer : IScreenCapturer
         return true;
     }
 
-    /// <summary>ডিসপ্লে কতটা ঘোরানো — <c>DXGI_MODE_ROTATION</c>।</summary>
+    /// <summary>How far the display is rotated: <c>DXGI_MODE_ROTATION</c>.</summary>
     private static uint RotationOf(nint duplication)
     {
         DXGI_OUTDUPL_DESC desc;
@@ -278,17 +276,17 @@ internal sealed unsafe class DuplicationCapturer : IScreenCapturer
     }
 
     /// <summary>
-    /// ⚠️ <b>সফল <c>AcquireNextFrame</c> মানেই ছবি পাওয়া নয়।</b>
+    /// Careful: <b>a successful <c>AcquireNextFrame</c> does not mean an image was obtained.</b>
     ///
-    /// <c>DuplicateOutput</c>-এর পরপরই প্রথম কলটা প্রায় সবসময় সফল হয়, কিন্তু
-    /// <c>AccumulatedFrames = 0</c> আর <c>LastPresentTime = 0</c> নিয়ে — অর্থাৎ
-    /// "ডেস্কটপ বদলায়নি"। ওই ফ্রেমের সারফেসে কোনো ছবি বসানো হয় না, পুরোটা কালো।
+    /// Right after <c>DuplicateOutput</c> the first call almost always succeeds, but with
+    /// <c>AccumulatedFrames = 0</c> and <c>LastPresentTime = 0</c>, meaning "the desktop did not
+    /// change". No image is put on that frame's surface; it is entirely black.
     ///
-    /// এই মেশিনেই মেপে দেখা গেছে: কল সফল, HRESULT ঠিক, মাপ ঠিক (১৯২০×১০৮০,
-    /// pitch ৭৬৮০) — শুধু প্রতিটি পিক্সেল শূন্য। ফেরত মান দেখে সন্তুষ্ট হলে
-    /// মাসের পর মাস নিখুঁতভাবে কালো ছবি জমত।
+    /// This was measured on this very machine: call successful, HRESULT fine, size fine (1920x1080,
+    /// pitch 7680), only every pixel zero. Being satisfied with the return value would have
+    /// collected perfectly black images for months.
     ///
-    /// তাই খালি ফ্রেম ছেড়ে দিয়ে আসল ছবির জন্য অপেক্ষা করা হয়।
+    /// So empty frames are released and we wait for a real image.
     /// </summary>
     private bool TryAcquire(nint duplication, out DXGI_OUTDUPL_FRAME_INFO info, ref nint desktop)
     {
@@ -312,7 +310,7 @@ internal sealed unsafe class DuplicationCapturer : IScreenCapturer
                 return false;
             }
 
-            // ছবি সত্যিই আছে কি না — দুটোর যেকোনো একটা শূন্য না হলেই যথেষ্ট
+            // whether there really is an image: it is enough if either of the two is non-zero
             if (fi.AccumulatedFrames > 0 || fi.LastPresentTime != 0)
             {
                 info = fi;
@@ -320,21 +318,21 @@ internal sealed unsafe class DuplicationCapturer : IScreenCapturer
                 return true;
             }
 
-            // খালি ফ্রেম — ছেড়ে দিয়ে আবার। ⚠️ ছাড়া না দিলে পরের
-            // AcquireNextFrame সরাসরি ব্যর্থ হয়।
+            // Empty frame: release it and go again. Careful: without releasing, the next
+            // AcquireNextFrame fails outright.
             ComCall.Release(ref res);
             ((delegate* unmanaged[Stdcall]<nint, int>)
                 ComCall.Method(duplication, Dxgi.Duplication_ReleaseFrame))(duplication);
         }
 
-        // পর্দায় কিছুই নড়ছে না। এটা ইঞ্জিনের দোষ নয় — আর ঠিক এই অবস্থাতেই
-        // GDI নিখুঁত ছবি দেয়, কারণ কালো আসার একমাত্র কারণ চলমান ভিডিও।
+        // Nothing on screen is moving. That is not the engine's fault, and in exactly this
+        // situation GDI gives a perfect image, because the only reason for black is moving video.
         LastStep = "no change on screen — falling back to GDI";
         EngineFault = false;
         return false;
     }
 
-    /// <summary>এই ত্রুটিগুলো কেটে যায় — মেশিনটা DXGI পারে না, এমন নয়।</summary>
+    /// <summary>These errors pass: it does not mean the machine cannot do DXGI.</summary>
     private static bool IsTransient(int hr) =>
         hr == Dxgi.DXGI_ERROR_ACCESS_LOST ||
         hr == Dxgi.DXGI_ERROR_NOT_CURRENTLY_AVAILABLE ||
@@ -342,9 +340,9 @@ internal sealed unsafe class DuplicationCapturer : IScreenCapturer
 
     private static bool TryCreateStaging(nint device, D3D11_TEXTURE2D_DESC source, ref nint staging)
     {
-        // ⚠️ STAGING-এর সাথে BindFlags শূন্য ছাড়া কিছু দিলে তৈরিই হয় না।
-        //    MipLevels ১, ArraySize ১, কোনো মাল্টিস্যাম্পল নয় — নইলে
-        //    CopyResource মাপ না মেলায় নীরবে কিছুই করে না।
+        // Careful: with STAGING, passing anything other than zero for BindFlags means it is not
+        // created at all. MipLevels 1, ArraySize 1, no multisampling: otherwise CopyResource
+        // silently does nothing because the sizes do not match.
         var desc = new D3D11_TEXTURE2D_DESC
         {
             Width = source.Width,

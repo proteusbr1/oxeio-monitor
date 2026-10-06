@@ -31,24 +31,24 @@ import {
 } from '../../components/ui';
 
 /**
- * E10 · স্টাফ — `CRUD /employees`।
+ * Staff: `CRUD /employees`.
  *
- * ⚠️ **ডিলিট নেই, deactivate আছে।** সার্ভারে `@Delete` রুটটাই নেই
- * (`employees.controller.ts`) — কারণ সারিটা মুছলে ওই কর্মীর মাসের হিসাব,
- * স্ক্রিনশট আর audit trail সব অনাথ হতো। তাই UI-তেও "মুছে ফেলুন" কথাটা
- * কোথাও লেখা নেই; "নিষ্ক্রিয় করুন" লেখা আছে, আর ব্যাপারটা ফেরানো যায়।
+ * Careful: **there is no delete, only deactivate.** The server has no `@Delete` route
+ * (`employees.controller.ts`), because deleting the row would orphan that
+ * employee's monthly figures, screenshots and audit trail. So the UI never says
+ * "delete" anywhere; it says "deactivate", and it can be reversed.
  *
- * ⭐ বেতনের ঘরটা `user.role === 'owner'` ছাড়া **render-ই হয় না**।
- * ম্যানেজারের রেসপন্সে `monthlySalary` key-টাই থাকে না (redact.ts), তাই
- * `?? '—'` লিখলে ম্যানেজারের পর্দায় একটা ফাঁকা বেতনের কলাম বসে যেত —
- * আর সেটা দেখে মনে হতো বেতন বসানোই নেই।
+ * Important: the salary field **is not rendered at all** unless `user.role ===
+ * 'owner'`. A manager's response has no `monthlySalary` key (redact.ts), so writing
+ * `?? '—'` would put an empty salary column on a manager's screen, and that would
+ * look as if no salary had been set.
  */
 
 /**
- * ⚠️ কর্মীর `inactive` মানে **চাকরি ছেড়েছেন বা বন্ধ করা হয়েছে** — লাইভ
- *    বোর্ডের "নিষ্ক্রিয়" (Idle, কি-বোর্ড চুপ) নয়। তাই এখানে "Idle" নয়,
- *    "Inactive"; দুটোকে এক শব্দে মেলালে ছুটিতে থাকা কর্মী আর চাকরি ছাড়া
- *    কর্মী একই রকম দেখাত।
+ * Careful: an employee's `inactive` means **has left or been switched off**, not the
+ *    live board's "inactive" (Idle, keyboard quiet). So this says "Inactive", not
+ *    "Idle"; merging them into one word would make someone on leave and someone who
+ *    left look the same.
  */
 const STATUS_OPTIONS = [
   { value: 'active', label: 'Active' },
@@ -61,16 +61,16 @@ type StatusFilter = EmployeeStatus | 'all';
 export function StaffTab() {
   const { user } = useAuth();
   /**
-   * ⭐ দুটো আলাদা প্রশ্ন, তাই দুটো আলাদা নাম — যদিও আজ দুটোরই উত্তর
-   * `role === 'owner'`।
+   * Important: two different questions, so two different names, even though today
+   * both are answered by `role === 'owner'`.
    *
-   * ⚠️ একটাই চলক রাখলে কাল বেতনের নিয়ম বদলালে (বা ম্যানেজার deactivate
-   * করতে পারলে) দুটো জিনিস একসাথে নড়ত, আর কেউ খেয়াল করত না।
+   * Careful: with a single variable, if the salary rule changed tomorrow (or managers
+   * could deactivate), two things would move together and nobody would notice.
    */
   const { features } = useFeatures();
   // payroll switched off in Settings → Modules: the salary stays saved, unseen
   const canSeeSalary = user?.role === 'owner' && features.payroll;
-  /** portal অ্যাকাউন্ট · পাসওয়ার্ড রিসেট · deactivate — সার্ভারে owner-only */
+  /** portal account, password reset, deactivate: owner-only on the server */
   const isOwner = user?.role === 'owner';
 
   const [status, setStatus] = useState<StatusFilter>('active');
@@ -82,7 +82,7 @@ export function StaffTab() {
     [status, search],
   );
 
-  // পলিসির নাম দেখানোর জন্য — id দেখিয়ে লাভ নেই, কেউ মনে রাখে না
+  // For showing the policy's name; an id is no use, nobody remembers it
   const policies = useApi((signal) => listWorkPolicies(signal), []);
   const policyName = (id: number | null): string => {
     if (id === null) return '—';
@@ -103,11 +103,11 @@ export function StaffTab() {
   const rows = staff.data?.rows ?? [];
 
   /**
-   * ⭐ বন্ধ হয়ে যাওয়া এজেন্ট আবার চালু — **নিশ্চিতকরণসহ**।
+   * Switching a stopped agent back on, **with confirmation**.
    *
-   * ⚠️⚠️ revoke `token_hash` মোছে না, শুধু দরজা বন্ধ করে। ফেরালে **পুরোনো
-   * টোকেনটাই আবার জেগে ওঠে** — তাই হারিয়ে যাওয়া ল্যাপটপে এটা করা যাবে না,
-   * যে ধরে আছে সে-ও ফিরে আসবে। এক ক্লিকে হয়ে যাওয়ার মতো কাজ নয়।
+   * Careful: revoke does not erase `token_hash`, it only closes the door. When
+   * reversed, **the old token wakes up again**, so this must not be done for a lost
+   * laptop: whoever holds it comes back too. Not something to happen in one click.
    */
   const onTurnAgentOn = (emp: EmployeeView) => {
     const ok = window.confirm(
@@ -128,23 +128,23 @@ export function StaffTab() {
       key: 'name',
       header: 'Name',
       /**
-       * ⭐ ম্যানেজারের নাম **মোটা ও সবুজ** — ১৫ জনের তালিকায় কে কী ভূমিকায়
-       *    আছেন সেটা জানতে আর প্রতিটা সারির `Login` জানালা খুলতে হয় না।
+       * The manager's name is **bold and green**, so in a list of 15 you need not open
+       *    each row's `Login` window to learn who has which role.
        *
-       * ⚠️ owner-ও এখানে পড়ে না, ইচ্ছাকৃতভাবে। owner সাধারণত কর্মীর
-       *    তালিকায় থাকেনই না, আর থাকলেও তাঁকে "চিনিয়ে দেওয়ার" দরকার নেই —
-       *    যিনি দেখছেন তিনি নিজেই owner।
+       * Careful: owner is deliberately not included. An owner is normally not in the
+       *    staff list at all, and even if so there is no need to point them out: the
+       *    person looking is the owner.
        */
       render: (emp) => (
         <PersonCell
           fullName={emp.fullName}
           empCode={emp.empCode}
           /*
-            ⚠️ ধরনটা পদবির **আগে** — নিয়ম ওটার উপরেই বসে, তাই তালিকায় চোখ
-               বুলিয়ে "কার ধরন বসানো নেই" ধরা পড়া দরকার (মাঠে দুজনের
-               খালি ছিল, আর তাঁদের একজন আসলে ডিজাইনার)।
+            Careful: the type comes **before** the designation: rules attach to it, so
+               scanning the list you should spot "whose type is not set" (in the field
+               two were empty, and one of them was actually a designer).
           */
-          /* ⚠️ পদবি আর দেখানো হয় না — ধরনটা পাশের কলামেই আছে (২২ আগস্ট) */
+          /* Careful: the designation is no longer shown; the type is in the next column */
           accent={emp.portalRole === 'manager'}
           accentTitle="Manager — sees everyone's Live Board and reports"
         />
@@ -153,9 +153,9 @@ export function StaffTab() {
     {
       key: 'department',
       header: 'Type',
-      /* ⚠️ ধরন বসানো না থাকলে **লাল** — মাঠে দুজনের খালি ছিল, আর তাঁদের
-         একজন আসলে ডিজাইনার (১৩৩টা ডিজাইন)। ফাঁকটা চোখে পড়া দরকার,
-         কারণ ধরন ছাড়া টার্গেটের হিসাব ওই কর্মীকে ছেড়ে দেয়। */
+      /* Careful: **red** when the type is not set. In the field two were empty, and one
+         of them was actually a designer (133 designs). The gap must be visible,
+         because without a type the target calculation skips that employee. */
       render: (emp) =>
         emp.staffType ? (
           STAFF_TYPE_LABEL[emp.staffType]
@@ -179,7 +179,7 @@ export function StaffTab() {
         </span>
       ),
     },
-    // ⭐ কলামটা তালিকা থেকেই বাদ — লুকিয়ে রাখা নয়, বসানোই হয় না
+    // The column is left out of the list entirely: not hidden, just never rendered
     ...(canSeeSalary
       ? [
           {
@@ -193,21 +193,21 @@ export function StaffTab() {
         ]
       : []),
     /**
-     * ⭐ **রোলআউটের একমাত্র শর্ত** — সই ছাড়া কারো PC-তে এজেন্ট বসবে না
-     * ([01 § রোলআউট](../../../../docs/01-Planning.md))।
+     * **The rollout's one condition**: no PC gets the agent without a signature
+     * (see the rollout section in `docs/01-Planning.md`).
      *
-     * ⚠️ কলামটা তালিকার ভেতরে রাখা হয়েছে, কোনো আলাদা পাতায় নয়: রোলআউটের
-     * দিনে প্রশ্নটা হয় "এর সই আছে তো?", আর উত্তরটা ওই সারিতেই থাকা দরকার।
-     * ⚠️ "নেই" অবস্থাটা **আম্বার**, লাল নয় — এটা সিস্টেমের ব্যর্থতা নয়,
-     * একটা বাকি থাকা কাজ।
+     * Careful: the column is inside the list, not on a separate page: on rollout day
+     * the question is "is this one signed off?", and the answer should be on that row.
+     * Careful: the "not yet" state is **amber**, not red: it is not a system failure,
+     * just outstanding work.
      */
     /**
-     * ⭐⭐ **"এই লোকটার এজেন্ট বসানো যাবে?" — এক নজরে।**
+     * **"Can this person's agent be installed?", at a glance.**
      *
-     * ⚠️ আগে এই প্রশ্নের উত্তর পর্দায় **কোথাও ছিল না**। কার portal
-     * account খোলা হয়েছে সেটা জানার একমাত্র উপায় ছিল ১৫টা সারিতে একে একে
-     * "Portal account" চেপে দেখা। ফলে রোলআউটের দিন কেউ বাদ পড়লে সেটা ধরা
-     * পড়ত **ওই PC-র সামনে দাঁড়িয়ে**, যখন স্টাফ সাইন ইন করতে পারত না।
+     * Careful: this answer used to be **nowhere on screen**. The only way to learn
+     * whose portal account was open was to press "Portal account" on 15 rows one by
+     * one. So if someone was missed on rollout day, it was found **standing at that
+     * PC**, when the staff member could not sign in.
      */
     {
       key: 'setup',
@@ -215,7 +215,7 @@ export function StaffTab() {
       render: (emp) => {
         if (emp.status !== 'active') return <span className="text-ink3">—</span>;
 
-        // ⚠️ ক্রমটা কাজের ক্রম: আগে লগইন, তারপর MSI, তারপর সে সাইন ইন করে
+        // Careful: the order is the order of work: first login, then MSI, then they sign in
         if (!emp.hasPortalAccount) {
           return (
             <span className="text-brand" title="Create a portal account first — the agent asks for this login">
@@ -224,13 +224,14 @@ export function StaffTab() {
           );
         }
         /**
-         * ⚠️⚠️ **এটা "Ready to install"-এর আগে দেখতে হবে।** দুটো অবস্থাতেই
-         * `hasDevice` মিথ্যা, কিন্তু করণীয় সম্পূর্ণ আলাদা: একটায় PC-তে
-         * গিয়ে MSI বসাতে হয়, অন্যটায় সারিতেই এক ক্লিক। উল্টো ক্রমে লিখলে
-         * মালিক বন্ধ হয়ে যাওয়া এজেন্টের জন্য আবার ইনস্টল করতে যেতেন।
+         * Careful: **this must be checked before "Ready to install".** In both states
+         * `hasDevice` is false, but what to do is completely different: in one you go to
+         * the PC and install the MSI, in the other it is one click in the row. In the
+         * wrong order the owner would go to reinstall for an agent that was just switched
+         * off.
          *
-         * ⭐ এটা ঘটে কারণ কর্মী নিষ্ক্রিয় করলে তাঁর ডিভাইস revoke হয়, আর
-         * আবার সক্রিয় করলে সেটা ফেরে না — ইচ্ছাকৃত, কিন্তু নীরব।
+         * Important: this happens because deactivating an employee revokes their
+         * device, and reactivating does not bring it back: deliberate, but silent.
          */
         if (emp.agentSwitchedOff) {
           return (
@@ -273,9 +274,9 @@ export function StaffTab() {
       header: '',
       align: 'right',
       /**
-       * ⚠️ ম্যানেজার **Edit**-ই শুধু পান *(১৫ আগস্ট)*। portal অ্যাকাউন্ট,
-       * পাসওয়ার্ড রিসেট, deactivate/reactivate — সার্ভারে ওগুলো
-       * owner-only, তাই বোতামও দেখানো হয় না। দেখালে চাপলেই ৪০৩ আসত।
+       * Careful: managers get **only Edit**. Portal account, password reset and
+       * deactivate/reactivate are owner-only on the server, so the buttons are not
+       * shown; showing them would give a 403 on press.
        */
       render: (emp) => (
         <RowActions>
@@ -290,9 +291,9 @@ export function StaffTab() {
                     : 'Gives them a login to see their own hours'
                 }
               >
-                {/* ⭐ অ্যাকাউন্ট থাকলে লেখাটা বদলায় — নইলে "Portal account"
-                    চেপে কী হবে তার কোনো ইঙ্গিতই থাকত না, আর মালিক ভাবতেন
-                    আবার নতুন অ্যাকাউন্ট তৈরি হয়ে যাবে। */}
+                {/* Important: the text changes when an account exists; otherwise there would
+                    be no hint what pressing "Portal account" does, and the owner would
+                    think a new account would be created again. */}
                 {emp.hasPortalAccount ? 'Login' : 'Portal account'}
               </MiniButton>
               <MiniButton tone="danger" onClick={() => setDeactivating(emp)}>
@@ -310,10 +311,10 @@ export function StaffTab() {
   ];
 
   /**
-   * ⭐ রোলআউটের একমাত্র সংখ্যা — কতজনের কাজ বাকি।
+   * The rollout's one number: how many still have work to do.
    *
-   * ⚠️ শুধু `active` কর্মী গোনা হয়; যিনি চলে গেছেন তাঁর portal account
-   * না থাকাটা বাকি কাজ নয়।
+   * Careful: only `active` staff are counted; for someone who has left, having no
+   * portal account is not outstanding work.
    */
   const activeStaff = rows.filter((e) => e.status === 'active');
   const needLogin = activeStaff.filter((e) => !e.hasPortalAccount).length;
@@ -321,9 +322,9 @@ export function StaffTab() {
     (e) => e.hasPortalAccount && !e.hasDevice && !e.agentSwitchedOff,
   ).length;
 
-  // ⚠️ আলাদা করে গোনা — "বসাতে হবে" আর "চালু করতে হবে" এক নয়, আর
-  //    দ্বিতীয়টা এক ক্লিকের কাজ। একসাথে গুনলে মালিক ভাবতেন সবগুলোতেই
-  //    PC-তে যেতে হবে।
+  // Careful: counted separately: "needs installing" and "needs switching on" are not
+  //    the same, and the second is a one-click job. Counted together, the owner would
+  //    think every one needs a trip to the PC.
   const switchedOff = activeStaff.filter((e) => e.agentSwitchedOff).length;
 
   const setupHint =
@@ -340,8 +341,8 @@ export function StaffTab() {
   return (
     <div className="space-y-3">
       {/*
-        ⚠️ ফিল্টারের বার তিনটে অবস্থার **বাইরে** — নইলে সার্চ বাক্সটা প্রতি
-           রিকোয়েস্টে unmount হয়ে যেত আর টাইপ করতে করতে কার্সার হারাত।
+        Careful: the filter bar is **outside** the three states; otherwise the search box
+           would unmount on every request and lose the cursor while typing.
       */}
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div className="flex flex-wrap items-end gap-2">
@@ -401,11 +402,11 @@ export function StaffTab() {
           padded={false}
           title={`Staff · ${staff.data?.total ?? rows.length}`}
           /**
-           * ⭐ **রোলআউটের একমাত্র সংখ্যা।** ১৫টা সারি পড়ার বদলে এক লাইনে
-           * "কতজন বাকি" — আর কী বাকি, সেটাও।
+           * **The rollout's one number.** One line saying "how many are left", and
+           * what is left, instead of reading 15 rows.
            *
-           * ⚠️ শুধু কাজ **বাকি থাকলেই** দেখানো হয়। সব শেষ হয়ে গেলে লাইনটা
-           * উধাও — নইলে ওটা স্থায়ী সাজসজ্জা হয়ে যেত আর কেউ পড়ত না।
+           * Careful: shown only **while work remains**. When all is done the line
+           * vanishes; otherwise it would become permanent decoration nobody reads.
            */
           hint={setupHint ?? (
             canSeeSalary
@@ -424,8 +425,9 @@ export function StaffTab() {
 
       {(creating || editing) && (
         <EmployeeForm
-          // ⚠️ `key` — নইলে একজনের ফর্ম বন্ধ না করে অন্যজনেরটা খুললে React
-          //    একই কম্পোনেন্ট ধরে নিত আর আগের জনের টাইপ করা মান বসে থাকত
+          // Careful: `key`, or opening one person's form without closing another's
+          //    would make React reuse the same component and the previous person's typed
+          //    values would stay
           key={editing?.id ?? 'new'}
           employee={editing}
           canSeeSalary={canSeeSalary}
@@ -474,8 +476,8 @@ export function StaffTab() {
           onCreated={(email, password) => {
             setPortalFor(null);
             setTempPassword({ email, password });
-            // ⚠️ রিসেটেও তালিকা রিফ্রেশ — নতুন অ্যাকাউন্ট খোলা হলে
-            //    "Setup" কলামটা সাথে সাথে বদলাতে হবে
+            // Careful: a reset refreshes the list too; when a new account is opened
+            //    the "Setup" column must change at once
             staff.reload();
           }}
           onSaved={() => {
@@ -499,15 +501,15 @@ export function StaffTab() {
   );
 }
 
-// ── যোগ করা ও সম্পাদনা ──────────────────────────────────────────────────────
+// ── Add and edit ────────────────────────────────────────────────────────────
 
 interface StaffForm {
   empCode: string;
   fullName: string;
   email: string;
-  /** ⚠️ খালি স্ট্রিং = "বসানো নেই" — `StaffType | ''` */
+  /** Careful: empty string = "not set"; `StaffType | ''` */
   staffType: string;
-  /** ⚠️ খালি স্ট্রিং = "বসানো নেই" → পলিসির ২৫ খাটবে; `'0'` = বন্ধ */
+  /** Careful: empty string = "not set", so the policy's 25 applies; `'0'` = off */
   dailyDesignTarget: string;
   policyId: string;
   joinedOn: string;
@@ -535,11 +537,12 @@ function formOf(employee: EmployeeView | null): StaffForm {
 }
 
 /**
- * ⚠️ PATCH-এ **শুধু যা বদলেছে** সেটুকুই যায়।
+ * Careful: the PATCH sends **only what changed**.
  *
- * পুরো ফর্মটা পাঠালে দুটো ক্ষতি হতো: (১) বেতনে হাত না দিলেও প্রতিবার
- * `employee_salary` audit সারি বসত, আর আসল বেতন-পরিবর্তনগুলো ওগুলোর নিচে
- * চাপা পড়ত; (২) দুজন একসাথে সম্পাদনা করলে একজন অন্যজনের বদল মুছে দিত।
+ * Sending the whole form would do two kinds of harm: (1) an `employee_salary` audit
+ * row would be written every time even if salary was untouched, burying the real
+ * salary changes under them; (2) with two people editing at once, one would erase
+ * the other's change.
  */
 function patchOf(
   before: StaffForm,
@@ -548,19 +551,19 @@ function patchOf(
 ): UpdateEmployeeBody {
   const patch: UpdateEmployeeBody = {};
 
-  // ⚠️ `empCode` তুলনাই করা হয় না — ঘরটা read-only, আর সার্ভারও ওটা নেয় না।
+  // Careful: `empCode` is not compared at all; the field is read-only and the server ignores it too
   if (after.fullName.trim() !== before.fullName) {
     patch.fullName = after.fullName.trim();
   }
-  // ⚠️ ফাঁকা ঘর মানে `null` ("মুছে দাও"), `''` নয় — `''` পাঠালে
-  //    `@IsEmail`/`@Matches` ভেঙে ৪০০ হতো
+  // Careful: an empty field means `null` ("delete it"), not `''`; sending `''` would
+  //    trip `@IsEmail`/`@Matches` and give a 400
   if (after.email.trim() !== before.email) patch.email = orNull(after.email);
-  // ⚠️ ফাঁকা মানে `null` ("ধরন তুলে নাও") — সার্ভার `null` মেনে নেয়
+  // Careful: empty means `null` ("remove the type"); the server accepts `null`
   if (after.staffType !== before.staffType) {
     patch.staffType = after.staffType === '' ? null : (after.staffType as StaffType);
   }
-  // ⚠️ ফাঁকা মানে `null` ("নিজের সংখ্যা মুছে পলিসিতে ফেরাও"), `0` নয় —
-  //    `0` পাঠালে টার্গেট **বন্ধ** হয়ে যেত, যা সম্পূর্ণ আলাদা কথা
+  // Careful: empty means `null` ("clear their own number, go back to the policy"),
+  //    not `0`; sending `0` would **switch the target off**, which is a different thing
   if (after.dailyDesignTarget.trim() !== before.dailyDesignTarget) {
     patch.dailyDesignTarget =
       after.dailyDesignTarget.trim() === ''
@@ -599,17 +602,18 @@ function EmployeeForm({
   const { busy, error, run } = useMutation();
 
   /**
-   * ⭐ নতুন কর্মীর ফর্মে কোডটা **আগেভাগে দেখানো** হয় (`OX-13`) — কিন্তু
-   * ওটা কেবল দেখার জন্য, পাঠানোর জন্য নয়। আসল কোড বসে সার্ভারে, সেভ
-   * করার মুহূর্তে।
+   * On a new employee's form the code is **shown in advance** (`OX-13`), but only
+   * for display, not for sending. The real code is assigned on the server, at the
+   * moment of saving.
    *
-   * ⚠️ তাই লেখাটা "next", "your code will be" নয়: দুজন মালিক একসাথে
-   * যোগ করলে একজন পরেরটা পাবেন, আর পর্দা তখন মিথ্যে বলে থাকত।
+   * Careful: so the text says neither "next" nor "your code will be": if two owners
+   * add at once, one gets the next one, and the screen would have been lying.
    *
-   * ⚠️ **সম্পাদনার সময় ডাকা হয় না** — ওখানে কোডটা কর্মীর নিজের।
+   * Careful: **not called when editing**; there the code belongs to the employee.
    *
-   * ⚠️ ব্যর্থ হলে চুপ করে থাকা হয় ইচ্ছাকৃতভাবে: এটা নিছক তথ্য, আর এর
-   * জন্য পুরো ফর্মে লাল বার্তা দেখানো অর্থহীন — সেভ করলে কোড ঠিকই বসবে।
+   * Careful: failure is silent, on purpose: it is mere information, and showing a red
+   * message across the whole form for it is pointless; the code will be assigned on
+   * save anyway.
    */
   useEffect(() => {
     if (employee) return;
@@ -618,7 +622,7 @@ function EmployeeForm({
     nextEmployeeCode(ac.signal)
       .then(({ code }) => setForm((prev) => ({ ...prev, empCode: code })))
       .catch(() => {
-        /* না এলে ঘরটা "Assigned on save" দেখাবে */
+        /* If it does not arrive the field shows "Assigned on save" */
       });
 
     return () => ac.abort();
@@ -632,13 +636,13 @@ function EmployeeForm({
     run(async () => {
       if (employee) {
         const patch = patchOf(initial, form, canSeeSalary);
-        // কিছুই বদলায়নি — সার্ভারে গিয়ে "কোনো ফিল্ড দেওয়া হয়নি" ৪০০ আনার
-        // চেয়ে চুপচাপ বন্ধ করে দেওয়াই সৎ
+        // Nothing changed: quietly closing is more honest than going to the server to
+        // get a 400 "no field was supplied"
         if (Object.keys(patch).length > 0) {
           await updateEmployee(employee.id, patch);
         }
       } else {
-        // ⚠️ `empCode` পাঠানো হয় না — সার্ভার নিজে বসায়, আর পাঠালে ৪০০
+        // Careful: `empCode` is not sent; the server assigns it, and sending it gives a 400
         const body: CreateEmployeeBody = {
           fullName: form.fullName.trim(),
           ...(orUndefined(form.email) ? { email: form.email.trim() } : {}),
@@ -660,7 +664,7 @@ function EmployeeForm({
     });
   };
 
-  // ⚠️ কোড আর শর্ত নয় — ওটা সার্ভারের কাজ। শুধু নাম চাই।
+  // Careful: not code and conditions; that is the server's job. Only the name is needed.
   const incomplete = form.fullName.trim() === '';
 
   return (
@@ -689,19 +693,20 @@ function EmployeeForm({
       <div className="space-y-3.5">
         <FormGrid>
           {/*
-            ⭐⭐ কোডটা **দেখার জিনিস, লেখার নয়** — সার্ভার বসায়, কেউ বদলাতে
-            পারে না। ঘরটা তবু রাখা হয়েছে (লুকিয়ে ফেলা হয়নি), কারণ
-            রোলআউটের দিনে "এর কোড কত?" প্রশ্নটা এই ফর্মেই ওঠে।
+            Important: the code is **to look at, not to write**: the server assigns it
+            and nobody can change it. The field is still kept (not hidden), because on
+            rollout day the question "what is their code?" comes up in this very form.
 
-            ⚠️ `disabled` কেবল পর্দার ভদ্রতা নয় — সার্ভারেও ঘরটা নেই
-            (`CreateEmployeeDto`/`UpdateEmployeeDto`), তাই DevTools দিয়ে
-            চালাকি করলেও ৪০০। দুই দিকেই বন্ধ না করলে একদিন একটা বদলাত।
+            Careful: `disabled` is not mere screen politeness: the field does not exist
+            on the server either (`CreateEmployeeDto`/`UpdateEmployeeDto`), so even
+            cleverness through DevTools gets a 400. Without blocking both sides, one
+            would one day drift.
           */}
           <TextField
             label="Employee code"
             value={form.empCode}
             onChange={() => {
-              /* বদলানো যায় না */
+              /* cannot be changed */
             }}
             disabled
             mono
@@ -713,7 +718,7 @@ function EmployeeForm({
                   : 'Assigned automatically — this is the next one in line'
             }
           />
-          {/* ⚠️ কোডের ঘরটা এখন disabled, তাই মোডাল খুললে কার্সার এখানে */}
+          {/* Careful: the code field is now disabled, so the cursor starts here when the modal opens */}
           <TextField
             label="Full name"
             value={form.fullName}
@@ -730,13 +735,13 @@ function EmployeeForm({
             hint="Needed to create a portal account"
           />
           {/*
-            ⭐⭐ **কাজের ধরন** *(২১ আগস্ট, মালিকের চাওয়া)* — আর এটাই
-               একমাত্র ঘর যার উপর **নিয়ম** বসে (ডিজাইনারের দৈনিক টার্গেট)।
+            **Staff type**, the owner's request: the only field that **rules** attach to
+               (the designer's daily target).
 
-            ⚠️⚠️ নিচের "Designation" মুক্ত-লেখাই থাকছে, আর সেটা ইচ্ছাকৃত:
-               ওটা পদবি ("Senior Graphic Designer"), এটা শ্রেণি। এক করে
-               ফেললে পদবিতে "Senior" যোগ করামাত্র টার্গেটের নিয়ম ওই
-               কর্মীর উপর খাটা বন্ধ হয়ে যেত — নীরবে।
+            Careful: the free-text "Designation" below stays, deliberately: it is a job
+               title ("Senior Graphic Designer"), this is a class. Merged, adding
+               "Senior" to the title would silently stop the target rule applying to
+               that employee.
           */}
           <SelectField
             label="Staff type"
@@ -751,13 +756,14 @@ function EmployeeForm({
             hint="Designers get a daily design target; the others do not"
           />
           {/*
-            ⭐⭐ **ঘরটা কেবল ডিজাইনারের জন্যই ওঠে** — সার্ভারের
-               `hasDesignTarget()` ঠিক এই একই শর্ত দেখে। অন্যদের দেখালে
-               ঘরটা ভরা যেত, অথচ কোনো পর্দায় কিছুই বদলাত না — একটা ঘর
-               যা কিছুই করে না, সেটা ভুল সংখ্যার চেয়েও বিভ্রান্তিকর।
+            **This field appears only for designers**: the server's
+               `hasDesignTarget()` checks exactly this same condition. Showing it for
+               others would let it be filled while changing nothing on any screen; a
+               field that does nothing is more confusing than a wrong number.
 
-            ⚠️ ধরন বদলে "Designer" থেকে সরালে ঘরটা লুকোবে, কিন্তু বসানো
-               মানটা **মুছবে না** — আবার ডিজাইনার করলে সংখ্যাটা ফিরে আসবে।
+            Careful: changing the type away from "Designer" hides the field but does
+               **not erase** the saved value; making them a designer again brings the
+               number back.
           */}
           {features.designTargets && form.staffType === 'designer' && (
             <TextField
@@ -769,22 +775,20 @@ function EmployeeForm({
             />
           )}
           {/*
-            ⭐⭐ **দুই ঘরে এক নাম — আর সেটাই এখানকার একমাত্র ফাঁদ**
-               *(২৫ আগস্ট ২০২৬)*।
+            **Two fields, one name, and that is the only trap here.**
 
-            মালিকের সিদ্ধান্ত: *"researcher and designer same kaj kore na,
-            tai eder access o same hobe na"* — তাই গবেষক এখন পোর্টালের
-            একটা **ভূমিকা** (`UserRole.researcher`), আর অধিকারটা ওখান
-            থেকেই আসে।
+            The owner's decision: researcher and designer do not do the same work, so
+            their access should not be the same. So researcher is now a portal **role**
+            (`UserRole.researcher`), and rights come from there.
 
-            ⚠️⚠️ কিন্তু এই ঘরটা (**Staff type**) অধিকার দেয় **না** — এটা
-               কাজের নাম, আর ডিজাইনারের টার্গেটের ঘরটা এটাই খোলে। ভূমিকা
-               বসে আলাদা জানালায় (সারির "Login" বোতাম)।
+            Careful: this field (**Staff type**) does **not** grant rights: it is the
+               name of the work, and it is what opens the designer's target field. The
+               role is set in a separate window (the row's "Login" button).
 
-            ⭐ তাই দুটো এক না হলে নিচের বার্তাটা ওঠে। চুপচাপ ভূমিকা বসিয়ে
-               দেওয়াও যেত, কিন্তু তখন মালিক জানতেনই না কী ঘটল — আর এই
-               প্রকল্পে **অদৃশ্য জাদুই** বারবার ভুল সংখ্যার জন্ম দিয়েছে।
-               দেখা যায় এমন সতর্কতা, লুকোনো সংশোধন নয়।
+            Important: so when the two disagree, the message below appears. The role
+               could have been set quietly, but then the owner would never know what
+               happened, and in this project **invisible magic** has repeatedly caused
+               wrong numbers. A visible warning, not a hidden correction.
           */}
           {employee &&
             features.designTargets &&
@@ -812,16 +816,16 @@ function EmployeeForm({
               </FullWidth>
             )}
           {/*
-            ⚠️⚠️ **"Designation" ও "Department" ঘর দুটো তুলে দেওয়া হয়েছে**
-               *(২২ আগস্ট, মালিকের সিদ্ধান্ত: "Designation and Department
-               remove kore dao")*।
+            Careful: **the "Designation" and "Department" fields were removed**
+               (the owner's decision).
 
-            ⭐ কারণ উপরের **Staff type**-ই এখন একমাত্র শ্রেণিকরণ, আর তিনটে
-               আলাদা ঘরে একই কথা লেখা মানে তিন রকম বানান — "Designer",
-               "Graphic Designer", "Design" — যার উপর কোনো নিয়ম বসানো যায় না।
+            Important: **Staff type** above is now the only classification, and
+               writing the same thing in three fields means three spellings
+               ("Designer", "Graphic Designer", "Design") that no rule can attach to.
 
-            ⚠️ ডাটাবেসের কলাম দুটো **মোছা হয়নি**: পুরোনো সারিতে মান আছে, আর
-               সেগুলো মুছলে ইতিহাস হারাত। শুধু আর সম্পাদনা বা দেখানো হয় না।
+            Careful: the two database columns were **not dropped**: old rows hold
+               values, and deleting them would lose history. They are just no longer
+               edited or shown.
           */}
           <TextField
             label="Joined on"
@@ -842,9 +846,9 @@ function EmployeeForm({
           />
 
           {/*
-            ⭐ বেতনের ঘরটা owner ছাড়া কারো জন্য **বসানোই হয় না**।
-               ⚠️ পাশের লেখাটা ইচ্ছাকৃত: যে দেখছে সে-ও যেন জানে তার দেখাটা
-                  লেখা থাকছে (সার্ভার `payroll_view` সারি বসায়)।
+            The salary field is **not rendered at all** for anyone but the owner.
+               Careful: the note beside it is deliberate: whoever is looking should know
+                  their looking is recorded (the server writes a `payroll_view` row).
           */}
           {canSeeSalary && (
             <FullWidth>
@@ -866,7 +870,7 @@ function EmployeeForm({
   );
 }
 
-// ── নিষ্ক্রিয় ও পুনরায় চালু ─────────────────────────────────────────────────
+// ── Deactivate and reactivate ───────────────────────────────────────────────
 
 
 function DeactivateDialog({
@@ -944,21 +948,21 @@ function ReactivateDialog({
   );
 }
 
-// ── পোর্টাল অ্যাকাউন্ট ──────────────────────────────────────────────────────
+// ── Portal account ──────────────────────────────────────────────────────────
 
 /**
- * ⭐ টাইপটা `AssignableRole`, `Role` নয় — তাই কেউ ভুল করে
- * `{ value: 'owner' }` যোগ করতে গেলে **কম্পাইলারই থামাবে**। ADR-011d-র
- * নিয়মটা তখন আর কেবল সার্ভারের DTO-তে নয়, পর্দার কোডেও বাঁধা।
+ * Important: the type is `AssignableRole`, not `Role`, so if someone adds
+ * `{ value: 'owner' }` by mistake **the compiler stops them**. ADR-011d's rule is
+ * then bound in the screen's code, not only in the server's DTO.
  */
 /**
- * ⚠️ ভূমিকার **মানুষের পড়ার নাম** — সার্ভারের মান নয়। বার্তায়
- * `employee` লিখলে মালিক ভাবতেন সেটা কোনো কারিগরি সংকেত।
+ * Careful: the role's **human-readable name**, not the server value. Writing
+ * `employee` in a message would make the owner think it was some technical signal.
  *
- * ⚠️⚠️ `Record<Role, string>` — **সম্পূর্ণ** মানচিত্র, ইচ্ছাকৃতভাবে।
- * `UserRole`-এ কাল নতুন কিছু বসলে এখানেই কম্পাইল-এরর হবে, আর
- * পর্দায় ফাঁকা ঘর দেখা যাবে না। ২৫ আগস্ট `researcher` যোগ করার
- * সময় গোটা কোডবেসে **মাত্র দুটো** জায়গা এভাবে ধরা পড়েছিল।
+ * Careful: `Record<Role, string>`: a **complete** map, deliberately. If something
+ * new is added to `UserRole`, a compile error appears here, and no blank cell shows
+ * on screen. When `researcher` was added, only **two** places in the whole
+ * codebase were caught this way.
  */
 const ROLE_WORD: Record<Role, string> = {
   owner: 'Owner',
@@ -968,11 +972,11 @@ const ROLE_WORD: Record<Role, string> = {
 };
 
 /**
- * ⭐⭐ **কোন ভূমিকা ড্রপডাউনে কোনটা দেখাবে** — সম্পূর্ণ মানচিত্র।
+ * **Which role shows what in the dropdown**: a complete map.
  *
- * ⚠️ `owner` → `'employee'` নয়, ওটা এখানে **পৌঁছায়ই না**: owner-এর
- * ড্রপডাউনটাই দেখানো হয় না (`ownerAccount`)। তবু ঘরটা রাখা হয়েছে,
- * কারণ `Record<Role, ...>` সম্পূর্ণ না হলে কম্পাইলার এটাকে পাহারা দিত না।
+ * Careful: `owner` is not `'employee'`; it **never reaches** here: the owner's
+ * dropdown is not shown at all (`ownerAccount`). The entry is kept anyway, because
+ * without a complete `Record<Role, ...>` the compiler would not guard this.
  */
 const ASSIGNABLE_OF: Record<Role, AssignableRole> = {
   owner: 'employee',
@@ -984,12 +988,12 @@ const ASSIGNABLE_OF: Record<Role, AssignableRole> = {
 const PORTAL_ROLES: { value: AssignableRole; label: string }[] = [
   { value: 'employee', label: 'Staff — their own hours only' },
   /**
-   * ⭐⭐ *(২৫ আগস্ট — মালিক: "researcher and designer same kaj kore na,
-   * tai eder access o same hobe na")*
+   * The owner's decision: researcher and designer do not do the same work, so their
+   * access should not be the same.
    *
-   * ⚠️ লেখাটায় **কী পাবেন** বলা আছে, "Researcher" শব্দটা একা নয়। পাশের
-   * ঘরে (Staff type) ঠিক একই শব্দ আছে অথচ সেটা অধিকার দেয় না — দুটো
-   * আলাদা করে চেনা না গেলে মালিক ভুল ঘরে খুঁজতেন।
+   * Careful: the text says **what they will get**, not the word "Researcher" alone.
+   * The adjacent field (Staff type) has exactly the same word yet grants no rights;
+   * if the two could not be told apart, the owner would look in the wrong field.
    */
   {
     value: 'researcher',
@@ -999,11 +1003,11 @@ const PORTAL_ROLES: { value: AssignableRole; label: string }[] = [
 ];
 
 /**
- * স্টাফের নিজের পর্দায় ঢোকার অ্যাকাউন্ট (J04)।
+ * The account for signing in to the employee's own screen.
  *
- * ⚠️ `owner` ভূমিকা এখান থেকে দেওয়া যায় না — ইচ্ছাকৃত। owner মানে বেতন,
- *    audit log আর সেটিংসের চাবি; সেটা একটা ড্রপডাউনের এক ক্লিকে দেওয়ার
- *    মতো জিনিস নয়।
+ * Careful: the `owner` role cannot be given from here, deliberately. Owner means
+ *    the key to pay, the audit log and settings; that is not something to hand out
+ *    with one click on a dropdown.
  */
 function PortalAccountForm({
   employee,
@@ -1013,16 +1017,17 @@ function PortalAccountForm({
 }: {
   employee: EmployeeView;
   onClose: () => void;
-  /** নতুন অস্থায়ী পাসওয়ার্ড — খোলা ও রিসেট, দুটোতেই */
+  /** The new temporary password: for both open and reset */
   onCreated: (email: string, password: string) => void;
-  /** ইমেইল বদলানোর পর — পাসওয়ার্ড দেখানোর কিছু নেই, শুধু তালিকা রিফ্রেশ */
+  /** After an email change: no password to show, just refresh the list */
   onSaved: () => void;
 }) {
   /**
-   * ⭐ একই মোডাল দুটো কাজ করে — অ্যাকাউন্ট **খোলা** আর **ঠিক করা**।
+   * One modal does two jobs: **opening** an account and **fixing** it.
    *
-   * ⚠️ আলাদা দুটো মোডাল বানালে সারিতে দুটো বোতাম লাগত, আর মালিককে মনে
-   * রাখতে হতো কারটা খোলা হয়েছে কারটা হয়নি — অথচ সেটা সিস্টেম নিজেই জানে।
+   * Careful: two separate modals would need two buttons on the row, and the owner
+   * would have to remember which has been opened and which not, though the system
+   * itself knows.
    */
   const existing = employee.hasPortalAccount && employee.portalUserId !== null;
 
@@ -1030,48 +1035,49 @@ function PortalAccountForm({
     existing ? (employee.portalEmail ?? '') : (employee.email ?? ''),
   );
   /**
-   * ⚠️⚠️ ড্রপডাউনটা **বর্তমান** ভূমিকা দেখিয়ে খোলে। `'employee'` ধরে
-   * শুরু করলে কেউ শুধু ইমেইলের বানান ঠিক করতে গিয়ে সেভ চাপলেই একজন
-   * ম্যানেজার নীরবে স্টাফ হয়ে যেতেন — আর সেটা কোথাও দেখা যেত না।
+   * Careful: the dropdown opens showing the **current** role. Starting from
+   * `'employee'` would mean that someone fixing an email typo and pressing save
+   * silently turned a manager into staff, and nothing would show it anywhere.
    */
   /**
-   * ⭐ টাইপটা `Role` নয়, `AssignableRole` — কারণ initializer-ই মানটাকে
-   * দুটোয় নামিয়ে আনে, আর owner-এর ড্রপডাউন দেখানোই হয় না (নিচে)।
+   * The type is `AssignableRole`, not `Role`, because the initializer narrows the
+   * value to those two, and the owner's dropdown is never shown (below).
    *
-   * ⚠️ `Role` লেখা থাকায় কম্পাইলার ধরে নিত মানটা `'owner'`ও হতে পারে, আর
-   * `changeUserRole` সেটা নেয় না — **ওয়েব বিল্ড তাতেই ভেঙেছিল** (TS2345)।
-   * সরু টাইপটা এখন নিয়মটাই পাহারা দেয়, রানটাইমের কোনো গার্ড ছাড়াই।
+   * Careful: with `Role` written, the compiler assumed the value could also be
+   * `'owner'`, which `changeUserRole` does not accept: **the web build broke on
+   * exactly that** (TS2345). The narrow type now guards the rule itself, with no
+   * runtime guard.
    */
   /**
-   * ⚠️⚠️ **এই এক লাইনেই বাগটা তৃতীয়বার ফিরে এসেছিল** *(২৫ আগস্ট)*।
+   * Careful: **the bug came back a third time, on this one line.**
    *
-   * আগে লেখা ছিল `portalRole === 'manager' ? 'manager' : 'employee'` —
-   * অর্থাৎ *"ম্যানেজার না হলে স্টাফ"*। `researcher` রোল আসার পর সেটা
-   * সুমাইয়াকে ড্রপডাউনে **"Staff" দেখাত**, আর মালিক কেবল ইমেইলের বানান
-   * ঠিক করতে জানালাটা খুলে সেভ চাপলেই তিনি ⭐ **নীরবে গবেষক থেকে
-   * সাধারণ স্টাফ হয়ে যেতেন** — Design Pool, বানান-কিউ সব হারিয়ে।
+   * It used to read `portalRole === 'manager' ? 'manager' : 'employee'`, meaning
+   * *"if not a manager, staff"*. After the `researcher` role arrived, that showed a
+   * researcher as **"Staff" in the dropdown**, and an owner who opened the window just
+   * to fix an email typo and pressed save would **silently turn them from researcher
+   * into ordinary staff**, losing the Design Pool and the spelling queue.
    *
-   * ⚠️ ঠিক এই বাগটার কথাই উপরের টীকায় লেখা আছে, ম্যানেজারের বেলায়।
-   * তখন `? :` দিয়ে সারানো হয়েছিল — আর সেই সারাইটাই নতুন রোলের জন্য
-   * আবার ফাঁদ হলো। ⭐ তাই এখন **সম্পূর্ণ মানচিত্র**: `Record<Role, ...>`
-   * enum বাড়লে কম্পাইলারই থামাবে, অনুমান করবে না।
+   * Careful: this is the same bug the note above describes for managers. It was then
+   * fixed with `? :`, and that fix itself became a trap for the new role. Important:
+   * so it is now a **complete map**: `Record<Role, ...>`; if the enum grows, the
+   * compiler stops it instead of guessing.
    */
   const [role, setRole] = useState<AssignableRole>(
     () => ASSIGNABLE_OF[employee.portalRole ?? 'employee'],
   );
 
   /**
-   * ⚠️ owner-এর অ্যাকাউন্ট এখান থেকে ছোঁয়া যায় না। ভূমিকার ঘরটাই দেখানো
-   * হয় না, কারণ একটা নিষ্ক্রিয় ড্রপডাউন দেখলে মনে হতো কিছু একটা ভেঙে
-   * আছে — অথচ এটা ইচ্ছাকৃত (ADR-011d)। সার্ভারও আলাদা করে আটকায়।
+   * Careful: an owner's account cannot be touched from here. The role field is not
+   * shown at all, because a disabled dropdown would look like something was broken,
+   * when this is deliberate (ADR-011d). The server also blocks it separately.
    */
   /**
-   * ⭐⭐ **মালিকের বেছে দেওয়া পাসওয়ার্ড** *(২৩ আগস্ট, মালিকের সিদ্ধান্ত)*।
+   * **A password chosen by the owner.**
    *
-   * ⚠️⚠️ খালি রাখলে **আগের আচরণ অক্ষত**: সিস্টেম এলোমেলো ১৪ অক্ষর বানায়
-   * আর প্রথম লগইনে বদলাতে বলে। ⭐ ঘরটা ভরলে সেটাই বসে, আর "Change your
-   * password" পর্দাটা আর আসে না — মালিক পাসওয়ার্ডটা জানেন, আর সেটা
-   * তিনি **জেনেবুঝে** বেছেছেন।
+   * Careful: left empty, **the old behaviour is unchanged**: the system generates 14
+   * random characters and asks for a change at first login. Important: when the field
+   * is filled, that is what is set, and the "Change your password" screen no longer
+   * appears: the owner knows the password, and chose it **knowingly**.
    */
   const [password, setPassword] = useState('');
 
@@ -1098,9 +1104,9 @@ function PortalAccountForm({
           </Button>
           {existing ? (
             <>
-              {/* ⚠️⚠️ পাসওয়ার্ড রিসেট আর ইমেইল বদলানো **দুটো আলাদা বোতাম**।
-                  এক বোতামে মিলিয়ে দিলে ইমেইলের বানান ঠিক করতে গিয়ে কারো
-                  পাসওয়ার্ড অকারণে বদলে যেত, আর সে পরদিন ঢুকতেই পারত না। */}
+              {/* Careful: password reset and email change are **two separate buttons**.
+                  Combined into one, fixing an email typo would needlessly change
+                  someone's password and they could not sign in the next day. */}
               <Button
                 onClick={() =>
                   run(async () => {
@@ -1120,10 +1126,10 @@ function PortalAccountForm({
                 onClick={() =>
                   run(async () => {
                     /**
-                     * ⚠️ ইমেইল ও ভূমিকা — যেটা সত্যিই বদলেছে **শুধু সেটাই**
-                     * পাঠানো হয়। দুটোই সবসময় পাঠালে audit log-এ এমন
-                     * "বদল" জমত যেখানে আসলে কিছুই বদলায়নি, আর পরে
-                     * "কে কখন ম্যানেজার হলো" খুঁজে বের করা কঠিন হতো।
+                     * Careful: email and role: **only what really changed** is sent.
+                     * Always sending both would pile up "changes" in the audit log where
+                     * nothing changed, and later finding "who became manager and when"
+                     * would be hard.
                      */
                     if (emailChanged) {
                       await changeLoginEmail(employee.portalUserId!, email.trim());
@@ -1179,8 +1185,8 @@ function PortalAccountForm({
         />
 
         {/*
-          ⚠️ ইমেইলের **পরে**, ভূমিকার আগে — কাজের ক্রম এটাই: কে ঢুকবে,
-             কী দিয়ে ঢুকবে, তারপর কী দেখবে।
+          Careful: **after** the email and before the role: that is the order of work:
+             who gets in, with what, and then what they see.
         */}
         <TextField
           label="Password"

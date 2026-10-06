@@ -1,27 +1,27 @@
 namespace oXeio.Agent.Sync;
 
 /// <summary>
-/// টোকেন কোথা থেকে আসবে — শুধু এইটুকুই সিঙ্ক ক্লায়েন্ট জানে।
+/// Where the token comes from; this is all the sync client knows.
 ///
-/// ⚠️ এখানে ডিস্ক পড়া হয় না, DPAPI নেই, ফাইলের পাথ নেই। টোকেন জমানোর মালিক
-/// secrets মডিউল; সিঙ্ক ক্লায়েন্ট শুধু "এখনকার টোকেনটা দাও" বলে। দুই জায়গায়
-/// দুরকম করে টোকেন পড়লে rotate করার দিন একজন পুরোনোটা নিয়ে চলত আর
-/// প্রতিটা আপলোড ৪০১ খেত — অথচ ৪০১ Transient, তাই কেউ টেরও পেত না।
+/// Careful: no disk reads, no DPAPI, no file paths here. The secrets module owns token
+/// storage; the sync client just says "give me the current token". If two places read the
+/// token in two different ways, on the day of a rotation one would keep using the old one
+/// and every upload would get a 401, and since 401 is Transient nobody would notice.
 /// </summary>
 internal interface IDeviceTokenSource
 {
     /// <summary>
-    /// এখনকার device token, না থাকলে null (তখন enroll ছাড়া সব কল ৪০১ পাবে)।
+    /// The current device token, or null (then every call except enroll gets a 401).
     ///
-    /// ⚠️ এটা প্রতিটা রিকোয়েস্টে ডাকা হয়, তাই সস্তা হতে হবে —
-    /// ভেতরে ডিস্ক পড়া বা DPAPI decrypt চলবে না, ক্যাশ করা মান ফেরাতে হবে।
-    /// থ্রেড-নিরাপদ হতে হবে; সিঙ্ক লুপ আর tray একই সময়ে ডাকতে পারে।
+    /// Careful: this is called on every request, so it must be cheap: no disk reads or DPAPI
+    /// decrypts inside, return a cached value. It must be thread-safe; the sync loop and the
+    /// tray can call it at the same time.
     /// </summary>
     string? CurrentToken { get; }
 }
 
 /// <summary>
-/// secrets মডিউল আসার আগ পর্যন্ত (এবং টেস্টে) কাজ চালানোর মতো সরল উৎস।
+/// A simple source that does the job until the secrets module arrives (and in tests).
 /// </summary>
 internal sealed class InMemoryDeviceTokenSource : IDeviceTokenSource
 {
@@ -33,7 +33,7 @@ internal sealed class InMemoryDeviceTokenSource : IDeviceTokenSource
 
     public void Set(string? token) => Volatile.Write(ref _token, Normalize(token));
 
-    /// <summary>ফাঁকা স্ট্রিং আর null একই জিনিস — নইলে <c>Bearer </c> হেডার যেত।</summary>
+    /// <summary>An empty string and null are the same thing; otherwise a <c>Bearer </c> header would go out.</summary>
     private static string? Normalize(string? token) =>
         string.IsNullOrWhiteSpace(token) ? null : token.Trim();
 }

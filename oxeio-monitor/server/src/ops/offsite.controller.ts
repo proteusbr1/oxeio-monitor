@@ -18,8 +18,9 @@ import {
 
 class SaveOffsiteDto {
   /**
-   * ⚠️ খালি স্ট্রিং **বৈধ** — মানে "মুছে দাও, সার্ভারের ফাইলে ফেরত যাও"।
-   * তাই `@IsNotEmpty()` নয়, নইলে ভুল করে বসানো কী সরানোর পথ থাকত না।
+   * An empty string is **valid**: it means "delete it and go back to the server's
+   * file". Hence no `@IsNotEmpty()`, otherwise there would be no way to remove a
+   * wrongly entered key.
    */
   @IsString() @MaxLength(120)
   keyId!: string;
@@ -32,17 +33,17 @@ class SaveOffsiteDto {
 }
 
 /**
- * **অফসাইট ব্যাকআপের কনফিগ পর্দা থেকে** (R5 · G39)।
+ * **Offsite backup config from the screen** (R5 · G39).
  *
- * ⚠️⚠️ **কেন এটা দরকার হলো — মাঠের ঘটনা, ১৮ আগস্ট।** B2-র কী বসাতে হতো
- * VPS-এ SSH → `rclone config` → `/etc/oxeio-offsite.env` সম্পাদনা। মালিক
- * চেষ্টা করলেন, আর একটা আংশিক-পেস্ট হওয়া key নিয়ে `401 bad_auth_token`
- * এল — কারণটা বুঝতে টার্মিনালে বসে খোঁজাখুঁজি করতে হলো। ⭐ পর্দা থেকে
- * বসানো গেলে ওই পুরো পথটাই লাগে না, আর ভুল **সাথে সাথে** ধরা পড়ে।
+ * Why this was needed (a field incident): setting the B2 key meant SSH into the
+ * VPS, `rclone config`, and editing `/etc/oxeio-offsite.env`. The owner tried,
+ * and a partially pasted key gave `401 bad_auth_token`; finding the cause meant
+ * poking around in a terminal. Setting it from the screen skips that whole
+ * path, and a mistake is caught **immediately**.
  *
- * ⚠️ owner-only। এটা পরিকাঠামোর ক্রেডেনশিয়াল, আর ব্যাকআপে গোটা
- * প্রতিষ্ঠানের ঘণ্টা, বেতন ও স্ক্রিনশট আছে — কে ওখানে হাত দেবে সেই
- * সিদ্ধান্ত ম্যানেজারের নয়।
+ * Owner-only. This is an infrastructure credential, and the backup holds the
+ * whole organisation's hours, salaries and screenshots; who may touch it is
+ * not the manager's decision.
  */
 @Roles(UserRole.owner)
 @Controller('settings/offsite')
@@ -68,16 +69,16 @@ export class OffsiteSettingsController {
     let appKey = dto.appKey.trim();
 
     /**
-     * ⭐⭐ **খালি appKey মানে "আগেরটাই থাক"** — টেলিগ্রামের চেয়ে এখানে
-     * নিয়মটা আলাদা, আর সেটা ইচ্ছাকৃত।
+     * **An empty appKey means "keep the previous one"**. The rule differs from
+     * Telegram's on purpose.
      *
-     * ⚠️⚠️ কারণ B2 applicationKey **একবারই দেখায়**। bucket-এর নামটা
-     * শুধরাতে গিয়ে সেভ চাপলে যদি কী মুছে যেত, তাহলে মালিককে **নতুন key
-     * বানাতে হতো** — একটা টাইপো ঠিক করার দাম হিসেবে। টেলিগ্রামের টোকেন
-     * যেকোনো সময় BotFather থেকে আবার পাওয়া যায়, এটা যায় না।
+     * The B2 applicationKey is **shown only once**. If pressing Save while fixing
+     * the bucket name wiped the key, the owner would have to **create a new key**
+     * as the price of fixing a typo. A Telegram token can be fetched again from
+     * BotFather at any time; this one cannot.
      *
-     * ⭐ পুরোপুরি মুছতে হলে তিনটে ঘরই খালি রেখে সেভ — নিচের শর্তটা তাই
-     * `keyId` ও `bucket`-ও খালি কিনা দেখে।
+     * To clear it fully, save with all three fields empty; the condition below
+     * therefore also checks whether `keyId` and `bucket` are empty.
      */
     if ((appKey.length === 0 || keyId.length === 0) && bucket.length > 0) {
       const current = await this.stored();
@@ -102,9 +103,9 @@ export class OffsiteSettingsController {
       targetId: OFFSITE_SETTING_KEY,
       ipAddress: ip,
       /**
-       * ⚠️⚠️ **কী audit log-এও যায় না** — শুধু "বসানো হয়েছে কি না"।
-       * audit log মালিক ও ম্যানেজার দুজনেই দেখেন, আর গোপন মান একবার
-       * ওখানে বসলে আর মোছা যায় না।
+       * **The key does not go into the audit log either**, only whether it is
+       * set. The owner and managers both see the audit log, and a secret that
+       * lands there can never be erased.
        */
       meta: { op: 'offsite', keySet: appKey.length > 0, keyId, bucket },
     });
@@ -113,15 +114,15 @@ export class OffsiteSettingsController {
   }
 
   /**
-   * ⭐⭐ **কী-জোড়া সত্যিই কাজ করে কি না — এখনই।**
+   * **Does the key pair really work? Right now.**
    *
-   * ⚠️⚠️ এটা না থাকলে মালিক সেভ করে অপেক্ষা করতেন **শনিবার পর্যন্ত**, আর
-   * তখন কিছু না গেলে বুঝতেন ভুল ছিল — কিন্তু কী ভুল, জানার উপায় নেই।
-   * ঠিক এই অন্ধকারেই ১৮ আগস্ট সময় গেছে।
+   * Without this the owner would save and wait **until Saturday**, and if
+   * nothing went out they would know something was wrong, but not what. That is
+   * exactly the darkness in which time was lost in the August incident.
    *
-   * ⭐ `b2_authorize_account` বেছে নেওয়া হয়েছে ইচ্ছাকৃতভাবে: **সীমাবদ্ধ
-   * key-তেও এটা চলে** (bucket তালিকা করার অনুমতি লাগে না), আর উত্তরে
-   * key-টা কোন bucket-এ বাঁধা সেটাও বলে দেয়।
+   * `b2_authorize_account` is chosen on purpose: **it works even with a
+   * restricted key** (no bucket-listing permission needed), and the response
+   * also says which bucket the key is bound to.
    */
   @Post('test')
   async test(): Promise<B2Verdict> {
@@ -147,8 +148,8 @@ export class OffsiteSettingsController {
         },
       );
 
-      // ⚠️ B2-র ভুল-উত্তরও JSON, কিন্তু নেটওয়ার্ক ভাঙলে সেটা HTML হতে
-      //    পারে — তাই parse ব্যর্থ হলে চুপচাপ খালি অবজেক্ট।
+      // B2's error replies are JSON too, but if the network breaks it may be
+      // HTML; so on a parse failure we quietly use an empty object.
       const body = (await res.json().catch(() => ({}))) as {
         allowed?: { bucketName?: string | null };
         message?: string;
@@ -160,9 +161,9 @@ export class OffsiteSettingsController {
       );
     } catch (err) {
       /**
-       * ⚠️ কখনো throw নয় — এটা একটা **পরীক্ষা**, আর পরীক্ষা ব্যর্থ হওয়া
-       * মানে ৫০০ নয়। ৫০০ দিলে পর্দায় "কিছু একটা ভুল" ছাড়া কিছুই বলা
-       * যেত না, অথচ আসল কারণটাই মালিকের দরকার।
+       * Never throws: this is a **test**, and a failed test is not a 500. A 500
+       * would show nothing but "something went wrong" on screen, while the
+       * real cause is what the owner needs.
        */
       return {
         ok: false,
@@ -182,9 +183,9 @@ export class OffsiteSettingsController {
   }
 
   /**
-   * ⚠️ `.env`-এর নামগুলো `deploy/offsite-b2.sh`-এর সাথে মিলিয়ে রাখা —
-   * দুই জায়গায় দু-রকম নাম হলে "কেন খাটছে না" প্রশ্নের উত্তর খুঁজতে
-   * অনেক সময় যেত।
+   * The `.env` names are kept in line with `deploy/offsite-b2.sh`; with
+   * different names in two places, finding out "why isn't it working" would
+   * take a long time.
    */
   private async resolve() {
     return resolveOffsite(await this.stored(), {

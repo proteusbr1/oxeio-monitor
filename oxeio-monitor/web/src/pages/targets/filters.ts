@@ -1,14 +1,14 @@
 import type { TargetStatus } from '../../api/targets';
 
 /**
- * **Design Pool-এর ছাঁকনির নিয়ম** *(৯ সেপ্টেম্বর ২০২৬-এ পাতা থেকে
- * আলাদা করা)* — কোন কন্ট্রোল কী বাছে, আর ড্রপডাউনটা কী দেখায়।
+ * **The filter rules of the Design Pool**, split out of the page: which
+ * control selects what, and what the dropdown shows.
  *
- * ⚠️⚠️ **কেন আলাদা ফাইল।** `no_file` যোগ করতে গিয়ে দেখা গেল সবচেয়ে
- * ভাঙাভাঙির জায়গাটা JSX নয়, এই তিনটে খাঁটি নিয়ম — বিশেষত
- * `dropdownValueOf`, যেটা ভুল হলে বাছাইয়ের সাথে সাথে ঘরটা "All targets"-এ
- * ফিরে যায় আর তালিকাটা ব্যাখ্যাহীন হয়ে দাঁড়ায়। ⭐ পাতার ভেতরে থাকলে
- * ওটা পরীক্ষা করার একমাত্র উপায় ছিল ব্রাউজারে চোখে দেখা।
+ * Careful: **why a separate file.** While adding `no_file` it turned out that
+ * the most fragile part is not the JSX but these three pure rules, especially
+ * `dropdownValueOf`: if it is wrong, the select jumps back to "All targets"
+ * right after picking and the list becomes unexplained. Inside the page, the
+ * only way to test it was to look at it in a browser.
  */
 
 export type Stage =
@@ -18,29 +18,29 @@ export type Stage =
   | 'to_live'
   | 'to_review'
   /**
-   * ⚠️⚠️ **`no_file` বাকিগুলোর মতো ধাপ নয়** *(৯ সেপ্টেম্বর ২০২৬)* — কাজের
-   * শেকলে ওর কোনো ঘর নেই, আর ওটা শেষ করার মতো কোনো কিউ-ও নয়।
+   * Careful: **`no_file` is not a step like the others.** It has no place in
+   * the work chain, and it is not a queue to be emptied.
    *
-   * ⭐ তবু `Stage`-এর ভেতরেই রাখা হয়েছে, কারণ সার্ভারে ছাঁকনিটা ঠিক
-   * একইভাবে কাজ করে — আলাদা টাইপ বানালে `stageOf` দুবার লিখতে হতো।
-   * ⚠️ পার্থক্যটা কেবল **কোথায় বসে**: এটা ড্রপডাউনে, চিপের সারিতে নয়।
+   * It is still kept inside `Stage`, because the server's filter works exactly
+   * the same way; a separate type would mean writing `stageOf` twice.
+   * Careful: the only difference is **where it sits**: in the dropdown, not in the chip row.
    */
   | 'no_file';
 export type FilterKey = TargetStatus | 'all' | Stage;
 
 /**
- * ⭐⭐ **প্রথম দুটো গবেষকের রোজকার কিউ** *(২৪ আগস্ট ২০২৬)*।
+ * **The first two are the researcher's daily queues.**
  *
- * ⚠️⚠️ ক্রমটা ইচ্ছাকৃত — কাজের দুটো সবার আগে, তদারকির ছাঁকনিগুলো পরে।
- * Uploaded ও Live বোতাম দুটো প্রতিটা সারিতে **আগে থেকেই ছিল**, আর অনুমতিও
- * গবেষকের ছিল; যা ছিল না তা হলো *"কোনগুলো"* — ৩৯ হাজার সারির স্তূপ থেকে
- * আজকের কাজটা আলাদা করার উপায়। ⭐ ফলে ২৭,৬৩২টার মধ্যে বোতামটা চাপা
- * পড়েছিল **মাত্র ১ বার**।
+ * Careful: the order is intentional: the two work queues first, the
+ * supervision filters after. The Uploaded and Live buttons **already existed**
+ * on every row, and researchers already had permission; what was missing was
+ * *"which ones"*, a way to separate today's work from the pile of 39,000 rows.
+ * The result: out of 27,632, the button had been pressed **only once**.
  *
- * ⚠️ এগুলো `status` নয়, **ধাপ** — `uploadedAt`/`liveAt` তারিখ, অবস্থা নয়
- * (নইলে সারিটা `done` থেকে সরে গিয়ে সব গণনা নীরবে কমে যেত)।
+ * Careful: these are **steps**, not a `status`: `uploadedAt`/`liveAt` are dates,
+ * not states (otherwise the row would leave `done` and every count would silently drop).
  */
-/** ⭐ চিপটা ধাপ না অবস্থা — এক জায়গায় ঠিক হয়, দুই জায়গায় নয় */
+/** Whether a chip is a step or a status: decided in one place, not two */
 export const stageOf = (key: FilterKey): Stage | undefined =>
   key === 'to_check' ||
   key === 'to_fix' ||
@@ -52,18 +52,18 @@ export const stageOf = (key: FilterKey): Stage | undefined =>
     : undefined;
 
 /**
- * ⭐⭐ **চিপে কেবল কাজের কিউ** *(মালিকের সিদ্ধান্ত, ২৫ আগস্ট:
- * "khubi gatharing lagoche dekhote")*।
+ * **Only the work queues are chips** (owner's decision: the row looked
+ * crowded).
  *
- * ⚠️⚠️ আগে এখানে নয়টা চিপ ছিল — চারটে কিউ আর পাঁচটা **অবস্থা**
- * (All · Waiting · In hand · Done · Skipped)। কিন্তু অবস্থাগুলো
- * পরস্পরের **বিকল্প**: একসাথে কখনো দুটো বাছা যায় না। ⭐ যা থেকে
- * একটাই বাছা যায়, সেটা চিপের সারি নয়, ড্রপডাউন
- * (`STATUS_OPTIONS`) — আর তাতে পাঁচটা কন্ট্রোল একটায় নামে।
+ * Careful: there used to be nine chips here: four queues and five **statuses**
+ * (All · Waiting · In hand · Done · Skipped). But the statuses are
+ * **alternatives**: you can never select two at once. Something of which only
+ * one can be chosen belongs in a dropdown (`STATUS_OPTIONS`), not a chip row,
+ * and that folds five controls into one.
  *
- * ⚠️ কিউ চারটে চিপই থাকল, কারণ **ওগুলোয় সংখ্যা আছে** — আর সংখ্যাটাই
- * ক্লিক করার আগে বলে দেয় আজ কাজ আছে কি না। ড্রপডাউনে ঢুকিয়ে দিলে
- * সংখ্যাটা দেখতে হলে খুলতে হতো, আর তখন কেউ খুলতই না।
+ * Careful: the four queues stay as chips because **they carry counts**, and
+ * the count tells you before clicking whether there is work today. Put in a
+ * dropdown, you would have to open it to see the count, and nobody would.
  */
 export const FILTERS: { key: FilterKey; label: string; stage: Stage }[] = [
   { key: 'to_check', label: 'To check', stage: 'to_check' },
@@ -73,23 +73,22 @@ export const FILTERS: { key: FilterKey; label: string; stage: Stage }[] = [
 ];
 
 /**
- * ⚠️⚠️ **`to_review` এখানে নেই — ওটার নিজের পাতা** *(মালিকের নির্দেশ,
- * ৩১ আগস্ট ২০২৬: "side bar e design pool er niche review name ekta page
- * koro")*।
+ * Careful: **`to_review` is not here; it has its own page** (owner's
+ * instruction: add a page called Review under Design Pool in the sidebar).
  *
- * ⭐ চিপটা একদিনের জন্য এখানে ছিল, তারপর সরে গেছে — আর নকল নয়, **সরানো**।
- * উপরের চারটে গবেষকের রোজকার কাজ; বাদ-যাওয়া ডিজাইন দেখা মালিক ও
- * ম্যানেজারের কাজ, অর্থাৎ অন্য মানুষ, অন্য ছন্দ। ⚠️ দুই জায়গায় একই কিউ
- * রাখলে দুটো দরজা হতো, আর ২৫ আগস্টের ছাঁটাইয়ের গোটা কথাই ছিল এই পাতায়
- * **কম** জিনিস রাখা।
+ * The chip was here for a day and then moved: **moved, not copied**. The four
+ * above are the researcher's daily work; looking at dropped designs is the
+ * owner's and manager's job: other people, another rhythm. Careful: the same
+ * queue in two places would be two doors, and the whole point of the August
+ * trimming was **less** on this page.
 
 /**
- * ⭐ অবস্থার ড্রপডাউন — চিপ থেকে নামিয়ে আনা পাঁচটা।
+ * The status dropdown: the five brought down from the chips.
  *
- * ⚠️ `done_today` আসল কোনো অবস্থা **নয়** — এটা একটা শর্টকাট যা
- * `filter='done'` + আজকের দুটো তারিখ একসাথে বসায়। আগে এটা একটা আলাদা
- * বোতাম ছিল ("Completed today"), আর সেটা ভুল করে Complete চাপা কাজ
- * খুঁজে বের করার সবচেয়ে ছোট পথ — তাই তুলে দেওয়া হয়নি, সরানো হয়েছে।
+ * Careful: `done_today` is **not** a real status: it is a shortcut that sets
+ * `filter='done'` plus today's two dates together. It used to be a separate
+ * button ("Completed today"), and it is the shortest way to find work done by
+ * a mistaken Complete press, so it was not removed, only moved.
  */
 export const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: 'all', label: 'All targets' },
@@ -98,40 +97,38 @@ export const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: 'done', label: 'Done' },
   { value: 'done_today', label: 'Done · today' },
   /**
-   * ⭐⭐⭐ **শেষ বলা হয়েছে, অথচ ফাইলটা কখনো খোলা হয়নি**
-   * *(মালিকের চাওয়া, ৯ সেপ্টেম্বর ২০২৬: "kha banao")*।
+   * **Marked done, yet the file was never opened.** Requested by the owner.
    *
-   * ⚠️⚠️ **এটা চিপ নয়, আর ওটাই পুরো সিদ্ধান্ত।** চিপে সংখ্যা বসে, আর
-   * সংখ্যা বসলে ওটা একটা **কিউ** হয়ে যেত — রোজ খালি করার জিনিস, অর্থাৎ
-   * কার্যত একটা অ্যালার্ট। মালিক বলেছিলেন *"নীরব তালিকা, অ্যালার্ট নয়"*,
-   * তাই এটা ড্রপডাউনে: যিনি খুঁজবেন তিনিই পাবেন, রোজ কারো চোখে পড়বে না।
+   * Careful: **this is not a chip, and that is the whole decision.** A chip
+   * carries a number, and with a number it would become a **queue**: something
+   * to empty daily, in effect an alert. The owner said "a quiet list, not an
+   * alert", so it is in the dropdown: whoever looks for it finds it, and it
+   * does not catch anyone's eye daily.
    */
   { value: 'no_file', label: 'Done · no file trace' },
   { value: 'skipped', label: 'Skipped' },
   /**
-   * ⭐⭐ **মরা লিঙ্কগুলো** *(২৯ আগস্ট ২০২৬)* — Amazon-এ পাতাই নেই।
+   * **Dead links**: the page no longer exists on Amazon.
    *
-   * ⚠️⚠️ এটা না থাকলে মোছা সারিগুলো **কোথাও দেখা যেত না**, অথচ ওরা
-   * টেবিলে বসে আছে। ⭐ আর তখন "কতগুলো লিঙ্ক মরে গেছে" প্রশ্নটার উত্তর
-   * দেওয়ার পথই থাকত না — অথচ ওই সংখ্যাটাই বলে দেয় গবেষকের তালিকাটা
-   * কতটা বাসি।
+   * Careful: without this, deleted rows **could not be seen anywhere**, yet
+   * they sit in the table. And then there would be no way to answer "how many
+   * links have died?", yet that number tells how stale the researcher's list is.
    */
   { value: 'deleted', label: 'Deleted' },
 ];
 
 /**
- * ⭐⭐ **ড্রপডাউনে কোন মানটা দেখা যাবে** *(৯ সেপ্টেম্বর ২০২৬-এ পাতা
- * থেকে তুলে আনা)*।
+ * **Which value the dropdown shows.** Pulled out of the page.
  *
- * | বাছাই | ড্রপডাউন দেখায় | কেন |
+ * | selection | dropdown shows | why |
  * |---|---|---|
- * | কিউ-চিপ (`to_check` …) | `all` | ⚠️ বাছাইটা **চিপে**; দুটো কন্ট্রোল একসাথে জ্বললে কোনটা কাজ করছে বোঝা যেত না |
- * | `no_file` | `no_file` | ⭐ এটা **ড্রপডাউনেরই** ভেতরে — নিজেকে না দেখালে বাছাইটাই উধাও হতো |
- * | `done` + আজকের দুটো তারিখ | `done_today` | ⚠️ শর্টকাটটা যা করেছে, ঘরটা তা-ই বলে |
- * | বাকি সব | নিজেই | |
+ * | queue chip (`to_check` …) | `all` | Careful: the selection is **on the chip**; with both controls lit you could not tell which one is working |
+ * | `no_file` | `no_file` | it is **inside the dropdown itself**; if it did not show itself the selection would vanish |
+ * | `done` + today's two dates | `done_today` | Careful: the select says what the shortcut did |
+ * | everything else | itself | |
  *
- * ⚠️ `done_today` **মনে রাখা হয় না, মিলিয়ে দেখা হয়** — নইলে মালিক হাতে
- * তারিখ বদলানোর পরেও ঘরটা "আজ" বলত।
+ * Careful: `done_today` is **not remembered, it is matched**; otherwise the
+ * select would still say "today" after the owner changes the dates by hand.
  */
 export function dropdownValueOf(
   filter: FilterKey,

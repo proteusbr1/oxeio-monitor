@@ -9,25 +9,28 @@ import { Caveat, Empty, ErrorBox, Loading } from '../../components/States';
 import { formatPct, pctOf } from '../../lib/format';
 
 /**
- * D07 — একদিনের productivity স্কোর।
+ * D07 — one day's productivity score.
  *
- * ⭐⚠️ **স্কোরের পাশে "কত শতাংশ সময় অচেনা" সবসময় থাকে** — ইংরেজি পর্দায়
- * "… % uncategorised"। ৯০% সময় অচেনা হলে ৮০% স্কোর কার্যত অর্থহীন — অথচ
- * শুধু বড় করে "80%" লিখে দিলে কেউ সেটাকে দিনের রায় ধরে নিত, আর তার
- * ভিত্তিতে কথা শোনাত। দুটো সংখ্যা পাশাপাশি না থাকলে এই পর্দাটা মিথ্যে বলে।
+ * Important: **next to the score, "what percent of time is unrecognised" is
+ * always shown** (on the English screen, "… % uncategorised"). If 90% of the
+ * time is unrecognised, an 80% score is practically meaningless, yet a big
+ * bare "80%" would be taken as the verdict on the day and people would be
+ * lectured over it. Without both numbers side by side this screen lies.
  *
- * ⚠️ পুরো ড্যাশবোর্ডে একটাই শব্দ — **uncategorised** (uncategorized,
- * unknown বা unmatched নয়)। D07-এর টাইল, ব্রেকডাউনের ভাগ আর D08-এর
- * ক্যাটাগরি-লেবেল তিন জায়গাতেই এক, নইলে পাঠক ভাবত তিনটে আলাদা জিনিস।
+ * Careful: the whole dashboard uses one word, **uncategorised** (not
+ * uncategorized, unknown or unmatched). The D07 tile, the breakdown segments
+ * and the D08 category label all match; otherwise readers would think they
+ * were three different things.
  *
- * ⭐ `scorePct === null` মানে **তথ্য নেই**, শূন্য নয়। `formatPct()` সেটা
- * `'—'` দেখায়; কোথাও `?? 0` লেখা হয়নি।
+ * `scorePct === null` means **no data**, not zero. `formatPct()` shows it as
+ * `'—'`; there is no `?? 0` anywhere.
  */
 
 /**
- * ⚠️ "অচেনা" ভাগটা ডোরাকাটা, নিরেট নয়। চারটে ধূসরের শেড পাশাপাশি বসালে
- * "নিরপেক্ষ" আর "অচেনা" আলাদা করা যেত না — অথচ দুটো সম্পূর্ণ আলাদা কথা:
- * একটা "জানি, এবং নিরপেক্ষ", অন্যটা "জানিই না"। রঙ দুটোই ব্র্যান্ড টোকেন।
+ * Careful: the "uncategorised" segment is striped, not solid. With four grey
+ * shades side by side, "neutral" and "uncategorised" could not be told apart,
+ * yet they mean completely different things: one is "known, and neutral", the
+ * other "not known at all". Both colours are brand tokens.
  */
 const UNKNOWN_STRIPES: CSSProperties = {
   backgroundImage:
@@ -53,13 +56,13 @@ export function ScoreCard({
   nonce: number;
 }) {
   const { data, error, loading, reload } = useApi(
-    // ⚠️ একদিন মানে `from === to`। প্যারামিটার camelCase, নইলে ৪০০।
+    // One day means `from === to`. Parameters are camelCase, otherwise 400.
     (signal) =>
       getDailyProductivity({ employeeId, from: date, to: date }, signal),
     [employeeId, date, nonce],
   );
 
-  // employeeId দিলে সার্ভার ঠিক একজনকেই ফেরত দেয় (না থাকলে ৪০৪)
+  // With employeeId the server returns exactly one employee (404 if absent)
   const score = data?.employees[0]?.total;
 
   return (
@@ -92,10 +95,10 @@ export function ScoreCard({
   );
 }
 
-/** ⭐ দুটো সংখ্যা সবসময় একসাথে — একটা ছাড়া অন্যটা পড়া যাবে না */
+/** The two numbers always go together: neither can be read without the other */
 function Numbers({ score }: { score: ProductivityScore }) {
-  // ⚠️ অচেনার অংশ বড় হলে সেটাই দিনের আসল খবর, তাই তখন মনোযোগের রঙ।
-  //    এই কার্ডে লাল টাইল একটার বেশি নেই।
+  // Careful: when the unrecognised share is large it is the real news of the day,
+  // so it gets the attention colour. This card has at most one red tile.
   const alarming = score.unknownPct >= 50;
 
   return (
@@ -131,12 +134,13 @@ function Numbers({ score }: { score: ProductivityScore }) {
 
 function Explain({ score }: { score: ProductivityScore }) {
   /*
-    ⚠️ অচেনা সময় শূন্য হলে `categorizedSec` আর `totalSec` **সমান**, তাই
-       "not on the full …" তুলনাটা তখন নিজেকেই নিজে তুলনা করত — পর্দায়
-       দাঁড়াত "the 3h 20m of known time …, not on the full 3h 20m"। সংখ্যা
-       ঠিকই ছিল, বাক্যটা অর্থহীন। তাই তুলনার অংশটুকু শর্তসাপেক্ষ।
-    ⭐ কিন্তু নিচের "…% uncategorised" **শর্তহীনই থাকে** — সেটা ইচ্ছাকৃত,
-       কারণ ব্যাখ্যা নিচে দেওয়া আছে।
+    Careful: when unrecognised time is zero, `categorizedSec` and `totalSec` are
+       **equal**, so the "not on the full …" comparison would compare a value
+       with itself and the screen would read "the 3h 20m of known time …, not on
+       the full 3h 20m". The numbers were right, the sentence was meaningless. So
+       the comparison part is conditional.
+    But the "…% uncategorised" below **stays unconditional**, on purpose; the
+       reason is explained below.
   */
   const hasUnknown = score.categorizedSec < score.totalSec;
 
@@ -167,11 +171,12 @@ function Explain({ score }: { score: ProductivityScore }) {
       )}
       {' — '}
       {/*
-        ⭐⚠️ "…% uncategorised" বাক্যটা **শর্তহীন**, স্কোরের ঠিক নিচেই।
-           আগে এটা শুধু ৩০%+ হলে দেখাত, ফলে ২৯% অচেনা থাকলে পর্দায় সংখ্যাটা
-           কোথাও লেখাই থাকত না — অথচ দিনের প্রায় এক-তৃতীয়াংশ তখনো অজানা।
-           টাইলটা উপরে আছে বটে, কিন্তু ওখানে লেবেল আগে আর সংখ্যা পরে; পুরো
-           কথাটা এক টানে পড়া যায় শুধু এই লাইনে।
+        Important: the "…% uncategorised" sentence is **unconditional**, right
+           under the score. It used to show only at 30%+, so with 29%
+           unrecognised the number was written nowhere on screen, although nearly
+           a third of the day was still unknown. The tile is above, but there the
+           label comes first and the number after; only this line reads the whole
+           thing in one go.
       */}
       <b>{formatPct(score.unknownPct)} uncategorised</b>.
       {score.unknownPct >= 30 && (

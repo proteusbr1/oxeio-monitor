@@ -8,58 +8,57 @@ using oXeio.Core.Time;
 namespace oXeio.Agent.Ui;
 
 /// <summary>
-/// "Today's hours" — স্টাফ নিজের হিসাব নিজে দেখতে পারে।
+/// "Today's hours": staff can see their own tally themselves.
 ///
-/// এই জানালাটাই সিস্টেমটাকে সৎ করে: যে সংখ্যা দিয়ে তার বেতন হিসাব হবে, সেটা
-/// তার নিজের পর্দায় সবসময় দেখা যায়, প্রশাসকের কাছে জিজ্ঞাসা না করেই।
+/// This window is what keeps the system honest: the number their pay is calculated from is
+/// always visible on their own screen, without having to ask an administrator.
 ///
-/// ⚠️ এখানে কোনো বাটন নেই — না বিরতি, না মিটিং, না "সময় দাবি করুন"। কোনো একটা
-/// বসালেই সেটা approval workflow-র প্রথম ধাপ হয়ে যেত, আর এই সিস্টেমে কোনো
-/// approval নেই।
+/// Careful: there are no buttons here: no break, no meeting, no "claim time". Adding any one
+/// of them would become the first step of an approval workflow, and this system has no
+/// approval.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class TodayForm : OwnerDrawnForm
 {
-    /// <summary>শেষ ৩০ মিনিট = ৬টা ৫-মিনিটের ঘর (<c>AgentHost.BusyBlocks</c>-এর সমান)।</summary>
+    /// <summary>Last 30 minutes = 6 cells of 5 minutes (same as <c>AgentHost.BusyBlocks</c>).</summary>
     private const int BusyBlockCount = 6;
 
-    /// <summary>থাম্বনেইলের প্রস্থ, ৯৬ DPI-তে। জানালার ভেতরের চওড়া ৩৬৮px।</summary>
+    /// <summary>Thumbnail width at 96 DPI. The window's inner width is 368px.</summary>
     private const int ThumbWidth = 220;
 
     private readonly Func<TrayOptions> _options;
     private AgentStatus _status = AgentStatus.Starting;
 
     /// <summary>
-    /// ⭐⭐ <b>সেকেন্ডের ঘড়ি</b> — জানালা খোলা থাকলে প্রতি সেকেন্ডে একবার আঁকা।
+    /// <b>The seconds clock</b>: while the window is open, redrawn once a second.
     ///
-    /// ⚠️⚠️ এটা ছাড়া সেকেন্ড দেখানোর কোনো মানেই ছিল না: <see cref="Apply"/>
-    /// শুধু <b>স্ট্যাটাস বদলালে</b> আঁকে, আর স্ট্যাটাস বদলায় heartbeat বা
-    /// সেগমেন্ট বন্ধ হওয়ার সময় — মিনিটে একবারও নয়। মালিক ঠিক সেটাই দেখেছেন
-    /// (<i>"login korar pore sec change hocche na"</i>): অঙ্কে সেকেন্ড ছিল,
-    /// কিন্তু সেটা নড়ত না।
+    /// Careful: without this, showing seconds made no sense: <see cref="Apply"/> only draws
+    /// <b>when the status changes</b>, and the status changes on a heartbeat or when a segment
+    /// closes, not even once a minute. The owner saw exactly that: the digits had seconds but
+    /// they did not move.
     ///
-    /// ⚠️ জানালা বন্ধ থাকলে টাইমারও বন্ধ — tray-তে বসে থাকা এজেন্ট প্রতি
-    ///    সেকেন্ডে অকারণে কিছুই আঁকে না।
+    /// Careful: when the window is closed the timer is off too, so an agent sitting in the
+    /// tray draws nothing every second for no reason.
     /// </summary>
     private readonly System.Windows.Forms.Timer _tick = new() { Interval = 1_000 };
 
-    /// <summary>গোনা সংখ্যা + তারপর থেকে কেটে যাওয়া সময় (নিয়মটা Core-এ, টেস্টসহ)।</summary>
+    /// <summary>The counted figure plus the time elapsed since (the rule lives in Core, with tests).</summary>
     private readonly LiveDuration _live = new();
 
     /// <summary>
-    /// ⚠️ উচ্চতা ৫০০ → ৪০০। নতুন লেআউটে লেখা কম, তাই ৫০০-তে নিচে একটা বড়
-    /// ফাঁকা কালো পটি পড়ে থাকত — দেখে মনে হতো কিছু লোড হতে বাকি।
-    /// <see cref="OwnerDrawnForm"/> দরকার হলে নিজেই লম্বা করে নেয় (loading ও
-    /// alert অবস্থায় লেখা বেশি), তাই ছোট রাখাটা নিরাপদ দিক।
+    /// Careful: height 500 → 400. The new layout has less text, so at 500 a large empty dark
+    /// band was left at the bottom, which looked like something was still loading.
+    /// <see cref="OwnerDrawnForm"/> lengthens itself when needed (more text in the loading and
+    /// alert states), so keeping it small is the safe side.
     /// </summary>
     public TodayForm(TrayFonts fonts, Func<TrayOptions> options)
         : base(fonts, "oXeio — Today's hours", 400, 400)
     {
         _options = options;
 
-        // ⚠️ শুধু Invalidate — হিসাবটা PaintBody-তেই হয়, তাই টাইমারের হাতে
-        //    কোনো অবস্থা নেই। পুনঃআঁকা সস্তা: থাম্বনেইলটা ক্যাশে থাকে
-        //    (OwnerDrawnForm.ThumbnailFor), তাই প্রতি সেকেন্ডে ডিস্ক পড়া হয় না।
+        // Careful: only Invalidate; the calculation happens in PaintBody, so the timer holds no
+        // state. Repainting is cheap: the thumbnail is cached (OwnerDrawnForm.ThumbnailFor), so
+        // there is no disk read every second.
         _tick.Tick += (_, _) => { if (Visible && !IsDisposed) Invalidate(); };
         _tick.Start();
     }
@@ -71,15 +70,15 @@ internal sealed class TodayForm : OwnerDrawnForm
     }
 
     /// <summary>
-    /// নতুন স্ট্যাটাস। ⚠️ শুধু UI থ্রেড থেকে ডাকা যাবে — <see cref="TrayIcon"/>
-    /// ইতিমধ্যেই সেটা নিশ্চিত করে ডাকে।
+    /// A new status. Careful: may only be called from the UI thread; <see cref="TrayIcon"/>
+    /// already guarantees that when it calls.
     /// </summary>
     public void Apply(AgentStatus status)
     {
         if (status is null) return;
 
-        // record-এর মান-সমতা: একই মান এলে আঁকার দরকার নেই। জানালা খোলা রেখে
-        // দিলে সেকেন্ডে একবার করে অকারণ রি-পেইন্ট হতো।
+        // The record's value equality: if the same value arrives there is no need to redraw.
+        // Leaving the window open would otherwise cause a pointless repaint every second.
         if (_status == status) return;
 
         _status = status;
@@ -104,25 +103,26 @@ internal sealed class TodayForm : OwnerDrawnForm
         stack.Line(UiText.WorkDate(now) + " · " + DhakaTime.Label, TrayFontRole.Small, Muted);
         stack.Gap(6);
 
-        // ⭐ অবস্থাটা সংখ্যার পাশেই — জানালার একমাত্র এটাই মিনিটে মিনিটে বদলায়।
+        // The state sits next to the number: it is the only thing in the window that changes
+        // minute by minute.
         //
-        // ⚠️⚠️ সাইন ইন না করা থাকলে **"Working" লেখা যাবে না**। আগে ঠিক
-        //    সেটাই হতো: সবুজ বিন্দু আর "Working", অথচ গোনাও হচ্ছিল না,
-        //    সার্ভারেও কিছু যাচ্ছিল না। স্টাফ দেখত সব ঠিক আছে, তাই সাইন ইন
-        //    করার কথাই মাথায় আসত না — আর দিনের শেষে তার ঘণ্টা শূন্য।
-        // ⭐ হিরো সংখ্যাটাই একমাত্র সেকেন্ডসহ (মালিকের চাওয়া, ১৮ আগস্ট) —
-        //    নিচের টার্গেট-বারগুলো H:MM-ই থাকে।
+        // Careful: when not signed in, **"Working" must not be written**. That is exactly what
+        // used to happen: a green dot and "Working", while nothing was being counted and
+        // nothing was going to the server. Staff saw everything fine, so signing in never
+        // occurred to them, and at the end of the day their hours were zero.
+        // The hero number is the only one with seconds (the owner's request, 18 August);
+        // the target bars below stay H:MM.
         //
-        // ⭐⭐ আর এখানেই **চলন্ত** মান: `status.ActiveToday` নিজে লাফিয়ে
-        //    বাড়ে (heartbeat বা সেগমেন্ট বন্ধ হলে), তাই তার সাথে "তারপর
-        //    থেকে কত সময় কাজ চলছে" যোগ করে দেখানো হয় — নইলে অঙ্কে সেকেন্ড
-        //    থাকত, কিন্তু নড়ত না। নিয়মটা LiveDuration-এ, টেস্টসহ।
+        // And here is the **running** value: `status.ActiveToday` itself jumps up (on a
+        // heartbeat or when a segment closes), so we add "how long work has been running
+        // since" to it before showing; otherwise the digits would have seconds but not move.
+        // The rule is in LiveDuration, with tests.
         var (figure, seconds) = UiText.SplitSeconds(
             UiText.DurationLong(
                 _live.Next(status.ActiveToday, status.CountedAt, now, IsCounting(status))));
 
-        // ⭐ সেকেন্ডটা অর্ধেক মাপে (মালিকের চাওয়া, ১৮ আগস্ট) — ওটাই একমাত্র
-        //    অঙ্ক যেটা প্রতি সেকেন্ডে নড়ে, আর পুরো মাপে সেটা চোখ টেনে রাখত।
+        // The seconds are at half size (the owner's request, 18 August): they are the only digit
+        // that moves every second, and at full size they would hold the eye.
         stack.Hero(figure, seconds, "hours today", HeroState(status), StateDot(status));
 
         stack.Line(
@@ -130,10 +130,9 @@ internal sealed class TodayForm : OwnerDrawnForm
                 ? "Counted so far — idle time already removed"
                 : TrackingGate.Explain(TrackingGate.Verdict.NotEnrolled),
             TrayFontRole.Small,
-            // ⚠️ Brand (লাল), Idle (আম্বার) নয়। আম্বার এই জানালায় ইতিমধ্যেই
-            //    "থেমে আছে/পিছিয়ে আছে" বোঝায় — অস্থায়ী অবস্থা। সাইন ইন না
-            //    করা মানে **কিছুই গোনা হচ্ছে না**, ঠিক revoke-এর মতোই আটকে
-            //    থাকা, আর সেটার রং এখানে বরাবরই লাল।
+            // Careful: Brand (red), not Idle (amber). In this window amber already means
+            // "paused/behind", a temporary state. Not being signed in means **nothing is being
+            // counted**, stuck just like a revoke, and that has always been red here.
             status.Enrolled ? Muted : Theme.Brand);
 
         stack.Rule();
@@ -150,9 +149,9 @@ internal sealed class TodayForm : OwnerDrawnForm
 
         stack.Rule();
 
-        // ⚠️ সিঙ্কের অবস্থা সবসময় দেখানো হয়, শুধু গোলমাল হলে নয়। আগে এখানে
-        //    কিছু না থাকা মানে "ঠিক আছে" ধরে নিতে হতো — অর্থাৎ সবচেয়ে জরুরি
-        //    আশ্বাসটা (ডেটা পৌঁছেছে) ঠিক তখনই অদৃশ্য, যখন সেটা সত্যি।
+        // Careful: the sync state is always shown, not only when something is wrong. Before,
+        // nothing here meant "assume fine", so the most important reassurance (the data
+        // arrived) was invisible exactly when it was true.
         var bad = status.Health is SyncHealth.Failing or SyncHealth.Revoked;
 
         stack.Readout(
@@ -162,8 +161,8 @@ internal sealed class TodayForm : OwnerDrawnForm
             ("Queued", UiText.Number(Math.Max(0, status.QueueDepth)), null),
         ]);
 
-        // ⭐ পুরো বাক্যটা আসে কেবল যখন সত্যিই গোলমাল — তখনই মানুষের একটা
-        //    বাক্য দরকার, লেবেল নয়।
+        // The full sentence appears only when something is really wrong; that is when a human
+        // sentence is needed, not a label.
         if (status.Health is SyncHealth.Failing or SyncHealth.Revoked)
         {
             stack.Alert(status.HealthDetail is { Length: > 0 } detail
@@ -180,8 +179,8 @@ internal sealed class TodayForm : OwnerDrawnForm
 
         stack.Rule();
 
-        // ⚠️ এই দুটো লাইন নিছক সাজসজ্জা নয়। "সময় কোথায় গেল" প্রশ্নের উত্তর
-        //    আগেভাগে দেওয়া না থাকলে স্টাফ ধরে নেয় সিস্টেম তার ঘণ্টা খেয়ে ফেলছে।
+        // Careful: these two lines are not mere decoration. If the answer to "where did the
+        // time go" is not given in advance, staff assume the system is eating their hours.
         stack.Line(
             $"Counting stops after {UiText.Number(options.EffectiveConfig.IdleThresholdSec)} seconds " +
             "without mouse or keyboard, and that idle time is removed from the total.",
@@ -194,23 +193,23 @@ internal sealed class TodayForm : OwnerDrawnForm
     }
 
     /// <summary>
-    /// মাসের অগ্রগতি — <b>শুধু সার্ভার সংখ্যাটা বলে দেওয়ার পর</b>।
+    /// Month progress: <b>only after the server has given its number</b>.
     ///
-    /// ⭐⚠️ মাসের হিসাব এজেন্ট নিজে রাখে না, তাই প্রথম heartbeat আসার আগে
-    /// <see cref="AgentStatus.ActiveThisMonth"/> মিথ্যা শূন্য। ওই অবস্থায়
-    /// বার আর শতাংশ আঁকলে স্টাফ প্রতিবার লগইনের পর কয়েক সেকেন্ডের জন্য
-    /// "0 / 208 hours · 0%" দেখত — অর্থাৎ মনে হতো মাসের কাজ মুছে গেছে।
-    /// তাই তিনটে অবস্থা: জানা নেই / জানা আছে / লক্ষ্য নেই।
+    /// Careful: the agent does not keep the month's tally itself, so before the first heartbeat
+    /// arrives <see cref="AgentStatus.ActiveThisMonth"/> is a false zero. Drawing the bar and
+    /// percentage in that state would make staff see "0 / 208 hours · 0%" for a few seconds
+    /// after every login, as if the month's work had vanished.
+    /// So there are three states: unknown / known / no target.
     /// </summary>
     /// <summary>
-    /// তিনটে টার্গেট — আজ · গত ৭ দিন · এই মাস। তিনটেই একই আকৃতির বার।
+    /// Three targets: today · last 7 days · this month. All three are bars of the same shape.
     ///
-    /// ⭐ ক্রমটা ছোট থেকে বড়: মানুষ আগে জানতে চায় "আজ কেমন গেল", তারপর
-    /// "সপ্তাহটা", তারপর "মাসটা"। উল্টো করলে সবচেয়ে দূরের সংখ্যাটা আগে
-    /// চোখে পড়ত, অথচ আজকের কাজে ওটা দিয়ে কিছু করার নেই।
+    /// The order is small to large: people first want to know "how did today go", then "the
+    /// week", then "the month". Reversed, the most distant number would catch the eye first,
+    /// yet there is nothing to do about it in today's work.
     ///
-    /// ⚠️ <b>একমাত্র চুক্তি মাসিক ২০৮ ঘণ্টা</b> (§ ৪ · O8)। আজ ও ৭ দিনের
-    /// টার্গেট নিছক দেখানোর জিনিস — বেতন বা কাটাকাটির সাথে এদের সম্পর্ক নেই।
+    /// Careful: <b>the only contract is the monthly 208 hours</b> (§ 4 · O8). The today and
+    /// 7-day targets are display only; they have no relation to pay or deductions.
     /// </summary>
     private void PaintTargets(TextStack stack, AgentStatus status, DateTimeOffset now)
     {
@@ -225,9 +224,9 @@ internal sealed class TodayForm : OwnerDrawnForm
             return;
         }
 
-        // ── আজ ────────────────────────────────────────────────────────────
-        // ⚠️ টার্গেট শূন্য মানে ছুটি — বার নয়, একটা বাক্য। ছুটির দিনে
-        //    খালি বার দেখালে সেটা "আজও ৮ ঘণ্টা বাকি" বলে তাড়া দিত।
+        // ── today ─────────────────────────────────────────────────────────
+        // Careful: a target of zero means a day off: a sentence, not a bar. Showing an empty
+        // bar on a day off would nag "still 8 hours to go today".
         if (status.DailyTarget is { } daily && daily == TimeSpan.Zero)
         {
             stack.TargetRow(
@@ -247,7 +246,7 @@ internal sealed class TodayForm : OwnerDrawnForm
 
         stack.Gap(6);
 
-        // ── গত ৭ দিন ──────────────────────────────────────────────────────
+        // ── last 7 days ───────────────────────────────────────────────────
         stack.TargetRow(
             "Last 7 days",
             status.ActiveLast7 is { } worked && status.Last7Target is { } target
@@ -258,7 +257,7 @@ internal sealed class TodayForm : OwnerDrawnForm
 
         stack.Gap(6);
 
-        // ── এই মাস ────────────────────────────────────────────────────────
+        // ── this month ────────────────────────────────────────────────────
         var pace = PaceOf(status, now);
 
         stack.TargetRow(
@@ -273,13 +272,13 @@ internal sealed class TodayForm : OwnerDrawnForm
     }
 
     /// <summary>
-    /// "প্রতি ৫ মিনিটে কতটা হাত চলেছে" — মালিকের চাওয়া, তবে <b>কতবার নয়</b>।
+    /// "How much the hands moved in each 5 minutes": the owner's request, but <b>not how many times</b>.
     ///
-    /// ⭐⚠️ কতবার কি-বোর্ড চাপা হয়েছে সেটা এই সিস্টেম জানতেই পারে না, আর
-    /// জানার চেষ্টাও করবে না: তার জন্য low-level hook লাগত, যেটা কীলগিং
-    /// (04-Features § L) আর G46-এ স্পষ্টভাবে প্রত্যাখ্যাত। এখানে যা দেখা যায়
-    /// তা হলো <b>কত শতাংশ সময়</b> হাত চলেছে — সংখ্যাটা প্রতিটা সেগমেন্টের
-    /// <c>input_score</c>, যা আগে থেকেই সার্ভারে যাচ্ছিল।
+    /// Careful: how many times the keyboard was pressed is something this system cannot know,
+    /// and will not try to: that would need a low-level hook, which is keylogging (04-Features
+    /// § L) and explicitly rejected in G46. What can be seen here is <b>what percentage of the
+    /// time</b> the hands moved; the number is each segment's <c>input_score</c>, which was
+    /// already going to the server.
     /// </summary>
     private void PaintBusy(TextStack stack, AgentStatus status)
     {
@@ -297,11 +296,11 @@ internal sealed class TodayForm : OwnerDrawnForm
     }
 
     /// <summary>
-    /// শেষ যে ছবিটা গেছে — স্টাফ নিজের চোখে দেখুক ঠিক কী পাঠানো হয়েছে।
+    /// The last image that went out: staff can see for themselves exactly what was sent.
     ///
-    /// ⭐ এটাই এই জানালার মূল কথার সবচেয়ে সরাসরি রূপ: নজরদারি লুকোনো নয়।
-    /// ⚠️ থাম্বনেইল, তাই পড়া যায় না — উদ্দেশ্য "কী ছবি গেছে" বোঝানো,
-    /// ছবিটা আবার পড়া নয়। পুরোটা দেখতে হলে "My data" পাতা আছে (J05)।
+    /// This is the most direct form of the window's central point: surveillance is not hidden.
+    /// Careful: it is a thumbnail, so it cannot be read; the aim is to show "what picture went",
+    /// not to re-read the image. To see it in full there is the "My data" page (J05).
     /// </summary>
     private void PaintLatestShot(TextStack stack, AgentStatus status)
     {
@@ -353,12 +352,12 @@ internal sealed class TodayForm : OwnerDrawnForm
     }
 
     /// <summary>
-    /// ⭐ মিটারের দাগ — "আজ পর্যন্ত যতটা হওয়ার কথা"।
+    /// The meter's mark: "how much should be done by today".
     ///
-    /// সার্ভার আলাদা করে এই সংখ্যাটা পাঠায় না, কিন্তু পাঠানোর দরকারও নেই:
-    /// pace-ই তো <b>যা হয়েছে</b> বিয়োগ <b>যা হওয়ার কথা</b>। তাই উল্টো
-    /// করে বের করা হয় — এতে দাগ আর "behind/ahead" সংখ্যাটা <b>একই উৎস</b>
-    /// থেকে আসে, আর দুটো কখনো একে অন্যকে মিথ্যা বলতে পারে না।
+    /// The server does not send this number separately, nor does it need to: pace is simply
+    /// <b>what was done</b> minus <b>what should have been done</b>. So it is derived in
+    /// reverse; that way the mark and the "behind/ahead" number come from <b>the same
+    /// source</b>, and the two can never contradict each other.
     /// </summary>
     private static double? ExpectedRatio(AgentStatus status, TimeSpan? pace)
     {
@@ -370,11 +369,11 @@ internal sealed class TodayForm : OwnerDrawnForm
 
         var ratio = expected.TotalHours / status.MonthlyTargetHours;
 
-        // মাসের শেষে প্রত্যাশা ১০০%-এ ঠেকে; তার বেশি দাগ আঁকার জায়গা নেই
+        // At month end the expectation reaches 100%; there is no room to draw a mark beyond that
         return Math.Min(1.0, ratio);
     }
 
-    /// <summary>মিটারের নিচের লাইন — বাঁয়ে কত বাকি, ডানে এগিয়ে না পিছিয়ে।</summary>
+    /// <summary>The line under the meter: how much is left on the left, ahead or behind on the right.</summary>
     private void PaintLegend(TextStack stack, AgentStatus status, TimeSpan? pace)
     {
         var left = status.MonthlyRemaining <= TimeSpan.Zero
@@ -382,17 +381,17 @@ internal sealed class TodayForm : OwnerDrawnForm
             : UiText.Duration(status.MonthlyRemaining) + " left";
 
         /*
-         * ⭐⭐ G111 — "এখনো দেখা হয়নি" আর "ঠিক লক্ষ্যে আছি" এক নয়।
+         * G111: "not yet observed" is not the same as "exactly on target".
          *
-         * ⚠️⚠️ সার্ভার এই অবস্থায় pace ঠিক ০ পাঠায়, তাই নিচের শাখাটা
-         * "0:00 ahead" লিখত — নতুন কর্মীর প্রথম দিনে একটা প্রশংসা, যেটার
-         * পেছনে একটাও পর্যবেক্ষণ নেই।
+         * Careful: in this state the server sends pace as exactly 0, so the branch below would
+         * write "0:00 ahead": a compliment on a new employee's first day with not a single
+         * observation behind it.
          *
-         * ⚠️⚠️ **শাখাটা `PaceOf`-এর আগে**, আর সেটাই আসল কথা: পরে বসালে
-         * আনুমানিক হিসাবটা (`MonthlyPace.Estimate`) আগেই চলে যেত, আর ওটা
-         * মাসের ১ তারিখ থেকে গোনে — অর্থাৎ ঠিক ওই না-দেখা দিনগুলোকেই
-         * ঘাটতি বলে দেখাত। একটা ভুল আশ্বাস সারাতে গিয়ে উল্টো দিকের একটা
-         * ভুল অভিযোগ।
+         * Careful: **this branch comes before `PaceOf`**, and that is the whole point: placed
+         * later, the estimate (`MonthlyPace.Estimate`) would already have been chosen, and it
+         * counts from the 1st of the month, so it would show exactly those unobserved days as a
+         * shortfall. Fixing one false reassurance would create a false accusation in the other
+         * direction.
          */
         var view = MonthlyPace.ViewFor(status.PaceObserved, status.Pace, pace);
 
@@ -410,42 +409,41 @@ internal sealed class TodayForm : OwnerDrawnForm
 
         var ahead = value >= TimeSpan.Zero;
 
-        // ⚠️ চিহ্নটা লেখাতেই বলা আছে ("ahead"/"behind"), তাই সংখ্যাটা সবসময়
-        //    ধনাত্মক রূপে। UiText.Duration ঋণাত্মককে শূন্য বানায়, ফলে
-        //    Abs না নিলে প্রতিটা "behind" থাকা স্টাফ দেখত "0:00 behind"।
+        // Careful: the sign is already in the text ("ahead"/"behind"), so the number is always
+        // in positive form. UiText.Duration turns a negative into zero, so without taking Abs
+        // every staff member who is "behind" would see "0:00 behind".
         var text = UiText.Duration(value.Duration()) + (ahead ? " ahead" : " behind");
 
-        // ⚠️ সার্ভারের পাঠানো নয়, আমাদের আন্দাজ হলে সেটা লুকোনো যাবে না —
-        //    শব্দটা ছুটির দিনের হিসাব নিয়ে আমাদের না-জানার স্বীকারোক্তি।
+        // Careful: if it is our guess and not the server's number, it must not be hidden; the
+        // word is our admission that we do not know about holidays.
         if (view is MonthlyPace.PaceView.Estimated) text += " (estimated)";
 
-        // ⭐ পিছিয়ে থাকা **আম্বার**, লাল নয়। লাল এই জানালায় শুধু
-        //    "ডেটা সার্ভারে পৌঁছাচ্ছে না"-র জন্য — সেটা সিস্টেমের ব্যর্থতা,
-        //    আর পিছিয়ে থাকা কোনো ইনসিডেন্ট নয়।
+        // Being behind is **amber**, not red. In this window red is only for "data is not
+        // reaching the server": that is a system failure, and being behind is not an incident.
         stack.Legend(left, text, ahead ? Theme.Ok : Theme.Idle);
     }
 
     /// <summary>
-    /// "এগিয়ে না পিছিয়ে" (B05b/J02)।
+    /// "Ahead or behind" (B05b/J02).
     ///
-    /// ⭐ সার্ভার সংখ্যাটা পাঠালে সেটাই — ওটাই ড্যাশবোর্ডের সংখ্যা, আর দুই
-    /// জায়গায় দুই সংখ্যা দেখলে স্টাফ ধরে নেবে একটা মিথ্যা বলছে।
-    /// সার্ভার না পাঠালে <see cref="MonthlyPace"/>-এর আনুমানিক হিসাব, এবং
-    /// লেবেলেই "estimated" — ⚠️ শব্দটা সরাবেন না, ওটা ছুটির দিনের জন্য
-    /// আমাদের না-জানার স্বীকারোক্তি।
+    /// If the server sends the number, that is what is used: it is the dashboard's number, and
+    /// seeing two numbers in two places makes staff assume one is lying.
+    /// If the server does not send it, <see cref="MonthlyPace"/>'s estimate, with "estimated"
+    /// in the label itself. Careful: do not remove that word; it is our admission that we do
+    /// not know about holidays.
     ///
-    /// লক্ষ্যই না থাকলে (টার্গেট ০) লাইনটা বাদ — "0:00 hours ahead" অর্থহীন।
+    /// If there is no target at all (target 0) the line is omitted: "0:00 hours ahead" is meaningless.
     /// </summary>
     private static TimeSpan? PaceOf(AgentStatus status, DateTimeOffset now) =>
         status.Pace
         ?? MonthlyPace.Estimate(status.ActiveThisMonth, status.MonthlyTargetHours, now);
 
     /// <summary>
-    /// সংখ্যার পাশের পিলটায় যা লেখা থাকে।
+    /// What is written in the pill next to the number.
     ///
-    /// ⚠️ ক্রমটা <see cref="TrackingGate"/>-এর ক্রমেই — সাইন-ইন ও revoke
-    /// আগে, তারপর pause, তারপর চলতি অবস্থা। উল্টো হলে বাতিল ডিভাইসেও
-    /// "Idle" লেখা থাকত, যেন এখুনি আবার শুরু হয়ে যাবে।
+    /// Careful: the order follows <see cref="TrackingGate"/>: sign-in and revoke first, then
+    /// pause, then the running state. Reversed, a revoked device would also say "Idle", as if
+    /// it would start again at any moment.
     /// </summary>
     private static string HeroState(AgentStatus status) =>
         TrackingGate.Check(status.Enrolled, status.Health is SyncHealth.Revoked) switch
@@ -456,25 +454,26 @@ internal sealed class TodayForm : OwnerDrawnForm
         };
 
     /// <summary>
-    /// এই মুহূর্তে ঘড়িটা সত্যিই চলছে কি না — চলন্ত সংখ্যার একমাত্র শর্ত।
+    /// Whether the clock is really running right now: the only condition for the live number.
     ///
-    /// ⭐ idle অবস্থায় সংখ্যাটা <b>থেমে থাকাই ঠিক</b>: নিয়মই তো "৬০ সেকেন্ড
-    /// হাত না চললে গোনা বন্ধ, আর ওই সময়টা মোট থেকে বাদ" — জানালার নিচেই
-    /// লেখা আছে। idle-এও ঘড়ি চললে জানালাটা নিজের লেখা কথারই বিরুদ্ধে যেত।
+    /// In idle the number is <b>correctly frozen</b>: the rule is "if the hands do not move for
+    /// 60 seconds, counting stops and that time is excluded from the total", and it is
+    /// written at the bottom of the window. If the clock ran during idle too, the window
+    /// would contradict its own text.
     ///
-    /// ⚠️ সাইন ইন না থাকলে বা revoke হলে তো গোনাই হয় না (TrackingGate),
-    /// আর pause চলাকালীনও নয়।
+    /// Careful: when not signed in or revoked nothing is counted at all (TrackingGate), and
+    /// not during a pause either.
     /// </summary>
     private static bool IsCounting(AgentStatus status) =>
         TrackingGate.Allows(status.Enrolled, status.Health is SyncHealth.Revoked)
         && !status.Paused
         && status.State == SegmentState.Active;
 
-    /// <summary>Live Board-এর ডট-ভাষাই — সবুজ চলছে · আম্বার থেমে · ধূসর লক।</summary>
+    /// <summary>The same dot language as the Live Board: green running · amber paused · grey locked.</summary>
     private Color StateDot(AgentStatus status)
     {
-        // ⚠️ সবুজ বিন্দুটা "সব ঠিকঠাক চলছে"-র প্রতিশ্রুতি। সাইন ইন না করা
-        //    থাকলে সেটা মিথ্যে, তাই রংটাই আগে বদলায় — লেখা পড়ার আগেই।
+        // Careful: the green dot is a promise that "everything is running fine". If not
+        // signed in that is false, so the color changes first, before the text is read.
         if (!status.Enrolled) return Theme.Brand;
 
         return status.Paused
@@ -496,13 +495,13 @@ internal sealed class TodayForm : OwnerDrawnForm
     };
 
     /// <summary>
-    /// ⭐ অগ্রগতির ভরাট <b>সবুজ</b> (<c>Theme.Ok</c>) — মালিকের চাওয়া
-    /// (১৮ আগস্ট): "কাজ হচ্ছে = সবুজ"।
+    /// The progress fill is <b>green</b> (<c>Theme.Ok</c>): the owner's request
+    /// (18 August): "work in progress = green".
     ///
-    /// ⚠️ আগে ছিল চলতি অবস্থায় নিরপেক্ষ <c>ink</c>, শুধু টার্গেট পূর্ণে সবুজ
-    /// ([09 § ৩উ](../../../../docs/09-Build-Log.md))। মালিক প্রথমে ওয়েবে,
-    /// তারপর এই জানালাতেও ভরাটটা সবুজ চেয়েছেন — দুই পর্দা এক থাকুক।
-    /// (আরও আগে ছিল <c>#4A6FA5</c>, একটা নীল যা oXeio-র কোথাও নেই।)
+    /// Careful: it used to be neutral <c>ink</c> while running, green only when the target was
+    /// full ([09 § 3u](../../../../docs/09-Build-Log.md)). The owner wanted the fill green,
+    /// first on the web and then in this window too, so that the two screens match.
+    /// (Even earlier it was <c>#4A6FA5</c>, a blue that appears nowhere in oXeio.)
     /// </summary>
     private Color ProgressFill => Theme.Ok;
 

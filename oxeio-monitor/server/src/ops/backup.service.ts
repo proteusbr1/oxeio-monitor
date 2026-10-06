@@ -41,11 +41,11 @@ import {
   type PgConnection,
 } from './ops.rules';
 
-/** ⚠️ pg_dump-এর stderr কত বাইট পর্যন্ত ধরে রাখা হবে (মেমরি পাহারা) */
+/** How many bytes of pg_dump's stderr to keep (memory guard) */
 const STDERR_CAP = 4000;
 
 export interface BackupCopyResult {
-  /** কনফিগ করা ছিল কি না — না থাকলে কপি "ব্যর্থ" নয়, শুধু বন্ধ */
+  /** Whether it was configured; if not, the copy is not "failed", just off */
   configured: boolean;
   ok: boolean;
   error: string | null;
@@ -54,37 +54,37 @@ export interface BackupCopyResult {
 
 export interface BackupResult {
   ok: boolean;
-  /** কেন চালানো হয়নি — চালানো হলে `null` */
+  /** Why it was not run; `null` if it ran */
   skipped: 'not_configured' | 'already_running' | 'external' | null;
   fileName: string | null;
   sizeBytes: number | null;
   durationMs: number;
   error: string | null;
   copy: BackupCopyResult;
-  /** কতগুলো পুরোনো ফাইল ঘোরানো হলো (দুই ফোল্ডার মিলিয়ে) */
+  /** How many old files were rotated (across both folders) */
   rotated: number;
 }
 
 /**
- * **K02 + K03** — রাত ২:৩০-এর `pg_dump`, এনক্রিপশন, এক্সটার্নাল ড্রাইভে কপি
- * আর পুরোনো ব্যাকআপ ঘোরানো।
+ * **K02 + K03**: the 02:30 `pg_dump`, encryption, copy to the external drive,
+ * and rotation of old backups.
  *
- * ⭐ **এনক্রিপশন ঐচ্ছিক নয় (G39)।** এই ডাম্পে ১৫ জনের মাসের পর মাসের
- * কার্যকলাপ, তাদের বেতনের অঙ্ক আর স্ক্রিনশটের সব মেটাডেটা একসাথে থাকে —
- * অর্থাৎ পুরো ব্যবস্থার সবচেয়ে সংবেদনশীল জিনিসটা একটা ফাইলে, আর সেই
- * ফাইলটাই যায় একটা খোলা এক্সটার্নাল ড্রাইভে। ওই ড্রাইভ হারানো মানে
- * সবকিছু হারানো। তাই `BACKUP_PASSPHRASE` না থাকলে ব্যাকআপ **চলে না** —
- * নীরবে প্লেইনটেক্সট ফেলে রাখার চেয়ে ব্যাকআপ না হওয়াই ভালো, যতক্ষণ
- * সেটা কেউ জানে (G04 রোজ মনে করিয়ে দেবে)।
+ * **Encryption is not optional (G39).** This dump holds 15 people's activity
+ * month after month, their salary figures and all the screenshot metadata:
+ * the most sensitive thing in the whole system in one file, and that file goes
+ * onto an external drive that is easy to carry off. Losing that drive means
+ * losing everything. So without `BACKUP_PASSPHRASE` the backup **does not run**;
+ * no backup is better than quietly leaving plaintext lying around, as long as
+ * someone knows about it (G04 reminds them daily).
  *
- * ⭐ **ফরম্যাটটা ইচ্ছাকৃতভাবে `openssl enc`-এর সাথে মেলানো।**
- * নিজস্ব হেডার + AES-GCM ব্যবহার করলে integrity পাওয়া যেত, কিন্তু খোলার
- * জন্য আমাদেরই একটা টুল লাগত — আর দুর্যোগের দিনে (সার্ভার পুড়ে গেছে,
- * রিপো নেই) সেই টুলটাই থাকে না। যে ব্যাকআপ স্ট্যান্ডার্ড টুল দিয়ে খোলা
- * যায় না, সেটা ব্যাকআপ নয়। integrity-র জন্য পাশে একটা `.sha256` সাইডকার
- * রাখা হয় — `openssl enc`-এ কোনো AEAD মোড নেই, তাই এটাই সেরা আপস।
+ * **The format deliberately matches `openssl enc`.** A custom header plus
+ * AES-GCM would give integrity, but opening the file would need a tool of our
+ * own, and on the day of a disaster (server burned, no repo) that tool is
+ * gone. A backup that cannot be opened with a standard tool is not a backup.
+ * For integrity a `.sha256` sidecar is kept beside it; `openssl enc` has no
+ * AEAD mode, so this is the best compromise.
  *
- * খোলার কমান্ড (`README-restore.txt`-এও লেখা থাকে):
+ * The command to open it (also written in `README-restore.txt`):
  * ```
  * openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
  *   -in oxeio-2026-08-11-0230.dump.enc -out oxeio.dump -pass env:BACKUP_PASSPHRASE
@@ -114,26 +114,26 @@ export class BackupService implements OnApplicationBootstrap {
   ) {
     this.passphrase = (config.get<string>('BACKUP_PASSPHRASE') ?? '').trim();
     /**
-     * ⚠️⚠️ **`?.trim() ||`, `??` নয় — আর এই এক অক্ষরের তফাতেই ব্যাকআপ
-     * কোনোদিন চলেনি।**
+     * **`?.trim() ||`, not `??`: this one-character difference is why the backup
+     * never ran.**
      *
-     * `.env.example`-এ লাইনটা `BACKUP_DIR=` (ফাঁকা) হিসেবে বসানো, তাই
-     * `config.get()` ফেরত দেয় **খালি স্ট্রিং**, `undefined` নয়। `??`
-     * কেবল `null`/`undefined` ধরে — খালি স্ট্রিং পেরিয়ে যায়। ফলে
-     * ডিফল্টটা কোনোদিন ব্যবহারই হয়নি, আর `resolve('')` দাঁড়াত
-     * **প্রসেসের cwd**-তে, অর্থাৎ `/app` — যেখানে লেখার অনুমতি নেই।
+     * `.env.example` has the line `BACKUP_DIR=` (empty), so `config.get()`
+     * returns an **empty string**, not `undefined`. `??` only catches
+     * `null`/`undefined`; an empty string passes through. The default was never
+     * used, and `resolve('')` ended up in the **process cwd**, i.e. `/app`,
+     * where there is no write permission.
      *
-     * ⭐ ব্যর্থতাটা তবু **জোরে** হয়েছে (`EACCES`), আর সেটা ভাগ্য: ওই
-     * ফোল্ডারে লেখার অনুমতি থাকলে ডাম্প নীরবে কনটেইনারের ভেতরে বসত আর
-     * প্রতি ডিপ্লয়ে মুছে যেত — কেউ কিছু টেরই পেত না।
+     * The failure was still **loud** (`EACCES`), which was luck: if that folder
+     * had been writable the dump would have silently landed inside the container
+     * and been wiped on every deploy, with nobody noticing.
      *
-     * ⚠️ পাশের প্রতিটা অপশন (`BACKUP_COPY_TO`, `BACKUP_PG_DUMP`,
-     * `BACKUP_DOCKER_*`) `?.trim() ||` ব্যবহার করে; **কেবল এটাই `??`
-     * ছিল**। একই ফাইলে দু-রকম নিয়ম — ঠিক যেভাবে এই বাগগুলো জন্মায়।
+     * Every neighbouring option (`BACKUP_COPY_TO`, `BACKUP_PG_DUMP`,
+     * `BACKUP_DOCKER_*`) uses `?.trim() ||`; **this was the only `??`**. Two
+     * rules in one file is exactly how these bugs are born.
      */
     this.dir = resolve(
       config.get<string>('BACKUP_DIR')?.trim() ||
-        // ডকের লেআউট (07 § ৬.২): `D:\oXeio\storage\` -এর পাশে `D:\oXeio\backups\`
+        // The doc's layout (07 § 6.2): `D:\oXeio\backups\` beside `D:\oXeio\storage\`
         join(storageRoot(config), '..', 'backups'),
     );
     this.copyTo = config.get<string>('BACKUP_COPY_TO')?.trim() || null;
@@ -168,7 +168,7 @@ export class BackupService implements OnApplicationBootstrap {
     if (await this.isExternal()) return { errors, warnings };
 
     if (!this.passphrase) {
-      // ⭐ "জোরে বলা" এখান থেকেই শুরু — বুটের সময়েই একবার, তারপর G04 রোজ।
+      // The "shouting" starts here: once at boot, then G04 daily.
       errors.push(
         'No BACKUP_PASSPHRASE — the nightly backup will not run. ' +
           'Leaving backup off is safer than dropping the salary and screenshot ' +
@@ -201,19 +201,19 @@ export class BackupService implements OnApplicationBootstrap {
     return (await this.mode()) === 'external';
   }
 
-  /** K03 চালু আছে কি না — `null` মানে এক্সটার্নাল কপি কনফিগারই করা হয়নি */
+  /** Whether K03 is on; `null` means no external copy is configured at all */
   get copyTarget(): string | null {
     return this.copyTo;
   }
 
-  /** হেলথ পাতায় দেখানোর জন্য — ⚠️ পাসফ্রেজ কখনোই বেরোয় না */
+  /** For the health page. Careful: the passphrase never comes out. */
   get backupDir(): string {
     return this.dir;
   }
 
   /**
-   * এক দফা ব্যাকআপ। ⚠️ কখনো throw করে না — ব্যর্থতা একটা **মান**।
-   * শিডিউলার আর হাতে-চালানো দুটোই এখান দিয়েই যায়।
+   * One round of backup. Careful: it never throws; a failure is a **value**.
+   * Both the scheduler and the manual run go through here.
    */
   async runOnce(now = new Date()): Promise<BackupResult> {
     // a manual "run now" too — the owner said backups happen elsewhere
@@ -259,18 +259,18 @@ export class BackupService implements OnApplicationBootstrap {
       const info = await stat(partPath);
       sizeBytes = info.size;
 
-      // ⚠️ শূন্য বা হাস্যকর ছোট ফাইল = ব্যর্থতা। pg_dump শূন্য কোডে বেরিয়েও
-      //    কিছুই না লিখতে পারে (যেমন খালি স্কিমা বা বন্ধ পাইপ), আর তখন
-      //    ডিস্কে একটা "ব্যাকআপ" পড়ে থাকত যেটা আসলে কিছুই নয়।
+      // A zero or absurdly small file is a failure. pg_dump can exit with code 0
+      // and still write nothing (e.g. empty schema or a closed pipe), and then a
+      // "backup" would sit on disk that is actually nothing.
       if (sizeBytes < 512) {
         throw new Error(`The dump is suspiciously small (${sizeBytes} bytes)`);
       }
 
       await writeFile(partPath + SHA_EXT, `${digest}  ${fileName}\n`, 'utf8');
-      // ⭐ এই rename-টাই "ব্যাকআপ হয়েছে" ঘোষণার একমাত্র মুহূর্ত। এর আগে
-      //    ফাইলটার নাম `.part`, তাই ঘোরানোর নিয়ম বা কপি কেউই সেটাকে
-      //    ব্যাকআপ বলে চেনে না — অসম্পূর্ণ ডাম্প কোনোদিন ব্যাকআপ হিসেবে
-      //    গোনা হবে না, এটাই এখানকার সবচেয়ে জরুরি নিশ্চয়তা।
+      // This rename is the only moment "the backup is done" is declared. Before
+      // it the file is named `.part`, so neither rotation nor the copy recognises
+      // it as a backup: an incomplete dump is never counted as a backup, which
+      // is the most important guarantee here.
       await rename(partPath + SHA_EXT, finalPath + SHA_EXT);
       await rename(partPath, finalPath);
 
@@ -280,8 +280,8 @@ export class BackupService implements OnApplicationBootstrap {
     } catch (err) {
       error = err instanceof Error ? err.message : 'unknown error';
       this.logger.error(`Backup failed: ${error}`);
-      // ⚠️ অসম্পূর্ণ ফাইল রেখে যাওয়া চলবে না — পরে কেউ সেটাকেই ব্যাকআপ
-      //    ভেবে বসত। নাম `.part` বলে ঘোরানোর নিয়ম চিনত না, ফলে চিরকাল থাকত।
+      // An incomplete file must not be left behind: someone could later take it
+      // for a backup. Being `.part`, rotation would not recognise it and it would stay forever.
       await quietUnlink(partPath, partPath + SHA_EXT);
     }
 
@@ -314,17 +314,17 @@ export class BackupService implements OnApplicationBootstrap {
     };
   }
 
-  // ── pg_dump → AES → ফাইল ──────────────────────────────────────────────────
+  // ── pg_dump → AES → file ───────────────────────────────────────────────────
 
   /**
-   * ⭐ পুরোটা স্ট্রিমে — ডাম্প কখনো প্লেইনটেক্সটে ডিস্ক স্পর্শ করে না।
+   * All of it streams: the dump never touches disk as plaintext.
    *
-   * ⚠️ **এই ফাংশনের সবচেয়ে সহজ ভুলটা হলো exit code না দেখা।** pg_dump
-   *    মাঝপথে মরে গেলে তার stdout বন্ধ হয়ে যায়, আর `pipeline()` সেটাকে
-   *    "স্ট্রিম শেষ" ধরে **সফলভাবেই** ফেরত আসে। ফলে ডিস্কে একটা দিব্যি
-   *    দেখতে ফাইল তৈরি হতো, `.sha256` মিলত, কপিও হতো — আর সেটা যে অর্ধেক
-   *    ডাম্প তা জানা যেত পুনরুদ্ধারের দিন। তাই স্ট্রিম শেষ হওয়ার **পর**
-   *    আলাদা করে exit code মেলানো হয়।
+   * **The easiest mistake in this function is not checking the exit code.** If
+   * pg_dump dies midway its stdout closes, and `pipeline()` takes that as
+   * "stream finished" and returns **successfully**. A perfectly normal-looking
+   * file would be created, the `.sha256` would match, the copy would happen, and
+   * that it is half a dump would be learned on restore day. So the exit code is
+   * checked separately **after** the stream ends.
    */
   private async dumpEncrypted(
     conn: PgConnection,
@@ -335,8 +335,8 @@ export class BackupService implements OnApplicationBootstrap {
     const child = spawn(command, args, {
       env: { ...process.env, ...env },
       windowsHide: true,
-      // ⚠️ ঝুলে যাওয়া ডাম্প নিজে থেকেই মরবে — নইলে RunLock ধরে বসে থেকে
-      //    পরদিনের ব্যাকআপও আটকে দিত।
+      // A hung dump dies by itself; otherwise it would hold the RunLock and
+      // block the next day's backup too.
       timeout: BACKUP_TIMEOUT_MS,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -350,8 +350,8 @@ export class BackupService implements OnApplicationBootstrap {
       child.once('error', rej);
       child.once('close', (code) => res(code ?? -1));
     });
-    // ⚠️ আগেভাগে একটা হ্যান্ডলার — pipeline আগে throw করলে এই promise-টা
-    //    unhandled rejection হয়ে পুরো প্রসেস নামিয়ে দিত।
+    // A handler up front: if pipeline throws first, this promise would become an
+    // unhandled rejection and bring the whole process down.
     void exited.catch(() => undefined);
 
     const stdout = child.stdout;
@@ -374,7 +374,7 @@ export class BackupService implements OnApplicationBootstrap {
     });
 
     const out = createWriteStream(partPath);
-    // `openssl enc`-এর হেডার: ASCII "Salted__" + ৮ বাইট salt
+    // The `openssl enc` header: ASCII "Salted__" + 8 bytes of salt
     const header = Buffer.concat([Buffer.from('Salted__', 'ascii'), salt]);
     hash.update(header);
     out.write(header);
@@ -406,22 +406,23 @@ export class BackupService implements OnApplicationBootstrap {
   }
 
   /**
-   * pg_dump কোথায়। ⚠️ Docker-এ Postgres চললে হোস্টে `pg_dump` **থাকেই না** —
-   * তখন `docker exec` দিয়ে কন্টেইনারের ভেতরেরটা চালানো হয়। দুটো পথই
-   * কনফিগারেবল, কারণ কোনটা সত্যি সেটা কোড থেকে জানার উপায় নেই।
+   * Where pg_dump is. When Postgres runs in Docker, `pg_dump` is **not on the
+   * host at all**, so the one inside the container is run via `docker exec`.
+   * Both paths are configurable, because the code cannot know which is true.
    */
   private dumpCommand(conn: PgConnection): {
     command: string;
     args: string[];
     env: Record<string, string>;
   } {
-    // ⚠️ `--format=custom` (কম্প্রেসড) — এনক্রিপশনের **আগে** কম্প্রেস করতেই
-    //    হবে, কারণ এনক্রিপ্ট করা বাইট আর কম্প্রেস হয় না। প্লেইন SQL রাখলে
-    //    ফাইলটা কয়েক গুণ বড় হতো, আর এক্সটার্নাল ড্রাইভে কপির সময়ও তত।
+    // `--format=custom` (compressed): compression must happen **before**
+    // encryption, because encrypted bytes no longer compress. Plain SQL would
+    // make the file several times bigger, and the copy to the external drive
+    // that much slower.
     //
-    // ⚠️ `host` আলাদা প্যারামিটার, কারণ Docker-এর ভেতর থেকে DB সবসময়
-    //    কন্টেইনারের নিজের localhost — বাইরের হোস্টনেম (compose-এর
-    //    `postgres`) সেখানে অর্থহীন হতে পারে।
+    // `host` is a separate parameter because, from inside Docker, the DB is
+    // always the container's own localhost; the outside hostname (compose's
+    // `postgres`) may mean nothing there.
     const dumpArgs = (host: string): string[] => [
       '-h', host,
       '-p', conn.port,
@@ -438,16 +439,16 @@ export class BackupService implements OnApplicationBootstrap {
         args: [
           'exec',
           /**
-           * ⭐ `-e PGPASSWORD` — **শুধু নামটা, মান নয়।** `docker exec` বাকি
-           * অংশটা নিজের প্রসেসের env থেকে তুলে নিয়ে কন্টেইনারে পাঠায় (নিচের
-           * `env`-এ সেটাই বসানো), ঠিক `docker run`-এর মতোই।
+           * `-e PGPASSWORD`: **only the name, not the value.** `docker exec`
+           * picks the rest up from its own process env and passes it into the
+           * container (that is what `env` below sets), just like `docker run`.
            *
-           * ⚠️ `PGPASSWORD=<মান>` লিখলে ডাটাবেসের পাসওয়ার্ড `docker`
-           * প্রসেসের argv-তে বসত, আর হোস্টে `ps aux` করা **যেকোনো**
-           * ব্যবহারকারী সেটা পড়তে পারত — রাত ২:৩০-এ, রোজ। argv সবার
-           * জন্য পাঠযোগ্য, env নয়; তাই পার্থক্যটা কসমেটিক নয়।
-           * (ঝুঁকিটা কল্পিত নয়: docker গ্রুপের সদস্য বা মনিটরিং এজেন্ট
-           * প্রসেস-তালিকা তোলে।)
+           * Writing `PGPASSWORD=<value>` would put the database password in the
+           * `docker` process's argv, and **any** user running `ps aux` on the
+           * host could read it, at 02:30, every day. argv is readable by
+           * everyone, env is not; the difference is not cosmetic. (The risk is
+           * not imaginary: members of the docker group or monitoring agents list
+           * processes.)
            */
           '-e',
           'PGPASSWORD',
@@ -462,12 +463,12 @@ export class BackupService implements OnApplicationBootstrap {
     return {
       command: this.pgDumpBin,
       args: dumpArgs(conn.host),
-      // ⚠️ PGPASSWORD env-এ, কমান্ড লাইনে নয় — `ps` করলে যেন পাসওয়ার্ড না দেখা যায়
+      // PGPASSWORD in the env, not on the command line, so `ps` cannot show the password
       env: { PGPASSWORD: conn.password },
     };
   }
 
-  /** ⚠️ ENOENT-এর ডিফল্ট বার্তাটা ("spawn pg_dump ENOENT") কিছুই বোঝায় না */
+  /** The default ENOENT message ("spawn pg_dump ENOENT") explains nothing */
   private spawnHint(command: string, err: unknown): string {
     const message = err instanceof Error ? err.message : 'unknown error';
     if (!message.includes('ENOENT')) return message;
@@ -484,16 +485,16 @@ export class BackupService implements OnApplicationBootstrap {
     return parsePgUrl(this.databaseUrl);
   }
 
-  // ── K03 · এক্সটার্নাল ড্রাইভ ───────────────────────────────────────────────
+  // ── K03 · external drive ───────────────────────────────────────────────────
 
   /**
-   * ⭐ কপি হয়ে যাওয়ার পর **আবার হ্যাশ মিলিয়ে দেখা হয়**।
+   * After the copy, **the hash is checked again**.
    *
-   * USB ড্রাইভে অর্ধেক লেখা ফাইল, ভরে যাওয়া ড্রাইভ বা খুলে ফেলা কেবল —
-   * তিনটেই `copyFile()`-কে সফল দেখাতে পারে বা প্রায়-সফল ফাইল রেখে যেতে
-   * পারে। যাচাই না করলে "অফসাইট কপি আছে" বিশ্বাসটাই মিথ্যা হয়ে যেত, আর
-   * সেই মিথ্যাটা ধরা পড়ত ঠিক পুনরুদ্ধারের দিনে। পড়াটা ধীর, কিন্তু এটা
-   * রাত ৩টার কাজ — আর এই যাচাইটুকুই কপিটার একমাত্র মূল্য।
+   * A half-written file on a USB drive, a full drive or a pulled cable can all
+   * make `copyFile()` look successful or leave an almost-successful file.
+   * Without verifying, the belief "there is an offsite copy" would be false, and
+   * the falsehood would be found on restore day. The read is slow, but this is
+   * a 3 AM job, and this check is the copy's only value.
    */
   private async copyOut(fileName: string): Promise<BackupCopyResult> {
     if (!this.copyTo) {
@@ -504,10 +505,11 @@ export class BackupService implements OnApplicationBootstrap {
     const source = join(this.dir, fileName);
 
     try {
-      // ⚠️ ড্রাইভ **নেই** আর ড্রাইভ **খালি** — দুটো আলাদা। `mkdir` দিয়ে
-      //    জোর করে বানালে ড্রাইভ খোলা না থাকলেও উইন্ডোজ মাঝে মাঝে পথটা
-      //    তৈরি করে ফেলে (সিস্টেম ডিস্কে!), আর তখন "কপি হয়েছে" দেখাত —
-      //    অথচ কপিটা পড়ে থাকত সেই একই ডিস্কে, অর্থাৎ কোনো সুরক্ষাই নেই।
+      // A drive that is **absent** and a drive that is **empty** are different
+      // things. Forcing it with `mkdir` can make Windows sometimes create the
+      // path even when the drive is not attached (on the system disk!), and
+      // then "copied" would show, while the copy sat on that same disk, so no
+      // protection at all.
       const dirInfo = await stat(target).catch(() => null);
       if (!dirInfo?.isDirectory()) {
         throw new Error(
@@ -533,9 +535,9 @@ export class BackupService implements OnApplicationBootstrap {
     }
   }
 
-  // ── ঘোরানো ────────────────────────────────────────────────────────────────
+  // ── rotation ───────────────────────────────────────────────────────────────
 
-  /** দুটো ফোল্ডারেই — নইলে এক্সটার্নাল ড্রাইভটা নীরবে ভরে যেত */
+  /** Both folders, otherwise the external drive would silently fill up */
   private async rotate(now: Date): Promise<number> {
     const dirs = [this.dir, ...(this.copyTo ? [resolve(this.copyTo)] : [])];
     let removed = 0;
@@ -544,7 +546,7 @@ export class BackupService implements OnApplicationBootstrap {
       try {
         removed += await this.rotateOne(dir, now);
       } catch (err) {
-        // ⚠️ ঘোরাতে না পারা ব্যাকআপকে ব্যর্থ করে না — ব্যাকআপটা তো হয়ে গেছে
+        // Failing to rotate does not fail the backup: the backup has already happened
         this.logger.warn(
           `Could not rotate ${dir}: ${err instanceof Error ? err.message : 'unknown error'}`,
         );
@@ -569,14 +571,14 @@ export class BackupService implements OnApplicationBootstrap {
     ];
 
     for (const name of doomed) {
-      // ⚠️ শেষ পাহারা: নামটা সত্যিই আমাদের প্যাটার্নের কি না আরেকবার দেখা।
-      //    এই লুপটাই একমাত্র জায়গা যেখানে কোড নিজে থেকে ফাইল **মোছে**।
+      // Last guard: check once more that the name really fits our pattern. This
+      // loop is the only place where the code **deletes** files on its own.
       if (!isBackupFile(name) && !isPartFile(name)) continue;
       await quietUnlink(join(dir, name), join(dir, name + SHA_EXT));
     }
 
-    // যাদের ব্যাকআপটাই আর নেই, সেই সাইডকারগুলো — উপরের লুপের পরে দেখা হয়
-    // যাতে এইমাত্র মোছা ফাইলগুলোর সাইডকারও (যদি বেঁচে থাকে) ধরা পড়ে
+    // Sidecars whose backup no longer exists. Checked after the loop above so that
+    // the sidecars of the files just deleted (if they survived) are caught too.
     const orphans = orphanSidecars(await readdir(dir));
     for (const name of orphans) await quietUnlink(join(dir, name));
 
@@ -587,12 +589,12 @@ export class BackupService implements OnApplicationBootstrap {
   }
 
   /**
-   * ⭐ পুনরুদ্ধারের নির্দেশনা ব্যাকআপের **পাশেই** রাখা হয়।
+   * The restore instructions are kept **right beside** the backups.
    *
-   * দুর্যোগের দিনে যা থাকে সেটা হলো একটা এক্সটার্নাল ড্রাইভ — সার্ভার নেই,
-   * রিপো নেই, ডকুমেন্টেশন নেই। ওই ড্রাইভে যদি শুধু একগাদা `.enc` ফাইল
-   * থাকে আর কেউ না জানে ওগুলো কীভাবে খোলে, তাহলে এনক্রিপশনটা ব্যাকআপকে
-   * বাঁচায়নি, মেরে ফেলেছে।
+   * On the day of a disaster what remains is an external drive: no server, no
+   * repo, no documentation. If that drive holds only a pile of `.enc` files and
+   * nobody knows how to open them, then encryption did not save the backup, it
+   * killed it.
    */
   private async writeRestoreNote(): Promise<void> {
     const note = [
@@ -623,7 +625,7 @@ export class BackupService implements OnApplicationBootstrap {
       try {
         await writeFile(join(dir, 'README-restore.txt'), note, 'utf8');
       } catch {
-        // নির্দেশনা লিখতে না পারা ব্যাকআপকে ব্যর্থ করে না
+        // Failing to write the instructions does not fail the backup
       }
     }
   }
@@ -647,7 +649,7 @@ async function quietUnlink(...paths: string[]): Promise<void> {
     try {
       await unlink(path);
     } catch {
-      // ছিল না, বা লক করা — দুটোতেই করার কিছু নেই
+      // It was not there, or it is locked; nothing to do either way
     }
   }
 }
@@ -658,7 +660,7 @@ async function sha256File(path: string): Promise<string> {
   return hash.digest('hex');
 }
 
-/** সাইডকারের প্রথম শব্দটাই হেক্স ডাইজেস্ট (`sha256sum` ফরম্যাট) */
+/** The first word of the sidecar is the hex digest (`sha256sum` format) */
 async function readDigest(shaPath: string): Promise<string> {
   const text = await readFile(shaPath, 'utf8');
   return text.trim().split(/\s+/)[0] ?? '';

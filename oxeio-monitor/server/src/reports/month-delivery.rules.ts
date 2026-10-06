@@ -1,19 +1,19 @@
 /**
- * **R26 — মাস বন্ধ হলে রিপোর্ট নিজে থেকে পাঠানো**, তার খাঁটি নিয়মগুলো।
+ * **R26: sending the report automatically when a month is closed**, its pure rules.
  *
- * ⭐ আলাদা ফাইল, কারণ এখানকার ভুলগুলো নীরব: ভুল তারিখের রেঞ্জ মানে ভুল
- * মাসের সংখ্যা পাঠানো, আর সেটা পড়ে কেউ ধরতে পারবে না — ফাইলটা দেখতে
- * নিখুঁতই লাগবে। তাই সিদ্ধান্তটুকু I/O ছাড়া, টেস্টসহ।
+ * A separate file because mistakes here are silent: a wrong date range means
+ * sending the wrong month's numbers, and nobody reading it could catch that;
+ * the file would look perfect. So the decision logic is free of I/O, with tests.
  */
 
 /**
- * `'2026-07'` → ওই মাসের প্রথম ও শেষ দিন।
+ * `'2026-07'` → the first and last day of that month.
  *
- * ⚠️⚠️ শেষ দিনটা **গোনা হয়**, ৩০/৩১ ধরে নেওয়া হয় না — ফেব্রুয়ারিতে
- * (আর অধিবর্ষে) ধরে নেওয়া সংখ্যা দু-দিন পর্যন্ত ভুল হতো, আর ওই দু-দিনের
- * ঘণ্টা রিপোর্ট থেকে নীরবে বাদ পড়ত।
+ * The last day is **computed**, not assumed to be 30/31: in February (and leap
+ * years) an assumed number would be off by up to two days, and those days'
+ * hours would silently drop out of the report.
  *
- * ⭐ `Date.UTC(y, m, 0)` — পরের মাসের "০ তারিখ" মানে চলতি মাসের শেষ দিন।
+ * `Date.UTC(y, m, 0)`: day "0" of the next month is the last day of this month.
  */
 export function monthRange(yearMonth: string): { from: string; to: string } {
   const m = /^(\d{4})-(\d{2})$/.exec(yearMonth);
@@ -34,22 +34,23 @@ export function monthRange(yearMonth: string): { from: string; to: string } {
 export interface MonthCaptionInput {
   orgName: string;
   yearMonth: string;
-  /** রিপোর্টে কতজন কর্মী আছেন */
+  /** How many staff are in the report */
   people: number;
-  /** সবার মোট গোনা ঘণ্টা */
+  /** Everyone's total counted hours */
   totalHours: number;
 }
 
 /**
- * টেলিগ্রামে ফাইলের সাথে যে এক-দুই লাইন যায়।
+ * The one or two lines that go with the file on Telegram.
  *
- * ⚠️⚠️ **কোনো কর্মীর নাম এখানে নেই, ইচ্ছাকৃতভাবে।** বার্তা টেলিগ্রামের
- * সার্ভারে জমে থাকে আর ওই চ্যাটে কে আছে সেটা সময়ের সাথে বদলায় — তাই
- * ক্যাপশনে কেবল **যোগফল**। নাম-ধরে-ধরে হিসাবটা সংযুক্ত ফাইলে, আর ফাইলটা
- * খুলতে হলে ইচ্ছে করে নামাতে হয় (`ops.rules.ts`-এর allowlist-এর একই যুক্তি)।
+ * **No employee name is here, on purpose.** The message sits on Telegram's
+ * servers and who is in that chat changes over time, so the caption has only
+ * **totals**. The name-by-name figures are in the attached file, which has to
+ * be downloaded deliberately to open (the same reasoning as the allowlist in
+ * `ops.rules.ts`).
  *
- * ⚠️ কোনো Markdown/HTML নয় — প্রতিষ্ঠানের নামে একটা `_` থাকলেই গোটা কলটা
- *    ৪০০ হয়ে যেত।
+ * No Markdown/HTML: a single `_` in the organisation's name would make the
+ * whole call a 400.
  */
 export function monthCaption(input: MonthCaptionInput): string {
   const hours = Math.round(input.totalHours);
@@ -62,12 +63,12 @@ export function monthCaption(input: MonthCaptionInput): string {
 }
 
 /**
- * ⭐ ফাইলের নাম — ASCII, তারিখসহ, যাতে চ্যাটে পাশাপাশি কয়েকটা মাস থাকলেও
- * কোনটা কোনটা এক নজরে বোঝা যায়।
+ * The file name: ASCII, with dates, so that even with several months side by
+ * side in a chat you can tell which is which at a glance.
  *
- * ⚠️ `reportFilename()`-এর ফরম্যাটটাই (`oxeio-<report>-<from>_<to>.<ext>`)
- *    ব্যবহার করা হয় — দুই জায়গায় দু-রকম নাম হলে সাপোর্টে "কোন ফাইলটা"
- *    প্রশ্নের উত্তর দেওয়া কঠিন হতো।
+ * It uses the same format as `reportFilename()`
+ * (`oxeio-<report>-<from>_<to>.<ext>`); with different names in two places,
+ * answering "which file?" in support would be hard.
  */
 export function monthReportName(yearMonth: string, ext: 'xlsx' | 'pdf'): string {
   const { from, to } = monthRange(yearMonth);

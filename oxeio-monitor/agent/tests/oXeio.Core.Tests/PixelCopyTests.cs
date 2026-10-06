@@ -5,21 +5,21 @@ namespace oXeio.Core.Tests;
 public class PixelCopyTests
 {
     /// <summary>
-    /// প্রতিটি পিক্সেলে তার সারি ও কলাম লিখে দেওয়া — কপির পর কোন পিক্সেল কোথায়
-    /// গেল সেটা চোখে দেখে মেলানো যায়। এক বাইট সরে গেলেও ধরা পড়বে।
+    /// Writes each pixel's row and column into it, so after the copy you can check by
+    /// eye where each pixel went. Even a one-byte shift is caught.
     /// </summary>
     private static byte[] Grid(int rowPitch, int width, int height, byte tag = 0xEE)
     {
         var buf = new byte[rowPitch * height];
-        Array.Fill(buf, tag); // padding-এ চেনা আবর্জনা
+        Array.Fill(buf, tag); // recognizable junk in the padding
 
         for (var y = 0; y < height; y++)
         {
             for (var x = 0; x < width; x++)
             {
                 var i = (y * rowPitch) + (x * 4);
-                buf[i] = (byte)x;      // B = কলাম
-                buf[i + 1] = (byte)y;  // G = সারি
+                buf[i] = (byte)x;      // B = column
+                buf[i + 1] = (byte)y;  // G = row
                 buf[i + 2] = 0x10;
                 buf[i + 3] = 0xFF;
             }
@@ -43,7 +43,7 @@ public class PixelCopyTests
     public void Pitch_বড়_হলে_padding_বাদ_যায়_আর_সারি_সরে_না()
     {
         const int w = 8, h = 4;
-        const int pitch = (w * 4) + 64; // ড্রাইভারের বাড়তি ৬৪ বাইট
+        const int pitch = (w * 4) + 64; // the driver's extra 64 bytes
         var src = Grid(pitch, w, h);
 
         var dest = PixelCopy.ToTightBuffer(src, pitch, w, h);
@@ -55,19 +55,20 @@ public class PixelCopyTests
             for (var x = 0; x < w; x++)
             {
                 var i = (y * w * 4) + (x * 4);
-                Assert.Equal((byte)x, dest[i]);      // কলাম ঠিক আছে
-                Assert.Equal((byte)y, dest[i + 1]);  // সারি ঠিক আছে
+                Assert.Equal((byte)x, dest[i]);      // column is right
+                Assert.Equal((byte)y, dest[i + 1]);  // row is right
             }
         }
 
-        // padding-এর আবর্জনা একটাও ঢোকেনি
+        // none of the padding junk got in
         Assert.DoesNotContain((byte)0xEE, dest);
     }
 
     /// <summary>
-    /// এই বাগটাই সবচেয়ে ভয়ানক: pitch উপেক্ষা করে টানা কপি করলে ছবি ক্র্যাশ করে না,
-    /// কালোও হয় না — শুধু প্রতিটি সারি একটু করে সরে গিয়ে তেরছা হয়ে যায়।
-    /// এই টেস্টটা দেখায় ভুল পথে গেলে ফল কী হতো।
+    /// This is the most dangerous bug: if the pitch is ignored and the copy is done in
+    /// one run, the image does not crash and is not black; each row just shifts a little
+    /// further and the picture becomes slanted. This test shows what would happen on the wrong
+    /// path.
     /// </summary>
     [Fact]
     public void টানা_কপি_করলে_ছবি_তেরছা_হতো()
@@ -77,19 +78,19 @@ public class PixelCopyTests
         var src = Grid(pitch, w, h);
 
         var correct = PixelCopy.ToTightBuffer(src, pitch, w, h);
-        var naive = src.AsSpan(0, w * 4 * h).ToArray(); // pitch ভুলে যাওয়া
+        var naive = src.AsSpan(0, w * 4 * h).ToArray(); // forgetting the pitch
 
         Assert.NotEqual(correct, naive);
 
-        // দ্বিতীয় সারির প্রথম পিক্সেল naive-এ প্রথম সারির padding থেকে এসেছে
+        // the first pixel of row two in naive came from the padding of row one
         Assert.Equal(0xEE, naive[w * 4]);
-        Assert.Equal(0x00, correct[w * 4]); // আসল: কলাম ০
+        Assert.Equal(0x00, correct[w * 4]); // real: column 0
     }
 
     [Fact]
     public void শেষ_সারির_padding_না_থাকলেও_চলে()
     {
-        // ড্রাইভার শেষ সারির পরে padding না-ও দিতে পারে
+        // the driver may give no padding after the last row
         const int w = 8, h = 4;
         const int pitch = (w * 4) + 64;
         var full = Grid(pitch, w, h);
@@ -98,7 +99,7 @@ public class PixelCopyTests
         var dest = PixelCopy.ToTightBuffer(clipped, pitch, w, h);
 
         Assert.Equal(w * 4 * h, dest.Length);
-        Assert.Equal((byte)(h - 1), dest[((h - 1) * w * 4) + 1]); // শেষ সারি ঠিক এসেছে
+        Assert.Equal((byte)(h - 1), dest[((h - 1) * w * 4) + 1]); // the last row came through right
     }
 
     [Fact]
@@ -125,7 +126,8 @@ public class PixelCopyTests
     [Fact]
     public void Pitch_প্রস্থের_চেয়ে_ছোট_হলে_নাকচ()
     {
-        // width × 4-এর কম pitch মানে হিসাব কোথাও ভুল — চুপ করে মেনে নেওয়ার জিনিস নয়
+        // a pitch smaller than width x 4 means the calculation is wrong somewhere; not something
+        // to accept quietly
         Assert.Throws<ArgumentOutOfRangeException>(
             () => PixelCopy.ToTightBuffer(new byte[1024], 16, 8, 4));
     }
@@ -135,7 +137,7 @@ public class PixelCopyTests
     [Fact]
     public void পুল_বড়_হলে_কনটেন্টের_মাপই_নেওয়া_হয়()
     {
-        // মনিটর ১৯২০×১০৮০-এ নামানোর পরেও পুল কিছুক্ষণ ২৫৬০×১৪৪০ দিতে থাকে
+        // after the monitor is lowered to 1920x1080 the pool keeps returning 2560x1440 for a while
         var (w, h) = PixelCopy.ContentBounds(2560, 1440, 1920, 1080);
 
         Assert.Equal(1920, w);
@@ -145,7 +147,7 @@ public class PixelCopyTests
     [Fact]
     public void কনটেন্ট_বড়_দেখালেও_টেক্সচারের_বাইরে_যাওয়া_হয়_না()
     {
-        // উল্টো দিকটাও ঠেকাতে হবে — নইলে টেক্সচারের বাইরে পড়ে যেত
+        // the opposite direction must be prevented too; otherwise it would fall outside the texture
         var (w, h) = PixelCopy.ContentBounds(1920, 1080, 2560, 1440);
 
         Assert.Equal(1920, w);
@@ -170,9 +172,11 @@ public class PixelCopyTests
         Assert.Equal(0, h);
     }
 
-    // ── ঘূর্ণন ──────────────────────────────────────────────────────────────
+    // ── rotation ────────────────────────────────────────────────────────────
 
-    /// <summary>প্রতিটি পিক্সেলে B = কলাম, G = সারি — ঘোরানোর পর কে কোথায় গেল দেখা যায়।</summary>
+    /// <summary>
+    /// B = column, G = row in every pixel; after rotating you can see who went where.
+    /// </summary>
     private static byte[] Tagged(int w, int h)
     {
         var buf = new byte[w * h * 4];
@@ -216,11 +220,11 @@ public class PixelCopyTests
         Assert.Equal(3, w);
         Assert.Equal(4, h);
 
-        // ঘড়ির কাঁটার দিকে ৯০°: উৎসের বাঁ-উপরের কোণা (0,0) যায় ডান-উপরে
+        // 90° clockwise: the source's top-left corner (0,0) goes to the top-right
         Assert.Equal((0, 0), At(dst, w, 2, 0));
-        // উৎসের ডান-উপরের কোণা (3,0) যায় ডান-নিচে
+        // the source's top-right corner (3,0) goes to the bottom-right
         Assert.Equal((3, 0), At(dst, w, 2, 3));
-        // উৎসের বাঁ-নিচের কোণা (0,2) যায় বাঁ-উপরে
+        // the source's bottom-left corner (0,2) goes to the top-left
         Assert.Equal((0, 2), At(dst, w, 0, 0));
     }
 
@@ -232,14 +236,15 @@ public class PixelCopyTests
 
         Assert.Equal(4, w);
         Assert.Equal(3, h);
-        Assert.Equal((0, 0), At(dst, w, 3, 2)); // বাঁ-উপর → ডান-নিচ
-        Assert.Equal((3, 2), At(dst, w, 0, 0)); // ডান-নিচ → বাঁ-উপর
+        Assert.Equal((0, 0), At(dst, w, 3, 2)); // top-left → bottom-right
+        Assert.Equal((3, 2), At(dst, w, 0, 0)); // bottom-right → top-left
     }
 
     [Fact]
     public void চার_পাক_ঘোরালে_আবার_আগের_জায়গায়()
     {
-        // ঘূর্ণনের সবচেয়ে ভালো পরীক্ষা — যোগ করে পুরো বৃত্ত হলে ফল অপরিবর্তিত
+        // the best test of rotation: applying it four times, a full circle, leaves the result
+        // unchanged
         var src = Tagged(5, 3);
         var cur = (Pixels: src, Width: 5, Height: 3);
 
@@ -279,7 +284,7 @@ public class PixelCopyTests
     [Fact]
     public void অচেনা_ঘূর্ণন_কোডে_ঘোরানো_হয়_না()
     {
-        // অজানা মান পেলে আন্দাজে ঘোরানোর চেয়ে না ঘোরানোই নিরাপদ
+        // given an unknown value, not rotating is safer than rotating by a guess
         Assert.Equal(0, PixelCopy.TurnsForRotation(99));
     }
 }

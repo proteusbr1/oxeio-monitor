@@ -28,7 +28,7 @@ export class AuditLogQueryDto {
   @IsOptional() @IsISO8601()
   from?: string;
 
-  /** ⚠️ ধরা হয় **exclusive** নয়, inclusive — নিচে সার্ভিসে ব্যাখ্যা আছে */
+  /** Careful: treated as inclusive, not exclusive; explained in the service below */
   @IsOptional() @IsISO8601()
   to?: string;
 
@@ -36,8 +36,8 @@ export class AuditLogQueryDto {
   page?: number;
 
   /**
-   * ⚠️ ২০০-র বেশি চাইলে ৪০০ — চুপচাপ ২০০-তে নামিয়ে দেওয়া হয় না।
-   * নামিয়ে দিলে ক্লায়েন্ট ভাবত সে সব পেয়ে গেছে, অথচ পায়নি।
+   * Careful: asking for more than 200 returns 400; it is not quietly cut down
+   * to 200. If it were, the client would think it had received everything when it had not.
    */
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(200)
   pageSize?: number;

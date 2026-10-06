@@ -2,21 +2,20 @@ import { ProgressRing } from '../../components/ProgressRing';
 import { formatDuration, formatHours } from '../../lib/format';
 
 /**
- * E01/E02 — **আজকের** টার্গেটের রিং (`todayWorkedSec / dailyTargetSec`)।
+ * Ring for **today's** target (`todayWorkedSec / dailyTargetSec`).
  *
- * ⭐ এটা এখন শেয়ার্ড `components/ProgressRing`-এর **পাতলা মোড়ক**, নিজের
- *    আলাদা SVG নয়।
+ * Important: this is a **thin wrapper** around the shared `components/ProgressRing`,
+ *    not a separate SVG.
  *
- *    আগে এখানে গোটা রিংটা আবার লেখা ছিল, দুটো কারণে: (১) `ProgressRing`-এর
- *    doc-এ লেখা ছিল "রিংটা মাসিক, দৈনিক নয়", আর (২) ওর `aria-label`-এ
- *    "মাসিক অগ্রগতি" হার্ডকোড ছিল — স্ক্রিন রিডারে আজকের রিংটা "মাসিক" বলে
- *    পরিচয় দিত। **দুটোই এখন নেই**: ওটা `ariaLabel` প্রপ নিয়েছে আর doc-ও
- *    সংশোধন হয়েছে, তাই কারণ দুটো উঠে গেছে।
+ *    The whole ring used to be duplicated here for two reasons: `ProgressRing`'s doc
+ *    said the ring was monthly, not daily, and its `aria-label` hardcoded "monthly
+ *    progress", so screen readers called today's ring "monthly". Both are gone now:
+ *    `ProgressRing` takes an `ariaLabel` prop and its doc is fixed.
  *
- * ⚠️ নকলটা রেখে দেওয়া যেত, কিন্তু তাতে জ্যামিতি ও রঙের নিয়ম **দুই জায়গায়**
- *    থাকত। ঠিক সেটাই একবার ঘটেছিল: রঙের নিয়ম বদলানোর পর লাইভ বোর্ডের রিং
- *    পুরোনো নিয়মেই রয়ে গিয়েছিল, আর একই ড্যাশবোর্ডে দুই রকম রিং দাঁড়িয়ে
- *    গিয়েছিল। এক জায়গায় রাখলে ওটা আর সম্ভব নয়।
+ * Careful: keeping the copy would put the geometry and colour rules in **two
+ *    places**. That has happened before: after the colour rules changed, the live
+ *    board's ring kept the old rules and the same dashboard showed two kinds of
+ *    ring. With one implementation that cannot happen.
  */
 export function TodayRing({
   workedSec,
@@ -24,7 +23,7 @@ export function TodayRing({
   size = 46,
 }: {
   workedSec: number;
-  /** ⚠️ **সার্ভারের `dailyTargetSec`** — ৮ ঘণ্টা হার্ডকোড নয় */
+  /** Careful: the **server's `dailyTargetSec`**, not a hardcoded 8 hours */
   targetSec: number;
   size?: number;
 }) {
@@ -39,18 +38,18 @@ export function TodayRing({
 }
 
 /**
- * রিংয়ের নিচের `of 8h` — **সার্ভারের `dailyTargetSec` থেকে**।
+ * The `of 8h` text under the ring, derived **from the server's `dailyTargetSec`**.
  *
- * ⭐ পুরো ঘণ্টা হলে `8h`, নইলে শেয়ার্ড `formatDuration` (`7h 42m`)।
- *    সরাসরি `formatDuration` লিখলে আগস্টে `8h 0m` বসত — ওই শূন্য মিনিটটা
- *    প্রতিদিন প্রতিটা কার্ডে চোখে লাগত, অথচ কিছুই বলত না।
+ * Whole hours render as `8h`, otherwise the shared `formatDuration` (`7h 42m`).
+ *    Using `formatDuration` directly would show `8h 0m`: a pointless zero
+ *    minutes on every card, every day.
  *
- * ⚠️ `formatHours(sec, 0)` এখানে **শুধু পুরো ঘণ্টার শাখায়** — round করে
- *    বলে ২৭ কর্মদিবসের মাসে ৭ঘ ৪২মি-কে সে "8" বানিয়ে দিত, আর টার্গেট
- *    নীরবে ভুল দেখাত। ভগ্নাংশ থাকলে তাই `formatDuration`।
+ * Careful: `formatHours(sec, 0)` is used **only in the whole-hours branch**. It
+ *    rounds, so in a 27-workday month it would turn 7h 42m into "8" and show the
+ *    target wrongly. With a fraction, use `formatDuration`.
  *
- * ⚠️ শেয়ার্ড `format.ts`-এ `formatDurationShort()` যোগ হলে এটা মুছে
- *    দেওয়াই ভালো — সময়ের লেখা এক জায়গাতেই থাকা উচিত।
+ * Careful: once the shared `format.ts` gets a `formatDurationShort()`, delete this;
+ *    duration formatting belongs in one place.
  */
 export function targetText(targetSec: number): string {
   return targetSec % 3600 === 0
@@ -59,17 +58,17 @@ export function targetText(targetSec: number): string {
 }
 
 /**
- * রিংয়ের জায়গায় ছুটির চিহ্ন — `todayIsWorkday === false` হলে।
+ * Day-off marker in place of the ring, when `todayIsWorkday === false`.
  *
- * ⚠️ লেখাটা কেন "Weekly off"/"Holiday" নয়: `GET /live` শুধু
- *    `todayIsWorkday` (bool) পাঠায়, **কারণটা নয়**। শুক্রবারের সাপ্তাহিক
- *    ছুটিকে "Holiday" বা ২১শে ফেব্রুয়ারিকে "Weekly off" লিখলে অর্ধেক
- *    ক্ষেত্রেই ভুল শব্দ বসত — আর ভুল শব্দ কেউ ধরতেও পারত না। সার্ভার
- *    `'weekly_off' | 'holiday'` পাঠাতে শুরু করলে (রিপোর্টে `DayType`
- *    আগে থেকেই আছে) এখানে ঠিক শব্দটাই বসবে।
+ * Careful: why the text is not "Weekly off"/"Holiday": `GET /live` sends only
+ *    `todayIsWorkday` (a bool), **not the reason**. Writing "Holiday" for a Friday
+ *    weekly off, or "Weekly off" for a public holiday, would be the wrong word half
+ *    the time, and nobody would notice. Once the server sends
+ *    `'weekly_off' | 'holiday'` (reports already have `DayType`), the exact word
+ *    can be shown here.
  *
- * ⚠️ ছুটি মানে "কাজ নিষিদ্ধ" নয় — তাই কার্ডে আজকের ঘণ্টা তবু দেখানো হয়,
- *    শুধু টার্গেটের তুলনাটা থাকে না।
+ * Careful: a day off does not mean work is forbidden, so the card still shows
+ *    today's hours, just without the comparison to the target.
  */
 export function DayOffTag() {
   return (

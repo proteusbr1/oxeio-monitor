@@ -1,16 +1,16 @@
 import { useEffect, useRef } from 'react';
 
 /**
- * I09 — "Signing out in 60 seconds"।
+ * I09: "Signing out in 60 seconds".
  *
- * ⚠️ `settings/ui.tsx`-এর `Modal` ব্যবহার করা হয়নি, ইচ্ছাকৃতভাবে: ওটা
- *    `document.body`-র স্ক্রল বন্ধ করে আর পুরো পর্দা ঢেকে দেয়। আধঘণ্টা ধরে
- *    রিপোর্ট পড়তে থাকা ব্যবহারকারীর সামনে হঠাৎ গোটা পাতা ঢেকে ফেলা মানে
- *    তার কাজেই বাধা — অথচ এই বার্তার উদ্দেশ্যই ছিল বাধা **কমানো**। তাই
- *    কোণায় বসা একটা toast; পেছনের পাতা পুরোপুরি ব্যবহারযোগ্য থাকে।
+ * Careful: `Modal` from `settings/ui.tsx` is deliberately not used. It locks the
+ * scroll of `document.body` and covers the whole screen. Covering the whole page
+ * in front of someone who has been reading a report for half an hour interrupts
+ * their work, while the point of this message was to reduce interruption. So it
+ * is a toast in the corner; the page behind stays fully usable.
  *
- * ⚠️ `role="alertdialog"` + `aria-live` — সময়ের ব্যাপারটা স্ক্রিন রিডারে
- *    না শোনালে এটা ঠিক সেই "চুপচাপ লগআউট"-ই হতো, শুধু অন্য কারো জন্য।
+ * Careful: `role="alertdialog"` + `aria-live`: if the time were not announced to
+ * screen readers, this would be exactly the silent logout, just for someone else.
  */
 export function IdleWarning({
   secondsLeft,
@@ -24,14 +24,15 @@ export function IdleWarning({
   const boxRef = useRef<HTMLDivElement>(null);
 
   /**
-   * ⚠️ **যেকোনো ক্লিকে বাতিল** — স্পেসিফিকেশনের শর্ত। `useIdleLogout`-এর
-   *    নিজের লিসেনারও এটা করে, কিন্তু সেটা ৫ সেকেন্ড থ্রটল করা; সতর্কবার্তা
-   *    চলাকালীন ওই দেরিটুকুও অস্বস্তিকর, কারণ ব্যবহারকারী ক্লিক করেও
-   *    কাউন্টডাউন কমতে দেখত। তাই এখানে থ্রটল ছাড়া, capture ধাপে।
+   * Careful: any click cancels, as the spec requires. `useIdleLogout` has its own
+   * listener that does this too, but it is throttled to 5 seconds; during the
+   * warning even that delay is uncomfortable, because the user would click and
+   * still watch the countdown drop. So this one has no throttle and runs in the
+   * capture phase.
    *
-   * ⚠️ বাক্সের **ভেতরের** ক্লিক বাদ — নইলে "এখনই বেরোই" কাজই করত না:
-   *    `mousedown`-এই `onStay` চলে বাক্সটা unmount হয়ে যেত, আর `click`
-   *    ইভেন্টটা আর কোনো বোতামে পৌঁছাত না।
+   * Careful: clicks inside the box are excluded. Otherwise "Sign out now" would not
+   * work: `onStay` would run on `mousedown` and unmount the box, and the `click`
+   * event would never reach any button.
    */
   useEffect(() => {
     const cancel = (e: Event): void => {
@@ -59,8 +60,8 @@ export function IdleWarning({
       className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-sm rounded-xl border border-brand/40 bg-surface p-4 shadow-lg sm:inset-x-auto sm:right-4 sm:bottom-4"
     >
       {/*
-        ⚠️ একবচন/বহুবচন — "1 seconds" লেখাটা কাউন্টডাউনের শেষ সেকেন্ডে
-           প্রতিবারই চোখে পড়ত।
+        Careful: singular/plural: "1 seconds" would be noticed on the last second of
+           the countdown every single time.
       */}
       <h2 className="text-[14px] font-semibold text-brand-ink">
         Signing out in {secondsLeft} second{secondsLeft === 1 ? '' : 's'}

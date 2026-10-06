@@ -44,21 +44,21 @@ import {
 import { DropReasonPicker, DropReasonTag } from './DropReason';
 
 /**
- * **সব ডিজাইন-টার্গেট** *(২৩ আগস্ট, মালিকের চাওয়া)* — সাইডবারে
- * **"Design Pool"** *(মালিকের দেওয়া নাম, ২৩ আগস্ট)*।
+ * **All design targets**: the sidebar entry is **"Design Pool"** (a name the
+ * owner chose).
  *
- * ⚠️ ফাইলের নাম `AllTargetsPage` রয়ে গেছে ইচ্ছাকৃতভাবে — রুট
- * (`targets/all`), import আর App.tsx সব একসাথে বদলানো মানে অকারণ churn,
- * অথচ ব্যবহারকারী ফাইলের নাম দেখেন না। ⭐ পর্দার নাম আর ফাইলের নাম
- * আলাদা হলে বিভ্রান্তি হতে পারে, তাই কথাটা এখানে লেখা রইল।
+ * Careful: the file is still called `AllTargetsPage` on purpose. Renaming the
+ * route (`targets/all`), the imports and App.tsx together would be needless
+ * churn, and users never see the file name. Screen name and file name differ,
+ * which can confuse, so it is noted here.
  *
- * ⚠️⚠️ **"Pool" শব্দটা এই পাতাতেই আবার আসে** — অবস্থার চিপে (`Pool` =
- * এখনো কারো হাতে যায়নি)। অর্থাৎ পাতার নাম "Design Pool" হলেও পাতাটা
- * **সব অবস্থাই** দেখায়, কেবল pool নয়। subtitle ("Every link, and where
- * it stands") ইচ্ছাকৃতভাবে রাখা হয়েছে ঠিক সেই কারণেই।
+ * Important: **the word "Pool" appears again on this page**, in the status chip
+ * (`Pool` = not yet handed to anyone). So although the page is named "Design
+ * Pool", it shows **every status**, not only the pool. The subtitle ("Every
+ * link, and where it stands") is there for exactly that reason.
  *
- * ⚠️ জমা দেওয়ার পাতাটা আলাদা: দুটো আলাদা কাজ, আর এক পাতায় থাকলে
- * ৫০০ লাইন পেস্ট করতে গিয়ে প্রতিবার ৩৯ হাজারের তালিকাও লোড হতো।
+ * Careful: the submission page is separate. They are two different jobs, and
+ * on one page every paste of 500 lines would also load the 39,000-row list.
  */
 export function AllTargetsPage() {
   return (
@@ -70,79 +70,80 @@ export function AllTargetsPage() {
 
 
 /**
- * ⭐⭐ **পুরো তালিকা** *(২৩ আগস্ট, মালিকের চাওয়া)*।
+ * **The full list.**
  *
- * ⚠️⚠️ **পাতা ভাগ ছাড়া এটা বানানো যেত না** — টেবিলে ৩৯ হাজারের বেশি
- * সারি। সব একসাথে আনলে উত্তরটা কয়েক MB হতো, আর ব্রাউজার টেবিলটা আঁকতে
- * গিয়ে জমে যেত।
+ * Important: **this could not be built without pagination.** The table has
+ * more than 39,000 rows; fetching them all would make a response of several MB
+ * and the browser would freeze drawing the table.
  *
- * ⭐ খোঁজার ঘরে **URL বা ASIN** দুটোই চলে — গবেষক একটা লিঙ্ক পেস্ট করে
- * দেখে নিতে পারেন ওটা আগে হয়ে গেছে কি না, আর কে করেছিল।
+ * The search box accepts **a URL or an ASIN**: a researcher can paste a link
+ * to check whether it was already done, and by whom.
  */
-/** ঢাকার আজকের তারিখ, `YYYY-MM-DD` */
+/** Today's date in Dhaka, `YYYY-MM-DD` */
 function dhakaToday(): string {
-  // ⚠️ `toISOString()` UTC দেয় — ঢাকায় ভোর ৬টার আগে সেটা গতকাল দেখাত
+  // Careful: `toISOString()` gives UTC; in Dhaka before 6 am it would show yesterday
   return todayInDhaka();
 }
 
 /**
- * ⭐⭐ **এক টেবিল, দুই পাতা** *(৩১ আগস্ট ২০২৬)*।
+ * **One table, two pages.**
  *
- * ⚠️⚠️ `lockedStage` দিলে পাতাটা **ওই কিউতেই আটকে থাকে**: চিপের সারি ও
- * অবস্থার ড্রপডাউন বসে না, কারণ ওগুলো দিয়ে কেউ Review পাতা থেকে বেরিয়ে
- * অন্য কিছু দেখতে পারত — তখন পাতার নাম আর পাতার বিষয় আলাদা হয়ে যেত।
+ * Careful: when `lockedStage` is given the page **stays locked to that queue**:
+ * the chip row and the status dropdown are not shown, because with them someone
+ * could leave the Review page and look at something else, and the page's name
+ * would no longer match its subject.
  *
- * ⭐ খোঁজা ও বাকি ছাঁকনি (ডিজাইনার · কে এনেছেন · তারিখ) **থাকে** — ওগুলো
- * কিউয়ের ভেতরে খোঁজার জিনিস, কিউ থেকে বেরোনোর নয়।
+ * Search and the other filters (designer · added by · date) **stay**: they are
+ * for searching inside the queue, not for leaving it.
  *
- * ⚠️ মার্কআপটা **নকল করা হয়নি, ভাগ করা হয়েছে** — ১৭ আগস্টে Worklog-এর
- * সময় শেখা: দুই জায়গায় কপি থাকলে একদিন একটা বদলাত আর অন্যটা নয়।
+ * Careful: the markup is **shared, not copied**. Lesson from the Worklog page:
+ * with copies in two places, one day one changes and the other does not.
  */
 export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
   const [filter, setFilter] = useState<FilterKey>(lockedStage ?? 'all');
-  /** ⚠️ আটকানো পাতায় কিউ বদলানোর কন্ট্রোলগুলো বসে না */
+  /** Careful: the locked page does not show the controls for switching queues */
   const showQueues = lockedStage === undefined;
   const [q, setQ] = useState('');
   const [staffId, setStaffId] = useState('');
-  /** ⭐ কে এনেছেন — `users.id`, `staffId`-র (`employees.id`) থেকে আলাদা */
+  /** Added by: `users.id`, which is different from `staffId` (`employees.id`) */
   const [addedById, setAddedById] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [page, setPage] = useState(1);
-  /** ⭐ বাকি ছাঁকনিগুলো খোলা আছে কি না *(২৫ আগস্ট)* — ডিফল্টে বন্ধ */
+  /** Whether the other filters are open; closed by default */
   const [showFilters, setShowFilters] = useState(false);
   const edit = useMutation();
 
   /**
-   * ⭐⭐ **বেছে নেওয়া সারিগুলো** *(মালিকের চাওয়া, ২৯ আগস্ট ২০২৬:
-   * "not found asin gula delete korar time e select kora zabe")*।
+   * **Selected rows.** Requested by the owner so that "not found" ASINs can be
+   * selected when deleting.
    *
-   * ⚠️ `Set`, `TargetRow[]` নয় — দরকার শুধু "এটা বাছা হয়েছে কি না",
-   * আর সারির বাকি তথ্য তালিকাতেই আছে। সারি জমিয়ে রাখলে রিফ্রেশের পর
-   * পুরোনো কপি হাতে থেকে যেত।
+   * Careful: a `Set`, not `TargetRow[]`: all we need is "is it selected", and
+   * the rest of the row's data is in the list anyway. Keeping rows would leave
+   * stale copies in hand after a refresh.
    */
   const [picked, setPicked] = useState<ReadonlySet<number>>(new Set());
   const [confirmingBulk, setConfirmingBulk] = useState(false);
-  /** ⚠️ শেষ-হওয়া কতগুলো বাদ পড়ল — মোছার পর একবার বলা হয়, তারপর চুপ */
+  /** Careful: how many finished rows were skipped; said once after deleting, then silent */
   const [kept, setKept] = useState(0);
 
   const designers = useApi(listTargetDesigners, []);
   /**
-   * ⭐⭐ **কে কতগুলো এনেছেন** *(মালিকের চাওয়া, ২৫ আগস্ট)*।
+   * **Who added how many.**
    *
-   * ⚠️ সংখ্যাটা ড্রপডাউনের ভেতরেই লেখা থাকে, তাই মালিক **কিছু না চেপেই**
-   * উত্তরটা পান — ছাঁকাটা তার পরের ধাপ, বাধ্যতামূলক নয়।
+   * Careful: the number is written inside the dropdown, so the owner gets the
+   * answer **without clicking anything**; filtering is the next step, not required.
    */
   const adders = useApi(listTargetAdders, []);
-  /** ⭐ চিপের পাশের সংখ্যাটা — ক্লিক করার **আগেই** জানা দরকার কাজ আছে কি না */
+  /** The number beside the chip: you need to know there is work **before** clicking */
   const stats = useApi(targetStats, []);
 
   /**
-   * ⭐ শর্তটার **নাম আছে** — `role !== 'employee'` লেখা হয়নি।
+   * The condition has a **name**; `role !== 'employee'` is not written inline.
    *
-   * ⚠️ এই প্রকল্পে নাম না দেওয়া অধিকার-শর্ত বারবার বাগ তৈরি করেছে
-   * (G134: ম্যানেজার নেভে Settings দেখতেন, চাপলে "There's nothing at this
-   * address")। নাম থাকলে বদলানোর সময় সব জায়গা একসাথে বদলায়।
+   * Careful: in this project, unnamed permission conditions have repeatedly
+   * caused bugs (G134: a manager saw Settings in the nav and, when clicking it,
+   * got "There's nothing at this address"). With a name, all places change together.
    */
   const { user } = useAuth();
   const mayDelete = user?.role === 'owner' || user?.role === 'manager';
@@ -152,9 +153,9 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
       listTargets(
         {
           /**
-           * ⚠️ কিউ দুটো `status` নয় — তাই আলাদা করে পাঠাতে হয়। `stage`
-           *    থাকলে `status` পাঠানো হয় **না**, নইলে দুটো ছাঁকনি একসাথে
-           *    বসে কিউটা খালি দেখাত।
+           * Careful: the queues are not a `status`, so they are sent separately.
+           *    When `stage` is set, `status` is **not** sent; otherwise the two
+           *    filters would combine and the queue would look empty.
            */
           ...(stageOf(filter)
             ? { stage: stageOf(filter) }
@@ -174,9 +175,10 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
   );
 
   /**
-   * ⚠️⚠️ **ছাঁকনি বা পাতা বদলালে বাছাই মুছে যায়, আর এটা নিরাপত্তার শর্ত।**
-   * নইলে ২ নম্বর পাতায় ৫০টা বেছে, তারপর ছাঁকনি বদলে Delete চাপলে
-   * **চোখের সামনে নেই এমন** সারি মুছে যেত — আর কেউ বুঝতই না কী গেল।
+   * Important: **changing the filter or the page clears the selection, and
+   * this is a safety condition.** Otherwise, selecting 50 on page 2, then
+   * changing the filter and pressing Delete would remove rows **that are not
+   * in front of your eyes**, and nobody would know what went.
    */
   useEffect(() => {
     setPicked(new Set());
@@ -184,30 +186,32 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
   }, [filter, q, staffId, addedById, from, to, page]);
 
   /**
-   * ⭐⭐ **গোটানো ছাঁকনির গায়ের সংখ্যাটা** *(২৫ আগস্ট)*।
+   * **The count on the collapsed filters' button.**
    *
-   * ⚠️⚠️ লুকোনো ছাঁকনি নিজেই একটা ফাঁদ: কেউ কাল এসে খালি তালিকা দেখে
-   * ভাবত ডেটা হারিয়ে গেছে, অথচ গতকালের তারিখটাই বসে ছিল। এই সংখ্যাটাই
-   * সেই ফাঁদটা বন্ধ করে — বোতামে সংখ্যা থাকলে সেটা লালও হয়ে থাকে।
+   * Careful: a hidden filter is a trap in itself: someone coming back
+   * tomorrow sees an empty list and thinks data was lost, when yesterday's
+   * date was still set. This number closes the trap; when the button shows a
+   * number it also turns red.
    */
   const activeFilters =
     (staffId ? 1 : 0) + (addedById ? 1 : 0) + (from ? 1 : 0) + (to ? 1 : 0);
 
   /**
-   * ⭐ ড্রপডাউনে কী দেখাবে — কিউ-চিপ বাছা থাকলে `all`।
+   * What the dropdown shows: `all` when a queue chip is selected.
    *
-   * ⚠️ চিপ আর ড্রপডাউন **একই চলক** (`filter`) ধরে চলে, তাই একটা বাছলে
-   * অন্যটা নিজে থেকেই ছেড়ে দেয়। দুটো আলাদা চলক রাখলে একদিন দুটোই
-   * বসে যেত, আর তালিকা খালি দেখাত।
+   * Careful: the chip and the dropdown work off **the same variable** (`filter`),
+   * so picking one releases the other by itself. With two separate variables
+   * both would apply one day and the list would look empty.
    *
-   * ⚠️⚠️ `done_today` আসল অবস্থা নয় — তাই মিলিয়ে দেখা হয়, মনে রাখা হয়
-   * না। মনে রাখলে মালিক হাতে তারিখ বদলানোর পরেও ড্রপডাউন "আজ" বলত।
+   * Careful: `done_today` is not a real status, so it is worked out by
+   * matching, not remembered. If remembered, the dropdown would still say
+   * "today" after the owner changes the dates by hand.
    */
   const today = dhakaToday();
   const statusValue = dropdownValueOf(filter, from, to, today);
 
   const rows = data.data?.rows ?? [];
-  /** ⚠️ খালি পাতায় `every()` সত্যি বলে — তাই সংখ্যাটাও দেখা হয় */
+  /** Careful: `every()` is true on an empty page, so the count is checked too */
   const allPicked = rows.length > 0 && rows.every((r) => picked.has(r.id));
 
   const toggleAll = () =>
@@ -216,14 +220,14 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
   const toggleOne = (id: number) =>
     setPicked((prev) => {
       const next = new Set(prev);
-      // ⚠️ `delete()` false ফেরালে তবেই যোগ — দুই লাইনের if/else নয়
+      // Careful: add only if `delete()` returned false; not a two-line if/else
       if (!next.delete(id)) next.add(id);
       return next;
     });
 
   /**
-   * ⭐ চেকবক্সের কলামটা কেবল যাঁর মোছার অধিকার আছে তাঁর কাছে — গবেষকের
-   * পর্দায় বসালে বেছে নেওয়া যেত, অথচ কিছুই করা যেত না।
+   * The checkbox column is only for people who may delete; on a researcher's
+   * screen they could select rows but nothing could be done with them.
    */
   const pickColumn: Column<TargetRow>[] = mayDelete
     ? [
@@ -252,13 +256,13 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
       ]
     : [];
 
-  /** ⚠️ ছাঁকনি বা খোঁজা বদলালে পাতা ১-এ ফেরত — নইলে ৫ নম্বর পাতায় বসে
-   *  থেকে "কিছু নেই" দেখা যেত, অথচ ফল আছে */
+  /** Careful: changing a filter or the search goes back to page 1; otherwise
+   *  you would sit on page 5 seeing "nothing here" although results exist */
   /**
-   * ⭐ লেখাটা কি একটা লিঙ্ক? — `/` বা `:` থাকলেই যথেষ্ট।
+   * Is the text a link? A `/` or `:` is enough.
    *
-   * ⚠️ নিখুঁত URL পার্সিং নয়, ইচ্ছাকৃতভাবে: কাজটা কেবল **ইঙ্গিত দেখানো**,
-   *    কিছু আটকানো নয়। ASIN বা Job নম্বরে এ দুটো অক্ষরের একটাও থাকে না।
+   * Careful: this is deliberately not exact URL parsing. The job is only to
+   *    **show a hint**, not to block anything. An ASIN or Job number contains neither character.
    */
   const looksLikeUrl = /[/:]/.test(q);
 
@@ -271,9 +275,9 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
     <Card
       title="Every Target"
       /*
-        ⚠️ "Newest activity first" আগে ছাঁকনির সারিতে একটা আলাদা লেখা
-           ছিল — একটা গোটা কন্ট্রোলের জায়গা নিত, অথচ কিছুই করত না।
-        ⭐ কথাটা সত্যি আর দরকারি, তাই মোছা হয়নি — সংখ্যাটার পাশে এসেছে।
+        Careful: "Newest activity first" used to be a separate label in the
+           filter row; it took a whole control's space and did nothing.
+        It is true and useful, so it was not deleted; it moved next to the count.
       */
       hint={
         data.data
@@ -310,9 +314,9 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
           >
             {f.label}
             {/*
-              ⭐ সংখ্যাটা চিপেই — ক্লিক করার **আগেই** জানা দরকার আজ কাজ
-                 আছে কি না। ⚠️ ০ হলেও দেখানো হয়, কারণ "০" মানে
-                 "শেষ করেছি", আর সেটাই একমাত্র পুরস্কার এখানে।
+              The count is on the chip itself: you need to know whether there is
+                 work today **before** clicking. Careful: it is shown even at 0,
+                 because "0" means "I'm done", the only reward here.
             */}
             {stats.data ? (
               <span className="num ml-1.5 text-ink-3">
@@ -331,12 +335,12 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
           ))}
 
         {/*
-          ⭐⭐ **পাঁচটা অবস্থা-চিপের বদলে একটা ড্রপডাউন** *(২৫ আগস্ট)*।
+          **One dropdown instead of five status chips.**
 
-          ⚠️ `done_today` বেছে নিলে তারিখ দুটোও বসে যায়, তাই মানটা
-             ফিরে আসে `done` হিসেবে — নিচের `statusValue` সেটা মিলিয়ে
-             দেখে আবার `done_today` দেখায়। ⭐ ছাঁকনি যা করেছে, ড্রপডাউন
-             ঠিক তা-ই বলে; দুটো আলাদা হলে কেউ বিশ্বাস করত না।
+          Careful: choosing `done_today` also sets both dates, so the value
+             comes back as `done`; `statusValue` below matches it and shows
+             `done_today` again. What the dropdown says is exactly what the
+             filter does; if they differed nobody would trust it.
         */}
         {showQueues && (
           <select
@@ -351,8 +355,8 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
                 return;
               }
               setFilter(v as FilterKey);
-              // ⚠️ "আজ" থেকে বেরোলে তারিখ দুটোও ছাড়তে হয়, নইলে কেউ
-              //    "Done" বেছে খালি তালিকা দেখে ভাবত ডেটা হারিয়ে গেছে
+              // Careful: leaving "today" must also clear both dates, otherwise
+              //    someone picking "Done" would see an empty list and think data was lost
               if (statusValue === 'done_today') {
                 setFrom('');
                 setTo('');
@@ -374,15 +378,15 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
         )}
 
         {/*
-          ⭐⭐ **বাকি ছাঁকনিগুলো গোটানো** *(২৫ আগস্ট)*।
+          **The other filters are collapsed.**
 
-          ⚠️⚠️ চারটে ঘরই (ডিজাইনার · কে এনেছেন · দুটো তারিখ) বেশিরভাগ
-             সময় **খালি পড়ে থাকে**, অথচ রোজ পর্দার একটা গোটা সারি নেয়।
+          Careful: all four fields (designer · added by · two dates) **sit empty**
+             most of the time, yet take a whole row of the screen every day.
 
-          ⚠️ কিন্তু লুকোনো ছাঁকনি নিজেই একটা ফাঁদ — কেউ কাল এসে খালি
-             তালিকা দেখে ভাবত ডেটা হারিয়ে গেছে। ⭐ তাই বোতামের গায়ে
-             **সংখ্যা** বসে, আর সংখ্যা থাকলে বোতামটা লাল হয়ে থাকে।
-             লুকোনো, কিন্তু নীরব নয়।
+          Careful: but a hidden filter is a trap in itself: someone coming back
+             tomorrow sees an empty list and thinks data was lost. So the button
+             carries a **count**, and with a count it stays red.
+             Hidden, but not silent.
         */}
         <button
           type="button"
@@ -400,12 +404,12 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
         </button>
 
         {/*
-          ⭐⭐ **ASIN বা Job নম্বর** *(৬ সেপ্টেম্বর ২০২৬, মালিকের চাওয়া)*।
-             প্রতিটা সারির নিচে Job নম্বরটা লেখা থাকে, অথচ এতদিন ওটা দিয়ে
-             খোঁজা যেত না — একমাত্র পরিচয় ছিল ASIN।
+          **ASIN or Job number.**
+             Every row shows its Job number underneath, yet until now you could not
+             search by it; the only identity was the ASIN.
 
-          ⚠️⚠️ **লিঙ্ক আর চলে না।** আগে পেস্ট করা URL থেকে ASIN বের করে
-             নেওয়া হতো; মালিক ওটা তুলে দিতে বলেছেন।
+          Careful: **links no longer work.** Pasted URLs used to be reduced to
+             an ASIN; the owner asked for that to be removed.
         */}
         <input
           value={q}
@@ -416,9 +420,9 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
       </div>
 
       {/*
-        ⚠️⚠️ লিঙ্ক পেস্ট করলে **বলে দেওয়া হয়**। নইলে ফলটা হতো একটা নীরব
-           খালি তালিকা, আর ব্যবহারকারী ভাবতেন ডিজাইনটা পুলে নেই — অথচ
-           আছে। এই অ্যাপে নীরব ভুল উত্তরই সবচেয়ে অপছন্দের ব্যর্থতা।
+        Careful: when a link is pasted, the user **is told**. Otherwise the result
+           would be a silent empty list, and the user would think the design is not
+           in the pool when it is. A silent wrong answer is the failure this app dislikes most.
       */}
       {looksLikeUrl && (
         <div className="px-4 pb-2 text-[12px] text-idle-ink">
@@ -443,11 +447,11 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
           </select>
 
           {/*
-            ⚠️⚠️ পাশের ড্রপডাউনের সাথে দেখতে এক, অথচ **ভিন্ন টেবিলের id**
-               — ওটা `employees`, এটা `users`। লেখাদুটো তাই আলাদা রাখা,
-               নইলে ওরা যমজ দেখাত।
-            ⭐ প্রতিটা নামের পাশে সংখ্যা — মালিক ছাঁকার **আগেই** দেখেন কে
-               কতটা এনেছেন।
+            Careful: looks the same as the dropdown beside it, but is the **id of a
+               different table**: that one is `employees`, this one `users`. The
+               labels are kept different so they don't look like twins.
+            The number beside each name lets the owner see who added how many
+               **before** filtering.
           */}
           <select
             value={addedById}
@@ -506,13 +510,14 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
       </div>
 
       {/*
-        ⭐⭐⭐ **তালিকাটা কী বলে, আর কী বলে না** *(৯ সেপ্টেম্বর ২০২৬)*।
+        **What the list says, and what it does not.**
 
-        ⚠️⚠️ এই লেখাটা ঐচ্ছিক নয়। একটা "প্রমাণ নেই" তালিকা ব্যাখ্যা ছাড়া
-           পড়লে ওটা একটা **অভিযোগপত্র**, অথচ চিহ্ন না থাকার সবচেয়ে সাধারণ
-           কারণ নির্দোষ: মাঠে একজন গোটা দিন `Untitled-20*`-এ কাজ করেন,
-           কখনো সেভ করেন না — তাঁর ৮০% কাজেরই কোনো চিহ্ন নেই, অথচ কাজটা
-           হয়েছে। ⭐ সংখ্যাটা ভুল নয়, ওটার **মানেটা** সহজে ভুল পড়া যায়।
+        Important: this text is not optional. Read without explanation, a "no
+           evidence" list is an **indictment**, yet the most common reason for
+           no trace is innocent: in the field, someone works all day in
+           `Untitled-20*` and never saves, so 80% of their work leaves no trace
+           although the work was done. The number is not wrong; its **meaning**
+           is easy to misread.
       */}
       {filter === 'no_file' && (
         <div className="px-4 pb-1">
@@ -548,10 +553,10 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
       {data.data && data.data.rows.length > 0 && (
         <>
           {/*
-            ⭐⭐ **কতগুলো বাছা হয়েছে, আর তা নিয়ে কী করা যায়** — বারটা বসে
-               তখনই, যখন অন্তত একটা বাছা। ⚠️ সবসময় বসিয়ে রাখলে পাতার
-               মাথায় একটা খালি ফালি থাকত, আর ২৫ আগস্টের ছাঁটাইয়ের গোটা
-               কথাই ছিল এই পাতায় কম জিনিস রাখা।
+            **How many are selected, and what can be done with them.** The bar
+               appears only when at least one is selected. Careful: if always
+               shown, it would leave an empty strip at the top of the page, and
+               the whole point of the August trimming was fewer things on this page.
           */}
           {mayDelete && picked.size > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-paper px-4 py-2.5">
@@ -577,9 +582,10 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
           )}
 
           {/*
-            ⚠️⚠️ **যেগুলো মোছা হয়নি সেগুলোর কথাও বলা হয়।** ৫০টা বেছে ৪৮টা
-               মুছলে বাকি দুটোর কী হলো সেটা না বললে মানুষ ধরেই নিতেন সব
-               মুছে গেছে — আর শেষ-হওয়া কাজ চুপচাপ তালিকায় থেকে যেত।
+            Careful: **the rows that were not deleted are reported too.** After
+               selecting 50 and deleting 48, without saying what happened to the
+               other two people would assume all went, and finished work would
+               silently stay in the list.
           */}
           {kept > 0 && (
             <div className="px-4 pt-3">
@@ -593,12 +599,12 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
           )}
 
           {/*
-            ⚠️⚠️ **`ConfirmDialog` নয়, খোলা `Modal` — আর কারণটা গঠনগত**
-               *(৩১ আগস্ট)*। ওই ডায়ালগের নিজের একটা "Delete" বোতাম আছে, আর
-               কারণ বাছাই তার সাথে বাঁধা যেত না: হয় কারণ ছাড়াই মোছা যেত,
-               নয় একটা ডিফল্ট বসাতে হতো — আর ডিফল্ট মানে কেউ কোনোদিন
-               ভেবে বাছত না। ⭐ এখানে **তিনটে কারণই নিচের বোতাম**, অর্থাৎ
-               কারণ না বেছে মোছার কোনো পথ নেই।
+            Careful: **an open `Modal`, not `ConfirmDialog`, and the reason is
+               structural.** That dialog has its own "Delete" button, so the
+               reason picker could not be tied to it: either rows could be deleted
+               with no reason, or a default would have to be preset, and a default
+               means nobody ever picks thoughtfully. Here **all three reasons are
+               the buttons below**, so there is no way to delete without choosing one.
           */}
           {confirmingBulk && (
             <Modal
@@ -630,9 +636,9 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
                   Use this for links whose Amazon page is gone.
                 </p>
                 {/*
-                  ⚠️⚠️ পরিণামটা **দুই দিক থেকেই** লেখা: আর কারো কাছে যাবে না,
-                     আর ওই ASIN কোনোদিন পুলে ফিরতেও পারবে না। দ্বিতীয় কথাটাই
-                     এই বদলের গোটা কারণ, তাই লুকোনো চলে না।
+                  Careful: the consequence is stated **both ways**: it will never go to
+                     anyone again, and that ASIN can never return to the pool. The second
+                     is the whole reason for this change, so it must not be hidden.
                 */}
                 <Notice tone="attention">
                   They stay in the list as Deleted, never go to anyone again, and
@@ -650,14 +656,14 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
             columns={[
               ...pickColumn,
               /*
-                ⭐⭐ **সাতটা কলাম থেকে চারটে** *(মালিকের সিদ্ধান্ত, ২৫
-                   আগস্ট: "khubi gatharing lagoche dekhote")*।
+                **Seven columns down to four** (owner's decision: the table
+                   looked crowded).
 
-                ⚠️⚠️ কোনো তথ্য মোছা হয়নি — **জোড়া লাগানো হয়েছে**, আর
-                   জোড়াগুলো ইচ্ছেমতো নয়:
-                     · Job no. → ASIN-এর নিচে  (দুটোই *পরিচয়*)
-                     · তারিখ  → Stage-এর নিচে  (একই কথা: কোন ধাপে, কবে)
-                     · কে এনেছেন → কে করছেন    (একটা *বাক্য*, দুটো ঘর নয়)
+                Careful: no information was removed; columns were **merged**, and
+                   not arbitrarily:
+                     · Job no. under ASIN       (both are *identity*)
+                     · date under Stage         (same idea: which step, when)
+                     · added by with who's doing it (one *sentence*, not two cells)
               */
               {
                 key: 'design',
@@ -667,16 +673,16 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
                     <a
                       href={r.url}
                       target="_blank"
-                      // ⚠️ tabnabbing ঠেকাতে — নতুন ট্যাব যেন এই পাতা সরাতে না পারে
+                      // Careful: prevents tabnabbing; the new tab must not be able to navigate this page
                       rel="noreferrer noopener"
                       className="num text-data hover:underline"
                     >
                       {r.asin}
                     </a>
                     {/*
-                      ⚠️ কাজের নম্বর **না থাকলে লাইনটাই বসে না** — একটা
-                         "—" দেখানোর চেয়ে ফাঁকা জায়গাই শান্ত, আর পুলে
-                         পড়ে থাকা সারির নম্বর থাকেই না।
+                      Careful: **if there is no job number the line is not rendered at
+                         all**; blank space is calmer than a "—", and a row sitting in
+                         the pool never has a number anyway.
                     */}
                     {r.jobNumber !== null && (
                       <span className="num block text-[11.5px] text-ink-3">
@@ -692,16 +698,16 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
                 render: (r) => (
                   <span className="block">
                     {/*
-                      ⭐ কারণটা চিপের **পাশে**, নিচে নয় *(৩১ আগস্ট)* — নিচের
-                         লাইনটা তারিখের, আর দুটো আলাদা জিনিস এক লাইনে বসলে
-                         কোনটা কী বোঝা যেত না।
+                      The reason goes **beside** the chip, not below it: the line
+                         below is the date, and two different things on one line
+                         could not be told apart.
                     */}
                     <span className="flex flex-wrap items-center gap-1.5">
                       <StatusChip row={r} />
                       <DropReasonTag reason={r.dropReason} />
                       {/*
-                        ⭐ দেখা হয়ে গেলে কে দেখেছেন সেটা এখানেই — সারিটা
-                           কিউ থেকে সরে যায় বলে নইলে খবরটা কোথাও থাকত না।
+                        Once reviewed, who reviewed it is shown here: the row leaves
+                           the queue, so otherwise that information would be nowhere.
                       */}
                       {r.reviewedAt !== null && (
                         <Chip tone="counted">
@@ -714,17 +720,17 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
                 ),
               },
               /**
-               * ⭐⭐⭐ **দাবির পাশে মাপ** *(মালিকের চাওয়া, ৯ সেপ্টেম্বর
-               * ২০২৬: "ka banao")*।
+               * **The measure beside the claim.** Requested by the owner, so a
+               * "done" mark can be backed up.
                *
-               * ⚠️⚠️ **কেন কলামটা দরকার হলো।** "শেষ" চিহ্নটা কর্মীর
-               * নিজের ক্লিক — কেউ যাচাই করে না। ৮ সেপ্টেম্বরে একজনের
-               * ৩২টা "শেষ" নিয়ে প্রশ্ন উঠলে উত্তর দিতে ডাটাবেসে হাতে
-               * কোয়েরি লিখতে হয়েছিল, কারণ পর্দায় দাবিটা ছিল, দাবির
-               * পাশে কিছু ছিল না।
+               * Careful: **why this column was needed.** The "done" mark is the
+               * employee's own click and nobody verifies it. When one person's 32
+               * "done"s were questioned, answering meant writing a query by hand in
+               * the database, because the screen showed the claim and nothing
+               * beside it.
                *
-               * ⭐ নতুন কিছু জমা করতে হয়নি — এজেন্ট শিরোনাম আগে থেকেই
-               * রাখে, আর ফাইলের নাম শুরু হয় জব-নম্বরে।
+               * Nothing new had to be stored: the agent already keeps window
+               * titles, and file names start with the job number.
                */
               {
                 key: 'file',
@@ -736,14 +742,14 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
                 key: 'people',
                 header: 'People',
                 /*
-                  ⭐⭐ **"কে এনেছেন → কে করছেন"** — একটা সারির গোটা গল্প।
+                  **"Added by → doing it"**: the whole story of a row.
 
-                  ⚠️⚠️ দুটো আলাদা id-র জগৎ এক ঘরে বসছে (`users` →
-                     `employees`), আর তীরচিহ্নটা সেটাই বোঝায়: বাঁয়ে যিনি
-                     কাজটা **এনেছেন**, ডানে যিনি **করছেন**।
+                  Careful: two different id worlds sit in one cell (`users` →
+                     `employees`), and the arrow shows that: on the left whoever
+                     **brought** the work, on the right whoever is **doing** it.
 
-                  ⚠️ আনার নামটা **ধূসর**, করার নামটা গাঢ় — রোজকার কাজে
-                     ডিজাইনারের নামটাই বেশি দরকার হয়, তাই ওজনটা সেদিকে।
+                  Careful: the adder's name is **grey**, the doer's name dark: in
+                     daily work the designer's name is needed more, so the weight goes there.
                 */
                 className: 'hidden sm:table-cell',
                 render: (r) => <PeopleCell row={r} />,
@@ -804,8 +810,8 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
                     mayProofread={user?.canProofread === true}
                     onDelete={(reason) =>
                       edit.run(async () => {
-                        // ⚠️ একক পথেও `keptDone` আসে — শেষ-হওয়া সারিতে
-                        //    Delete চাপলে কিছুই ঘটে না, আর সেটা বলা দরকার
+                        // Careful: the single-row path returns `keptDone` too; pressing
+                        //    Delete on a finished row does nothing, and that must be said
                         const res = await deleteTarget(r.id, reason);
                         setKept(res.keptDone);
                         data.reload();
@@ -844,18 +850,18 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
 }
 
 /**
- * ⚠️ "শেষ" হলে **কীভাবে** শেষ হলো সেটাও বলা হয় — সিস্টেম ফাইলের নাম
- * থেকে ধরেছে, নাকি কেউ হাতে বলেছে, নাকি পুরোনো তালিকা থেকে এসেছে।
- * সংখ্যাটা এক, কিন্তু ভরসা এক নয়।
+ * Careful: for "done", **how** it was finished is also shown: whether the
+ * system picked it up from a file name, someone said so by hand, or it came
+ * from the old list. The number is the same but the trust is not.
  */
 function StatusChip({ row }: { row: TargetRow }) {
   if (row.status === 'done') {
     /*
-      ⚠️ পুরোনো Excel থেকে আসা সারিগুলো আলাদা করে বলা হয় — ওগুলোর
-         সংখ্যাটা সত্যি, কিন্তু oXeio সেটা **মাপেনি**, শুধু ইতিহাস
-         হিসেবে নিয়েছে। ভরসার মাত্রা এক নয়।
-      ⚠️ `filename` আর আসে না (২৩ আগস্ট থেকে ওটা "শুরু"); পুরোনো সারিতে
-         থাকতে পারে বলে ঘরটা রাখা।
+      Careful: rows from the old Excel are labelled separately: their number
+         is true, but oXeio did not **measure** it, only took it in as history.
+         The level of trust differs.
+      Careful: `filename` no longer arrives (it has meant "started" since 23
+         August); the case is kept because old rows may still have it.
     */
     return (
       <Chip tone="counted">
@@ -863,8 +869,8 @@ function StatusChip({ row }: { row: TargetRow }) {
       </Chip>
     );
   }
-  // ⭐ "কাজ চলছে" আলাদা করে দেখানো — মালিক দেখেন কোনগুলোয় সত্যিই হাত
-  //    পড়েছে, আর কোনগুলো পড়ে আছে
+  // Show "work in progress" separately: the owner sees which rows were really
+  //    touched and which are lying idle
   if (row.status === 'assigned') {
     return row.startedAt ? (
       <Chip tone="pending">Started</Chip>
@@ -874,9 +880,9 @@ function StatusChip({ row }: { row: TargetRow }) {
   }
   if (row.status === 'skipped') return <Chip tone="attention">Skipped</Chip>;
   /**
-   * ⚠️ ধূসর, লাল নয় — মোছা সারি কোনো **সমস্যা** নয়, একটা মীমাংসিত ঘটনা।
-   * লাল রাখলে তালিকা ভর্তি লাল চিপ হতো, আর তখন সত্যিকারের লাল
-   * (`Skipped`) আর চোখে পড়ত না (`Notice`-এর একই নিয়ম)।
+   * Careful: grey, not red. A deleted row is not a **problem**, it is a settled
+   * matter. With red, the list would fill with red chips and the real red
+   * (`Skipped`) would go unnoticed (the same rule as in `Notice`).
    */
   if (row.status === 'deleted') return <Chip tone="muted">Deleted</Chip>;
 
@@ -884,40 +890,40 @@ function StatusChip({ row }: { row: TargetRow }) {
 }
 
 /**
- * ⭐ কোন তারিখ, আর **কীসের** তারিখ।
+ * Which date, and the date of **what**.
  *
- * ⚠️ শুধু একটা তারিখ বসালে পুলে পড়ে থাকা সারিতেও কিছু একটা দেখাত, আর
- * পাঠক ধরে নিতেন ওটা "কবে হয়েছে"।
+ * Careful: with just one date, a row lying in the pool would show something
+ * too, and the reader would take it to be "when it happened".
  */
 /**
- * ⭐ Stage-এর নিচের ছোট তারিখটা *(২৫ আগস্ট থেকে আলাদা কলাম নয়)*।
+ * The small date under Stage (no longer a separate column).
  *
- * ⚠️⚠️ **কোন তারিখটা দেখানো হচ্ছে সেটাও বলা হয়** — শেষ হওয়ার, শুরুর,
- * নাকি বরাদ্দের। শুধু একটা তারিখ বসালে পাঠক ধরে নিতেন ওটা "কবে
- * হয়েছে"। উপরের চিপটা অবস্থা বলে, কিন্তু `In hand` সারিতে তারিখটা
- * শুরুরও হতে পারে, বরাদ্দেরও — চিপ ওই দুটো আলাদা করে না।
+ * Careful: **which date is being shown is also said**: done, started, or
+ * assigned. With just a date, the reader would take it as "when it
+ * happened". The chip above gives the state, but on an `In hand` row the date
+ * may be the start or the assignment, and the chip does not tell those apart.
  *
- * ⭐ পুলে পড়ে থাকা সারির কোনো কাজের তারিখ নেই, তাই আগে এখানে `—` বসত।
- * এখন **কবে এসেছে** সেটা বসে — ওটাই ওই সারির একমাত্র খবর, আর ঘরটা
- * খালি রাখার চেয়ে সত্যি কথা বলা ভালো।
+ * A row lying in the pool has no work date, so `—` used to be shown here.
+ * Now it shows **when it arrived**: that is the row's only news, and telling
+ * the truth beats leaving the cell empty.
  */
 /**
- * ⭐⭐ **ফাইলের চিহ্ন — তিনটে অবস্থা, তিন রকম লেখা** *(৯ সেপ্টেম্বর ২০২৬)*।
+ * **File trace: three states, three kinds of text.**
  *
- * | মান | পর্দায় | মানে |
+ * | value | on screen | meaning |
  * |---|---|---|
- * | `null` | `—` | ⚠️ বলার মতো কিছু নেই — হয় তখনকার শিরোনাম জমা নেই, নয় সারিটা এখনো শেষ বলা হয়নি |
- * | `0` | `no trace` | **শেষ বলা হয়েছে**, অথচ কখনো খোলা হয়নি |
- * | `> 0` | `18m` / `45s` | এতক্ষণ পর্দায় ছিল |
+ * | `null` | `—` | nothing to say: either the titles from back then were not stored, or the row is not yet marked done |
+ * | `0` | `no trace` | **marked done**, yet never opened |
+ * | `> 0` | `18m` / `45s` | this long on screen |
  *
- * ⚠️⚠️ **`formatDuration()` এখানে একা যথেষ্ট নয়, আর কারণটা সূক্ষ্ম:**
- * ওটা ২০ সেকেন্ডকে `0m` লেখে, আর `0m` দেখতে হুবহু "কখনো খোলা হয়নি"-র
- * মতো। অথচ এই কলামে ঠিক ওই পার্থক্যটাই সবচেয়ে দরকারি খবর — ২০ সেকেন্ড
- * মানে ফাইলটা খোলা হয়েছিল, আর শূন্য মানে হয়নি। ⭐ তাই এক মিনিটের নিচে
- * সেকেন্ডেই লেখা হয়।
+ * Careful: **`formatDuration()` alone is not enough here, and the reason is
+ * subtle:** it writes 20 seconds as `0m`, and `0m` looks exactly like "never
+ * opened". Yet that difference is the most useful news in this column: 20
+ * seconds means the file was opened, zero means it was not. So below one
+ * minute it is written in seconds.
  *
- * ⚠️ `0`-র রংটা **সতর্কতার নয়** — ধূসর। লাল করলে তালিকাটা অভিযোগ হয়ে
- * যেত, অথচ সেভ না করা ফাইলও ঠিক এই ঘরেই পড়ে।
+ * Careful: the colour for `0` is **not a warning**, it is grey. Red would turn
+ * the list into an accusation, yet an unsaved file lands in exactly this cell too.
  */
 function FileCell({ sec }: { sec: number | null }) {
   if (sec === null) {
@@ -972,27 +978,26 @@ function WhenCell({ row }: { row: TargetRow }) {
 }
 
 /**
- * ⭐⭐ **কে এনেছেন → কে করছেন** *(২৫ আগস্ট)*।
+ * **Added by → doing it.**
  *
- * ⚠️ আগে এটা দুটো আলাদা কলাম ছিল ("Added by" আর "Designer"), আর দুটোই
- * মানুষের নাম — পাশাপাশি বসে সেটা গাদাগাদি লাগত। ⭐ এক ঘরে তীরচিহ্ন
- * দিয়ে লিখলে ওটা একটা **বাক্য** হয়ে যায়: কাজটা কোথা থেকে এসে কার
- * কাছে গেছে।
+ * Careful: this used to be two columns ("Added by" and "Designer"), both
+ * human names, which looked crowded side by side. One cell with an arrow
+ * makes it a **sentence**: where the work came from and who it went to.
  */
 function PeopleCell({ row }: { row: TargetRow }) {
   return (
     <span className="block">
       <span className="whitespace-nowrap">
-        {/* ⚠️ আনার নামটা ধূসর — রোজকার কাজে ডিজাইনারের নামটাই বেশি দরকার */}
+        {/* Careful: the adder's name is grey; in daily work the designer's name matters more */}
         <span className="text-ink-3">{row.addedBy.fullName}</span>
         <span className="px-1 text-ink-3">→</span>
         {row.assignedTo ? (
           <span className="text-ink">{row.assignedTo.fullName}</span>
         ) : row.sourceNote ? (
           /*
-            ⚠️ ইমপোর্ট করা পুরোনো সারিতে `assignedTo` **নেই** — নামটা
-               কাঁচা লেখায় (`Hafiz-24-05-2026`), কারণ ওই কর্মীদের অনেকেই
-               আর সিস্টেমে নেই।
+            Careful: imported old rows have **no** `assignedTo`; the name is
+               raw text (`Hafiz-24-05-2026`), because many of those staff
+               are no longer in the system.
           */
           <span className="num text-[12px] text-ink-3">{row.sourceNote}</span>
         ) : (
@@ -1001,12 +1006,12 @@ function PeopleCell({ row }: { row: TargetRow }) {
       </span>
 
       {/*
-        ⭐⭐ **কে "শেষ" বলেছেন** *(২৩ আগস্ট, মালিকের রিপোর্ট)*। আগে কেবল
-        বরাদ্দ পাওয়া মানুষের নাম দেখাত, তাই মালিক নিজে Complete চাপলেও
-        ডিজাইনারের নামই উঠত — সরাসরি ভুল তথ্য।
+        **Who said "done".** Reported by the owner. It used to show only the
+        assignee's name, so even when the owner pressed Complete the designer's
+        name appeared: plainly wrong information.
 
-        ⚠️ নামটা তখনই আসে যখন কেউ সত্যিই চেপেছেন। পুরোনো সারিগুলোয় ঘরটা
-        খালি থাকে — অনুমান করে কিছু বসানো হয় না।
+        Careful: the name appears only when someone really pressed. On old rows
+        the cell stays empty; nothing is filled in by guessing.
       */}
       {row.completedBy && (
         <span className="block text-[11.5px] text-ink-3">
@@ -1018,16 +1023,16 @@ function PeopleCell({ row }: { row: TargetRow }) {
 }
 
 /**
- * ⭐⭐ **সম্পাদনা** *(২৩ আগস্ট)* — owner · manager · গবেষক।
+ * **Editing**: owner · manager · researcher.
  *
- * ⚠️⚠️ **ASIN বদলানোর পথ নেই** — ওটা সারিটার পরিচয়। বদলালে
- * ডুপ্লিকেট-প্রহরীর গোটা ভিত্তিটাই নড়ে যেত, আর ইতিহাসে "এই পণ্যটা
- * হয়েছিল" কথাটা মিথ্যা হয়ে যেত।
+ * Careful: **there is no way to change the ASIN**: it is the row's identity.
+ * Changing it would shake the whole basis of the duplicate guard, and the
+ * history's "this product was done" would become false.
  *
- * ⚠️ **Delete এখন আর সারি মোছে না** *(২৯ আগস্ট ২০২৬)* — অবস্থা হয়
- * `deleted`, সারিটা তালিকায় থাকে। ⭐ তবু জিজ্ঞেস করা হয়: ফেরার পথ
- * আছে (অবস্থা বদলে `pool`), কিন্তু ভুল সারি মুছলে কেউ টেরই পাবেন না —
- * চিপটা ধূসর, আর ধূসর জিনিস চোখে পড়ে না।
+ * Careful: **Delete no longer removes the row.** The status becomes `deleted`
+ * and the row stays in the list. It still asks first: there is a way back
+ * (change the status to `pool`), but if the wrong row is deleted nobody will
+ * notice, because the chip is grey and grey things go unseen.
  */
 function RowActions({
   row,
@@ -1047,46 +1052,48 @@ function RowActions({
   busy: boolean;
   onChange: (status: TargetStatus) => void;
   onUploaded: () => void;
-  /** ⭐ `true` = বানান ঠিক · `false` = ভুল পাওয়া গেছে */
+  /** `true` = spelling correct · `false` = an error was found */
   onChecked: (ok: boolean) => void;
   onFixed: () => void;
   onLive: () => void;
-  /** ⭐ "শেষ" ফিরিয়ে নেওয়া *(২৫ আগস্ট)* — যেকোনো দিনের */
+  /** Take back "done", on any day */
   onUndo: () => void;
-  /** ⭐ "দেখে নিয়েছি" — কেবল বাদ-যাওয়া সারিতে *(৩১ আগস্ট)* */
+  /** "I have looked": only on skipped rows */
   onReviewed: () => void;
   onDelete: (reason: DropReason) => void;
-  /** ⚠️ `false` হলে Delete বোতামটাই বসে না — গবেষকের হাতে ওটা থাকবে না */
+  /** Careful: when `false` the Delete button is not rendered; researchers do not get it */
   mayDelete: boolean;
   /**
-   * ⭐ `false` হলে বানান-যাচাইয়ের তিনটে বোতাম বসে না *(২৫ আগস্ট)*।
+   * When `false` the three spelling-check buttons are not rendered.
    *
-   * ⚠️ সারির অবস্থার সাথে **এবং** করে দেখা হয়, বদলে নয় — অধিকার
-   * থাকলেও ক্রম মানতে হয়: দেখা হয়ে গেলে "Spelling OK" আর ওঠে না।
+   * Careful: this is checked **in addition to** the row's status, not instead:
+   * even with the right, the order must be followed: once reviewed,
+   * "Spelling OK" no longer appears.
    */
   mayProofread: boolean;
 }) {
   const [confirming, setConfirming] = useState(false);
   /**
-   * ⭐⭐ **বাকি বোতামগুলো খোলা আছে কি না** *(মালিকের সিদ্ধান্ত, ২৫ আগস্ট:
-   * "khubi gatharing lagoche dekhote")*।
+   * **Whether the other buttons are open.** The owner said the row looked
+   * crowded.
    *
-   * ⚠️⚠️ একটা সারি **একটাই** ধাপে থাকে, তবু আগে পাইপলাইনের সব বোতাম
-   * একসাথে বসত — একটা শেষ-হওয়া সারিতে ছটা পর্যন্ত। ⭐ এখন এই সারির
-   * *পরের ধাপটা* সামনে, বাকিগুলো `⋯`-এ।
+   * Careful: a row sits in **one** step only, yet all the pipeline's buttons
+   * used to show together: up to six on a finished row. Now this row's *next
+   * step* is in front and the rest are under `⋯`.
    *
-   * ⚠️ **কোনো বোতাম মুছে যায়নি** — সবই এক ক্লিক দূরে। পপ-আপ মেনু না
-   * করে সারির ভেতরেই খোলা হয়: মেনু বসাতে হলে জায়গা মাপা, বাইরে ক্লিক
-   * ধরা, কি-বোর্ড সামলানো — তিনটে নতুন ফাঁদ, একটাও দরকার নেই।
+   * Careful: **no button was removed**; all are one click away. It opens
+   * inside the row rather than as a pop-up menu: a menu means measuring space,
+   * catching outside clicks and handling the keyboard, three new traps and
+   * none of them needed.
    */
   const [open, setOpen] = useState(false);
 
   /**
-   * ⭐⭐ **"Really delete" উঠে গেছে, তার জায়গায় তিনটে কারণ** *(৩১ আগস্ট)*।
+   * **"Really delete" is gone; three reasons took its place.**
    *
-   * ⚠️ পুরোনো বোতামটা একটা প্রশ্ন করত যার উত্তরে **কোনো তথ্য ছিল না** —
-   * "হ্যাঁ" ছাড়া কিছু জানা যেত না। এখন একই চাপে নিশ্চিতকরণ **আর** কারণ,
-   * দুটোই আসে।
+   * Careful: the old button asked a question whose answer carried **no
+   * information**: nothing was learnt except "yes". Now one press gives the
+   * confirmation **and** the reason.
    */
   if (confirming) {
     return (
@@ -1102,38 +1109,37 @@ function RowActions({
   }
 
   /**
-   * ⭐⭐ **বাদ-যাওয়া সারিতে একটাই বোতাম — ফেরানোর** *(মালিকের নির্দেশ,
-   * ৩১ আগস্ট ২০২৬: "delete kora design e only un delete show korbe",
-   * তারপর "same jinis ta kew skip dileO hobe")*।
+   * **Skipped or deleted rows get one button only: the restoring one.**
+   * The owner's instruction: a deleted design should show only "Undelete", and
+   * the same for a skipped one.
    *
-   * ⚠️⚠️ আগে এই সারিগুলোতেও বসত Complete · Skip · Delete — অর্থাৎ
-   * ইতিমধ্যে বাদ-যাওয়া জিনিসকে আবার বাদ দেওয়ার, বা কেউ বানায়নি এমন
-   * ডিজাইনকে "শেষ" বলার প্রস্তাব। ⭐ কোনোটাই ক্ষতি করত না (সার্ভার
-   * প্রতিটা পথেই আলাদা পাহারা দেয়), কিন্তু পর্দা মিথ্যা বলত — এমন কাজের
-   * প্রস্তাব দিত যার কোনো মানে নেই।
+   * Careful: these rows used to get Complete · Skip · Delete too, i.e. an offer
+   * to drop what was already dropped, or to call "done" a design nobody made.
+   * None of it did harm (the server guards every path separately), but the
+   * screen lied by offering actions that make no sense.
    *
-   * ⚠️⚠️ **শর্তটা `open`/`next`-এর আগে, আর জায়গাটাই এখানকার আসল কথা।**
-   * প্রথমবার এটা নিচে বসানো হয়েছিল — খোলা মেনুর ভেতরে — আর তাতে গোটানো
-   * সারিতে `Complete` থেকেই যেত। ⭐ মালিক ছবি পাঠিয়ে ধরিয়ে দিয়েছেন:
-   * *"deleted design er pase complete button keno?"*
+   * Careful: **this condition sits before `open`/`next`, and its position is
+   * the whole point.** The first version put it lower, inside the open menu,
+   * so the collapsed row still showed `Complete`. The owner caught this with a
+   * screenshot: "why a complete button next to a deleted design?"
    *
-   * ⭐ **`skipped` ও `deleted` একই আচরণ পায়, কেবল লেখাটা আলাদা** — কর্মটা
-   * এক (পুলে ফেরত), কিন্তু বোতামের নাম যেটা ফেরানো হচ্ছে তারই উল্টো
-   * শব্দ, নইলে "To pool" পড়ে বোঝা যেত না কী ফিরছে।
+   * **`skipped` and `deleted` behave the same, only the text differs**: the
+   * action is the same (back to the pool), but the button name is the opposite
+   * of what is being undone; with "To pool" you could not tell what comes back.
    *
-   * ⚠️ ফেরত মানে **পুলে ফেরত** (`pool`), আর সার্ভার তখন কারণটাও মুছে দেয়
-   * — নইলে সারিটা পুলে ফিরেও "Not Found" বলে দাগানো থাকত, আর পরের বণ্টনে
-   * যিনি পেতেন তিনি একটা মীমাংসিত সতর্কবার্তা দেখতেন।
+   * Careful: restoring means **back to the pool** (`pool`), and the server
+   * then clears the reason too; otherwise the row would be back in the pool
+   * still marked "Not Found", and whoever gets it next would see a settled warning.
    */
   if (row.status === 'deleted' || row.status === 'skipped') {
     return (
       <span className="flex flex-wrap items-center justify-end gap-1.5">
         {/*
-          ⭐⭐ **"দেখে নিয়েছি" — কিউ খালি করার একমাত্র পথ** *(৩১ আগস্ট)*।
-          ⚠️ বোতামটা বসে **কেবল যতক্ষণ কেউ দেখেনি**, আর কেবল কারণসহ সারিতে
-             (পুরোনো ৯৩টায় কারণ নেই, তাই দেখার কিছুও নেই)। ⭐ দেখা হয়ে
-             গেলে বোতামটা উধাও, আর তার জায়গায় নিচের চিপটা বলে কে দেখেছেন।
-          ⚠️ `mayDelete` = owner/manager — সার্ভারের `@Roles`-এর সাথে এক।
+          **"Reviewed": the only way to empty the queue.**
+          Careful: the button shows **only while nobody has reviewed**, and only
+             on rows that have a reason (the old 93 have none, so nothing to review).
+             Once reviewed the button vanishes and the chip below says who did it.
+          Careful: `mayDelete` = owner/manager, the same as the server's `@Roles`.
         */}
         {mayDelete && row.dropReason !== null && row.reviewedAt === null && (
           <MiniButton tone="good" disabled={busy} onClick={onReviewed}>
@@ -1148,14 +1154,14 @@ function RowActions({
   }
 
   /**
-   * ⭐⭐ **এই সারির পরের ধাপ** — শেকলের ক্রম মেনে, উপর থেকে নিচে।
+   * **This row's next step**, following the chain in order, top to bottom.
    *
-   * ⚠️⚠️ ক্রমটাই এখানকার আসল সিদ্ধান্ত: একটা শেষ-হওয়া সারিতে "বানান
-   * দেখা" আর "আপলোড" **দুটোই** সম্ভব, কিন্তু আগে বানান। উল্টো করলে
-   * না-দেখা ডিজাইন Amazon-এ চলে যেত, আর কিউটা কখনো খালি হতো না।
+   * Careful: the order is the real decision here: a finished row can have both
+   * "spelling check" and "upload" next, but spelling comes first. Reversed, an
+   * unchecked design would go to Amazon and the queue would never empty.
    *
-   * ⚠️ যাচাইয়ের ধাপে **দুটো** বোতাম, কারণ ওটা একটা কাজ নয় — একটা
-   * সিদ্ধান্ত (ঠিক আছে, নাকি ভুল আছে)। একটায় নামানো যেত না।
+   * Careful: the check step has **two** buttons because it is not one task but
+   * one decision (correct, or has an error). It could not be reduced to one.
    */
   const broken = row.errorFoundAt !== null && row.fixedAt === null;
 
@@ -1183,11 +1189,11 @@ function RowActions({
       </MiniButton>
     ) : row.status !== 'done' ? (
       /*
-        ⚠️ নামটা **"Complete"**, "Done" নয় — ডিজাইনারের পাতায় ঠিক এই
-           বোতামটাই ওই নামে আছে, আর দুটো আলাদা শব্দ মানে মালিক ভাবতেন
-           দুটো আলাদা কাজ (মালিকের প্রশ্ন, ২৩ আগস্ট)।
-        ⭐ নিয়মটা: **বোতামে ক্রিয়া** (Complete · Skip), **চিহ্নে অবস্থা**
-           (Done · Skipped)।
+        Careful: the name is **"Complete"**, not "Done": the designer's page
+           has this very button under that name, and two different words would
+           make the owner think they were two different actions (owner's question).
+        The rule: **a verb on the button** (Complete · Skip), **the state on
+           the mark** (Done · Skipped).
       */
       <MiniButton tone="good" disabled={busy} onClick={() => onChange('done')}>
         Complete
@@ -1206,16 +1212,16 @@ function RowActions({
   }
 
   /**
-   * খোলা অবস্থা — সব কিছু, ক্রম মেনে।
+   * Open state: everything, in order.
    *
-   * ⚠️⚠️ বোতামগুলো **ক্রম মেনেই দেখা যায়**: শেষ না হলে "Uploaded" নেই,
-   * আপলোড না হলে "Live" নেই। সবগুলো একসাথে দেখালে যে-কেউ যেকোনো ক্রমে
-   * চাপতে পারতেন, আর তখন পাইপলাইনের সংখ্যাগুলোই অর্থ হারাত। সার্ভারও
-   * একই পাহারা দেয় — পর্দা একমাত্র রক্ষী নয়।
+   * Careful: the buttons **appear in order**: no "Uploaded" until finished, no
+   * "Live" until uploaded. Showing them all together would let anyone press in
+   * any order, and the pipeline numbers themselves would lose meaning. The
+   * server guards the same way: the screen is not the only guard.
    */
   return (
     <span className="flex flex-wrap items-center justify-end gap-1.5">
-      {/* ⭐ কারো হাত থেকে তুলে নেওয়া — মালিকানাও ছেড়ে যায় */}
+      {/* Taking it out of someone's hands: ownership is released too */}
       {row.status !== 'pool' && (
         <MiniButton disabled={busy} onClick={() => onChange('pool')}>
           To pool
@@ -1242,10 +1248,10 @@ function RowActions({
         </MiniButton>
       )}
       {/*
-        ⚠️⚠️ **ভুল পাওয়া অথচ ঠিক-না-হওয়া ডিজাইনে "Uploaded" বোতামই ওঠে না**
-        *(মালিকের সিদ্ধান্ত, ২৫ আগস্ট)* — জানা-ভাঙা জিনিস Amazon-এ যাবে না।
-        ⭐ কিন্তু **এখনো দেখা হয়নি** এমন সারি আটকায় না; আটকালে কিউটা
-        রাতারাতি ০ হয়ে যেত আর কেউ শুরুই করত না।
+        Careful: **a design with an error found and not yet fixed gets no
+        "Uploaded" button at all** (owner's decision): known-broken work does not
+        go to Amazon. But a row that has **not been checked yet** is not blocked;
+        blocking it would make the queue 0 overnight and nobody would start.
       */}
       {row.completedAt !== null && row.uploadedAt === null && !broken && (
         <MiniButton disabled={busy} onClick={onUploaded}>
@@ -1258,15 +1264,15 @@ function RowActions({
         </MiniButton>
       )}
       {/*
-        ⭐⭐ **"ভুল করে Complete চেপে ফেলেছে"** *(মালিকের রিপোর্ট, ২৫ আগস্ট)*।
+        **"Complete pressed by mistake".** Reported by the owner.
 
-        ⚠️⚠️ পাশের "To pool" দিয়ে এটা করা **যায় না** — ওটা মালিকানাও
-           ছেড়ে দেয়, তাই কাজটা ডিজাইনারের হাত থেকে বেরিয়ে যেত। এটা
-           কেবল "শেষ" চিহ্নটা তোলে, সারিটা তাঁর হাতেই থাকে।
+        Careful: this **cannot** be done with the neighbouring "To pool": that
+           also gives up ownership, so the work would leave the designer's
+           hands. This only lifts the "done" mark; the row stays with them.
 
-        ⚠️ শেকলে এগিয়ে যাওয়া সারিতে বোতামটাই ওঠে না — বানান দেখা হয়ে
-           গেলে বা Amazon-এ চলে গেলে ওটা আর "ভুলে চাপা" নয়, আর ফেরালে
-           কিউয়ের সংখ্যাগুলো একসাথে মিথ্যে হয়ে যেত।
+        Careful: the button does not appear on a row that has moved down the
+           chain: once spelling was checked or it went to Amazon it is no longer
+           "pressed by mistake", and undoing would make the queue numbers wrong together.
       */}
       {row.status === 'done' &&
         row.checkedAt === null &&
@@ -1277,18 +1283,17 @@ function RowActions({
           </MiniButton>
         )}
       {/*
-        ⚠️ শর্তটা (`status !== 'skipped'`) উঠে গেছে *(৩১ আগস্ট)* — উপরের
-           early return-এর পর এখানে `skipped` সারি আর পৌঁছায়ই না, তাই
-           শর্তটা চিরকাল সত্যি ছিল। ⭐ টাইপচেকারই ধরিয়ে দিয়েছে
-           ("no overlap"), আর মৃত শর্ত রেখে দেওয়া মানে পরের পাঠককে
-           ভাবতে বাধ্য করা যে ওটা কখন মিথ্যা হয়।
+        Careful: the condition (`status !== 'skipped'`) was removed: after the
+           early return above, a `skipped` row never reaches here, so the
+           condition was always true. The type checker caught it ("no overlap");
+           keeping a dead condition makes the next reader wonder when it is false.
       */}
       <MiniButton tone="danger" disabled={busy} onClick={() => onChange('skipped')}>
         Skip
       </MiniButton>
       {/*
-        ⚠️ গবেষকের হাতে Delete থাকবে না — ৪৬ হাজার সারির মধ্যে একটা
-           ভুল ডিলিট কেউ খুঁজেই পেত না।
+        Careful: researchers do not get Delete: one wrong delete among 46,000
+           rows would never be found.
       */}
       {mayDelete && (
         <MiniButton tone="danger" disabled={busy} onClick={() => setConfirming(true)}>

@@ -1,10 +1,10 @@
 /**
- * ফাইল নামানোর সাধারণ অংশ — নাম ও MIME।
+ * The common part of downloading a file: name and MIME.
  *
- * `reports.excel.ts` থেকে সরিয়ে আনা হয়েছে কারণ F06-এর পর ফরম্যাট দুটো
- * (xlsx ও pdf), আর "PDF-এর নাম বানাতে excel ফাইলটা import করতে হচ্ছে"
- * পড়তে অদ্ভুত লাগত — তার চেয়েও বড় কথা, তখন কেউ Excel-এর কোড বদলাতে
- * গিয়ে অজান্তে PDF-এর নামও বদলে ফেলতে পারত।
+ * Moved out of `reports.excel.ts` because after F06 there are two formats
+ * (xlsx and pdf), and "importing the excel file to build a PDF's name" reads
+ * oddly; more importantly, someone changing the Excel code could then
+ * unknowingly change the PDF's name too.
  */
 
 export type DownloadFormat = 'xlsx' | 'pdf';
@@ -20,12 +20,13 @@ export const MIME_OF: Record<DownloadFormat, string> = {
 };
 
 /**
- * ⚠️ ফাইলের নাম ASCII-তে রাখা হয় — Content-Disposition-এ বাংলা নাম দিতে হলে
- *    RFC 5987 এনকোডিং লাগত, আর পুরোনো ক্লায়েন্টে ওটা ভাঙা নামে সেভ হতো।
+ * Careful: the file name is kept ASCII; a non-ASCII name in Content-Disposition
+ * would need RFC 5987 encoding, and older clients would save it under a broken name.
  *
- * ⚠️ এক্সটেনশনটা প্যারামিটার, ভেতরে হার্ডকোড নয়। আগে `.xlsx` হার্ডকোড ছিল;
- *    PDF যোগ করার সময় সেটা না বদলালে ব্রাউজার একটা PDF-কে `.xlsx` নামে সেভ
- *    করত আর Excel সেটা খুলতে গিয়ে "ফাইল নষ্ট" বলত — অথচ ফাইলটা ঠিকই ছিল।
+ * Careful: the extension is a parameter, not hardcoded inside. `.xlsx` used to
+ * be hardcoded; when PDF was added, had that not been changed the browser
+ * would have saved a PDF as `.xlsx` and Excel would say "file corrupt" when
+ * opening it, though the file was fine.
  */
 export function reportFilename(
   report: string,

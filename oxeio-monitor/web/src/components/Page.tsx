@@ -1,13 +1,13 @@
 import type { ReactNode } from 'react';
 
 /**
- * পেজের শিরোনাম + অ্যাকশন বার।
+ * Page title + action bar.
  *
- * ⭐ ছ-টা পেজেই এটা দিয়ে শুরু হলে শিরোনামের আকার, ফাঁক আর মোবাইলের
- * ভাঙাটা এক জায়গায় ঠিক করা যায়।
+ * Starting all six pages with this means title size, spacing and mobile wrapping
+ * are fixed in one place.
  *
- * ⚠️ E12 — ফোনে `actions` শিরোনামের **নিচে** নেমে যায় (`flex-wrap`)।
- *    একই সারিতে জোর করে রাখলে তারিখ বাছাই আর বোতাম চেপে গিয়ে অপঠ্য হতো।
+ * Careful: E12: on a phone `actions` drops below the title (`flex-wrap`). Forcing
+ * them onto one row would squeeze the date picker and buttons until unreadable.
  */
 export function Page({
   title,
@@ -16,17 +16,17 @@ export function Page({
   children,
 }: {
   /**
-   * ⭐ **ঐচ্ছিক** — Live Board শিরোনাম ছাড়াই চলে (মকআপ ক-এ ওটা নেই;
-   * পাতার নাম সাইডবারে জ্বলে, তারিখ-সময় উপরের বারে)।
+   * Optional: the Live Board works without a title (mockup A has none; the page name
+   * lights up in the sidebar and the date-time is in the top bar).
    *
-   * ⚠️ শিরোনাম না থাকলে **ফাঁকা জায়গাটুকুও বসে না** — নইলে একটা অদৃশ্য
-   * শিরোনামের জন্য পর্দার মাথায় ৭০px খালি পড়ে থাকত, ঠিক যেখানে মকআপের
-   * KPI সারিটা বসার কথা।
+   * Careful: with no title, the blank space is not rendered either; otherwise 70px
+   * would stay empty at the top of the screen for an invisible title, exactly where
+   * the mockup's KPI row belongs.
    */
   title?: ReactNode;
-  /** এক লাইনের ব্যাখ্যা — কী দেখানো হচ্ছে, কোন তারিখের */
+  /** One-line explanation: what is shown, for which date. */
   subtitle?: ReactNode;
-  /** তারিখ বাছাই, ডাউনলোড, রিফ্রেশ — ডানদিকে */
+  /** Date picker, download, refresh: on the right. */
   actions?: ReactNode;
   children: ReactNode;
 }) {
@@ -53,8 +53,8 @@ export function Page({
 }
 
 /**
- * পেজের ভেতরের অংশের শিরোনাম।
- * ডানদিকে ছোট ব্যাখ্যা (`hint`) — যেমন "Ring = today's target"।
+ * Heading for a section inside a page.
+ * A small explanation on the right (`hint`), e.g. "Ring = today's target".
  */
 export function SectionHead({
   title,
@@ -75,12 +75,12 @@ export function SectionHead({
 }
 
 /**
- * সাধারণ বোতাম — সরু আউটলাইন, hover-এ ব্র্যান্ড লাল।
+ * Normal button: thin outline, brand red on hover.
  *
- * ⚠️ **সলিড লাল বোতাম বানাবেন না** — সলিড লাল মানে "মনোযোগ দরকার"
- *    (ভুল, এজেন্ট বন্ধ)। বিপজ্জনক কাজে `tone="danger"`, বাকি সব জায়গায়
- *    ডিফল্ট। প্রধান কাজে `tone="primary"` (নিরেট `ink`, লাল নয় — ⚠️ ওটা
- *    "কালো" নয়, Midnight থিমে `ink` প্রায় সাদা)।
+ * Careful: do not make solid red buttons. Solid red means "needs attention"
+ * (error, agent off). Use `tone="danger"` for dangerous actions and the default
+ * everywhere else. Use `tone="primary"` for the main action (solid `ink`, not
+ * red; and `ink` is not "black": in the Midnight theme it is almost white).
  */
 export function Button({
   children,
@@ -98,9 +98,10 @@ export function Button({
   title?: string;
 }) {
   /**
-   * ⚠️ রং তিনটেই টোকেন থেকে — `text-on-ink` / `text-on-brand` **জোড়া**
-   *    টোকেন, `text-white` নয়। ডার্ক থিমে `bg-ink` প্রায় সাদা হয়ে যায়,
-   *    তখন সাদা লেখা বসলে বোতামটাই অদৃশ্য হতো (index.css § সেতু দেখুন)।
+   * Careful: all three colors come from tokens, using the paired `text-on-ink` /
+   * `text-on-brand` tokens, not `text-white`. In the dark theme `bg-ink` becomes
+   * almost white, and white text on it would make the button invisible (see the
+   * bridge section in index.css).
    */
   const style =
     tone === 'primary'
@@ -115,7 +116,7 @@ export function Button({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      // ⚠️ `tap` — ফোনে ৪৪px ছোঁয়ার লক্ষ্য (`index.css`-এ কারণ)
+      // Careful: `tap`: a 44px touch target on phones (reason in `index.css`)
       className={`tap rounded-md border px-3 py-1.5 text-[13px] font-medium transition focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-50 ${style}`}
     >
       {children}

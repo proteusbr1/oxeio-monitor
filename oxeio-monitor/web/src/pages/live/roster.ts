@@ -2,28 +2,28 @@ import type { LiveCard } from '../../api/dashboard';
 import { isWorking } from './onTheClock';
 
 /**
- * **রোস্টারের দুটো সিদ্ধান্ত** — ক্রম, আর মিটার কী বলছে।
+ * **Two roster decisions**: the order, and what the meter says.
  *
- * ⭐ আলাদা ফাইলে, কারণ দুটোই **নিয়ম**, বিন্যাস নয়। বিশেষ করে ক্রমটা:
- * এক সারিতে সাজানো ঘণ্টা নিজেই একটা র‌্যাঙ্কিং হয়ে উঠতে চায়, আর সেই
- * ঝোঁকটা ঠেকানো একটা **সচেতন** সিদ্ধান্ত — কোথাও `sort by hours` লিখে
- * ফেলা যাতে এক লাইনের ভুল না হয়, তাই নিয়মটা এখানে, টেস্টসহ।
+ * Important: in a separate file because both are **rules**, not layout. Especially
+ * the order: hours sorted in one row want to become a ranking by themselves, and
+ * resisting that is a **deliberate** decision. A one-line `sort by hours` somewhere
+ * must not slip in, so the rule lives here, with tests.
  */
 
 /**
- * আজকের মিটারটা কোন সত্যি বলছে।
+ * Which truth today's meter is telling.
  *
- * ⚠️⚠️ **শূন্য আর অজানা এক জিনিস নয়, আর পর্দায় এক দেখানো যাবে না।**
- * "আজ কিছু করেননি" (মাপা হয়েছে) আর "আমরা জানি না" (এজেন্টই বসেনি /
- * কখনো সাড়া দেয়নি) — দুটোকে একই খালি বার দিয়ে দেখালে দ্বিতীয়টা
- * নীরবে প্রথমটার অভিযোগ হয়ে যেত।
+ * Careful: **zero and unknown are different things, and the screen must not show
+ * them the same.** "Did nothing today" (measured) and "we do not know" (agent never
+ * installed / never responded): showing both as the same empty bar would silently
+ * turn the second into an accusation of the first.
  */
 export type MeterKind = 'counted' | 'zero' | 'unknown';
 
 export function meterKind(card: LiveCard): MeterKind {
-  // ⚠️ আগে অজানা, পরে শূন্য — ক্রমটা জরুরি। এজেন্ট না বসা কর্মীর
-  //    `todayWorkedSec` ০-ই থাকে, আর শর্ত উল্টো হলে সে "শূন্য কাজ" বলে
-  //    গোনা হতো, অথচ তাকে মাপাই হয়নি।
+  // Careful: unknown is checked before zero; the order matters. An employee without
+  //    an agent keeps `todayWorkedSec` at 0, and with the checks reversed they would
+  //    count as "zero work" when they were never measured.
   if (card.agentPresence !== 'installed' || card.lastHeartbeatAt === null) {
     return 'unknown';
   }
@@ -31,48 +31,49 @@ export function meterKind(card: LiveCard): MeterKind {
 }
 
 /**
- * ⭐⭐ **G130 (R2) — আজ তাঁর কোনো টার্গেট আছে কি না, আর না থাকলে কেন।**
+ * Whether they have a target today, and if not, why.
  *
- * ⚠️⚠️ **ছুটির দিনটা এতদিন কার্ডে দেখা যেত না।** `todayIsWorkday` বলে
- * দিনটা **অফিসের** ক্যালেন্ডারে কর্মদিবস কি না — শুক্রবার আর সরকারি ছুটি।
- * ব্যক্তিগত ছুটি ওতে নেই, তাই ছুটিতে থাকা কর্মীর কার্ডে ফুটত
- * **"0h / 8h" আর একটা খালি মিটার** — অর্থাৎ দেখতে হুবহু ফাঁকি দেওয়া
- * মানুষের মতো। অথচ সংখ্যাগুলো (টার্গেট, প্রত্যাশা, pace) তাঁকে অনেক আগেই
- * ছাড় দিয়েছে; শুধু ছবিটা দেয়নি।
+ * Careful: **a day off used to be invisible on the card.** `todayIsWorkday` says
+ * whether the day is a workday in the **office** calendar: Fridays and public
+ * holidays. Personal leave is not in it, so the card of someone on leave showed
+ * **"0h / 8h" and an empty meter**, which looks exactly like someone slacking.
+ * Yet the numbers (target, expected, pace) had excused them long ago; only the
+ * picture had not.
  *
- * ⭐ তিনটে পর্দা (`TeamRoster` · `TeamBars` · `TeamTable`) আগে এই শর্তটা
- * **তিনবার আলাদা করে** লিখত। এক জায়গায় আনা হলো, নইলে ছুটির নিয়মটা
- * একটাতে বসত আর দুটোতে বসত না — এই রেপোর সবচেয়ে চেনা পাপ।
+ * Important: the three screens (`TeamRoster`, `TeamBars`, `TeamTable`) used to
+ * write this condition **three times separately**. It is now in one place, or the
+ * leave rule would land in one and not the others, this repo's best-known sin.
  *
- * ⚠️ `'leave'` আর `'off'` আলাদা রাখা হয়েছে, যদিও দুটোতেই মিটার ওঠে না:
- * পর্দায় কথাটা আলাদা ("on leave" বনাম "day off")। এক করে দিলে ছুটির
- * দিনে কার্ড বলত "day off", অর্থাৎ **গোটা অফিস বন্ধ** — একটা মিথ্যা
- * সারাতে গিয়ে নতুন একটা মিথ্যা।
+ * Careful: `'leave'` and `'off'` are kept apart even though neither shows a meter:
+ * the screen says different things ("on leave" vs "day off"). Merging them would
+ * make a leave day's card say "day off", meaning **the whole office is closed**,
+ * a new falsehood introduced while fixing another.
  */
 export type DayDuty = 'target' | 'leave' | 'off';
 
 export function dayDuty(card: LiveCard): DayDuty {
   /**
-   * ⚠️ **ছুটি আগে দেখা হয়, ক্রমটা ইচ্ছাকৃত।** কারো ছুটি যদি শুক্রবারে বা
-   * সরকারি ছুটির দিনে লেখা থাকে, তখনো কার্ডে "day off"-ই লেখা উচিত —
-   * ওই দিনে কারোরই টার্গেট নেই, তাই তাঁকে আলাদা করে চিহ্নিত করাটা
-   * অর্থহীন হতো। তাই শর্তটা `todayIsWorkday`-র **ভেতরে**।
+   * Careful: **leave is checked first, and the order is intentional.** If someone's
+   * leave is entered on a Friday or a public holiday, the card should still say
+   * "day off": nobody has a target that day, so singling them out would be
+   * meaningless. Hence the condition sits **inside** `todayIsWorkday`.
    */
   if (!card.todayIsWorkday || card.dailyTargetSec <= 0) return 'off';
   return card.onLeaveToday ? 'leave' : 'target';
 }
 
 /**
- * ⭐⭐ **সারির ক্রম — কখনো ঘণ্টা ধরে নয়।**
+ * **Row order: never by hours.**
  *
- * কাজ করছেন যাঁরা আগে, তারপর যাঁরা করছেন না। ⚠️ প্রতিটি দলের **ভেতরে
- * সার্ভারের ক্রমই** অক্ষত থাকে (`empCode` ascending, dashboard.service),
- * অর্থাৎ ক্রমটা নিরপেক্ষ।
+ * Those who are working come first, then those who are not. Careful: **inside each
+ * group the server's order is kept intact** (`empCode` ascending, in
+ * dashboard.service), so the order is neutral.
  *
- * ⚠️⚠️ ঘণ্টা ধরে সাজালে পাতাটা রোজ সকালে একটা **লিডারবোর্ড** হয়ে উঠত —
- * আর ঠিক সেটাই এই পণ্য করে না (README-র "কখনোই নয়")। ভাগটা `splitBoard`
- * থেকে না নিয়ে এখানে আবার লেখা হয়নি: `isWorking` একটাই জায়গায় থাকুক,
- * নইলে ট্যাবের সংখ্যা আর সারির ক্রম একদিন দ্বিমত করত (G88-এর শিক্ষা)।
+ * Careful: sorting by hours would turn the page into a **leaderboard** every
+ * morning, and that is exactly what this product does not do (the README's
+ * "never" list). The split is not taken from `splitBoard` and rewritten here:
+ * `isWorking` should live in one place, or the tab counts and row order would one
+ * day disagree (the lesson of G88).
  */
 export function rosterRows(cards: readonly LiveCard[]): LiveCard[] {
   const working: LiveCard[] = [];
@@ -86,8 +87,8 @@ export function rosterRows(cards: readonly LiveCard[]): LiveCard[] {
 }
 
 /**
- * প্রথম "কাজ করছেন না" সারিটা কোথায় — ওখানেই দলছুট ব্যান্ডটা বসবে।
- * কেউ না থাকলে `-1`, আর তখন ব্যান্ডটাই আঁকা হয় না।
+ * Where the first "not working" row is; the separated band goes there.
+ * `-1` if there is none, in which case the band is not drawn at all.
  */
 export function restingStartsAt(rows: readonly LiveCard[]): number {
   return rows.findIndex((c) => !isWorking(c.status));
@@ -95,63 +96,64 @@ export function restingStartsAt(rows: readonly LiveCard[]): number {
 
 export interface DesignView {
   /**
-   * ⭐ আজ কতগুলো ডিজাইন **শেষ** হয়েছে — Complete বোতাম *(২৩ আগস্ট)*।
+   * How many designs were **finished** today (the Complete button).
    *
-   * ⚠️⚠️ ফাইল **খোলা** গোনা হয় না, ইচ্ছাকৃতভাবে: ওই গণনা "যে বানায়" আর
-   * "যে দেখে" — দুজনকে আলাদা করতে পারে না (ম্যানেজার ১৯টা ফাইলে ৪৪
-   * মিনিট দিয়ে "১৬" দেখাচ্ছিলেন)।
+   * Careful: opening a file is deliberately not counted: that count cannot tell
+   * "who makes" from "who views" (a manager showed "16" from 19 files with 44
+   * minutes total).
    */
   done: number;
-  /** ⚠️ `null` = **এই কর্মীর কোনো ডিজাইন-টার্গেট নেই** — শূন্য টার্গেট নয় */
+  /** Careful: `null` = **this employee has no design target**, not a target of zero */
   target: number | null;
-  /** টার্গেট না থাকলে সবসময় `false` — "ব্যর্থ" নয়, "প্রযোজ্য নয়" */
+  /** Always `false` without a target: "not applicable", not "failed" */
   met: boolean;
 }
 
 /**
- * ⭐⭐ **আজকের ডিজাইন — তিনটে অবস্থা, দুটো নয়** *(মালিকের বাছাই, ২২ আগস্ট)*।
+ * **Today's designs: three states, not two** (the owner's choice).
  *
- * | কে | কী দেখায় |
+ * | Who | What is shown |
  * |---|---|
- * | ডিজাইনার, টার্গেট আছে | `24 / 25` |
- * | অন্য কেউ, তবু ডিজাইন করেছেন | শুধু `43` |
- * | কেউ ডিজাইন করেননি | কিছুই না |
+ * | Designer with a target | `24 / 25` |
+ * | Someone else who still designed | just `43` |
+ * | Nobody designed | nothing |
  *
- * ⚠️⚠️ মাঝের সারিটাই সিদ্ধান্ত: ম্যানেজার (OX-01) নিজেও ডিজাইন করেন —
- * তিন দিনে **৪৩টা**। ধরন `manager` বসানোর পর সংখ্যাটা সব পর্দা থেকে
- * উধাও হয়ে যাচ্ছিল, অথচ কাজটা সত্যি। ⭐ "কত হলো" আর "টার্গেট ছুঁল কি
- * না" — দুটো আলাদা প্রশ্ন হিসেবেই থাকল।
+ * Careful: the middle row is the decision: the manager (OX-01) also designs, **43**
+ * in three days. After the role was set to `manager`, the number kept vanishing from
+ * every screen though the work was real. "How many" and "did they hit the target"
+ * stay two separate questions.
  *
- * ⚠️ **সার্ভারের `design.rules.ts`-এর হুবহু নকল।** দুই জায়গায় দু-রকম
- * হলে টেলিগ্রাম এক কথা বলত আর পর্দা অন্য — আর ঠিক ওই ফাঁদটা এই
- * প্রকল্পে আগে পড়া হয়েছে (`fleet.ts`-এর `compareVersion`-এর নোট)।
+ * Careful: **an exact copy of the server's `design.rules.ts`.** If the two differ,
+ * Telegram would say one thing and the screen another, and this project has fallen
+ * in exactly that trap before (see the note on `compareVersion` in `fleet.ts`).
  */
 export function designView(card: LiveCard): DesignView | null {
   /**
-   * ⭐⭐ **কেবল "শেষ" গোনা হয়** *(২৩ আগস্ট ২০২৬, মালিকের সিদ্ধান্ত)* —
-   * *"file khoila hole seta count koro na, only complete dile count koro"*।
+   * **Only "finished" is counted.**
    *
-   * ⚠️⚠️ **কেন বদলাল।** আগে বাঁ দিকে "খোলা" সংখ্যাও দেখানো হতো। মাঠে ধরা
-   * পড়ল ম্যানেজার (OX-01) দেখাচ্ছেন **১৬** — অথচ মেপে দেখা গেল তিনি
-   * ১৯টা ফাইলে মোট **৪৪ মিনিট** দিয়েছেন (একটায় ১০ মিনিট, বেশিরভাগে
-   * ১–৪ মিনিট)। অর্থাৎ তিনি ফাইল **খুলে দেখছিলেন**, বানাননি।
+   * Careful: **why this changed.** The left side used to show the "opened" count too.
+   * In the field the manager (OX-01) showed **16**, yet measuring showed they gave a
+   * total of **44 minutes** to 19 files (10 on one, 1-4 on most). They were
+   * **opening files to look**, not making them.
    *
-   * ⭐ "খোলা" গণনা **যে বানায় আর যে দেখে — দুজনকে আলাদা করতে পারে না**।
-   * Complete বোতামের সংখ্যাটা পারে, কারণ ডিজাইনার নিজে বলেন।
+   * Important: an "opened" count **cannot tell who makes from who views**. The
+   * Complete button's count can, because the designer says so themselves.
    *
-   * ⚠️ `card.designsDone` (খোলা) এখনো API-তে আসে ও `daily_summary`-তে
-   * জমা থাকে — ওটা "কাজ শুরু" শনাক্ত করতে কাজে লাগে। শুধু **দেখানো**
-   * হয় না, কারণ সংখ্যা হিসেবে সেটা বিভ্রান্তিকর।
+   * Careful: `card.designsDone` (opened) still comes in the API and is stored in
+   * `daily_summary`; it helps detect "work started". It is just not **shown**,
+   * because as a number it is misleading.
    */
   const done = card.designsFinished;
 
   /**
-   * ⚠️⚠️ `met` এখনো **খোলা** সংখ্যা ধরে, "শেষ" ধরে নয় — ইচ্ছাকৃত।
+   * Careful: `met` still uses the **opened** count, not "finished". This is
+   * intentional.
    *
-   * Complete বোতামটা সবে বসেছে আর মাঠে **এখনো একজনও চাপেননি** (মেপে দেখা,
-   * ২২ আগস্ট: `completed_via = 'button'` → ০)। এখনই ✅-কে "শেষ"-এর সাথে
-   * বাঁধলে পরদিন সকালে **সবাই টার্গেট-মিস** দেখাত, অথচ কাজ ঠিকই হয়েছে।
-   * ⭐ বোতামটা অভ্যাসে দাঁড়ালে এটা এক লাইনে বদলানো যাবে।
+   * The Complete button is new and **nobody has pressed it yet** in the field
+   * (measured: `completed_via = 'button'` gave 0). Tying the check mark to
+   * "finished" now would show **everyone as missing the target** the next morning,
+   * though the work was done. Once pressing the button becomes habit, this is a
+   * one-line change.
    */
   if (card.staffType === 'designer' && card.designTargetPerDay > 0) {
     return {

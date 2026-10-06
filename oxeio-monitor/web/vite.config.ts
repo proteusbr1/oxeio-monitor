@@ -2,39 +2,39 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 
-/* ═══ PWA: সার্ভিস ওয়ার্কার বিল্ড করা ═══════════════════════════════════
+/* ═══ PWA: building the service worker ═══════════════════════════════════
  *
- * ⭐⭐ কেন `vite-plugin-pwa` নয় — নির্ভরতা নয়, **নিয়ন্ত্রণ**। প্লাগইনটা
- *    workbox আনে, আর workbox ডিফল্টে অনেক কিছু runtime ক্যাশ করে। এই
- *    অ্যাপে `/api/v1/screenshots/*` হলো কর্মীর পর্দার ছবি, আর সংখ্যাগুলো
- *    লাইভ — দুটোর একটাও ডিভাইসে জমতে পারে না। পুরো ব্যাখ্যা
- *    `src/pwa-sw.ts`-এর মাথায়।
+ * Why not `vite-plugin-pwa`: not the dependency, but **control**. The plugin
+ *    brings workbox, and workbox caches many things at runtime by default. In
+ *    this app `/api/v1/screenshots/*` is employees' screen pictures, and the
+ *    numbers are live: neither may pile up on a device. The full explanation
+ *    is at the top of `src/pwa-sw.ts`.
  *
- * ⭐ কিন্তু যেটার জন্য প্লাগইন সত্যিই লাগত সেটা হলো **hash-করা ফাইলের
- *    তালিকা** — `assets/index-eB3mYKqm.js` নামটা প্রতি বিল্ডে বদলায়, তাই
- *    হাতে লেখা যায় না। নিচের ~৬০ লাইন ঠিক ততটুকুই করে: বিল্ড শেষে
- *    তালিকাটা আর একটা ভার্সন-হ্যাশ সার্ভিস ওয়ার্কারের ভেতরে বসিয়ে দেয়।
+ * What the plugin would really be needed for is the **list of hashed files**:
+ *    a name like `assets/index-eB3mYKqm.js` changes on every build, so it
+ *    cannot be hand-written. The ~60 lines below do just that much: after the
+ *    build they inject the list and a version hash into the service worker.
  */
 
-/** সার্ভিস ওয়ার্কারের সোর্স — rollup-এর দ্বিতীয় entry */
+/** The service worker's source: rollup's second entry */
 const SW_ENTRY = 'src/pwa-sw.ts';
 
-/** বিল্ডের পর যে নামে বেরোবে — ⚠️ `index.html` ও `Caddyfile`-এ একই নাম */
+/** The name it comes out with after the build. Careful: the same name in `index.html` and `Caddyfile` */
 const SW_FILE = 'sw.js';
 
 /**
- * ⭐ ছোট, স্থিতিশীল হ্যাশ (FNV-1a, ৩২-বিট) — ফাইলের তালিকা বদলালেই বদলায়।
+ * A small, stable hash (FNV-1a, 32-bit): it changes whenever the file list changes.
  *
- * ⚠️ `node:crypto` ইচ্ছাকৃতভাবে নয়: শুধু এই এক লাইনের জন্য web-এ
- *    `@types/node` যোগ করতে হতো (`tsconfig.node.json`-এ lib কেবল ES2023)।
- *    এটা নিরাপত্তার হ্যাশ নয়, "বদলেছে কি না" চেনার সংকেত মাত্র।
+ * Careful: deliberately not `node:crypto`: for this one line the web app would
+ *    need `@types/node` (the lib in `tsconfig.node.json` is only ES2023).
+ *    This is not a security hash, just a signal to tell "did it change".
  */
 function shortHash(input: string): string {
   let hash = 0x811c9dc5;
   for (let i = 0; i < input.length; i += 1) {
     hash ^= input.charCodeAt(i);
-    // ⚠️ `Math.imul` — সাধারণ `*` করলে ৩২ বিট ছাড়িয়ে ভাসমান দশমিকে চলে
-    //    যেত আর হ্যাশটা মেশিনভেদে আলাদা হতো।
+    // Careful: `Math.imul`: a plain `*` would go past 32 bits into floating
+    //    point and the hash would differ from machine to machine.
     hash = Math.imul(hash, 0x01000193);
   }
   return (hash >>> 0).toString(16).padStart(8, '0');
@@ -44,21 +44,21 @@ function serviceWorkerPlugin(): Plugin {
   return {
     name: 'oxeio-service-worker',
 
-    // ⚠️ শুধু বিল্ডে। ডেভ সার্ভারে `sw.js` তৈরি হয় না, আর সেটাই চাওয়া —
-    //    কারণ `src/pwa.ts`-এ লেখা।
+    // Careful: build only. The dev server does not produce `sw.js`, and that is
+    //    wanted; the reason is written in `src/pwa.ts`.
     apply: 'build',
 
     /**
-     * সার্ভিস ওয়ার্কারকে **দ্বিতীয় entry** হিসেবে যোগ করা।
+     * Adds the service worker as a **second entry**.
      *
-     * ⭐ এতে ফাইলটা সাধারণ TypeScript-ই থাকে — `tsc -b` টাইপ দেখে,
-     *    eslint পড়ে, আর বাকি কোডের মতোই আচরণ করে। স্ট্রিং হিসেবে
-     *    লিখলে ওই তিনটের একটাও পেত না।
-     * ⚠️ নামটা `sw.js`, hash নয় — ব্রাউজার সবসময় **একই ঠিকানায়**
-     *    ওয়ার্কার খোঁজে। hash বসালে প্রতি বিল্ডে নতুন ওয়ার্কার হতো আর
-     *    পুরোনোটা কোনোদিন প্রতিস্থাপিত হতো না।
-     * ⚠️ scope: `/`-এ বসে বলে পুরো সাইট তার আওতায়। `assets/`-এ থাকলে
-     *    scope হতো `/assets/`, আর নেভিগেশন কখনো ধরত না।
+     * This way the file stays ordinary TypeScript: `tsc -b` checks types,
+     *    eslint reads it, and it behaves like the rest of the code. Written as
+     *    a string, it would get none of those three.
+     * Careful: the name is `sw.js`, not hashed: the browser always looks for
+     *    the worker at the **same address**. With a hash, every build would make a
+     *    new worker and the old one would never be replaced.
+     * Careful: scope: because it sits at `/`, the whole site is under it. In
+     *    `assets/` the scope would be `/assets/` and it would never catch navigation.
      */
     config() {
       return {
@@ -75,16 +75,16 @@ function serviceWorkerPlugin(): Plugin {
     },
 
     /**
-     * ⭐ `index.html`-এর কমেন্টগুলো বিল্ডে ছেঁটে ফেলা।
+     * Strips the comments from `index.html` in the build.
      *
-     * ⚠️ Vite HTML কমেন্ট রেখে দেয় (JS/CSS-এর মতো ছাঁটে না)। এই ফাইলে
-     *    ব্যাখ্যা লম্বা — না ছাঁটলে ~৫ কিলোবাইট বাংলা কমেন্ট **প্রতিবার**
-     *    যেত, আর `index.html` ইচ্ছাকৃতভাবে `no-cache` (Caddyfile), অর্থাৎ
-     *    ড্যাশবোর্ড খোলার প্রতিবার। মালিক-ম্যানেজার ফোনের ডেটায় এটা
-     *    খোলেন।
-     * ⭐ কমেন্টগুলো তাই সোর্সেই থাকে, পুরো দৈর্ঘ্যে — শুধু পাঠানো হয় না।
-     * ⚠️ `order: 'post'` — Vite স্ক্রিপ্ট/স্টাইল ট্যাগ বসানোর **পরে**;
-     *    ওগুলোয় কোনো কমেন্ট নেই, তাই কিছু নষ্ট হয় না।
+     * Careful: Vite keeps HTML comments (unlike JS/CSS, it does not strip them).
+     *    The explanations in this file are long; unstripped, about 5 KB of
+     *    Bengali comments would be sent **every time**, and `index.html` is
+     *    deliberately `no-cache` (Caddyfile), i.e. on every dashboard open.
+     *    The owner and managers open it on phone data.
+     * So the comments stay in the source at full length; they are just not sent.
+     * Careful: `order: 'post'`: **after** Vite inserts the script/style tags;
+     *    those contain no comments, so nothing is lost.
      */
     transformIndexHtml: {
       order: 'post',
@@ -92,33 +92,33 @@ function serviceWorkerPlugin(): Plugin {
     },
 
     /**
-     * ⭐ বিল্ডের ফাইলগুলো জানা হয়ে গেছে — এখন তালিকাটা ওয়ার্কারের ভেতরে বসে।
+     * The build's files are known now: the list goes into the worker.
      */
     generateBundle(_options, bundle) {
       /**
-       * ⚠️ `/index.html` হাতে যোগ করা হয়, `bundle` থেকে নয়। Vite-এর HTML
-       *    প্লাগইন ফাইলটা তার **নিজের** `generateBundle`-এ emit করে, আর
-       *    দুটো হুকের ক্রম প্লাগইনের সাজানোর উপর নির্ভর করে। ক্রম বদলালে
-       *    তালিকা থেকে `index.html` নীরবে হারিয়ে যেত — আর তখন অফলাইনে
-       *    অ্যাপ একেবারেই খুলত না, অথচ বিল্ড সবুজ।
+       * Careful: `/index.html` is added by hand, not from `bundle`. Vite's HTML
+       *    plugin emits that file in **its own** `generateBundle`, and the order
+       *    of the two hooks depends on how the plugins are sorted. If the order
+       *    changed, `index.html` would silently drop out of the list, and then
+       *    the app would not open offline at all, while the build stayed green.
        */
       const shell = ['/index.html'];
 
       for (const fileName of Object.keys(bundle)) {
-        // ⚠️ ওয়ার্কার নিজেকে precache করে না — করলে নতুন সংস্করণ কোনোদিন
-        //    পৌঁছাত না, ঠিক যে ফাঁদটা `Caddyfile`-এর no-cache ঠেকায়।
+        // Careful: the worker does not precache itself: otherwise a new version
+        //    would never arrive, the very trap the `Caddyfile`'s no-cache prevents.
         if (fileName === SW_FILE) continue;
-        // sourcemap ব্যবহারকারীর কোনো কাজে লাগে না, শুধু ক্যাশ ভারী করত।
+        // Sourcemaps are of no use to the user, they would only make the cache heavy.
         if (fileName.endsWith('.map')) continue;
         shell.push(`/${fileName}`);
       }
 
       /**
-       * ⭐⭐ **এই প্রকল্পের সবচেয়ে জরুরি নিয়মটার পাহারা।**
+       * **A guard for this project's most important rule.**
        *
-       * ⚠️ কোনোদিন কেউ `/api/*`-এর কিছু বান্ডলে ঢুকিয়ে দিলে সেটা নীরবে
-       *    precache হয়ে যেত — অর্থাৎ কর্মীর ডেটা ফোনের ডিস্কে। বিল্ড
-       *    থামিয়ে দেওয়াই একমাত্র সৎ উত্তর।
+       * Careful: if someone ever pulls anything from `/api/*` into the bundle it
+       *    would be silently precached, i.e. employee data on the phone's disk.
+       *    Stopping the build is the only honest answer.
        */
       const leaked = shell.filter((path) => path.startsWith('/api'));
       if (leaked.length > 0) {
@@ -137,13 +137,13 @@ function serviceWorkerPlugin(): Plugin {
         return;
       }
 
-      // ⭐ ভার্সন = তালিকার হ্যাশ। কোড বদলালে asset-এর hash বদলায়, তাই এটাও।
+      // Version = hash of the list. When code changes, the assets' hashes change, so this does too.
       const version = shortHash(shell.join('\n'));
 
       /**
-       * ⚠️ প্লেসহোল্ডারের কোট দুরকম হতে পারে — esbuild minify করার সময়
-       *    `'...'` কে `"..."` বানিয়ে দেয়। দুটোই ধরা হয়, নইলে minify চালু
-       *    করার দিনটাতেই এটা নীরবে ভাঙত।
+       * Careful: the placeholder's quotes can be of two kinds: when esbuild
+       *    minifies it turns `'...'` into `"..."`. Both are matched, otherwise
+       *    this would silently break on the very day minify is switched on.
        */
       const before = chunk.code;
       chunk.code = before
@@ -151,10 +151,11 @@ function serviceWorkerPlugin(): Plugin {
         .replace(/(['"])__OXEIO_SW_VERSION__\1/, JSON.stringify(version));
 
       /**
-       * ⚠️⚠️ বদল না হলে বিল্ড থামে। বসানো না হলে ওয়ার্কারে
-       *    `JSON.parse('__OXEIO_PRECACHE__')` থেকে যেত — সে ইনস্টলেই মরত,
-       *    ব্যবহারকারী কিছুই টের পেতেন না, আর বিল্ড সবুজ দেখাত।
-       *    **নীরব ব্যর্থতাই এখানে আসল শত্রু।**
+       * Careful: if nothing was replaced the build stops. Had the placeholder
+       *    not been injected, `JSON.parse('__OXEIO_PRECACHE__')` would remain in
+       *    the worker, which would die at install, the user would notice
+       *    nothing, and the build would look green.
+       *    **Silent failure is the real enemy here.**
        */
       if (chunk.code.includes('__OXEIO_PRECACHE__') || chunk.code.includes('__OXEIO_SW_VERSION__')) {
         this.error(
@@ -169,27 +170,27 @@ function serviceWorkerPlugin(): Plugin {
 }
 
 /**
- * ⭐ API HTTPS-এ চললে proxy-ও HTTPS-এ যেতে হবে।
+ * If the API runs on HTTPS, the proxy must go to HTTPS too.
  *
- * ⚠️ সার্ভার `TLS_CERT`/`TLS_KEY` পেলে **শুধু** TLS-এ কথা বলে — ওই পোর্টে
- *    আর কোনো প্লেইন HTTP থাকে না। proxy তখনো `http://` ধরে বসে থাকলে
- *    প্রতিটা রিকোয়েস্ট `socket hang up` হয়ে ফিরত, আর ড্যাশবোর্ড পুরো
- *    অচল হয়ে যেত — অথচ সার্ভারের লগে কিছুই ভুল দেখাত না। TLS চালু করার
- *    দিনটাই সবচেয়ে খারাপ দিন এই ফাঁদে পড়ার জন্য।
+ * Careful: when the server gets `TLS_CERT`/`TLS_KEY` it speaks **only** TLS:
+ *    there is no plain HTTP left on that port. If the proxy still held on to
+ *    `http://`, every request would come back as `socket hang up` and the
+ *    dashboard would be completely dead, while the server's log showed nothing
+ *    wrong. The day TLS is switched on is the worst day to fall into this trap.
  *
- * তাই একই `.env` থেকে `TLS_CERT` দেখে scheme ঠিক করা হয় — দুটো জায়গায়
- * দুরকম সত্য রাখলে একদিন সেগুলো আলাদা হয়ে যেত।
+ * So the scheme is decided from `TLS_CERT` in the same `.env`: with two places
+ * holding two versions of the truth, one day they would differ.
  *
- * ⚠️ vite এই ফাইলটা **চালু হওয়ার সময় একবারই** পড়ে। তাই `.env`-এ TLS
- *    চালু/বন্ধ করলে ডেভ সার্ভারটাও **রিস্টার্ট করতে হবে** — নইলে proxy
- *    আগের scheme ধরে বসে থাকবে আর প্রতিটা কল ৫০০ দেবে।
+ * Careful: vite reads this file **only once, at startup**. So switching TLS
+ *    on or off in `.env` also means **restarting the dev server**; otherwise
+ *    the proxy keeps the old scheme and every call gives 500.
  */
 export default defineConfig(({ mode }) => {
-  // ⚠️ `.env` আছে web/ নয়, তার এক ফোল্ডার উপরে — সার্ভারও সেটাই পড়ে।
-  //    তৃতীয় আর্গুমেন্ট `''` মানে সব ভেরিয়েবল, শুধু `VITE_`-গুলো নয়।
-  // ⚠️ `'..'` ইচ্ছাকৃতভাবে আপেক্ষিক — `loadEnv` নিজেই cwd থেকে মেলায়,
-  //    ঠিক যেভাবে vite তার `root`-ও মেলায়। `node:path`/`node:url` আনলে
-  //    web-এ `@types/node` যোগ করতে হতো শুধু এই এক লাইনের জন্য।
+  // Careful: `.env` is not in web/ but one folder above it; the server reads the same one.
+  //    The third argument `''` means all variables, not only the `VITE_` ones.
+  // Careful: `'..'` is deliberately relative: `loadEnv` resolves it from cwd,
+  //    exactly as vite resolves its `root`. Importing `node:path`/`node:url`
+  //    would need `@types/node` in web for just this one line.
   const env = loadEnv(mode, '..', '');
   const https = Boolean(env.TLS_CERT?.trim());
 
@@ -198,21 +199,21 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       /**
-       * ⚠️ proxy না থাকলে লগইনই কাজ করবে না।
+       * Careful: without the proxy, login would not work at all.
        *
-       * সেশন cookie-তে `SameSite=Strict` (ADR-016), তাই ব্রাউজার সেটা শুধু
-       * **same-site** রিকোয়েস্টেই পাঠায়। ফ্রন্টএন্ড :5173 থেকে সরাসরি :3000-এ
-       * ডাকলে cookie যেত না — লগইন সফল দেখাত, কিন্তু পরের রিকোয়েস্টেই 401।
-       * proxy দিয়ে ব্রাউজারের চোখে সবই এক origin।
+       * The session cookie is `SameSite=Strict` (ADR-016), so the browser sends
+       * it only on **same-site** requests. If the frontend on :5173 called :3000
+       * directly, the cookie would not go: login would look successful, but the
+       * very next request would give 401.
        */
       proxy: {
         '/api': {
           target: `${https ? 'https' : 'http'}://localhost:3000`,
           changeOrigin: false,
-          // ⚠️ self-signed সার্ট (deploy/make-cert.ps1) — ডেভ proxy-কে
-          //    সেটা মেনে নিতে বলতে হয়। এটা **শুধু ডেভ সার্ভারের** কথা;
-          //    এজেন্ট নিজে SPKI পিন দিয়েই যাচাই করে, আর ব্রাউজার তার
-          //    নিজের নিয়মে সার্ট দেখে।
+          // Careful: self-signed cert (deploy/make-cert.ps1): the dev proxy has
+          //    to be told to accept it. This is **only for the dev server**;
+          //    the agent itself verifies with an SPKI pin, and the browser checks
+          //    certs by its own rules.
           secure: false,
         },
       },

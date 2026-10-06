@@ -30,16 +30,16 @@ import {
   type TwoFactorStatus,
 } from './two-factor.service';
 
-/** লগইনের উত্তর — দুটোর একটাই আসে, কখনো দুটো একসাথে নয় */
+/** The login response: exactly one of the two arrives, never both */
 interface LoginResponse {
-  /** true হলে সেশন cookie **বসেনি**; ইউজারকে কোড চাইতে হবে */
+  /** When true the session cookie was **not set**; the user must supply a code */
   needsTotp?: true;
   mustChangePassword?: boolean;
   usedRecoveryCode?: boolean;
   recoveryCodesLeft?: number | null;
 }
 
-/** I09 — ওয়েব এই সংখ্যাগুলো দিয়েই নিজের কাউন্টডাউন মেলায় */
+/** I09: the web uses these numbers to sync its own countdown */
 interface SessionPolicy {
   idleTimeoutSec: number;
   warnBeforeSec: number;
@@ -78,8 +78,8 @@ export class AuthController {
       dto.recoveryCode,
     );
 
-    // ⚠️ ২০০ কিন্তু cookie নেই — ইচ্ছাকৃত। ৪০১ দিলে ওয়েবের গ্লোবাল
-    //    "সেশন শেষ" হ্যান্ডলার চালু হতো, অথচ এটা ব্যর্থতাই নয়, ধাপ ১।
+    // Careful: 200 but no cookie, deliberately. A 401 would trigger the web's global
+    // "session ended" handler, yet this is not a failure at all, it is step 1.
     if (outcome.status === 'needs_totp') return { needsTotp: true };
 
     await this.tokens.issue(res, outcome.user);
@@ -104,9 +104,10 @@ export class AuthController {
   }
 
   /**
-   * I09 — ওয়েবের কাউন্টডাউন যেন সার্ভারের সাথে না মেলে এমন না হয়।
-   * ⚠️ সংখ্যাগুলো ফ্রন্টএন্ডে হার্ডকোড করলে একদিন সার্ভারে TTL বদলে গেলে
-   *    ওয়েব ৩০ মিনিটে সতর্ক করত অথচ সেশন মরত ১৫ মিনিটে — বা উল্টো।
+   * I09: the web's countdown must not drift from the server's.
+   * Careful: if the numbers were hardcoded in the frontend, one day when the
+   * server TTL changed the web would warn at 30 minutes while the session died
+   * at 15, or the reverse.
    */
   @Public()
   @Get('session-policy')
@@ -165,16 +166,16 @@ export class AuthController {
       dto.newPassword,
       ip,
     );
-    // টোকেনে mustChangePw বসানো আছে — নতুন করে ইস্যু না করলে
-    // পাসওয়ার্ড বদলানোর পরেও ইউজার আটকে থাকত
+    // The token carries mustChangePw; without issuing a new one the user
+    // would stay stuck even after changing the password
     await this.tokens.issue(res, { ...user, mustChangePw: false });
   }
 
-  // ══════════════════ I06 — ঐচ্ছিক TOTP 2FA ══════════════════
+  // ══════════════════ I06: optional TOTP 2FA ══════════════════
   //
-  // ⚠️ কোনোটাতেই `@AllowWhileMustChangePw()` নেই। প্রথম লগইনে অস্থায়ী
-  //    পাসওয়ার্ড নিয়েই কেউ 2FA বসিয়ে ফেললে ওই দুর্বল পাসওয়ার্ডটাই
-  //    রয়ে যেত — আগে পাসওয়ার্ড বদলাক, তারপর 2FA।
+  // Careful: none of these has `@AllowWhileMustChangePw()`. If someone could
+  // set up 2FA on the first login using the temporary password, that weak
+  // password would stay in place; change the password first, then 2FA.
 
   @Get('2fa')
   twoFactorStatus(@CurrentUser() user: SessionUser): Promise<TwoFactorStatus> {

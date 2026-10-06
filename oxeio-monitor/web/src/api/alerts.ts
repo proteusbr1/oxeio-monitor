@@ -2,14 +2,14 @@ import { api } from './client';
 import { qs } from './query';
 
 /**
- * G01–G07 — অ্যালার্টের তালিকা ও acknowledge।
+ * G01–G07 — the alert list and acknowledge.
  *
- * সার্ভারের উৎস: `server/src/alerts/` (alerts.controller.ts ·
- * alerts.service.ts · alerts.constants.ts)।
+ * Server source: `server/src/alerts/` (alerts.controller.ts ·
+ * alerts.service.ts · alerts.constants.ts).
  *
- * ⚠️ পুরোটাই **owner-only** — অ্যালার্টে হোস্টনেম, কর্মীর নাম আর ডিভাইসের
- *    অবস্থা একসাথে থাকে, আর সেগুলো ম্যানেজারের নাগালের বাইরে (§ ৪.৩)।
- *    ম্যানেজারকে অ্যালার্টের ব্যাজটাও দেখাবেন না।
+ * Careful: all of it is **owner-only**. An alert carries the hostname, the
+ * employee's name and the device state together, and managers must not see
+ * those (section 4.3). Do not show managers the alert badge either.
  */
 
 export type AlertType =
@@ -27,16 +27,16 @@ export type AlertType =
 export type AlertSeverity = 'info' | 'warning' | 'critical';
 
 /**
- * পর্দায় দেখানোর নাম — সব পেজে এক থাকুক।
+ * Display names for the screen — kept identical across all pages.
  *
- * ⚠️ এখনো কোনো পেজ এগুলো render করে না (অ্যালার্টের পাতাটা এখনো নেই)।
- *    তবু বাকি UI-র সাথে **একই ভাষায়** রাখা হলো, নইলে পাতাটা যেদিন লেখা
- *    হতো সেদিন গোটা ড্যাশবোর্ড ইংরেজি অথচ অ্যালার্টের তালিকা বাংলা —
- *    আর ততদিনে কেউ মনে রাখত না এই ফাইলটা অনুবাদ বাকি ছিল।
+ * Note: no page renders these yet (there is no alerts page). They are still
+ * in the **same language** as the rest of the UI; otherwise, by the time the
+ * page is written, the whole dashboard would be English with an alert list in
+ * another language, and nobody would remember this file was left untranslated.
  *
- * ⚠️ `agent_down`-এর লেখাটা `StatusDot`-এর `STATUS_LABEL`-এর সাথে **হুবহু
- *    এক** ("Agent down") — একই ঘটনা দুই পর্দায় দুই নামে ডাকলে ওগুলো
- *    আলাদা জিনিস মনে হতো।
+ * Careful: the `agent_down` text matches `STATUS_LABEL` in `StatusDot`
+ * **exactly** ("Agent down"). Calling the same event by two names on two
+ * screens would make them look like different things.
  */
 export const ALERT_TYPE_LABEL: Record<AlertType, string> = {
   agent_down: 'Agent down',
@@ -48,9 +48,9 @@ export const ALERT_TYPE_LABEL: Record<AlertType, string> = {
   no_activity_today: 'No activity today',
   device_overlap: 'Two devices at once',
   /**
-   * ⭐ **G46** — নাম ইচ্ছাকৃতভাবে নিরপেক্ষ: "Unbroken activity", "Fake
-   * input" নয়। অ্যালার্টটা সন্দেহ, প্রমাণ নয় — আর ফিল্টারের ড্রপডাউনে
-   * "Fake input" লেখা থাকলে মালিক তালিকাটা খুলেই সিদ্ধান্ত নিয়ে ফেলতেন।
+   * **G46** — the name is deliberately neutral: not "Unbroken activity" or
+   * "Fake input". The alert is a suspicion, not proof, and if the filter
+   * dropdown said "Fake input" the owner would decide just by opening the list.
    */
   synthetic_input: 'Unbroken activity',
   agent_capability: 'Agent part not working',
@@ -63,9 +63,9 @@ export const ALERT_SEVERITY_LABEL: Record<AlertSeverity, string> = {
 };
 
 export interface AlertRow {
-  /** ⚠️ স্ট্রিং — সার্ভারে BigInt */
+  /** A string — `BigInt` on the server */
   id: string;
-  /** ⚠️ কলামটা TEXT, তাই তালিকার বাইরের মানও তাত্ত্বিকভাবে আসতে পারে */
+  /** The column is TEXT, so a value outside the list can in theory arrive */
   type: string;
   severity: AlertSeverity;
   title: string;
@@ -75,14 +75,14 @@ export interface AlertRow {
   employeeId: number | null;
   employeeName: string | null;
   meta: unknown;
-  /** কোন কোন চ্যানেলে পাঠানো হয়েছে (`email` …) */
+  /** Channels it was sent to (`email` …) */
   channelsSent: string[];
   acknowledgedAt: string | null;
-  /** যিনি প্রথম "দেখেছি" বলেছিলেন — পরে কেউ ডাকলেও নাম বদলায় না */
+  /** Whoever first said "seen" — the name does not change if someone else acknowledges later */
   acknowledgedBy: string | null;
   /**
-   * ⭐ সার্ভার **নিজে** বন্ধ করেছে (এজেন্ট ফিরে এসেছে) — কোনো মানুষ দেখেনি।
-   *    acknowledgedAt থেকে আলাদা: "open" মানে দুটোই null।
+   * Closed by the **server itself** (the agent came back) — no human looked.
+   * Distinct from acknowledgedAt: "open" means both are null.
    */
   resolvedAt: string | null;
   createdAt: string;
@@ -92,18 +92,18 @@ export interface AlertPage {
   total: number;
   page: number;
   limit: number;
-  /** ⭐ ফিল্টার যাই হোক, এখনো acknowledge হয়নি এমন মোট সংখ্যা — nav ব্যাজে এটাই */
+  /** Total not yet acknowledged, whatever the filter — the nav badge shows this */
   openCount: number;
   rows: AlertRow[];
 }
 
 export interface AlertListQuery {
-  /** ডিফল্ট `open` — তালিকাটার উদ্দেশ্যই "এখনো দেখা বাকি" */
+  /** Defaults to `open` — the list exists for "not yet looked at" */
   status?: 'open' | 'all';
   type?: AlertType;
   severity?: AlertSeverity;
   page?: number;
-  /** ডিফল্ট ৫০, সর্বোচ্চ ২০০ */
+  /** Default 50, max 200 */
   limit?: number;
 }
 
@@ -115,22 +115,23 @@ export function listAlerts(
 }
 
 /**
- * "দেখেছি" বলা।
+ * Mark as seen ("acknowledge").
  *
- * ⚠️ অ্যালার্ট কখনো **ডিলিট হয় না**, শুধু acknowledged হয় — তাই UI-তে
- *    "মুছে ফেলুন" নয়, "দেখেছি" লিখুন। ইতিহাসটাই পরে ঘণ্টা সংশোধনের প্রমাণ।
+ * Careful: alerts are **never deleted**, only acknowledged, so the UI should
+ * say "Seen", not "Delete". The history later serves as evidence for hour
+ * corrections.
  *
- * ⭐ idempotent, আর **প্রথমজনের নামই থেকে যায়**।
+ * Idempotent, and **the first person's name is kept**.
  */
 export function acknowledgeAlert(id: string): Promise<AlertRow> {
   return api<AlertRow>(`/alerts/${id}/acknowledge`, { method: 'POST' });
 }
 
 /**
- * ⭐ একসাথে সব খোলা অ্যালার্ট "দেখেছি" — G01-এর মতো একই জিনিস ১২টা PC-তে
- * বারবার এলে এক-এক করে চাপার যন্ত্রণা কমায়।
+ * Acknowledge all open alerts at once — as with G01, it saves pressing them one
+ * by one when the same problem shows up repeatedly on 12 PCs.
  *
- * ⚠️ আগে-দেখা সারি ছোঁয় না; ফেরত দেয় কতগুলো নতুন করে seen হলো।
+ * Rows already seen are untouched; returns how many were newly seen.
  */
 export function acknowledgeAllAlerts(): Promise<{ count: number }> {
   return api<{ count: number }>(`/alerts/acknowledge-all`, { method: 'POST' });

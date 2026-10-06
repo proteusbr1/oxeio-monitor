@@ -33,17 +33,17 @@ import {
 } from '../../components/ui';
 
 /**
- * D06 — ক্যাটাগরির নিয়ম (owner-only)।
+ * Category rules (owner-only).
  *
- * ⭐ এই পর্দার দুটো কথা না বললে সবাই ঠকে:
+ * Important: if these two points go unsaid, everyone loses:
  *
- *   ১· **ছোট priority আগে জেতে।** ২০০ দিলে সেটা "বেশি গুরুত্ব" নয়, বরং
- *      কার্যত সবার শেষে। seed-এ ব্রাউজারের নিয়ম ২০০, বাকিরা ১০০ — অর্থাৎ
- *      ডোমেইনের নিয়ম ব্রাউজারের নিয়মকে হারায়।
+ *   1. **Lower priority wins first.** Entering 200 does not mean "more important",
+ *      it effectively means last of all. In the seed the browser rule is 200 and the
+ *      others 100, so a domain rule beats the browser rule.
  *
- *   ২· **ক্যাটাগরি বসে ingest-এর সময়, পড়ার সময় নয়।** নিয়ম বদলালে পুরোনো
- *      সারিতে পুরোনো সিদ্ধান্তই বসে থাকে — তাই recategorize বোতামটা আছে,
- *      আর সেটা না চালালে রিপোর্ট সপ্তাহের পর সপ্তাহ পুরোনো নিয়মে চলে।
+ *   2. **The category is assigned at ingest time, not at read time.** When a rule
+ *      changes, old rows keep the old decision, so the recategorize button
+ *      exists, and unless it is run, reports stay on the old rules for weeks.
  */
 
 const MATCH_LABEL: Record<MatchType, string> = {
@@ -58,7 +58,7 @@ const MATCH_OPTIONS = [
   { value: 'title_regex', label: 'Title regex' },
 ];
 
-/** ⭐ মকআপের ভাষাই রাখা হয়েছে — রিপোর্টের লেজেন্ডেও এই তিনটে শব্দই */
+/** Important: the mockup's wording is kept; the report legend uses the same three words */
 const CATEGORY_OPTIONS = [
   { value: 'productive', label: 'Productive' },
   { value: 'neutral', label: 'Neutral' },
@@ -81,7 +81,7 @@ export function CategoriesTab() {
   const [creating, setCreating] = useState(false);
   const [removing, setRemoving] = useState<CategoryRuleView | null>(null);
   const [rerunning, setRerunning] = useState(false);
-  /** শেষ কাজের ফল — মুছে ফেলা বা recategorize-এর পর কী হলো */
+  /** Result of the last job: what happened after a delete or recategorize */
   const [outcome, setOutcome] = useState<string | null>(null);
 
   const rows = rules.data ?? [];
@@ -111,9 +111,9 @@ export function CategoriesTab() {
     {
       key: 'category',
       header: 'Category',
-      // ⭐ ব্র্যান্ডের নিয়মটাই এখানে হুবহু খাটে: নিরেট `ink` = গোনা হওয়া
-      //    কাজ, ধূসর = গোনা হয়নি। লাল ব্যবহার করা হয়নি — unproductive
-      //    হওয়া কোনো ভুল নয়, শুধু একটা শ্রেণি।
+      // Important: the brand rule applies exactly here: solid `ink` = counted work,
+      //    grey = not counted. No red is used: being unproductive is not an error,
+      //    just a class.
       render: (rule) => (
         <Chip tone={rule.category === 'productive' ? 'counted' : 'muted'}>
           {rule.category}
@@ -230,7 +230,7 @@ export function CategoriesTab() {
   );
 }
 
-// ── রুল যোগ ও সম্পাদনা ──────────────────────────────────────────────────────
+// ── Add and edit rule ───────────────────────────────────────────────────────
 
 function RuleForm({
   rule,
@@ -267,8 +267,8 @@ function RuleForm({
 
       if (rule) {
         await updateCategory(rule.id, body);
-        // ⚠️ রুল **বদলানোর** পর `onlyUnmatched: false` লাগে — পুরোনো
-        //    সিদ্ধান্ত বসানো সারিগুলো নইলে পুরোনোই থেকে যেত
+        // Careful: after **changing** a rule, `onlyUnmatched: false` is needed;
+        //    otherwise rows carrying the old decision would stay old
         onSaved(
           'Rule changed. Rows already stored still carry the old decision — run "Apply rules to past rows" and choose "All rows".',
         );
@@ -352,7 +352,7 @@ function RuleForm({
   );
 }
 
-// ── মোছা ────────────────────────────────────────────────────────────────────
+// ── Delete ──────────────────────────────────────────────────────────────────
 
 function RemoveDialog({
   rule,
@@ -377,7 +377,7 @@ function RemoveDialog({
       onConfirm={() =>
         run(async () => {
           const result = await deleteCategory(rule.id);
-          // ⭐ সার্ভারের `hint` হুবহু দেখানো হয় — ওখানেই লেখা আছে এরপর কী করতে হবে
+          // The server's `hint` is shown verbatim; it says what to do next
           onDone(
             result.orphanedRows === 0
               ? `Rule deleted. ${result.hint}`
@@ -389,12 +389,13 @@ function RemoveDialog({
   );
 }
 
-// ── পুরোনো সারিতে নিয়ম বসানো ────────────────────────────────────────────────
+// ── Applying rules to old rows ──────────────────────────────────────────────
 
 /**
- * ⚠️ কাজটা **সিনক্রোনাস** — এক মাসে লাখখানেক সারিতে কয়েক সেকেন্ড লাগতে
- *    পারে, আর ততক্ষণ ব্রাউজার অপেক্ষা করে। তাই বোতামে "অপেক্ষা করুন…"
- *    লেখা ওঠে; নইলে কেউ ভাবত ক্লিকটা লাগেনি আর বারবার চাপত।
+ * Careful: the job is **synchronous**: over about a hundred thousand rows in a month
+ *    it can take several seconds, and the browser waits. So the button shows
+ *    "please wait..."; otherwise people would think the click did not register and
+ *    press it again and again.
  */
 function RecategorizeDialog({
   onClose,

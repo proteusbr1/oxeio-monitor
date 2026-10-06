@@ -14,11 +14,11 @@ import {
 } from './setup/harness';
 
 /**
- * **G08 — টেলিগ্রামের কনফিগ পর্দা থেকে।**
+ * **G08 — Telegram config from the screen.**
  *
- * ⚠️⚠️ এই ফাইলের সবচেয়ে জরুরি দাবিটা নিরাপত্তার: **বট টোকেন কখনো
- * রেসপন্সে যাবে না**। গেলে সেটা DevTools, প্রক্সি লগ বা স্ক্রিন শেয়ারে
- * দেখা যেত, আর যে কেউ ওই বট দিয়ে বার্তা পাঠাতে পারত।
+ * The most important claim of this file is about security: **the bot token
+ * never goes in a response**. If it did, it would be visible in DevTools,
+ * proxy logs or a screen share, and anyone could send messages with that bot.
  */
 let h: Harness;
 let owner: Session;
@@ -47,7 +47,7 @@ const save = (botToken: string, chatId: string) =>
     .send({ botToken, chatId });
 
 describe('GET /settings/telegram', () => {
-  it('কিছু বসানো না থাকলে none', async () => {
+  it('none when nothing is set', async () => {
     const res = await read().expect(200);
 
     expect(res.body.source).toBe('none');
@@ -55,8 +55,8 @@ describe('GET /settings/telegram', () => {
     expect(res.body.tokenHint).toBeNull();
   });
 
-  /** ⚠️ ম্যানেজার নয় — ওই চ্যাটে কর্মীর নাম ও ঘণ্টা যায় */
-  it('ম্যানেজার দেখতে পান না', async () => {
+  /** Not a manager — that chat receives employee names and hours */
+  it('a manager cannot see it', async () => {
     const manager = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
 
     await manager.http.get('/api/v1/settings/telegram').expect(403);
@@ -64,7 +64,7 @@ describe('GET /settings/telegram', () => {
 });
 
 describe('PATCH /settings/telegram', () => {
-  it('বসানো যায়, আর ডাটাবেসই জেতে', async () => {
+  it('can be set, and the database wins', async () => {
     const res = await save(TOKEN, '-100999').expect(200);
 
     expect(res.body.source).toBe('database');
@@ -73,10 +73,10 @@ describe('PATCH /settings/telegram', () => {
   });
 
   /**
-   * ⭐⭐⭐ **এই ফাইলের মূল টেস্ট।** পুরো টোকেন কোনো রেসপন্সেই থাকবে না —
-   * না সেভ করার উত্তরে, না পড়ার উত্তরে।
+   * **The main test of this file.** The full token will be in no response at
+   * all — neither in the reply to saving nor in the reply to reading.
    */
-  it('পুরো টোকেন কোনো রেসপন্সে যায় না', async () => {
+  it('the full token does not go in any response', async () => {
     const saved = await save(TOKEN, '55').expect(200);
     const fetched = await read().expect(200);
 
@@ -85,18 +85,18 @@ describe('PATCH /settings/telegram', () => {
     expect(JSON.stringify(fetched.body)).not.toContain('AAHfake');
   });
 
-  /** ⭐ শুধু শেষ চার অক্ষর — মালিক যেন মিলিয়ে নিতে পারেন কোনটা বসানো */
-  it('শেষ চার অক্ষরের ইঙ্গিত যায়', async () => {
+  /** Only the last four characters — so the owner can check which one is set */
+  it('a hint of the last four characters is returned', async () => {
     const res = await save(TOKEN, '55').expect(200);
 
     expect(res.body.tokenHint).toBe('…4821');
   });
 
   /**
-   * ⚠️⚠️ **টোকেন audit log-এও যায় না।** audit log মালিক ও ম্যানেজার
-   * দুজনেই দেখেন, আর গোপন মান একবার ওখানে বসলে আর মোছা যায় না।
+   * **The token does not go in the audit log either.** Both the owner and
+   * the manager see the audit log, and once a secret value lands there it cannot be erased.
    */
-  it('audit log-এ টোকেন লেখা হয় না', async () => {
+  it('the token is not written to the audit log', async () => {
     await save(TOKEN, '55').expect(200);
 
     const rows = await h.prisma.auditLog.findMany({
@@ -108,8 +108,8 @@ describe('PATCH /settings/telegram', () => {
     expect(rows[0].meta).toMatchObject({ op: 'telegram', tokenSet: true });
   });
 
-  /** ⚠️ খালি পাঠানো বৈধ — মানে "মুছে দাও", নইলে ভুল টোকেন সরানোর পথ থাকত না */
-  it('খালি পাঠিয়ে মুছে ফেলা যায়', async () => {
+  /** Sending empty is valid — it means "delete", otherwise there would be no way to remove a wrong token */
+  it('sending empty deletes it', async () => {
     await save(TOKEN, '55').expect(200);
 
     const res = await save('', '').expect(200);
@@ -118,17 +118,17 @@ describe('PATCH /settings/telegram', () => {
   });
 
   /**
-   * ⚠️⚠️ একটা ঘর ভরা আর একটা খালি রাখলে ডাটাবেসেরটা **জেতে না** — নইলে
-   * পর্দা দিয়ে টেলিগ্রাম নীরবে ভাঙানো যেত।
+   * If one field is filled and the other left empty, the database one does
+   * **not win** — otherwise Telegram could be silently broken from the screen.
    */
-  it('আধা-ভরা কনফিগ কার্যকর হয় না', async () => {
+  it('a half-filled config does not take effect', async () => {
     const res = await save(TOKEN, '').expect(200);
 
     expect(res.body.configured).toBe(false);
     expect(res.body.source).toBe('none');
   });
 
-  it('ম্যানেজার বসাতে পারেন না', async () => {
+  it('a manager cannot set it', async () => {
     const manager = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
 
     await manager.http
@@ -138,12 +138,12 @@ describe('PATCH /settings/telegram', () => {
       .expect(403);
   });
 
-  it('অতি লম্বা টোকেন ৪০০', async () => {
+  it('an overlong token gives 400', async () => {
     await save('x'.repeat(300), '5').expect(400);
   });
 
-  /** ⭐ দুবার বসালে সারি একটাই — upsert */
-  it('আবার বসালে নতুনটাই থাকে', async () => {
+  /** Setting twice leaves one row — upsert */
+  it('setting again keeps the new one', async () => {
     await save(TOKEN, '11').expect(200);
     const res = await save('987654321:BBsecondTOKEN9999', '22').expect(200);
 

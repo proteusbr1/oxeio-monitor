@@ -31,19 +31,20 @@ import {
 } from '../../components/ui';
 
 /**
- * **B14 · J08 · ADR-011e** — ঘণ্টা সংশোধন।
+ * Hours adjustment.
  *
- * ⭐ **কেন এটা কর্মীর পাতায়, Settings-এ নয়:** প্রশ্নটা ওঠে একটা নির্দিষ্ট
- * দিন দেখতে দেখতে — "ওইদিন এজেন্ট বন্ধ ছিল, ওর ঘণ্টা কম কেন"। উত্তরটাও
- * তাই ওই পাতাতেই থাকা দরকার, অন্য পর্দায় গিয়ে খুঁজতে হলে কেউ করতই না।
+ * Important — why this is on the employee page and not in Settings: the question
+ * comes up while looking at one particular day, "the agent was off that day, why
+ * are their hours low". The answer should be on that same page; nobody would go
+ * searching another screen.
  *
- * ⚠️ **স্টাফ নিজেও এটা পড়ে** (J08)। তাই কারণের লেখাগুলো কারিগরি নয়, আর
- * এখানে কোনো "দাবি করুন" বোতাম নেই — সংশোধন owner-এর সিদ্ধান্ত, স্টাফের
- * আবেদন নয় (ADR-011d: কোনো অনুমোদন ব্যবস্থা নেই)।
+ * Careful: **staff read this themselves** (J08). So the reason texts are not
+ * technical, and there is no "claim" button here: an adjustment is the owner's
+ * decision, not a staff request (ADR-011d: there is no approval system).
  *
- * ⚠️ তালিকাটা **তারিখ-নিরপেক্ষ** — পাতার বাকি অংশ একটা দিনের, কিন্তু
- * সংশোধন কম হয় আর সবগুলো একসাথে দেখাই কাজের। দিন ধরে ফিল্টার করলে
- * "গত মাসে কি কিছু দেওয়া হয়েছিল" প্রশ্নের উত্তর খুঁজতে ৩০ দিন ঘুরতে হতো।
+ * Careful: the list is **date-independent**. The rest of the page is about one day,
+ * but adjustments are few and seeing them all together is useful. Filtering by day
+ * would mean scrolling through 30 days to answer "was anything granted last month".
  */
 export function Adjustments({
   employeeId,
@@ -89,10 +90,10 @@ export function Adjustments({
       {!loading && !error && rows.length > 0 && (
         <div className="space-y-2">
           {/*
-            ⚠️ যোগফলটা উপরে, কারণ "মোট কত ফেরত দেওয়া হয়েছে" প্রশ্নটাই
-               প্রথমে আসে — সারি গুনে বের করতে হলে কেউ করত না।
-            ⚠️ শুধু **সক্রিয়** সারিগুলো গোনা হয়; বাতিল করাগুলো বাদ,
-               ঠিক যেমন সার্ভারের হিসাবেও বাদ।
+            Careful: the total is at the top because "how much was given back in total"
+               is the first question; nobody would count rows to find out.
+            Careful: only **active** rows are counted; cancelled ones are excluded,
+               just as in the server's calculation.
           */}
           {counted.length > 0 && (
             <p className="text-[13px] text-ink-2">
@@ -154,10 +155,11 @@ function Row({
       <div className="min-w-0 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           {/*
-            ⚠️ চিহ্নসহ সংখ্যা (+২:০০ / −০:৩০) — "২:০০" দেখে কেউ বুঝত না
-               ঘণ্টা যোগ হলো না কাটা গেল, অথচ পার্থক্যটা তার বেতনের।
-            ⚠️ বাতিল হলে কাটা দাগ, আর রংও নিরপেক্ষ — সংখ্যাটা এখনো
-               গোনা হচ্ছে বলে ভুল হওয়ার সুযোগ থাকা চলবে না।
+            Careful: a signed number (+2:00 / -0:30): seeing "2:00" alone, nobody
+               could tell whether hours were added or deducted, yet the difference
+               is in their pay.
+            Careful: when cancelled it is struck through and the colour is neutral;
+               there must be no room to mistake it for a number still being counted.
           */}
           <span
             className={`num text-[15px] font-semibold ${
@@ -180,7 +182,7 @@ function Row({
           {!row.active && <Chip tone="muted">Revoked</Chip>}
         </div>
 
-        {/* ⭐ কারণটা সবসময় দেখানো হয় — স্টাফ নিজেও এটা পড়ে (J08) */}
+        {/* The reason is always shown; staff read this themselves (J08) */}
         <p className="max-w-prose text-[13px] text-ink-2">{row.reason}</p>
 
         <p className="text-[11.5px] text-ink-3">
@@ -201,8 +203,8 @@ function Row({
 }
 
 /**
- * ⚠️ ইনপুট **ঘণ্টা ও মিনিটে**, সেকেন্ডে নয় — কেউ "2h 30m" ভেবে 230
- * লিখলে সেটা ৪ মিনিট হয়ে যেত। API-তে সেকেন্ডেই যায়, রূপান্তরটা এখানে।
+ * Careful: input is **hours and minutes**, not seconds: someone typing 230 meaning
+ * "2h 30m" would get about 4 minutes. The API takes seconds; the conversion is here.
  */
 function AddDialog({
   employeeId,
@@ -368,13 +370,12 @@ function totalSec(rows: AdjustmentView[]): number {
 }
 
 /**
- * ⚠️ `signed()` এখানেই লেখা ছিল, এখন `lib/format.ts`-এ
- * (`formatSignedDuration`) — ওই ফাইলের নিজের ডকই বলে *"নিজের পেজে আলাদা
- * করে ফরম্যাট লিখবেন না"*, আর এটাই ছিল একমাত্র জায়গা যেখানে নিয়মটা ভাঙা
- * হয়েছিল।
+ * Careful: `signed()` used to be written here and is now in `lib/format.ts`
+ * (`formatSignedDuration`). That file's own doc says "do not write a separate
+ * format on your own page", and this was the only place that broke the rule.
  *
- * ⭐ সরানোর সাথে সাথেই একটা সত্যিকারের বাগ বেরোল: এখানকার হিসাবে ৩৫৯৮
- * সেকেন্ডের সংশোধন পর্দায় `+0:60` দেখাত (মিনিট round করে ৬০ হয়ে যায়,
- * আর ঘণ্টায় তোলা হতো না)। `formatDuration()` ওই ফাঁদটা আগেই সামলাত —
- * নকল করে লেখা কোডটাই সামলাত না।
+ * Important: moving it exposed a real bug: with the old calculation an adjustment of
+ * 3598 seconds showed `+0:60` (the minutes round up to 60 and were never carried
+ * into hours). `formatDuration()` already handled that trap; the copied code did
+ * not.
  */

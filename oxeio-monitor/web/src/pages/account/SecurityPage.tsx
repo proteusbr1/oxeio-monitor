@@ -17,9 +17,9 @@ import { Modal, Notice, ServerError, useMutation } from '../../components/ui';
 import { RecoveryCodesModal } from './RecoveryCodesModal';
 
 /**
- * I06 — নিজের অ্যাকাউন্টের 2FA। **নিজের**, অন্য কারো নয়: সব endpoint
- * সেশনের ইউজারের উপরেই কাজ করে, তাই owner-only করার দরকার নেই — ম্যানেজার
- * বা স্টাফও নিজের অ্যাকাউন্ট শক্ত করতে পারবে।
+ * I06: 2FA for one's own account: one's own, nobody else's. Every endpoint works
+ * on the session's user, so there is no need to make it owner-only; managers and
+ * staff can harden their own accounts too.
  */
 export function SecurityPage() {
   const { user } = useAuth();
@@ -63,8 +63,8 @@ export function SecurityPage() {
             </Notice>
 
             {/*
-              ⚠️ কোড ফুরিয়ে গেলে ফোন হারানোর দিন ঢোকার আর কোনো পথ থাকে না —
-                 তাই কম থাকলে চুপ না থেকে বলে দেওয়া।
+              Careful: once the codes run out, there is no way in on the day the phone is lost,
+                 so warn when few are left instead of staying quiet.
             */}
             {data.recoveryCodesLeft <= 2 && (
               <Notice tone="attention">
@@ -156,12 +156,11 @@ export function SecurityPage() {
 }
 
 /**
- * ধাপ ২ — QR দেখানো আর একটা কোড দিয়ে প্রমাণ।
+ * Step 2: show the QR and prove with a code.
  *
- * ⚠️ এই মোডাল বন্ধ করলে 2FA **চালু হয় না** — সার্ভারে সিক্রেটটা
- *    `enabled: false` অবস্থায় পড়ে থাকে। ইচ্ছাকৃত: স্ক্যান করতে ভুলে গিয়ে
- *    বা ভুল অ্যাপে স্ক্যান করে কেউ যেন নিজের অ্যাকাউন্ট থেকে চিরতরে
- *    তালাবদ্ধ না হয়।
+ * Careful: closing this modal does not enable 2FA: the secret stays on the
+ * server with `enabled: false`. Intentional: so nobody gets locked out of their
+ * own account for good by forgetting to scan, or scanning with the wrong app.
  */
 function EnableModal({
   setup,
@@ -204,17 +203,17 @@ function EnableModal({
         </ol>
 
         {/*
-          ⚠️ ছবিটা data URL — বাইরের কোনো সার্ভারে যায় না। QR-এর ভেতরে
-             সিক্রেট আছে; তৃতীয় পক্ষের API দিয়ে আঁকালে সেটা তাদের লগে বসত।
-          ⚠️ সাদা পটভূমি হার্ডকোড: QR স্ক্যানার গাঢ়-হালকার বৈসাদৃশ্য খোঁজে,
-             তাই ডার্ক থিমেও ছবির চারপাশের quiet zone সাদাই থাকতে হবে।
-          ⚠️ সাদা বাক্সটা **ভেতরের** div-এ, বাইরের বর্ডারওয়ালা div-এ নয় —
-             ইচ্ছে করেই আলাদা রাখা। `index.css`-এ একসময় একটা সেতু-নিয়ম ছিল
-             যা `border-line bg-white` জোড়াটাকে ডার্কে `surface` করে দিত;
-             ইনপুট দুটো `bg-surface`-এ সরে যাওয়ায় নিয়মটা এখন মুছে গেছে।
-             তবু ক্লাস দুটো আলাদা এলিমেন্টে রাখা হলো: ভবিষ্যতে কেউ ওই
-             ধরনের নিয়ম আবার লিখলেও এই quiet zone সাদাই থাকবে — গাঢ় হলে
-             স্ক্যানার আটকাত, আর 2FA চালু করার একমাত্র পথ ওই স্ক্যান।
+          Careful: the image is a data URL and never goes to an outside server. The QR
+             contains the secret; drawing it through a third-party API would put it in
+             their logs.
+          Careful: the white background is hard-coded. QR scanners look for light/dark
+             contrast, so the quiet zone around the image must stay white in the dark theme too.
+          Careful: the white box is on the inner div, not the outer bordered one, on
+             purpose. `index.css` once had a bridge rule turning the `border-line bg-white`
+             pair into `surface` in dark mode; it is gone now that the two inputs moved
+             to `bg-surface`. The classes still sit on separate elements: if someone writes
+             such a rule again, the quiet zone stays white (dark would block the scanner,
+             and scanning is the only way to turn 2FA on).
         */}
         <div className="flex justify-center rounded-lg border border-line bg-paper p-3">
           <div className="rounded bg-white p-2">
@@ -272,9 +271,9 @@ function EnableModal({
 }
 
 /**
- * ⚠️ বন্ধ করা আর নতুন কোড বানানো — দুটোতেই পাসওয়ার্ড। সেশন cookie-ই যথেষ্ট
- *    ধরলে খোলা রেখে যাওয়া ল্যাপটপ থেকে যে কেউ 2FA খুলে ফেলতে পারত, অথচ
- *    2FA-র উদ্দেশ্যই cookie চুরির বিরুদ্ধে রক্ষা।
+ * Careful: both disabling and generating new codes need the password. If the
+ * session cookie alone were enough, anyone at a laptop left open could switch 2FA
+ * off, yet the whole purpose of 2FA is protection against cookie theft.
  */
 function PasswordConfirmModal({
   mode,

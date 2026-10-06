@@ -1,15 +1,15 @@
 import { shiftWorkDate, todayInDhaka } from '../lib/format';
 
 /**
- * তারিখ বাছাই — একটা দিন, আর from–to রেঞ্জ।
+ * Date picking: a single day, and a from-to range.
  *
- * ⭐⚠️ `<input type="date">`-এর মান ঠিক `YYYY-MM-DD`, অর্থাৎ সার্ভার যা চায়
- *    হুবহু তাই। কোথাও `new Date(...)` দিয়ে ঘুরিয়ে আনার দরকার নেই — আর
- *    আনলেই টাইমজোনের ফাঁদে পড়তে হতো (`toISOString()` UTC দেয়, ঢাকায়
- *    রাত ১২টার পর সেটা **আগের তারিখ**)।
+ * Careful: the value of `<input type="date">` is exactly `YYYY-MM-DD`, which is
+ * what the server wants. No round trip through `new Date(...)` is needed, and
+ * doing one leads into the timezone trap (`toISOString()` gives UTC, which after
+ * midnight in Dhaka is the previous date).
  *
- * ⚠️ `max` ডিফল্টভাবে **ঢাকার আজ** — ভবিষ্যতের তারিখ বাছার কোনো মানে নেই,
- *    আর বাছলে খালি পর্দা দেখে মনে হতো ডেটা হারিয়ে গেছে।
+ * Careful: `max` defaults to today in Dhaka. Picking a future date is pointless,
+ * and the empty screen would make it look as if data was lost.
  */
 export function DatePicker({
   value,
@@ -17,7 +17,7 @@ export function DatePicker({
   label = 'Date',
   max = todayInDhaka(),
   min,
-  /** ◀ ▶ দিয়ে আগের/পরের দিন — টাইমলাইন পেজে খুব কাজে লাগে */
+  /** Previous/next day with the arrows; very useful on the timeline page. */
   withArrows = false,
 }: {
   value: string;
@@ -49,8 +49,8 @@ export function DatePicker({
           max={max}
           min={min}
           onChange={(e) => {
-            // ⚠️ ব্যবহারকারী হাতে মুছে ফেললে `''` আসে — সেটা সার্ভারে
-            //    পাঠালে ৪০০ হতো, তাই খালি মান উপেক্ষা করা হয়।
+            // Careful: when the user clears it by hand `''` arrives; sending that to the
+            // server would give a 400, so empty values are ignored.
             if (e.target.value) onChange(e.target.value);
           }}
           className="num rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
@@ -71,15 +71,15 @@ export function DatePicker({
 }
 
 /**
- * from–to রেঞ্জ।
+ * from-to range.
  *
- * ⚠️ `from > to` হলে সার্ভার ৪০০ দেয়। তাই এখানেই আটকানো হয়: একটা প্রান্ত
- *    বদলে উল্টো হয়ে গেলে অন্যটাও সাথে সরে যায় — ব্যবহারকারী এরর দেখার
- *    আগেই ব্যাপারটা মিটে যায়।
+ * Careful: the server gives a 400 when `from > to`. So it is prevented here: if
+ * one end is moved past the other, the other moves along with it, and the
+ * problem is settled before the user sees an error.
  *
- * ⚠️ রেঞ্জের সর্বোচ্চ দৈর্ঘ্য সার্ভারে ৩৭০ দিন (রিপোর্ট) / ৩৬৬ দিন
- *    (activity)। এক বছরের বেশি চাইলে ৪০০ আসবে — বার্তাটা `<ErrorBox>`
- *    নিজেই দেখাবে।
+ * Careful: the maximum range length on the server is 370 days (reports) / 366
+ * days (activity). Asking for more than a year gives a 400; `<ErrorBox>` shows
+ * the message by itself.
  */
 export function DateRange({
   from,
@@ -114,8 +114,8 @@ export function DateRange({
 }
 
 /**
- * মাস বাছাই — পে-রোল (`YYYY-MM`) ও মাসিক অগ্রগতির জন্য।
- * ⚠️ `<input type="month">`-এর মানও ঠিক `YYYY-MM`, সার্ভার যা চায়।
+ * Month picking: for payroll (`YYYY-MM`) and monthly progress.
+ * Careful: the value of `<input type="month">` is exactly `YYYY-MM`, what the server wants.
  */
 export function MonthPicker({
   value,
@@ -163,10 +163,10 @@ function ArrowButton({
       aria-label={label}
       title={label}
       /*
-       * ⚠️ `tap` — তারিখের ◀▶ ফোনে সবচেয়ে বেশি ব্যবহৃত বোতামগুলোর একটা
-       *    (আগের দিন দেখা), অথচ ছিল ~৩০px। `min-w-11`-ও দেওয়া হলো: এদের
-       *    ভেতরে একটাই সরু অক্ষর, তাই শুধু উচ্চতা বাড়ালে লক্ষ্যটা লম্বা
-       *    কিন্তু সরু হয়ে থাকত।
+       * Careful: `tap`: the date arrows are among the most used buttons on a phone
+       * (viewing the previous day) yet were about 30px. `min-w-11` is also set: each
+       * holds a single narrow character, so raising only the height would leave a
+       * target that is tall but narrow.
        */
       className="tap min-w-11 rounded-md border border-line bg-surface px-2 py-1.5 text-[11px] text-ink-2 transition hover:border-brand hover:text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-40 sm:min-w-0"
     >

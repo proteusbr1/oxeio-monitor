@@ -1,53 +1,53 @@
 namespace oXeio.Core.Tracking;
 
 /// <summary>
-/// ⭐⭐⭐ <b>G46 — পর্দার ছাপ কখন নেওয়া হবে।</b> খাঁটি নিয়ম, কোনো Win32 নেই।
+/// <b>G46: when to take the screen fingerprint.</b> Pure rule, no Win32.
 ///
-/// ⚠️⚠️ <b>এই ফাইলটা জন্মেছে একটা বাস্তব ক্ষতি থেকে।</b> আগে ছাপ আসত কেবল
-/// স্ক্রিনশটের স্লট থেকে, আর <see cref="Capture.CaptureGate"/> স্ক্রিনশট
-/// তুলতে দেয় <b>শুধু ACTIVE অবস্থায়</b>। ফলে:
+/// <b>This file was born from a real harm.</b> Fingerprints used to come only from the
+/// screenshot slot, and <see cref="Capture.CaptureGate"/> allows screenshots <b>only while
+/// ACTIVE</b>. So:
 ///
 /// <code>
-/// পর্দা জমেছে → IDLE → স্ক্রিনশট বন্ধ → নতুন ছাপ নেই → চিরকাল "জমে আছে"
+/// screen froze → IDLE → screenshots stop → no new fingerprint → "frozen" forever
 /// </code>
 ///
-/// একজন কর্মী দশ মিনিটের বেশি বিরতি নিলে, ফিরে এসে কাজ শুরু করলেও এজেন্ট
-/// <b>স্থায়ীভাবে</b> idle দেখাত — রিস্টার্ট না করা পর্যন্ত। ফাঁকি ধরার
-/// যন্ত্রটাই সৎ কর্মীর গোটা দিন কেটে নিত, অর্থাৎ জিগলারের চেয়েও বড় ক্ষতি।
+/// If an employee took a break of more than ten minutes, the agent would show idle
+/// <b>permanently</b> even after they came back and started working, until restarted. The
+/// tool meant to catch cheating would cut an honest employee's whole day, a bigger harm
+/// than the jiggler itself.
 ///
-/// ⭐⭐ <b>শিক্ষা:</b> যে তথ্য দিয়ে একটা সিদ্ধান্ত নেওয়া হয়, সেই তথ্যের
-/// উৎস ওই সিদ্ধান্তের ফলাফলের উপর নির্ভর করতে পারে না। নইলে সিদ্ধান্তটা
-/// নিজেই নিজের প্রমাণ বানিয়ে ফেলে, আর বেরোনোর পথ থাকে না।
+/// <b>Lesson:</b> the source of the information a decision uses must not depend on the
+/// outcome of that decision. Otherwise the decision manufactures its own proof and there
+/// is no way out.
 /// </summary>
 public static class ScreenSampling
 {
     /// <summary>
-    /// স্বাভাবিক অবস্থায় কত পরপর ছাপ নেওয়া হয়।
+    /// How often a fingerprint is taken in the normal state.
     ///
-    /// ⚠️ <see cref="ScreenActivity.StaleAfter"/>-এর চেয়ে <b>যথেষ্ট ছোট</b>
-    /// হতে হবে, নইলে নমুনা স্বাভাবিক কাজের মধ্যেই বাসি হয়ে যেত আর পাহারাটা
-    /// নীরবে অকেজো থাকত (৬০ সে. বনাম ৩ মি. — তিনগুণ জায়গা)।
+    /// Careful: this must be <b>well below</b> <see cref="ScreenActivity.StaleAfter"/>, or
+    /// samples would go stale during ordinary work and the guard would be silently useless
+    /// (60 s against 3 min: three times the room).
     /// </summary>
     public static readonly TimeSpan Interval = TimeSpan.FromSeconds(60);
 
     /// <summary>
-    /// ⭐⭐ পর্দা জমে থাকলে <b>অনেক ঘন ঘন</b> — এখানেই ন্যায্যতা।
+    /// When the screen is frozen, <b>much more often</b>: this is where fairness lies.
     ///
-    /// জমে থাকা অবস্থায় কর্মীর গোনা বন্ধ। তিনি ফিরে এসে সত্যিই কাজ শুরু
-    /// করলে সেটা <b>যত দ্রুত সম্ভব</b> টের পাওয়া দরকার — নইলে প্রতিবার
-    /// বিরতির পর এক মিনিট করে সময় কাটা যেত, রোজ, সবার।
+    /// While frozen, the employee's counting is off. If they come back and really start
+    /// working, that must be noticed <b>as fast as possible</b>, or every break would cost a
+    /// minute of time, every day, for everyone.
     ///
-    /// ⚠️ খরচ নগণ্য: শুধু প্রথম মনিটর, WebP এনকোডিং নেই, আর এটা চলে
-    /// কেবল তখনই যখন পর্দা জমে আছে (কেউ নেই, বা কেউ ফাঁকি দিচ্ছে)।
+    /// The cost is negligible: only the first monitor, no WebP encoding, and it runs only
+    /// while the screen is frozen (nobody there, or someone cheating).
     /// </summary>
     public static readonly TimeSpan WhenFrozen = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// এখন কি নতুন একটা ছাপ নেওয়ার সময়?
+    /// Is it time to take a new fingerprint now?
     ///
-    /// ⚠️ ঘড়ি পিছিয়ে গেলে (NTP সংশোধন) হিসাবটা ঋণাত্মক হয় — তখন নেওয়াই
-    /// হয়, কারণ বাড়তি একটা নমুনার কোনো ক্ষতি নেই, কিন্তু নমুনা বন্ধ হয়ে
-    /// যাওয়ার ক্ষতি আছে।
+    /// If the clock went back (NTP correction) the calculation is negative; then one is taken,
+    /// because an extra sample does no harm, but samples stopping does.
     /// </summary>
     public static bool Due(DateTimeOffset now, DateTimeOffset? lastSampleAt, bool frozen)
     {
@@ -60,19 +60,19 @@ public static class ScreenSampling
     }
 
     /// <summary>
-    /// ছাপ নেওয়া কি আদৌ অনুমোদিত?
+    /// Is taking a fingerprint permitted at all?
     ///
-    /// ⭐⭐⭐ <b>এখানে ইচ্ছাকৃতভাবে <c>SegmentState</c> নেই</b>, আর সেটাই এই
-    /// ফাইলের গোটা কারণ। <see cref="Capture.CaptureGate"/>-এ ACTIVE-এর শর্ত
-    /// আছে (ঠিকই আছে — স্ক্রিনশট জমা হয়, দেখা হয়)। কিন্তু ছাপ কোথাও জমে
-    /// না, যায়ও না; ওটা শুধু একটা প্রশ্নের উত্তর: <i>পর্দা বদলাচ্ছে?</i>
-    /// ওই প্রশ্নের উত্তর অবস্থার উপর নির্ভর করলে অচলাবস্থা তৈরি হয়।
+    /// <b>There is deliberately no <c>SegmentState</c> here</b>, and that is the whole reason for
+    /// this file. <see cref="Capture.CaptureGate"/> has the ACTIVE condition (rightly: screenshots
+    /// are stored and looked at). But a fingerprint is neither stored nor sent anywhere; it only
+    /// answers one question: <i>is the screen changing?</i> If the answer to that question
+    /// depended on the state, a deadlock would arise.
     ///
-    /// ⚠️ তবু তিনটে শর্ত থাকে, আর তিনটেই স্ক্রিনশটের মতোই কড়া:
-    ///   · সাইন ইন করা ও বাতিল নয় — নইলে কার পর্দা তা-ই জানা নেই
-    ///   · § ৪.২-এর জানালার ভেতরে — অফিসের সময়ের বাইরে পর্দা ছোঁয়াই হয় না
-    ///   · <b>লক করা নয়</b> — লক পর্দা এমনিতেই স্থির, ওটা নমুনা হিসেবে
-    ///     রাখলে আনলক করার পরও কিছুক্ষণ "জমে আছে" দেখাত
+    /// Three conditions remain, all as strict as for screenshots:
+    ///   - signed in and not revoked: otherwise it is not known whose screen it is
+    ///   - inside the section 4.2 window: outside office hours the screen is not touched at all
+    ///   - <b>not locked</b>: a locked screen is still anyway, and keeping it as a sample would
+    ///     make the screen look "frozen" for a while even after unlocking
     /// </summary>
     public static bool Allowed(bool enrolled, bool revoked, bool insideWindow, bool locked) =>
         enrolled && !revoked && insideWindow && !locked;

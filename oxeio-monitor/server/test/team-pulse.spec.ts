@@ -6,27 +6,27 @@ import {
 } from '../src/dashboard/dashboard.math';
 
 /**
- * **E01 — দলের দিনের ছন্দ** (`GET /live/pulse`)।
+ * **E01 — the team's rhythm over the day** (`GET /live/pulse`).
  *
- * ⭐ খাঁটি ফাংশন, তাই DB ছাড়াই পুরোটা মাপা যায়। আর মাপার মতো জিনিস
- * দুটোই: **সেকেন্ড হারায় না**, আর **কতজন** সংখ্যাটা সত্যি বলে।
+ * A pure function, so all of it can be tested without a DB. And there are
+ * two things worth measuring: **no seconds are lost**, and **how many people** is truthful.
  */
 
 /**
- * কর্মদিবসটা Prisma-র `@db.Date` ধাঁচে — UTC-midnight `Date`।
+ * The working day is in Prisma's `@db.Date` shape — a UTC-midnight `Date`.
  *
- * ⚠️⚠️ কিন্তু ঢাকার **স্থানীয়** মধ্যরাত ওটার ছয় ঘণ্টা **আগে**
- * (`dayStartUtcMs = workDate − ৬ঘ`)। প্রথমে এই বিয়োগটা ভুলে গিয়ে
- * helper লিখেছিলাম, আর ছটা টেস্ট সাথে সাথে ফেল করেছিল — সব কাজ ঠিক
- * ছয় ঘরে সরে গিয়েছিল।
+ * But Dhaka's **local** midnight is six hours **before** that
+ * (`dayStartUtcMs = workDate − 6h`). I first forgot this subtraction when
+ * writing the helper, and six tests failed at once — all the work had
+ * shifted by exactly six hours.
  *
- * ⭐ এটাই এই টেস্ট ফাইলটার প্রথম আসল কাজ: **টাইমজোনের ভুল ধরা**।
+ * This is the first real job of this test file: **catching timezone mistakes**.
  */
 const DHAKA_OFFSET_MS = 6 * 3_600_000;
 const DAY = new Date('2026-08-13T00:00:00.000Z');
 const DAY_START_MS = DAY.getTime() - DHAKA_OFFSET_MS;
 
-/** ঢাকার `hour`-এ শুরু, `mins` মিনিট ধরে */
+/** Starts at `hour` in Dhaka, lasting `mins` minutes */
 function seg(employeeId: number, hour: number, mins: number, atMin = 0) {
   const startMs = DAY_START_MS + hour * 3_600_000 + atMin * 60_000;
   return {
@@ -37,8 +37,8 @@ function seg(employeeId: number, hour: number, mins: number, atMin = 0) {
   };
 }
 
-describe('spreadTeamIntoHourBuckets · সেকেন্ডের হিসাব', () => {
-  it('সবসময় ২৪টা বালতি, খালি ঘণ্টাও শূন্য নিয়ে থাকে', () => {
+describe('spreadTeamIntoHourBuckets · seconds arithmetic', () => {
+  it('always 24 buckets, empty hours stay with zero', () => {
     const hours = spreadTeamIntoHourBuckets([], DAY);
 
     expect(hours).toHaveLength(24);
@@ -46,7 +46,7 @@ describe('spreadTeamIntoHourBuckets · সেকেন্ডের হিসা�
     expect(hours.every((h) => h.activeSec === 0 && h.people === 0)).toBe(true);
   });
 
-  it('দুজনের একই ঘণ্টার কাজ যোগ হয়', () => {
+  it("two people's work in the same hour adds up", () => {
     const hours = spreadTeamIntoHourBuckets(
       [seg(1, 10, 60), seg(2, 10, 30)],
       DAY,
@@ -56,11 +56,11 @@ describe('spreadTeamIntoHourBuckets · সেকেন্ডের হিসা�
   });
 
   /**
-   * ⚠️⚠️ এই টেস্টটাই আসল পাহারাদার। সব সেগমেন্ট এক গাদা করে ছড়ালে মোট
-   * ঠিকই আসত, তাই মোট দিয়ে বাগটা ধরা যেত না — ধরা পড়ে **কতজন** দিয়ে।
+   * This test is the real guard. Piling all segments into one bucket would
+   * still give the right total, so the total cannot catch the bug — **how many people** does.
    */
-  it('ঘণ্টার সীমানা পেরোনো কাজ অনুপাতে ভাগ হয়, আর মোট অটুট থাকে', () => {
-    // ১০:৪৫ থেকে ৯০ মিনিট → ১০টায় ১৫মি, ১১টায় ৬০মি, ১২টায় ১৫মি
+  it('work crossing an hour boundary is split proportionally, and the total stays intact', () => {
+    // 10:45 for 90 minutes → 15 min at 10, 60 min at 11, 15 min at 12
     const hours = spreadTeamIntoHourBuckets([seg(1, 10, 90, 45)], DAY);
 
     expect(hours[10].activeSec).toBe(15 * 60);
@@ -72,11 +72,11 @@ describe('spreadTeamIntoHourBuckets · সেকেন্ডের হিসা�
   });
 
   /**
-   * ⭐ একজনের `/hourly` চার্ট আর দলের ছন্দ **একই ফাংশন** থেকে আসে, তাই
-   * দুটো কখনো আলাদা গল্প বলতে পারে না। নিয়মটা নকল হলে একদিন একটা বদলাত
-   * আর অন্যটা নয় — এই টেস্ট সেটাই আটকায়।
+   * One person's `/hourly` chart and the team's rhythm come from the **same
+   * function**, so they can never tell different stories. If the rule were
+   * duplicated, one day one would change and not the other — this test prevents that.
    */
-  it('একজনের হিসাব `spreadIntoHourBuckets`-এর সাথে হুবহু মেলে', () => {
+  it("one person's figures match `spreadIntoHourBuckets` exactly", () => {
     const rows = [seg(7, 9, 50, 20), seg(7, 14, 130, 10), seg(7, 22, 45, 40)];
 
     const team = spreadTeamIntoHourBuckets(rows, DAY);
@@ -86,12 +86,12 @@ describe('spreadTeamIntoHourBuckets · সেকেন্ডের হিসা�
   });
 });
 
-describe('spreadTeamIntoHourBuckets · কতজন', () => {
+describe('spreadTeamIntoHourBuckets · how many people', () => {
   /**
-   * ⭐⭐ এই দুটো টেস্ট একসাথে না থাকলে `people` অর্থহীন হতো — একটা মাপে
-   * "একই লোক দুবার গোনা হয় না", অন্যটা "আলাদা লোক আলাদা করে গোনা হয়"।
+   * Without both of these tests together `people` would be meaningless — one
+   * measures "the same person is not counted twice", the other "different people are counted separately".
    */
-  it('একই কর্মীর দুটো সেগমেন্ট এক ঘণ্টায় থাকলে তিনি একজনই', () => {
+  it('if one employee has two segments in an hour, they count as one person', () => {
     const hours = spreadTeamIntoHourBuckets(
       [seg(1, 10, 20), seg(1, 10, 20, 30)],
       DAY,
@@ -101,7 +101,7 @@ describe('spreadTeamIntoHourBuckets · কতজন', () => {
     expect(hours[10].activeSec).toBe(40 * 60);
   });
 
-  it('আলাদা কর্মী আলাদা করে গোনা হন', () => {
+  it('different employees are counted separately', () => {
     const hours = spreadTeamIntoHourBuckets(
       [seg(1, 10, 20), seg(2, 10, 20), seg(3, 10, 20)],
       DAY,
@@ -111,12 +111,12 @@ describe('spreadTeamIntoHourBuckets · কতজন', () => {
   });
 
   /**
-   * ⚠️ সীমা ছাড়া `> 0` — এক সেকেন্ডও যদি ওই ঘণ্টায় পড়ে, মানুষটা "ছিলেন"।
-   * সীমা বসালে সেটা হতো একটা নীরব মত, আর কেউ জানত না কেন ভোরের একজন উধাও।
+   * `> 0` with no threshold — if even one second falls in that hour, the person "was there".
+   * A threshold would be a silent opinion, and nobody would know why one early-morning person vanished.
    */
-  it('ঘণ্টার কানায় পড়া সামান্য সময়ও মানুষটাকে গোনে', () => {
-    // ০৯:৫৯:৩০ → ১০:০০:৩০, অর্থাৎ দুই ঘণ্টার ঘরে ৩০ সেকেন্ড করে।
-    // ⚠️ সেকেন্ডের নিখুঁত সীমানা দরকার, তাই `seg()` নয় — ওর ধাপ মিনিট।
+  it('even a small amount of time at the edge of an hour counts the person', () => {
+    // 09:59:30 → 10:00:30, i.e. 30 seconds in each of two hour cells.
+    // Exact second boundaries are needed, so not `seg()` — its step is a minute.
     const start = DAY_START_MS + 9 * 3_600_000 + 59 * 60_000 + 30_000;
     const hours = spreadTeamIntoHourBuckets(
       [
@@ -136,7 +136,7 @@ describe('spreadTeamIntoHourBuckets · কতজন', () => {
     expect(hours[10].people).toBe(1);
   });
 
-  it('যে ঘণ্টায় কেউ ছিলেন না, সেখানে শূন্য — আর সেটা বৈধ উত্তর', () => {
+  it('in an hour when nobody was there, zero — and that is a valid answer', () => {
     const hours = spreadTeamIntoHourBuckets([seg(1, 10, 30)], DAY);
 
     expect(hours[3].people).toBe(0);
@@ -144,10 +144,10 @@ describe('spreadTeamIntoHourBuckets · কতজন', () => {
   });
 
   /**
-   * ⭐ `peakPeople` (সার্ভিসে গোনা) এই সংখ্যাটার উপরেই দাঁড়ায় — চার্টের
-   * y-অক্ষের সীমা। তাই সর্বোচ্চটা সত্যিই সর্বোচ্চ কি না, সেটা মেপে রাখা।
+   * `peakPeople` (counted in the service) rests on exactly this number — the
+   * limit of the chart's y-axis. So we measure whether the maximum really is the maximum.
    */
-  it('সর্বোচ্চ একসাথে কতজন — সেটাই চার্টের অক্ষের সীমা', () => {
+  it("the most people at once — that is the chart's axis limit", () => {
     const hours = spreadTeamIntoHourBuckets(
       [seg(1, 9, 60), seg(1, 14, 60), seg(2, 14, 60), seg(3, 14, 60)],
       DAY,

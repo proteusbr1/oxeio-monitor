@@ -42,11 +42,11 @@ export function SubmitButton({
 }
 
 /**
- * ভুলের বার্তা — লাল, কারণ এটা মনোযোগ দাবি করে।
+ * Error message: red, because it demands attention.
  *
- * ⚠️ ভরাট নয়, **আভা + লাল লেখা** (`brand-bg` / `brand-ink`)। ফর্মে একটার
- *    পর একটা ভুল আসতে পারে; ভরাট লাল বাক্স পরপর দুটো বসলে পুরো পর্দাটাই
- *    সংকটের মতো দেখাত।
+ * Careful: not a solid fill, but a tint plus red text (`brand-bg` / `brand-ink`).
+ * Errors can arrive one after another in a form; two solid red boxes in a row
+ * would make the whole screen look like a crisis.
  */
 export function ErrorNote({ children }: { children: React.ReactNode }) {
   return (

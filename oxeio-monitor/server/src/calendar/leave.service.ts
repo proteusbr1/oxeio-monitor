@@ -20,32 +20,32 @@ export interface LeaveView {
   note: string | null;
   createdBy: string;
   /**
-   * ⭐⭐ ওই তারিখটা ওই কর্মীর জন্য আদৌ কর্মদিবস ছিল কি না।
+   * Whether that date was a workday for that employee at all.
    *
-   * ⚠️⚠️ এটা পর্দা পর্যন্ত পাঠানোর কারণ আছে: শুক্রবারে বা সরকারি ছুটির
-   * দিনে লেখা একটা ছুটি **টার্গেটের কিছুই কমায় না** (`countLeaveWorkdays`
-   * ওটা ছেঁকে ফেলে)। সারিটা তবু খাতায় থাকে, আর তখন পর্দায় ওটাকে অন্য
-   * সবের মতো দেখালে খাতা একটা মিথ্যা বলত — "এই দিনটা ছাড় পেয়েছে"।
-   * তাই সারিটা থাকে, কিন্তু নিজেই বলে দেয় সে কিছু বদলায়নি।
+   * Careful: there is a reason this goes all the way to the screen: a leave
+   * written on a Friday or a public holiday **reduces nothing of the target**
+   * (`countLeaveWorkdays` filters it out). The row still stays in the
+   * register, and showing it like any other would make the register lie
+   * ("this day got relief"). So the row stays, but says itself that it changed nothing.
    */
   countsTowardTarget: boolean;
 }
 
-/** ⚠️ তিনটেই সবেতন — কেন `unpaid` নেই, `schema.prisma`-র নোট দেখুন */
+/** Careful: all three are paid; for why `unpaid` is missing, see the note in `schema.prisma` */
 const LEAVE_TYPES = new Set(['casual', 'sick', 'annual']);
 
 /**
- * ⭐⭐ **R2 — ছুটির খাতা।**
+ * **R2: the leave register.**
  *
- * ⚠️⚠️ **যা এটা করে না:** কোনো আবেদন-অনুমোদনের প্রবাহ নেই। মালিক বা
- * ম্যানেজার একটা তারিখ লেখেন, ব্যস। সাতজনের অফিসে অনুমোদনের ধাপ যোগ
- * করা মানে এমন একটা প্রক্রিয়া বানানো যা কেউ ব্যবহার করবে না, আর তখন
- * খাতাটা ফাঁকা থাকত — অর্থাৎ ছুটির দিনগুলো "অনুপস্থিতি" হয়েই থাকত।
+ * Careful: what it does not do: there is no application/approval flow. The
+ * owner or a manager just writes a date, that is all. In a seven-person
+ * office, adding an approval step would build a process nobody would use, and
+ * then the register would stay empty, so leave days would remain "absences".
  *
- * ⭐⭐ **সিদ্ধান্তটা: ছুটি সবেতন।** ছুটি `target_sec` কমায় (ওই দিনের
- * ৮ ঘণ্টা আর কারো কাছে পাওনা নয়), কিন্তু পে-রোলের ভগ্নাংশ `d ÷ D` **ছোঁয়
- * না**। কোডে এই বিচ্ছেদটা তিন জায়গায় পাহারা দেওয়া: `prorate()`,
- * `proratedExpectedSec()`, আর `test/proration.spec.ts`।
+ * **The decision: leave is paid.** Leave reduces `target_sec` (those 8 hours
+ * of that day are no longer owed by anyone), but it does **not** touch
+ * payroll's fraction `d / D`. In the code this separation is guarded in three
+ * places: `prorate()`, `proratedExpectedSec()`, and `test/proration.spec.ts`.
  */
 @Injectable()
 export class LeaveService {
@@ -57,10 +57,10 @@ export class LeaveService {
   ) {}
 
   /**
-   * এক মাসের সব ছুটি — কর্মীর নাম সহ।
+   * All leave in one month, with employee names.
    *
-   * ⚠️ মাস দিয়ে ছাঁকা **বাধ্যতামূলক**, রেঞ্জ ঐচ্ছিক নয়: খাতা বছরের পর
-   *    বছর বাড়ে, আর "সব ছুটি" চাওয়ার মতো কোনো পর্দা নেই।
+   * Careful: filtering by month is **mandatory**, a range is not optional:
+   * the register grows year after year, and no screen needs "all leave".
    */
   async list(yearMonth: string): Promise<{ rows: LeaveView[] }> {
     const { first, last } = monthBounds(yearMonth);
@@ -105,11 +105,12 @@ export class LeaveService {
   }
 
   /**
-   * এক বা একাধিক দিনের ছুটি লেখা।
+   * Writing leave for one or more days.
    *
-   * ⭐ **রেঞ্জ ধরে**, একদিন ধরে নয় — মানুষ "১০ থেকে ১৪ তারিখ" ছুটি নেয়,
-   * "১০ তারিখ" পাঁচবার নয়। একদিনের API-তে পর্দাকে পাঁচটা রিকোয়েস্ট
-   * পাঠাতে হতো, আর মাঝপথে একটা ব্যর্থ হলে খাতায় অর্ধেক ছুটি বসে থাকত।
+   * **By range**, not one day at a time: people take leave "from the 10th to
+   * the 14th", not "the 10th" five times. With a one-day API the screen would
+   * have to send five requests, and if one failed midway the register would
+   * hold half a leave.
    */
   async create(
     actor: SessionUser,
@@ -135,9 +136,10 @@ export class LeaveService {
     }
 
     /**
-     * ⚠️ ⭐ **৯২ দিনের ছাদ।** টাইপো (`2026` বদলে `2016`) ছাড়া কেউ এর
-     *    চেয়ে বড় রেঞ্জ লিখবে না, আর ছাদ না থাকলে ওই টাইপোটা কয়েক হাজার
-     *    সারি বসিয়ে দিত — এবং প্রতিটা মাসের টার্গেট শূন্য করে দিত।
+     * Careful: **a ceiling of 92 days.** Nobody would write a range longer
+     * than this except through a typo (`2016` instead of `2026`), and without
+     * a ceiling that typo would insert several thousand rows and zero out
+     * every month's target.
      */
     const days = Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1;
     if (days > 92) {
@@ -153,10 +155,11 @@ export class LeaveService {
     if (!employee) throw new NotFoundException('Employee not found');
 
     /**
-     * ⚠️⚠️ **বন্ধ মাসে ছুটি লেখা যায় না** (R1)। লিখতে দিলে বন্ধ করার পুরো
-     *    উদ্দেশ্যটাই ব্যর্থ হতো: `refreshMonth()` বন্ধ মাস ছোঁয় না, তাই
-     *    সারিটা খাতায় বসত কিন্তু টার্গেট বদলাত না — অর্থাৎ ছুটির খাতা আর
-     *    সংখ্যা দুটো চিরকালের জন্য আলাদা কথা বলত, নীরবে।
+     * Careful: **leave cannot be written into a closed month** (R1). Allowing
+     * it would defeat the whole purpose of closing: `refreshMonth()` does not
+     * touch a closed month, so the row would sit in the register while the
+     * target did not change, and the leave register and the numbers would
+     * silently disagree for ever.
      */
     const months = [
       ...new Set(
@@ -174,9 +177,9 @@ export class LeaveService {
     }
 
     /**
-     * ⭐ `skipDuplicates` — ইতিমধ্যে লেখা একটা দিনের জন্য গোটা রেঞ্জটা
-     *    ব্যর্থ হয় না। কোন দিনগুলো বাদ পড়ল সেটা নিচে ফেরত যায়, নইলে
-     *    পর্দা "৫টা যোগ হয়েছে" বলত যখন আসলে ৩টা হয়েছে।
+     * `skipDuplicates`: the whole range does not fail because of one day that
+     * is already written. Which days were skipped is returned below, otherwise
+     * the screen would say "5 added" when only 3 were.
      */
     const existing = await this.prisma.leave.findMany({
       where: {
@@ -227,10 +230,10 @@ export class LeaveService {
   }
 
   /**
-   * একদিনের ছুটি মুছে ফেলা।
+   * Deleting one day of leave.
    *
-   * ⚠️ সত্যিই মুছে ফেলা হয়, `revoked_at` নয় — ছুটি কোনো আর্থিক লেনদেন নয়
-   *    (সময়-সংশোধনের মতো), আর audit-এ কে কবে মুছল তা থেকেই যায়।
+   * Careful: it is really deleted, not `revoked_at`: leave is not a financial
+   * transaction (unlike a time adjustment), and the audit keeps who deleted it and when.
    */
   async remove(actor: SessionUser, id: number, ip: string): Promise<void> {
     const row = await this.prisma.leave.findUnique({
@@ -244,7 +247,8 @@ export class LeaveService {
       where: { yearMonth },
       select: { yearMonth: true },
     });
-    // ⚠️ মোছাটাও বন্ধ মাসে আটকানো — কারণ একই: খাতা বদলাত, সংখ্যা নয়
+    // Careful: deleting is blocked in a closed month too, for the same reason:
+    // the register would change, the numbers would not
     if (closed) {
       throw new ConflictException(
         `${yearMonth} is closed — reopen the month first`,
@@ -267,7 +271,7 @@ export class LeaveService {
   }
 }
 
-/** `YYYY-MM-DD` → UTC-মধ্যরাত, ঠিক যেভাবে `holidays` টেবিলে বসে */
+/** `YYYY-MM-DD` -> UTC midnight, exactly as it is stored in the `holidays` table */
 function parseDate(value: string): Date {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new BadRequestException(`Expected YYYY-MM-DD, got "${value}"`);

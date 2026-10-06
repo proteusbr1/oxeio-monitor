@@ -10,18 +10,19 @@ import {
 } from '../src/deposits/deposit.math';
 
 /**
- * R21 — জামানতের খাঁটি হিসাব। ডাটাবেস লাগে না, তাই এগুলোই প্রথম পাহারা।
+ * R21 — the pure deposit calculations. No database needed, so these are the
+ * first line of defence.
  */
 
-describe('মাসের হিসাব', () => {
-  it('পরের মাস — আর বছর পেরোলেও ঠিক', () => {
+describe('month arithmetic', () => {
+  it('next month — correct across a year boundary too', () => {
     expect(nextMonth('2026-08')).toBe('2026-09');
     expect(nextMonth('2026-11')).toBe('2026-12');
-    // ⚠️ ডিসেম্বর → পরের বছরের জানুয়ারি, '2026-13' নয়
+    // December goes to January of the next year, not '2026-13'
     expect(nextMonth('2026-12')).toBe('2027-01');
   });
 
-  it('দুই প্রান্তসহ প্রতিটা মাস', () => {
+  it('every month, both ends included', () => {
     expect(monthsBetween('2026-08', '2026-08')).toEqual(['2026-08']);
     expect(monthsBetween('2026-08', '2026-11')).toEqual([
       '2026-08',
@@ -31,7 +32,7 @@ describe('মাসের হিসাব', () => {
     ]);
   });
 
-  it('বছর পেরিয়ে গেলেও ক্রম ঠিক থাকে', () => {
+  it('order stays correct across a year boundary', () => {
     expect(monthsBetween('2026-11', '2027-02')).toEqual([
       '2026-11',
       '2026-12',
@@ -40,46 +41,46 @@ describe('মাসের হিসাব', () => {
     ]);
   });
 
-  it('শুরু শেষের পরে হলে খালি তালিকা — ছোড়া হয় না', () => {
-    // ⚠️ কর্মী নিয়ম শুরুর মাসের পরে যোগ দিলে এমনটা হতেই পারে
+  it('start after end gives an empty list — it does not throw', () => {
+    // This can legitimately happen when staff join after the rule's start month
     expect(monthsBetween('2026-09', '2026-08')).toEqual([]);
   });
 
-  it('ভুল ফরম্যাট চুপচাপ মেনে নেওয়া হয় না', () => {
+  it('a bad format is not silently accepted', () => {
     expect(() => monthsBetween('2026-8', '2026-09')).toThrow(RangeError);
     expect(() => monthsBetween('2026-13', '2027-01')).toThrow(RangeError);
     expect(isYearMonth('2026-00')).toBe(false);
     expect(isYearMonth('2026-12')).toBe(true);
   });
 
-  it('⚠️ অস্বাভাবিক লম্বা সীমা থামিয়ে দেওয়া হয়', () => {
-    // ৫০ বছরের বেশি — ভুল ইনপুট, লুপ ঘুরতে দেওয়া হয় না
+  it('an unusually long range is stopped', () => {
+    // More than 50 years — bad input, so the loop is not allowed to run
     expect(() => monthsBetween('2026-01', '2126-01')).toThrow(RangeError);
   });
 });
 
-describe('নোটিশের হিসাব', () => {
+describe('notice arithmetic', () => {
   const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 
-  it('শেষ দিনটাও গোনা হয়', () => {
-    // ⚠️ ৩১ জুলাই জানিয়ে ৩০ আগস্ট শেষ দিন = ৩০ দিন। মানুষ "৩০ দিনের
-    //    নোটিশ" বলতে এটাই বোঝে, আর এক দিনের হেরফেরে টাকাটা আটকে যেত।
+  it('the last day counts too', () => {
+    // Notice given 31 July with last day 30 August = 30 days. That is what
+    // people mean by "30 days' notice", and a one-day error would hold back the money.
     expect(daysBetween(d('2026-07-31'), d('2026-08-30'))).toBe(30);
   });
 
-  it('ঠিক ৩০ দিন হলে নিয়ম মেলে', () => {
+  it('exactly 30 days meets the rule', () => {
     const check = checkNotice(d('2026-07-31'), d('2026-08-30'), 30);
     expect(check.daysGiven).toBe(30);
     expect(check.meetsRule).toBe(true);
   });
 
-  it('২৯ দিন হলে মেলে না', () => {
+  it('29 days does not meet it', () => {
     const check = checkNotice(d('2026-08-01'), d('2026-08-30'), 30);
     expect(check.daysGiven).toBe(29);
     expect(check.meetsRule).toBe(false);
   });
 
-  it('⭐ তারিখ জানা না থাকলে "না" — "জানি না"-কে "হ্যাঁ" ধরা হয় না', () => {
+  it('an unknown date means "no" — "don\'t know" is not treated as "yes"', () => {
     expect(checkNotice(null, d('2026-08-30'), 30)).toEqual({
       daysGiven: null,
       daysRule: 30,
@@ -88,12 +89,12 @@ describe('নোটিশের হিসাব', () => {
     expect(checkNotice(d('2026-07-01'), null, 30).meetsRule).toBe(false);
   });
 
-  it('নিয়ম ০ দিনের হলে যেকোনো নোটিশই যথেষ্ট', () => {
-    // ⚠️ অদ্ভুত শোনায়, কিন্তু বৈধ — নিয়ম শিথিল করতে চাইলে কোড বদলাতে হবে না
+  it('when the rule is 0 days, any notice is enough', () => {
+    // Sounds odd but is valid — relaxing the rule should not need a code change
     expect(checkNotice(d('2026-08-29'), d('2026-08-30'), 0).meetsRule).toBe(true);
   });
 
-  it('⚠️ শেষ দিন নোটিশের আগে হলে ঋণাত্মক — আর সেটা নিয়ম মেলায় না', () => {
+  it('a last day before the notice date is negative — and does not meet the rule', () => {
     const check = checkNotice(d('2026-09-10'), d('2026-08-30'), 30);
     expect(check.daysGiven).toBe(-11);
     expect(check.meetsRule).toBe(false);
@@ -101,41 +102,42 @@ describe('নোটিশের হিসাব', () => {
 });
 
 /**
- * ⭐⭐ **এই কর্মীর জামানত কোন মাস থেকে** — একটাই সংজ্ঞা।
+ * Which month this staff member's deposit starts from — one single definition.
  *
- * ⚠️⚠️ নিয়মটা আগে **দুই জায়গায় লেখা ছিল**: খাতা ভরার সময় একবার, পর্দায়
- * দেখানোর সময় আরেকবার। দুটো আলাদা হয়ে গেলে পর্দা এক মাস দেখাত আর খাতায়
- * বসত অন্যটা — আর দুটোই "ঠিক" দেখাত বলে পার্থক্যটা কেউ ধরতে পারত না।
- * এই টেস্টগুলো সেই একত্ব পাহারা দেয়।
+ * The rule used to be written in two places: once when filling the ledger and
+ * once when displaying on screen. If the two drifted apart, the screen would
+ * show one month while the ledger used another, and since both looked
+ * "correct" nobody would notice the difference. These tests guard that they
+ * stay the same.
  */
 describe('effectiveDepositStart', () => {
   const policyStart = '2026-01';
 
-  it('কিছু না থাকলে নিয়মের মাস', () => {
+  it('the rule\'s month when nothing else is set', () => {
     expect(
       effectiveDepositStart({ override: null, joinedMonth: null, policyStart }),
     ).toBe('2026-01');
   });
 
-  it('পরে যোগ দিলে যোগদানের মাস', () => {
+  it('the joining month when they joined later', () => {
     expect(
       effectiveDepositStart({ override: null, joinedMonth: '2026-04', policyStart }),
     ).toBe('2026-04');
   });
 
-  /** ⚠️ নিয়ম চালুর আগে যোগ দিলে নিয়মের মাসই — তার আগে কাটার কথাই ছিল না */
-  it('আগে যোগ দিলেও নিয়মের মাস', () => {
+  /** If they joined before the rule started, it is the rule's month — nothing was due before that */
+  it('the rule\'s month even if they joined earlier', () => {
     expect(
       effectiveDepositStart({ override: null, joinedMonth: '2025-03', policyStart }),
     ).toBe('2026-01');
   });
 
   /**
-   * ⭐⭐ **মালিকের বেছে দেওয়া মাস যোগদানের তারিখকেও হারায়।** `joined_on`
-   * প্রায়ই অনুমান বা ফাঁকা; এই ঘরটা মালিক নিজে বসান — অনুমান বিবৃতিকে
-   * হারালে সংশোধন করেও কিছু বদলাত না।
+   * The month chosen by the owner beats even the joining date. `joined_on` is
+   * often a guess or empty; the owner sets this field personally, so if a
+   * guess beat a statement, a correction would change nothing.
    */
-  it('override সবকিছুর উপরে', () => {
+  it('override beats everything', () => {
     expect(
       effectiveDepositStart({
         override: '2026-03',
@@ -145,7 +147,7 @@ describe('effectiveDepositStart', () => {
     ).toBe('2026-03');
   });
 
-  it('override নিয়মের আগেও হতে পারে', () => {
+  it('override may be earlier than the rule', () => {
     expect(
       effectiveDepositStart({ override: '2025-11', joinedMonth: null, policyStart }),
     ).toBe('2025-11');

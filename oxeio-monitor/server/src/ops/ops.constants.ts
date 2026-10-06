@@ -1,183 +1,183 @@
 /**
- * K02 · K03 · K04 · G04 · G08 — ব্যাকআপ, হেলথ আর টেলিগ্রামের সব দোরগোড়া।
+ * K02 · K03 · K04 · G04 · G08 — all the thresholds for backup, health and Telegram.
  *
- * `alerts.constants.ts`-এর মতোই আলাদা ফাইলে — এই সংখ্যাগুলো **নিয়ম**,
- * বাস্তবায়ন নয়। কোনটা বদলালে কী হারায় সেটা এক জায়গায় দেখা গেলে ভবিষ্যতে
- * কেউ "৩০ দিন বেশি, ৭ দিন করে দিই" বলে চুপচাপ পুরো পুনরুদ্ধারের জানালাটা
- * ছোট করে ফেলতে পারবে না।
+ * Kept in a separate file like `alerts.constants.ts`: these numbers are
+ * **rules**, not implementation. With what each change costs visible in one
+ * place, nobody can quietly say "30 days is a lot, make it 7" and shrink the
+ * whole restore window.
  */
 
-// ── K02 · রাতের pg_dump ─────────────────────────────────────────────────────
+// ── K02 · nightly pg_dump ───────────────────────────────────────────────────
 
-/** স্পেক § ৬.৪ — রাত ২:৩০ (K01 retention রাত ২:০০-এ শেষ হওয়ার পর) */
+/** Spec § 6.4: 02:30 (after the K01 retention job finishes at 02:00) */
 export const BACKUP_CRON = '0 30 2 * * *';
 
 /**
- * ⚠️ ব্যাকআপের নামের একমাত্র উপসর্গ — ঘোরানোর নিয়ম ঠিক এই প্যাটার্নেই
- *    ভরসা করে। এটা বদলালে পুরোনো ফাইলগুলো আর "ব্যাকআপ" বলে চেনা যাবে না,
- *    ফলে সেগুলো চিরকাল ডিস্কে পড়ে থাকবে — আর নতুনগুলোই শুধু ঘুরবে।
+ * The only prefix of a backup's name; rotation relies on exactly this pattern.
+ * If it changes, old files are no longer recognised as backups, so they would
+ * stay on disk forever and only the new ones would rotate.
  */
 export const BACKUP_PREFIX = 'oxeio';
 
-/** এনক্রিপ্ট করা ডাম্পের এক্সটেনশন — `pg_dump -Fc` (কাস্টম, কম্প্রেসড) */
+/** Extension of the encrypted dump: `pg_dump -Fc` (custom, compressed) */
 export const BACKUP_EXT = '.dump.enc';
 
-/** অসম্পূর্ণ ফাইলের এক্সটেনশন — সফল হলে তবেই নাম বদলে আসল নাম পায় */
+/** Extension of an incomplete file; it gets its real name only after success */
 export const BACKUP_PART_EXT = '.part';
 
-/** পাশের integrity ফাইল — `sha256sum -c` ঠিক এই ফরম্যাটটাই পড়ে */
+/** The integrity file beside it; `sha256sum -c` reads exactly this format */
 export const BACKUP_SHA_EXT = '.sha256';
 
 /**
- * ⚠️ ৩০ দিন — 07 § ৬.৪ ("৩০ দিন রাখবে")। টাস্কের বর্ণনায় "যেমন ১৪ দিন"
- *    লেখা ছিল উদাহরণ হিসেবে; দ্বন্দ্বে ডকই সত্যের উৎস (09 § ৪), তাই ৩০।
- *    `BACKUP_KEEP_DAYS` env দিয়ে বদলানো যায়।
+ * 30 days: 07 § 6.4 ("keep 30 days"). The task description said "e.g. 14 days"
+ * as an example; when they conflict the doc is the source of truth (09 § 4),
+ * so 30. Can be changed with the `BACKUP_KEEP_DAYS` env var.
  */
 export const BACKUP_KEEP_DAYS = 30;
 
 /**
- * ⭐ যত পুরোনোই হোক, সবচেয়ে নতুন **দুটো** ব্যাকআপ কখনো মোছা হবে না।
+ * However old, the newest **two** backups are never deleted.
  *
- * ব্যাকআপ ৪০ দিন ধরে ব্যর্থ হলে সরল "৩০ দিনের পুরোনো সব মুছে দাও" নিয়মটা
- * ঠিক শেষ ভালো কপিটাই মুছে ফেলত — অর্থাৎ যেদিন ব্যাকআপ **দরকার** হতো
- * সেদিন কিছুই থাকত না। দুটো রাখার কারণ: সবচেয়ে নতুনটা নষ্ট বেরোলেও
- * আগেরটা থাকে।
+ * If backups fail for 40 days, the simple rule "delete everything older than
+ * 30 days" would delete exactly the last good copy, so on the day a backup is
+ * **needed** nothing would be left. Two are kept so that if the newest turns
+ * out to be bad, the one before it is still there.
  */
 export const BACKUP_KEEP_MIN = 2;
 
 /**
- * এতক্ষণ পেরোলে "গতরাতের ব্যাকআপ হয়নি" ধরা হয়।
+ * After this long, "last night's backup did not happen" is assumed.
  *
- * ⚠️ ২৬ ঘণ্টা, ২৪ নয় — জব চলে ২:৩০-এ, আর চেক চলে তার একটু পরে। ঠিক ২৪
- *    রাখলে সফল ব্যাকআপের ২৪ ঘণ্টা ১ মিনিট পরেই "বাসি" বলে অ্যালার্ট যেত,
- *    অথচ পরের ব্যাকআপ তখনো হওয়ারই কথা নয়।
+ * 26 hours, not 24: the job runs at 02:30 and the check a little later. At
+ * exactly 24, an alert would fire for "stale" 24 hours and 1 minute after a
+ * successful backup, when the next one is not due yet.
  */
 export const BACKUP_STALE_HOURS = 26;
 
-/** ⭐ G04 — টানা এত দিন কোনো সফল ব্যাকআপ না হলে severity বেড়ে critical */
+/** G04: severity rises to critical after this many days with no successful backup */
 export const BACKUP_CRITICAL_DAYS = 2;
 
 /**
- * ⚠️ পড়ে থাকা `.part` ফাইল এতক্ষণ পুরোনো হলে মুছে ফেলা হয়। প্রসেস
- *    মাঝপথে মরে গেলে অর্ধেক ডাম্প ডিস্কে থেকে যায় — সেগুলো জমে ডিস্ক
- *    ভরালে ঠিক সেই ইনজেস্টই আটকাত যেটা বাঁচাতে ব্যাকআপ।
+ * A leftover `.part` file older than this is deleted. If the process dies
+ * midway, a half dump stays on disk; piled up until the disk is full, they
+ * would block the very ingest the backup exists to protect.
  */
 export const PART_MAX_AGE_HOURS = 12;
 
 /**
- * ⚠️ pg_dump ঝুলে গেলে এতক্ষণ পর মেরে ফেলা হয়। না মারলে একটা আটকে যাওয়া
- *    ডাম্প পরদিনের ডাম্পকেও আটকে রাখত (RunLock), অর্থাৎ একটা ঝুলে যাওয়ায়
- *    চিরকালের নীরবতা।
+ * A hung pg_dump is killed after this long. Without it one stuck dump would
+ * block the next day's dump too (RunLock), a hang turning into permanent silence.
  */
 export const BACKUP_TIMEOUT_MS = 30 * 60_000;
 
 /**
- * ⭐ PBKDF2-এর রাউন্ড — `openssl enc -pbkdf2 -iter` ঠিক এই সংখ্যাটাই চাইবে
- *    পুনরুদ্ধারের সময়। বদলালে পুরোনো ফাইল আর খোলা যাবে না, তাই
- *    এটা কার্যত **চিরস্থায়ী**। বদলাতে হলে নামের ভেতর ভার্সন বসাতে হবে।
+ * PBKDF2 rounds: `openssl enc -pbkdf2 -iter` will want exactly this number at
+ * restore time. Changing it makes old files unopenable, so it is effectively
+ * **permanent**. To change it, put a version in the file name.
  */
 export const PBKDF2_ITERATIONS = 200_000;
 
-// ── K04 · হেলথ ──────────────────────────────────────────────────────────────
+// ── K04 · health ────────────────────────────────────────────────────────────
 
 /**
- * ⚠️ এতগুলো অ্যালার্ট পাঠানোর অপেক্ষায় থাকলে ধরে নেওয়া হয় dispatcher আটকে
- *    আছে। সংখ্যাটা বড় (১০০) কারণ একটা সত্যিকারের ঝড়ে (সবার PC একসাথে বন্ধ)
- *    কয়েক ডজন জমা স্বাভাবিক — কিন্তু ১০০ মানে কেউ পাঠাচ্ছেই না।
+ * With this many alerts waiting to be sent, the dispatcher is assumed stuck.
+ * The number is large (100) because in a real storm (everyone's PC off at once)
+ * a few dozen queued is normal, but 100 means nobody is sending.
  */
 export const HEALTH_PENDING_ALERTS_MAX = 100;
 
-/** হেলথে "চুপ" গোনার দোরগোড়া — G01-এর সাথে মিলিয়ে (alerts.constants) */
+/** Threshold for counting as "silent" in health; matches G01 (alerts.constants) */
 export const HEALTH_SILENCE_MIN = 10;
 
-/** G04 · ব্যাকআপ-বাসি চেক কত পরপর চলবে — দিনে কয়েকবারই যথেষ্ট */
+/** G04: how often the stale-backup check runs; a few times a day is enough */
 export const BACKUP_CHECK_TICK_MS = 60 * 60_000;
 
-// ── G08 · টেলিগ্রাম ─────────────────────────────────────────────────────────
+// ── G08 · Telegram ──────────────────────────────────────────────────────────
 
-/** ⚠️ Telegram API ঝুলে গেলে যেন পুরো sweep আটকে না থাকে */
+/** So a hung Telegram API cannot block the whole sweep */
 export const TELEGRAM_TIMEOUT_MS = 10_000;
 
 /**
- * ⚠️⚠️ ফাইল আপলোডের জন্য **আলাদা**, অনেক বড় টাইমআউট।
+ * A **separate**, much larger timeout for file uploads.
  *
- * উপরের ১০ সেকেন্ড একটা টেক্সট POST-এর মাপে বসানো। কয়েক MB-র workbook
- * VPS-এর লিঙ্ক দিয়ে তুলতে ওটা নিয়মিত ফেল করত, আর ব্যর্থতাটা দেখতে হুবহু
- * "টোকেন ভুল"-এর মতো লাগত। ⭐ উপরেরটা ছোটই থাকল, নইলে একটা ঝুলে যাওয়া
- * আপলোড ৬০ সেকেন্ডের অ্যালার্ট-sweep আটকে রাখত।
+ * The 10 seconds above is sized for a text POST. For a workbook of a few MB
+ * over the VPS link it failed regularly, and the failure looked exactly like a
+ * "wrong token". The one above stays small, otherwise a hung upload would
+ * block the 60-second alert sweep.
  */
 export const TELEGRAM_UPLOAD_TIMEOUT_MS = 60_000;
 
 /**
- * ⚠️ Telegram-এর **নিজের** ছাদ, আমাদের পছন্দ নয় — bot API-তে
- * `sendDocument` ৫০ MB-র বেশি নেয় না। আগে মেপে না নিলে পুরো আপলোড খরচ
- * করার **পরে** ওদিক থেকে প্রত্যাখ্যান আসত।
- * ⚠️ ডাটাবেসের ডাম্প সাধারণত এর চেয়ে বড় — ব্যাকআপ এই পথে পাঠানোর জিনিস নয়।
+ * Telegram's **own** ceiling, not our choice: the bot API's `sendDocument`
+ * takes nothing over 50 MB. Without measuring first, the rejection would come
+ * **after** the whole upload cost was spent.
+ * A database dump is usually bigger than this; backups are not meant to go this way.
  */
 export const TELEGRAM_DOCUMENT_MAX_BYTES = 50 * 1024 * 1024;
 
-/** ⚠️ ক্যাপশনের সীমা ১০২৪ (বার্তার ৪০৯৬ নয়) — বেশি দিলে গোটা কলটাই ৪০০ */
+/** The caption limit is 1024 (not the message's 4096); over it, the whole call is a 400 */
 export const TELEGRAM_CAPTION_MAX = 1024;
 
-/** এক দফায় সর্বোচ্চ কতগুলো অ্যালার্ট একটা বার্তায় যাবে */
+/** The most alerts that go in one message per round */
 export const TELEGRAM_BATCH = 10;
 
 /**
- * ⚠️ এর চেয়ে পুরোনো অ্যালার্ট আর টেলিগ্রামে যায় না — ইমেইলের
- *    `DISPATCH_MAX_AGE_HOURS`-এর মতোই কারণ: এক সপ্তাহ বন্ধ থাকার পর
- *    তিনশো বাসি বার্তা একসাথে বেরোনোটাই আরেকটা বন্যা।
+ * Alerts older than this no longer go to Telegram, for the same reason as the
+ * email `DISPATCH_MAX_AGE_HOURS`: after a week off, three hundred stale
+ * messages coming out at once is just another flood.
  */
 export const TELEGRAM_MAX_AGE_HOURS = 24;
 
 export const TELEGRAM_TICK_MS = 60_000;
 
 /**
- * ⭐ `channels_sent`-এ এই চিহ্নটা বসলে বোঝা যায় বার্তা টেলিগ্রামে গেছে।
+ * This tag in `channels_sent` means the message went to Telegram.
  *
- * ⚠️ ইমেইলের চিহ্নগুলো (`email` · `log` · `email_failed`) AlertDispatcher
- *    **বসিয়ে দেয়** (`channelsSent: [channel]` — পুরো অ্যারে বদলে যায়)।
- *    তাই টেলিগ্রাম শুধু সেই সারিগুলোই ছোঁয় যেগুলোর `channels_sent` **খালি
- *    নয়**, অর্থাৎ ইমেইলের পালা শেষ। উল্টো করলে টেলিগ্রাম আগে চিহ্ন বসাত,
- *    dispatcher-এর `isEmpty` ফিল্টারে সারিটা আর পড়ত না, আর অ্যালার্টটা
- *    কোনোদিন ইমেইলে যেত না।
+ * The email tags (`email` · `log` · `email_failed`) are **set** by
+ * AlertDispatcher (`channelsSent: [channel]`, which replaces the whole array).
+ * So Telegram only touches rows whose `channels_sent` is **not empty**, i.e.
+ * email's turn is over. The other way round, Telegram would set its tag first,
+ * the dispatcher's `isEmpty` filter would no longer pick the row up, and the
+ * alert would never go out by email.
  */
 export const TELEGRAM_CHANNEL_TAG = 'telegram';
 
 /**
- * ⚠️ তিনবার চেষ্টার পরও না গেলে এই চিহ্নটা বসে — নইলে একটা ভুল টোকেন
- *    প্রতি মিনিটে চিরকাল একই দশটা অ্যালার্ট নিয়ে চেষ্টা করত, আর তার
- *    পেছনে জমতে থাকা নতুনগুলো কোনোদিন সামনের সারিতে আসত না।
+ * Set after three failed attempts. Otherwise a wrong token would retry the same
+ * ten alerts every minute forever, and the newer ones piling up behind them
+ * would never reach the front of the queue.
  */
 export const TELEGRAM_FAILED_TAG = 'telegram_failed';
 
 export const TELEGRAM_MAX_ATTEMPTS = 3;
 
 /**
- * ⭐⭐ **যে অ্যালার্টগুলো টেলিগ্রামে যায় না** *(১৮ আগস্ট ২০২৬)*।
+ * **Alerts that do not go to Telegram** *(18 August 2026)*.
  *
- * ⚠️⚠️ **মাঠে মাপা:** গত ২৪ ঘণ্টায় `agent_down` উঠেছে **৩৯ বার**, সপ্তাহে
- * **১৬৮ বার**। ১৩টা PC রোজ বন্ধ হয়, লাঞ্চে ঘুমোয়, নেটওয়ার্ক কাঁপে —
- * প্রতিটাই একটা বার্তা। মালিকের কথায়: *"ami ei type er alart gula chaina"*।
+ * Measured in the field: in the last 24 hours `agent_down` fired **39 times**,
+ * **168 times** in a week. 13 PCs shut down daily, sleep at lunch, the network
+ * flickers, and each one is a message. The owner said they do not want this
+ * type of alert.
  *
- * ⚠️ এটা ঠিক সেই বন্যা যেটার ভয়ে রিয়েল-টাইম idle অ্যালার্ট **বাদ** দেওয়া
- * হয়েছিল ([10-Roadmap](../../../docs/10-Roadmap.md) — *"তখন কেউ আর কোনো
- * বার্তাই পড়ত না"*); শুধু এবার বন্যাটা এসেছে অন্য দরজা দিয়ে।
+ * This is exactly the flood that led to dropping the real-time idle alert
+ * ([10-Roadmap](../../../docs/10-Roadmap.md): "then nobody would read any
+ * message"); this time it just came through another door.
  *
- * ⭐⭐ **অ্যালার্টটা মুছে ফেলা হয়নি** — এটা কেবল একটা **চ্যানেল** ফিল্টার।
- * সারি তৈরি হয়, ইমেইলে যায়, Alerts পাতায় ওঠে, নিজে থেকে বন্ধও হয়
- * (§ ৩ভ২)। শুধু ফোনে প্রতিটার জন্য আলাদা বার্তা যায় না; দিনে একবার,
- * দৈনিক রিপোর্টের শেষে এক লাইনে গোনা হয়ে যায়।
+ * **The alert is not deleted**: this is only a **channel** filter. The row is
+ * created, goes by email, appears on the Alerts page, and closes itself (§ 3.v2).
+ * Only the per-alert phone message is skipped; once a day, at the end of the
+ * daily report, they are counted in one line.
  *
- * ⚠️ **কোনগুলো এখানে বসবে না:** `backup_failed` · `disk_low` ·
- * `agent_tamper` — এগুলো বিরল, আর প্রতিটাই সত্যিই এখনই জানা দরকার।
+ * **What must not go here:** `backup_failed` · `disk_low` · `agent_tamper`.
+ * These are rare, and each one really needs to be known right now.
  */
 export const TELEGRAM_MUTED_TYPES = ['agent_down'] as const;
 
-// ── R5 · অফসাইট (Backblaze B2) ──────────────────────────────────────────────
+// ── R5 · offsite (Backblaze B2) ─────────────────────────────────────────────
 
 /**
- * ⚠️ পর্দার "Test the connection" বোতামের সীমা। ছোট রাখা হয়েছে ইচ্ছাকৃতভাবে:
- * মালিক বোতাম চেপে বসে আছেন, তাই উত্তরটা দ্রুত আসা দরকার — B2 সাড়া না দিলে
- * "পৌঁছানো গেল না" বলাই যথেষ্ট, ৩০ সেকেন্ড ঘোরানোর দরকার নেই।
+ * Limit for the screen's "Test the connection" button. Kept small on purpose:
+ * the owner is sitting there after pressing the button, so the answer should be
+ * quick. If B2 does not respond, "could not reach it" is enough; no need to spin for 30 seconds.
  */
 export const B2_AUTH_TIMEOUT_MS = 10_000;

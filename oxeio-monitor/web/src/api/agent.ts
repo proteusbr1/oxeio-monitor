@@ -3,7 +3,7 @@ import { api } from './client';
 /** PCs (devices) and the agent builds offered to them. */
 
 export type DeviceStatus = 'active' | 'revoked';
-// ── ডিভাইস (owner-only) ─────────────────────────────────────────────────────
+// ── Devices (owner-only) ────────────────────────────────────────────────────
 
 export interface DeviceView {
   id: number;
@@ -14,9 +14,9 @@ export interface DeviceView {
   agentVersion: string | null;
   monitors: number;
   status: DeviceStatus;
-  /** ISO instant — কখনো সাড়া না দিলে `null` */
+  /** ISO instant — `null` if it never responded */
   lastSeenAt: string | null;
-  /** ঘড়ির হেরফের, সেকেন্ডে — বড় হলে সময়ের হিসাব সন্দেহজনক */
+  /** Clock drift in seconds — if large, the time figures are suspect */
   lastDriftSec: number;
   maxDriftSec: number;
   /**
@@ -26,30 +26,31 @@ export interface DeviceView {
   capabilities?: Record<string, string> | null;
   capabilitiesAt?: string | null;
   enrolledAt: string;
-  /** কোনো কর্মীর সাথে যুক্ত না থাকলে `null` */
+  /** `null` if not linked to any employee */
   employee: { id: number; empCode: string; fullName: string } | null;
 }
 /**
- * ⚠️⚠️ **এই রুটটা সার্ভারে বহুদিন ধরে ছিল, ওয়েব একবারও ডাকেনি।**
+ * **This route existed on the server for a long time; the web never called it.**
  *
- * উপরের `DeviceView` টাইপটাও লেখা হয়ে বসে ছিল — অর্থাৎ চুক্তির দুই পাশই
- * তৈরি, মাঝখানে কল নেই। ফল: *"কোন PC-তে কোন এজেন্ট চলছে"* প্রশ্নের উত্তর
- * পর্দার কোথাও ছিল না, যদিও ডেটাটা এক কল দূরে (১৮ আগস্ট, মালিকের প্রশ্ন)।
+ * The `DeviceView` type above was also already written, so both sides of the
+ * contract existed with no call in between. Result: the question "which agent
+ * runs on which PC" was answered nowhere on screen, although the data was one
+ * call away (raised by the owner).
  *
- * ⚠️ owner-only (`@Roles(UserRole.owner)`), আর সার্ভার `{ rows, total }`
- * খামে পাঠায় — `total` এখানে লাগে না, সারিগুলোই ফেরত দেওয়া হয়।
+ * Owner-only (`@Roles(UserRole.owner)`), and the server wraps the result in a
+ * `{ rows, total }` envelope — `total` is not needed here, only the rows are returned.
  */
 export function listDevices(signal?: AbortSignal): Promise<DeviceView[]> {
   return api<{ rows: DeviceView[]; total: number }>('/devices', {
     signal,
   }).then((r) => r.rows);
 }
-// ── H04 · এজেন্টের ভার্সন বিলি ──────────────────────────────────────────────
+// ── H04 · Agent version rollout ─────────────────────────────────────────────
 
 export type RolloutStage = 'canary' | 'partial' | 'all' | 'halted';
 /**
- * ⚠️ লেখাগুলো owner-এর পর্দায় যায়, তাই কারিগরি নাম নয় — "canary" শব্দটা
- * কী বোঝায় সেটা ধরে নেওয়া যায় না।
+ * These labels appear on the owner's screen, so no technical names — what
+ * "canary" means cannot be assumed to be known.
  */
 export const STAGE_LABEL: Record<RolloutStage, string> = {
   canary: 'A few PCs first',
@@ -65,17 +66,17 @@ export interface AgentVersionView {
   isMandatory: boolean;
   releaseNotes: string | null;
   releasedAt: string;
-  /** ⚠️ সারি আছে কিন্তু MSI-টা ডিস্কে নেই — এজেন্ট নামাতে গিয়ে ৪০৪ পাবে */
+  /** The row exists but the MSI file is not on disk — agents fetching it get a 404 */
   fileMissing: boolean;
   /** Published with the owner's signature (`<msi>.sig`); optional for older servers */
   signed?: boolean;
   devicesOn: number;
   /**
-   * ⭐⭐ **বালতি নির্বিশেষে যে PC-টা আগে পায়** *(১ সেপ্টেম্বর ২০২৬)* —
-   * `null` মানে কেউ নয়।
+   * The PC that gets this version first, regardless of rollout stage.
+   * `null` means none.
    */
   pilotDeviceId: number | null;
-  /** ⭐ পর্দায় দেখানোর নাম — কর্মীর নাম, না থাকলে hostname */
+  /** Display name for the screen — the employee's name, or the hostname if none */
   pilotLabel: string | null;
 }
 export function listAgentVersions(
@@ -90,15 +91,15 @@ export function publishAgentVersion(body: {
   rolloutStage?: RolloutStage;
   isMandatory?: boolean;
 }): Promise<AgentVersionView> {
-  // ⚠️ `body` কাঁচা অবজেক্ট — `api()` নিজেই `JSON.stringify` করে।
-  //    এখানে আগেই stringify করলে দুবার এনকোড হয়ে সার্ভারে একটা
-  //    **স্ট্রিং** পৌঁছাত, আর ব্রাউজারে আসত `"…" is not valid JSON`।
+  // `body` is a raw object — `api()` calls `JSON.stringify` itself. Stringifying
+  // here first would encode it twice, the server would receive a **string**,
+  // and the browser would get `"…" is not valid JSON`.
   return api<AgentVersionView>('/agent-versions', { method: 'POST', body });
 }
 /**
- * ⚠️⚠️ `pilotDeviceId` **না পাঠানো** আর **`null` পাঠানো** এক নয়: প্রথমটা
- * "যা ছিল তাই থাক", দ্বিতীয়টা "পাইলট তুলে দাও"। ⭐ পার্থক্যটা না রাখলে
- * শুধু ধাপ বদলাতে গেলেই বেছে নেওয়া PC-টা নীরবে মুছে যেত।
+ * Not sending `pilotDeviceId` and sending `null` are different: the first
+ * means "leave it as it was", the second means "remove the pilot". Without the
+ * distinction, merely changing the stage would silently erase the chosen PC.
  */
 export function setAgentRollout(
   version: string,

@@ -25,8 +25,8 @@ import { homePathFor, seesEveryone } from './api/auth';
 import { FeaturesProvider, useFeatures } from './features/FeaturesContext';
 
 /**
- * তিনটি অবস্থা, তিনটি আলাদা রুট-গাছ — তাই "লগইন করেনি অথচ ভেতরের পেজ দেখছে"
- * বা "পাসওয়ার্ড না বদলে ঘুরে বেড়াচ্ছে" — এমন কিছু সম্ভবই নয়।
+ * Three states, three separate route trees — so "not logged in but looking at
+ * an inner page" or "wandering around without changing the password" cannot happen.
  */
 function Router() {
   const { user, loading, offline, refresh } = useAuth();
@@ -42,14 +42,14 @@ function Router() {
   }
 
   /**
-   * ⭐⭐ "সার্ভারে পৌঁছাতে পারিনি" আর "সেশন শেষ" — দুটো আলাদা কথা,
-   * তাই দুটো আলাদা পর্দা।
+   * "Could not reach the server" and "session ended" are different things,
+   * so they get different screens.
    *
-   * ⚠️ এখানে লগইন পর্দা দেখানো মানে ব্যবহারকারীকে একটা **মিথ্যা** বলা:
-   *    তাঁর cookie দিব্যি বেঁচে আছে, শুধু প্লেনটা পৌঁছায়নি। হোমস্ক্রিনের
-   *    PWA মোবাইল ডেটায় বারবার ঠান্ডা-চালু হয়, তাই ফোনে এটাই নিত্য ঘটনা
-   *    হতো — আর পাসওয়ার্ড টাইপ করে সাবমিট না করা পর্যন্ত আসল কারণটা
-   *    জানাই যেত না।
+   * Showing the login screen here would tell the user a **lie**: their cookie
+   * is perfectly alive, the request just did not get through. The home-screen
+   * PWA cold-starts repeatedly on mobile data, so on a phone this would be an
+   * everyday event, and the real cause would stay hidden until they typed a
+   * password and submitted.
    */
   if (offline) {
     return (
@@ -90,52 +90,53 @@ function Router() {
 
   const isOwner = user.role === 'owner';
   /**
-   * ⭐ Settings-এর রুটটা ম্যানেজারেরও *(১৫ আগস্ট)* — তিনি Staff · Categories
-   * · Holidays পান। ভেতরে কোন ট্যাব তিনি দেখবেন সেটা `SettingsPage`-এর কাজ।
+   * Managers get the Settings route too — they see Staff · Categories ·
+   * Holidays. Which tabs they see inside is `SettingsPage`'s job.
    *
-   * ⚠️⚠️ এটা আলাদা চলক, `isOwner || isManager` নয়: **নেভ, রুট আর পর্দা —
-   * তিন জায়গায় একই শর্ত থাকতে হয়**। মাঠে ধরা পড়েছে ঠিক এই ফাঁকটাই —
-   * `Layout`-এর নেভ আর `SettingsPage` দুটোই ম্যানেজারকে ঢুকতে দিচ্ছিল,
-   * কিন্তু রুটটা owner-only থেকে গিয়েছিল; ম্যানেজার নেভে Settings দেখতেন,
-   * চাপলে **"Not found"**।
+   * This is a separate variable, not `isOwner || isManager`: **the nav, the
+   * route and the screen must all share the same condition**. This exact gap
+   * was caught in the field: the `Layout` nav and `SettingsPage` both let the
+   * manager in, but the route stayed owner-only, so managers saw Settings in
+   * the nav and got **"Not found"** when they clicked it.
    */
   const mayOpenSettings = isOwner || user.role === 'manager';
   /**
-   * ⚠️ সার্ভারের গার্ড পড়ে দেখা: স্টাফের জন্য `/screenshots` ও `/me`
-   *    **ছাড়া** আর কোনো ড্যাশবোর্ড endpoint খোলা নেই (`live`, `employees`,
-   *    `activity`, `reports` — সবগুলোয় ক্লাস-লেভেল `@Roles(owner, manager)`)।
-   *    তাই লগইনের পর তাকে লাইভ বোর্ডে নামালে প্রথম যা দেখত তা একটা ৪০৩ বাক্স।
+   * Read from the server guards: for staff, nothing in the dashboard is open
+   * **except** `/screenshots` and `/me` (`live`, `employees`, `activity`,
+   * `reports` all have a class-level `@Roles(owner, manager)`). So landing on
+   * the live board after login would first show them a 403 box.
    */
   /**
-   * ⚠️⚠️ নামটা `isStaff` **থাকল**, সূত্রটা উল্টে গেছে *(২৫ আগস্ট)*।
-   * আগে লেখা ছিল `role === 'employee'`, তাই `researcher` রোল আসার পর
-   * গবেষক আর "স্টাফ" থাকতেন না — তিনি লাইভ বোর্ডে নামতেন, আর সেখানে
-   * তাঁর জন্য একটা ৪০৩ বাক্স ছাড়া কিছুই নেই।
-   * ⭐ প্রশ্নটা আসলে *"ইনি কি গোটা দল দেখেন না?"* — সেটাই এখন লেখা।
+   * The name `isStaff` **stays**, but the logic is inverted. It used to be
+   * `role === 'employee'`, so once the `researcher` role arrived the
+   * researcher no longer counted as "staff": they landed on the live board,
+   * where there is nothing for them but a 403 box.
+   * The real question is *"does this person not see the whole team?"* — and
+   * that is what the code now says.
    */
   const isStaff = !seesEveryone(user.role);
 
   /**
-   * ⭐ Worklog — Live Board-এর মতোই owner ও manager।
+   * Worklog — owner and manager, same as the Live Board.
    *
-   * ⚠️⚠️ `mayOpenSettings`-এর মতোই **আলাদা নাম**, `!isStaff` নয়। শর্তটা
-   * তিন জায়গায় থাকে (নেভ · রুট · পর্দা), আর নাম না দিলে একদিন একটা
-   * বদলাত আর বাকি দুটো নয় — G134-এ ঠিক সেটাই ঘটেছিল।
+   * A **separate name** like `mayOpenSettings`, not `!isStaff`. The condition
+   * lives in three places (nav · route · screen); without a name, one day one
+   * would change and not the other two — which is exactly what happened in G134.
    */
   const mayOpenWorklog = isOwner || user.role === 'manager';
 
   /**
-   * ⭐⭐ **গবেষক লগইন করে নিজের কাজের তালিকায় নামেন** *(২৪ আগস্ট ২০২৬)*।
+   * **A researcher lands on their own work list after login.**
    *
-   * ⚠️⚠️ আগে তিনিও `/me`-তে নামতেন — চারটে **ঘণ্টার** টাইল, একটাও তাঁর
-   * কাজের নয়। দিনের প্রথম পর্দাটাই বলত *"তোমাকে মাপা হচ্ছে"*, আর তাঁর
-   * উৎপাদনের কথা কিছুই বলত না। ⭐ মাঠের ফল: দুজন গবেষকের **শেষ লগইন
-   * ১৩ আগস্ট** — সিস্টেম চালুর দিন, তারপর আর ফেরেননি।
+   * They used to land on `/me`: four **hours** tiles, none about their work.
+   * The first screen of the day said *"you are being measured"* and said
+   * nothing about their output. Field result: both researchers' **last login
+   * was 13 August**, the day the system went live; they never came back.
    *
-   * ⚠️ এখানে আগে লেখা ছিল `user.canAddTargets ? ... : '/me'` — তখন
-   * "ইনি গবেষক" কথাটা ওই পতাকাটাই বহন করত, কারণ রোল ছিল `employee`।
-   * ⭐ ২৫ আগস্ট রোলটা আলাদা হলো, তাই প্রশ্নটা এখন সরাসরি — আর সূত্রটা
-   * `homePathFor`-এ **এক জায়গায়**, "পাওয়া যায়নি" পাতাটাও সেটাই পড়ে।
+   * This used to be `user.canAddTargets ? ... : '/me'`, when that flag carried
+   * the meaning "this is a researcher" because the role was `employee`.
+   * Now the role is separate, so the question is direct, and the rule lives in
+   * **one place**, `homePathFor`; the "not found" page reads it too.
    */
   const staffLanding = homePathFor(user.role, features.designTargets);
 
@@ -146,24 +147,23 @@ function Router() {
           index
           element={
             /*
-              ⭐ স্টাফ নামে **নিজের পাতায়**, গ্যালারিতে নয়। আগে গ্যালারিই
-              ছিল (তখন আর কিছু ছিল না), কিন্তু লগইনের পর প্রথম যা দেখা
-              দরকার তা নিজের ছবির গ্রিড নয় — নিজের ঘণ্টা।
+              Staff land on **their own page**, not the gallery. It used to be
+              the gallery (there was nothing else then), but the first thing
+              to see after login is not their own picture grid — it is their hours.
             */
             isStaff ? <Navigate to={staffLanding} replace /> : <LiveBoardPage />
           }
         />
 
         {/*
-          ⭐⭐ **Staff তালিকা** *(মালিকের চাওয়া, ১৫ আগস্ট — মকআপ ক-এর
-             সাইডবারে ওটা আছে)*।
+          **Staff list** (requested by the owner — the mockup's sidebar has it).
 
-          ⚠️ এখানে আগে লেখা ছিল "`staff` বলে কোনো তালিকা-পর্দা নেই" — আর
-             সেটাই ছিল সাইডবার থেকে ট্যাবটা তুলে দেওয়ার কারণ। এখন পাতাটা
-             আছে, তাই ট্যাবটাও ফিরেছে।
+          This used to say "there is no `staff` list screen", which was the
+          reason the tab was removed from the sidebar. The page exists now, so
+          the tab is back.
 
-          ⚠️ owner + manager — `/live` থেকেই ডেটা আসে, আর ওই endpoint
-             স্টাফের জন্য ৪০৩। নেভেও তাই কেবল দুজনের।
+          owner + manager — the data comes from `/live`, and that endpoint is
+          a 403 for staff. So the nav shows it to those two only.
         */}
         {(isOwner || user?.role === 'manager') && (
           <Route path="staff" element={<StaffPage />} />
@@ -171,23 +171,22 @@ function Router() {
         <Route path="staff/:id" element={<EmployeeDetailPage />} />
 
         {/*
-          ⭐ **J05 · J08** — tray-র "My data" মেনু ঠিক এখানেই নামে
-          (`StaffPortalUrl`)। পাতাটা না থাকায় ওই মেনুটা এতদিন ৪০৪ দেখাত।
+          **J05 · J08** — the tray's "My data" menu lands exactly here
+          (`StaffPortalUrl`). Without this page that menu showed a 404 for a long time.
 
-          ⚠️ রুটটা **সব ভূমিকার জন্য**, `isStaff &&` দিয়ে ঘেরা নয় — owner
-          বা manager নিজেও একজন কর্মী হতে পারেন (`users.employee_id`
-          বসানো)। যাঁর সেটা নেই, সার্ভার তাঁকে পরিষ্কার ৪০৩ বলে, আর
-          পাতাটা সেটাই দেখায়।
+          The route is **for every role**, not wrapped in `isStaff &&`: an owner
+          or manager can also be an employee (`users.employee_id` set). For
+          someone without it, the server answers a clear 403 and the page shows that.
         */}
         <Route path="me" element={<MyDataPage />} />
 
         {/*
-          ⭐ Targets *(২২ আগস্ট)* — গবেষক · ম্যানেজার · মালিক।
+          Targets — researcher · manager · owner.
 
-          ⚠️ রুটটা **সবার জন্য খোলা**, আর সেটা ইচ্ছাকৃত: আসল পাহারা
-             সার্ভারে (`assertCanSubmit` → ৪০৩)। কেউ ঠিকানা টাইপ করে
-             এলে পাতাটা সার্ভারের বার্তাই দেখাবে, আর সেটাই এই কোডবেসের
-             নিয়ম — পর্দায় লুকানো প্রথম রক্ষাকবচ, শেষ নয়।
+          The route is **open to everyone**, deliberately: the real guard is on
+          the server (`assertCanSubmit` → 403). If someone types the address, the
+          page just shows the server's message, which is this code base's rule:
+          hiding things on screen is the first safeguard, not the last.
         */}
         {features.designTargets && (
           <Route path="targets" element={<TargetsPage />} />
@@ -196,9 +195,9 @@ function Router() {
           <Route path="targets/all" element={<AllTargetsPage />} />
         )}
         {/*
-          ⚠️ owner + manager — সাইডবার, এই রুট আর সার্ভারের
-             `@Roles(owner, manager)` তিন জায়গাতেই এক (G134-এর শিক্ষা:
-             তিনটের একটা বদলালে বাকি দুটোও বদলাতে হয়)।
+          owner + manager — the sidebar, this route and the server's
+          `@Roles(owner, manager)` are the same in all three places (lesson from
+          G134: change one of the three and the other two must change too).
         */}
         {features.designTargets && (
           <Route path="targets/review" element={<ReviewPage />} />
@@ -212,32 +211,32 @@ function Router() {
         <Route path="reports" element={<ReportsPage />} />
 
         {/*
-          ⭐ I06 — শর্ত ছাড়া, **সব ভূমিকার জন্য**। নিজের অ্যাকাউন্টের 2FA
-             চালু করা কোনো বিশেষাধিকার নয়; স্টাফও নিজের অ্যাকাউন্ট রক্ষা
-             করতে পারবে। (এটা তার উপর নজরদারির কোনো নতুন পথ খোলে না —
-             পাতাটা শুধু তার নিজের লগইন নিয়ে।)
+          I06 — unconditional, **for every role**. Turning on 2FA for your own
+          account is not a privilege; staff can protect their own account too.
+          (It opens no new way to watch them — the page is only about their own login.)
         */}
         <Route path="security" element={<SecurityPage />} />
 
         {/*
-          ⚠️ owner না হলে রুটটা **থাকেই না** — সেটিংসের মতোই। অ্যালার্টে
-          হোস্টনেম, কর্মীর নাম আর ডিভাইসের অবস্থা একসাথে থাকে, আর
-          সেগুলো ম্যানেজারের নাগালের বাইরে (স্পেক § ৪.৩)।
+          If not owner, the route **does not exist** — same as Settings. An alert
+          carries the hostname, the employee's name and the device state together,
+          and those are out of managers' reach (spec section 4.3).
         */}
         {isOwner && <Route path="alerts" element={<AlertsPage />} />}
 
         {/*
-          ⭐ **R21** — জামানত আগে `Settings → Deposits` ট্যাব ছিল, এখন
-             সাইডবারের নিজের পাতা। সেটিংসে যা থাকে তা একবার বসিয়ে ভুলে
-             যাওয়ার জিনিস; জামানতের হিসাবে ঢুকতে হয় বারবার।
+          **R21** — Deposits used to be a `Settings → Deposits` tab, then a page
+          of its own in the sidebar. Settings hold things you set once and forget;
+          the deposit calculation needs visiting again and again.
 
-          ⚠️ alerts-এর মতোই owner না হলে রুটটা **থাকেই না** — জামানত
-             সরাসরি বেতনের অংশ (ADR-023 · ADR-027)।
+          Like alerts, the route **does not exist** unless owner — deposits are
+          directly part of pay (ADR-023 · ADR-027).
         */}
         {/*
-          ⚠️ owner **ও** manager — `/live`-এর `@Roles`-এর সাথে হুবহু এক।
-             G134-এর শিক্ষা: এক অধিকার তিন জায়গায় (নেভ · রুট · পর্দা), আর
-             তিনটেই না মিললে ব্যবহারকারী নেভে দেখেন কিন্তু চাপলে "কিছু নেই"।
+          owner **and** manager — exactly the same as `@Roles` on `/live`.
+          Lesson from G134: one permission lives in three places (nav · route ·
+          screen), and if the three do not match, the user sees it in the nav
+          but gets "nothing here" when clicking.
         */}
         {mayOpenWorklog && <Route path="worklog" element={<WorklogPage />} />}
         {isOwner && <Route path="payroll" element={<PayrollPage />} />}
@@ -247,11 +246,11 @@ function Router() {
         )}
 
         {/*
-          ⭐ যাঁর অধিকার নেই তাঁর জন্য রুটটা **থাকেই না** — সরাসরি
-             `/settings` টাইপ করলে "পাওয়া যায়নি" আসে, ৪০৩ নয়। ৪০৩ বললে
-             উল্টো স্বীকার করা হতো যে পর্দাটা আছে। (`createRoutesFromChildren`
-             non-element চাইল্ড নীরবে বাদ দেয়, তাই `false` বসানো নিরাপদ —
-             v7-এর ডকুমেন্টেড আচরণ, ঠিক এই ধরনের শর্তের জন্যই রাখা।)
+          For someone without the right, the route **does not exist** — typing
+          `/settings` directly gives "not found", not 403. A 403 would admit
+          that the screen exists. (`createRoutesFromChildren` silently drops
+          non-element children, so putting `false` here is safe — documented v7
+          behaviour, kept for exactly this kind of condition.)
         */}
         {mayOpenSettings && (
           <Route path="settings" element={<SettingsPage />} />
@@ -271,10 +270,10 @@ export function App() {
           <Router />
         </FeaturesProvider>
         {/*
-          ⭐ রুটার ও Layout-এর **বাইরে**, ইচ্ছাকৃতভাবে — তাই ব্যাজটা
-             লগইন পাতা, পাসওয়ার্ড-বদলের পাতা আর ৪০৪-সহ **প্রতিটা** পর্দায়
-             থাকে। ভেতরে বসালে ঠিক যে অবস্থাগুলোতে "কোন বিল্ড চলছে" জানা
-             সবচেয়ে জরুরি, সেখানেই ওটা থাকত না।
+          **Outside** the router and Layout, deliberately — so the badge shows on
+          **every** screen, including the login page, the change-password page
+          and the 404. Inside, it would be missing in exactly the states where
+          knowing "which build is running" matters most.
         */}
         <VersionBadge />
       </AuthProvider>

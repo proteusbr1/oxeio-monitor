@@ -1,22 +1,22 @@
 import { Workbook } from 'exceljs';
 
 /**
- * F05 — .xlsx তৈরি (exceljs)।
+ * F05: building the .xlsx (exceljs).
  *
- * ⭐ এখানে একটাই নিয়ম: **যা সংখ্যা, তা সংখ্যা হিসেবেই লেখা হয়**। ঘণ্টা
- * "৭ঘ ৩২মি" লিখে দিলে Excel-এ ওটা টেক্সট, তখন কলাম সিলেক্ট করে যোগফল দেখা
- * বা বড়-থেকে-ছোট sort করা — দুটোর কোনোটাই চলে না। অথচ রিপোর্ট নামিয়ে
- * মানুষ প্রথম কাজ ওটাই করে।
+ * One rule here: **what is a number is written as a number.** If hours were
+ * written as "7h 32m" they would be text in Excel, and then neither summing the
+ * selected column nor sorting largest to smallest would work, though those
+ * are the first things people do after downloading a report.
  */
 
 export type CellValue = string | number | null;
 
-/** ঘণ্টা ও শতাংশ — দুই দশমিক, কিন্তু ভেতরে পুরো সংখ্যাটাই থাকে */
+/** Hours and percentages: two decimals shown, but the whole number is kept inside */
 export const NUM_FMT_2 = '0.00';
 
 export interface ExcelColumn<T> {
   header: string;
-  /** Excel-এর অক্ষর-চওড়া একক; লম্বা ইংরেজি হেডার একটু বেশি জায়গা নেয় */
+  /** In Excel's character-width unit; long English headers take a bit more room */
   width: number;
   numFmt?: string;
   value: (row: T) => CellValue;
@@ -36,8 +36,8 @@ export interface SheetSpec {
 }
 
 /**
- * টাইপ-নিরাপদ কলাম সংজ্ঞাকে এক ওয়ার্কবুকে অন্য শিটের পাশে বসানোর মোড়ক।
- * (একেক শিটের সারির ধরন একেক রকম, তাই জেনেরিকটা এখানেই মুছে ফেলা হয়।)
+ * A wrapper to put a type-safe column definition into a workbook beside other
+ * sheets. (Each sheet's row type differs, so the generic is erased right here.)
  */
 export function sheetOf<T>(
   name: string,
@@ -57,9 +57,10 @@ export function sheetOf<T>(
 }
 
 /**
- * ⭐ রেঞ্জ, তৈরির সময়, ছাঁটাইয়ের নোট — এসব **আলাদা শিটে**, ডেটার উপরে নয়।
- * টেবিলের মাথায় দু-তিন লাইন শিরোনাম বসালে ফিল্টার, sort আর "কলাম সিলেক্ট
- * করে যোগফল" — সব ভেঙে যায়, কারণ তখন হেডার আর প্রথম সারি এক থাকে না।
+ * The range, creation time and truncation notes go **on a separate sheet**, not
+ * above the data. Putting two or three title lines above the table breaks
+ * filtering, sorting and "select the column and sum", because the header and
+ * the first row are no longer the same row.
  */
 export async function buildWorkbook(
   sheets: SheetSpec[],
@@ -94,8 +95,8 @@ export async function buildWorkbook(
       };
     });
 
-    // হেডার আটকে থাকে — ৫০০০ সারির অ্যাটেনডেন্স শিটে এটা ছাড়া কোন কলাম
-    // কীসের তা বোঝা যায় না
+    // The header stays pinned: on a 5000-row attendance sheet you cannot tell
+    // which column is which without this
     ws.views = [{ state: 'frozen', ySplit: 1 }];
     if (spec.columns.length > 0) {
       ws.autoFilter = {
@@ -113,11 +114,11 @@ export async function buildWorkbook(
   for (const [key, value] of info) infoSheet.addRow([key, value]);
   infoSheet.getRow(1).font = { bold: true };
 
-  // ⚠️ exceljs-এর টাইপ Buffer বললেও রানটাইমে কিছু সংস্করণ ArrayBuffer দেয়;
-  //    Buffer.from() দুটোই সামলায়, আর res.send() তখন নিশ্চিতভাবেই বাইনারি পায়।
+  // exceljs's type says Buffer, but at runtime some versions give an ArrayBuffer;
+  // Buffer.from() handles both, and res.send() then surely gets binary.
   const written = await wb.xlsx.writeBuffer();
   return Buffer.from(written);
 }
 
-// ফাইলের নাম ও MIME এখন `reports.download.ts`-এ — F06-এর পর ওগুলো আর
-// শুধু Excel-এর জিনিস নয়।
+// The file name and MIME are now in `reports.download.ts`: after F06 they are
+// no longer only an Excel matter.

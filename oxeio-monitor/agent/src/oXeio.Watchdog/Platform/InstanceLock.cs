@@ -2,46 +2,46 @@ using System.Runtime.Versioning;
 
 namespace oXeio.Watchdog.Platform;
 
-/// <summary>lock ফাইল কে ধরে আছে — বা আদৌ জানা গেল কি না।</summary>
+/// <summary>Who holds the lock file, or whether that could be determined at all.</summary>
 internal enum LockProbe
 {
-    /// <summary>কেউ ধরে নেই।</summary>
+    /// <summary>Nobody holds it.</summary>
     Free,
 
-    /// <summary>কেউ একজন ধরে আছে।</summary>
+    /// <summary>Someone holds it.</summary>
     Held,
 
-    /// <summary>⚠️ জানাই গেল না। "খালি"-র সমান ধরা যাবে না।</summary>
+    /// <summary>Could not be determined. Must not be treated as "free".</summary>
     Unknown,
 }
 
 /// <summary>
-/// ⭐ <b>দুটো এজেন্ট একসাথে না চলার নিশ্চয়তা — ফাইল লক দিয়ে।</b>
+/// <b>Guarantees that two agents never run at once, using a file lock.</b>
 ///
-/// <b>কেন mutex নয়:</b> এক মেশিনে দুটো Windows সেশন (কনসোল + RDP, বা ফাস্ট ইউজার
-/// সুইচিং) থাকতে পারে, আর সেখানে দুটো এজেন্ট চললে একই ঘণ্টা দুবার গোনা হতো —
-/// অর্থাৎ পে-রোল নষ্ট। সেশন পেরিয়ে কাজ করতে হলে mutex-এর নাম <c>Global\</c>
-/// দিয়ে শুরু করতে হয়, আর <c>Global\</c> নামের kernel object তৈরি করতে লাগে
-/// <c>SeCreateGlobalPrivilege</c> — যেটা স্ট্যান্ডার্ড ইউজারের থাকে না।
-/// অর্থাৎ non-admin অ্যাকাউন্টে চলা এজেন্ট সেই mutex বানাতেই পারত না।
+/// <b>Why not a mutex:</b> one machine can have two Windows sessions (console + RDP, or
+/// fast user switching), and two agents running there would count the same hour twice,
+/// which corrupts payroll. A mutex that spans sessions needs a name starting with
+/// <c>Global\</c>, and creating a <c>Global\</c> kernel object requires
+/// <c>SeCreateGlobalPrivilege</c>, which standard users do not have. So an agent running
+/// under a non-admin account could not even create that mutex.
 ///
-/// <c>%ProgramData%</c>-র একটা ফাইল <c>FileShare.None</c>-এ খুলে ধরে রাখলে সেই
-/// সমস্যা নেই: মেশিন-ব্যাপী, কোনো privilege লাগে না, আর প্রসেস মরলে
-/// (ক্র্যাশ, TerminateProcess, পাওয়ার কাটা — সব ক্ষেত্রেই) কার্নেল নিজেই
-/// হ্যান্ডেল ছেড়ে দেয়, তাই বাসি লক পড়ে থাকে না।
+/// Opening a file under <c>%ProgramData%</c> with <c>FileShare.None</c> and holding it
+/// avoids the problem: it is machine-wide, needs no privilege, and when the process dies
+/// (crash, TerminateProcess, power loss) the kernel releases the handle itself, so no
+/// stale lock is left behind.
 ///
-/// <b>interlock-এর তিনটে স্তর</b> (Task Scheduler আর watchdog যেন একসাথে
-/// এজেন্ট চালু করে না বসে):
+/// <b>Three layers of interlock</b> (so Task Scheduler and the watchdog do not both
+/// start an agent):
 /// <list type="number">
-/// <item>Task Scheduler <b>শুধু watchdog</b>-কে চালু করে, এজেন্টকে নয়। অর্থাৎ
-/// চালু করার লোক গঠনগতভাবেই একজন।</item>
-/// <item>তবু এজেন্ট নিজে এই লক নেয়, আর না পেলে সাথে সাথে বেরিয়ে যায় —
-/// কেউ হাতে exe-তে ডাবল ক্লিক করলে, বা পুরোনো ইনস্টলের একটা scheduled task
-/// রয়ে গেলে, এটাই আসল রক্ষাকবচ।</item>
-/// <item>watchdog চালু করার <b>আগে</b> লক probe করে; ধরা থাকলে চালু করে না।
-/// ⚠️ probe আর launch-এর মাঝে একটা race থেকেই যায় — সেটা সমস্যা নয়, কারণ
-/// (২) অনুযায়ী হেরে যাওয়া কপিটা নিজেই বেরিয়ে যায়। probe শুধু অকারণ প্রসেস
-/// তৈরি আর লগ ভরা ঠেকায়, শুদ্ধতার দায়িত্ব তার নয়।</item>
+/// <item>Task Scheduler starts <b>only the watchdog</b>, never the agent. So by
+/// construction there is a single starter.</item>
+/// <item>Still, the agent takes this lock itself and exits immediately if it cannot get
+/// it. This is the real safeguard when someone double-clicks the exe, or an old
+/// install left a scheduled task behind.</item>
+/// <item>The watchdog probes the lock <b>before</b> launching and does not launch if it
+/// is held. Careful: a race between the probe and the launch always remains. That is
+/// fine, because by (2) the losing copy exits on its own. The probe only prevents
+/// pointless process creation and log noise; correctness is not its job.</item>
 /// </list>
 /// </summary>
 [SupportedOSPlatform("windows")]
@@ -55,8 +55,8 @@ internal sealed class InstanceLock : IDisposable
     private InstanceLock(FileStream stream) => _stream = stream;
 
     /// <summary>
-    /// লক নেওয়ার চেষ্টা (watchdog নিজের জন্য ব্যবহার করে)।
-    /// <c>null</c> = অন্য কেউ ধরে আছে, বা খোলাই গেল না।
+    /// Tries to take the lock (the watchdog uses this for itself).
+    /// <c>null</c> = someone else holds it, or it could not be opened at all.
     /// </summary>
     public static InstanceLock? TryAcquire(string path)
     {
@@ -74,11 +74,11 @@ internal sealed class InstanceLock : IDisposable
     }
 
     /// <summary>
-    /// কেউ ধরে আছে কি না — ধরে না রেখেই।
+    /// Whether someone holds the lock, without keeping it.
     ///
-    /// ⚠️ এখানে <c>using</c> অপরিহার্য। হ্যান্ডেলটা খোলা রেখে দিলে watchdog নিজেই
-    /// লকটা ধরে বসে থাকত, আর এজেন্ট কোনোদিন চালু হতে পারত না — অথচ লগে সব
-    /// স্বাভাবিক দেখাত।
+    /// Careful: the <c>using</c> is essential here. If the handle stayed open, the
+    /// watchdog would hold the lock itself and the agent could never start, while the
+    /// log would look perfectly normal.
     /// </summary>
     public static LockProbe Probe(string path)
     {
@@ -95,17 +95,17 @@ internal sealed class InstanceLock : IDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            // ফোল্ডার নেই, ACL নেই, ডিস্ক ভরা — কোনোটাই "এজেন্ট নেই" নয়।
-            // ভুল করে অপেক্ষা করার খরচ ৩০ সেকেন্ড; ভুল করে দ্বিতীয় এজেন্ট
-            // চালু করার খরচ দুবার গোনা ঘণ্টা।
+            // Missing folder, missing ACL, full disk: none of these mean "no agent".
+            // Waiting by mistake costs 30 seconds; starting a second agent by mistake
+            // costs an hour counted twice.
             return LockProbe.Unknown;
         }
     }
 
     /// <summary>
-    /// <c>IOException.HResult</c>-এর নিচের ১৬ বিটেই আসল Win32 কোড
-    /// (0x8007_00XX ⇒ FACILITY_WIN32)। মেসেজের লেখা মিলিয়ে দেখা যেত না —
-    /// ওটা locale অনুযায়ী বদলায়, আর এই মেশিনগুলোর কোনোটা বাংলা Windows হতে পারে।
+    /// The real Win32 code is in the low 16 bits of <c>IOException.HResult</c>
+    /// (0x8007_00XX means FACILITY_WIN32). Matching the message text would not work:
+    /// it changes with the locale, and some of these machines may run Bengali Windows.
     /// </summary>
     private static int Win32Code(IOException ex) => ex.HResult & 0xFFFF;
 

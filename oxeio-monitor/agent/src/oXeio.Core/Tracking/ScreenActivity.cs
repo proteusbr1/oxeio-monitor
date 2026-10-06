@@ -1,87 +1,85 @@
 namespace oXeio.Core.Tracking;
 
 /// <summary>
-/// ⭐⭐ <b>G46 — পর্দা সত্যিই বদলাচ্ছে কি না।</b> খাঁটি নিয়ম, কোনো Win32 নেই।
+/// <b>G46: is the screen really changing?</b> Pure rule, no Win32.
 ///
-/// <b>কেন এটা দরকার:</b> এজেন্ট idle মাপে <c>GetLastInputInfo</c> দিয়ে, আর ওই
-/// API <b>আসল ও নকল ইনপুট আলাদা করে না</b>। দশ লাইনের একটা স্ক্রিপ্ট —
-/// প্রতি মিনিটে <c>SendKeys("{F15}")</c> — টাইমারটা চিরকাল রিসেট করে রাখে,
-/// আর পর্দায় কিচ্ছু দেখা যায় না। ফলে সারাদিন "Working", আর অফিসের সরাসরি ক্ষতি।
+/// <b>Why this is needed:</b> the agent measures idle with <c>GetLastInputInfo</c>, and that
+/// API <b>cannot tell real input from fake</b>. A ten-line script that does
+/// <c>SendKeys("{F15}")</c> every minute resets the timer forever while nothing shows on the
+/// screen. The result is "Working" all day, a direct loss to the office.
 ///
-/// ⭐ সমাধানের যুক্তিটা সরল: <b>কেউ সত্যিই কাজ করলে পর্দা বদলায়</b> — অক্ষর
-/// ওঠে, কার্সর নড়ে, উইন্ডো সরে। জিগলার চললে পর্দা একেবারে স্থির, শুধু একটা
-/// টাইমার রিসেট হয়।
+/// The idea behind the fix is simple: <b>when someone is really working the screen changes</b>:
+/// characters appear, the cursor moves, windows shift. When a jiggler runs the screen is
+/// completely still and only a timer is reset.
 ///
-/// ⚠️⚠️ <b>low-level hook ব্যবহার করা হয়নি — ইচ্ছাকৃত।</b> <c>LLKHF_INJECTED</c>
-/// দেখে নকল কীস্ট্রোক নিশ্চিতভাবে ধরা যেত, কিন্তু ওটা কীলগারের যন্ত্র, আর
-/// 04-Features § L-এ স্পষ্টভাবে নিষিদ্ধ। এখানে যা দেখা হয় তা <b>পর্দার
-/// আকৃতি বদলেছে কি না</b> — কী লেখা হয়েছে তা নয়। হ্যাশটা মেশিন ছেড়ে
-/// কোথাও যায় না।
+/// <b>No low-level hook is used, deliberately.</b> Looking at <c>LLKHF_INJECTED</c> would
+/// catch fake keystrokes for certain, but that is a keylogger's tool and is explicitly
+/// forbidden in 04-Features § L. What is looked at here is <b>whether the screen's shape
+/// changed</b>, not what was typed. The hash never leaves the machine.
 ///
-/// ⚠️ এটা নিখুঁত নয়: কেউ পর্দায় ঘড়ি বা ভিডিও খুলে রাখলে পর্দা বদলাতেই
-/// থাকবে। ⭐ কিন্তু সেটা স্ক্রিনশটে সাথে সাথে চোখে পড়ে, আর সার্ভারের
-/// <c>synthetic_input</c> অ্যালার্টও পাশাপাশি চলে — দুটো মিলে ফাঁকির খরচ
-/// অনেক বাড়িয়ে দেয়।
+/// This is not perfect: if someone leaves a clock or a video open on screen, the screen keeps
+/// changing. But that is noticed at once in the screenshots, and the server's
+/// <c>synthetic_input</c> alert runs alongside; together they raise the cost of cheating a lot.
 /// </summary>
 public sealed class ScreenActivity
 {
     /// <summary>
-    /// এতক্ষণ পর্দা এক চুলও না বদলালে "জমে গেছে" ধরা হয়।
+    /// If the screen does not change at all for this long, it is considered "frozen".
     ///
-    /// ⚠️⚠️ সংখ্যাটা <b>উদার</b>, আর সেটা ইচ্ছাকৃত। মানুষ লম্বা নথি পড়ে,
-    /// ভাবে, ফোনে কথা বলে — তখন পর্দা কয়েক মিনিট স্থির থাকতেই পারে। কম
-    /// করলে সৎ কর্মীর ঘণ্টা কাটা যেত, আর <b>সেই ভুলটা ঠকবাজি ধরতে না
-    /// পারার চেয়ে অনেক বেশি ক্ষতিকর</b>।
+    /// The number is <b>generous</b>, deliberately. People read long documents, think, talk on
+    /// the phone, and the screen can stay still for several minutes. A lower value would cut an
+    /// honest employee's hours, and <b>that mistake does far more harm than failing to catch
+    /// cheating</b>.
     ///
-    /// ⭐ ১০ মিনিট মানে জিগলার সর্বোচ্চ ওই ১০ মিনিটই চুরি করতে পারবে, তারপর
-    /// গোনা বন্ধ — দিনে ৮ ঘণ্টার বদলে বড়জোর ১০ মিনিট।
+    /// With 10 minutes a jiggler can steal at most those 10 minutes before counting stops:
+    /// 10 minutes at most instead of 8 hours a day.
     /// </summary>
     public static readonly TimeSpan FrozenAfter = TimeSpan.FromMinutes(10);
 
     /// <summary>
-    /// ⚠️⚠️ <b>একটা কোষ কতটা বদলালে "বদলেছে" ধরা হবে।</b>
+    /// <b>How much one cell must change to count as "changed".</b>
     ///
-    /// ছাপটা ধূসর, তাই মান ০–২৫৫। ছোট হেরফের সবসময়ই থাকে — JPEG/WebP-এর
-    /// ক্ষতিপূরণ, কার্সরের ঝিকিমিকি, অ্যান্টি-এলিয়াসিং। শূন্য সহনশীলতা
-    /// রাখলে পর্দা <b>কোনোদিনই</b> জমত না।
+    /// The fingerprint is grayscale, so values are 0 to 255. Small variations are always
+    /// present: JPEG/WebP compensation, cursor flicker, anti-aliasing. With zero tolerance
+    /// the screen would <b>never</b> freeze.
     /// </summary>
     private const int CellTolerance = 12;
 
     /// <summary>
-    /// ⚠️⚠️ <b>কতগুলো কোষ বদলালে সত্যিই "পর্দা বদলেছে"।</b>
+    /// <b>How many cells must change for the screen to truly count as "changed".</b>
     ///
-    /// এটাই এই ফাইলের <b>সবচেয়ে গুরুত্বপূর্ণ সংখ্যা</b>, আর এর কারণটা
-    /// একেবারে বাস্তব: <b>টাস্কবারের ঘড়ি প্রতি মিনিটে বদলায়।</b> হুবহু
-    /// মিল খুঁজলে ঘড়ির একটা অঙ্কই যথেষ্ট হতো — পর্দা চিরকাল "বদলাচ্ছে"
-    /// দেখাত, আর গোটা পাহারাটা <b>নীরবে অকেজো</b> থাকত। ঠিক এই ধরনের
-    /// নীরব অকেজো ফিচারই এই প্রকল্পে বারবার ফিরে এসেছে।
+    /// This is the <b>most important number in this file</b>, and the reason is very real:
+    /// <b>the taskbar clock changes every minute.</b> If an exact match were required, a
+    /// single digit of the clock would be enough, the screen would always look "changing", and
+    /// the whole guard would be <b>silently useless</b>. Exactly this kind of silently useless
+    /// feature has kept returning in this project.
     ///
-    /// ⭐ ১৬×১৬ = ২৫৬ কোষে ঘড়ি বড়জোর ১–২টা কোষ ছোঁয়। ৬ ধরলে ঘড়ি,
-    /// নোটিফিকেশনের বিন্দু বা ব্লিংক করা কার্সর পার পায় না, কিন্তু
-    /// সত্যিকারের কাজ (স্ক্রল, টাইপ, উইন্ডো বদল) সহজেই সীমা ছাড়ায়।
+    /// In 16x16 = 256 cells a clock touches at most 1 or 2 cells. At 6, a clock, a
+    /// notification dot or a blinking cursor does not get through, but real work (scrolling,
+    /// typing, switching windows) easily exceeds the limit.
     /// </summary>
     private const int ChangedCells = 6;
 
     /// <summary>
-    /// ⭐⭐⭐ <b>নমুনা এতক্ষণ পুরোনো হলে আর কোনো উত্তর দেওয়া হয় না।</b>
+    /// <b>If the sample is this old, no answer is given any more.</b>
     ///
-    /// ⚠️⚠️ <b>এটা একটা সত্যিকারের ঘটনা থেকে এসেছে</b>, তত্ত্ব থেকে নয়।
-    /// প্রথম সংস্করণে ছাপ আসত <b>কেবল স্ক্রিনশটের স্লট থেকে</b>, আর স্ক্রিনশট
-    /// ওঠে কেবল ACTIVE অবস্থায়। ফলে একটা অচলাবস্থা তৈরি হতো:
+    /// <b>This came from a real incident</b>, not from theory. In the first version the
+    /// fingerprint came <b>only from the screenshot slot</b>, and screenshots are taken only
+    /// while ACTIVE. That produced a deadlock:
     ///
     /// <code>
-    /// পর্দা জমেছে → IDLE → স্ক্রিনশট বন্ধ → নতুন ছাপ নেই → চিরকাল "জমে আছে"
+    /// screen froze → IDLE → screenshots stop → no new fingerprint → "frozen" forever
     /// </code>
     ///
-    /// কর্মী ফিরে এসে কাজ শুরু করলেও এজেন্ট <b>স্থায়ীভাবে</b> idle দেখাত —
-    /// এজেন্ট রিস্টার্ট না করা পর্যন্ত। অর্থাৎ ফাঁকি ধরার যন্ত্রটাই সৎ
-    /// কর্মীর গোটা দিন কেটে নিত। ⭐ ঠিক এই আশঙ্কাটা টেস্ট ফাইলের মাথায়
-    /// লেখাও ছিল, কিন্তু ভুলটা ছিল <b>তারের সংযোগে</b>, নিয়মে নয় — তাই
-    /// কোনো ইউনিট টেস্ট ধরতে পারেনি।
+    /// Even when the employee came back and started working, the agent would show idle
+    /// <b>permanently</b>, until the agent was restarted. The very tool meant to catch
+    /// cheating would cut an honest employee's whole day. This very risk was even written at
+    /// the top of the test file, but the mistake was in the <b>wiring</b>, not in the rule, so
+    /// no unit test could catch it.
     ///
-    /// ⭐⭐ তাই নিয়মটা এখন <b>নিজেই</b> পাহারা দেয়: নমুনা টাটকা না হলে
-    /// উত্তর "জানি না", আর জানি না মানে সন্দেহ নয়। কলার যেভাবেই লেখা হোক,
-    /// অচলাবস্থাটা আর তৈরি হতে পারে না।
+    /// So the rule now guards itself: if the sample is not fresh the answer is "don't know",
+    /// and don't know does not mean suspicion. However a caller is written, the deadlock can
+    /// no longer arise.
     /// </summary>
     public static readonly TimeSpan StaleAfter = TimeSpan.FromMinutes(3);
 
@@ -89,25 +87,24 @@ public sealed class ScreenActivity
     private readonly TimeSpan _staleAfter;
 
     /**
-     * ⚠️⚠️ <b>লিখে ক্যাপচার লুপ, পড়ে ট্র্যাকার থ্রেড।</b> তালা ছাড়া
-     * <see cref="DateTimeOffset"/> (১২+ বাইট) পড়ার সময় ছিঁড়ে যেতে পারত —
-     * অর্ধেক পুরোনো, অর্ধেক নতুন — আর ফল হতো উদ্ভট একটা সময়, অর্থাৎ
-     * অকারণে "জমে গেছে" বা অকারণে "বাসি"। বছরে হয়তো একবার, আর ধরা
-     * প্রায় অসম্ভব।
+     * <b>Written by the capture loop, read by the tracker thread.</b> Without a lock, reading a
+     * <see cref="DateTimeOffset"/> (12+ bytes) could tear: half old, half new, giving a bogus
+     * time, i.e. a wrongful "frozen" or a wrongful "stale". Perhaps once a year, and almost
+     * impossible to catch.
      *
-     * ⭐ খরচ নগণ্য: সেকেন্ডে বড়জোর একবার ডাকা হয়।
+     * The cost is negligible: it is called at most once a second.
      */
     private readonly object _gate = new();
 
     /**
-     * ⚠️⚠️ <b>প্রতি মনিটরের একটা করে ছাপ</b> (৩১ আগস্ট ২০২৬)। আগে ছিল
-     * একটামাত্র <c>byte[]</c> — কেবল প্রথম পর্দার, আর ওটাই মাঠে সৎ কর্মীর
-     * ঘণ্টা কেটেছে (নিচের <see cref="DiffersAny"/>-র টীকা)।
+     * <b>One fingerprint per monitor.</b> There used to be a single <c>byte[]</c>, for the
+     * first screen only, and that is what cut honest employees' hours in the field (see the
+     * note on <see cref="DiffersAny"/> below).
      */
     private byte[][]? _last;
     private DateTimeOffset _changedAt;
 
-    /// <summary>শেষ নমুনা কখন এসেছিল — বদলাক বা না বদলাক।</summary>
+    /// <summary>When the last sample arrived, whether it changed or not.</summary>
     private DateTimeOffset _sampledAt;
 
     public ScreenActivity(TimeSpan? frozenAfter = null, TimeSpan? staleAfter = null)
@@ -125,9 +122,9 @@ public sealed class ScreenActivity
     }
 
     /// <summary>
-    /// দুটো ছাপ কি সত্যিই আলাদা? — খাঁটি, তাই টেস্ট করা যায়।
+    /// Are two fingerprints really different? Pure, so it can be tested.
     ///
-    /// ⚠️ আকার আলাদা হলে "বদলেছে" ধরা হয় (মনিটর যোগ/বিয়োগ হয়েছে)।
+    /// If the sizes differ it counts as "changed" (a monitor was added or removed).
     /// </summary>
     public static bool Differs(byte[] a, byte[] b)
     {
@@ -144,23 +141,22 @@ public sealed class ScreenActivity
     }
 
     /// <summary>
-    /// ⭐⭐ <b>একাধিক পর্দার মধ্যে <i>যেকোনো একটা</i> বদলালেই "বদলেছে"।</b>
+    /// <b>If <i>any one</i> of several screens changes, it counts as "changed".</b>
     ///
-    /// ⚠️⚠️ <b>এটাই ৩১ আগস্ট ২০২৬-এ সারানো বাগটা।</b> ছাপ নেওয়া হতো কেবল
-    /// <b>প্রথম</b> মনিটর থেকে (<c>CapturePrimary()</c>), আর কেউ দ্বিতীয়
-    /// পর্দায় কাজ করলে প্রথমটা স্থির থাকত → দশ মিনিট পর "জমেছে" → গোনা বন্ধ।
-    /// মাঠে মাপা: দুই মনিটরের তিনটে PC-তে দুদিনে ৪৩ · ৯ · ৬টা ভুয়া idle,
-    /// আর এক-মনিটরের ছ-টা PC-তে <b>শূন্য</b>।
+    /// <b>This is the bug fixed on 31 August 2026.</b> The fingerprint was taken only from the
+    /// <b>first</b> monitor (<c>CapturePrimary()</c>), so when someone worked on the second
+    /// screen the first stayed still → after ten minutes "frozen" → counting stopped.
+    /// Measured in the field over two days: 43, 9 and 6 bogus idles on three two-monitor PCs,
+    /// and <b>zero</b> on six one-monitor PCs.
     ///
-    /// ⚠️ পুরোনো কোডের টীকায় যুক্তিটা <b>উল্টো</b> লেখা ছিল — *"সব পর্দা
-    /// মেলালে একটা নিষ্ক্রিয় দ্বিতীয় মনিটরই জমেছে বলে গোনা বন্ধ করত"*। সেটা
-    /// সত্যি হতো যদি নিয়মটা হতো "সব পর্দা জমলে তবেই বদলায়নি"-র উল্টোটা।
-    /// ⭐ ঠিক নিয়ম: <b>যেকোনো একটায় বদল = কাজ হচ্ছে</b>; তাই নিষ্ক্রিয় দ্বিতীয়
-    /// মনিটর কখনোই গোনা থামাতে পারে না, আর জিগলারের পাহারাও অটুট থাকে
-    /// (জিগলার চললে <b>কোনো</b> পর্দাই বদলায় না)।
+    /// The old code's note argued the <b>opposite</b>: that comparing all screens would let an
+    /// idle second monitor alone count as frozen and stop counting. That would be true only if
+    /// the rule were inverted. The correct rule: <b>a change on any one = work is happening</b>;
+    /// so an idle second monitor can never stop counting, and the jiggler guard stays intact
+    /// (when a jiggler runs <b>no</b> screen changes).
     ///
-    /// ⚠️ সংখ্যা আলাদা হলে "বদলেছে" — মনিটর যোগ বা বিয়োগ হয়েছে, অর্থাৎ
-    /// কেউ মেশিনটা ছুঁয়েছে।
+    /// If the count differs it counts as "changed": a monitor was added or removed, meaning
+    /// someone touched the machine.
     /// </summary>
     public static bool DiffersAny(
         IReadOnlyList<byte[]> before, IReadOnlyList<byte[]> after)
@@ -176,11 +172,11 @@ public sealed class ScreenActivity
     }
 
     /// <summary>
-    /// পর্দার একটা নতুন নমুনা।
+    /// A new sample of the screen.
     ///
-    /// ⚠️ প্রথম নমুনাটা <b>বদল হিসেবে ধরা হয়</b> — তার আগে তুলনা করার কিছুই
-    /// ছিল না, আর "জানি না"-কে "বদলায়নি" ধরলে এজেন্ট চালু হওয়ার প্রথম দশ
-    /// মিনিটেই সবার গোনা বন্ধ হয়ে যেত।
+    /// The first sample <b>counts as a change</b>: there was nothing to compare with before, and
+    /// treating "don't know" as "unchanged" would stop everyone's counting within the first ten
+    /// minutes after the agent started.
     /// </summary>
     public void Observe(byte[] fingerprint, DateTimeOffset now)
     {
@@ -190,8 +186,8 @@ public sealed class ScreenActivity
     }
 
     /// <summary>
-    /// ⭐ প্রতি মনিটরের একটা করে ছাপ — ক্রমটা স্থির (মনিটরের ক্রম), তাই
-    /// একই সূচক মানে একই পর্দা।
+    /// One fingerprint per monitor. The order is fixed (monitor order), so the same index
+    /// means the same screen.
     /// </summary>
     public void Observe(IReadOnlyList<byte[]> fingerprints, DateTimeOffset now)
     {
@@ -200,15 +196,15 @@ public sealed class ScreenActivity
 
         lock (_gate)
         {
-            // ⚠️ বদলাক বা না বদলাক — নমুনা এসেছে, সেটাই আলাদা করে মনে রাখা
-            //    হয়। "শেষ কবে বদলেছে" আর "শেষ কবে দেখেছি" দুটো আলাদা প্রশ্ন,
-            //    আর দ্বিতীয়টার উত্তর না রাখাই ছিল অচলাবস্থার মূল।
+            // Whether it changed or not, a sample arrived, and that is remembered separately.
+            // "When did it last change" and "when did I last look" are two different questions,
+            // and not keeping the answer to the second was the root of the deadlock.
             _sampledAt = now;
 
             if (_last is null || DiffersAny(_last, fingerprints))
             {
-                // ⚠️ কপি — কলার তালিকাটা পরে ফের ব্যবহার করলে আমাদের
-                //    "শেষ যা দেখেছি" নীরবে বদলে যেত।
+                // A copy: if the caller reused the list later, our "last seen" would change
+                // silently.
                 _last = [.. fingerprints];
                 _changedAt = now;
             }
@@ -216,12 +212,11 @@ public sealed class ScreenActivity
     }
 
     /// <summary>
-    /// ⚠️⚠️ নমুনাই না থাকলে <b>false</b> — অর্থাৎ সন্দেহ করা হয় না।
+    /// With no sample at all, <b>false</b>: no suspicion.
     ///
-    /// ক্যাপচার বন্ধ থাকতে পারে (রাতের বেলা, § ৪.২-এর জানালার বাইরে), ব্যর্থ
-    /// হতে পারে, বা এজেন্ট সবে চালু হয়েছে। ওই অবস্থায় "পর্দা বদলায়নি" ধরে
-    /// নিলে <b>তথ্যের অভাবই শাস্তি হয়ে দাঁড়াত</b> — সার্ভারের G46 নিয়মেও
-    /// ঠিক এই একই সিদ্ধান্ত নেওয়া হয়েছে।
+    /// Capture can be off (at night, outside the section 4.2 window), can fail, or the agent
+    /// may have just started. Treating that as "screen unchanged" would make <b>the lack of
+    /// information itself the punishment</b>; the server's G46 rule takes exactly the same decision.
     /// </summary>
     public bool IsFrozen(DateTimeOffset now)
     {
@@ -230,27 +225,27 @@ public sealed class ScreenActivity
             if (_last is null) return false;
 
             /**
-             * ⭐⭐⭐ <b>টাটকা নমুনা ছাড়া কোনো অভিযোগ নয়</b> (<see cref="StaleAfter"/>)।
+             * <b>No accusation without a fresh sample</b> (<see cref="StaleAfter"/>).
              *
-             * ⚠️⚠️ নমুনা আসা যেকোনো কারণে থেমে যেতে পারে — ক্যাপচার ব্যর্থ, মনিটর
-             * খুলে ফেলা, § ৪.২-এর জানালা বন্ধ, পর্দা লক। ওই নীরবতাকে "পর্দা
-             * বদলায়নি" ধরলে <b>তথ্যের অভাবই শাস্তি</b> হয়ে দাঁড়াত, আর একবার
-             * ধরা পড়লে বেরোনোর পথও থাকত না।
+             * Samples can stop arriving for any reason: capture failing, a monitor unplugged, the
+             * section 4.2 window closed, the screen locked. Treating that silence as "screen
+             * unchanged" would make <b>the lack of information itself the punishment</b>, and
+             * once caught there would be no way out.
              */
             if (now - _sampledAt > _staleAfter) return false;
 
-            // ⚠️ ঘড়ি পিছিয়ে গেলে (NTP সংশোধন) ঋণাত্মক হতে পারে — তখনও "জমেনি"
+            // If the clock went back (NTP correction) it can be negative: still "not frozen"
             return now - _changedAt >= _frozenAfter;
         }
     }
 
-    /// <summary>শেষ কবে পর্দা বদলেছিল — লগে দেখানোর জন্য। নমুনা না থাকলে null।</summary>
+    /// <summary>When the screen last changed: for showing in the log. Null if there are no samples.</summary>
     public DateTimeOffset? LastChangedAt
     {
         get { lock (_gate) { return _last is null ? null : _changedAt; } }
     }
 
-    /// <summary>শেষ কবে নমুনা এসেছিল — ডায়াগনস্টিকসে "কেন জমেনি" বোঝার জন্য।</summary>
+    /// <summary>When a sample last arrived: for understanding "why it did not freeze" in diagnostics.</summary>
     public DateTimeOffset? LastSampledAt
     {
         get { lock (_gate) { return _last is null ? null : _sampledAt; } }

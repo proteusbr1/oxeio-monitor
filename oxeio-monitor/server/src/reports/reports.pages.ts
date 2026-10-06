@@ -10,24 +10,24 @@ import type {
 } from './reports.types';
 
 /**
- * F06 — কোন PDF দেখতে কেমন (কলাম, প্রস্থ, লেবেল)। ঠিক যে কারণে
- * `reports.sheets.ts` `reports.excel.ts` থেকে আলাদা: "একটা কলাম যোগ করো"
- * বলতে যেন কোয়েরির কোডে হাত না পড়ে।
+ * F06: what each PDF looks like (columns, widths, labels). For the same reason
+ * `reports.sheets.ts` is separate from `reports.excel.ts`: "add a column" should
+ * not mean touching the query code.
  *
- * ⭐ **লেবেল ইংরেজিতে** (Excel-এ বাংলা)। কারণটা এক জায়গায় লেখা —
- * [reports.pdf.text.ts](./reports.pdf.text.ts)-এর মাথার নোট। এখানে শুধু
- * ফলটা: pdfkit-এর বিল্ট-ইন ফন্টে বাংলা **নীরবে ফাঁকা** ছাপে, তাই বাংলা
- * লেবেল মানে খালি হেডার।
+ * **Labels are in English** (Bengali in Excel). The reason is written in one
+ * place: the note at the top of [reports.pdf.text.ts](./reports.pdf.text.ts).
+ * Only the result matters here: pdfkit's built-in font prints Bengali
+ * **silently blank**, so a Bengali label would mean an empty header.
  *
- * ⭐ রিপোর্ট → **ছাপার লাইন** রূপান্তরটা খাঁটি (`attendanceLines`,
- * `summaryLines`) আর pdfkit থেকে সম্পূর্ণ আলাদা। দুটো কারণে:
+ * The report → **print lines** conversion is pure (`attendanceLines`,
+ * `summaryLines`) and entirely separate from pdfkit. Two reasons:
  *
- * ১· বাংলা অক্ষর কোথায় বদলে গেল সেটা এখানেই ঠিক হয়, আর সেটা DB বা
- *    PDF ইঞ্জিন ছাড়াই পরীক্ষা করা যায় — অথচ ভুল হলে ফল হতো একটা নীরব
- *    ফাঁকা ঘর, কোনো এরর নয়।
- * ২· `lossy` পতাকা **ছাপা শুরুর আগেই** জানা দরকার, কারণ তার উপরেই
- *    নির্ভর করে পাদটীকাটা বসবে কি না। কলামের `value()` ফাংশন থেকে জানতে
- *    গেলে দেরি হয়ে যেত — নোট তখন লেখা হয়ে গেছে।
+ * 1. Where Bengali characters get replaced is decided here, and can be tested
+ *    without the DB or the PDF engine; a mistake would otherwise show up as a
+ *    silent empty cell, not an error.
+ * 2. The `lossy` flag must be known **before printing starts**, because whether
+ *    the footnote is added depends on it. Learning it from a column's `value()`
+ *    function would be too late: the notes would already be written.
  */
 
 const DAY_TYPE_EN: Record<DayType, string> = {
@@ -42,42 +42,44 @@ const DAY_STATUS_EN: Record<DayStatus, string> = {
 };
 
 /**
- * ⚠️ শুধু তখনই ছাপা হয় যখন সত্যিই কিছু বদলাতে হয়েছে। সবসময় বসালে
- * ইংরেজি নামের অফিসে এটা অর্থহীন গোলমাল হতো, আর গোলমাল পড়া বন্ধ হলে
- * যেদিন সত্যিই দরকার সেদিনও কেউ পড়ত না।
+ * Printed only when something really had to be replaced. Always shown, it would
+ * be meaningless noise in an English-named office, and once noise stops being
+ * read, nobody would read it on the day it really matters.
  */
 const LOSSY_NOTE =
   'Some Bangla text (names, departments) cannot be rendered with this PDF ' +
   'font. Names are shown as employee codes and other characters as "?". ' +
   'The Excel (xlsx) export carries the original text.';
 
-/** ⭐ ক্যাটাগরি-বিহীন রিপোর্টেও নিয়মটা লেখা থাকে — শিটে যেমন থাকে */
+/** The rule is written in reports without categories too, as it is on the sheet */
 const CATEGORY_NOTE =
   'Hours here are attendance figures only. App/site categories never affect ' +
   'worked, credited or target hours.';
 
 /**
- * ⚠️ `reports.types.ts`-এর `OVERTIME_NOTE`-এর **ছাপার উপযোগী রূপ**: em
- * ড্যাশ (—) WinAnsi-তে থাকলেও এখানে সাধারণ হাইফেন, যাতে ছাপা লেখায়
- * বাইটের রকম যত কম থাকে (reports.pdf.text.ts-এর নিয়ম)। দুটো এক কথা বলে —
- * একটা বদলালে অন্যটাও বদলাতে হবে, নইলে একদিন xlsx আর PDF দুই রকম নীতি
- * বলত (O4)।
+ * The **print-friendly form** of `OVERTIME_NOTE` in `reports.types.ts`: the em
+ * dash (—) exists in WinAnsi, but a plain hyphen is used here to keep the
+ * variety of bytes in the printed text low (the rule in reports.pdf.text.ts).
+ * The two say the same thing: if one changes the other must too, or one day
+ * xlsx and PDF would state two different policies (O4).
  *
- * ⭐⭐ **O4 নিষ্পত্তি ২৩ আগস্ট ২০২৬** — আলাদা রেট **নেই**। তাই "এখনো ঠিক
- * হয়নি" নয়, লেখা হয় "আলাদা রেট নেই" ([reports.types.ts](reports.types.ts))।
+ * **O4 is settled**: there is **no** separate rate. So it no longer says "not
+ * decided yet" but "no separate rate" ([reports.types.ts](reports.types.ts)).
  */
 const OVERTIME_NOTE_EN =
   'Overtime hours are not converted to money - there is no separate ' +
   'overtime rate.';
 
 /**
- * ⭐⭐ ছাপা কাগজে **তিনটে সংখ্যা তিনটে আলাদা প্রশ্নের উত্তর** — বাক্যটা
- * ছাড়া পাঠক বিয়োগ করে মেলাতে গিয়ে ভাবতেন হিসাবে ভুল আছে।
+ * On the printed page **three numbers answer three different questions**;
+ * without this sentence a reader would subtract to reconcile and think the
+ * figures were wrong.
  *
- * ⚠️ কলামের হেডারে এটা লেখা যায় না: PDF-এর কলামপ্রস্থ পিক্সেলে বাঁধা,
- *    লম্বা হেডার কেটে যেত। তাই পাদটীকা — কিন্তু **থাকতেই হবে**, কারণ
- *    মানুষ কাগজটাকেই বিশ্বাস করে, আর গত রাউন্ডে কাগজটাই এমন ঘাটতির
- *    অভিযোগ করত যা এজেন্ট বসার আগের দিনগুলোর।
+ * It cannot go in the column headers: PDF column widths are fixed in pixels
+ * and a long header would be cut off. So it is a footnote, but one that
+ * **must be there**, because people trust the paper, and in the last round the
+ * paper complained of a shortfall that was really days before the agent was
+ * installed.
  */
 const SHORTFALL_NOTE_EN =
   'Target (h) covers every day shown. Shortfall (h) is measured only against ' +
@@ -85,12 +87,12 @@ const SHORTFALL_NOTE_EN =
   'are never counted as a shortfall. Overtime (h) is hours beyond the full ' +
   'target for the days shown.';
 
-// ── ছাপার লাইন (খাঁটি) ───────────────────────────────────────────────────────
+// ── Print lines (pure) ───────────────────────────────────────────────────────
 
 /**
- * এক জায়গায় সব `toPdfText` ডাক, যাতে "কিছু বদলেছে কি না" প্রশ্নের উত্তর
- * একটাই জায়গা থেকে আসে। প্রতিটা কল সাইটে আলাদা করে `lossy` মেলালে একটা
- * ভুলে যাওয়া কল মানেই নীরবে হারিয়ে যাওয়া পাদটীকা।
+ * All the `toPdfText` calls in one place, so the answer to "did anything get
+ * replaced?" comes from a single place. If every call site matched `lossy`
+ * separately, one forgotten call would mean a silently lost footnote.
  */
 class Printable {
   lossy = false;
@@ -123,7 +125,7 @@ export interface AttendanceLine {
 
 export interface Lines<T> {
   lines: T[];
-  /** অন্তত একটা ঘরের লেখা বদলাতে হয়েছে — পাদটীকা দরকার */
+  /** At least one cell's text had to be changed: a footnote is needed */
   lossy: boolean;
 }
 
@@ -138,19 +140,19 @@ export function attendanceLines(
     department: p.text(r.department),
     date: r.date,
     /**
-     * ⭐⭐ **G130** — ছুটির দিন কাগজে "On leave" বলেই ছাপা হয়।
+     * **G130**: a leave day is printed on paper as "On leave".
      *
-     * ⚠️⚠️ PDF-এ কলাম যোগ করার জায়গা নেই (A4-এ ইতিমধ্যেই নয়টা), তাই
-     * তথ্যটা **Day type** ঘরেই বসে। ছুটি একটা কর্মদিবসেরই ঘটনা, কিন্তু
-     * পাঠকের প্রশ্নটা হলো "ওই দিনটা ওর জন্য কী ছিল" — আর ওই দিনটা তাঁর
-     * জন্য ছুটিই ছিল।
+     * There is no room to add a column in the PDF (A4 already has nine), so the
+     * information goes **in the Day type cell**. Leave is an event on a work
+     * day, but the reader's question is "what was that day for them", and for
+     * them that day was leave.
      *
-     * ⚠️ `status` ছোঁয়া হয়নি: কেউ ছুটির দিনেও কাজ করলে ওখানে "Worked"-ই
-     * থাকে, আর দুটো তথ্য পাশাপাশি পড়া যায়। `status`-এ বসালে ওই ঘণ্টাগুলো
-     * কাগজ থেকে উধাও হতো।
+     * `status` is untouched: if someone works on a leave day it still says
+     * "Worked" there, and the two facts can be read side by side. Put into
+     * `status`, those hours would vanish from the paper.
      *
-     * ⚠️ JSON-এ ঘরদুটো আলাদাই থাকে (`onLeave`) — এই জোড়া লাগানো নিছক
-     * **ছাপার** সিদ্ধান্ত, তাই এখানে, `reports.service.ts`-এ নয়।
+     * In JSON the two fields stay separate (`onLeave`); this merging is purely a
+     * **print** decision, so it lives here, not in `reports.service.ts`.
      */
     dayType: r.onLeave ? 'On leave' : DAY_TYPE_EN[r.dayType],
     status: DAY_STATUS_EN[r.status],
@@ -187,8 +189,8 @@ export function summaryLines(report: SummaryReport): Lines<SummaryLine> {
     bucket: r.bucket,
     from: r.bucketStart,
     to: r.bucketEnd,
-    // ⚠️ দিনসংখ্যা `hoursText` দিয়ে নয় — "৯.০০ কর্মদিবস" পড়তে অদ্ভুত,
-    //    আর ঘণ্টার কলামের সাথে গুলিয়ে যেত
+    // Day counts do not use `hoursText`: "9.00 workdays" reads oddly, and
+    // would be confused with the hours columns
     workdays: String(r.workdays),
     daysWithWork: String(r.daysWithWork),
     worked: hoursText(r.workedHours),
@@ -203,7 +205,7 @@ export function summaryLines(report: SummaryReport): Lines<SummaryLine> {
 
 // ── PDF ──────────────────────────────────────────────────────────────────────
 
-/** F01 — অ্যাটেনডেন্স PDF */
+/** F01: attendance PDF */
 export function attendancePdf(
   report: AttendanceReport,
   orgName: string,
@@ -231,15 +233,15 @@ export function attendancePdf(
       ['Days with work', String(report.totals.daysWithWork)],
       ['Total worked (h)', hoursText(report.totals.workedHours)],
       ['Total credited (h)', hoursText(report.totals.creditedHours)],
-      // ⚠️ "days listed" — সংখ্যাটা উপরের Target কলামের যোগফল, "এ পর্যন্ত
-      //    কত হওয়ার কথা ছিল" নয় (`AttendanceReport.totals`-এর নোট)
+      // "days listed": this is the sum of the Target column above, not "how much
+      // was due up to now" (see the note on `AttendanceReport.totals`)
       ['Total target - days listed (h)', hoursText(report.totals.targetHours)],
     ],
     notes: notesFor(report.meta, lossy, [CATEGORY_NOTE]),
   });
 }
 
-/** F02 — সাপ্তাহিক / মাসিক সারাংশ PDF */
+/** F02: weekly / monthly summary PDF */
 export function summaryPdf(
   report: SummaryReport,
   orgName: string,
@@ -270,12 +272,12 @@ export function summaryPdf(
     ),
     table: tableOf(columns, lines),
     notes: notesFor(report.meta, lossy, [
-      // ⚠️ ঘাটতির বাক্যটা **আগে**, কারণ কাগজ দেখে মানুষ প্রথমেই ওই
-      //    কলামটা নিয়ে প্রশ্ন করেন
+      // The shortfall sentence **first**, because looking at the paper people
+      // ask about that column before anything else
       SHORTFALL_NOTE_EN,
-      // ⭐ নোটটা ফাইলের ভেতরেই থাকে — শুধু JSON-এ থাকলে যিনি PDF ছাপিয়ে
-      //    মিটিংয়ে নিয়ে যান তিনি জানতেনই না, আর নিজের মতো একটা হার
-      //    বসিয়ে ফেলতেন (O4)
+      // The note stays inside the file: if it were only in the JSON, someone who
+      // prints the PDF and takes it to a meeting would not know, and would put
+      // in a rate of their own (O4)
       OVERTIME_NOTE_EN,
       CATEGORY_NOTE,
     ]),
@@ -305,17 +307,19 @@ function letterhead(
 }
 
 /**
- * প্রতিটি PDF-এর পাদটীকা।
+ * Footnotes for every PDF.
  *
- * ⚠️ ছাঁটাই (`clampedToToday`) আর বাদ পড়া কর্মী — দুটোই **ফাইলের ভেতরে**
- * থাকতে হয়। Excel-এ ওগুলো "Info" শিটে আছে, কিন্তু PDF-এ আলাদা শিট নেই;
- * বাদ দিলে কেউ "৩১ আগস্ট পর্যন্ত" ভেবে ১১ তারিখের ডেটা নিয়ে সিদ্ধান্ত নিতেন।
+ * Clamping (`clampedToToday`) and excluded staff must both be **inside the
+ * file**. In Excel they are on the "Info" sheet, but a PDF has no separate
+ * sheet; left out, someone would think "up to 31 August" and make decisions on
+ * data only up to the 11th.
  */
 /**
- * ⚠️ `export` কেবল টেস্টের জন্য — বাইরে কেউ ডাকে না। কারণ: তৈরি PDF-এর
- * ভেতরের লেখা pdfkit কম্প্রেস করে রাখে, তাই বাফার খুঁজে "নোটটা কাগজে
- * উঠেছে কি না" যাচাই করা যায় না। রপ্তানি না করলে এই ফাংশনের উপর
- * **একটাও assertion** থাকত না — আর নোট হারিয়ে গেলেও সব সবুজ থাকত।
+ * `export` is only for tests; nobody outside calls it. The reason: pdfkit
+ * compresses the text inside the generated PDF, so searching the buffer to
+ * verify "did the note reach the paper" is not possible. Without exporting,
+ * this function would have **no assertion at all**, and everything would stay
+ * green even if the note were lost.
  */
 export function notesFor(
   meta: ReportMeta,
@@ -340,14 +344,14 @@ export function notesFor(
   }
 
   /**
-   * ⭐⭐ G108 — ছাপা কাগজেই অনিশ্চয়তাটা লেখা থাকে।
+   * G108: the uncertainty is written on the printed paper itself.
    *
-   * ⚠️ কাগজটা মিটিংয়ে যায়, আর সেখানে JSON বা পর্দা কিছুই থাকে না। O4-এর
-   * ওভারটাইম-নোটটা ঠিক এই যুক্তিতেই PDF-এ বসানো হয়েছিল — নইলে কেউ
-   * নিজের মতো একটা হার বসিয়ে ফেলতেন।
+   * The paper goes to meetings, where there is neither JSON nor a screen. O4's
+   * overtime note was put in the PDF for exactly this reason; otherwise someone
+   * would put in a rate of their own.
    *
-   * ⚠️ সংখ্যাটা `meta` থেকেই, নতুন করে গোনা হয় না — নইলে অনিশ্চয়তার
-   * দ্বিতীয় একটা সংজ্ঞা দাঁড়াত।
+   * The number comes from `meta`, not counted again; otherwise there would be
+   * a second definition of uncertainty.
    */
   const approx = approximateHolidayNote(meta.approximateHolidayDates);
   if (approx !== null) notes.push(approx);

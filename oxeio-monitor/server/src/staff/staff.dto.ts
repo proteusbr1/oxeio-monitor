@@ -15,11 +15,12 @@ import { DATE_ONLY, TAKA, TAKA_MSG } from '../common/patterns';
 // ── employees ───────────────────────────────────────────────────────────────
 
 /**
- * ⭐⭐ **`empCode` ইচ্ছাকৃতভাবে এখানে নেই — সার্ভার নিজে বানায়।**
+ * `empCode` is deliberately not here: the server generates it.
  *
- * ⚠️ `forbidNonWhitelisted: true` (app.setup.ts) বলে কেউ পাঠালে ৪০০ পাবে,
- *    নীরবে উপেক্ষা নয়। এটাই চাওয়া: "পাঠালাম অথচ বসল না" অবস্থাটা এই
- *    ফিল্ডে সবচেয়ে বিপজ্জনক, কারণ কোডটা মানুষ চোখে চেনে।
+ * Careful: because of `forbidNonWhitelisted: true` (app.setup.ts), anyone who
+ * sends it gets a 400 instead of being silently ignored. That is wanted:
+ * "sent but not applied" is the most dangerous state for this field, since
+ * people recognise the code by eye.
  */
 export class CreateEmployeeDto {
   @IsString() @MinLength(1) @MaxLength(120)
@@ -35,11 +36,13 @@ export class CreateEmployeeDto {
   department?: string;
 
   /**
-   * ⭐ কাজের ধরন — নিয়ম **কেবল এর উপরেই** বসে (যেমন ডিজাইনারের দৈনিক ২৫)।
+   * Kind of work. Rules attach **only to this** (for example the designer's
+   * daily 25).
    *
-   * ⚠️ `designation`-এর বিকল্প নয়, পাশাপাশি: ওটা পদবি (মুক্ত-লেখা), এটা
-   * শ্রেণি (নির্দিষ্ট তালিকা)। ⚠️ ঐচ্ছিক — না বসালে ওই কর্মী টার্গেটের
-   * হিসাব থেকে **বাদ** থাকেন, শূন্য পান না।
+   * Careful: not a replacement for `designation`; they sit side by side.
+   * `designation` is the job title (free text), this is the class (fixed
+   * list). It is optional: without it the employee is **left out** of target
+   * calculations, not given zero.
    */
   @IsOptional() @IsIn(['designer', 'researcher', 'manager'])
   staffType?: 'designer' | 'researcher' | 'manager';
@@ -54,32 +57,34 @@ export class CreateEmployeeDto {
   joinedOn?: string;
 
   /**
-   * ⭐⭐ **এই ডিজাইনারের নিজের দৈনিক টার্গেট** *(২৩ আগস্ট ২০২৬)* — মালিকের
-   * কথায়: *"karo daily target 25 ta, kono designer er daily target 15 ta"*।
+   * **This designer's own daily target.**
    *
-   * ⚠️ **খালি রাখলে পলিসির সংখ্যাটাই খাটে** (`work_policies`-এর ২৫), শূন্য নয়।
-   * `null` পাঠিয়ে আগের মান মুছে পলিসিতে ফেরানো যায়।
-   * ⚠️⚠️ **০ বৈধ** — "এর টার্গেট বন্ধ"; সংখ্যা গোনা চলবে, কিন্তু কেউ পিছিয়ে নয়।
-   * ⚠️ ছাদ ৫০০ — টাইপো ধরার জন্য, নীতির জন্য নয় (পলিসির ঘরের মতোই)।
+   * Careful: **when left empty the policy's number applies** (25 in
+   * `work_policies`), not zero. Sending `null` clears the earlier value and
+   * falls back to the policy.
+   * **0 is valid**: it means "no target for this person"; counting continues
+   * but nobody is behind.
+   * The cap of 500 is there to catch typos, not as policy (same as the policy field).
    */
   @IsOptional() @IsInt() @Min(0) @Max(500)
   dailyDesignTarget?: number | null;}
 /**
- * ⚠️ প্রতিটা ফিল্ড optional, আর `null`-ও গ্রহণযোগ্য — `@IsOptional()`
- * null ও undefined দুটোতেই যাচাই বাদ দেয়। এটা ইচ্ছাকৃত: `null` পাঠানো =
- * "মানটা মুছে দাও", ফিল্ড না পাঠানো = "হাত দিও না"। সার্ভিস `undefined`
- * দেখে দুটোকে আলাদা করে।
+ * Careful: every field is optional and `null` is accepted too, because
+ * `@IsOptional()` skips validation for both null and undefined. This is
+ * deliberate: sending `null` means "clear the value", omitting the field
+ * means "leave it alone". The service tells the two apart by checking for
+ * `undefined`.
  */
 export class UpdateEmployeeDto {
   /**
-   * ⭐⭐ **`empCode` এখানেও নেই — একবার বসলে আর বদলায় না।**
+   * `empCode` is not here either: once set, it never changes.
    *
-   * ⚠️ কোডটা কেবল একটা লেবেল নয়, মানুষের **পরিচয়**: রিপোর্ট, Excel,
-   *    পে-রোল শিট, টেলিগ্রামের সারাংশ, এমনকি ছাপানো কাগজেও ওটাই লেখা
-   *    থাকে। মাঝপথে বদলে গেলে পুরোনো কাগজ আর নতুন পর্দা দুই কথা বলত,
-   *    অথচ কোথাও কোনো ভুল দেখা যেত না।
-   * ⚠️ ডেটার দিক থেকেও বদলানোর দরকার নেই — ফাইলের পাথ ও সব foreign key
-   *    employee **id** ধরে চলে, `empCode` ধরে নয়।
+   * Careful: the code is not just a label but a person's **identity**. It is
+   * printed in reports, Excel, payroll sheets, Telegram summaries and on
+   * paper. Changing it midway would make old paper and the new screen say
+   * different things, with no visible error anywhere.
+   * Data-wise there is no need either: file paths and all foreign keys use
+   * the employee **id**, not `empCode`.
    */
   @IsOptional() @IsString() @MinLength(1) @MaxLength(120)
   fullName?: string;
@@ -93,14 +98,14 @@ export class UpdateEmployeeDto {
   @IsOptional() @IsString() @MaxLength(120)
   department?: string | null;
 
-  /** ⚠️ `null` পাঠানো **বৈধ** — ধরনটা তুলে নেওয়ার একমাত্র পথ */
+  /** Careful: sending `null` is **valid**; it is the only way to remove the type. */
   @IsOptional() @IsIn(['designer', 'researcher', 'manager', null])
   staffType?: 'designer' | 'researcher' | 'manager' | null;
 
   @IsOptional() @IsInt() @Min(1)
   policyId?: number | null;
 
-  /** ⭐ বদলালে আলাদা audit সারি বসে (targetType = `employee_salary`) */
+  /** A change writes a separate audit row (targetType = `employee_salary`). */
   @IsOptional() @Matches(TAKA, { message: TAKA_MSG })
   monthlySalary?: string | null;
 
@@ -108,62 +113,63 @@ export class UpdateEmployeeDto {
   joinedOn?: string | null;
 
   /**
-   * ⭐⭐ **এই ডিজাইনারের নিজের দৈনিক টার্গেট** *(২৩ আগস্ট ২০২৬)* — মালিকের
-   * কথায়: *"karo daily target 25 ta, kono designer er daily target 15 ta"*।
+   * **This designer's own daily target.**
    *
-   * ⚠️ **খালি রাখলে পলিসির সংখ্যাটাই খাটে** (`work_policies`-এর ২৫), শূন্য নয়।
-   * `null` পাঠিয়ে আগের মান মুছে পলিসিতে ফেরানো যায়।
-   * ⚠️⚠️ **০ বৈধ** — "এর টার্গেট বন্ধ"; সংখ্যা গোনা চলবে, কিন্তু কেউ পিছিয়ে নয়।
-   * ⚠️ ছাদ ৫০০ — টাইপো ধরার জন্য, নীতির জন্য নয় (পলিসির ঘরের মতোই)।
+   * Careful: **when left empty the policy's number applies** (25 in
+   * `work_policies`), not zero. Sending `null` clears the earlier value and
+   * falls back to the policy.
+   * **0 is valid**: it means "no target for this person"; counting continues
+   * but nobody is behind.
+   * The cap of 500 is there to catch typos, not as policy (same as the policy field).
    */
   @IsOptional() @IsInt() @Min(0) @Max(500)
   dailyDesignTarget?: number | null;}
 /**
- * `POST /employees/:id/policy-signed` — সই করা মনিটরিং পলিসির তারিখ।
+ * `POST /employees/:id/policy-signed`: date of the signed monitoring policy.
  *
- * ⭐ **কেন আলাদা endpoint, `PATCH /employees/:id`-এর একটা ফিল্ড নয়:**
- * এটা কর্মীর তথ্য সম্পাদনা নয়, একটা **আইনি ঘটনা রেকর্ড করা** —
- * রোলআউটের একমাত্র শর্ত ([01 § রোলআউট](../../../docs/01-Planning.md))।
- * সাধারণ update-এর ভেতরে থাকলে সেটা `employee_update` audit-এ মিশে যেত,
- * আর "কার সই কবে নেওয়া হয়েছিল" আলাদা করে বের করা যেত না।
+ * Why a separate endpoint instead of a field on `PATCH /employees/:id`: this
+ * is not editing employee details but **recording a legal event**, the only
+ * rollout precondition ([01 § Rollout](../../../docs/01-Planning.md)). Inside
+ * the normal update it would blend into `employee_update` audit rows, and
+ * "whose signature was taken when" could not be pulled out separately.
  *
- * ⚠️ **স্ক্যান আপলোড এখনো নেই** — শুধু তারিখ। `monitoring-policy-template.md`
- * "স্ক্যান করে ড্যাশবোর্ডে আপলোড" বলে; সেটা ভবিষ্যতের কাজ
- * (`upload_policy_doc` audit action ওর জন্যই তোলা আছে)।
+ * Careful: there is **no scan upload yet**, only the date.
+ * `monitoring-policy-template.md` says "scan and upload to the dashboard";
+ * that is future work (the `upload_policy_doc` audit action is reserved for it).
  */
 export class PolicySignedDto {
   /**
-   * `YYYY-MM-DD`। না দিলে **আজকের ঢাকার তারিখ**।
+   * `YYYY-MM-DD`. Defaults to **today's Dhaka date**.
    *
-   * ⚠️ তারিখ দেওয়ার সুযোগ রাখা হয়েছে কারণ কাগজটা প্রায়ই আগে সই হয়,
-   * আর ড্যাশবোর্ডে বসানো হয় দু-দিন পরে। বসানোর দিনটাকে সইয়ের দিন ধরে
-   * নিলে রেকর্ডটা কাগজের সাথে মিলত না।
+   * Careful: a date can be given because the paper is often signed earlier
+   * and entered on the dashboard two days later. Treating the entry day as the
+   * signing day would make the record disagree with the paper.
    */
   @IsOptional() @Matches(DATE_ONLY)
   signedOn?: string;
 }
 /**
- * ⚠️ ডিলিট নেই, deactivate আছে — কারো সারি মুছলে তার মাসের হিসাব,
- * স্ক্রিনশট আর audit trail সব অনাথ হয়ে যেত।
+ * Careful: there is deactivate, not delete. Deleting a row would orphan that
+ * person's monthly totals, screenshots and audit trail.
  */
 export class DeactivateEmployeeDto {
-  /** না দিলে ঢাকার আজকের তারিখ */
+  /** Defaults to today's Dhaka date when omitted. */
   @IsOptional() @Matches(DATE_ONLY, { message: 'leftOn must be in YYYY-MM-DD format' })
   leftOn?: string;
 
   @IsString() @MinLength(3) @MaxLength(500)
   reason!: string;
 }
-/** query-তে 'all'-ও লাগে, তাই Prisma-র enum সরাসরি ব্যবহার করা যায় না */
+/** The query also needs 'all', so Prisma's enum cannot be used directly. */
 export const EMPLOYEE_STATUS_FILTERS = ['active', 'inactive', 'all'] as const;
 export type EmployeeStatusFilter = (typeof EMPLOYEE_STATUS_FILTERS)[number];
 export class EmployeeListQueryDto {
   /**
-   * ডিফল্ট `active` — চলে যাওয়া লোকজন তালিকা ভরিয়ে রাখে না।
+   * Defaults to `active`, so people who have left do not fill the list.
    *
-   * ⚠️ এখানে `?includeInactive=true` ধাঁচের boolean রাখা হয়নি, কারণ
-   * query string-এ সব কিছুই স্ট্রিং আর `Boolean('false')` = **true**।
-   * ওই ফাঁদে পড়লে "চলে যাওয়া কর্মীদের বাদ দাও" চেকবক্সটা কখনোই কাজ করত না।
+   * Careful: no `?includeInactive=true` style boolean here, because in a query
+   * string everything is a string and `Boolean('false')` is **true**. With
+   * that trap, the "hide departed employees" checkbox would never work.
    */
   @IsOptional() @IsIn(EMPLOYEE_STATUS_FILTERS)
   status?: EmployeeStatusFilter;

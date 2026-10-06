@@ -5,17 +5,17 @@ using System.Text;
 namespace oXeio.Watchdog.Platform;
 
 /// <summary>
-/// হাল ছেড়ে দেওয়ার <b>দৃশ্যমান</b> চিহ্ন — <c>%ProgramData%\oXeio\watchdog.alarm</c>।
+/// The <b>visible</b> sign of giving up: <c>%ProgramData%\oXeio\watchdog.alarm</c>.
 ///
-/// <b>কেন ফাইল, আর কেন এটুকুই যথেষ্ট:</b> Windows Event Log-এ লিখতে .NET 8-এ
-/// আলাদা NuGet প্যাকেজ লাগে, আর এই কোডবেসে নতুন প্যাকেজ যোগ করা যায় না।
-/// কিন্তু আসল সংকেতটা এমনিতেই সার্ভারের হাতে: এজেন্ট থেমে গেলে heartbeat আসা
-/// বন্ধ হয়, আর সার্ভার ১০ মিনিট চুপ থাকলে owner-কে অ্যালার্ট পাঠায়
-/// (02-Workflow § অ্যালার্ট টেবিল)। এই ফাইলটা সেই অ্যালার্টের <b>উত্তর</b> —
-/// অ্যাডমিন মেশিনে এসে এক নজরে দেখে নেন কারণটা কী ছিল।
+/// <b>Why a file, and why this is enough:</b> writing to the Windows Event Log on .NET 8
+/// needs a separate NuGet package, and no new packages may be added to this codebase.
+/// And the real signal is already in the server's hands: when the agent stops, heartbeats
+/// stop arriving, and when the server hears nothing for 10 minutes it alerts the owner
+/// (02-Workflow, alert table). This file is the <b>answer</b> to that alert: the admin comes
+/// to the machine and sees at a glance what the reason was.
 ///
-/// ⚠️ এজেন্ট সুস্থ হয়ে ফিরলে ফাইলটা মুছে ফেলতে হবে, নইলে ছয় মাস পর কেউ ওটা
-/// দেখে গত মার্চের একটা ঘটনার পেছনে ছুটবে।
+/// The file must be deleted once the agent is healthy again, or six months later someone
+/// will find it and chase an incident from last March.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static class AlarmFile
@@ -41,7 +41,7 @@ internal static class AlarmFile
         }
         catch (Exception)
         {
-            // অ্যালার্ম লিখতে না পারা দুঃখজনক, কিন্তু পাহারা থামানোর কারণ নয়।
+            // Failing to write the alarm is unfortunate, but no reason to stop guarding.
         }
     }
 

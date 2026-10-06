@@ -13,15 +13,15 @@ internal enum LockState
 }
 
 /// <summary>
-/// এই মুহূর্তে স্ক্রিন লক করা আছে কি না।
+/// Whether the screen is locked right now.
 ///
-/// ইভেন্ট শুধু <i>পরিবর্তন</i> জানায়। এজেন্ট যদি লক করা অবস্থায় চালু হয়
-/// (যেমন রিবুটের পর অটো-লগইন, বা ক্র্যাশের পর watchdog রিস্টার্ট করল),
-/// তাহলে ইভেন্টের অপেক্ষায় থাকলে সে চিরকাল "আনলক" ধরে সময় গুনতে থাকত।
+/// Events only report <i>changes</i>. If the agent starts while locked (for example auto-login
+/// after a reboot, or the watchdog restarted it after a crash), then waiting for an event would
+/// make it count time as "unlocked" forever.
 ///
-/// <c>OpenInputDesktop</c> দিয়ে অনুমান করার চেষ্টা ইচ্ছাকৃতভাবে করা হয়নি —
-/// ওটা UAC প্রম্পট, Ctrl+Alt+Del পর্দা বা fast user switching-এও ব্যর্থ হয়,
-/// অর্থাৎ "লক" নয় এমন অবস্থাকেও লক বলে ধরত।
+/// Guessing with <c>OpenInputDesktop</c> was deliberately not done: it also fails on a UAC prompt,
+/// the Ctrl+Alt+Del screen or fast user switching, so it would treat states that are not "locked"
+/// as locked.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static class LockStateProbe

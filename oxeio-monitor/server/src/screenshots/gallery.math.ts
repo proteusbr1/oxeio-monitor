@@ -1,27 +1,27 @@
 /**
- * E06 — গ্যালারির খাঁটি হিসাব: তারিখ পার্স করা আর পেজিনেশন।
+ * Gallery maths: date parsing and pagination.
  *
- * আলাদা ফাইলে, কারণ দুটোই এমন জায়গা যেখানে ভুল হলে কোনো এরর ওঠে না —
- * শুধু ভুল দিনের বা ভুল ঘরের ছবি দেখা যায়। DB ছাড়াই টেস্ট করা যায়।
+ * Kept in its own file because both are places where a mistake raises no
+ * error. The user just sees photos from the wrong day or the wrong page.
+ * Testable without a DB.
  */
 
 /**
- * এক পাতায় কতগুলো ছবি। ৫ মিনিট স্লট × ২টা মনিটর ধরলে একজনের পুরো
- * কর্মদিবস মোটামুটি দুই পাতায় আসে — গ্রিডে স্ক্রল করে দেখার মতো।
+ * Photos per page. At one 5-minute slot x 2 monitors, one person's full work
+ * day comes to about two pages, which is comfortable to scroll in the grid.
  */
 export const GALLERY_PAGE_SIZE = 60;
 
 /**
- * `YYYY-MM-DD` → ওই তারিখের **UTC-midnight**, কারণ `screenshots.work_date`
- * কলামটা `@db.Date` আর Prisma সেখানে ঠিক এটাই চায় (দেখুন
- * agent/util/dhaka-time.ts → workDateOf)।
+ * `YYYY-MM-DD` -> **UTC midnight** of that date. The `screenshots.work_date`
+ * column is `@db.Date` and Prisma expects exactly this (see workDateOf in
+ * agent/util/dhaka-time.ts).
  *
- * ⚠️ শুধু regex দিয়ে যাচাই করলে `2026-02-30` পাশ করে যেত, আর `Date.UTC`
- *    সেটাকে নীরবে ২ মার্চ বানিয়ে দিত — ব্যবহারকারী ফেব্রুয়ারির ছবি চেয়ে
- *    মার্চের ছবি পেত, কোনো এরর ছাড়াই। তাই ফেরত আসা তারিখটা আবার মিলিয়ে
- *    দেখা হয়।
+ * Careful: a regex check alone would accept `2026-02-30`, and `Date.UTC`
+ * would silently turn it into 2 March. The user would ask for February and
+ * get March photos with no error. So the resulting date is compared back.
  *
- * @returns অবৈধ হলে `null` (কলার সেটাকে ৪০০ বানায়)
+ * @returns `null` when invalid (the caller turns that into a 400)
  */
 export function parseWorkDate(iso: string): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
@@ -42,7 +42,7 @@ export function parseWorkDate(iso: string): Date | null {
   return d;
 }
 
-/** UTC-midnight তারিখ → `YYYY-MM-DD` (রেসপন্সে ফেরত পাঠানোর জন্য) */
+/** UTC-midnight date -> `YYYY-MM-DD` (for sending back in the response). */
 export function formatWorkDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -56,13 +56,14 @@ export interface PageSlice {
 }
 
 /**
- * পাতার নম্বর → `skip`/`take`।
+ * Page number -> `skip`/`take`.
  *
- * ⚠️ পাতা **১ থেকে** গোনা হয় (URL-এ `page=0` কেউ লেখে না), কিন্তু `skip`
- *    ০ থেকে — এই এক ঘরের পার্থক্যেই প্রথম পাতার ছবিগুলো হারিয়ে যেতে পারত।
+ * Careful: pages are counted from 1 (nobody writes `page=0` in a URL) but
+ * `skip` from 0. This one-off difference could make the first page's photos
+ * vanish.
  *
- * ⚠️ ছবি না থাকলেও `totalPages` কমপক্ষে ১, নইলে ফ্রন্টএন্ডে "পাতা ১ / ০"
- *    দেখাত।
+ * `totalPages` is at least 1 even with no photos, otherwise the frontend
+ * would show "page 1 / 0".
  */
 export function pageSlice(
   page: number,

@@ -1,14 +1,14 @@
 import { createHash } from 'node:crypto';
 
 /**
- * মধ্যরাতে একটা রেকর্ড ভাগ হলে টুকরোগুলোর আলাদা `client_uuid` লাগে —
- * কিন্তু কলামটা UNIQUE, আর dedupe-ও ওটার উপরেই দাঁড়িয়ে (§ ২.১-ঘ)।
+ * When a record is split at midnight, each piece needs its own `client_uuid`,
+ * but the column is UNIQUE and dedupe relies on it (§ 2.1-d).
  *
- * তাই র‍্যান্ডম নয়, **নির্ধারিত** (deterministic) আইডি বানানো হয়:
- * এজেন্ট একই রেকর্ড আবার পাঠালে টুকরোগুলোও হুবহু একই আইডি পাবে,
- * ফলে `ON CONFLICT DO NOTHING` ঠিকঠাক কাজ করবে।
+ * So the id is **deterministic**, not random: if the agent resends the same
+ * record, the pieces get exactly the same ids and `ON CONFLICT DO NOTHING`
+ * works as intended.
  *
- * index 0 মূল আইডিটাই রাখে, যাতে ভাগ না হওয়া রেকর্ড অপরিবর্তিত থাকে।
+ * Index 0 keeps the original id, so records that are not split stay unchanged.
  */
 export function deriveUuid(base: string, index: number): string {
   if (index === 0) return base;
@@ -16,8 +16,8 @@ export function deriveUuid(base: string, index: number): string {
   const digest = createHash('sha256').update(`${base}:${index}`).digest();
   const b = Buffer.from(digest.subarray(0, 16));
 
-  // UUID v4-এর আকার দেওয়া হচ্ছে (আসলে র‍্যান্ডম নয়, কিন্তু Postgres-এর
-  // uuid টাইপে বসতে হলে ফরম্যাটটা মানতে হয়)
+  // Shape it like a UUID v4 (it is not actually random, but it must follow the
+  // format to fit Postgres's uuid type).
   b[6] = (b[6] & 0x0f) | 0x40;
   b[8] = (b[8] & 0x3f) | 0x80;
 

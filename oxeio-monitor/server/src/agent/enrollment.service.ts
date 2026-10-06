@@ -16,17 +16,17 @@ import { AgentConfigService, type AgentConfig } from './agent-config.service';
 import { hashToken } from './device-auth.guard';
 import type { EnrollDto, EnrollLoginDto } from './dto';
 
-/** দুটো পথেরই সাধারণ অংশ — মেশিনটা কে, কোথায় */
+/** The part common to both paths: who and where the machine is. */
 type EnrollFacts = Omit<EnrollDto, 'enrollmentCode'>;
 
 /**
- * ⭐⭐ **ডিভাইসের পরিচয়: মেশিন + যিনি বসেছেন।**
+ * **Device identity: the machine plus who is signed in.**
  *
- * ⚠️ `machineGuid` একা নয় — ওটা **মেশিনের**, ব্যবহারকারীর নয়। একই PC-তে
- * দুজন স্টাফ আলাদা Windows অ্যাকাউন্টে কাজ করলে দুজনের আলাদা সারি দরকার,
- * অথচ তাঁদের GUID হুবহু এক। schema-তে `@@unique([hostname,
- * windowsUsername])` আগে থেকেই ছিল; এটাই আসল পরিচয় ছিল, শুধু enroll
- * ওটা ব্যবহার করত না।
+ * Careful: `machineGuid` alone is not enough. It belongs to the **machine**, not
+ * the user. If two staff work on one PC under different Windows accounts, they
+ * need separate rows, yet their GUID is identical. The schema already had
+ * `@@unique([hostname, windowsUsername])`; that was the real identity, but
+ * enroll did not use it.
  */
 const identityOf = (dto: EnrollFacts) => ({
   hostname: dto.hostname,
@@ -35,7 +35,7 @@ const identityOf = (dto: EnrollFacts) => ({
 
 export interface EnrollResult {
   deviceId: number;
-  /** ⚠️ এই একবারই যাবে — সার্ভারে শুধু sha256 জমা থাকে */
+  /** Careful: sent only this once; the server stores only the sha256. */
   deviceToken: string;
   employee: { id: number; empCode: string; fullName: string };
   configVersion: string;
@@ -43,11 +43,13 @@ export interface EnrollResult {
 }
 
 /**
- * ⭐ 2FA চালু থাকলে প্রথম উত্তরটা এটাই — এজেন্ট তখন ছ-অঙ্কের ঘরটা দেখায়।
+ * When 2FA is on, this is the first response: the agent then shows the
+ * six-digit field.
  *
- * ⚠️ আলাদা `status` ফিল্ড দিয়ে বোঝানো হয়, কোনো এরর ছুড়ে নয়: কোড না
- * দেওয়াটা আক্রমণ নয়, স্বাভাবিক প্রথম ধাপ। ৪০১ দিলে এজেন্ট "পাসওয়ার্ড
- * ভুল" দেখাত, আর স্টাফ বারবার ঠিক পাসওয়ার্ডই টাইপ করে যেত।
+ * Careful: it is signalled with a separate `status` field, not by throwing an
+ * error: not sending a code is not an attack, just the normal first step. With a
+ * 401 the agent would show "wrong password" and staff would keep typing the
+ * correct password again and again.
  */
 export type EnrollLoginResult = EnrollResult | { status: 'needs_totp' };
 
@@ -62,15 +64,16 @@ export class EnrollmentService {
   ) {}
 
   /**
-   * **H05** — একবার ব্যবহার্য কোড দিয়ে (স্ক্রিপ্টেড রোলআউটের পথ)।
+   * **H05** - with a single-use code (the scripted rollout path).
    *
-   * ⚠️ পথটা রাখা হয়েছে ইচ্ছাকৃতভাবে: ১৫টা PC-তে একসাথে বসানোর সময় কারো
-   * কীবোর্ডে বসে টাইপ করার সুযোগ থাকে না। মানুষ যখন সামনে থাকে তখন
-   * `enrollWithLogin()` সহজ ও নির্ভুল।
+   * Careful: this path is kept deliberately. When installing on 15 PCs at once,
+   * nobody can sit at each keyboard and type. When a person is present,
+   * `enrollWithLogin()` is simpler and more accurate.
    */
   async enroll(dto: EnrollDto): Promise<EnrollResult> {
-    // ⚠️ hash তৈরি ও যাচাই — দুই পাশে **একই ফাংশন**। আলাদা লিখলে একদিন
-    //    একটা বদলাত আর সব enrollment নীরবে ভাঙত।
+    // Careful: the hash is created and verified by **the same function** on both
+    //    sides. Written separately, one would one day change and every
+    //    enrollment would break silently.
     const codeHash = hashEnrollmentCode(dto.enrollmentCode);
 
     const code = await this.prisma.enrollmentCode.findUnique({
@@ -78,8 +81,8 @@ export class EnrollmentService {
       select: { id: true, employeeId: true, usedAt: true, expiresAt: true },
     });
 
-    // "নেই", "ব্যবহার হয়ে গেছে", "মেয়াদ শেষ" — তিনটেতেই একই বার্তা,
-    // নইলে কোড অনুমান করার চেষ্টা সহজ হয়ে যেত (H05 · G18)
+    // "Does not exist", "already used" and "expired" all get the same message;
+    // otherwise guessing codes would be easier (H05 · G18).
     if (!code || code.usedAt || code.expiresAt <= new Date()) {
       throw new UnauthorizedException('Enrolment code is invalid or expired');
     }
@@ -88,25 +91,27 @@ export class EnrollmentService {
   }
 
   /**
-   * ⭐⭐ **স্টাফ নিজের ইমেইল-পাসওয়ার্ড দিয়ে নিজের PC যোগ করে।**
+   * **Staff add their own PC using their own email and password.**
    *
-   * ⚠️ কেন এই দ্বিতীয় পথ: কোডের ব্যবস্থায় মালিককে প্রতিটা PC-র জন্য
-   * আলাদা কোড বানাতে হতো, ২৪ ঘণ্টার মধ্যে ব্যবহার করাতে হতো, আর **কোন
-   * কোড কোন মেশিনে** সেটা হাতে মেলাতে হতো। ভুল মিললে কোনো এরর আসত না —
-   * শুধু একজনের কাজের ঘণ্টা আরেকজনের নামে জমা হতো, আর ধরা পড়ত মাস শেষে।
+   * Why this second path: with codes, the owner had to create a separate code
+   * for each PC, have it used within 24 hours, and match **which code went on
+   * which machine** by hand. A wrong match produced no error; one person's
+   * worked hours were simply credited to another, and it was noticed only at
+   * month end.
    *
-   * ⭐ এখানে যে কীবোর্ডে বসে **সে নিজেই প্রমাণ করে সে কে**। তাই বাঁধাটা
-   * বেশি নির্ভুল, কম নয়।
+   * Here the person at the keyboard **proves who they are themselves**, so the
+   * binding is more accurate, not less.
    *
-   * ⚠️ এতে স্টাফের হাতে নতুন কোনো ক্ষমতা আসে না: সে নিজের ট্র্যাকিং
-   * **যোগ** করতে পারে, বাদ দিতে পারে না। পাসওয়ার্ডটা এখানেই ডিভাইস
-   * টোকেনে বদলে যায়, আর এজেন্ট সেটা কোথাও জমা রাখে না।
+   * Careful: this gives staff no new power. They can **add** their own tracking
+   * but cannot remove it. The password is turned into a device token right
+   * here, and the agent stores it nowhere.
    *
-   * ⚠️⚠️ যাচাইটা `AuthService.login()`-এই হয়, নকল করে লেখা হয়নি — ফলে
-   * লগইনের তিনটে রক্ষাকবচ আপনাআপনি পাওয়া যায়: brute-force throttle, 2FA,
-   * আর `audit_log`-এ `login`/`login_failed`। আলাদা করে লিখলে তিনটেই বাদ
-   * পড়ত, আর এই endpoint-টা হয়ে যেত পাসওয়ার্ড অনুমান করার সবচেয়ে সহজ
-   * দরজা — সেশন-লগইনের চেয়েও সহজ, কারণ এখানে CSRF বা cookie কিছুই নেই।
+   * Careful: verification happens in `AuthService.login()`, not copied here, so
+   * the login's three safeguards come for free: brute-force throttle, 2FA, and
+   * `login`/`login_failed` in `audit_log`. Written separately, all three would
+   * be missing and this endpoint would become the easiest door for guessing
+   * passwords, easier even than the session login, since there is no CSRF or
+   * cookie here.
    */
   async enrollWithLogin(
     dto: EnrollLoginDto,
@@ -117,9 +122,9 @@ export class EnrollmentService {
     if (outcome.status === 'needs_totp') return { status: 'needs_totp' };
 
     /**
-     * ⚠️ owner ও manager-এর `users.employee_id` সাধারণত null — তাঁদের নামে
-     * কর্মীর কোনো সারি নেই, তাই ঘণ্টা জমা করার জায়গাও নেই। ওই অ্যাকাউন্টে
-     * এজেন্ট বসালে ডিভাইসটা কার, সেটাই বলা যেত না।
+     * Careful: for owner and manager `users.employee_id` is usually null: they
+     * have no staff row, so there is nowhere to accumulate hours. Installing the
+     * agent on such an account would leave it unclear whose device it is.
      */
     if (outcome.user.employeeId === null) {
       throw new ForbiddenException(
@@ -127,39 +132,40 @@ export class EnrollmentService {
       );
     }
 
-    // ⚠️ `mustChangePw` এখানে আটকানো হয় **না**। এজেন্ট কোনো ডেটা পড়ে না,
-    //    শুধু পাঠায়; আর প্রথম দিনেই "আগে ওয়েবে গিয়ে পাসওয়ার্ড বদলান"
-    //    বললে ইনস্টলটাই আটকে যেত।
+    // Careful: `mustChangePw` is **not** enforced here. The agent reads no data,
+    //    it only sends; and telling someone on day one to "first go to the web
+    //    and change your password" would block the install itself.
     return this.bind(outcome.user.employeeId, dto, null);
   }
 
   /**
-   * ⭐⭐ **একটা ডিভাইস-সারি একজনেরই — নীরবে হাতবদল হবে না।**
+   * **A device row belongs to one person only; it never changes hands silently.**
    *
-   * ⚠️⚠️ যে বাগটা এটা সারায়: `upsert`-এর চাবি ছিল কেবল `machineGuid`, আর
-   * সংঘাত হলে `employeeId` ও `tokenHash` **দুটোই লিখে দেওয়া হতো**। ফলে
-   * একই `machineGuid` পাঠানো দুটো এজেন্টের মধ্যে একটাই সারি হাতবদল করত,
-   * আর প্রতিবার:
+   * Careful, the bug this fixes: the `upsert` key was only `machineGuid`, and on
+   * a conflict **both `employeeId` and `tokenHash` were overwritten**. So two
+   * agents sending the same `machineGuid` passed one row back and forth, and
+   * each time:
    *
-   *   · আগের সেশনের টোকেন অচল হয়ে যেত → তার এজেন্ট চুপচাপ ৪০১ খেয়ে
-   *     **কিছুই পাঠাতে পারত না** (মালিকের চোখে "হঠাৎ offline")
-   *   · আগের কর্মীর ডিভাইস-সংখ্যা **শূন্য** হয়ে যেত → Staff পর্দায়
-   *     "Ready to install", Live Board-এ "No agent yet"
+   *   - the previous session's token stopped working, so that agent silently got
+   *     401s and **could send nothing** (to the owner: "suddenly offline");
+   *   - the previous employee's device count dropped to **zero**, so the Staff
+   *     screen showed "Ready to install" and the Live Board "No agent yet".
    *
-   * ⚠️ পুরো ব্যাপারটা **নীরব** ছিল: কোনো এরর নয়, কোনো লগ নয়। ধরা পড়ত
-   *    কেবল ওই কর্মীর হারানো ঘণ্টা দিয়ে, দিন পেরিয়ে যাওয়ার পর।
+   * Careful: the whole thing was **silent**: no error, no log. It was noticed
+   * only through that employee's missing hours, days later.
    *
-   * ⭐⭐ পরিচয়টা এখন **(hostname, windowsUsername)** — মেশিন **ও** যিনি
-   *    বসেছেন, দুটো মিলে। `machineGuid` একা যথেষ্ট নয়, কারণ ওটা
-   *    **মেশিনের, ব্যবহারকারীর নয়**: একই PC-তে দুজন স্টাফ আলাদা Windows
-   *    অ্যাকাউন্টে কাজ করলে দুজনের আলাদা সারি দরকার, অথচ GUID এক।
+   * The identity is now **(hostname, windowsUsername)**: the machine **and** who
+   * is signed in, together. `machineGuid` alone is not enough, because it is
+   * **the machine's, not the user's**: two staff on one PC under different
+   * Windows accounts need separate rows, yet the GUID is the same.
    *
-   * ⚠️ এই দাবিটা অনুমান নয় — অফিসের লগেই ধরা পড়েছে: `DESKTOP-BJNQ6OF`-এ
-   *    "Intern" ও "Intern 2", আর `DESKTOP-KP1DT93`-এ "Sumaiya" ও "user"।
+   * Careful: this is not a guess; it showed up in the office's own logs:
+   * "Intern" and "Intern 2" on `DESKTOP-BJNQ6OF`, "Sumaiya" and "user" on
+   * `DESKTOP-KP1DT93`.
    *
-   * ⭐ **বৈধ হস্তান্তরের পথ খোলা:** ডিভাইসটা `revoked` হলে নতুন কর্মী
-   *    নিতে পারেন। অর্থাৎ একই Windows অ্যাকাউন্ট হাতবদল হলে মালিক
-   *    Settings → Devices-এ একবার revoke করবেন — সচেতন একটা ধাপ।
+   * **A legitimate handover path stays open:** once a device is `revoked`, a new
+   * employee can take it. So when the same Windows account changes hands, the
+   * owner revokes it once in Settings -> Devices, a deliberate step.
    */
   private async assertNotSomeoneElses(
     tx: Prisma.TransactionClient,
@@ -177,8 +183,8 @@ export class EnrollmentService {
       },
     });
 
-    // নতুন মেশিন · আগেরটা কারো নামে নেই · একই কর্মী আবার বসাচ্ছেন —
-    // তিনটেই স্বাভাবিক
+    // New machine, one that belongs to nobody, or the same employee installing
+    // again: all three are normal.
     if (
       !existing ||
       existing.employeeId === null ||
@@ -187,14 +193,14 @@ export class EnrollmentService {
       return;
     }
 
-    // ⭐ revoke করা মানে মালিক ইচ্ছে করে ছেড়ে দিয়েছেন — তখন নেওয়া যায়
+    // A revoke means the owner released it on purpose, so it can be taken.
     if (existing.status !== 'active') return;
 
     /**
-     * ⚠️ এখানে পৌঁছানো মানে **একই মেশিনের একই Windows অ্যাকাউন্টে** দুজন
-     * ভিন্ন স্টাফ সাইন ইন করছেন — অর্থাৎ তাঁরা একটা লগইন ভাগ করে নিচ্ছেন।
-     * সেটা নীরবে মেনে নেওয়া যায় না: তখন দুজনের ঘণ্টা এক সারিতে মিশে যেত
-     * আর কোনটা কার তা আর আলাদা করা যেত না।
+     * Careful: reaching here means two different staff are signing in on **the
+     * same machine's same Windows account**, i.e. they share one login. That
+     * cannot be accepted silently: both people's hours would merge into one row
+     * and could no longer be told apart.
      */
     this.logger.warn(
       `enrol refused: "${existing.hostname}\\${existing.windowsUsername}" ` +
@@ -205,9 +211,9 @@ export class EnrollmentService {
     );
 
     /**
-     * ⚠️ বার্তায় **নাম নয়, empCode** — এটা স্টাফের পর্দায় ভেসে ওঠে, আর
-     * স্টাফ সাধারণত সহকর্মীদের তালিকা দেখে না। কোডটা মালিকের কাছে
-     * যথেষ্ট, আর তিনিই পরের ধাপটা করবেন।
+     * Careful: the message has the **empCode, not the name**. It appears on
+     * the staff member's screen, and staff usually cannot see the list of
+     * colleagues. The code is enough for the owner, who will take the next step.
      */
     throw new ConflictException(
       `This Windows account is already registered to ${existing.employee?.empCode ?? 'another staff member'}. ` +
@@ -216,30 +222,33 @@ export class EnrollmentService {
   }
 
   /**
-   * দুটো পথেরই শেষ ধাপ — ডিভাইসের সারি, `agent_start` ইভেন্ট, আর কনফিগ।
+   * The last step of both paths: the device row, the `agent_start` event, and
+   * the config.
    *
-   * ⚠️ এক জায়গায় রাখা হয়েছে ইচ্ছাকৃতভাবে। দুবার লিখলে একদিন একটা পথে
-   * `status: 'active'` বসত আর অন্যটায় নয়, বা একটায় ইভেন্ট যেত অন্যটায়
-   * না — আর পার্থক্যটা ধরা পড়ত কেবল ওই পথে বসানো মেশিনগুলোয়।
+   * Careful: kept in one place deliberately. Written twice, one day one path
+   * would set `status: 'active'` and the other not, or one would emit the event
+   * and the other not, and the difference would show only on machines enrolled
+   * through that path.
    */
   private async bind(
     employeeId: number,
     dto: EnrollFacts,
-    /** কোড দিয়ে এলে তার id — একবার ব্যবহার্য বলে বন্ধ করতে হয়। লগইনে null */
+    /** The code's id if via a code (single use, so it must be closed); null for login. */
     codeId: number | null,
   ): Promise<EnrollResult> {
-    const deviceToken = randomBytes(32).toString('base64url'); // ২৫৬ বিট
+    const deviceToken = randomBytes(32).toString('base64url'); // 256 bits
     const now = new Date();
 
     try {
       return await this.prisma.$transaction(async (tx) => {
         await this.assertNotSomeoneElses(tx, dto, employeeId);
 
-        // ⭐ একই মেশিনের একই Windows অ্যাকাউন্টে আবার ইনস্টল করলে নতুন সারি
-        //    নয়, আগেরটাই হালনাগাদ। অন্য অ্যাকাউন্ট = অন্য সারি।
-        // ⚠️ `machineGuid` **update-এও** বসে: Windows রিইনস্টল বা GUID
-        //    বদলালে মানটা পুরোনো থেকে যেত, আর H04-এর rollout bucket ভুল
-        //    মেশিনের হিসাব করত।
+        // Installing again on the same machine's same Windows account updates the
+        //    existing row rather than creating a new one. Another account means
+        //    another row.
+        // Careful: `machineGuid` is set in **update too**: after a Windows
+        //    reinstall or a GUID change the value would stay old, and H04's rollout
+        //    bucket would be computed for the wrong machine.
         const device = await tx.device.upsert({
           where: { hostname_windowsUsername: identityOf(dto) },
           update: {
@@ -267,7 +276,7 @@ export class EnrollmentService {
           },
         });
 
-        // একবার ব্যবহার্য — এখানেই বন্ধ হয়ে যায়
+        // Single use: closed right here.
         if (codeId !== null) {
           await tx.enrollmentCode.update({
             where: { id: codeId },
@@ -286,8 +295,8 @@ export class EnrollmentService {
               enrolled: true,
               hostname: dto.hostname,
               agentVersion: dto.agentVersion ?? null,
-              // ⚠️ কোন পথে বসল সেটা ইভেন্টেই থাকে — ছ-মাস পরে "এই মেশিনটা
-              //    কীভাবে যোগ হয়েছিল" প্রশ্নের একমাত্র সূত্র এটাই
+              // Careful: which path was used is kept in the event itself; six
+              //    months later it is the only clue to "how was this machine added?"
               via: codeId === null ? 'login' : 'code',
             },
           },
@@ -318,8 +327,8 @@ export class EnrollmentService {
         };
       });
     } catch (err) {
-      // devices(hostname, windows_username) UNIQUE — অন্য machine_guid নিয়ে
-      // একই নামে আরেকটা সারি বসাতে গেলে এখানেই আটকাবে
+      // devices(hostname, windows_username) UNIQUE: trying to insert another row
+      // with the same name but a different machine_guid is stopped here
       if (
         err instanceof Prisma.PrismaClientKnownRequestError &&
         err.code === 'P2002'

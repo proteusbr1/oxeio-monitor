@@ -1,16 +1,16 @@
 import { api } from '../api/client';
 
 /**
- * I06/I09-এর API কল।
+ * API calls for I06/I09.
  *
- * ⚠️ `src/api/auth.ts`-এ না লিখে এখানে — ওই ফাইলটা এই কাজের আওতার বাইরে।
- *    `login` এখানে আবার লেখা হয়েছে কারণ 2FA-র জন্য দুটো বাড়তি ফিল্ড আর
- *    একটা নতুন ধরনের উত্তর (`needsTotp`) দরকার। `me`/`logout` অপরিবর্তিত
- *    রয়ে গেছে `src/api/auth.ts`-এ।
+ * Careful: written here, not in `src/api/auth.ts`, because that file is outside
+ * the scope of this work. `login` is rewritten here because 2FA needs two extra
+ * fields and a new kind of response (`needsTotp`). `me`/`logout` remain unchanged
+ * in `src/api/auth.ts`.
  */
 
 export interface LoginResponse {
-  /** true হলে সেশন cookie **বসেনি** — কোড চেয়ে আবার পাঠাতে হবে */
+  /** When true, the session cookie was not set; ask for the code and send again. */
   needsTotp?: true;
   mustChangePassword?: boolean;
   usedRecoveryCode?: boolean;
@@ -28,7 +28,7 @@ export function login(creds: LoginCredentials): Promise<LoginResponse> {
   return api('/auth/login', {
     method: 'POST',
     body: creds,
-    // ভুল পাসওয়ার্ড/কোডের 401 যেন গ্লোবাল লগআউট ট্রিগার না করে
+    // A 401 for a wrong password/code must not trigger a global logout.
     silent401: true,
   });
 }
@@ -39,9 +39,10 @@ export interface SessionPolicy {
 }
 
 /**
- * ⚠️ সংখ্যাগুলো ফ্রন্টএন্ডে হার্ডকোড না করে সার্ভার থেকে আনা হয় — নইলে
- *    একদিন সার্ভারে TTL বদলে গেলে ব্রাউজার ৩০ মিনিটে সতর্ক করত অথচ সেশন
- *    মরত ১৫ মিনিটে (বা উল্টো), আর কেউ ধরতেই পারত না।
+ * Careful: the numbers are fetched from the server rather than hard-coded in the
+ * frontend. Otherwise, if the server's TTL changed one day, the browser would
+ * warn at 30 minutes while the session died at 15 (or the reverse), and nobody
+ * would notice.
  */
 export function sessionPolicy(): Promise<SessionPolicy> {
   return api('/auth/session-policy', { silent401: true });
@@ -49,7 +50,7 @@ export function sessionPolicy(): Promise<SessionPolicy> {
 
 export interface TwoFactorStatus {
   enabled: boolean;
-  /** QR বানানো হয়েছে কিন্তু কোড দিয়ে প্রমাণ করা হয়নি */
+  /** The QR was generated but not yet proven with a code. */
   pendingSetup: boolean;
   recoveryCodesLeft: number;
 }

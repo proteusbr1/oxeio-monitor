@@ -14,14 +14,14 @@ using oXeio.Core.Tracking;
 namespace oXeio.Agent;
 
 /// <summary>
-/// এই মুহূর্তে এটা <b>ডায়াগনস্টিক টুল</b>, পূর্ণ এজেন্ট নয়।
+/// For now this is a <b>diagnostic tool</b>, not the full agent.
 ///
-/// উদ্দেশ্য: blueprint-এ যেসব জিনিস "আসল ডেস্কটপ ছাড়া যাচাই করা যায় না" বলা হয়েছে,
-/// সেগুলো আপনি নিজের PC-তে চালিয়ে চোখে দেখে নিতে পারবেন —
-/// lock/unlock ইভেন্ট আসে কি না, ঘুম ধরা পড়ে কি না, idle হিসাব ঠিক কি না।
+/// Purpose: the things the blueprint says "cannot be verified without a real desktop" can be run on
+/// your own PC and checked by eye: whether lock/unlock events arrive, whether sleep is detected,
+/// whether the idle calculation is right.
 ///
-/// চালান:  oXeio.Agent.exe --diagnose
-/// থামান:  Ctrl+C
+/// Run:  oXeio.Agent.exe --diagnose
+/// Stop: Ctrl+C
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static class Diagnostics
@@ -106,18 +106,18 @@ internal static class Diagnostics
         return 0;
     }
 
-    // ── অ্যাপ/সাইট পরীক্ষা ──────────────────────────────────────────────────
+    // ── App/site check ───────────────────────────────────────────────────
 
     /// <summary>
-    /// D01–D04 এই PC-তে কাজ করছে কি না।
+    /// Whether D01-D04 work on this PC.
     ///
-    /// ⭐ <b>ব্রাউজারের address bar পড়া সবচেয়ে ভঙ্গুর অংশ</b> — UI Automation
-    /// ব্রাউজারের ভার্সন, ভাষা আর accessibility সেটিংয়ের ওপর নির্ভর করে।
-    /// প্রতিটা অফিস PC-তে রোল-আউটের আগে এখানেই দেখে নেওয়া যায় ডোমেইন
-    /// আসছে কি না; না এলে অ্যাপের হিসাব তবু চলবে, শুধু সাইটের নাম থাকবে না।
+    /// <b>Reading the browser's address bar is the most fragile part:</b> UI Automation depends on
+    /// the browser version, language and accessibility settings. Before rolling out to each office
+    /// PC, this is where to check whether the domain comes through; if not, app accounting still
+    /// works, only the site name is missing.
     ///
-    /// ⚠️ এখানে <b>ডোমেইনই ছাপা হয়, পুরো URL নয়</b> — কনসোলেও নিয়মটা এক
-    /// ([ADR-013](../../../docs/05-Options-Decisions.md))।
+    /// Careful: here <b>the domain is printed, not the full URL</b>; the rule is the same in the
+    /// console ([ADR-013](../../../docs/05-Options-Decisions.md)).
     /// </summary>
     private static void TestAppTracking()
     {
@@ -144,17 +144,17 @@ internal static class Diagnostics
             Thread.Sleep(1000);
         }
 
-        // ⚠️ CloseAll-এর **আগে** পড়তে হবে — ওটা খোলা উইন্ডোটা বন্ধ করে দেয়,
-        //    তারপর CurrentProcess সবসময় null। আগে উল্টো ছিল, ফলে সব কিছু
-        //    ঠিকঠাক চললেও লাইনটা "পড়া গেল না" দেখাত।
+        // Careful: this must be read **before** CloseAll: that closes the open window, after which
+        // CurrentProcess is always null. It used to be the other way round, so the line showed
+        // "could not be read" even when everything worked.
         var current = service.CurrentProcess;
         seen.AddRange(service.CloseAll(Clock.Now));
 
         Line($"   foreground : {current ?? "(no window could be read)"}");
 
-        // ⚠️ "UI Automation বন্ধ" পতাকাটা দিয়ে বিচার করা যায় না — ওটা টানা
-        //    ২০ বার ব্যর্থ হলে ওঠে, আর ১০ সেকেন্ডে ২০ বার চেষ্টাই হয় না।
-        //    তাই সত্যিই ডোমেইন এসেছে কি না, সেটাই একমাত্র নির্ভরযোগ্য প্রমাণ।
+        // Careful: the "UI Automation off" flag cannot be used to judge: it is raised after 20
+        // consecutive failures, and 20 attempts do not happen in 10 seconds. So whether a domain
+        // really came through is the only reliable evidence.
         var browser = seen.FirstOrDefault(r => r.IsBrowser == true);
         Line(browser switch
         {
@@ -166,7 +166,7 @@ internal static class Diagnostics
 
         foreach (var r in seen)
         {
-            // ⚠️ টাইটেল ছাপা হয় না — পড়ার সময় কেউ পাশে থাকতে পারে
+            // Careful: the title is not printed; someone may be standing next to you while reading
             Line($"   ▸ {r.ProcessName} {r.DurationSec} s" +
                  (r.Domain is null ? "" : $"  domain: {r.Domain}"));
         }
@@ -174,11 +174,11 @@ internal static class Diagnostics
         Line("");
     }
 
-    // ── ক্যাপচার পরীক্ষা ────────────────────────────────────────────────────
+    // ── Capture check ────────────────────────────────────────────────────
 
     /// <summary>
-    /// একবার ছবি তুলে দেখা — সত্যিই কাজ করছে কি না, ছবিগুলো কোথায় গেল,
-    /// আর কোনোটা কালো এল কি না।
+    /// Take one image to see whether it really works, where the images went, and whether any came
+    /// out black.
     /// </summary>
     private static void TestCapture()
     {
@@ -201,9 +201,9 @@ internal static class Diagnostics
         Line($"");
         Line($"Capture engine: {service.EngineName}");
 
-        // ⭐ DXGI ছবি দেয় শুধু তখনই যখন পর্দায় কিছু বদলায়। স্থির ডেস্কটপে ও
-        //    কিছুই দেয় না — সেটা ভুল নয়, নকশা। তাই দুই অবস্থাতেই পরীক্ষা করা হয়:
-        //    একবার পর্দা নড়তে নড়তে, একবার একদম স্থির অবস্থায়।
+        // DXGI gives an image only when something on screen changes. On a static desktop it gives
+        // nothing, which is not a bug but the design. So both cases are tested: once while the
+        // screen is moving, once while it is completely still.
         Line("");
         Line("── 1· Screen moving (DXGI's working path) ───────────");
         var moving = RunWithMotion(service.CaptureAll);
@@ -211,7 +211,7 @@ internal static class Diagnostics
         ReportFailures(service);
 
         Line("── 2· Screen still (should fall back to GDI) ────────");
-        Thread.Sleep(1200); // সব অ্যানিমেশন থামার সময়
+        Thread.Sleep(1200); // time for all animations to stop
         var still = service.CaptureAll();
         Report(still, outDir, "still", dxgi);
         ReportFailures(service);
@@ -224,9 +224,9 @@ internal static class Diagnostics
     }
 
     /// <summary>
-    /// ক্যাপচার চলাকালীন কনসোলে লেখা চালিয়ে যাওয়া, যাতে পর্দায় সত্যিই কিছু
-    /// বদলায়। এটা ছাড়া DXGI-র কাজের পথটা পরীক্ষাই করা যায় না — স্থির পর্দায়
-    /// ও ইচ্ছাকৃতভাবেই কিছু দেয় না।
+    /// Keep writing to the console during capture so that something really changes on screen.
+    /// Without this the working path of DXGI cannot be tested at all: on a still screen it
+    /// deliberately gives nothing.
     /// </summary>
     private static IReadOnlyList<CaptureResult> RunWithMotion(
         Func<IReadOnlyList<CaptureResult>> capture)
@@ -278,14 +278,14 @@ internal static class Diagnostics
         Line($"     DXGI: {dxgi.LastStep}");
     }
 
-    /// <summary>যে মনিটরগুলো কোনো ছবিই দেয়নি — চুপ করে বাদ দেওয়া হয় না।</summary>
+    /// <summary>Monitors that gave no image at all: they are not dropped silently.</summary>
     private static void ReportFailures(ScreenCaptureService service)
     {
         foreach (var name in service.LastFailedMonitors)
             Line($"   ❌ {name}: no engine could produce an image");
     }
 
-    // ── প্রতি সেকেন্ডের কাজ ────────────────────────────────────────────────
+    // ── Per-second work ──────────────────────────────────────────────────
 
     private static void SampleLoop(PowerMonitor power)
     {
@@ -298,13 +298,13 @@ internal static class Diagnostics
 
             if (!sample.Valid)
             {
-                // নমুনা বাদ — কোনো ডিফল্ট বসানো হয় না
+                // sample dropped: no default is substituted
                 Line($"⚠️  GetLastInputInfo failed (Win32 {sample.Win32Error}) — this second is skipped");
                 Thread.Sleep(Tick);
                 continue;
             }
 
-            // ঘড়ি দেখে ঘুম ধরা — কোনো ইভেন্টের উপর ভরসা নয়
+            // detect sleep by looking at the clock, not by trusting any event
             var gap = SleepDetector.Observe(
                 new SleepGapDetector.Sample(sample.BiasedMs, sample.UnbiasedMs, now));
 
@@ -320,11 +320,11 @@ internal static class Diagnostics
                 Line("⚠️  Last input time looked like it was in the future — clamped to zero");
 
             /**
-             * ⚠️ ডায়াগনস্টিক মোডে <c>screenFrozen: false</c> — ইচ্ছাকৃত।
+             * Careful: <c>screenFrozen: false</c> in diagnostic mode is intentional.
              *
-             * এই মোডটা কয়েক মিনিটের, আর এখানে ক্যাপচার চলে না, তাই পর্দার
-             * কোনো নমুনাই থাকে না। "জমেছে" ধরে নিলে ডায়াগনস্টিক নিজেই
-             * ভুল ছবি দেখাত — অথচ এটার পুরো কাজই সত্যিটা দেখানো।
+             * This mode lasts a few minutes and no capture runs in it, so there are no screen
+             * samples at all. Assuming "frozen" would make the diagnostic itself show a wrong
+             * picture, when its whole job is to show the truth.
              */
             Record(_machine.Tick(
                 now, sample.SinceLastInput, _sessionSuspended, screenFrozen: false));
@@ -351,7 +351,7 @@ internal static class Diagnostics
         Application.Exit();
     }
 
-    // ── উইন্ডো মেসেজ ────────────────────────────────────────────────────────
+    // ── Window messages ──────────────────────────────────────────────────
 
     private static PowerMonitor? _power;
 
@@ -378,8 +378,8 @@ internal static class Diagnostics
 
                 if (signal == PowerSignal.Suspend || signal == PowerSignal.DisplayOff)
                 {
-                    // ঘুমাতে যাওয়ার আগে হাতে সময় ~২ সেকেন্ড, তাও সব প্রসেস মিলিয়ে।
-                    // তাই এখানে শুধু সেগমেন্ট বন্ধ — কোনো নেটওয়ার্ক কল নয়।
+                    // About 2 seconds are available before sleep, and that is for all processes
+                    // combined. So only the segment is closed here, with no network call.
                     Record(_machine.OnSuspend(Clock.Now));
                     SleepDetector.Reset();
                 }
@@ -397,7 +397,7 @@ internal static class Diagnostics
         }
     }
 
-    // ── ছোট সহায়ক ───────────────────────────────────────────────────────────
+    // ── Small helpers ────────────────────────────────────────────────────
 
     private static void Record(IReadOnlyList<ActivitySegment> closed)
     {

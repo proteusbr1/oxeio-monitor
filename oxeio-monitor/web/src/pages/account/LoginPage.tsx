@@ -6,9 +6,9 @@ import { Wordmark } from '../../components/Brand';
 import { ErrorNote, Field, SubmitButton } from '../../components/Field';
 
 /**
- * ⭐ দুটো ধাপ, কিন্তু **একটাই ফর্ম state** — ইমেইল/পাসওয়ার্ড মুছে ফেলা হয় না।
- *    কারণ সার্ভারের দ্বিতীয় ধাপেও ইমেইল+পাসওয়ার্ড লাগে (কোনো মাঝপথের
- *    "half-logged-in" টোকেন নেই, ADR — `auth.service.ts` দেখুন)।
+ * Two steps, but only one form state: the email/password are not cleared. The
+ * server's second step needs the email and password again as well (there is no
+ * half-logged-in token in between; see `auth.service.ts`).
  */
 type Step = 'password' | 'totp';
 
@@ -30,9 +30,9 @@ export function LoginPage() {
       const result = await signIn({
         email,
         password,
-        // ⚠️ ধাপ ১-এ ফিল্ড দুটো পাঠানোই হয় না — খালি স্ট্রিং পাঠালে সার্ভার
-        //    সেটাকে "কোড দেওয়া হয়েছে কিন্তু ভুল" ধরত না ঠিকই, তবু
-        //    অকারণে throttle-এর কাছাকাছি যাওয়ার মানে নেই।
+        // Careful: in step 1 the two fields are not sent at all. An empty string would
+        // not be treated by the server as "code given but wrong", but there is no
+        // point going near the throttle for nothing.
         ...(step === 'totp' && !useRecovery ? { totp: code } : {}),
         ...(step === 'totp' && useRecovery ? { recoveryCode: code } : {}),
       });
@@ -44,10 +44,10 @@ export function LoginPage() {
       }
 
       /**
-       * ⚠️ রিকভারি কোড খরচ হলে সেটা জানানো **জরুরি** — কেউ ১০টার শেষটা
-       *    ব্যবহার করে ফেলে টেরও না পেলে পরেরবার আর ঢোকার পথ থাকত না।
-       *    রুট বদলে যাওয়ার আগে `alert` ছাড়া উপায় নেই: এই কম্পোনেন্টটা
-       *    সাথে সাথেই unmount হয়ে যায়।
+       * Careful: it is important to tell the user when a recovery code was used up. If
+       * someone spent the last of 10 without noticing, there would be no way in next
+       * time. There is no option but `alert` before the route changes: this component
+       * unmounts immediately.
        */
       if (result.usedRecoveryCode) {
         const left = result.recoveryCodesLeft ?? 0;
@@ -58,19 +58,19 @@ export function LoginPage() {
               : ''),
         );
       }
-      // সফল হলে রুটিং নিজেই বদলে যায় — user সেট হওয়ার সাথে সাথে
+      // On success routing changes by itself, as soon as the user is set
     } catch (err) {
       /**
-       * ⚠️ `err.message` সার্ভারের বার্তা ("ইমেইল বা পাসওয়ার্ড ভুল"), আর
-       *    সার্ভার এখনো বাংলায় বলে — সেটা যেমন আসে তেমনই দেখানো হয়।
-       *    নিচের নেটওয়ার্ক-ব্যর্থতার বাক্যটা আমাদের নিজেদের, তাই ইংরেজি।
+       * Careful: `err.message` is the server's message (e.g. "wrong email or
+       * password"), and the server still speaks Bengali, so it is shown as it comes.
+       * The network-failure sentence below is our own, so it is in English.
        */
       setError(
         err instanceof ApiError ? err.message : "Can't reach the server",
       );
       setBusy(false);
-      // ⚠️ ভুল কোডে ধাপ ১-এ ফেরানো হয় না — ফেরালে ব্যবহারকারীকে আবার
-      //    পুরো পাসওয়ার্ড টাইপ করতে হতো, অথচ ভুলটা ছিল শুধু ৬ অঙ্কে।
+      // Careful: a wrong code does not send the user back to step 1; that would make
+      // them type the whole password again when only the 6 digits were wrong.
       if (step === 'totp') setCode('');
     }
   }
@@ -104,7 +104,7 @@ export function LoginPage() {
                 </p>
               </div>
 
-              {/* I09 — "হঠাৎ লগইন পর্দা কেন?" প্রশ্নটার উত্তর */}
+              {/* I09: the answer to "why am I suddenly on the login screen?" */}
               {timedOut && !error && (
                 <p className="rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink-2">
                   Your session closed after a long stretch of no activity.
@@ -173,9 +173,9 @@ export function LoginPage() {
                   id="totp"
                   label="Verification code"
                   /*
-                   * ⚠️ `type="text"` + `inputMode="numeric"` — `type="number"`
-                   *    দিলে শুরুর শূন্য মুছে যেত (`012345` → `12345`) আর
-                   *    স্ক্রলে সংখ্যা বদলে যেত।
+                   * Careful: `type="text"` + `inputMode="numeric"`: with `type="number"`
+                   * leading zeros would be dropped (`012345` becomes `12345`) and
+                   * scrolling would change the number.
                    */
                   type="text"
                   inputMode="numeric"
@@ -186,10 +186,9 @@ export function LoginPage() {
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   /*
-                   * ⚠️ placeholder-এ **ইংরেজি অঙ্ক** — আগে বাংলা অঙ্ক
-                   *    ("১২৩৪৫৬") বসানো ছিল, অথচ authenticator অ্যাপ কোড
-                   *    দেয় ইংরেজি অঙ্কে। দুটো মেলে না দেখে কেউ ভাবতে পারত
-                   *    ভুল ঘরে টাইপ করছে।
+                   * Careful: English digits in the placeholder. Bengali digits used to be there,
+                   * yet the authenticator app gives the code in English digits. Seeing the two not
+                   * match, someone might think they are typing in the wrong field.
                    */
                   placeholder="123456"
                   hint="Each code works only once — an old one won't do."

@@ -25,26 +25,26 @@ const PENDING_SELECT = {
 type PendingAlert = Prisma.AlertGetPayload<{ select: typeof PENDING_SELECT }>;
 
 /**
- * G07 — যেসব অ্যালার্ট এখনো কোনো চ্যানেলে যায়নি (`channels_sent` খালি),
- * সেগুলো তুলে নিয়ে ইমেইলে পাঠায়।
+ * Picks up alerts that have not gone to any channel yet (`channels_sent` empty)
+ * and sends them by email.
  *
- * ⭐ পাঠানোটা তৈরি করার জায়গা থেকে আলাদা রাখার তিনটে কারণ:
+ * Sending is kept separate from where alerts are created, for three reasons:
  *
- *  ১. **G05 আপনাআপনি ঢেকে যায়।** clock_drift অ্যালার্ট বসায়
- *     src/agent/clock-drift.service.ts, আমরা নই। সেটাও `channels_sent = {}`
- *     রেখে যায়, তাই এখান দিয়েই ইমেইলে চলে যায় — অথচ আমাদের কোথাও
- *     clock_drift **তৈরি** করতে হয় না (দুবার বসানোর ঝুঁকিই নেই)।
- *  ২. SMTP ধীর বা মৃত হলে সেটা যেন চেকগুলোকে ধীর না করে।
- *  ৩. পাঠানোর একটাই পথ থাকলে "এই অ্যালার্টটা ইমেইলে গিয়েছিল কি না" প্রশ্নের
- *     উত্তর সবসময় `channels_sent` কলামেই মেলে।
+ *  1. **Clock-drift alerts are covered automatically.** clock_drift alerts are
+ *     inserted by src/agent/clock-drift.service.ts, not by us. It leaves
+ *     `channels_sent = {}` too, so it goes out by email through here, and we
+ *     never have to **create** clock_drift anywhere (no risk of double inserts).
+ *  2. A slow or dead SMTP server must not slow the checks down.
+ *  3. With a single sending path, "did this alert go out by email?" is always
+ *     answered by the `channels_sent` column.
  */
 @Injectable()
 export class AlertDispatcher {
   private readonly logger = new Logger(AlertDispatcher.name);
   private readonly explicitRecipients: string[];
   /**
-   * ⚠️ ইন-মেমরি, ইচ্ছাকৃতভাবে। সার্ভার রিস্টার্ট করলে গোনা শুরু থেকে হয় —
-   *    আর সেটাই ঠিক আচরণ: রিস্টার্টের কারণ সাধারণত কনফিগ ঠিক করা।
+   * Deliberately in-memory. After a server restart the count starts over, which
+   * is the right behavior: restarts are usually done to fix the config.
    */
   private readonly attempts = new Map<string, number>();
 
@@ -59,7 +59,7 @@ export class AlertDispatcher {
       .filter(Boolean);
   }
 
-  /** ফেরত দেয় কতগুলো অ্যালার্টের নিষ্পত্তি হলো (পাঠানো বা হাল ছাড়া) */
+  /** Returns how many alerts were settled (sent or given up on) */
   async runOnce(now = new Date()): Promise<number> {
     const pending = await this.prisma.alert.findMany({
       where: {
@@ -80,8 +80,8 @@ export class AlertDispatcher {
     }
 
     const recipients = await this.recipients();
-    // ⭐ পুরো ব্যাচ **একটাই** ইমেইলে। বারোটা PC একসাথে বন্ধ হলে বারোটা মেইল
-    //    নয়, একটা মেইলে বারোটা লাইন — এটাই বন্যা ঠেকানোর শেষ স্তর।
+    // The whole batch goes in **one** email. If twelve PCs shut down together,
+    // that is one mail with twelve lines, not twelve mails: the last flood barrier.
     const outcome = await this.mailer.send(
       recipients,
       subjectFor(pending),
@@ -102,10 +102,10 @@ export class AlertDispatcher {
   }
 
   /**
-   * SMTP নেই — অ্যালার্ট তবু হারায় না, লগে যায়।
-   * ⚠️ `channels_sent`-এ `log` বসানো হয় যাতে পরের sweep-এ আবার একই জিনিস
-   *    না তোলে; নইলে প্রতি মিনিটে একই লাইন লগে লেখা হতো আর আসল পেন্ডিং
-   *    অ্যালার্টগুলো ওই ব্যাচেই আটকে থাকত।
+   * No SMTP: the alert is still not lost, it goes to the log.
+   * Careful: `log` is written into `channels_sent` so the next sweep does not
+   * pick up the same alerts again; otherwise the same line would be logged
+   * every minute and the real pending alerts would be stuck behind that batch.
    */
   private async markLogged(pending: PendingAlert[]): Promise<number> {
     for (const a of pending) {
@@ -126,10 +126,10 @@ export class AlertDispatcher {
   }
 
   /**
-   * পাঠানো যায়নি — তিনবার চেষ্টার পর হাল ছাড়া হয়।
+   * Could not be sent: we give up after three attempts.
    *
-   * ⚠️ অনন্তকাল চেষ্টা করলে একটা ভুল কনফিগ পুরো কিউ আটকে রাখত, আর তার
-   *    পেছনে জমতে থাকা নতুন অ্যালার্টগুলো কোনোদিন সামনের সারিতে আসত না।
+   * Careful: retrying forever would let one bad config block the whole queue,
+   * and new alerts piling up behind it would never reach the front.
    */
   private async countFailures(pending: PendingAlert[]): Promise<number> {
     const exhausted: PendingAlert[] = [];
@@ -152,11 +152,11 @@ export class AlertDispatcher {
   }
 
   /**
-   * কার কাছে যাবে — `ALERT_EMAIL_TO` থাকলে সেটাই, নইলে সক্রিয় owner-দের ইমেইল।
+   * Who receives it: `ALERT_EMAIL_TO` if set, otherwise the active owners' emails.
    *
-   * ⚠️ ম্যানেজারদের পাঠানো হয় না। অ্যালার্টে হোস্টনেম ও কর্মীর নাম থাকে, আর
-   *    এই তালিকাটা owner-only endpoint-এর সমান জিনিস — ইমেইলে পাঠিয়ে
-   *    role-এর দেয়ালটা ফাঁকি দেওয়া চলবে না।
+   * Careful: managers are not emailed. Alerts carry hostnames and staff names,
+   * and this list is the same data as the owner-only endpoint; emailing it must
+   * not become a way around the role wall.
    */
   private async recipients(): Promise<string[]> {
     if (this.explicitRecipients.length > 0) return this.explicitRecipients;
@@ -192,7 +192,7 @@ function bodyFor(pending: PendingAlert[]): string {
   ].join('\n');
 }
 
-/** ⚠️ কখনো URL, উইন্ডোর টেক্সট বা ফাইলের নাম নয় — শুধু হোস্টনেম ও কর্মীর নাম */
+/** Never a URL, window text or file name: only the hostname and staff name */
 function lineFor(a: PendingAlert): string {
   const who = [a.employee?.fullName, a.device?.hostname]
     .filter(Boolean)

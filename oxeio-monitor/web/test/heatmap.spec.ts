@@ -4,23 +4,23 @@ import type { AttendanceReport, AttendanceRow, ReportMeta } from '../src/api/rep
 import { buildMonthGrid } from '../src/pages/monthly/heatmap';
 
 /**
- * **G110 · G111** — Monthly পাতার ছবিটা আর সংখ্যাটা এক কথা বলে কি না।
+ * **G110 · G111**: do the picture and the number on the Monthly page say the same thing?
  *
- * ⭐⭐ দুটো ত্রুটিই এক জাতের, আর সেটাই এদের এক ফাইলে রাখার কারণ: **কোনো
- * এরর ওঠে না, কোনো সংখ্যা ভুল হয় না** — শুধু একটা অবস্থা অন্য একটার ছদ্মবেশে
- * দেখা যায়, আর মানুষ ছদ্মবেশটাই বিশ্বাস করেন।
+ * Both defects are of one kind, which is why they share a file: **no error is
+ * raised and no number is wrong**; one state just looks like another, and
+ * people believe the disguise.
  *
- *   · G110 — ট্র্যাকিং শুরুর **আগের** দিন দেখতে "কর্মদিবসে কিছুই করেনি"-র
- *     মতো (লালচে ছোঁয়া)। একই পাতায় সংখ্যাটা বলে "কোনো দাবি নেই", ছবিটা বলে
- *     "ফাঁকি" — আর মানুষ আগে ছবিটা দেখে।
- *   · G111 — যাঁকে এখনো একটা শেষ-হওয়া কর্মদিবসেও দেখা হয়নি, তাঁর ঘাটতি ০,
- *     তাই সারিতে লেখা ওঠে **"On track"**।
+ *   · G110: a day **before** tracking began looked like "did nothing on a
+ *     workday" (a reddish tint). On the same page the number says "no claim",
+ *     the picture says "slacking", and people look at the picture first.
+ *   · G111: someone not yet observed on even one finished workday has a
+ *     shortfall of 0, so the row says **"On track"**.
  *
- * ⚠️ এই ফাইলটার আগে `heatmap.ts`-এ **একটাও টেস্ট ছিল না**, যদিও এখানেই
- * পাতাটার প্রায় সব নিয়ম বসে।
+ * Careful: before this file, `heatmap.ts` had **no tests at all**, though
+ * nearly all of the page's rules live there.
  */
 
-/** আগস্ট ২০২৬ — শুক্রবার ৭, ১৪, ২১, ২৮ */
+/** August 2026: Fridays are the 7th, 14th, 21st, 28th */
 const MONTH = '2026-08';
 const TRACKED_FROM = '2026-08-13';
 
@@ -50,7 +50,7 @@ function row(over: Partial<AttendanceRow> & { date: string }): AttendanceRow {
     department: 'Design',
     dayType: 'workday',
     status: 'no_activity',
-    // ⚠️ নমুনায় কেউ ছুটিতে নেই — এই ফিক্সচার G130 নিয়ে দাবি করে না
+    // Careful: nobody in the sample is on leave; this fixture makes no claim about G130
     onLeave: false,
     designsDone: null,
     workedHours: 0,
@@ -80,7 +80,7 @@ function report(
   };
 }
 
-/** ১–২০ আগস্টের প্রতিটা দিনের সারি — শুক্রবারগুলো সাপ্তাহিক ছুটি */
+/** A row for every day from 1 to 20 August: the Fridays are the weekly day off */
 function wholeRange(): AttendanceRow[] {
   const rows: AttendanceRow[] = [];
   for (let d = 1; d <= 20; d += 1) {
@@ -101,20 +101,20 @@ const cellOn = (grid: ReturnType<typeof buildMonthGrid>, date: string) =>
   grid.rows[0].cells.find((c) => c.date === date)!;
 
 /**
- * ⭐⭐⭐ **G130-এর বাকি অংশ — অনুমোদিত ছুটি হিটম্যাপেও** *(৬ সেপ্টেম্বর ২০২৬)*।
+ * **The rest of G130: approved leave on the heatmap too.**
  *
- * ⚠️⚠️ **যে ফাঁকটা এই describe-টা পাহারা দেয়:** সার্ভার `onLeave` পাঠাত
- * (G130, ৫ সেপ্টেম্বর), রিপোর্টের সারিতে *"On leave"* লেখাও উঠত — কিন্তু
- * `buildMonthGrid()` ঘরটা **কোনোদিন কপি করেনি**, তাই হিটম্যাপ ওটা জানতেই
- * পারত না। ছুটির দিনে `dayType` থাকে `workday` (ওটা **অফিসের** ক্যালেন্ডার,
- * একজনের নয়) আর ঘণ্টা ০ — ফলে ঘরটা *"কর্মদিবসে কিছুই হয়নি"* বলে **লালচে
- * ফাঁকির দাগ** পেত।
+ * Careful: **the gap this describe guards:** the server sent `onLeave` (G130),
+ * and the report row even said *"On leave"*, but `buildMonthGrid()` **never
+ * copied the field** into the cell, so the heatmap could not know. On a leave day
+ * `dayType` is `workday` (that is the **office** calendar, not one person's)
+ * and the hours are 0, so the cell got *"nothing done on a workday"*, a **reddish
+ * slacking mark**.
  *
- * ⭐ ঠিক G110-র মতোই: সংখ্যা মিথ্যা বলছিল না, ছবিটা বলছিল।
+ * Exactly like G110: the number was not lying, the picture was.
  */
-describe('G130 — অনুমোদিত ছুটির দিন হিটম্যাপে', () => {
-  /** ⭐⭐⭐ এটাই আসল পাহারা — ঘরটা সত্যিই সারি থেকে ঘরে পৌঁছায় কি না */
-  it('⭐ ছুটির দিনের ঘরে `onLeave` পৌঁছায়', () => {
+describe('G130 — approved leave days on the heatmap', () => {
+  /** The real guard: does the field actually travel from row to cell */
+  it('`onLeave` reaches the cell of a leave day', () => {
     const rows = wholeRange().map((r) =>
       r.date === '2026-08-18' ? { ...r, onLeave: true, targetHours: 0 } : r,
     );
@@ -125,11 +125,11 @@ describe('G130 — অনুমোদিত ছুটির দিন হিট�
   });
 
   /**
-   * ⚠️⚠️ **দ্বিতীয় টেস্টটা ছাড়া প্রথমটা একা যথেষ্ট নয়** — সবসময় `true`
-   * ফেরত দিলেও ওটা সবুজ থাকত। বাকি দিনগুলো `false` কি না, সেটাই প্রমাণ
-   * করে সংখ্যাটা সত্যিই সারি থেকে আসছে।
+   * Careful: **the first test alone is not enough without the second**: it
+   * would stay green even if it always returned `true`. That the other days
+   * are `false` proves the number really comes from the row.
    */
-  it('⭐ ছুটি নয় এমন দিনে `onLeave` মিথ্যা', () => {
+  it('`onLeave` is false on a day that is not leave', () => {
     const rows = wholeRange().map((r) =>
       r.date === '2026-08-18' ? { ...r, onLeave: true, targetHours: 0 } : r,
     );
@@ -141,10 +141,10 @@ describe('G130 — অনুমোদিত ছুটির দিন হিট�
   });
 
   /**
-   * ⚠️ ছুটির দিনটা `untracked` হয়ে যায় না — ট্র্যাকিং চলছিল, শুধু তিনি
-   *    ছুটিতে ছিলেন। দুটো গুলিয়ে গেলে ঘরটা আবার ভুল কথা বলত।
+   * Careful: a leave day does not become `untracked`: tracking was running,
+   *    the person was just on leave. Mixing the two up would make the cell say the wrong thing again.
    */
-  it('ছুটির দিন `untracked` নয়, সাধারণ দিন', () => {
+  it('a leave day is an ordinary day, not `untracked`', () => {
     const rows = wholeRange().map((r) =>
       r.date === '2026-08-18' ? { ...r, onLeave: true, targetHours: 0 } : r,
     );
@@ -155,30 +155,30 @@ describe('G130 — অনুমোদিত ছুটির দিন হিট�
   });
 });
 
-describe('G110 — ট্র্যাকিং শুরুর আগের দিন', () => {
-  it('আগের কর্মদিবস `untracked`, পরেরটা সাধারণ `day`', () => {
+describe('G110 — the days before tracking began', () => {
+  it('an earlier workday is `untracked`, the next is an ordinary `day`', () => {
     const grid = buildMonthGrid(report(wholeRange()), MONTH);
 
-    // ১২ আগস্ট — ট্র্যাকিং শুরুর আগের দিন
+    // 12 August: the day before tracking began
     expect(cellOn(grid, '2026-08-12').kind).toBe('untracked');
-    // ১৩ আগস্ট — ঠিক শুরুর দিন, এটা আর না-দেখা নয়
+    // 13 August: exactly the first day, no longer unobserved
     expect(cellOn(grid, '2026-08-13').kind).toBe('day');
   });
 
-  it('ছুটির দিন ছুটির দিনই থাকে — তার চেহারা আগে থেকেই ঠিক ছিল', () => {
-    // ⚠️ ৭ আগস্ট শুক্রবার, আর ট্র্যাকিং শুরুরও আগে। তবু `untracked` নয়:
-    //    ছুটির দিনের নিজস্ব চেহারা কাউকে ফাঁকিবাজ দেখায় না, তাই ওটা
-    //    বদলানোর কোনো কারণ নেই। বদলালে উল্টো তথ্য হারাত।
+  it('a day off stays a day off: its look was already right', () => {
+    // Careful: Friday 7 August, and even before tracking began. Still not `untracked`:
+    //    a day off's own look never makes anyone seem a slacker, so there is no
+    //    reason to change it. Changing it would lose information.
     const grid = buildMonthGrid(report(wholeRange()), MONTH);
     expect(cellOn(grid, '2026-08-07').kind).toBe('day');
     expect(cellOn(grid, '2026-08-07').dayType).toBe('weekly_off');
   });
 
-  it('⭐ না-দেখা দিনে owner ঘণ্টা বসালে দিনটা আর না-দেখা নয়', () => {
-    // ⚠️⚠️ এটাই এই নিয়মের সবচেয়ে সহজে ভুল হওয়া ধারটা। সংশোধনে বসানো
-    //    ঘণ্টা সত্যিকারের গোনা ঘণ্টা; ডটেড ফাঁকা ঘরে ঢেকে দিলে ওগুলো
-    //    পর্দা থেকেই উধাও হতো, অথচ মোট ঘণ্টায় থাকত — ছবি আর সংখ্যা আবার
-    //    দুই কথা বলত, কেবল উল্টো দিকে।
+  it('on an unobserved day, if the owner enters hours the day is no longer unobserved', () => {
+    // Careful: this is the edge of the rule that is easiest to get wrong. Hours
+    //    entered through an adjustment are truly counted hours; covering them with
+    //    a dotted empty cell would make them vanish from the screen while staying
+    //    in the total hours: picture and number saying two things again, only the opposite way.
     const rows = wholeRange().map((r) =>
       r.date === '2026-08-10'
         ? { ...r, adjustmentHours: 8, creditedHours: 8 }
@@ -190,7 +190,7 @@ describe('G110 — ট্র্যাকিং শুরুর আগের দ�
     );
   });
 
-  it('কখনোই দেখা হয়নি (`trackedFrom` null) — মাসের সব কর্মদিবসই না-দেখা', () => {
+  it('never observed (`trackedFrom` null): every workday of the month is unobserved', () => {
     const grid = buildMonthGrid(
       report(wholeRange(), { trackedFrom: { 1: null } }),
       MONTH,
@@ -203,8 +203,8 @@ describe('G110 — ট্র্যাকিং শুরুর আগের দ�
     expect(workdayCells.every((c) => c.kind === 'untracked')).toBe(true);
   });
 
-  it('না-দেখা ঘর মোট ঘণ্টা বা প্রত্যাশা কিছুই বদলায় না', () => {
-    // ⚠️ এটা নিছক আঁকার বদল — একটা সংখ্যাও নড়লে সেটা G110 নয়, নতুন একটা বাগ।
+  it('an unobserved cell changes neither total hours nor expectation', () => {
+    // Careful: this is a pure drawing change: if even one number moves, it is not G110 but a new bug.
     const drawn = buildMonthGrid(report(wholeRange()), MONTH);
     const blind = buildMonthGrid(
       report(wholeRange(), { trackedFrom: {} }),
@@ -216,11 +216,11 @@ describe('G110 — ট্র্যাকিং শুরুর আগের দ�
     expect(drawn.rows[0].paceHours).toBe(blind.rows[0].paceHours);
   });
 
-  it('প্রত্যাশা এখনো সার্ভারের সংখ্যা — `trackedFrom` থেকে গোনা হয় না', () => {
-    // ⭐⭐ এই টেস্টটাই G110-র আসল পাহারা। তারিখটা পাঠানোর **উদ্দেশ্যই**
-    //    ছিল আঁকা, আর সবচেয়ে সহজ ভুলটা হলো ওটা দিয়ে আবার প্রত্যাশা গোনা —
-    //    ঠিক ওভাবেই আগের বাগটা জন্মেছিল। এখানে `expectedHours` এমন একটা
-    //    সংখ্যা যেটা তারিখ দিয়ে গুনলে কখনোই বেরোত না।
+  it('expectation is still the server number, not counted from `trackedFrom`', () => {
+    // This test is the real guard of G110. The date was sent **only for
+    //    drawing**, and the easiest mistake is to count expectation with it again:
+    //    that is exactly how the earlier bug was born. Here `expectedHours` is a
+    //    number that counting by the date could never produce.
     const grid = buildMonthGrid(
       report(wholeRange(), { expectedHours: { 1: 3.5 } }),
       MONTH,
@@ -230,8 +230,8 @@ describe('G110 — ট্র্যাকিং শুরুর আগের দ�
   });
 });
 
-describe('G111 — যাঁকে এখনো দেখাই হয়নি', () => {
-  it('`observed` সার্ভারের meta থেকেই আসে', () => {
+describe('G111 — someone not yet observed', () => {
+  it('`observed` comes straight from the server meta', () => {
     const seen = buildMonthGrid(report(wholeRange()), MONTH);
     expect(seen.rows[0].observed).toBe(true);
 
@@ -242,17 +242,17 @@ describe('G111 — যাঁকে এখনো দেখাই হয়নি'
     expect(unseen.rows[0].observed).toBe(false);
   });
 
-  it('meta চুপ থাকলে "দেখা হয়েছে" ধরা হয়', () => {
-    // ⚠️ উল্টোটা করলে পুরোনো একটা সার্ভারের সাথে গোটা পাতা "কারো হিসাব
-    //    নেই" দেখাত — সংখ্যাগুলো ঠিকই থাকত, শুধু ব্যাখ্যাটা মিথ্যা হতো।
+  it('if meta is silent, "observed" is assumed', () => {
+    // Careful: the other way round, against an old server the whole page would
+    //    show "nobody has figures"; the numbers would stay right, only the explanation would be false.
     const grid = buildMonthGrid(report(wholeRange(), { observed: {} }), MONTH);
     expect(grid.rows[0].observed).toBe(true);
   });
 
-  it('⭐ না-দেখা মানুষ "পিছিয়ে"-তেও গোনা হয় না, আলাদা করে গোনা হয়', () => {
-    // ⚠️⚠️ তাঁর `paceHours` ঠিক ০, তাই তিনি "পিছিয়ে" তালিকায় পড়েন না —
-    //    আর সেটাই ছিল ফাঁদ: তাতে তিনি নীরবে "ঠিক আছেন"-দের দলে চলে যেতেন।
-    //    দুই তালিকার কোনোটাতেই না রেখে তৃতীয় একটা ঘরে গোনা হয়।
+  it('an unobserved person is not counted as "behind" either, but counted separately', () => {
+    // Careful: their `paceHours` is exactly 0, so they do not fall into the
+    //    "behind" list, and that was the trap: they would silently go into the
+    //    "fine" group. Instead of putting them in either list, they are counted in a third cell.
     const grid = buildMonthGrid(
       report(wholeRange(), { observed: { 1: false }, expectedHours: { 1: 0 } }),
       MONTH,
@@ -262,7 +262,7 @@ describe('G111 — যাঁকে এখনো দেখাই হয়নি'
     expect(grid.totals.notObserved).toBe(1);
   });
 
-  it('দেখা-হওয়া পিছিয়ে-থাকা মানুষ আগের মতোই "পিছিয়ে"', () => {
+  it('an observed person who is behind is "behind" as before', () => {
     const grid = buildMonthGrid(
       report(wholeRange(), { observed: { 1: true }, expectedHours: { 1: 40 } }),
       MONTH,
@@ -272,17 +272,17 @@ describe('G111 — যাঁকে এখনো দেখাই হয়নি'
     expect(grid.totals.notObserved).toBe(0);
   });
 
-  it('⭐ ০ ঘাটতি আর না-দেখা — সংখ্যায় এক, অবস্থায় আলাদা', () => {
-    // ⭐⭐ এই সমতাটাই G111-এর গোটা কারণ। দুটো গ্রিডের `paceHours` হুবহু
-    //    এক (০), অথচ একজনকে দেখা হয়েছে আর অন্যজনকে হয়নি। পতাকাটা না
-    //    থাকলে পর্দার কাছে এই দুটো অবস্থা **সম্পূর্ণ অভিন্ন** — আর তখন
-    //    দুজনেই "On track" পড়তেন।
+  it('a shortfall of 0 and unobserved: the same in number, different in state', () => {
+    // This equality is the whole reason for G111. The two grids' `paceHours`
+    //    are exactly the same (0), yet one person was observed and the other was
+    //    not. Without the flag the screen sees these two states as **completely
+    //    identical**, and both would read "On track".
     const met = buildMonthGrid(
       report(
         wholeRange().map((r) =>
           r.dayType === 'workday' ? { ...r, creditedHours: 8, workedHours: 8 } : r,
         ),
-        // ১–২০ আগস্টে ১৮ কর্মদিবস (৭ ও ১৪ শুক্রবার) × ৮ঘ = ১৪৪ — ঠিক পূরণ
+        // 18 workdays in 1-20 August (the 7th and 14th are Fridays) x 8h = 144: exactly met
         { observed: { 1: true }, expectedHours: { 1: 144 } },
       ),
       MONTH,

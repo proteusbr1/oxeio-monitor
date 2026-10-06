@@ -1,13 +1,13 @@
 namespace oXeio.Core.Time;
 
 /// <summary>
-/// Asia/Dhaka = UTC+06:00, কোনো DST নেই — তাই অফসেট ধ্রুবক ধরে হিসাব করা নিরাপদ।
+/// Asia/Dhaka = UTC+06:00 with no DST, so it is safe to calculate with a constant offset.
 ///
-/// সার্ভারের <c>server/src/agent/util/dhaka-time.ts</c>-এর হুবহু প্রতিরূপ।
-/// দুই দিকেই একই নিয়ম না থাকলে এজেন্ট আর সার্ভার আলাদা <c>work_date</c> বের করত।
+/// An exact mirror of the server's <c>server/src/agent/util/dhaka-time.ts</c>.
+/// Without the same rule on both sides, the agent and the server would derive different <c>work_date</c>s.
 ///
-/// ⚠️ v1-এ শুধু Asia/Dhaka। অন্য টাইমজোনে যেতে হলে এখানে
-/// <c>TimeZoneInfo</c> বসাতে হবে — DST থাকলে এই সরল হিসাব ভাঙবে।
+/// In v1 only Asia/Dhaka. To support another time zone, <c>TimeZoneInfo</c> would have to
+/// go in here; with DST this simple calculation would break.
 ///
 /// Update: the server may now run on another zone without DST
 /// (<c>WORK_TIMEZONE</c>) and sends its fixed offset in the config
@@ -100,21 +100,21 @@ public static class DhakaTime
     /// <summary>Back to Asia/Dhaka — for tests.</summary>
     public static void Reset() => _zone = new Zone(DefaultTimeZone, DefaultOffset);
 
-    /// <summary>ওই মুহূর্তটা ঢাকার সময়ে কোন তারিখে পড়ে।</summary>
+    /// <summary>The date, on the Dhaka calendar, that this moment falls on.</summary>
     public static DateOnly WorkDateOf(DateTimeOffset instant)
     {
         var local = instant.ToUniversalTime() + Offset;
         return DateOnly.FromDateTime(local.UtcDateTime);
     }
 
-    /// <summary>ওই মুহূর্তটা ঢাকার ঘড়িতে কটা বাজে।</summary>
+    /// <summary>What time it is on the Dhaka clock at that moment.</summary>
     public static TimeOnly LocalTimeOf(DateTimeOffset instant)
     {
         var local = instant.ToUniversalTime() + Offset;
         return TimeOnly.FromDateTime(local.UtcDateTime);
     }
 
-    /// <summary>ওই মুহূর্তের ঠিক পরের <b>স্থানীয়</b> মধ্যরাত (§ ২.১-ক)।</summary>
+    /// <summary>The next <b>local</b> midnight right after that moment (section 2.1(a)).</summary>
     public static DateTimeOffset NextLocalMidnight(DateTimeOffset instant)
     {
         var offset = Offset;

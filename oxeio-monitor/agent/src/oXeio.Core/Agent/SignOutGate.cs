@@ -1,58 +1,56 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// এই মুহূর্তে সাইন আউট করা যাবে কি না, আর করলে <b>কী হারাবে</b> —
-/// <see cref="TrackingGate"/>-এর জোড়া।
+/// Whether signing out is allowed right now, and if so <b>what would be lost</b>. The pair
+/// of <see cref="TrackingGate"/>.
 ///
-/// ⚠️⚠️ <b>কেন এটা একটা নিয়ম, শুধু একটা মেনু আইটেম নয়:</b> সাইন আউট মানে
-/// ডিভাইস টোকেন মুছে ফেলা। কিন্তু আউটবক্সে তখনো যা পড়ে থাকে — সেগমেন্ট,
-/// অ্যাপ-ব্যবহার, স্ক্রিনশট — সেগুলো <b>ডিস্কেই থেকে যায়</b>। পরের জন ওই
-/// একই PC-তে সাইন ইন করলে সিঙ্ক ওয়ার্কার সেগুলো <b>তার</b> টোকেন দিয়ে
-/// পাঠাত, আর আগের জনের ঘণ্টা ও ছবি নতুন জনের খাতায় গিয়ে বসত।
+/// <b>Why this is a rule, not just a menu item:</b> signing out deletes the device token. But
+/// whatever is still in the outbox (segments, app usage, screenshots) <b>stays on disk</b>. If
+/// the next person signs in on the same PC, the sync worker would send those with <b>their</b>
+/// token, and the previous person's hours and pictures would land in the new person's record.
 ///
-/// ⭐ এটা হুবহু <b>G79</b>-এর ক্ষতি, উল্টো দিক থেকে। G79-এ সাইন ইনের
-/// <i>আগের</i> সারিগুলো ভুল লোকের নামে যেত; এখানে সাইন আউটের <i>পরের</i>
-/// সাইন-ইনে। তাই সমাধানও একই ধাঁচের — সিদ্ধান্তটা Core-এ, খাঁটি, আর
-/// প্রতিটা কলার একই নিয়ম মানে।
+/// This is the same harm as <b>G79</b>, from the opposite side. In G79 the rows from <i>before</i>
+/// sign-in went to the wrong person; here it is the sign-in <i>after</i> a sign-out. So the
+/// fix has the same shape: the decision lives in Core, pure, and every caller follows the same rule.
 ///
-/// ⚠️ ফলে সাইন আউটের সময় অপাঠানো সারিগুলো <b>ফেলে দিতে হয়</b>। তথ্য হারানো
-/// খারাপ, কিন্তু <b>ভুল লোকের নামে তথ্য বসা আরও খারাপ</b> — প্রথমটা
-/// স্টাফ টের পায় (ঘণ্টা কম), দ্বিতীয়টা কেউ কোনোদিন টের পায় না।
+/// So rows not yet sent at sign-out time must be <b>discarded</b>. Losing data is bad, but
+/// <b>data landing under the wrong person is worse</b>: staff notice the first (fewer hours),
+/// while nobody ever notices the second.
 /// </summary>
 public static class SignOutGate
 {
     public enum Verdict
     {
-        /// <summary>কেউ সাইন ইনই করেনি — মেনু আইটেমটা দেখা যাবে, কিন্তু নিষ্ক্রিয়।</summary>
+        /// <summary>Nobody has signed in: the menu item is visible but disabled.</summary>
         NotSignedIn,
 
         /// <summary>
-        /// H06 — অফিস ডিভাইসটা বন্ধ করে দিয়েছে। টোকেন এমনিতেই মুছে গেছে,
-        /// তাই সাইন আউট করার কিছু নেই।
+        /// H06: the office has shut this device off. The token is already gone, so there is
+        /// nothing to sign out of.
         /// </summary>
         Revoked,
 
-        /// <summary>সব পাঠানো হয়ে গেছে — নিশ্চিত করে নিয়ে সরাসরি।</summary>
+        /// <summary>Everything has been sent: go straight ahead after a confirmation.</summary>
         Ready,
 
         /// <summary>
-        /// আউটবক্সে সারি পড়ে আছে। সাইন আউট করা যাবে, কিন্তু ⚠️ সেগুলো
-        /// ফেলে দেওয়া হবে — তাই সংখ্যাটা স্টাফকে দেখিয়ে জিজ্ঞাসা করতে হবে।
+        /// There are rows in the outbox. Signing out is allowed, but they will be discarded,
+        /// so the count must be shown to staff and they must be asked.
         /// </summary>
         PendingUpload,
     }
 
     /// <param name="pendingItems">
-    /// আউটবক্সে এখনো পড়ে থাকা সারির সংখ্যা (<c>OutboxDepth.Total</c>)।
-    /// ⚠️ ঋণাত্মক বা শূন্য — দুটোই "কিছু নেই"। গণনায় বাগ থাকলে সেটা যেন
-    /// অতিরিক্ত সতর্কবার্তা না বানায়; বাগের শাস্তি স্টাফের পাওয়া উচিত নয়।
+    /// The number of rows still in the outbox (<c>OutboxDepth.Total</c>).
+    /// Negative or zero both mean "nothing". A counting bug must not produce an unnecessary
+    /// warning; staff should not be punished for a bug.
     /// </param>
     /// <remarks>
-    /// ⚠️⚠️ <b>ক্রমটা <see cref="TrackingGate.Check"/>-এর সাথে হুবহু এক:
-    /// revoke আগে।</b> revoke হলে টোকেন মুছে যায়, অর্থাৎ তখন "enrolled নয়"-ও
-    /// সত্যি — দুটো শর্তই মেলে। উল্টো লিখলে বাতিল মেশিনে স্টাফ দেখত
-    /// <i>"সাইন ইন করা নেই"</i>, অথচ আসল কথা হলো অফিস এটা বন্ধ করে দিয়েছে।
-    /// দুই গেট দুই রকম উত্তর দিলে tray-র দুই জায়গায় দুই রকম ব্যাখ্যা যেত।
+    /// <b>The order is exactly the same as <see cref="TrackingGate.Check"/>: revoke first.</b>
+    /// Revoking deletes the token, so "not enrolled" is true as well and both conditions hold.
+    /// Written the other way round, staff on a revoked machine would see
+    /// <i>"not signed in"</i>, when the real news is that the office shut it off.
+    /// If two gates gave different answers, two places in the tray would explain it differently.
     /// </remarks>
     public static Verdict Check(bool enrolled, bool revoked, int pendingItems)
     {
@@ -62,7 +60,7 @@ public static class SignOutGate
         return pendingItems > 0 ? Verdict.PendingUpload : Verdict.Ready;
     }
 
-    /// <summary>মেনু আইটেমটা <c>Enabled</c> হবে কি না।</summary>
+    /// <summary>Whether the menu item will be <c>Enabled</c>.</summary>
     public static bool Allows(Verdict verdict) =>
         verdict is Verdict.Ready or Verdict.PendingUpload;
 
@@ -70,29 +68,28 @@ public static class SignOutGate
         Allows(Check(enrolled, revoked, pendingItems));
 
     /// <summary>
-    /// নিশ্চিতকরণের জানালায় যা লেখা থাকবে।
+    /// The text of the confirmation window.
     ///
-    /// ⚠️ <b>নিষ্ক্রিয় অবস্থার জন্য কোনো লেখা নেই</b> — <see cref="Allows(Verdict)"/>
-    /// মিথ্যা হলে জানালাটা খোলাই হয় না। এখানে একটা বার্তা রাখলে কোনোদিন
-    /// কেউ সেটা দেখাত, আর স্টাফ এমন একটা "নিশ্চিত করুন?" পড়ত যার কোনো
-    /// ফলই নেই।
+    /// <b>There is no text for the disabled state</b>: when <see cref="Allows(Verdict)"/> is
+    /// false the window never opens. Putting a message here would one day get shown, and staff
+    /// would read a "confirm?" prompt that has no effect.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// এমন verdict যেটায় সাইন আউট করাই যায় না।
+    /// A verdict in which signing out is not possible at all.
     /// </exception>
     public static string Confirm(Verdict verdict, int pendingItems) => verdict switch
     {
-        // ⚠️ "আবার সাইন ইন করা যাবে" কথাটা ইচ্ছাকৃত। এটা না থাকলে স্টাফ
-        //    ভাবত সাইন আউট মানে চিরতরে বাদ পড়া (revoke), আর ভয়ে কেউ
-        //    শেয়ার করা PC-তে সাইন আউট করত না — তখন ঘণ্টা ভুল লোকের নামে।
+        // The words "you can sign in again" are deliberate. Without them staff would think
+        // signing out means being removed for good (revoke), and out of fear nobody would sign
+        // out on a shared PC, so hours would land under the wrong person.
         Verdict.Ready =>
             "Sign out of oXeio?\n\n"
             + "Your hours stop being counted until someone signs in again. "
             + "Everything measured so far has already reached the office.",
 
-        // ⚠️⚠️ সংখ্যাটা বাক্যের **শুরুতে**, কারণ এটাই একমাত্র জিনিস যা
-        //    স্টাফের সিদ্ধান্ত বদলাতে পারে। আর "Sync now" বলে দেওয়া হয়,
-        //    নইলে বার্তাটা শুধু ক্ষতির খবর দিত, বাঁচার পথ নয়।
+        // The count goes at the **start** of the sentence, because it is the one thing that can
+        // change staff's decision. And it says "Sync now"; otherwise the message would only
+        // report the loss, not the way to avoid it.
         Verdict.PendingUpload =>
             $"{Describe(pendingItems)} not reached the office yet.\n\n"
             + "Signing out now will discard them — they cannot be sent later, "
@@ -105,9 +102,9 @@ public static class SignOutGate
     };
 
     /// <summary>
-    /// ⚠️ একবচন/বহুবচন আলাদা। "1 items" লেখাটা ছোট ব্যাপার মনে হয়, কিন্তু
-    /// এই বাক্যটাই স্টাফকে তথ্য ফেলে দিতে রাজি করাচ্ছে — এখানে অযত্নের ছাপ
-    /// থাকলে পুরো সতর্কবার্তাটাই কম বিশ্বাসযোগ্য শোনায়।
+    /// Singular/plural handled separately. "1 items" looks minor, but this very sentence is
+    /// what persuades staff to discard data; any sign of carelessness here makes the whole
+    /// warning less believable.
     /// </summary>
     private static string Describe(int pendingItems) =>
         pendingItems == 1 ? "1 measurement has" : $"{pendingItems} measurements have";

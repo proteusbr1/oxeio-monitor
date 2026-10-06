@@ -4,35 +4,36 @@ using oXeio.Core.Time;
 namespace oXeio.Core.Tracking;
 
 /// <summary>
-/// ⭐ সিস্টেমের হৃদয় — পুরো নিয়মটা এখানেই।
+/// The heart of the system: the whole rule is here.
 ///
 /// <code>
-/// কি-বোর্ড/মাউস ব্যবহার হচ্ছে?  →  হ্যাঁ: ⏱ গোনা হচ্ছে  ·  না (৬০ সে.): ⏸ hold
+/// keyboard/mouse in use?  →  yes: counting  ·  no (60 s): hold
 /// </code>
 ///
-/// ইচ্ছাকৃতভাবে <b>প্ল্যাটফর্ম-মুক্ত</b>: এখানে কোনো Win32 কল নেই। বাইরে থেকে
-/// শুধু "এখন কটা বাজে", "শেষ ইনপুট কতক্ষণ আগে", "লক করা আছে কি না" — এই তিনটে
-/// তথ্য দিলেই চলে। ফলে পুরো নিয়মটা ইউনিট টেস্টে যাচাই করা যায়, আর CI-তে
-/// Linux-এও চলে (আসল <c>GetLastInputInfo</c> থাকে oXeio.Agent-এ)।
+/// Deliberately <b>platform-free</b>: there are no Win32 calls here. From outside it needs only
+/// three facts: "what time is it now", "how long since the last input", and "is it locked".
+/// So the whole rule can be verified in unit tests and also runs on Linux in CI (the real
+/// <c>GetLastInputInfo</c> lives in oXeio.Agent).
 /// </summary>
 public sealed class IdleStateMachine
 {
-    /// <summary>এর চেয়ে কম সময় আগে ইনপুট এলে ওই সেকেন্ডটা "সক্রিয়" ধরা হয় (input score)।</summary>
+    /// <summary>Input within less than this counts that second as "active" (input score).</summary>
     private static readonly TimeSpan RecentInput = TimeSpan.FromSeconds(2);
 
     /// <summary>
-    /// ⭐ একটা সেগমেন্ট সর্বোচ্চ এতক্ষণ খোলা থাকতে পারে।
+    /// The longest a segment may stay open.
     ///
-    /// <b>কেন দরকার:</b> সেগমেন্ট বন্ধ হয় কেবল স্টেট বদলালে। কেউ টানা কাজ
-    /// করলে (বা ভিডিও দেখতে দেখতে মাউস নাড়তে থাকলে) একটাই ACTIVE সেগমেন্ট
-    /// ঘণ্টার পর ঘণ্টা খোলা থাকত, আর <b>কিউয়ে কিছুই যেত না</b>।
+    /// <b>Why needed:</b> a segment closes only when the state changes. If someone works
+    /// continuously (or keeps moving the mouse while watching a video), a single ACTIVE
+    /// segment would stay open for hours and <b>nothing would reach the queue</b>.
     ///
-    /// তারপর বিদ্যুৎ গেলে বা PC ক্র্যাশ করলে ওই পুরো সময়টা হারাত — কারণ
-    /// <see cref="CloseAll"/> কেবল স্বাভাবিকভাবে বন্ধ হওয়ার সময় চলে।
-    /// আসল মেশিনে চালিয়ে দেখা গেছে: ৩ মিনিট টানা কাজে সার্ভারে শূন্য সেগমেন্ট।
+    /// Then on a power cut or PC crash that whole stretch would be lost, because
+    /// <see cref="CloseAll"/> runs only on a normal shutdown.
+    /// On a real machine this showed up as zero segments on the server after 3 minutes of
+    /// continuous work.
     ///
-    /// ৫ মিনিট বেছে নেওয়ার কারণ স্ক্রিনশটের স্লটও ৫ মিনিট — দুটো একই ছন্দে
-    /// চলে, আর ক্র্যাশে হারানোর সর্বোচ্চ পরিমাণ ৫ মিনিটে বাঁধা পড়ে।
+    /// 5 minutes was chosen because the screenshot slot is 5 minutes too: the two run on the
+    /// same rhythm, and the most that a crash can lose is bounded to 5 minutes.
     /// </summary>
     public static readonly TimeSpan MaxSegmentLength = TimeSpan.FromMinutes(5);
 
@@ -41,38 +42,36 @@ public sealed class IdleStateMachine
     private readonly Func<Guid> _newUuid;
 
     /// <summary>
-    /// ⭐⭐⭐ <b>G160 — এই অবজেক্টটা একাধিক থ্রেড থেকে বদলায়</b>
-    /// <i>(৬ সেপ্টেম্বর ২০২৬)</i>।
+    /// <b>G160: this object is mutated from several threads.</b>
     ///
-    /// ⚠️⚠️ <b>যে বাগটা এটা সারায়:</b> <c>AgentHost</c>-এর মন্তব্যে লেখা ছিল
-    /// "<c>_machine</c> এই লুপের সম্পত্তি" — আর সেটা <b>সত্যি ছিল না</b>।
-    /// তিনটে থ্রেড এটাকে বদলাত:
+    /// <b>The bug this fixes:</b> a comment in <c>AgentHost</c> said "<c>_machine</c> belongs
+    /// to this loop", and that was <b>not true</b>. Three threads changed it:
     /// <list type="number">
-    ///   <item><c>oXeio-tracker</c> — প্রতি সেকেন্ডে <see cref="Tick"/>;</item>
-    ///   <item><b>WinForms মেসেজ-পাম্প</b> — <c>WM_POWERBROADCAST</c> এলে
-    ///     <c>AgentHost.OnPower</c> সরাসরি <see cref="OnSuspend"/>/<see cref="OnResume"/>
-    ///     ডাকে, কোনো marshalling ছাড়াই;</item>
-    ///   <item><b>থ্রেড পুল</b> — <c>DisposeAsync</c> <see cref="CloseAll"/> ডাকে
-    ///     ঠিক যখন ট্র্যাকার হয়তো টিকের মাঝপথে।</item>
+    ///   <item><c>oXeio-tracker</c>: <see cref="Tick"/> every second;</item>
+    ///   <item>the <b>WinForms message pump</b>: on <c>WM_POWERBROADCAST</c>,
+    ///     <c>AgentHost.OnPower</c> calls <see cref="OnSuspend"/>/<see cref="OnResume"/>
+    ///     directly, with no marshalling;</item>
+    ///   <item>a <b>thread-pool thread</b>: <c>DisposeAsync</c> calls <see cref="CloseAll"/>
+    ///     just when the tracker may be midway through a tick.</item>
     /// </list>
     ///
-    /// ⚠️⚠️ <b>দুজন একসাথে <c>EmitAndReopen</c>-এ ঢুকলে কী হয়:</b> দুজনেই
-    /// <c>_state == Active, _openedAt == T0</c> পড়ে ফেলে, তারপর দুজনেই
-    /// <b>একই সময়টুকু</b> সেগমেন্ট বানায় — দুটো আলাদা <c>ClientUuid</c> নিয়ে।
-    /// সার্ভার কেবল <c>client_uuid</c> দেখে ডুপ্লিকেট ছাঁটে, ওভারল্যাপ দেখে
-    /// না — তাই <b>ওই সময়টা দুবার গোনা হয়, আর দুবার টাকাও হয়</b>।
+    /// <b>What happens when two enter <c>EmitAndReopen</c> together:</b> both read
+    /// <c>_state == Active, _openedAt == T0</c>, then both build a segment for <b>the same
+    /// stretch of time</b>, each with its own <c>ClientUuid</c>. The server trims duplicates
+    /// only by <c>client_uuid</c>, not by overlap, so <b>that time is counted twice and paid
+    /// twice</b>.
     ///
-    /// ⚠️ আরও বাজে দিকটা: <c>_state = next</c> আর <c>_openedAt = at</c>
-    /// দুটো আলাদা লেখা। একজনের <c>_openedAt</c> অন্যজনের <c>_state</c>-এর
-    /// সাথে জোড়া লেগে গেলে ঘুমিয়ে থাকা সময় <c>Active</c> হয়ে যেতে পারত।
+    /// An even worse side: <c>_state = next</c> and <c>_openedAt = at</c> are two separate
+    /// writes. If one thread's <c>_openedAt</c> got paired with another's <c>_state</c>, time
+    /// spent asleep could become <c>Active</c>.
     ///
-    /// ⭐ তালাটা <b>এখানে</b>, <c>AgentHost</c>-এ নয় — নিয়মটা যে অবজেক্টের,
-    /// পাহারাও তারই। কলার বদলালে বা নতুন কলার এলে পাহারা আপনিই সাথে যায়।
+    /// The lock is <b>here</b>, not in <c>AgentHost</c>: the guard belongs to the object that
+    /// owns the rule. If a caller changes or a new one appears, the guard comes along by itself.
     ///
-    /// ⚠️ ভেতরে ধরে রাখার সময় মাইক্রোসেকেন্ডেরও কম — কোনো I/O নেই। এটা
-    /// জরুরি: <c>OnPower</c> চলে মেসেজ-পাম্পে, যেখানে উইন্ডোজ ঘুমাতে যাওয়ার
-    /// আগে হাতে মোটে ~২ সেকেন্ড দেয়। <b>সেগমেন্ট কিউয়ে পাঠানো
-    /// (<c>Record</c>) তালার বাইরে</b> — ওটা SQLite-এ লেখে।
+    /// The lock is held for less than a microsecond, with no I/O. This matters: <c>OnPower</c>
+    /// runs on the message pump, where Windows gives only about 2 seconds before sleeping.
+    /// <b>Sending the segment to the queue (<c>Record</c>) is outside the lock</b>, because it
+    /// writes to SQLite.
     /// </summary>
     private readonly object _gate = new();
 
@@ -106,32 +105,31 @@ public sealed class IdleStateMachine
     public DateTimeOffset OpenedAt { get { lock (_gate) return _openedAt; } }
 
     /// <summary>
-    /// ⭐ স্টেট আর "কখন খুলেছে" — <b>একসাথে, এক তালায়</b> <i>(G160)</i>।
+    /// State and "when it opened", <b>together, under one lock</b> <i>(G160)</i>.
     ///
-    /// ⚠️ আলাদা করে দুটো property পড়লে মাঝখানে transition ঘটে যেতে পারে,
-    /// আর তখন একজনের স্টেটের সাথে অন্যজনের সময় জোড়া লাগে। tray-র
-    /// "আজ কত কাজ হলো" ঠিক ওই জোড়াটাই ব্যবহার করে।
+    /// Reading the two properties separately lets a transition happen in between, pairing one
+    /// reading's state with the other's time. The tray's "work done today" uses exactly this pair.
     /// </summary>
     public (SegmentState State, DateTimeOffset OpenedAt) Peek()
     {
         lock (_gate) return (_state, _openedAt);
     }
 
-    /// <summary>প্রতি ১ সেকেন্ডে ডাকা হয়।</summary>
-    /// <param name="now">monotonic ঘড়ির সময় (<see cref="MonotonicClock"/>)।</param>
-    /// <param name="sinceLastInput">শেষ কি-বোর্ড/মাউস ইনপুটের পর কত সময় গেছে।</param>
-    /// <param name="locked">স্ক্রিন লক করা আছে কি না (Win+L)।</param>
+    /// <summary>Called every 1 second.</summary>
+    /// <param name="now">The time on the monotonic clock (<see cref="MonotonicClock"/>).</param>
+    /// <param name="sinceLastInput">How long since the last keyboard/mouse input.</param>
+    /// <param name="locked">Whether the screen is locked (Win+L).</param>
     /// <param name="screenFrozen">
-    /// ⭐⭐ <b>G46</b> — পর্দা অনেকক্ষণ এক চুলও বদলায়নি
-    /// (<see cref="ScreenActivity"/>)। ইনপুট টাইমার "সচল" বললেও এটা সত্যি
-    /// হলে সময় গোনা হয় না।
+    /// <b>G46</b>: the screen has not changed at all for a long time
+    /// (<see cref="ScreenActivity"/>). Even if the input timer says "active", when this is true
+    /// time is not counted.
     ///
-    /// ⚠️⚠️ ঘরটা <b>ঐচ্ছিক নয়</b> — ইচ্ছাকৃত। ডিফল্ট থাকলে কেউ একদিন
-    /// নতুন কলার লিখে ঘরটা দিতে ভুলে যেত, আর পাহারাটা <b>নীরবে</b> বন্ধ
-    /// হয়ে থাকত। এই প্রকল্পে "চুক্তি লেখা আছে, কলার লেখা হয়নি" ভুলটা
-    /// নয়বার ঘটেছে; কম্পাইলারকে পাহারায় বসানোই একমাত্র সত্যিকারের প্রতিকার।
+    /// This parameter is deliberately <b>not optional</b>. With a default, someone would one day
+    /// write a new caller and forget to pass it, and the guard would be <b>silently</b> off.
+    /// The mistake "the contract is written, the caller was not" has happened nine times in
+    /// this project; putting the compiler on guard is the only real remedy.
     /// </param>
-    /// <returns>এই টিকে যেসব সেগমেন্ট বন্ধ হলো।</returns>
+    /// <returns>The segments that closed on this tick.</returns>
     public IReadOnlyList<ActivitySegment> Tick(
         DateTimeOffset now,
         TimeSpan sinceLastInput,
@@ -149,11 +147,11 @@ public sealed class IdleStateMachine
     {
         var closed = new List<ActivitySegment>();
 
-        // ১· মধ্যরাত পার হলে state না বদলেও রেকর্ড ভাগ হয় (§ ২.১-ক)
+        // 1. After midnight the record is split even if the state did not change (section 2.1(a))
         SplitAtMidnights(closed, now);
 
-        // ২· অনেকক্ষণ একই স্টেটে থাকলেও ভাগ — নইলে টানা কাজের সময়টুকু
-        //    কিউয়ে না গিয়ে মেমরিতে খোলা থাকত, আর ক্র্যাশে হারাত।
+        // 2. Split after a long time in the same state too, or the stretch of continuous work
+        //    would stay open in memory instead of reaching the queue, and be lost in a crash.
         SplitLongSegments(closed, now);
 
         if (locked)
@@ -163,19 +161,18 @@ public sealed class IdleStateMachine
         }
 
         /**
-         * ⭐⭐ <b>G46 — নকল ইনপুট।</b> পর্দা জমে থাকলে ইনপুট টাইমারকে আর
-         * বিশ্বাস করা হয় না।
+         * <b>G46: fake input.</b> When the screen is frozen, the input timer is no longer trusted.
          *
-         * ⚠️ এটা <b>idle-এর শর্তের সাথেই</b> মেলানো হয়েছে, আলাদা কোনো
-         * state বানানো হয়নি। কারণ ফলটা এক: সময়টা কাজের হিসাবে যাবে না।
-         * নতুন state বানালে সার্ভার, পর্দা, রিপোর্ট — সবখানে একটা করে
-         * নতুন ঘর যোগ করতে হতো, আর কোথাও না কোথাও বাদ পড়ত।
+         * This is matched <b>together with the idle condition</b>, and no separate state was
+         * created, because the result is the same: the time does not count as work. A new state
+         * would mean adding a new field to the server, the screen and the reports, and it would
+         * be missed somewhere.
          *
-         * ⚠️⚠️ কিন্তু retro-adjust <b>করা হয় না</b> এখানে। পর্দা জমেছে
-         * বলে ধরা পড়ল এখন, অথচ জমে ছিল দশ মিনিট ধরে — ওই দশ মিনিট
-         * পিছিয়ে কেটে দিলে সৎ কর্মীর পড়ার সময়টাও কেটে যেত। তাই কাটা
-         * শুরু হয় <b>এখন থেকে</b>, আগেরটুকু ছেড়ে দেওয়া হয়। ⭐ ভুল করলে
-         * কর্মীর পক্ষে ভুল করাই নিয়ম (ADR-023-এর একই যুক্তি)।
+         * But there is <b>no</b> retro-adjust here. The screen was found frozen now, yet it may
+         * have been frozen for ten minutes; cutting back ten minutes would also cut an honest
+         * employee's reading time. So the cutting starts <b>from now</b> and the earlier part
+         * is let go. When in doubt, erring in the employee's favor is the rule (the same
+         * reasoning as ADR-023).
          */
         var untrusted = sinceLastInput >= _idleThreshold || screenFrozen;
 
@@ -183,11 +180,11 @@ public sealed class IdleStateMachine
         {
             if (_state == SegmentState.Active)
             {
-                // ⭐ retro-adjust (B04): idle আসলে শুরু হয়েছিল threshold-টা আগেই।
-                // তাই ওই সময়টুকুও কাজের হিসাব থেকে বাদ — এক সেকেন্ড বেশিও নয়, কমও নয়।
+                // Retro-adjust (B04): idle actually started a threshold earlier, so that
+                // stretch is excluded from the work count too: not one second more, not less.
                 //
-                // ⚠️ শুধু **আসল** idle-এ। পর্দা জমার কারণে হলে পিছিয়ে কাটা
-                //    হয় না — উপরের মন্তব্য দেখুন।
+                // Only for **real** idle. If it is due to a frozen screen there is no cutting
+                // back; see the comment above.
                 var startedIdleAt = sinceLastInput >= _idleThreshold
                     ? now - _idleThreshold
                     : now;
@@ -196,14 +193,14 @@ public sealed class IdleStateMachine
             }
             else if (_state == SegmentState.Locked)
             {
-                // আনলক হয়েছে, কিন্তু এখনো কেউ কিছু ছোঁয়নি — LOCKED থেকে সরাসরি IDLE।
-                // এখানে retro-adjust নয়: লক থাকা সময়টা এমনিতেই গোনা হয়নি।
+                // Unlocked, but nobody has touched anything yet: straight from LOCKED to IDLE.
+                // No retro-adjust here: the locked time was never counted anyway.
                 Transition(closed, SegmentState.Idle, now);
             }
         }
         else if (_state != SegmentState.Active)
         {
-            // ইনপুট পেলেই সাথে সাথে (B03) — কোনো অপেক্ষা নেই
+            // As soon as input arrives (B03): no waiting
             Transition(closed, SegmentState.Active, now);
         }
 
@@ -217,8 +214,8 @@ public sealed class IdleStateMachine
     }
 
     /// <summary>
-    /// PC ঘুমাতে যাচ্ছে (G3)। খোলা সেগমেন্ট এখানেই বন্ধ — নইলে জেগে ওঠার পর
-    /// ঘুমিয়ে থাকা পুরো সময়টা কাজ হিসেবে যোগ হয়ে যেত।
+    /// The PC is going to sleep (G3). The open segment is closed right here, or after waking
+    /// the whole time spent asleep would be added as work.
     /// </summary>
     public IReadOnlyList<ActivitySegment> OnSuspend(DateTimeOffset at)
     {
@@ -230,19 +227,19 @@ public sealed class IdleStateMachine
         }
     }
 
-    /// <summary>জেগে উঠল। ইনপুট না আসা পর্যন্ত IDLE, তাই ঘুমের সময় গোনা হয় না।</summary>
+    /// <summary>Woke up. IDLE until input arrives, so sleep time is not counted.</summary>
     public IReadOnlyList<ActivitySegment> OnResume(DateTimeOffset at)
     {
         lock (_gate)
         {
             var closed = new List<ActivitySegment>();
-            // ঘুমের সময়টুকু LOCKED হিসেবে বন্ধ করে, নতুন দিন শুরু (মধ্যরাত পেরোলে ভাগ হবে)
+            // Close the sleep stretch as LOCKED and start a new day (split if midnight passed)
             EmitAndReopen(closed, SegmentState.Idle, at);
             return closed;
         }
     }
 
-    /// <summary>logoff / shutdown / এজেন্ট বন্ধ — শেষ সেগমেন্টটা বন্ধ করে দাও।</summary>
+    /// <summary>logoff / shutdown / agent stopping: close the last segment.</summary>
     public IReadOnlyList<ActivitySegment> CloseAll(DateTimeOffset at)
     {
         lock (_gate)
@@ -250,15 +247,15 @@ public sealed class IdleStateMachine
             var closed = new List<ActivitySegment>();
             EmitSegment(closed, _state, _openedAt, at);
 
-            // ⚠️ পিছিয়ে যাওয়া ঘড়িতেও `_openedAt` পিছোয় না — নইলে পরের
-            //    সেগমেন্ট আগেরটার ভেতরে ঢুকে ওভারল্যাপ বানাত (G160)।
+            // `_openedAt` does not move back even if the clock goes back, or the next segment
+            // would sit inside the previous one and overlap it (G160).
             if (at > _openedAt) _openedAt = at;
             ResetScore();
             return closed;
         }
     }
 
-    // ── ভেতরের কাজ ──────────────────────────────────────────────────────────
+    // ── Internals ───────────────────────────────────────────────────────────
 
     private void Transition(List<ActivitySegment> closed, SegmentState next, DateTimeOffset at)
     {
@@ -277,18 +274,18 @@ public sealed class IdleStateMachine
     }
 
     /// <summary>
-    /// খোলা সেগমেন্ট <see cref="MaxSegmentLength"/> পেরোলে সেখানেই কেটে
-    /// নতুন করে খোলা। স্টেট বদলায় না — শুধু রেকর্ডটা টেকসই হয়।
+    /// Once an open segment passes <see cref="MaxSegmentLength"/>, it is cut there and reopened.
+    /// The state does not change; only the record becomes durable.
     ///
-    /// ⚠️ <b>শেষ <c>idleThreshold</c> সময়টুকু কখনো বন্ধ করা হয় না।</b>
+    /// <b>The last <c>idleThreshold</c> stretch is never closed.</b>
     ///
-    /// কারণ retro-adjust (B04): ACTIVE থেকে IDLE-এ যাওয়ার সময় শেষ ৬০ সেকেন্ড
-    /// কাজের হিসাব থেকে <b>বাদ</b> দিতে হয়। ওই ৬০ সেকেন্ড যদি ইতিমধ্যে
-    /// আলাদা সেগমেন্ট হিসেবে বেরিয়ে গিয়ে থাকে, তখন আর পিছিয়ে গিয়ে কাটা
-    /// যায় না — আর নিষ্ক্রিয় সময়টা নীরবে <b>কাজ হিসেবে গোনা</b> হয়ে যায়।
+    /// The reason is the retro-adjust (B04): when going from ACTIVE to IDLE, the last 60
+    /// seconds must be <b>excluded</b> from the work count. If those 60 seconds have already
+    /// gone out as a separate segment, they can no longer be cut back, and the idle time would
+    /// silently be <b>counted as work</b>.
     ///
-    /// তাই ভাগ করার সীমানা সবসময় <c>now − idleThreshold</c>-এর আগে রাখা হয়।
-    /// এতে সেগমেন্ট ~৬০ সেকেন্ড দেরিতে বের হয়, যেটা কোনো সমস্যা নয়।
+    /// So the split boundary is always kept before <c>now - idleThreshold</c>. The segment
+    /// then comes out about 60 seconds late, which is no problem.
     /// </summary>
     private void SplitLongSegments(List<ActivitySegment> closed, DateTimeOffset now)
     {
@@ -303,7 +300,7 @@ public sealed class IdleStateMachine
         }
     }
 
-    /// <summary>খোলা সেগমেন্ট মধ্যরাত পেরিয়ে গেলে সেখানেই কেটে নতুন করে খোলা হয়।</summary>
+    /// <summary>When an open segment crosses midnight it is cut there and reopened.</summary>
     private void SplitAtMidnights(List<ActivitySegment> closed, DateTimeOffset now)
     {
         var boundary = DhakaTime.NextLocalMidnight(_openedAt);
@@ -317,8 +314,8 @@ public sealed class IdleStateMachine
     }
 
     /// <summary>
-    /// রক্ষাকবচ হিসেবে এখানেও মধ্যরাতে ভাগ করা হয় — কোনো সেগমেন্ট যেন
-    /// কখনো দুই work_date জুড়ে না থাকে।
+    /// As a safeguard the split at midnight is done here too, so that no segment ever spans two
+    /// work_dates.
     /// </summary>
     private void EmitSegment(
         List<ActivitySegment> closed,
@@ -350,7 +347,7 @@ public sealed class IdleStateMachine
         }
     }
 
-    /// <summary>০–১০০। কতটা ব্যস্ত ছিল, কী লিখেছে তা নয় (B13)।</summary>
+    /// <summary>0 to 100. How busy the person was, not what they typed (B13).</summary>
     private int? ScoreFor(SegmentState state)
     {
         if (state != SegmentState.Active || _samples == 0) return null;

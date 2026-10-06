@@ -16,18 +16,18 @@ import {
 } from './setup/harness';
 
 /**
- * ⭐⭐⭐ **কর্মীপ্রতি আজকের সবচেয়ে নতুন ছবি** *(৬ সেপ্টেম্বর ২০২৬, G159)*।
+ * The newest screenshot per employee for today (G159).
  *
- * ⚠️⚠️ **যে বাগটা এই ফাইলটা পাহারা দেয়:** বোর্ড ও Worklog-এর কার্ড এতদিন
- * গ্যালারির **শেষ এক-দুটো পাতা** (৬০–১২০টা ছবি) টেনে এনে তার ভেতর থেকে
- * কর্মীপ্রতি নতুনটা বাছত। যাঁর শেষ ছবিটা ওই জানালার বাইরে — যিনি আগে
- * বেরিয়ে গেছেন, বা দল বড় — তাঁর কার্ডে লেখা উঠত
- * *"No screenshot yet today"*।
+ * The bug this file guards: the board and the Worklog cards used to pull the
+ * last one or two gallery pages (60-120 screenshots) and pick each employee's
+ * newest from inside them. Someone whose last screenshot fell outside that
+ * window (they left early, or the team is large) got the text
+ * *"No screenshot yet today"* on their card.
  *
- * ⚠️ মাঠের হিসাব: ২৫ আগস্ট সন্ধ্যায় OX-05-এর **১১৪টা** ছবি ছিল, তবু কার্ড
- * বলত একটাও নেই। পর্দা একটা মিথ্যা বলত, আর কোনো এররও উঠত না।
+ * Field numbers: on the evening of 25 August OX-05 had 114 screenshots, yet
+ * the card said there were none. The screen told a lie and no error was raised.
  *
- * ⭐ পাতা ঘেঁটে অনুমান করাই ভুল পথ ছিল — প্রশ্নটার নিজের উত্তর দরকার।
+ * Guessing by scanning pages was the wrong path; the question needs its own answer.
  */
 let h: Harness;
 let owner: Session;
@@ -47,7 +47,7 @@ beforeEach(async () => {
   owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 });
 
-/** কর্মী + তার ডিভাইস */
+/** An employee plus their device */
 async function staffWithDevice(empCode: string): Promise<{
   employeeId: number;
   deviceId: number;
@@ -66,7 +66,7 @@ async function staffWithDevice(empCode: string): Promise<{
   return { employeeId, deviceId: device.id };
 }
 
-/** আজকের দিনে `minutesAgo` মিনিট আগের একটা ছবি */
+/** A screenshot from `minutesAgo` minutes before noon today */
 async function shot(
   who: { employeeId: number; deviceId: number },
   minutesAgo: number,
@@ -96,21 +96,22 @@ const latest = async () =>
     items: { employeeId: number; capturedAt: string; monitorIndex: number }[];
   };
 
-describe('কর্মীপ্রতি আজকের সবচেয়ে নতুন ছবি', () => {
+describe('the newest screenshot per employee for today', () => {
   /**
-   * ⭐⭐⭐ **এই ফাইলের মূল টেস্ট** — অনেক আগের ছবিওয়ালা কর্মীও বাদ পড়েন না।
+   * The core test of this file: an employee whose screenshots are long ago is
+   * not dropped either.
    *
-   * ⚠️ পুরোনো নিয়মে ৬০টার পাতা ধরে বাছা হতো, তাই এখানে **এক কর্মীর ৭০টা
-   * ছবি** বসানো হয়েছে: ওগুলোই শেষ পাতা ভরে ফেলত আর দ্বিতীয় কর্মীর
-   * অনেক-আগের ছবিটা কোনো পাতাতেই পড়ত না।
+   * The old rule picked from a page of 60, so here one employee has 70
+   * screenshots: those would fill the last page and the second employee's
+   * much older screenshot would fall on no page.
    */
-  it('⭐ দিনের শুরুতে কাজ করা কর্মীও বাদ পড়েন না', async () => {
+  it('an employee who worked early in the day is not dropped', async () => {
     const busy = await staffWithDevice('OX-B1');
     const early = await staffWithDevice('OX-E1');
 
-    // ব্যস্ত কর্মীর ৭০টা সাম্প্রতিক ছবি
+    // the busy employee's 70 recent screenshots
     for (let i = 0; i < 70; i += 1) await shot(busy, i);
-    // অন্যজনের একটাই, অনেক আগের
+    // the other one has just one, from long ago
     await shot(early, 300);
 
     const res = await latest();
@@ -121,8 +122,8 @@ describe('কর্মীপ্রতি আজকের সবচেয়ে �
     expect(res.items).toHaveLength(2);
   });
 
-  /** ⚠️ কর্মীপ্রতি ঠিক **একটাই** সারি — নইলে কার্ডে কোনটা বসবে অস্পষ্ট */
-  it('⭐ কর্মীপ্রতি একটাই সারি, আর সেটা সবচেয়ে নতুনটা', async () => {
+  /** Exactly one row per employee, otherwise it is unclear which goes on the card */
+  it('one row per employee, and it is the newest one', async () => {
     const who = await staffWithDevice('OX-N1');
     await shot(who, 100);
     await shot(who, 5);
@@ -136,10 +137,10 @@ describe('কর্মীপ্রতি আজকের সবচেয়ে �
   });
 
   /**
-   * ⚠️⚠️ **একই মুহূর্তে দুই মনিটরের দুটো ছবি** — সবচেয়ে নতুন `capturedAt`
-   * তখন দুটো সারিতে মেলে, তবু কার্ডের জন্য একটাই চাই।
+   * Two screenshots from two monitors at the same moment: the newest
+   * `capturedAt` then matches two rows, yet the card needs just one.
    */
-  it('⭐ দুই মনিটরের একই মুহূর্তেও একটাই সারি', async () => {
+  it('even for two monitors at the same moment, one row', async () => {
     const who = await staffWithDevice('OX-M2');
     await shot(who, 5, 0);
     await shot(who, 5, 1);
@@ -149,8 +150,8 @@ describe('কর্মীপ্রতি আজকের সবচেয়ে �
     expect(res.items).toHaveLength(1);
   });
 
-  /** ⚠️ মুছে ফেলার জন্য চিহ্নিত ছবি গোনা হয় না — গ্যালারির একই নিয়ম */
-  it('মুছে ফেলা ছবি বাদ', async () => {
+  /** Screenshots marked for deletion are not counted: the same rule as the gallery */
+  it('deleted screenshots are excluded', async () => {
     const who = await staffWithDevice('OX-D2');
     await shot(who, 5);
     await h.prisma.screenshot.updateMany({
@@ -160,7 +161,7 @@ describe('কর্মীপ্রতি আজকের সবচেয়ে �
     expect((await latest()).items).toHaveLength(0);
   });
 
-  it('কোনো ছবি না থাকলে খালি তালিকা', async () => {
+  it('an empty list when there are no screenshots', async () => {
     await staffWithDevice('OX-Z1');
 
     const res = await latest();
@@ -170,11 +171,12 @@ describe('কর্মীপ্রতি আজকের সবচেয়ে �
   });
 
   /**
-   * ⚠️⚠️ **অডিট আগের মতোই একটাই সারি**, কর্মীপ্রতি নয় — নইলে বোর্ড
-   * খোলামাত্র ১২টা সারি লিখে *"কে আমার স্ক্রিনশট দেখল"* খাতাটা (I08)
-   * আবর্জনায় ভরে যেত, আর আসল ঘটনাগুলো আর খুঁজে পাওয়া যেত না।
+   * The audit is still a single row as before, not one per employee:
+   * otherwise opening the board would write 12 rows and fill the *"who looked
+   * at my screenshots"* ledger (I08) with junk, and the real events could no
+   * longer be found.
    */
-  it('⭐ অডিটে একটাই সারি লেখে', async () => {
+  it('writes a single row to the audit', async () => {
     const a = await staffWithDevice('OX-A9');
     const b = await staffWithDevice('OX-B9');
     await shot(a, 5);

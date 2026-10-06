@@ -11,21 +11,21 @@ import {
 } from '../src/agent/rollout';
 
 /**
- * ⭐⭐⭐ **H04 — রোলআউট নিজে থেকে এগোনোর নিয়ম** *(৫ সেপ্টেম্বর ২০২৬)*।
+ * H04: the rules for the rollout advancing by itself.
  *
- * মালিক: *"update gula office staff ra pacche na. every single pc te
- * manually install korte hocche."*
+ * Background: office staff were not receiving updates, and every single PC
+ * had to be installed manually.
  *
- * ⚠️⚠️ **কারণটা একটা বাগ ছিল না, একটা অনুপস্থিত ধাপ।** বালতি · শতাংশ ·
- * পাইলট · জরুরি ব্রেক — ধাপে-ধাপে রোলআউটের গোটা যন্ত্রটাই তৈরি ছিল, শুধু
- * `canary → partial → all` বদলানোর একমাত্র পথ ছিল **হাতে ক্লিক**। কেউ না
- * চাপলে নতুন ভার্সন চিরকাল ৭%-এ বসে থাকত, অর্থাৎ ১২টার মধ্যে ১১টা PC-কে
- * কোনোদিন অফারই যেত না।
+ * The cause was not a bug but a missing step. Buckets, percentages, pilot,
+ * emergency brake: the whole machinery for staged rollout existed, but the
+ * only way to change `canary -> partial -> all` was a manual click. If nobody
+ * clicked, a new version sat at 7% forever, so 11 of the 12 PCs were never
+ * even offered it.
  *
- * ⭐⭐ **এই ফাইলের আসল কাজ নতুন আচরণটা পাহারা দেওয়া নয় — পুরোনো
- * নিরাপত্তাগুলো অক্ষত আছে কি না দেখা।** স্বয়ংক্রিয় করা মানে যদি জরুরি ব্রেক
- * খুলে যায়, বা ভাঙা বিল্ড নিজে থেকে ছড়ায়, তাহলে সমস্যাটা আগের চেয়ে অনেক
- * বড় হলো।
+ * The real job of this file is not to guard the new behaviour but to check
+ * that the old safety features are intact. If automating means the emergency
+ * brake can be released, or a broken build can spread by itself, the problem
+ * is much bigger than before.
  */
 
 const HOUR_MS = 3600_000;
@@ -34,7 +34,7 @@ const NOW = new Date('2026-09-05T12:00:00.000Z');
 const hoursAgo = (h: number) => new Date(NOW.getTime() - h * HOUR_MS);
 const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60_000);
 
-/** একটা সুস্থ canary মেশিন — ছ-ঘণ্টার বেশি চালাচ্ছে, এইমাত্র সাড়া দিয়েছে */
+/** A healthy canary machine: running for over six hours, just responded */
 function healthy(over: Partial<DeviceProof> = {}): DeviceProof {
   return {
     versionSince: hoursAgo(ROLLOUT_SOAK_HOURS + 1),
@@ -43,48 +43,49 @@ function healthy(over: Partial<DeviceProof> = {}): DeviceProof {
   };
 }
 
-describe('nextStage — জরুরি ব্রেক স্বয়ংক্রিয় কিছুর হাতে নয়', () => {
+describe('nextStage: the emergency brake is not in the hands of anything automatic', () => {
   it('canary → partial → all', () => {
     expect(nextStage('canary')).toBe('partial');
     expect(nextStage('partial')).toBe('all');
   });
 
-  it('`all` শেষ ধাপ — এগোনোর কিছু নেই', () => {
+  it('`all` is the last stage: nothing to advance to', () => {
     expect(nextStage('all')).toBeNull();
   });
 
   /**
-   * ⭐⭐⭐ **এই ফাইলের সবচেয়ে জরুরি টেস্ট।**
+   * The most important test in this file.
    *
-   * ⚠️⚠️ `halted` মানে মালিক জরুরি ব্রেক চেপেছেন — সাধারণত এই কারণেই যে
-   * বিল্ডটা মাঠে কিছু ভেঙেছে। স্বয়ংক্রিয় কিছু ওটা খুলতে পারলে ব্রেকটা আর
-   * ব্রেক থাকত না, আর ভাঙা বিল্ডটা **নিজে থেকেই** বাকি সব PC-তে চলে যেত।
-   * এতদিন ঝুঁকিটা ছিল না, কারণ ধাপ বাড়ত কেবল মানুষের ক্লিকে।
+   * `halted` means the owner pressed the emergency brake, usually because the
+   * build broke something in the field. If anything automatic could release it,
+   * the brake would no longer be a brake, and the broken build would go to every
+   * other PC by itself. The risk did not exist before, because stages only
+   * advanced by a human click.
    */
-  it('⭐ `halted` থেকে কোনো পথ নেই', () => {
+  it('there is no way out of `halted`', () => {
     expect(nextStage('halted')).toBeNull();
   });
 });
 
-describe('isProvenBy — একটা মেশিন কি সত্যিই প্রমাণ দিচ্ছে', () => {
-  it('ছ-ঘণ্টা চালাচ্ছে আর এখনো সাড়া দিচ্ছে — প্রমাণ', () => {
+describe('isProvenBy: is a machine really giving proof', () => {
+  it('running for six hours and still responding: proof', () => {
     expect(isProvenBy(healthy(), NOW)).toBe(true);
   });
 
-  it('সবে বসানো হয়েছে — এখনো কিছু প্রমাণ হয়নি', () => {
-    // ⚠️ পাঁচ মিনিট আগে বসানো একটা বিল্ড কিছুই বলে না; soak-এর পুরো মানেই এটা
+  it('just installed: nothing is proven yet', () => {
+    // A build installed five minutes ago says nothing; that is the whole point of soak
     expect(isProvenBy(healthy({ versionSince: minutesAgo(5) }), NOW)).toBe(false);
   });
 
   /**
-   * ⭐⭐⭐ **এটাই আসল পরীক্ষা, আর সবচেয়ে সহজে বাদ পড়ে যেত।**
+   * This is the real test, and the one most easily left out.
    *
-   * ⚠️⚠️ শুধু "ছ-ঘণ্টা ধরে চালাচ্ছে" শর্ত রাখলে **মৃত এজেন্টওয়ালা মেশিনও**
-   * প্রমাণ হয়ে যেত — অর্থাৎ ঠিক যে বিল্ডটা এজেন্টকে মেরে ফেলেছে, সেটাই
-   * নিজে থেকে বাকি সবার কাছে পৌঁছে যেত। যে বিল্ড ক্র্যাশ করে, তার ডিভাইস
-   * চুপ হয়ে যায় — নীরবতাটাই সবচেয়ে জোরালো সংকেত।
+   * If the condition were only "running for six hours", a machine with a dead
+   * agent would count as proof too: the very build that killed the agent would
+   * reach everyone else by itself. A build that crashes leaves its device
+   * silent, and the silence is the strongest signal.
    */
-  it('⭐ ছ-ঘণ্টা হয়েছে, কিন্তু এজেন্ট চুপ — প্রমাণ নয়', () => {
+  it('six hours passed, but the agent is silent: not proof', () => {
     expect(
       isProvenBy(
         healthy({ lastSeenAt: minutesAgo(ROLLOUT_FRESH_MINUTES + 10) }),
@@ -94,53 +95,54 @@ describe('isProvenBy — একটা মেশিন কি সত্যিই 
   });
 
   /**
-   * ⚠️ `null` = "জানি না", আর অজানাকে প্রমাণ ধরা যায় না। ⭐ এটা কেবল
-   *    তাত্ত্বিক নয়: মাইগ্রেশনের দিন **প্রতিটা** পুরোনো সারিতে ঘরটা খালি
-   *    থাকে। "জানি না"-কে "অনেকদিন ধরে চলছে" ধরলে ঠিক ওই দিনই সব ভার্সন
-   *    এক লাফে `all`-এ চলে যেত।
+   * `null` means "unknown", and unknown cannot count as proof. This is not just
+   * theory: on migration day every old row has this cell empty. Treating
+   * "unknown" as "running for a long time" would send every version to `all`
+   * in one jump that very day.
    */
-  it('⭐ ট্র্যাকিং-শুরু জানা না থাকলে প্রমাণ নয়', () => {
+  it('tracking start unknown: not proof', () => {
     expect(isProvenBy(healthy({ versionSince: null }), NOW)).toBe(false);
   });
 
-  it('কখনো সাড়া দেয়নি — প্রমাণ নয়', () => {
+  it('never responded: not proof', () => {
     expect(isProvenBy(healthy({ lastSeenAt: null }), NOW)).toBe(false);
   });
 
   /**
-   * ⚠️ ঠিক সীমানায় প্রমাণ হয় — নইলে "ছ-ঘণ্টা" কথাটা আসলে "ছ-ঘণ্টা এক
-   *    টিক" হতো, আর তখন জবের ঘণ্টাভিত্তিক টিকের সাথে মিলে দেরিটা
-   *    এক ঘণ্টা বেড়ে যেত।
+   * Exactly on the boundary it is proof; otherwise "six hours" would really
+   * mean "six hours plus one tick", and combined with the job's hourly tick the
+   * delay would grow by an hour.
    */
-  it('ঠিক ছ-ঘণ্টায় প্রমাণ', () => {
+  it('proof at exactly six hours', () => {
     expect(isProvenBy(healthy({ versionSince: hoursAgo(ROLLOUT_SOAK_HOURS) }), NOW)).toBe(
       true,
     );
   });
 });
 
-describe('stageToAdvanceTo — জব কেবল সারি আনে, সিদ্ধান্ত এখানে', () => {
-  it('সুস্থ canary → partial', () => {
+describe('stageToAdvanceTo: the job only fetches rows, the decision is here', () => {
+  it('healthy canary -> partial', () => {
     expect(stageToAdvanceTo('canary', [healthy()], NOW)).toBe('partial');
   });
 
-  it('সুস্থ partial → all', () => {
+  it('healthy partial -> all', () => {
     expect(stageToAdvanceTo('partial', [healthy()], NOW)).toBe('all');
   });
 
   /**
-   * ⭐⭐ **কেউ ইনস্টল না করলে ধাপ বাড়ে না** — আর এটাই এই নকশার কেন্দ্র।
+   * If nobody installs it, the stage does not advance, and this is the centre
+   * of the design.
    *
-   * ⚠️⚠️ শর্তটা "প্রকাশের ছ-ঘণ্টা পর" (`released_at`) হতে পারত, আর সেটাই
-   * সবচেয়ে সহজ ছিল। কিন্তু তাতে canary-র পুরো মানেই মুছে যেত: **একটাও
-   * মেশিন বিল্ডটা না চালালেও** ধাপ বাড়ত, অর্থাৎ "আগে একটা PC-তে পরীক্ষা"
-   * কথাটা কাগজেই থেকে যেত।
+   * The condition could have been "six hours after release" (`released_at`),
+   * and that was the simplest. But it would erase the whole meaning of canary:
+   * the stage would advance even if not one machine ran the build, so "test on
+   * one PC first" would stay on paper only.
    */
-  it('⭐ কোনো মেশিন এই বিল্ডটা চালাচ্ছেই না — ধাপ বাড়ে না', () => {
+  it('no machine is running this build at all: the stage does not advance', () => {
     expect(stageToAdvanceTo('canary', [], NOW)).toBeNull();
   });
 
-  it('⭐ চালাচ্ছে, কিন্তু কেউ প্রমাণ দিচ্ছে না — ধাপ বাড়ে না', () => {
+  it('running, but nobody gives proof: the stage does not advance', () => {
     const tooNew = healthy({ versionSince: minutesAgo(10) });
     const silent = healthy({ lastSeenAt: minutesAgo(ROLLOUT_FRESH_MINUTES + 1) });
 
@@ -148,57 +150,58 @@ describe('stageToAdvanceTo — জব কেবল সারি আনে, স�
   });
 
   /**
-   * ⚠️ **অন্তত একটা**, সবগুলো নয়। ছুটিতে থাকা কারো PC বন্ধ থাকলে "সবাই"
-   *    শর্তে রোলআউট চিরকাল আটকে থাকত — অর্থাৎ যে সমস্যাটা সারানো হচ্ছে
-   *    সেটাই ফিরে আসত, কেবল অন্য মোড়কে।
+   * At least one, not all. If a PC of someone on leave is off, an "everyone"
+   * condition would block the rollout forever, and the very problem being
+   * fixed would come back in other packaging.
    */
-  it('একজন প্রমাণ দিলেই যথেষ্ট — বাকিদের PC বন্ধ থাকতে পারে', () => {
+  it('one machine giving proof is enough: the others may be off', () => {
     const off = healthy({ lastSeenAt: hoursAgo(20) });
 
     expect(stageToAdvanceTo('canary', [off, healthy(), off], NOW)).toBe('partial');
   });
 
-  it('⭐ `halted`-এ সুস্থ মেশিন থাকলেও কিছুই হয় না', () => {
+  it('nothing happens on `halted` even with healthy machines', () => {
     expect(stageToAdvanceTo('halted', [healthy(), healthy()], NOW)).toBeNull();
   });
 
-  it('`all` থেকে আর এগোনোর কিছু নেই', () => {
+  it('nothing more to advance to from `all`', () => {
     expect(stageToAdvanceTo('all', [healthy()], NOW)).toBeNull();
   });
 });
 
 /**
- * ⭐⭐ **বিলির নিয়ম আর এগোনোর নিয়ম — দুটো আলাদা, আর আলাদাই থাকা চাই।**
+ * The delivery rule and the advancing rule are two different things, and
+ * they must stay different.
  *
- * ⚠️ এই describe-টা নতুন কিছু পরীক্ষা করে না; এটা দেখে যে **নতুন কোডটা
- * পুরোনোটাকে ছোঁয়নি**। রোলআউট স্বয়ংক্রিয় করতে গিয়ে কেউ যদি একদিন
- * `isOfferedTo`-তে হাত দেন, ভাঙাটা এখানে ধরা পড়বে।
+ * This describe tests nothing new; it checks that the new code has not
+ * touched the old. If someone one day edits `isOfferedTo` while automating the
+ * rollout, the breakage will be caught here.
  */
 /**
- * ⭐⭐⭐ **প্রতিটা ধাপের নিজের ছ-ঘণ্টা** *(৬ সেপ্টেম্বর ২০২৬)*।
+ * Each stage gets its own six hours.
  *
- * ⚠️⚠️ **যে বাগটা এই describe-টা পাহারা দেয়:** soak মাপা হতো কেবল
- * `versionSince` থেকে — ডিভাইসটা কবে বিল্ডটা বসিয়েছে। ঘড়িটা ধাপ বদলালে
- * **রিসেট হতো না**, তাই canary-তে ছ-ঘণ্টা পার করা একটা মেশিন **পরের
- * টিকেই** `partial → all`-ও করিয়ে দিত। ৫০% ধাপটা কার্যত এড়িয়ে যেত, আর
- * "ধাপে ধাপে ছাড়া"র পুরো উদ্দেশ্যটাই ব্যর্থ হতো।
+ * The bug this describe guards: soak was measured only from `versionSince`,
+ * when the device installed the build. The clock was not reset when the stage
+ * changed, so a machine that had passed six hours in canary would make
+ * `partial -> all` happen on the very next tick too. The 50% stage was
+ * effectively skipped, and the whole purpose of a staged release failed.
  *
- * ⭐ প্রতিটা ধাপে **নতুন মেশিন** যোগ হয়, আর ঝুঁকিটা ঠিক ওদের নিয়েই —
- * তাই নতুন ধাপের জন্য নতুন করে অপেক্ষা করাটাই পুরো ব্যবস্থাটার মানে।
+ * Every stage adds new machines, and the risk is exactly about them, so
+ * waiting afresh for the new stage is the whole point of the system.
  */
-describe('soak-ঘড়ি ধাপে ধাপে রিসেট হয়', () => {
-  /** ⭐⭐⭐ এই ফাইলের নতুন আচরণের মূল টেস্ট */
-  it('⭐ ধাপ এইমাত্র বদলালে পুরোনো মেশিনও আর প্রমাণ নয়', () => {
-    // মেশিনটা সাত ঘণ্টা ধরে চালাচ্ছে — আগের নিয়মে যথেষ্ট
+describe('the soak clock resets stage by stage', () => {
+  /** The core test of this file's new behaviour */
+  it('when the stage has just changed, even an old machine is no longer proof', () => {
+    // the machine has been running for seven hours: enough under the old rule
     const machine = healthy();
 
-    // কিন্তু ধাপটা বদলেছে এক ঘণ্টা আগে
+    // but the stage changed an hour ago
     expect(isProvenBy(machine, NOW, ROLLOUT_SOAK_HOURS, ROLLOUT_FRESH_MINUTES, hoursAgo(1))).toBe(
       false,
     );
   });
 
-  it('⭐ নতুন ধাপে ছ-ঘণ্টা পার হলে আবার প্রমাণ', () => {
+  it('after six hours in the new stage it is proof again', () => {
     const machine = healthy({ versionSince: hoursAgo(20) });
 
     expect(
@@ -207,10 +210,11 @@ describe('soak-ঘড়ি ধাপে ধাপে রিসেট হয়'
   });
 
   /**
-   * ⚠️ ধাপ বদল **পুরোনো** হলে ঘড়িটা ডিভাইসের ইনস্টল-সময়েই থাকে — অর্থাৎ
-   *    সদ্য বসানো মেশিন তখনো প্রমাণ নয়। দুটোর মধ্যে যেটা পরে, সেটাই মেঝে।
+   * If the stage change is old, the clock stays at the device's install time,
+   * so a freshly installed machine is still not proof. Whichever of the two is
+   * later is the floor.
    */
-  it('⭐ ধাপ পুরোনো হলেও সদ্য বসানো মেশিন প্রমাণ নয়', () => {
+  it('even with an old stage, a freshly installed machine is not proof', () => {
     const fresh = healthy({ versionSince: hoursAgo(1) });
 
     expect(
@@ -219,10 +223,10 @@ describe('soak-ঘড়ি ধাপে ধাপে রিসেট হয়'
   });
 
   /**
-   * ⚠️⚠️ **`stageToAdvanceTo`-ও ঘড়িটা মানে** — নইলে খাঁটি নিয়মটা ঠিক
-   * থাকত আর জব তবু পুরোনো আচরণে এগোত। এই রেপোর চেনা পাপ।
+   * `stageToAdvanceTo` obeys the clock too: otherwise the pure rule would be
+   * right and the job would still advance by the old behaviour. A familiar sin in this repo.
    */
-  it('⭐ ধাপ এইমাত্র বদলালে `stageToAdvanceTo` এগোয় না', () => {
+  it('`stageToAdvanceTo` does not advance when the stage has just changed', () => {
     const proofs = [healthy(), healthy()];
 
     expect(
@@ -230,7 +234,7 @@ describe('soak-ঘড়ি ধাপে ধাপে রিসেট হয়'
     ).toBeNull();
   });
 
-  it('ধাপ যথেষ্ট পুরোনো হলে এগোয়', () => {
+  it('it advances when the stage is old enough', () => {
     const proofs = [healthy()];
 
     expect(
@@ -239,28 +243,28 @@ describe('soak-ঘড়ি ধাপে ধাপে রিসেট হয়'
   });
 
   /**
-   * ⚠️ ঘড়ি না জানলে (`null`) আগের আচরণ — পুরোনো সারিতে কলামটা খালি
-   *    থাকতে পারে, আর তখন রোলআউট আটকে যাওয়ার চেয়ে এগোনোই ভালো।
+   * If the clock is unknown (`null`), the old behaviour: in old rows the column
+   * may be empty, and then advancing is better than the rollout getting stuck.
    */
-  it('ঘড়ি অজানা হলে আগের আচরণ', () => {
+  it('with an unknown clock, the old behaviour', () => {
     expect(isProvenBy(healthy(), NOW, ROLLOUT_SOAK_HOURS, ROLLOUT_FRESH_MINUTES, null)).toBe(
       true,
     );
   });
 });
 
-describe('বিলির নিয়ম অক্ষত — স্বয়ংক্রিয় করা কিছু বদলায়নি', () => {
+describe('the delivery rule is intact: automating changed nothing', () => {
   const GUID = 'a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d';
 
-  it('`halted`-এ কেউ পায় না — পাইলটও নয়', () => {
+  it('nobody gets it on `halted`, not even the pilot', () => {
     expect(isOfferedTo('halted', GUID, '0.4.11', true)).toBe(false);
   });
 
-  it('`all`-এ সবাই পায়', () => {
+  it('everyone gets it on `all`', () => {
     expect(isOfferedTo('all', GUID, '0.4.11')).toBe(true);
   });
 
-  it('পাইলট বালতি নির্বিশেষে পায়', () => {
+  it('the pilot gets it regardless of bucket', () => {
     expect(isOfferedTo('canary', GUID, '0.4.11', true)).toBe(true);
   });
 });

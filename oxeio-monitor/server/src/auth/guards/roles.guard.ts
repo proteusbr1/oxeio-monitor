@@ -10,7 +10,7 @@ import type { UserRole } from '@prisma/client';
 import { REQUIRED_ROLES } from '../decorators';
 import type { AuthedRequest } from '../types';
 
-/** I05 — owner / manager / employee (স্পেক § ৪.৩) */
+/** I05: owner / manager / employee (spec § 4.3) */
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}

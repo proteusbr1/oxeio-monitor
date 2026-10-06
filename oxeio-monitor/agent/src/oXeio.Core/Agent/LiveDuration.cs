@@ -1,41 +1,39 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// পর্দায় <b>চলন্ত</b> ঘড়ি — গোনা সংখ্যাটা লাফিয়ে বাড়ে, কিন্তু দেখাতে হয় সেকেন্ডে সেকেন্ডে।
+/// A <b>running</b> clock on screen: the counted number jumps up, but must be shown ticking
+/// every second.
 ///
-/// ⭐⚠️ <b>কেন এটা দরকার হলো:</b> <see cref="AgentStatus.ActiveToday"/> কোনো
-/// চলন্ত সংখ্যা নয়। ওটা বাড়ে দু-ভাবে — সার্ভারের heartbeat নতুন
-/// <c>TodayActiveSec</c> আনলে, অথবা এজেন্টের নিজের কাউন্টার একটা সেগমেন্ট
-/// <b>বন্ধ</b> হওয়ার পর বাড়লে। দুটোই থেমে থেমে ঘটে। তাই জানালায় সেকেন্ড
-/// দেখালেও (<c>2:27:14</c>) অঙ্কটা মিনিটের পর মিনিট একই বসে থাকত — মালিক ঠিক
-/// এটাই ধরেছেন: <i>"0.4.7 e login korar pore sec change hocche na"</i>।
+/// <b>Why this is needed:</b> <see cref="AgentStatus.ActiveToday"/> is not a running number.
+/// It grows in two ways: when a server heartbeat brings a new <c>TodayActiveSec</c>, or when
+/// the agent's own counter grows after a segment is <b>closed</b>. Both happen in bursts. So
+/// even with seconds on the window (<c>2:27:14</c>), the figure would sit unchanged for
+/// minutes on end. The owner noticed exactly this: after login the seconds do not change.
 ///
-/// ⭐ সাইন ইন করার <b>পরে</b> সমস্যাটা চোখে পড়ে, আর সেটাও যুক্তিসঙ্গত: তার
-/// আগে সংখ্যাটা আসত এজেন্টের নিজের কাউন্টার থেকে, পরে আসে সার্ভারের
-/// heartbeat থেকে — যেটা আরও কম ঘন ঘন বদলায়।
+/// The problem shows up <b>after</b> signing in, which makes sense: before that the number
+/// came from the agent's own counter, and afterwards it comes from the server's heartbeat,
+/// which changes even less often.
 ///
-/// এই ক্লাসের কাজ: <b>গোনা সংখ্যা + তারপর থেকে কেটে যাওয়া সময়</b>।
-/// অবস্থা ধরে রাখে (আগে কত দেখানো হয়েছিল), তাই <c>static</c> নয় — কিন্তু
-/// কোনো ঘড়ি, I/O বা টাইমার নেই, সময় সবসময় প্যারামিটারে আসে। তাই পুরোটাই
-/// ইউনিট টেস্টে ধরা যায়।
+/// This class's job: <b>the counted number plus the time elapsed since</b>.
+/// It keeps state (what was shown before), so it is not <c>static</c>, but it has no clock,
+/// I/O or timer; time always arrives as a parameter. So all of it can be covered by unit tests.
 /// </summary>
 public sealed class LiveDuration
 {
     /// <summary>
-    /// দুটো snapshot-এর ফাঁকে সর্বোচ্চ যতটুকু নিজে থেকে যোগ করা হবে।
+    /// The most that is added on its own between two snapshots.
     ///
-    /// ⚠️⚠️ ছাদটা <b>অপরিহার্য</b>। এজেন্টের ভেতরের লুপ থেমে গেলে (অথচ জানালা
-    /// আঁকা চলছে) <c>counted</c> পুরোনো হয়ে পড়ে থাকে, আর ছাদ না থাকলে জানালা
-    /// নিজে থেকেই <b>ঘণ্টার পর ঘণ্টা বানিয়ে</b> দেখাত — অর্থাৎ যে সংখ্যাটা
-    /// দিয়ে বেতন হিসাব হয় সেটা নিয়েই মিথ্যা বলত।
+    /// This ceiling is <b>essential</b>. If the agent's inner loop stops (while the window keeps
+    /// drawing), <c>counted</c> goes stale, and without a ceiling the window would
+    /// <b>invent hours on end</b>, lying about the very number payroll is computed from.
     ///
-    /// ⚠️ **১০ মিনিট, ৫ নয়** — ৫ ছিল আর সেটাই ছিল "সেকেন্ড আটকে যায়"-এর
-    /// দ্বিতীয় কারণ: স্ট্যাটাস প্রকাশ হয় heartbeat/সেগমেন্টের তালে, দুটোরই
-    /// সর্বোচ্চ ব্যবধান ঠিক ৫ মিনিট। ছাদ আর ব্যবধান সমান হলে ঘড়িটা ঠিক
-    /// শেষ মুহূর্তে গিয়ে থমকে যেত। এখন ছাদ ব্যবধানের **দ্বিগুণ**।
+    /// Careful: <b>10 minutes, not 5.</b> It used to be 5, and that was the second cause of
+    /// "seconds get stuck": status is published on the rhythm of heartbeats/segments, and
+    /// both have a maximum gap of exactly 5 minutes. With the ceiling equal to the gap, the
+    /// clock would stall right at the last moment. The ceiling is now <b>twice</b> the gap.
     ///
-    /// ⭐ ছাদে ঠেকলে সংখ্যাটা জমে যায় — আর সেটাই সৎ উত্তর: আমরা জানি না।
-    ///    (tray-র "Sync" ঘরটা তখন এমনিতেই গোলমাল দেখাচ্ছে।)
+    /// When the ceiling is hit the number freezes, which is the honest answer: we do not know.
+    /// (The tray's "Sync" field is already showing trouble by then.)
     /// </summary>
     public static readonly TimeSpan MaxDrift = TimeSpan.FromMinutes(10);
 
@@ -45,21 +43,21 @@ public sealed class LiveDuration
 
     public LiveDuration(TimeSpan? maxDrift = null) => _maxDrift = maxDrift ?? MaxDrift;
 
-    /// <summary>এই মুহূর্তে পর্দায় যা বসবে।</summary>
-    /// <param name="counted">শেষ যেটুকু <b>সত্যিই</b> গোনা হয়েছে।</param>
-    /// <param name="countedAt">ওই সংখ্যাটা কখন মাপা হয়েছিল। <c>null</c> হলে
-    /// নিজে থেকে কিছু যোগ করা হয় না — ⚠️ anchor না জানলে সময় বানানো যাবে না।</param>
-    /// <param name="counting">এই মুহূর্তে সত্যিই গোনা চলছে কি না (ACTIVE,
-    /// pause নয়, সাইন ইন করা)। ⭐ idle অবস্থায় ঘড়িটা <b>থামা থাকাই ঠিক</b> —
-    /// নিয়মই তো "৬০ সেকেন্ড হাত না চললে গোনা বন্ধ"।</param>
+    /// <summary>What goes on screen at this moment.</summary>
+    /// <param name="counted">What has <b>really</b> been counted so far.</param>
+    /// <param name="countedAt">When that number was measured. If <c>null</c>, nothing is
+    /// added on its own: without a known anchor, time cannot be invented.</param>
+    /// <param name="counting">Whether counting is really under way right now (ACTIVE, not
+    /// paused, signed in). While idle the clock <b>should stay stopped</b>: the rule is
+    /// "no hand movement for 60 seconds stops counting".</param>
     public TimeSpan Next(
         TimeSpan counted, DateTimeOffset? countedAt, DateTimeOffset now, bool counting)
     {
         if (counted < TimeSpan.Zero) counted = TimeSpan.Zero;
 
-        // ⚠️ গোনা সংখ্যা পিছিয়ে গেছে — ঢাকার মধ্যরাত পেরিয়েছে (আজকের হিসাব
-        //    শূন্য), অথবা সার্ভার সংশোধন পাঠিয়েছে। তখন আগের দেখানো মানটা ধরে
-        //    রাখা যাবে না, নইলে জানালা কাল সারাদিন গতকালের মোট দেখাত।
+        // The counted number went backwards: Dhaka midnight passed (today's total is zero), or
+        // the server sent a correction. The previously shown value must not be kept then, or
+        // the window would show yesterday's total all day.
         if (counted < _counted) _shown = counted;
         _counted = counted;
 
@@ -69,19 +67,19 @@ public sealed class LiveDuration
         {
             var elapsed = now - at;
 
-            // ⚠️ ঋণাত্মক মানে মেশিনের ঘড়ি পিছিয়েছে — তখন কিছু যোগ না করাই
-            //    নিরাপদ (এজেন্টে ঘড়ি-drift এমনিতেই আলাদা করে ধরা হয়)।
+            // Negative means the machine clock moved backwards: adding nothing is safest
+            // (clock drift is tracked separately in the agent anyway).
             if (elapsed > TimeSpan.Zero)
             {
                 candidate = counted + (elapsed > _maxDrift ? _maxDrift : elapsed);
             }
         }
 
-        // ⭐⚠️ <b>কখনো পিছিয়ে যায় না।</b> heartbeat-এর সংখ্যাটা আপলোড হওয়া
-        //     সেগমেন্টের যোগফল, তাই সেটা মাঝে মাঝে আমাদের নিজের হিসাবের
-        //     চেয়ে <b>কম</b> আসে (কিউয়ে কিছু পড়ে আছে)। max না নিলে ঠিক তখন
-        //     পর্দার ঘড়িটা পিছিয়ে যেত — আর "কাজ করলাম, অথচ সময় কমে গেল"
-        //     দেখা মানুষটার কাছে গোটা ব্যবস্থাটাই অবিশ্বাস্য হয়ে পড়ত।
+        // <b>Never goes backwards.</b> The heartbeat's number is the sum of uploaded segments,
+        // so it sometimes comes in <b>lower</b> than our own count (something is still in the
+        // queue). Without max, the clock on screen would step back exactly then, and for a
+        // person who sees "I worked, yet the time went down" the whole system would become
+        // unbelievable.
         if (candidate > _shown) _shown = candidate;
 
         return _shown;

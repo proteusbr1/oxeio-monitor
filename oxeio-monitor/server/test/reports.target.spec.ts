@@ -13,33 +13,35 @@ import {
 import { prorate } from '../src/summary/proration';
 
 /**
- * ⭐⭐ **এক হার — দুই পথ যেন কখনো দুই সংখ্যা না বলে।**
+ * One rate: the two paths must never give two numbers.
  *
- * এই ফাইলের সবচেয়ে জরুরি টেস্টটা কোনো একটা সংখ্যার নয়, একটা **সমতার**:
- * একই কর্মী, একই মাস, একই ছুটির ক্যালেন্ডার দিলে —
+ * The most important test in this file is not about one number but an
+ * equality: for the same employee, the same month and the same holiday
+ * calendar,
  *
- *   · `summary/proration.ts` → `prorate().targetSec`  (tray · Live Board ·
- *     `monthly_summary` · পে-রোল এই পথে চলে), আর
- *   · `reports/reports.range.ts` → `targetSecIn()`    (Reports পাতা · Excel ·
- *     PDF · ডাইজেস্ট এই পথে চলে)
+ *   - `summary/proration.ts` -> `prorate().targetSec` (the tray, Live Board,
+ *     `monthly_summary` and payroll run on this path), and
+ *   - `reports/reports.range.ts` -> `targetSecIn()` (the Reports page, Excel,
+ *     PDF and the digest run on this path)
  *
- * — দুটোকে **একই ঘণ্টা** দিতে হবে।
+ * must give the same hours.
  *
- * ⚠️⚠️ **কেন "ঘণ্টা", "কর্মদিবস" নয়:** গত রাউন্ডের টেস্ট শুধু কর্মদিবসের
- * সংখ্যা মেলাত। দুই পথ কর্মদিবস একই গুনত, কিন্তু **হর আলাদা ছিল** —
- * proration ভাগ করত পলিসির ২৬ দিয়ে, reports ভাগ করত ওই মাসের ক্যালেন্ডার
- * কর্মদিবস দিয়ে। ফলে একই কর্মীর দৈনিক টার্গেট এক পর্দায় ৮.০০ ঘণ্টা,
- * আরেক পর্দায় ৭.৭০ — আর টেস্ট সবুজই থাকত। সংখ্যা না মিলিয়ে সংখ্যার
- * **উপাদান** মেলালে ঠিক এভাবেই ফাঁক থেকে যায়।
+ * Careful, why "hours" and not "workdays": the previous round's test only
+ * matched the workday counts. Both paths counted workdays the same, but the
+ * denominator differed: proration divided by the policy's 26, reports divided
+ * by that month's calendar workdays. So the same employee's daily target was
+ * 8.00 hours on one screen and 7.70 on another, and the test stayed green.
+ * Matching the ingredients of a number instead of the number leaves exactly
+ * that kind of gap.
  */
 
 const HOUR = 3600;
 const d = (y: number, m: number, day: number) => new Date(Date.UTC(y, m - 1, day));
 
-/** O11 — শুক্রবার সাপ্তাহিক ছুটি */
+/** Friday is the weekly day off */
 const FRIDAY = 5;
 
-/** পলিসির ঘরে যা লেখা: ২০৮ ঘণ্টা ÷ ২৬ আদর্শ কর্মদিবস = ৮ ঘণ্টা */
+/** What the policy row says: 208 hours / 26 standard workdays = 8 hours */
 const MONTHLY_TARGET_SEC = 208 * HOUR;
 const POLICY_WORKDAYS = 26;
 
@@ -47,14 +49,14 @@ interface Month {
   name: string;
   start: Date;
   end: Date;
-  /** ছুটি ছাড়া, শুধু শুক্রবার বাদ দিয়ে ক্যালেন্ডার কর্মদিবস */
+  /** calendar workdays without holidays, only Fridays excluded */
   workdays: number;
 }
 
 /**
- * ⭐ তিনটে মাস ইচ্ছাকৃতভাবে **তিন রকম** কর্মদিবসের: ২৭, ২৬, ২৫। হর যদি
- * ভুল করে ক্যালেন্ডারে ফিরে যায়, দৈনিক টার্গেট তিন মাসে তিন রকম হয়ে
- * যাবে আর নিচের টেস্টগুলো সাথে সাথে লাল হবে।
+ * The three months deliberately have three different workday counts: 27, 26,
+ * 25. If the denominator slips back to the calendar by mistake, the daily
+ * target will differ across the three months and the tests below go red at once.
  */
 const MONTHS: Month[] = [
   { name: 'আগস্ট ২০২৬', start: d(2026, 8, 1), end: d(2026, 8, 31), workdays: 27 },
@@ -70,7 +72,7 @@ const ruleOf = (holidays: ReadonlySet<number>): WorkdayRule => ({
 const holidaysOn = (...dates: Date[]): Set<number> =>
   new Set(dates.map((x) => x.getTime()));
 
-/** দিনে-দিনে যোগ — রিপোর্টের পাতায় যে ঘরগুলো ছাপা হয়, ঠিক সেগুলোর যোগফল */
+/** Day-by-day sum: exactly the sum of the cells printed on the report page */
 function sumDayByDay(
   from: Date,
   to: Date,
@@ -84,12 +86,12 @@ function sumDayByDay(
   return sec;
 }
 
-describe('এক হার — হর সবসময় পলিসির expected_workdays', () => {
-  it('মাসে কর্মদিবস যতই হোক, দৈনিক টার্গেট ৮ ঘণ্টাই', () => {
+describe('one rate: the denominator is always the policy expected_workdays', () => {
+  it('whatever the workdays in the month, the daily target is 8 hours', () => {
     for (const month of MONTHS) {
       const rule = ruleOf(new Set<number>());
 
-      // মাসগুলো সত্যিই আলাদা — নইলে নিচের দাবিটার কোনো জোর থাকত না
+      // the months really differ, otherwise the claim below would have no force
       expect(countWorkdays(month.start, month.end, rule)).toBe(month.workdays);
 
       expect(
@@ -99,16 +101,17 @@ describe('এক হার — হর সবসময় পলিসির expe
   });
 
   /**
-   * ⭐⭐ মালিকের ভাষায় প্রশ্নটা: "ছুটি বাড়লে কর্মীর লাভ হবে, না বোঝা
-   * বাড়বে?" হর ক্যালেন্ডার হলে ছুটি বাড়লে দৈনিক টার্গেট **বাড়ত** আর মাসের
-   * মোট ২০৮-এই আটকে থাকত — অর্থাৎ ছুটি দিয়ে কিছুই মিলত না।
+   * In the owner's words: "if holidays increase, does the employee gain, or
+   * does the burden grow?" With a calendar denominator, more holidays would
+   * raise the daily target while the month's total stayed stuck at 208, so a
+   * holiday would buy nothing.
    */
-  it('ছুটি বাড়লে দৈনিক টার্গেট বাড়ে না, মাসের মোট কমে', () => {
-    const month = MONTHS[0]; // আগস্ট ২০২৬ — ছুটিহীন অবস্থায় ২৭ কর্মদিবস
+  it('more holidays do not raise the daily target, they lower the month total', () => {
+    const month = MONTHS[0]; // August 2026: 27 workdays without holidays
     const perDay = dailyTargetSec(MONTHLY_TARGET_SEC, POLICY_WORKDAYS);
 
     const noHoliday = ruleOf(new Set<number>());
-    // ২৬ আগস্ট বুধবার (ঈদে মিলাদুন্নবী — এখনো পাকা নয়), ১৭ আগস্ট সোমবার
+    // Wednesday 26 August (Eid-e-Miladunnabi, not final yet), Monday 17 August
     const twoHolidays = ruleOf(holidaysOn(d(2026, 8, 26), d(2026, 8, 17)));
 
     const span = { from: month.start, to: month.end };
@@ -116,30 +119,30 @@ describe('এক হার — হর সবসময় পলিসির expe
     expect(secondsToHours(targetSecIn(span, noHoliday, perDay))).toBe(216);
     expect(secondsToHours(targetSecIn(span, twoHolidays, perDay))).toBe(200);
 
-    // ⚠️ ফারাকটা ঠিক দুই দিনের টার্গেট — এক পয়সাও এদিক-ওদিক নয়
+    // the difference is exactly two days' target, not a paisa off
     expect(
       targetSecIn(span, noHoliday, perDay) -
         targetSecIn(span, twoHolidays, perDay),
     ).toBeCloseTo(2 * perDay, 6);
   });
 
-  it('সাপ্তাহিক ছুটির দিনে পড়া ছুটি কর্মদিবস দুবার কমায় না', () => {
+  it('a holiday on the weekly day off does not reduce workdays twice', () => {
     const perDay = dailyTargetSec(MONTHLY_TARGET_SEC, POLICY_WORKDAYS);
     const span = { from: d(2026, 8, 1), to: d(2026, 8, 31) };
 
-    // ৭ আগস্ট ২০২৬ শুক্রবার — এমনিতেই সাপ্তাহিক ছুটি
+    // 7 August 2026 is a Friday, already a weekly day off
     const onFriday = ruleOf(holidaysOn(d(2026, 8, 7)));
 
     expect(secondsToHours(targetSecIn(span, onFriday, perDay))).toBe(216);
   });
 });
 
-describe('⭐⭐ দুই পথ এক সংখ্যা — proration বনাম reports', () => {
+describe('two paths, one number: proration vs reports', () => {
   /**
-   * ⚠️ ইচ্ছাকৃতভাবে **ঘণ্টা** মেলানো হয়: `prorate()` সেকেন্ডে round করে,
-   * `targetSecIn()` করে না। দুটোর মধ্যে আধ সেকেন্ডের কম ফারাক থাকতে পারে,
-   * কিন্তু কাগজে যা ছাপা হয় সেই দুই দশমিকের ঘণ্টায় কোনো ফারাক থাকতে
-   * পারবে না — মানুষ ওই সংখ্যাটাই দেখে।
+   * Hours are matched on purpose: `prorate()` rounds to the second and
+   * `targetSecIn()` does not. They may differ by under half a second, but
+   * there must be no difference in the two-decimal hours printed on paper,
+   * because that is the number people look at.
    */
   const cases: {
     label: string;
@@ -170,9 +173,9 @@ describe('⭐⭐ দুই পথ এক সংখ্যা — proration বন
 
   for (const month of MONTHS) {
     for (const c of cases) {
-      it(`${month.name} · ${c.label} — targetSec একই ঘণ্টা দেয়`, () => {
-        // ⚠️ কেসগুলোর তারিখ আগস্টের; অন্য মাসে সেগুলো এমনিতেই বাইরে পড়ে,
-        //    তাই ছুটি ও কর্মকাল মাস-নিরপেক্ষভাবেই প্রয়োগ হয়
+      it(`${month.name} · ${c.label}: targetSec gives the same hours`, () => {
+        // The cases' dates are in August; in other months they fall outside
+        // anyway, so holidays and employment apply independent of the month
         const rule = ruleOf(c.holidays);
 
         const p = prorate({
@@ -186,7 +189,7 @@ describe('⭐⭐ দুই পথ এক সংখ্যা — proration বন
           policyWorkdays: POLICY_WORKDAYS,
         });
 
-        // reports যেভাবে দেখে: কর্মকাল ∩ মাস
+        // how reports sees it: period of employment intersected with the month
         const from =
           c.joinedOn !== null && c.joinedOn.getTime() > month.start.getTime()
             ? c.joinedOn
@@ -199,22 +202,22 @@ describe('⭐⭐ দুই পথ এক সংখ্যা — proration বন
         const perDay = dailyTargetSec(MONTHLY_TARGET_SEC, POLICY_WORKDAYS);
         const reportSec = targetSecIn({ from, to }, rule, perDay);
 
-        // ⭐ দুটো হরও এক — ভাগটা দুই ফাইলে দুবার লেখা, তাই এটাও বাঁধা থাক
+        // the denominators match too: the division is written in two files, so pin it
         expect(p.dailyTargetSec).toBe(perDay);
         expect(countWorkdays(from, to, rule)).toBe(p.employeeWorkdays);
 
-        // ⭐⭐ আসল দাবি
+        // the real claim
         expect(secondsToHours(reportSec)).toBe(secondsToHours(p.targetSec));
       });
     }
   }
 
   /**
-   * ⚠️ ২০৮ ÷ ২৬ কাকতালীয়ভাবে পূর্ণসংখ্যা (২৮৮০০ সেকেন্ড)। ভাগ না যাওয়া
-   * পলিসিতেও দুটো পথ যেন না ছাড়ে — নইলে "আমাদের সংখ্যায় তো মিলছে" বলে
-   * ফাঁকটা লুকিয়ে থাকত।
+   * 208 / 26 happens to be a whole number (28800 seconds). The two paths must
+   * not part even with a policy that does not divide evenly; otherwise "our
+   * numbers match" would hide the gap.
    */
-  it('ভাগ না যাওয়া পলিসিতেও (২০০ঘ ÷ ২২ দিন) দুটো এক থাকে', () => {
+  it('the two stay the same even for a policy that does not divide evenly (200h / 22 days)', () => {
     const monthlyTargetSec = 200 * HOUR;
     const policyWorkdays = 22;
     const month = MONTHS[0];
@@ -242,18 +245,18 @@ describe('⭐⭐ দুই পথ এক সংখ্যা — proration বন
   });
 });
 
-describe('গুণফল আর দিনে-দিনে যোগফল — কলামটা যেন যোগ হয়', () => {
+describe('product vs day-by-day sum: so the column adds up', () => {
   /**
-   * ⭐⭐ রিপোর্টের পাতায় টার্গেট ছাপা হয় **প্রতিদিন এক ঘর করে**, আর নিচে
-   * একটা মোট বসে। মোটটা `targetSecIn()` (গুণ) থেকে আসে। দুটো আলাদা হলে
-   * পাঠক কলামটা যোগ করে দেখতেন মোটের সাথে মিলছে না — যেকোনো ভুল সংখ্যার
-   * চেয়ে ওটা খারাপ।
+   * The report page prints the target one cell per day, with a total below.
+   * The total comes from `targetSecIn()` (multiplication). If the two differ,
+   * a reader adding up the column would find it does not match the total,
+   * which is worse than any wrong number.
    *
-   * ⚠️ এই সমতাটা টিকে আছে **শুধু কারণ হর ধ্রুবক**। হর মাসভেদে বদলালে দুই
-   * মাস ছোঁয়া রেঞ্জে গুণ করাটা ভুল হতো — তাই এই টেস্টটা আসলে হরটাকেও
-   * পাহারা দেয়।
+   * This equality holds only because the denominator is constant. If the
+   * denominator varied by month, multiplying across a two-month range would be
+   * wrong, so this test also guards the denominator.
    */
-  it('দুই মাস ছোঁয়া রেঞ্জেও গুণফল = দিনে-দিনে যোগফল', () => {
+  it('even for a range touching two months, product = day-by-day sum', () => {
     const rule = ruleOf(holidaysOn(d(2026, 8, 26), d(2026, 9, 15)));
     const perDay = dailyTargetSec(MONTHLY_TARGET_SEC, POLICY_WORKDAYS);
     const span = { from: d(2026, 8, 10), to: d(2026, 9, 20) };
@@ -263,7 +266,7 @@ describe('গুণফল আর দিনে-দিনে যোগফল — �
     );
   });
 
-  it('ভাগ না যাওয়া পলিসিতেও যোগফল মেলে', () => {
+  it('the sum matches for a policy that does not divide evenly too', () => {
     const rule = ruleOf(new Set<number>());
     const perDay = dailyTargetSec(200 * HOUR, 22);
     const span = { from: d(2026, 8, 1), to: d(2026, 8, 31) };
@@ -274,8 +277,8 @@ describe('গুণফল আর দিনে-দিনে যোগফল — �
   });
 });
 
-describe('overlapOf — প্রত্যাশার জানালা ও রেঞ্জের ছেদ', () => {
-  it('ছেদ থাকলে দুই সীমার ভেতরেরটাই ফেরে', () => {
+describe('overlapOf: intersection of the expectation window and the range', () => {
+  it('with an overlap, the part inside both bounds is returned', () => {
     const seen = overlapOf(
       { from: d(2026, 8, 13), to: d(2026, 8, 20) },
       { from: d(2026, 8, 1), to: d(2026, 8, 31) },
@@ -286,7 +289,7 @@ describe('overlapOf — প্রত্যাশার জানালা ও �
     expect(seen?.to).toEqual(d(2026, 8, 20));
   });
 
-  it('একটাই দিন মিললেও সেটা ছেদ — খালি নয়', () => {
+  it('even a single shared day is an overlap, not empty', () => {
     const seen = overlapOf(
       { from: d(2026, 8, 1), to: d(2026, 8, 13) },
       { from: d(2026, 8, 13), to: d(2026, 8, 31) },
@@ -295,8 +298,8 @@ describe('overlapOf — প্রত্যাশার জানালা ও �
     expect(seen).toEqual({ from: d(2026, 8, 13), to: d(2026, 8, 13) });
   });
 
-  /** ⭐ `null` মানে "ছেদই নেই" — "০ কর্মদিবস"-এর চেয়ে আলাদা কথা */
-  it('না মিললে null, উল্টো রেঞ্জ নয়', () => {
+  /** `null` means "no overlap at all", which is different from "0 workdays" */
+  it('null when they do not meet, not a reversed range', () => {
     expect(
       overlapOf(
         { from: d(2026, 8, 1), to: d(2026, 8, 10) },
@@ -306,18 +309,18 @@ describe('overlapOf — প্রত্যাশার জানালা ও �
   });
 });
 
-describe('প্রত্যাশা বনাম টার্গেট — ঘাটতির হর', () => {
+describe('expectation vs target: the denominator of the shortfall', () => {
   const perDay = dailyTargetSec(MONTHLY_TARGET_SEC, POLICY_WORKDAYS);
   const rule = ruleOf(new Set<number>());
   const range = { from: d(2026, 8, 1), to: d(2026, 8, 31) };
 
   /**
-   * ⭐⭐ এই ইনস্টলেশনের আসল ঘটনা: এজেন্ট বসেছে ১৩ আগস্ট ২০২৬। ১–১২ আগস্ট
-   * কেউ কিছু মাপেনি, তাই ওই দিনগুলো প্রত্যাশায় নেই — অথচ টার্গেটে আছে
-   * (দিনগুলো রিপোর্টের সারি হিসেবে ছাপা হয়)।
+   * The real event of this installation: the agent went live on 13 August
+   * 2026. Nobody measured 1-12 August, so those days are not in the
+   * expectation, yet they are in the target (the days print as report rows).
    */
-  it('ট্র্যাকিং শুরুর আগের দিন টার্গেটে থাকে, প্রত্যাশায় নয়', () => {
-    const window = { from: d(2026, 8, 13), to: d(2026, 8, 20) }; // গতকাল = ২০
+  it('days before tracking began are in the target, not in the expectation', () => {
+    const window = { from: d(2026, 8, 13), to: d(2026, 8, 20) }; // yesterday = 20th
     const seen = overlapOf(window, range);
 
     const targetHours = secondsToHours(targetSecIn(range, rule, perDay));
@@ -325,17 +328,17 @@ describe('প্রত্যাশা বনাম টার্গেট — ঘ
       seen === null ? 0 : targetSecIn(seen, rule, perDay),
     );
 
-    expect(targetHours).toBe(216); // পুরো আগস্টের ২৭ কর্মদিবস
-    expect(expectedHours).toBe(56); // ১৩–২০ আগস্ট, ১৪ শুক্রবার বাদে ৭ দিন
+    expect(targetHours).toBe(216); // the 27 workdays of the whole of August
+    expect(expectedHours).toBe(56); // 13-20 August, 7 days excluding Friday the 14th
     expect(expectedHours).toBeLessThan(targetHours);
   });
 
   /**
-   * ⭐ পর্ব শেষ হয়ে গেলে (গত মাসের রিপোর্ট) জানালা পুরো রেঞ্জ ঢাকে —
-   * অর্থাৎ প্রত্যাশা = টার্গেট, আর ঘাটতির হিসাব আগের মতোই থাকে। পুরোনো
-   * ছাপা কাগজ তাই এই নিয়মে নড়ে না।
+   * Once the period is over (last month's report) the window covers the whole
+   * range, so expectation = target and the shortfall calculation stays as
+   * before. Old printed papers do not move under this rule.
    */
-  it('পর্ব শেষ হলে প্রত্যাশা আর টার্গেট এক হয়ে যায়', () => {
+  it('once the period is over, expectation and target become the same', () => {
     const seen = overlapOf(range, range);
 
     expect(secondsToHours(targetSecIn(seen!, rule, perDay))).toBe(

@@ -4,19 +4,19 @@ using oXeio.Core.Tracking;
 namespace oXeio.Core.Tests;
 
 /// <summary>
-/// [02-Workflow § ৯]-এর ম্যানুয়াল চেকলিস্টের যেসব পয়েন্ট স্বয়ংক্রিয়ভাবে যাচাই করা যায়।
-/// বাকিগুলো (স্ক্রিন ক্যাপচার, tray, AV) আসল ডেস্কটপেই দেখতে হবে।
+/// The points of the manual checklist in [02-Workflow § 9] that can be verified
+/// automatically. The rest (screen capture, tray, AV) must be checked on a real desktop.
 /// </summary>
 public class IdleStateMachineTests
 {
     private static readonly TimeSpan Threshold = TimeSpan.FromSeconds(60);
     private static readonly DateTimeOffset Start =
-        new(2026, 8, 9, 4, 0, 0, TimeSpan.Zero); // ঢাকায় সকাল ১০টা
+        new(2026, 8, 9, 4, 0, 0, TimeSpan.Zero); // 10 AM in Dhaka
 
     private static IdleStateMachine New(DateTimeOffset? at = null) =>
         new(Threshold, at ?? Start);
 
-    /// <summary>এক সেকেন্ড করে এগিয়ে ইনপুট দিতে থাকে (মানুষ কাজ করছে)।</summary>
+    /// <summary>Feeds input one second at a time (a person is working).</summary>
     private static List<ActivitySegment> Run(
         IdleStateMachine sm,
         DateTimeOffset from,
@@ -31,10 +31,11 @@ public class IdleStateMachineTests
     }
 
     /// <summary>
-    /// আগে এই টেস্ট বলত "কাজ করতে থাকলে কোনো সেগমেন্ট বন্ধ হয় না" — আর
-    /// সেটাই ছিল বাগ: টানা কাজের সময়টুকু কিউয়ে না গিয়ে মেমরিতে খোলা থাকত,
-    /// আর বিদ্যুৎ গেলে হারাত ([G53](../../../../docs/08-Gap-Analysis.md))।
-    /// এখন স্টেট বদলায় না, কিন্তু রেকর্ড নিয়মিত বেরোয়।
+    /// This test used to say "no segment closes while the person keeps working", and
+    /// that was the bug: the continuous working time stayed open in memory instead of
+    /// going to the queue, and would be lost on a power cut
+    /// ([G53](../../../../docs/08-Gap-Analysis.md)).
+    /// Now the state does not change, but records come out regularly.
     /// </summary>
     [Fact]
     public void কাজ_করতে_থাকলেও_রেকর্ড_নিয়মিত_বেরোয়_কিন্তু_স্টেট_বদলায়_না()
@@ -52,12 +53,12 @@ public class IdleStateMachineTests
     {
         var sm = New();
 
-        // ৫ মিনিট কাজ, তারপর হাত সরিয়ে নেওয়া
+        // 5 minutes of work, then hands off
         Run(sm, Start, 300, _ => TimeSpan.Zero);
         var afterWork = Start.AddSeconds(300);
 
         var closed = Run(sm, afterWork, 59, i => TimeSpan.FromSeconds(i));
-        Assert.Empty(closed); // ৫৯ সেকেন্ডে এখনো ACTIVE
+        Assert.Empty(closed); // still ACTIVE at 59 seconds
 
         closed = Run(sm, afterWork.AddSeconds(59), 1, _ => TimeSpan.FromSeconds(60));
         Assert.Single(closed);
@@ -74,7 +75,7 @@ public class IdleStateMachineTests
 
         var active = Assert.Single(closed);
         Assert.Equal(SegmentState.Active, active.State);
-        // idle শুরু হয়েছিল ৩০০ সেকেন্ডে, ৩৬০-এ নয় — ওই ৬০ সেকেন্ডও বাদ (B04)
+        // idle began at 300 seconds, not 360: those 60 seconds are excluded too (B04)
         Assert.Equal(Start.AddSeconds(300), active.EndedAt);
         Assert.Equal(300, active.DurationSec);
     }
@@ -85,13 +86,14 @@ public class IdleStateMachineTests
         var sm = New();
         var all = Run(sm, Start, 300, _ => TimeSpan.Zero).ToList();
 
-        // ১০ মিনিট কেউ নেই (৩০১ থেকে ৯০০ সেকেন্ড পর্যন্ত টিক)
+        // nobody there for 10 minutes (ticks from 301 to 900 seconds)
         all.AddRange(Run(sm, Start.AddSeconds(300), 600, i => TimeSpan.FromSeconds(i)));
-        // ঠিক ৯০০ সেকেন্ডের মাথায় ফিরে এসে মাউস নাড়ল
+        // came back and moved the mouse exactly at the 900-second mark
         all.AddRange(sm.Tick(Start.AddSeconds(900), TimeSpan.Zero, locked: false, screenFrozen: false));
 
-        // ⚠️ এখন লম্বা সেগমেন্ট ৫ মিনিটেও ভাগ হয়, তাই সংখ্যা নয় — **যোগফল**
-        //    যাচাই করা হয়। নিয়মটা একই: ১০ মিনিট দূরে থাকলে ঠিক ১০ মিনিটই বাদ।
+        // Careful: long segments are now split every 5 minutes too, so the **sum** is
+        // checked, not the count. The rule is the same: 10 minutes away, exactly 10 minutes
+        // excluded.
         var idleAll = all.Where(c => c.State == SegmentState.Idle).ToList();
 
         Assert.NotEmpty(idleAll);
@@ -107,7 +109,7 @@ public class IdleStateMachineTests
         Run(sm, Start.AddSeconds(300), 120, i => TimeSpan.FromSeconds(i));
         Assert.Equal(SegmentState.Idle, sm.State);
 
-        // এক টিকেই ফিরে আসা — কোনো অপেক্ষা নেই (B03)
+        // back within one tick: no waiting (B03)
         sm.Tick(Start.AddSeconds(421), TimeSpan.Zero, locked: false, screenFrozen: false);
         Assert.Equal(SegmentState.Active, sm.State);
     }
@@ -122,7 +124,7 @@ public class IdleStateMachineTests
         Assert.Single(closed);
         Assert.Equal(SegmentState.Locked, sm.State);
 
-        // লক থাকা অবস্থায় সময় গোনা হয় না
+        // time is not counted while locked
         Run(sm, Start.AddSeconds(61), 300, _ => TimeSpan.Zero, locked: true);
         Assert.Equal(SegmentState.Locked, sm.State);
 
@@ -139,7 +141,7 @@ public class IdleStateMachineTests
         var sm = New();
         sm.Tick(Start.AddSeconds(1), TimeSpan.Zero, locked: true, screenFrozen: false);
 
-        // আনলক হলো, কিন্তু শেষ ইনপুট অনেক আগের
+        // unlocked, but the last input was long ago
         sm.Tick(Start.AddSeconds(400), TimeSpan.FromSeconds(300), locked: false, screenFrozen: false);
 
         Assert.Equal(SegmentState.Idle, sm.State);
@@ -156,11 +158,11 @@ public class IdleStateMachineTests
         var active = Assert.Single(closed);
         Assert.Equal(300, active.DurationSec);
 
-        // ৮ ঘণ্টা ঘুম
+        // 8 hours of sleep
         var resumeAt = suspendAt.AddHours(8);
         closed = sm.OnResume(resumeAt);
 
-        // ঘুমের সময়টা LOCKED হিসেবে বন্ধ হলো — কাজ হিসেবে নয়
+        // the sleep time closed as LOCKED, not as work
         Assert.All(closed, s => Assert.False(s.CountsAsWork));
         Assert.Equal(SegmentState.Idle, sm.State);
     }
@@ -168,16 +170,16 @@ public class IdleStateMachineTests
     [Fact]
     public void মধ্যরাত_পার_হলে_সেগমেন্ট_দুই_তারিখে_ভাগ_হয়()
     {
-        // ঢাকায় ২৩:৫০ = 17:50Z
+        // 23:50 in Dhaka = 17:50Z
         var lateNight = new DateTimeOffset(2026, 8, 8, 17, 50, 0, TimeSpan.Zero);
         var sm = New(lateNight);
 
-        // ২০ মিনিট একটানা কাজ — মধ্যরাত পেরিয়ে
+        // 20 minutes of continuous work, across midnight
         var closed = Run(sm, lateNight, 20 * 60, _ => TimeSpan.Zero);
 
-        // ⚠️ লম্বা সেগমেন্ট ৫ মিনিটেও ভাগ হয়, তাই একাধিক টুকরো আসে।
-        //    যা যাচাই করার: মধ্যরাতের **আগের** সব টুকরো আগের তারিখে, আর
-        //    সেগুলোর যোগফল ঠিক ১০ মিনিট (২৩:৫০ → ০০:০০)।
+        // Careful: long segments are split every 5 minutes too, so several pieces arrive.
+        // What to verify: all pieces from **before** midnight are on the earlier date, and
+        // their sum is exactly 10 minutes (23:50 → 00:00).
         var midnight = new DateTimeOffset(2026, 8, 8, 18, 0, 0, TimeSpan.Zero);
         var before = closed.Where(c => c.EndedAt <= midnight).ToList();
 
@@ -186,8 +188,8 @@ public class IdleStateMachineTests
         Assert.Equal(600, before.Sum(c => c.DurationSec));
         Assert.Equal(midnight, before[^1].EndedAt);
 
-        // মধ্যরাতের পরের অংশ — টুকরো যতগুলোই হোক, সবই নতুন তারিখে,
-        // আর যোগফল ঠিক ১০ মিনিট (০০:০০ → ০০:১০)
+        // The part after midnight: however many pieces, all on the new date,
+        // and the sum is exactly 10 minutes (00:00 → 00:10)
         var after = closed.Where(c => c.StartedAt >= midnight).ToList();
         after.AddRange(sm.CloseAll(lateNight.AddMinutes(20)));
 
@@ -215,26 +217,26 @@ public class IdleStateMachineTests
     public void শুধু_ACTIVE_কাজ_হিসেবে_গোনা_হয়()
     {
         var sm = New();
-        var closed = Run(sm, Start, 300, _ => TimeSpan.Zero);   // ০ → ৩০০ কাজ
+        var closed = Run(sm, Start, 300, _ => TimeSpan.Zero);   // 0 → 300 working
 
-        // ৩০০ → ৬০০ নিষ্ক্রিয় · এখানেই প্রথম ACTIVE সেগমেন্টটা বন্ধ হয়
+        // 300 → 600 idle; this is where the first ACTIVE segment closes
         closed.AddRange(Run(sm, Start.AddSeconds(300), 300, i => TimeSpan.FromSeconds(i)));
 
         closed.AddRange(sm.Tick(Start.AddSeconds(600), TimeSpan.Zero, locked: false, screenFrozen: false));
-        closed.AddRange(sm.CloseAll(Start.AddSeconds(700)));    // ৬০০ → ৭০০ কাজ
+        closed.AddRange(sm.CloseAll(Start.AddSeconds(700)));    // 600 → 700 working
 
         var worked = closed.Where(s => s.CountsAsWork).Sum(s => s.DurationSec);
         var notWorked = closed.Where(s => !s.CountsAsWork).Sum(s => s.DurationSec);
 
-        Assert.Equal(400, worked);     // ৩০০ + ১০০
-        Assert.Equal(300, notWorked);  // retro-adjust ধরে ঠিক ৫ মিনিট
+        Assert.Equal(400, worked);     // 300 + 100
+        Assert.Equal(300, notWorked);  // exactly 5 minutes, counting the retro-adjust
     }
 
     [Fact]
     public void Input_score_শূন্য_থেকে_একশো_র_মধ্যে_থাকে()
     {
         var sm = New();
-        // অর্ধেক সেকেন্ডে ইনপুট, অর্ধেকে নয় — কিন্তু কখনোই threshold ছাড়ায় না
+        // input in half the seconds, none in the other half, but never exceeding the threshold
         Run(sm, Start, 300, i => i % 2 == 0 ? TimeSpan.Zero : TimeSpan.FromSeconds(5));
         var closed = sm.CloseAll(Start.AddSeconds(300));
 
@@ -244,27 +246,27 @@ public class IdleStateMachineTests
         Assert.Equal(50, seg.InputScore);
     }
 
-    // ── G46 · নকল ইনপুট: পর্দা জমে থাকলে গোনা বন্ধ ────────────────────────
+    // ── G46 · fake input: counting stops while the screen is frozen ─────────
 
     /// <summary>
-    /// ⭐⭐⭐ <b>এই ফিচারের গোটা উদ্দেশ্য।</b>
+    /// <b>The whole purpose of this feature.</b>
     ///
-    /// জিগলার চললে <c>sinceLastInput</c> সবসময় শূন্যের কাছাকাছি থাকে —
-    /// অর্থাৎ পুরোনো নিয়মে চিরকাল ACTIVE। পর্দা জমে আছে জানলে সেটা আর
-    /// বিশ্বাস করা হয় না।
+    /// With a jiggler running, <c>sinceLastInput</c> is always near zero, so under the
+    /// old rule it was ACTIVE forever. Once it is known that the screen is frozen, that
+    /// is no longer trusted.
     /// </summary>
     [Fact]
     public void Frozen_screen_stops_counting_even_with_fresh_input()
     {
         var sm = new IdleStateMachine(Threshold, Start);
 
-        // ইনপুট একদম তাজা, তবু পর্দা জমা
+        // input is perfectly fresh, yet the screen is frozen
         sm.Tick(Start.AddSeconds(1), TimeSpan.Zero, locked: false, screenFrozen: true);
 
         Assert.Equal(SegmentState.Idle, sm.State);
     }
 
-    /// <summary>⭐ পর্দা আবার বদলালে সাথে সাথেই গোনা ফেরে — অপেক্ষা নেই</summary>
+    /// <summary>Counting resumes immediately when the screen changes again; no waiting</summary>
     [Fact]
     public void Screen_moving_again_resumes_counting()
     {
@@ -279,12 +281,13 @@ public class IdleStateMachineTests
     }
 
     /// <summary>
-    /// ⚠️⚠️ পর্দা জমার কারণে থামলে <b>পিছিয়ে কাটা হয় না</b>।
+    /// Careful: when it stops because of a frozen screen, <b>it does not cut backwards</b>.
     ///
-    /// আসল idle-এ retro-adjust হয় (threshold-টা আগে থেকেই idle ছিল), কিন্তু
-    /// এখানে নয়: পর্দা দশ মিনিট ধরে জমে ছিল, আর ওই দশ মিনিট পিছিয়ে কেটে
-    /// দিলে <b>লম্বা নথি পড়া সৎ কর্মীর সময়ও কেটে যেত</b>। ⭐ ভুল করলে
-    /// কর্মীর পক্ষে — সেগমেন্টটা <b>এখন</b> বন্ধ হয়, আগে নয়।
+    /// For real idle there is a retro-adjust (the threshold had already been idle), but
+    /// not here: the screen was frozen for ten minutes, and cutting those ten minutes
+    /// backwards would also remove <b>the time of an honest worker reading a long
+    /// document</b>. If it errs, it errs in the worker's favor: the segment closes
+    /// <b>now</b>, not earlier.
     /// </summary>
     [Fact]
     public void Frozen_screen_does_not_retro_adjust()
@@ -299,7 +302,9 @@ public class IdleStateMachineTests
         Assert.Equal(at, active.EndedAt);
     }
 
-    /// <summary>⚠️ লক থাকলে পর্দার প্রশ্নই ওঠে না — LOCKED আগে</summary>
+    /// <summary>
+    /// Careful: when locked the screen question does not arise; LOCKED comes first
+    /// </summary>
     [Fact]
     public void Locked_wins_over_frozen()
     {

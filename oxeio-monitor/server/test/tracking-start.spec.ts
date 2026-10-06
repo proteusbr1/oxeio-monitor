@@ -14,29 +14,30 @@ import {
 } from '../src/summary/summary.math';
 
 /**
- * ⭐⭐ **প্রত্যাশার জানালা — একটাই সংজ্ঞা, সব পর্দায়।**
+ * **The expectation window — one definition, on every screen.**
  *
- * এই ফাইল দুটো জিনিস পাহারা দেয়:
+ * This file guards two things:
  *
- * ১· **জানালাটা ঠিক আছে** (`elapsedWindow()` / `elapsedWorkdays()`) —
- *    শুরু হয় ট্র্যাকিং শুরুর দিন থেকে, শেষ হয় গতকাল।
+ * 1. **The window is right** (`elapsedWindow()` / `elapsedWorkdays()`) —
+ *    it starts on the tracking start day and ends yesterday.
  *
- *    ⚠️ যে ভুলটা এটা ঠেকায়: `expected_sec` গোনা হতো মাসের ১ তারিখ থেকে,
- *    অথচ এই ইনস্টলেশনে এজেন্ট বসেছে **১৩ আগস্ট ২০২৬**। ফলে Monthly পাতা
- *    প্রত্যেককে ~৯৪ ঘণ্টা পিছিয়ে দেখাত — এমন এক সময়ের জন্য যখন মাপার
- *    যন্ত্রটাই ছিল না। **অনুপস্থিত পর্যবেক্ষণ ব্যর্থতা নয়** (নিয়ম ২)।
+ *    The mistake it prevents: `expected_sec` used to count from the 1st of the
+ *    month, yet in this installation the agent went live on **13 August 2026**. So the
+ *    Monthly page showed everyone ~94 hours behind — for a time when there
+ *    was no measuring instrument at all. **Missing observation is not a failure** (rule 2).
  *
- * ২· **চার পর্দা একই সংখ্যা বলে** (নিচের ৫ নং অংশ)। এক সময় tray,
- *    Live Board আর মাসিক rollup তিনটে আলাদা সংজ্ঞায় `workdays_elapsed`
- *    গুনত — কর্মী নিজের `/me`-তে যা দেখতেন আর owner ড্যাশবোর্ডে যা
- *    দেখতেন, ফারাক দাঁড়িয়েছিল ~৮৯ ঘণ্টা। দুই পর্দায় দুই উত্তর মানে
- *    কোনটা সত্যি সেই প্রশ্নের উত্তর নেই — এই রিপোর সবচেয়ে বড় পাপ।
+ * 2. **All four screens report the same number** (section 5 below). At one
+ *    point the tray, the Live Board and the monthly rollup counted
+ *    `workdays_elapsed` with three different definitions — what an employee
+ *    saw in their own `/me` and what the owner saw on the dashboard differed by
+ *    ~89 hours. Two answers on two screens means there is no answer to "which
+ *    is true" — the biggest sin of this repo.
  *
- * **পরীক্ষার মাস — আগস্ট ২০২৬:** ১ তারিখ শনিবার, শুক্রবার ৭ · ১৪ · ২১ · ২৮,
- * অর্থাৎ ২৭ কর্মদিবস (`proration.e2e.spec.ts`-এর মাসটাই)।
+ * **Test month — August 2026:** the 1st is a Saturday, Fridays are 7 · 14 · 21 · 28,
+ * so 27 working days (the same month as `proration.e2e.spec.ts`).
  */
 
-/** UTC-মধ্যরাত তারিখ — Prisma-র `@db.Date` ও `workDateOf()` দুটোই এই ছাঁদে */
+/** UTC-midnight date — both Prisma's `@db.Date` and `workDateOf()` have this shape */
 const day = (iso: string): Date => new Date(`${iso}T00:00:00.000Z`);
 
 const HOUR = 3600;
@@ -44,12 +45,12 @@ const HOUR = 3600;
 const AUG_START = day('2026-08-01');
 const AUG_END = day('2026-08-31');
 
-/** শুক্রবার ছুটি (ISO ৫) — স্পেকের ডিফল্ট পলিসি */
+/** Friday off (ISO 5) — the spec's default policy */
 const FRIDAY_OFF = 5;
 
 const NO_HOLIDAYS: ReadonlySet<number> = new Set<number>();
 
-/** ⚠️ `trackingStartedOn` ইচ্ছাকৃতভাবে **অনুপস্থিত** — সেটাই পুরোনো আচরণ */
+/** `trackingStartedOn` is deliberately **absent** — that is the old behaviour */
 const BASE: ElapsedInput = {
   periodStart: AUG_START,
   periodEnd: AUG_END,
@@ -60,15 +61,15 @@ const BASE: ElapsedInput = {
   holidays: NO_HOLIDAYS,
 };
 
-// ══════════════════════ ১ · ট্র্যাকিং-শুরু ছাড়া — আগের মতোই ══════════════════════
+// ══════════════════════ 1 · without tracking start — as before ══════════════════════
 
-describe('elapsedWorkdays — trackingStartedOn না দিলে জানালা পর্বের শুরু থেকেই', () => {
+describe('elapsedWorkdays — without trackingStartedOn the window starts at the start of the period', () => {
   /**
-   * ⚠️ এটাই এই ফিচারের নিরাপত্তা-জাল: নতুন ধারণাটা **ঐচ্ছিক**। না দিলে
-   * শুরুর সীমা আগের মতোই `periodStart` (বা যোগ দেওয়ার দিন), তাই যে সব
-   * হিসাব ট্র্যাকিং-শুরু জানে না সেগুলোর ফল বদলায় না।
+   * This is the safety net of the feature: the new concept is **optional**.
+   * Without it, the start limit is `periodStart` (or the join day) as before, so
+   * calculations that know nothing about tracking start keep their results.
    */
-  it('১ আগস্ট থেকে গতকাল পর্যন্ত — ১৭ কর্মদিবস', () => {
+  it('1 August to yesterday — 17 working days', () => {
     expect(elapsedWorkdays(BASE)).toBe(17);
     expect(elapsedWindow(BASE)).toEqual({
       from: AUG_START,
@@ -76,23 +77,24 @@ describe('elapsedWorkdays — trackingStartedOn না দিলে জানা
     });
   });
 
-  it('`null` আর অনুপস্থিত — দুটো একই কথা', () => {
+  it('`null` and absent — both mean the same', () => {
     expect(elapsedWorkdays({ ...BASE, trackingStartedOn: null })).toBe(
       elapsedWorkdays(BASE),
     );
   });
 
   /**
-   * ⚠️⚠️ **হাতে গোনা তালিকা, `countWorkdays()` নয়।**
+   * **A hand-counted list, not `countWorkdays()`.**
    *
-   * এখানে আগে লেখা ছিল `expect(elapsedWorkdays(BASE)).toBe(countWorkdays(…))`
-   * আর দাবি করা হতো "পুরোনো সূত্রের সাথে মেলে"। কিন্তু `elapsedWorkdays()`
-   * নিজেই ভেতরে `countWorkdays()` ডাকে — অর্থাৎ টেস্টটা একই সূত্র দুবার
-   * লিখে নিজের সাথে নিজেই মেলাত। সূত্রটা ভুল হলে দুদিকেই সমান ভুল হতো
-   * আর টেস্ট নিশ্চিন্তে সবুজ থাকত। **যা মাপার কথা তা মাপাই হতো না।**
+   * This used to say `expect(elapsedWorkdays(BASE)).toBe(countWorkdays(…))`
+   * and claimed to "match the old formula". But `elapsedWorkdays()` itself
+   * calls `countWorkdays()` inside — so the test wrote the same formula twice
+   * and compared it with itself. If the formula were wrong it would be equally
+   * wrong on both sides and the test would stay happily green. **What was
+   * supposed to be measured was never measured.**
    */
-  it('জানালার দিনগুলো হাতে গোনা তালিকার সাথে মেলে', () => {
-    // ১–১৯ আগস্ট, শুক্রবার ৭ ও ১৪ বাদে
+  it('the days of the window match the hand-counted list', () => {
+    // 1–19 August, excluding Fridays the 7th and 14th
     const byHand = [
       '2026-08-01', '2026-08-02', '2026-08-03', '2026-08-04',
       '2026-08-05', '2026-08-06', '2026-08-08', '2026-08-09',
@@ -104,41 +106,41 @@ describe('elapsedWorkdays — trackingStartedOn না দিলে জানা
     expect(byHand).toHaveLength(17);
     expect(elapsedWorkdays(BASE)).toBe(byHand.length);
 
-    // আর জানালার দুই প্রান্তও ওই তালিকার দুই প্রান্ত
+    // and the two ends of the window are the two ends of that list
     const window = elapsedWindow(BASE);
     expect(window?.from).toEqual(day(byHand[0]));
     expect(window?.to).toEqual(day(byHand[byHand.length - 1]));
   });
 
-  /** ⚠️ যোগ দেওয়ার দিনের নিয়মটা (G37) অক্ষত — নইলে ১৭ তারিখে যোগ দেওয়া কর্মী প্রথম দিনেই পিছিয়ে */
-  it('joinedOn মাসের মাঝখানে হলে সেখান থেকেই — আগের মতোই', () => {
+  /** The join-day rule (G37) is intact — otherwise someone who joined on the 17th would be behind on day one */
+  it('if joinedOn is mid-month, from there — as before', () => {
     expect(elapsedWorkdays({ ...BASE, joinedOn: day('2026-08-17') })).toBe(3);
   });
 
-  it('leftOn জানালার শেষ সীমা টেনে নামায় — আগের মতোই', () => {
+  it('leftOn pulls the end limit of the window down — as before', () => {
     expect(elapsedWorkdays({ ...BASE, leftOn: day('2026-08-10') })).toBe(9);
   });
 
   /**
-   * ⚠️ পুরোনো মাস হালনাগাদ করলে জানালা পর্বের শেষ দিনেই থামে। না থামলে
-   * গত মাসের `workdays_elapsed` চিরকাল পুরো মাস ছাড়িয়ে বাড়ত।
+   * Updating an old month stops the window at the last day of the period. If
+   * it did not, last month's `workdays_elapsed` would grow past the whole month forever.
    */
-  it('গত মাস হালনাগাদ করলে পুরো মাসটাই গোনা হয়', () => {
+  it('updating last month counts the whole month', () => {
     expect(elapsedWorkdays({ ...BASE, today: day('2026-09-10') })).toBe(27);
   });
 
-  it('ভবিষ্যতের মাসে কিছুই গোনা হয়নি', () => {
+  it('nothing has been counted in a future month', () => {
     const future = { ...BASE, today: day('2026-07-20') };
     expect(elapsedWindow(future)).toBeNull();
     expect(elapsedWorkdays(future)).toBe(0);
   });
 });
 
-// ═══════════════════ ২ · ট্র্যাকিং শুরুর আগের দিন গোনা হয় না ═══════════════════
+// ═══════════════════ 2 · days before tracking start are not counted ═══════════════════
 
-describe('elapsedWorkdays — ট্র্যাকিং শুরুর আগের কর্মদিবস বাদ', () => {
-  /** ⭐ আসল ঘটনা: এজেন্ট বসেছে ১৩ আগস্ট, তার আগের ১২ দিন আমরা দেখিনি */
-  it('শুরু মাসের মাঝখানে হলে আগের দিনগুলো বাদ পড়ে', () => {
+describe('elapsedWorkdays — working days before tracking start are excluded', () => {
+  /** The real incident: the agent went live on 13 August, and we did not see the 12 days before it */
+  it('if the start is mid-month, the earlier days drop out', () => {
     const withStart = { ...BASE, trackingStartedOn: day('2026-08-13') };
 
     expect(elapsedWorkdays(withStart)).toBe(6);
@@ -147,26 +149,26 @@ describe('elapsedWorkdays — ট্র্যাকিং শুরুর আগ
       to: day('2026-08-19'),
     });
 
-    // ⚠️ আর ওই ১১টা দিনই আগে নীরবে "০ ঘণ্টা কাজ" হয়ে যেত
+    // And those 11 days used to silently become "0 hours worked"
     expect(elapsedWorkdays(BASE) - elapsedWorkdays(withStart)).toBe(11);
   });
 
-  it('শুরু পর্বের আগে হলে কোনো প্রভাব নেই', () => {
+  it('no effect if the start is before the period', () => {
     expect(
       elapsedWorkdays({ ...BASE, trackingStartedOn: day('2026-07-20') }),
     ).toBe(elapsedWorkdays(BASE));
   });
 
-  it('শুরু ঠিক মাসের ১ তারিখ হলেও প্রভাব নেই', () => {
+  it('no effect even if the start is exactly the 1st of the month', () => {
     expect(elapsedWorkdays({ ...BASE, trackingStartedOn: AUG_START })).toBe(17);
   });
 
   /**
-   * ⚠️ দুটো শুরুর সীমার মধ্যে **পরেরটা** জেতে। ট্র্যাকিং ১৩ তারিখে শুরু
-   * হলেও ১৭ তারিখে যোগ দেওয়া কর্মীর প্রত্যাশা ১৭ থেকেই — নইলে সে যোগ
-   * দেওয়ার আগের চারটে দিনের ঘাটতি নিয়ে শুরু করত।
+   * Of the two start limits, **the later one** wins. Even if tracking started
+   * on the 13th, an employee who joined on the 17th is expected from the 17th —
+   * otherwise they would start with the shortfall of the four days before joining.
    */
-  it('joinedOn ট্র্যাকিং-শুরুর পরে হলে joinedOn-ই জেতে', () => {
+  it('if joinedOn is after the tracking start, joinedOn wins', () => {
     expect(
       elapsedWorkdays({
         ...BASE,
@@ -177,25 +179,25 @@ describe('elapsedWorkdays — ট্র্যাকিং শুরুর আগ
   });
 
   /**
-   * ⭐⭐ **আর এটাই কর্মী-স্তরের ট্র্যাকিং-শুরুর পুরো কারণ।**
+   * **And this is the whole reason for per-employee tracking start.**
    *
-   * ⚠️ সংখ্যাটা যদি **সংস্থার** প্রথম দিন হতো (আগে তাই ছিল, `where` ছাড়া
-   * একটা `findFirst`), তাহলে সংস্থা পুরোনো অথচ কর্মী নতুন — এই খুব
-   * সাধারণ অবস্থায় জানালা সংস্থার প্রথম দিন থেকে শুরু হতো, অর্থাৎ সে
-   * সিস্টেমে আসার আগের মাসগুলোও তার ঘাটতিতে ঢুকত। `joined_on` ঠিকঠাক
-   * বসানো থাকলে সেটাও আটকাত, কিন্তু ওই কলামটা মালিকের হাতে লেখা আর
-   * খালিও থাকতে পারে; **এই সীমাটা ডেটা থেকেই আসে**, তাই আলাদা করে
-   * ভরসা করা যায়।
+   * If the number were the **organisation's** first day (as it used to be, a
+   * `findFirst` with no `where`), then in the very common case of an old
+   * organisation and a new employee the window would start at the
+   * organisation's first day, so months before they came to the system would
+   * enter their shortfall. A correctly set `joined_on` would stop that too, but
+   * that column is hand-written by the owner and may be empty; **this limit
+   * comes from the data itself**, so it can be relied on separately.
    *
-   * ⚠️⚠️ **যা এটা করে না, সেটাও লিখে রাখা দরকার।** `trackingStartedOn`
-   * আসে `min(daily_summary.work_date)` থেকে, আর `refreshDate()` প্রতিটি
-   * active কর্মীর সারি লেখে — ডেটা থাক বা না থাক। তাই এটা মাপে
-   * **"সার্ভার কবে থেকে এই কর্মীকে নিয়ে চলছে"**, "এজেন্ট কবে বসেছে" নয়।
-   * ১ অক্টোবর সক্রিয় হয়ে ৮ অক্টোবর এজেন্ট পাওয়া কর্মীর ৫টা এজেন্টহীন
-   * দিন এখনো পুরো ঘাটতি — আগে এই ফাইলে ঠিক ওই কেসটাই "সারানো হয়েছে" বলে
-   * লেখা ছিল, আর দাবিটা মিথ্যা ছিল।
+   * **What it does not do must be written down too.** `trackingStartedOn`
+   * comes from `min(daily_summary.work_date)`, and `refreshDate()` writes a row
+   * for every active employee — data or no data. So it measures **"since when
+   * the server has been carrying this employee"**, not "since when the agent
+   * went live". For an employee activated on 1 October whose agent arrived on
+   * 8 October, the 5 agentless days are still a full shortfall — this file
+   * used to say that exact case was "fixed", and the claim was false.
    */
-  it('joinedOn ট্র্যাকিং-শুরুর আগে হলে ট্র্যাকিং-শুরুই জেতে', () => {
+  it('if joinedOn is before the tracking start, the tracking start wins', () => {
     expect(
       elapsedWorkdays({
         ...BASE,
@@ -206,67 +208,67 @@ describe('elapsedWorkdays — ট্র্যাকিং শুরুর আগ
   });
 
   /**
-   * ⭐⭐ **G120 সারানো হয়েছে** *(২৪ আগস্ট ২০২৬)* — আগে এই টেস্টটাই সেই
-   * ফাঁকের ক্যানারি ছিল, আর এখন সেটা উল্টে দেওয়া হয়েছে।
+   * **G120 fixed.** This test used to be the canary for that gap, and it has now been flipped.
    *
-   * ⚠️⚠️ **যে ফাঁকটা ছিল:** `trackingStartedOn` আসত `min(daily_summary
-   * .work_date)` থেকে, অথচ `refreshDate()` প্রতিটি **active** কর্মীর সারি
-   * লেখে (ডেটা থাক বা না থাক)। তাই ৩ আগস্ট সক্রিয় হওয়া কর্মীর ট্র্যাকিং
-   * ৩ আগস্ট থেকেই ধরা হতো — এজেন্ট ১৩ তারিখে বসলেও — আর মাঝের এজেন্টহীন
-   * আটটা দিন তার **পুরো ঘাটতি** হয়ে থাকত।
+   * **The gap that existed:** `trackingStartedOn` came from
+   * `min(daily_summary.work_date)`, yet `refreshDate()` writes a row for every
+   * **active** employee (data or no data). So an employee activated on 3 August
+   * had tracking counted from 3 August — even if the agent went live on the 13th —
+   * and the eight agentless days in between stayed as their **full shortfall**.
    *
-   * ⭐ **এখন উৎস `work_sessions`** (`src/summary/tracking-start.ts`), যার
-   * সারি কেবল এজেন্ট সত্যিই কিছু পাঠালে জন্মায়। অর্থাৎ সংখ্যাটা এখন
-   * সত্যিই *"তার এজেন্ট কবে বসেছে"* মাপে।
+   * **The source is now `work_sessions`** (`src/summary/tracking-start.ts`),
+   * whose rows exist only when the agent really sent something. So the number
+   * now truly measures *"since when their agent has been live"*.
    *
-   * ⚠️ অঙ্কটা (`elapsedWorkdays`) এই ব্যাচে **এক লাইনও বদলায়নি** — বদলেছে
-   * কেবল তাকে যে খোরাক দেওয়া হয়। তাই এই টেস্ট দেখায় খোরাকটা ঠিক হলে
-   * ফলটাও ঠিক; আসল উৎস-বদলের পাহারা `proration.e2e.spec.ts`-এ।
+   * The arithmetic (`elapsedWorkdays`) did **not change by a single line** in
+   * this batch — only what feeds it changed. So this test shows that if the
+   * feed is right the result is right; the real guard for the source change is
+   * in `proration.e2e.spec.ts`.
    */
-  it('এজেন্ট দেরিতে বসলে আগের দিনগুলো আর গোনা হয় না', () => {
+  it('if the agent went live late, the earlier days are no longer counted', () => {
     const activatedAug3 = {
       ...BASE,
       joinedOn: day('2026-08-03'),
-      // ⭐ এজেন্ট বসেছে ১৩ তারিখে — `work_sessions`-এর প্রথম সারিও তখনই
+      // The agent went live on the 13th — and the first `work_sessions` row is from then too
       trackingStartedOn: day('2026-08-13'),
     };
 
-    // ১৩–১৯ আগস্ট, শুক্রবার ১৪ বাদে = ৬ দিন
+    // 13–19 August, excluding Friday the 14th = 6 days
     expect(elapsedWorkdays(activatedAug3)).toBe(6);
 
     /**
-     * ⚠️⚠️ পুরোনো আচরণের সাথে ফারাকটা **৯ কর্মদিবস** — অর্থাৎ ৭২ ঘণ্টা,
-     * যা আগে ওই কর্মীর ঘাটতি হিসেবে গোনা হতো অথচ তাঁকে দেখাই হয়নি।
+     * The difference from the old behaviour is **9 working days** — i.e. 72
+     * hours, which used to be counted as that employee's shortfall although they were never observed.
      */
     const asBefore = { ...activatedAug3, trackingStartedOn: day('2026-08-03') };
     expect(elapsedWorkdays(asBefore) - elapsedWorkdays(activatedAug3)).toBe(9);
   });
 
   /**
-   * ⭐⭐ **কাউকে কখনো দেখা হয়নি** — কলার তখন `today` পাঠায়, `null` নয়।
+   * **Never observed** — the caller then sends `today`, not `null`.
    *
-   * ⚠️⚠️ `null` পাঠালে `maxDate()`-এ ওটা "সীমা নেই" হয়ে যেত, জানালা পুরো
-   * মাস জুড়ে খুলত, আর যার এজেন্ট কোনোদিন কিছু পাঠায়নি তার **পুরো মাসের
-   * ঘাটতি** দাঁড়াত — অর্থাৎ ফিক্সের উল্টো ফল। এই জোড়া টেস্টটাই সেই
-   * সিদ্ধান্তের পাহারা।
+   * Sending `null` would become "no limit" in `maxDate()`, the window would
+   * open across the whole month, and someone whose agent never sent anything
+   * would get a **full-month shortfall** — the opposite of the fix. This pair
+   * of tests guards that decision.
    */
-  it('কখনো দেখা হয়নি — today পাঠালে প্রত্যাশা ০, null পাঠালে পুরো মাস', () => {
+  it('never observed — sending today gives expectation 0, sending null gives the whole month', () => {
     const neverSeen = { ...BASE, trackingStartedOn: BASE.today };
     expect(elapsedWorkdays(neverSeen)).toBe(0);
 
-    // ⚠️ ভুলটা দেখতে কেমন — কেউ `?? null` লিখে ফেললে এটাই ঘটবে
+    // What the mistake looks like — this is what happens if someone writes `?? null`
     const withNull = { ...BASE, trackingStartedOn: null };
     expect(elapsedWorkdays(withNull)).toBeGreaterThan(0);
   });
 
-  /** ⚠️ ট্র্যাকিং আজই শুরু — শেষ হয়ে যাওয়া একটা দিনও দেখা হয়নি, তাই প্রত্যাশা ০ */
-  it('ট্র্যাকিং আজ শুরু হলে জানালা খালি', () => {
+  /** Tracking starts today — not even one finished day has been seen, so expectation 0 */
+  it('if tracking starts today the window is empty', () => {
     const fresh = { ...BASE, trackingStartedOn: BASE.today };
     expect(elapsedWindow(fresh)).toBeNull();
     expect(elapsedWorkdays(fresh)).toBe(0);
   });
 
-  it('ট্র্যাকিং-শুরু ক্যালেন্ডার ছুটির সাথেও মেলে', () => {
+  it('tracking start also matches the calendar holidays', () => {
     expect(
       elapsedWorkdays({
         ...BASE,
@@ -277,39 +279,39 @@ describe('elapsedWorkdays — ট্র্যাকিং শুরুর আগ
   });
 });
 
-// ════════════════════════════ ৩ · আজকের দিনটা বাদ ════════════════════════════
+// ════════════════════════════ 3 · today is excluded ════════════════════════════
 
-describe('elapsedWorkdays — আজকের দিন প্রত্যাশায় ধরা হয় না', () => {
+describe('elapsedWorkdays — today is not counted in the expectation', () => {
   /**
-   * ⚠️⚠️ Live Board-এ ঠিক এই ভুলটাই ধরা পড়েছিল: আজকের পুরো ৮ ঘণ্টা
-   * প্রত্যাশায় ধরলে ভোর ৬টায় দল "১১৪ ঘণ্টা পিছিয়ে" দেখাত, আর সন্ধ্যা
-   * নাগাদ সংখ্যাটা নিজে থেকেই ঠিক হয়ে যেত। একই দল দিনে দুবার দুই রকম
-   * রায় পেত, কেবল ঘড়ির কাঁটার কারণে।
+   * This exact mistake was caught on the Live Board: counting today's full 8
+   * hours in the expectation showed the team "114 hours behind" at 6 a.m.,
+   * and by evening the number fixed itself. The same team got two different
+   * verdicts in a day, purely because of the clock hands.
    */
-  it('জানালা গতকালেই থামে, আজ নয়', () => {
-    // আজ (২০ আগস্ট, বৃহস্পতিবার) ধরলে হতো ১৮ — হাতে গোনা
+  it('the window stops yesterday, not today', () => {
+    // Counting today (Thursday 20 August) would give 18 — hand-counted
     expect(elapsedWorkdays(BASE)).toBe(17);
     expect(elapsedWindow(BASE)?.to).toEqual(day('2026-08-19'));
   });
 
-  /** পর্বের প্রথম দিনে এখনো একটা দিনও শেষ হয়নি — প্রত্যাশা ০-ই সৎ */
-  it('আজ মাসের ১ তারিখ হলে জানালা খালি', () => {
+  /** On the first day of the period not one day has finished yet — expectation 0 is the honest answer */
+  it('if today is the 1st of the month the window is empty', () => {
     const first = { ...BASE, today: AUG_START };
     expect(elapsedWindow(first)).toBeNull();
     expect(elapsedWorkdays(first)).toBe(0);
   });
 
-  /** ⚠️ আজ সাপ্তাহিক ছুটি হলে বাদ দেওয়া-না-দেওয়ায় তফাত নেই — সংখ্যাটা তবু স্থির থাকা চাই */
-  it('আজ শুক্রবার হলেও গতকাল পর্যন্তই', () => {
-    // ১–২০ আগস্ট, শুক্রবার ৭ ও ১৪ বাদে = ১৮
+  /** If today is the weekly day off, excluding or not makes no difference — the number must still stay fixed */
+  it('even if today is Friday, only up to yesterday', () => {
+    // 1–20 August, excluding Fridays the 7th and 14th = 18
     expect(elapsedWorkdays({ ...BASE, today: day('2026-08-21') })).toBe(18);
   });
 });
 
-// ═════════════════ ৪ · আসল ঘটনার regression — ১৪ আগস্ট ২০২৬ ═════════════════
+// ═════════════════ 4 · regression of the real incident — 14 August 2026 ═════════════════
 
-describe('১৪ আগস্ট ২০২৬ — ~৯৪ ঘণ্টার ভুয়া ঘাটতি আর ফিরবে না', () => {
-  /** ২৭ কর্মদিবস × ৮ ঘণ্টা — আগস্টের prorated টার্গেট */
+describe('14 August 2026 — the phantom ~94-hour shortfall will not return', () => {
+  /** 27 working days × 8 hours — August's prorated target */
   const AUG_TARGET = 27 * 8 * HOUR;
 
   const monthBase = {
@@ -328,7 +330,7 @@ describe('১৪ আগস্ট ২০২৬ — ~৯৪ ঘণ্টার ভ
       trackingStartedOn,
     });
 
-  it('ট্র্যাকিং শুরুর আগে গুনলে ১২ কর্মদিবস, অর্থাৎ ৯৬ ঘণ্টার প্রত্যাশা', () => {
+  it('counting before tracking start gives 12 working days, i.e. an expectation of 96 hours', () => {
     const before = rollupMonth({ ...monthBase, workdaysElapsed: elapsedOn(null), observedWorkdays: elapsedOn(null) });
 
     expect(elapsedOn(null)).toBe(12);
@@ -336,11 +338,11 @@ describe('১৪ আগস্ট ২০২৬ — ~৯৪ ঘণ্টার ভ
   });
 
   /**
-   * ⭐ ১৩ আগস্ট থেকে দেখা শুরু, আজ ১৪ — শেষ হওয়া কর্মদিবস মোটে একটা।
-   * ⚠️ কেউ এক ঘণ্টাও কাজ না করলে ঘাটতি ৮ ঘণ্টা, ৯৬ নয়। বাকি ৮৮ ঘণ্টা
-   *    কোনো ব্যর্থতা নয় — ওটা কেবল **আমাদের না-দেখা**।
+   * Observation started on 13 August, today is the 14th — exactly one working day has finished.
+   * If someone worked not even an hour the shortfall is 8 hours, not 96. The other
+   *    88 hours are no failure — they are simply **our not having seen**.
    */
-  it('১৩ আগস্ট থেকে গুনলে ১ কর্মদিবস, প্রত্যাশা ৮ ঘণ্টা', () => {
+  it('counting from 13 August gives 1 working day, expectation 8 hours', () => {
     const started = day('2026-08-13');
     const after = rollupMonth({
       ...monthBase,
@@ -354,11 +356,11 @@ describe('১৪ আগস্ট ২০২৬ — ~৯৪ ঘণ্টার ভ
   });
 
   /**
-   * ⚠️ টার্গেট ও ঘাটতি (`shortfall_sec`) **বদলায় না** — পে-রোলের কর্তন
-   * ওই দুটো থেকেই হয় (`payroll.math.ts`: `targetSec − creditedSec`)।
-   * এই বদল কেবল pace/expected-কে ছোঁয়, কারো বেতনের অঙ্ক নয়।
+   * The target and shortfall (`shortfall_sec`) **do not change** — payroll
+   * deductions come from those two (`payroll.math.ts`: `targetSec − creditedSec`).
+   * This change touches only pace/expected, not anyone's pay amount.
    */
-  it('টার্গেট ও ঘাটতি অপরিবর্তিত — কর্তনের হিসাব এই বদলের বাইরে', () => {
+  it('target and shortfall unchanged — the deduction calculation is outside this change', () => {
     const before = rollupMonth({ ...monthBase, workdaysElapsed: elapsedOn(null), observedWorkdays: elapsedOn(null) });
     const after = rollupMonth({
       ...monthBase,
@@ -372,39 +374,40 @@ describe('১৪ আগস্ট ২০২৬ — ~৯৪ ঘণ্টার ভ
   });
 });
 
-// ═══════════════ ৫ · এক নিয়ম, সব পর্দা — একই ইনপুটে একই উত্তর ═══════════════
+// ═══════════════ 5 · one rule, every screen — same input, same answer ═══════════════
 
 /**
- * ⭐⭐⭐ **এই ফাইলের সবচেয়ে জরুরি অংশ।**
+ * **The most important part of this file.**
  *
- * ⚠️ যে ভুলটা এটা ঠেকায়, সেটা কোনো একটা সংখ্যার ভুল নয় — **দুটো সংখ্যার
- * অমিল**। এক সময় `workdays_elapsed`-এর তিনটে সংজ্ঞা চালু ছিল:
+ * The mistake it prevents is not an error in one number — it is **a mismatch
+ * between two numbers**. At one time `workdays_elapsed` had three definitions in use:
  *
- * | কোথায়            | শুরু                          | শেষ    | কী গোনে           |
- * |------------------|-------------------------------|--------|-------------------|
- * | মাসিক rollup      | max(মাস, joined, ট্র্যাকিং)    | গতকাল  | ক্যালেন্ডার কর্মদিবস |
- * | tray / `/me`      | max(মাস, joined)              | **আজ** | ক্যালেন্ডার কর্মদিবস |
- * | Live Board        | max(মাস, **org** ট্র্যাকিং)    | গতকাল  | **daily_summary সারি** |
+ * | Where             | Start                         | End       | What it counts          |
+ * |-------------------|-------------------------------|-----------|-------------------------|
+ * | Monthly rollup    | max(month, joined, tracking)  | yesterday | calendar working days   |
+ * | tray / `/me`      | max(month, joined)            | **today** | calendar working days   |
+ * | Live Board        | max(month, **org** tracking)  | yesterday | **daily_summary rows**  |
  *
- * ফল: কর্মী নিজের tray-তে যা দেখতেন আর owner Monthly পাতায় যা দেখতেন,
- * ফারাক ~৮৯ ঘণ্টা। এখন চারটে পথই একই দুটো ফাংশন ডাকে — `elapsedWorkdays()`
- * আর `proratedExpectedSec()` — তাই সংখ্যাটা আর আলাদা হতেই পারে না।
+ * Result: what an employee saw in their own tray and what the owner saw on the
+ * Monthly page differed by ~89 hours. Now all four paths call the same two
+ * functions — `elapsedWorkdays()` and `proratedExpectedSec()` — so the
+ * number can no longer differ.
  */
-describe('একই ইনপুট → tray · Monthly · Live Board সবাই একই সংখ্যা', () => {
-  /** ১৭ তারিখে যোগ দেওয়া কর্মী, ট্র্যাকিং ১৩ থেকে, আজ ২০ আগস্ট */
+describe('same input → tray · Monthly · Live Board all give the same number', () => {
+  /** An employee who joined on the 17th, tracking from the 13th, today is 20 August */
   const input: ElapsedInput = {
     ...BASE,
     joinedOn: day('2026-08-17'),
     trackingStartedOn: day('2026-08-13'),
   };
 
-  /** ১৭–৩১ আগস্ট, শুক্রবার ২১ ও ২৮ বাদে = ১৩ কর্মদিবস (`prorate()`-এর d) */
+  /** 17–31 August, excluding Fridays the 21st and 28th = 13 working days (the d of `prorate()`) */
   const EMPLOYEE_WORKDAYS = 13;
   const TARGET_SEC = EMPLOYEE_WORKDAYS * 8 * HOUR;
 
   const workdaysElapsed = elapsedWorkdays(input);
 
-  /** মাসিক rollup — `monthly_summary.expected_sec`/`pace_sec` কলাম দুটোই এখান থেকে */
+  /** Monthly rollup — both the `monthly_summary.expected_sec` and `pace_sec` columns come from here */
   const monthly = rollupMonth({
     workedSec: 40 * HOUR,
     adjustmentSec: 0,
@@ -416,7 +419,7 @@ describe('একই ইনপুট → tray · Monthly · Live Board সবা�
     daysWithWork: 5,
   });
 
-  it('জানালাটা যোগ দেওয়ার দিন থেকে গতকাল — ৩ কর্মদিবস', () => {
+  it('the window is from the join day to yesterday — 3 working days', () => {
     expect(elapsedWindow(input)).toEqual({
       from: day('2026-08-17'),
       to: day('2026-08-19'),
@@ -425,11 +428,11 @@ describe('একই ইনপুট → tray · Monthly · Live Board সবা�
   });
 
   /**
-   * ⭐ tray (`/me`, এজেন্টের tray) → `progress.math.ts`
-   *   Monthly পাতা ও Live Board → `monthly_summary.expected_sec` কলাম
-   *   দুটোই নিচের একই `proratedExpectedSec()`-এ গিয়ে ঠেকে।
+   * tray (`/me`, the agent's tray) → `progress.math.ts`
+   *   Monthly page and Live Board → the `monthly_summary.expected_sec` column
+   *   Both end up in the same `proratedExpectedSec()` below.
    */
-  it('tray আর মাসিক rollup হুবহু এক সেকেন্ডে মেলে', () => {
+  it('the tray and the monthly rollup match to the exact second', () => {
     const tray = trayExpectedSec({
       creditedSec: 40 * HOUR,
       monthlyTargetHours: TARGET_SEC / HOUR,
@@ -438,10 +441,10 @@ describe('একই ইনপুট → tray · Monthly · Live Board সবা�
     });
 
     expect(tray).toBe(monthly.expectedSec);
-    expect(monthly.expectedSec).toBe(24 * HOUR); // ৩ দিন × ৮ ঘণ্টা
+    expect(monthly.expectedSec).toBe(24 * HOUR); // 3 days × 8 hours
   });
 
-  it('গতিও (pace) এক — কর্মী ও owner একই কথা পড়েন', () => {
+  it('pace is the same too — the employee and the owner read the same thing', () => {
     const tray = trayPaceSec({
       creditedSec: 40 * HOUR,
       monthlyTargetHours: TARGET_SEC / HOUR,
@@ -453,8 +456,8 @@ describe('একই ইনপুট → tray · Monthly · Live Board সবা�
     expect(monthly.paceSec).toBe(16 * HOUR);
   });
 
-  /** ⚠️ সূত্রটা সত্যিই একটাই — দুটো পথই এই একই ফাংশনে গিয়ে ঠেকে */
-  it('দুটো পথই `proratedExpectedSec()`-এই গিয়ে ঠেকে', () => {
+  /** The formula really is just one — both paths end up in this same function */
+  it('both paths end up in `proratedExpectedSec()`', () => {
     expect(
       proratedExpectedSec({
         targetSec: TARGET_SEC,
@@ -465,14 +468,14 @@ describe('একই ইনপুট → tray · Monthly · Live Board সবা�
   });
 
   /**
-   * ⭐ রিপোর্ট (F01/F02 → Monthly পাতার হিটম্যাপ ও দৈনিক ইমেইল) দিনগুলোর
-   * টার্গেট যোগ করে, কিন্তু **ঠিক এই জানালার** ভেতরেই। তাই যোগফলটা
-   * সবসময় "জানালার কর্মদিবস × দৈনিক টার্গেট"-এই দাঁড়ায়।
+   * The report (F01/F02 → the Monthly page heatmap and the daily email) adds
+   * up the days' targets, but **exactly inside this window**. So the sum
+   * always comes to "window working days × daily target".
    *
-   * ⚠️ `reports.service.ts` জানালাটা নিজে বানায় না, `elapsedWindow()`
-   * ডাকে — এখানে সেই যোগফলটাই নকল করে দেখানো হচ্ছে।
+   * `reports.service.ts` does not build the window itself, it calls
+   * `elapsedWindow()` — here that same sum is imitated and shown.
    */
-  it('রিপোর্টের দিন-ধরে-যোগও একই জানালা, একই কর্মদিবস', () => {
+  it("the report's day-by-day sum is the same window, the same working days", () => {
     const window = elapsedWindow(input);
     expect(window).not.toBeNull();
 
@@ -482,8 +485,8 @@ describe('একই ইনপুট → tray · Monthly · Live Board সবা�
       t <= window!.to.getTime();
       t += 86_400_000
     ) {
-      // রিপোর্টের `targetSecOf()` ছুটির দিনে ০ দেয়, তাই কর্মদিবসই গোনা হয়।
-      // ⚠️ শুক্রবার = `getUTCDay() === 5` (JS-এর রবি = ০ ছাঁদে)
+      // The report's `targetSecOf()` gives 0 on a day off, so working days are what is counted.
+      // Friday = `getUTCDay() === 5` (in JS's Sunday = 0 scheme)
       if (new Date(t).getUTCDay() !== 5) workdaysSeen += 1;
     }
 
@@ -491,14 +494,14 @@ describe('একই ইনপুট → tray · Monthly · Live Board সবা�
   });
 
   /**
-   * ⚠️⚠️ **পুরোনো tray-র সূত্র ফিরে এলে এই টেস্ট ভাঙবে।**
-   * সেটা ছিল: মাসের ১ (বা joined) থেকে **আজ ধরে**, ট্র্যাকিং-শুরু ছাড়াই।
+   * **If the old tray formula comes back, this test breaks.**
+   * That formula was: from the 1st (or joined) of the month **counting today**, with no tracking start.
    */
-  it('পুরোনো tray-সূত্রে ফিরে গেলে ফারাকটা আবার দেখা যেত', () => {
+  it('going back to the old tray formula would bring the difference back', () => {
     const oldTrayElapsed = elapsedWorkdays({
       ...input,
       trackingStartedOn: null,
-      // পুরোনো কোড আজকের দিনটাও গুনত — এক দিন পিছিয়ে দিলে সেটাই হয়
+      // The old code counted today too — shifting back by one day does exactly that
       today: day('2026-08-21'),
     });
 
@@ -508,32 +511,32 @@ describe('একই ইনপুট → tray · Monthly · Live Board সবা�
 });
 
 
-// ══════════════ ৬ · G111 — "দেখা হয়নি" আর "ঘাটতি নেই" আলাদা ══════════════
+// ══════════════ 6 · G111 — "not observed" and "no shortfall" are different ══════════════
 
 /**
- * ⭐⭐ **G111** — একই ০ দুটো সম্পূর্ণ বিপরীত কথা বলতে পারে।
+ * **G111** — the same 0 can say two completely opposite things.
  *
- * ⚠️⚠️ যাঁর একটাও **শেষ হয়ে যাওয়া** কর্মদিবস এখনো দেখা হয়নি, তাঁর জানালা
- * খালি → প্রত্যাশা ০ → গতি ০। পর্দায় সেটা **হুবহু টার্গেট পূরণ করা মানুষের
- * মতো** দেখায়। নতুন কর্মীর প্রথম সপ্তাহে বা কারো এজেন্ট বসাতে দেরি হলে ঠিক
- * তখনই এটা ঘটে — আর তখন খবরটা "সব ঠিক আছে" বলে পড়া হয়।
+ * Someone with not one **finished** working day seen yet has an empty window
+ * → expectation 0 → pace 0. On screen that looks **exactly like someone who
+ * met the target**. It happens precisely in a new employee's first week or when
+ * someone's agent is installed late — and then the news gets read as "all is well".
  */
-describe('isObserved — এক নিয়ম, তিন পর্দা', () => {
-  it('একটাও শেষ-হওয়া কর্মদিবস না দেখা হলে `false`', () => {
+describe('isObserved — one rule, three screens', () => {
+  it('`false` if not one finished working day has been seen', () => {
     expect(isObserved({ workdaysElapsed: 0 })).toBe(false);
   });
 
-  it('একটা দেখা হলেই `true` — "যথেষ্ট দেখা হয়েছে" কোনো ধারণা নেই', () => {
+  it('`true` as soon as one has been seen — there is no concept of "seen enough"', () => {
     expect(isObserved({ workdaysElapsed: 1 })).toBe(true);
   });
 
   /**
-   * ⭐⭐ **এটাই আসল পাহারা।** ⚠️ পতাকাটা `daysWithWork` (কাজ করেছেন কি না)
-   * থেকে গুনলে যিনি দেখা-যাওয়া দিনে এক ঘণ্টাও কাজ করেননি তিনি "এখনো দেখা
-   * হয়নি" দেখাতেন — অর্থাৎ **সত্যিকারের ঘাটতিটাই ঢাকা পড়ত**, আর ত্রুটিটা
-   * ঠিক উল্টো দিকে গিয়ে আরও খারাপ হতো।
+   * **This is the real guard.** If the flag were counted from `daysWithWork`
+   * (whether they worked), someone who did not work even an hour on a seen day would
+   * show as "not yet observed" — i.e. **a genuine shortfall would be hidden**, and
+   * the error would go the opposite way and get worse.
    */
-  it('⭐ "দেখা হয়েছে" মানে "কাজ করেছেন" নয়', () => {
+  it('"seen" does not mean "worked"', () => {
     const numbers = rollupMonth({
       workedSec: 0,
       adjustmentSec: 0,
@@ -547,18 +550,18 @@ describe('isObserved — এক নিয়ম, তিন পর্দা', () 
 
     expect(numbers.daysWithWork).toBe(0);
     expect(isObserved(numbers)).toBe(true);
-    // ⭐ আর তাই তাঁর ঘাটতিটা সত্যিকারের ঘাটতি, লুকানোর কিছু নেই
+    // And so their shortfall is a genuine shortfall, nothing to hide
     expect(numbers.paceSec).toBeLessThan(0);
   });
 
   /**
-   * ⭐⭐⭐ **এই ফাইলের G111-অংশের সবচেয়ে জরুরি টেস্ট।**
+   * **The most important test of this file's G111 part.**
    *
-   * ⚠️⚠️ দুজনের `paceSec` **হুবহু এক** (০), অথচ অবস্থা দুই মেরুর। পতাকাটা
-   * না থাকলে পর্দার কাছে এই দুটো অবস্থা সম্পূর্ণ অভিন্ন — আর তখন যাঁকে
-   * এখনো দেখাই হয়নি তিনিও "টার্গেট পূরণ" পড়তেন।
+   * The two have **exactly the same** `paceSec` (0), yet their situations are
+   * polar opposites. Without the flag the two states are completely identical to
+   * the screen — and then someone not yet seen would also read as "target met".
    */
-  it('⭐ টার্গেট ঠিক পূরণ আর এখনো না-দেখা — গতি একই ০, অবস্থা আলাদা', () => {
+  it('target exactly met vs not yet seen — pace the same 0, state different', () => {
     const met = rollupMonth({
       workedSec: 216 * HOUR,
       adjustmentSec: 0,
@@ -576,7 +579,7 @@ describe('isObserved — এক নিয়ম, তিন পর্দা', () 
       targetSec: 216 * HOUR,
       expectedWorkdays: 27,
       monthWorkdays: 27,
-      // ⚠️ এজেন্ট আজই বসেছে — একটাও শেষ-হওয়া দিন নেই
+      // The agent went live today — there is no finished day
       workdaysElapsed: 0,
       observedWorkdays: 0,
       daysWithWork: 0,
@@ -589,11 +592,11 @@ describe('isObserved — এক নিয়ম, তিন পর্দা', () 
   });
 
   /**
-   * ⭐ পতাকাটা যে জানালা থেকে প্রত্যাশা বেরোয় ঠিক সেখান থেকেই আসে —
-   * তাই "দেখা হয়েছে" আর "প্রত্যাশা আছে" কখনো দুই কথা বলতে পারে না।
+   * The flag comes from exactly the window the expectation comes from —
+   * so "seen" and "has an expectation" can never say two different things.
    */
-  it('⭐ জানালা খালি হলেই না-দেখা — দুটো এক সূত্রে বাঁধা', () => {
-    // ট্র্যাকিং আজই শুরু, তাই গতকাল পর্যন্ত কিছুই নেই
+  it('as soon as the window is empty, not observed — both tied to one rule', () => {
+    // Tracking starts today, so there is nothing up to yesterday
     const input: ElapsedInput = { ...BASE, trackingStartedOn: day('2026-08-20') };
 
     expect(elapsedWindow(input)).toBeNull();

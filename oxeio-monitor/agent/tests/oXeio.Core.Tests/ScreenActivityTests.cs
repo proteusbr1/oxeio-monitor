@@ -3,39 +3,40 @@ using oXeio.Core.Tracking;
 namespace oXeio.Core.Tests;
 
 /// <summary>
-/// <b>G46 — পর্দা সত্যিই বদলাচ্ছে কি না।</b>
+/// <b>G46: is the screen really changing?</b>
 ///
-/// ⚠️⚠️ এই ফাইলের ভুলের দুটো দিক, আর <b>দ্বিতীয়টা অনেক বেশি ক্ষতিকর</b>:
-///   · কম ধরলে জিগলার ঘণ্টা চুরি করে যাবে
-///   · <b>বেশি ধরলে সৎ কর্মীর কাজের সময় কাটা যাবে</b> — লম্বা নথি পড়া,
-///     ভাবা, ফোনে কথা বলা; পর্দা তখন স্থির থাকতেই পারে
+/// Careful: a mistake in this file has two sides, and <b>the second does far more
+/// harm</b>:
+///   - Too lenient: a jiggler steals hours
+///   - <b>Too strict: an honest worker's time gets cut</b>: reading a long document,
+///     thinking, talking on the phone; the screen can stay still then
 ///
-/// ⭐ তাই "জমেনি" প্রমাণ করার টেস্টগুলো এখানে অন্তত ততটাই গুরুত্ব পায়।
+/// So the tests that prove "not frozen" matter here at least as much.
 /// </summary>
 public class ScreenActivityTests
 {
     private static readonly DateTimeOffset Start =
-        new(2026, 8, 16, 4, 0, 0, TimeSpan.Zero); // ঢাকায় সকাল ১০টা
+        new(2026, 8, 16, 4, 0, 0, TimeSpan.Zero); // 10 AM in Dhaka
 
     private static DateTimeOffset At(int minutes) => Start.AddMinutes(minutes);
 
-    /// <summary>১৬×১৬ ধূসর ছাপ — সব কোষ একই মান</summary>
+    /// <summary>A 16x16 gray fingerprint: every cell has the same value</summary>
     private static byte[] Flat(byte value) => Enumerable.Repeat(value, 256).ToArray();
 
     /// <summary>
-    /// বাস্তবের মতো নমুনা আসতে থাকা — প্রতি মিনিটে একই ছাপ।
+    /// Samples keep arriving as in real life: the same fingerprint every minute.
     ///
-    /// ⚠️⚠️ <b>টেস্টে এটা দরকার হয়, আর সেটাই আসল কথা।</b> একটামাত্র নমুনা
-    /// দিয়ে আর কখনো "জমেছে" প্রমাণ করা যায় না — <see cref="ScreenActivity.StaleAfter"/>
-    /// পেরোলেই সন্দেহ উঠে যায়। এজেন্টে নমুনা আসে প্রতি ৬০ সেকেন্ডে
-    /// (জমে থাকলে ৫ সেকেন্ডে), তাই এখানেও তা-ই।
+    /// Careful: <b>tests need this, and that is the whole point.</b> With a single
+    /// sample "frozen" can no longer be proven; suspicion lifts once
+    /// <see cref="ScreenActivity.StaleAfter"/> passes. In the agent a sample arrives every
+    /// 60 seconds (every 5 seconds when frozen), so it is the same here.
     /// </summary>
     private static void Steady(ScreenActivity screen, byte value, int fromMin, int toMin)
     {
         for (var m = fromMin; m <= toMin; m++) screen.Observe(Flat(value), At(m));
     }
 
-    /// <summary>একই ছাপ, কিন্তু `cells`টা কোষ অনেকখানি বদলানো</summary>
+    /// <summary>The same fingerprint, but with `cells` cells changed by a large amount</summary>
     private static byte[] Nudged(byte value, int cells)
     {
         var f = Flat(value);
@@ -44,9 +45,9 @@ public class ScreenActivityTests
     }
 
     /// <summary>
-    /// ⚠️⚠️ <b>নমুনা না থাকলে কখনোই "জমেছে" নয়।</b> ক্যাপচার বন্ধ থাকতে পারে
-    /// (রাতে), ব্যর্থ হতে পারে, বা এজেন্ট সবে চালু হয়েছে — তথ্যের অভাবকে
-    /// প্রমাণ ধরলে গোটা দলের গোনা বন্ধ হয়ে যেত।
+    /// Careful: <b>with no sample it is never "frozen".</b> Capture may be off (at
+    /// night), may have failed, or the agent may have just started; treating missing
+    /// information as proof would stop counting for the whole team.
     /// </summary>
     [Fact]
     public void No_sample_is_never_frozen()
@@ -58,7 +59,9 @@ public class ScreenActivityTests
         Assert.Null(screen.LastChangedAt);
     }
 
-    /// <summary>⭐ প্রথম নমুনাটাই একটা "বদল" — তার আগে তুলনার কিছু ছিল না।</summary>
+    /// <summary>
+    /// The first sample is itself a "change": there was nothing to compare against before it.
+    /// </summary>
     [Fact]
     public void First_sample_counts_as_a_change()
     {
@@ -82,7 +85,9 @@ public class ScreenActivityTests
         Assert.True(screen.IsFrozen(At(10)));
     }
 
-    /// <summary>⚠️ ঠিক সীমানার আগে এখনো "জমেনি" — এক মিনিটও আগে নয়।</summary>
+    /// <summary>
+    /// Careful: just before the boundary it is still "not frozen": not a minute earlier.
+    /// </summary>
     [Fact]
     public void Just_under_the_window_is_not_frozen()
     {
@@ -95,8 +100,8 @@ public class ScreenActivityTests
     }
 
     /// <summary>
-    /// ⭐⭐ <b>এই ফাইলের মূল টেস্ট</b> — একবার বদলালেই ঘড়ি নতুন করে শুরু।
-    /// নইলে যিনি দশ মিনিট পড়ে তারপর কাজ শুরু করলেন, তাঁর গোনা বন্ধই থেকে যেত।
+    /// <b>The main test of this file:</b> a single change restarts the clock. Otherwise
+    /// someone who read for ten minutes and then started working would stay uncounted.
     /// </summary>
     [Fact]
     public void A_change_resets_the_clock()
@@ -106,7 +111,7 @@ public class ScreenActivityTests
         Steady(screen, 60, 0, 12);
         Assert.True(screen.IsFrozen(At(12)));
 
-        screen.Observe(Flat(100), At(12));   // পর্দা নড়ল
+        screen.Observe(Flat(100), At(12));   // the screen moved
 
         Assert.False(screen.IsFrozen(At(12)));
 
@@ -115,7 +120,7 @@ public class ScreenActivityTests
         Assert.True(screen.IsFrozen(At(22)));
     }
 
-    /// <summary>⚠️ পুরোনো হ্যাশে ফিরে গেলেও সেটা একটা বদল — পর্দা নড়েছে।</summary>
+    /// <summary>Careful: returning to an old hash is also a change: the screen moved.</summary>
     [Fact]
     public void Returning_to_an_old_hash_is_still_a_change()
     {
@@ -129,8 +134,9 @@ public class ScreenActivityTests
     }
 
     /// <summary>
-    /// ⚠️⚠️ ঘড়ি পিছিয়ে গেলে (NTP সংশোধন) হিসাবটা ঋণাত্মক হয় — তখনও
-    /// "জমেছে" বলা যাবে না, নইলে একটা সময়-সংশোধনেই সবার গোনা বন্ধ হতো।
+    /// Careful: if the clock goes back (an NTP correction) the calculation turns
+    /// negative; it still must not say "frozen", or one time correction would stop
+    /// everyone's counting.
     /// </summary>
     [Fact]
     public void Clock_going_backwards_is_not_frozen()
@@ -142,7 +148,7 @@ public class ScreenActivityTests
         Assert.False(screen.IsFrozen(At(10)));
     }
 
-    /// <summary>⭐ জানালাটা বদলানো যায় — টেস্টে ও ভবিষ্যতে নিয়ম বদলাতে</summary>
+    /// <summary>The window can be changed: in tests and to change the rule in future</summary>
     [Fact]
     public void Window_is_configurable()
     {
@@ -161,22 +167,22 @@ public class ScreenActivityTests
             () => new ScreenActivity(TimeSpan.Zero));
     }
 
-    /// <summary>⭐ ডিফল্ট ১০ মিনিট — জিগলার সর্বোচ্চ ওইটুকুই চুরি করতে পারবে</summary>
+    /// <summary>The default is 10 minutes: that is the most a jiggler can steal</summary>
     [Fact]
     public void Default_window_is_ten_minutes()
     {
         Assert.Equal(TimeSpan.FromMinutes(10), ScreenActivity.FrozenAfter);
     }
 
-    // ── সহনশীলতা — এখানেই ফিচারটা বাঁচে বা মরে ────────────────────────────
+    // ── tolerance: this is where the feature lives or dies ──────────────────
 
     /// <summary>
-    /// ⭐⭐⭐ <b>এই ফাইলের সবচেয়ে জরুরি টেস্ট।</b>
+    /// <b>The most important test in this file.</b>
     ///
-    /// টাস্কবারের ঘড়ি <b>প্রতি মিনিটে</b> বদলায়। হুবহু মিল খুঁজলে ওই একটা
-    /// অঙ্কই যথেষ্ট হতো — পর্দা চিরকাল "বদলাচ্ছে" দেখাত, আর গোটা পাহারাটা
-    /// <b>নীরবে অকেজো</b> থাকত। ঠিক এই ধরনের নীরব অকেজো ফিচার এই প্রকল্পে
-    /// বারবার ফিরে এসেছে, তাই এটা টেস্টে বাঁধা।
+    /// The taskbar clock changes <b>every minute</b>. If an exact match were required,
+    /// that one digit alone would be enough: the screen would always show "changing", and
+    /// the whole guard would sit <b>silently useless</b>. This kind of silently useless
+    /// feature has come back in this project again and again, so it is pinned in a test.
     /// </summary>
     [Fact]
     public void Taskbar_clock_alone_does_not_count_as_a_change()
@@ -184,14 +190,14 @@ public class ScreenActivityTests
         var screen = new ScreenActivity();
 
         screen.Observe(Flat(100), At(0));
-        // ঘড়ির অঙ্ক বদলাল — ২৫৬ কোষের মধ্যে দুটো
+        // the clock digit changed: two cells out of 256
         screen.Observe(Nudged(100, cells: 2), At(5));
         screen.Observe(Nudged(100, cells: 2), At(10));
 
         Assert.True(screen.IsFrozen(At(10)));
     }
 
-    /// <summary>⭐ সত্যিকারের কাজ সহজেই সীমা ছাড়ায় — স্ক্রল, টাইপ, উইন্ডো বদল</summary>
+    /// <summary>Real work easily crosses the limit: scrolling, typing, switching windows</summary>
     [Fact]
     public void Real_work_counts_as_a_change()
     {
@@ -203,7 +209,7 @@ public class ScreenActivityTests
         Assert.False(screen.IsFrozen(At(14)));
     }
 
-    /// <summary>⚠️ সীমানা — ৫টা কোষে জমেই থাকে, ৬টায় বদল</summary>
+    /// <summary>Careful: boundary: 5 cells stay frozen, at 6 it is a change</summary>
     [Fact]
     public void Threshold_is_six_cells()
     {
@@ -212,8 +218,8 @@ public class ScreenActivityTests
     }
 
     /// <summary>
-    /// ⚠️⚠️ সামান্য হেরফের (WebP-র ক্ষতিপূরণ, অ্যান্টি-এলিয়াসিং) বদল নয় —
-    /// নইলে পর্দা <b>কোনোদিনই</b> জমত না।
+    /// Careful: small variation (WebP loss, anti-aliasing) is not a change;
+    /// otherwise the screen would <b>never</b> count as frozen.
     /// </summary>
     [Fact]
     public void Tiny_noise_everywhere_is_not_a_change()
@@ -225,46 +231,48 @@ public class ScreenActivityTests
         Assert.False(ScreenActivity.Differs(a, b));
     }
 
-    /// <summary>⚠️ মনিটর যোগ/বিয়োগ হলে ছাপের আকারই বদলায় — সেটা বদল</summary>
+    /// <summary>
+    /// Careful: when a monitor is added or removed the fingerprint size itself changes; that is
+    /// a change
+    /// </summary>
     [Fact]
     public void Different_size_is_a_change()
     {
         Assert.True(ScreenActivity.Differs(Flat(100), new byte[128]));
     }
 
-    // ── বাসি নমুনা — যে ভুলটা বেলালের একটা দিন কেড়ে নিয়েছিল ─────────────
+    // ── stale samples: the mistake that cost one staff member a day ─────────
 
     /// <summary>
-    /// ⭐⭐⭐ <b>এই ফাইলের সবচেয়ে দামি টেস্ট, কারণ এটা একটা সত্যিকারের
-    /// ক্ষতি থেকে এসেছে।</b>
+    /// <b>The most valuable test in this file, because it came from real harm.</b>
     ///
-    /// ০.৪.১-এ ছাপ আসত কেবল স্ক্রিনশটের স্লট থেকে, আর স্লট চলত কেবল ACTIVE
-    /// অবস্থায়। ফলে: <b>জমেছে → IDLE → স্লট বন্ধ → নতুন ছাপ নেই → চিরকাল
-    /// জমে আছে</b>। কর্মী ফিরে এসে কাজ শুরু করলেও এজেন্ট স্থায়ীভাবে idle
-    /// দেখাত, রিস্টার্ট না করা পর্যন্ত।
+    /// In 0.4.1 the fingerprint came only from the screenshot slot, and the slot ran
+    /// only while ACTIVE. So: <b>frozen -> IDLE -> slot stops -> no new fingerprint ->
+    /// frozen forever</b>. Even when the worker came back and started working, the
+    /// agent kept showing idle until a restart.
     ///
-    /// ⚠️⚠️ নিয়মটা ভুল ছিল না — <b>তারের সংযোগ</b> ভুল ছিল। তাই প্রতিকারটাও
-    /// নিয়মের ভেতরেই বসানো হয়েছে: টাটকা নমুনা না থাকলে কোনো উত্তর নেই।
-    /// কলার যেভাবেই লেখা হোক, অচলাবস্থাটা আর তৈরি হতে পারে না।
+    /// Careful: the rule was not wrong; the <b>wiring</b> was. So the remedy is placed
+    /// inside the rule: without a fresh sample there is no answer. However the caller
+    /// is written, this deadlock can no longer arise.
     /// </summary>
     [Fact]
     public void A_stale_sample_never_freezes()
     {
         var screen = new ScreenActivity();
 
-        // জমে গেছে, আর নমুনা তখনো টাটকা — সন্দেহটা বৈধ
+        // frozen, and the sample is still fresh: the suspicion is valid
         Steady(screen, 100, 0, 11);
         Assert.True(screen.IsFrozen(At(11)));
 
-        // ⭐ নমুনা আসা বন্ধ (IDLE হওয়ায় ক্যাপচার থেমেছিল) — তিন মিনিট
-        //    পরেই সন্দেহ তুলে নেওয়া হয়, আর কর্মী ফিরে এলে গোনা শুরু হয়
+        // Careful: samples stop (capture paused when IDLE); three minutes later the
+        // suspicion is lifted, and counting starts when the worker returns
         Assert.False(screen.IsFrozen(At(15)));
         Assert.False(screen.IsFrozen(At(600)));
     }
 
     /// <summary>
-    /// ⭐ নমুনা আসতে থাকলে সন্দেহ টেকে — নইলে StaleAfter বসিয়ে পুরো
-    /// পাহারাটাই অকেজো করে ফেলা হতো।
+    /// If samples keep arriving the suspicion holds; otherwise setting StaleAfter would
+    /// have made the whole guard useless.
     /// </summary>
     [Fact]
     public void Fresh_samples_keep_the_freeze()
@@ -276,7 +284,9 @@ public class ScreenActivityTests
         Assert.True(screen.IsFrozen(At(20)));
     }
 
-    /// <summary>⚠️ একই নমুনা আবার এলে "বদলেনি", কিন্তু "দেখা হয়েছে" — দুটো আলাদা।</summary>
+    /// <summary>
+    /// Careful: the same sample again is "unchanged" but "seen": two different things.
+    /// </summary>
     [Fact]
     public void An_unchanged_sample_still_counts_as_seen()
     {
@@ -285,22 +295,22 @@ public class ScreenActivityTests
         screen.Observe(Flat(100), At(0));
         screen.Observe(Flat(100), At(12));
 
-        // বদলায়নি, তাই জমেই আছে — আর নমুনা টাটকা, তাই উত্তরটা দেওয়া হয়
+        // unchanged, so still frozen; and the sample is fresh, so the answer is given
         Assert.True(screen.IsFrozen(At(12)));
         Assert.Equal(At(0), screen.LastChangedAt);
         Assert.Equal(At(12), screen.LastSampledAt);
     }
 
-    /// <summary>⭐ সীমানা — ঠিক StaleAfter-এ এখনো উত্তর দেওয়া হয়</summary>
+    /// <summary>Boundary: at exactly StaleAfter an answer is still given</summary>
     [Fact]
     public void Stale_boundary_is_inclusive()
     {
         var screen = new ScreenActivity();
 
-        Steady(screen, 100, 0, 11);   // শেষ নমুনা ১১ মিনিটে
+        Steady(screen, 100, 0, 11);   // last sample at minute 11
 
-        Assert.True(screen.IsFrozen(At(14)));   // ঠিক ৩ মিনিট পুরোনো
-        Assert.False(screen.IsFrozen(At(15)));  // তার বেশি
+        Assert.True(screen.IsFrozen(At(14)));   // exactly 3 minutes old
+        Assert.False(screen.IsFrozen(At(15)));  // older than that
     }
 
     [Fact]
@@ -321,31 +331,31 @@ public class ScreenActivityTests
     {
         var screen = new ScreenActivity();
 
-        // ⚠️ ৩১ আগস্ট থেকে দুটো overload, তাই null-এর ধরন লিখে দিতে হয়
+        // Careful: there are two overloads now, so the type of null must be spelled out
         Assert.Throws<ArgumentNullException>(() => screen.Observe((byte[])null!, At(0)));
         Assert.Throws<ArgumentNullException>(
             () => screen.Observe((IReadOnlyList<byte[]>)null!, At(0)));
     }
 
     // ════════════════════════════════════════════════════════════════════
-    // ⭐⭐ একাধিক মনিটর (৩১ আগস্ট ২০২৬)
+    // Multiple monitors.
     //
-    // ⚠️⚠️ মাঠের বাগ: ছাপ নেওয়া হতো কেবল **প্রথম** পর্দা থেকে, আর কেউ
-    //    দ্বিতীয় মনিটরে কাজ করলে প্রথমটা স্থির থাকত → দশ মিনিট পর "জমেছে"
-    //    → গোনা বন্ধ। মাপা: দুই মনিটরের তিনটে PC-তে দুদিনে ৪৩ · ৯ · ৬টা
-    //    ভুয়া idle, এক-মনিটরের ছ-টায় শূন্য।
+    // Careful: a field bug. The fingerprint was taken only from the **first** screen,
+    // and if someone worked on the second monitor the first stayed still, so after
+    // ten minutes: "frozen", and counting stopped. Measured: on three two-monitor PCs
+    // over two days, 43, 9 and 6 false idles; on six one-monitor PCs, zero.
     // ════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// ⭐⭐ এই টেস্টটাই আসল দাবি: <b>দ্বিতীয় পর্দা বদলালে প্রথমটা স্থির
-    /// থাকলেও জমেনি</b>।
+    /// <b>This test is the real claim: if the second screen changes, it is not frozen
+    /// even though the first stays still</b>.
     /// </summary>
     [Fact]
     public void দ্বিতীয়_মনিটর_বদলালে_পর্দা_জমেনি()
     {
         var screen = new ScreenActivity();
 
-        // প্রথম পর্দা সারাক্ষণ একই, দ্বিতীয়টায় প্রতি মিনিটে কাজ চলছে
+        // the first screen stays the same, the second has work going on every minute
         for (var m = 0; m <= 20; m++)
         {
             screen.Observe([Flat(100), Flat((byte)(m * 5))], At(m));
@@ -355,8 +365,8 @@ public class ScreenActivityTests
     }
 
     /// <summary>
-    /// ⚠️ পাহারাটা অটুট: জিগলার চললে <b>কোনো</b> পর্দাই বদলায় না, তাই
-    /// দুই মনিটরেও ঠিক আগের মতোই ধরা পড়ে।
+    /// Careful: the guard stays intact: with a jiggler <b>no</b> screen changes, so
+    /// it is caught on two monitors exactly as before.
     /// </summary>
     [Fact]
     public void দুই_মনিটরের_কোনোটাই_না_বদলালে_জমে_যায়()
@@ -371,7 +381,9 @@ public class ScreenActivityTests
         Assert.True(screen.IsFrozen(At(20)));
     }
 
-    /// <summary>⚠️ মনিটর যোগ বা বিয়োগ হলে "বদলেছে" — কেউ মেশিনটা ছুঁয়েছে।</summary>
+    /// <summary>
+    /// Careful: adding or removing a monitor counts as "changed": someone touched the machine.
+    /// </summary>
     [Fact]
     public void মনিটরের_সংখ্যা_বদলালে_বদল_হিসেবে_ধরা_হয়()
     {
@@ -380,8 +392,7 @@ public class ScreenActivityTests
     }
 
     /// <summary>
-    /// ⭐ একটামাত্র পর্দার পুরোনো ডাকটাও আগের মতোই চলে — ওটা এখন
-    /// এক-সদস্যের তালিকা।
+    /// The old single-screen call works as before; it is now a list of one member.
     /// </summary>
     [Fact]
     public void এক_মনিটরের_পুরোনো_আচরণ_অপরিবর্তিত()
@@ -393,7 +404,7 @@ public class ScreenActivityTests
         Assert.True(screen.IsFrozen(At(20)));
     }
 
-    /// <summary>⚠️ খালি তালিকা মানে "কিছুই তুলতে পারিনি" — নমুনাই নয়।</summary>
+    /// <summary>Careful: an empty list means "could not capture anything": not a sample.</summary>
     [Fact]
     public void খালি_তালিকা_নমুনা_হিসেবে_গোনা_হয়_না()
     {
@@ -401,7 +412,7 @@ public class ScreenActivityTests
 
         screen.Observe(System.Array.Empty<byte[]>(), At(0));
 
-        // নমুনা নেই ⇒ সন্দেহও নেই
+        // no sample => no suspicion either
         Assert.False(screen.IsFrozen(At(20)));
     }
 }

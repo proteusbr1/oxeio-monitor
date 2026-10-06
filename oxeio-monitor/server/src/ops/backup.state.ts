@@ -5,13 +5,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { BackupState } from './ops.rules';
 
 /**
- * ⚠️ `settings` টেবিলের এই একটামাত্র সারিতেই ব্যাকআপের পুরো ইতিহাস।
- *    schema বদলানোর অনুমতি নেই, আর দরকারও নেই — প্রশ্নটা ছোট
- *    ("শেষ কবে সফল হয়েছিল?"), তাই একটা key/value সারিই যথেষ্ট।
+ * This single row in the `settings` table holds the whole backup history.
+ * Changing the schema is not allowed, and not needed: the question is small
+ * ("when did it last succeed?"), so one key/value row is enough.
  */
 export const BACKUP_STATE_KEY = 'ops.backup.state';
 
-/** ডিস্কে (JSON-এ) যেভাবে থাকে — সব সময় ISO স্ট্রিং */
+/** How it is stored on disk (in JSON): always ISO strings */
 interface StoredBackupState {
   lastAttemptAt?: string | null;
   lastOutcome?: 'ok' | 'failed' | null;
@@ -26,7 +26,7 @@ interface StoredBackupState {
   observedSince?: string | null;
 }
 
-/** হেলথ পাতা যা যা দেখায় — verdict-এর বাইরের কাঁচা তথ্য */
+/** Everything the health page shows: the raw facts outside the verdict */
 export interface BackupSnapshot extends BackupState {
   lastError: string | null;
   lastSuccessFile: string | null;
@@ -36,30 +36,30 @@ export interface BackupSnapshot extends BackupState {
 }
 
 /**
- * ব্যাকআপের অবস্থা লেখা ও পড়া — ⭐ **একটাই** সত্যের উৎস।
+ * Writing and reading the backup state: the **single** source of truth.
  *
- * K02 (জব), K04 (হেলথ) আর G04 (অ্যালার্ট) — তিন জায়গাতেই "শেষ ব্যাকআপ কেমন
- * গেল" জানতে হয়। প্রত্যেকে নিজের মতো করে ব্যাকআপ ফোল্ডার ঘেঁটে হিসাব করলে
- * তিনটে উত্তর তিন রকম হতো, আর সবচেয়ে খারাপ দৃশ্যটা হলো: হেলথ পাতা সবুজ,
- * অথচ অ্যালার্ট বলছে ব্যাকআপ নেই। তখন কোনটাকে বিশ্বাস করা হবে সেটাই আর
- * ঠিক করা যেত না, আর মানুষ সাধারণত সবুজটাকেই বিশ্বাস করে।
+ * K02 (job), K04 (health) and G04 (alert) all need to know "how did the last
+ * backup go". If each dug through the backup folder on its own, the three
+ * answers would differ, and the worst case is a green health page while the
+ * alert says there is no backup. Then nobody could decide which to trust, and
+ * people usually trust the green one.
  */
 @Injectable()
 export class BackupStateStore {
   private readonly logger = new Logger(BackupStateStore.name);
 
   /**
-   * ⚠️ প্রসেস কখন উঠেছে — `observedSince`-এর শেষ ভরসা। এটা ছাড়া সদ্য
-   *    ইনস্টল করা সার্ভার প্রথম মিনিটেই "একটাও ব্যাকআপ হয়নি" বলে চেঁচাত।
+   * When the process started: the last resort for `observedSince`. Without it a
+   * freshly installed server would shout "no backup has ever run" in its first minute.
    */
   private readonly bootedAt = new Date();
 
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * ⚠️ কখনো throw করে না। এই ফাংশনটা হেলথ endpoint আর অ্যালার্ট চেক দুটোতেই
-   *    ডাকা হয় — settings টেবিল পড়তে না পারলে "ব্যাকআপের খবর নেই" বলাই যথেষ্ট,
-   *    পুরো হেলথ পাতা ৫০০ হয়ে যাওয়ার কোনো মানে নেই।
+   * Never throws. This function is called by both the health endpoint and the
+   * alert check; if the settings table cannot be read, saying "no news of a
+   * backup" is enough, and there is no reason for the whole health page to 500.
    */
   async read(configured: boolean): Promise<BackupSnapshot> {
     const stored = await this.load();
@@ -81,12 +81,12 @@ export class BackupStateStore {
   }
 
   /**
-   * এক দফার ফল লিখে রাখা।
+   * Records the result of one run.
    *
-   * ⭐ `consecutiveFailures` এখানেই গোনা হয় — সফল হলে ০, ব্যর্থ হলে +১।
-   * G04-এর severity বাড়া-কমা পুরোটাই এই একটা সংখ্যার উপর, তাই গোনাটা
-   * এক জায়গায় রাখা হয়েছে; দুই জায়গায় বাড়ালে টানা দুই রাতের ব্যর্থতা
-   * চার গোনা হতো এবং প্রথম রাতেই critical বেজে যেত।
+   * `consecutiveFailures` is counted here: 0 on success, +1 on failure. G04's
+   * severity rises and falls entirely on this one number, so the counting
+   * lives in one place; incrementing in two places would count two failed
+   * nights in a row as four and fire critical on the very first night.
    */
   async record(outcome: {
     at: Date;
@@ -102,8 +102,8 @@ export class BackupStateStore {
       ...prev,
       lastAttemptAt: outcome.at.toISOString(),
       lastOutcome: outcome.ok ? 'ok' : 'failed',
-      // ⚠️ বার্তাটা ছেঁটে রাখা হয় — pg_dump-এর stderr কয়েক হাজার লাইন হতে
-      //    পারে, আর পুরোটা settings-এ জমলে প্রতিটা হেলথ কল ওটা টেনে আনত।
+      // The message is truncated: pg_dump's stderr can be thousands of lines, and
+      // if all of it piled up in settings every health call would pull it in.
       lastError: outcome.ok ? null : (outcome.error ?? 'unknown error').slice(0, 500),
       consecutiveFailures: outcome.ok ? 0 : (prev.consecutiveFailures ?? 0) + 1,
       observedSince: prev.observedSince ?? this.bootedAt.toISOString(),
@@ -126,7 +126,7 @@ export class BackupStateStore {
     await this.save(next);
   }
 
-  /** কনফিগ নেই বলে জবটা চালানোই হয়নি — সেটাও একটা রেকর্ডযোগ্য ঘটনা */
+  /** The job was not run because there is no config; that too is a recordable event */
   async markObserved(): Promise<void> {
     const prev = await this.load();
     if (prev.observedSince) return;
@@ -160,8 +160,8 @@ export class BackupStateStore {
         update: { value },
       });
     } catch (err) {
-      // ⚠️ লেখা না গেলেও ব্যাকআপটা তো হয়েই গেছে — এখান থেকে throw করলে
-      //    সফল একটা ব্যাকআপ "ব্যর্থ" হিসেবে লগে উঠত।
+      // The backup has already happened even if this write fails; throwing here
+      // would log a successful backup as "failed".
       this.logger.error(
         `Could not write backup state: ${err instanceof Error ? err.message : 'unknown error'}`,
       );

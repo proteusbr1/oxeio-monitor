@@ -1,17 +1,18 @@
 namespace oXeio.Agent.Ui;
 
 /// <summary>
-/// প্রতি শ্রেণির বেলুন নোটিফিকেশন ঘণ্টায় একবারের বেশি নয়।
+/// Balloon notifications of each class are shown at most once an hour.
 ///
-/// কেন এত কড়া: সিঙ্ক ব্যর্থ হলে সেটা সাধারণত একবার হয় না — সাইটের ইন্টারনেট
-/// গেলে টানা কয়েক ঘণ্টা যায়। প্রতিবার বেলুন দেখালে স্টাফ প্রথমে বিরক্ত হবে,
-/// তারপর Windows-এর নোটিফিকেশন সেটিংস থেকে এই অ্যাপটাকে চুপ করিয়ে দেবে। তখন
-/// লাল আইকনের পাশে যে একটামাত্র জরুরি বার্তা দেখানোর সুযোগ ছিল, সেটাও চিরতরে
-/// বন্ধ — এবং সেটা ঠিক করার কোনো উপায় কোডে নেই।
+/// Why so strict: when sync fails it is usually not a one-off; if the site's internet goes
+/// down it lasts for hours. Showing a balloon every time would first annoy staff, and then
+/// they would silence this app from Windows's notification settings. Then the one urgent
+/// message we could show next to the red icon is gone for good, and there is nothing in
+/// the code that can fix that.
 ///
-/// ⚠️ সময় মাপা হয় <see cref="oXeio.Core.Time.MonotonicClock"/>-এর elapsed দিয়ে,
-/// <c>DateTimeOffset.UtcNow</c> দিয়ে নয়। কেউ PC-র ঘড়ি পিছিয়ে দিলে UtcNow-ভিত্তিক
-/// হিসাব বেলুনকে অনির্দিষ্টকালের জন্য চুপ করিয়ে রাখত।
+/// Careful: time is measured with the elapsed time of
+/// <see cref="oXeio.Core.Time.MonotonicClock"/>, not <c>DateTimeOffset.UtcNow</c>. If someone
+/// set the PC clock back, a UtcNow-based calculation would keep the balloon silent
+/// indefinitely.
 /// </summary>
 internal sealed class BalloonThrottle
 {
@@ -27,12 +28,12 @@ internal sealed class BalloonThrottle
     }
 
     /// <param name="eventClass">
-    /// ধ্রুব স্ট্রিং — <c>"sync_failing"</c>, <c>"revoked"</c>… ⚠️ এখানে কখনো
-    /// পরিবর্তনশীল কিছু (যেমন সারির গভীরতা) জুড়বেন না: প্রতিটা আলাদা মান আলাদা
-    /// শ্রেণি হয়ে যেত, ফলে থ্রটল কার্যত উঠে যেত <b>এবং</b> ডিকশনারিটা মাসের পর
-    /// মাস বাড়তেই থাকত।
+    /// A constant string: <c>"sync_failing"</c>, <c>"revoked"</c>… Careful: never append
+    /// anything variable here (such as the queue depth): every distinct value would become a
+    /// separate class, so the throttle would effectively disappear <b>and</b> the dictionary
+    /// would grow month after month.
     /// </param>
-    /// <param name="elapsed">এজেন্ট চালু হওয়ার পর থেকে কত সময় গেছে।</param>
+    /// <param name="elapsed">Time elapsed since the agent started.</param>
     public bool ShouldShow(string eventClass, TimeSpan elapsed)
     {
         if (string.IsNullOrEmpty(eventClass)) return false;

@@ -11,17 +11,17 @@ export const IS_PUBLIC = 'oxeio:public';
 export const REQUIRED_ROLES = 'oxeio:roles';
 export const ALLOW_PW_CHANGE = 'oxeio:allowWhileMustChangePw';
 
-/** লগইন ছাড়াই পৌঁছানো যায় — health, login */
+/** Reachable without logging in: health, login */
 export const Public = (): MethodDecorator & ClassDecorator =>
   SetMetadata(IS_PUBLIC, true);
 
-/** নির্দিষ্ট role ছাড়া ঢোকা যাবে না */
+/** Cannot be entered without a specific role */
 export const Roles = (...roles: UserRole[]): MethodDecorator & ClassDecorator =>
   SetMetadata(REQUIRED_ROLES, roles);
 
 /**
- * `mustChangePw = true` অবস্থাতেও যেসব রুট খোলা থাকবে —
- * নইলে ইউজার পাসওয়ার্ডই বদলাতে পারত না।
+ * Routes that stay open even while `mustChangePw = true`;
+ * otherwise the user could not change the password.
  */
 export const AllowWhileMustChangePw = (): MethodDecorator =>
   SetMetadata(ALLOW_PW_CHANGE, true);
@@ -30,7 +30,7 @@ export const CurrentUser = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): SessionUser => {
     const req = ctx.switchToHttp().getRequest<AuthedRequest>();
     if (!req.user) {
-      // JwtAuthGuard আগেই আটকে দেওয়ার কথা — এখানে পৌঁছানো মানে wiring-এ ভুল
+      // JwtAuthGuard should have blocked it already; reaching here means a wiring mistake
       throw new Error('CurrentUser used on a route marked @Public');
     }
     return req.user;

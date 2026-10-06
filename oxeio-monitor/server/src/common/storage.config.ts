@@ -3,16 +3,17 @@ import { join } from 'node:path';
 import type { ConfigService } from '@nestjs/config';
 
 /**
- * স্ক্রিনশট ও অন্যান্য ফাইল কোথায় জমে — **একটাই সংজ্ঞা**।
+ * Where screenshots and other files accumulate: **a single definition**.
  *
- * ⚠️ আগে এই লাইনটা **পাঁচ জায়গায় নকল** ছিল: ingest, retention, gallery,
- * disk alert, update। নকলের বিপদটা তাত্ত্বিক নয় —
- * <b>retention জব যদি ingest-এর চেয়ে আলাদা ফোল্ডার হিসাব করত, তাহলে সে
- * ডাটাবেসের সারি মুছত কিন্তু ডিস্কের ছবি রেখে দিত।</b> ডিস্ক নীরবে ভরে
- * যেত, আর গ্যালারিতে ভাঙা ছবি দেখাত — দুটোরই কারণ খুঁজে পাওয়া কঠিন।
+ * Careful: this line used to be **copied in five places**: ingest, retention,
+ * gallery, disk alert, update. The danger of copies is not theoretical:
+ * <b>if the retention job computed a different folder than ingest, it would
+ * delete database rows but leave the pictures on disk.</b> The disk would
+ * fill up silently and the gallery would show broken images, and both are
+ * hard to trace to their cause.
  *
- * fallback পথটা ইচ্ছাকৃতভাবে রিপোর ভেতরে (`.data/storage`) — ডেভেলপারের
- * মেশিনে `STORAGE_ROOT` না বসালেও কাজ করে, আর গিটে যায় না।
+ * The fallback path is deliberately inside the repo (`.data/storage`): it
+ * works on a developer's machine without setting `STORAGE_ROOT`, and does not go into git.
  */
 export function storageRoot(config: ConfigService): string {
   return (

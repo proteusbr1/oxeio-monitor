@@ -1,27 +1,29 @@
 /**
- * I09 — নিষ্ক্রিয়তার খাঁটি হিসাব।
+ * I09: the pure idle calculation.
  *
- * ⚠️ এটা `server/src/auth/idle-timeout.ts`-এর **হুবহু নকল**। সার্ভার আর
- *    ওয়েব আলাদা npm প্যাকেজ, তাই import করা যায় না। **সার্ভারের ফাইলটাই
- *    সত্যের উৎস** — ওখানকার টেস্ট (`server/test/totp.spec.ts`) এই
- *    আচরণটাই পাহারা দেয়। এখানে কিছু বদলালে ওখানেও বদলাতে হবে, নইলে
- *    ব্রাউজার একরকম গুনবে আর সার্ভার আরেকরকম।
+ * Careful: this is an exact copy of `server/src/auth/idle-timeout.ts`. The server
+ * and the web app are separate npm packages, so it cannot be imported. The
+ * server's file is the source of truth: its test (`server/test/totp.spec.ts`)
+ * guards this behavior. If you change something here, change it there too, or
+ * the browser will count one way and the server another.
  *
- * ⚠️ এই হিসাবটা কোনো **নিরাপত্তা** দেয় না — আসল তালা সার্ভারের JWT-র
- *    মেয়াদ। এখানকার কাজ শুধু ভদ্রতা: চুপচাপ বের করে না দিয়ে আগে সতর্ক করা।
+ * Careful: this calculation provides no security. The real lock is the lifetime
+ * of the server's JWT. The job here is only courtesy: warn before signing the
+ * user out, rather than doing it silently.
  */
 
 export type IdlePhase = 'active' | 'warning' | 'expired';
 
 export interface IdleState {
   phase: IdlePhase;
-  /** আর কত মিলিসেকেন্ড বাকি; `expired` হলে ০ */
+  /** Milliseconds remaining; 0 once `expired`. */
   msLeft: number;
 }
 
 /**
- * ⚠️ ঘড়ি পিছিয়ে গেলে (ল্যাপটপ ঘুম থেকে ওঠা, NTP সিংক) বিয়োগটা ঋণাত্মক
- *    হতো আর `msLeft` টাইমআউটের চেয়েও বড় দেখাত — সতর্কবার্তা কখনো আসত না।
+ * Careful: when the clock goes backwards (laptop waking from sleep, NTP sync) the
+ * subtraction would be negative and `msLeft` would look larger than the timeout,
+ * so the warning would never appear.
  */
 export function idleStateAt(
   lastActivityMs: number,

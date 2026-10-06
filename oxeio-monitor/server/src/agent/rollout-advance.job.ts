@@ -19,33 +19,34 @@ export interface RolloutAdvanceResult {
   version: string | null;
   from: string | null;
   to: string | null;
-  /** কতগুলো ডিভাইস এই ভার্সনটা চালাচ্ছে (প্রমাণ দিক বা না দিক) */
+  /** How many devices run this version (whether or not they give proof). */
   onVersion: number;
   skipped: boolean;
 }
 
 /**
- * ⭐⭐⭐ **H04 — রোলআউট নিজে থেকে এগোয়** *(৫ সেপ্টেম্বর ২০২৬)*।
+ * **H04 - the rollout advances by itself.**
  *
- * মালিক: *"update gula office staff ra pacche na. every single pc te
- * manually install korte hocche."*
+ * The owner reported that staff were not getting the updates and every single
+ * PC had to be installed manually.
  *
- * ⚠️⚠️ **কারণটা একটা বাগ ছিল না, একটা অনুপস্থিত ধাপ।** ধাপে-ধাপে রোলআউটের
- * গোটা যন্ত্রটা তৈরি ছিল — বালতি, শতাংশ, পাইলট, জরুরি ব্রেক — কিন্তু
- * `canary → partial → all` বদলানোর একমাত্র পথ ছিল Settings-এ **হাতে ক্লিক**।
- * কেউ না চাপলে নতুন ভার্সন চিরকাল ৭%-এ বসে থাকত, অর্থাৎ ১২টার মধ্যে ১১টা
- * PC-কে কোনোদিন অফারই যেত না — আর তখন প্রতিটা মেশিনে হাতে গিয়ে বসানো ছাড়া
- * সত্যিই কোনো উপায় থাকত না।
+ * Careful: **the cause was not a bug but a missing step.** All the machinery of
+ * a staged rollout existed (buckets, percentages, pilot, emergency brake), but
+ * the only way to move `canary -> partial -> all` was a **manual click** in
+ * Settings. If nobody clicked, a new version would sit at 7% forever, so 11 of
+ * 12 PCs would never even be offered it, and the only way left would be to go
+ * to each machine and install by hand.
  *
- * ⭐ এই প্রকল্পের সবচেয়ে চেনা ছাঁদ, আবার: **চুক্তি লেখা আছে, কলার লেখা হয়নি।**
+ * This is the most familiar pattern in this project, again: **the contract is
+ * written, the caller is not.**
  *
- * ⚠️⚠️ **এই জব G58-এর নিরাপত্তাটা কেড়ে নেয় না।** ধাপ বাড়ে কেবল তখনই যখন
- * একটা **আসল মেশিন** নতুন বিল্ডটা ছ-ঘণ্টা ধরে চালিয়ে **এখনো সাড়া দিচ্ছে**।
- * অর্থাৎ canary-র মানেটা অক্ষত — শুধু তার ফলটা আর কারো ক্লিকের অপেক্ষায়
- * বসে থাকে না।
+ * Careful: **this job does not remove the G58 safety.** The stage advances only
+ * when a **real machine** has run the new build for six hours and is **still
+ * responding**. So the meaning of canary is intact; its outcome just no longer
+ * waits for somebody's click.
  *
- * ⚠️ `halted` কখনো খোলে না — জরুরি ব্রেক স্বয়ংক্রিয় কিছুর হাতে ছাড়া যায় না
- * (`nextStage()`-এর নোট)।
+ * Careful: `halted` never opens by itself; the emergency brake cannot be left to
+ * anything automatic (see the note in `nextStage()`).
  */
 @Injectable()
 export class RolloutAdvanceJob {
@@ -58,12 +59,14 @@ export class RolloutAdvanceJob {
   ) {}
 
   /**
-   * ⚠️ ঘণ্টায় একবার, ৭ মিনিটে — গোল সময়ে নয়। ⭐ অন্য জবগুলো (`:00`, `:15`)
-   *    গোল সময়ে চলে; একই মুহূর্তে চাপ না বাড়ানোই ভালো, আর লগ পড়ার সময়
-   *    কোনটা কার তা-ও আলাদা করা যায়।
+   * Careful: once an hour, at minute 7, not on the round hour. The other jobs
+   *    (`:00`, `:15`) run on round times; it is better not to add load at the
+   *    same moment, and it also makes it easy to tell whose lines are whose when
+   *    reading the log.
    *
-   * ⚠️ ঘণ্টায় একবারই যথেষ্ট: soak ছ-ঘণ্টার, তাই ঘন ঘন দেখার কিছু নেই।
-   *    ফলে সবচেয়ে খারাপ ক্ষেত্রেও ধাপ বাড়তে ছ-ঘণ্টা এক মিনিট লাগে।
+   * Careful: once an hour is enough: the soak is six hours, so there is nothing
+   *    to check more often. In the worst case a stage therefore advances after
+   *    six hours and one minute.
    */
   @Cron('0 7 * * * *', {
     name: 'rollout-advance',
@@ -72,7 +75,7 @@ export class RolloutAdvanceJob {
     waitForCompletion: true,
   })
   async scheduled(): Promise<void> {
-    // ⚠️ দ্বিতীয় তালা — কারণ ব্যাখ্যা `summary-refresh.job.ts`-এ
+    // Careful: the second lock; the reason is explained in `summary-refresh.job.ts`.
     if (!SCHEDULING_ENABLED) return;
     await this.runOnce();
   }
@@ -88,9 +91,10 @@ export class RolloutAdvanceJob {
 
     const result = await this.lock.run(async () => {
       /**
-       * ⭐⭐ **ঠিক সেই ভার্সনটা যেটা `UpdateService.offerFor()` দেয়** — সবচেয়ে
-       * নতুন non-halted। ⚠️ পুরোনো কোনো ভার্সনের ধাপ বাড়ানোর কোনো অর্থ নেই:
-       * কেউ সেটা অফারই পায় না, তাই বদলটা হতো নীরব আর বিভ্রান্তিকর।
+       * **Exactly the version that `UpdateService.offerFor()` offers**: the
+       * newest non-halted one. Careful: advancing the stage of any older version
+       * means nothing, since nobody is offered it, so the change would be silent
+       * and confusing.
        */
       const latest = await this.prisma.agentVersion.findFirst({
         where: { rolloutStage: { not: 'halted' } },
@@ -100,9 +104,9 @@ export class RolloutAdvanceJob {
       if (latest === null) return idle;
 
       /**
-       * ⚠️ ডিভাইসগুলো **status ধরে ছাঁকা** — বাতিল করা PC-র heartbeat
-       *    কোনো প্রমাণ নয়। ⚠️ `agentVersion` মেলানো হয় হুবহু: যে মেশিন
-       *    এখনো পুরোনো বিল্ডে আছে সে এই বিল্ড সম্পর্কে কিছুই বলে না।
+       * Careful: devices are **filtered by status**; a revoked PC's heartbeat is
+       *    no proof. Careful: `agentVersion` is matched exactly; a machine still
+       *    on an older build says nothing about this build.
        */
       const devices = await this.prisma.device.findMany({
         where: { status: 'active', agentVersion: latest.version },
@@ -114,12 +118,12 @@ export class RolloutAdvanceJob {
         lastSeenAt: d.lastSeenAt,
       }));
 
-      // ⭐ সিদ্ধান্তটা এখানে নেওয়া হয় না — `rollout.ts`-এর খাঁটি ফাংশনে
+      // The decision is not made here but in the pure function in `rollout.ts`.
       /**
-       * ⭐⭐⭐ **ধাপ বদলের সময়টাও পাঠানো হয়** *(৬ সেপ্টেম্বর ২০২৬)* —
-       * soak-ঘড়ির মেঝে। ⚠️ না পাঠালে canary-তে ছ-ঘণ্টা পার করা একটা
-       * মেশিন পরের টিকেই `partial → all`-ও করিয়ে দিত, আর ৫০% ধাপটা
-       * কার্যত এড়িয়ে যেত।
+       * **The time of the stage change is passed too**, as the floor of the soak
+       * clock. Careful: without it, a machine that had passed six hours on canary
+       * would push `partial -> all` on the very next tick as well, and the 50%
+       * stage would effectively be skipped.
        */
       const to = stageToAdvanceTo(
         latest.rolloutStage,
@@ -135,22 +139,22 @@ export class RolloutAdvanceJob {
 
       const updated = await this.prisma.agentVersion.update({
         where: { version: latest.version },
-        // ⚠️ ঘড়িটা **এখানেই** রিসেট হয় — নইলে পরের ধাপ আবার সাথে সাথে
-        //    এগিয়ে যেত, আর ধাপগুলো একটার পর একটা এক টিকেই পার হতো
+        // Careful: the clock is reset **here**; otherwise the next stage would
+        //    advance immediately too, and the stages would all pass in one tick.
         data: { rolloutStage: to, stageChangedAt: now },
       });
 
       /**
-       * ⭐⭐ **অডিটে লেখা হয়, আর সেটা ঐচ্ছিক নয়।** ধাপ বদলানো এতদিন
-       * সবসময় একজন মানুষের কাজ ছিল, তাই খাতায় নাম থাকত। এখন যন্ত্র করলে
-       * খাতাটা ফাঁকা যেত — আর কেউ দেখত "কাল ৭% ছিল, আজ ১০০%", কে বা কী
-       * করল তার কোনো উত্তর নেই।
+       * **It is written to the audit log, and that is not optional.** Changing
+       * the stage used to be always a person's action, so a name was on record.
+       * If a machine did it now, the log would be empty, and someone would see
+       * "7% yesterday, 100% today" with no answer to who or what did it.
        *
-       * ⚠️ কেন এগোনো হলো সেটাও লেখা থাকে (`onVersion`), নইলে পরে
-       *    জিজ্ঞেস করলে উত্তর দেওয়ার মতো কিছু থাকত না।
+       * Careful: why it advanced is recorded too (`onVersion`); otherwise there
+       * would be nothing to answer with when asked later.
        */
       await this.audit.record({
-        // ⚠️ `null` — কোনো মানুষ চাপেননি, আর সেটা লুকানোর কিছু নেই
+        // Careful: `null`; no person pressed anything, and there is nothing to hide.
         userId: null,
         action: 'agent_version.rollout_auto',
         targetType: 'agent_version',

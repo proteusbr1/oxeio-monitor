@@ -27,13 +27,14 @@ public static class AddressBarMatcher
     public const string FirefoxUrlBarId = "urlbar-input";
 
     /// <summary>
-    /// address bar-এর নাম যেসব ভাষায়/ভার্সনে যা হয়। ⚠️ তালিকাটা
-    /// সম্পূর্ণ নয় এবং হতে পারেও না — তাই নিচে নাম-নিরপেক্ষ ফলব্যাকও আছে।
+    /// What the address bar is called, per language/version. Careful: this list is
+    /// incomplete and cannot ever be complete, which is why there is a name-independent
+    /// fallback below.
     /// </summary>
     public static readonly IReadOnlyList<string> AddressBarNames =
     [
         "address and search bar", // Chrome
-        "address bar",            // Edge (কিছু ভার্সন)
+        "address bar",            // Edge (some versions)
         "search or enter address", // Firefox
         "omnibox",
     ];
@@ -77,9 +78,9 @@ public static class AddressBarMatcher
             if (extraNames is not null && Matches(name, extraNames)) return i;
         }
 
-        // ⚠️ এটা ভুল কন্ট্রোলও ধরতে পারে (যেমন পেজের ভেতরের সার্চ বাক্স)।
-        //    তাতে ক্ষতি নেই — DomainParser ডোমেইনের মতো না দেখালে বাদ দেয়,
-        //    তাই টাইপ করা সার্চ-শব্দ কখনো "ডোমেইন" হিসেবে জমা হয় না।
+        // This can also pick the wrong control (e.g. a search box inside the page). That does
+        // no harm: DomainParser drops anything that does not look like a domain, so a typed
+        // search term is never stored as a "domain".
         return 0;
     }
 

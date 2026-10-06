@@ -23,7 +23,7 @@ export class CreateWorkPolicyDto {
   @IsString() @MinLength(1) @MaxLength(120)
   name!: string;
 
-  /** ⭐ একমাত্র টার্গেট — ডিফল্ট ২০৮ ঘণ্টা (ADR-011b) */
+  /** The only target; default 208 hours (ADR-011b) */
   @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(1) @Max(744)
   monthlyTargetHours?: number;
 
@@ -31,15 +31,15 @@ export class CreateWorkPolicyDto {
   expectedWorkdays?: number;
 
   /**
-   * ISO দিন — সোম = ১ … রবি = ৭, শুক্র = ৫।
-   * ⚠️ এটা ব্লক নয়; ছুটির দিনে কাজ করলেও ঘণ্টা পুরোপুরি গোনা হয়।
+   * ISO weekday: Mon = 1 ... Sun = 7, Fri = 5.
+   * Careful: this is not a block; if someone works on an off day the hours are counted in full.
    */
   // ISO days (Fri = 5), unique; at most 6, so a week keeps at least one workday
   @IsOptional() @IsArray() @ArrayMaxSize(6) @ArrayUnique()
   @IsInt({ each: true }) @Min(1, { each: true }) @Max(7, { each: true })
   weeklyOffDays?: number[];
 
-  /** ⭐ না দিলে ০৭:০০–২৩:০০ বসে — `null` করে ২৪ ঘণ্টা করা যায় না (ADR-011c) */
+  /** If omitted, 07:00-23:00 is set; it cannot be made 24 hours by setting `null` (ADR-011c) */
   @IsOptional() @Matches(HHMM, { message: "screenshotFrom must be in 'HH:MM' format" })
   screenshotFrom?: string;
 
@@ -47,11 +47,11 @@ export class CreateWorkPolicyDto {
   screenshotTo?: string;
 
   /**
-   * ⭐⭐ **অফিস কখন খোলা** — শুধু `agent_down` অ্যালার্ট কখন **তোলা হবে না**
-   * তা ঠিক করে (G01)। ⚠️ ঘণ্টা গোনায় কোনো প্রভাব নেই।
+   * **When the office is open.** Only decides when an `agent_down` alert is
+   * **not raised** (G01). Careful: no effect on counting hours.
    *
-   * ⚠️ না দিলে খালি থাকে, আর খালি মানে **সারাদিনই খোলা** — অর্থাৎ আগের
-   *    আচরণ। "নীরবে পাহারা বন্ধ" হওয়ার চেয়ে "বেশি অ্যালার্ট" নিরাপদ।
+   * Careful: if omitted it stays empty, and empty means **open all day**,
+   *    the earlier behavior. "More alerts" is safer than "guarding silently switched off".
    */
   @IsOptional() @Matches(HHMM, { message: "officeFrom must be in 'HH:MM' format" })
   officeFrom?: string;
@@ -70,9 +70,9 @@ export class CreateWorkPolicyDto {
   screenshotsEnabled?: boolean;
 
   /**
-   * ⭐ ডিজাইনারের দৈনিক টার্গেট (মালিকের চাওয়া ২৫)।
-   * ⚠️ ০ **বৈধ** — টার্গেট বন্ধ, কিন্তু সংখ্যা গোনা চলতেই থাকে।
-   * ⚠️ ছাদ ৫০০: টাইপো ধরার জন্য, নীতির জন্য নয়।
+   * The designer's daily target (owner's request 25).
+   * Careful: 0 is **valid**: the target is off, but counting continues.
+   * Careful: the ceiling of 500 is for catching typos, not for policy.
    */
   @IsOptional() @IsInt() @Min(0) @Max(500)
   dailyDesignTarget?: number;
@@ -98,7 +98,7 @@ export class UpdateWorkPolicyDto {
   @IsOptional() @Matches(HHMM)
   screenshotTo?: string;
 
-  /** ⭐ অফিসের সময় — `agent_down` অ্যালার্টের জানালা (G01) */
+  /** Office hours: the window for the `agent_down` alert (G01) */
   @IsOptional() @Matches(HHMM)
   officeFrom?: string;
 
@@ -116,9 +116,9 @@ export class UpdateWorkPolicyDto {
   screenshotsEnabled?: boolean;
 
   /**
-   * ⭐ ডিজাইনারের দৈনিক টার্গেট (মালিকের চাওয়া ২৫)।
-   * ⚠️ ০ **বৈধ** — টার্গেট বন্ধ, কিন্তু সংখ্যা গোনা চলতেই থাকে।
-   * ⚠️ ছাদ ৫০০: টাইপো ধরার জন্য, নীতির জন্য নয়।
+   * The designer's daily target (owner's request 25).
+   * Careful: 0 is **valid**: the target is off, but counting continues.
+   * Careful: the ceiling of 500 is for catching typos, not for policy.
    */
   @IsOptional() @IsInt() @Min(0) @Max(500)
   dailyDesignTarget?: number;
@@ -149,7 +149,7 @@ export class CreateHolidayDto {
   @IsString() @MinLength(1) @MaxLength(120)
   name!: string;
 
-  /** public | optional | company — খোলা রাখা হয়েছে, স্কিমাতেও TEXT */
+  /** public | optional | company: left open, and the schema column is TEXT too */
   @IsOptional() @IsString() @MaxLength(32)
   type?: string;
 }
@@ -168,18 +168,18 @@ export class HolidayListQueryDto {
   year?: number;
 }
 /**
- * R1 — মাস বন্ধ করার সাথে ঐচ্ছিক একটা নোট।
+ * R1: an optional note along with closing a month.
  *
- * ⚠️ নোটটা **কেন** বন্ধ করা হলো তার জায়গা ("আগস্টের বেতন ৩ সেপ্টেম্বর
- *    দেওয়া হয়েছে")। ছয় মাস পরে কেউ audit ঘাঁটলে তারিখটার চেয়ে কারণটাই
- *    বেশি কাজে দেয়।
+ * Careful: the note is the place for **why** it was closed ("August's pay
+ *    was given on 3 September"). Six months later, when someone digs through
+ *    the audit, the reason helps more than the date.
  */
 /**
- * R2 — ছুটি লেখা।
+ * R2: writing leave.
  *
- * ⚠️ `from`/`to` **তারিখ, সময় নয়** — `@IsISO8601` একা `2026-09-10T14:00Z`-ও
- *    মেনে নিত, আর তখন `new Date(...T00:00Z)`-এর সাথে তুলনা করে দিনটা এক
- *    দিন সরে যেত। তাই `Matches` দিয়ে আকারটাও বাঁধা।
+ * Careful: `from`/`to` are **dates, not times**. `@IsISO8601` alone would
+ *    also accept `2026-09-10T14:00Z`, and compared with `new Date(...T00:00Z)`
+ *    the day would shift by one. So the shape is pinned down with `Matches` too.
  */
 export class CreateLeaveDto {
   @IsInt()
@@ -192,7 +192,7 @@ export class CreateLeaveDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'to must be YYYY-MM-DD' })
   to!: string;
 
-  /** ⚠️ তিনটেই সবেতন — `unpaid` কেন নেই, `schema.prisma`-র নোট দেখুন */
+  /** Careful: all three are paid; for why `unpaid` is missing, see the note in `schema.prisma` */
   @IsIn(['casual', 'sick', 'annual'])
   type!: string;
 

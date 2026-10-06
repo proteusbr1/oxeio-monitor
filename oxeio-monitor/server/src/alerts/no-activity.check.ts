@@ -6,18 +6,18 @@ import { isNoActivityWindow, shouldFlagNoActivity } from './alerts.rules';
 import { AlertsService, type RaiseInput } from './alerts.service';
 
 /**
- * G06 — কেউ পুরো দিন কোনো কাজ করেনি।
+ * G06: nobody did any work all day.
  *
- * ⭐ severity ইচ্ছাকৃতভাবে `info`, `warning` নয়। *"আজ কেউ আসেনি"* কোনো
- * **ত্রুটি** নয় — নিছক তথ্য। warning বানালে আসল ত্রুটির (এজেন্ট মরে যাওয়া,
- * ডিস্ক ভরা) সাথে এক কাতারে পড়ত, আর তখন warning শব্দটার মানেই হালকা হয়ে যেত।
+ * The severity is deliberately `info`, not `warning`. "Nobody came in today"
+ * is not an **error**, just information. Making it a warning would put it in
+ * the same bracket as real errors (agent died, disk full), and the word
+ * warning would lose its weight.
  *
- * ⚠️⚠️ **এখানে আগে লেখা ছিল "ছুটির কোনো ব্যবস্থা এই সিস্টেমে নেই
- * (ADR-011d)" — আর সেটা এক মাস ধরে বাসি ছিল।** ছুটির খাতা এসেছে R2/G130-তে
- * (৫ সেপ্টেম্বর), কিন্তু এই পরীক্ষাটা `leaves` টেবিলটা পড়তে শুরু করেছে
- * ৬ সেপ্টেম্বরে (G157) — মাঝের দিনগুলোয় অনুমোদিত ছুটিতেও খবর যেত।
- * ⭐ বাসি মন্তব্য নিছক অগোছালো নয়: ওটাই পরের পাঠককে ভুল জিনিস বিশ্বাস
- * করিয়ে রেখেছিল।
+ * Careful: this comment used to say "this system has no leave facility
+ * (ADR-011d)", and that had been stale for a month. The leave register
+ * arrived on 5 September, but this check only started reading the `leaves`
+ * table on 6 September, so approved leave still raised alerts in between.
+ * A stale comment is not just untidy: it leaves the next reader believing the wrong thing.
  */
 @Injectable()
 export class NoActivityCheck {
@@ -29,7 +29,7 @@ export class NoActivityCheck {
   ) {}
 
   async runOnce(now = new Date()): Promise<number> {
-    // সন্ধ্যার জানালার বাইরে প্রশ্নটাই অর্থহীন — কুয়েরিও করা হয় না
+    // Outside the evening window the question is meaningless, so no query is made either
     if (!isNoActivityWindow(now)) return 0;
 
     const workDate = workDateOf(now);
@@ -50,11 +50,11 @@ export class NoActivityCheck {
         select: { name: true },
       }),
       /**
-       * ⚠️ `daily_summary` নয়, সরাসরি `activity_segments`।
+       * Careful: raw `activity_segments`, not `daily_summary`.
        *
-       * rollup জব প্রতি ১৫ মিনিটে চলে (§ ৬.৪) — কিন্তু ওটা বন্ধ থাকলে বা
-       * পিছিয়ে থাকলে সবাইকে "কাজ করেনি" দেখাত, আর তখন বারোজনের বারোটা
-       * মিথ্যা অ্যালার্ট যেত। কাঁচা টেবিল কখনো মিথ্যা বলে না।
+       * The rollup job runs every 15 minutes (§ 6.4), but if it is stopped or
+       * behind, everyone would look like "did no work" and twelve false alerts
+       * would go out. The raw table never lies.
        */
       this.prisma.activitySegment.groupBy({
         by: ['employeeId'],
@@ -62,12 +62,12 @@ export class NoActivityCheck {
         _count: { _all: true },
       }),
       /**
-       * ⭐⭐⭐ **আজ কে ছুটিতে** *(৬ সেপ্টেম্বর ২০২৬, G157)*।
+       * **Who is on leave today.**
        *
-       * ⚠️⚠️ এই কোয়েরিটা **এক মাস ধরে অনুপস্থিত ছিল**। ছুটির খাতা এসেছে
-       * R2/G130-তে, কিন্তু অ্যালার্টের কোনো পরীক্ষা কোনোদিন `leaves`
-       * টেবিলটা পড়েনি — তাই অনুমোদিত ছুটির দিনেও *"আজ কেউ কাজ করেনি"*
-       * খবর যেত। মাঠে: ৩টা ছুটির দিনে ১১টা মিথ্যা অ্যালার্ট।
+       * Careful: this query was **missing for a month**. The leave register
+       * arrived, but no alert check ever read the `leaves` table, so "nobody
+       * did any work today" went out even on approved leave days. In the
+       * field: 11 false alerts on 3 leave days.
        */
       this.prisma.leave.findMany({
         where: { leaveDate: workDate },

@@ -3,11 +3,10 @@ using oXeio.Core.Models;
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// একটা অ্যাপ/সাইট ব্যবহারের খণ্ড — <c>POST /agent/app-usage</c>-এর
-/// <c>items[]</c>-এর একটা এলিমেন্ট।
+/// A slice of app/site usage: one element of <c>items[]</c> in <c>POST /agent/app-usage</c>.
 ///
-/// <see cref="oXeio.Core.Models.ActivitySegment"/>-এর মতোই <see cref="ClientUuid"/>
-/// এজেন্টেই তৈরি হয় ও কিউতে জমা থাকে, তাই রিট্রাইয়ে একই আইডি যায়।
+/// Like <see cref="oXeio.Core.Models.ActivitySegment"/>, the <see cref="ClientUuid"/> is created
+/// in the agent and kept in the queue, so retries send the same id.
 /// </summary>
 public sealed record AppUsageRecord
 {
@@ -15,43 +14,43 @@ public sealed record AppUsageRecord
     public required DateTimeOffset StartedAt { get; init; }
     public required DateTimeOffset EndedAt { get; init; }
 
-    /// <summary>সার্ভার ০–৮৬৪০০ ছাড়া মানে না; দিন পেরোলে সে নিজেই ভাগ করে নেয়।</summary>
+    /// <summary>The server accepts only 0 to 86400; it splits across days itself.</summary>
     public required int DurationSec { get; init; }
 
-    /// <summary>যেমন <c>chrome.exe</c>। সর্বোচ্চ ২৬০ অক্ষর (Windows MAX_PATH)।</summary>
+    /// <summary>E.g. <c>chrome.exe</c>. At most 260 characters (Windows MAX_PATH).</summary>
     public required string ProcessName { get; init; }
 
-    /// <summary>এক্সিকিউটেবলের FileDescription, যেমন "Google Chrome"। না পেলে null।</summary>
+    /// <summary>The executable's FileDescription, e.g. "Google Chrome". Null if not found.</summary>
     public string? AppName { get; init; }
 
-    /// <summary>সর্বোচ্চ ১০০০ অক্ষর — সার্ভার এর বেশি নিলে ৪০০ দেয়।</summary>
+    /// <summary>At most 1000 characters; the server returns 400 for more.</summary>
     public string? WindowTitle { get; init; }
 
     /// <summary>
-    /// ⚠️ শুধু ডোমেইন — <b>ফুল URL কখনো নয়</b> (ADR-013)। "facebook.com" চলে,
-    /// "facebook.com/messages/t/12345" চলে না। পাথ বা query রাখলে এটা আর
-    /// অ্যাপ-ট্র্যাকিং থাকে না, ব্রাউজিং-হিস্ট্রি নজরদারি হয়ে যায়।
+    /// Domain only, <b>never the full URL</b> (ADR-013). "facebook.com" is fine,
+    /// "facebook.com/messages/t/12345" is not. Keeping the path or query would turn this from
+    /// app tracking into browsing-history surveillance.
     /// </summary>
     public string? Domain { get; init; }
 
     public bool? IsBrowser { get; init; }
 
     /// <summary>
-    /// ⭐⭐ <b>R22a</b> — এই খণ্ডটা কোন অবস্থায় দেখা হয়েছে।
+    /// <b>R22a</b>: the state in which this slice was observed.
     ///
-    /// আগে app-usage রেকর্ড হতো <b>কেবল ACTIVE</b>-এ, তাই ঘরটার দরকারই
-    /// ছিল না। ⚠️⚠️ কিন্তু তাতে একটা প্রশ্নের উত্তর চিরতরে হারাত: "এই
-    /// idle সময়টায় সামনে কী ছিল?" — আর ওটাই মিটিং চেনার একমাত্র সূত্র
-    /// (কেউ Zoom-এ থাকলে কি-বোর্ড চুপ, অথচ সে কাজেই আছে)।
+    /// App usage used to be recorded <b>only while ACTIVE</b>, so this field was not needed.
+    /// But that would lose the answer to one question forever: "what was in front during this
+    /// idle time?", which is the only clue for recognizing meetings (in a Zoom call the keyboard
+    /// is quiet, yet the person is working).
     ///
-    /// ⚠️ ডিফল্ট <see cref="SegmentState.Active"/>, কারণ পুরোনো এজেন্ট এই
-    /// ঘরটা পাঠায় না — আর তারা যা পাঠাত তার সবই সংজ্ঞা অনুযায়ী ACTIVE।
-    /// সার্ভারেও একই ডিফল্ট, তাই পুরোনো সারিগুলোর মানে বদলায় না।
+    /// Defaults to <see cref="SegmentState.Active"/>, because old agents do not send this field
+    /// and everything they sent was ACTIVE by definition. The server has the same default, so the
+    /// meaning of old rows does not change.
     ///
-    /// ⚠️⚠️ <b>এটা গোনার জিনিস নয়</b>। idle-এ দেখা খণ্ড রিপোর্টে বা D07/D08-এ
-    /// যায় না — পড়ার প্রতিটা জায়গায় <c>segment_state = 'active'</c> ছাঁকনি
-    /// বসানো। নইলে "লাঞ্চে গিয়ে Excel খোলা রেখে যাওয়া"টাই কাজ হয়ে যেত,
-    /// আর সেই নিয়মটাই এই ট্র্যাকারের মূল কথা।
+    /// <b>This is not something to count.</b> Slices seen while idle do not go into reports or
+    /// D07/D08: every place that reads them filters on <c>segment_state = 'active'</c>. Otherwise
+    /// "leaving Excel open and going to lunch" would count as work, and that rule is the heart of
+    /// this tracker.
     /// </summary>
     public SegmentState State { get; init; } = SegmentState.Active;
 }

@@ -1,47 +1,49 @@
 /**
- * ⭐⭐ সার্ভিস ওয়ার্কার — অ্যাপ-শেল ক্যাশ করে, **API কখনো নয়**।
+ * Service worker: caches the app shell, **never the API**.
  *
- * ═══ কেন হাতে লেখা, `vite-plugin-pwa` নয় ═══════════════════════════════
+ * ═══ Why hand-written, not `vite-plugin-pwa` ═════════════════════════════
  *
- * ⭐ প্লাগইনটা workbox টেনে আনে — একটা নির্ভরতা নয়, বিশটা। এই রিপোর
- *    web-এর deps **তিনটে** (react, react-dom, react-router-dom), আর সেটা
- *    ইচ্ছাকৃত।
- * ⚠️ আসল কারণটা আকার নয়, **নিয়ন্ত্রণ**: workbox ডিফল্টে অনেক কিছু runtime
- *    ক্যাশ করে (ছবি, ফন্ট, একই-origin GET)। এই অ্যাপে `/api/v1/screenshots/*`
- *    হলো **কর্মীর পর্দার ছবি** — ওগুলো ডিভাইসের ডিস্কে জমে যাওয়া মানে ফোন
- *    হারালেই সব ফাঁস। "ডিফল্ট বন্ধ করে দিলাম" ভরসা করার চেয়ে যে ফাইলটা
- *    ক্যাশ করে সেটা ৫০ লাইনে নিজের চোখে পড়া নিরাপদ।
- * ⭐ যেটার জন্য প্লাগইন সত্যিই দরকার হতো — hash-করা ফাইলের তালিকা — সেটা
- *    `vite.config.ts`-এর ছোট প্লাগইনটা বিল্ডের সময় এখানে বসিয়ে দেয়।
- *    হাতে লিখলে প্রতি বিল্ডে তালিকাটা ভাঙত।
+ * The plugin pulls in workbox: not one dependency but twenty. This repo's
+ *    web app has **three** deps (react, react-dom, react-router-dom), and that
+ *    is deliberate.
+ * Careful: the real reason is not size but **control**: by default workbox
+ *    caches many things at runtime (images, fonts, same-origin GETs). In this
+ *    app `/api/v1/screenshots/*` is **employees' screen pictures**; letting
+ *    those pile up on a device's disk means everything leaks if the phone is
+ *    lost. Reading, in 50 lines, the file that does the caching is safer than
+ *    trusting "I switched the defaults off".
+ * The one thing the plugin would really be needed for, the list of hashed
+ *    files, is injected here at build time by the small plugin in
+ *    `vite.config.ts`. Written by hand, the list would break on every build.
  *
- * ═══ ক্যাশের নীতি ═════════════════════════════════════════════════════
+ * ═══ The caching policy ═══════════════════════════════════════════════
  *
- *   `/api/*`          → **ছোঁয়াই হয় না**। `fetch` হ্যান্ডলার সবার আগে
- *                        বাদ দেয়, তাই রিকোয়েস্টটা সোজা নেটওয়ার্কে যায়,
- *                        যেন সার্ভিস ওয়ার্কার নেই-ই।
- *   navigation        → **আগে নেটওয়ার্ক**, না পেলে ক্যাশের `/index.html`
- *   `/assets/*` (hash)→ আগে ক্যাশ (নামেই hash, তাই বদলাতে পারে না)
- *   আইকন, manifest    → আগে ক্যাশ
- *   বাকি সব           → নেটওয়ার্ক, ক্যাশে কিছুই জমে না
+ *   `/api/*`          → **never touched**. The `fetch` handler excludes it
+ *                        first of all, so the request goes straight to the
+ *                        network, as if there were no service worker.
+ *   navigation        → **network first**, else the cached `/index.html`
+ *   `/assets/*` (hash)→ cache first (the hash is in the name, so it cannot change)
+ *   icons, manifest   → cache first
+ *   everything else   → network, nothing is cached
  *
- * ⚠️⚠️ **API উত্তর ক্যাশ না করার কারণ দুটো, দুটোই এই প্রকল্পের মূল নীতি:**
- *   ১· এটা **লাইভ** মনিটরিং ড্যাশবোর্ড। অফলাইনে গতকালের সংখ্যা দেখানো মানে
- *      সংখ্যাকে মিথ্যা বলানো — "জানি না"-কে "এই হলো" বলা। মালিক ওই সংখ্যা
- *      দেখে বেতন হিসাব করেন।
- *   ২· স্ক্রিনশট স্পর্শকাতর (উপরে)।
- *   নেটওয়ার্ক না থাকলে API কল ব্যর্থ হয়, আর অ্যাপ নিজের এরর-স্টেট দিয়ে
- *   পরিষ্কার করে "সংযোগ নেই" বলে — সেটাই সঠিক উত্তর।
+ * Important: **there are two reasons for not caching API responses, both core
+ * principles of this project:**
+ *   1. This is a **live** monitoring dashboard. Showing yesterday's numbers
+ *      offline makes the numbers lie: it says "this is it" for "I don't know".
+ *      The owner calculates pay from those numbers.
+ *   2. Screenshots are sensitive (above).
+ *   With no network an API call fails, and the app's own error state cleanly
+ *   says "no connection": that is the correct answer.
  */
 
-/* ── টাইপ ─────────────────────────────────────────────────────────────────
-   ⚠️ `ServiceWorkerGlobalScope`, `FetchEvent`, `ExtendableEvent` — এগুলো
-      TypeScript-এর `"WebWorker"` lib-এ, `"DOM"`-এ নয়। কিন্তু এই ফাইলটা
-      `tsconfig.app.json`-এর অধীনে, আর সেখানে বাকি পুরো অ্যাপ DOM ধরে চলে।
-      দুটো lib একসাথে দিলে ওরা একই নামে দুরকম `self`/`fetch` ঘোষণা করে আর
-      পুরো প্রোজেক্ট টাইপ-এরর-এ ভরে যেত।
-   ⭐ তাই যেটুকু সত্যিই ব্যবহার হয় সেটুকুরই ছোট ঘোষণা — ছয়টা সদস্য, সবই
-      নিচে ব্যবহৃত। আলাদা tsconfig বানানোর চেয়ে এটা কম যন্ত্রপাতি। */
+/* ── Types ────────────────────────────────────────────────────────────────
+   Careful: `ServiceWorkerGlobalScope`, `FetchEvent`, `ExtendableEvent` are in
+      TypeScript's `"WebWorker"` lib, not in `"DOM"`. But this file is under
+      `tsconfig.app.json`, where the whole rest of the app assumes DOM. Giving
+      both libs together declares `self`/`fetch` twice in different ways and
+      the whole project would fill with type errors.
+   So these are small declarations of only what is really used: six members,
+      all used below. Less machinery than building a separate tsconfig. */
 
 interface ExtendableEventLike extends Event {
   waitUntil(promise: Promise<unknown>): void;
@@ -65,39 +67,40 @@ interface ServiceWorkerScope {
 
 const sw = self as unknown as ServiceWorkerScope;
 
-/* ── বিল্ড-টাইমে বসানো দুটো মান ───────────────────────────────────────────
-   ⚠️ প্লেসহোল্ডার দুটো `vite.config.ts`-এর `oxeio-service-worker` প্লাগইন
-      বদলে দেয়। বদল **না হলে প্লাগইনটা বিল্ড থামিয়ে দেয়** — নইলে এখানে
-      `JSON.parse('__OXEIO_PRECACHE__')` চলত আর সার্ভিস ওয়ার্কার নীরবে
-      ইনস্টলই হতো না, অথচ বিল্ড সবুজ দেখাত।
-   ⭐ `JSON.parse(...)` মোড়কটা ইচ্ছাকৃত: minifier স্ট্রিং লিটারেলটা হুবহু
-      রেখে দেয়, তাই বদলানোর জায়গাটা বিল্ডের পরেও খুঁজে পাওয়া যায়। */
+/* ── Two values injected at build time ─────────────────────────────────────
+   Careful: the two placeholders are replaced by the `oxeio-service-worker`
+      plugin in `vite.config.ts`. If they are **not replaced the plugin stops
+      the build**; otherwise `JSON.parse('__OXEIO_PRECACHE__')` would run here and
+      the service worker would silently never install, while the build looked green.
+   The `JSON.parse(...)` wrapper is deliberate: the minifier keeps the string
+      literal exactly, so the place to replace can still be found after the build. */
 
-/** এই বিল্ডের অ্যাপ-শেল — `/index.html` + hash-করা `/assets/*` */
+/** This build's app shell: `/index.html` + the hashed `/assets/*` */
 const SHELL = JSON.parse('__OXEIO_PRECACHE__') as string[];
 
 /**
- * ⭐ শেলের তালিকা থেকে বানানো হ্যাশ — **ক্যাশের নামের জন্য**।
+ * A hash made from the shell list, **for the cache name**.
  *
- * ⚠️ ক্যাশের নামে ভার্সন না থাকলে নতুন বিল্ডের ফাইল পুরোনোগুলোর পাশে বসত,
- *    আর পুরোনোগুলো কোনোদিন মুছত না। এক বছরে ফোনের স্টোরেজে অকেজো বান্ডল
- *    জমত, আর ব্যবহারকারী বুঝতেই পারতেন না কেন।
+ * Careful: without a version in the cache name, a new build's files would sit
+ *    beside the old ones and the old ones would never be deleted. In a year
+ *    useless bundles would pile up in the phone's storage and the user would
+ *    never know why.
  *
- * ⚠️ এটা **আপডেটের সংকেত নয়** — সেটা ব্রাউজারের কাজ। সে `/sw.js` আবার
- *    নামিয়ে বাইট মিলিয়ে দেখে; এক বাইট আলাদা হলেই নতুন ওয়ার্কার। তাই
- *    শুধু এই ফাইলের কোড বদলালে (তালিকা এক থেকে গেলে) হ্যাশটা একই থাকে,
- *    অথচ আপডেট ঠিকই পৌঁছায় — আর ক্যাশের নাম না বদলানোই তখন সঠিক, কারণ
- *    ভেতরের ফাইলগুলো হুবহু একই।
+ * Careful: this is **not the update signal**; that is the browser's job. It
+ *    downloads `/sw.js` again and compares bytes; one byte of difference makes
+ *    a new worker. So if only this file's code changes (the list staying the
+ *    same) the hash stays the same, yet the update still arrives; and not
+ *    changing the cache name is then right, because the files inside are identical.
  */
 const VERSION = '__OXEIO_SW_VERSION__';
 
 const CACHE = `oxeio-shell-${VERSION}`;
 
 /**
- * ⚠️ `public/`-এর ফাইলগুলো hash পায় না, তাই তালিকাটা বিল্ড থেকে আসতে পারে
- *    না — হাতে লেখা। পথগুলো আইকন-এজেন্টের সাথে **চুক্তি**; বদলাতে হলে
- *    `index.html` আর `manifest.webmanifest`-ও একসাথে বদলাতে হবে।
- * ⚠️ এগুলো **best-effort**: কোনোটা না থাকলেও ইনস্টল সফল হয় (নিচে দেখুন)।
+ * Careful: files in `public/` get no hash, so the list cannot come from the
+ *    build; it is hand-written. The paths are a **contract** with the icon
+ *    agent; if changed, `index.html` and `manifest.webmanifest` must change too.
+ * Careful: these are **best-effort**: install succeeds even if one is missing (see below).
  */
 const STATIC = [
   '/manifest.webmanifest',
@@ -109,33 +112,33 @@ const STATIC = [
   '/icons/apple-touch-icon.png',
 ];
 
-/** ⭐ ক্যাশ থেকে দেওয়ার যোগ্য পথগুলো — বাকি সব সোজা নেটওয়ার্কে */
+/** Paths eligible to be served from the cache; everything else goes straight to the network */
 const PRECACHED = new Set([...SHELL, ...STATIC]);
 
 /**
- * নেটওয়ার্কের জন্য কতক্ষণ অপেক্ষা — navigation-এ।
+ * How long to wait for the network, for navigation.
  *
- * ⚠️ মোবাইল ডেটায় fetch ব্যর্থ হতে ৩০ সেকেন্ডও লাগতে পারে ("আছে কিন্তু
- *    চলছে না" সংযোগ)। ততক্ষণ ফোনে অ্যাপটা **জমে গেছে** মনে হতো, অথচ
- *    ক্যাশে পুরো শেলটা বসে আছে। `/index.html` কয়েক কিলোবাইট — ৪ সেকেন্ডে
- *    না এলে সেটা আর "ধীর নেটওয়ার্ক" নয়।
+ * Careful: on mobile data a fetch can take even 30 seconds to fail (a "there
+ *    but not working" connection). For that long the app would seem **frozen**
+ *    on the phone, while the whole shell sits in the cache. `/index.html` is a
+ *    few kilobytes; if it has not come in 4 seconds it is no longer a "slow network".
  */
 const NAV_TIMEOUT_MS = 4000;
 
 /**
- * ⭐⭐ ক্যাশ খোঁজার শর্ত — **দুটোই ছাড়া অফলাইনে অ্যাপ খুলত না**।
- * (এই বাগটা সত্যিই ধরা পড়েছে: সার্ভার বন্ধ করে রিফ্রেশ দিলে `index.html`
- *  ক্যাশ থেকে আসত, কিন্তু JS ও CSS `net::ERR_FAILED` — অথচ দুটোই ক্যাশে
- *  বসে ছিল। ফল: কালো ফাঁকা পর্দা।)
+ * The cache lookup options: **without both, the app would not open offline.**
+ * (This bug was really hit: with the server stopped and a refresh, `index.html`
+ *  came from the cache but JS and CSS gave `net::ERR_FAILED`, though both were
+ *  in the cache. Result: a black blank screen.)
  *
- * ⚠️ `ignoreVary` — কারণটা সূক্ষ্ম আর নিষ্ঠুর। ক্যাশে বসানোর সময়
- *    `cache.addAll()` রিকোয়েস্টগুলো পাঠায় **`Origin` হেডার ছাড়া**, কিন্তু
- *    পাতা থেকে আসা `<script crossorigin>` রিকোয়েস্টে `Origin` **থাকে**।
- *    সার্ভার উত্তরে `Vary: Origin` দিলে (Vite preview দেয়, আর CORS ধরা যেকোনো
- *    সার্ভারই দিতে পারে) ব্রাউজার ওই দুটোকে **আলাদা** ধরে — ক্যাশ মিস,
- *    তারপর নেটওয়ার্ক, তারপর অফলাইনে ব্যর্থ। `Vary` আমাদের কোনো কাজেই
- *    লাগে না: এখানে যা আছে সব আমাদের নিজের শেল, প্রতি পথে একটাই ফাইল।
- * ⚠️ `ignoreSearch` — `?v=2` ধরনের কোয়েরি জুড়ে দিলেও যেন একই ফাইল মেলে।
+ * Careful: `ignoreVary` has a subtle and cruel reason. When filling the cache,
+ *    `cache.addAll()` sends requests **without an `Origin` header**, but the
+ *    `<script crossorigin>` request from the page **has** `Origin`. If the
+ *    server answers with `Vary: Origin` (Vite preview does, and any
+ *    CORS-aware server may), the browser treats the two as **different**: a
+ *    cache miss, then the network, then failure offline. `Vary` is of no use
+ *    to us: everything here is our own shell, one file per path.
+ * Careful: `ignoreSearch` lets the same file match even with a query like `?v=2`.
  */
 const MATCH: CacheQueryOptions = { ignoreSearch: true, ignoreVary: true };
 
@@ -147,43 +150,44 @@ sw.addEventListener('install', (event) => {
       const cache = await caches.open(CACHE);
 
       /**
-       * ⚠️ শেলটা `addAll` — একটাও না পেলে **পুরোটা ব্যর্থ**, আর এটাই চাওয়া।
-       *    অর্ধেক শেল ক্যাশ করে রাখলে অফলাইনে HTML আসত কিন্তু JS আসত না,
-       *    অর্থাৎ চিরকালের সাদা পর্দা — নেটওয়ার্ক-এরর দেখানোর চেয়ে খারাপ।
+       * Careful: the shell goes through `addAll`: if even one is missing the
+       *    **whole thing fails**, and that is wanted. A half-cached shell would
+       *    serve HTML offline but no JS: a permanent white screen, worse than
+       *    showing a network error.
        */
       await cache.addAll(SHELL);
 
       /**
-       * ⭐ আইকনগুলো `allSettled` — একটা না থাকলেও ইনস্টল আটকায় না।
+       * The icons use `allSettled`: one missing does not block install.
        *
-       * ⚠️ `addAll` দিলে একটামাত্র আইকন ৪০৪ হলেই সার্ভিস ওয়ার্কার কোনোদিন
-       *    ইনস্টল হতো না, অর্থাৎ **অফলাইন সাপোর্ট পুরো উধাও** — আর কারণটা
-       *    হতো একটা ছবি। আইকন না থাকা ছোট সমস্যা, শেল না থাকা বড়।
+       * Careful: with `addAll`, a single icon returning 404 would mean the service
+       *    worker never installs, i.e. **offline support gone entirely**, over one
+       *    picture. A missing icon is a small problem, a missing shell a big one.
        */
       await Promise.allSettled(STATIC.map((url) => cache.add(url)));
 
       /**
-       * ⭐⭐ `skipWaiting` — নতুন সংস্করণ **অপেক্ষায় বসে থাকে না**।
+       * `skipWaiting`: the new version **does not sit waiting**.
        *
-       * কেন এটা বেছে নেওয়া হলো, "নতুন সংস্করণ এসেছে, রিফ্রেশ করুন" বার্তার
-       * বদলে:
-       *   ১· ⭐ অ্যাপে কোনো `import()` নেই — পুরো কোড **একটাই** বান্ডল।
-       *      lazy chunk থাকলে skipWaiting বিপজ্জনক হতো: চালু পাতাটা পরে
-       *      পুরোনো chunk চাইত, নতুন ডিপ্লয়ে সেটা সার্ভারে আর নেই → ৪০৪।
-       *      একটাই বান্ডল মানে চালু পাতা মেমরি থেকেই চলে, কিছু চায় না।
-       *   ২· navigation আগে-নেটওয়ার্ক, তাই অনলাইনে থাকা ব্যবহারকারী পরের
-       *      নেভিগেশনেই টাটকা `index.html` পান — অপেক্ষারত ওয়ার্কার বসিয়ে
-       *      রাখলে ট্যাব বন্ধ না করা পর্যন্ত পুরোনো কোড চলত। ফোনের
-       *      হোমস্ক্রিন অ্যাপ কেউ "বন্ধ" করে না, দিনের পর দিন খোলা থাকে।
-       *   ৩· ⚠️ বার্তাটা দেখাতে হলে `src/components/**`-এ একটা টোস্ট লাগত,
-       *      আর সেটা `VersionBadge`-এর কাজেরই নকল হতো।
+       * Why this was chosen over a "new version available, please refresh" message:
+       *   1. The app has no `import()`: the whole code is **one** bundle. With lazy
+       *      chunks skipWaiting would be dangerous: the running page would later ask
+       *      for an old chunk that no longer exists on the server after a new
+       *      deploy, giving a 404. One bundle means the running page works from
+       *      memory and asks for nothing.
+       *   2. Navigation is network-first, so an online user gets a fresh
+       *      `index.html` on the very next navigation; leaving a worker waiting
+       *      would run old code until the tab is closed. Nobody "closes" a phone
+       *      home-screen app; it stays open for days.
+       *   3. Showing the message would need a toast in `src/components/**`,
+       *      which would duplicate what `VersionBadge` does.
        *
-       * ⚠️ **`VersionBadge`-এর সাথে লড়াই হয় না** — বরং ওটাই শেষ জাল।
-       *    ব্যাজটা web ও api-র বিল্ড মেলায়; শেল কোনো কারণে পুরোনো থেকে
-       *    গেলে কোণায় লাল `⚠ #123` জ্বলে ওঠে। নীরব পুরোনো-কোড অবস্থা তাই
-       *    কখনো তৈরি হয় না।
-       * ⚠️ পাতা **নিজে থেকে রিলোড করা হয় না** (`controllerchange`-এ নয়)।
-       *    করলে কেউ ফর্ম ভরার মাঝপথে বা তারিখ বাছার সময় পাতা লাফ দিত।
+       * Careful: this does **not fight `VersionBadge`**; it is the last net. The
+       *    badge compares the web and api builds; if the shell somehow stays old,
+       *    a red `⚠ #123` lights up in the corner. So a silent old-code state
+       *    can never arise.
+       * Careful: the page is **not reloaded by itself** (not on `controllerchange`).
+       *    If it were, the page would jump while someone is filling a form or picking a date.
        */
       await sw.skipWaiting();
     })(),
@@ -196,9 +200,9 @@ sw.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       /**
-       * ⚠️ শুধু **নিজের** উপসর্গের ক্যাশ মোছা হয়। `caches.keys()`-এ অন্য
-       *    কিছু থাকার কথা নয়, কিন্তু ফিল্টার ছাড়া লিখলে ভবিষ্যতে কেউ
-       *    দ্বিতীয় কোনো ক্যাশ যোগ করলে এই লাইনটা নীরবে সেটা মুছে দিত।
+       * Careful: only caches with **our own** prefix are deleted. `caches.keys()`
+       *    should hold nothing else, but written without the filter, if someone
+       *    later adds a second cache this line would silently delete it.
        */
       const names = await caches.keys();
       await Promise.all(
@@ -208,10 +212,10 @@ sw.addEventListener('activate', (event) => {
       );
 
       /**
-       * ⭐ `clients.claim()` — এই ওয়ার্কার এখনই খোলা ট্যাবগুলোর দায়িত্ব নেয়।
-       * ⚠️ ছাড়া লিখলে **প্রথমবার** ইনস্টলের পর ওয়ার্কারটা পরের নেভিগেশন
-       *    পর্যন্ত কিছুই করত না — অর্থাৎ ইনস্টল করেই ফ্লাইট মোডে গেলে
-       *    অফলাইন কাজ করত না, আর কারণটা বোঝা প্রায় অসম্ভব হতো।
+       * `clients.claim()`: this worker takes over the open tabs right away.
+       * Careful: without it, after the **first** install the worker would do
+       *    nothing until the next navigation: install, go into flight mode, and
+       *    offline would not work, with a cause almost impossible to find.
        */
       await sw.clients.claim();
     })(),
@@ -224,34 +228,34 @@ sw.addEventListener('fetch', (event) => {
   const request = event.request;
 
   /**
-   * ⚠️ শুধু GET। POST/PATCH/DELETE-এ `respondWith` না ডাকাই একমাত্র সঠিক
-   *    আচরণ — লগইন বা সেটিংস সেভ ক্যাশের মধ্য দিয়ে গেলে ভয়ানক হতো।
+   * Careful: GET only. Not calling `respondWith` for POST/PATCH/DELETE is the
+   *    only correct behaviour; login or saving settings going through a cache would be terrible.
    */
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
 
-  // ⚠️ অন্য origin (যদি কোনোদিন আসে) — আমাদের ব্যাপার নয়।
+  // Careful: another origin (if one ever appears) is not our business.
   if (url.origin !== sw.location.origin) return;
 
   /**
-   * ⭐⭐⭐ **এই ফাইলের সবচেয়ে জরুরি চারটে লাইন।**
+   * **The most important four lines in this file.**
    *
-   * `/api/*` দেখলে হ্যান্ডলার সাথে সাথে ফিরে যায় — `respondWith` ডাকা হয় না,
-   * তাই ব্রাউজার রিকোয়েস্টটা নিজেই নেটওয়ার্কে পাঠায়, ঠিক যেন সার্ভিস
-   * ওয়ার্কার নেই।
+   * On seeing `/api/*` the handler returns at once: `respondWith` is not
+   * called, so the browser sends the request to the network itself, exactly as
+   * if there were no service worker.
    *
-   * ⚠️ এটা **সবার আগে**, ইচ্ছাকৃতভাবে। পরে বসালে একদিন কেউ উপরে একটা নতুন
-   *    নিয়ম যোগ করত ("সব ছবি ক্যাশ করো") আর স্ক্রিনশটগুলো নীরবে ডিস্কে জমা
-   *    হতে শুরু করত। এখানে থাকলে API-র পথ কোনো নিয়মেই পৌঁছায় না।
-   * ⚠️ `=== '/api'`-ও ধরা হয় স্ল্যাশ ছাড়া পথের জন্য।
+   * Careful: this comes **first**, deliberately. Put later, one day someone
+   *    would add a new rule above it ("cache all images") and screenshots would
+   *    silently start piling up on disk. Here, no rule ever reaches an API path.
+   * Careful: `=== '/api'` is also caught, for the path without a slash.
    */
   if (url.pathname === '/api' || url.pathname.startsWith('/api/')) return;
 
   /**
-   * ⭐ নেভিগেশন (ঠিকানা লেখা, রিফ্রেশ, হোমস্ক্রিন থেকে খোলা) — সব রুটেই
-   *    `/index.html`, কারণ রুটিং ক্লায়েন্টে (react-router)। ডিস্কে
-   *    `/monthly` বলে কোনো ফাইল নেই।
+   * Navigation (typing an address, refresh, opening from the home screen): every
+   *    route gets `/index.html`, because routing is on the client (react-router).
+   *    There is no file called `/monthly` on disk.
    */
   if (request.mode === 'navigate') {
     event.respondWith(navigate(request));
@@ -263,19 +267,20 @@ sw.addEventListener('fetch', (event) => {
     return;
   }
 
-  // বাকি সব — কিছুই করা হয় না, অর্থাৎ নেটওয়ার্ক, আর ক্যাশে কিছুই জমে না।
+  // Everything else: nothing is done, i.e. network, and nothing is cached.
 });
 
 /**
- * নেভিগেশন: **আগে নেটওয়ার্ক, তারপর ক্যাশ**।
+ * Navigation: **network first, then cache.**
  *
- * ⭐⭐ উল্টোটা (আগে-ক্যাশ) এখানে ভুল হতো। ক্যাশ থেকে দিলে ডিপ্লয়ের পরেও
- *    ব্যবহারকারী অন্তত একবার **পুরোনো অ্যাপ** পেতেন — লাইভ ড্যাশবোর্ডে
- *    যেখানে সংখ্যার সংজ্ঞা বদলাতে পারে, সেটা "পুরোনো কোড নতুন ডেটা দেখাচ্ছে"
- *    বলে ভুল হিসাব দেখাত। অনলাইনে থাকলে **সবসময় টাটকা কোড** — এটাই নিয়ম।
+ * The opposite (cache first) would be wrong here. Serving from the cache, even
+ *    after a deploy the user would get the **old app** at least once; on a live
+ *    dashboard, where the definition of a number may change, that would show
+ *    wrong figures as "old code showing new data". When online, **always fresh
+ *    code**: that is the rule.
  *
- * ⚠️ `index.html` কয়েক কিলোবাইট আর Caddy ওটাতে `no-cache` দেয়, তাই প্রতি
- *    খোলায় নেটওয়ার্কে যাওয়ার দামটা প্রায় শূন্য।
+ * Careful: `index.html` is a few kilobytes and Caddy gives it `no-cache`, so
+ *    the cost of going to the network on every open is almost zero.
  */
 async function navigate(request: Request): Promise<Response> {
   const controller = new AbortController();
@@ -285,12 +290,11 @@ async function navigate(request: Request): Promise<Response> {
     return await fetch(request, { signal: controller.signal });
   } catch {
     /**
-     * নেটওয়ার্ক নেই (বা এত ধীর যে নেই-ই) — জমানো শেল দেওয়া হয়।
+     * No network (or so slow that it is as good as none): the stored shell is served.
      *
-     * ⭐ এতে অ্যাপটা **খোলে**, আর তার নিজের API কলগুলো ব্যর্থ হয়ে পাতায়
-     *    "সংযোগ নেই" দেখায়। ⚠️ পুরোনো সংখ্যা দেখানো হয় না — কোনো API উত্তর
-     *    কোথাও জমা নেই। ব্রাউজারের ডাইনোসর পাতার বদলে অ্যাপের নিজের ভাষায়
-     *    সৎ উত্তর।
+     * The app **opens**, and its own API calls fail and show "no connection" on
+     *    the page. Careful: no old numbers are shown; no API response is stored
+     *    anywhere. Instead of the browser's dinosaur page, an honest answer in the app's own words.
      */
     const cache = await caches.open(CACHE);
     const shell = await cache.match('/index.html', MATCH);
@@ -301,9 +305,9 @@ async function navigate(request: Request): Promise<Response> {
 }
 
 /**
- * ⚠️ শেলও যদি ক্যাশে না থাকে (একেবারে প্রথম খোলাটাই অফলাইনে) — তখনো
- *    ব্রাউজারের এরর পাতা নয়, নিজের বার্তা। লেখাটা ইংরেজি, কারণ পুরো
- *    ইন্টারফেসই ইংরেজি।
+ * Careful: if even the shell is not in the cache (the very first open is
+ *    offline), still not the browser's error page but our own message. The text
+ *    is English because the whole interface is English.
  */
 function offlineResponse(): Response {
   return new Response(
@@ -322,11 +326,12 @@ function offlineResponse(): Response {
 }
 
 /**
- * ⭐ hash-করা asset ও আইকন: ক্যাশে থাকলে সেটাই, নইলে নেটওয়ার্ক।
+ * Hashed assets and icons: from the cache if present, otherwise the network.
  *
- * ⚠️ নেটওয়ার্ক থেকে আনা উত্তর **ক্যাশে ফেরত রাখা হয় না**। রাখলে এই
- *    হ্যান্ডলারটা "যা চাওয়া হয়েছে সব জমাও"-তে পরিণত হতো, আর তখন
- *    তালিকাটাই অর্থহীন — ঠিক যে জিনিসটা এড়ানোর জন্য হাতে লেখা।
+ * Careful: a response fetched from the network is **not put back in the
+ *    cache**. If it were, this handler would turn into "store everything that
+ *    is asked for", and then the list would be pointless, which is exactly
+ *    what hand-writing it avoids.
  */
 async function cacheFirst(request: Request): Promise<Response> {
   const cache = await caches.open(CACHE);

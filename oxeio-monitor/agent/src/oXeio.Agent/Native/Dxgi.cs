@@ -29,12 +29,11 @@ internal struct DXGI_MODE_DESC
 }
 
 /// <summary>
-/// ⚠️ <c>DeviceName</c> <c>fixed char</c>, <c>ByValTStr</c> নয় — নইলে স্ট্রাকচারটা
-/// non-blittable হয়ে যেত (<see cref="MONITORINFOEXW"/>-এর মতোই)।
+/// Careful: <c>DeviceName</c> is a <c>fixed char</c>, not <c>ByValTStr</c>, otherwise the struct
+/// would become non-blittable (the same as <see cref="MONITORINFOEXW"/>).
 ///
-/// <c>Monitor</c> ফিল্ডটাই আসল কাজের জিনিস: এটাই সেই HMONITOR যেটা
-/// <see cref="Platform.Capture.MonitorEnumerator"/> থেকে আসা মনিটরের সাথে
-/// মেলাতে হবে।
+/// The <c>Monitor</c> field is what really matters: it is the HMONITOR that has to be matched
+/// against the monitor coming from <see cref="Platform.Capture.MonitorEnumerator"/>.
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal unsafe struct DXGI_OUTPUT_DESC
@@ -51,7 +50,7 @@ internal struct DXGI_OUTDUPL_DESC
 {
     internal DXGI_MODE_DESC ModeDesc;
 
-    /// <summary>DXGI_MODE_ROTATION — ঘোরানো ডিসপ্লেতে ১ ছাড়া অন্য কিছু আসে।</summary>
+    /// <summary>DXGI_MODE_ROTATION: on a rotated display something other than 1 comes in.</summary>
     internal uint Rotation;
 
     internal int DesktopImageInSystemMemory;
@@ -71,16 +70,17 @@ internal struct DXGI_OUTDUPL_FRAME_INFO
     internal long LastMouseUpdateTime;
 
     /// <summary>
-    /// শূন্য মানে কেবল কার্সার নড়েছে, ডেস্কটপের ছবি বদলায়নি —
-    /// তবু <c>AcquireNextFrame</c> সফল হয় ([ADR-012c](../../../../docs/05-Options-Decisions.md))।
+    /// Zero means only the cursor moved and the desktop image did not change, yet
+    /// <c>AcquireNextFrame</c> still succeeds
+    /// ([ADR-012c](../../../../docs/05-Options-Decisions.md)).
     /// </summary>
     internal uint AccumulatedFrames;
 
     internal int RectsCoalesced;
 
     /// <summary>
-    /// ⭐ DRM-সুরক্ষিত কনটেন্ট বাদ দেওয়া হয়েছে কি না — <b>OS নিজে জানিয়ে দিচ্ছে</b>।
-    /// GDI-তে এই তথ্যটা পাওয়ারই উপায় ছিল না; আন্দাজে কালো পিক্সেল গুনতে হতো।
+    /// Whether DRM-protected content was excluded: <b>the OS itself reports it</b>. With GDI there
+    /// was no way to get this information; black pixels had to be counted as a guess.
     /// </summary>
     internal int ProtectedContentMaskedOut;
 
@@ -90,17 +90,16 @@ internal struct DXGI_OUTDUPL_FRAME_INFO
 }
 
 /// <summary>
-/// DXGI Desktop Duplication — প্রাথমিক ক্যাপচার ইঞ্জিন
-/// ([ADR-012c](../../../../docs/05-Options-Decisions.md))।
+/// DXGI Desktop Duplication: the primary capture engine
+/// ([ADR-012c](../../../../docs/05-Options-Decisions.md)).
 ///
-/// সব IID ও স্লট <c>Windows Kits\10\Include\10.0.26100.0\shared\{dxgi,dxgi1_2}.h</c>
-/// থেকে গুনে মেলানো।
+/// All IIDs and slots were counted and matched against
+/// <c>Windows Kits\10\Include\10.0.26100.0\shared\{dxgi,dxgi1_2}.h</c>.
 ///
-/// ⚠️ <b>DXGI-র উত্তরাধিকার D3D11-এর উল্টো ক্রমে।</b> সব DXGI ইন্টারফেস
-/// <c>IDXGIObject</c> থেকে আসে, যার চারটে মেথডের ক্রম —
-/// SetPrivateData, SetPrivateDataInterface, <b>Get</b>PrivateData, GetParent।
-/// D3D11-এ আবার Get আগে, Set পরে। দুটো গুলিয়ে ফেললে স্লট এক ঘর সরে যাবে
-/// আর ভুলটা নীরব থাকবে।
+/// Careful: <b>DXGI's inheritance is in the opposite order to D3D11's.</b> All DXGI interfaces
+/// derive from <c>IDXGIObject</c>, whose four methods are in the order SetPrivateData,
+/// SetPrivateDataInterface, <b>Get</b>PrivateData, GetParent. In D3D11 the Get comes first and the
+/// Set after. Mixing the two up shifts a slot by one and the mistake stays silent.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static partial class Dxgi
@@ -119,13 +118,13 @@ internal static partial class Dxgi
     internal static readonly Guid IID_IDXGIOutputDuplication =
         new("191cfac3-a341-470d-b26e-a864f428319c");
 
-    // ── vtable স্লট ─────────────────────────────────────────────────────────
+    // ── vtable slots ──────────────────────────────────────────────────────
     //
-    // IDXGIObject: 3 SetPrivateData · 4 SetPrivateDataInterface
-    //              5 GetPrivateData · 6 GetParent
-    // অর্থাৎ প্রতিটি DXGI ইন্টারফেসের নিজস্ব মেথড শুরু হয় ৭ থেকে।
+    // IDXGIObject: 3 SetPrivateData, 4 SetPrivateDataInterface,
+    //              5 GetPrivateData, 6 GetParent
+    // So every DXGI interface's own methods start from 7.
 
-    /// <summary>IDXGIFactory1 — dxgi.h। IDXGIFactory-র ৫টা মেথড (৭–১১) পেরিয়ে।</summary>
+    /// <summary>IDXGIFactory1, dxgi.h: past IDXGIFactory's 5 methods (7-11).</summary>
     internal const int Factory1_EnumAdapters1 = 12;
 
     /// <summary>IDXGIDevice — dxgi.h</summary>
@@ -138,13 +137,12 @@ internal static partial class Dxgi
     internal const int Output_GetDesc = 7;
 
     /// <summary>
-    /// IDXGIOutput1 — dxgi1_2.h। IDXGIOutput-এর ১২টা মেথড (৭–১৮) পেরিয়ে
-    /// GetDisplayModeList1(19), FindClosestMatchingMode1(20),
-    /// GetDisplaySurfaceData1(21), তারপর এটা।
+    /// IDXGIOutput1, dxgi1_2.h: past IDXGIOutput's 12 methods (7-18), then GetDisplayModeList1(19),
+    /// FindClosestMatchingMode1(20), GetDisplaySurfaceData1(21), then this one.
     /// </summary>
     internal const int Output1_DuplicateOutput = 22;
 
-    /// <summary>IDXGIOutputDuplication — ⚠️ <c>void</c> ফেরত।</summary>
+    /// <summary>IDXGIOutputDuplication. Careful: returns <c>void</c>.</summary>
     internal const int Duplication_GetDesc = 7;
 
     /// <summary>IDXGIOutputDuplication</summary>
@@ -153,48 +151,48 @@ internal static partial class Dxgi
     /// <summary>IDXGIOutputDuplication</summary>
     internal const int Duplication_ReleaseFrame = 14;
 
-    // ── ত্রুটি কোড (winerror.h) ─────────────────────────────────────────────
+    // ── Error codes (winerror.h) ─────────────────────────────────────────
 
-    /// <summary>ডেস্কটপ একটুও বদলায়নি — <b>ব্যর্থতা নয়</b>, স্বাভাবিক ফল।</summary>
+    /// <summary>The desktop did not change at all: <b>not a failure</b>, a normal result.</summary>
     internal const int DXGI_ERROR_WAIT_TIMEOUT = unchecked((int)0x887A0027);
 
-    /// <summary>মোড বদল / ডেস্কটপ সুইচ / DWM রিস্টার্ট — নতুন করে শুরু করতে হবে।</summary>
+    /// <summary>Mode change / desktop switch / DWM restart: must start over.</summary>
     internal const int DXGI_ERROR_ACCESS_LOST = unchecked((int)0x887A0026);
 
     /// <summary>
-    /// একসাথে সর্বোচ্চ ৪টি duplication চলতে পারে। Teams বা Zoom স্ক্রিন শেয়ার
-    /// করলে এই সীমা ছোঁয়া বাস্তবেই ঘটে।
+    /// At most 4 duplications can run at once. When Teams or Zoom shares the screen, hitting this
+    /// limit really does happen.
     /// </summary>
     internal const int DXGI_ERROR_NOT_CURRENTLY_AVAILABLE = unchecked((int)0x887A0022);
 
-    /// <summary>RDP সেশন — ডেস্কটপ ডুপ্লিকেশন ওখানে চলে না।</summary>
+    /// <summary>RDP session: desktop duplication does not work there.</summary>
     internal const int DXGI_ERROR_SESSION_DISCONNECTED = unchecked((int)0x887A0028);
 
-    /// <summary>ড্রাইভার/অ্যাডাপ্টার এটা পারে না — এই মেশিনে আর চেষ্টা করার মানে নেই।</summary>
+    /// <summary>The driver/adapter cannot do this: no point trying again on this machine.</summary>
     internal const int DXGI_ERROR_UNSUPPORTED = unchecked((int)0x887A0004);
 
     internal const int DXGI_ERROR_NOT_FOUND = unchecked((int)0x887A0002);
     internal const int DXGI_ERROR_INVALID_CALL = unchecked((int)0x887A0001);
 
-    /// <summary>UAC-র secure desktop বা লক স্ক্রিন সামনে থাকলে।</summary>
+    /// <summary>When the UAC secure desktop or the lock screen is in front.</summary>
     internal const int E_ACCESSDENIED = unchecked((int)0x80070005);
 
     /// <summary>
-    /// এই ত্রুটিগুলো এই মেশিনে <b>স্থায়ী</b> — প্রতি ৫ মিনিটে আবার চেষ্টা করা
-    /// অর্থহীন। এগুলো পেলে একেবারে GDI-তে নেমে যাওয়া হয়।
+    /// These errors are <b>permanent</b> on this machine: retrying every 5 minutes is pointless. On
+    /// getting them, we fall all the way back to GDI.
     /// </summary>
     internal static bool IsPermanent(int hr) =>
         hr == DXGI_ERROR_UNSUPPORTED || hr == DXGI_ERROR_NOT_FOUND;
 
-    // ── এন্ট্রি পয়েন্ট ───────────────────────────────────────────────────────
+    // ── Entry points ─────────────────────────────────────────────────────
 
     /// <summary>
-    /// dxgi.h — অ্যাডাপ্টার গোনার জন্য।
+    /// dxgi.h: for enumerating adapters.
     ///
-    /// ⚠️ ডিফল্ট অ্যাডাপ্টারে ডিভাইস বানিয়ে কাজ চালানো যায় না। হাইব্রিড গ্রাফিক্সের
-    /// ল্যাপটপে (Intel + NVIDIA) মনিটরটা যে অ্যাডাপ্টারে লাগানো, ডিভাইস ঠিক
-    /// <b>সেটাতেই</b> বানাতে হয় — নইলে <c>DuplicateOutput</c> সরাসরি
-    /// E_INVALIDARG দেয়। অফিসে একটাও ল্যাপটপ থাকলেই এটা ধরা পড়বে।
+    /// Careful: working by creating the device on the default adapter does not work. On a hybrid
+    /// graphics laptop (Intel + NVIDIA) the device must be created on <b>exactly the adapter</b>
+    /// the monitor is attached to, otherwise <c>DuplicateOutput</c> returns E_INVALIDARG straight
+    /// away. Even one laptop in the office will expose this.
     /// </summary>
     [LibraryImport("dxgi.dll")]
     internal static unsafe partial int CreateDXGIFactory1(Guid* riid, nint* factory);

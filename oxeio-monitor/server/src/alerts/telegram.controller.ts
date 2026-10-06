@@ -16,8 +16,8 @@ import {
 
 class SaveTelegramDto {
   /**
-   * ⚠️ খালি স্ট্রিং **বৈধ** — মানে "মুছে দাও, `.env`-এ ফেরত যাও"। তাই
-   * `@IsNotEmpty()` নয়, নইলে ভুল করে বসানো টোকেন সরানোর কোনো পথ থাকত না।
+   * Careful: an empty string is **valid**, meaning "delete it and go back to
+   * `.env`". So no `@IsNotEmpty()`, otherwise a wrongly entered token could not be removed.
    */
   @IsString() @MaxLength(200)
   botToken!: string;
@@ -27,15 +27,15 @@ class SaveTelegramDto {
 }
 
 /**
- * **টেলিগ্রামের কনফিগ পর্দা থেকে** (G08)।
+ * **Telegram config from the screen** (G08).
  *
- * ⚠️⚠️ **কেন এটা দরকার হলো:** টোকেন ও চ্যাট আইডি ছিল কেবল `.env`-এ,
- * অর্থাৎ বদলাতে হলে VPS-এ SSH → ফাইল সম্পাদনা → কনটেইনার রিস্টার্ট।
- * মালিকের পক্ষে সেটা কার্যত অসম্ভব, তাই একবার ভুল হলে সেটা মাসের পর মাস
- * ভুলই থেকে যেত।
+ * Why it was needed: the token and chat id lived only in `.env`, so changing
+ * them meant SSH to the VPS, editing the file and restarting the container.
+ * That is practically impossible for the owner, so one mistake would stay
+ * wrong for months.
  *
- * ⚠️ owner-only। টেলিগ্রাম চ্যানেলে কর্মীর নাম ও ঘণ্টা যায়, তাই কে
- * সেটা পাবে সেই সিদ্ধান্ত ম্যানেজারের নয়।
+ * Careful: owner-only. The Telegram channel carries staff names and hours, so
+ * who receives them is not the manager's decision.
  */
 @Roles(UserRole.owner)
 @Controller('settings/telegram')
@@ -53,9 +53,10 @@ export class TelegramSettingsController {
     });
 
     /**
-     * ⚠️⚠️ `telegramView()` দিয়েই যায় — **কাঁচা সারিটা কখনো নয়**। ওতে
-     * পুরো টোকেন থাকে, আর সেটা ব্রাউজারে গেলে DevTools, প্রক্সি লগ বা
-     * স্ক্রিন শেয়ারে দেখা যেত। পর্দায় যায় কেবল শেষ চার অক্ষর।
+     * Careful: always goes through `telegramView()`, **never the raw row**.
+     * The row holds the full token, and sent to the browser it would show up
+     * in DevTools, proxy logs or screen shares. Only the last four characters
+     * go to the screen.
      */
     return telegramView(
       resolveTelegram((row?.value as Record<string, string> | undefined) ?? null, {
@@ -91,9 +92,9 @@ export class TelegramSettingsController {
       targetId: TELEGRAM_SETTING_KEY,
       ipAddress: ip,
       /**
-       * ⚠️⚠️ **টোকেন audit log-এও যায় না** — শুধু "বসানো হয়েছে কি না"।
-       * audit log মালিক ও ম্যানেজার দুজনেই দেখেন, আর গোপন মান একবার ওখানে
-       * বসলে সেটা আর মোছা যায় না।
+       * Careful: **the token does not go into the audit log either**, only
+       * "whether it is set". Both owner and manager can see the audit log, and
+       * once a secret is written there it cannot be removed.
        */
       meta: { op: 'telegram', tokenSet: botToken.length > 0, chatId },
     });
@@ -102,10 +103,11 @@ export class TelegramSettingsController {
   }
 
   /**
-   * ⭐⭐ **সত্যিই কাজ করছে কি না — একটা পরীক্ষামূলক বার্তা।**
+   * **Whether it really works: a test message.**
    *
-   * ⚠️ এটা না থাকলে মালিক সেভ করে অপেক্ষা করতেন **শুক্রবার পর্যন্ত**, আর
-   * তখন কিছু না এলে বুঝতেন ভুল ছিল — অথচ কী ভুল, সেটা জানার উপায় নেই।
+   * Careful: without this the owner would save and wait **until Friday**, and
+   * if nothing arrived then they would learn something was wrong, with no way
+   * to find out what.
    */
   @Patch('test')
   async test(@CurrentUser() actor: SessionUser): Promise<{ outcome: string }> {

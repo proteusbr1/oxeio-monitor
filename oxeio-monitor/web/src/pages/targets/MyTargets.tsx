@@ -17,31 +17,31 @@ import { DropReasonPicker } from './DropReason';
 import { Chip, MiniButton, Notice, ServerError, useMutation } from '../../components/ui';
 
 /**
- * **ডিজাইনারের নিজের টার্গেট** *(২২ আগস্ট ২০২৬)* — `/me` পাতায়।
+ * **A designer's own targets**, on the `/me` page.
  *
- * ⚠️⚠️ **"Complete" বোতামটা কেন দরকার হলো** *(২৩ আগস্ট, মালিকের প্রশ্নে)*।
- * প্রথমে ভাবা হয়েছিল সিস্টেম নিজেই শেষ হওয়া ধরে ফেলবে — কিন্তু এজেন্ট
- * শিরোনামে নম্বরটা দেখে ফাইল **খোলার** মুহূর্তে, শেষ করার নয়। ফলে
- * টার্গেট খোলামাত্র বন্ধ হয়ে যেত।
+ * Important: **why the "Complete" button was needed** (the owner asked).
+ * First it was assumed the system would detect completion by itself, but the
+ * agent sees the number in the window title at the moment the file is
+ * **opened**, not finished. So a target would close as soon as it was opened.
  *
- * ⭐ এখন ভাগ করা: **সিস্টেম বলে "শুরু হয়েছে"**, আর **শেষ হওয়া বলেন
- * ডিজাইনার নিজে**। প্রত্যেকে যা সত্যিই জানে, সেটুকুই বলে।
+ * Now the work is split: **the system says "started"**, and **the designer
+ * says "finished"**. Each reports only what it truly knows.
  *
- * ⚠️ oXeio-র নিয়মটা তাতেও ভাঙে না ([ADR-032](../../../../docs/05-Options-Decisions.md)):
- * বোতামটা **কোনো মাপা সংখ্যা বদলায় না** — ঘণ্টা নয়, ডিজাইনের গোনাও নয়
- * (ওটা ফাইলের নাম থেকেই আসে)। এটা কেবল একটা কাজের ঘোষণা।
+ * Careful: this still does not break oXeio's rule ([ADR-032](../../../../docs/05-Options-Decisions.md)):
+ * the button **changes no measured number**: not hours, and not the design
+ * count (that comes from the file name). It is only an announcement of work.
  *
- * ⚠️ কারো টার্গেট না থাকলে কার্ডটাই বসে না — গবেষক বা ম্যানেজারের পাতায়
- * একটা খালি "কোনো টার্গেট নেই" বাক্স বসিয়ে লাভ নেই।
+ * Careful: if someone has no targets the card is not rendered at all; an empty
+ * "no targets" box on a researcher's or manager's page is pointless.
  */
 export function MyTargets() {
   const { data, loading, error, reload } = useApi(myTargets, []);
   const skip = useMutation();
 
   /**
-   * ⚠️ পপ-আপ আটকানোর বার্তা `skip.error`-এর সাথে মেশানো হয়নি — ওটা
-   *    সার্ভারের না-বলা, আর এটা ব্রাউজারের। দুটো এক ঘরে বসালে একটা
-   *    আরেকটাকে মুছে দিত, অথচ কারণ দুটো আলাদা।
+   * Careful: the popup-blocked message is not mixed with `skip.error`: that is
+   *    the server's refusal and this is the browser's. In one slot one would
+   *    erase the other, yet the causes are different.
    */
   const [tabsNotice, setTabsNotice] = useState<string | null>(null);
 
@@ -50,29 +50,29 @@ export function MyTargets() {
   if (!data || data.length === 0) return null;
 
   /**
-   * ⭐⭐ **দুই ভাগ** *(মালিকের রিপোর্ট, ২৫ আগস্ট)*।
+   * **Two parts.** Reported by the owner.
    *
-   * ⚠️⚠️ আগে Complete চাপার সাথে সাথে সারিটা **পর্দা থেকেই উধাও** হতো,
-   * কারণ সার্ভার কেবল `assigned` পাঠাত। ⭐ ভুলে চেপে ফেললে ফেরানোর
-   * বোতাম দূরে থাক, জিনিসটাই আর দেখা যেত না।
+   * Careful: pressing Complete used to make the row **vanish from the screen**,
+   * because the server sent only `assigned`. So if it was pressed by mistake
+   * there was no undo button, let alone the row itself.
    *
-   * ⚠️ সার্ভার **আজকের** শেষ করাগুলোই পাঠায়, তাই এখানে দিন গোনার
-   * দরকার নেই — `completedAt` থাকা মানেই "আজ, আর এখনো ফেরানো যায়"।
+   * Careful: the server sends only **today's** finished rows, so there is no
+   * need to count days here: having `completedAt` means "today, and still undoable".
    */
   const inHand = data.filter((t) => t.completedAt === null);
   const finished = data.filter((t) => t.completedAt !== null);
 
   /**
-   * ⭐⭐ **এক চাপে হাতের সব কটা Amazon পাতা** *(মালিকের চাওয়া, ২৯ আগস্ট
-   * ২০২৬: "30 design gula ek sathe open korar ekta button")*।
+   * **All the Amazon pages in hand, in one press.** The owner asked for a
+   * button to open 30 designs at once.
    *
-   * ⚠️ **হাতেরগুলোই খোলে, আজ শেষ করাগুলো নয়** — নিচের "Finished today"
-   * ভাগটা একটা রসিদ, করণীয় নয়। ওগুলোও খুললে রোজ ৩০টার বদলে ৬০টা ট্যাব
-   * খুলত, আর অর্ধেকের কোনো কাজই বাকি নেই।
+   * Careful: **it opens the ones in hand, not those finished today**: the
+   * "Finished today" part below is a receipt, not a to-do. Opening those too
+   * would open 60 tabs a day instead of 30, half with nothing left to do.
    *
-   * ⚠️⚠️ ব্রাউজার বেশিরভাগটাই আটকাবে **প্রথমবার** — সেটা ভাঙা নয়, নিয়ম
-   * ([popups.ts](../lib/popups.ts))। তাই কী ঘটল সেটা গুনে বার্তায় বসে,
-   * আর অনুমতি একবার দিলে পরের দিন থেকে ৩০টাই খোলে।
+   * Careful: the browser will block most of them **the first time**; that is
+   * not broken, it is the rule ([popups.ts](../lib/popups.ts)). So the count of what
+   * happened goes into the message, and once permission is given all 30 open from the next day.
    */
   function openAll() {
     const { blocked } = openInTabs(
@@ -87,10 +87,10 @@ export function MyTargets() {
       title="Your Design Targets"
       hint={`${inHand.length} in hand — oldest first`}
       /*
-        ⭐ বোতামটা কার্ডের মাথায়, প্রতিটা সারিতে নয় — কাজটা গোটা তালিকার,
-           একটা টার্গেটের নয়। ⚠️ সংখ্যাটা লেখাতেই বসে ("Open all 30"),
-           কারণ ৩০টা ট্যাব খোলা ফেরানো কঠিন; চাপার আগেই জানা দরকার কত
-           আসছে।
+        The button is at the top of the card, not on each row: the action is
+           for the whole list, not one target. Careful: the number is in the
+           text ("Open all 30"), because 30 open tabs are hard to undo; you
+           need to know how many are coming before pressing.
       */
       actions={
         inHand.length > 0 ? (
@@ -105,9 +105,9 @@ export function MyTargets() {
     >
       <div className="space-y-3 p-4">
         {/*
-          ⭐⭐ এই এক লাইনটাই গোটা কার্ডের কারণ। ডিজাইনারের একমাত্র কাজ
-             নম্বরটা ফাইলের নামে বসানো — সেটা না জানলে কোনো টার্গেটই
-             কোনোদিন বন্ধ হতো না, আর সবাই ভাবত সিস্টেম ভাঙা।
+          This one line is the reason for the whole card. The designer's only
+             job is to put the number in the file name; without knowing that,
+             no target would ever close and everyone would think the system was broken.
         */}
         <Notice>
           Start the file name with the number —{' '}
@@ -116,15 +116,17 @@ export function MyTargets() {
         </Notice>
 
         {/*
-          ⚠️ বার্তাটা এখানেই দেখাতে হয় — Undo আটকে গেলে (কেউ বানান দেখে
-             ফেলেছেন, বা কাজটা গতকালের) সার্ভার **কেন** আটকাল সেটা বলে,
-             আর সেটা না দেখালে ডিজাইনার ভাবতেন বোতামটা ভাঙা।
+          Careful: the message must be shown here: when Undo is refused (someone
+             has already checked the spelling, or the work is from yesterday) the
+             server says **why**, and without showing it the designer would think
+             the button was broken.
         */}
         <ServerError error={skip.error} />
 
         {/*
-          ⚠️ ব্রাউজার ট্যাব আটকালে **এখানেই** বলা হয় — ঠিকানা-বারের ছোট
-             আইকনটা মানুষ খেয়ালই করে না, আর তখন বোতামটাকে ভাঙা মনে হয়।
+          Careful: if the browser blocks the tabs it is said **here**: people
+             never notice the small icon in the address bar, and then the button
+             seems broken.
         */}
         {tabsNotice && <Notice tone="attention">{tabsNotice}</Notice>}
 
@@ -149,15 +151,15 @@ export function MyTargets() {
         ))}
 
         {/*
-          ⭐⭐ **আজ যা শেষ করেছেন** — ভুল শোধরানোর একমাত্র জানালা।
+          **What you finished today**: the only window for correcting mistakes.
 
-          ⚠️ ভাগটা **ইচ্ছাকৃতভাবে শান্ত**: হালকা লেখা, কম রঙ। এটা কাজের
-             তালিকা নয়, একটা রসিদ — চোখ এখানে আটকানোর কথা নয়।
+          Careful: this part is **deliberately quiet**: light text, little
+             colour. It is a receipt, not a work list; the eye should not stick here.
 
-          ⚠️⚠️ Undo বোতামটা **সব সারিতেই** বসে, কারণ সার্ভার এখানে যা
-             পাঠায় তার সবই ফেরানোযোগ্য। কেউ মাঝপথে বানান দেখে ফেললে
-             পরের রিফ্রেশে সারিটা এমনিতেই চলে যাবে, আর ততক্ষণে চাপলে
-             সার্ভার কারণ লিখে আটকাবে।
+          Careful: the Undo button appears on **every row**, because everything
+             the server sends here can be undone. If someone checks the spelling
+             midway, the row will leave on the next refresh anyway, and pressing
+             in the meantime makes the server refuse with a reason.
         */}
         {finished.length > 0 && (
           <div className="space-y-2 pt-1">
@@ -196,18 +198,18 @@ function TargetRow({
   onSkip: (reason: DropReason) => void;
 }) {
   /**
-   * ⭐⭐ **Skip চাপলে সাথে সাথে বাদ যায় না — আগে "কেন" জিজ্ঞেস করা হয়**
-   * *(মালিকের চাওয়া, ৩১ আগস্ট ২০২৬)*।
+   * **Skip does not drop at once: it first asks "why".** Requested by the
+   * owner.
    *
-   * ⚠️ তিনটে কারণের বোতামই একসাথে **নিশ্চিতকরণ** — আলাদা "Really skip"
-   * নেই। এক চাপ, অথচ আগের চেয়ে বেশি তথ্য।
+   * Careful: the three reason buttons are themselves the **confirmation**;
+   * there is no separate "Really skip". One press, yet more information than before.
    */
   const [asking, setAsking] = useState(false);
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-line bg-paper px-3 py-2.5">
       {/*
-        ⭐ নম্বরটাই সবচেয়ে বড় লেখা, ASIN নয় — ASIN ডিজাইনারের কোনো কাজে
-           লাগে না, লিঙ্কটা লাগে; আর নম্বরটা ছাড়া কাজ শেষই হয় না।
+        The number is the biggest text, not the ASIN: the ASIN is of no use to
+           the designer, the link is; and without the number the work never finishes.
       */}
       <span className="num min-w-[104px] text-[19px] font-semibold tracking-tight text-ink">
         {target.jobNumber ?? '—'}
@@ -216,8 +218,8 @@ function TargetRow({
       <span className="min-w-0 flex-1">
         <span className="num block text-[13px] text-ink">{target.asin}</span>
         {/*
-          ⭐ "কাজ চলছে" — সিস্টেম ফাইলটা খুলতে দেখেছে। ⚠️ এটা উৎসাহ নয়,
-             তথ্য: ডিজাইনার দেখেন কোনটায় তিনি হাত দিয়ে ফেলেছেন।
+          "In progress": the system saw the file being opened. Careful: this is
+             information, not encouragement: the designer sees which ones they have touched.
         */}
         <span className="block text-[11.5px] text-ink-3">
           {target.startedAt
@@ -231,8 +233,8 @@ function TargetRow({
       <a
         href={target.url}
         target="_blank"
-        // ⚠️ `noopener` — নতুন ট্যাব `window.opener` দিয়ে এই পাতাটা
-        //    সরিয়ে দিতে পারত (tabnabbing)
+        // Careful: `noopener`: otherwise the new tab could redirect this page
+        //    through `window.opener` (tabnabbing)
         rel="noreferrer noopener"
         className="text-[12.5px] whitespace-nowrap text-data hover:underline"
       >
@@ -240,10 +242,10 @@ function TargetRow({
       </a>
 
       {/*
-        ⭐ Copy — ২৫ বার হাতে টাইপ করলে একদিন একটা অঙ্ক ভুল হবেই, আর
-           তখন টার্গেটটা চিরকাল খোলা থেকে যেত আর কেউ কারণ বুঝত না।
-        ⚠️ `navigator.clipboard` না থাকলে (পুরোনো ব্রাউজার, http) বোতামটা
-           চুপচাপ কিছুই করে না — তাই আগে দেখে নেওয়া হয়।
+        Copy: typing it by hand 25 times, one day a digit will go wrong, and
+           then the target would stay open forever and nobody would know why.
+        Careful: without `navigator.clipboard` (old browser, http) the button
+           silently does nothing, so it is checked first.
       */}
       {target.jobNumber !== null && typeof navigator.clipboard !== 'undefined' && (
         <MiniButton
@@ -254,12 +256,12 @@ function TargetRow({
       )}
 
       {/*
-        ⭐⭐ **Complete** — শেষ হওয়া বলার একমাত্র পথ। ⚠️ `tone` নেই বলে
-           এটা Skip-এর মতোই দেখতে; আলাদা করে বড় করা হয়নি, কারণ দিনে
-           ২৫ বার চাপতে হবে — চোখে লাগলে ক্লান্তিকর হতো।
+        **Complete**: the only way to say "finished". Careful: with no `tone` it
+           looks like Skip; it was not made bigger, because it is pressed 25
+           times a day and anything eye-catching would be tiring.
 
-        ⚠️ কারণ জিজ্ঞেস করার সময় Complete-ও সরে যায় — একটা প্রশ্নের
-           উত্তর দেওয়ার মাঝখানে অন্য কাজের বোতাম থাকলে ভুল চাপ পড়ত।
+        Careful: while the reason is being asked, Complete also goes away:
+           another action's button in the middle of answering a question would invite a wrong press.
       */}
       {asking ? (
         <DropReasonPicker
@@ -286,11 +288,11 @@ function TargetRow({
 }
 
 /**
- * ⭐⭐ **আজ শেষ করা একটা সারি** *(২৫ আগস্ট)* — আর তার পাশে Undo।
+ * **A row finished today**, with Undo beside it.
  *
- * ⚠️ উপরের `TargetRow`-এর সাথে জুড়ে দেওয়া যেত (একটা `done` prop দিয়ে),
- * কিন্তু তখন একটাই কম্পোনেন্টে দুটো আলাদা কাজের বোতাম-সেট থাকত, আর
- * প্রতিটা শর্ত দুবার করে লিখতে হতো। ⭐ আলাদা রাখলে দুটোই ছোট থাকে।
+ * Careful: this could have been merged into `TargetRow` above (with a `done`
+ * prop), but then one component would hold two different sets of action
+ * buttons and every condition would be written twice. Kept separate, both stay small.
  */
 function FinishedRow({
   target,
@@ -315,8 +317,8 @@ function FinishedRow({
       </span>
 
       {/*
-        ⚠️ নামটা **"Undo"**, "Not done" নয় — ডিজাইনার যা চাপতে চান সেটা
-           একটা ভুল **ফেরানো**, কোনো নতুন ঘোষণা নয়। শব্দটা কাজটাই বলে।
+        Careful: the name is **"Undo"**, not "Not done": what the designer wants
+           is to **take back** a mistake, not make a new announcement. The word says the action.
       */}
       <MiniButton disabled={busy} onClick={onUndo}>
         Undo
@@ -325,7 +327,7 @@ function FinishedRow({
   );
 }
 
-/** ⭐ আজকের অগ্রগতি — কার্ডের শিরোনামের পাশে বসানোর জন্য */
+/** Today's progress, to sit beside the card's title */
 export function TargetProgress({
   done,
   target,

@@ -13,16 +13,16 @@ import {
 } from '../../components/ui';
 
 /**
- * **G08 — টেলিগ্রামের কনফিগ, পর্দা থেকে।**
+ * Telegram settings, editable from the screen.
  *
- * ⚠️⚠️ **কেন এটা দরকার হলো:** টোকেন ও চ্যাট আইডি ছিল কেবল `.env`-এ, তাই
- * বদলাতে হলে VPS-এ SSH → ফাইল সম্পাদনা → কনটেইনার রিস্টার্ট। মালিকের
- * পক্ষে সেটা কার্যত অসম্ভব — ফলে একবার ভুল হলে সেটা মাসের পর মাস ভুলই
- * থেকে যেত, আর সাপ্তাহিক সারাংশ নীরবে আসা বন্ধ থাকত।
+ * Careful — why this exists: the token and chat ID used to live only in `.env`, so
+ * changing them meant SSH into the VPS, editing the file and restarting the
+ * container. That is practically impossible for the owner, so a mistake would stay
+ * for months and the weekly summary would silently stop arriving.
  *
- * ⚠️ **পুরো টোকেন এই পর্দায় কোনোদিন আসে না** — সার্ভার শেষ চার অক্ষর
- * ছাড়া কিছু পাঠায় না। তাই ঘরটা সবসময় খালি দেখায়; বসালে নতুনটা বসে,
- * খালি রেখে সেভ করলে আগেরটাই থাকে।
+ * Careful: the full token never reaches this screen. The server sends only the last
+ * four characters, so the field always looks empty. Typing sets a new value; saving
+ * with the field empty keeps the existing one.
  */
 export function NotificationsTab() {
   const telegram = useApi(getTelegramSettings, []);
@@ -54,9 +54,10 @@ export function NotificationsTab() {
           </Notice>
 
           {/*
-            ⚠️⚠️ কোনটা **আসলে** খাটছে সেটা বলা হয় — না বললে মালিক পর্দায়
-               নতুন মান বসিয়ে ভাবতেন সেভ হয়নি, অথচ হয়েছে; শুধু `.env`-এরটা
-               তখনো জিতছিল (দুটো ঘরের একটা খালি রাখলে সেটাই হয়)।
+            Careful: this says which value is **actually** in effect. Without it the owner
+               would enter a new value, think it was not saved (though it was), because
+               the `.env` one was still winning (it wins when one of the two fields
+               is left empty).
           */}
           {current && (
             <div className="text-[13px]">
@@ -113,9 +114,9 @@ export function NotificationsTab() {
               onClick={() =>
                 save.run(async () => {
                   /**
-                   * ⚠️ ঘর খালি রাখলে **আগেরটাই** পাঠানো হয় — নইলে শুধু
-                   * চ্যাট আইডি ঠিক করতে গিয়ে টোকেনটা মুছে যেত, আর
-                   * টেলিগ্রাম নীরবে বন্ধ হয়ে থাকত।
+                   * Careful: an empty field sends the **existing** value. Otherwise fixing
+                   * only the chat ID would wipe the token, and Telegram would be
+                   * silently off.
                    */
                   await saveTelegramSettings(
                     token.trim(),
@@ -132,9 +133,9 @@ export function NotificationsTab() {
             </MiniButton>
 
             {/*
-              ⭐⭐ পরীক্ষার বোতামটা **সবচেয়ে দরকারি অংশ**। এটা না থাকলে
-                 মালিক সেভ করে শুক্রবার পর্যন্ত অপেক্ষা করতেন, আর কিছু না
-                 এলে বুঝতেন ভুল ছিল — কিন্তু কী ভুল, তা জানার উপায় নেই।
+              Important: the test button is the **most useful part**. Without it the
+                 owner would save, wait until Friday, and only realise something was
+                 wrong if nothing arrived, with no way to tell what was wrong.
             */}
             <MiniButton
               disabled={probe.busy || !current?.configured}

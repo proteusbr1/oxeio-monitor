@@ -1,64 +1,62 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// **I01** — সার্ভারের সার্টিফিকেট পিনিংয়ের সিদ্ধান্তটুকু।
+/// **I01**: the decision part of pinning the server's certificate.
 ///
-/// ⭐ <b>এখানে কোনো X509, কোনো TLS, কোনো Win32 নেই</b> — শুধু "যা পাওয়া গেল
-/// তা মেনে নেব কি না"। কারণ এই সিদ্ধান্তটাই একমাত্র জায়গা যেখানে ভুল হলে
-/// <b>নীরবে</b> নিরাপত্তা উবে যায়, আর TLS হ্যান্ডলারের ভেতরে বসে থাকলে
-/// সেটা যাচাই করতে সত্যিকারের সার্ট, সত্যিকারের MITM আর একটা টেস্ট
-/// সার্ভার লাগত।
+/// <b>No X509, no TLS, no Win32 here</b>, only "do we accept what we were given". This
+/// decision is the one place where a mistake makes security vanish <b>silently</b>, and if it
+/// sat inside the TLS handler, testing it would need a real certificate, a real MITM and a
+/// test server.
 /// </summary>
 public static class CertificatePin
 {
     public enum Verdict
     {
-        /// <summary>পিন বসানোই নেই — .NET-এর নিজের যাচাইটাই একমাত্র ভরসা।</summary>
+        /// <summary>No pin is set: .NET's own validation is the only safeguard.</summary>
         NoPinConfigured,
 
-        /// <summary>পিন মিলেছে, আর চেইনও পরিষ্কার।</summary>
+        /// <summary>The pin matched and the chain is clean.</summary>
         Trusted,
 
         /// <summary>
-        /// ⚠️ পিন বসানো আছে কিন্তু <b>মেলেনি</b> — অর্থাৎ তারের ওপাশে অন্য কেউ।
-        /// এটাই পিনিংয়ের পুরো উদ্দেশ্য।
+        /// A pin is set but <b>did not match</b>: someone else is on the other end of the wire.
+        /// This is the whole purpose of pinning.
         /// </summary>
         PinMismatch,
 
         /// <summary>
-        /// ⚠️⚠️ পিন মিলেছে, কিন্তু .NET-এর নিজের যাচাই ব্যর্থ (হোস্টনেম মেলেনি,
-        /// মেয়াদ শেষ, চেইন ভাঙা)। <b>এটাও প্রত্যাখ্যান</b> — নিচের ডক দেখুন।
+        /// The pin matched, but .NET's own validation failed (hostname mismatch, expired,
+        /// broken chain). <b>This is also a rejection</b>; see the doc below.
         /// </summary>
         ChainInvalid,
 
-        /// <summary>সার্টই আসেনি — TLS হ্যান্ডশেকই ঠিকমতো হয়নি।</summary>
+        /// <summary>No certificate arrived: the TLS handshake did not complete properly.</summary>
         NoCertificate,
     }
 
     /// <summary>
-    /// ⭐⭐ <b>এই ফাংশনের সবচেয়ে জরুরি লাইনটা `chainOk` চেকটা।</b>
+    /// <b>The most important line in this function is the `chainOk` check.</b>
     ///
-    /// ⚠️ .NET-এ <c>RemoteCertificateValidationCallback</c> বসানোর মানে তার
-    /// <b>নিজের সব যাচাই বন্ধ হয়ে যাওয়া</b> — হোস্টনেম মেলানো, চেইন, মেয়াদ,
-    /// সব। কলব্যাক যা বলবে তাই চূড়ান্ত। তাই পিন মিলে গেলেই
-    /// <c>return true</c> লিখে দেওয়াটা সবচেয়ে সহজ ভুল, আর তাতে হোস্টনেম
-    /// যাচাই ও মেয়াদ — দুটোই নীরবে চলে যেত।
+    /// In .NET, installing a <c>RemoteCertificateValidationCallback</c> means <b>all of its own
+    /// validation is switched off</b>: hostname matching, chain, expiry, everything. Whatever
+    /// the callback says is final. So writing <c>return true</c> as soon as the pin matches is
+    /// the easiest mistake, and hostname validation and expiry would both silently go away.
     ///
-    /// এখানে তাই <b>দুটোই</b> লাগে: পিন মিলতে হবে <b>এবং</b> .NET যা যা
-    /// আপত্তি জানিয়েছে সেটা খালি হতে হবে।
+    /// So <b>both</b> are required here: the pin must match <b>and</b> the list of objections
+    /// .NET raised must be empty.
     ///
-    /// ⚠️ একাধিক পিন রাখা যায় ইচ্ছাকৃতভাবে — সার্ট নবায়নের দিন পুরোনো ও
-    /// নতুন দুটোই কিছুক্ষণ বৈধ থাকা দরকার, নইলে নবায়নের মুহূর্তে ১৫টা
-    /// এজেন্ট একসাথে সংযোগ হারাত (রানবুক § ৭.১)।
+    /// Multiple pins are allowed on purpose: on certificate renewal day both the old and the
+    /// new one must stay valid for a while, otherwise at the moment of renewal 15 agents would
+    /// lose their connection at once (runbook section 7.1).
     /// </summary>
     /// <param name="pins">
-    /// রেজিস্ট্রি থেকে পড়া, কমা দিয়ে ভাগ করা base64 SPKI হ্যাশ। খালি হলে
-    /// <see cref="Verdict.NoPinConfigured"/>।
+    /// Read from the registry, comma-separated base64 SPKI hashes. If empty,
+    /// <see cref="Verdict.NoPinConfigured"/>.
     /// </param>
     /// <param name="presentedSpkiHash">
-    /// তারে আসা সার্টের SPKI-র sha256, base64। null = সার্ট আসেনি।
+    /// sha256 of the SPKI of the certificate presented on the wire, base64. Null = no certificate came.
     /// </param>
-    /// <param name="chainOk">.NET-এর নিজের যাচাই পরিষ্কার কি না।</param>
+    /// <param name="chainOk">Whether .NET's own validation was clean.</param>
     public static Verdict Check(
         IReadOnlyCollection<string> pins,
         string? presentedSpkiHash,
@@ -67,9 +65,9 @@ public static class CertificatePin
         if (pins.Count == 0) return Verdict.NoPinConfigured;
         if (string.IsNullOrWhiteSpace(presentedSpkiHash)) return Verdict.NoCertificate;
 
-        // ⚠️ ক্রমটা ইচ্ছাকৃত: **আগে পিন**, তারপর চেইন। উল্টো হলে ভুল
-        //    সার্ভারের মেয়াদোত্তীর্ণ সার্ট পেলে লগে "মেয়াদ শেষ" লেখা হতো,
-        //    অথচ আসল খবরটা অনেক বড় — ওটা আমাদের সার্ভারই নয়।
+        // The order is deliberate: **pin first**, then chain. The other way round, getting an
+        // expired certificate from a wrong server would log "expired", when the real news is
+        // much bigger: it is not our server at all.
         var matched = false;
         foreach (var pin in pins)
         {
@@ -86,12 +84,11 @@ public static class CertificatePin
     }
 
     /// <summary>
-    /// কনফিগের স্ট্রিং → পিনের তালিকা।
+    /// Config string → list of pins.
     ///
-    /// ⚠️ ফাঁকা জায়গা ও খালি অংশ ছেঁকে ফেলা হয়: রেজিস্ট্রিতে হাতে বসানো
-    /// মান প্রায়ই <c>"a=, b="</c> বা শেষে একটা কমা নিয়ে আসে, আর তখন একটা
-    /// খালি স্ট্রিং পিন হিসেবে ঢুকে যেত — যা কোনোদিন কিছুর সাথেই মিলত না,
-    /// কিন্তু তালিকাটাকে "অখালি" বানিয়ে রাখত।
+    /// Whitespace and empty parts are filtered out: values typed by hand into the registry
+    /// often look like <c>"a=, b="</c> or end with a comma, and an empty string would then
+    /// become a pin. It would never match anything, but would make the list "non-empty".
     /// </summary>
     public static IReadOnlyList<string> Parse(string? configured)
     {
@@ -110,10 +107,10 @@ public static class CertificatePin
     }
 
     /// <summary>
-    /// মানুষের পড়ার মতো কারণ — tray টুলটিপ ও লগে যায়।
+    /// A human-readable reason: goes to the tray tooltip and the log.
     ///
-    /// ⚠️ বার্তাগুলো <b>কী করতে হবে</b> বলে, শুধু কী ভুল তা নয়। ইনস্টলের
-    /// দিনে অ্যাডমিন এই এক লাইনটুকুই পড়েন।
+    /// The messages say <b>what to do</b>, not only what is wrong. On install day the admin
+    /// reads just this one line.
     /// </summary>
     public static string Explain(Verdict verdict) => verdict switch
     {

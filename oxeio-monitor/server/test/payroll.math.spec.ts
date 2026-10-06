@@ -7,52 +7,52 @@ import {
   supersededThrough,
 } from '../src/payroll/payroll.math';
 
-/** ২০৮ ঘণ্টা, সেকেন্ডে */
+/** 208 hours, in seconds */
 const TARGET = 208 * 3600;
 
 /**
- * ⭐⭐⭐ **না-দেখা দিনের জন্য কর্তন হয় না** *(৬ সেপ্টেম্বর ২০২৬, মালিকের
- * সিদ্ধান্ত)*।
+ * No deduction for days that were not observed (owner's decision).
  *
- * ⚠️⚠️ **মাঠে ধরা পড়া বাগ:** ঘাটতি মাপা হতো পুরো `targetSec`-এর সাপেক্ষে,
- * অথচ `creditedSec` আসে কেবল সেইসব দিন থেকে যেদিন সিস্টেম চলছিল। আগস্ট
- * ২০২৬-এ ট্র্যাকিং শুরু হয় ১৩–১৫ তারিখে, অর্থাৎ মাসের প্রায় অর্ধেকটা
- * কেউ দেখেনি — তবু ওই দিনগুলো ঘাটতি হয়ে বেতন থেকে কাটা যেত।
+ * Bug found in the field: the shortfall was measured against the full
+ * `targetSec`, but `creditedSec` only comes from days when the system was
+ * running. In August 2026 tracking started on the 13th-15th, so nearly half
+ * the month was unobserved, yet those days counted as shortfall and were
+ * deducted from salary.
  *
- * মাঠে মাপা দাম: ১২ জনের কর্তন **৳৭৯,৭৮৮**, যার **৳৬১,২৮০** না-দেখা
- * দিনের জন্য।
+ * Measured cost in the field: 12 people's deductions came to ৳79,788, of which
+ * ৳61,280 was for unobserved days.
  */
-describe('payroll — না-দেখা দিনের জন্য কর্তন নয়', () => {
-  /** ⭐⭐⭐ এই describe-এর মূল টেস্ট — আগস্টের আসল আকৃতিটাই */
-  it('⭐ অর্ধেক মাস ট্র্যাক না হলে কেবল দেখা-অংশের হিসাব চাওয়া হয়', () => {
+describe('payroll: no deduction for unobserved days', () => {
+  /** The core test of this describe: the real shape of August. */
+  it('when half the month was not tracked, only the observed part is asked for', () => {
     const line = computePayroll({
       monthlySalary: 10000,
       targetSec: TARGET,
-      // ⚠️ ২০৮-এর মধ্যে কেবল ১১২ ঘণ্টা দেখা হয়েছে (১৪টা কর্মদিবস)
+      // Only 112 of the 208 hours were observed (14 workdays)
       observedTargetSec: 112 * 3600,
       creditedSec: 110 * 3600,
       workdays: 26,
       monthWorkdays: 26,
     });
 
-    // ঘাটতি ২ ঘণ্টা, ৯৮ ঘণ্টা নয়
+    // shortfall is 2 hours, not 98
     expect(line.shortfallSec).toBe(2 * 3600);
 
-    // ⭐ হার এখনো পুরো মাসের: ১০০০০ ÷ ২০৮ = ৪৮.০৭৬৯…/ঘণ্টা
-    //   কর্তন = ১০০০০ × ৭২০০ ÷ ৭৪৮৮০০ ≈ ৯৬.১৫ টাকা
+    // the rate is still the full-month one: 10000 / 208 = 48.0769.../hour
+    //   deduction = 10000 x 7200 / 748800 = about 96.15 taka
     expect(paisaToTaka(line.deductionPaisa)).toBe('96.15');
   });
 
   /**
-   * ⚠️⚠️ **আগের আচরণটা কী ছিল, সেটাই এখানে লেখা** — যাতে কেউ ফিরিয়ে
-   * আনলে সংখ্যাটা চোখে পড়ে। একই কর্মী, একই কাজ, কিন্তু পুরো মাসের
-   * সাপেক্ষে মাপলে কর্তন **৪৭ গুণ** বেশি।
+   * This records what the old behaviour was, so that anyone bringing it back
+   * notices the number. Same employee, same work, but measured against the
+   * full month the deduction is 47 times larger.
    */
-  it('⭐ পুরো টার্গেটের সাপেক্ষে মাপলে কর্তনটা কত হতো', () => {
+  it('what the deduction would be if measured against the full target', () => {
     const old = computePayroll({
       monthlySalary: 10000,
       targetSec: TARGET,
-      observedTargetSec: TARGET, // ← পুরোনো আচরণ
+      observedTargetSec: TARGET, // the old behaviour
       creditedSec: 110 * 3600,
       workdays: 26,
       monthWorkdays: 26,
@@ -63,11 +63,11 @@ describe('payroll — না-দেখা দিনের জন্য কর্
   });
 
   /**
-   * ⚠️⚠️ **অনুপস্থিতি মকুব হয় না** — এটাই উল্টো দিকের পাহারা। দিনটা
-   * দেখা হয়েছে (সারি লেখা হয়েছিল), কেবল তিনি কাজ করেননি। এটা গুলিয়ে
-   * ফেললে যে-কেউ অফিসে না এসেও পুরো বেতন পেত।
+   * Absence is not forgiven: this guards the other direction. The day was
+   * observed (a row was written); the person just did not work. Confusing the
+   * two would let anyone get full pay without coming to the office.
    */
-  it('⭐ দেখা-দিনে কাজ না করলে কর্তন হয়ই', () => {
+  it('not working on an observed day is still deducted', () => {
     const line = computePayroll({
       monthlySalary: 10000,
       targetSec: TARGET,
@@ -82,10 +82,10 @@ describe('payroll — না-দেখা দিনের জন্য কর্
   });
 
   /**
-   * ⚠️ কিছুই দেখা না হলে কোনো ঘাটতিই নেই — মাসের মাঝপথে বসানো নতুন
-   *    কর্মীর প্রথম দিনগুলোয় ঠিক এটাই ঘটে।
+   * If nothing was observed there is no shortfall at all; this is exactly what
+   * happens in the first days of an employee added mid-month.
    */
-  it('⭐ কিছুই দেখা না হলে কর্তন শূন্য', () => {
+  it('nothing observed means zero deduction', () => {
     const line = computePayroll({
       monthlySalary: 10000,
       targetSec: TARGET,
@@ -101,10 +101,10 @@ describe('payroll — না-দেখা দিনের জন্য কর্
   });
 
   /**
-   * ⚠️ **দেখা-অংশ টার্গেট ছাড়াতে পারে না** — গণনার কোনো ধারে ছাড়ালে
-   *    ঘাটতি বানিয়ে ফেলা হতো।
+   * The observed part cannot exceed the target: if it did anywhere in the
+   * calculation, it would manufacture a shortfall.
    */
-  it('দেখা-অংশ টার্গেটের বেশি হলে টার্গেটেই আটকায়', () => {
+  it('an observed part above the target is capped at the target', () => {
     const line = computePayroll({
       monthlySalary: 10000,
       targetSec: TARGET,
@@ -118,11 +118,11 @@ describe('payroll — না-দেখা দিনের জন্য কর্
   });
 
   /**
-   * ⚠️⚠️ **ওভারটাইম এখনো পুরো টার্গেটের সাপেক্ষে** — ইচ্ছাকৃত। নইলে
-   * অর্ধেক মাস ট্র্যাক না হওয়া কেউ কয়েক দিন কাজ করেই "ওভারটাইম"
-   * দেখাতেন, আর সংখ্যাটা অর্থহীন হয়ে যেত।
+   * Overtime is still measured against the full target, on purpose. Otherwise
+   * someone whose half month was untracked would show "overtime" after a few
+   * days of work, and the number would be meaningless.
    */
-  it('⭐ ওভারটাইম দেখা-অংশ নয়, পুরো টার্গেট ধরে', () => {
+  it('overtime uses the full target, not the observed part', () => {
     const line = computePayroll({
       monthlySalary: 10000,
       targetSec: TARGET,
@@ -132,20 +132,20 @@ describe('payroll — না-দেখা দিনের জন্য কর্
       monthWorkdays: 26,
     });
 
-    // দেখা-অংশ ছাড়িয়েছে, কিন্তু মাসের টার্গেট নয় — তাই OT শূন্য
+    // the observed part is exceeded, but not the month's target, so OT is zero
     expect(line.overtimeSec).toBe(0);
     expect(line.shortfallSec).toBe(0);
   });
 });
 
-describe('payroll — ঘাটতিকে টাকায় রূপান্তর', () => {
-  it('টার্গেট পূরণ হলে কিছুই কাটা যায় না', () => {
+describe('payroll: converting shortfall to money', () => {
+  it('nothing is deducted when the target is met', () => {
     const line = computePayroll({
       monthlySalary: 13000,
       targetSec: TARGET,
       observedTargetSec: TARGET,
       creditedSec: TARGET,
-      // ⚠️ পুরো মাস — G37-এর proration এখানে কিছু বদলায় না
+      // Full month: proration changes nothing here
       workdays: 26,
       monthWorkdays: 26,
     });
@@ -155,13 +155,13 @@ describe('payroll — ঘাটতিকে টাকায় রূপান�
     expect(paisaToTaka(line.payablePaisa)).toBe('13000.00');
   });
 
-  it('টার্গেটের বেশি কাজ করলেও কাটা যায় না, আর OT-র টাকা হিসাব হয় না', () => {
+  it('nothing is deducted for working over the target, and OT money is not calculated', () => {
     const line = computePayroll({
       monthlySalary: 13000,
       targetSec: TARGET,
       observedTargetSec: TARGET,
       creditedSec: TARGET + 10 * 3600,
-      // ⚠️ পুরো মাস — G37-এর proration এখানে কিছু বদলায় না
+      // Full month: proration changes nothing here
       workdays: 26,
       monthWorkdays: 26,
     });
@@ -171,14 +171,14 @@ describe('payroll — ঘাটতিকে টাকায় রূপান�
     expect(paisaToTaka(line.payablePaisa)).toBe('13000.00');
   });
 
-  it('ঠিক ভাগ যায় এমন বেতনে হিসাব মিলিয়ে দেখা', () => {
-    // ১৩০০০ ÷ ২০৮ = ৬২.৫০ টাকা/ঘণ্টা। ২০ ঘণ্টা ঘাটতি = ১২৫০ টাকা।
+  it('checks the numbers with a salary that divides evenly', () => {
+    // 13000 / 208 = 62.50 taka/hour. 20 hours short = 1250 taka.
     const line = computePayroll({
       monthlySalary: 13000,
       targetSec: TARGET,
       observedTargetSec: TARGET,
       creditedSec: TARGET - 20 * 3600,
-      // ⚠️ পুরো মাস — G37-এর proration এখানে কিছু বদলায় না
+      // Full month: proration changes nothing here
       workdays: 26,
       monthWorkdays: 26,
     });
@@ -189,18 +189,19 @@ describe('payroll — ঘাটতিকে টাকায় রূপান�
   });
 
   /**
-   * ⭐ এই টেস্টটাই সবচেয়ে দরকারি। ১০০০০ ÷ ২০৮ = ৪৮.০৭৬৯… — ভাগ যায় না।
-   * হারটা আগে পয়সায় round করে (৪৮০৮) তারপর ঘণ্টা দিয়ে গুণ করলে
-   * ২০ ঘণ্টায় ৯৬১.৬০ আসত, অথচ সঠিক ৯৬১.৫৪। মাসে ছয় পয়সা সামান্য শোনায়,
-   * কিন্তু ভুলটা সবসময় একই দিকে ঝোঁকে — কর্মীর বিপক্ষে।
+   * The most useful test. 10000 / 208 = 48.0769..., which does not divide
+   * evenly. Rounding the rate to paisa first (4808) and then multiplying by
+   * the hours would give 961.60 for 20 hours, when the correct value is
+   * 961.54. Six paisa a month sounds small, but the error always leans the
+   * same way: against the employee.
    */
-  it('ভাগ না যাওয়া বেতনে হার আগে round করা হয় না', () => {
+  it('for a salary that does not divide evenly, the rate is not rounded first', () => {
     const line = computePayroll({
       monthlySalary: 10000,
       targetSec: TARGET,
       observedTargetSec: TARGET,
       creditedSec: TARGET - 20 * 3600,
-      // ⚠️ পুরো মাস — G37-এর proration এখানে কিছু বদলায় না
+      // Full month: proration changes nothing here
       workdays: 26,
       monthWorkdays: 26,
     });
@@ -208,16 +209,16 @@ describe('payroll — ঘাটতিকে টাকায় রূপান�
     expect(paisaToTaka(line.deductionPaisa)).toBe('961.54');
 
     const naive = Math.round((Math.round(1000000 / 208) * 20) / 1);
-    expect(paisaToTaka(naive)).toBe('961.60'); // যা হতো
+    expect(paisaToTaka(naive)).toBe('961.60'); // what it would have been
   });
 
-  it('পুরো মাস অনুপস্থিত থাকলে প্রদেয় শূন্য, ঋণাত্মক নয়', () => {
+  it('a full month of absence gives payable zero, not negative', () => {
     const line = computePayroll({
       monthlySalary: 15000,
       targetSec: TARGET,
       observedTargetSec: TARGET,
       creditedSec: 0,
-      // ⚠️ পুরো মাস — G37-এর proration এখানে কিছু বদলায় না
+      // Full month: proration changes nothing here
       workdays: 26,
       monthWorkdays: 26,
     });
@@ -227,11 +228,12 @@ describe('payroll — ঘাটতিকে টাকায় রূপান�
   });
 
   /**
-   * ⚠️⚠️ **কর্মদিবস থাকা সত্ত্বেও টার্গেট শূন্য = পলিসি ভুল বসানো।**
-   * মেনে নিলে ঘাটতি অসম্ভব হতো, কর্তনও শূন্য — অর্থাৎ কেউ এক ঘণ্টা কাজ
-   * না করেই পুরো বেতন পেত। G37-এর পরেও এই শর্তটা রাখা হয়েছে।
+   * Workdays present but target zero means the policy was set up wrong.
+   * Accepting it would make a shortfall impossible and the deduction zero, so
+   * someone could get full pay without working an hour. This check was kept
+   * after proration was introduced.
    */
-  it('কর্মদিবস আছে অথচ টার্গেট শূন্য — নাকচ', () => {
+  it('workdays exist but the target is zero: rejected', () => {
     expect(() =>
       computePayroll({
         monthlySalary: 13000,
@@ -244,7 +246,7 @@ describe('payroll — ঘাটতিকে টাকায় রূপান�
     ).toThrow(RangeError);
   });
 
-  it('ঋণাত্মক বেতন নাকচ হয়', () => {
+  it('a negative salary is rejected', () => {
     expect(() =>
       computePayroll({
         monthlySalary: -1,
@@ -257,10 +259,10 @@ describe('payroll — ঘাটতিকে টাকায় রূপান�
     ).toThrow(RangeError);
   });
 
-  // ── G37 · ADR-025 — মাঝপথে যোগ দিলে ──────────────────────────────────
+  // -- Proration (ADR-025): joining mid-month ------------------------------
 
   describe('G37 — proration', () => {
-    /** ১৫ তারিখে যোগ: d = ১৪, D = ২৬, টার্গেট ১৪ × ৮ = ১১২ঘ */
+    /** Joined on the 15th: d = 14, D = 26, target 14 x 8 = 112h */
     const HALF = {
       monthlySalary: 20000,
       targetSec: 112 * 3600,
@@ -269,21 +271,21 @@ describe('payroll — ঘাটতিকে টাকায় রূপান�
       monthWorkdays: 26,
     };
 
-    it('বেতনও prorate হয় — d ÷ D', () => {
+    it('salary is also prorated: d / D', () => {
       const line = computePayroll({ ...HALF, creditedSec: 112 * 3600 });
 
-      // ২০০০০ × ১৪ ÷ ২৬ = ১০,৭৬৯.২৩
+      // 20000 x 14 / 26 = 10,769.23
       expect(line.payablePaisa).toBe(Math.round((2000000 * 14) / 26));
       expect(line.deductionPaisa).toBe(0);
     });
 
     /**
-     * ⭐⭐ **এই ফাইলের সবচেয়ে জরুরি টেস্ট।** বেতন ও টার্গেট দুটোই prorate
-     * করলে ঘণ্টাপ্রতি হার d-নিরপেক্ষ হয়ে যায় — S ÷ (D × ৮)। শুধু টার্গেট
-     * prorate করলে এই হার দ্বিগুণ হতো, আর কোনো একক সংখ্যা দেখে সেটা ধরা
-     * পড়ত না।
+     * The most important test in this file. If both salary and target are
+     * prorated, the hourly rate becomes independent of d: S / (D x 8). If only
+     * the target were prorated, this rate would double, and no single number
+     * would reveal it.
      */
-    it('ঘণ্টাপ্রতি হার পুরো-মাসের কর্মীর সমান', () => {
+    it('the hourly rate equals that of a full-month employee', () => {
       const partial = computePayroll({ ...HALF, creditedSec: 0 });
       const full = computePayroll({
         monthlySalary: 20000,
@@ -297,15 +299,15 @@ describe('payroll — ঘাটতিকে টাকায় রূপান�
       expect(partial.hourlyRatePaisa).toBe(full.hourlyRatePaisa);
     });
 
-    it('অর্ধেক মাসে অর্ধেক কাজ করলে prorated বেতনের অর্ধেক কাটে', () => {
+    it('working half in a half month deducts half of the prorated salary', () => {
       const line = computePayroll({ ...HALF, creditedSec: 56 * 3600 });
 
       const prorated = Math.round((2000000 * 14) / 26);
       expect(line.deductionPaisa).toBe(Math.round(prorated / 2));
     });
 
-    /** ⚠️ ওই মাসে ছিলই না — টার্গেট ০, বেতনও ০, আর কোনো ছোড়াছুড়ি নয় */
-    it('মাসে একদিনও না থাকলে সবই শূন্য', () => {
+    /** Not there at all that month: target 0, salary 0, and no fuss. */
+    it('with no day in the month, everything is zero', () => {
       const line = computePayroll({
         monthlySalary: 20000,
         targetSec: 0,
@@ -321,10 +323,10 @@ describe('payroll — ঘাটতিকে টাকায় রূপান�
     });
 
     /**
-     * ⭐ **O9 — পুরো মাসটাই ছুটি (D = ০)।** কারো কর্মদিবস নেই, ঘাটতিও
-     * অসম্ভব — মালিকের সিদ্ধান্ত: পুরো বেতন।
+     * Whole month is a holiday (D = 0). Nobody has workdays and a shortfall is
+     * impossible; owner's decision: full salary.
      */
-    it('পুরো মাস ছুটি হলে পুরো বেতন', () => {
+    it('a month that is all holiday gets full salary', () => {
       const line = computePayroll({
         monthlySalary: 20000,
         targetSec: 0,
@@ -337,8 +339,8 @@ describe('payroll — ঘাটতিকে টাকায় রূপান�
       expect(line.payablePaisa).toBe(2000000);
     });
 
-    /** ⚠️ টার্গেটের বেশি কাজ করলেও prorated বেতনই সর্বোচ্চ (ADR-023) */
-    it('টার্গেটের বেশি কাজেও বাড়তি টাকা নয়', () => {
+    /** Even working over the target, the prorated salary is the maximum (ADR-023). */
+    it('working over the target earns no extra money', () => {
       const line = computePayroll({ ...HALF, creditedSec: 200 * 3600 });
 
       expect(line.payablePaisa).toBe(Math.round((2000000 * 14) / 26));
@@ -346,14 +348,14 @@ describe('payroll — ঘাটতিকে টাকায় রূপান�
     });
   });
 
-  it('পয়সা থেকে টাকায় রূপান্তর দশমিক ঠিক রাখে', () => {
+  it('paisa to taka conversion keeps the decimals right', () => {
     expect(paisaToTaka(0)).toBe('0.00');
     expect(paisaToTaka(5)).toBe('0.05');
     expect(paisaToTaka(100)).toBe('1.00');
     expect(paisaToTaka(123456)).toBe('1234.56');
   });
 
-  it('অফিসের বারো জনের কারো হিসাবেই ঋণাত্মক প্রদেয় আসে না', () => {
+  it('none of the office\'s twelve people ever gets a negative payable', () => {
     const salaries = [13000, 10000, 15000, 14000, 13000, 10000, 14000, 10000, 10000, 10000, 10000, 10000];
 
     for (const salary of salaries) {
@@ -363,7 +365,7 @@ describe('payroll — ঘাটতিকে টাকায় রূপান�
           targetSec: TARGET,
           observedTargetSec: TARGET,
           creditedSec: workedHours * 3600,
-          // ⚠️ পুরো মাস — G37-এর proration এখানে কিছু বদলায় না
+          // Full month: proration changes nothing here
           workdays: 26,
           monthWorkdays: 26,
         });
@@ -377,64 +379,65 @@ describe('payroll — ঘাটতিকে টাকায় রূপান�
 });
 
 /**
- * ⭐⭐ **অতীতের বেতন যাতে না নড়ে** *(২৩ আগস্ট ২০২৬)*।
+ * Past salaries must not move.
  *
- * ⚠️⚠️ আগে পে-রোল `employees.monthly_salary` **লাইভ** পড়ত, তাই কারো বেতন
- * বাড়ালে **বন্ধ মাসের পে-রোলও বদলে যেত**। এই ব্লকটাই সেই রোগের পাহারাদার।
+ * Payroll used to read `employees.monthly_salary` live, so raising someone's
+ * salary also changed the payroll of closed months. This block guards against
+ * that.
  */
-describe('salaryForMonth — ওই মাসে কত বেতন ছিল', () => {
+describe('salaryForMonth: what the salary was in that month', () => {
   const slices = [
     { throughMonth: '2026-06', monthlySalary: '12000.00' },
     { throughMonth: '2026-08', monthlySalary: '13000.00' },
   ];
 
-  it('পুরোনো মাস পুরোনো বেতনই পায়', () => {
+  it('an old month gets the old salary', () => {
     expect(salaryForMonth('2026-05', '15000.00', slices)).toBe('12000.00');
     expect(salaryForMonth('2026-06', '15000.00', slices)).toBe('12000.00');
   });
 
-  /** ⭐ জুলাই ২০২৬-০৬-এর আওতার বাইরে, তাই পরের টুকরোটা */
-  it('মাঝের মাস পরের টুকরো পায়', () => {
+  /** July is outside the scope of the 2026-06 slice, so it gets the next slice */
+  it('a middle month gets the next slice', () => {
     expect(salaryForMonth('2026-07', '15000.00', slices)).toBe('13000.00');
     expect(salaryForMonth('2026-08', '15000.00', slices)).toBe('13000.00');
   });
 
-  it('সব টুকরোর পরের মাস এখনকার বেতন পায়', () => {
+  it('the month after all slices gets the current salary', () => {
     expect(salaryForMonth('2026-09', '15000.00', slices)).toBe('15000.00');
   });
 
-  /** ⚠️ খালি টেবিল = "বেতন কোনোদিন বদলায়নি" — সব মাসেই এখনকার মান */
-  it('কোনো ইতিহাস না থাকলে এখনকার বেতন', () => {
+  /** An empty table means "the salary never changed": the current value for every month */
+  it('with no history, the current salary', () => {
     expect(salaryForMonth('2026-01', '15000.00', [])).toBe('15000.00');
   });
 
-  /** ⚠️ null = বেতন বসানোই নেই — শূন্য নয় */
-  it('বেতন বসানো না থাকলে null-ই থাকে', () => {
+  /** null means no salary is set at all, which is not zero */
+  it('stays null when no salary is set', () => {
     expect(salaryForMonth('2026-01', null, [])).toBeNull();
   });
 
-  /** ⚠️ ক্রম এলোমেলো হলেও সবচেয়ে ছোট মানানসই টুকরোই জেতে */
-  it('সারির ক্রমে ফল বদলায় না', () => {
+  /** Even with the order shuffled, the smallest matching slice wins */
+  it('the result does not depend on row order', () => {
     const shuffled = [...slices].reverse();
     expect(salaryForMonth('2026-07', '15000.00', shuffled)).toBe('13000.00');
   });
 });
 
-describe('supersededThrough — পুরোনো বেতন কোন মাস পর্যন্ত', () => {
-  it('সাধারণত আগের মাস পর্যন্ত', () => {
+describe('supersededThrough: until which month the old salary applied', () => {
+  it('normally up to the previous month', () => {
     expect(supersededThrough('2026-08', false)).toBe('2026-07');
   });
 
-  it('জানুয়ারিতে আগের বছরের ডিসেম্বর', () => {
+  it('in January, December of the previous year', () => {
     expect(supersededThrough('2026-01', false)).toBe('2025-12');
   });
 
   /**
-   * ⚠️⚠️ চলতি মাস বন্ধ থাকলে ওই মাসের বেতন **দেওয়া হয়ে গেছে**, তাই নতুন
-   * সংখ্যাটা ওখানে বসানো যাবে না — পুরোনোটা চলতি মাস পর্যন্তই চলেছিল।
-   * এটা না রাখলে বন্ধ মাসের পে-রোল আবার নড়ত।
+   * If the current month is closed, that month's salary has already been paid,
+   * so the new figure cannot go there: the old one ran through the current
+   * month. Without this, a closed month's payroll would move again.
    */
-  it('চলতি মাস বন্ধ থাকলে ওই মাস পর্যন্তই', () => {
+  it('if the current month is closed, through that month', () => {
     expect(supersededThrough('2026-08', true)).toBe('2026-08');
     expect(supersededThrough('2026-01', true)).toBe('2026-01');
   });

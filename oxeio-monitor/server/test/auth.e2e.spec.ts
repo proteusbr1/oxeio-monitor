@@ -28,15 +28,15 @@ beforeEach(async () => {
   await resetDatabase(h.prisma, h.app);
 });
 
-describe('পাবলিক রুট', () => {
-  it('health লগইন ছাড়াই খোলে', async () => {
+describe('public routes', () => {
+  it('health opens without login', async () => {
     const res = await h.http().get('/api/v1/health').expect(200);
     expect(res.body.status).toBe('ok');
     expect(res.body.db).toBe('up');
   });
 });
 
-describe('লগইন ছাড়া সুরক্ষিত রুট', () => {
+describe('protected routes without login', () => {
   it('GET /auth/time-zone is public and defaults to Dhaka', async () => {
     const res = await h.http().get('/api/v1/auth/time-zone').expect(200);
     expect(res.body).toEqual({ timeZone: 'Asia/Dhaka', utcOffsetMinutes: 360 });
@@ -56,14 +56,14 @@ describe('লগইন ছাড়া সুরক্ষিত রুট', () =
     await h.http().get('/api/v1/auth/me').expect(401);
   });
 
-  // গার্ডের ক্রম JWT → CSRF, তাই এখানে 403 নয় 401 আসা উচিত
-  it('POST reset-password → 401, CSRF-এর 403 নয়', async () => {
+  // The guard order is JWT then CSRF, so this should be 401, not 403
+  it('POST reset-password gives 401, not the CSRF 403', async () => {
     await h.http().post('/api/v1/users/1/reset-password').expect(401);
   });
 });
 
-describe('লগইন', () => {
-  it('ভুল পাসওয়ার্ডে 401', async () => {
+describe('login', () => {
+  it('wrong password gives 401', async () => {
     await h
       .http()
       .post('/api/v1/auth/login')
@@ -71,7 +71,7 @@ describe('লগইন', () => {
       .expect(401);
   });
 
-  it('অচেনা ইমেইলেও একই বার্তা — user enumeration ঠেকাতে', async () => {
+  it('an unknown email gets the same message, to prevent user enumeration', async () => {
     const unknown = await h
       .http()
       .post('/api/v1/auth/login')
@@ -87,7 +87,7 @@ describe('লগইন', () => {
     expect(unknown.body.message).toBe(wrongPw.body.message);
   });
 
-  it('সঠিক পাসওয়ার্ডে cookie বসে, session cookie httpOnly', async () => {
+  it('a correct password sets cookies, and the session cookie is httpOnly', async () => {
     const res = await h
       .http()
       .post('/api/v1/auth/login')
@@ -102,14 +102,14 @@ describe('লগইন', () => {
 
     expect(session).toMatch(/HttpOnly/i);
     expect(session).toMatch(/SameSite=Strict/i);
-    // CSRF টোকেন ফ্রন্টএন্ডকে পড়তে হয় — তাই এটা httpOnly হওয়া চলবে না
+    // The frontend has to read the CSRF token, so this must not be httpOnly
     expect(csrf).toBeDefined();
     expect(csrf).not.toMatch(/HttpOnly/i);
   });
 });
 
-describe('mustChangePw অবস্থায়', () => {
-  it('/auth/me খোলা থাকে কিন্তু বাকি সব 403', async () => {
+describe('while mustChangePw is set', () => {
+  it('/auth/me stays open but everything else is 403', async () => {
     const s = await login(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     const me = await s.http.get('/api/v1/auth/me').expect(200);
@@ -124,7 +124,7 @@ describe('mustChangePw অবস্থায়', () => {
 });
 
 describe('CSRF', () => {
-  it('হেডার ছাড়া 403', async () => {
+  it('403 without the header', async () => {
     const s = await login(h, OWNER_EMAIL, OWNER_PASSWORD);
     await s.http
       .post('/api/v1/auth/change-password')
@@ -132,7 +132,7 @@ describe('CSRF', () => {
       .expect(403);
   });
 
-  it('ভুল টোকেনে 403', async () => {
+  it('403 with a wrong token', async () => {
     const s = await login(h, OWNER_EMAIL, OWNER_PASSWORD);
     await s.http
       .post('/api/v1/auth/change-password')
@@ -142,8 +142,8 @@ describe('CSRF', () => {
   });
 });
 
-describe('পাসওয়ার্ড বদল', () => {
-  it('১০ অক্ষরের কম হলে 400', async () => {
+describe('password change', () => {
+  it('400 if shorter than 10 characters', async () => {
     const s = await login(h, OWNER_EMAIL, OWNER_PASSWORD);
     await s.http
       .post('/api/v1/auth/change-password')
@@ -152,7 +152,7 @@ describe('পাসওয়ার্ড বদল', () => {
       .expect(400);
   });
 
-  it('বর্তমান পাসওয়ার্ড ভুল হলে 401', async () => {
+  it('401 if the current password is wrong', async () => {
     const s = await login(h, OWNER_EMAIL, OWNER_PASSWORD);
     await s.http
       .post('/api/v1/auth/change-password')
@@ -161,7 +161,7 @@ describe('পাসওয়ার্ড বদল', () => {
       .expect(401);
   });
 
-  it('আগেরটার মতোই দিলে 400', async () => {
+  it('400 if the same as the previous one', async () => {
     const s = await login(h, OWNER_EMAIL, OWNER_PASSWORD);
     await s.http
       .post('/api/v1/auth/change-password')
@@ -170,7 +170,7 @@ describe('পাসওয়ার্ড বদল', () => {
       .expect(400);
   });
 
-  it('সফল বদলের পর mustChangePassword মিথ্যা হয়ে যায়', async () => {
+  it('after a successful change, mustChangePassword becomes false', async () => {
     const s = await login(h, OWNER_EMAIL, OWNER_PASSWORD);
     const res = await s.http
       .post('/api/v1/auth/change-password')
@@ -178,7 +178,7 @@ describe('পাসওয়ার্ড বদল', () => {
       .send({ currentPassword: OWNER_PASSWORD, newPassword: 'brand-new-pass-1' })
       .expect(204);
 
-    // cookie নতুন করে ইস্যু হয়, নইলে টোকেনে পুরোনো mustChangePw থেকে যেত
+    // The cookie is issued anew, otherwise the token would keep the old mustChangePw
     expect(res.headers['set-cookie']).toBeDefined();
 
     const me = await s.http.get('/api/v1/auth/me').expect(200);
@@ -187,9 +187,9 @@ describe('পাসওয়ার্ড বদল', () => {
 });
 
 describe('role guard', () => {
-  it('owner owner-only রুটে পৌঁছায়', async () => {
+  it('the owner reaches owner-only routes', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
-    // স্টাফটি নেই — অর্থাৎ গার্ড পেরিয়ে সার্ভিস পর্যন্ত পৌঁছেছে
+    // The staff member does not exist, i.e. we got past the guard to the service
     await s.http
       .post('/api/v1/employees/999/portal-account')
       .set('X-CSRF-Token', s.csrf)
@@ -197,7 +197,7 @@ describe('role guard', () => {
       .expect(404);
   });
 
-  it('manager owner-only রুটে 403', async () => {
+  it('a manager gets 403 on owner-only routes', async () => {
     const s = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
     await s.http
       .post('/api/v1/users/1/reset-password')
@@ -206,14 +206,14 @@ describe('role guard', () => {
   });
 });
 
-describe('owner-এর পাসওয়ার্ড রিসেট (G33)', () => {
+describe('owner password reset (G33)', () => {
   /**
-   * ⚠️⚠️ **রিসেট আর বাধ্যতামূলক বদল বসায় না** *(২৩ আগস্ট, ADR-033)*।
-   * মালিক দুবার বলেছেন ওই দেয়ালটা চান না, আর দ্বিতীয়বার তিনি নিজেই
-   * ওতে আটকেছিলেন — Reset চেপে, পাসওয়ার্ডের ঘর খালি রেখে।
-   * ⭐ এলোমেলো পাসওয়ার্ড এখনো দেওয়া হয়, শুধু বদলাতে বলা হয় না।
+   * Careful: reset no longer forces a mandatory change (ADR-033). The owner
+   * said twice he did not want that wall, and the second time he got stuck
+   * on it himself: pressing Reset with the password field empty. A random
+   * password is still issued; the person is just not told to change it.
    */
-  it('অস্থায়ী পাসওয়ার্ড দেয়, কিন্তু বদলাতে বলে না', async () => {
+  it('issues a temporary password but does not ask to change it', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     const manager = await h.prisma.user.findFirstOrThrow({
       where: { email: MANAGER_EMAIL },
@@ -231,7 +231,7 @@ describe('owner-এর পাসওয়ার্ড রিসেট (G33)', ()
     });
     expect(after.mustChangePw).toBe(false);
 
-    // নতুন পাসওয়ার্ড সত্যিই কাজ করে
+    // The new password really works
     await h
       .http()
       .post('/api/v1/auth/login')
@@ -239,7 +239,7 @@ describe('owner-এর পাসওয়ার্ড রিসেট (G33)', ()
       .expect(200);
   });
 
-  it('audit_log-এ রেকর্ড হয়', async () => {
+  it('is recorded in audit_log', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     const manager = await h.prisma.user.findFirstOrThrow({
       where: { email: MANAGER_EMAIL },
@@ -258,8 +258,8 @@ describe('owner-এর পাসওয়ার্ড রিসেট (G33)', ()
   });
 });
 
-describe('স্টাফের self-view অ্যাকাউন্ট', () => {
-  it('owner অ্যাকাউন্ট খুললে role = employee হয়', async () => {
+describe('staff self-view account', () => {
+  it('opening an owner account gives role = employee', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     const policy = await h.prisma.workPolicy.findFirstOrThrow();
     const employee = await h.prisma.employee.create({
@@ -279,13 +279,13 @@ describe('স্টাফের self-view অ্যাকাউন্ট', () =>
     });
     expect(created.role).toBe('employee');
     expect(created.employeeId).toBe(employee.id);
-    // ⚠️ নতুন অ্যাকাউন্টেও নয় — ADR-033
+    // Not even on a new account: ADR-033
     expect(created.mustChangePw).toBe(false);
   });
 });
 
 describe('logout', () => {
-  it('cookie মুছে যায়, পরের রিকোয়েস্ট 401', async () => {
+  it('the cookie is cleared, and the next request gets 401', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     await s.http
       .post('/api/v1/auth/logout')
@@ -295,23 +295,23 @@ describe('logout', () => {
   });
 });
 
-describe('ব্রুট-ফোর্স (I11)', () => {
+describe('brute force (I11)', () => {
   /**
-   * ⚠️⚠️ সংখ্যাটা আর হার্ডকোড করা হয় না — এটা এখন `.env`-এর সেটিং
-   * (`LOGIN_MAX_FAILS`)। আগে টেস্টে "৫" বসানো ছিল, তাই ডিফল্ট নরম করার
-   * সাথে সাথেই টেস্ট ভেঙেছে — অথচ আচরণটা ঠিকই ছিল। টেস্ট যেন **নিয়ম**
-   * পাহারা দেয়, একটা নির্দিষ্ট সংখ্যা নয়।
+   * Careful: the number is no longer hard-coded; it is now a `.env` setting
+   * (`LOGIN_MAX_FAILS`). The test used to have "5" in it, so it broke the
+   * moment the default was softened, though the behaviour was right. The test
+   * should guard the rule, not one particular number.
    */
   const { maxFails, enabled } = resolveThrottle({
     maxFails: process.env.LOGIN_MAX_FAILS,
     lockMinutes: process.env.LOGIN_LOCK_MINUTES,
   });
 
-  it.skipIf(!enabled)('সীমা ছাড়ালে 429', async () => {
+  it.skipIf(!enabled)('429 once the limit is passed', async () => {
     const email = `attacker-${uniqueSuffix()}@test.local`;
     const codes: number[] = [];
 
-    // সীমা পর্যন্ত সবগুলোই 401, তার পরেরটা 429
+    // Everything up to the limit is 401, the next is 429
     for (let i = 0; i <= maxFails; i++) {
       const res = await h
         .http()
@@ -324,7 +324,7 @@ describe('ব্রুট-ফোর্স (I11)', () => {
     expect(codes[maxFails]).toBe(429);
   });
 
-  it('আক্রমণের পরেও আসল অ্যাকাউন্ট খোলা থাকে', async () => {
+  it('the real account stays open even after an attack', async () => {
     const email = `attacker2-${uniqueSuffix()}@test.local`;
     for (let i = 0; i <= maxFails; i++) {
       await h.http().post('/api/v1/auth/login').send({ email, password: 'x' });

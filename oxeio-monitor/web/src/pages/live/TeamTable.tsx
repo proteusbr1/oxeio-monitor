@@ -7,25 +7,25 @@ import { PersonCell, Table, type Column } from '../../components/Table';
 import { formatDuration, pctOf } from '../../lib/format';
 
 /**
- * ⭐⭐ **E01 — দলের টেবিল, মকআপ ক-এর ছ-টা কলামেই**: কর্মী · আজ · টার্গেট ·
- * মাস · অগ্রগতি · অবস্থা।
+ * **Team table, with all six columns of mockup A**: Employee, Today, Target,
+ * Month, Progress, Status.
  *
- * ⚠️⚠️ **এটা `TargetBars`-এর জায়গা নিয়েছে, আর সেটা একটা সচেতন উলটপালট।**
- * প্রথম দফায় টেবিলটা ইচ্ছাকৃতভাবে বানানো হয়নি — যুক্তি ছিল, বার ইতিমধ্যেই
- * নাম · অবস্থা · অগ্রগতি · ঘণ্টা দেখায়, আর টেবিলে গেলে ফোনের বিন্যাস ও
- * বারের রঙের যত্ন করে লেখা নিয়মগুলো হারাত। ⭐ মালিক মকআপটা দেখে অনুমোদন
- * করেছিলেন **টেবিলসহ**, আর পরে বলেছেন "এর মতো পুরোপুরি হয়নি" — তাই
- * যুক্তিটা টিকল না। ⭐⭐ তবে **নিয়মগুলো টিকেছে**: নিচের প্রতিটা মন্তব্য
- * বারের কোড থেকে সরাসরি আনা, কারণ ওগুলো বিন্যাসের নয়, **সত্যের** নিয়ম।
+ * Careful: **this replaced `TargetBars`, a deliberate reversal.** The table was
+ * first left out on purpose: the bars already show name, status, progress and
+ * hours, and a table would lose the carefully written phone layout and bar-colour
+ * rules. But the owner approved the mockup **with the table** and later said it did
+ * not fully match, so that argument did not hold. Still, **the rules survived**:
+ * every comment below was carried over from the bar code, because they are rules of
+ * **truth**, not of layout.
  *
- * ⭐ ফোনে টেবিলটা নিজের ফ্রেমে ডানে-বাঁয়ে স্ক্রল করে আর **প্রথম কলাম আটকে
- * থাকে** (`Table`-এর G124) — নইলে ছ-কলামে সরালে কার সারি দেখছি সেটাই
- * হারিয়ে যেত।
+ * Important: on a phone the table scrolls sideways in its own frame and **the first
+ * column stays pinned** (the `Table` component's sticky first column); otherwise,
+ * scrolling across six columns would lose which row you are looking at.
  */
 export function TeamTable({ cards }: { cards: LiveCard[] }) {
   /**
-   * ⚠️ ছুটিতে থাকা কর্মী **তালিকার শেষে** — শূন্যের বিপরীতে অগ্রগতি সাজানো
-   *    মানে ছুটির দিনটাকেই ব্যর্থতার মতো দেখানো।
+   * Careful: an employee on leave goes **to the end of the list**; sorting progress
+   *    against zero would make the day off look like a failure.
    */
   const rows = [...cards].sort((a, b) => {
     const ta = hasTarget(a);
@@ -64,9 +64,9 @@ export function TeamTable({ cards }: { cards: LiveCard[] }) {
       align: 'right',
       render: (c) =>
         /*
-          ⚠️ ছুটির দিনে `—`, `0` নয়। শূন্য একটা টার্গেটের দাবি করে যেটা
-             পূরণ হয়নি; ড্যাশ বলে **আজ কোনো টার্গেটই ছিল না**।
-          ⚠️ সংখ্যাটা হার্ডকোড ৮ ঘণ্টা নয় — ২৭ কর্মদিবসের মাসে ৭ঘ ৪২মি।
+          Careful: `—` on a day off, not `0`. Zero claims a target that was not
+             met; the dash says **there was no target today**.
+          Careful: the number is not a hardcoded 8 hours; 7h 42m in a 27-workday month.
         */
         hasTarget(c) ? (
           <span className="num text-ink-2">
@@ -74,9 +74,9 @@ export function TeamTable({ cards }: { cards: LiveCard[] }) {
           </span>
         ) : (
           /*
-            ⭐ G130 — ড্যাশটা কেন, সেটা hover-এ বলা থাকে। ⚠️ আগে সবসময়
-               "Weekly off or holiday" লেখা থাকত, অথচ কারণটা ব্যক্তিগত
-               ছুটিও হতে পারে — আর তখন লেখাটা সরাসরি ভুল ছিল।
+            Why the dash is explained on hover. Careful: it used to always say
+               "Weekly off or holiday", but the reason can also be personal leave,
+               and then the text was plainly wrong.
           */
           <span
             className="text-ink-3"
@@ -91,27 +91,25 @@ export function TeamTable({ cards }: { cards: LiveCard[] }) {
         ),
     },
     /*
-      ⚠️⚠️ এখানে একটা **Month** কলাম ছিল — "এই মাসে কার কত ঘণ্টা"
-      *(মালিকের নির্দেশে তুলে দেওয়া, ২৩ আগস্ট)*।
+      Careful: there used to be a **Month** column, "hours per person this month".
+      It was removed on the owner's instruction.
 
-      ⭐ যোগ করার কারণ ছিল "Monthly পাতায় যেতে হতো"। কিন্তু বোর্ডের এই
-      টেবিলের প্রশ্ন **আজ** নিয়ে — Today · Target · Designs · Progress।
-      মাসের সংখ্যাটা ওখানে অন্য প্রশ্নের উত্তর দিচ্ছিল, আর টেবিলটাকে
-      চওড়া করছিল।
+      It was added because "you had to go to the Monthly page". But this board table
+      is about **today**: Today, Target, Designs, Progress. The month figure answered
+      a different question and made the table wider.
 
-      ⚠️ তথ্যটা হারায়নি: **Monthly** পাতায় আছে, আর **Worklog**-এর
-      রোস্টারেও `This month` কলাম আছে। এক ক্লিক দূরে, মুছে যায়নি।
+      Careful: the information is not lost: it is on the **Monthly** page, and the
+      Worklog roster also has a `This month` column. One click away, not deleted.
     */
     /**
-     * ⭐⭐ **আজকের ডিজাইন** *(২৩ আগস্ট ২০২৬, মালিকের চাওয়া)* — "ei colame
-     * kon staff koto design korlo today seta bosiye dao"।
+     * **Today's designs.**
      *
-     * ⚠️ কোষটা `DesignCell`-এ **ভাগ করা** — Worklog-এর রোস্টারেও একই
-     * জিনিস। নকল করলে একদিন একটা বদলাত আর অন্যটা নয়।
+     * Careful: the cell is **shared** in `DesignCell`; the Worklog roster shows the
+     * same thing. Copying it would let one change and not the other.
      *
-     * ⚠️⚠️ কলামটা **কেবল তখনই** বসে যখন দলে অন্তত একজনের ডিজাইন আছে।
-     * সবসময় বসালে গবেষকদের সারিতে রোজ একটা খালি ঘর থাকত, আর খালি ঘর
-     * দেখতে "ডেটা আসেনি"-র মতো লাগে — অথচ মাপটাই তাঁদের নয়।
+     * Careful: the column appears **only when** at least one team member has designs.
+     * Always showing it would leave an empty cell every day in researchers' rows, and
+     * an empty cell looks like "no data yet", when they are simply not measured on it.
      */
     ...(cards.some((c) => designView(c) !== null)
       ? [
@@ -134,16 +132,16 @@ export function TeamTable({ cards }: { cards: LiveCard[] }) {
       key: 'status',
       header: 'Status',
       /*
-        ⭐ মকআপের রঙিন পিল — আর সেটা নতুন করে লেখা হয়নি, `StatusChip`
-           আগে থেকেই ছিল (কার্ডের মাথায় ব্যবহৃত)। ⚠️ নিজে বানালে চারটে
-           অবস্থার রং দ্বিতীয়বার সংজ্ঞায়িত হতো, আর একদিন একটা বদলে অন্যটা
-           থেকে যেত — এই ফাইলেই তার নাম G88।
+        The coloured pill from the mockup. It was not written anew: `StatusChip`
+           already existed (used at the top of the card). Careful: building our own
+           would define the four status colours twice, and one day one would change
+           and the other stay; this very file has a name for that, G88.
 
-        ⚠️ মকআপে পিলের ভেতর সময়ও ছিল ("অফলাইন ৪০মি")। বসানো হয়নি:
-           `LiveCard`-এ কেবল `lastHeartbeatAt` আছে, আর ওটা **এজেন্ট শেষ
-           কবে কথা বলেছে** — "কতক্ষণ ধরে নিষ্ক্রিয়" নয়। দুটো এক নয়, আর
-           heartbeat-এর সময়টাকে নিষ্ক্রিয়তার দৈর্ঘ্য বলে দেখালে পিলটা
-           এমন কিছু দাবি করত যা সে জানে না।
+        Careful: the mockup also had a time inside the pill ("offline 40m"). It is
+           not shown: `LiveCard` has only `lastHeartbeatAt`, which is **when the agent
+           last spoke**, not "how long inactive". They are not the same, and showing
+           the heartbeat time as the inactivity length would claim something the pill
+           does not know.
       */
       render: (c) => <StatusChip status={c.status} />,
     },
@@ -155,8 +153,9 @@ export function TeamTable({ cards }: { cards: LiveCard[] }) {
       rows={rows}
       rowKey={(c) => String(c.employeeId)}
       /*
-        ⚠️ ছুটিতে থাকা সারিটা হালকা — তালিকার শেষে থাকাটাই যথেষ্ট সংকেত নয়,
-           কারণ ক্রম দেখে বোঝা যায় না ওটা "সবচেয়ে পিছিয়ে" নাকি "আজ ছুটি"।
+        Careful: the on-leave row is dimmed. Being at the end of the list is not
+           signal enough, since the order does not say whether they are "furthest
+           behind" or "on leave today".
       */
       rowMuted={(c) => !hasTarget(c) && c.todayWorkedSec === 0}
     />
@@ -164,38 +163,37 @@ export function TeamTable({ cards }: { cards: LiveCard[] }) {
 }
 
 /**
- * ⭐⭐ **বার সবুজ — মকআপ ক-এর মতোই** *(মালিক: "ami mockup er moto 100% same
- * chai", ১৫ আগস্ট)*।
+ * **Bar is green, as in mockup A** (the owner wanted it 100% identical).
  *
- * ⚠️ এখানে আগে বার **নিরপেক্ষ** ছিল, আর কারণটা ছিল আসল: চলতি অগ্রগতি
- * একসময় ব্র্যান্ড-লালে আঁকা হতো, ফলে রোজ কাজ করা প্রতিটা মানুষের সারিতে
- * সারাদিন লাল জ্বলত আর দু-দিনেই লাল মানে "কিছু না" হয়ে যেত।
+ * Careful: the bar used to be **neutral**, for a real reason: in-progress used to be
+ * drawn in brand red, so every person working normally had red burning in their row
+ * all day, and within two days red meant "nothing".
  *
- * ⭐ সবুজে ওই সমস্যাটা ফেরে না — সবুজ এই অ্যাপে "ঠিক আছে", আর কাজ চলা
- * সত্যিই ঠিক আছে। ⚠️ তবে দাম আছে, আর সেটা লিখে রাখা দরকার: **টার্গেট
- * ছোঁয়া আর না-ছোঁয়া এখন এক রঙে**। আগে সবুজ মানে ছিল "হয়ে গেছে"; এখন
- * পার্থক্যটা কেবল বারের **দৈর্ঘ্য** আর পাশের শতাংশে।
+ * Important: green does not bring that problem back: green means "fine" in this app,
+ * and work in progress really is fine. Careful, though, there is a cost worth
+ * writing down: **reaching the target and not reaching it now share one colour**.
+ * Green used to mean "done"; now the difference is only the bar's **length** and
+ * the percentage beside it.
  */
 function TodayBar({ card }: { card: LiveCard }) {
   const targeted = hasTarget(card);
 
   /**
-   * ⭐⭐ **ছুটির দিনে করা কাজও বারে দেখা যায়, আর সেটা সবুজ**
-   * *(মালিকের চাওয়া, ১৫ আগস্ট)*।
+   * **Work done on a day off also shows in the bar, and it is green.**
    *
-   * ⚠️ আগে ছুটির দিনে সবার পাশে একটা **খালি ধূসর রেল** থাকত, অথচ সংখ্যা
-   *    বলত সবাই ৩ ঘণ্টা, ২ ঘণ্টা করে কাজ করেছেন। খালি রেল দেখতে হুবহু
-   *    "শূন্য শতাংশ"-এর মতো — একই সারিতে সংখ্যা আর ছবি উল্টো কথা বলত,
-   *    আর মানুষ ছবিটাই বিশ্বাস করে।
+   * Careful: on a day off everyone used to get an **empty grey rail**, while the
+   *    numbers said everyone had worked 3 hours, 2 hours. An empty rail looks
+   *    exactly like "zero percent": number and picture in the same row contradicted
+   *    each other, and people believe the picture.
    *
-   * ⚠️ রংটা শুরু থেকেই সবুজ, কারণ ছুটির দিনে **"হয়নি" বলে কিছু নেই** —
-   *    যতটুকু হয়েছে পুরোটাই বাড়তি।
+   * Careful: it is green from the start, because on a day off **there is no
+   *    "not done"**; whatever was done is entirely extra.
    */
   const bonus =
     !targeted && card.todayWorkedSec > 0 && card.dailyTargetSec > 0;
 
-  // ⚠️ কিছুই না করলে বার নেই — ছুটির দিনে শূন্য কোনো ঘাটতি নয়, আর
-  //    শূন্য-ভরা রেল ঠিক ওই দাবিটাই করত।
+  // Careful: nothing done means no bar. On a day off zero is no shortfall, and a
+  //    zero-filled rail would claim exactly that.
   if (!targeted && !bonus) {
     return (
       <div
@@ -213,7 +211,7 @@ function TodayBar({ card }: { card: LiveCard }) {
         <ProgressBar
           value={card.todayWorkedSec}
           max={card.dailyTargetSec}
-          // ⭐ সবসময় সবুজ — মকআপ ক-এর টেবিলে বারগুলো আংশিক অবস্থাতেও সবুজ
+          // Always green: in mockup A the bars are green even when partly filled
           tone="ok"
           ariaLabel={
             bonus
@@ -222,7 +220,7 @@ function TodayBar({ card }: { card: LiveCard }) {
           }
         />
       </div>
-      {/* `w-9` — শতাংশগুলো ডানদিকে এক রেখায় বসানোর জন্য */}
+      {/* `w-9` keeps the percentages aligned on one line at the right */}
       <span className="num w-9 shrink-0 text-right text-[11px] text-ink-3">
         {pct}%
       </span>
@@ -231,11 +229,11 @@ function TodayBar({ card }: { card: LiveCard }) {
 }
 
 /**
- * আজ এই কর্মীর সত্যিই টার্গেট আছে কি না — ছুটির দিনে নেই।
+ * Whether this employee really has a target today; on a day off they do not.
  *
- * ⚠️ নিয়মটা এখানে আর **লেখা নেই**, `roster.ts`-এর `dayDuty()`-তে। আগে
- *    তিনটে পর্দায় তিনবার লেখা ছিল, আর G130-এর ব্যক্তিগত ছুটিটা তখন
- *    একটাতে বসত আর দুটোতে বসত না।
+ * Careful: the rule is no longer **written** here; it lives in `dayDuty()` in
+ *    `roster.ts`. It used to be written three times on three screens, and personal
+ *    leave (G130) got added to one but not the other two.
  */
 function hasTarget(card: LiveCard): boolean {
   return dayDuty(card) === 'target';

@@ -1,60 +1,60 @@
 /**
- * **অফসাইট ব্যাকআপের সেটিং (R5 · G39)** — খাঁটি নিয়ম, কোনো I/O নেই।
+ * **Offsite backup settings (R5 · G39)**: pure rules, no I/O.
  *
- * ⚠️⚠️ **কেন এটা দরকার হলো:** B2-র কী-জোড়া বসাতে হতো VPS-এ SSH করে,
- * `rclone config` চালিয়ে, তারপর `/etc/oxeio-offsite.env` সম্পাদনা করে।
- * মালিকের পক্ষে সেটা কার্যত অসম্ভব — আর ১৮ আগস্ট মাঠে ঠিক সেটাই ঘটেছে:
- * একটা ভুল-পেস্ট করা key নিয়ে `401 bad_auth_token`, আর কারণটা বুঝতে
- * টার্মিনালে বসে খোঁজাখুঁজি।
+ * Why this was needed: setting the B2 key pair meant SSH into the VPS, running
+ * `rclone config`, then editing `/etc/oxeio-offsite.env`. That is practically
+ * impossible for the owner, and in the field it went wrong exactly that way:
+ * a badly pasted key gave `401 bad_auth_token`, and finding the cause meant
+ * poking around in a terminal.
  *
- * ⭐ এখন পর্দা থেকেই বসানো যায়, আর **সাথে সাথে পরীক্ষা** করা যায়।
- * `.env`/`/etc/oxeio-offsite.env` **fallback হিসেবে থাকে** — পুরোনো
- * ইনস্টলেশনে কিছু ভাঙে না।
+ * Now it can be set from the screen and **tested immediately**. `.env` and
+ * `/etc/oxeio-offsite.env` **stay as a fallback**, so old installations keep
+ * working.
  *
- * ⚠️ ধাঁচটা `alerts/telegram.settings.ts`-এর হুবহু অনুকরণ, ইচ্ছাকৃতভাবে:
- * গোপন মান রাখা ও পর্দায় না পাঠানোর নিয়মগুলো দুই জায়গায় দু-রকম হলে
- * একদিন একটায় ফাঁক থেকে যেত।
+ * Careful: the shape deliberately mirrors `alerts/telegram.settings.ts`. If the
+ * rules for keeping secrets and not sending them to the screen differed between
+ * the two places, one of them would eventually have a gap.
  */
 
-/** ডাটাবেসে `settings` টেবিলে এই চাবিতে বসে */
+/** The key under which it is stored in the `settings` table */
 export const OFFSITE_SETTING_KEY = 'ops.offsite';
 
 export interface OffsiteSettings {
-  /** B2-র `keyID` — ২৫ অক্ষর */
+  /** B2 `keyID`, 25 characters */
   keyId: string;
-  /** B2-র `applicationKey` — ৩১ অক্ষর, ⚠️ গোপন */
+  /** B2 `applicationKey`, 31 characters. Secret. */
   appKey: string;
-  /** যেমন `oxeio-backups` */
+  /** e.g. `oxeio-backups` */
   bucket: string;
 }
 
 /**
- * ⚠️⚠️ **পর্দায় যা যায় — applicationKey কখনো নয়।**
+ * **What goes to the screen: never the applicationKey.**
  *
- * ব্রাউজারে পাঠালে সেটা DevTools, প্রক্সি লগ বা স্ক্রিন শেয়ারে দেখা যেত।
- * তাই কেবল **শেষ চারটে অক্ষর** — মালিক যেন মিলিয়ে নিতে পারেন কোনটা বসানো
- * আছে, কিন্তু কেউ যেন ওটা দিয়ে ব্যাকআপে হাত দিতে না পারে।
+ * Sent to the browser it could show up in DevTools, proxy logs or screen
+ * shares. So only the **last four characters** go, so the owner can check which
+ * key is set, while nobody can use it to touch the backups.
  */
 export interface OffsiteSettingsView {
   configured: boolean;
-  /** `…9f2a` — বসানো না থাকলে `null` */
+  /** `…9f2a`, or `null` when nothing is set */
   keyHint: string | null;
   /**
-   * ⭐ keyID **গোপন নয়** — ওটা কেবল একটা পরিচয়, আর ওটা দিয়ে একা কিছু
-   * করা যায় না (টেলিগ্রামের `chatId`-র মতোই)। পুরোটা ফেরত পাঠানো হয়
-   * যাতে পর্দায় "আগেরটাই থাক" সত্যিই কাজ করে — নইলে bucket শুধরাতে
-   * গিয়ে keyID মুছে যেত।
+   * The keyID is **not secret**: it is only an identifier and does nothing on
+   * its own (like Telegram's `chatId`). It is sent back in full so "keep the
+   * previous one" really works on screen; otherwise fixing the bucket would
+   * wipe the keyID.
    */
   keyId: string;
-  /** ⭐ bucket-এর নাম গোপন নয় — ওটা দিয়ে কিছু করা যায় না */
+  /** The bucket name is not secret: nothing can be done with it */
   bucket: string;
-  /** ⚠️ ডাটাবেস না সার্ভারের ফাইল — কোনটা খাটছে, মালিকের জানা দরকার */
+  /** Database or server file: the owner needs to know which one is in effect */
   source: 'database' | 'env' | 'none';
 }
 
 /**
- * ⚠️ চার অক্ষরের কম হলে কিছুই দেখানো হয় না — খুব ছোট মান মানে হয় ভুল
- * বসানো, নয় পরীক্ষার মান; দুই ক্ষেত্রেই অংশ দেখিয়ে লাভ নেই।
+ * Nothing is shown below four characters: a very short value is either a
+ * mistake or a test value, and showing part of it helps nobody.
  */
 export function keyHint(key: string): string | null {
   const trimmed = key.trim();
@@ -64,11 +64,12 @@ export function keyHint(key: string): string | null {
 }
 
 /**
- * ডাটাবেস ও সার্ভারের ফাইল মিলিয়ে **কোনটা আসলে খাটবে**।
+ * Merges the database and the server file to decide **which one actually applies**.
  *
- * ⭐⭐ ডাটাবেস জিতবে, কিন্তু **তিনটে ঘরই ভরা থাকলে**। দুটো ভরা আর একটা
- * খালি রেখে দিলে অফসাইট আধা-কনফিগার হয়ে চুপচাপ বন্ধ থাকত, অথচ সার্ভারে
- * কাজ করা মান বসেই আছে — অর্থাৎ পর্দায় হাত দিয়ে জিনিসটা **ভাঙানো** যেত।
+ * The database wins, but **only when all three fields are filled**. With two
+ * filled and one left empty, offsite would be half configured and silently off
+ * while a working value still sits on the server; the screen could be used to
+ * **break** it.
  */
 export function resolveOffsite(
   db: Partial<OffsiteSettings> | null,
@@ -94,11 +95,11 @@ export function resolveOffsite(
 }
 
 /**
- * পর্দার জন্য ছবি।
+ * The picture for the screen.
  *
- * ⚠️ `source` পাঠানো হয় ইচ্ছাকৃতভাবে: সার্ভারের ফাইলে মান থাকা অবস্থায়
- * পর্দায় নতুন মান বসালে কোনটা খাটছে সেটা না জানালে মালিক ভাবতেন সেভ
- * হয়নি — অথচ হয়েছে, শুধু অন্যটা জিতছে না।
+ * Careful: `source` is sent on purpose. When the server file has a value and a
+ * new one is entered on screen, without saying which one is in effect the owner
+ * would think the save failed, when it worked and the other one just does not win.
  */
 export function offsiteView(
   resolved: ReturnType<typeof resolveOffsite>,
@@ -115,30 +116,31 @@ export function offsiteView(
 }
 
 /**
- * ⭐⭐ **B2 কী-জোড়া সত্যিই কাজ করে কি না** — এটাই সেই পরীক্ষা যেটা ১৮
- * আগস্ট টার্মিনালে বসে করতে হয়েছিল।
+ * **Whether the B2 key pair really works.** This is the test that had to be done
+ * by hand in a terminal during the August incident.
  *
- * B2-র `b2_authorize_account` একটা সাধারণ HTTPS GET, Basic auth-এ
- * `keyId:appKey`। ⭐ সীমাবদ্ধ key-তেও এটা কাজ করে (bucket তালিকা করার
- * অনুমতি লাগে না), আর উত্তরে `allowed.bucketName` বলে দেয় key-টা **কোন**
- * bucket-এ বাঁধা — অর্থাৎ ভুল bucket লেখা থাকলেও ধরা পড়ে।
+ * B2's `b2_authorize_account` is a plain HTTPS GET with Basic auth
+ * (`keyId:appKey`). It works even with a restricted key (no permission to list
+ * buckets needed), and the reply's `allowed.bucketName` says **which** bucket
+ * the key is bound to, so a wrong bucket is caught too.
  *
- * ⚠️ এটা খাঁটি ফাংশন নয় (নেটওয়ার্ক লাগে), কিন্তু **সিদ্ধান্তটুকু** খাঁটি:
- * নিচের `b2Verdict()` কেবল উত্তরটা পড়ে রায় দেয়, তাই সেটা টেস্টযোগ্য।
+ * This is not a pure function (it needs the network), but **the decision** is
+ * pure: `b2Verdict()` below only reads the reply and gives a verdict, so it can
+ * be tested.
  */
 export interface B2AuthReply {
   status: number;
-  /** B2-র JSON — `allowed.bucketName` থাকতে পারে */
+  /** B2's JSON; may have `allowed.bucketName` */
   allowed?: { bucketName?: string | null; capabilities?: string[] };
-  /** ব্যর্থ হলে B2-র বার্তা */
+  /** B2's message on failure */
   message?: string;
 }
 
 export interface B2Verdict {
   ok: boolean;
-  /** পর্দায় দেখানোর মতো এক লাইন */
+  /** One line fit to show on screen */
   message: string;
-  /** key-টা যে bucket-এ বাঁধা (সীমাবদ্ধ না হলে `null`) */
+  /** The bucket the key is bound to (`null` if unrestricted) */
   boundTo: string | null;
 }
 
@@ -146,7 +148,7 @@ export function b2Verdict(reply: B2AuthReply, bucket: string): B2Verdict {
   if (reply.status === 401) {
     return {
       ok: false,
-      // ⚠️ ঠিক এই ভুলটাই মাঠে হয়েছে — তাই বার্তায় সরাসরি করণীয় লেখা
+      // This exact mistake happened in the field, so the message says what to do
       message:
         'Backblaze rejected the key (401). The application key is usually the problem — it is shown only once, so copy it again or make a new one.',
       boundTo: null,
@@ -164,8 +166,8 @@ export function b2Verdict(reply: B2AuthReply, bucket: string): B2Verdict {
   const bound = reply.allowed?.bucketName ?? null;
 
   /**
-   * ⚠️⚠️ key ঠিক, কিন্তু **অন্য bucket-এ বাঁধা** — এটা নীরব ব্যর্থতার
-   * চমৎকার উৎস: সব সবুজ দেখাত, আর ব্যাকআপ যেত অন্য কোথাও (বা কোথাওই না)।
+   * The key is fine but **bound to another bucket**: a perfect source of silent
+   * failure. Everything would look green while the backups went elsewhere (or nowhere).
    */
   if (bound !== null && bucket.trim().length > 0 && bound !== bucket.trim()) {
     return {

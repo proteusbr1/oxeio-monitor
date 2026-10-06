@@ -26,208 +26,208 @@ import {
 } from '../src/lib/format';
 
 /**
- * ⭐ **ওয়েবের প্রথম টেস্ট ফাইল।**
+ * **The web app's first test file.**
  *
- * ⚠️ এখানে যা পরীক্ষা করা হচ্ছে তার একটাও "দেখতে সুন্দর" প্রশ্ন নয় —
- * প্রতিটাই এমন ভুল যেখানে পর্দায় **ভুল সংখ্যা** বসে যায়, আর কেউ ধরতে
- * পারে না কারণ দেখতে ঠিকই লাগে। ঢাকার তারিখ একদিন সরে গেলে রাতে কাজ করা
- * কর্মী নিজের ঘণ্টা খুঁজে পায় না; সংশোধনের চিহ্ন হারালে যোগ আর বিয়োগ
- * একই দেখায়।
+ * Careful: none of what is tested here is a question of "looks nice": each
+ * is a mistake where a **wrong number** lands on screen and nobody catches
+ * it because it looks right. If the Dhaka date shifts by a day, a person who
+ * works at night cannot find their hours; if the adjustment sign is lost,
+ * add and subtract look the same.
  */
 
-// ── ঢাকার তারিখ ────────────────────────────────────────────────────────────
+// ── Dhaka dates ─────────────────────────────────────────────────────────────
 
-describe('todayInDhaka — ব্রাউজারের টাইমজোন ধরে নেওয়া হয় না', () => {
+describe('todayInDhaka — the browser timezone is not assumed', () => {
   /**
-   * ⭐⭐ এই ফাইলের সবচেয়ে জরুরি টেস্ট। ঢাকায় রাত ১২টা–ভোর ৬টার মধ্যে UTC
-   * এখনো **আগের দিন**। `toISOString().slice(0,10)` লিখলে ওই সময়ে কাজ করা
-   * কর্মী নিজের আজকের ঘণ্টা খুঁজেই পেত না — অথচ রাতে কাজ করা এই
-   * সিস্টেমে স্বাভাবিক (§ ২.১-ক)।
+   * The most important test in this file. Between midnight and 6 am in Dhaka,
+   * UTC is still on the **previous day**. Writing `toISOString().slice(0,10)`
+   * would make someone working then unable to find today's hours at all, yet
+   * working at night is normal in this system (§ 2.1a).
    */
-  it('ঢাকার রাত ২টা = নতুন দিন, যদিও UTC-তে আগের দিন', () => {
-    const utc = new Date('2026-08-11T20:00:00Z'); // ঢাকায় ১২ আগস্ট রাত ২টা
+  it('2 am in Dhaka = new day, even though it is still the previous day in UTC', () => {
+    const utc = new Date('2026-08-11T20:00:00Z'); // 2 am on 12 August in Dhaka
     expect(utc.toISOString().slice(0, 10)).toBe('2026-08-11');
     expect(todayInDhaka(utc)).toBe('2026-08-12');
   });
 
-  it('ঢাকার রাত ১১:৫৯ এখনো সেদিনই', () =>
+  it('11:59 pm in Dhaka is still the same day', () =>
     expect(todayInDhaka(new Date('2026-08-12T17:59:00Z'))).toBe('2026-08-12'));
 
-  it('workDateOf ISO স্ট্রিং আর Date দুটোই নেয়', () => {
+  it('workDateOf takes both an ISO string and a Date', () => {
     expect(workDateOf('2026-08-11T20:30:00Z')).toBe('2026-08-12');
     expect(workDateOf(new Date('2026-08-11T20:30:00Z'))).toBe('2026-08-12');
   });
 });
 
-describe('parseWorkDate — অসম্ভব তারিখ চুপচাপ পাল্টে যায় না', () => {
+describe('parseWorkDate — an impossible date is not silently changed', () => {
   /**
-   * ⚠️ `new Date('2026-02-31')` চুপচাপ ৩ মার্চ বানিয়ে দেয়। ফিরে এসে না
-   * মেলালে ব্যবহারকারী ভুল দিনের ডেটা দেখে বুঝতেও পারত না।
+   * Careful: `new Date('2026-02-31')` silently becomes 3 March. If it is not
+   * checked on the way back, the user would see the wrong day's data without knowing.
    */
-  it('৩১ ফেব্রুয়ারি null', () => expect(parseWorkDate('2026-02-31')).toBeNull());
-  it('১৩ নম্বর মাস null', () => expect(parseWorkDate('2026-13-01')).toBeNull());
-  it('ফরম্যাট না মিললে null', () => expect(parseWorkDate('11/08/2026')).toBeNull());
-  it('ঠিক তারিখ চলে', () => expect(isValidWorkDate('2026-02-28')).toBe(true));
-  it('লিপ ইয়ারের ২৯ ফেব্রুয়ারি চলে', () =>
+  it('31 February is null', () => expect(parseWorkDate('2026-02-31')).toBeNull());
+  it('month 13 is null', () => expect(parseWorkDate('2026-13-01')).toBeNull());
+  it('null when the format does not match', () => expect(parseWorkDate('11/08/2026')).toBeNull());
+  it('a valid date passes', () => expect(isValidWorkDate('2026-02-28')).toBe(true));
+  it('29 February of a leap year passes', () =>
     expect(isValidWorkDate('2028-02-29')).toBe(true));
-  it('অ-লিপ বছরের ২৯ ফেব্রুয়ারি নয়', () =>
+  it('29 February of a non-leap year does not', () =>
     expect(isValidWorkDate('2026-02-29')).toBe(false));
 });
 
-describe('তারিখ সরানো', () => {
-  it('মাসের সীমা পেরোয়', () =>
+describe('shifting dates', () => {
+  it('crosses the month boundary', () =>
     expect(shiftWorkDate('2026-08-01', -1)).toBe('2026-07-31'));
 
-  it('ভুল তারিখ দিলে যা দেওয়া হয়েছিল তাই ফেরে', () =>
+  it('on a bad date, what was given comes back', () =>
     expect(shiftWorkDate('গতকাল', -1)).toBe('গতকাল'));
 
-  it('মাসের শেষ দিন — লিপ ইয়ার নিজে থেকেই মেলে', () => {
+  it('last day of the month: leap years work out by themselves', () => {
     expect(monthEndOf('2026-02')).toBe('2026-02-28');
     expect(monthEndOf('2028-02-10')).toBe('2028-02-29');
   });
 
-  it('বছরের সীমা পেরিয়ে মাস সরে', () =>
+  it('crosses the year boundary, the month moves', () =>
     expect(shiftMonth('2026-01', -1)).toBe('2025-12'));
 
-  it('চলতি মাসের রেঞ্জ ঢাকার আজ ধরে', () => {
+  it('the current month range is based on today in Dhaka', () => {
     const range = thisMonthRange(new Date('2026-08-11T20:00:00Z'));
     expect(range).toEqual({ from: '2026-08-01', to: '2026-08-12' });
   });
 });
 
-describe('তারিখ দেখানো', () => {
-  it('পুরো তারিখ', () => expect(formatDate('2026-08-10')).toBe('10 August 2026'));
-  it('সরু কলামে', () => expect(formatDateShort('2026-10-05')).toBe('5 Oct'));
-  it('বার', () => expect(weekdayOf('2026-08-10')).toBe('Mon'));
-  it('মাস', () => expect(formatMonth('2026-08')).toBe('August 2026'));
+describe('showing dates', () => {
+  it('full date', () => expect(formatDate('2026-08-10')).toBe('10 August 2026'));
+  it('in a narrow column', () => expect(formatDateShort('2026-10-05')).toBe('5 Oct'));
+  it('weekday', () => expect(weekdayOf('2026-08-10')).toBe('Mon'));
+  it('month', () => expect(formatMonth('2026-08')).toBe('August 2026'));
 
-  /** ⚠️ ভুল ইনপুট পেলে ফাঁকা নয়, যা এসেছিল তাই — নইলে ঘরটা নীরবে খালি হতো */
-  it('ভুল তারিখে যা এসেছিল তাই', () =>
+  /** Careful: on bad input it gives back what came in, not blank; otherwise the cell would silently be empty */
+  it('a bad date gives back what came in', () =>
     expect(formatDate('not-a-date')).toBe('not-a-date'));
 
-  it('ভুল মাসে যা এসেছিল তাই', () =>
+  it('a bad month gives back what came in', () =>
     expect(formatMonth('2026-99')).toBe('2026-99'));
 
-  /** ⚠️ সময় ঢাকার ঘড়িতে — ব্যবহারকারীর টাইমজোনে নয় */
-  it('সময় ঢাকার ঘড়িতে', () =>
+  /** Careful: time on the Dhaka clock, not the user's timezone */
+  it('time on the Dhaka clock', () =>
     expect(formatTime('2026-08-11T08:32:00Z')).toBe('14:32'));
 
-  it('সময় না থাকলে ড্যাশ', () => expect(formatTime(null)).toBe('—'));
-  it('ভাঙা ISO-তে ড্যাশ', () => expect(formatTime('আজ দুপুর')).toBe('—'));
+  it('dash when there is no time', () => expect(formatTime(null)).toBe('—'));
+  it('dash on a broken ISO', () => expect(formatTime('আজ দুপুর')).toBe('—'));
 });
 
-describe('formatAgo — একবচন/বহুবচন', () => {
+describe('formatAgo — singular/plural', () => {
   const now = new Date('2026-08-12T10:00:00Z');
   const ago = (sec: number) =>
     formatAgo(new Date(now.getTime() - sec * 1000).toISOString(), now);
 
-  it('একদম সদ্য', () => expect(ago(10)).toBe('Just now'));
-  /** ⚠️ "1 minutes ago" যন্ত্রের মতো শোনায়, আর সংখ্যার উপর ভরসা কমায় */
-  it('এক মিনিট — একবচন', () => expect(ago(60)).toBe('1 minute ago'));
-  it('দুই মিনিট — বহুবচন', () => expect(ago(120)).toBe('2 minutes ago'));
-  it('এক ঘণ্টা', () => expect(ago(3600)).toBe('1 hour ago'));
-  it('দুই দিন', () => expect(ago(2 * 86400)).toBe('2 days ago'));
+  it('just now', () => expect(ago(10)).toBe('Just now'));
+  /** Careful: "1 minutes ago" sounds mechanical and lowers trust in the number */
+  it('one minute: singular', () => expect(ago(60)).toBe('1 minute ago'));
+  it('two minutes: plural', () => expect(ago(120)).toBe('2 minutes ago'));
+  it('one hour', () => expect(ago(3600)).toBe('1 hour ago'));
+  it('two days', () => expect(ago(2 * 86400)).toBe('2 days ago'));
 
-  /** ⚠️ ঘড়ি এদিক-ওদিক হলে ঋণাত্মক সংখ্যা দেখালে মনে হতো সিস্টেম ভেঙে গেছে */
-  it('ভবিষ্যতের সময়েও ঋণাত্মক নয়', () =>
+  /** Careful: with clock skew a negative number would make the system look broken */
+  it('never negative even for a future time', () =>
     expect(formatAgo(new Date(now.getTime() + 60_000).toISOString(), now)).toBe(
       'Just now',
     ));
 
-  it('কখনো না এলে Never', () => expect(formatAgo(null)).toBe('Never'));
+  it('Never when it never came', () => expect(formatAgo(null)).toBe('Never'));
 });
 
-// ── সময়কাল ─────────────────────────────────────────────────────────────────
+// ── Durations ───────────────────────────────────────────────────────────────
 
 describe('formatDuration', () => {
-  it('ঘণ্টা ও মিনিট', () => expect(formatDuration(7 * 3600 + 32 * 60)).toBe('7h 32m'));
-  it('এক ঘণ্টার কম — শুধু মিনিট', () => expect(formatDuration(32 * 60)).toBe('32m'));
+  it('hours and minutes', () => expect(formatDuration(7 * 3600 + 32 * 60)).toBe('7h 32m'));
+  it('under one hour: minutes only', () => expect(formatDuration(32 * 60)).toBe('32m'));
 
-  /** ⚠️ খালি ঘর দেখলে বোঝা যায় না ডেটা নেই না কি সত্যিই শূন্য */
-  it('শূন্য মানে 0m, ফাঁকা নয়', () => expect(formatDuration(0)).toBe('0m'));
-  it('তথ্য না থাকলে ড্যাশ', () => expect(formatDuration(null)).toBe('—'));
-  it('NaN-এ ড্যাশ', () => expect(formatDuration(Number.NaN)).toBe('—'));
+  /** Careful: seeing an empty cell you cannot tell "no data" from truly zero */
+  it('zero means 0m, not blank', () => expect(formatDuration(0)).toBe('0m'));
+  it('dash when there is no data', () => expect(formatDuration(null)).toBe('—'));
+  it('dash on NaN', () => expect(formatDuration(Number.NaN)).toBe('—'));
 
   /**
-   * ⭐ round করার পর মিনিট ৬০ হয়ে যেতে পারে। ঘণ্টায় না তুললে পর্দায়
-   * `0h 60m` বসে থাকত — ভুল না হলেও কেউ ওই সংখ্যাটাকে বিশ্বাস করত না।
+   * After rounding, the minutes can become 60. Without carrying into the hour
+   * the screen would show `0h 60m`: not wrong, but nobody would trust that number.
    */
-  it('৩৫৯৮ সেকেন্ড → 1h 0m, "0h 60m" নয়', () =>
+  it('3598 seconds → 1h 0m, not "0h 60m"', () =>
     expect(formatDuration(3598)).toBe('1h 0m'));
 
-  it('ঋণাত্মক সময় ০-তে আটকায়', () => expect(formatDuration(-500)).toBe('0m'));
+  it('negative time is clamped to 0', () => expect(formatDuration(-500)).toBe('0m'));
 });
 
-describe('formatSignedDuration — চিহ্নটাই আসল তথ্য', () => {
-  it('ধনাত্মকেও চিহ্ন থাকে', () =>
+describe('formatSignedDuration — the sign is the real information', () => {
+  it('a positive value also carries a sign', () =>
     expect(formatSignedDuration(2 * 3600)).toBe('+2:00'));
 
-  /** ⚠️ ইউনিকোড মাইনাস (U+2212), হাইফেন নয় */
-  it('ঋণাত্মকে ইউনিকোড মাইনাস', () => {
+  /** Careful: the Unicode minus (U+2212), not a hyphen */
+  it('a negative value uses the Unicode minus', () => {
     const text = formatSignedDuration(-30 * 60);
     expect(text).toBe('−0:30');
     expect(text.charCodeAt(0)).toBe(0x2212);
   });
 
-  it('এক ঘণ্টার কম হলেও ঘণ্টাটা থাকে', () =>
+  it('the hour stays even when under one hour', () =>
     expect(formatSignedDuration(30 * 60)).toBe('+0:30'));
 
-  it('শূন্যকে ধনাত্মক ধরা হয়', () => expect(formatSignedDuration(0)).toBe('+0:00'));
+  it('zero is treated as positive', () => expect(formatSignedDuration(0)).toBe('+0:00'));
 
-  /** ⚠️ `formatDuration()`-এর ফাঁদটা এখানেও — সরানোর পর প্রথম টেস্টেই ধরা পড়ল */
-  it('৩৫৯৮ সেকেন্ড → +1:00, "+0:60" নয়', () =>
+  /** Careful: the `formatDuration()` trap is here too; caught by the first test after the move */
+  it('3598 seconds → +1:00, not "+0:60"', () =>
     expect(formatSignedDuration(3598)).toBe('+1:00'));
 
-  it('ঋণাত্মক দিকেও একই', () =>
+  it('the same in the negative direction', () =>
     expect(formatSignedDuration(-3598)).toBe('−1:00'));
 });
 
-describe('formatHoursAsDuration — API-র দুই ফরম্যাট এক পর্দায়', () => {
-  it('সংখ্যা', () => expect(formatHoursAsDuration(7.53)).toBe('7h 32m'));
-  /** ⚠️ payroll ঘণ্টা **স্ট্রিং** হিসেবে পাঠায় (Decimal) */
-  it('স্ট্রিং', () => expect(formatHoursAsDuration('7.53')).toBe('7h 32m'));
-  it('null-এ ড্যাশ', () => expect(formatHoursAsDuration(null)).toBe('—'));
-  it('আজেবাজে স্ট্রিং-এ ড্যাশ', () => expect(formatHoursAsDuration('অনেক')).toBe('—'));
+describe('formatHoursAsDuration — the two API formats on one screen', () => {
+  it('number', () => expect(formatHoursAsDuration(7.53)).toBe('7h 32m'));
+  /** Careful: payroll sends hours as a **string** (Decimal) */
+  it('string', () => expect(formatHoursAsDuration('7.53')).toBe('7h 32m'));
+  it('dash on null', () => expect(formatHoursAsDuration(null)).toBe('—'));
+  it('dash on a junk string', () => expect(formatHoursAsDuration('অনেক')).toBe('—'));
 });
 
-// ── শতাংশ, বাইট, টাকা ───────────────────────────────────────────────────────
+// ── Percent, bytes, money ───────────────────────────────────────────────────
 
-describe('formatPct — null মানে তথ্য নেই, শূন্য নয়', () => {
+describe('formatPct — null means no data, not zero', () => {
   /**
-   * ⭐ `0%` লিখলে "কিছুই productive করেনি" বলা হতো, অথচ সত্যিটা "বলার
-   * মতো কিছুই নেই" — ছুটির দিনে দুটোর পার্থক্য পুরো রিপোর্ট বদলে দেয়।
+   * Writing `0%` would say "was not productive at all", when the truth is
+   * "nothing to say": on a day off the difference changes the whole report.
    */
-  it('null-এ ড্যাশ', () => expect(formatPct(null)).toBe('—'));
-  it('শূন্যে 0%', () => expect(formatPct(0)).toBe('0%'));
-  it('দশমিক ঘর', () => expect(formatPct(72.456, 1)).toBe('72.5%'));
+  it('dash on null', () => expect(formatPct(null)).toBe('—'));
+  it('0% on zero', () => expect(formatPct(0)).toBe('0%'));
+  it('decimal places', () => expect(formatPct(72.456, 1)).toBe('72.5%'));
 
-  it('হর শূন্য হলে ০, NaN নয়', () => expect(pctOf(5, 0)).toBe(0));
-  it('স্বাভাবিক শতাংশ', () => expect(pctOf(1, 4)).toBe(25));
+  it('0 when the denominator is zero, not NaN', () => expect(pctOf(5, 0)).toBe(0));
+  it('ordinary percentage', () => expect(pctOf(1, 4)).toBe(25));
 });
 
 describe('formatBytes', () => {
-  it('১ KiB-র কম', () => expect(formatBytes(900)).toBe('900 B'));
+  it('under 1 KiB', () => expect(formatBytes(900)).toBe('900 B'));
   it('KB', () => expect(formatBytes(2048)).toBe('2.0 KB'));
-  it('বড় হলে দশমিক ছাড়া', () => expect(formatBytes(15 * 1024 * 1024)).toBe('15 MB'));
-  it('null-এ ড্যাশ', () => expect(formatBytes(null)).toBe('—'));
+  it('no decimals when large', () => expect(formatBytes(15 * 1024 * 1024)).toBe('15 MB'));
+  it('dash on null', () => expect(formatBytes(null)).toBe('—'));
 });
 
-describe('formatTaka — সংখ্যায় রূপান্তর করা হয় না', () => {
+describe('formatTaka — not converted to a number', () => {
   /**
-   * ⚠️ সার্ভার টাকা **স্ট্রিং** হিসেবে পাঠায় (Decimal)। `Number()` করে
-   * হিসাব করলে ১৩০০০.১০ পর্দায় ১৩০০০.০৯৯৯… হয়ে যেত।
+   * Careful: the server sends money as a **string** (Decimal). Computing with
+   * `Number()` would turn 13000.10 into 13000.0999… on screen.
    */
-  it('হাজারের কমা', () => expect(formatTaka('13000.50')).toBe('৳ 13,000.50'));
-  it('দশমিকের ঘরগুলো হুবহু থাকে', () =>
+  it('thousands comma', () => expect(formatTaka('13000.50')).toBe('৳ 13,000.50'));
+  it('the decimal places stay exactly', () =>
     expect(formatTaka('13000.10')).toBe('৳ 13,000.10'));
-  it('দশমিক না থাকলে যোগ করা হয় না', () =>
+  it('no decimals are added when there are none', () =>
     expect(formatTaka('900')).toBe('৳ 900'));
-  it('ঋণাত্মক', () => expect(formatTaka('-1500')).toBe('৳ -1,500'));
-  it('লাখের অঙ্ক', () => expect(formatTaka('1234567')).toBe('৳ 1,234,567'));
-  it('null-এ ড্যাশ', () => expect(formatTaka(null)).toBe('—'));
+  it('negative', () => expect(formatTaka('-1500')).toBe('৳ -1,500'));
+  it('lakh-style digits', () => expect(formatTaka('1234567')).toBe('৳ 1,234,567'));
+  it('dash on null', () => expect(formatTaka(null)).toBe('—'));
 });
 
 describe('formatCount', () => {
-  it('হাজারের কমা', () => expect(formatCount(12345)).toBe('12,345'));
-  it('null-এ ড্যাশ', () => expect(formatCount(null)).toBe('—'));
+  it('thousands comma', () => expect(formatCount(12345)).toBe('12,345'));
+  it('dash on null', () => expect(formatCount(null)).toBe('—'));
 });

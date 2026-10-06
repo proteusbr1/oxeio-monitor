@@ -7,13 +7,13 @@ using oXeio.Core.Tracking;
 namespace oXeio.Agent.Platform;
 
 /// <summary>
-/// "শেষ ইনপুট কতক্ষণ আগে" — একটাই কাজ।
+/// "How long ago was the last input": one job only.
 ///
-/// <b>স্টেটহীন:</b> প্রতিবার শূন্য থেকে হিসাব হয়, কিছু জমিয়ে রাখা হয় না।
-/// একটা টিক মিস হলে শুধু ওই সেকেন্ডের নিখুঁততা যায়, হিসাব নষ্ট হয় না।
+/// <b>Stateless:</b> calculated from zero each time, nothing is accumulated. If a tick is missed,
+/// only that second's precision is lost; the accounting is not damaged.
 ///
-/// হিসাবের নিয়মটা <see cref="IdleMath"/>-এ, কারণ ওটা টেস্ট করা যায়; এখানে শুধু
-/// Win32 থেকে কাঁচা সংখ্যা তোলা।
+/// The calculation rule is in <see cref="IdleMath"/>, because that can be tested; here we only
+/// fetch the raw number from Win32.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class IdleProbe
@@ -25,7 +25,7 @@ internal sealed class IdleProbe
         ulong UnbiasedMs,
         uint RawDwTime,
         uint RawNow32,
-        /// <summary>শেষ ইনপুটের সময় "এখনকার" চেয়ে পরে দেখাচ্ছিল কি না।</summary>
+        /// <summary>Whether the last input time appeared to be later than "now".</summary>
         bool ClampedFuture,
         int Win32Error);
 
@@ -33,7 +33,7 @@ internal sealed class IdleProbe
 
     public Sample Read()
     {
-        // প্রতিবার বসাতে হয় — Windows এটা সত্যিই যাচাই করে
+        // must be set every time: Windows really does validate this
         _lii.cbSize = 8;
 
         var biased = Kernel32.GetTickCount64();
@@ -41,14 +41,14 @@ internal sealed class IdleProbe
 
         if (!User32.GetLastInputInfo(ref _lii))
         {
-            // ⚠️ কোনো ডিফল্ট মান বসানো যাবে না — dwTime তখন 0, আর সেটা ব্যবহার করলে
-            //    নিষ্ক্রিয়তা "PC চালু হওয়ার পর থেকে" হিসেব হবে। নমুনাটাই বাদ।
+            // Careful: no default value may be put in. dwTime would be 0, and using it would
+            // compute inactivity as "since the PC was switched on". The sample is dropped.
             return new Sample(false, TimeSpan.Zero, biased, unbiased, 0, 0, false,
                 Marshal.GetLastPInvokeError());
         }
 
-        // dwTime ৩২-বিট GetTickCount ঘড়িতে চলে, আর GetTickCount64-এর নিচের ৩২ বিটই
-        // সেই ঘড়ি — তাই সরু করে নিয়ে modular বিয়োগ
+        // dwTime runs on the 32-bit GetTickCount clock, and the low 32 bits of GetTickCount64 are
+        // that same clock, so narrow it and use modular subtraction
         var now32 = unchecked((uint)biased);
         var elapsed = IdleMath.Elapsed(now32, _lii.dwTime, out var clamped);
 

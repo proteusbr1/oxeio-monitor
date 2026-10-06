@@ -10,25 +10,25 @@ import {
 } from '../../lib/format';
 
 /**
- * চারটে রিপোর্ট ট্যাবের সাধারণ টুকরোগুলো।
+ * Pieces shared by the four report tabs.
  *
- * ⭐ `meta` দেখানোর কাজটা এক জায়গায় রাখা হয়েছে, কারণ ওখানেই দুটো জিনিস
- * আছে যা **লুকিয়ে ফেলা সবচেয়ে সহজ আর সবচেয়ে ক্ষতিকর** — ছেঁটে দেওয়া রেঞ্জ
- * (`clampedToToday`) আর বাদ পড়া কর্মী (`excludedEmployees`)। প্রতিটা ট্যাবে
- * আলাদা করে লিখলে একটায় ভুলে যাওয়া প্রায় নিশ্চিত ছিল।
+ * Important: showing `meta` is kept in one place because it holds two things that
+ * are **the easiest to hide and the most harmful to hide**: a trimmed range
+ * (`clampedToToday`) and excluded employees (`excludedEmployees`). Written
+ * separately in each tab, forgetting one would have been almost certain.
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * F08 — এক রিকোয়েস্টে সর্বোচ্চ কত দিন।
- * ⚠️ সংখ্যাটা সার্ভারের `reports/reports.range.ts` → `MAX_RANGE_DAYS`-এর
- *    প্রতিলিপি। বড় রেঞ্জ চাইলে সার্ভার ৪০০ দেয়; এখানে আগেই ধরে ফেলা হয়
- *    যাতে একটা নিশ্চিত-ব্যর্থ রিকোয়েস্ট পাঠাতেই না হয়।
+ * F08 — the maximum number of days in one request.
+ * Careful: this number is a copy of `MAX_RANGE_DAYS` in the server's
+ *    `reports/reports.range.ts`. The server returns 400 for a bigger range; it is
+ *    caught here first so a request that is sure to fail is never sent.
  */
 export const MAX_REPORT_DAYS = 370;
 
-/** দুই প্রান্তসহ দিনসংখ্যা। তারিখ অবৈধ হলে ০ — NaN নয়। */
+/** Number of days, both ends included. 0 if a date is invalid, not NaN. */
 export function rangeDays(from: string, to: string): number {
   const start = parseWorkDate(from);
   const end = parseWorkDate(to);
@@ -37,14 +37,15 @@ export function rangeDays(from: string, to: string): number {
 }
 
 /**
- * রেঞ্জ, তৈরির সময়, আর যা যা বলা দরকার।
+ * The range, the generation time, and everything else that needs saying.
  *
- * ⚠️ `clampedToToday` সত্যি হলে **বলতেই হবে**। "১–৩১ আগস্ট" চেয়ে ১১ তারিখ
- *    পর্যন্ত ডেটা পেয়ে কেউ ভাবত সবাই বিশাল পিছিয়ে আছে — অথচ বাকি দিনগুলো
- *    এখনো আসেইনি।
+ * Careful: when `clampedToToday` is true it **must be said**. Someone who asked
+ *    for "1-31 August" and got data only up to the 11th would think everyone is
+ *    hugely behind, when the remaining days have simply not happened yet.
  *
- * ⚠️ `excludedEmployees` — যাদের রাখা যায়নি, নাম ধরে। চুপচাপ বাদ দিলে
- *    "সবাই আছে" ধরে নিয়ে কেউ মিলিয়ে দেখত না।
+ * Careful: `excludedEmployees` lists, by name, the people who could not be
+ *    included. Dropping them silently would let readers assume "everyone is
+ *    here" and not cross-check.
  */
 export function MetaNote({ meta }: { meta: ReportMeta }) {
   return (
@@ -75,15 +76,17 @@ export function MetaNote({ meta }: { meta: ReportMeta }) {
       )}
 
       {/*
-        ⭐⭐ G108 — সংখ্যাগুলো ভুল নয়, কিন্তু **অনিশ্চিত**, আর সেটাই এতদিন
-        অদৃশ্য ছিল। চান্দ্র ছুটির তারিখ চাঁদ দেখার পর নড়ে; নড়লে ওই মাসের
-        কর্মদিবস বদলায়, তার সাথে দৈনিক টার্গেটের হর আর পে-রোলের `d ÷ D`।
+        Careful: the numbers are not wrong, but they are **uncertain**, and that was
+        invisible for a long time. Lunar-calendar holiday dates move after the moon is
+        sighted; when they move, that month's workdays change, and with them the
+        denominator of the daily target and payroll's `d ÷ D`.
 
-        ⚠️⚠️ যে সময়ে এটা ধরা পড়ত সেটাই সবচেয়ে খারাপ সময়: ঘোষণা এসে তারিখ
-        সরার পর — অর্থাৎ সংখ্যাটা তখন ইতিমধ্যে ছাপা ও বিলি হয়ে গেছে।
+        Careful: the worst moment to find out would be after the announcement moves the
+        date, when the numbers have already been printed and handed out.
 
-        ⚠️ তালিকাটা `meta` থেকেই, নতুন করে গোনা হয় না — গুনলে অনিশ্চয়তার
-        দ্বিতীয় সংজ্ঞা দাঁড়াত, আর একদিন পর্দা ও Excel দুই তালিকা দেখাত।
+        Careful: the list comes from `meta`, not recounted here; recounting would
+        create a second definition of uncertainty, and one day the screen and Excel
+        would show two different lists.
       */}
       {meta.approximateHolidayDates.length > 0 && (
         <Caveat>
@@ -108,8 +111,8 @@ export function MetaNote({ meta }: { meta: ReportMeta }) {
 }
 
 /**
- * সরু আউটলাইন চিপ — দিনের ধরন, ক্যাটাগরি, অ্যাপ/সাইট।
- * ⚠️ সলিড লাল **নয়**। এগুলো কোনো সমস্যা নয়, শুধু শ্রেণিবিভাগ।
+ * Thin outline chip: day type, category, app/site.
+ * Careful: **not** solid red. These are not problems, just classification.
  */
 export function Pill({
   children,
@@ -130,16 +133,16 @@ export function Pill({
 }
 
 /**
- * সমন্বয়ের ঘণ্টা — **চিহ্ন সহ**।
+ * Adjustment hours, **with sign**.
  *
- * ⭐⚠️ এখানে `<Hours>` ব্যবহার করা যায় না। `formatDuration()` ভেতরে
- *    `Math.max(0, …)` করে, তাই −১.৫ ঘণ্টার সমন্বয় পর্দায় "0মি" হয়ে যেত —
- *    অর্থাৎ **কেটে নেওয়া ঘণ্টা একেবারে অদৃশ্য**। অথচ `delta_sec` ঋণাত্মক
- *    হতেই পারে (schema: "+ = ঘণ্টা ফেরত · − = কেটে নেওয়া"), আর কারো ঘণ্টা
- *    কেটে নেওয়া হলে সেটাই রিপোর্টের সবচেয়ে জরুরি সংখ্যা।
+ * Careful: `<Hours>` cannot be used here. `formatDuration()` applies
+ *    `Math.max(0, …)` internally, so a -1.5 hour adjustment would show as "0m", and
+ *    **deducted hours would be completely invisible**. Yet `delta_sec` can well be
+ *    negative (schema: "+ = hours returned, - = deducted"), and when someone's hours
+ *    are deducted, that is the most important number in the report.
  *
- * ⚠️ শূন্য হলে `—`, `0মি` নয়: বেশিরভাগ সারিতেই কোনো সমন্বয় থাকে না, আর
- *    কলামজুড়ে "0মি" থাকলে যেখানে সত্যিই সমন্বয় হয়েছে সেটা চোখেই পড়ত না।
+ * Careful: zero shows `—`, not `0m`: most rows have no adjustment, and a column
+ *    full of "0m" would hide the rows where there really was one.
  */
 export function SignedHours({ hours }: { hours: number }) {
   if (!Number.isFinite(hours) || hours === 0) {
@@ -169,10 +172,10 @@ export const CATEGORY_LABEL: Record<UsageCategory, string> = {
 };
 
 /**
- * ⚠️ বড় রেঞ্জে সারি হাজারে পৌঁছায় (৩৭০ দিন × ১৫ জন = ৫৫৫০)। সবগুলো DOM-এ
- *    বসালে পেজটা কয়েক সেকেন্ডের জন্য জমে যেত, অথচ পর্দায় কেউ দুশোর বেশি
- *    সারি পড়ে না। তাই কেটে দেখানো হয় — কিন্তু **চুপচাপ নয়**, আর পুরোটা
- *    যে Excel-এ আছে সেটাও বলে দেওয়া হয়।
+ * Careful: on a big range, rows reach the thousands (370 days x 15 people = 5550).
+ *    Putting them all in the DOM would freeze the page for a few seconds, and nobody
+ *    reads more than two hundred rows on screen. So the display is truncated, but
+ *    **not silently**, and it also says that the whole thing is in Excel.
  */
 export const MAX_SHOWN_ROWS = 500;
 

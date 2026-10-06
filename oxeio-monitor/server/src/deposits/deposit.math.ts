@@ -1,12 +1,12 @@
 /**
- * R21 — জামানতের খাঁটি হিসাব। কোনো I/O নেই।
+ * Pure security-deposit calculations. No I/O.
  *
- * `payroll.math.ts`-এর মতোই আলাদা ফাইলে, একই কারণে: এখানকার ভুল সরাসরি
- * মানুষের পকেটে পড়ে, আর ডাটাবেসের সাথে মিশে থাকলে নিরিবিলি পরীক্ষা করা
- * যেত না।
+ * In its own file like `payroll.math.ts`, for the same reason: a mistake here
+ * lands directly in someone's pocket, and mixed with the database it could not
+ * be tested quietly.
  */
 
-/** '2026-08' — বছর-মাস, ঢাকার ক্যালেন্ডারে। */
+/** '2026-08' — year-month, in the Dhaka calendar. */
 export type YearMonth = string;
 
 export const YEAR_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -16,11 +16,11 @@ export function isYearMonth(value: string): boolean {
 }
 
 /**
- * `2026-08` → `2026-09`।
+ * `2026-08` → `2026-09`.
  *
- * ⚠️ `new Date()` দিয়ে করা হয় **না** — মাসের যোগ-বিয়োগে JS-এর Date
- * সময়-অঞ্চল টেনে আনে, আর ৩১ তারিখে "পরের মাস" কখনো দুই মাস এগিয়ে যায়।
- * এখানে ব্যাপারটা নিছক দুটো সংখ্যা।
+ * Careful: this is **not** done with `new Date()` — JS Date pulls in the time
+ * zone when adding or subtracting months, and on the 31st "next month" can
+ * jump two months ahead. Here it is just two numbers.
  */
 export function nextMonth(ym: YearMonth): YearMonth {
   const [y, m] = ym.split('-').map(Number);
@@ -29,7 +29,7 @@ export function nextMonth(ym: YearMonth): YearMonth {
     : `${y}-${String(m + 1).padStart(2, '0')}`;
 }
 
-/** শুরু থেকে শেষ পর্যন্ত প্রতিটা মাস, **দুই প্রান্তসহ**। */
+/** Every month from start to end, **both ends included**. */
 export function monthsBetween(from: YearMonth, to: YearMonth): YearMonth[] {
   if (!isYearMonth(from) || !isYearMonth(to)) {
     throw new RangeError('Months must be in YYYY-MM format');
@@ -38,14 +38,15 @@ export function monthsBetween(from: YearMonth, to: YearMonth): YearMonth[] {
   const out: YearMonth[] = [];
   let cursor = from;
 
-  // ⚠️ স্ট্রিং তুলনাই যথেষ্ট — 'YYYY-MM' লেক্সিকোগ্রাফিক ক্রমে সময়ের
-  //    ক্রমের সমান, কারণ দুটো ঘরই শূন্য-প্যাড করা।
+  // Careful: string comparison is enough — 'YYYY-MM' sorts lexicographically in
+  // time order, because both fields are zero-padded.
   while (cursor <= to) {
     out.push(cursor);
     cursor = nextMonth(cursor);
 
-    // ⚠️⚠️ ছাদ। `to` ভুল করে ২৩০০ সাল হলে লুপটা কয়েক হাজার বার ঘুরে
-    //    মেমরি খেত — আর সেটা ধরা পড়ত সার্ভার পড়ে যাওয়ায়, ভুল ইনপুটে নয়।
+    // Careful: a ceiling. If `to` were mistakenly the year 2300, the loop would
+    // run thousands of times and eat memory — and it would be found when the
+    // server fell over, not by rejecting the bad input.
     if (out.length > 600) {
       throw new RangeError('The month range is too long (over 50 years)');
     }
@@ -55,10 +56,11 @@ export function monthsBetween(from: YearMonth, to: YearMonth): YearMonth[] {
 }
 
 /**
- * দুটো তারিখের মধ্যে কত দিন — শেষেরটা **গোনা হয়**।
+ * Days between two dates — the last one is **counted**.
  *
- * ⚠️ ৩১ জুলাই জানিয়ে ৩০ আগস্ট শেষ দিন = ৩০ দিন, ২৯ নয়। মানুষ "৩০ দিনের
- * নোটিশ" বলতে এটাই বোঝে, আর এক দিনের হেরফেরে কারো ৫,০০০ টাকা আটকে যেত।
+ * Careful: notice given on 31 July with the last day 30 August = 30 days, not
+ * 29. That is what people mean by "30 days' notice", and a one-day difference
+ * could withhold someone's 5,000 taka.
  */
 export function daysBetween(from: Date, to: Date): number {
   const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -66,24 +68,24 @@ export function daysBetween(from: Date, to: Date): number {
 }
 
 export interface NoticeCheck {
-  /** কত দিনের নোটিশ পাওয়া গেছে — দুটো তারিখের একটাও না থাকলে `null` */
+  /** How many days' notice was given — `null` if either date is missing */
   daysGiven: number | null;
-  /** নিয়ম কত দিনের */
+  /** How many days the rule requires */
   daysRule: number;
   /**
-   * নিয়ম অনুযায়ী ফেরত পাওয়ার কথা কি না।
+   * Whether a refund is due under the rule.
    *
-   * ⚠️ এটাই **শেষ কথা নয়** — সিদ্ধান্তটা মালিকের (ADR-028)। এই মানটা শুধু
-   * পর্দায় "নিয়ম কী বলে" দেখানোর জন্য, আর ডিফল্ট বোতামটা কোনটা হবে তা
-   * ঠিক করতে।
+   * Careful: this is **not the last word** — the decision is the owner's
+   * (ADR-028). This value only shows "what the rule says" on screen and picks
+   * which button is the default.
    */
   meetsRule: boolean;
 }
 
 /**
- * ⚠️ তারিখ না জানা থাকলে `meetsRule` **false** — "জানি না"-কে "হ্যাঁ" ধরে
- * নেওয়া মানে নীরবে নিয়মটা মাফ করে দেওয়া। মালিক তবু ফেরত দিতে পারবেন,
- * কিন্তু সেটা তখন তাঁর সজ্ঞান সিদ্ধান্ত।
+ * Careful: if a date is unknown, `meetsRule` is **false** — treating "don't
+ * know" as "yes" would silently waive the rule. The owner can still refund,
+ * but then it is their conscious decision.
  */
 export function checkNotice(
   noticeGivenOn: Date | null,
@@ -99,24 +101,25 @@ export function checkNotice(
 }
 
 /**
- * ⭐⭐ **এই কর্মীর জামানত কোন মাস থেকে কাটা শুরু** — একটাই সংজ্ঞা।
+ * **From which month this employee's deposit deductions start** — one definition.
  *
- * ⚠️⚠️ প্রথমে এটা **দুই জায়গায় লেখা ছিল** — `ensureLedger()` খাতা ভরার
- * সময় একবার, আর `balances()` পর্দায় দেখানোর সময় আরেকবার। দুটো আলাদা হয়ে
- * গেলে পর্দা এক মাস দেখাত আর খাতায় বসত অন্যটা, আর পার্থক্যটা কেউ ধরতে
- * পারত না — কারণ দুটোই "ঠিক" দেখাত, শুধু একে অন্যের সাথে মিলত না।
+ * Careful: it was first **written in two places** — `ensureLedger()` when
+ * filling the ledger, and `balances()` when showing the screen. If the two
+ * drifted apart, the screen would show one month and the ledger record
+ * another, and nobody could spot the difference — both would look "right",
+ * they just would not match each other.
  *
- * ⚠️ ক্রমটাই নিয়ম:
- *   ১· মালিকের বেছে দেওয়া মাস থাকলে **সেটাই চূড়ান্ত** — `joined_on`-এর
- *      উপরেও। ওটা অনুমান, আর এটা বিবৃতি।
- *   ২· নইলে যোগদানের মাস আর নিয়মের মাসের মধ্যে যেটা **পরে**।
+ * Careful: the order is the rule:
+ *   1. If the owner picked a month, **that is final** — even over `joined_on`.
+ *      One is a guess, the other a statement.
+ *   2. Otherwise, whichever is **later** of the joining month and the policy's month.
  */
 export function effectiveDepositStart(input: {
-  /** মালিকের বেছে দেওয়া, না দিলে `null` */
+  /** Chosen by the owner, `null` if not given */
   override: string | null;
-  /** `joined_on`-এর মাস, না জানলে `null` */
+  /** Month of `joined_on`, `null` if unknown */
   joinedMonth: string | null;
-  /** নিয়মের সাধারণ শুরুর মাস */
+  /** The policy's general start month */
   policyStart: string;
 }): string {
   if (input.override) return input.override;

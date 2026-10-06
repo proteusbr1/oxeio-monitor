@@ -11,24 +11,25 @@ import {
 } from './synthetic-input.rules';
 
 /**
- * **G46** — নকল ইনপুট (মাউস-জিগলার) সন্দেহে চিহ্নিত করা।
+ * **G46**: flag suspected synthetic input (mouse jiggler).
  *
- * ⚠️⚠️ **কেন এটা সার্ভারে, এজেন্টে নয়:** এজেন্ট চলে স্টাফের নিজের মেশিনে।
- * সেখানে বসানো যেকোনো পাহারা তিনি বন্ধ করতে, বদলাতে বা ফাঁকি দিতে পারেন —
- * আর সবচেয়ে খারাপ, **সেটা নীরবে**। বদলে এখানে দেখা হয় সার্ভারে পৌঁছানো
- * ডেটার **আকৃতি**, যেটা লুকানো যায় না: ঘণ্টা দাবি করতে হলে ডেটা পাঠাতেই
- * হবে, আর পাঠালেই আকৃতিটা ধরা পড়ে।
+ * Why this runs on the server, not in the agent: the agent runs on the staff
+ * member's own machine. Any guard placed there can be stopped, altered or
+ * bypassed by them, and worst of all **silently**. Instead, this looks at the
+ * **shape** of the data that reaches the server, which cannot be hidden: to
+ * claim hours the data must be sent, and once it is sent the shape shows.
  *
- * ⭐⭐ ফাঁকির তিনটে পথ, তিনটেই কোথাও না কোথাও ধরা পড়ে:
+ * There are three ways to cheat, and each one is caught somewhere:
  *
- *   ১· **জিগলার চালানো** → এই নিয়ম ধরে
- *   ২· **এজেন্ট বন্ধ করা** → ঘণ্টাও বন্ধ, আর `agent_down` ওঠে
- *   ৩· **এজেন্টে হাত দেওয়া** → `agent_tamper` ওঠে
+ *   1. **Running a jiggler**: this rule catches it
+ *   2. **Stopping the agent**: hours stop too, and `agent_down` is raised
+ *   3. **Tampering with the agent**: `agent_tamper` is raised
  *
- * অর্থাৎ পাহারাটা এড়াতে গেলে **ঘণ্টা হারাতে হয়** — আর সেটাই আসল প্রতিরোধ,
- * কোনো একক কৌশল নয়।
+ * So evading the guard costs **lost hours**, and that is the real deterrent,
+ * not any single technique.
  *
- * ⚠️ এটা **অভিযোগ নয়, দেখার অনুরোধ** — বার্তাটাও সেভাবেই লেখা।
+ * Careful: this is **a request to take a look, not an accusation**, and the
+ * message is worded that way.
  */
 @Injectable()
 export class SyntheticInputCheck {
@@ -43,9 +44,9 @@ export class SyntheticInputCheck {
     const workDate = workDateOf(now);
 
     /**
-     * ⚠️ শুধু `active` — idle বা locked খণ্ড স্ট্রেচ **ভাঙার** জন্য দরকার,
-     * আর সেটা এমনিতেই ঘটে: ওগুলো তালিকায় না থাকায় সময়ের ফাঁক তৈরি হয়,
-     * আর `mergeActive` ওখানেই স্ট্রেচ কেটে দেয়।
+     * Only `active`. Idle or locked segments are needed to **break** a
+     * stretch, and that happens by itself: because they are not in the list a
+     * gap in time appears, and `mergeActive` cuts the stretch there.
      */
     const segments = await this.prisma.activitySegment.findMany({
       where: { workDate, state: 'active' },
@@ -74,9 +75,9 @@ export class SyntheticInputCheck {
     });
 
     /**
-     * ⚠️⚠️ **কর্মী নয়, ডিভাইস ধরে ভাগ করা হয়।** কারো দুটো PC একসাথে চললে
-     * (G32) তাদের খণ্ড মিশে গিয়ে একটা লম্বা "একটানা" স্ট্রেচ বানাত, আর
-     * দুই মেশিনে কাজ করা সৎ কর্মীই সন্দেহে পড়তেন।
+     * **Grouped by device, not by employee.** If someone's two PCs run at the
+     * same time (G32), their segments would merge into one long "unbroken"
+     * stretch, and an honest employee working on two machines would fall under suspicion.
      */
     const byDevice = new Map<
       string,
@@ -106,13 +107,13 @@ export class SyntheticInputCheck {
         startedAt: u.startedAt,
         endedAt: u.endedAt,
         /**
-         * ⭐ process **আর** শিরোনাম — শুধু process নিলে একই ব্রাউজারে
-         * ট্যাব বদলানো "কোনো বদল নয়" মনে হতো, আর সারাদিন ব্রাউজারে কাজ
-         * করা কর্মী সন্দেহে পড়তেন।
+         * The process **and** the title. With the process alone, switching
+         * tabs in the same browser would look like "no change", and someone
+         * who works in the browser all day would fall under suspicion.
          *
-         * ⚠️ শিরোনাম **এখানে জমে না, কোথাও লেখাও হয় না** — শুধু গোনার
-         * জন্য একটা চাবি বানানো হয়, আর অ্যালার্টের `meta`-তেও কেবল
-         * সংখ্যাটাই যায়। কে কোন নথি খুলেছিলেন সেটা এই অ্যালার্ট জানায় না।
+         * Careful: the title is **not accumulated here and not written
+         * anywhere**. It only builds a key for counting, and only the count
+         * goes into the alert's `meta`. This alert does not reveal who opened which document.
          */
         key: `${u.processName}|${u.windowTitle ?? ''}`,
       });
@@ -138,8 +139,8 @@ export class SyntheticInputCheck {
         inputs.push({
           type: 'synthetic_input' as const,
           /**
-           * ⚠️ `warning`, `critical` নয়। এটা সন্দেহ, প্রমাণ নয় — আর একটা
-           * ভুল "critical" মানুষের সম্পর্কে যা ক্ষতি করে, সেটা ফেরানো যায় না।
+           * `warning`, not `critical`. This is suspicion, not proof, and the
+           * damage a wrong "critical" does to a person cannot be undone.
            */
           severity: 'warning' as const,
           deviceId: row.deviceId,
@@ -159,11 +160,11 @@ export class SyntheticInputCheck {
             windows: f.windows,
             scoreSpread: f.scoreSpread,
             /**
-             * ⭐ কোন সীমায় ফেলা হয়েছে সেটাও লেখা — সীমা বদলালে পুরোনো
-             * অ্যালার্টগুলো কেন উঠেছিল তা আর অনুমান করতে হয় না।
+             * The limits applied are recorded too, so after a limit changes
+             * nobody has to guess why older alerts were raised.
              *
-             * ⚠️ ঘর ধরে ধরে লেখা, পুরো অবজেক্ট নয় — Prisma-র `InputJsonValue`
-             * ইন্ডেক্স-সিগনেচারহীন interface মানে না।
+             * Careful: written field by field, not as a whole object. Prisma's
+             * `InputJsonValue` does not accept an interface without an index signature.
              */
             minStretchSec: DEFAULT_SYNTHETIC_LIMITS.minStretchSec,
             maxWindows: DEFAULT_SYNTHETIC_LIMITS.maxWindows,

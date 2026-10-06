@@ -6,14 +6,15 @@ import { teamsCard } from './teams.card';
 export type TeamsOutcome = 'sent' | 'not_configured' | 'failed';
 
 /**
- * **Microsoft Teams চ্যানেল** — সাপ্তাহিক সারাংশ অফিসের চ্যানেলে।
+ * **Microsoft Teams channel**: the weekly summary goes to the office channel.
  *
- * ⭐ গড়নটা <see cref="TelegramChannel"/>-এর হুবহু একই: একটা ঠিকানা, একটা
- * POST, আর কখনো throw না করা। নতুন স্থাপত্য নয়, আরেকটা চ্যানেল।
+ * The structure is exactly the same as <see cref="TelegramChannel"/>: one
+ * address, one POST, and never throwing. Not a new architecture, just another channel.
  *
- * ⚠️⚠️ **কনফিগ না থাকলে চুপচাপ বন্ধ, ক্র্যাশ নয়** — কিন্তু চালুর সময়
- * একবার লগে লেখা হয়। নইলে ছয় মাস পরে কেউ "Teams-এ কিছু আসছে না কেন"
- * খুঁজতে বসত, আর উত্তরটা `.env`-এ লুকিয়ে থাকত।
+ * Careful: **with no config it stops quietly, it does not crash**, but it
+ * writes a line to the log once at startup. Otherwise six months later
+ * someone would be hunting for "why does nothing arrive in Teams", with the
+ * answer hidden in `.env`.
  */
 @Injectable()
 export class TeamsChannel {
@@ -21,9 +22,10 @@ export class TeamsChannel {
   private readonly webhook: string;
 
   /**
-   * ⚠️ পাঠানোর জন্য অপেক্ষা কতক্ষণ। সাপ্তাহিক জব রাতে চলে, তাই ধীর হলেও
-   * ক্ষতি নেই — কিন্তু **সীমা ছাড়া রাখা যাবে না**, নইলে Teams সাড়া না
-   * দিলে জবটা চিরকাল ঝুলে থাকত আর পরের সপ্তাহের জবও চলত না।
+   * Careful: how long to wait for the send. The weekly job runs at night, so
+   * slowness does no harm, but it **must not be left without a limit**:
+   * otherwise if Teams did not respond the job would hang forever and next
+   * week's job would not run either.
    */
   private static readonly TimeoutMs = 15_000;
 
@@ -37,16 +39,16 @@ export class TeamsChannel {
 
   get configured(): boolean {
     /**
-     * ⚠️ শুধু "খালি নয়" নয়, **https-ও** — ভুল করে http বসালে সারাংশটা
-     * (কর্মীর নাম ও ঘণ্টা) প্লেইনটেক্সটে যেত। এটা নীরবে হতে দেওয়া যায় না,
-     * তাই এখানেই আটকানো।
+     * Careful: not just "non-empty" but **https too**. If http were set by
+     * mistake the summary (staff names and hours) would go in plaintext. That
+     * cannot be allowed to happen silently, so it is blocked here.
      */
     return this.webhook.startsWith('https://');
   }
 
   /**
-   * এক দফা পাঠানো। ⚠️ **কখনো throw করে না** — সাপ্তাহিক জবটা এর উপর
-   * দাঁড়িয়ে, আর Teams বন্ধ থাকা মানে হিসাব হারানো নয়।
+   * One send. Careful: it **never throws**; the weekly job depends on it, and
+   * Teams being down does not mean losing the numbers.
    */
   async send(title: string, text: string): Promise<TeamsOutcome> {
     if (!this.configured) return 'not_configured';
@@ -60,10 +62,11 @@ export class TeamsChannel {
       });
 
       /**
-       * ⚠️⚠️ **২০০ মানেই পৌঁছেছে নয়।** Power Automate কার্ডের গড়ন ভুল হলেও
-       * ২০০ ফেরত দেয়, আর চ্যানেলে কিছুই দেখা যায় না — নীরব ব্যর্থতা।
-       * তাই গড়নটা `teams.card.ts`-এ খাঁটি রেখে **টেস্টে বাঁধা** হয়েছে;
-       * এখানে শুধু HTTP স্তরটা দেখা যায়, আর সেটাই সৎভাবে বলা হচ্ছে।
+       * Careful: **200 does not mean it arrived.** Power Automate returns 200
+       * even when the card structure is wrong, and nothing shows in the
+       * channel: a silent failure. So the structure is kept pure in
+       * `teams.card.ts` and **pinned in tests**; only the HTTP layer can be
+       * seen here, and that is what is honestly reported.
        */
       if (!res.ok) {
         this.logger.warn(`Teams refused the message — HTTP ${res.status}`);
@@ -72,8 +75,8 @@ export class TeamsChannel {
 
       return 'sent';
     } catch (err) {
-      // ⚠️ টাইমআউট, DNS, সার্ট — সবই এখানে। বার্তাটা হারায় না, কারণ
-      //    কলার ব্যর্থ হলে পুরো লেখাটা লগে রাখে।
+      // Careful: timeout, DNS, cert: all of them land here. The message is not
+      // lost, because on failure the caller keeps the full text in the log.
       this.logger.warn(
         `Could not reach Teams: ${err instanceof Error ? err.message : String(err)}`,
       );

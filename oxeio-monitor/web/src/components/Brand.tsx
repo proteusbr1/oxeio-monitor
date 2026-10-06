@@ -1,4 +1,4 @@
-/** লোগোর অনুকরণে — সাদা লেখা, লাল X */
+/** Modeled on the logo: white text, red X. */
 export function Wordmark({ className = '' }: { className?: string }) {
   return (
     <span className={`font-semibold tracking-tight ${className}`}>

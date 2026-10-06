@@ -19,17 +19,17 @@ import {
 } from '../../components/ui';
 
 /**
- * ⭐⭐ **R21 — সিকিউরিটি মানি (জামানত)।**
+ * **Security deposit.**
  *
- * মালিকের কথা *(১৫ আগস্ট)*: প্রতি মাসে বেতন থেকে ৫০০ টাকা কেটে রাখা হয়,
- * আর কেউ ৩০ দিন আগে জানিয়ে চাকরি ছাড়লে পুরো জমাটা ফেরত পান।
+ * The owner's rule: "৳500 is withheld from salary each month, and anyone who leaves
+ * giving 30 days' notice gets the whole deposit back."
  *
- * ⚠️⚠️ এই পর্দাটা **owner-only**, ম্যানেজারও নয় — জামানত সরাসরি বেতনের
- * অংশ (ADR-023 · ADR-027)।
+ * Careful: this screen is **owner-only**, not even managers: the deposit is a direct
+ * part of pay (ADR-023, ADR-027).
  *
- * ⭐ কর্মী নিজের জমাটা নিজের পাতায় দেখেন (`/me`), তাই "কত জমল" প্রশ্নের
- * উত্তর জানতে তাঁকে মালিকের কাছে আসতে হয় না — ফিচারটার আসল উদ্দেশ্যই
- * সেটা।
+ * Important: employees see their own deposit on their own page (`/me`), so they
+ * need not come to the owner to learn "how much has been saved"; that is the
+ * whole point of the feature.
  */
 export function DepositsTab() {
   const { data, error, loading, reload } = useApi(
@@ -41,16 +41,16 @@ export function DepositsTab() {
   const [editingRule, setEditingRule] = useState(false);
   const [settling, setSettling] = useState<DepositBalance | null>(null);
   const [startFor, setStartFor] = useState<DepositBalance | null>(null);
-  /** ⭐ মাস-ধরে খাতা ও ভুল অঙ্ক সংশোধনের পর্দা */
+  /** Opens the month-by-month ledger and the wrong-amount correction screen */
   const [monthsFor, setMonthsFor] = useState<DepositBalance | null>(null);
 
   const rows = data?.rows ?? [];
   const open = rows.filter((r) => !r.settlement);
 
   /**
-   * ⚠️ মোট জমা **পয়সা থেকে** যোগ হয়, `balance` স্ট্রিং পার্স করে নয় —
-   *    `Number("500.00")` কাজ করে বটে, কিন্তু বারোটা সারিতে ভাসমান দশমিক
-   *    যোগ করলে শেষে এক পয়সা এদিক-ওদিক হতো, আর সেটা মালিকের চোখে পড়ত।
+   * Careful: the total is summed **from paisa**, not by parsing the `balance`
+   *    string: `Number("500.00")` works, but adding floating-point decimals across
+   *    twelve rows would end a paisa off, and the owner would notice.
    */
   const heldPaisa = open.reduce((sum, r) => sum + r.balancePaisa, 0);
 
@@ -83,11 +83,11 @@ export function DepositsTab() {
         ) : (
           <>
             {/*
-              ⭐ মোটটা উপরে, একবার। মালিকের প্রথম প্রশ্নটা "সব মিলিয়ে কত
-                 টাকা আমার হাতে জমা আছে" — সারি গুনে যোগ করতে হলে ওই
-                 উত্তরটা কেউ কোনোদিন বের করত না।
-              ⚠️ নিষ্পত্তি হয়ে যাওয়া কর্মীদের বাদ দিয়ে — ওই টাকা আর
-                 হাতে নেই, ফেরত (বা বাজেয়াপ্ত) হয়ে গেছে।
+              Important: the total is at the top, once. The owner's first question is
+                 "how much money of mine is being held in all"; nobody would ever work
+                 that out by counting rows and adding.
+              Careful: settled employees are excluded: that money is no longer held;
+                 it has been returned (or forfeited).
             */}
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line px-4 py-3">
               <span className="num text-[19px] font-semibold">
@@ -127,12 +127,12 @@ export function DepositsTab() {
                         {row.months} {row.months === 1 ? 'month' : 'months'}{' '}
                         held
                         {/*
-                          ⭐ **কোন মাস থেকে কাটা হচ্ছে** — এটা না দেখালে
-                             মালিককে অঙ্ক কষে বের করতে হতো, আর ভুলটা
-                             ধরাই পড়ত না।
-                          ⚠️ মালিক নিজে বেছে দিলে সেটা আলাদা করে বলা হয়,
-                             নইলে "নিয়ম অনুযায়ী" — দুটো এক দেখালে কে
-                             কোনটা বসিয়েছে তা আর জানা যেত না।
+                          Important: **which month deductions start from**; without
+                             this the owner would have to work it out, and a mistake
+                             would go unnoticed.
+                          Careful: if the owner picked it, that is stated separately,
+                             otherwise "by rule"; showing both alike would hide who set
+                             which.
                         */}
                         {row.effectiveStart && (
                           <>
@@ -155,19 +155,20 @@ export function DepositsTab() {
 
                   <RowActions>
                     {/*
-                      ⚠️ নিষ্পত্তি হয়ে গেলে বোতামটা **থাকেই না** — সার্ভার
-                         দ্বিতীয়বার ৪০৯ দেয়, তাই বোতাম রাখলে সেটা শুধু
-                         একটা এরর বাক্সে নিয়ে যেত।
+                      Careful: once settled, the button **does not exist**: the server
+                         returns 409 on a second attempt, so a button would only lead to
+                         an error box.
                     */}
                     {/*
-                      ⚠️ নিষ্পত্তি হয়ে গেলে খাতা বন্ধ — সার্ভার ৪০৯ দেয়,
-                         তাই বোতামটাও থাকে না।
+                      Careful: once settled the ledger is closed: the server returns
+                         409, so the button is gone too.
                     */}
                     {/*
-                      ⭐⭐ **মাসগুলো দেখার দরজা।** এতদিন মালিক কেবল যোগফল
-                         দেখতেন (*"2 months held · ৳500"*) — দুটোই সত্যি,
-                         একসাথে পড়লে অর্থহীন। ⚠️ নিষ্পত্তির পরেও দেখা
-                         যায়: খাতা বন্ধ মানে বদলানো যায় না, পড়া যায় না নয়।
+                      Important: **the door to view the months.** The owner used to see
+                         only the total (*"2 months held · ৳500"*): both true, together
+                         meaningless. Careful: it is viewable even after settlement: a
+                         closed ledger means it cannot be changed, not that it cannot
+                         be read.
                     */}
                     <MiniButton onClick={() => setMonthsFor(row)}>
                       Months
@@ -217,9 +218,9 @@ export function DepositsTab() {
               reload();
 
               /**
-               * ⚠️⚠️ কতগুলো কিস্তি মুছল সেটা **বলে দেওয়া হয়** — নীরবে
-               * সারি মুছে ফেলা যাবে না। মালিক যদি ভুল মাস বসিয়ে থাকেন,
-               * এই এক লাইনই তাঁকে সাথে সাথে জানায় কী ঘটেছে।
+               * Careful: it **says how many instalments were deleted**; rows must not
+               * vanish silently. If the owner picked the wrong month, this one line
+               * tells them at once what happened.
                */
               if (result.removed > 0 || result.added > 0) {
                 window.alert(
@@ -266,7 +267,7 @@ export function DepositsTab() {
   );
 }
 
-/** পয়সা → '৳' ছাড়া দুই-দশমিকের সংখ্যা, সার্ভারের `paisaToTaka`-র মতোই */
+/** Paisa to a two-decimal number without '৳', the same as the server's `paisaToTaka` */
 function takaOf(paisa: number): string {
   return (paisa / 100).toFixed(2);
 }
@@ -298,9 +299,9 @@ function EditRule({
   const [active, setActive] = useState(policy.active ? 'yes' : 'no');
 
   /**
-   * ⚠️ ফাঁকা বা অসংখ্যা ঘরে বোতামটা নিষ্ক্রিয় — সার্ভার ৪০০ দিত ঠিকই,
-   *    কিন্তু দেয়ালে পাঠানোর চেয়ে দেখিয়ে দেওয়াই ভালো। ⚠️ `Number('')`
-   *    শূন্য হয়, তাই খালি ঘরটা আলাদা করে দেখা দরকার।
+   * Careful: the button is disabled for an empty or non-numeric field: the server
+   *    would return 400 anyway, but showing it is better than sending people into a
+   *    wall. Careful: `Number('')` is zero, so the empty field needs a separate check.
    */
   const badAmount = amount.trim() === '' || !(Number(amount) > 0);
   const badNotice =
@@ -317,7 +318,7 @@ function EditRule({
             disabled={busy || badAmount || badNotice}
             onClick={() =>
               onSubmit({
-                // ⭐ পর্দা টাকায় নেয়, API পয়সায় — রূপান্তরটা এই এক জায়গায়
+                // The screen takes taka, the API paisa; the conversion is in this one place
                 amountPaisa: Math.round(Number(amount) * 100),
                 startYearMonth: orUndefined(startYearMonth),
                 noticeDays: Number(noticeDays),
@@ -367,12 +368,12 @@ function EditRule({
 }
 
 /**
- * ⭐⭐ নিষ্পত্তির মোডাল — **সিদ্ধান্তটা মালিকের, হিসাবটা পর্দার।**
+ * Settlement modal: **the decision is the owner's, the arithmetic is the screen's.**
  *
- * ⚠️ তারিখ দুটো বসালে পর্দা সাথে সাথে বলে দেয় কত দিনের নোটিশ হলো আর নিয়ম
- * কী বলে, কিন্তু বোতাম দুটোর কোনোটাই লুকায় না। ব্যতিক্রম সবসময়ই থাকে
- * (হাসপাতাল, পারিবারিক কারণ), আর স্বয়ংক্রিয় করলে মালিককে নিয়মটা
- * **ভাঙতে** হতো — অথচ ভাঙার কোনো পথ থাকত না।
+ * Careful: once both dates are entered, the screen says at once how many days of
+ * notice were given and what the rule says, but neither button is ever hidden.
+ * Exceptions always exist (hospital, family reasons), and automating it would force
+ * the owner to **break** the rule when there would be no way to break it.
  */
 function SettleDialog({
   row,
@@ -397,7 +398,7 @@ function SettleDialog({
   const [outcome, setOutcome] = useState<'refunded' | 'forfeited'>('refunded');
   const [note, setNote] = useState('');
 
-  /** দুটো তারিখই থাকলে কত দিন — সার্ভারের `daysBetween`-এর মতোই, শেষ দিনসহ */
+  /** Days between the two dates if both are set, end day included, like the server's `daysBetween` */
   const daysGiven =
     noticeGivenOn && lastWorkingDay
       ? Math.round(
@@ -465,10 +466,10 @@ function SettleDialog({
         <TextField label="Note" value={note} onChange={setNote} />
 
         {/*
-          ⭐ হিসাবটা দেখানো হয়, কিন্তু বোতাম বদলানো হয় না — মালিক নিয়ম
-             জেনে সিদ্ধান্ত নেন, নিয়ম তাঁর হয়ে সিদ্ধান্ত নেয় না।
-          ⚠️ তারিখ না দিলে কিছুই দাবি করা হয় না: "জানা নেই" আর "শর্ত
-             মেলেনি" এক কথা নয়।
+          Important: the calculation is shown but the buttons are not changed: the
+             owner decides knowing the rule; the rule does not decide for them.
+          Careful: with no date nothing is claimed: "not known" and "condition not
+             met" are not the same thing.
         */}
         <FullWidth>
           {daysGiven === null ? (
@@ -492,14 +493,14 @@ function SettleDialog({
 }
 
 /**
- * ⭐⭐ **এই কর্মীর জামানত কোন মাস থেকে কাটা শুরু।**
+ * **From which month this employee's deposit starts being deducted.**
  *
- * ⚠️⚠️ মাস **এগিয়ে** দিলে তার আগের কিস্তিগুলো খাতা থেকে মুছে যায় — এটাই
- * এই জানালার আসল কাজ (ভুল সংশোধন), তাই কথাটা এখানে **আগেই** বলা হয়,
- * সেভ করার পরে নয়।
+ * Careful: moving the month **forward** deletes the earlier instalments from the
+ * ledger; that is this window's real purpose (fixing a mistake), so it is said
+ * **before** saving, not after.
  *
- * ⭐ `month` ইনপুট ব্যবহার করা হয়েছে, তারিখ নয় — প্রশ্নটা "কোন মাস", আর
- * দিন চাইলে মালিককে এমন একটা সিদ্ধান্ত নিতে হতো যেটার কোনো মানেই নেই।
+ * Important: it uses a `month` input, not a date: the question is "which month",
+ * and asking for a day would force the owner into a decision that means nothing.
  */
 function StartMonthDialog({
   row,
@@ -523,8 +524,9 @@ function StartMonthDialog({
         <>
           <MiniButton onClick={onClose}>Cancel</MiniButton>
           {/*
-            ⚠️ "নিয়মে ফেরত" আলাদা বোতাম — ঘরটা খালি করে সেভ করলে সেটা
-               "কিছু বলিনি" নাকি "নিয়মে ফেরাও" তা বোঝা যেত না।
+            Careful: "back to rule" is a separate button; if you cleared the field and
+               saved, it could not be told whether that meant "I said nothing" or
+               "return to the rule".
           */}
           {row.startYearMonth !== null && (
             <MiniButton disabled={busy} onClick={() => onSubmit(null)}>
@@ -566,18 +568,18 @@ function StartMonthDialog({
 }
 
 /**
- * ⭐⭐⭐ **একজনের মাস-ধরে খাতা, আর ভুল অঙ্ক সংশোধন** *(৫ সেপ্টেম্বর ২০২৬)*।
+ * **One person's month-by-month ledger, and correcting a wrong amount.**
  *
- * ⚠️⚠️ **কেন এটা দরকার হলো:** মালিকের পাতায় ছিল কেবল যোগফল —
- * *"2 months held · ৳500"*। দুটোই সত্যি, একসাথে পড়লে অর্থহীন, আর মাঠে
- * ঠিক সেই প্রশ্নই এসেছে: *"Saifur OX-10 2 mase 500 joma dekhacche keno?"*
- * কারণটা ছিল একটা মাস ৳০-তে বসে থাকা — কিন্তু **মাসগুলো দেখারই কোনো উপায়
- * ছিল না** মালিকের পর্দায় (কেবল কর্মীর নিজের `/me/deposit`-এ)।
+ * Careful — why this was needed: the owner's page had only the total, *"2 months
+ * held · ৳500"*. Both true, together meaningless, and in the field exactly that
+ * question came up: why does OX-10 show 2 months with 500? The cause was one month
+ * sitting at ৳0, but **there was no way to see the months** on the owner's screen
+ * (only on the employee's own `/me/deposit`).
  *
- * ⚠️ আর দেখা গেলেও **সংশোধনের পথ ছিল না**: `ensureLedger()` বিদ্যমান সারি
- * কখনো হালনাগাদ করে না (ইচ্ছাকৃত — নিয়মের অঙ্ক বদলালে পুরোনো মাস ফিরে
- * লেখা হয় না)। শেষমেশ সারানো গেছে একটা কৌশলে, যেটা কেবল **শুরুর দিকের**
- * মাসে খাটে আর কোথাও লেখাও ছিল না।
+ * Careful: and even when visible there was **no way to correct**: `ensureLedger()`
+ * never updates an existing row (deliberate: if the rule's amount changes, past
+ * months are not rewritten). It was finally fixed by a trick that only works on
+ * **early** months and was not written down anywhere.
  */
 function MonthsDialog({
   row,
@@ -599,9 +601,9 @@ function MonthsDialog({
   const mutation = useMutation();
 
   /**
-   * ⚠️ টাকা → পয়সা এখানেই, আর `Math.round` দিয়ে। ভাসমান গুণফল
-   *    (`500.10 * 100 = 50009.999…`) সরাসরি পাঠালে সার্ভারের `@IsInt()`
-   *    ৪০০ দিত, আর মালিক বুঝতেন না কী ভুল করলেন।
+   * Careful: taka to paisa happens here, with `Math.round`. Sending a floating-point
+   *    product (`500.10 * 100 = 50009.999...`) directly would make the server's
+   *    `@IsInt()` return 400, and the owner would not understand what they did wrong.
    */
   const paisa = Math.round(Number(amount) * 100);
   const ready =
@@ -649,9 +651,9 @@ function MonthsDialog({
             value={amount}
             onChange={setAmount}
             /*
-              ⚠️⚠️ শূন্য বসানো যায় না, আর কারণটা এখানেই লেখা — সার্ভার ও
-                 ডাটাবেস দুটোই আটকায়, কিন্তু বাধার কারণ পর্দায় না লিখলে
-                 মালিক বারবার চেষ্টা করতেন।
+              Careful: zero cannot be entered, and the reason is written right here:
+                 the server and the database both block it, but without the reason on
+                 screen the owner would keep trying.
             */
             hint="More than zero. To skip the early months use Start month instead."
           />
@@ -676,8 +678,8 @@ function MonthsDialog({
                       reason.trim(),
                     );
                     setEditing(null);
-                    // ⭐ দুটোই — ভেতরের তালিকা আর বাইরের যোগফল, নইলে
-                    //   পর্দায় দুটো সংখ্যা দুই কথা বলত
+                    // Both: the inner list and the outer total, or the screen would
+                    //   show two numbers saying two things
                     months.reload();
                     onSaved();
                   })

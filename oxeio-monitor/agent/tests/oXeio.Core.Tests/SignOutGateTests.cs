@@ -3,12 +3,12 @@ using oXeio.Core.Agent;
 namespace oXeio.Core.Tests;
 
 /// <summary>
-/// সাইন আউট করা যাবে কি না, আর করলে কী হারাবে।
+/// Whether signing out is allowed, and what is lost if you do.
 ///
-/// ⚠️⚠️ এই নিয়মটার আসল কাজ মেনু নিষ্ক্রিয় রাখা নয় — <b>ভুল লোকের নামে
-/// ঘণ্টা বসা ঠেকানো</b>। সাইন আউটের পর আউটবক্সে সারি পড়ে থাকলে পরের জন
-/// সাইন ইন করামাত্র সেগুলো তার টোকেনে চলে যেত, আর কেউ কোনোদিন টের পেত না।
-/// তাই এখানকার সীমানাগুলোই সবচেয়ে গুরুত্বপূর্ণ।
+/// Careful: the real job of this rule is not disabling a menu; it is <b>preventing
+/// hours from landing under the wrong person's name</b>. If rows were left in the
+/// outbox after sign-out, they would go out under the next person's token the moment
+/// they sign in, and nobody would ever notice. So the boundaries here matter most.
 /// </summary>
 public class SignOutGateTests
 {
@@ -31,13 +31,15 @@ public class SignOutGateTests
             SignOutGate.Check(NotEnrolled, NotRevoked, Nothing));
 
     /**
-     * ⚠️⚠️ <b>ক্রমের টেস্ট — TrackingGate-এর সাথে হুবহু মেলে।</b>
+     * Careful: <b>the order test; it matches TrackingGate exactly.</b>
      *
-     * revoke হলে টোকেন মুছে যায়, তাই ওই মুহূর্তে "enrolled নয়"-ও সত্যি।
-     * দুটো শর্তই মেলে বলেই ক্রমটা লিখে রাখা দরকার, নইলে বাতিল মেশিনে
-     * স্টাফ দেখত "সাইন ইন করা নেই" — অথচ আসল কথা অফিস এটা বন্ধ করেছে।
+     * On revoke the token is deleted, so "not enrolled" is true at that moment too.
+     * Both conditions hold, which is why the order must be written down; otherwise
+     * staff on a revoked machine would see "not signed in", when the real fact is that
+     * the office switched it off.
      *
-     * ⭐ দুই গেট একই ক্রম না মানলে tray-র দুই জায়গায় দুই রকম ব্যাখ্যা যেত।
+     * If the two gates did not follow the same order, the two places in the tray would
+     * give two different explanations.
      */
     [Fact]
     public void বাতিল_ডিভাইসে_revoke_ই_উত্তর_সাইন_ইন_নেই_নয()
@@ -46,7 +48,7 @@ public class SignOutGateTests
             SignOutGate.Verdict.Revoked,
             SignOutGate.Check(NotEnrolled, Revoked, Nothing));
 
-        // দুই গেটের ক্রম একই — এটাই আসল দাবি
+        // both gates have the same order: this is the real claim
         Assert.Equal(
             TrackingGate.Verdict.Revoked,
             TrackingGate.Check(NotEnrolled, Revoked));
@@ -56,7 +58,7 @@ public class SignOutGateTests
     public void বাতিল_ডিভাইসে_সাইন_আউট_নিষ্ক্রিয়() =>
         Assert.False(SignOutGate.Allows(NotEnrolled, Revoked, Something));
 
-    /** ⭐⭐ এই ফাইলের মূল টেস্ট */
+    /** The main test of this file */
     [Fact]
     public void অপাঠানো_সারি_থাকলে_আলাদা_উত্তর()
     {
@@ -64,15 +66,15 @@ public class SignOutGateTests
             SignOutGate.Verdict.PendingUpload,
             SignOutGate.Check(Enrolled, NotRevoked, Something));
 
-        // ⚠️ আটকানো হয় না — শুধু জিজ্ঞাসা করা হয়। আটকে দিলে অফলাইন
-        //    মেশিনে কেউ কোনোদিন সাইন আউট করতে পারত না, আর শেয়ার করা PC-তে
-        //    ঘণ্টা ভুল লোকের নামেই যেত — যা ঠেকাতে চাইছি ঠিক সেটাই।
+        // Careful: it does not block, it only asks. Blocking would mean nobody could
+        // ever sign out on an offline machine, and on a shared PC hours would go to the
+        // wrong person, exactly what we are trying to prevent.
         Assert.True(SignOutGate.Allows(Enrolled, NotRevoked, Something));
     }
 
     /**
-     * ⚠️ গণনায় বাগ থাকলে সেটা যেন বাড়তি সতর্কবার্তা না বানায় — ঋণাত্মক
-     * সংখ্যা "কিছু নেই"-এর সমান। বাগের শাস্তি স্টাফের পাওয়ার কথা নয়।
+     * Careful: a bug in the count must not produce an extra warning: a negative number
+     * equals "nothing". Staff should not pay for a bug.
      */
     [Fact]
     public void ঋণাত্মক_গণনা_কিছু_নেই_ধরা_হয() =>
@@ -87,8 +89,8 @@ public class SignOutGateTests
             SignOutGate.Check(Enrolled, NotRevoked, 1));
 
     /**
-     * ⚠️⚠️ বার্তাটা স্টাফকে <b>তথ্য ফেলে দিতে</b> রাজি করাচ্ছে। তাই তিনটে
-     * জিনিস তাতে থাকতেই হবে: কতগুলো, কী হবে, আর বাঁচার পথ।
+     * Careful: the message is persuading staff to <b>throw data away</b>. So three
+     * things must be in it: how many, what will happen, and the way out.
      */
     [Fact]
     public void অপাঠানো_থাকলে_বার্তায়_সংখ্যা_ক্ষতি_ও_পথ_তিনটেই_থাকে()
@@ -100,7 +102,7 @@ public class SignOutGateTests
         Assert.Contains("Sync now", text, StringComparison.Ordinal);
     }
 
-    /** ⚠️ "1 items" — অযত্নের ছাপ থাকলে গোটা সতর্কবার্তাই কম বিশ্বাসযোগ্য */
+    /** Careful: "1 items": any sign of carelessness makes the whole warning less believable */
     [Fact]
     public void একবচন_ও_বহুবচন_আলাদা()
     {
@@ -112,9 +114,9 @@ public class SignOutGateTests
     }
 
     /**
-     * ⚠️⚠️ "আবার সাইন ইন করা যাবে" বোঝানো জরুরি। না বোঝালে স্টাফ ভাবত
-     * সাইন আউট মানে চিরতরে বাদ পড়া, আর ভয়ে শেয়ার করা PC-তে কেউ সাইন
-     * আউট করত না — তখন ঘণ্টা ভুল লোকের নামেই যেত।
+     * Careful: it is important to convey "you can sign in again". If not, staff would
+     * think signing out means being removed for good, and out of fear nobody would sign
+     * out on a shared PC; then hours would go to the wrong person.
      */
     [Fact]
     public void সব_পাঠানো_হয়ে_গেলে_বার্তা_ভয়_দেখায়_না()
@@ -126,9 +128,9 @@ public class SignOutGateTests
     }
 
     /**
-     * ⚠️ যে অবস্থায় সাইন আউট করাই যায় না, সেখানে বার্তা চাওয়া মানে কলারের
-     * ভুল — নীরবে একটা লাইন ফেরত দিলে কোনোদিন স্টাফ এমন "নিশ্চিত করুন?"
-     * পড়ত যার কোনো ফলই নেই।
+     * Careful: in a state where signing out is not possible at all, asking for a
+     * message is the caller's mistake; silently returning a line would show staff a
+     * "confirm?" that has no consequence.
      */
     [Theory]
     [InlineData(SignOutGate.Verdict.NotSignedIn)]

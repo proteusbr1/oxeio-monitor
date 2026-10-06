@@ -1,21 +1,22 @@
 /**
- * 'YYYY-MM-DD' → `@db.Date` কলামে বসানোর মতো `Date`।
+ * 'YYYY-MM-DD' -> a `Date` fit to store in a `@db.Date` column.
  *
- * ⚠️ এখানে `src/agent/util/dhaka-time.ts` ব্যবহার করা হয় **না**, আর সেটা
- * ইচ্ছাকৃত। ওই ফাইলটা কোনো *instant*-কে ঢাকার তারিখে নামায় (যেমন একটা
- * সেগমেন্ট কোন কর্মদিবসে পড়ল)। কিন্তু যোগদানের তারিখ বা ছুটির তারিখ কোনো
- * instant নয় — নিছক ক্যালেন্ডার তারিখ, যেটা মানুষ হাতে লিখে দিয়েছে।
- * ওটার উপর টাইমজোন চাপালে ০১ তারিখ কখনো ৩১ হয়ে যেত।
+ * Careful: `src/agent/util/dhaka-time.ts` is deliberately **not** used here.
+ * That file converts an *instant* to a Dhaka date (for example which workday a
+ * segment falls on). But a joining date or a holiday date is not an instant:
+ * it is a plain calendar date that a person wrote by hand. Applying a
+ * timezone to it would sometimes turn the 1st into the 31st.
  *
- * ⚠️ আসল ফাঁদ: `new Date('2026-08-10T00:00:00')` (শেষে `Z` ছাড়া) সার্ভারের
- * **স্থানীয়** সময় ধরে পড়া হয়। সার্ভার ঢাকায় থাকলে সেটা UTC-তে আগের দিনের
- * ১৮:০০ — অর্থাৎ ডাটাবেসে একদিন পিছিয়ে বসত, আর ছুটির ক্যালেন্ডার নীরবে
- * এক দিন সরে যেত। তাই `Z` স্পষ্ট করে লেখা আছে।
+ * Careful: the real trap: `new Date('2026-08-10T00:00:00')` (without a
+ * trailing `Z`) is read in the server's **local** time. If the server is in
+ * Dhaka, that is 18:00 of the previous day in UTC, so the database would get
+ * a date one day behind and the holiday calendar would silently shift by a
+ * day. That is why the `Z` is written explicitly.
  */
 
 const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-/** ফরম্যাট বা মান ভুল হলে `null` — কী স্ট্যাটাস যাবে সেটা কলার ঠিক করবে */
+/** `null` on a bad format or value; the caller decides which status to return */
 export function parseCalendarDate(value: string): Date | null {
   const m = CALENDAR_DATE.exec(value);
   if (!m) return null;
@@ -23,8 +24,8 @@ export function parseCalendarDate(value: string): Date | null {
   const parsed = new Date(`${value}T00:00:00.000Z`);
   if (Number.isNaN(parsed.getTime())) return null;
 
-  // ⚠️ `2026-02-31` কে JS নীরবে ০৩ মার্চ বানিয়ে দেয়। ফিরে মিলিয়ে না দেখলে
-  //    ছুটির ক্যালেন্ডারে এমন তারিখ বসত যা কেউ লেখেনি।
+  // Careful: JS silently turns `2026-02-31` into 3 March. Without checking it
+  // back, the holiday calendar would get a date nobody wrote.
   if (parsed.toISOString().slice(0, 10) !== value) return null;
 
   return parsed;

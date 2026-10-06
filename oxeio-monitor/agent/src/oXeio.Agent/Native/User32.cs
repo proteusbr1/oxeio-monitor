@@ -7,17 +7,17 @@ namespace oXeio.Agent.Native;
 internal static partial class User32
 {
     /// <summary>
-    /// ⚠️ <b>সেশন-ভিত্তিক।</b> Session 0 (Windows Service) থেকে ডাকলে ভুল ফল দেয় —
-    /// এজন্যই এজেন্টকে ইউজার সেশনে চালাতেই হবে (06-Research § ২.২)।
-    /// ⚠️ <c>plii.cbSize</c> = 8 না দিলে false ফেরত দেয় আর dwTime শূন্য থেকে যায়।
+    /// Careful: <b>session-based.</b> Called from Session 0 (a Windows Service) it gives wrong
+    /// results, which is why the agent must run in the user session (06-Research section 2.2).
+    /// Careful: unless <c>plii.cbSize</c> = 8 is passed, it returns false and dwTime stays zero.
     /// </summary>
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool GetLastInputInfo(ref LASTINPUTINFO plii);
 
     /// <summary>
-    /// Modern standby-তে suspend খবর পাওয়ার আসল উপায়। রেজিস্টার না করলে
-    /// Windows আর বিনামূল্যে ব্রডকাস্ট পাঠায় না — তখন ঘুম ধরা পড়ে না।
+    /// The real way to receive suspend notifications in Modern standby. If not registered, Windows
+    /// no longer sends the broadcast for free, and then sleep is not detected.
     /// </summary>
     [LibraryImport("user32.dll", SetLastError = true)]
     internal static partial nint RegisterSuspendResumeNotification(nint hRecipient, uint flags);
@@ -38,9 +38,9 @@ internal static partial class User32
     internal static partial nint GetForegroundWindow();
 
     /// <summary>
-    /// উইন্ডোর টাইটেল। ⚠️ ফেরত মান = কত অক্ষর লেখা হলো; ০ মানে টাইটেল
-    /// খালি **অথবা** কল ব্যর্থ — দুটো আলাদা করা যায় না, তাই দুটোকেই
-    /// "টাইটেল নেই" ধরা হয়।
+    /// The window's title. Careful: the return value is the number of characters written; 0 means
+    /// the title is empty **or** the call failed. The two cannot be told apart, so both are treated
+    /// as "no title".
     /// </summary>
     [LibraryImport("user32.dll", EntryPoint = "GetWindowTextW", SetLastError = true)]
     internal static unsafe partial int GetWindowText(nint hWnd, char* lpString, int nMaxCount);
@@ -48,17 +48,18 @@ internal static partial class User32
     [LibraryImport("user32.dll", EntryPoint = "GetWindowTextLengthW", SetLastError = true)]
     internal static partial int GetWindowTextLength(nint hWnd);
 
-    /// <summary>উইন্ডোর মালিক প্রসেস। ফেরত মান thread id, যেটা এখানে লাগে না।</summary>
+    /// <summary>The window's owner process. The return value is the thread id, which is not needed
+    /// here.</summary>
     [LibraryImport("user32.dll", SetLastError = true)]
     internal static partial uint GetWindowThreadProcessId(nint hWnd, out uint lpdwProcessId);
 
-    // ── মনিটর ও ক্যাপচার ────────────────────────────────────────────────────
+    // ── Monitors and capture ─────────────────────────────────────────────
 
     /// <summary>
-    /// ⚠️ প্রতিটি ক্যাপচারে নতুন করে ডাকা হয়, ক্যাশ করা হয় না।
-    /// <c>Screen.AllScreens</c> ব্যবহার করা হয়নি — ওটা তৈরির সময়ের সীমা ধরে রাখে,
-    /// আর মিশ্র-DPI সেটআপে ভুল মাপ দেয়। ডক/আনডক বা মনিটর খুলে-লাগালে
-    /// পুরোনো তালিকা ধরে ক্যাপচার করলে কালো ছবি আসত।
+    /// Careful: called afresh for every capture, not cached. <c>Screen.AllScreens</c> is not used:
+    /// it keeps the bounds from when it was created and gives wrong sizes in mixed-DPI setups. When
+    /// docking/undocking or plugging/unplugging a monitor, capturing from an old list would produce
+    /// black images.
     /// </summary>
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -77,12 +78,12 @@ internal static partial class User32
     [LibraryImport("user32.dll")]
     internal static partial int ReleaseDC(nint hWnd, nint hDC);
 
-    /// <summary>এজেন্ট যেন নিজের উইন্ডোর ছবি না তোলে।</summary>
+    /// <summary>So the agent does not capture its own window.</summary>
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool SetWindowDisplayAffinity(nint hWnd, uint dwAffinity);
 
-    /// <summary>GDI/USER হ্যান্ডেল লিক আছে কি না দেখার জন্য (0 = GDI, 1 = USER)।</summary>
+    /// <summary>To check for GDI/USER handle leaks (0 = GDI, 1 = USER).</summary>
     [LibraryImport("user32.dll")]
     internal static partial uint GetGuiResources(nint hProcess, uint uiFlags);
 }

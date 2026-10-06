@@ -6,7 +6,7 @@ public class RetryPolicyTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 8, 1, 12, 0, 0, TimeSpan.Zero);
 
-    // ── ব্যাকঅফের ধাপ ───────────────────────────────────────────────────────
+    // ── backoff steps ───────────────────────────────────────────────────────
 
     [Fact]
     public void প্রথম_ব্যর্থতায়_base_delay()
@@ -28,14 +28,14 @@ public class RetryPolicyTests
     [Fact]
     public void সিলিং_ছাড়ায়_না()
     {
-        // ৫ × ২^৯ = ২৫৬০ সেকেন্ড, কিন্তু সিলিং ৫ মিনিট
+        // 5 x 2^9 = 2560 seconds, but the ceiling is 5 minutes
         Assert.Equal(TimeSpan.FromMinutes(5), RetryPolicy.Default.DelayFor(10));
     }
 
     /// <summary>
-    /// দশ দিন অফলাইন থাকলে attempt কয়েক হাজারে পৌঁছায়। Math.Pow তখন ∞ দেয়,
-    /// আর TimeSpan.FromSeconds(∞) OverflowException ছোড়ে — অর্থাৎ ঠিক যে
-    /// মেশিনটার ডেটা সবচেয়ে বেশি জমেছে, তারই সিঙ্ক ওয়ার্কার মরত।
+    /// After ten days offline the attempt count reaches several thousand. Math.Pow then
+    /// gives infinity, and TimeSpan.FromSeconds(infinity) throws OverflowException, so the
+    /// sync worker of exactly the machine with the most accumulated data would die.
     /// </summary>
     [Fact]
     public void বহু_চেষ্টার_পরেও_overflow_হয়_না()
@@ -44,7 +44,7 @@ public class RetryPolicyTests
         Assert.Equal(TimeSpan.FromMinutes(5), RetryPolicy.Default.DelayFor(int.MaxValue));
     }
 
-    /// <summary>রিকভারির পথে throw করা মানে ডেটা আর কোনোদিন না যাওয়া।</summary>
+    /// <summary>Throwing on the recovery path means the data never goes out again.</summary>
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
@@ -67,7 +67,7 @@ public class RetryPolicyTests
     [Fact]
     public void jitter_পঁচিশ_শতাংশের_দুই_পাশে_থাকে()
     {
-        // attempt 3 → ২০ সেকেন্ড, ±২৫% → ১৫ থেকে ২৫
+        // attempt 3 → 20 seconds, ±25% → 15 to 25
         Assert.Equal(TimeSpan.FromSeconds(15), RetryPolicy.Default.DelayFor(3, 0));
         Assert.Equal(TimeSpan.FromSeconds(25), RetryPolicy.Default.DelayFor(3, 1));
     }
@@ -84,8 +84,8 @@ public class RetryPolicyTests
     }
 
     /// <summary>
-    /// jitter ঋণাত্মক বা শূন্য বিলম্ব বানালে সিঙ্ক লুপ busy loop হয়ে
-    /// একটা কোর খেয়ে ফেলত — অফিসের PC-তে সেটা পাখা ঘোরা ছাড়া কিছুই দেখাত না।
+    /// If jitter produced a negative or zero delay the sync loop would become a busy
+    /// loop and eat a core; on an office PC that would show as nothing but a spinning fan.
     /// </summary>
     [Fact]
     public void jitter_কখনো_শূন্য_বিলম্ব_দেয়_না()
@@ -97,8 +97,8 @@ public class RetryPolicyTests
     }
 
     /// <summary>
-    /// ইচ্ছাকৃত: ১৫টা PC একই সুইচের পেছনে, সিলিং-এ ক্ল্যাম্প করলে ওরা ঠিক
-    /// সেখানেই আবার এক কাতারে দাঁড়াত।
+    /// Deliberate: 15 PCs sit behind the same switch, and if they were clamped to the
+    /// ceiling they would line up in one queue again right there.
     /// </summary>
     [Fact]
     public void সিলিংয়ের_ওপরেও_jitter_কাজ_করে()
@@ -134,11 +134,11 @@ public class RetryPolicyTests
         Assert.Equal(T0 + TimeSpan.FromSeconds(10), at);
     }
 
-    // ── কখন হাল ছাড়া হয় ────────────────────────────────────────────────────
+    // ── when it gives up ────────────────────────────────────────────────────
 
     /// <summary>
-    /// দশ দিনের লাইন-বিভ্রাটে ~২,৯০০ বার চেষ্টা হয়। "২০ বারের পর ছেড়ে দাও"
-    /// নিয়মটা তখন দশ দিনের পুরো পে-রোল ডেটা মুছে দিত।
+    /// A ten-day line outage means ~2,900 attempts. A rule like "give up after 20
+    /// tries" would then delete ten days of payroll data.
     /// </summary>
     [Fact]
     public void ডিফল্টে_চেষ্টার_সংখ্যায়_হাল_ছাড়া_হয়_না()
@@ -164,7 +164,9 @@ public class RetryPolicyTests
         Assert.True(RetryPolicy.Default.ShouldAbandon(1, T0, T0 + TimeSpan.FromDays(30)));
     }
 
-    /// <summary>বয়স মাপা হয় <b>তৈরির</b> সময় থেকে, শেষ চেষ্টার সময় থেকে নয়।</summary>
+    /// <summary>
+    /// Age is measured from the time of <b>creation</b>, not from the last attempt.
+    /// </summary>
     [Fact]
     public void বয়স_শেষ_চেষ্টা_নয়_তৈরির_সময়_থেকে_মাপা_হয়()
     {
@@ -177,11 +179,11 @@ public class RetryPolicyTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new RetryPolicy(
             TimeSpan.Zero, 2, TimeSpan.FromMinutes(5), 0.25, null, TimeSpan.FromDays(30)));
 
-        // সিলিং base-এর চেয়ে ছোট
+        // the ceiling is smaller than the base
         Assert.Throws<ArgumentOutOfRangeException>(() => new RetryPolicy(
             TimeSpan.FromMinutes(1), 2, TimeSpan.FromSeconds(5), 0.25, null, TimeSpan.FromDays(30)));
 
-        // multiplier < 1 মানে বিলম্ব কমতে থাকত — ব্যাকঅফের উল্টো
+        // multiplier < 1 would make the delay shrink: the opposite of backoff
         Assert.Throws<ArgumentOutOfRangeException>(() => new RetryPolicy(
             TimeSpan.FromSeconds(5), 0.5, TimeSpan.FromMinutes(5), 0.25, null, TimeSpan.FromDays(30)));
 
@@ -189,7 +191,7 @@ public class RetryPolicyTests
             TimeSpan.FromSeconds(5), 2, TimeSpan.FromMinutes(5), 1.5, null, TimeSpan.FromDays(30)));
     }
 
-    // ── HTTP স্ট্যাটাস → ফলাফল ──────────────────────────────────────────────
+    // ── HTTP status → outcome ───────────────────────────────────────────────
 
     [Theory]
     [InlineData(200)]
@@ -212,7 +214,7 @@ public class RetryPolicyTests
         Assert.Equal(SyncOutcome.Transient, SyncOutcomeClassifier.FromHttpStatus(status));
     }
 
-    /// <summary>রেকর্ডটাই বেঠিক — আবার পাঠালে একই উত্তরই আসবে।</summary>
+    /// <summary>The record itself is bad; sending it again would get the same answer.</summary>
     [Theory]
     [InlineData(400)]
     [InlineData(415)]
@@ -232,7 +234,8 @@ public class RetryPolicyTests
     }
 
     /// <summary>
-    /// revoke না বলে শুধু ৪০৩ মানে সাধারণত প্রক্সি বা অথের কনফিগ — ডেটা রাখা হয়।
+    /// A 403 without a revoke message is usually a proxy or auth config problem, so the data is
+    /// kept.
     /// </summary>
     [Fact]
     public void revoke_ছাড়া_৪০৩_শুধু_সাময়িক()
@@ -241,8 +244,8 @@ public class RetryPolicyTests
     }
 
     /// <summary>
-    /// ৪০১-কে স্থায়ী বললে টোকেন রিফ্রেশের সময় গোটা কিউ মুছে যেত।
-    /// ৪০৪ মানে সাধারণত ভুল base URL — অ্যাডমিন ঠিক করলেই ডেটা চলে যাবে।
+    /// Calling 401 permanent would delete the whole queue during a token refresh.
+    /// A 404 usually means a wrong base URL; once the admin fixes it the data goes through.
     /// </summary>
     [Theory]
     [InlineData(401)]

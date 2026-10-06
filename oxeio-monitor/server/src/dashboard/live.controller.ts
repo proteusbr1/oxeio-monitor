@@ -10,11 +10,12 @@ import {
 } from './dashboard.service';
 
 /**
- * E01/E02 — `GET /api/v1/live`
+ * `GET /api/v1/live`
  *
- * ⚠️ role দুটো **ক্লাস-লেভেলে** (§ ৪.৩ — লাইভ ভিউ owner ও manager দুজনেই
- * দেখে)। মেথডে বসালে পরে যোগ হওয়া নতুন endpoint নীরবে সবার — এমনকি
- * `role = employee`-র — নাগালে চলে যেত, আর স্টাফ সহকর্মীদের কার্ড দেখত।
+ * Careful: the roles sit at **class level** (§ 4.3 — the live view is for
+ * owner and manager). Put on a method, any endpoint added later would
+ * silently be open to everyone, including `role = employee`, and staff would
+ * see their colleagues' cards.
  */
 @Roles(UserRole.owner, UserRole.manager)
 @Controller('live')
@@ -27,15 +28,15 @@ export class LiveController {
   }
 
   /**
-   * ⭐ E01 — `GET /api/v1/live/pulse` · দলের দিনের ছন্দ, ২৪টা ঘণ্টা।
+   * `GET /api/v1/live/pulse` — the team's daily rhythm, 24 hours.
    *
-   * ⭐ ক্লাস-লেভেলের `@Roles` এখানেও খাটে (উপরের নোট) — তাই স্টাফ এই
-   *    পথেও সহকর্মীদের ছন্দ দেখতে পান না।
+   * The class-level `@Roles` applies here too (see the note above), so staff
+   * cannot see their colleagues' rhythm on this path either.
    *
-   * ⚠️ `date` ঐচ্ছিক ও যাচাই করা হয় `resolveWorkDate`-এ (ভুল ফরম্যাটে ৪০০)।
-   *    বোর্ড এটা পাঠায় না — আজকের দিনই চায় — কিন্তু ঘরটা রাখা হলো, কারণ
-   *    "গতকাল কেমন গেল" প্রশ্নটা এই একই চার্টেরই কাজ, আর তখন নতুন
-   *    endpoint লেখার দরকার হবে না।
+   * Careful: `date` is optional and validated in `resolveWorkDate` (bad
+   * format gives 400). The board does not send it — it always wants today —
+   * but the field is kept because "how did yesterday go" is the same chart's
+   * job, and no new endpoint would be needed.
    */
   @Get('pulse')
   pulse(@Query('date') date?: string): Promise<TeamPulse> {
@@ -43,10 +44,11 @@ export class LiveController {
   }
 
   /**
-   * ⭐ E01 — `GET /api/v1/live/trend` · সাত দিন ও চলতি মাস।
+   * `GET /api/v1/live/trend` — the last seven days and the current month.
    *
-   * ⚠️ `date` ঘর নেই, ইচ্ছাকৃতভাবে: এটা সবসময় **আজ পর্যন্ত** শেষ সাত দিন।
-   *    অতীতের কোনো সপ্তাহ দেখার জায়গা রিপোর্ট পাতা, লাইভ বোর্ড নয়।
+   * Careful: there is deliberately no `date` field: this is always the last
+   * seven days **up to today**. Past weeks belong on the reports page, not
+   * the live board.
    */
   @Get('trend')
   trend(): Promise<TeamTrend> {

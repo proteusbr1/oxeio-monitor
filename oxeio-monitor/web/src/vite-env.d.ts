@@ -1,10 +1,10 @@
 /// <reference types="vite/client" />
 
 /**
- * ⭐ বিল্ডের সময় বসানো ভার্সন-চলকগুলো (web/Dockerfile → VITE_APP_*)।
+ * The version variables set at build time (web/Dockerfile → VITE_APP_*).
  *
- * ⚠️ টাইপ না দিলে `import.meta.env.VITE_APP_BUILD` `any` হয়ে যেত, আর
- *    নামের বানান ভুল করলেও কম্পাইলার চুপ থাকত — ব্যাজে চিরকাল "dev"।
+ * Careful: without types, `import.meta.env.VITE_APP_BUILD` would be `any`,
+ *    and a misspelt name would go unnoticed by the compiler: the badge would say "dev" forever.
  */
 interface ImportMetaEnv {
   readonly VITE_APP_BUILD?: string;

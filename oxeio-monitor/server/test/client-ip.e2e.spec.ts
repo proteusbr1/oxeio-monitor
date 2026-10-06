@@ -11,28 +11,28 @@ import {
 } from './setup/harness';
 
 /**
- * ⭐⭐⭐ **প্রক্সির পেছনে আসল IP** *(৬ সেপ্টেম্বর ২০২৬)*।
+ * The real client IP behind the proxy.
  *
- * ⚠️⚠️ **যে বাগটা এই ফাইল পাহারা দেয়, আর সেটা দুটো:**
+ * This file guards against two bugs:
  *
- * ১· **লগইনের তালা একটাই বালতি হয়ে গিয়েছিল।** থ্রটল প্রতি-IP গোনে
- *    (G116), কিন্তু Express প্রক্সিকে বিশ্বাস না করায় `req.ip` হতো
- *    **Caddy কন্টেইনারের** ঠিকানা — সবার জন্য একই। ফলে যেকোনো জায়গা
- *    থেকে ৫০টা ভুল লগইন করলে **মালিকসহ গোটা অফিস** তালাবন্ধ হতো।
+ * 1. The login lock became a single bucket. The throttle counts per IP
+ *    (G116), but because Express did not trust the proxy, `req.ip` was the
+ *    address of the Caddy container, the same for everyone. So 50 wrong
+ *    logins from anywhere locked out the whole office, owner included.
  *
- * ২· **অডিট লগের IP অর্থহীন ছিল।** *"আমার স্ক্রিনশট কে দেখল"* (I08)
- *    প্রশ্নের উত্তরে প্রতিটা সারিতে একই ভেতরের ঠিকানা বসত। মাঠে গুনে
- *    দেখা: ৭ দিনের **৪৯৪টা সারির সবগুলোতেই** `172.18.0.4`।
+ * 2. The IP in the audit log was meaningless. For the question "who looked
+ *    at my screenshots" (I08), every row carried the same internal address.
+ *    Counted in the field: all 494 rows over 7 days had `172.18.0.4`.
  *
- * ⚠️⚠️ **কেন ইউনিট টেস্ট যথেষ্ট ছিল না:** `LoginThrottleService` নিজে
- * বরাবরই ঠিক ছিল আর `login-throttle-ip.spec.ts` সেটা প্রমাণ করত। ফাঁকটা
- * ছিল **জোড়ার মুখে** — Express কোন সংখ্যাটা `req.ip`-এ বসায়। ঠিক এই
- * ছাঁদেই এই রেপোতে বারবার বাগ হয়েছে: নিয়ম ঠিক, প্লাম্বিং ভুল।
+ * Why unit tests were not enough: `LoginThrottleService` itself was always
+ * correct, and `login-throttle-ip.spec.ts` proved that. The gap was at the
+ * seam, in which number Express puts in `req.ip`. This repo has had bugs in
+ * exactly this shape again and again: the rule is right, the plumbing wrong.
  */
 let h: Harness;
 let owner: Session;
 
-/** পরীক্ষার জন্য দুটো আলাদা পাবলিক IP (RFC 5737, ডকুমেন্টেশন-রেঞ্জ) */
+/** Two different public IPs for testing (RFC 5737, documentation range) */
 const ALICE = '203.0.113.9';
 const BOB = '198.51.100.4';
 
@@ -50,8 +50,8 @@ beforeEach(async () => {
 });
 
 /**
- * পে-রোল দেখা একটা **অডিটেড** ঘটনা (`payroll_view`) — তাই এটাই সবচেয়ে
- * সহজ পথ "সার্ভার কোন IP লিখল" জানার।
+ * Viewing payroll is an audited event (`payroll_view`), so it is the easiest
+ * way to learn which IP the server wrote.
  */
 async function viewPayrollFrom(ip: string): Promise<void> {
   await owner.http
@@ -69,23 +69,23 @@ const lastAuditIp = async (): Promise<string | null> => {
   return row?.ipAddress ?? null;
 };
 
-describe('প্রক্সির পেছনে আসল IP', () => {
+describe('the real IP behind the proxy', () => {
   /**
-   * ⭐⭐⭐ **এই ফাইলের মূল টেস্ট।** প্রক্সি যে IP পাঠায়, অডিটে সেটাই বসে —
-   * প্রক্সির নিজের ঠিকানা নয়।
+   * The main test of this file. The IP the proxy sends is what lands in the
+   * audit log, not the proxy's own address.
    */
-  it('⭐ `X-Forwarded-For`-এর IP অডিটে বসে', async () => {
+  it('the IP from `X-Forwarded-For` lands in the audit log', async () => {
     await viewPayrollFrom(ALICE);
 
     expect(await lastAuditIp()).toBe(ALICE);
   });
 
   /**
-   * ⚠️⚠️ **দ্বিতীয় টেস্টটাই আসল পাহারা।** প্রথমটা একা থাকলে একটা ধ্রুবক
-   * ফেরত দিয়েও সবুজ থাকা যেত। দুটো আলাদা IP আলাদা সারি লেখে কি না —
-   * সেটাই প্রমাণ করে সংখ্যাটা সত্যিই ক্লায়েন্টের।
+   * Careful: the second test is the real guard. The first alone could stay
+   * green even by returning a constant. Whether two different IPs write
+   * different rows proves the value really is the client's.
    */
-  it('⭐ আলাদা ক্লায়েন্ট আলাদা IP লেখে', async () => {
+  it('different clients write different IPs', async () => {
     await viewPayrollFrom(ALICE);
     const first = await lastAuditIp();
 
@@ -98,19 +98,19 @@ describe('প্রক্সির পেছনে আসল IP', () => {
   });
 
   /**
-   * ⚠️⚠️ **একটার বেশি হপ বিশ্বাস করা হয় না** — আর এটাই নিরাপত্তার
-   * সীমারেখা। `trust proxy` যত হপ বিশ্বাস করে, ক্লায়েন্ট তত গভীরে
-   * `X-Forwarded-For` জাল করতে পারে; তখন সে নিজের IP নিজেই বেছে নিয়ে
-   * লগইনের তালা এড়াত।
+   * Careful: more than one hop is not trusted, and that is the security
+   * boundary. The more hops `trust proxy` trusts, the deeper a client can
+   * forge `X-Forwarded-For`; it could then pick its own IP and dodge the login
+   * lock.
    *
-   * ⭐ ক্লায়েন্ট নিজে একটা ভুয়া হপ যোগ করলে Express **ডান দিক থেকে
-   * একটাই** ধাপ পিছিয়ে পড়ে — অর্থাৎ ক্লায়েন্টের নিজের বসানো প্রথম
-   * নামটা নয়, আসল সংযোগের ঠিক আগেরটা।
+   * If the client adds a fake hop itself, Express steps back exactly one
+   * place from the right: not the first name the client put there, but the one
+   * just before the real connection.
    */
-  it('⭐ জাল করা বাড়তি হপ বিশ্বাস করা হয় না', async () => {
+  it('an extra forged hop is not trusted', async () => {
     await owner.http
       .get('/api/v1/payroll?month=2026-08')
-      // ক্লায়েন্ট দাবি করছে সে ১০.০.০.১, আর প্রক্সি লিখেছে তার আসল IP
+      // The client claims to be 10.0.0.1, and the proxy wrote its real IP
       .set('X-Forwarded-For', `10.0.0.1, ${ALICE}`)
       .expect(200);
 
@@ -118,10 +118,10 @@ describe('প্রক্সির পেছনে আসল IP', () => {
   });
 
   /**
-   * ⚠️ হেডার না থাকলে সরাসরি সংযোগের ঠিকানাই — ডেভেলপমেন্টে আর টেস্টে
-   *    ঠিক এটাই ঘটে, আর সেখানে কিছু ভাঙা উচিত নয়।
+   * With no header it is the direct connection's address: that is exactly
+   * what happens in development and tests, and nothing should break there.
    */
-  it('হেডার না থাকলে সরাসরি সংযোগের ঠিকানা', async () => {
+  it('without the header, the direct connection address', async () => {
     await owner.http.get('/api/v1/payroll?month=2026-08').expect(200);
 
     const ip = await lastAuditIp();

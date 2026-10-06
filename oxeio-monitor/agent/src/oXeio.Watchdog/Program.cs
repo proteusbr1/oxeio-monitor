@@ -8,20 +8,20 @@ using oXeio.Watchdog.Platform;
 namespace oXeio.Watchdog;
 
 /// <summary>
-/// oXeio এজেন্টের পাহারাদার (H01) — কোনো UI নেই, কোনো উইন্ডো নেই, শুধু একটা লুপ।
+/// Watchdog for the oXeio agent (H01). No UI, no window, just a loop.
 ///
-/// <b>চালানোর ধরন</b>
+/// <b>Usage</b>
 /// <code>
-/// oXeio.Watchdog.exe                      পাহারা শুরু (Task Scheduler এভাবেই চালায়)
-/// oXeio.Watchdog.exe --install-task       H02 — লগঅন টাস্ক বসায় (অ্যাডমিন লাগে)
-/// oXeio.Watchdog.exe --uninstall-task     টাস্ক মুছে দেয়
-/// oXeio.Watchdog.exe --print-task-xml     টাস্কের XML দেখায় (কিছু বদলায় না)
-/// oXeio.Watchdog.exe --agent &lt;path&gt;      এজেন্টের exe অন্য জায়গায় হলে
-/// oXeio.Watchdog.exe --data &lt;dir&gt;        %ProgramData%\oXeio ছাড়া অন্য ফোল্ডার
+/// oXeio.Watchdog.exe                      start supervising (how Task Scheduler runs it)
+/// oXeio.Watchdog.exe --install-task       H02: install the logon task (needs admin)
+/// oXeio.Watchdog.exe --uninstall-task     remove the task
+/// oXeio.Watchdog.exe --print-task-xml     print the task XML (changes nothing)
+/// oXeio.Watchdog.exe --agent &lt;path&gt;      when the agent exe is somewhere else
+/// oXeio.Watchdog.exe --data &lt;dir&gt;        a folder other than %ProgramData%\oXeio
 /// </code>
 ///
-/// এক্সিট কোড: ০ স্বাভাবিক · ১ এই সেশনে পাহারা সম্ভব নয় · ২ আরেকটা watchdog
-/// আগে থেকেই চলছে · ৩ ডেটা ফোল্ডার তৈরি করা গেল না · ৪ টাস্ক বসানো যায়নি।
+/// Exit codes: 0 normal; 1 cannot supervise in this session; 2 another watchdog is
+/// already running; 3 could not create the data folder; 4 could not install the task.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static class Program
@@ -37,7 +37,7 @@ internal static class Program
         return Supervise(dataDir, agentPath);
     }
 
-    // ── পাহারা ──────────────────────────────────────────────────────────────
+    // ── supervising ─────────────────────────────────────────────────────────
 
     private static int Supervise(string? dataDir, string? agentPath)
     {
@@ -45,17 +45,17 @@ internal static class Program
 
         if (!paths.EnsureDirectory())
         {
-            // লগ লেখার জায়গাই নেই, তাই লগে কিছু লেখা যাবে না — এক্সিট কোডই
-            // একমাত্র সংকেত। ইনস্টলারকে %ProgramData%\oXeio-তে Users গ্রুপকে
-            // Modify দিতে হবে (AgentPaths-এর মন্তব্য দেখুন)।
+            // There is nowhere to write the log, so nothing can be logged; the exit
+            // code is the only signal. The installer must give the Users group Modify
+            // on %ProgramData%\oXeio (see the comment in AgentPaths).
             return 3;
         }
 
         var log = new RollingLog(paths.Log);
 
-        // ⚠️ Session 0-তে থাকলে এখানেই শেষ। ওখান থেকে চালু করা প্রতিটা এজেন্ট
-        //    সাথে সাথেই বন্ধ হয়ে যেত, অর্থাৎ watchdog নিশ্চিত-ব্যর্থ প্রসেস
-        //    বানানোর যন্ত্র হয়ে দাঁড়াত।
+        // Careful: in Session 0 we stop right here. Every agent started from there
+        // would be shut down immediately, so the watchdog would become a machine for
+        // creating processes that are certain to fail.
         var session = SessionCheck.Check();
         if (session.SessionId == 0)
         {
@@ -65,9 +65,9 @@ internal static class Program
 
         log.Write($"Session {session.SessionId} (console {session.ConsoleSessionId}) — {session.Explanation}");
 
-        // ⚠️ দুটো watchdog চললে একজনের চালু করা এজেন্টকে অন্যজন "অচেনা" ভেবে
-        //    গোলমাল বাধাত, আর দুই মই আলাদা আলাদা গুনে ঝড়টাই দ্বিগুণ করত।
-        //    Task Scheduler-এর IgnoreNew প্রথম বাধা; এটা দ্বিতীয় ও নিশ্চিত বাধা।
+        // Careful: with two watchdogs, each would see the other's agent as "unknown"
+        // and interfere, and their two separate ladders would double the restart storm.
+        // Task Scheduler's IgnoreNew is the first barrier; this is the second, certain one.
         using var self = InstanceLock.TryAcquire(paths.WatchdogLock);
         if (self is null)
         {
@@ -77,7 +77,8 @@ internal static class Program
 
         using var stop = new ManualResetEvent(false);
 
-        // Windows শাটডাউনে বা টাস্ক থামালে যেন লগে শেষ লাইনটা লেখা যায়।
+        // So that the last line can still be written on Windows shutdown or when the task is
+        // stopped.
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
         {
             try { stop.Set(); } catch (ObjectDisposedException) { }
@@ -87,12 +88,12 @@ internal static class Program
         return 0;
     }
 
-    // ── এক-শটের CLI ─────────────────────────────────────────────────────────
+    // ── one-shot CLI ────────────────────────────────────────────────────────
 
     private static int RunOneShot(string[] args)
     {
-        // WinExe-র নিজের কনসোল নেই। অ্যাডমিন elevated prompt থেকে চালালে
-        // আউটপুটটা সেখানেই দেখানো হয়। ⚠️ প্রথম Console ব্যবহারের আগেই ডাকতে হবে।
+        // A WinExe has no console of its own. When an admin runs this from an elevated
+        // prompt, the output is shown there. Careful: must be called before the first Console use.
         Kernel32.AttachConsole(Kernel32.AttachParentProcess);
 
         var output = Console.Out;
@@ -110,12 +111,12 @@ internal static class Program
         return TaskInstaller.Install(exe, output);
     }
 
-    // ── ছোট সহায়ক ───────────────────────────────────────────────────────────
+    // ── small helpers ───────────────────────────────────────────────────────
 
     private static bool Has(string[] args, string flag) =>
         Array.Exists(args, a => string.Equals(a, flag, StringComparison.OrdinalIgnoreCase));
 
-    /// <summary><c>--নাম মান</c> জোড়া থেকে মান। না থাকলে null।</summary>
+    /// <summary>The value from a <c>--name value</c> pair, or null if absent.</summary>
     private static string? ValueOf(string[] args, string name)
     {
         for (var i = 0; i < args.Length - 1; i++)

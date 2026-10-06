@@ -24,7 +24,7 @@ public class EngineFallbackPolicyTests
         p.RecordFailure(T0);
         p.RecordFailure(T0);
 
-        // একবার-দুবার ব্যর্থতা কিছুই প্রমাণ করে না — লক স্ক্রিনেই হতে পারে
+        // One or two failures prove nothing; it can happen on the lock screen alone
         Assert.True(p.ShouldTryPrimary(T0));
     }
 
@@ -52,9 +52,9 @@ public class EngineFallbackPolicyTests
     }
 
     /// <summary>
-    /// এই বাগটাই সবচেয়ে সহজে ঢুকত: বিরতির পর কাউন্টার শূন্য না করলে
-    /// পরের একটামাত্র ব্যর্থতাই আবার সীমা ছুঁয়ে ফেলত — অর্থাৎ বিরতি
-    /// কার্যত স্থায়ী হয়ে যেত আর DXGI আর কখনো ফিরত না।
+    /// This is the bug that would slip in most easily: if the counter is not reset
+    /// after a pause, the very next single failure would hit the limit again, so the
+    /// pause would effectively become permanent and DXGI would never come back.
     /// </summary>
     [Fact]
     public void বিরতির_পর_কাউন্টার_শূন্য_থেকে_শুরু_হয়()
@@ -67,7 +67,7 @@ public class EngineFallbackPolicyTests
         Assert.Equal(0, p.ConsecutiveFailures);
 
         p.RecordFailure(after);
-        Assert.True(p.ShouldTryPrimary(after)); // এক ব্যর্থতায় আবার থামে না
+        Assert.True(p.ShouldTryPrimary(after)); // one failure does not pause it again
     }
 
     [Fact]
@@ -83,15 +83,15 @@ public class EngineFallbackPolicyTests
 
         p.RecordFailure(T0);
         p.RecordFailure(T0);
-        Assert.True(p.ShouldTryPrimary(T0)); // আগের দুটো আর গোনা হয়নি
+        Assert.True(p.ShouldTryPrimary(T0)); // the earlier two are no longer counted
     }
 
     [Fact]
     public void বিরতি_চলাকালীন_ব্যর্থতা_বিরতি_বাড়ায়_না()
     {
-        // ফলব্যাক ইঞ্জিন চলার সময় প্রাথমিকটা ডাকাই হয় না, তাই RecordFailure
-        // আসা উচিত নয়। তবু এলে বিরতির সময়সীমা যেন পিছিয়ে না যায় — নইলে
-        // ব্যস্ত মেশিনে বিরতি কখনো শেষই হতো না।
+        // While the fallback engine runs the primary is not called at all, so
+        // RecordFailure should not arrive. If it does, the pause deadline must not be
+        // pushed back; otherwise on a busy machine the pause would never end.
         var p = Policy(failures: 3, cooldownMin: 30);
         for (var i = 0; i < 3; i++) p.RecordFailure(T0);
 

@@ -20,9 +20,9 @@ internal static partial class Shcore
         nint hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 
     /// <summary>
-    /// ম্যানিফেস্টের DPI সেটিং সত্যিই কার্যকর হয়েছে কি না যাচাই করতে।
-    /// না হলে ১৫০% স্কেলের 4K মনিটরের ছবি ছোট করে দেওয়া হবে আর লেখা পড়াই যাবে না —
-    /// অথচ কোনো ব্যতিক্রম বা ত্রুটি দেখা যাবে না।
+    /// To verify that the manifest's DPI setting has really taken effect. If it has not, the image
+    /// of a 4K monitor at 150% scale would be shrunk and the text unreadable, with no exception or
+    /// error showing.
     /// </summary>
     [LibraryImport("shcore.dll")]
     internal static partial int GetProcessDpiAwareness(nint hprocess, out ProcessDpiAwareness value);

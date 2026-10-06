@@ -1,15 +1,16 @@
 /**
- * G01–G07 — অ্যালার্টের সব দোরগোড়া এক জায়গায়।
+ * All alert thresholds in one place.
  *
- * আলাদা ফাইলে রাখার কারণ: এই সংখ্যাগুলো **নিয়ম**, বাস্তবায়ন নয়। কোন সংখ্যা
- * বদলালে কী হবে সেটা এক নজরে দেখা গেলে ভবিষ্যতে কেউ "একটু কমিয়ে দিই"
- * বলে চুপচাপ পুরো ব্যবস্থাটা অকেজো করে ফেলতে পারবে না।
+ * They live in their own file because these numbers are **policy**, not
+ * implementation. Seeing what each change does at a glance stops someone from
+ * quietly "lowering it a bit" and making the whole system useless.
  */
 
 /**
- * `alerts.type` কলামে যেসব মান বসে — schema.prisma-র মন্তব্যে লেখা তালিকাটাই।
+ * Values that go into the `alerts.type` column (the list from the schema.prisma comment).
  *
- * ⚠️ কলামটা `TEXT`, কোনো enum নয়। তাই টাইপো ধরার একমাত্র জায়গা এই ইউনিয়নটাই।
+ * Careful: the column is `TEXT`, not an enum, so this union is the only place
+ * that catches typos.
  */
 export type AlertType =
   | 'agent_down'
@@ -23,7 +24,7 @@ export type AlertType =
   | 'synthetic_input'
   | 'agent_capability';
 
-/** তালিকা আকারে — DTO-র `@IsIn()`-এ লাগে */
+/** As a list; needed by the DTO's `@IsIn()` */
 export const ALERT_TYPE_VALUES: readonly AlertType[] = [
   'agent_down',
   'agent_killed',
@@ -38,164 +39,172 @@ export const ALERT_TYPE_VALUES: readonly AlertType[] = [
 ];
 
 /**
- * ⭐ পুরো মডিউলের সবচেয়ে গুরুত্বপূর্ণ সংখ্যা।
+ * The most important number in the whole module.
  *
- * একই ডিভাইসের একই কারণে ৬ ঘণ্টায় একটাই অ্যালার্ট। এটা না থাকলে একটা PC
- * রাতে বন্ধ থাকলেই ৫ মিনিট পরপর অ্যালার্ট — এক রাতে ১৪০টা, বারো জনের অফিসে
- * হাজারখানেক ইমেইল। তারপর কেউ আর কোনো অ্যালার্ট পড়ত না, অর্থাৎ **সত্যিকারের**
- * সমস্যাটাও চোখ এড়িয়ে যেত। বন্যা ঠেকানো তাই কোনো সৌজন্য নয়, এটাই ব্যবস্থাটাকে
- * কাজের রাখে।
+ * One alert per device per reason within 6 hours. Without it, a PC that is off
+ * overnight would raise an alert every 5 minutes: 140 in one night, about a
+ * thousand emails for a twelve-person office. Nobody would read alerts after
+ * that, so the **real** problems would be missed too. Flood control is not a
+ * courtesy; it is what keeps the system useful.
  */
 export const THROTTLE_HOURS = 6;
 
-// ── G46 · নকল ইনপুট (মাউস-জিগলার) ──────────────────────────────────────────
+// ── Synthetic input (mouse jiggler) ─────────────────────────────────────────
 
 /**
- * ⚠️ দিনে একবার যথেষ্ট — চেকটা **সারা দিনের** খণ্ড দেখে, তাই ঘন ঘন চালিয়ে
- * লাভ নেই। ⭐ তবু দিনের মধ্যেই চলে (রাতে নয়), যাতে মালিক ঘটনাটা **সেদিনই**
- * দেখতে পান আর স্ক্রিনশটগুলো তখনো তাজা থাকে।
+ * Once a day is enough: the check looks at segments from the **whole day**, so
+ * running it often gains nothing. It still runs during the day (not at night)
+ * so the owner sees the incident **the same day** while the screenshots are
+ * still fresh.
  */
 export const SYNTHETIC_INPUT_TICK_MS = 60 * 60_000;
 
-// ── G01 · এজেন্ট চুপ ────────────────────────────────────────────────────────
+// ── Agent silent ────────────────────────────────────────────────────────────
 
-/** স্পেক § ৬.৪ — "কোনো এজেন্ট ১০ মিনিট ধরে চুপ?" */
+/** Spec § 6.4: "is any agent silent for 10 minutes?" */
 export const AGENT_SILENCE_MIN = 10;
 
-/** ওই একই সারিতে — চেকটা প্রতি ৫ মিনিটে চলে */
+/** Same row: the check runs every 5 minutes */
 export const AGENT_DOWN_TICK_MS = 5 * 60_000;
 
 /**
- * ⭐⭐ **অফিস খোলার পর এতক্ষণ agent_down চেক চলবে না** *(২৩ আগস্ট ২০২৬)*।
+ * **The agent_down check does not run for this long after the office opens.**
  *
- * ⚠️⚠️ অফিস ৯:০০-এ খোলে, কিন্তু মানুষ ৯:০০-এ **এসে বসে PC চালু করেন**।
- * প্রথম কয়েক মিনিট সবাই স্বাভাবিকভাবেই চুপ, আর সেটা খবর নয়।
+ * Careful: the office opens at 9:00, but people **arrive and switch on their
+ * PC** at 9:00. Everyone is naturally silent for the first few minutes, and
+ * that is not news.
  *
- * ⭐ মাঠে মাপা (২৩ আগস্ট): আজ সবাই কাজ শুরু করেছেন **০৮:৪৮ – ০৯:০৩**-এর
- * মধ্যে, সবচেয়ে দেরিতে ০৯:০৩। অথচ ঠিক ৯:০০-এ **ছটা** অ্যালার্ট উঠেছিল,
- * আর ওই ছটার সবাই ৯:০৯-এর মধ্যে ফিরে এসেছিল — অর্থাৎ একটাও আসল ছিল না।
+ * Measured in the field: everyone started working between **08:48 and 09:03**,
+ * the latest at 09:03. Yet **six** alerts fired at exactly 9:00, and all six
+ * people were back by 9:09, so none of them was real.
  *
- * ⚠️ ছাড় না দিলে এটা **রোজ** ঘটত — মাসে ~১৩০টা অকারণ অ্যালার্ট, আর
- * তাতেই আবার আসল খবর চাপা পড়ত (ঠিক যে রোগ [ADR-031] সারিয়েছিল)।
+ * Without this grace it would happen **every day**: about 130 pointless alerts
+ * a month, which would again bury the real ones (the exact disease ADR-031 cured).
  *
- * ⭐ ১৫ মিনিট কেন: সবচেয়ে দেরিতে শুরু করা মানুষের চেয়েও ১২ মিনিট বেশি,
- * আর ধীরে চালু হওয়া PC-র জন্যও যথেষ্ট। ⚠️ এটা অফিসের সময় বদলায় **না** —
- * কেবল "কখন থেকে সবার হাজির থাকার কথা" সেটা ঠিক করে।
+ * Why 15 minutes: 12 minutes more than the latest starter, and enough for a
+ * slow-booting PC. Careful: this does **not** change office hours; it only
+ * sets "from when everyone is expected to be present".
  */
 export const OFFICE_OPEN_GRACE_MIN = 15;
 
 /**
- * ⚠️ ইভেন্টের সময় আসে এজেন্টের ঘড়ি থেকে (drift সংশোধনের পর), আর `lastSeenAt`
- *    বসে সার্ভারের ঘড়িতে। দুটোর মাঝে কয়েক সেকেন্ড হেরফের স্বাভাবিক, তাই
- *    "শেষ ইভেন্টটাই কি বিদায়ের ইভেন্ট ছিল?" প্রশ্নে এই ছাড়টুকু রাখা হয়।
+ * Event times come from the agent's clock (after drift correction), while
+ * `lastSeenAt` is set on the server's clock. A few seconds of difference is
+ * normal, so this allowance is kept for the question "was the last event the
+ * goodbye event?".
  */
 export const CLEAN_STOP_GRACE_MIN = 5;
 
 /**
- * ⭐ সার্ভার রিস্টার্টের পর এতক্ষণ agent_down চেক চলবে না।
+ * The agent_down check does not run for this long after a server restart.
  *
- * সার্ভার এক ঘণ্টা বন্ধ থাকলে ফিরে আসার মুহূর্তে **প্রতিটা** ডিভাইসের
- * `lastSeenAt` পুরোনো — এজেন্টরা তখনো নতুন করে হাজিরা দেয়নি। গ্রেস না রাখলে
- * প্রতিটা রিস্টার্টে বারো জনের বারোটা মিথ্যা "এজেন্ট বন্ধ" অ্যালার্ট যেত, আর
- * সেগুলোই সবচেয়ে বিশ্বাস-নষ্ট করা অ্যালার্ট — কারণ ওগুলো সবসময় ভুল।
+ * If the server was down for an hour, **every** device's `lastSeenAt` is stale
+ * the moment it returns, because the agents have not checked in again yet.
+ * Without a grace period every restart would send twelve false "agent down"
+ * alerts for a twelve-person office, and those are the most trust-destroying
+ * alerts because they are always wrong.
  */
 export const STARTUP_GRACE_MIN = 15;
 
-// ── G02 · এজেন্ট বন্ধ / আনইনস্টল ────────────────────────────────────────────
+// ── Agent stopped / uninstalled ─────────────────────────────────────────────
 
-/** এই ইভেন্টগুলো এলে হস্তক্ষেপ হয়েছে কি না দেখা হয় */
+/** When these events arrive, we check whether someone tampered with the agent */
 export const TAMPER_EVENT_TYPES: readonly string[] = [
   'agent_stop',
   'agent_uninstall',
   'uninstall',
 ];
 
-/** আনইনস্টল কখনোই স্বাভাবিক নয় — এগুলোর কোনো ছাড় নেই */
+/** An uninstall is never normal, so these get no exemption */
 export const UNINSTALL_EVENT_TYPES: readonly string[] = [
   'agent_uninstall',
   'uninstall',
 ];
 
 /**
- * ⚠️ agent_stop-এর পিঠে পিঠে logoff/shutdown এলে সেটা সাধারণ বন্ধ করা —
- *    হস্তক্ষেপ নয়। এই জানালার ভেতরে দুটো ইভেন্ট পড়লে ছাড় দেওয়া হয়।
+ * A logoff/shutdown right after agent_stop is an ordinary shutdown, not
+ * tampering. Two events inside this window are exempted.
  */
 export const SHUTDOWN_PAIR_WINDOW_MIN = 2;
 
 /**
- * ⚠️ এজেন্ট অফলাইনে ইভেন্ট জমিয়ে রাখে, তাই তিন দিন পুরোনো একটা agent_stop
- *    আজ এসে পৌঁছাতে পারে। তাই স্ক্যান হয় `receivedAt` ধরে, `occurredAt` ধরে নয় —
- *    নইলে দেরিতে আসা ঘটনাগুলো চিরকালের জন্য অদৃশ্য থেকে যেত।
+ * Agents buffer events while offline, so a three-day-old agent_stop can arrive
+ * today. That is why the scan uses `receivedAt`, not `occurredAt`; otherwise
+ * late-arriving events would stay invisible forever.
  *
- * ⚠️ টিকের (৫ মিনিট) চেয়ে জানালাটা অনেক বড় রাখা হয়েছে ইচ্ছাকৃতভাবে — সার্ভার
- *    রিস্টার্ট করলে প্রথম টিক আসে ৫ মিনিট পরে, আর তার আগে যা এসেছিল সেটুকুও
- *    যেন জানালার ভেতরেই থাকে। বাড়তি দেখা ইভেন্টে কোনো ক্ষতি নেই — throttle
- *    ওগুলোকে এমনিতেই একটাই অ্যালার্টে মিলিয়ে দেয়।
+ * The window is deliberately much longer than the tick (5 minutes): after a
+ * server restart the first tick comes 5 minutes later, and anything that
+ * arrived before it must still be inside the window. Seeing extra events does
+ * no harm, since the throttle merges them into a single alert anyway.
  */
 export const TAMPER_LOOKBACK_MIN = 30;
 
 export const TAMPER_TICK_MS = 5 * 60_000;
 
-// ── G03 · ডিস্ক ─────────────────────────────────────────────────────────────
+// ── Disk ────────────────────────────────────────────────────────────────────
 
 export const DISK_WARN_PCT = 80;
 export const DISK_CRITICAL_PCT = 95;
 export const DISK_TICK_MS = 15 * 60_000;
 
-// ── G06 · সারাদিন কোনো কাজ নেই ──────────────────────────────────────────────
+// ── No activity all day ─────────────────────────────────────────────────────
 
 /**
- * ⭐ শুধু সন্ধ্যার এই জানালাতেই প্রশ্নটা করা হয়।
+ * The question is asked only inside this evening window.
  *
- * সকাল ৯টায় "আজ কেউ কিছু করেনি" বলা অর্থহীন — দিনটা তো সবে শুরু। আর জানালা
- * না রাখলে মধ্যরাতের পরপরই নতুন দিনের হিসাবে সবাইকে "কাজ করেনি" পাওয়া যেত,
- * অর্থাৎ প্রতি রাতে বারোটা অ্যালার্ট।
+ * Saying "nobody did anything today" at 9 AM is meaningless; the day has just
+ * begun. Without a window, right after midnight the new day's numbers would
+ * show everyone as "did no work", which means twelve alerts every night.
  *
- * ⚠️ জানালার দৈর্ঘ্য (৪ ঘণ্টা) throttle-এর ৬ ঘণ্টার চেয়ে ছোট রাখা হয়েছে
- *    ইচ্ছাকৃতভাবে — এতে একজনের জন্য দিনে একটার বেশি অ্যালার্ট গাণিতিকভাবেই অসম্ভব।
+ * Careful: the window (4 hours) is deliberately shorter than the 6-hour
+ * throttle, which makes more than one alert per person per day mathematically
+ * impossible.
  */
 export const NO_ACTIVITY_FROM_HOUR = 18;
 export const NO_ACTIVITY_TO_HOUR = 22;
 export const NO_ACTIVITY_TICK_MS = 30 * 60_000;
 
-// ── G32 · একই স্টাফের দুটো ডিভাইস একসাথে ───────────────────────────────────
+// ── Two devices of the same staff member at once ────────────────────────────
 
 /**
- * স্পেক § ২.১-গ — "দিনে overlap ১৫ মিনিট ছাড়ালে `device_overlap` অ্যালার্ট"।
+ * Spec § 2.1(c): "a `device_overlap` alert when overlap exceeds 15 minutes a day".
  *
- * ⚠️ দোরগোড়াটা উঁচু, ইচ্ছাকৃতভাবে। দু-এক মিনিটের overlap রোজকার ঘটনা —
- * ডেস্কটপ লক না করে ল্যাপটপ নিয়ে মিটিংয়ে যাওয়া। ছোট করলে প্রায় রোজই
- * সবার নামে অ্যালার্ট উঠত, আর তখন এটার মানেই থাকত না।
+ * Careful: the threshold is deliberately high. An overlap of a minute or two
+ * is an everyday event, such as walking into a meeting with the laptop without
+ * locking the desktop. With a lower threshold almost everyone would get an
+ * alert nearly every day, and the alert would stop meaning anything.
  */
 export const OVERLAP_ALERT_SEC = 15 * 60;
 
 /**
- * ⚠️ ঘণ্টায় একবারই যথেষ্ট। overlap কোনো জরুরি অবস্থা নয় (ঘণ্টার হিসাবে
- * প্রভাব পড়ে না — `worked_sec` এমনিতেই UNION), আর চেকটা দিনের **সব**
- * সেগমেন্ট টানে। ৫ মিনিট পরপর চালালে অকারণে ডাটাবেস ঘোরাত।
+ * Once an hour is enough. Overlap is not an emergency (it does not affect the
+ * hours total, since `worked_sec` is a UNION anyway), and the check pulls
+ * **all** of the day's segments. Running it every 5 minutes would needlessly
+ * hammer the database.
  */
 export const OVERLAP_TICK_MS = 60 * 60_000;
 
-// ── G07 · ইমেইল পাঠানো ──────────────────────────────────────────────────────
+// ── Sending email ───────────────────────────────────────────────────────────
 
 export const DISPATCH_TICK_MS = 60_000;
 
 /**
- * ⚠️ ২৪ ঘণ্টার পুরোনো অ্যালার্ট আর ইমেইলে যায় না।
+ * Alerts older than 24 hours are no longer emailed.
  *
- * SMTP এক সপ্তাহ বন্ধ থাকার পর ঠিক করলে জমে থাকা তিনশো অ্যালার্ট একসাথে
- * বেরিয়ে যেত — সবগুলোই বাসি, আর একসাথে সেটাই আরেকটা বন্যা।
+ * If SMTP is fixed after a week of downtime, the 300 queued alerts would all
+ * go out at once. All of them would be stale, and sending them together would
+ * be another flood.
  */
 export const DISPATCH_MAX_AGE_HOURS = 24;
 
-/** এক দফায় সর্বোচ্চ কতগুলো অ্যালার্ট একটা ইমেইলে যাবে */
+/** The most alerts sent in one email per round */
 export const DISPATCH_BATCH = 20;
 
-/** এতবার চেষ্টার পরও না গেলে হাল ছেড়ে `email_failed` লিখে সরিয়ে রাখা হয় */
+/** After this many failed attempts we give up, write `email_failed` and set it aside */
 export const MAX_EMAIL_ATTEMPTS = 3;
 
 /**
- * ⚠️ SMTP-র টাইমআউট — একটা ঝুলে যাওয়া মেইল সার্ভার যেন পুরো sweep আটকে না রাখে।
- *    nodemailer-এর ডিফল্ট অনেক বড়, তাই স্পষ্ট করে বসানো হয়েছে।
+ * SMTP timeout, so one hung mail server cannot block the whole sweep.
+ * nodemailer's default is very long, so it is set explicitly.
  */
 export const SMTP_TIMEOUT_MS = 10_000;

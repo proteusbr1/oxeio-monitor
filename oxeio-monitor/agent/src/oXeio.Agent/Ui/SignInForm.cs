@@ -7,28 +7,28 @@ using oXeio.Agent.Security;
 namespace oXeio.Agent.Ui;
 
 /// <summary>
-/// ⭐⭐ <b>স্টাফ নিজের ইমেইল-পাসওয়ার্ড দিয়ে নিজের PC যোগ করে।</b>
+/// <b>Staff add their own PC with their own email and password.</b>
 ///
-/// ⚠️ আগের ব্যবস্থায় অ্যাডমিনকে প্রতিটা PC-র জন্য একবার-ব্যবহার্য কোড
-/// বানাতে হতো, ২৪ ঘণ্টার মধ্যে ব্যবহার করাতে হতো, আর <b>কোন কোড কোন
-/// মেশিনে</b> সেটা হাতে মেলাতে হতো। ভুল মিললে কোনো এরর আসত না — শুধু
-/// একজনের ঘণ্টা আরেকজনের নামে জমা হতো, আর ধরা পড়ত মাস শেষে।
+/// Careful: in the old arrangement the admin had to create a one-time code for every PC,
+/// have it used within 24 hours, and match <b>which code went to which machine</b> by hand.
+/// A wrong match gave no error; one person's hours simply piled up under another's name, and
+/// it was caught only at month end.
 ///
-/// ⚠️ <b>পাসওয়ার্ড কোথাও জমা হয় না।</b> এখান থেকে সোজা
-/// <see cref="EnrollmentClient.SignInAsync"/>-এ যায়, সেখানে ডিভাইস
-/// টোকেনে বদলায়, আর ডিস্কে যায় শুধু টোকেনটা (DPAPI দিয়ে)।
-/// <see cref="TextBox.UseSystemPasswordChar"/> বসানো, আর
-/// <see cref="TextBox.MaxLength"/>-ও — নইলে কেউ ভুল করে গোটা একটা ফাইল
-/// পেস্ট করে দিলে সেটা তারে চলে যেত।
+/// Careful: <b>the password is stored nowhere.</b> From here it goes straight to
+/// <see cref="EnrollmentClient.SignInAsync"/>, where it is exchanged for a device token, and
+/// only the token goes to disk (via DPAPI).
+/// <see cref="TextBox.UseSystemPasswordChar"/> is set, and so is
+/// <see cref="TextBox.MaxLength"/>; otherwise if someone pasted a whole file by mistake it
+/// would go onto the wire.
 ///
-/// ⚠️ জানালাটা <b>মডাল</b> আর <see cref="Form.TopMost"/>। ইনস্টলের পর
-/// এটাই প্রথম ও একমাত্র জিনিস যা স্টাফকে করতে হয়; পেছনে চলে গেলে
-/// এজেন্ট চিরকাল enroll ছাড়া বসে থাকত আর কেউ টেরও পেত না।
+/// Careful: the window is <b>modal</b> and <see cref="Form.TopMost"/>. After install this
+/// is the first and only thing staff have to do; if it went behind other windows, the agent
+/// would sit un-enrolled forever and nobody would notice.
 ///
-/// ⚠️ এখানে <b>Cancel বোতাম নেই</b>, ইচ্ছাকৃতভাবে — কিন্তু জানালাটা বন্ধ
-/// করা যায় (X)। বন্ধ করলে এজেন্ট চলতেই থাকে, শুধু enroll হয় না; পরের
-/// লগঅনে আবার জিজ্ঞেস করা হয়। জোর করে আটকে রাখলে স্টাফ কাজই শুরু করতে
-/// পারত না, আর প্রথম দিনেই সিস্টেমটার উপর বিরক্তি তৈরি হতো।
+/// Careful: there is <b>no Cancel button</b>, deliberately, but the window can be closed (X).
+/// If closed, the agent keeps running, it just does not enroll; at the next logon it asks
+/// again. Forcing it to stay would stop staff from starting work at all, and create
+/// resentment toward the system on the first day.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class SignInForm : Form
@@ -44,12 +44,12 @@ internal sealed class SignInForm : Form
     private readonly Label _message = new();
     private readonly Button _signIn = new();
 
-    /// <summary>যে ফাংশনটা সত্যিকারের কাজটা করে — টেস্টে বদলে দেওয়া যায়।</summary>
+    /// <summary>The function that does the real work; can be swapped in tests.</summary>
     private readonly Func<string, SecretText, string?, CancellationToken, Task<EnrollmentResult>> _signInAsync;
 
     private bool _busy;
 
-    /// <summary>শেষ ঘরটার নিচের প্রান্ত — <see cref="Relayout"/>-এর শুরুর বিন্দু।</summary>
+    /// <summary>The bottom edge of the last field; the starting point of <see cref="Relayout"/>.</summary>
     private int _fieldsBottom;
 
     public SignInForm(
@@ -71,9 +71,9 @@ internal sealed class SignInForm : Form
         TopMost = true;
         ShowInTaskbar = true;
 
-        // ⭐ ব্র্যান্ড আইকন। ⚠️ এই ক্লাসটা OwnerDrawnForm-এর উত্তরাধিকারী
-        //    **নয়**, তাই বেস ক্লাসে বসিয়ে এটা পাওয়া যায় না — অথচ
-        //    ইনস্টলের পর স্টাফ এই জানালাটাই সবার আগে দেখেন।
+        // Brand icon. Careful: this class does <b>not</b> inherit from OwnerDrawnForm, so it
+        // cannot get this by setting it on the base class, yet staff see this window first
+        // after install.
         Icon = BrandIcon.Value;
         BackColor = _theme.Surface;
         ForeColor = _theme.Ink;
@@ -86,10 +86,10 @@ internal sealed class SignInForm : Form
             Text = "Sign in to start tracking",
             Font = _fonts.Get(TrayFontRole.Strong, dpi),
             ForeColor = _theme.Ink,
-            // ⚠️ BackColor স্পষ্ট করে বসাতে হয়। WinForms-এ Label-এর ডিফল্ট
-            //    BackColor ambient, কিন্তু `AutoSize` লেবেল প্রথম পেইন্টে
-            //    মাঝে মাঝে সিস্টেমের `Control` রংটাই আঁকে — গাঢ় জানালায়
-            //    সেটা প্রতিটা লেবেলের পেছনে একটা ফ্যাকাশে বাক্স হয়ে বসে।
+            // Careful: BackColor must be set explicitly. In WinForms a Label's default
+            // BackColor is ambient, but an `AutoSize` label sometimes paints the system
+            // `Control` color on the first paint; in a dark window that shows up as a pale
+            // box behind every label.
             BackColor = _theme.Surface,
             AutoSize = true,
             Location = new Point(Scale(20, dpi), y),
@@ -98,10 +98,9 @@ internal sealed class SignInForm : Form
         y += Scale(26, dpi);
 
         /**
-         * ⭐ সার্ভারের ঠিকানাটা দেখানো হয় ইচ্ছাকৃতভাবে। স্টাফ যেন জানে
-         * পাসওয়ার্ডটা **কোথায়** যাচ্ছে — এটাই একমাত্র জায়গা যেখানে সে
-         * অফিসের সিস্টেমে নিজের পাসওয়ার্ড টাইপ করছে, আর হুবহু এই রকম
-         * একটা জানালা যে কেউ বানাতে পারে।
+         * The server address is shown on purpose, so staff know <b>where</b> the password is
+         * going. This is the only place where they type their password into the office
+         * system, and anyone can build a window that looks exactly like this.
          */
         var where = new Label
         {
@@ -122,11 +121,11 @@ internal sealed class SignInForm : Form
         _password.UseSystemPasswordChar = true;
         _password.MaxLength = 200;
 
-        // ⚠️ 2FA-র ঘরটা শুরুতে **লুকানো** — বেশিরভাগ স্টাফের 2FA নেই, আর
-        //    একটা ফাঁকা ঘর দেখলে মানুষ ভাবে কিছু একটা ভরতে হবে।
+        // Careful: the 2FA field is **hidden** at first; most staff have no 2FA, and seeing an
+        // empty field makes people think they must fill something in.
         _totpLabel.Text = "6-digit code";
-        // ⚠️ `y` **বাড়ানো হয় না** — ঘরটা লুকানো, তাই জায়গাও ছাড়া হয় না।
-        //    `Relayout()` দেখানোর সময় জানালাটা বাড়িয়ে দেয়।
+        // Careful: `y` is **not advanced**; the field is hidden, so no space is reserved.
+        // `Relayout()` grows the window when it is shown.
         AddField(_totpLabel, _totp, y, dpi);
         _totp.MaxLength = 10;
         _totpLabel.Visible = false;
@@ -147,7 +146,7 @@ internal sealed class SignInForm : Form
         _signIn.Click += async (_, _) => await SubmitAsync().ConfigureAwait(true);
         Controls.Add(_signIn);
 
-        // Enter চাপলেই সাইন ইন — ফর্মে এটাই একমাত্র কাজ
+        // Pressing Enter signs in; that is the form's only action
         AcceptButton = _signIn;
 
         _fieldsBottom = y;
@@ -157,16 +156,16 @@ internal sealed class SignInForm : Form
     }
 
     /**
-     * ⚠️⚠️ <b>জানালার উচ্চতা হাতে লেখা ধ্রুবক নয়, হিসাব করা।</b>
+     * Careful: <b>the window height is not a hand-written constant; it is calculated.</b>
      *
-     * 2FA-র ঘরটা সাধারণত লুকানো, আর তখন ওই জায়গাটুকু ফাঁকা পড়ে থাকত —
-     * প্রথম ছবিতে ঠিক সেটাই দেখা গেছে: মাঝখানে একটা বড় শূন্যতা, আর নিচে
-     * বোতামটা কিনারায় গিয়ে ঠেকা। উল্টোদিকে উচ্চতাটা ছোট করে বসালে
-     * 2FA-ওয়ালা অ্যাকাউন্টে ঘরটা জানালার **বাইরে** পড়ত, আর স্টাফ কোড
-     * টাইপ করার জায়গাই পেত না।
+     * The 2FA field is usually hidden, and then that space would sit empty; the first
+     * screenshot showed exactly that: a large void in the middle and the button pushed up
+     * against the edge. In the other direction, a height that was too small would put the
+     * field **outside** the window for accounts with 2FA, and staff would have nowhere to
+     * type the code.
      *
-     * তাই দুটো অবস্থার জন্য দুটো উচ্চতা, আর ঘরটা দেখানোর সময় জানালাটা
-     * নিজে থেকেই বেড়ে যায়।
+     * So there are two heights for the two states, and when the field is shown the window
+     * grows by itself.
      */
     private void Relayout()
     {
@@ -186,7 +185,7 @@ internal sealed class SignInForm : Form
         ClientSize = new Size(Scale(380, dpi), y + _signIn.Height + Scale(18, dpi));
     }
 
-    /// <summary>সফল হলে ভরা থাকে — কলার এটা দেখেই বোঝে কী হলো।</summary>
+    /// <summary>Filled in on success; the caller reads this to know what happened.</summary>
     public EnrollmentResult? Result { get; private set; }
 
     private int AddField(string label, TextBox box, int y, int dpi) =>
@@ -214,9 +213,9 @@ internal sealed class SignInForm : Form
 
     private async Task SubmitAsync()
     {
-        // ⚠️ দুবার চাপা আটকানো — প্রতিটা ব্যর্থ চেষ্টা সার্ভারের
-        //    brute-force কাউন্টারে গোনা হয়, তাই ডাবল-ক্লিকে অকারণে
-        //    দুটো ব্যর্থতা জমত আর তালা তাড়াতাড়ি পড়ত।
+        // Careful: prevent a double press. Every failed attempt counts against the server's
+        // brute-force counter, so a double-click would needlessly add two failures and the
+        // lock would come sooner.
         if (_busy) return;
 
         _busy = true;
@@ -235,8 +234,8 @@ internal sealed class SignInForm : Form
         }
         catch (Exception ex)
         {
-            // ⚠️ এখানে ছুড়ে দেওয়া মানে WinForms-এর unhandled handler, অর্থাৎ
-            //    ক্র্যাশ ডায়ালগ — সাইন-ইনের ভুলে গোটা এজেন্ট মরা চলবে না।
+            // Careful: throwing here means WinForms's unhandled handler, i.e. a crash dialog;
+            // a sign-in mistake must not be allowed to kill the whole agent.
             result = new EnrollmentResult(
                 EnrollmentStatus.ServerUnreachable, "Something went wrong: " + ex.Message);
         }
@@ -254,7 +253,7 @@ internal sealed class SignInForm : Form
 
         if (result.Status == EnrollmentStatus.NeedsTotp)
         {
-            // ⭐ দ্বিতীয় ধাপ — ঘরটা এখন দেখা যাবে, আর কার্সরও ওখানে
+            // Second step: the field is now visible, and the cursor goes there too
             _totpLabel.Visible = true;
             _totp.Visible = true;
             Relayout();
@@ -267,8 +266,8 @@ internal sealed class SignInForm : Form
         _message.ForeColor = _theme.Brand;
         _message.Text = result.Message;
 
-        // ⚠️ পাসওয়ার্ডের ঘরটা খালি করা হয় **না**। ভুল ছ-অঙ্কের কোডের জন্য
-        //    ব্যর্থ হলে পাসওয়ার্ড আবার টাইপ করানো নিছক শাস্তি।
+        // Careful: the password field is **not** cleared. If sign-in failed because of a wrong
+        // 6-digit code, making the user type the password again would be pure punishment.
         _password.SelectAll();
         _password.Focus();
     }

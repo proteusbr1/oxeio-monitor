@@ -38,8 +38,8 @@ public class AppUsageTrackerTests
     }
 
     /// <summary>
-    /// D04। alt-tab করে ফাইল খুঁজতে গিয়ে কেউ দশটা উইন্ডো ছুঁয়ে যায় —
-    /// প্রতিটা রেকর্ড হলে রিপোর্টে আসল ছবিটা ঢাকা পড়ত।
+    /// D04. Someone alt-tabbing to look for a file touches ten windows; if each were
+    /// recorded, the real picture in the report would be buried.
     /// </summary>
     [Fact]
     public void পাঁচ_সেকেন্ডের_কম_হলে_রেকর্ড_হয়_না()
@@ -68,21 +68,21 @@ public class AppUsageTrackerTests
     }
 
     /// <summary>
-    /// কেউ লাঞ্চে গেলে পর্দায় Excel খোলা থাকে। ওই এক ঘণ্টা
-    /// "Excel ব্যবহার" নয় — কাজের সময়ের হিসাবেও ওটা গোনা হয় না।
+    /// When someone goes to lunch, Excel is still open on screen. That hour is not
+    /// "Excel use", and it is not counted in working time either.
     /// </summary>
     /// <summary>
-    /// ⭐⭐ <b>R22a-তে এই চুক্তিটা বদলেছে</b> — আর বদলটা সচেতন।
+    /// <b>R22a changed this contract, deliberately.</b>
     ///
-    /// আগে idle-এ ঢুকলে ট্র্যাকার থেমে যেত, অর্থাৎ ওই সময়ের কোনো রেকর্ডই
-    /// থাকত না। ⚠️⚠️ তাতে "এই idle সময়টায় সামনে কী ছিল?" প্রশ্নের উত্তর
-    /// চিরতরে হারাত — আর ওটাই মিটিং চেনার একমাত্র সূত্র (Zoom-এ থাকলে
-    /// কি-বোর্ড চুপ, অথচ মানুষটা কাজেই আছে)।
+    /// Before, the tracker stopped on entering idle, so there was no record at all for
+    /// that time. Careful: that lost for good the answer to "what was in front during
+    /// this idle time?", which is the only clue for recognizing meetings (in Zoom the
+    /// keyboard is quiet, yet the person is working).
     ///
-    /// ⭐ <b>"লাঞ্চে Excel খোলা রেখে যাওয়া কাজ নয়" নিয়মটা ভাঙেনি</b> —
-    /// শুধু জায়গা বদলেছে: রেকর্ডটা জমা হয় <c>State = Idle</c> নিয়ে, আর
-    /// সার্ভারে পড়ার প্রতিটা জায়গা কেবল ACTIVE ছাঁকে। <b>রেকর্ড থাকা</b>
-    /// আর <b>গোনা হওয়া</b> — দুটো আলাদা জিনিস।
+    /// <b>The rule "leaving Excel open at lunch is not work" did not break</b>; it only
+    /// moved: the record is stored with <c>State = Idle</c>, and every read on the
+    /// server filters only ACTIVE. <b>Being recorded</b> and <b>being counted</b> are
+    /// two different things.
     /// </summary>
     [Fact]
     public void নিষ্ক্রিয়_অবস্থায়ও_রেকর্ড_হয়_কিন্তু_আলাদা_চিহ্নে()
@@ -91,21 +91,21 @@ public class AppUsageTrackerTests
 
         t.Observe(App("excel.exe"), T0, SegmentState.Active);
 
-        // অবস্থা বদলেছে — ACTIVE খণ্ডটা এখানেই কাটা পড়ে
+        // The state changed: the ACTIVE chunk is cut right here
         var closed = t.Observe(App("excel.exe"), T0.AddSeconds(30), SegmentState.Idle);
         Assert.Single(closed);
         Assert.Equal(30, closed[0].DurationSec);
         Assert.Equal(SegmentState.Active, closed[0].State);
 
-        // ⭐ idle-এর সময়টুকুও এখন জমে — কিন্তু Idle চিহ্ন নিয়ে
+        // Idle time is now recorded too, but marked Idle
         var more = t.Observe(App("excel.exe"), T0.AddMinutes(6), SegmentState.Idle);
         Assert.NotEmpty(more);
         Assert.All(more, r => Assert.Equal(SegmentState.Idle, r.State));
     }
 
     /// <summary>
-    /// ⚠️ একটা রেকর্ড অর্ধেক ACTIVE অর্ধেক IDLE হতে পারে না — নইলে "এই
-    /// সময়টা গোনা হবে কি না" প্রশ্নের কোনো একক উত্তর থাকত না।
+    /// Careful: one record cannot be half ACTIVE and half IDLE; otherwise the question
+    /// "is this time counted?" would have no single answer.
     /// </summary>
     [Fact]
     public void অবস্থা_বদলালে_খণ্ড_ওখানেই_কাটে()
@@ -125,7 +125,7 @@ public class AppUsageTrackerTests
         Assert.Equal(30, backActive[0].DurationSec);
     }
 
-    /// <summary>⭐ স্বাভাবিক অবস্থায় চিহ্নটা ACTIVE — ডিফল্ট বদলে যায়নি।</summary>
+    /// <summary>In the normal state the mark is ACTIVE: the default did not change.</summary>
     [Fact]
     public void সচল_অবস্থার_রেকর্ডে_চিহ্ন_Active()
     {
@@ -150,11 +150,11 @@ public class AppUsageTrackerTests
         Assert.Empty(more);
     }
 
-    // ── ব্রাউজার ────────────────────────────────────────────────────────────
+    // ── browser ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// ⭐ ব্রাউজারে ডোমেইন বদলালে নতুন রেকর্ড — নইলে সারাদিন একটাই
-    /// "chrome.exe ৮ ঘণ্টা" থাকত আর D08 (টপ ১০ সাইট) বানানোই যেত না।
+    /// A domain change in a browser starts a new record; otherwise there would be one
+    /// "chrome.exe 8 hours" all day and D08 (top 10 sites) could not be built.
     /// </summary>
     [Fact]
     public void ডোমেইন_বদলালে_নতুন_রেকর্ড()
@@ -172,8 +172,8 @@ public class AppUsageTrackerTests
     [Fact]
     public void একই_ডোমেইনে_টাইটেল_বদলালে_নতুন_রেকর্ড_নয়()
     {
-        // একই পেজে স্ক্রল করলেও টাইটেল বদলায় — প্রতিবার নতুন সারি হলে
-        // রেকর্ডের সংখ্যা অকারণে ফুলে উঠত
+        // Scrolling on one page also changes the title; a new row each time would
+        // inflate the record count for no reason
         var t = New();
 
         t.Observe(Browser("https://github.com/a", "A · GitHub"), T0, SegmentState.Active);
@@ -197,8 +197,9 @@ public class AppUsageTrackerTests
     }
 
     /// <summary>
-    /// ব্যক্তিগত ব্রাউজিংয়ে "ব্রাউজার ব্যবহার হয়েছে" টুকুই থাকে।
-    /// টাইটেলেও পেজের নাম থাকে, তাই সেটাও বাদ — নইলে ঘুরিয়ে একই তথ্য রাখা হতো।
+    /// In private browsing only "the browser was used" is kept. The title also holds
+    /// the page name, so it is dropped as well; otherwise the same information would be kept
+    /// indirectly.
     /// </summary>
     [Fact]
     public void ব্যক্তিগত_ব্রাউজিংয়ে_ডোমেইন_বা_টাইটেল_কিছুই_যায়_না()
@@ -216,12 +217,12 @@ public class AppUsageTrackerTests
         Assert.Null(r.WindowTitle);
     }
 
-    // ── টেকসইতা ─────────────────────────────────────────────────────────────
+    // ── durability ──────────────────────────────────────────────────────────
 
     [Fact]
     public void টানা_এক_অ্যাপে_থাকলেও_রেকর্ড_নিয়মিত_বেরোয়()
     {
-        // সেগমেন্টের মতোই — নইলে ক্র্যাশে পুরোটা হারাত (G53)
+        // Same as segments; otherwise a crash would lose everything (G53)
         var t = New();
         var all = new List<oXeio.Core.Agent.AppUsageRecord>();
 
@@ -271,12 +272,12 @@ public class AppUsageTrackerTests
         Assert.Null(t.CurrentProcess);
     }
 
-    // ── A07 · ছবির সাথে জোড়া লাগানোর জন্য "এখন সামনে কী" ────────────────────
+    // ── A07: "what is in front now", to pair with the screenshot ────────────
 
     /// <summary>
-    /// ⚠️ D04-এর ৫ সেকেন্ডের নিয়ম <b>রেকর্ডের</b> নিয়ম, "এখন সামনে কী"-র নয়।
-    /// প্রথম সেকেন্ডেই তোলা ছবির পাশেও নামটা বসা চাই — নইলে যে ছবিগুলো ঠিক
-    /// অ্যাপ বদলানোর মুহূর্তে ওঠে সেগুলোই চিরকাল নামহীন থাকত।
+    /// Careful: D04's 5-second rule is a rule for <b>records</b>, not for "what is in
+    /// front now". The name must also sit beside a screenshot taken in the first second;
+    /// otherwise the screenshots taken exactly at an app switch would stay nameless forever.
     /// </summary>
     [Fact]
     public void সামনের_উইন্ডো_প্রথম_মুহূর্ত_থেকেই_জানা_যায়()
@@ -290,9 +291,9 @@ public class AppUsageTrackerTests
     }
 
     /// <summary>
-    /// ⭐ স্ক্রিনশট ওঠে <b>শুধু</b> ACTIVE-এ (A04), আর এখানে ACTIVE ছাড়া
-    /// <c>Current</c> খালি — অর্থাৎ ছবির সাথে নাম জোড়া লাগাতে গিয়ে
-    /// "লক করা পর্দার সামনে কী ছিল" কখনো বসতে পারে না।
+    /// Screenshots are taken <b>only</b> while ACTIVE (A04), and here <c>Current</c> is
+    /// empty unless ACTIVE, so "what was in front of the locked screen" can never end
+    /// up paired with an image.
     /// </summary>
     [Fact]
     public void ACTIVE_ছাড়া_সামনের_উইন্ডো_বলা_হয়_না()

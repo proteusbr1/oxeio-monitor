@@ -1,45 +1,46 @@
 /**
- * ⭐⭐ **owner-lockout — ফেরার একমাত্র পথ।**
+ * Owner lockout: the only way back in.
  *
- * ⚠️ এই সিস্টেমে "পাসওয়ার্ড ভুলে গেছি" বলে কোনো ইমেইল-লিংক নেই, আর সেটা
- * ইচ্ছাকৃত: অফিসের ভেতরের সার্ভার, বাইরের কোনো মেইল-নির্ভরতা রাখা হয়নি।
- * কিন্তু তার ফল ছিল একটা **নিঃশব্দ ফাঁদ** — একমাত্র owner পাসওয়ার্ড (বা
- * 2FA-র ফোনটা) হারালে গোটা সিস্টেমে ঢোকার আর কোনো উপায় থাকত না। কর্মীদের
- * ঘণ্টা জমা হতেই থাকত, অথচ কেউ দেখতে পারত না, বেতনের হিসাবও বের করা যেত না।
+ * Careful: this system has no "forgot password" email link, deliberately. It
+ * is an internal office server with no outside mail dependency. The result
+ * was a **silent trap**: if the only owner lost the password (or the 2FA
+ * phone), there was no way into the system at all. Staff hours would keep
+ * accumulating with nobody able to see them or compute payroll.
  *
- * ⚠️ `prisma/seed.ts` দিয়েও ফেরা যায় না — সেখানে owner `upsert` হয়
- * `update: {}` দিয়ে, অর্থাৎ অ্যাকাউন্ট আগে থেকে থাকলে পাসওয়ার্ড অক্ষত
- * থাকে। seed-এর জন্য ওটাই ঠিক (বারবার চলে), কিন্তু বিপদের দিনে অচল।
+ * Careful: `prisma/seed.ts` cannot recover either. It upserts the owner with
+ * `update: {}`, so an existing account keeps its password. That is right for
+ * the seed (it runs repeatedly) but useless on a bad day.
  *
- * ── কীভাবে চালাতে হয় ────────────────────────────────────────────────────
+ * -- How to run ----------------------------------------------------------
  *
- * সার্ভারে (কন্টেইনারে — সত্যিকারের বিপদের দিনে এভাবেই লাগবে):
+ * On the server (inside the container; this is how it is needed in a real
+ * emergency):
  *
  *   docker compose exec api node dist/scripts/recover-owner.js --list
  *   docker compose exec api node dist/scripts/recover-owner.js --confirm
  *
- * ডেভ মেশিনে:
+ * On a dev machine:
  *
  *   npm run recover:owner -- --list
  *   npm run recover:owner -- --confirm --email owner@office.local
  *
- * ⚠️⚠️ ফাইলটা `src/`-এর ভেতরে, `scripts/`-এ নয় — **ইচ্ছাকৃতভাবে**।
- * প্রোডাকশনের ইমেজে শুধু `dist/` আর prod-deps যায়; `tsx` সেখানে নেই আর
- * `scripts/` ফোল্ডারটাও কপি হয় না। বাইরে রাখলে স্ক্রিপ্টটা ঠিক সেই
- * মেশিনেই অচল থাকত যেখানে ওটা একমাত্র কাজে লাগে। `src/`-এ থাকায়
- * `nest build` এটাকেও কম্পাইল করে, আর কেউ import না করায় সার্ভার চালু
- * হওয়ার সময় এটা কখনো চলে না।
+ * Careful: the file is deliberately inside `src/`, not `scripts/`. The
+ * production image contains only `dist/` and prod dependencies; `tsx` is not
+ * there and the `scripts/` folder is not copied. Outside `src/`, the script
+ * would be unusable on exactly the machine where it is the only thing that
+ * helps. In `src/`, `nest build` compiles it too, and since nothing imports
+ * it, it never runs at server start.
  *
- * ⚠️ চালাতে হলে সার্ভারের শেলে পৌঁছাতে হয় — অর্থাৎ যার ডাটাবেসে হাত আছে
- * সে এমনিতেই সব পারে। এই স্ক্রিপ্ট নতুন কোনো ফাঁক তৈরি করে না; শুধু
- * ইতিমধ্যেই থাকা ক্ষমতাটা **অডিট করা** ও নিরাপদ একটা পথে আনে।
+ * Careful: running it needs a shell on the server, so whoever can do that
+ * already has database access and can do anything. The script opens no new
+ * hole; it only brings an existing power onto an audited, safe path.
  *
- * ⚠️ পাসওয়ার্ড কমান্ড-লাইনে **নেওয়া হয় না**, বানিয়ে দেওয়া হয়। আর্গুমেন্টে
- * নিলে সেটা শেলের ইতিহাসে আর `ps` তালিকায় থেকে যেত, আর মানুষ প্রায়ই
- * দুর্বল কিছু বসাত।
+ * Careful: the password is **not taken** on the command line, it is
+ * generated. As an argument it would stay in shell history and the `ps`
+ * list, and people often pick something weak.
  *
- * সিদ্ধান্তগুলো এখানে নয় — `src/auth/owner-recovery.ts`-এ, যাতে টেস্ট
- * করা যায়। এই ফাইলে শুধু argv আর পর্দা।
+ * The decisions are not here but in `src/auth/owner-recovery.ts`, so they can
+ * be tested. This file only handles argv and the screen.
  */
 import { PrismaClient } from '@prisma/client';
 
@@ -77,9 +78,10 @@ async function main(): Promise<void> {
   }
 
   /**
-   * ⚠️ `--confirm` ছাড়া কিছুই বদলায় না। এটা এমন কাজ নয় যা ভুল করে চালানো
-   * যায় — চললে আগের পাসওয়ার্ডটা **চিরতরে যায়**, আর owner তখন লগইন করতে
-   * গিয়ে হঠাৎ আটকে যেতেন, কারণ না জেনেই।
+   * Careful: nothing changes without `--confirm`. This must not be something
+   * that can run by accident: once it runs, the old password is **gone for
+   * good**, and the owner would suddenly be locked out at login without
+   * knowing why.
    */
   if (!has('confirm')) {
     console.error(
@@ -104,8 +106,8 @@ async function main(): Promise<void> {
     } else {
       console.error('  … --list  দিয়ে দেখে নিন\n');
     }
-    // ⚠️ আলাদা exit code — স্ক্রিপ্টটা কোনো রানবুকে বসলে যেন "কী ভুল হলো"
-    //    প্রশ্নের উত্তর আউটপুট না পড়েও পাওয়া যায়।
+    // Careful: distinct exit codes, so that when the script sits inside a
+    // runbook, "what went wrong" can be answered without reading the output.
     process.exitCode = result.reason === 'no-owner-no-email' ? 3 : 4;
     return;
   }

@@ -1,17 +1,16 @@
 /**
- * পরের কর্মী-কোড কী হবে — খাঁটি ফাংশন, কোনো I/O নেই।
+ * What the next employee code should be. Pure function, no I/O.
  *
- * ⭐ **কেন আলাদা ফাইল:** "পরেরটা কোনটা" প্রশ্নের উত্তর দেখতে সহজ, কিন্তু
- * সীমানাগুলো নয় — মিশ্র প্রস্থ (`OX-01` বনাম `OX-001`), অন্য উপসর্গ,
- * সংখ্যা-নয় এমন কোড, খালি তালিকা। DB-র ভেতরে বসে থাকলে এর একটাও যাচাই
- * করা যেত না।
+ * Why a separate file: "which comes next" looks easy, but the edge cases are
+ * not: mixed widths (`OX-01` vs `OX-001`), other prefixes, non-numeric codes,
+ * an empty list. None of that could be tested while it sat inside the DB code.
  *
- * ⚠️ এটা **পরামর্শ**, নিশ্চয়তা নয়। পর্দায় ঘরটা সম্পাদনযোগ্যই থাকে, আর
- * আসল সুরক্ষা ডাটাবেসের unique constraint — দুজন একসাথে যোগ করলে
- * দ্বিতীয়জন ৪০৯ পাবে, আর সেটাই ঠিক।
+ * Careful: this is a **suggestion**, not a guarantee. The field stays editable
+ * on screen, and the real protection is the database unique constraint: if
+ * two people add at the same time, the second gets a 409, which is correct.
  */
 
-/** `OX-001` ধাঁচ — উপসর্গ, তারপর হাইফেন, তারপর শুধু অঙ্ক */
+/** Shape `OX-001`: a prefix, a hyphen, then digits only. */
 const PATTERN = /^([A-Za-z_]+)-(\d+)$/;
 
 const DEFAULT_PREFIX = 'OX';
@@ -31,11 +30,12 @@ function parse(code: string): Parsed | null {
 }
 
 /**
- * @param existing ডাটাবেসের **সব** কর্মীর কোড — active ও inactive দুটোই।
+ * @param existing Codes of **all** employees in the database, active and
+ * inactive alike.
  *
- * ⚠️⚠️ inactive-দেরও দিতে হবে। শুধু active দিলে ছাঁটাই হওয়া কর্মীর কোডটা
- * আবার পরামর্শ হিসেবে আসত, আর সেভ করতে গিয়ে ৪০৯ — অথচ পর্দায় ওই কোডের
- * কাউকে দেখা যেত না, তাই কারণটা বোঝাই যেত না।
+ * Careful: inactive ones must be included. With only active ones, the code
+ * of a departed employee would be suggested again and saving would fail with
+ * 409, while nobody on screen has that code, so the cause would be unclear.
  */
 export function nextEmployeeCode(existing: readonly string[]): string {
   const parsed = existing
@@ -43,18 +43,18 @@ export function nextEmployeeCode(existing: readonly string[]): string {
     .filter((p): p is Parsed => p !== null);
 
   if (parsed.length === 0) {
-    // ⚠️ `OX-001`, `OX-1` নয় — পর্দার হিন্টেও এই উদাহরণটাই দেওয়া আছে,
-    //    আর তিন অঙ্কে ৯৯৯ জন পর্যন্ত ক্রম ঠিক থাকে।
+    // Careful: `OX-001`, not `OX-1`. The on-screen hint gives this example,
+    // and three digits keep the order correct up to 999 people.
     return `${DEFAULT_PREFIX}-${'1'.padStart(DEFAULT_WIDTH, '0')}`;
   }
 
   /**
-   * ⭐ সবচেয়ে **বড় সংখ্যাটাই** ভিত্তি, আর প্রস্থও তারই।
+   * The **largest number** is the base, and its width is used.
    *
-   * ⚠️ প্রকৃত ডেটায় দুই ধাঁচ পাশাপাশি আছে — `OX-001` (মালিক নিজে হাতে
-   * বসিয়েছেন) আর `OX-01`…`OX-12` (seed থেকে)। "সবচেয়ে চওড়াটা নাও" ধরলে
-   * পরেরটা হতো `OX-013`, অর্থাৎ চলতি ক্রম থেকে ছিটকে যেত। বদলে যেখানে
-   * থেমেছিলেন সেখান থেকেই এগোনো হয় — `OX-12` → `OX-13`।
+   * Careful: real data has two styles side by side: `OX-001` (typed by the
+   * owner) and `OX-01`...`OX-12` (from the seed). Taking "the widest" would
+   * give `OX-013` next and break out of the running sequence. Instead it
+   * continues from where the sequence stopped: `OX-12` -> `OX-13`.
    */
   let best = parsed[0];
   for (const p of parsed) {
@@ -64,15 +64,15 @@ export function nextEmployeeCode(existing: readonly string[]): string {
   const prefix = mostCommonPrefix(parsed) ?? best.prefix;
   const next = best.value + 1;
 
-  // ⚠️ সংখ্যাটা প্রস্থ ছাড়িয়ে গেলে (৯৯ → ১০০) আর কাটা যায় না, তাই
-  //    `padStart` স্বাভাবিকভাবেই বড় হতে দেয়।
+  // Careful: when the number outgrows the width (99 -> 100) nothing can be
+  // truncated, so `padStart` simply lets it grow.
   return `${prefix}-${String(next).padStart(best.width, '0')}`;
 }
 
 /**
- * ⚠️ উপসর্গ **সবচেয়ে বড় কোডের** থেকে নেওয়া হয় না, সবচেয়ে **প্রচলিতটা**
- * থেকে নেওয়া হয়। কেউ একবার `TMP-99` বসালে পরের সব পরামর্শ `TMP-` হয়ে
- * যেত, অথচ বাকি ১২ জন `OX-`।
+ * Careful: the prefix is taken from the **most common** one, not from the
+ * largest code. If someone once entered `TMP-99`, every later suggestion
+ * would become `TMP-` while the other 12 people are `OX-`.
  */
 function mostCommonPrefix(parsed: readonly Parsed[]): string | null {
   const counts = new Map<string, number>();

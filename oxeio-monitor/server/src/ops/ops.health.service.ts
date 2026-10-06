@@ -23,7 +23,7 @@ import {
 
 export interface OpsHealth {
   status: HealthStatus;
-  /** খালি অ্যারে = সব ঠিক */
+  /** Empty array = everything is fine */
   problems: string[];
   checkedAt: string;
   uptimeSec: number;
@@ -57,36 +57,36 @@ export interface OpsHealth {
     hoursSinceSuccess: number | null;
     copyOutcome: 'ok' | 'failed' | null;
     copyError: string | null;
-    /** ⭐ G04 যে verdict দেখে অ্যালার্ট করে, হুবহু সেটাই */
+    /** The very verdict G04 uses when it raises the alert */
     problem: BackupVerdict['problem'] | null;
   };
 
   devices: {
     active: number;
-    /** ⚠️ শুধু গোনা — status খারাপ করে না, কারণ রাতে সবাই চুপ থাকাই স্বাভাবিক */
+    /** Only counted; does not worsen status, since everyone being silent at night is normal */
     silent: number;
     silenceThresholdMin: number;
   };
 
   queue: {
-    /** এখনো কোনো চ্যানেলে যায়নি */
+    /** Not yet sent on any channel */
     pendingAlerts: number;
-    /** এখনো acknowledge হয়নি */
+    /** Not yet acknowledged */
     openAlerts: number;
-    /** retention মার্ক করেছে, ফাইল/সারি এখনো যায়নি */
+    /** Marked by retention, file/row not yet gone */
     screenshotsAwaitingPurge: number;
   };
 }
 
 /**
- * **K04** — সার্ভারের বিস্তারিত হেলথ (owner-only)।
+ * **K04**: the server's detailed health (owner-only).
  *
- * ⭐ `src/health/` (`GET /api/v1/health`) ছোঁয়া হয়নি — ওটা **liveness**:
- * পাবলিক, ছোট, দ্রুত, আর Docker healthcheck ও Live Board ওটার উপরেই
- * দাঁড়ানো। এখানকার উত্তরে ডিস্কের আকার, ব্যাকআপের ইতিহাস আর কতগুলো
- * ডিভাইস চুপ — সবই এমন তথ্য যা দিয়ে বাইরের কেউ অফিসের ভেতরের ছবি আঁকতে
- * পারে। দুটোকে এক করলে হয় liveness-টা গোপন হয়ে যেত (তখন Docker আর
- * healthcheck করতে পারত না), নয়তো এই তথ্যগুলো পাবলিক হতো।
+ * `src/health/` (`GET /api/v1/health`) is untouched: that is **liveness**:
+ * public, small, fast, and the Docker healthcheck and Live Board rest on it.
+ * The reply here has disk size, backup history and how many devices are
+ * silent, all information from which an outsider could draw a picture of the
+ * inside of the office. Merging the two would either hide liveness (Docker could
+ * no longer healthcheck) or make this information public.
  */
 @Injectable()
 export class OpsHealthService {
@@ -106,9 +106,9 @@ export class OpsHealthService {
   async check(now = new Date()): Promise<OpsHealth> {
     const db = await this.pingDb();
 
-    // ⚠️ DB পড়া না গেলে বাকি কুয়েরিগুলো চালানোর মানে নেই — ওগুলোও একই
-    //    ত্রুটিতে ভাঙত, আর তখন হেলথ endpoint নিজেই ৫০০ দিত। ঠিক যে
-    //    মুহূর্তে কেউ "সার্ভারের কী হলো" জানতে আসে, তখনই উত্তর না পাওয়া।
+    // If the DB cannot be read there is no point running the other queries: they
+    // would fail with the same error and the health endpoint itself would 500, so
+    // there is no answer at exactly the moment someone asks "what happened to the server".
     const counts = db.up
       ? await this.counts(now)
       : { active: 0, silent: 0, pendingAlerts: 0, openAlerts: 0, awaitingPurge: 0 };
@@ -189,8 +189,8 @@ export class OpsHealthService {
     };
   }
 
-  /** ⚠️ latency-টাও রাখা হয় — DB "উঠে আছে কিন্তু ৮ সেকেন্ড নেয়" অবস্থাটা
-   *     `up: true` দিয়ে বোঝানো যায় না, অথচ ওটাই সবচেয়ে সাধারণ ধীরগতি। */
+  /** Latency is kept too: "the DB is up but takes 8 seconds" cannot be expressed
+   *  with `up: true`, yet it is the most common kind of slowness. */
   private async pingDb(): Promise<{ up: boolean; latencyMs: number | null }> {
     const startedAt = Date.now();
     try {
@@ -219,16 +219,16 @@ export class OpsHealthService {
         this.prisma.device.count({
           where: {
             status: 'active',
-            // ⚠️ `lastSeenAt: null` ডিভাইসগুলোও চুপ — এনরোল হয়েও কখনো কিছু
-            //    পাঠায়নি। G01 ওদের অ্যালার্ট করে না, কিন্তু হেলথে গোনা দরকার:
-            //    "১৫টার মধ্যে ৩টা কোনোদিন কথাই বলেনি" — এটা ইনস্টলেশনের খবর।
+            // Devices with `lastSeenAt: null` are silent too: enrolled but never
+            // sent anything. G01 does not alert on them, but health should count
+            // them: "3 of 15 never spoke" is news about the installation.
             OR: [{ lastSeenAt: null }, { lastSeenAt: { lt: silenceFloor } }],
           },
         }),
         this.prisma.alert.count({ where: { channelsSent: { isEmpty: true } } }),
-        // ⚠️ alerts.service-এর openCount-এর যমজ। "open" = acknowledgedAt আর
-        //    resolvedAt দুটোই NULL — নইলে সার্ভার নিজে বন্ধ করা alert হেলথ
-        //    পাতায় সংখ্যাটা ভুল দেখাত (অন্য পাতা ঠিক হলেও)।
+        // Twin of alerts.service's openCount. "open" = acknowledgedAt and
+        // resolvedAt both NULL; otherwise alerts the server closed itself would
+        // make the number wrong on the health page (even if the other page is right).
         this.prisma.alert.count({ where: { acknowledgedAt: null, resolvedAt: null } }),
         this.prisma.screenshot.count({ where: { deletedAt: { not: null } } }),
       ]);
@@ -237,9 +237,9 @@ export class OpsHealthService {
   }
 
   /**
-   * ⚠️ `disk.check.ts`-এর সাথে একই কৌশল: `STORAGE_ROOT` না থাকলে ড্রাইভের
-   *    রুট দেখা হয় (একই ভলিউম, একই সংখ্যা)। দুটোই ব্যর্থ হলে `null` —
-   *    হেলথ পাতা তখন "ডিস্কের তথ্য পড়া যায়নি" বলে, ৫০০ দেয় না।
+   * Same technique as `disk.check.ts`: without `STORAGE_ROOT`, the drive root is
+   * looked at (same volume, same number). If both fail, `null`; the health page
+   * then says "disk info could not be read" instead of returning a 500.
    */
   private async readDisk(): Promise<{
     usedPct: number | null;

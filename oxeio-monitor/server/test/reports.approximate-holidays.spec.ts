@@ -14,19 +14,19 @@ import {
 } from '../src/reports/reports.types';
 
 /**
- * G108 — "ছুটির তারিখ এখনো পাকা নয়" কথাটা **যেখানে সিদ্ধান্ত হয় সেখানেই**
- * পৌঁছায় কি না।
+ * G108: does the message "holiday dates are not final yet" reach the place
+ * where the decision is made?
  *
- * ⭐⭐ এই ফাইলটাই G108-এর আসল ডেলিভারেবল, তারের কাজটা নয়। কারণ
- * `approximateHolidayDates()` অনেক আগে থেকেই ঠিক সংখ্যা ফেরাত এবং তার
- * নিজের ইউনিট টেস্টও ছিল (`holidays.spec.ts`) — শুধু **কেউ সেটা পড়ত না**।
- * গোটা রেপোতে ওই মানের উপর একটাও assertion ছিল না, তাই Excel বা PDF থেকে
- * সতর্কবার্তাটা উধাও হয়ে গেলেও সব টেস্ট সবুজই থাকত। G117-এ ঠিক এই ফাঁকই
- * ধরা পড়েছিল (09-Build-Log § ৩ঞ)।
+ * This file is the real deliverable of G108, not the wiring. `approximateHolidayDates()`
+ * had long returned the right numbers and had its own unit test
+ * (`holidays.spec.ts`); the problem was that nobody read it. Nothing in the
+ * repo asserted on that value, so the warning could vanish from Excel or PDF
+ * and every test would stay green. G117 caught exactly this gap (09-Build-Log
+ * section 3).
  *
- * ⚠️ তাই এখানে "ফাংশনটা ঠিক উত্তর দেয়" পরীক্ষা করা হয় না — পরীক্ষা করা হয়
- * **পথটা**: মান → Excel-এর Info শিট, মান → PDF-এর পাদটীকা, আর দুই পথের
- * লেখা এক কি না।
+ * So this does not test "the function gives the right answer"; it tests the
+ * path: value to the Excel Info sheet, value to the PDF footnote, and whether
+ * the two paths say the same text.
  */
 
 const APPROX = '2026-08-26';
@@ -44,7 +44,7 @@ function meta(over: Partial<ReportMeta> = {}): ReportMeta {
     targetHoursInRange: {},
     expectedHours: {},
     approximateHolidayDates: [],
-    // ⚠️ নমুনায় কেউ 'না-দেখা' নয় — এই ফিক্সচার G110/G111 নিয়ে কোনো দাবি করে না
+    // nobody in the sample is 'unobserved': this fixture makes no claim about G110/G111
     observed: {},
     trackedFrom: {},
     ...over,
@@ -77,13 +77,13 @@ function summary(m: ReportMeta): SummaryReport {
   };
 }
 
-/** তৈরি ওয়ার্কবুক আবার পড়ে "Info" শিটের সারিগুলো ফেরত দেয় */
+/** Re-reads the generated workbook and returns the rows of the "Info" sheet */
 async function infoSheetRows(m: ReportMeta): Promise<[string, string][]> {
   const buffer = await summaryWorkbook(summary(m));
 
-  // ⚠️ বাফারটা আবার পার্স করা হয় — `infoRows()` সরাসরি ডাকলে "ফাংশনটা
-  //    সারি বানায়" প্রমাণ হতো, "সারিটা ফাইলে ওঠে" নয়। শিট যোগ করতে ভুলে
-  //    গেলে তখনো টেস্ট সবুজ থাকত।
+  // The buffer is parsed again: calling `infoRows()` directly would prove
+  // "the function builds the rows", not "the row reaches the file". Forgetting
+  // to add the sheet would still leave the test green.
   const wb = new Workbook();
   await wb.xlsx.load(buffer as unknown as ArrayBuffer);
 
@@ -100,14 +100,14 @@ async function infoSheetRows(m: ReportMeta): Promise<[string, string][]> {
   return rows;
 }
 
-describe('G108 — সতর্কবার্তার লেখা', () => {
-  it('কোনো সম্ভাব্য তারিখ না থাকলে কিছুই বলা হয় না', () => {
-    // ⚠️ `''` নয়, `null` — কলাররা `!== null` দেখে সিদ্ধান্ত নেয়; খালি
-    //    স্ট্রিং ফেরালে প্রতিটা রিপোর্টে একটা ফাঁকা "Note" সারি বসত।
+describe('G108: warning text', () => {
+  it('nothing is said when there are no approximate dates', () => {
+    // `null`, not `''`: callers decide on `!== null`; returning an empty
+    // string would add a blank "Note" row to every report.
     expect(approximateHolidayNote([])).toBeNull();
   });
 
-  it('একটা তারিখ হলে একবচন, একাধিক হলে বহুবচন', () => {
+  it('singular for one date, plural for several', () => {
     const one = approximateHolidayNote([APPROX])!;
     expect(one).toContain('1 holiday date');
     expect(one).toContain('is not final yet');
@@ -117,16 +117,16 @@ describe('G108 — সতর্কবার্তার লেখা', () => {
     expect(two).toContain('are not final yet');
   });
 
-  it('তারিখগুলো লেখাতেই থাকে — পাঠক কোন দিন নড়তে পারে জানেন', () => {
+  it('the dates themselves are in the text: the reader knows which day may move', () => {
     const note = approximateHolidayNote([APPROX, APPROX_2])!;
     expect(note).toContain(APPROX);
     expect(note).toContain(APPROX_2);
   });
 
-  it('কী নড়তে পারে সেটাও বলা থাকে — টার্গেট ঘণ্টা ও পে-রোল', () => {
-    // ⚠️ শুধু "তারিখ পাকা নয়" বললে পাঠক ভাবতেন এটা কেবল ক্যালেন্ডারের
-    //    ব্যাপার। আসল ঝুঁকি হলো ওই মাসের কর্মদিবস বদলালে `d ÷ D` বদলায়,
-    //    অর্থাৎ **টাকা** বদলায়।
+  it('it also says what may move: target hours and payroll', () => {
+    // Saying only "dates are not final" would make readers think it is just a
+    // calendar matter. The real risk: if the month's workdays change, `d / D`
+    // changes, so the money changes.
     const note = approximateHolidayNote([APPROX])!;
     expect(note).toMatch(/working days/i);
     expect(note).toMatch(/target hours/i);
@@ -134,8 +134,8 @@ describe('G108 — সতর্কবার্তার লেখা', () => {
   });
 });
 
-describe('G108 — Excel ফাইলের ভেতরে পৌঁছায়', () => {
-  it('সম্ভাব্য তারিখ থাকলে Info শিটে সারিটা ওঠে', async () => {
+describe('G108: reaches the inside of the Excel file', () => {
+  it('with approximate dates, the row appears in the Info sheet', async () => {
     const rows = await infoSheetRows(
       meta({ approximateHolidayDates: [APPROX] }),
     );
@@ -145,7 +145,7 @@ describe('G108 — Excel ফাইলের ভেতরে পৌঁছায�
     expect(row![1]).toBe(approximateHolidayNote([APPROX]));
   });
 
-  it('না থাকলে সারিটাও থাকে না', async () => {
+  it('without them, there is no row either', async () => {
     const rows = await infoSheetRows(meta());
     expect(rows.map(([label]) => label)).not.toContain(
       'Holiday dates not final',
@@ -153,8 +153,8 @@ describe('G108 — Excel ফাইলের ভেতরে পৌঁছায�
   });
 });
 
-describe('G108 — PDF-এর পাদটীকায় পৌঁছায়', () => {
-  it('সম্ভাব্য তারিখ থাকলে নোটটা যোগ হয়', () => {
+describe('G108: reaches the PDF footnote', () => {
+  it('with approximate dates, the note is added', () => {
     const notes = notesFor(
       meta({ approximateHolidayDates: [APPROX] }),
       false,
@@ -163,14 +163,15 @@ describe('G108 — PDF-এর পাদটীকায় পৌঁছায়'
     expect(notes).toContain(approximateHolidayNote([APPROX]));
   });
 
-  it('না থাকলে যোগ হয় না', () => {
+  it('without them, it is not added', () => {
     expect(notesFor(meta(), false, [])).toEqual([]);
   });
 
-  it('অন্য সতর্কবার্তার পাশে বাঁচে — একটা আরেকটাকে চাপা দেয় না', () => {
-    // ⚠️ ছাঁটাই + বাদ-পড়া কর্মী + অনিশ্চিত ছুটি একসাথে ঘটতেই পারে (ঈদের
-    //    মাসের শেষ দিকে)। কোডটা `push` করে বলে এটা তুচ্ছ মনে হয়, কিন্তু
-    //    কেউ `notes = [...]` লিখে ফেললে নীরবে একটা হারিয়ে যেত।
+  it('it survives next to other warnings: one does not suppress another', () => {
+    // Clipping, excluded employees and uncertain holidays can all happen
+    // together (late in the Eid month). It looks trivial because the code
+    // `push`es, but if someone wrote `notes = [...]`, one would silently
+    // disappear.
     const notes = notesFor(
       meta({
         clampedToToday: true,
@@ -190,11 +191,12 @@ describe('G108 — PDF-এর পাদটীকায় পৌঁছায়'
   });
 });
 
-describe('G108 — সব পথে এক লেখা', () => {
-  it('Excel আর PDF অক্ষরে অক্ষরে একই কথা বলে', async () => {
-    // ⭐⭐ সমতাটাই আসল পাহারা। দুই জায়গায় দুটো আলাদা বাক্য লিখলে আজ
-    //    দুটোই ঠিক থাকত, কিন্তু একদিন একটা বদলালে অন্যটা পুরোনো কথা বলত —
-    //    আর কাগজ ও শিট মিলিয়ে দেখা কেউ ধরতেই পারতেন না কোনটা সত্যি।
+describe('G108: one text on every path', () => {
+  it('Excel and PDF say exactly the same thing, character for character', async () => {
+    // The equality is the real guard. With two separate sentences in two
+    // places both would be right today, but one day one would change and the
+    // other would say the old thing, and nobody comparing paper and sheet
+    // could tell which is true.
     const m = meta({ approximateHolidayDates: [APPROX, APPROX_2] });
 
     const excel = (await infoSheetRows(m)).find(
@@ -205,11 +207,10 @@ describe('G108 — সব পথে এক লেখা', () => {
     expect(excel).toBe(pdf);
   });
 
-  it('লেখাটা `meta` থেকেই আসে, নতুন করে গোনা হয় না', async () => {
-    // ⚠️ কেউ যদি ছাপার সময় আবার ছুটির তালিকা দেখে গুনতেন, তাহলে
-    //    অনিশ্চয়তার **দ্বিতীয় একটা সংজ্ঞা** দাঁড়াত। এখানে `meta`-তে এমন
-    //    একটা তারিখ বসানো হয়েছে যেটা কোনো ছুটির তালিকাতেই নেই — তবু
-    //    সেটাই ছাপা হওয়া চাই।
+  it('the text comes from `meta`, it is not counted afresh', async () => {
+    // If someone recounted from the holiday list at print time, there would be
+    // a second definition of the uncertainty. Here `meta` holds a date that is
+    // in no holiday list at all, and that date must still be printed.
     const invented = '2031-01-02';
     const rows = await infoSheetRows(
       meta({ approximateHolidayDates: [invented] }),
@@ -220,14 +221,16 @@ describe('G108 — সব পথে এক লেখা', () => {
   });
 });
 
-describe('G108 — হর আর সতর্কবার্তা এক সারি থেকেই আসে', () => {
-  it('যে সারিগুলো দিয়ে কর্মদিবস গোনা, তার নামের চিহ্নই অনিশ্চয়তা ঠিক করে', () => {
-    // ⚠️ চিহ্নটা DB-র **নামে** থাকে, আলাদা কোনো কলামে নয় — মালিক
-    //    Settings → Holidays-এ চিহ্ন মুছলেই রিপোর্ট চুপ করে যায়।
+describe('G108: the denominator and the warning come from the same rows', () => {
+  it('the name marker on the rows used for counting workdays decides uncertainty', () => {
+    // The marker lives in the DB row's name, not in a separate column: as soon
+    // as the owner removes the marker in Settings > Holidays, the report goes
+    // quiet.
     //
-    // ⚠️ চিহ্নটা এখানে হাতে লেখা হয় না, ধ্রুবক থেকেই আসে: seed ওটা
-    //    **লেখে**, রিপোর্ট ওটা **পড়ে**। হাতে লিখলে ধ্রুবক বদলানোর দিন
-    //    seed আর রিপোর্ট আলাদা হয়ে যেত, অথচ টেস্ট সবুজ থাকত।
+    // The marker is not hand-written here, it comes from the constant: the
+    // seed writes it and the report reads it. Hand-writing it would let the
+    // seed and the report drift apart on the day the constant changes, while
+    // the test stayed green.
     const dates = approximateHolidayDates([
       {
         date: new Date('2026-08-26T00:00:00.000Z'),

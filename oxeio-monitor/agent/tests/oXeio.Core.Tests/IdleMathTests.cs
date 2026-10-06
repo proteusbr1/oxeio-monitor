@@ -3,7 +3,8 @@ using oXeio.Core.Tracking;
 namespace oXeio.Core.Tests;
 
 /// <summary>
-/// এই বিয়োগটাই ঘণ্টার হিসাবের ভিত্তি — এখানে ভুল হলে কারো সারাদিনের কাজ মুছে যেতে পারে।
+/// This subtraction is the basis of the hour count; a mistake here can wipe out someone's whole
+/// day of work.
 /// </summary>
 public class IdleMathTests
 {
@@ -22,13 +23,13 @@ public class IdleMathTests
     }
 
     /// <summary>
-    /// GetTickCount ৪৯.৭ দিনে উল্টে যায়। modular বিয়োগ নিজে থেকেই ঠিক উত্তর দেয় —
-    /// আলাদা কোনো শর্ত লাগে না।
+    /// GetTickCount wraps around after 49.7 days. Modular subtraction gives the right
+    /// answer by itself; no separate condition is needed.
     /// </summary>
     [Fact]
     public void ঘড়ি_উল্টে_গেলেও_হিসাব_ঠিক_থাকে()
     {
-        // শেষ ইনপুট wrap-এর ৫ সেকেন্ড আগে, এখন wrap-এর ৩ সেকেন্ড পরে
+        // the last input was 5 seconds before the wrap, now is 3 seconds after it
         uint lastInput = uint.MaxValue - 5_000 + 1;
         uint now = 3_000;
 
@@ -39,14 +40,15 @@ public class IdleMathTests
     }
 
     /// <summary>
-    /// Microsoft বলে dwTime "not guaranteed to be incremental"। মাত্র ৫ সেকেন্ড
-    /// এগিয়ে থাকলে সরল বিয়োগ ৪৯.৭ দিন দিত — আর ওই স্টাফ সারাদিন "নিষ্ক্রিয়" দেখাত।
+    /// Microsoft says dwTime is "not guaranteed to be incremental". With the input just
+    /// 5 seconds ahead, plain subtraction would give 49.7 days, and that staff member
+    /// would show "inactive" all day.
     /// </summary>
     [Fact]
     public void ভবিষ্যতের_টাইমস্ট্যাম্প_শূন্যে_আটকে_যায়()
     {
         uint now = 1_000_000;
-        uint lastInput = now + 5_000; // ৫ সেকেন্ড এগিয়ে
+        uint lastInput = now + 5_000; // 5 seconds ahead
 
         var elapsed = IdleMath.Elapsed(now, lastInput, out var clamped);
 
@@ -60,8 +62,8 @@ public class IdleMathTests
         uint now = 1_000_000;
         uint lastInput = now + 5_000;
 
-        // ক্ল্যাম্প ছাড়া কাঁচা ফল কত হতো তা দেখিয়ে রাখা — যেন কেউ ভবিষ্যতে
-        // "এই শর্তটা তো অপ্রয়োজনীয়" ভেবে মুছে না ফেলে
+        // Showing what the raw result would be without the clamp, so nobody deletes
+        // this condition one day thinking "this check is unnecessary"
         var raw = unchecked(now - lastInput);
         Assert.True(TimeSpan.FromMilliseconds(raw).TotalDays > 49);
     }

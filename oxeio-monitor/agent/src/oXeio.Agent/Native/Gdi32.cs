@@ -16,14 +16,14 @@ internal struct RECT
 }
 
 /// <summary>
-/// ⚠️ <c>szDevice</c> ইচ্ছাকৃতভাবে <c>fixed char</c>, <c>ByValTStr</c> নয়।
-/// ByValTStr স্ট্রাকচারটাকে non-blittable করে দেয়, আর তখন source-generated
-/// P/Invoke (<c>LibraryImport</c>) এটা নিতে পারে না।
+/// Careful: <c>szDevice</c> is deliberately <c>fixed char</c>, not <c>ByValTStr</c>. ByValTStr
+/// makes the struct non-blittable, and then the source-generated P/Invoke (<c>LibraryImport</c>)
+/// cannot take it.
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal unsafe struct MONITORINFOEXW
 {
-    /// <summary>CCHDEVICENAME — null টার্মিনেটর সহ।</summary>
+    /// <summary>CCHDEVICENAME, including the null terminator.</summary>
     internal const int DeviceNameLength = 32;
 
     internal uint cbSize;
@@ -52,7 +52,7 @@ internal struct BITMAPINFOHEADER
     internal uint biSize;
     internal int biWidth;
 
-    /// <summary>ঋণাত্মক দিলে top-down সারি — যা SkiaSharp সরাসরি নিতে পারে।</summary>
+    /// <summary>A negative value gives top-down rows, which SkiaSharp can take directly.</summary>
     internal int biHeight;
 
     internal ushort biPlanes;
@@ -72,9 +72,9 @@ internal static partial class Gdi32
     internal static partial nint CreateCompatibleDC(nint hdc);
 
     /// <summary>
-    /// ⚠️ <b>স্ক্রিন DC দিতে হবে, memory DC নয়।</b> নতুন memory DC-তে ১×১ মনোক্রোম
-    /// বিটম্যাপ বসানো থাকে, তাই memory DC দিলে ১-bpp সাদাকালো বিটম্যাপ ফেরত আসে —
-    /// কল সফল হয়, কিন্তু স্ক্রিনশট আসে dithered সাদাকালো noise হিসেবে।
+    /// Careful: <b>pass a screen DC, not a memory DC.</b> A new memory DC has a 1x1 monochrome
+    /// bitmap selected into it, so passing a memory DC returns a 1-bpp black and white bitmap: the
+    /// call succeeds, but the screenshot comes out as dithered black and white noise.
     /// </summary>
     [LibraryImport("gdi32.dll", SetLastError = true)]
     internal static partial nint CreateCompatibleBitmap(nint hdc, int cx, int cy);

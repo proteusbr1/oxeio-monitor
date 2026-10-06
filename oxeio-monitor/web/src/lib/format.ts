@@ -1,20 +1,20 @@
 /**
- * সংখ্যা ও তারিখ দেখানোর একমাত্র জায়গা।
+ * The one place for showing numbers and dates.
  *
- * ⭐ ছ-টা পেজ একই ফাংশন ব্যবহার করে বলেই "৭.৫ ঘণ্টা" আর "7h 32m" দুই
- *    পর্দায় দুই রকম দেখাবে না। নিজের পেজে আলাদা করে ফরম্যাট লিখবেন না।
+ * Because all six pages use the same functions, "7.5 hours" and "7h 32m" will not
+ * look different on two screens. Do not write your own formatting in a page.
  *
- * ⚠️ **পর্দার ভাষা ইংরেজি** (মালিকের সিদ্ধান্ত) — মাস, বার আর একক সবই
- *    ইংরেজি: `7h 32m`, `11 August 2026`। অঙ্ক আগেও ইংরেজি ছিল, এখনো তাই;
- *    `.num` ক্লাসের tabular-nums তখনই কাজ করে।
+ * Careful: the screen language is English (the owner's decision): months,
+ * weekdays and units are all English: `7h 32m`, `11 August 2026`. Digits were
+ * English before and still are; the `.num` class's tabular-nums only works then.
  *
- * ⚠️ এই ফাইলের **মন্তব্য বাংলাতেই থাকে** — ওগুলো প্রকল্পের ডকুমেন্টেশন,
- *    পর্দার লেখা নয়। শুধু return-করা স্ট্রিংগুলো ইংরেজি।
+ * Comments in this file are project documentation, not screen text; only the
+ * returned strings are English screen text.
  */
 
 /**
- * ⭐ Asia/Dhaka = UTC+06:00, কোনো DST নেই — সার্ভারের `dhaka-time.ts`-এর
- * ঠিক একই ধ্রুবক। দুই জায়গায় দুটো সংখ্যা থাকলে একদিন একটা বদলাত।
+ * Asia/Dhaka = UTC+06:00, no DST; exactly the same constant as the server's
+ * `dhaka-time.ts`. With two numbers in two places, one would eventually change.
  */
 let DHAKA_OFFSET_MS = 6 * 60 * 60 * 1000;
 
@@ -86,18 +86,18 @@ const MONTHS = [
 ];
 
 /**
- * ⭐⚠️ সরু কলামের জন্য মাসের **হাতে লেখা** সংক্ষিপ্ত রূপ।
+ * Hand-written short forms of the months, for narrow columns.
  *
- * ইংরেজিতে `MONTHS[i].slice(0, 3)` লিখলে কাজ করত, তবু তালিকাটা হাতে লেখা
- * রইল — কারণ বাংলা তালিকার সময় ঠিক ওই `slice()`-ই নীরবে লেখা ভেঙে দিত:
- * JS-এর `slice()` UTF-16 একক গোনে, যুক্তাক্ষর বা কার-চিহ্ন চেনে না।
- *   · `'অক্টোবর'.slice(0,3)` → `'অক্'` — **হসন্তে শেষ**, ভাঙা লেখা
- *   · `'ডিসেম্বর'.slice(0,3)` → `'ডিস'` — ঠিক, কিন্তু কাকতালীয়
- *   · `'ফেব্রুয়ারি'.slice(0,3)` → `'ফেব্'` — আবার হসন্ত
- * অর্থাৎ বছরে অন্তত তিনটে মাস অ্যাটেনডেন্স, সারাংশ আর audit log-এর
- * প্রতিটা সারিতে ভাঙা দেখাত — কোনো এরর ছাড়াই। কোনোদিন আবার বাংলা (বা
- * অন্য কোনো ইন্ডিক লিপি) ফিরলে যেন ফাঁদটা আবার পাতা না হয়, তাই দুটো
- * তালিকা আলাদা করেই রাখা।
+ * In English `MONTHS[i].slice(0, 3)` would work, yet the list stays hand-written:
+ * with a Bengali list that same `slice()` silently broke the text. JS `slice()`
+ * counts UTF-16 units; it does not know conjuncts or vowel signs.
+ *   - October in Bengali, sliced to 3, ends in a hasanta (virama): broken text
+ *   - December in Bengali, sliced to 3, comes out right, but by coincidence
+ *   - February in Bengali, sliced to 3, ends in a hasanta again
+ * So at least three months a year would look broken on every row of attendance,
+ * summary and the audit log, with no error. If Bengali (or any other Indic
+ * script) ever returns, the trap must not be set again, so the two lists are
+ * kept separate.
  */
 const MONTHS_SHORT = [
   'Jan',
@@ -114,7 +114,7 @@ const MONTHS_SHORT = [
   'Dec',
 ];
 
-/** Sun = 0 … Sat = 6 (JS-এর `getUTCDay()` ক্রম) */
+/** Sun = 0 ... Sat = 6 (the order of JS `getUTCDay()`). */
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 // ── Display locale (DISPLAY_LOCALE on the server) ───────────────────────────
@@ -182,40 +182,40 @@ function localeDate(
   }).format(date);
 }
 
-// ── কর্মদিবস (`YYYY-MM-DD`) ─────────────────────────────────────────────────
+// ── Workday (`YYYY-MM-DD`) ──────────────────────────────────────────────────
 
 /**
- * ⭐⚠️ ঢাকার **আজকের কর্মদিবস** — ব্রাউজারের টাইমজোন ধরে নেওয়া হয় না।
+ * Today's workday in Dhaka: the browser's timezone is not assumed.
  *
- * `new Date().toISOString().slice(0, 10)` লিখলে UTC তারিখ আসত, আর ঢাকায়
- * রাত ১২টা থেকে ভোর ৬টার মধ্যে সেটা **আগের দিন** দেখাত — অর্থাৎ রাতে কাজ
- * করা কর্মী (§ ২.১-ক অনুযায়ী স্বাভাবিক) নিজের আজকের ঘণ্টা খুঁজেই পেত না।
- * উল্টোদিকে ব্যাংককের কোনো ব্রাউজারে `toLocaleDateString()` এক দিন এগিয়ে
- * যেত। তাই অফসেটটা এখানে স্পষ্ট করে বসানো।
+ * `new Date().toISOString().slice(0, 10)` would give the UTC date, and in Dhaka
+ * between midnight and 6 a.m. that shows the previous day, so an employee working
+ * at night (normal per section 2.1-a) could not find their own hours for today.
+ * In the other direction, in a browser in Bangkok `toLocaleDateString()` would run
+ * a day ahead. So the offset is stated explicitly here.
  */
 export function todayInDhaka(now: Date = new Date()): string {
   return isoDateOf(new Date(now.getTime() + DHAKA_OFFSET_MS));
 }
 
 /**
- * ঢাকার **এখনকার ঘণ্টা**, ০–২৩ — দিনের-ছন্দ চার্টে "আমরা এখন কোথায়"।
+ * The current hour in Dhaka, 0-23: "where are we now" on the day-rhythm chart.
  *
- * ⚠️ `new Date().getHours()` লেখা যেত না — ওটা **ব্রাউজারের** ঘণ্টা।
- *    মালিক বিদেশ থেকে বোর্ড খুললে চিহ্নটা ভুল কলামের নিচে বসত, আর
- *    ভুলটা এমন যে ধরা কঠিন: চার্ট ঠিকই দেখাত, শুধু দাগটা সরানো।
- *    `todayInDhaka`-র মতোই অফসেটটা এখানেও স্পষ্ট।
+ * Careful: `new Date().getHours()` cannot be used; that is the browser's hour. If
+ * the owner opened the board from abroad, the marker would sit under the wrong
+ * column, and a hard-to-spot error: the chart would be right, only the mark moved.
+ * The offset is explicit here, as in `todayInDhaka`.
  */
 export function dhakaHourNow(now: Date = new Date()): number {
   return new Date(now.getTime() + DHAKA_OFFSET_MS).getUTCHours();
 }
 
-/** কোনো instant ঢাকার কোন কর্মদিবসে পড়ে — `YYYY-MM-DD` */
+/** Which Dhaka workday an instant falls in: `YYYY-MM-DD`. */
 export function workDateOf(instant: Date | string): string {
   const date = typeof instant === 'string' ? new Date(instant) : instant;
   return isoDateOf(new Date(date.getTime() + DHAKA_OFFSET_MS));
 }
 
-/** UTC অংশ ধরে `YYYY-MM-DD` — কোনো লোকাল getter নয় */
+/** `YYYY-MM-DD` from the UTC parts; no local getter. */
 function isoDateOf(shifted: Date): string {
   return [
     shifted.getUTCFullYear(),
@@ -225,11 +225,11 @@ function isoDateOf(shifted: Date): string {
 }
 
 /**
- * `YYYY-MM-DD` → UTC-midnight Date।
+ * `YYYY-MM-DD` to a UTC-midnight Date.
  *
- * ⚠️ `new Date('2026-02-31')` চুপচাপ ৩ মার্চ বানিয়ে দেয়, তাই ফিরে এসে
- *    মিলিয়ে দেখা হয়। না মিললে `null` — ব্যবহারকারী ভুল তারিখের ডেটা
- *    দেখে বুঝতেও পারত না।
+ * Careful: `new Date('2026-02-31')` quietly makes 3 March, so the result is checked
+ * by converting back. `null` if it does not match; otherwise the user would see
+ * data for the wrong date without knowing.
  */
 export function parseWorkDate(text: string): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
@@ -252,32 +252,32 @@ export function isValidWorkDate(text: string): boolean {
   return parseWorkDate(text) !== null;
 }
 
-/** কর্মদিবস সরানো — `shiftWorkDate('2026-08-10', -1)` → `'2026-08-09'` */
+/** Shift a workday: `shiftWorkDate('2026-08-10', -1)` gives `'2026-08-09'`. */
 export function shiftWorkDate(date: string, days: number): string {
   const parsed = parseWorkDate(date);
   if (!parsed) return date;
   return isoDateOf(new Date(parsed.getTime() + days * DAY_MS));
 }
 
-/** ওই তারিখের মাসের ১ তারিখ — রিপোর্টের ডিফল্ট `from` */
+/** The 1st of that date's month: the report's default `from`. */
 export function monthStartOf(date: string): string {
   return `${date.slice(0, 7)}-01`;
 }
 
-/** ওই মাসের শেষ দিন — `'2026-02'` বা `'2026-02-10'` দুটোই চলে */
+/** The last day of that month: both `'2026-02'` and `'2026-02-10'` work. */
 export function monthEndOf(date: string): string {
   const year = Number(date.slice(0, 4));
   const month = Number(date.slice(5, 7));
-  // পরের মাসের ০ তারিখ = এই মাসের শেষ দিন; লিপ ইয়ারও নিজে থেকেই মেলে
+  // Day 0 of the next month = last day of this month; leap years work out by themselves
   return isoDateOf(new Date(Date.UTC(year, month, 0)));
 }
 
-/** `'2026-08-10'` → `'2026-08'` — payroll ও monthly_summary-র ফরম্যাট */
+/** `'2026-08-10'` to `'2026-08'`: the format of payroll and monthly_summary. */
 export function monthKeyOf(date: string): string {
   return date.slice(0, 7);
 }
 
-/** মাস সরানো — `shiftMonth('2026-01', -1)` → `'2025-12'` */
+/** Shift a month: `shiftMonth('2026-01', -1)` gives `'2025-12'`. */
 export function shiftMonth(monthKey: string, months: number): string {
   const year = Number(monthKey.slice(0, 4));
   const month = Number(monthKey.slice(5, 7));
@@ -285,7 +285,7 @@ export function shiftMonth(monthKey: string, months: number): string {
   return `${moved.getUTCFullYear()}-${pad(moved.getUTCMonth() + 1)}`;
 }
 
-/** চলতি মাসের ১ তারিখ → ঢাকার আজ। রিপোর্ট পেজগুলোর ডিফল্ট রেঞ্জ। */
+/** The 1st of the current month to today in Dhaka. The default range for report pages. */
 export function thisMonthRange(now: Date = new Date()): {
   from: string;
   to: string;
@@ -294,7 +294,7 @@ export function thisMonthRange(now: Date = new Date()): {
   return { from: monthStartOf(today), to: today };
 }
 
-// ── তারিখ দেখানো ────────────────────────────────────────────────────────────
+// ── Showing dates ───────────────────────────────────────────────────────────
 
 /** `'2026-08-10'` → `'10 August 2026'` */
 export function formatDate(date: string): string {
@@ -310,7 +310,7 @@ export function formatDate(date: string): string {
   return `${parsed.getUTCDate()} ${MONTHS[parsed.getUTCMonth()]} ${parsed.getUTCFullYear()}`;
 }
 
-/** `'2026-08-10'` → `'10 Aug'` — টেবিলের সরু কলামে */
+/** `'2026-08-10'` to `'10 Aug'`: for narrow table columns. */
 /**
  * `'2026-10-03'` → `'3 Oct 2026'` — the top bar's date. With a display
  * locale, the same numeric form as `formatDate` (`03/10/2026`).
@@ -333,10 +333,11 @@ export function formatDateShort(date: string): string {
 }
 
 /**
- * `'2026-08-10'` → `'Mon'`
+ * `'2026-08-10'` to `'Mon'`
  *
- * ⚠️ বাংলায় এর পরে "বার" জুড়ে দেওয়া হতো (`সোম` + `বার`)। ইংরেজিতে সেটা
- *    করবেন না — `Mon` নিজেই সম্পূর্ণ, আর জুড়লে "Monবার" ধরনের কিছু হতো।
+ * Careful: in Bengali the word for "day" used to be appended (Sun + that word).
+ * Do not do that in English: `Mon` is complete by itself, and appending would
+ * give something like "Mon" glued to a Bengali suffix.
  */
 export function weekdayOf(date: string): string {
   const parsed = parseWorkDate(date);
@@ -358,11 +359,11 @@ export function formatMonth(monthKey: string): string {
 }
 
 /**
- * ISO instant → ঢাকার ঘড়ির সময়, `'14:32'`।
+ * ISO instant to the Dhaka clock time, `'14:32'`.
  *
- * ⚠️ `toLocaleTimeString()` ব্যবহারকারীর টাইমজোনে দেখাত — ঢাকার বাইরের কেউ
- *    (বা VPN-এ থাকা কেউ) স্ক্রিনশটের সময় ভুল দেখত, আর সেটা ধরার কোনো উপায়
- *    থাকত না। অফিসের সব সময় ঢাকার সময়।
+ * Careful: `toLocaleTimeString()` would show the user's own timezone; someone
+ * outside Dhaka (or on a VPN) would see wrong screenshot times and have no way
+ * to notice. All office times are Dhaka time.
  */
 export function formatTime(iso: string | null): string {
   if (!iso) return '—';
@@ -371,7 +372,7 @@ export function formatTime(iso: string | null): string {
   return `${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`;
 }
 
-/** ISO instant → `'10 August 2026, 14:32'` (ঢাকার সময়) */
+/** ISO instant to `'10 August 2026, 14:32'` (Dhaka time). */
 export function formatDateTime(iso: string | null): string {
   if (!iso) return '—';
   const at = new Date(iso);
@@ -380,14 +381,15 @@ export function formatDateTime(iso: string | null): string {
 }
 
 /**
- * "কত আগে" — `'3 minutes ago'`।
+ * "How long ago": `'3 minutes ago'`.
  *
- * লাইভ বোর্ডে heartbeat-এর বয়স দেখাতে। ⚠️ ভবিষ্যতের সময় (ঘড়ি এদিক-ওদিক)
- * এলে `'Just now'` — ঋণাত্মক সংখ্যা দেখালে মনে হতো সিস্টেম ভেঙে গেছে।
+ * For showing the age of a heartbeat on the live board. Careful: a future time
+ * (clock skew) gives `'Just now'`; showing a negative number would look as if the
+ * system had broken.
  *
- * ⚠️ ইংরেজিতে **একবচন/বহুবচন** মেলাতে হয় (বাংলায় লাগত না): `1 minute ago`,
- *    `2 minutes ago`। "1 minutes ago" দেখলে লেখাটা যন্ত্রের মতো শোনায়, আর
- *    সংখ্যাগুলোর উপর ভরসাও কমে।
+ * Careful: English needs singular/plural agreement (Bengali did not):
+ * `1 minute ago`, `2 minutes ago`. Seeing "1 minutes ago" makes the text sound
+ * mechanical and lowers trust in the numbers.
  */
 export function formatAgo(iso: string | null, now: Date = new Date()): string {
   if (!iso) return 'Never';
@@ -405,17 +407,18 @@ function ago(count: number, unit: string): string {
   return `${count} ${unit}${count === 1 ? '' : 's'} ago`;
 }
 
-// ── সময়কাল ─────────────────────────────────────────────────────────────────
+// ── Duration ────────────────────────────────────────────────────────────────
 
 /**
- * ⭐ সেকেন্ড → `'7h 32m'`। এক ঘণ্টার কম হলে শুধু `'32m'`, শূন্য হলে `'0m'`।
+ * Seconds to `'7h 32m'`. Under an hour just `'32m'`; zero gives `'0m'`.
  *
- * ⚠️ শূন্যে **খালি স্ট্রিং নয়** — `'0m'`। খালি ঘর দেখলে বোঝা যায় না ডেটা
- *    নেই না কি সত্যিই শূন্য, আর "তথ্য নেই" বোঝাতে এই ফাইলে `'—'` আছে।
+ * Careful: zero is `'0m'`, not an empty string. An empty cell does not tell you
+ * whether there is no data or the value really is zero, and this file has `'—'`
+ * for "no data".
  *
- * ⚠️ মিনিট round করার পর ৬০ হয়ে যেতে পারে (৩৫৯৮ সেকেন্ড → 0h 60m)।
- *    তখন ঘণ্টায় তুলে না দিলে পর্দায় "60m" বসে থাকত — দেখতে ভুল না হলেও
- *    কেউ সেটাকে সংখ্যা হিসেবে বিশ্বাস করত না।
+ * Careful: minutes can reach 60 after rounding (3598 seconds gives 0h 60m). If
+ * that is not carried into the hours, "60m" would sit on screen; it would not
+ * look wrong, but nobody would trust it as a number.
  */
 export function formatDuration(seconds: number | null | undefined): string {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) {
@@ -435,19 +438,18 @@ export function formatDuration(seconds: number | null | undefined): string {
 }
 
 /**
- * ⭐ ঘণ্টা-সংশোধনের মান — `'+2:00'` / `'−0:30'` (B14 · G35)।
+ * Format of an hours correction: `'+2:00'` / `'−0:30'` (B14, G35).
  *
- * ⚠️ **চিহ্নটাই আসল তথ্য**, তাই কখনো বাদ দেওয়া হয় না — ধনাত্মকেও `+`।
- * `2:00` লেখা থাকলে বোঝাই যেত না ঘণ্টা যোগ হলো না কাটা হলো, অথচ
- * পার্থক্যটা কারো বেতনের।
+ * Careful: the sign is the actual information, so it is never dropped, even `+`
+ * for positive. With `2:00` alone you could not tell whether hours were added or
+ * removed, and the difference is someone's pay.
  *
- * ⚠️ ইউনিকোড মাইনাস (`−`, U+2212), হাইফেন নয় — সংখ্যার পাশে হাইফেন ছোট
- * দেখায় আর ঋণাত্মক চিহ্নটা চোখ এড়িয়ে যেতে পারত।
+ * Careful: the Unicode minus (`−`, U+2212), not a hyphen: a hyphen next to a
+ * number looks short and the negative sign could slip past the eye.
  *
- * ⚠️ এখানে `formatDuration()` ব্যবহার করা হয় **না**, ইচ্ছাকৃতভাবে: ওটা
- * `7h 32m` লেখে আর এক ঘণ্টার কম হলে ঘণ্টাটা বাদ দেয়। সংশোধনের তালিকায়
- * সব সারি একই চওড়ায় থাকা দরকার (`+0:30` আর `+2:00` পাশাপাশি), তাই
- * ঘণ্টাটা সবসময় থাকে।
+ * Careful: `formatDuration()` is deliberately not used here: it writes `7h 32m` and
+ * drops the hours below an hour. In the corrections list all rows need the same
+ * width (`+0:30` beside `+2:00`), so the hour part is always present.
  */
 export function formatSignedDuration(seconds: number): string {
   const abs = Math.abs(seconds);
@@ -455,7 +457,7 @@ export function formatSignedDuration(seconds: number): string {
   let minutes = Math.round((abs % 3600) / 60);
   let carried = hours;
 
-  // ⚠️ `formatDuration()`-এর মতোই ফাঁদ: ৩৫৯৮ সেকেন্ড → `0:60`
+  // Careful: the same trap as `formatDuration()`: 3598 seconds gives `0:60`
   if (minutes === 60) {
     carried += 1;
     minutes = 0;
@@ -464,7 +466,7 @@ export function formatSignedDuration(seconds: number): string {
   return `${seconds < 0 ? '−' : '+'}${carried}:${pad(minutes)}`;
 }
 
-/** সেকেন্ড → দশমিক ঘণ্টা, `'7.5'` — চার্টের অক্ষ ও তুলনার জন্য */
+/** Seconds to decimal hours, `'7.5'`: for chart axes and comparisons. */
 export function formatHours(
   seconds: number | null | undefined,
   digits = 1,
@@ -476,11 +478,11 @@ export function formatHours(
 }
 
 /**
- * দশমিক ঘণ্টা → `'7h 32m'`।
+ * Decimal hours to `'7h 32m'`.
  *
- * ⚠️ রিপোর্টের API ঘণ্টা পাঠায় (`workedHours: 7.53`), লাইভ বোর্ড সেকেন্ড
- *    (`todayWorkedSec`)। দুই পর্দায় একই লেখা দেখাতে এই সেতুটা দরকার।
- *    Payroll ঘণ্টা **স্ট্রিং** হিসেবে পাঠায় (`'7.53'`) — সেটাও চলে।
+ * Careful: the reports API sends hours (`workedHours: 7.53`), the live board sends
+ * seconds (`todayWorkedSec`). This bridge is needed to show the same text on both
+ * screens. Payroll sends hours as a string (`'7.53'`); that works too.
  */
 export function formatHoursAsDuration(
   hours: number | string | null | undefined,
@@ -491,18 +493,18 @@ export function formatHoursAsDuration(
   return formatDuration(value * HOUR);
 }
 
-/** দশমিক ঘণ্টা → সেকেন্ড — ProgressRing-এ পাঠানোর জন্য */
+/** Decimal hours to seconds: for passing to ProgressRing. */
 export function hoursToSeconds(hours: number | string): number {
   const value = typeof hours === 'string' ? Number(hours) : hours;
   return Number.isFinite(value) ? value * HOUR : 0;
 }
 
-// ── শতাংশ, বাইট, টাকা ───────────────────────────────────────────────────────
+// ── Percentages, bytes, taka ────────────────────────────────────────────────
 
 /**
- * ⭐ `null` মানে **তথ্য নেই**, শূন্য নয় (সার্ভারের `scorePct` ঠিক এভাবেই
- * পাঠায়)। `0%` লিখে দিলে "কিছুই productive করেনি" বলা হতো, অথচ সত্যিটা
- * "বলার মতো কিছুই নেই" — ছুটির দিনে দুটোর পার্থক্য পুরো রিপোর্ট বদলে দেয়।
+ * `null` means no data, not zero (the server's `scorePct` sends exactly this).
+ * Writing `0%` would say "was not productive at all", when the truth is "nothing
+ * to say"; on a day off the difference changes the whole report.
  */
 export function formatPct(
   value: number | null | undefined,
@@ -514,7 +516,7 @@ export function formatPct(
   return `${localizeDigits(value.toFixed(digits))}%`;
 }
 
-/** অগ্রগতির শতাংশ — হর শূন্য হলে ০, NaN বা Infinity নয় */
+/** Progress percentage: 0 if the denominator is zero, not NaN or Infinity. */
 export function pctOf(part: number, whole: number): number {
   if (!Number.isFinite(part) || !Number.isFinite(whole) || whole <= 0) return 0;
   return (part / whole) * 100;
@@ -554,16 +556,16 @@ export function currencySymbol(): string {
 }
 
 /**
- * টাকা — `'13000.50'` → `'৳ 13,000.50'`।
+ * Taka: `'13000.50'` to `'৳ 13,000.50'`.
  *
  * The symbol is the configured currency's (`currencySymbol()`); with the
  * default BDT the text is exactly what it always was.
  *
- * ⚠️ সার্ভার টাকা **স্ট্রিং** হিসেবে পাঠায় (Decimal, float নয়)। এখানে
- *    `Number()` করে হিসাব করা হয় **না**, শুধু হাজারের কমা বসানো হয় —
- *    নইলে ১৩০০০.১০ পর্দায় ১৩০০০.০৯৯৯… হয়ে যেত।
+ * Careful: the server sends money as a string (Decimal, not float). No `Number()`
+ * arithmetic is done here, only thousands separators are inserted; otherwise
+ * 13000.10 would become 13000.0999... on screen.
  *
- * ⭐ এটা owner ছাড়া কারো পর্দায় ডাকা যাবে না (§ ৪.৩, ADR-023)।
+ * It must not be called on anyone's screen except the owner's (section 4.3, ADR-023).
  */
 export function formatTaka(amount: string | null | undefined): string {
   if (amount === null || amount === undefined) return '—';
@@ -574,7 +576,7 @@ export function formatTaka(amount: string | null | undefined): string {
   return `${currencySymbolValue} ${localizeDigits(`${sign}${grouped}${fraction ? `.${fraction}` : ''}`)}`;
 }
 
-/** সাধারণ সংখ্যা — হাজারের কমা সহ */
+/** A plain number, with thousands separators. */
 export function formatCount(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return '—';

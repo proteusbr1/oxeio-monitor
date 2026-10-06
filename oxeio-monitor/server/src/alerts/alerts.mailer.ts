@@ -5,15 +5,15 @@ import { createTransport } from 'nodemailer';
 import { SMTP_TIMEOUT_MS } from './alerts.constants';
 
 /**
- * ⚠️ nodemailer-এর পুরো `Transporter` টাইপটা ধরে রাখা হয়নি — যেটুকু ব্যবহার
- *    হয় শুধু সেটুকুর একটা ইন্টারফেস। এতে লাইব্রেরির ভার্সন বদলালে এই ফাইলে
- *    কী কী ভাঙতে পারে সেটা এক নজরেই দেখা যায়।
+ * Careful: we do not carry nodemailer's whole `Transporter` type, only an
+ * interface for what is actually used. That way a library version change shows
+ * at a glance what could break in this file.
  */
 /**
- * ⭐ **R26** — চিঠির সাথে ফাইল। `content` সরাসরি `Buffer`, কারণ
- * `reports.excel.ts`/`reports.pdf.ts` দুটোই `Buffer` ফেরত দেয় — কোনো
- * অস্থায়ী ফাইল বা base64-এর দরকার নেই।
- * ⭐ আকৃতিটা `ReportFile`-এর উপসেট, তাই ওটা সরাসরি পাস করা যায়।
+ * An email attachment. `content` is a plain `Buffer` because
+ * `reports.excel.ts` and `reports.pdf.ts` both return a `Buffer`, so no temp
+ * file or base64 is needed.
+ * The shape is a subset of `ReportFile`, so one can be passed in directly.
  */
 export interface MailAttachment {
   filename: string;
@@ -27,8 +27,8 @@ interface MailSender {
     to: string;
     subject: string;
     text: string;
-    // ⚠️ readonly নয় — nodemailer-এর নিজের টাইপ mutable অ্যারে চায়,
-    //    আর readonly দিলে গোটা Transporter-টাই আর এই ইন্টারফেসে মেলে না
+    // Careful: not readonly. nodemailer's own type wants a mutable array, and
+    // with readonly the whole Transporter would no longer match this interface
     attachments?: MailAttachment[];
   }): Promise<unknown>;
   close(): void;
@@ -47,20 +47,20 @@ interface SmtpConfig {
 export type SendOutcome = 'sent' | 'not_configured' | 'failed';
 
 /**
- * G07 — অ্যালার্টের ইমেইল চ্যানেল।
+ * Email channel for alerts.
  *
- * ⭐ এই ক্লাসের একটাই অলঙ্ঘনীয় নিয়ম: **এটা কখনো সার্ভার নামাতে পারবে না**।
- * ইমেইল পাঠানো মনিটরিংয়ের সহায়ক কাজ, মূল কাজ নয়। একটা ভুল SMTP পাসওয়ার্ড,
- * একটা ঝুলে যাওয়া মেইল সার্ভার বা DNS-এ ভুল হোস্টনেম — কোনোটাই যেন ঘণ্টা
- * গোনা বা এজেন্টের ডেটা নেওয়া বন্ধ না করে। তাই কনস্ট্রাক্টর থেকে শুরু করে
- * প্রতিটা send পর্যন্ত সবকিছু try/catch-এ মোড়া, আর কোথাও `verify()` ডাকা হয় না।
+ * The one inviolable rule of this class: **it must never be able to bring the
+ * server down.** Sending email is a supporting job of monitoring, not the main
+ * one. A wrong SMTP password, a hung mail server or a bad hostname in DNS must
+ * not stop hour counting or agent data intake. So everything from the
+ * constructor to each send is wrapped in try/catch, and `verify()` is never called.
  */
 @Injectable()
 export class AlertMailer implements OnModuleDestroy {
   private readonly logger = new Logger(AlertMailer.name);
   private readonly config: SmtpConfig | null;
   private transporter: MailSender | null = null;
-  /** একই অভিযোগ প্রতি মিনিটে লগে লেখার কোনো মানে নেই */
+  /** No point logging the same complaint every minute */
   private warnedMissing = false;
 
   constructor(config: ConfigService) {
@@ -78,17 +78,17 @@ export class AlertMailer implements OnModuleDestroy {
   }
 
   /**
-   * ফেরত দেয় কী হলো — কলার সেটা দেখে `channels_sent` বসায়।
-   * ⚠️ কখনো throw করে না। ব্যর্থতা একটা **মান**, ব্যতিক্রম নয়।
+   * Returns what happened; the caller uses it to set `channels_sent`.
+   * Careful: it never throws. A failure is a **value**, not an exception.
    */
   async send(
     to: readonly string[],
     subject: string,
     body: string,
     /**
-     * ⚠️ **ঐচ্ছিক, ইচ্ছাকৃতভাবে** — তিনটে পুরোনো কলার আর দুটো টেস্ট-মক
-     *    অপরিবর্তিত থাকে। বাধ্যতামূলক করলে ওগুলো সবই একসাথে ভাঙত, অথচ
-     *    তাদের কারো সংযুক্তির দরকার নেই।
+     * Optional, deliberately: the three older callers and two test mocks stay
+     * unchanged. Making it required would break all of them at once, and none
+     * of them needs an attachment.
      */
     attachments?: readonly MailAttachment[],
   ): Promise<SendOutcome> {
@@ -111,20 +111,20 @@ export class AlertMailer implements OnModuleDestroy {
         to: to.join(', '),
         subject,
         text: body,
-        // ⚠️ খালি হলে ঘরটা **বসানোই হয় না** — `attachments: []` পাঠানো
-        //    নিরীহ, কিন্তু কিছু SMTP সার্ভার তাতেও multipart মোড়ক বানায়
+        // Careful: when empty the key is **not set at all**. Sending
+        // `attachments: []` is harmless, but some SMTP servers still build a multipart wrapper
         ...(attachments && attachments.length > 0
           ? { attachments: [...attachments] }
           : {}),
       });
       return 'sent';
     } catch (err) {
-      // ⚠️ শুধু বার্তা, stack নয় — SMTP-র error object-এ কখনো কখনো
-      //    পাঠানো তথ্য (এমনকি auth স্ট্রিং) জুড়ে থাকে, সেটা লগে যাওয়া চলবে না।
+      // Careful: log only the message, not the stack. An SMTP error object can
+      // carry the sent data (even the auth string), which must not reach the log.
       this.logger.error(
         `Could not send alert email: ${err instanceof Error ? err.message : 'unknown error'}`,
       );
-      // পরের চেষ্টায় নতুন কানেকশন — ঝুলে থাকা সকেট ধরে রাখা হয় না
+      // New connection on the next attempt; we do not hold on to a hung socket
       this.dispose();
       return 'failed';
     }
@@ -144,15 +144,15 @@ export class AlertMailer implements OnModuleDestroy {
       port,
       secure,
       auth: user ? { user, pass } : undefined,
-      // ⚠️ টাইমআউট তিনটেই স্পষ্ট করে বসানো — nodemailer-এর ডিফল্ট এত বড় যে
-      //    একটা মৃত মেইল সার্ভারে প্রতিটা sweep কয়েক মিনিট ধরে ঝুলে থাকত।
+      // Careful: all three timeouts are set explicitly. nodemailer's defaults are
+      // so long that a dead mail server would hang every sweep for minutes.
       connectionTimeout: SMTP_TIMEOUT_MS,
       greetingTimeout: SMTP_TIMEOUT_MS,
       socketTimeout: SMTP_TIMEOUT_MS,
     });
 
-    // ⚠️ EventEmitter-এ 'error' শোনার কেউ না থাকলে Node পুরো প্রসেস ফেলে দেয়।
-    //    এই এক লাইনটাই "ভুল SMTP সার্ভার নামিয়ে দেবে না" প্রতিশ্রুতির শেষ পেরেক।
+    // Careful: if nobody listens for 'error' on an EventEmitter, Node kills the process.
+    // This one line is the last nail in the "a bad SMTP server won't take us down" promise.
     transporter.on('error', (err: Error) => {
       this.logger.error(`SMTP connection error: ${err.message}`);
     });
@@ -165,15 +165,15 @@ export class AlertMailer implements OnModuleDestroy {
     try {
       this.transporter?.close();
     } catch {
-      // বন্ধ করতে না পারলেও কিছু করার নেই
+      // Nothing to do if closing fails
     }
     this.transporter = null;
   }
 }
 
 /**
- * ⚠️ `SMTP_HOST` না থাকলে পুরোটাই বন্ধ — অর্ধেক কনফিগ নিয়ে চালু হওয়ার চেয়ে
- *    পরিষ্কারভাবে "নেই" বলা ভালো।
+ * Careful: without `SMTP_HOST` the whole thing is off. Saying plainly "not
+ * configured" is better than starting with half a config.
  */
 function readSmtpConfig(config: ConfigService): SmtpConfig | null {
   const host = config.get<string>('SMTP_HOST')?.trim();
@@ -186,7 +186,7 @@ function readSmtpConfig(config: ConfigService): SmtpConfig | null {
   return {
     host,
     port: Number.isFinite(port) && port > 0 ? port : 587,
-    // ৪৬৫ = implicit TLS; বাকি পোর্টে STARTTLS, তাই secure = false
+    // 465 = implicit TLS; other ports use STARTTLS, so secure = false
     secure: (config.get<string>('SMTP_SECURE') ?? '').toLowerCase() === 'true'
       ? true
       : port === 465,

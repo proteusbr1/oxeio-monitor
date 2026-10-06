@@ -14,29 +14,28 @@ import {
 } from './setup/harness';
 
 /**
- * ⭐⭐⭐ **G112 — tray-র "কত ঘণ্টা" আর ড্যাশবোর্ডের "কত ঘণ্টা" এক কি না**
- * *(৫ সেপ্টেম্বর ২০২৬)*।
+ * **G112 — whether the tray's "how many hours" and the dashboard's "how many hours" agree.**
  *
- * ⚠️⚠️ **যে ফাঁকটা এই ফাইল বন্ধ করে:** tray (`progress.service.ts`) ঘণ্টা
- * গুনত `Σ activity_segments.duration_sec` দিয়ে — এজেন্টের **monotonic
- * ঘড়ির কাঁচা যোগফল**। আর `daily_summary.worked_sec` আসে দেয়ালঘড়ির
- * `started_at`–`ended_at`-এর **UNION** থেকে (`summarizeDay`)। দুটো
- * ইচ্ছাকৃতভাবে আলাদা মাপকাঠি, আর `summary.math.ts` নিজেই লিখে রেখেছে
- * ওরা হুবহু মেলে না।
+ * **The gap this file closes:** the tray (`progress.service.ts`) counted hours
+ * with `Σ activity_segments.duration_sec` — the **raw sum of the agent's
+ * monotonic clock**. But `daily_summary.worked_sec` comes from the **UNION**
+ * of wall-clock `started_at`–`ended_at` (`summarizeDay`). The two are
+ * deliberately different yardsticks, and `summary.math.ts` itself says they do
+ * not match exactly.
  *
- * ⭐⭐ **ফারাকটা সবচেয়ে বড় দুই ডিভাইসওয়ালা কর্মীর বেলায়:** একসাথে দুই
- * মেশিনে কাজ করলে ওই সময়টা কাঁচা যোগফলে **দুবার** গোনা হয়, UNION-এ
- * একবার। অর্থাৎ তাঁর নিজের tray তাঁকে ড্যাশবোর্ডের চেয়ে **বেশি ঘণ্টা**
- * দেখাত — আর কেউ দুটো পাশাপাশি না রাখলে ধরাই পড়ত না। G32-র
- * `device_overlap` অ্যালার্ট ঠিক ওই ফারাকটাই মাপে, অর্থাৎ সংখ্যাটা
- * সিস্টেম নিজেই জানত, শুধু tray জানত না।
+ * **The difference is biggest for an employee with two devices:** work on
+ * two machines at once is counted **twice** in the raw sum and once in the
+ * UNION. So their own tray showed them **more hours** than the dashboard did —
+ * and it would never be caught unless someone put the two side by side. G32's
+ * `device_overlap` alert measures exactly that difference, so the system
+ * itself knew the number; only the tray did not.
  *
- * ⚠️ pace-এর দুই পাশ: **প্রত্যাশার** পাশটা আগেই এক সংজ্ঞায় এসেছে
- * (`elapsedWindow`), **কাজের** পাশটা এই ব্যাচে। তার আগে "tray আর
- * ড্যাশবোর্ড এক বলে" কথাটা অর্ধেক সত্যি ছিল।
+ * Both sides of pace: the **expectation** side already moved to one
+ * definition (`elapsedWindow`), the **work** side moves in this batch. Before
+ * that, "the tray and the dashboard agree" was only half true.
  *
- * ⚠️⚠️ **এই ফাইলে কোনো পিন-করা তারিখ নেই** (G140) — সব ফিক্সচার "আজ"-এর
- * সাপেক্ষে, কারণ tray সবসময় চলতি মাস ও আজকের দিন নিয়েই কথা বলে।
+ * **No pinned date in this file** (G140) — all fixtures are relative to
+ * "today", because the tray always speaks about the current month and today.
  */
 let h: Harness;
 let progress: ProgressService;
@@ -90,14 +89,14 @@ async function makeDevice(employeeId: number, tag: string): Promise<number> {
 }
 
 /**
- * একটা active সেগমেন্ট বসায় — ওই কর্মদিবসের `hour`টা থেকে `hours` ঘণ্টা।
+ * Adds one active segment — `hours` hours starting at `hour` of that working day.
  *
- * ⚠️ `durationSec` **দেয়ালঘড়ির দৈর্ঘ্যের সমানই** রাখা হয়, কারণ এই ফাইলের
- *    দাবিটা monotonic-বনাম-দেয়ালঘড়ি নিয়ে নয় — **যোগফল বনাম UNION** নিয়ে।
- *    দুটো একসাথে নাড়ালে কোন কারণে সংখ্যা বদলাল তা আর আলাদা করা যেত না।
+ * `durationSec` is kept **equal to the wall-clock length**, because this
+ *    file's claim is not about monotonic vs wall-clock — it is about **sum vs
+ *    UNION**. Moving both at once would make it impossible to tell which one changed the number.
  *
- * ⚠️ প্রতিটা সেগমেন্টের নিজের `work_sessions` সারি — schema-য় `sessionId`
- *    বাধ্যতামূলক, আর ওই টেবিলটাই "কবে থেকে দেখছি"-র উৎস (G120)।
+ * Each segment has its own `work_sessions` row — `sessionId` is mandatory
+ *    in the schema, and that table is the source of "since when we have been watching" (G120).
  */
 async function addSegment(opts: {
   employeeId: number;
@@ -138,14 +137,14 @@ async function addSegment(opts: {
 const trayOf = (employeeId: number) =>
   progress.forEmployee(employeeId, dhakaNoon());
 
-describe('G112 — দুই ডিভাইসের একসাথে কাজ একবারই গোনা হয়', () => {
+describe('G112 — work on two devices at the same time is counted once', () => {
   /**
-   * ⭐⭐⭐ **এই ফাইলের সবচেয়ে জরুরি টেস্ট।**
+   * **The most important test of this file.**
    *
-   * দুটো ডিভাইস, **হুবহু একই চার ঘণ্টা**। কাঁচা যোগফল বলত ৮ ঘণ্টা,
-   * দেয়ালঘড়ির UNION বলে ৪ — আর মানুষটা সত্যিই চার ঘণ্টাই বসেছিলেন।
+   * Two devices, **exactly the same four hours**. The raw sum said 8 hours,
+   * the wall-clock UNION says 4 — and the person really did sit four hours.
    */
-  it('⭐ আজ দুই PC-তে একই ৪ ঘণ্টা — tray ৪ বলে, ৮ নয়', async () => {
+  it('today the same 4 hours on two PCs — the tray says 4, not 8', async () => {
     const id = await makeEmployee('G112-OVERLAP');
     const a = await makeDevice(id, 'a');
     const b = await makeDevice(id, 'b');
@@ -160,8 +159,8 @@ describe('G112 — দুই ডিভাইসের একসাথে কা�
     expect(tray.monthActiveSec).toBe(4 * HOUR);
   });
 
-  it('ওভারল্যাপ না থাকলে কিছুই বদলায় না — যোগফল আর UNION তখন একই', async () => {
-    // ⚠️ এটাই নিরাপত্তা-জাল: একটামাত্র PC-র কর্মীর সংখ্যা এক চুলও নড়েনি।
+  it('with no overlap nothing changes — the sum and the UNION are the same then', async () => {
+    // This is the safety net: the numbers of an employee with a single PC did not move at all.
     const id = await makeEmployee('G112-SINGLE');
     const a = await makeDevice(id, 'solo');
     const day = today();
@@ -173,18 +172,18 @@ describe('G112 — দুই ডিভাইসের একসাথে কা�
   });
 });
 
-describe('G112 — শেষ হয়ে যাওয়া দিন rollup থেকেই আসে', () => {
+describe('G112 — finished days come from the rollup', () => {
   /**
-   * ⭐⭐ **সমতাটাই আসল পাহারা।** কেবল দুটো ধ্রুবক মিলিয়ে দেখলে ভবিষ্যতে
-   * সংখ্যা দুটো আবার আলাদা হয়ে গেলেও টেস্ট সবুজ থাকত — তাই এখানে
-   * **tray-র সংখ্যা আর ড্যাশবোর্ডের সারিটা সরাসরি মেলানো হয়**।
+   * **Equality is the real guard.** Just comparing two constants would stay
+   * green even if the two numbers drifted apart again in future — so here
+   * **the tray's number and the dashboard's row are compared directly**.
    */
-  it('⭐ tray-র মাসিক ঘণ্টা = Σ daily_summary.worked_sec', async () => {
+  it("the tray's monthly hours = Σ daily_summary.worked_sec", async () => {
     const id = await makeEmployee('G112-PAST');
     const a = await makeDevice(id, 'past');
 
-    // ⚠️ গতকাল ও পরশু — আজকের দিনটা ইচ্ছাকৃতভাবে খালি, যাতে দাবিটা
-    //    কেবল "শেষ হয়ে যাওয়া দিন"-এর উপরেই দাঁড়ায়
+    // Yesterday and the day before — today is deliberately empty, so the claim
+    //    stands only on "finished days"
     const yesterday = new Date(today().getTime() - MS_PER_DAY);
     const before = new Date(today().getTime() - 2 * MS_PER_DAY);
 
@@ -208,13 +207,13 @@ describe('G112 — শেষ হয়ে যাওয়া দিন rollup �
   });
 
   /**
-   * ⭐⭐ **সীমানার দুই পাশ — আর `lt` বনাম `lte`-র একটামাত্র অক্ষর।**
+   * **Both sides of the boundary — and the single character of `lt` vs `lte`.**
    *
-   * ⚠️⚠️ আজকের দিনটা যদি rollup **আর** লাইভ সেগমেন্ট দুই জায়গা থেকেই
-   * আসত, সকালের কাজ দুবার গোনা হতো। এখানে ইচ্ছাকৃতভাবে আজকের দিনের
-   * `daily_summary` সারিটাও লেখা হয়, যাতে ভুলটা ঘটলে ধরা পড়ে।
+   * If today came from both the rollup **and** the live segments, the morning's
+   * work would be counted twice. Today's `daily_summary` row is deliberately
+   * written here too, so that the mistake is caught if it occurs.
    */
-  it('⭐ আজকের দিন দুবার গোনা হয় না — rollup চললেও নয়', async () => {
+  it('today is not counted twice — even if the rollup has run', async () => {
     const id = await makeEmployee('G112-BOUNDARY');
     const a = await makeDevice(id, 'edge');
     const day = today();
@@ -227,17 +226,17 @@ describe('G112 — শেষ হয়ে যাওয়া দিন rollup �
         hours: 3,
       });
 
-    // rollup আজকের সারিটাও লিখে ফেলল
+    // the rollup wrote today's row too
     await summary.refreshDate(day, dhakaNoon());
 
     const tray = await trayOf(id);
 
     expect(tray.todayActiveSec).toBe(3 * HOUR);
-    // ৬ নয় — একবারই
+    // not 6 — just once
     expect(tray.monthActiveSec).toBe(3 * HOUR);
   });
 
-  it('গতকাল + আজ — দুই উৎস জোড়া লাগে, একটাও হারায় না', async () => {
+  it('yesterday + today — the two sources join up, none is lost', async () => {
     const id = await makeEmployee('G112-BOTH');
     const a = await makeDevice(id, 'both');
     const day = today();
@@ -254,13 +253,13 @@ describe('G112 — শেষ হয়ে যাওয়া দিন rollup �
   });
 
   /**
-   * ⚠️ rollup এখনো ওই দিনটা লেখেনি — তখন সংখ্যাটা কম, **বেশি নয়**।
+   * The rollup has not yet written that day — then the number is lower, **not higher**.
    *
-   * ⭐ এটা ইচ্ছাকৃত দাম, আর দামটা এদিকেই দেওয়া হয়েছে: অনুপস্থিত সারি
-   *    "শূন্য ঘণ্টা" বলে, "অজানা" নয়। কাঁচা সেগমেন্টে ফিরে গিয়ে ফাঁক
-   *    ভরাট করলে দুটো সংজ্ঞা আবার ফিরে আসত — অর্থাৎ G112-ই ফিরে আসত।
+   * This is a deliberate price, and the price is paid on this side: a missing
+   *    row says "zero hours", not "unknown". Going back to raw segments to fill
+   *    the gap would bring the two definitions back — i.e. G112 itself would return.
    */
-  it('গতকালের rollup না চললে সংখ্যাটা কম — কিন্তু ড্যাশবোর্ডও তখন কম', async () => {
+  it("if yesterday's rollup has not run the number is lower — but the dashboard is lower then too", async () => {
     const id = await makeEmployee('G112-NOROLLUP');
     const a = await makeDevice(id, 'stale');
     const yesterday = new Date(today().getTime() - MS_PER_DAY);
@@ -272,7 +271,7 @@ describe('G112 — শেষ হয়ে যাওয়া দিন rollup �
         hour: 10,
         hours: 5,
       });
-    // ⚠️ refreshDate ইচ্ছাকৃতভাবে চালানো হয়নি
+    // refreshDate was deliberately not run
 
     const rows = await h.prisma.dailySummary.findMany({ where: { employeeId: id } });
     expect(rows).toHaveLength(0);
@@ -283,27 +282,27 @@ describe('G112 — শেষ হয়ে যাওয়া দিন rollup �
 
 
 /**
- * ⭐⭐⭐ **G162 — এক মাস, এক সংখ্যা** *(৬ সেপ্টেম্বর ২০২৬)*।
+ * **G162 — one month, one number.**
  *
- * ⚠️⚠️ **যে বাগটা এই ব্লকটা পাহারা দেয়:** My data পাতার নিচের সারিতে
- * *"This month so far"* সংখ্যাটা **ব্রাউজারে যোগ করা** হতো — তালিকার
- * সারিগুলোর `creditedSec` মিলিয়ে। উপরের *"This month"* টাইল আসত
- * সার্ভারের `monthActiveSec` থেকে। একই পর্দায় দুটো সংখ্যা, আর তিনটে
- * আলাদা কারণে তারা মিলত না:
+ * **The bug this block guards:** in the lower row of the My data page the
+ * *"This month so far"* figure was **added up in the browser** — from the
+ * `creditedSec` of the list rows. The *"This month"* tile above came from the
+ * server's `monthActiveSec`. Two numbers on one screen, and for three
+ * separate reasons they did not match:
  *
- * ১· **জানালা** — তালিকাটা রোলিং ৩০ দিনের, তাই মাসের ৩১ তারিখে ১
- *    তারিখটা আনাই হতো না। বছরে সাত দিন, নীরবে, প্রায় এক কর্মদিবস কম।
- * ২· **রাশি** — নিচেরটা `credited` (সংশোধনসহ), উপরেরটা `worked`।
- *    একটাও সংশোধন হলেই ফারাক ঠিক সংশোধনের সমান।
- * ৩· **সংজ্ঞা** — নিচেরটা কাঁচা `duration_sec`-এর যোগ, উপরেরটা UNION।
- *    দুই PC-তে একসাথে কাজ করলে নিচেরটা সময়টা দুবার গুনত (G112-রই ফাঁক,
- *    কেবল অন্য পাতায়)।
+ * 1. **Window** — the list is a rolling 30 days, so on the 31st of the month
+ *    the 1st was never fetched. Seven days a year, silently, almost a working day short.
+ * 2. **Quantity** — the lower one is `credited` (with adjustments), the upper
+ *    one `worked`. With even one adjustment the difference is exactly the adjustment.
+ * 3. **Definition** — the lower one added raw `duration_sec`, the upper one
+ *    the UNION. Working on two PCs at once, the lower one counted the time
+ *    twice (the same gap as G112, only on another page).
  *
- * ⭐ তাই সংখ্যাটা আর ব্রাউজারে বানানো হয় না — সার্ভার যেটা দিয়ে `paceSec`
- * কষে, `monthCreditedSec` হয়ে পর্দাও ঠিক সেটাই দেখায়।
+ * So the number is no longer built in the browser — what the server uses to
+ * work out `paceSec` goes out as `monthCreditedSec`, and the screen shows exactly that.
  */
-describe('G162 — মাসের credited সংখ্যাটা সার্ভারেরই', () => {
-  /** owner-এর ইউজার আইডি — সংশোধনের সারি লিখতে লাগে */
+describe("G162 — the month's credited number comes from the server", () => {
+  /** The owner's user id — needed to write the adjustment rows */
   const ownerId = async () =>
     (await h.prisma.user.findFirstOrThrow({ where: { email: OWNER_EMAIL } })).id;
 
@@ -321,14 +320,14 @@ describe('G162 — মাসের credited সংখ্যাটা সার�
   }
 
   /**
-   * ⭐⭐⭐ **এই ব্লকের মূল টেস্ট** — সংশোধন `monthCreditedSec`-এ ঢোকে,
-   * `monthActiveSec`-এ নয়।
+   * **The main test of this block** — an adjustment goes into
+   * `monthCreditedSec`, not into `monthActiveSec`.
    *
-   * ⚠️ দুটোই দরকার, আর দুটো আলাদাই থাকবে: টাইল ও tray দেখায় **কত কাজ
-   *    হয়েছে**, আর নিচের যোগফল দেখায় **কত গোনা হয়েছে**। আগের বাগটা
-   *    ছিল একটাকে অন্যটার জায়গায় বসিয়ে ফেলা, দুটো থাকা নয়।
+   * Both are needed, and they stay separate: the tile and the tray show
+   *    **how much work was done**, and the sum below shows **how much was
+   *    counted**. The earlier bug was putting one in place of the other, not having both.
    */
-  it('⭐ সংশোধন credited-এ ঢোকে, worked-এ নয়', async () => {
+  it('an adjustment goes into credited, not into worked', async () => {
     const id = await makeEmployee('G162-ADJ');
     const a = await makeDevice(id, 'adj');
     const day = today();
@@ -342,8 +341,8 @@ describe('G162 — মাসের credited সংখ্যাটা সার�
     expect(tray.monthCreditedSec).toBe(7 * HOUR);
   });
 
-  /** ⚠️ বাতিল করা সংশোধন ঘণ্টা ফেরত দেয় না — `/me/days`-এর একই নিয়ম */
-  it('বাতিল করা সংশোধন গোনা হয় না', async () => {
+  /** A revoked adjustment gives no hours back — the same rule as `/me/days` */
+  it('a revoked adjustment is not counted', async () => {
     const id = await makeEmployee('G162-REVOKED');
     const a = await makeDevice(id, 'rev');
     const day = today();
@@ -358,11 +357,12 @@ describe('G162 — মাসের credited সংখ্যাটা সার�
   });
 
   /**
-   * ⚠️⚠️ **সংশোধন না থাকলে দুটো সংখ্যা হুবহু এক** — মাঠে আজ ঠিক এই
-   * অবস্থাটাই (`time_adjustments` খালি), তাই বাগটা এতদিন **দেখা যায়নি**।
-   * ⭐ এই টেস্টটা সেই নীরবতাটাকেই লিখে রাখে: মিল থাকাটা কাকতালীয় নয়।
+   * **With no adjustments the two numbers are exactly the same** — in the
+   * field today that is exactly the state (`time_adjustments` is empty), which
+   * is why the bug stayed **unseen** so long.
+   * This test writes that silence down: the agreement is not a coincidence.
    */
-  it('সংশোধন না থাকলে credited আর worked এক', async () => {
+  it('with no adjustments credited and worked are the same', async () => {
     const id = await makeEmployee('G162-NOADJ');
     const a = await makeDevice(id, 'plain');
 
@@ -381,11 +381,11 @@ describe('G162 — মাসের credited সংখ্যাটা সার�
   });
 
   /**
-   * ⚠️⚠️ **দুই PC-র ওভারল্যাপ credited-এও একবারই।** পুরোনো ব্রাউজার-যোগফল
-   * কাঁচা `duration_sec` মেলাত, তাই এই কর্মীর নিচের সংখ্যাটা উপরের
-   * টাইলের **দ্বিগুণ** দেখাত — আর দুটোই একই পর্দায়।
+   * **An overlap between two PCs counts once in credited too.** The old
+   * browser sum added raw `duration_sec`, so this employee's lower number
+   * showed **double** the tile above — both on the same screen.
    */
-  it('⭐ দুই PC-তে একই ৪ ঘণ্টা — credited-ও ৪, ৮ নয়', async () => {
+  it('the same 4 hours on two PCs — credited is 4 too, not 8', async () => {
     const id = await makeEmployee('G162-OVERLAP');
     const a = await makeDevice(id, 'ov-a');
     const b = await makeDevice(id, 'ov-b');
@@ -398,14 +398,14 @@ describe('G162 — মাসের credited সংখ্যাটা সার�
   });
 
   /**
-   * ⭐⭐ **মাসের ১ তারিখটাও ধরা পড়ে।** পুরোনো নিয়মে তালিকা আসত
-   * `today − 29` থেকে, তাই ৩১ তারিখে ১ তারিখটা কোনো সারিতেই থাকত না —
-   * অথচ মাসের যোগফলে সেটা থাকার কথা।
+   * **The 1st of the month is caught too.** Under the old rule the list came
+   * from `today − 29`, so on the 31st the 1st was in no row — though it
+   * should be in the month's sum.
    *
-   * ⚠️ এখানে ৩১ তারিখ পিন করা হয়নি (G140): মাসের **প্রথম** দিনে ঘণ্টা
-   *    বসিয়ে দেখা হয় সেটা যোগফলে আছে কি না — জানালা যত ছোটই হোক।
+   * The 31st is not pinned here (G140): hours are placed on the **first** day
+   * of the month and we check whether they are in the sum — however small the window.
    */
-  it('⭐ মাসের প্রথম দিনের ঘণ্টাও যোগফলে থাকে', async () => {
+  it("hours on the month's first day are in the sum too", async () => {
     const id = await makeEmployee('G162-FIRSTDAY');
     const a = await makeDevice(id, 'first');
     const day = today();
@@ -414,7 +414,7 @@ describe('G162 — মাসের credited সংখ্যাটা সার�
     );
 
     if (firstOfMonth.getTime() === day.getTime()) {
-      // ⚠️ আজই ১ তারিখ হলে "আগের দিন" বলে কিছু নেই — তখন আজকেরটাই যথেষ্ট
+      // If today is the 1st there is no "previous day" — then today's alone is enough
       await addSegment({ employeeId: id, deviceId: a, workDate: day, hour: 10, hours: 3 });
       expect((await trayOf(id)).monthCreditedSec).toBe(3 * HOUR);
       return;

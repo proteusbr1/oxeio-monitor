@@ -14,113 +14,116 @@ import { paceSecOf } from './progress.math';
 import { workDateOf } from './util/dhaka-time';
 
 /**
- * ⚠️ `work_date` সবসময় UTC-মধ্যরাতের `@db.Date`, তাই দিন যোগ-বিয়োগে DST বা
- * ঘণ্টার ঝামেলা নেই — এটা নিছক পাটিগণিত, কোনো টাইমজোন নিয়ম নয়।
+ * Careful: `work_date` is always the UTC midnight of a `@db.Date`, so adding or
+ * subtracting days has no DST or hour trouble; it is plain arithmetic, not a
+ * timezone rule.
  */
 const MS_PER_DAY = 86_400_000;
 
 export interface EmployeeProgress {
-  /** ঢাকার আজকের দিনে গোনা সেকেন্ড */
+  /** Seconds counted on today's date in Dhaka. */
   todayActiveSec: number;
-  /** চলতি মাসে (ঢাকার) গোনা সেকেন্ড */
+  /** Seconds counted in the current month (Dhaka). */
   monthActiveSec: number;
 
   /**
-   * ⭐⭐⭐ **মাসের credited — worked + সংশোধন** *(৬ সেপ্টেম্বর ২০২৬, G162)*।
+   * **The month's credited: worked + adjustments** (G162).
    *
-   * ⚠️⚠️ **যে বাগটা এটা সারায়:** My data পাতার নিচের সারিতে
-   * *"This month so far"* সংখ্যাটা **ব্রাউজারে যোগ করা** হতো — আর তিনটে
-   * কারণে সেটা উপরের *"This month"* টাইলের সাথে মিলত না:
+   * Careful, the bug this fixes: the *"This month so far"* number in the bottom
+   * row of the My data page was **summed in the browser**, and for three reasons it
+   * did not match the *"This month"* tile above it:
    * <ol>
-   *   <li>জানালা আলাদা — তালিকাটা **রোলিং ৩০ দিনের**, তাই মাসের ৩১
-   *       তারিখে ১ তারিখটা কখনো আসতই না (বছরে সাত দিন);</li>
-   *   <li>রাশি আলাদা — নিচেরটা `credited` (সংশোধনসহ), উপরেরটা
-   *       `worked` (সংশোধন ছাড়া)। একটাও সংশোধন হলেই দুটো আলাদা হতো;</li>
-   *   <li>সংজ্ঞা আলাদা — নিচেরটা কাঁচা `duration_sec`-এর যোগ, উপরেরটা
-   *       UNION। দুই PC-তে একসাথে কাজ করলে নিচেরটা **দুবার** গুনত।</li>
+   *   <li>Different window: the list is a **rolling 30 days**, so on the 31st the
+   *       1st never appeared (seven days a year);</li>
+   *   <li>Different quantity: the bottom one was `credited` (with adjustments), the
+   *       top one `worked` (without). Any single adjustment made them differ;</li>
+   *   <li>Different definition: the bottom one summed raw `duration_sec`, the top
+   *       one a UNION. With work on two PCs at once, the bottom one counted it
+   *       **twice**.</li>
    * </ol>
    *
-   * ⭐ তাই সংখ্যাটা আর ব্রাউজারে বানানো হয় না — সার্ভার যেটা দিয়ে
-   * `paceSec` কষে, পর্দাও ঠিক সেটাই দেখায়। এক মাস, এক সংখ্যা।
+   * So the number is no longer built in the browser: the screen shows exactly what
+   * the server uses to compute `paceSec`. One month, one number.
    *
-   * ⚠️ `monthActiveSec` **বদলানো হয়নি**, ইচ্ছাকৃতভাবে: ওটা এজেন্টের
-   * তারের চুক্তি (`AgentHost.ActiveThisMonth`), আর § ২.১-ঙ (G35) বলে
-   * দেখানো ঘণ্টা `worked`-এ থাকবে, কেবল pace `credited`-এ। দুটো আলাদা
-   * প্রশ্ন, তাই দুটো আলাদা ঘর।
+   * Careful: `monthActiveSec` was **deliberately not changed**: it is the agent's
+   * wire contract (`AgentHost.ActiveThisMonth`), and § 2.1-e (G35) says the hours
+   * shown stay in `worked`, and only pace uses `credited`. Two different questions,
+   * so two different fields.
    */
   monthCreditedSec: number;
-  /** ওই কর্মীর work policy থেকে — হার্ডকোড ২০৮ নয় */
+  /** From that employee's work policy, not a hardcoded 208. */
   monthlyTargetHours: number;
   /**
-   * **B05b** — আজ পর্যন্ত এগিয়ে (+) না পিছিয়ে (−), সেকেন্ডে।
-   * `credited_sec − expected_sec` (§ ২.১-খ)।
+   * **B05b** - how far ahead (+) or behind (-) up to today, in seconds.
+   * `credited_sec - expected_sec` (§ 2.1-b).
    *
-   * ⭐ **এটা না পাঠালে এজেন্ট নিজেই আন্দাজ করে** — সে `holidays` টেবিল
-   * চেনে না, তাই শুধু শুক্রবার বাদ দিয়ে কর্মদিবস গোনে আর জানালায় "গতি
-   * (আনুমানিক)" লিখে রাখে। ঈদের সপ্তাহে ওই আন্দাজ ড্যাশবোর্ডের সংখ্যার
-   * চেয়ে কয়েক ঘণ্টা পিছিয়ে দেখাত — অর্থাৎ ছুটির দিনগুলোকেই কর্মীর ঘাটতি
-   * বলে গোনা হতো। সার্ভার সংখ্যাটা দেওয়া শুরু করলে এজেন্ট লেবেল থেকে
-   * "আনুমানিক" নিজেই তুলে নেয়।
+   * **If this is not sent, the agent guesses by itself**: it does not know the
+   * `holidays` table, so it counts workdays by excluding only Fridays and labels
+   * the window "pace (approx.)". In Eid week that guess would show a few hours
+   * behind the dashboard's number, i.e. the holidays themselves were counted as the
+   * employee's deficit. Once the server supplies the number, the agent removes
+   * "approx." from the label by itself.
    *
-   * ⚠️ `optional` — পুরোনো এজেন্ট ফিল্ডটা চেনে না, আর নতুন এজেন্টও
-   * `null` পেলে নিজের আন্দাজে ফিরে যায়। তাই কখনো ভাঙে না।
+   * Careful: `optional`: an old agent does not know the field, and a new agent also
+   * falls back to its own guess on `null`. So it never breaks.
    */
   paceSec: number;
 
   /**
-   * আজকের টার্গেট, সেকেন্ডে — মাসিক টার্গেট ÷ ওই মাসের কর্মদিবস।
+   * Today's target in seconds: monthly target / that month's workdays.
    *
-   * ⚠️ **ছুটির দিনে ০** (সাপ্তাহিক ছুটি বা `holidays`)। ০ মানে "আজ কিছু
-   * করার দরকার নেই", আর সেদিন কেউ কাজ করলে সেটা এমনিতেই মাসের হিসাবে যোগ
-   * হয় — নিয়মটা "যেকোনো দিন গোনা হয়" (§ ৪)।
+   * Careful: **0 on a day off** (weekly off day or `holidays`). 0 means "nothing
+   * required today", and if someone works that day it is added to the month anyway,
+   * because the rule is "any day counts" (§ 4).
    *
-   * ⭐ DB-তে দৈনিক টার্গেট বলে কোনো কলাম নেই, ইচ্ছাকৃতভাবে — একমাত্র
-   * চুক্তি মাসিক ২০৮ ঘণ্টা (O8)। এটা শুধু **দেখানোর** সংখ্যা, কাটার নয়।
+   * There is deliberately no daily-target column in the DB: the only contract is
+   * 208 hours a month (O8). This is a number for **display**, not for deductions.
    */
   dailyTargetSec: number;
 
-  /** গত ৭ দিনে (আজ ধরে) গোনা সেকেন্ড */
+  /** Seconds counted in the last 7 days (including today). */
   week7ActiveSec: number;
 
   /**
-   * ওই ৭ দিনের মধ্যে যতগুলো কর্মদিবস, তত × দৈনিক টার্গেট।
+   * The number of workdays in those 7 days, times the daily target.
    *
-   * ⚠️ "চলতি সপ্তাহ" নয়, **রোলিং ৭ দিন** — এই সিস্টেমে সপ্তাহের কোনো
-   * সীমানাই নেই (§ ৪: যেকোনো দিন গোনা হয়)। "এই সপ্তাহ" বানাতে গেলে
-   * সপ্তাহ কবে শুরু সেই নতুন ধারণা আমদানি করতে হতো।
+   * Careful: **rolling 7 days**, not "this week"; this system has no week boundary
+   * at all (§ 4: any day counts). Building "this week" would import a new notion of
+   * when the week starts.
    */
   week7TargetSec: number;
 
   /**
-   * ⭐⭐ **G111** — তাঁর একটাও **শেষ হয়ে যাওয়া** কর্মদিবস এখনো দেখা হয়েছে
-   * কি না। `false` হলে উপরের `paceSec` ০, কিন্তু সেটা "টার্গেট পূরণ" নয় —
-   * "এখনো বলার মতো কিছু ঘটেনি"।
+   * **G111** - whether any of their **finished** workdays has been seen yet. When
+   * `false`, `paceSec` above is 0, but that is not "target met"; it is "nothing
+   * worth reporting has happened yet".
    *
-   * ⚠️ এটা না পাঠালে tray-তে নতুন কর্মীর প্রথম দিনটা দেখতে হুবহু একজন
-   * এগিয়ে-থাকা মানুষের মতো — "০ ঘণ্টা পিছিয়ে"। ⭐ এজেন্ট এই পতাকা দেখেই
-   * গতির লেখাটা লুকিয়ে "Not observed yet" বসায়, নিজে থেকে `paceSec === 0`
-   * বিচার করে নয়; করলে টার্গেট ঠিক ছুঁয়ে ফেলা মানুষও ওই লেখাটা পেতেন।
+   * Careful: without this, a new employee's first day on the tray would look
+   * exactly like someone who is ahead: "0 hours behind". The agent hides the pace
+   * text and shows "Not observed yet" based on this flag, not by judging
+   * `paceSec === 0` itself; otherwise someone who hit the target exactly would get
+   * that text too.
    *
-   * ⚠️ পুরোনো এজেন্ট ফিল্ডটা চেনে না, আর না চিনলে আগের মতোই আচরণ করে —
-   * তাই এটা যোগ করায় কিছু ভাঙে না।
+   * Careful: an old agent does not know the field and behaves as before, so adding
+   * it breaks nothing.
    */
   observed: boolean;
 }
 
 /**
- * এজেন্টের tray-তে "x ঘ / ২০৮ঘ" দেখানোর জন্য সংখ্যাটা।
+ * The number for the agent's tray display "x h / 208h".
  *
- * ⚠️ **এজেন্ট নিজে এটা হিসাব করতে পারে না।** সে শুধু নিজের চালু থাকার সময়টুকু
- * জানে — রিবুট বা আপডেটের পর তার হিসাব শূন্য থেকে শুরু হয়। স্টাফ তখন tray-তে
- * দেখত "০ ঘ / ২০৮ঘ" আর ভাবত তার মাসের কাজ মুছে গেছে। যে ফিচারটার পুরো
- * উদ্দেশ্যই আস্থা তৈরি করা, সেটাই তখন আস্থা ভাঙত।
+ * Careful: **the agent cannot compute this itself.** It knows only its own uptime,
+ * and after a reboot or an update its count restarts from zero. Staff would then
+ * see "0 h / 208h" on the tray and think their month's work had been erased. A
+ * feature whose whole purpose is to build trust would then break it.
  *
- * তাই সংখ্যাটা সার্ভার দেয় — যেখানে সব ডিভাইসের ডেটা একসাথে আছে
- * (কেউ দুটো PC ব্যবহার করলেও যোগ হয়ে যায়, § ২.১-গ)।
+ * So the server supplies it, since it has all devices' data together (someone
+ * using two PCs is added up too, § 2.1-c).
  *
- * কাঁচা `activity_segments` থেকেই যোগ করা হয়, `monthly_summary` থেকে নয় —
- * ওই rollup এখনো তৈরি হয় না, আর ১৫টি ডিভাইসে মাসে কয়েক হাজার সারির যোগফল
- * সরাসরি বের করাই সহজ ও সবসময় হালনাগাদ।
+ * It is summed from raw `activity_segments`, not `monthly_summary`: that rollup
+ * is not produced yet, and summing a few thousand rows a month across 15 devices
+ * directly is simpler and always current.
  */
 @Injectable()
 export class ProgressService {
@@ -132,23 +135,23 @@ export class ProgressService {
   ): Promise<EmployeeProgress> {
     const today = workDateOf(now);
 
-    // মাসের প্রথম দিন — ঢাকার ক্যালেন্ডার অনুযায়ী, UTC-র নয়
+    // First day of the month, by the Dhaka calendar, not UTC.
     const monthStart = new Date(
       Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1),
     );
-    // পরের মাসের "০ তারিখ" = চলতি মাসের শেষ দিন (লিপ ইয়ারও নিজে সামলায়)
+    // Day "0" of next month = the last day of this month (leap years handled for free).
     const monthEnd = new Date(
       Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0),
     );
 
-    // রোলিং ৭ দিন — আজ ধরে, তাই ৬ দিন পিছিয়ে
+    // Rolling 7 days including today, so go back 6 days.
     const week7Start = new Date(today.getTime() - 6 * MS_PER_DAY);
 
     /**
-     * ⚠️ ছুটির তালিকা **মাসের শুরু নয়, ৭ দিনের জানালাটাও ধরে** আনতে হয়।
-     * মাসের ১–৬ তারিখে ৭ দিনের জানালা আগের মাসে ঢুকে পড়ে; শুধু চলতি মাসের
-     * ছুটি আনলে আগের মাসের ঈদের দিনগুলো "কর্মদিবস" হিসেবে গোনা হতো, আর
-     * ৭ দিনের টার্গেট বেশি দেখাত।
+     * Careful: the holiday list must cover **the 7-day window too, not just the
+     * start of the month.** On the 1st to 6th of a month the 7-day window reaches into
+     * the previous month; fetching only this month's holidays would count last month's
+     * Eid days as "workdays" and the 7-day target would look too high.
      */
     const holidayFrom = week7Start < monthStart ? week7Start : monthStart;
 
@@ -163,49 +166,47 @@ export class ProgressService {
       firstSeen,
     ] = await Promise.all([
         /**
-         * ⭐⭐⭐ **G112 — এক সংজ্ঞা, দুটো উৎস।** সীমানাটা এখানে **লেখা**,
-         * কারণ পরের জন সবচেয়ে সহজে যেটা করবেন তা হলো দুটো যোগ করে ফেলা।
+         * **G112 - one definition, two sources.** The boundary is **written down** here,
+         * because the easiest thing for the next person to do is to add the two together.
          *
          * ```
-         * শেষ হয়ে যাওয়া দিন  →  daily_summary.worked_sec   (rollup, ১৫ মিনিট)
-         * আজকের দিন          →  activity_segments-এর UNION  (লাইভ)
+         * finished days  ->  daily_summary.worked_sec   (rollup, 15 minutes)
+         * today          ->  UNION of activity_segments (live)
          * ```
          *
-         * ⚠️⚠️ **কেন কাঁচা যোগফল আর নয়:** আগে তিনটে সংখ্যাই ছিল
-         * `Σ duration_sec`, অর্থাৎ এজেন্টের **monotonic ঘড়ির যোগফল**।
-         * কিন্তু `daily_summary.worked_sec` হলো **দেয়ালঘড়ির UNION**
-         * (`summarizeDay`)। দুটো হুবহু মেলে না — ঘুম থেকে ওঠা, ঘড়ির
-         * সংশোধন, ছোট ফাঁক। ⭐ আর ফারাকটা সবচেয়ে বড় **দুই ডিভাইসওয়ালা**
-         * কর্মীর বেলায়: একসাথে দুই মেশিনে কাজ করলে ওই সময়টা যোগফলে
-         * **দুবার** গোনা হতো, UNION-এ একবার। ফলে তাঁর tray ড্যাশবোর্ডের
-         * চেয়ে বেশি ঘণ্টা দেখাত — G32-র `device_overlap` অ্যালার্ট ঠিক
-         * ওই ফারাকটাই মাপে।
+         * Careful, **why the raw sum is no longer used**: all three numbers used to be
+         * `Σ duration_sec`, i.e. **the sum of the agent's monotonic clock**. But
+         * `daily_summary.worked_sec` is a **wall-clock UNION** (`summarizeDay`). The two do
+         * not match exactly (waking from sleep, clock corrections, small gaps). The gap is
+         * biggest for an employee with **two devices**: working on two machines at once
+         * counted that time **twice** in the sum and once in the UNION. So their tray
+         * showed more hours than the dashboard; the `device_overlap` alert of G32 measures
+         * exactly that gap.
          *
-         * ⚠️ আজকের দিনটা rollup থেকে নেওয়া **যায় না**: ওটা ১৫ মিনিট
-         * পরপর চলে, তাই tray-র সংখ্যা ঘড়ির কাঁটার সাথে না নড়ে ধাপে ধাপে
-         * লাফাত — অথচ tray-র গোটা কাজই "এখন কত হলো" দেখানো।
+         * Careful: today **cannot** be taken from the rollup: it runs every 15 minutes, so
+         * the tray number would jump in steps instead of moving with the clock, whereas
+         * the tray's whole job is to show "how much now".
          *
-         * ⚠️ তাই আজকের দিনেও **UNION**, কাঁচা যোগফল নয়: উৎস দুটো, কিন্তু
-         * **সংজ্ঞা একটাই**। সংজ্ঞাটাও দুটো রাখলে সীমানা পেরোনোর সময়
-         * (মধ্যরাতে) সংখ্যাটা নিজে থেকেই এক লাফে বদলে যেত।
+         * Careful: so today is also a **UNION**, not a raw sum: two sources, but **one
+         * definition**. With two definitions the number would jump by itself when it
+         * crosses the boundary (at midnight).
          *
-         * ⚠️ **যে দামটা এতে দিতে হলো, সেটা জেনেই দেওয়া:** ঢাকার মধ্যরাত
-         * থেকে ০০:১৫ পর্যন্ত গতকালের সারিটা এখনো চূড়ান্ত নয় (day-close
-         * ০০:১৫-তে চলে, `day-close.job.ts`), তাই ওই পনেরো মিনিটে tray
-         * গতকালের শেষ কয়েক মিনিট বাদ দিতে পারে। আগে কাঁচা সেগমেন্ট
-         * যোগ করায় ওটা নিখুঁত ছিল। ⭐ তবু এটাই কাম্য: **ভুলটা এখন
-         * ড্যাশবোর্ডের সাথে অভিন্ন**, আর দুই পর্দায় এক সংখ্যা থাকাটা
-         * পনেরো মিনিটের নিখুঁততার চেয়ে দামি — এই ফিচারটার পুরো
-         * উদ্দেশ্যই আস্থা।
+         * Careful: **the price paid for this is known and accepted**: from Dhaka midnight
+         * to 00:15, yesterday's row is not final yet (day-close runs at 00:15,
+         * `day-close.job.ts`), so in those fifteen minutes the tray may leave out the last
+         * few minutes of yesterday. Summing raw segments used to be exact there. Still,
+         * this is the right trade: **the error is now identical to the dashboard's**, and
+         * the same number on both screens is worth more than fifteen minutes of accuracy;
+         * the whole purpose of this feature is trust.
          */
         this.prisma.activitySegment.findMany({
           where: { employeeId, countsAsWork: true, workDate: today },
           select: { startedAt: true, endedAt: true },
         }),
         /**
-         * ⚠️⚠️ `lt: today`, `lte` **নয়** — এই একটা অক্ষরই দ্বিগুণ গোনা
-         *    ঠেকায়। `lte` দিলে আজকের দিনটা rollup থেকেও আসত আর লাইভ
-         *    সেগমেন্ট থেকেও, অর্থাৎ সকালের কাজ দুবার।
+         * Careful: `lt: today`, **not** `lte`; this one character prevents double
+         * counting. With `lte`, today would come from the rollup and from the live
+         * segments, so the morning's work would count twice.
          */
         this.prisma.dailySummary.aggregate({
           _sum: { workedSec: true },
@@ -224,11 +225,11 @@ export class ProgressService {
         this.prisma.employee.findUnique({
           where: { id: employeeId },
           select: {
-            // ⭐ G37 — কর্মকালের দুই প্রান্ত, tray-র টার্গেটও prorate হয়
+            // G37 - the two ends of the employment span, so the tray target is prorated too.
             joinedOn: true,
             leftOn: true,
-            // ⚠️ `weeklyOffDay` কর্মীর নয়, **work policy**-র কলাম — সাপ্তাহিক
-            //    ছুটি নীতির অংশ, ব্যক্তিগত বৈশিষ্ট্য নয়।
+            // Careful: `weeklyOffDay` is a column of the **work policy**, not of the
+            //    employee; the weekly off day is part of policy, not a personal attribute.
             policy: {
               select: {
                 monthlyTargetHours: true,
@@ -239,13 +240,14 @@ export class ProgressService {
           },
         }),
         /**
-         * ⚠️ `time_adjustments` থেকে সরাসরি, `daily_summary.adjustment_sec`
-         * থেকে নয় — ওই কলামটা ১৫ মিনিট পরপর চলা rollup-এর ফল, তাই owner
-         * ঘণ্টা ফেরত দেওয়ার পর স্টাফের tray পরের রিফ্রেশ পর্যন্ত তাকে
-         * "পিছিয়ে" দেখাত। সংশোধনের পুরো উদ্দেশ্যই তখন দেরিতে পৌঁছাত।
+         * Careful: read straight from `time_adjustments`, not from
+         * `daily_summary.adjustment_sec`: that column is the result of the rollup that
+         * runs every 15 minutes, so after the owner gave hours back, the staff member's
+         * tray would keep showing "behind" until the next refresh. The whole point of an
+         * adjustment would then arrive late.
          *
-         * ⚠️ `revokedAt: null` — বাতিল করা সংশোধন ঘণ্টা ফেরত দেয় না
-         * (schema-য় ডিলিট নেই, শুধু revoke)।
+         * Careful: `revokedAt: null`; a revoked adjustment gives no hours back (the
+         * schema has no delete, only revoke).
          */
         this.prisma.timeAdjustment.aggregate({
           _sum: { deltaSec: true },
@@ -260,52 +262,51 @@ export class ProgressService {
           select: { holidayDate: true },
         }),
         /**
-         * ⭐ R2 — তার নিজের ছুটি। ⚠️ `holidayFrom` থেকেই আনা হয় (মাসের ১
-         *    তারিখ নয়), কারণ নিচে সাত দিনের টার্গেটেও এটা লাগে আর ওই
-         *    জানালা মাসের সীমা পেরোতে পারে।
+         * R2 - their own leave. Careful: it is fetched from `holidayFrom` (not the 1st of
+         * the month), because the seven-day target below needs it too and that window
+         * can cross the month boundary.
          */
         this.prisma.leave.findMany({
           where: { employeeId, leaveDate: { gte: holidayFrom, lte: monthEnd } },
           select: { leaveDate: true },
         }),
         /**
-         * ⭐⭐ **সার্ভার কবে থেকে এই কর্মীকে নিয়ে হিসাব করছে** — তার
-         * সবচেয়ে পুরোনো `daily_summary` সারি। প্রত্যাশার জানালা এর আগে
-         * শুরু হয় না।
+         * **Since when the server has been computing for this employee**: their oldest
+         * `daily_summary` row. The expectation window does not start before it.
          *
-         * ⚠️ মাস দিয়ে ছাঁকা হয় না, ইচ্ছাকৃত: প্রশ্নটা "এই মাসে তার ডেটা
-         *    আছে কি" নয়, "তাকে কবে থেকে গুনছি"। মাস দিয়ে ছাঁকলে প্রতিটি
-         *    মাসের ১ তারিখেই ট্র্যাকিং নতুন করে "শুরু" হতো।
+         * Careful: it is deliberately not filtered by month. The question is not "do they
+         * have data this month" but "since when are we counting them". Filtering by month
+         * would make tracking "start" afresh on the 1st of every month.
          *
-         * ⚠️ সংস্থা-স্তরের min **নয়** — তাহলে পরে যোগ হওয়া কর্মীর জানালা
-         *    সংস্থার প্রথম দিন থেকে শুরু হতো, অর্থাৎ সে সিস্টেমে আসার
-         *    আগের সময়টাও তার ঘাটতিতে ঢুকত।
+         * Careful: **not** an organisation-wide min; otherwise a later-joining employee's
+         * window would start from the organisation's first day, and the time before they
+         * entered the system would go into their deficit.
          *
-         * ⚠️⚠️ **এটা "এজেন্ট কবে বসেছে" নয়।** `refreshDate()` প্রতিটি
-         *    active কর্মীর সারি লেখে, ডেটা থাক বা না থাক — তাই ১ অক্টোবর
-         *    সক্রিয় হয়ে ৮ অক্টোবর এজেন্ট পাওয়া কর্মীর এজেন্টহীন দিনগুলো
-         *    এখনো পুরো ঘাটতি। আগে এখানে উল্টোটা দাবি করা ছিল, আর ওই
-         *    মিথ্যা মন্তব্যটা পড়ে কেউ ভাবতেন কেসটা ঢাকা পড়ে গেছে।
+         * Careful: **this is not "when the agent was installed".** `refreshDate()` writes
+         * a row for every active employee, with data or not. So for an employee activated
+         * on 1 October who got an agent on 8 October, the agentless days are still a full
+         * deficit. The comment here used to claim the opposite, and anyone reading that
+         * false comment would think the case was covered.
          */
         trackedFromBy(this.prisma, [employeeId]),
       ]);
 
     /**
-     * ⭐ আজকের লাইভ সংখ্যা — **UNION**, কাঁচা যোগফল নয় (উপরের নোট দেখুন)।
-     *    দুই ডিভাইসে একসাথে কাজ করলে সময়টা একবারই গোনা হয়, ঠিক যেভাবে
-     *    `daily_summary.worked_sec` গোনে।
+     * Today's live number: a **UNION**, not a raw sum (see the note above). With work
+     * on two devices at once the time is counted only once, exactly as
+     * `daily_summary.worked_sec` counts it.
      */
     const todayActiveSec = unionSec(todaySpans);
 
-    // ⭐ G112 — শেষ হয়ে যাওয়া দিন rollup থেকে + আজকের দিন লাইভ
+    // G112 - finished days from the rollup + today live.
     const monthActiveSec = (monthPastRow._sum.workedSec ?? 0) + todayActiveSec;
 
-    // ⭐ G162 — এক জায়গায় কষা, দুই জায়গায় ব্যবহৃত (pace আর My data-র নিচের সারি)
+    // G162 - computed in one place, used in two (pace and the bottom row of My data).
     const monthCreditedSec = monthActiveSec + (adjustmentRow._sum.deltaSec ?? 0);
     const week7ActiveSec = (week7PastRow._sum.workedSec ?? 0) + todayActiveSec;
     const monthlyTargetHours = Number(
-      // পলিসি না থাকলে স্পেকের ডিফল্ট — শূন্য দিলে এজেন্টে ভাগ করতে গিয়ে
-      // অসীম অগ্রগতি দেখাত
+      // The spec default if there is no policy; passing zero would show infinite
+      // progress when the agent divides.
       employee?.policy?.monthlyTargetHours ?? 208,
     );
 
@@ -314,12 +315,13 @@ export class ProgressService {
     const leaveDates = new Set(leaveRows.map((l) => l.leaveDate.getTime()));
 
     /**
-     * ⭐⭐ **G37 · ADR-025 — tray-র টার্গেটও prorate হয়।**
+     * **G37 · ADR-025 - the tray's target is prorated too.**
      *
-     * ⚠️⚠️ এটা বাদ দিলে **সবচেয়ে খারাপ ধরনের বাগ** হতো: ১৫ তারিখে যোগ
-     * দেওয়া স্টাফের tray দেখাত "x / ২০৮ঘ", আর ড্যাশবোর্ড ও পে-রোল শিট
-     * দেখাত "x / ১১২ঘ"। দুই জায়গায় দুই সংখ্যা মানে একটা মিথ্যা বলছে, আর
-     * এই ফিচারটার পুরো উদ্দেশ্যই আস্থা ([§ ২.১-ঙ](../../../docs/07-Technical-Spec.md))।
+     * Careful: leaving this out would be **the worst kind of bug**: a staff member who
+     * joined on the 15th would see "x / 208h" on the tray, while the dashboard and the
+     * payroll sheet show "x / 112h". Two numbers in two places means one is lying, and
+     * the whole purpose of this feature is trust
+     * ([§ 2.1-e](../../../docs/07-Technical-Spec.md)).
      */
     const p = prorate({
       monthStart,
@@ -336,18 +338,17 @@ export class ProgressService {
     const expectedWorkdays = p.employeeWorkdays;
 
     /**
-     * ⭐⭐ **জানালাটা এখানে হিসাব করা হয় না — `elapsedWorkdays()` করে।**
+     * **The window is not computed here; `elapsedWorkdays()` does it.**
      *
-     * ⚠️⚠️ আগে এখানে নিজের একটা হিসাব ছিল: `max(মাসের ১, joinedOn)` থেকে
-     *    **আজ ধরে** ক্যালেন্ডার কর্মদিবস। সেটাই ছিল এই রিপোর সবচেয়ে বড়
-     *    পাপের উৎস — কর্মী তার নিজের tray/`/me`-তে যা দেখতেন আর owner
-     *    Monthly পাতায় যা দেখতেন, দুটোর ফারাক দাঁড়িয়েছিল ~৮৯ ঘণ্টা।
-     *    কারণ দুটো:
-     *      ১· **আজকের দিনটা ধরা হতো।** ভোর ৬টায় tray "৮ ঘণ্টা পিছিয়ে"
-     *         দেখাত, সন্ধ্যায় নিজে থেকেই ঠিক হয়ে যেত — একই মানুষ দিনে
-     *         দুবার দুই রায় পেতেন, কেবল ঘড়ির কাঁটার কারণে।
-     *      ২· **ট্র্যাকিং শুরুর আগের দিনও গোনা হতো**, অর্থাৎ এজেন্ট বসার
-     *         আগের না-দেখা দিনগুলো তার ব্যর্থতা হয়ে যেত।
+     * Careful: this used to have its own calculation: calendar workdays from
+     * `max(1st of the month, joinedOn)` **through today**. That was the source of this
+     * repo's biggest sin: what an employee saw on their own tray or `/me` and what the
+     * owner saw on the Monthly page differed by about 89 hours. Two causes:
+     *   1. **Today was counted.** At 6 am the tray showed "8 hours behind" and fixed
+     *      itself by evening; the same person got two verdicts a day, purely because
+     *      of the clock.
+     *   2. **Days before tracking started were counted too**, so unseen days from
+     *      before the agent was installed became their failure.
      */
     const workdaysElapsed = elapsedWorkdays({
       periodStart: monthStart,
@@ -355,33 +356,34 @@ export class ProgressService {
       today,
       joinedOn: employee?.joinedOn ?? null,
       leftOn: employee?.leftOn ?? null,
-      // ⚠️⚠️ `?? today` — না-দেখা কর্মীর প্রত্যাশা ০, পুরো মাস নয় (G120)
+      // Careful: `?? today`; an unseen employee's expectation is 0, not the whole month (G120).
       trackingStartedOn: firstSeen.get(employeeId) ?? today,
       weeklyOffDays: off,
       holidays,
     }, leaveDates);
 
     /**
-     * এক কর্মদিবসের ভাগ। ⚠️ পলিসি থেকে সরাসরি, তার কর্মদিবস দিয়ে ভাগ করে
-     * নয় — দৈনিক টার্গেট সবার জন্য একই ৮ ঘণ্টা, কে কবে যোগ দিল তাতে বদলায় না।
+     * The share of one workday. Careful: taken straight from the policy, not divided
+     * by their own workdays; the daily target is the same 8 hours for everyone and
+     * does not change with when someone joined.
      */
     const perWorkdayTargetSec = Math.round(p.dailyTargetSec);
 
-    // আজ কর্মদিবস কি না — countWorkdays দুই প্রান্তই ধরে, তাই একদিনের রেঞ্জ
+    // Whether today is a workday; countWorkdays includes both ends, so use a one-day range.
     const todayIsWorkday = countWorkdays(today, today, off, holidays) > 0;
 
     return {
       todayActiveSec,
       monthActiveSec,
       monthCreditedSec,
-      // ⭐ G37 — এজেন্ট যা দেখাবে সেটা **তার** টার্গেট, ফ্ল্যাট ২০৮ নয়
+      // G37 - what the agent shows is **their** target, not a flat 208.
       monthlyTargetHours: p.targetSec / 3600,
       dailyTargetSec: todayIsWorkday ? perWorkdayTargetSec : 0,
       week7ActiveSec,
       /**
-       * ⚠️ R2 — সাত দিনের টার্গেট থেকেও ছুটি বাদ। নইলে ছুটি কাটিয়ে ফেরা
-       *    কেউ tray-তে "এই সপ্তাহে অনেক পিছিয়ে" দেখতেন — অথচ মাসিক
-       *    সংখ্যাটা তাঁকে ঠিকই ছাড় দিয়েছে। দুটো একসাথে দেখা যায়।
+       * Careful: R2 - leave is excluded from the seven-day target too. Otherwise
+       * someone back from leave would see "far behind this week" on the tray, while the
+       * monthly number does excuse them. The two are visible together.
        */
       week7TargetSec:
         perWorkdayTargetSec *
@@ -392,10 +394,10 @@ export class ProgressService {
         ),
       paceSec: paceSecOf({
         /**
-         * ⚠️ `credited`, `worked` নয় — § ২.১-ঙ (G35)। সার্ভারের দোষে ঘণ্টা
-         * হারানো স্টাফ owner-এর সংশোধনের পরেও tray-তে সারা মাস "পিছিয়ে"
-         * দেখত, অথচ ড্যাশবোর্ড তাকে এগিয়ে দেখাত — দুটো সংখ্যা দুই কথা
-         * বললেই আস্থা শেষ, আর এই ফিচারটার উদ্দেশ্যই আস্থা।
+         * Careful: `credited`, not `worked` (§ 2.1-e, G35). A staff member who lost hours
+         * through a server fault would otherwise see "behind" on the tray all month even
+         * after the owner's adjustment, while the dashboard showed them ahead. Two numbers
+         * saying two things ends trust, and the purpose of this feature is trust.
          */
         creditedSec: monthCreditedSec,
         monthlyTargetHours: p.targetSec / 3600,
@@ -403,7 +405,7 @@ export class ProgressService {
         leaveWorkdays: p.leaveWorkdays,
         workdaysElapsed,
       }),
-      // ⭐ G111 — `paceSec`-এর ঠিক পাশে, কারণ এটা ওই সংখ্যাটা **পড়ার নিয়ম**
+      // G111 - right next to `paceSec`, because this is the rule for **reading** that number.
       observed: isObserved({ workdaysElapsed }),
     };
   }

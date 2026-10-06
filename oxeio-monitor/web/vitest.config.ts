@@ -1,18 +1,18 @@
 import { defineConfig } from 'vitest/config';
 
 /**
- * ⚠️ ওয়েবে এতদিন **একটাও টেস্ট ছিল না**, যদিও সার্ভারে ৬০০-র বেশি।
- * ফাঁকটা কাকতালীয় নয়: React-এর টেস্ট মানেই সাধারণত DOM, jsdom, render —
- * ভারী ব্যবস্থা, তাই বারবার পিছিয়ে যায়।
+ * Careful: the web app had **not a single test** until now, though the server
+ * has over 600. The gap is no coincidence: a React test usually means DOM, jsdom,
+ * render, a heavy setup, so it keeps getting postponed.
  *
- * ⭐ তাই শুরুটা উল্টো দিক থেকে: **যে অংশটুকু DOM ছাড়াই ভুল হতে পারে**
- * সেটাই আগে। ঘণ্টা ফরম্যাট করা, ঢাকার তারিখ কষা, টাকা দেখানো — এগুলোর
- * একটাও ভুল হলে পর্দায় ভুল **সংখ্যা** বসে, আর সেটাই এই সিস্টেমের
- * সবচেয়ে খারাপ ব্যর্থতা: কেউ ধরতে পারে না, কারণ দেখতে ঠিকই লাগে।
+ * So the start is from the other end: **the parts that can go wrong without any
+ * DOM** come first. Formatting hours, working out Dhaka dates, showing money:
+ * if any is wrong, a wrong **number** lands on screen, and that is this
+ * system's worst failure: nobody catches it, because it looks right.
  *
- * ⚠️ `environment: 'node'` — jsdom ইচ্ছাকৃতভাবে আনা হয়নি। এখানকার কোনো
- * টেস্টের DOM লাগে না, আর jsdom প্রতিটা রানে কয়েক সেকেন্ড যোগ করত।
- * কম্পোনেন্ট টেস্ট লেখার দিন সেটা যোগ করা যাবে।
+ * Careful: `environment: 'node'`: jsdom was deliberately not brought in. None
+ * of the tests here need a DOM, and jsdom would add several seconds to every
+ * run. It can be added the day component tests are written.
  */
 export default defineConfig({
   test: {

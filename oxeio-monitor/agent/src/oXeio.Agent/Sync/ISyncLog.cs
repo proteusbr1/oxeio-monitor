@@ -1,31 +1,31 @@
 namespace oXeio.Agent.Sync;
 
 /// <summary>
-/// সিঙ্ক ক্লায়েন্টের লগের সরু সিম।
+/// A narrow seam for the sync client's logging.
 ///
-/// পূর্ণ লগিং মডিউল এলে সেটাকে এই ইন্টারফেসে মুড়ে দিলেই হবে। এখানে
-/// <c>Microsoft.Extensions.Logging</c> টেনে আনা হয়নি — নতুন NuGet এড়ানো
-/// (ঘরের নিয়ম) আর এই মডিউলের দরকার মাত্র তিনটে মেথড।
+/// When a full logging module arrives, just wrap it in this interface. We did not pull in
+/// <c>Microsoft.Extensions.Logging</c> here: no new NuGet packages (house rule), and this
+/// module needs only three methods.
 ///
-/// ⚠️ ইমপ্লিমেন্টেশন <b>কখনো এক্সসেপশন ছুড়বে না</b>। লগ লিখতে গিয়ে (ডিস্ক ভরা,
-/// ফাইল লক) ছুড়লে সেটা সিঙ্ক ওয়ার্কারকে মেরে ফেলত — অর্থাৎ লগ করার সমস্যা
-/// ডেটা হারানোর সমস্যা হয়ে যেত।
+/// Careful: implementations must <b>never throw</b>. If writing a log line threw (disk full,
+/// file locked) it would kill the sync worker, turning a logging problem into a data-loss
+/// problem.
 /// </summary>
 internal interface ISyncLog
 {
     void Info(string message);
 
-    /// <summary>সাময়িক গোলমাল — নেট নেই, ৫০০, টাইমআউট। রোজকার ঘটনা।</summary>
+    /// <summary>Transient noise: no network, 500, timeout. Everyday events.</summary>
     void Warn(string message);
 
     /// <summary>
-    /// যা কারো চোখে পড়া দরকার — স্থায়ী প্রত্যাখ্যান (৪০০/৪২২), revoke,
-    /// অথবা অপ্রত্যাশিত এক্সসেপশন।
+    /// Anything someone needs to notice: permanent rejection (400/422), revoke, or an
+    /// unexpected exception.
     /// </summary>
     void Error(string message, Exception? error = null);
 }
 
-/// <summary>কিছুই করে না। লগার না দিলে এটাই বসে, যাতে null-চেক ছড়াতে না হয়।</summary>
+/// <summary>Does nothing. Used when no logger is given, so null checks do not spread.</summary>
 internal sealed class NullSyncLog : ISyncLog
 {
     public static readonly NullSyncLog Instance = new();
@@ -38,11 +38,11 @@ internal sealed class NullSyncLog : ISyncLog
 }
 
 /*
- * ⚠️⚠️ এখানে আগে `ConsoleSyncLog` ছিল — <b>একমাত্র</b> বাস্তবায়ন, আর
- * `Program.cs` সেটাই এজেন্টে বসাত। কিন্তু প্রজেক্ট `WinExe`, অর্থাৎ
- * **কনসোলই নেই**; প্রতিটা লাইন শূন্যে যেত। H08-এর আসল রূপটা তাই
- * `Storage/FileLog.cs` — ডিস্কে লেখে, ৭ দিন / ৫০ MB সীমা মানে।
+ * Careful: this used to hold `ConsoleSyncLog`, the <b>only</b> implementation, and
+ * `Program.cs` installed it in the agent. But the project is `WinExe`, so there is
+ * **no console**; every line went nowhere. The real implementation is therefore
+ * `Storage/FileLog.cs`, which writes to disk with a 7 day / 50 MB limit.
  *
- * ক্লাসটা সরিয়ে দেওয়া হয়েছে রেখে না দিয়ে, কারণ রেখে দিলে একদিন কেউ
- * আবার ওটাই বসাত আর লগ আবার শূন্যে যেত — কোনো ভুল বার্তা ছাড়াই।
+ * The class was removed rather than kept, because if kept someone would one day
+ * install it again and the log would go nowhere again, with no error message.
  */

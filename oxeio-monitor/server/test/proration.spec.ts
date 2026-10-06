@@ -3,22 +3,23 @@ import { describe, expect, it } from 'vitest';
 import { prorate, salaryFraction, type ProrationInput } from '../src/summary/proration';
 
 /**
- * **G37 · ADR-025** — মাঝপথে যোগ দিলে টার্গেট ও বেতন।
+ * Target and salary when someone joins mid-month (ADR-025).
  *
- * ⭐ এই ফাইলের সবচেয়ে জরুরি টেস্টটা কোনো একটা সংখ্যার নয়, একটা
- * **সমতার**: ১৫ তারিখে যোগ দেওয়া আর পুরো মাস থাকা — দুজনের ঘণ্টাপ্রতি
- * হার হুবহু এক হতে হবে। ওটা ভাঙলে বাকি সব সংখ্যা ঠিক থেকেও নিয়মটা অন্যায্য
- * হয়ে যেত, আর কেউ টের পেত না।
+ * The most important test in this file is not about a single number but an
+ * equality: someone who joined on the 15th and someone who stayed the whole
+ * month must have exactly the same hourly rate. If that breaks, the rule
+ * becomes unfair even though every other number is right, and nobody would
+ * notice.
  */
 const d = (y: number, m: number, day: number) => new Date(Date.UTC(y, m - 1, day));
 
-/** সেপ্টেম্বর ২০২৬ — শুক্রবার ৪, ১১, ১৮, ২৫; ছুটি ছাড়া ২৬ কর্মদিবস */
+/** September 2026: Fridays 4, 11, 18, 25; 26 workdays without holidays */
 const SEPT: ProrationInput = {
   monthStart: d(2026, 9, 1),
   monthEnd: d(2026, 9, 30),
   joinedOn: null,
   leftOn: null,
-  weeklyOffDays: [5], // শুক্রবার (O11)
+  weeklyOffDays: [5], // Friday
   holidays: new Set<number>(),
   monthlyTargetSec: 208 * 3600,
   policyWorkdays: 26,
@@ -26,8 +27,8 @@ const SEPT: ProrationInput = {
 
 const HOURS = 3600;
 
-describe('prorate — কর্মদিবস গোনা', () => {
-  it('পুরো মাস থাকলে d = D', () => {
+describe('prorate: counting workdays', () => {
+  it('staying the whole month gives d = D', () => {
     const r = prorate(SEPT);
 
     expect(r.monthWorkdays).toBe(26);
@@ -35,55 +36,56 @@ describe('prorate — কর্মদিবস গোনা', () => {
     expect(r.partial).toBe(false);
   });
 
-  /** ⭐ মালিকের নিজের উদাহরণ: "১৫ তারিখ join করলে ১৫ দিনের salary" */
-  it('১৫ সেপ্টেম্বর যোগ দিলে তার কর্মদিবস ১৪', () => {
+  /** The owner's own example: "if someone joins on the 15th, 15 days of salary" */
+  it('joining on 15 September gives 14 workdays', () => {
     const r = prorate({ ...SEPT, joinedOn: d(2026, 9, 15) });
 
     expect(r.employeeWorkdays).toBe(14);
     expect(r.partial).toBe(true);
   });
 
-  it('মাসের মাঝে চলে গেলেও একই ভাবে গোনা হয়', () => {
+  it('leaving mid-month is counted the same way', () => {
     const r = prorate({ ...SEPT, leftOn: d(2026, 9, 14) });
 
-    // ১–১৪ সেপ্টেম্বর, শুক্রবার ৪ ও ১১ বাদে = ১২
+    // 1-14 September, minus Fridays the 4th and 11th = 12
     expect(r.employeeWorkdays).toBe(12);
   });
 
   /**
-   * ⚠️ যোগদান মাসের **আগে** হলে সেটা মাস শুরুর তারিখেই আটকে যায় — নইলে
-   * `countWorkdays` আগের মাসগুলোও গুনে ফেলত, আর টার্গেট আকাশে উঠত।
+   * If the join date is before the month, it is clamped to the month start;
+   * otherwise `countWorkdays` would count the earlier months too, and the
+   * target would skyrocket.
    */
-  it('আগের মাসে যোগ দেওয়া মানে পুরো মাস', () => {
+  it('joining in an earlier month means the whole month', () => {
     const r = prorate({ ...SEPT, joinedOn: d(2020, 1, 1) });
     expect(r.employeeWorkdays).toBe(26);
   });
 
-  it('মাসের পরে যোগ দিলে ওই মাসে তার কিছুই নেই', () => {
+  it('joining after the month means nothing for that month', () => {
     const r = prorate({ ...SEPT, joinedOn: d(2026, 10, 1) });
 
     expect(r.employeeWorkdays).toBe(0);
     expect(r.targetSec).toBe(0);
   });
 
-  it('মাসের আগেই চলে গেলে একই', () => {
+  it('leaving before the month is the same', () => {
     const r = prorate({ ...SEPT, leftOn: d(2026, 8, 31) });
     expect(r.employeeWorkdays).toBe(0);
   });
 
-  /** ⚠️ যোগ দিয়ে সেই মাসেই চলে যাওয়া — দুই প্রান্তই একসাথে খাটে */
-  it('একই মাসে যোগ দিয়ে চলে গেলে মাঝের অংশটুকুই', () => {
+  /** Joining and leaving in the same month: both ends apply together */
+  it('joining and leaving in the same month gives only the middle part', () => {
     const r = prorate({
       ...SEPT,
       joinedOn: d(2026, 9, 7),
       leftOn: d(2026, 9, 10),
     });
 
-    // ৭, ৮, ৯, ১০ — কোনো শুক্রবার নেই
+    // 7, 8, 9, 10: no Friday among them
     expect(r.employeeWorkdays).toBe(4);
   });
 
-  it('ছুটির দিন কর্মদিবস থেকে বাদ যায়', () => {
+  it('holidays are excluded from workdays', () => {
     const r = prorate({
       ...SEPT,
       holidays: new Set([d(2026, 9, 1).getTime(), d(2026, 9, 2).getTime()]),
@@ -94,14 +96,14 @@ describe('prorate — কর্মদিবস গোনা', () => {
   });
 });
 
-describe('prorate — টার্গেট', () => {
-  it('পুরো মাসে টার্গেট = কর্মদিবস × ৮ ঘণ্টা, ২০৮ নয়', () => {
-    // ⚠️ সেপ্টেম্বরে ২৬ কর্মদিবস, তাই এখানে ঠিক ২০৮ই আসে — কিন্তু
-    //    আগস্টে ২৭ দিন, অর্থাৎ ২১৬ঘ। ফ্ল্যাট ২০৮ আর নেই।
+describe('prorate: target', () => {
+  it('for a full month, target = workdays x 8 hours, not 208', () => {
+    // September has 26 workdays, so it comes to exactly 208 here, but
+    // August has 27 days, i.e. 216h. A flat 208 no longer exists.
     expect(prorate(SEPT).targetSec).toBe(208 * HOURS);
   });
 
-  it('আগস্টে ২৭ কর্মদিবস — টার্গেট ২১৬ ঘণ্টা', () => {
+  it('August has 27 workdays: target 216 hours', () => {
     const r = prorate({
       ...SEPT,
       monthStart: d(2026, 8, 1),
@@ -112,67 +114,68 @@ describe('prorate — টার্গেট', () => {
     expect(r.targetSec).toBe(216 * HOURS);
   });
 
-  it('১৫ তারিখে যোগ দিলে টার্গেট ১৪ × ৮ = ১১২ ঘণ্টা', () => {
+  it('joining on the 15th gives a target of 14 x 8 = 112 hours', () => {
     expect(prorate({ ...SEPT, joinedOn: d(2026, 9, 15) }).targetSec).toBe(112 * HOURS);
   });
 
   /**
-   * ⚠️⚠️ "৮ ঘণ্টা" হার্ডকোড **নয়** — পলিসির দুটো কলাম ভাগ করে বেরোয়।
-   * চুক্তি বদলে ২৬০ঘ ÷ ২৬ হলে দৈনিক ১০ ঘণ্টা, আর কোনো migration লাগে না।
+   * The 8 hours are not hardcoded: they come from dividing two policy
+   * columns. If the contract changes to 260h / 26, the daily target is
+   * 10 hours and no migration is needed.
    */
-  it('দৈনিক টার্গেট পলিসি থেকেই আসে, হার্ডকোড নয়', () => {
+  it('the daily target comes from the policy, not hardcoded', () => {
     const r = prorate({ ...SEPT, monthlyTargetSec: 260 * HOURS, policyWorkdays: 26 });
 
     expect(r.dailyTargetSec).toBe(10 * HOURS);
     expect(r.targetSec).toBe(260 * HOURS);
   });
 
-  it('পলিসির কর্মদিবস শূন্য বা ঋণাত্মক হলে ছোড়ে', () => {
+  it('throws when policy workdays are zero or negative', () => {
     expect(() => prorate({ ...SEPT, policyWorkdays: 0 })).toThrow(RangeError);
     expect(() => prorate({ ...SEPT, monthlyTargetSec: -1 })).toThrow(RangeError);
   });
 });
 
-describe('salaryFraction — বেতনের ভগ্নাংশ', () => {
-  it('পুরো মাস থাকলে পুরো বেতন', () => {
+describe('salaryFraction: the salary fraction', () => {
+  it('the whole month gives the whole salary', () => {
     expect(salaryFraction(26, 26)).toBe(1);
   });
 
-  it('অর্ধেক কর্মদিবসে অর্ধেক', () => {
+  it('half the workdays gives half', () => {
     expect(salaryFraction(13, 26)).toBe(0.5);
   });
 
-  it('ওই মাসে না থাকলে শূন্য', () => {
+  it('zero when not present that month', () => {
     expect(salaryFraction(0, 26)).toBe(0);
   });
 
   /**
-   * ⭐⭐ **O9 — পুরো মাসটাই ছুটি (D = ০)।** ঈদ আর সরকারি ছুটি একসাথে
-   * পড়লে সম্ভব। তখন কারো কোনো কর্মদিবসই নেই, অর্থাৎ ঘাটতিও অসম্ভব —
-   * মালিকের সিদ্ধান্ত: **পুরো বেতন**। ০/০-কে ০ ধরলে সবাই বিনা দোষে ওই
-   * মাসে শূন্য বেতন পেত।
+   * The whole month is a holiday (D = 0). This is possible when Eid and public
+   * holidays fall together. Then nobody has any workday, so a shortfall is
+   * impossible; owner's decision: full salary. Treating 0/0 as 0 would give
+   * everyone zero salary that month through no fault of their own.
    */
-  it('পুরো মাস ছুটি হলে পুরো বেতন, শূন্য নয়', () => {
+  it('a month that is all holiday gets full salary, not zero', () => {
     expect(salaryFraction(0, 0)).toBe(1);
   });
 
-  /** ⚠️ ১-এর বেশি কখনো নয় — ডেটা এলোমেলো হলেও কেউ বাড়তি বেতন পাবে না */
-  it('কখনো ১-এর বেশি নয়', () => {
+  /** Never more than 1: even with messy data nobody gets extra salary */
+  it('never more than 1', () => {
     expect(salaryFraction(30, 26)).toBe(1);
   });
 });
 
 /**
- * ⭐⭐⭐ **এই ফাইলের সবচেয়ে জরুরি টেস্ট।**
+ * The most important test in this file.
  *
- * ADR-025-এর পুরো যুক্তিটাই এই সমতার উপর দাঁড়ানো: বেতন ও টার্গেট **দুটোই**
- * prorate করলে ঘণ্টাপ্রতি হার = (S·d/D) ÷ (d×৮) = **S ÷ (D×৮)** — d
- * কেটে যায়। অর্থাৎ কে কবে যোগ দিল তাতে হার বদলায় না।
+ * The whole argument of ADR-025 stands on this equality: if both salary and
+ * target are prorated, the hourly rate = (S*d/D) / (d*8) = S / (D*8), since d
+ * cancels out. So the rate does not change with who joined when.
  *
- * ⚠️ শুধু টার্গেট prorate করলে ১৫ তারিখে যোগ দেওয়া কর্মীর হার **দ্বিগুণ**
- * হয়ে যেত, আর সেটা কোনো একক সংখ্যা দেখে ধরা পড়ত না।
+ * If only the target were prorated, the rate for someone who joined on the
+ * 15th would double, and no single number would reveal it.
  */
-describe('⭐ ঘণ্টাপ্রতি হার সবার এক — যেদিনই যোগ দিক', () => {
+describe('the hourly rate is the same for everyone, whatever day they join', () => {
   const salary = 20000;
 
   const rateOf = (joinedOn: Date | null): number => {
@@ -181,44 +184,44 @@ describe('⭐ ঘণ্টাপ্রতি হার সবার এক — �
     return paid / (r.targetSec / HOURS);
   };
 
-  it('পুরো মাস, ১৫ তারিখ, ২৪ তারিখ — তিনজনেরই একই হার', () => {
+  it('whole month, the 15th, the 24th: all three get the same rate', () => {
     const full = rateOf(null);
 
     expect(rateOf(d(2026, 9, 15))).toBeCloseTo(full, 10);
     expect(rateOf(d(2026, 9, 24))).toBeCloseTo(full, 10);
   });
 
-  it('হারটা S ÷ (D × দৈনিক ঘণ্টা)', () => {
-    // ২০০০০ ÷ (২৬ × ৮) = ৯৬.১৫…
+  it('the rate is S / (D x daily hours)', () => {
+    // 20000 / (26 x 8) = 96.15...
     expect(rateOf(null)).toBeCloseTo(20000 / (26 * 8), 10);
   });
 });
 
 /**
- * ⭐⭐ **R2 — ছুটির খাতা।**
+ * R2: the leave ledger.
  *
- * ⚠️⚠️ এখানকার সবচেয়ে জরুরি টেস্টটা কোনো সংখ্যার নয়, একটা **বিচ্ছেদের**:
- * ছুটি `targetSec` কমায়, কিন্তু `employeeWorkdays` (d) ও `monthWorkdays`
- * (D) **ছোঁয় না**। ওই দুটোই পে-রোলের ভগ্নাংশ `d ÷ D` — অর্থাৎ ছুটি
- * **সবেতন**। এই বিচ্ছেদ ভাঙলে ছুটি নেওয়া মানেই নীরবে বেতন কাটা হতো, আর
- * সংখ্যাগুলো দেখতে যুক্তিসঙ্গতই লাগত।
+ * The most important test here is not about a number but about a separation:
+ * leave reduces `targetSec` but does not touch `employeeWorkdays` (d) or
+ * `monthWorkdays` (D). Those two form the payroll fraction `d / D`, so leave
+ * is paid. If this separation broke, taking leave would silently cut pay, and
+ * the numbers would still look reasonable.
  */
-describe('prorate — ছুটি (R2)', () => {
-  /** সেপ্টেম্বর ২০২৬-এর কর্মদিবস: ১, ২, ৩ (শুক্র ৪), ৭, ৮ … */
+describe('prorate: leave (R2)', () => {
+  /** Workdays of September 2026: 1, 2, 3 (Friday the 4th), 7, 8 ... */
   const day = (n: number) => d(2026, 9, n).getTime();
 
-  it('⭐⭐ ছুটি টার্গেট কমায়, কিন্তু d ও D অটুট — অর্থাৎ বেতন কাটে না', () => {
+  it('leave reduces the target, but d and D stay intact: so pay is not cut', () => {
     const base = prorate(SEPT);
     const withLeave = prorate({
       ...SEPT,
       leaveDates: new Set([day(1), day(2), day(3)]),
     });
 
-    // ঘণ্টার টার্গেট তিন দিন কমেছে
+    // the hours target dropped by three days
     expect(withLeave.leaveWorkdays).toBe(3);
     expect(withLeave.targetSec).toBe(base.targetSec - 3 * 8 * HOURS);
 
-    // ⭐ কিন্তু পে-রোলের দুটো সংখ্যা এক চুলও নড়েনি
+    // but the two payroll numbers did not move at all
     expect(withLeave.employeeWorkdays).toBe(base.employeeWorkdays);
     expect(withLeave.monthWorkdays).toBe(base.monthWorkdays);
     expect(salaryFraction(withLeave.employeeWorkdays, withLeave.monthWorkdays)).toBe(
@@ -227,10 +230,11 @@ describe('prorate — ছুটি (R2)', () => {
   });
 
   /**
-   * ⚠️ শুক্রবারে "ছুটি" লেখা হলে সেদিন এমনিতেই টার্গেট ছিল না — বাদ দিলে
-   *    আট ঘণ্টা দুবার কাটা যেত, আর কেউ কারণ খুঁজে পেত না।
+   * If "leave" is recorded on a Friday, there was no target that day anyway;
+   * without excluding it, eight hours would be deducted twice and nobody
+   * could find the cause.
    */
-  it('সাপ্তাহিক ছুটির দিনে লেখা ছুটি গোনা হয় না', () => {
+  it('leave recorded on a weekly day off is not counted', () => {
     const base = prorate(SEPT);
     const onFriday = prorate({ ...SEPT, leaveDates: new Set([day(4)]) });
 
@@ -238,7 +242,7 @@ describe('prorate — ছুটি (R2)', () => {
     expect(onFriday.targetSec).toBe(base.targetSec);
   });
 
-  it('সরকারি ছুটির দিনে লেখা ছুটিও গোনা হয় না', () => {
+  it('leave recorded on a public holiday is not counted either', () => {
     const withHoliday = { ...SEPT, holidays: new Set([day(7)]) };
     const base = prorate(withHoliday);
     const both = prorate({ ...withHoliday, leaveDates: new Set([day(7)]) });
@@ -247,8 +251,8 @@ describe('prorate — ছুটি (R2)', () => {
     expect(both.targetSec).toBe(base.targetSec);
   });
 
-  /** ⚠️ যোগ দেওয়ার আগের ছুটি d-তেই নেই, তাই বাদ দেওয়ারও কিছু নেই */
-  it('কর্মকালের বাইরের ছুটি গোনা হয় না', () => {
+  /** Leave before the join date is not in d at all, so there is nothing to exclude */
+  it('leave outside the period of employment is not counted', () => {
     const joinedMid = { ...SEPT, joinedOn: d(2026, 9, 15) };
     const base = prorate(joinedMid);
     const before = prorate({ ...joinedMid, leaveDates: new Set([day(1), day(2)]) });
@@ -257,17 +261,17 @@ describe('prorate — ছুটি (R2)', () => {
     expect(before.targetSec).toBe(base.targetSec);
   });
 
-  it('⚠️ সব কর্মদিবস ছুটি হলে টার্গেট শূন্য, ঋণাত্মক নয়', () => {
+  it('when every workday is leave, the target is zero, not negative', () => {
     const all = new Set<number>();
     for (let n = 1; n <= 30; n++) all.add(day(n));
 
     const p = prorate({ ...SEPT, leaveDates: all });
     expect(p.targetSec).toBe(0);
-    // ⭐ তবু d ও D আগের মতোই — মাসভর ছুটি নিলেও বেতনের ভগ্নাংশ পুরো
+    // d and D are still as before: even taking leave all month, the salary fraction is full
     expect(p.employeeWorkdays).toBe(p.monthWorkdays);
   });
 
-  it('ছুটি না দিলে আগের মতোই আচরণ', () => {
+  it('without leave the behaviour is as before', () => {
     expect(prorate(SEPT)).toEqual(prorate({ ...SEPT, leaveDates: new Set() }));
   });
 });

@@ -8,56 +8,57 @@ import {
 } from '../summary/design.rules';
 
 /**
- * **ফাইলের চিহ্ন** *(৯ সেপ্টেম্বর ২০২৬)* — একটা জব-নম্বরের ফাইল
- * ডিজাইন-অ্যাপে মোট কতক্ষণ পর্দায় ছিল।
+ * **File trace**: how long, in total, a file with a given job number was on
+ * screen in a design app.
  *
- * ⚠️⚠️ **কেন এটা দরকার হলো।** টার্গেটের "শেষ" চিহ্নটা কর্মীর **নিজের
- * দাবি** — কেউ যাচাই করে না, আর সিস্টেম সেটা প্রশ্ন না করেই বোর্ডে তোলে।
- * ৮ সেপ্টেম্বরে একজনের ৩২টা "শেষ" নিয়ে প্রশ্ন উঠেছিল, আর উত্তর দিতে
- * ডাটাবেসে হাতে কোয়েরি লিখতে হয়েছিল — কারণ পর্দায় দাবিটা ছিল,
- * দাবির পাশে কিছু ছিল না।
+ * Careful: **why this was needed.** A target's "done" mark is the employee's
+ * **own claim**; nobody verifies it, and the system puts it on the board
+ * without question. On 8 September one person's 32 "done" marks were
+ * questioned, and answering meant hand-writing a database query, because the
+ * screen showed the claim with nothing next to it.
  *
- * ⭐⭐ নতুন কোনো ডেটা জমা করতে হয়নি: এজেন্ট শিরোনাম **আগে থেকেই** রাখে,
- * আর ফাইলের নাম শুরু হয় জব-নম্বর দিয়ে। অর্থাৎ প্রশ্নটার উত্তর ইতিমধ্যেই
- * টেবিলে ছিল, কেউ জিজ্ঞেস করত না।
+ * No new data had to be collected: the agent **already** keeps window titles,
+ * and file names start with the job number. So the answer to the question was
+ * already in the table; nobody asked.
  *
- * ⚠️⚠️ **এটা "কাজ হয়েছে কি না" মাপে না।** যা মাপে তা হলো *ওই নম্বরওয়ালা
- * একটা ফাইল Illustrator/Photoshop-এ খোলা ছিল কি না*। চিহ্ন না থাকার
- * নির্দোষ কারণ অনেক — ফাইলটা সেভ করা হয়নি (`Untitled-20*`), নামের সামনে
- * নম্বর বসানো হয়নি, বা কাজটা অন্য কোনো অ্যাপে হয়েছে। ⭐ তাই সংখ্যাটা
- * **অভিযোগ নয়, প্রসঙ্গ** — আর সেজন্যই এর কোনো অ্যালার্ট নেই।
+ * Careful: **this does not measure "was the work done".** What it measures is
+ * *whether a file with that number was open in Illustrator/Photoshop*. There
+ * are many innocent reasons for no trace: the file was not saved
+ * (`Untitled-20*`), the number was not put at the front of the name, or the
+ * work was done in another app. So the number is **context, not an
+ * accusation**, which is also why it has no alert.
  */
 @Injectable()
 export class FileTraceService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * ⭐⭐ **কোন দিন থেকে শিরোনাম জমা আছে** — `'YYYY-MM-DD'`, কিছু না
-   * থাকলে `null`।
+   * **Since which day titles have been stored**: `'YYYY-MM-DD'`, or `null`
+   * if there is nothing.
    *
-   * ⚠️⚠️ **এই তারিখটার আগের কোনো সারি নিয়ে "ফাইল খোলা হয়নি" বলা যায় না**,
-   * কারণ তখন আমরা দেখতামই না। মাঠে `app_usage` শুরু হয়েছে ১৩ আগস্ট
-   * ২০২৬-এ, অথচ শেষ-হওয়া টার্গেট আছে ২০২৫ সাল থেকে — ওই ২৭ হাজার সারি
-   * "চিহ্ন নেই" বলে দেখানো হতো, আর তালিকাটা অর্থহীন হয়ে যেত।
+   * Careful: **no row before this date can be used to say "the file was never
+   * opened"**, because we were not watching then. In the field `app_usage`
+   * started on 13 August 2026, yet completed targets go back to 2025; those
+   * 27 thousand rows would all be shown as "no trace" and the list would be meaningless.
    *
-   * ⭐ তারিখটা **ডেটা থেকেই** আসে, ধ্রুবক নয় — কোনোদিন পুরোনো সারি ছাঁটা
-   * শুরু হলে সীমানাটা নিজে থেকেই এগিয়ে যাবে, কারো মনে রাখতে হবে না।
+   * The date comes **from the data**, not a constant: if old rows are ever
+   * trimmed, the boundary moves forward by itself and nobody has to remember.
    *
-   * ### ⚠️ খরচ — মেপে রাখা *(৯ সেপ্টেম্বর ২০২৬)*
+   * ### Cost, measured (9 September 2026)
    *
-   * `min(work_date)`-এর কোনো সূচক নেই, তাই এটা গোটা `app_usage`-এর উপর
-   * সমান্তরাল seq scan: প্রোডাকশনে ১,৫৪,০০০ সারিতে **৩২–৫৪ ms**, আর
-   * প্রতিবার তালিকা খুললেই একবার। টেবিলটা দিনে ~৭ হাজার সারি বাড়ে।
+   * There is no index on `min(work_date)`, so this is a parallel seq scan over
+   * the whole of `app_usage`: **32-54 ms** on 154,000 rows in production, once
+   * each time the list is opened. The table grows by about 7 thousand rows a day.
    *
-   * ⚠️⚠️ **একটা ১০-মিনিটের ক্যাশ লেখা হয়েছিল, তারপর তুলে নেওয়া হয়** —
-   * কারণ সার্ভিসটা টেস্টে **একটাই ইনস্ট্যান্স**, আর `resetDatabase()`
-   * ওই ক্যাশ মোছে না; ফলে এক টেস্টের সীমানা পরের টেস্টে চলে যেত।
-   * ⭐ আর যে ক্যাশ ঠিক রাখতে টেস্টকে খোঁচাতে হয়, সেটা প্রোডাকশনেও
-   * ভুল হতে পারে — ৩২ ms-এর জন্য ওই লুকোনো অবস্থাটা কেনার মতো নয়।
+   * Careful: **a 10-minute cache was written, then removed**: in tests the
+   * service is **a single instance**, and `resetDatabase()` does not clear that
+   * cache, so one test's boundary leaked into the next. A cache that needs
+   * poking in tests to stay correct can also be wrong in production; hidden
+   * state is not worth buying for 32 ms.
    *
-   * ⭐ কোনোদিন সত্যিই সমস্যা হলে ঠিক পথ দুটো, আর দুটোই লুকোনো অবস্থা
-   * ছাড়া: `app_usage(work_date)`-এ একটা সূচক, নয়তো সংখ্যাটা
-   * `summary_dirty`-র মতো একটা ছোট টেবিলে লিখে রাখা।
+   * If it ever becomes a real problem there are two proper ways, both
+   * without hidden state: an index on `app_usage(work_date)`, or storing the
+   * number in a small table like `summary_dirty`.
    */
   async since(): Promise<string | null> {
     const rows = await this.prisma.$queryRaw<{ d: string | null }[]>`
@@ -67,36 +68,36 @@ export class FileTraceService {
   }
 
   /**
-   * ⭐⭐⭐ **শেষ বলা হয়েছে, অথচ ওই নম্বরের ফাইল কোনোদিন খোলা হয়নি** —
-   * `from`-এর পর থেকে, জব-নম্বরের তালিকা।
+   * **Marked done, yet a file with that number was never opened**: the list
+   * of job numbers after `from`.
    *
-   * ⚠️⚠️ **প্রশ্নটা `design_targets` থেকে জিজ্ঞেস করা হয়, `app_usage`
-   * থেকে নয় — আর এই দিকটাই গোটা খরচের পার্থক্য** *(৯ সেপ্টেম্বর ২০২৬,
-   * প্রোডাকশনে মাপা)*।
+   * Careful: **the question is asked from `design_targets`, not from
+   * `app_usage`, and that direction is the whole difference in cost**
+   * (measured in production, 9 September 2026).
    *
-   * | কোন দিক থেকে | কী ঘটে | সময় |
+   * | direction | what happens | time |
    * |---|---|---|
-   * | `app_usage` → সব নম্বর, তারপর `NOT IN` | ১৪,২২৫ সারিতে regex **আবার** গোনা | **৯৩০ ms** |
-   * | `design_targets` → প্রতিটার জন্য একটা প্রোব | ১,৮২১টা ইনডেক্স-লুকআপ, ৫µs করে | **২৫ ms** |
+   * | `app_usage` -> all, then `NOT IN` | regex run **again** over 14,225 rows | **930 ms** |
+   * | `design_targets` -> one probe each | 1,821 index lookups, 5 us each | **25 ms** |
    *
-   * ⭐ সূচকে হিসাবটা **আগে থেকেই বসানো**; প্রথম পথটা সেটা ব্যবহারই করত
-   * না — সূচক দিয়ে কেবল সারিগুলো বেছে নিয়ে তারপর হিপ থেকে পড়ে regex
-   * নতুন করে চালাত (`Bitmap Heap Scan`, ৩,৮৮৪ ব্লক)।
+   * The expression is **already built into the index**; the first way did not
+   * use it at all: it used the index only to pick rows, then read from the
+   * heap and re-ran the regex (`Bitmap Heap Scan`, 3,884 blocks).
    *
-   * ⚠️ ফেরত তালিকাটা `IN (…)` হয়ে Prisma-য় যায়। আজ **৪৭০**টা; ধীরে
-   * বাড়বে (আর ফাইলের নাম দেওয়ার অভ্যাস ভালো হলে **কমবে**)। ৩০ হাজার
-   * ছাড়ালে Postgres-এর প্যারামিটার-সীমা কাছে আসবে, আর তখন ছাঁকনি ও
-   * পাতা-ভাগ দুটোই SQL-এ নামাতে হবে।
+   * Careful: the returned list goes to Prisma as `IN (...)`. Today it is
+   * **470**; it will grow slowly (and **shrink** if naming files properly
+   * becomes a better habit). Past 30 thousand, Postgres's parameter limit
+   * comes near, and then both the filter and the paging must move into SQL.
    *
-   * ⚠️ ছয় অঙ্ক বা তার কম **এখানেও ধরা পড়ে**: `keepKnownLongIds` কেবল
-   * ক্রেডিট বসানোর সময় লম্বা নম্বর ছাঁকে, আর এখানে মিলানো হচ্ছে
-   * `design_targets.job_number`-এর সাথে — যা সংজ্ঞা অনুযায়ীই "জানা নম্বর"।
+   * Careful: six digits or fewer **are caught here too**: `keepKnownLongIds`
+   * filters long numbers only when credits are written, and what is matched
+   * here is `design_targets.job_number`, which by definition is a "known number".
    */
   async unseenJobNumbers(from: Date): Promise<number[]> {
     /**
-     * ⚠️ ভেতরের কোয়েরিতে `window_title`/`process_name` **যোগ্যতা ছাড়া**
-     * লেখা — ঠিক যেভাবে `migration.sql`-এর সূচকে আছে। ভেতরের স্কোপ
-     * আগে খোঁজা হয়, তাই ওগুলো `app_usage`-এরই কলাম।
+     * Careful: in the inner query `window_title`/`process_name` are written
+     * **without qualification**, exactly as in the `migration.sql` index. The
+     * inner scope is searched first, so they are `app_usage`'s own columns.
      */
     const rows = await this.prisma.$queryRaw<{ job_number: number }[]>`
       SELECT t.job_number
@@ -113,11 +114,11 @@ export class FileTraceService {
   }
 
   /**
-   * ⭐ **এই নম্বরগুলোর প্রতিটায় মোট কত সেকেন্ড** — না পাওয়া নম্বর
-   * ম্যাপে **থাকে না** (শূন্য বসে না; পার্থক্যটা কলার ঠিক করে)।
+   * **Total seconds for each of these numbers**; a number not found is
+   * **absent from the map** (no zero is inserted; the caller decides the difference).
    *
-   * ⚠️ কেবল পর্দায় থাকা পাতাটুকুর জন্য ডাকা হয় (৫০টা সারি), তাই
-   * ইনডেক্স ধরে ৫০টা লুকআপ — গোটা টেবিল নয়।
+   * Careful: it is called only for the page on screen (50 rows), so it is 50
+   * index lookups, not the whole table.
    */
   async secondsFor(
     jobNumbers: readonly number[],

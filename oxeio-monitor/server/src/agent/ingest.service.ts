@@ -14,7 +14,7 @@ import { nextLocalMidnight, workDateOf } from './util/dhaka-time';
 export interface IngestResult {
   accepted: number;
   duplicates: number;
-  /** মধ্যরাত পার হওয়ায় যতগুলো রেকর্ড ভাগ করতে হয়েছে */
+  /** How many records had to be split because they crossed midnight. */
   split: number;
 }
 
@@ -24,16 +24,16 @@ interface Span {
   durationSec: number;
 }
 
-/** সেশন বন্ধ হওয়ার যেসব ইভেন্ট */
+/** The events that close a session. */
 const SESSION_CLOSING = new Set(['logoff', 'shutdown', 'agent_stop']);
 
 /**
- * Prisma-র foreign key ভাঙার কোড।
+ * Prisma's foreign key violation code.
  *
- * ⚠️ `instanceof PrismaClientKnownRequestError` ব্যবহার করা হয়নি — ওটার
- * জন্য `@prisma/client` থেকে **রানটাইম** ইমপোর্ট লাগত, আর তাতে জেনারেট
- * করা ক্লায়েন্টের ভার্সনের সাথে শক্ত বাঁধন তৈরি হতো। কোডটা Prisma-র
- * প্রকাশ্য চুক্তির অংশ, তাই সেটাই দেখা হয়।
+ * Careful: `instanceof PrismaClientKnownRequestError` is not used. It would need
+ * a **runtime** import from `@prisma/client`, tying this tightly to the version
+ * of the generated client. The code is part of Prisma's public contract, so that
+ * is what is checked.
  */
 function isForeignKeyViolation(error: unknown): boolean {
   return (
@@ -54,8 +54,8 @@ export class IngestService {
   ) {}
 
   /**
-   * স্পেক § ৪.১ — `client_uuid` ছাড়া রেকর্ড নেওয়া হয় না, আর স্ট্যাটাস হয় **422**।
-   * (ValidationPipe দিলে 400 হতো, তাই যাচাইটা এখানে।)
+   * Spec § 4.1: a record without `client_uuid` is not accepted, and the status is
+   * **422**. (ValidationPipe would give 400, so the check is here.)
    */
   private assertClientUuids(items: Array<{ clientUuid?: string }>): void {
     const missing = items.findIndex((i) => !i.clientUuid);
@@ -67,8 +67,8 @@ export class IngestService {
   }
 
   /**
-   * § ২.১-ক — কোনো রেকর্ড দুই work_date জুড়ে থাকতে পারবে না।
-   * এজেন্টের ভাগ করে পাঠানোর কথা; এটা সার্ভারের রক্ষাকবচ (পুরোনো এজেন্টের জন্য)।
+   * § 2.1-a: no record may span two work_dates.
+   * The agent is supposed to split them; this is the server's safeguard (for old agents).
    */
   private splitAtMidnight(span: Span): Span[] {
     if (span.endedAt <= span.startedAt) {
@@ -87,8 +87,8 @@ export class IngestService {
       parts.push({
         startedAt: cursor,
         endedAt: end,
-        // অখণ্ড রেকর্ডে এজেন্টের monotonic durationSec-ই রাখা হয় (সবচেয়ে নির্ভুল)।
-        // ভাগ হলে সেটা অনুপাত করে ভাগ করে দেওয়া হয়, যাতে যোগফল অটুট থাকে।
+        // For an unsplit record the agent's monotonic durationSec is kept (the most exact).
+        // When split, it is divided proportionally so the total stays intact.
         durationSec:
           parts.length === 0 && partMs === wallMs
             ? span.durationSec
@@ -102,12 +102,13 @@ export class IngestService {
   }
 
   /**
-   * সেগমেন্ট কোন `work_session`-এ বসবে।
+   * Which `work_session` the segment goes into.
    *
-   * ⚠️ অফলাইন queue রিপ্লে হলে (A05) **পুরোনো ব্যাচ নতুনের পরে** আসতে পারে।
-   *    তাই "শেষ খোলা সেশনটাই চলতি সেশন" ধরে নেওয়া যায় না — ধরলে পুরোনো
-   *    ডেটা এসে চলতি সেশনকে অতীতের সময়ে বন্ধ করে দেয় (ended_at < started_at)।
-   *    সেশন তাই সবসময় **(device, work_date)** ধরে খোঁজা হয়।
+   * Careful: when the offline queue is replayed (A05), **an older batch can arrive
+   * after a newer one**. So "the last open session is the current session" cannot
+   * be assumed: doing so lets old data arrive and close the current session at a time
+   * in the past (ended_at < started_at). So the session is always looked up by
+   * **(device, work_date)**.
    */
   private async resolveSession(
     tx: Prisma.TransactionClient,
@@ -118,20 +119,20 @@ export class IngestService {
     endedAt: Date,
   ): Promise<bigint> {
     /**
-     * ⚠️⚠️ **`employeeId`-ও শর্তে, আর সেটাই এখানকার সবচেয়ে জরুরি লাইন**
-     * *(৬ সেপ্টেম্বর ২০২৬)*।
+     * Careful: **`employeeId` is part of the condition too, and that is the most
+     * important line here.**
      *
-     * আগে মেলানো হতো কেবল (ডিভাইস, তারিখ) ধরে। ফলে একটা PC দিনের
-     * মাঝখানে অন্য কর্মীকে দিলে নতুন কর্মীর সেগমেন্টগুলো **আগের কর্মীর**
-     * সেশনে গিয়ে বসত। কোনো এরর নয় — শুধু টাইমলাইনে একজনের কাজ অন্যজনের
-     * নামে, আর `trackedFromBy()` (যা `work_sessions` পড়ে) আসল কর্মীর
-     * ট্র্যাকিং-শুরু পিছিয়ে দিত।
+     * It used to match only on (device, date). So if a PC was handed to another
+     * employee in the middle of the day, the new employee's segments went into **the
+     * previous employee's** session. No error; the timeline just showed one person's
+     * work under another's name, and `trackedFromBy()` (which reads `work_sessions`)
+     * pushed the real employee's tracking start later.
      *
-     * ⚠️ নিচের ৩ নম্বর শাখাটা ইচ্ছাকৃতভাবে কর্মী ধরে ছাঁকে **না** —
-     *    আগের দিনের খোলা সেশন বন্ধ করা ডিভাইসের কাজ, কর্মীর নয়।
+     * Careful: branch 3 below deliberately does **not** filter by employee: closing
+     * a previous day's open session is the device's job, not the employee's.
      */
 
-    // ১· ওই তারিখেরই খোলা সেশন
+    // 1. The open session for that same date
     const open = await tx.workSession.findFirst({
       where: { deviceId: device.id, employeeId, workDate, endedAt: null },
       orderBy: { startedAt: 'desc' },
@@ -141,7 +142,7 @@ export class IngestService {
       return open.id;
     }
 
-    // ২· ওই তারিখের বন্ধ সেশন — backfill হলে সেটাতেই বসবে, নতুন সেশন নয়
+    // 2. A closed session for that date: with a backfill, it goes into that one, not a new session
     const closed = await tx.workSession.findFirst({
       where: { deviceId: device.id, employeeId, workDate },
       orderBy: { startedAt: 'desc' },
@@ -151,8 +152,8 @@ export class IngestService {
       return closed.id;
     }
 
-    // ৩· আগের কোনো তারিখের সেশন খোলা পড়ে আছে? তাকে **তার নিজের** মধ্যরাতে
-    //    বন্ধ করা হয় — নতুন সেগমেন্টের সময়ে নয় (§ ২.১-ক)
+    // 3. Is a session from an earlier date still open? It is closed at **its own**
+    //    midnight, not at the new segment's time (§ 2.1-a)
     const stale = await tx.workSession.findFirst({
       where: { deviceId: device.id, endedAt: null, workDate: { lt: workDate } },
       orderBy: { startedAt: 'desc' },
@@ -174,9 +175,9 @@ export class IngestService {
   }
 
   /**
-   * সেশনের সীমা তার ভেতরের সেগমেন্টগুলোকে ধরে রাখা উচিত।
-   * backfill-এ পুরোনো সেগমেন্ট এলে সেশনের শুরু পিছিয়ে দিতে হয়,
-   * নইলে টাইমলাইনে সেগমেন্ট সেশনের বাইরে পড়ে যায়।
+   * A session's bounds should hold the segments inside it.
+   * When an older segment arrives in a backfill, the session start must move back;
+   * otherwise the segment falls outside the session on the timeline.
    */
   private async widen(
     tx: Prisma.TransactionClient,
@@ -187,7 +188,7 @@ export class IngestService {
     const data: Prisma.WorkSessionUpdateInput = {};
 
     if (startedAt < session.startedAt) data.startedAt = startedAt;
-    // খোলা সেশনের শেষ নেই — সেটা logoff বা দিন-ক্লোজেই বসবে
+    // An open session has no end; it is set at logoff or day-close.
     if (session.endedAt !== null && endedAt > session.endedAt) {
       data.endedAt = endedAt;
     }
@@ -216,33 +217,33 @@ export class IngestService {
 
     let split = 0;
 
-    // সেশন তৈরি আর সেগমেন্ট insert — একই ট্রানজেকশনে, নইলে insert ব্যর্থ হলে
-    // অনাথ work_session পড়ে থাকত
+    // Create the session and insert the segments in the same transaction;
+    // otherwise a failed insert would leave an orphan work_session
     const { count, total } = await this.prisma.$transaction(async (tx) => {
       const rows: Prisma.ActivitySegmentCreateManyInput[] = [];
       const sessionByDate = new Map<number, bigint>();
 
       /**
-       * ⭐⭐⭐ **আগে খাম মাপা, তারপর সেশন** *(৬ সেপ্টেম্বর ২০২৬, G164)*।
+       * **Measure the envelope first, then the session** (G164).
        *
-       * ⚠️⚠️ **যে বাগটা এটা সারায়:** আগে সেশনটা ব্যাচের **প্রথম** খণ্ডের
-       * সময় নিয়ে তৈরি/চওড়া হতো, আর বাকি খণ্ডগুলো memo-হিটে সোজা ওই
-       * সেশনে বসত — `widen()` তাদের দেখতই না। ফলে সেশনের নিজের সীমা তার
-       * ভেতরের সেগমেন্টগুলোকে আর ধরে রাখত না, অথচ `widen()`-এর মন্তব্যেই
-       * লেখা আছে ঠিক সেটাই তার কাজ।
+       * Careful, the bug this fixes: the session used to be created/widened using the
+       * time of the **first** fragment in the batch, and the other fragments went
+       * straight into that session on a memo hit; `widen()` never saw them. So the
+       * session's own bounds no longer held its segments, although the comment on
+       * `widen()` says that is exactly its job.
        *
-       * ⚠️ মাঠে মাপা: ২২৬টা সেশনের **৭টা** ভাঙা — ৫২টা সেগমেন্ট,
-       * **২৪.৪৭ ঘণ্টা** নিজের সেশনের বাইরে। সবচেয়ে বড়টা ৬ ঘণ্টা (রাতের
-       * লক-সেগমেন্ট), আরেকটায় সেশন শুরু হয়েছে তার নিজের প্রথম
-       * সেগমেন্টের **৮ ঘণ্টা ৩৪ মিনিট পরে**।
+       * Careful: measured in the field: **7** of 226 sessions were broken, with 52
+       * segments and **24.47 hours** outside their own session. The largest was 6 hours
+       * (a night lock segment); in another, the session started **8 hours 34 minutes
+       * after** its own first segment.
        *
-       * ⚠️ কেন এলোমেলো ক্রমে আসে: এজেন্ট প্রতিটা বন্ধ সেগমেন্ট
-       * fire-and-forget কিউয়ে ফেলে (`AgentHost.Record`), তাই একই মুহূর্তে
-       * বন্ধ হওয়া ছোট idle সারিটা লম্বা lock সারিটাকে হারিয়ে দিতে পারে।
+       * Careful, why they arrive out of order: the agent puts each closed segment on a
+       * fire-and-forget queue (`AgentHost.Record`), so a small idle row that closes at
+       * the same moment can overtake the long lock row.
        *
-       * ⭐ **memo সরানো হয়নি** — সরালে ৫০০ সেগমেন্টের ব্যাচে ৫০০ বার
-       * `resolveSession` চলত (প্রতিবার ১–৩টা findFirst) একই ট্রানজেকশনের
-       * ভেতরে। খরচ আগের মতোই: তারিখপ্রতি একবার।
+       * **The memo was not removed**: without it, a 500-segment batch would run
+       * `resolveSession` 500 times (1-3 findFirst each) inside one transaction. The
+       * cost stays as before: once per date.
        */
       type PreparedPart = {
         workDate: Date;
@@ -296,10 +297,10 @@ export class IngestService {
       }
 
       /**
-       * ⚠️⚠️ **পুরোনো তারিখ আগে** — `resolveSession()`-এর ৩ নম্বর শাখা
-       * আগের দিনের খোলা সেশনকে **তার নিজের** মধ্যরাতে বন্ধ করে। উল্টো
-       * ক্রমে চললে নতুন দিনের সেশন আগে তৈরি হতো, আর পুরোনো দিনটা তখন
-       * ওই শাখার `workDate: { lt: … }` শর্তে আর পড়ত না।
+       * Careful: **older dates first.** Branch 3 of `resolveSession()` closes a previous
+       * day's open session at **its own** midnight. In the opposite order the new day's
+       * session would be created first, and the old day would no longer fall under that
+       * branch's `workDate: { lt: ... }` condition.
        */
       for (const key of [...bounds.keys()].sort((a, b) => a - b)) {
         const envelope = bounds.get(key)!;
@@ -329,37 +330,36 @@ export class IngestService {
           endedAt: p.part.endedAt,
           durationSec: p.part.durationSec,
           inputScore: p.inputScore,
-          // § ২.১ — শুধু ACTIVE গোনা হয়, আর কিছু নয়
+          // § 2.1 - only ACTIVE counts, nothing else
           countsAsWork: p.state === 'active',
         });
       }
 
       const res = await tx.activitySegment.createMany({
         data: rows,
-        skipDuplicates: true, // ← client_uuid UNIQUE, তাই রি-আপলোড নিরাপদ
+        skipDuplicates: true, // <- client_uuid is UNIQUE, so re-upload is safe
       });
 
       /**
-       * ⭐⭐⭐ **দেরিতে আসা দিনটা আবার গুনতে হবে** *(৬ সেপ্টেম্বর ২০২৬)*।
+       * **A late-arriving day must be recounted.**
        *
-       * ⚠️⚠️ **যে বাগটা এটা সারায়:** rollup চলত কেবল **দুটো** দিনের উপর —
-       * আজ (K06, প্রতি ১৫ মিনিটে) আর গতকাল (K05, ০০:১৫-তে, **একবার**)।
-       * এর বাইরের কোনো দিনের সেগমেন্ট পরে এলে সেটা এখানে ঠিকই বসত, কিন্তু
-       * `daily_summary`-তে **কোনোদিন উঠত না** — আর সেখান থেকে মাসিক সারি,
-       * আর সেখান থেকে বেতনের ঘাটতি।
+       * Careful, the bug this fixes: the rollup ran only on **two** days: today (K06,
+       * every 15 minutes) and yesterday (K05, at 00:15, **once**). A segment for any
+       * other day arriving later was stored here correctly but **never reached
+       * `daily_summary`**, and from there the monthly row and the pay deficit.
        *
-       * ⚠️ ঘটনাটা বিরল নয়, রোজকার: সন্ধ্যায় PC বন্ধ হলে শেষ সেগমেন্টটা
-       * আউটবক্সে থেকে যায়, আর পরদিন সকালে লগইনের পর আপলোড হয় — ততক্ষণে
-       * ০০:১৫-র দিন-ক্লোজ পেরিয়ে গেছে। মাঠে মাপা: আগস্ট–সেপ্টেম্বরে
-       * **৩৯টা (কর্মী, দিন) জোড়া, ১৭.৭৮ ঘণ্টা** এভাবে হারিয়েছিল।
+       * Careful: this is not rare, it is daily: when a PC shuts down in the evening the
+       * last segment stays in the outbox and uploads next morning after login, by which
+       * time the 00:15 day-close has passed. Measured in the field: in August-September
+       * **39 (employee, day) pairs, 17.78 hours** were lost this way.
        *
-       * ⭐ **আজকের দিনটা চিহ্নিত হয় না** — K06 এমনিতেই প্রতি ১৫ মিনিটে
-       * ওটা গোনে, তাই চিহ্ন বসালে একই কাজ দুবার হতো। গতকাল ও তার আগের
-       * সবই চিহ্নিত হয়, কারণ ওদের নির্ধারিত সুযোগ ইতিমধ্যেই পেরিয়ে গেছে।
+       * **Today is not marked**: K06 recounts it every 15 minutes anyway, so marking it
+       * would do the same work twice. Yesterday and everything before it is marked,
+       * because their scheduled chance has already passed.
        *
-       * ⚠️ চিহ্নটা **একই ট্রানজেকশনে** বসে। আলাদা করলে সেগমেন্ট লেখা
-       * সফল হয়ে চিহ্ন বসানো ব্যর্থ হতে পারত — আর তখন ঘণ্টাগুলো ঠিক
-       * আগের মতোই নীরবে হারাত, কেবল আরও দুর্লভভাবে।
+       * Careful: the mark is set **in the same transaction**. Separately, the segment
+       * write could succeed and the mark fail, and then the hours would be lost silently
+       * just as before, only more rarely.
        */
       const today = workDateOf(this.clock.correct(new Date(), drift)).getTime();
       const stale = [...sessionByDate.keys()].filter((ms) => ms < today);
@@ -367,9 +367,9 @@ export class IngestService {
       if (stale.length > 0) {
         await tx.summaryDirty.createMany({
           data: stale.map((ms) => ({ workDate: new Date(ms) })),
-          // ⚠️ একই দিন বারবার আসতেই পারে — প্রথম চিহ্নের `marked_at`
-          //    রেখে দেওয়াই ঠিক, নইলে নিষ্কাশনের ক্রমে ওটা চিরকাল
-          //    পিছিয়ে যেত আর পুরোনো দিনটা কখনো নাগাল পেত না
+          // Careful: the same day can arrive again and again; keep the first mark's
+          //    `marked_at`, otherwise it would keep sliding back in drain order and
+          //    the old day would never get reached
           skipDuplicates: true,
         });
       }
@@ -422,8 +422,8 @@ export class IngestService {
       );
     }
 
-    // ⚠️ নিয়মগুলো একবার — প্রতি সারিতে await করলে ৫০০ সারির ব্যাচে
-    //    ৫০০ বার ক্যাশ-চেক হতো, আর প্রতিটাই একটা microtask।
+    // Careful: resolve the rules once. Awaiting per row would mean 500 cache
+    //    checks for a 500-row batch, each one a microtask.
     const rules = await this.categories.rules();
 
     const rows: Prisma.AppUsageCreateManyInput[] = [];
@@ -449,24 +449,24 @@ export class IngestService {
           processName: item.processName,
           appName: item.appName ?? null,
           windowTitle: item.windowTitle ?? null,
-          // ADR-013 — ডোমেইন ছাড়া কিছু জমা হয় না
+          // ADR-013 - nothing is stored without a domain
           domain: item.domain ?? null,
           isBrowser: item.isBrowser ?? false,
 
           /**
-           * ⭐ **R22a** — খণ্ডটা কোন অবস্থায় দেখা হয়েছে।
+           * **R22a** - the state in which the fragment was seen.
            *
-           * ⚠️ পুরোনো এজেন্ট ঘরটা পাঠায় না, তাই `undefined` হলে কলামের
-           *    ডিফল্ট (`active`) বসতে দেওয়া হয় — জোর করে `'active'` লিখলে
-           *    "এজেন্ট বলেছে" আর "আমরা ধরে নিয়েছি" এক হয়ে যেত।
+           * Careful: an old agent does not send the field, so when `undefined` the column
+           * default (`active`) is allowed to apply; forcing `'active'` would make "the agent
+           * said so" and "we assumed so" the same thing.
            */
           ...(item.state === undefined ? {} : { segmentState: item.state }),
 
-          // D05 — ⚠️ **এখানেই** ক্যাটাগরি বসে, পড়ার সময় নয়। রিপোর্ট
-          //    (D07, D08) মাসের লাখখানেক সারির উপর group by করে; প্রতিবার
-          //    ১০৯টা নিয়ম মেলালে ওই কোয়েরি ব্যবহারের অযোগ্য হতো।
-          //    দাম: নিয়ম বদলালে পুরোনো সারি পুরোনো সিদ্ধান্তেই থাকে —
-          //    সেজন্যই `AppCategoryService.recategorize()`।
+          // D05 - Careful: the category is set **here**, not when reading. Reports
+          //    (D07, D08) group by over about a hundred thousand rows a month;
+          //    matching 109 rules each time would make that query unusable.
+          //    The price: when rules change, old rows keep the old decision;
+          //    hence `AppCategoryService.recategorize()`.
           categoryId: matchCategory(rules, {
             processName: item.processName,
             domain: item.domain,
@@ -482,14 +482,14 @@ export class IngestService {
   }
 
   /**
-   * ⚠️ ক্যাটাগরির নিয়ম **মুছে ফেলা হলে** ক্যাশে তার id বসে থাকে, আর তখন
-   * প্রতিটা insert foreign key ভেঙে ৫০০ দেয় — TTL ফুরানো পর্যন্ত, অর্থাৎ
-   * পাঁচ মিনিট ধরে ১৫টা PC-র কোনো app-usage ঢুকত না।
+   * Careful: when a category rule is **deleted**, its id stays in the cache, and every
+   * insert then violates the foreign key and returns 500 until the TTL expires,
+   * i.e. for five minutes none of the 15 PCs' app-usage gets in.
    *
-   * ডেটা হারাত না (৫xx এজেন্টের কাছে transient, সে আবার পাঠায়), কিন্তু
-   * পাঁচ মিনিটের অচলাবস্থা একটা রুল মোছার শাস্তি হিসেবে বেশি। তাই
-   * একবার ক্যাশ ফেলে দিয়ে আবার চেষ্টা — দ্বিতীয়বারেও ব্যর্থ হলে সত্যিই
-   * অন্য কোনো সমস্যা, সেটা উপরে যাক।
+   * No data was lost (a 5xx is transient to the agent, which resends), but a
+   * five-minute stall is too heavy a penalty for deleting one rule. So the cache is
+   * cleared once and tried again; if it fails a second time, it really is some other
+   * problem, and that should propagate.
    */
   private async insertAppUsage(
     rows: Prisma.AppUsageCreateManyInput[],
@@ -557,8 +557,8 @@ export class IngestService {
   }
 
   /**
-   * logoff / shutdown / agent_stop এলে খোলা সেশন বন্ধ করা হয় —
-   * নইলে `ended_at` চিরকাল NULL পড়ে থাকত (G24)।
+   * On logoff / shutdown / agent_stop the open session is closed;
+   * otherwise `ended_at` would stay NULL forever (G24).
    */
   private async applySessionEffects(
     device: Device,
@@ -579,31 +579,31 @@ export class IngestService {
     const workDate = workDateOf(at);
 
     /**
-     * ওই দিনের সেশন — ইভেন্টের সময়েই বন্ধ।
+     * That day's session: closed at the event's time.
      *
-     * ⭐⭐⭐ **কিন্তু নিজের শুরুর আগে নয়** *(৬ সেপ্টেম্বর ২০২৬, G165)*।
+     * **But never before its own start** (G165).
      *
-     * ⚠️⚠️ **যে বাগটা এটা সারায়:** বিদায়ী ইভেন্ট আউটবক্সে আটকে গেলে
-     * (রিবুটের পর নেট আসার আগে প্রথম চেষ্টা ব্যর্থ) `SyncWorker` পরের
-     * চক্রে **সেগমেন্ট আগে** পাঠায়, ইভেন্ট পরে। তখন দিনের সেশনটা
-     * রিবুট-পরবর্তী সময়ে তৈরি হয়ে গেছে, আর তার পরে আসা **পুরোনো**
-     * shutdown ইভেন্টটা তাকে **তার নিজের শুরুর আগে** বন্ধ করে দিত —
-     * অর্থাৎ `ended_at < started_at`, ঋণাত্মক দৈর্ঘ্যের সেশন।
+     * Careful, the bug this fixes: if a stop event gets stuck in the outbox (the
+     * first attempt fails after a reboot, before the network is up), the `SyncWorker`
+     * sends **segments first** and the event later on the next cycle. By then the day's
+     * session has been created in the post-reboot period, and the **older** shutdown
+     * event arriving after it would close it **before its own start**, i.e.
+     * `ended_at < started_at`, a session of negative length.
      *
-     * ⚠️ মাঠে এখনো ঘটেনি, তবে ২৪ আগস্ট ৩ মিনিট ৩০ সেকেন্ডের ব্যবধানে
-     * ফসকেছে (ডিভাইস ২৫: ইভেন্ট ০৯:৫৯:১৪, সেশন শুরু ১০:০১:৩৮ — দুটো
-     * ব্যাচের ক্রম উল্টো হলেই −১৪৪ সেকেন্ডের সেশন)। আর দেরিতে আসা
-     * বিদায়ী ইভেন্ট বিরল নয়: ৩ সপ্তাহে ৩৬৪টার মধ্যে **৫০টা** এক
-     * মিনিটেরও বেশি দেরিতে, সর্বোচ্চ ৫০ মিনিট।
+     * Careful: it has not happened in the field yet, but it was missed by 3 minutes
+     * 30 seconds on 24 August (device 25: event 09:59:14, session start 10:01:38; if
+     * the two batches arrive in reverse order that is a -144 second session). And
+     * late stop events are not rare: over 3 weeks, **50** of 364 were more than a
+     * minute late, up to 50 minutes.
      *
-     * ⚠️ **ক্ল্যাম্প করা হয় না, বাদ দেওয়া হয়।** `max(at, startedAt)`
-     * বসালে এখনো চলতে থাকা সেশনের গায়ে শূন্য-দৈর্ঘ্য আর একটা মিথ্যা
-     * `end_reason: shutdown` বসত। খোলা থাকাটা হারানো নয় — ০০:১৫-র
-     * দিন-ক্লোজ তাকে তার নিজের মধ্যরাতে `day_rollover` দিয়ে বন্ধ করে।
+     * Careful: **it is dropped, not clamped.** Setting `max(at, startedAt)` would put a
+     * zero length and a false `end_reason: shutdown` on a session that is still
+     * running. Being left open is not a loss: the 00:15 day-close closes it at its own
+     * midnight with `day_rollover`.
      *
-     * ⚠️ তুলনাটা **মুহূর্তে-মুহূর্তে** (`startedAt` বনাম `at`), লেবেলে নয় —
-     * `workDate`-এর সাথে মেলালে ওটা ঢাকার ভোর ৬টা হিসেবে পড়ত, আর তখন
-     * প্রায় প্রতিটা বৈধ বন্ধ করাও বাদ পড়ত।
+     * Careful: the comparison is **moment against moment** (`startedAt` vs `at`), not
+     * against the label: compared with `workDate`, that would read as 6 am Dhaka time,
+     * and almost every valid close would be dropped too.
      */
     await this.prisma.workSession.updateMany({
       where: {
@@ -618,9 +618,9 @@ export class IngestService {
       },
     });
 
-    // ⚠️ আগের দিনের কোনো সেশন খোলা পড়ে থাকলে সেটাকে আজকের logoff দিয়ে বন্ধ
-    //    করা যাবে না — তাহলে একদিনের সেশন দুদিন লম্বা দেখাত।
-    //    প্রত্যেকটাকে **তার নিজের** মধ্যরাতে বন্ধ করা হয়।
+    // Careful: a session left open from a previous day must not be closed with
+    //    today's logoff, or a one-day session would look two days long.
+    //    Each one is closed at **its own** midnight.
     const stale = await this.prisma.workSession.findMany({
       where: { deviceId: device.id, endedAt: null, workDate: { lt: workDate } },
       select: { id: true, startedAt: true },

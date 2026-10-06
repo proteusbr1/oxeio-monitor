@@ -6,18 +6,20 @@ using oXeio.Agent.Native;
 namespace oXeio.Agent.Platform.Capture;
 
 /// <summary>
-/// GDI <c>BitBlt</c> — সব মেশিনে চলে, তাই ফলব্যাক ([ADR-012b](../../../../docs/05-Options-Decisions.md))।
+/// GDI <c>BitBlt</c>: works on every machine, hence the fallback
+/// ([ADR-012b](../../../../docs/05-Options-Decisions.md)).
 ///
-/// সীমা: হার্ডওয়্যার-ত্বরিত ভিডিও, exclusive-fullscreen গেম আর DRM-সুরক্ষিত উইন্ডো
-/// কালো আসতে পারে। ঠেকানোর চেষ্টা করা হয় না — <see cref="oXeio.Core.Capture.FrameQuality"/>
-/// দিয়ে চিহ্নিত করে রাখা হয়।
+/// Limits: hardware-accelerated video, exclusive-fullscreen games and DRM-protected windows may
+/// come out black. No attempt is made to prevent it; it is flagged with
+/// <see cref="oXeio.Core.Capture.FrameQuality"/>.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class GdiCapturer : IScreenCapturer
 {
     private const uint SRCCOPY = 0x00CC0020;
 
-    /// <summary>ছাড়া দিলে layered উইন্ডো, tooltip ও কিছু overlay ছবিতে আসে না।</summary>
+    /// <summary>Without this, layered windows, tooltips and some overlays do not appear in the
+    /// image.</summary>
     private const uint CAPTUREBLT = 0x40000000;
 
     private const uint BI_RGB = 0;
@@ -31,8 +33,8 @@ internal sealed class GdiCapturer : IScreenCapturer
         var h = monitor.Height;
         if (w <= 0 || h <= 0) return null;
 
-        // hWnd = 0 → পুরো ভার্চুয়াল স্ক্রিনের DC। PerMonitorV2 থাকায় এটা
-        // ফিজিক্যাল পিক্সেলেই কাজ করে, স্কেল করা নয়।
+        // hWnd = 0 gives the DC of the whole virtual screen. Because PerMonitorV2 is set, it works
+        // in physical pixels, not scaled ones.
         var screen = User32.GetDC(0);
         if (screen == 0) return null;
 
@@ -42,13 +44,13 @@ internal sealed class GdiCapturer : IScreenCapturer
             mem = Gdi32.CreateCompatibleDC(screen);
             if (mem == 0) return null;
 
-            // ⚠️ screen DC — mem দিলে ১-bpp সাদাকালো বিটম্যাপ আসত
+            // Careful: screen DC; with a mem DC we would get a 1-bpp black and white bitmap
             bmp = Gdi32.CreateCompatibleBitmap(screen, w, h);
             if (bmp == 0) return null;
 
             old = Gdi32.SelectObject(mem, bmp);
 
-            // rcMonitor.Left/Top ঋণাত্মক হতে পারে (প্রাইমারির বাঁ দিকের মনিটর)
+            // rcMonitor.Left/Top can be negative (a monitor to the left of the primary)
             if (!Gdi32.BitBlt(mem, 0, 0, w, h, screen,
                     monitor.Bounds.Left, monitor.Bounds.Top, SRCCOPY | CAPTUREBLT))
             {
@@ -62,7 +64,7 @@ internal sealed class GdiCapturer : IScreenCapturer
             {
                 biSize = (uint)Marshal.SizeOf<BITMAPINFOHEADER>(),
                 biWidth = w,
-                biHeight = -h, // ঋণাত্মক = top-down, SkiaSharp সরাসরি নিতে পারে
+                biHeight = -h, // negative = top-down, SkiaSharp can take it directly
                 biPlanes = 1,
                 biBitCount = 32,
                 biCompression = BI_RGB,
@@ -85,10 +87,10 @@ internal sealed class GdiCapturer : IScreenCapturer
         }
         finally
         {
-            // ⚠️ প্রতিটি হ্যান্ডেল ছাড়তেই হবে। দিনে ২৮৮ ক্যাপচার × ২-৩ মনিটরে
-            //    একটা করে লিক হলে ~দুই সপ্তাহে ১০,০০০ হ্যান্ডেলের সীমা ছোঁবে —
-            //    আর সেটা ঘটবে সবচেয়ে বেশিদিন চালু থাকা মেশিনে, অর্থাৎ যেটার দিকে
-            //    কেউ তাকিয়ে নেই।
+            // Careful: every handle must be released. With 288 captures a day x 2-3 monitors, a
+            // leak of one each would reach the 10,000-handle limit in about two weeks, and it would
+            // happen on the machine that has been running longest, which is the one nobody is
+            // looking at.
             if (old != 0) Gdi32.SelectObject(mem, old);
             if (bmp != 0) Gdi32.DeleteObject(bmp);
             if (mem != 0) Gdi32.DeleteDC(mem);

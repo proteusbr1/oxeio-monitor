@@ -3,20 +3,20 @@ using System.Diagnostics;
 namespace oXeio.Core.Time;
 
 /// <summary>
-/// ঘড়ি বদলালেও যে সময় পিছিয়ে যায় না।
+/// Time that does not go backwards even when the clock is changed.
 ///
-/// কেন দরকার: <c>DateTimeOffset.UtcNow</c> ব্যবহার করলে কেউ PC-র ঘড়ি পিছিয়ে দিলে
-/// সেগমেন্টের দৈর্ঘ্য ঋণাত্মক হয়ে যেত, বা NTP সিঙ্ক হলে হঠাৎ লাফ দিত।
-/// এখানে শুরুর সময়টা একবার ধরা হয়, তারপর <see cref="Stopwatch"/> (QPC) দিয়ে
-/// এগোনো হয় — যা কেবল সামনেই যায় (G7 · ADR-অনুযায়ী § ৩.২)।
+/// Why needed: with <c>DateTimeOffset.UtcNow</c>, if someone set the PC's clock back, a
+/// segment's length would come out negative, or it would jump suddenly on an NTP sync.
+/// Here the start time is captured once and then advanced with <see cref="Stopwatch"/> (QPC),
+/// which only ever moves forward (G7, ADR section 3.2).
 ///
-/// ✅ <b>ঘুমের সময়ও এই ঘড়ি চলতে থাকে।</b> Microsoft-এর ডকুমেন্টেশন অনুযায়ী
-/// QueryPerformanceCounter "standby, hibernate, connected standby" — সব ধরনের ঘুমের
-/// সময়টাই গুনে রাখে, আর <see cref="Stopwatch"/> QPC-ই ব্যবহার করে।
+/// <b>This clock keeps running during sleep too.</b> According to Microsoft's documentation,
+/// QueryPerformanceCounter counts time in every kind of sleep ("standby, hibernate,
+/// connected standby"), and <see cref="Stopwatch"/> uses QPC.
 ///
-/// এটা আমাদের পক্ষেই যায়: জেগে ওঠার পর <c>Now</c> বাস্তব সময়ের সাথেই মেলে, <b>আর</b>
-/// ঘুম ধরার কাজেও লাগে — এক টিকে এই ঘড়ি ১ সেকেন্ডের বদলে ৮ ঘণ্টা এগোলে বোঝা যায়
-/// মাঝখানে PC ঘুমিয়ে ছিল (<see cref="Tracking.SleepGapDetector"/>)।
+/// That works in our favor: after waking, <c>Now</c> matches real time, <b>and</b> it helps
+/// detect sleep: if in one tick this clock advanced 8 hours instead of 1 second, the PC was
+/// asleep in between (<see cref="Tracking.SleepGapDetector"/>).
 /// </summary>
 public sealed class MonotonicClock
 {
@@ -29,11 +29,11 @@ public sealed class MonotonicClock
         _elapsed = Stopwatch.StartNew();
     }
 
-    /// <summary>বাস্তব ঘড়ি থেকে শুরু করে, এরপর শুধু সামনে।</summary>
+    /// <summary>Starts from the real clock, then only goes forward.</summary>
     public static MonotonicClock StartNow() => new(DateTimeOffset.UtcNow);
 
     public DateTimeOffset Now => _anchor + _elapsed.Elapsed;
 
-    /// <summary>শুরুর পর থেকে কত সময় গেছে — ঘড়ি বদলালেও অপরিবর্তিত।</summary>
+    /// <summary>Time elapsed since the start: unchanged even if the clock changes.</summary>
     public TimeSpan Elapsed => _elapsed.Elapsed;
 }

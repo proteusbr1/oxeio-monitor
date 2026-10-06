@@ -7,17 +7,17 @@ namespace oXeio.Agent.Native;
 internal static partial class Kernel32
 {
     /// <summary>
-    /// ঘুমের সময়টাও গোনে। <c>GetLastInputInfo.dwTime</c> ঠিক এই ঘড়িতেই চলে,
-    /// তাই বিয়োগ করতে হলে এটাই লাগবে।
+    /// Also counts the time spent asleep. <c>GetLastInputInfo.dwTime</c> runs on exactly this
+    /// clock, so this is what must be used for the subtraction.
     ///
-    /// ⚠️ <c>Environment.TickCount64</c> ব্যবহার করা যাবে না। .NET 8-এ ওটা এটারই সমান,
-    /// কিন্তু পরের কোনো .NET ভার্সনে unbiased ঘড়িতে বদলে গেলে dwTime-এর সাথে বিয়োগটা
-    /// নীরবে ভুল হবে — কোড না বদলেই, শুধু ফ্রেমওয়ার্ক আপগ্রেডে। তাই সরাসরি P/Invoke।
+    /// Careful: <c>Environment.TickCount64</c> must not be used. On .NET 8 it equals this, but if a
+    /// later .NET version changes it to an unbiased clock, the subtraction against dwTime would
+    /// silently be wrong, with no code change, just a framework upgrade. Hence the direct P/Invoke.
     /// </summary>
     [LibraryImport("kernel32.dll")]
     internal static partial ulong GetTickCount64();
 
-    /// <summary>ঘুমের সময় গোনে না। ১০০ ন্যানোসেকেন্ড এককে।</summary>
+    /// <summary>Does not count time spent asleep. In units of 100 nanoseconds.</summary>
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool QueryUnbiasedInterruptTime(out ulong unbiasedTime);

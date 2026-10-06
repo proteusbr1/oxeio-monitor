@@ -9,8 +9,9 @@ import { ErrorNote, Field, SubmitButton } from '../../components/Field';
 const MIN_LENGTH = 10;
 
 /**
- * G33 — seed বা owner-এর দেওয়া অস্থায়ী পাসওয়ার্ড নিয়ে সিস্টেম ব্যবহার করা যায় না।
- * সার্ভার `mustChangePw` থাকলে অন্য সব রুটে 403 দেয়, তাই এই পর্দা এড়ানোর উপায় নেই।
+ * G33: the system cannot be used with a seeded or owner-given temporary password.
+ * When `mustChangePw` is set, the server returns 403 on every other route, so
+ * there is no way around this screen.
  */
 export function ChangePasswordPage() {
   const { user, signOut, refresh } = useAuth();
@@ -32,7 +33,8 @@ export function ChangePasswordPage() {
       await changePassword(current, next);
       await refresh();
     } catch (err) {
-      // ⚠️ `err.message` সার্ভারের বার্তা — এখনো বাংলায় আসে, সেভাবেই যায়
+      // Careful: `err.message` is the server's message; it still comes in Bengali,
+      // and is passed on as is
       setError(err instanceof ApiError ? err.message : "Couldn't change it");
       setBusy(false);
     }

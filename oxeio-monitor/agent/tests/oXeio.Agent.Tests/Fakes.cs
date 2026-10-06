@@ -5,9 +5,9 @@ using oXeio.Core.Models;
 namespace oXeio.Agent.Tests;
 
 /// <summary>
-/// মেমরিতে চলা আউটবক্স — SQLite ছাড়াই <see cref="SyncWorker"/>-এর আচরণ যাচাই
-/// করার জন্য। lease/ack-এর নিয়মগুলো আসলটার মতোই: ack মুছে দেয়, retry ছেড়ে
-/// দেয় আর attempts বাড়ায়, abandon কারণসহ মুছে দেয়।
+/// An in-memory outbox, for checking <see cref="SyncWorker"/> behavior without SQLite.
+/// The lease/ack rules match the real one: ack deletes, retry releases and increments
+/// attempts, abandon deletes with a reason.
 /// </summary>
 internal sealed class FakeOutbox : IOutboxStore
 {
@@ -132,9 +132,9 @@ internal sealed class FakeOutbox : IOutboxStore
 }
 
 /// <summary>
-/// নকল সার্ভার। কোন <see cref="ClientUuid"/> "বিষাক্ত" সেটা আগে থেকে বলে
-/// দেওয়া যায় — ওটা ব্যাচে থাকলেই পুরো ব্যাচ ৪০০ খাবে, ঠিক যেমন আসল
-/// সার্ভারের <c>ValidationPipe</c> করে।
+/// A fake server. You can say up front which <see cref="ClientUuid"/> is "poisonous":
+/// if it is in a batch, the whole batch gets a 400, just like the real server's
+/// <c>ValidationPipe</c> does.
 /// </summary>
 internal sealed class FakeSyncClient : ISyncClient
 {
@@ -172,7 +172,7 @@ internal sealed class FakeSyncClient : ISyncClient
         _ => SyncResult<T>.Revoked("নকল revoke"),
     };
 
-    // ── এই টেস্টগুলোয় ব্যবহার হয় না ─────────────────────────────────────────
+    // ── not used by these tests ───────────────────────────────────────────
 
     public Task<SyncResult<EnrollResponse>> EnrollAsync(EnrollRequest r, CancellationToken ct = default) =>
         throw new NotSupportedException();

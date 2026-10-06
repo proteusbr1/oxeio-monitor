@@ -1,50 +1,50 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// ⭐ টেকসই আউটবক্স — অফলাইনে জমা, লাইন ফিরলে ক্রম মেনে আপলোড।
+/// Durable outbox: stores while offline, uploads in order when the line returns.
 ///
-/// <b>কেন lease/ack, কেন সাধারণ dequeue নয় — এটাই এই ইন্টারফেসের পুরো কারণ:</b>
+/// <b>Why lease/ack and not a plain dequeue; this is the whole reason for the interface:</b>
 ///
 /// <code>
-/// (ক) dequeue → upload   : সারি মুছে নিয়ে আপলোড করতে গেলাম, তখনই পাওয়ার গেল।
-///                          সারি নেই, সার্ভারেও পৌঁছায়নি। ডেটা <b>হারিয়ে গেল</b>।
-/// (খ) upload → delete    : আপলোড হলো, ২০০ আসার আগেই প্রসেস মরল। পরের বার
-///                          আবার পাঠাবে। ডেটা <b>ডুপ্লিকেট</b> হলো।
-/// (গ) lease → ack        : সারি জায়গাতেই থাকে, শুধু "ধার নেওয়া" চিহ্ন পড়ে।
-///                          ২০০ পেলে ack → মুছে যায়। মাঝপথে মরলে লিজ ফুরোয়
-///                          আর সারি নিজে থেকে ফিরে আসে।
+/// (a) dequeue → upload   : take the row out, go to upload, and the power fails.
+///                          The row is gone and never reached the server. Data is <b>lost</b>.
+/// (b) upload → delete    : the upload worked, but the process dies before the 200 arrives.
+///                          It sends again next time. Data is <b>duplicated</b>.
+/// (c) lease → ack        : the row stays in place, only marked "borrowed".
+///                          On a 200, ack deletes it. If we die midway the lease expires
+///                          and the row comes back by itself.
 /// </code>
 ///
-/// (গ)-তেও একই ডেটা দুবার <i>পাঠানো</i> হতে পারে — ঠিক যখন সার্ভার লিখে ফেলেছে
-/// কিন্তু উত্তরটা আমরা পাইনি। সেটা সমস্যা নয়, কারণ প্রতিটা রেকর্ডে
-/// <c>clientUuid</c> আছে আর সার্ভার <c>ON CONFLICT DO NOTHING</c> করে (§ ২.১-ঘ)।
-/// অর্থাৎ ডুপ্লিকেট পাঠানো <b>সস্তা</b>, আর ডেটা হারানো <b>অপূরণীয়</b> —
-/// তাই at-least-once বেছে নেওয়া হয়েছে, exactly-once নয়।
+/// Even in (c) the same data can be <i>sent</i> twice, exactly when the server has written it
+/// but we never got the reply. That is not a problem, because every record has a
+/// <c>clientUuid</c> and the server does <c>ON CONFLICT DO NOTHING</c> (section 2.1(d)).
+/// So sending a duplicate is <b>cheap</b> and losing data is <b>irreparable</b>; hence
+/// at-least-once was chosen, not exactly-once.
 ///
-/// ⚠️ সব মেথড একটাই সিঙ্ক ওয়ার্কার থেকে ডাকা হবে ধরে নেবেন না —
-/// <see cref="EnqueueAsync"/> ট্র্যাকিং থ্রেড থেকে আসে। ইমপ্লিমেন্টেশন
-/// থ্রেড-সেফ হতে হবে (SQLite-এ WAL + একটাই write connection যথেষ্ট)।
+/// Do not assume all methods are called from a single sync worker:
+/// <see cref="EnqueueAsync"/> comes from the tracking thread. Implementations must be
+/// thread-safe (in SQLite, WAL plus a single write connection is enough).
 /// </summary>
 public interface IOutboxStore : IAsyncDisposable
 {
-    /// <summary>একটা সারি জমা। ফেরত দেয় নতুন row id।</summary>
+    /// <summary>Enqueues one row. Returns the new row id.</summary>
     Task<long> EnqueueAsync(OutboxItem item, CancellationToken ct = default);
 
     /// <summary>
-    /// একাধিক সারি <b>একটাই ট্রানজেকশনে</b>। মাঝপথে মরলে হয় সবগুলো ঢোকে,
-    /// নয় একটাও না — অর্ধেক ঢোকা ব্যাচ পরে ফাঁক হিসেবে ধরা পড়ত না।
+    /// Several rows in <b>a single transaction</b>. If we die midway, either all go in or none:
+    /// a half-inserted batch would not be detected later as a gap.
     /// </summary>
     Task<int> EnqueueManyAsync(IReadOnlyList<OutboxItem> items, CancellationToken ct = default);
 
     /// <summary>
-    /// পরের ব্যাচ ধার নেওয়া। কিছু না থাকলে <c>null</c>।
+    /// Leases the next batch. <c>null</c> if there is nothing.
     ///
-    /// শর্তগুলো ইমপ্লিমেন্টেশনকেই মানতে হবে:
+    /// The implementation itself must honor these conditions:
     /// <list type="bullet">
-    /// <item>শুধু <paramref name="kind"/>-এর সারি, <see cref="OutboxEntry.EnqueuedAt"/> অনুসারে <b>পুরোনো আগে</b> (§ ২.১-ঘ: ক্রম বদলালে সার্ভারে সেশন ভাঙে — G43)</item>
-    /// <item>যেগুলোর <c>notBefore</c> এখনো আসেনি (<see cref="RetryAsync"/> দেখুন) সেগুলো বাদ</item>
-    /// <item>ইতিমধ্যে ধার নেওয়া (লিজ চালু) সারি বাদ</item>
-    /// <item><paramref name="maxItems"/> কখনো <see cref="SyncLimits.MaxBatchSize"/> ছাড়াবে না</item>
+    /// <item>Only rows of <paramref name="kind"/>, <b>oldest first</b> by <see cref="OutboxEntry.EnqueuedAt"/> (section 2.1(d): changing the order breaks sessions on the server, G43)</item>
+    /// <item>Skip rows whose <c>notBefore</c> has not arrived yet (see <see cref="RetryAsync"/>)</item>
+    /// <item>Skip rows already leased (lease still active)</item>
+    /// <item><paramref name="maxItems"/> must never exceed <see cref="SyncLimits.MaxBatchSize"/></item>
     /// </list>
     /// </summary>
     Task<OutboxLease?> LeaseAsync(
@@ -55,57 +55,57 @@ public interface IOutboxStore : IAsyncDisposable
         CancellationToken ct = default);
 
     /// <summary>
-    /// সার্ভার নিয়েছে (<see cref="SyncOutcome.Success"/>) — সারিগুলো মুছে ফেলুন।
+    /// The server accepted it (<see cref="SyncOutcome.Success"/>): delete the rows.
     ///
-    /// ⚠️ স্ক্রিনশটে <see cref="OutboxItem.FilePath"/>-এর ফাইলটাও এখানেই মুছতে হবে।
-    /// শুধু সারি মুছলে ডিস্কে অনাথ .webp জমতে থাকবে, আর সেগুলো কোনো বাজেট
-    /// হিসাবেও ধরা পড়বে না — মাস দুয়েকে ড্রাইভ ভরে যাবে।
-    /// অজানা বা ফুরিয়ে যাওয়া <paramref name="leaseId"/> চুপচাপ উপেক্ষা করুন।
+    /// For screenshots, the file at <see cref="OutboxItem.FilePath"/> must be deleted here too.
+    /// Deleting only the row would leave orphan .webp files piling up on disk, uncounted by any
+    /// budget, and the drive would fill within a couple of months.
+    /// Silently ignore an unknown or expired <paramref name="leaseId"/>.
     /// </summary>
     Task AckAsync(Guid leaseId, CancellationToken ct = default);
 
     /// <summary>
-    /// সাময়িক ব্যর্থতা (<see cref="SyncOutcome.Transient"/>) — লিজ ছেড়ে দিন,
-    /// <see cref="OutboxEntry.Attempts"/> এক বাড়ান, আর
-    /// <paramref name="notBefore"/>-এর আগে এগুলো আবার লিজ দেবেন না।
+    /// Temporary failure (<see cref="SyncOutcome.Transient"/>): release the lease, increase
+    /// <see cref="OutboxEntry.Attempts"/> by one, and do not lease these rows again before
+    /// <paramref name="notBefore"/>.
     ///
-    /// <paramref name="notBefore"/> আসে <see cref="RetryPolicy.NextAttemptAt"/> থেকে।
+    /// <paramref name="notBefore"/> comes from <see cref="RetryPolicy.NextAttemptAt"/>.
     /// </summary>
     Task RetryAsync(Guid leaseId, DateTimeOffset notBefore, CancellationToken ct = default);
 
     /// <summary>
-    /// স্থায়ী প্রত্যাখ্যান (<see cref="SyncOutcome.Permanent"/>) — সারিগুলো মুছে দিন,
-    /// কিন্তু <paramref name="reason"/> সহ লগে লিখুন।
+    /// Permanent rejection (<see cref="SyncOutcome.Permanent"/>): delete the rows, but write
+    /// them to the log together with <paramref name="reason"/>.
     ///
-    /// ⚠️ নীরবে মোছা চলবে না। ৪২২ পাওয়া মানে এজেন্ট এমন কিছু বানাচ্ছে যা সার্ভার
-    /// কোনোদিনই নেবে না; লগে না থাকলে একটা মেশিন মাসের পর মাস নিঃশব্দে ডেটা
-    /// ফেলে দিত আর রিপোর্টে শুধু "ঘণ্টা কম" দেখা যেত।
+    /// Do not delete silently. A 422 means the agent is building something the server will
+    /// never accept; without a log entry a machine would quietly discard data for months and the
+    /// reports would only show "fewer hours".
     /// </summary>
     Task AbandonAsync(Guid leaseId, string reason, CancellationToken ct = default);
 
     /// <summary>
-    /// ফুরিয়ে যাওয়া লিজ ফিরিয়ে নেওয়া (ক্র্যাশ বা রিবুটের পর)। ফেরত দেয় কতগুলো ফিরল।
-    /// স্টার্টআপে একবার, তারপর সিঙ্ক লুপে মাঝে মাঝে ডাকুন।
+    /// Reclaims expired leases (after a crash or reboot). Returns how many came back.
+    /// Call once at startup, then now and then in the sync loop.
     ///
-    /// এটাই (গ)-র নিরাপত্তা জাল — এটা না ডাকলে ক্র্যাশের সময় ধার নেওয়া ব্যাচ
-    /// চিরকাল আটকে থাকত আর কিউ কখনো খালি হতো না।
+    /// This is the safety net for (c): without calling it, a batch leased at the time of a
+    /// crash would stay stuck forever and the queue would never empty.
     /// </summary>
     Task<int> ReclaimExpiredLeasesAsync(DateTimeOffset now, CancellationToken ct = default);
 
-    /// <summary>heartbeat ও tray-র জন্য। সস্তা রাখুন — প্রতি ৩০ সেকেন্ডে ডাকা হয়।</summary>
+    /// <summary>For the heartbeat and the tray. Keep it cheap: called every 30 seconds.</summary>
     Task<OutboxDepth> GetDepthAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// <see cref="OutboxBudget"/>-এর খোরাক — প্রতিটা সারির id, ধরন, বয়স ও সাইজ।
-    /// Payload আনা হয় না (<see cref="OutboxEntryInfo"/>-র মন্তব্য দেখুন)।
+    /// Feed for <see cref="OutboxBudget"/>: each row's id, kind, age and size.
+    /// The payload is not fetched (see the comment on <see cref="OutboxEntryInfo"/>).
     /// </summary>
     Task<IReadOnlyList<OutboxEntryInfo>> SurveyAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// বাজেট মেলাতে সারি ফেলে দেওয়া। <see cref="AckAsync"/>-এর মতোই ফাইলও মুছবে।
-    /// ফেরত দেয় কতগুলো সত্যিই মুছল।
+    /// Drops rows to fit the budget. Like <see cref="AckAsync"/>, it deletes the file too.
+    /// Returns how many were really deleted.
     ///
-    /// ⚠️ ধার নেওয়া সারি কখনো মুছবেন না — ওগুলো এই মুহূর্তে আপলোড হচ্ছে।
+    /// Never delete a leased row: it is being uploaded right now.
     /// </summary>
     Task<int> EvictAsync(IReadOnlyList<long> rowIds, string reason, CancellationToken ct = default);
 }

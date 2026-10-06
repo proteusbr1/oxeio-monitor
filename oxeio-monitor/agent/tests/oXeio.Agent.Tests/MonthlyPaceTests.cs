@@ -3,50 +3,51 @@ using oXeio.Agent.Ui;
 namespace oXeio.Agent.Tests;
 
 /// <summary>
-/// J04-এর "এগিয়ে না পিছিয়ে"।
+/// J04's "ahead or behind".
 ///
-/// ⚠️ সংখ্যাটা আনুমানিক (ছুটির তালিকা এজেন্ট জানে না), কিন্তু <b>দিকটা</b>
-/// কখনো ভুল হতে পারবে না। একজন পিছিয়ে থাকলে "এগিয়ে" দেখানো এই জানালার
-/// পুরো উদ্দেশ্যটাই উল্টে দিত।
+/// Careful: the number is approximate (the agent does not know the holiday list), but
+/// the <b>direction</b> must never be wrong. Showing "ahead" for someone who is behind
+/// would defeat the whole purpose of this window.
 /// </summary>
 public class MonthlyPaceTests
 {
-    /// <summary>ঢাকার সময়ে একটা মুহূর্ত।</summary>
+    /// <summary>A moment in Dhaka time.</summary>
     private static DateTimeOffset Dhaka(int year, int month, int day, int hour = 12) =>
         new(year, month, day, hour, 0, 0, TimeSpan.FromHours(6));
 
-    // ── কর্মদিবস গোনা ───────────────────────────────────────────────────────
+    // ── counting workdays ───────────────────────────────────────────────────
 
-    /// <summary>আগস্ট ২০২৬-এ ৩১ দিন, তার মধ্যে ৪টা শুক্রবার (৭, ১৪, ২১, ২৮)।</summary>
+    /// <summary>August 2026 has 31 days, 4 of them Fridays (7, 14, 21, 28).</summary>
     [Fact]
     public void মাসের_কর্মদিবস_শুক্রবার_বাদে() =>
         Assert.Equal(31 - 4, MonthlyPace.WorkdaysInMonth(2026, 8));
 
-    /// <summary>ফেব্রুয়ারি ২০২৮ লিপ বছর — ২৯ দিন, ৪টা শুক্রবার (৪, ১১, ১৮, ২৫)।</summary>
+    /// <summary>February 2028 is a leap year: 29 days, 4 Fridays (4, 11, 18, 25).</summary>
     [Fact]
     public void লিপ_বছরের_ফেব্রুয়ারিও_ঠিক_গোনা_হয() =>
         Assert.Equal(29 - 4, MonthlyPace.WorkdaysInMonth(2028, 2));
 
     /// <summary>
-    /// ⚠️ আজকের দিনটাও গোনা হয়। না গুনলে মাসের শেষ কর্মদিবসেও expected
-    /// টার্গেটের এক দিন কম থাকত, অর্থাৎ প্রায় সবাই ভুয়া "এগিয়ে" দেখাত।
+    /// Careful: today is counted too. Otherwise even on the last workday of the month
+    /// the expected figure would be one day short of the target, and almost everyone
+    /// would show a bogus "ahead".
     /// </summary>
     [Fact]
     public void আজকের_দিনও_গোনা_হয()
     {
-        // ২০২৬-০৮-০৩ সোমবার; ১,২,৩ কেউ শুক্রবার নয়
+        // 2026-08-03 is a Monday; none of 1, 2, 3 is a Friday
         Assert.Equal(3, MonthlyPace.WorkdaysElapsed(new DateOnly(2026, 8, 3)));
 
-        // ৭ তারিখ শুক্রবার — সেটা বাদ
+        // the 7th is a Friday, so it is excluded
         Assert.Equal(6, MonthlyPace.WorkdaysElapsed(new DateOnly(2026, 8, 7)));
     }
 
-    // ── গতি ─────────────────────────────────────────────────────────────────
+    // ── pace ────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// ⭐ মাসের শেষ দিনে expected ঠিক টার্গেটেই গিয়ে ঠেকে (07 § ২.১-খ)।
-    /// এটাই সূত্রটার একমাত্র শক্ত অ্যাংকর — এটা ভাঙলে মাস শেষে সবাই
-    /// এগিয়ে বা পিছিয়ে দেখাত, কারণ যা-ই হোক না কেন।
+    /// On the last day of the month, expected lands exactly on the target (07 § 2.1-b).
+    /// This is the formula's only hard anchor; if it breaks, everyone would show ahead
+    /// or behind at month end, whatever the reason.
     /// </summary>
     [Fact]
     public void মাসের_শেষে_লক্ষ্য_ছুঁলে_গতি_শূন্য()
@@ -77,9 +78,10 @@ public class MonthlyPaceTests
     }
 
     /// <summary>
-    /// ঢাকার ক্যালেন্ডার, UTC-র নয়। ১ তারিখ ভোর ৩টা (ঢাকা) মানে UTC-তে তখনো
-    /// আগের মাসের ৩১ তারিখ রাত ৯টা — UTC ধরলে হিসাবটা আগের মাসের শেষ দিনের
-    /// হয়ে যেত, অর্থাৎ নতুন মাসের প্রথম সকালেই "২০৮ ঘণ্টা পিছিয়ে"।
+    /// The Dhaka calendar, not UTC. 03:00 on the 1st in Dhaka is still 21:00 on the
+    /// 31st of the previous month in UTC; with UTC the calculation would be for the
+    /// previous month's last day, so the first morning of a new month would show
+    /// "208 hours behind".
     /// </summary>
     [Fact]
     public void মাস_ঢাকার_ক্যালেন্ডারে_গোনা_হয()
@@ -90,14 +92,14 @@ public class MonthlyPaceTests
 
         Assert.NotNull(pace);
 
-        // সেপ্টেম্বরের ১ তারিখ = ১টা কর্মদিবস অতিবাহিত, ২৬টার মধ্যে →
-        // expected ≈ ৮ ঘণ্টা। আগের মাসের হিসাব হলে ২০৮ ঘণ্টা পিছিয়ে দেখাত।
+        // 1 September = 1 workday elapsed out of 26, so
+        // expected is about 8 hours. With last month's figures it would show 208 hours behind.
         Assert.InRange(-pace!.Value.TotalHours, 1, 20);
     }
 
     /// <summary>
-    /// ⚠️ লক্ষ্য ০ হলে <c>null</c>, ০ নয়। ০ ফেরালে জানালায় "০ ঘণ্টা এগিয়ে"
-    /// লেখা উঠত — অর্থাৎ লক্ষ্যহীন অবস্থাটা নিখুঁত অবস্থা হয়ে যেত।
+    /// Careful: with a target of 0 the result is <c>null</c>, not 0. Returning 0 would
+    /// put "0 hours ahead" in the window, so having no target would look like perfection.
     /// </summary>
     [Theory]
     [InlineData(0d)]
@@ -106,14 +108,13 @@ public class MonthlyPaceTests
     public void লক্ষ্য_না_থাকলে_গতিও_নেই(double target) =>
         Assert.Null(MonthlyPace.Estimate(TimeSpan.FromHours(10), target, Dhaka(2026, 8, 10)));
 
-    // ══════════════ G111 — "এখনো দেখা হয়নি" সবার আগে ══════════════
+    // ══════════════ G111: "not observed yet" comes first ══════════════
 
     /// <summary>
-    /// ⭐⭐⭐ <b>ক্রমটাই এই অংশের একমাত্র দাবি।</b>
+    /// <b>The order is the only claim of this section.</b>
     ///
-    /// ⚠️⚠️ সার্ভার এই অবস্থায় <c>paceSec: 0</c> পাঠায়, তাই "0:00 ahead"
-    /// লেখা হতো — নতুন কর্মীর প্রথম দিনে একটা প্রশংসা, যেটার পেছনে একটাও
-    /// পর্যবেক্ষণ নেই।
+    /// Careful: in this state the server sends <c>paceSec: 0</c>, so "0:00 ahead" would
+    /// be shown: praise on a new staff member's first day with not one observation behind it.
     /// </summary>
     [Fact]
     public void না_দেখা_হলে_সার্ভারের_শূন্যও_নয়()
@@ -124,12 +125,13 @@ public class MonthlyPaceTests
     }
 
     /// <summary>
-    /// ⭐⭐ <b>এটাই সবচেয়ে জরুরি টেস্ট।</b>
+    /// <b>This is the most important test.</b>
     ///
-    /// ⚠️⚠️ শাখাটা আন্দাজের <b>পরে</b> বসালে এখানে <c>Estimated</c> ফিরত।
-    /// আর আন্দাজটা মাসের ১ তারিখ থেকে গোনে — অর্থাৎ ঠিক ওই না-দেখা
-    /// দিনগুলোকেই ঘাটতি বলে দেখাত, যেগুলোর জন্য সার্ভার ইচ্ছাকৃতভাবে কোনো
-    /// দাবি করেনি। একটা ভুল আশ্বাস সারাতে গিয়ে উল্টো দিকের ভুল অভিযোগ।
+    /// Careful: if the branch were placed <b>after</b> the estimate, <c>Estimated</c>
+    /// would be returned here. The estimate counts from the 1st of the month, so it
+    /// would report as a deficit exactly the unobserved days for which the server
+    /// deliberately made no claim: fixing one false reassurance by creating the
+    /// opposite false accusation.
     /// </summary>
     [Fact]
     public void না_দেখা_হলে_আন্দাজেও_ফেরা_যায_না()
@@ -139,7 +141,7 @@ public class MonthlyPaceTests
             MonthlyPace.ViewFor(false, null, TimeSpan.FromHours(-94)));
     }
 
-    /// <summary>⚠️ পুরোনো সার্ভার (<c>observed</c> নেই) → আচরণ অবিকল আগের মতো।</summary>
+    /// <summary>Old server (no <c>observed</c>): behavior is exactly as before.</summary>
     [Fact]
     public void দেখা_হলে_সার্ভারের_সংখ্যাই()
     {
@@ -148,7 +150,9 @@ public class MonthlyPaceTests
             MonthlyPace.ViewFor(true, TimeSpan.FromHours(-2), TimeSpan.FromHours(-9)));
     }
 
-    /// <summary>সার্ভার চুপ, কিন্তু দেখা হয়েছে — তখনই কেবল আন্দাজ।</summary>
+    /// <summary>
+    /// The server is silent but the staff member was observed: only then use the estimate.
+    /// </summary>
     [Fact]
     public void সার্ভার_না_বললে_আন্দাজ()
     {
@@ -157,7 +161,9 @@ public class MonthlyPaceTests
             MonthlyPace.ViewFor(true, null, TimeSpan.FromHours(-9)));
     }
 
-    /// <summary>লক্ষ্যই নেই — "0:00 hours ahead" অর্থহীন, লাইনটা বাদ।</summary>
+    /// <summary>
+    /// No target at all: "0:00 hours ahead" is meaningless, so the line is dropped.
+    /// </summary>
     [Fact]
     public void কোনো_সংখ্যাই_না_থাকলে_লাইন_বাদ()
     {

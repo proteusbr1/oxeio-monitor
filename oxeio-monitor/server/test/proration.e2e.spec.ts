@@ -16,21 +16,21 @@ import {
 } from './setup/harness';
 
 /**
- * **G37 · ADR-025** — মাঝপথে যোগ দেওয়া কর্মীর টার্গেট ও বেতন, পুরো পথ ধরে।
+ * G37, ADR-025: the target and salary of an employee who joined mid-month, along the whole path.
  *
- * ⭐ **কেন ইউনিট টেস্টই যথেষ্ট নয়:** `prorate()` নিজে ঠিক আছে সেটা
- * `proration.spec.ts` দেখায়। কিন্তু G37-এর আসল ঝুঁকি ওখানে নয় —
- * ঝুঁকিটা **জোড়ার মুখে**: rollup সংখ্যাটা ডাটাবেসে বসায় কি না, পে-রোল
- * সেটা পড়ে কি না, আর `expected_workdays` কলামের মানে বদলানোয় অন্য কেউ
- * ভুল সংখ্যা পড়ছে কি না। ⚠️ এই প্রকল্পে ঠিক এই ছাঁদেই ছয়বার বাগ হয়েছে
- * ("চুক্তি লেখা আছে, কলার লেখা হয়নি")।
+ * Why unit tests are not enough: `proration.spec.ts` shows that `prorate()`
+ * itself is right. But G37's real risk is not there; it is at the joints:
+ * does the rollup write the number to the database, does payroll read it, and
+ * since the meaning of the `expected_workdays` column changed, is anyone else
+ * reading a wrong number. This project has had six bugs of exactly this shape
+ * ("the contract is written, the caller was not").
  */
 let h: Harness;
 let owner: Session;
 let summary: SummaryService;
 let reports: ReportsService;
 
-/** পরীক্ষার মাস — আগস্ট ২০২৬: শুক্রবার ৭, ১৪, ২১, ২৮ → ২৭ কর্মদিবস */
+/** The test month, August 2026: Fridays 7, 14, 21, 28 -> 27 workdays */
 const YEAR_MONTH = '2026-08';
 const utc = (day: number) => new Date(Date.UTC(2026, 7, day));
 const MONTH_WORKDAYS = 27;
@@ -52,7 +52,7 @@ beforeEach(async () => {
   owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 });
 
-/** শুক্রবার ছুটি, ২০৮ঘ ÷ ২৬ দিন = ৮ ঘণ্টা — স্পেকের ডিফল্ট পলিসি */
+/** Friday off, 208h / 26 days = 8 hours: the spec's default policy */
 async function makeEmployee(opts: {
   empCode: string;
   joinedOn?: Date | null;
@@ -77,23 +77,23 @@ async function makeEmployee(opts: {
 }
 
 /**
- * rollup চালানো — আগস্টের একটা দিন দিয়ে, "এখন" মাসের শেষে।
+ * Runs the rollup with a day in August, "now" at the end of the month.
  *
- * ⚠️ `now` = ৩১ আগস্ট দুপুর UTC → ঢাকায় ওই দিনেরই সন্ধ্যা, তাই
- *    `today` = ৩১ আগস্ট। প্রত্যাশার জানালা তাই **৩০ আগস্টেই থামে**
- *    (আজকের দিনটা গোনা হয় না, `summary.math.ts`-এর `elapsedWindow()`)।
+ * `now` = noon UTC on 31 August, which is that same day's evening in Dhaka,
+ * so `today` = 31 August. The expectation window therefore stops on 30 August
+ * (today is not counted, `elapsedWindow()` in `summary.math.ts`).
  */
 async function rollup(now = new Date(Date.UTC(2026, 7, 31, 12))): Promise<void> {
   await summary.refreshDate(utc(31), now);
 }
 
 /**
- * ওই কর্মীর কোনো দিনের `daily_summary` সারি বসানো।
+ * Inserts a `daily_summary` row for some day for that employee.
  *
- * ⭐ **কেন এটা দরকার:** প্রত্যাশার জানালা শুরু হয় ওই কর্মীর **সবচেয়ে
- * পুরোনো `daily_summary` সারি** থেকে — অর্থাৎ "তাকে কবে থেকে দেখছি"।
- * সারি না বসালে rollup নিজেই আজকের (৩১ আগস্টের) সারিটা লেখে, আর তখন
- * ট্র্যাকিং-শুরু = আজ, অর্থাৎ শেষ হয়ে যাওয়া একটা দিনও দেখা হয়নি।
+ * Why this is needed: the expectation window starts at that employee's oldest
+ * `daily_summary` row, i.e. "since when we have been watching them". If no
+ * row is inserted, the rollup itself writes today's (31 August) row, and then
+ * tracking start = today, so not even a finished day has been observed.
  */
 function seeDays(employeeId: number, days: number[]): Promise<unknown> {
   return h.prisma.dailySummary.createMany({
@@ -102,12 +102,12 @@ function seeDays(employeeId: number, days: number[]): Promise<unknown> {
 }
 
 /**
- * ⭐⭐ **এজেন্ট সত্যিই কিছু পাঠিয়েছে** — `work_sessions`-এর সারিই এখন
- * "তাকে কবে থেকে দেখছি"-র একমাত্র প্রমাণ (G120, ২৪ আগস্ট ২০২৬)।
+ * The agent really sent something: a `work_sessions` row is now the only proof of
+ * "since when we have been watching them" (G120).
  *
- * ⚠️ আগে `seeDays()`-ই এই কাজ করত, কারণ ট্র্যাকিং-শুরু আসত `daily_summary`
- * থেকে। কিন্তু ওই টেবিলে `refreshDate()` **সবার** সারি লেখে, ডেটা থাক বা
- * না থাক — তাই ওটা "দেখেছি" নয়, "সার্ভার চলছে" মাপত।
+ * Before, `seeDays()` did this job, because the tracking start came from
+ * `daily_summary`. But in that table `refreshDate()` writes a row for everyone,
+ * with or without data, so it measured "the server is running", not "we have observed".
  */
 async function seeSessions(employeeId: number, days: number[]): Promise<void> {
   const device = await h.prisma.device.create({
@@ -129,7 +129,7 @@ async function seeSessions(employeeId: number, days: number[]): Promise<void> {
   });
 }
 
-/** `from`..`to` (দুটোই ধরে) — দিনের তালিকা */
+/** The list of days from `from` to `to` (both inclusive) */
 const range = (from: number, to: number): number[] =>
   Array.from({ length: to - from + 1 }, (_, i) => from + i);
 
@@ -138,8 +138,8 @@ const monthRow = (employeeId: number) =>
     where: { employeeId_yearMonth: { employeeId, yearMonth: YEAR_MONTH } },
   });
 
-describe('rollup — monthly_summary-তে prorated টার্গেট', () => {
-  it('পুরো মাস থাকলে টার্গেট = ২৭ × ৮ = ২১৬ ঘণ্টা, ফ্ল্যাট ২০৮ নয়', async () => {
+describe('rollup: prorated target in monthly_summary', () => {
+  it('a full month gives target = 27 x 8 = 216 hours, not a flat 208', async () => {
     const id = await makeEmployee({ empCode: 'PR-FULL' });
     await rollup();
 
@@ -150,22 +150,22 @@ describe('rollup — monthly_summary-তে prorated টার্গেট', () 
     expect(row.monthWorkdays).toBe(MONTH_WORKDAYS);
   });
 
-  /** ⭐ মালিকের উদাহরণ — "১৫ তারিখ join করলে ১৫ দিনের salary" */
-  it('১৭ আগস্ট যোগ দিলে টার্গেট তার নিজের কর্মদিবস × ৮', async () => {
+  /** The owner's example: "if someone joins on the 15th, 15 days of salary" */
+  it('joining on 17 August gives a target of their own workdays x 8', async () => {
     const id = await makeEmployee({ empCode: 'PR-MID', joinedOn: utc(17) });
     await rollup();
 
     const row = await monthRow(id);
 
-    // ১৭–৩১ আগস্ট, শুক্রবার ২১ ও ২৮ বাদে = ১৩ দিন
+    // 17-31 August, minus Fridays the 21st and 28th = 13 days
     expect(row.expectedWorkdays).toBe(13);
     expect(row.targetSec).toBe(13 * 8 * HOUR);
 
-    // ⚠️ D আলাদা কলামে — পে-রোলের ভগ্নাংশের হর
+    // D is in a separate column: the denominator of the payroll fraction
     expect(row.monthWorkdays).toBe(MONTH_WORKDAYS);
   });
 
-  it('মাসের পরে যোগ দিলে টার্গেট শূন্য, আর "টার্গেট পূরণ" নয়', async () => {
+  it('joining after the month gives target zero, and not "target met"', async () => {
     const id = await makeEmployee({ empCode: 'PR-LATE', joinedOn: new Date(Date.UTC(2026, 8, 10)) });
     await rollup();
 
@@ -174,31 +174,31 @@ describe('rollup — monthly_summary-তে prorated টার্গেট', () 
     expect(row.expectedWorkdays).toBe(0);
     expect(row.targetSec).toBe(0);
     /**
-     * ⚠️⚠️ এটাই এখানকার সূক্ষ্ম শর্ত: `credited >= target` মানে `0 >= 0`,
-     * অর্থাৎ যে ওই মাসে ছিলই না সে-ও "✅ টার্গেট পূরণ" দেখাত আর
-     * `target_met_at`-এ একটা সময় বসে যেত। অর্জন বলার মতো কিছু ঘটেনি।
+     * This is the subtle condition here: `credited >= target` means `0 >= 0`,
+     * so someone who was not there at all that month would show "target met"
+     * and a time would be set in `target_met_at`. Nothing worth calling an achievement happened.
      */
     expect(row.targetMet).toBe(false);
     expect(row.targetMetAt).toBeNull();
   });
 
   /**
-   * ⭐⭐ **সংখ্যাটা বদলেছে — ১৩ থেকে ০ — আর সেটাই এখন সঠিক।**
+   * The number has changed, from 13 to 0, and that is now correct.
    *
-   * এই টেস্ট আগে দাবি করত `workdaysElapsed === 13` ও
-   * `expectedSec === targetSec`, অর্থাৎ ১৭ তারিখে যোগ দেওয়া কর্মীর কাছে
-   * ৩১ আগস্টেই পুরো ১০৪ ঘণ্টা দাবি করা হচ্ছে। কিন্তু এই দৃশ্যে তার
-   * **একটাও `daily_summary` সারি নেই** — `rollup()` নিজেই ৩১ তারিখের
-   * সারিটা প্রথমবার বসায়। অর্থাৎ ওই ১৩ দিনে আমরা তাকে দেখিইনি।
+   * This test used to claim `workdaysElapsed === 13` and
+   * `expectedSec === targetSec`, i.e. that for someone who joined on the 17th
+   * the full 104 hours were being demanded on 31 August. But in this scenario
+   * they have no `daily_summary` row at all: `rollup()` itself writes the
+   * 31st's row for the first time. So we never observed them on those 13 days.
    *
-   * ⚠️ **অনুপস্থিত পর্যবেক্ষণকে ব্যর্থতা বলে গোনা যাবে না** (এই প্রকল্পের
-   * কেন্দ্রীয় নীতি)। না-দেখা দিনের প্রত্যাশা ০, আর তাই pace-ও ০ — "সে
-   * পিছিয়ে" নয়, "আমরা জানি না"।
+   * A missing observation must not be counted as a failure (the central
+   * principle of this project). The expectation for unobserved days is 0, so
+   * pace is 0 too: not "they are behind", but "we do not know".
    *
-   * ⚠️ টার্গেট (`target_sec`) কিন্তু **অটুট** — ওটা চুক্তির সংখ্যা, আর
-   * পে-রোলের কর্তন ওখান থেকেই হয়। এই বদল কেবল pace/expected-কে ছোঁয়।
+   * The target (`target_sec`) stays intact: it is the contract number, and
+   * payroll deductions come from it. This change touches only pace/expected.
    */
-  it('যাকে এখনো একটা শেষ-হওয়া দিনেও দেখা হয়নি, তার প্রত্যাশা ০', async () => {
+  it('someone not yet observed on even one finished day has an expectation of 0', async () => {
     const id = await makeEmployee({ empCode: 'PR-ELAPSED', joinedOn: utc(17) });
     await rollup();
 
@@ -207,45 +207,44 @@ describe('rollup — monthly_summary-তে prorated টার্গেট', () 
     expect(row.workdaysElapsed).toBe(0);
     expect(row.expectedSec).toBe(0);
     expect(row.paceSec).toBe(0);
-    // ⭐ অথচ টার্গেট আগের মতোই তার নিজের ১৩ কর্মদিবসের
+    // yet the target is still their own 13 workdays as before
     expect(row.targetSec).toBe(13 * 8 * HOUR);
   });
 
   /**
-   * ⭐ ট্র্যাকিং শুরুর পর থেকে গোনা হয়, **আজকের দিনটা বাদে**।
+   * Counted from tracking start, excluding today.
    *
-   * ⚠️ একটামাত্র সারি (১৭ আগস্ট) বসানোই যথেষ্ট — জানালার শুরু ঠিক করে
-   * তার **সবচেয়ে পুরোনো** সারিটা, কতগুলো সারি আছে তা নয়। ১৮–৩০-এর
-   * অনুপস্থিত সারিগুলো "না-দেখা দিন" নয়: এজেন্ট তো বসেই গেছে, ওগুলো
-   * সত্যিকারের শূন্য দিন।
+   * One single row (17 August) is enough: the window start is decided by its
+   * oldest row, not by how many rows there are. The missing rows for 18-30 are
+   * not "unobserved days": the agent was installed, so they are genuine zero days.
    */
-  it('ট্র্যাকিং শুরুর পরের কর্মদিবস গোনা হয়, আজকের দিন বাদে', async () => {
+  it('workdays after tracking start are counted, excluding today', async () => {
     const id = await makeEmployee({ empCode: 'PR-SEEN', joinedOn: utc(17) });
     await seeDays(id, [17]);
-    // ⭐ G120 — ট্র্যাকিং-শুরু এখন সেশন থেকে, খালি দৈনিক সারি থেকে নয়
+    // G120: tracking start now comes from the session, not from an empty daily row
     await seeSessions(id, [17]);
     await rollup();
 
     const row = await monthRow(id);
 
-    // ১৭–৩০ আগস্ট (৩১ = আজ, বাদ), শুক্রবার ২১ ও ২৮ বাদে = ১২ দিন
+    // 17-30 August (the 31st is today, excluded), minus Fridays the 21st and 28th = 12 days
     expect(row.workdaysElapsed).toBe(12);
     expect(row.expectedSec).toBe(96 * HOUR);
-    // ⚠️ ১৩ দিনের টার্গেটের ঠিক ১২/১৩ — শেষ দিনটা এখনো শেষ হয়নি
+    // exactly 12/13 of the 13-day target: the last day has not finished yet
     expect(row.expectedSec).toBe(Math.round((row.targetSec * 12) / 13));
   });
 
   /**
-   * ⭐⭐ **মাস শেষ হয়ে গেলে প্রত্যাশা ঠিক টার্গেটে গিয়ে ঠেকে** — তার
-   * বেশিও নয়, কমও নয়। না মিললে যে কর্মী পুরো মাস নিখুঁত কাজ করেছেন
-   * তিনিও শেষে "পিছিয়ে" দেখতেন, আর এই ফিচারটার পুরো উদ্দেশ্যই আস্থা।
+   * Once the month is over, the expectation lands exactly on the target: no
+   * more, no less. Otherwise someone who worked perfectly all month would show
+   * "behind" at the end, and this feature's whole purpose is trust.
    */
-  it('মাস ফুরিয়ে গেলে প্রত্যাশা = পুরো টার্গেট', async () => {
+  it('when the month is over, expectation = the full target', async () => {
     const id = await makeEmployee({ empCode: 'PR-CLOSED', joinedOn: utc(17) });
     await seeDays(id, [17]);
     await seeSessions(id, [17]);
 
-    // "এখন" ১ সেপ্টেম্বর — আগস্টের শেষ দিনটাও এখন গতকালের আগে
+    // "now" is 1 September: even the last day of August is now before yesterday
     await rollup(new Date(Date.UTC(2026, 8, 1, 12)));
 
     const row = await monthRow(id);
@@ -255,7 +254,7 @@ describe('rollup — monthly_summary-তে prorated টার্গেট', () 
   });
 });
 
-describe('পে-রোল — বেতনও prorate হয়', () => {
+describe('payroll: salary is prorated too', () => {
   const payroll = () =>
     owner.http.get(`/api/v1/payroll?month=${YEAR_MONTH}`).expect(200);
 
@@ -263,44 +262,44 @@ describe('পে-রোল — বেতনও prorate হয়', () => {
     body.rows.find((r) => r.empCode === code) as unknown as Record<string, string>;
 
   /**
-   * ⭐ prorated ভিত্তি = বেতন × d ÷ D। ২০,০০০ × ১৩ ÷ ২৭ = **৯,৬২৯.৬৩**।
+   * Prorated base = salary x d / D. 20,000 x 13 / 27 = 9,629.63.
    *
-   * ⚠️⚠️ **এই টেস্টের প্রত্যাশা ৬ সেপ্টেম্বর ২০২৬-এ বদলেছে**, আর বদলটা
-   * ইচ্ছাকৃত। আগে লেখা ছিল `deduction = ৯,৬২৯.৬৩` ও `payable = ০.০০` —
-   * অর্থাৎ যাঁর কোনো ডেটাই নেই, তাঁর **পুরো** prorated বেতন কেটে নেওয়া
-   * হতো। মালিকের সিদ্ধান্ত: *"না-দেখা দিনের জন্য কর্তন হবে না"*।
+   * The expectation of this test changed, and the change is deliberate. It
+   * used to say `deduction = 9,629.63` and `payable = 0.00`, i.e. someone with
+   * no data at all had their entire prorated salary deducted. The owner's
+   * decision: no deduction for unobserved days.
    *
-   * ⭐ এই কর্মীর একটাও `daily_summary` সারি নেই (আজকের দিনটা জানালার
-   * বাইরে), তাই দেখা-অংশ ০ → ঘাটতিও ০ → কর্তন ০। **prorated ভিত্তিটা
-   * এখন `payable`-এই দেখা যায়** — আর সেটাই এই টেস্টের আসল কথা।
+   * This employee has no `daily_summary` row at all (today is outside the
+   * window), so the observed part is 0, the shortfall is 0, the deduction is 0.
+   * The prorated base is now visible in `payable`, and that is the real point of this test.
    */
-  it('prorated ভিত্তি = বেতন × d ÷ D', async () => {
+  it('prorated base = salary x d / D', async () => {
     await makeEmployee({ empCode: 'PR-PAY', joinedOn: utc(17), monthlySalary: 20000 });
     await rollup();
 
     const row = rowFor((await payroll()).body, 'PR-PAY');
 
-    // ২০,০০০ × ১৩ ÷ ২৭ = ৯,৬২৯.৬৩ — এটাই তাঁর মাসের ভিত্তি
+    // 20,000 x 13 / 27 = 9,629.63: this is their base for the month
     expect(row.payable).toBe('9629.63');
-    // ⚠️ কিছুই দেখা হয়নি, তাই দাবি করার মতো ঘাটতিও নেই
+    // nothing was observed, so there is no shortfall to claim either
     expect(row.deduction).toBe('0.00');
     expect(row.observedTargetHours).toBe('0.00');
   });
 
   /**
-   * ⭐⭐ **মালিকের উদাহরণের সরাসরি রূপ** — "১৫ তারিখ join করলে ১৫ দিনের
-   * salary"। নিজের পুরো টার্গেট (১৩ × ৮ = ১০৪ঘ) করলে কোনো কর্তন নয়, আর
-   * প্রদেয় ঠিক prorated বেতন।
+   * A direct form of the owner's example: "if someone joins on the 15th, 15
+   * days of salary". Meeting their own full target (13 x 8 = 104h) means no
+   * deduction, and payable is exactly the prorated salary.
    */
-  it('নিজের পুরো টার্গেট করলে prorated বেতন পুরোটাই পায়', async () => {
+  it('meeting their own full target gets the whole prorated salary', async () => {
     const id = await makeEmployee({
       empCode: 'PR-WORKED',
       joinedOn: utc(17),
       monthlySalary: 20000,
     });
 
-    // ⚠️ ৩১ তারিখ বাদ — `refreshDate(31)` ওই দিনের সারিটা segments থেকে
-    //    নতুন করে বসায়, তাই এখানে লিখলে মুছে যেত।
+    // The 31st is excluded: `refreshDate(31)` rewrites that day's row from
+    // segments, so anything written here would be erased.
     const workdays = [17, 18, 19, 20, 24, 25, 26, 27, 30];
     await h.prisma.dailySummary.createMany({
       data: workdays.map((day) => ({
@@ -311,7 +310,7 @@ describe('পে-রোল — বেতনও prorate হয়', () => {
       })),
     });
 
-    // ৯ দিন × ৮ঘ = ৭২ঘ; বাকি ৪ দিনের ৩২ঘ owner-এর সংশোধনে
+    // 9 days x 8h = 72h; the other 4 days' 32h come from the owner's adjustment
     await h.prisma.dailySummary.update({
       where: { employeeId_workDate: { employeeId: id, workDate: utc(17) } },
       data: { adjustmentSec: 32 * HOUR },
@@ -329,14 +328,15 @@ describe('পে-রোল — বেতনও prorate হয়', () => {
   });
 
   /**
-   * ⭐⭐⭐ **এই ফাইলের সবচেয়ে জরুরি টেস্ট — পুরো পথ ধরে।**
+   * The most important test in this file, along the whole path.
    *
-   * ADR-025-এর ন্যায্যতার দাবিটা এই সমতা: বেতন ও টার্গেট দুটোই prorate
-   * করায় ঘণ্টাপ্রতি হার d-নিরপেক্ষ। ⚠️ শুধু টার্গেট prorate করলে ১৭
-   * তারিখে যোগ দেওয়া কর্মীর হার দ্বিগুণ হয়ে যেত — আর সেটা একটামাত্র
-   * সংখ্যা দেখে ধরা পড়ত না, দুজনের হার পাশাপাশি না রাখলে।
+   * The fairness claim of ADR-025 is this equality: since both salary and
+   * target are prorated, the hourly rate is independent of d. If only the
+   * target were prorated, the rate of someone who joined on the 17th would
+   * double, and a single number would not reveal it, only putting the two
+   * people's rates side by side.
    */
-  it('⭐ ঘণ্টাপ্রতি হার — যে ১৭ তারিখে এলো আর যে পুরো মাস ছিল, দুজনেরই এক', async () => {
+  it('hourly rate: same for a 17th joiner and a full-month employee', async () => {
     await makeEmployee({ empCode: 'PR-A', monthlySalary: 20000 });
     await makeEmployee({ empCode: 'PR-B', joinedOn: utc(17), monthlySalary: 20000 });
     await rollup();
@@ -344,11 +344,11 @@ describe('পে-রোল — বেতনও prorate হয়', () => {
     const res = await payroll();
 
     expect(rowFor(res.body, 'PR-B').hourlyRate).toBe(rowFor(res.body, 'PR-A').hourlyRate);
-    // ২০০০০ ÷ (২৭ × ৮) = ৯২.৫৯
+    // 20000 / (27 x 8) = 92.59
     expect(rowFor(res.body, 'PR-A').hourlyRate).toBe('92.59');
   });
 
-  it('মাসের পরে যোগ দিলে ওই মাসে প্রদেয় শূন্য', async () => {
+  it('joining after the month gives payable zero for that month', async () => {
     await makeEmployee({
       empCode: 'PR-NONE',
       joinedOn: new Date(Date.UTC(2026, 8, 10)),
@@ -362,36 +362,38 @@ describe('পে-রোল — বেতনও prorate হয়', () => {
 });
 
 /**
- * ⭐⭐ **G117 — রিপোর্টের টার্গেটও অফিস-ডে ধরে** *(২৩ আগস্ট ২০২৬)*।
+ * G117: the report's target also counts office days.
  *
- * মালিকের নিয়ম: *"daily 8 ghonta kore, without holiday and friday"*, আর
+ * The owner's rule: 8 hours a day, excluding holidays and Fridays, and
  * *"maser hisab na kore office day hisab koro"*।
  *
- * ⚠️⚠️ **কেন এই টেস্টগুলো আলাদা করে দরকার:** এই সংখ্যাটার উপর গোটা রেপোতে
- * আগে **একটাও assertion ছিল না** — তিন জায়গায় কেবল খালি `{}` ফিক্সচার।
- * অর্থাৎ `meta` ফ্ল্যাট ২০৮ ফেরালেও সব সবুজ থাকত, আর ঠিক তাই থাকত।
+ * Why these tests are needed separately: before, there was not a single
+ * assertion on this number in the whole repo, only empty `{}` fixtures in
+ * three places. So even if `meta` returned a flat 208, everything would stay
+ * green, and that is exactly what happened.
  *
- * ⭐ প্রতিটা দাবিতে ধ্রুবকের **সাথে সাথে** `monthly_summary.target_sec`-ও
- * মেলানো হয় — কেবল ধ্রুবক মেলালে দুটো আবার আলাদা হয়ে গেলেও টেস্ট সবুজ
- * থাকত, আর G117 নীরবে ফিরে আসত।
+ * Each claim matches `monthly_summary.target_sec` as well as the constant:
+ * matching only the constant would stay green even if the two drifted apart
+ * again, and G117 would silently come back.
  */
 /**
- * ⭐⭐⭐ **না-দেখা দিনের জন্য কর্তন হয় না** *(৬ সেপ্টেম্বর ২০২৬, মালিকের
- * সিদ্ধান্ত)*।
+ * No deduction for days that were not observed (the owner's decision, 6
+ * September 2026).
  *
- * ⚠️⚠️ **মাঠে ধরা পড়া বাগ।** পে-রোল ঘাটতি মাপত পুরো `target_sec`-এর
- * সাপেক্ষে, অথচ `credited_sec` আসে কেবল সেইসব দিন থেকে যেদিন সিস্টেম
- * চলছিল। আগস্ট ২০২৬-এ ট্র্যাকিং শুরু হয় **১৩–১৫ তারিখে**, অর্থাৎ মাসের
- * প্রায় অর্ধেকটা কেউ দেখেনি — তবু ওই দিনগুলো ঘাটতি হয়ে বেতন থেকে কাটা
- * যেত। ১২ জনের কর্তন দাঁড়াত **৳৭৯,৭৮৮**, যার **৳৬১,২৮০** না-দেখা দিনের।
+ * A bug found in the field. Payroll measured the shortfall against the full
+ * `target_sec`, yet `credited_sec` only comes from days when the system was
+ * running. In August 2026 tracking started on the 13th-15th, so nearly half
+ * the month was unobserved, yet those days were deducted from salary as
+ * shortfall. The deductions of 12 people came to ৳79,788, of which ৳61,280
+ * was for unobserved days.
  *
- * ⚠️ **সঠিক সংখ্যাটা একই সারিতেই বসে ছিল** (`monthly_summary.expected_sec`,
- * ১১২–১২০ ঘণ্টা) — পে-রোল কেবল ওটা পড়ত না।
+ * The correct number was sitting in the same row (`monthly_summary.expected_sec`,
+ * 112-120 hours); payroll just did not read it.
  *
- * ⭐ এই describe-টা জোড়ার মুখ পাহারা দেয়: rollup সংখ্যাটা বসায় কি না,
- * আর পে-রোল সেটা পড়ে কি না।
+ * This describe guards the joint: does the rollup write the number, and does
+ * payroll read it.
  */
-describe('না-দেখা দিনের জন্য কর্তন নয়', () => {
+describe('no deduction for unobserved days', () => {
   const payroll = () =>
     owner.http.get(`/api/v1/payroll?month=${YEAR_MONTH}`).expect(200);
 
@@ -401,13 +403,13 @@ describe('না-দেখা দিনের জন্য কর্তন ন�
     ) as Record<string, string | number>;
 
   /**
-   * ⭐⭐⭐ **এই ফাইলের সবচেয়ে দামি টেস্ট** — আগস্টের আসল আকৃতিটাই।
+   * The most valuable test in this file: the real shape of August.
    *
-   * কর্মী পুরো মাস ছিলেন, কিন্তু আমরা দেখতে শুরু করেছি ১৩ তারিখ থেকে।
-   * ⚠️ ১৩–৩০ আগস্টে কর্মদিবস **১৫টা** (শুক্র ১৪ · ২১ · ২৮ বাদ), অথচ
-   * মাসের কর্মদিবস ২৭। তাই চাওয়া হয় ১২০ ঘণ্টার হিসাব, ২১৬-র নয়।
+   * The employee was there the whole month, but we started watching on the
+   * 13th. Workdays from 13-30 August number 15 (excluding Fridays the 14th,
+   * 21st, 28th), while the month has 27. So the shortfall is asked against 120 hours, not 216.
    */
-  it('⭐ ১৩ তারিখ থেকে দেখা শুরু হলে ঘাটতি ১২০ ঘণ্টার, ২১৬-র নয়', async () => {
+  it('observation starting on the 13th: shortfall against 120 hours, not 216', async () => {
     const id = await makeEmployee({ empCode: 'OB-HALF', monthlySalary: 20000 });
     const days = range(13, 30);
     await seeSessions(id, days);
@@ -422,17 +424,17 @@ describe('না-দেখা দিনের জন্য কর্তন ন�
     expect(row.observedTargetHours).toBe('120.00');
     expect(row.shortfallHours).toBe('120.00');
 
-    // ২০,০০০ × ১২০ ÷ ২১৬ = ১১,১১১.১১ — পুরো বেতন নয়
+    // 20,000 x 120 / 216 = 11,111.11: not the full salary
     expect(row.deduction).toBe('11111.11');
     expect(row.payable).toBe('8888.89');
   });
 
   /**
-   * ⚠️⚠️ **আগের আচরণটা কী ছিল** — যাতে কেউ ফিরিয়ে আনলে পার্থক্যটা চোখে
-   * পড়ে। একই কর্মী পুরো মাস দেখা হলে ঘাটতি ২১৬ ঘণ্টা, আর কর্তন **পুরো
-   * বেতন**।
+   * What the old behaviour was, so that anyone bringing it back notices the
+   * difference. The same employee observed the whole month has a shortfall of
+   * 216 hours, and the deduction is the full salary.
    */
-  it('⭐ পুরো মাস দেখা হলে অবশ্যই পুরো টার্গেটের হিসাব চাওয়া হয়', async () => {
+  it('with the whole month observed, the full target is certainly used', async () => {
     const id = await makeEmployee({ empCode: 'OB-FULL', monthlySalary: 20000 });
     const days = range(1, 30);
     await seeSessions(id, days);
@@ -442,25 +444,25 @@ describe('না-দেখা দিনের জন্য কর্তন ন�
     expect((await monthRow(id)).observedWorkdays).toBe(26);
 
     const row = await rowOf('OB-FULL');
-    // ১–৩০ আগস্টে কর্মদিবস ২৬ (শুক্র ৭ · ১৪ · ২১ · ২৮ বাদ); ৩১ আজকের দিন
+    // 1-30 August has 26 workdays (excluding Fridays 7, 14, 21, 28); the 31st is today
     expect(row.observedTargetHours).toBe('208.00');
     expect(row.deduction).toBe('19259.26');
   });
 
   /**
-   * ⭐⭐⭐ **G109 — জানালার মাঝখানের ফাঁকও আর ঘাটতি নয়।**
+   * G109: a gap in the middle of the window is no longer a shortfall either.
    *
-   * ⚠️⚠️ এটা এতদিন **ইচ্ছাকৃতভাবে খোলা** ছিল (মালিক ২৩ আগস্টে বাদ
-   * দিয়েছিলেন), কারণ `elapsedWorkdays()` জানালার কেবল **দুই প্রান্ত**
-   * ছাঁটত আর ভেতরের দিনগুলো ক্যালেন্ডার ধরে গুনত। এখন পে-রোলের পথে
-   * সেটাও বন্ধ: সারি না থাকা মানে ওই দিন আমরা গুনছিলাম না।
+   * This used to be deliberately left open (the owner dropped it on 23
+   * August), because `elapsedWorkdays()` trimmed only the two ends of the
+   * window and counted the days inside by the calendar. Now on the payroll
+   * path that is closed too: no row means we were not counting that day.
    *
-   * ⚠️ **অন্য পর্দাগুলোয় G109 এখনো খোলা** — tray · Live Board · Monthly
-   *    এখনো `expected_sec` পড়ে, আর ওটা ক্যালেন্ডার ধরেই গোনা।
+   * G109 is still open on the other screens: the tray, Live Board and Monthly
+   * still read `expected_sec`, which is counted by the calendar.
    */
-  it('⭐ মাঝখানে সার্ভার বন্ধ থাকা দিনও আর ঘাটতি নয়', async () => {
+  it('days when the server was down in the middle are no longer a shortfall', async () => {
     const id = await makeEmployee({ empCode: 'OB-GAP', monthlySalary: 20000 });
-    // ⚠️ ১৭–২০ আগস্টের সারি নেই — চারটে দিনের তিনটে কর্মদিবস (২০ বৃহ.সহ)
+    // No rows for 17-20 August: three workdays out of the four days (including Thursday the 20th)
     const days = [...range(13, 16), ...range(21, 30)];
     await seeSessions(id, days);
     await seeDays(id, days);
@@ -468,9 +470,9 @@ describe('না-দেখা দিনের জন্য কর্তন ন�
 
     const month = await monthRow(id);
 
-    // ১৩–৩০-এ কর্মদিবস ১৫, তার মধ্যে ১৭·১৮·১৯·২০ চারটেই কর্মদিবস → ১১
+    // 13-30 has 15 workdays; of these 17, 18, 19, 20 are all workdays -> 11
     expect(month.observedWorkdays).toBe(11);
-    // ⚠️ ক্যালেন্ডার-ভিত্তিক সংখ্যাটা তবু ১৫-ই — দুটো আলাদা প্রশ্ন
+    // the calendar-based number is still 15: two different questions
     expect(month.workdaysElapsed).toBe(15);
 
     const row = await rowOf('OB-GAP');
@@ -478,14 +480,13 @@ describe('না-দেখা দিনের জন্য কর্তন ন�
   });
 
   /**
-   * ⭐⭐⭐ **R21 — জামানত ও নিট প্রদেয় সত্যিই তারে যায়।**
+   * R21: the deposit and net payable really go on the wire.
    *
-   * ⚠️⚠️ সার্ভার এই দুটো প্রথম দিন থেকেই পাঠাত, কিন্তু **পর্দা ওগুলো
-   * ঘোষণাও করেনি** — তাই মালিক যে শিট দেখে টাকা দিতেন সেখানে gross
-   * লেখা থাকত। ⭐ এই টেস্টটা সার্ভারের দিকটা বাঁধে; পর্দার দিকটা
-   * `PayrollTab.tsx`-এর কলাম দুটো।
+   * The server sent both from day one, but the screen never even declared
+   * them, so the sheet the owner used to pay from showed gross. This test pins
+   * the server side; the screen side is the two columns in `PayrollTab.tsx`.
    */
-  it('⭐ শিটের সারিতে জামানত ও নিট প্রদেয় দুটোই থাকে', async () => {
+  it('the sheet row has both the deposit and net payable', async () => {
     const id = await makeEmployee({ empCode: 'OB-DEP', monthlySalary: 20000 });
     const days = range(1, 30);
     await seeSessions(id, days);
@@ -496,29 +497,29 @@ describe('না-দেখা দিনের জন্য কর্তন ন�
 
     expect(row).toHaveProperty('securityDeposit');
     expect(row).toHaveProperty('netPayable');
-    // ⚠️ নিট = প্রদেয় − কিস্তি; কিস্তি না থাকলে দুটো সমান
+    // net = payable - instalment; with no instalment the two are equal
     expect(row.netPayable).toBe(row.payable);
   });
 });
 
-describe('G117 — রিপোর্টের টার্গেট অফিস-ডে ধরে, ফ্ল্যাট ২০৮ নয়', () => {
+describe('G117: the report target counts office days, not a flat 208', () => {
   const monthTarget = async (employeeId: number): Promise<number> => {
     const r = await reports.attendance({ from: '2026-08-01', to: '2026-08-31' });
     return r.meta.targetHoursInRange[employeeId];
   };
 
-  it('পুরো মাস থাকলে ২১৬ ঘণ্টা — আর সংখ্যাটা monthly_summary-র সাথে হুবহু এক', async () => {
+  it('a full month gives 216 hours, exactly the same as monthly_summary', async () => {
     const id = await makeEmployee({ empCode: 'G117-FULL' });
     await rollup();
 
-    // ২৭ অফিস-ডে × ৮ঘ। ⚠️ পলিসির ফ্ল্যাট ২০৮ হলে এই দাবিটাই ভাঙবে।
+    // 27 office days x 8h. With the policy's flat 208 this very claim would break.
     expect(await monthTarget(id)).toBe(216);
 
-    // ⭐⭐ আসল পাহারা — দুই পথে গোনা দুটো সংখ্যা এক কি না
+    // the real guard: whether the two numbers counted by two paths are equal
     expect(await monthTarget(id)).toBe((await monthRow(id)).targetSec / HOUR);
   });
 
-  it('১৭ আগস্ট যোগ দিলে কেবল তার নিজের ১৩ অফিস-ডে গোনা হয়', async () => {
+  it('joining on 17 August counts only their own 13 office days', async () => {
     const id = await makeEmployee({ empCode: 'G117-MID', joinedOn: utc(17) });
     await rollup();
 
@@ -527,12 +528,12 @@ describe('G117 — রিপোর্টের টার্গেট অফি�
   });
 
   /**
-   * ⭐⭐ **এটাই "মাস ধরে নয়, অফিস-ডে ধরে"-র আসল প্রমাণ।**
+   * This is the real proof of "by office days, not by month".
    *
-   * ১–১০ আগস্ট = ১০ দিন, তার মধ্যে ৭ তারিখ শুক্রবার → **৯ অফিস-ডে = ৭২ঘ**।
-   * ⚠️ পুরোনো কোড এখানেও ২০৮ বলত, কারণ সংখ্যাটা পরিসর দেখত না।
+   * 1-10 August is 10 days, of which the 7th is a Friday: 9 office days = 72h.
+   * The old code said 208 here too, because the number did not look at the range.
    */
-  it('আধা মাস চাইলে আধা মাসেরই টার্গেট — ৯ অফিস-ডে = ৭২ ঘণ্টা', async () => {
+  it('half a month gives half a month\'s target: 9 office days = 72 hours', async () => {
     const id = await makeEmployee({ empCode: 'G117-HALF' });
     await rollup();
 
@@ -541,12 +542,13 @@ describe('G117 — রিপোর্টের টার্গেট অফি�
   });
 
   /**
-   * ⚠️ R2 — সবেতন ছুটির দিন টার্গেট থেকে বাদ, নইলে ছুটিটাই ঘাটতি হয়ে দাঁড়াত।
-   * ⭐ ৩ ও ৪ আগস্ট (সোম, মঙ্গল) — দুটোই অফিস-ডে, তাই ২১৬ − ১৬ = ২০০।
+   * R2: paid-leave days are excluded from the target, otherwise the leave
+   * itself would become a shortfall. 3 and 4 August (Monday, Tuesday) are both
+   * office days, so 216 - 16 = 200.
    */
-  it('ছুটির দিনও বাদ যায়, আর tray-র সংখ্যার সাথেই মেলে', async () => {
+  it('leave days are excluded too, and it matches the tray number', async () => {
     const id = await makeEmployee({ empCode: 'G117-LEAVE' });
-    // ⚠️ `created_by` বাধ্যতামূলক — কে ছুটি বসাল সেটা খাতায় থাকতেই হবে
+    // `created_by` is mandatory: who set the leave must be in the ledger
     await h.prisma.leave.createMany({
       data: [
         { employeeId: id, leaveDate: utc(3), type: 'casual', createdBy: OWNER_EMAIL },
@@ -560,15 +562,15 @@ describe('G117 — রিপোর্টের টার্গেট অফি�
   });
 
   /**
-   * ⚠️ যিনি ওই পরিসরে কর্মীই ছিলেন না, তিনি রিপোর্টে **থাকেনই না** — তাই
-   * ঘরটা `undefined`, ০ নয়। ⭐ পার্থক্যটা আসল: ০ মানে *"অফিস-ডে নেই"*,
-   * আর `undefined` মানে *"এই কাগজে তাঁর কোনো সারিই নেই"*।
+   * Someone who was not an employee in that range is not in the report at
+   * all, so the cell is `undefined`, not 0. The difference is real: 0 means
+   * "no office days", and `undefined` means "no row for them on this paper".
    *
-   * ⚠️⚠️ তবু ০ **পৌঁছনীয়** — পুরো পরিসরটা ছুটিতে কাটালে। আগে ছিল না
-   * (ফ্ল্যাট ২০৮ কখনো ০ হতো না), তাই ওয়েবে সেটা "0h 0m, ০%" না দেখিয়ে
-   * "No target" দেখানো হয় (`HeatGrid.tsx`)।
+   * Yet 0 is reachable, when the whole range is spent on leave. It was not
+   * before (a flat 208 was never 0), so the web shows "No target" instead of
+   * "0h 0m, 0%" (`HeatGrid.tsx`).
    */
-  it('পরের মাসে যোগ দিলে তিনি এই কাগজেই নেই — ০ নয়, অনুপস্থিত', async () => {
+  it('joining next month means not on this paper at all: absent, not 0', async () => {
     const id = await makeEmployee({
       empCode: 'G117-LATE',
       joinedOn: new Date(Date.UTC(2026, 8, 10)),
@@ -582,66 +584,66 @@ describe('G117 — রিপোর্টের টার্গেট অফি�
 });
 
 /**
- * ⭐⭐ **G120 — "কবে থেকে দেখছি" এখন `work_sessions` ধরে** *(২৪ আগস্ট ২০২৬)*।
+ * G120: "since when we have been watching" now goes by `work_sessions`.
  *
- * ⚠️⚠️ **যে বাগটা এটা ধরে:** `refreshDate()` প্রতিটি active কর্মীর
- * `daily_summary` সারি লেখে, ডেটা থাক বা না থাক। তাই ১ তারিখে কর্মী তৈরি
- * হলে ওই দিন থেকেই "দেখছি" ধরা হতো, আর এজেন্ট ১৭ তারিখে বসলেও মাঝের
- * দিনগুলো **পুরো ঘাটতি** হয়ে থাকত।
+ * The bug this catches: `refreshDate()` writes a `daily_summary` row for
+ * every active employee, with or without data. So if an employee was created
+ * on the 1st, "watching" was counted from that day, and even if the agent was
+ * installed on the 17th the days in between stayed a full shortfall.
  *
- * ⭐ ইউনিট টেস্ট এটা ধরতে পারে না — ওখানে `trackingStartedOn` হাতে বসানো
- * হয়। ফাঁকটা ছিল **কোন টেবিল থেকে সংখ্যাটা আসে** তাতে, আর সেটা কেবল
- * ডাটাবেসসহ পরীক্ষা করা যায়।
+ * Unit tests cannot catch this: there `trackingStartedOn` is set by hand. The
+ * gap was in which table the number comes from, and that can only be tested
+ * with the database.
  */
-describe('G120 — ট্র্যাকিং-শুরু: খালি সারি নয়, আসল সেশন', () => {
+describe('G120: tracking start: a real session, not an empty row', () => {
   /**
-   * ⚠️⚠️ **`workdaysElapsed`, `expectedWorkdays` নয়** — দুটো আলাদা জিনিস,
-   * আর প্রথমবার আমি ভুলটাই পড়েছিলাম (CI ধরিয়ে দিয়েছে)।
+   * `workdaysElapsed`, not `expectedWorkdays`: they are two different things,
+   * and the first time I read the wrong one (CI caught it).
    *
-   * `expectedWorkdays` = `prorate()`-এর **d**, অর্থাৎ তার নিজের কর্মদিবস —
-   * ট্র্যাকিং-শুরুর সাথে এর কোনো সম্পর্ক নেই। জানালাটা যায়
-   * `workdaysElapsed`-এ, আর সেখান থেকেই `expectedSec`।
+   * `expectedWorkdays` is `prorate()`'s d, i.e. their own workdays, and has
+   * nothing to do with tracking start. The window goes into `workdaysElapsed`,
+   * and `expectedSec` comes from there.
    */
   const elapsed = async (employeeId: number): Promise<number> =>
     (await monthRow(employeeId)).workdaysElapsed;
 
   /**
-   * ⭐⭐ **আসল পুনরুৎপাদন।** ১–১৬ আগস্টের খালি `daily_summary` সারি আছে
-   * (ঠিক যা `refreshDate()` লেখে), কিন্তু এজেন্টের প্রথম সেশন ১৭ তারিখে।
+   * The real reproduction. Empty `daily_summary` rows exist for 1-16 August
+   * (exactly what `refreshDate()` writes), but the agent's first session is on the 17th.
    *
-   * ⚠️ পুরোনো কোডে ট্র্যাকিং-শুরু হতো **১ আগস্ট**, তাই প্রত্যাশার জানালা
-   * পুরো মাস জুড়ে খুলত। এখন খোলে ১৭ তারিখ থেকে।
+   * With the old code tracking start was 1 August, so the expectation window
+   * opened across the whole month. Now it opens from the 17th.
    */
-  it('খালি সারি জমা থাকলেও এজেন্ট বসার আগের দিন গোনা হয় না', async () => {
+  it('with empty rows piled up, days before the agent was installed are not counted', async () => {
     const id = await makeEmployee({ empCode: 'G120-LATE' });
     await seeDays(id, Array.from({ length: 16 }, (_, i) => i + 1));
     await seeSessions(id, [17]);
     await rollup();
 
-    // ১৭–৩০ আগস্ট (আজকের ৩১ বাদ), শুক্রবার ২১ ও ২৮ বাদে = ১২ দিন
+    // 17-30 August (excluding today the 31st), minus Fridays the 21st and 28th = 12 days
     expect(await elapsed(id)).toBe(12);
   });
 
   /**
-   * ⚠️⚠️ **উল্টো দিকের পাহারা।** কারো একটাও সেশন না থাকলে হেল্পার কিছুই
-   * ফেরত দেয় না, আর কলার তখন `today` পাঠায় — জানালা খালি, প্রত্যাশা ০।
+   * The guard for the other direction. If someone has no session at all, the
+   * helper returns nothing, and the caller then passes `today`: window empty, expectation 0.
    *
-   * ⭐ কেউ ভুল করে `?? null` লিখলে এই টেস্টটাই ভাঙবে: `null` মানে
-   * "সীমা নেই", তাই প্রত্যাশা পুরো মাসের হয়ে যেত।
+   * If someone mistakenly writes `?? null`, this very test breaks: `null`
+   * means "no limit", so the expectation would become the whole month's.
    */
-  it('এজেন্ট কখনো কিছু পাঠায়নি — প্রত্যাশা ০, পুরো মাস নয়', async () => {
+  it('the agent never sent anything: expectation 0, not the whole month', async () => {
     const id = await makeEmployee({ empCode: 'G120-NEVER' });
     await seeDays(id, [1, 2, 3, 4, 5]);
     await rollup();
 
     expect(await elapsed(id)).toBe(0);
 
-    // ⚠️ টার্গেট অটুট — এই ফিক্স টাকার কোনো হিসাব ছোঁয় না
+    // the target is intact: this fix touches no money calculation
     expect((await monthRow(id)).targetSec).toBe(216 * HOUR);
   });
 
-  /** ⭐ সেশন থাকলে সংখ্যাটা স্থির — rollup দুবার চালালেও নড়ে না */
-  it('rollup দুবার চালালেও ট্র্যাকিং-শুরু নড়ে না', async () => {
+  /** With a session the number is fixed: it does not move even if the rollup is run twice */
+  it('running the rollup twice does not move the tracking start', async () => {
     const id = await makeEmployee({ empCode: 'G120-STABLE' });
     await seeSessions(id, [17, 18, 19]);
 
@@ -654,27 +656,29 @@ describe('G120 — ট্র্যাকিং-শুরু: খালি সা
 });
 
 /**
- * ⭐⭐ **G108 — যে অনুমানের উপর `d ÷ D` দাঁড়ানো, সেটা পে-রোলের গায়েই লেখা
- * থাকে** *(৪ সেপ্টেম্বর ২০২৬)*।
+ * G108: the assumption `d / D` stands on is written on the payroll itself
+ * (4 September 2026).
  *
- * চান্দ্র ছুটির তারিখ চাঁদ দেখার পর নড়ে। নড়লে ওই মাসের কর্মদিবস বদলায়,
- * অর্থাৎ **হর D বদলায়** — আর তাতে প্রতিটা কর্মীর prorated বেতন বদলায়।
- * এতদিন এই অনিশ্চয়তাটা কেবল ছুটির *নামে* ছিল (`(সম্ভাব্য)`); যিনি পে-রোল
- * খুলে বেতন ছাড়তেন তিনি জানতেনই না সংখ্যাটা এখনো নড়তে পারে।
+ * Lunar holiday dates move after the moon is sighted. When they move, that
+ * month's workdays change, i.e. the denominator D changes, and with it every
+ * employee's prorated salary. Until now this uncertainty lived only in the
+ * holiday's name (`(approximate)`); whoever opened payroll and released salary
+ * did not know the number could still move.
  *
- * ⚠️ এখানে e2e লাগে কারণ ঝুঁকিটা অঙ্কে নয়, **জোড়ার মুখে**: `sheet()`
- * মাসের ছুটির সারিগুলো আদৌ পড়ে কি না, আর পড়ে সেটা রেসপন্সে তোলে কি না।
+ * An e2e is needed here because the risk is not in the arithmetic but at the
+ * joint: does `sheet()` read the month's holiday rows at all, and does it put
+ * what it reads into the response.
  */
-describe('G108 — পে-রোল বলে দেয় কোন তারিখ এখনো পাকা নয়', () => {
+describe('G108: payroll says which dates are not final yet', () => {
   const payrollBody = async () =>
     (await owner.http.get(`/api/v1/payroll?month=${YEAR_MONTH}`).expect(200))
       .body as { approximateHolidayDates: string[] };
 
-  /** ২৬ আগস্ট বুধবার — শুক্রবার নয়, তাই এটা সত্যিই একটা কর্মদিবস কাড়ে */
+  /** Wednesday 26 August: not a Friday, so this really takes away a workday */
   const addHoliday = (day: number, name: string) =>
     h.prisma.holiday.create({ data: { holidayDate: utc(day), name } });
 
-  it('সম্ভাব্য ছুটি থাকলে তারিখটা রেসপন্সে ওঠে', async () => {
+  it('with an approximate holiday, the date goes into the response', async () => {
     await makeEmployee({ empCode: 'G108-PAY' });
     await addHoliday(26, `Eid-e-Miladunnabi${APPROX_HOLIDAY_SUFFIX}`);
     await rollup();
@@ -682,7 +686,7 @@ describe('G108 — পে-রোল বলে দেয় কোন তার�
     expect((await payrollBody()).approximateHolidayDates).toEqual(['2026-08-26']);
   });
 
-  it('পাকা ছুটি চুপ থাকে — সব ছুটি নিয়ে সতর্ক করলে সতর্কবার্তার দাম থাকত না', async () => {
+  it('a confirmed holiday stays quiet: warning on every holiday is worthless', async () => {
     await makeEmployee({ empCode: 'G108-FIXED' });
     await addHoliday(26, 'National Day');
     await rollup();
@@ -690,9 +694,9 @@ describe('G108 — পে-রোল বলে দেয় কোন তার�
     expect((await payrollBody()).approximateHolidayDates).toEqual([]);
   });
 
-  it('কোনো ছুটিই না থাকলে খালি — `undefined` নয়', async () => {
-    // ⚠️ `undefined` হলে ওয়েবে `.length` পড়তে গিয়ে পাতাটাই ভাঙত, আর
-    //    ভাঙত ঠিক সেই মাসে যেটায় কোনো ছুটি নেই — অর্থাৎ পরীক্ষায় নয়।
+  it('with no holiday at all it is empty, not `undefined`', async () => {
+    // With `undefined` the web would break reading `.length`, and it would
+    // break in exactly the month with no holiday, i.e. not in testing.
     await makeEmployee({ empCode: 'G108-NONE' });
     await rollup();
 
@@ -700,15 +704,15 @@ describe('G108 — পে-রোল বলে দেয় কোন তার�
   });
 
   /**
-   * ⭐⭐ **সতর্কবার্তাটা সত্যিই ওই টাকাটার কথা বলছে কি না।**
+   * Whether the warning really speaks about that money.
    *
-   * ⚠️ শুধু "তারিখটা তালিকায় আছে" দেখলে টেস্টটা সবুজ থাকত এমনকি যদি
-   * ছুটিটা হিসাবেই না ধরা হতো। তাই এখানে **একই মাসে** দুটো জিনিস একসাথে
-   * দেখা হয়: তারিখটা সতর্কবার্তায় উঠেছে, **আর** ওই তারিখটা সত্যিই একটা
-   * কর্মদিবস কেড়ে নিয়েছে (২৭ → ২৬), যার ফলে prorated ভিত্তি বদলেছে।
-   * এক সারি থেকেই দুটো আসছে — এটাই "এক সংখ্যা, এক সংজ্ঞা"।
+   * Checking only "the date is in the list" would stay green even if the
+   * holiday were not counted at all. So here two things are checked together
+   * in the same month: the date appears in the warning, and the same date
+   * really took away a workday (27 -> 26), changing the prorated base. Both
+   * come from one row: "one number, one definition".
    */
-  it('⭐ যে ছুটির কথা সতর্কবার্তায়, সেই ছুটিই D কমায়', async () => {
+  it('the holiday named in the warning is the one that reduces D', async () => {
     await makeEmployee({ empCode: 'G108-D', monthlySalary: 20000 });
     await addHoliday(26, `Eid-e-Miladunnabi${APPROX_HOLIDAY_SUFFIX}`);
     await rollup();
@@ -722,16 +726,16 @@ describe('G108 — পে-রোল বলে দেয় কোন তার�
 
     expect(body.approximateHolidayDates).toEqual(['2026-08-26']);
 
-    // ২৭ নয়, ২৬ কর্মদিবস → ২০০০০ ÷ (২৬ × ৮) = ৯৬.১৫ (২৭ হলে হতো ৯২.৫৯)
+    // 26 workdays, not 27 -> 20000 / (26 x 8) = 96.15 (with 27 it would be 92.59)
     const row = body.rows.find((r) => r.empCode === 'G108-D')!;
     expect(row.hourlyRate).toBe('96.15');
   });
 
   /**
-   * ⚠️ মাসের বাইরের ছুটি টানলে আগস্টের কাগজে সেপ্টেম্বরের অনিশ্চয়তা
-   * দেখাত — অথচ ওটা আগস্টের D-কে ছোঁয়ই না।
+   * Pulling in a holiday from outside the month would show September's
+   * uncertainty on August's paper, though it does not touch August's D at all.
    */
-  it('অন্য মাসের সম্ভাব্য ছুটি এই মাসের কাগজে আসে না', async () => {
+  it('another month\'s approximate holiday does not come into this month\'s paper', async () => {
     await makeEmployee({ empCode: 'G108-OTHER' });
     await h.prisma.holiday.create({
       data: {
@@ -746,32 +750,31 @@ describe('G108 — পে-রোল বলে দেয় কোন তার�
 });
 
 /**
- * ⭐⭐ **G110 · G111 — রিপোর্টের `meta` দুটো অবস্থা আলাদা করে বলে**
- * *(৫ সেপ্টেম্বর ২০২৬)*।
+ * G110, G111: the report's `meta` tells two states apart (5 September 2026).
  *
- * ⚠️⚠️ দুটোই এক জাতের ত্রুটি: **কোনো সংখ্যা ভুল নয়**, শুধু একটা অবস্থা
- * অন্যটার ছদ্মবেশে যায়।
- *   · G111 — যাঁকে এখনো একটা শেষ-হওয়া কর্মদিবসেও দেখা হয়নি, তাঁর প্রত্যাশা
- *     ০, তাই ঘাটতিও ০ — পর্দায় হুবহু "টার্গেট পূরণ"-এর মতো।
- *   · G110 — ট্র্যাকিং শুরুর আগের দিনগুলো হিটম্যাপে "কর্মদিবসে কিছুই
- *     হয়নি"-র লালচে ছোঁয়া পেত।
+ * Both are the same kind of fault: no number is wrong, but one state passes
+ * as the other.
+ *   - G111: someone not yet observed on even one finished workday has an
+ *     expectation of 0, so a shortfall of 0 too: on screen exactly like "target met".
+ *   - G110: the days before tracking started got a reddish tint of "nothing
+ *     happened on a workday" in the heatmap.
  *
- * ⚠️ e2e লাগে কারণ ঝুঁকিটা অঙ্কে নয়, **জোড়ার মুখে** — `context()` ঘরদুটো
- * ভরে কি না, আর `meta` সেগুলো তোলে কি না।
+ * An e2e is needed because the risk is not in the arithmetic but at the
+ * joint: does `context()` fill the two cells, and does `meta` pick them up.
  */
-describe('G110 · G111 — meta-তে "দেখা হয়েছে" ও "কবে থেকে"', () => {
+describe('G110, G111: "observed" and "since when" in meta', () => {
   const metaOf = async () =>
     (await reports.attendance({ from: '2026-08-01', to: '2026-08-31' })).meta;
 
-  it('একটাও শেষ-হওয়া দিন দেখা হয়নি — `observed` মিথ্যা', async () => {
-    // ⚠️ কোনো সেশন নেই, তাই ট্র্যাকিং-শুরু = আজ (৩১ আগস্ট), আর জানালা খালি
+  it('not one finished day observed: `observed` is false', async () => {
+    // No session, so tracking start = today (31 August), and the window is empty
     const id = await makeEmployee({ empCode: 'G111-NEW' });
     await rollup();
 
     expect((await metaOf()).observed[id]).toBe(false);
   });
 
-  it('শেষ-হওয়া দিন দেখা হয়েছে — `observed` সত্যি', async () => {
+  it('a finished day observed: `observed` is true', async () => {
     const id = await makeEmployee({ empCode: 'G111-SEEN' });
     await seeSessions(id, [17, 18, 19]);
     await rollup();
@@ -780,21 +783,22 @@ describe('G110 · G111 — meta-তে "দেখা হয়েছে" ও "�
   });
 
   /**
-   * ⭐⭐⭐ **এই ফাইলের G111-অংশের সবচেয়ে জরুরি টেস্ট — দুটো এক সূত্রে বাঁধা।**
+   * The most important test of this file's G111 part: the two are tied to one formula.
    *
-   * ⚠️⚠️ পতাকা আর প্রত্যাশা **কখনো দুই কথা বলতে পারে না**, আর সেটা কাকতালীয়
-   * নয়: দুটোই একই জানালা (`elapsedWindow`) থেকে বেরোয়। আলাদা কোনো কোয়েরি
-   * বা আলাদা নিয়মে গুনলে একদিন পাতাটা "এখনো দেখা হয়নি" লিখত অথচ পাশে
-   * ১২০ ঘণ্টার ঘাটতি দেখাত — অর্থাৎ একই সারি নিজের সাথেই বিরোধ করত।
+   * The flag and the expectation can never say two things, and that is not
+   * coincidence: both come out of the same window (`elapsedWindow`). If they
+   * were counted by a separate query or a separate rule, one day the page
+   * would write "not observed yet" while showing a 120-hour shortfall beside
+   * it: the same row contradicting itself.
    *
-   * ⭐ ভবিষ্যতে কেউ পতাকাটা অন্য কোথাও থেকে (যেমন `daily_summary`-র সারি
-   * গুনে) বানাতে গেলে এই সমতাটাই ভাঙবে।
+   * If someone later builds the flag from somewhere else (say, by counting
+   * `daily_summary` rows), this very equality will break.
    */
-  it('⭐ `observed` মিথ্যা ⟺ প্রত্যাশা ০ — দুটোই একই জানালার', async () => {
+  it('`observed` false <=> expectation 0: both from the same window', async () => {
     const seen = await makeEmployee({ empCode: 'G111-A' });
     await seeSessions(seen, [17, 18]);
 
-    // এজেন্ট কোনোদিন কিছু পাঠায়নি
+    // the agent never sent anything
     const unseen = await makeEmployee({ empCode: 'G111-B' });
     await rollup();
 
@@ -806,24 +810,25 @@ describe('G110 · G111 — meta-তে "দেখা হয়েছে" ও "�
     expect(meta.observed[unseen]).toBe(false);
     expect(meta.expectedHours[unseen]).toBe(0);
 
-    // ⚠️ কিন্তু টার্গেট দুজনেরই অটুট — জানালা টার্গেট ছোঁয় না, আর ঠিক
-    //    সেজন্যই না-দেখা মানুষের পুরো টার্গেটটা দলের যোগফল থেকে বাদ পড়ে।
+    // But the target is intact for both: the window does not touch the target,
+    // and that is exactly why an unobserved person's whole target drops out of the team sum.
     expect(meta.targetHoursInRange[unseen]).toBe(216);
   });
 
-  it('G110 — ট্র্যাকিং-শুরুর তারিখটা meta-তে যায়', async () => {
+  it('G110: the tracking start date goes into meta', async () => {
     const id = await makeEmployee({ empCode: 'G110-DATE' });
     await seeSessions(id, [13, 14, 17]);
     await rollup();
 
-    // ⚠️ সবচেয়ে পুরোনো সেশনের দিন — ১৩ আগস্ট, ঠিক যেমন এই ইনস্টলেশনে হয়েছিল
+    // the oldest session's day: 13 August, exactly as it happened on this installation
     expect((await metaOf()).trackedFrom[id]).toBe('2026-08-13');
   });
 
-  it('G110 — কখনো কিছু পাঠায়নি হলে তারিখটা `null`', async () => {
-    // ⚠️ ০ বা আজকের তারিখ নয় — `null` মানে "খবর নেই", আর পাতাটা তখন
-    //    মাসের সব কর্মদিবসকেই না-দেখা আঁকে। আজকের তারিখ বসালে পাতাটা
-    //    দাবি করত আমরা আজ থেকে দেখছি, অথচ একটাও সেশন নেই।
+  it('G110: when nothing was ever sent, the date is `null`', async () => {
+    // Not 0 and not today's date: `null` means "no information", and the page
+    // then draws every workday of the month as unobserved. Putting today's
+    // date would make the page claim we are watching from today, though there
+    // is not a single session.
     const id = await makeEmployee({ empCode: 'G110-NEVER' });
     await rollup();
 
@@ -831,15 +836,15 @@ describe('G110 · G111 — meta-তে "দেখা হয়েছে" ও "�
   });
 
   /**
-   * ⭐⭐ **তারিখটা প্রত্যাশা বদলায় না** — G110-র গোটা ঝুঁকিটাই এখানে।
+   * The date does not change the expectation: this is G110's whole risk.
    *
-   * ⚠️⚠️ তারিখটা পাঠানোর একমাত্র উদ্দেশ্য **আঁকা**। কেউ যদি একদিন এটা
-   * দিয়ে আবার প্রত্যাশা গোনেন, তখন "আজকের দিন বাদ" নিয়মটাও দ্বিতীয়বার
-   * লেখা হবে — আর ঠিক ওভাবেই আগের বাগটা জন্মেছিল। এখানে দেখা হয়:
-   * তারিখ ও প্রত্যাশা দুটোই আছে, আর প্রত্যাশা **জানালার** সংখ্যা,
-   * তারিখ থেকে গোনা নয়।
+   * The only purpose of sending the date is drawing. If someone one day uses
+   * it to count the expectation again, the "excluding today" rule would be
+   * written a second time, and that is exactly how the earlier bug was born.
+   * Here it is checked: both the date and the expectation are present, and the
+   * expectation is the window's number, not counted from the date.
    */
-  it('⭐ ১৩ আগস্ট থেকে দেখা — প্রত্যাশা ১৩ তারিখ থেকে ৩০ পর্যন্ত, ১ থেকে নয়', async () => {
+  it('observed from 13 August: expectation runs 13th to 30th, not from the 1st', async () => {
     const id = await makeEmployee({ empCode: 'G110-EXP' });
     await seeSessions(id, [13]);
     await rollup();
@@ -848,44 +853,44 @@ describe('G110 · G111 — meta-তে "দেখা হয়েছে" ও "�
 
     expect(meta.trackedFrom[id]).toBe('2026-08-13');
     /**
-     * ১৩–৩১ আগস্টে কর্মদিবস ১৬ (শুক্রবার ১৪ · ২১ · ২৮ বাদ) × ৮ঘ = ১২৮।
+     * 13-31 August has 16 workdays (excluding Fridays 14, 21, 28) x 8h = 128.
      *
-     * ⚠️ জানালার ডান প্রান্ত **গতকাল**, আর আগস্ট ২০২৬ এখন সম্পূর্ণ অতীত —
-     *    তাই মাসটা পুরোটাই ভেতরে পড়ে আর সংখ্যাটা আর কখনো নড়বে না
-     *    (G140: স্পেকের সংখ্যা ক্যালেন্ডারের সাথে বদলাতে পারে না)।
-     * ⭐ আসল দাবিটা সংখ্যাটা নয় — **১ আগস্ট থেকে গোনা হয়নি**: পুরো মাস
-     *    গুনলে হতো ২১৬, অর্থাৎ ৮৮ ঘণ্টার ভুতুড়ে ঘাটতি।
+     * The window's right end is yesterday, and August 2026 is now entirely in
+     * the past, so the month falls wholly inside and the number will never
+     * move again (G140: the spec's number cannot change with the calendar).
+     * The real claim is not the number: it was not counted from 1 August.
+     * Counting the whole month would give 216, i.e. a phantom shortfall of 88 hours.
      */
     expect(meta.expectedHours[id]).toBe(128);
     expect(meta.expectedHours[id]).toBeLessThan(216);
-    // ⚠️ পুরো মাসের টার্গেট অটুট — জানালা টার্গেট ছোঁয় না
+    // the whole month's target is intact: the window does not touch the target
     expect(meta.targetHoursInRange[id]).toBe(216);
   });
 });
 
 /**
- * ⭐⭐ **G130 (R2) — ছুটি রিপোর্টের সারিতেও লেখা থাকে** *(৫ সেপ্টেম্বর ২০২৬)*।
+ * G130 (R2): leave is written on the report row too (5 September 2026).
  *
- * ⚠️⚠️ ছুটি সংখ্যায় অনেক আগেই পৌঁছেছে (উপরের `leave.spec.ts` ও এই ফাইলের
- * টার্গেট-টেস্টগুলো দেখুন) — কেউ আর ছুটির জন্য "পিছিয়ে" দেখায় না। কিন্তু
- * সারিটা দেখতে হুবহু **শূন্য-ঘণ্টার একটা কর্মদিবসের** মতো ছিল, আর কারণটা
- * জানতে Settings → Leave-এ যেতে হতো।
+ * Leave reached the numbers long ago (see `leave.spec.ts` above and this
+ * file's target tests): nobody shows "behind" for leave any more. But the row
+ * looked exactly like a workday with zero hours, and to learn the reason you
+ * had to go to Settings > Leave.
  *
- * ⚠️ e2e লাগে কারণ ঝুঁকিটা **জোড়ার মুখে**: `context()` পতাকাটা ভরে কি না,
- * আর সারিটা সেটা তোলে কি না।
+ * An e2e is needed because the risk is at the joint: does `context()` fill the
+ * flag, and does the row pick it up.
  */
-describe('G130 — রিপোর্টের সারিতে "On leave"', () => {
+describe('G130: "On leave" on the report row', () => {
   const rowsOf = async (empId: number) =>
     (await reports.attendance({ from: '2026-08-01', to: '2026-08-31' })).rows
       .filter((r) => r.employeeId === empId);
 
-  /** ২০ আগস্ট বৃহস্পতিবার — কর্মদিবস, তাই ছুটিটা সত্যিই একটা টার্গেট কাড়ে */
+  /** Thursday 20 August: a workday, so the leave really takes away some target */
   const takeLeave = (employeeId: number, day: number) =>
     h.prisma.leave.create({
       data: { employeeId, leaveDate: utc(day), createdBy: 'test@oxeio' },
     });
 
-  it('ছুটির দিনের সারিতে পতাকা ওঠে, অন্য দিনে ওঠে না', async () => {
+  it('the flag is set on the leave day\'s row and not on other days', async () => {
     const id = await makeEmployee({ empCode: 'G130-ROW' });
     await takeLeave(id, 20);
     await rollup();
@@ -899,14 +904,14 @@ describe('G130 — রিপোর্টের সারিতে "On leave"', (
   });
 
   /**
-   * ⭐⭐ **এক সেট, দুই ব্যবহার — এটাই আসল পাহারা।**
+   * One set, two uses: this is the real guard.
    *
-   * ⚠️⚠️ ব্যাজটা যদি আলাদা একটা কোয়েরি থেকে আসত, একদিন সারিতে "On leave"
-   * লেখা থাকত অথচ টার্গেট কাটা যেত না (বা উল্টোটা) — অর্থাৎ কাগজটা
-   * নিজের সাথেই বিরোধ করত। এখানে দেখা হয় দুটো **একই সারি** থেকে আসছে:
-   * পতাকা উঠেছে **আর** ওই দিনের টার্গেট ০।
+   * If the badge came from a separate query, one day the row would say
+   * "On leave" without the target being cut (or the reverse): the paper would
+   * contradict itself. Here it is checked that both come from the same row:
+   * the flag is set and that day's target is 0.
    */
-  it('⭐ যে দিনে পতাকা, সেই দিনেই টার্গেট ০', async () => {
+  it('the day with the flag has target 0 on that same day', async () => {
     const id = await makeEmployee({ empCode: 'G130-TARGET' });
     await takeLeave(id, 20);
     await rollup();
@@ -918,7 +923,7 @@ describe('G130 — রিপোর্টের সারিতে "On leave"', (
       targetHours: 0,
       dayType: 'workday',
     });
-    // ⚠️ পাশের দিনটা অক্ষত — ছুটি ছড়িয়ে পড়েনি
+    // the next day is intact: the leave did not spread
     expect(rows.find((r) => r.date === '2026-08-19')).toMatchObject({
       onLeave: false,
       targetHours: 8,
@@ -926,11 +931,11 @@ describe('G130 — রিপোর্টের সারিতে "On leave"', (
   });
 
   /**
-   * ⚠️ `daily_summary`-তে কিছু লেখা হয় না, `leaves` টেবিল সরাসরি পড়া হয় —
-   *    আর ওটাই ঠিক: ছুটি মুছে দিলে ব্যাজ **সাথে সাথেই** যায়, পরের
-   *    rollup-এর অপেক্ষায় থাকে না। rollup না চালিয়েই সেটা দেখা হচ্ছে।
+   * Nothing is written to `daily_summary`; the `leaves` table is read
+   * directly, and that is right: when a leave is deleted the badge goes
+   * immediately, without waiting for the next rollup. This is checked without running the rollup.
    */
-  it('⭐ ছুটি মুছে দিলে ব্যাজ সাথে সাথে যায় — rollup ছাড়াই', async () => {
+  it('deleting a leave removes the badge immediately, without a rollup', async () => {
     const id = await makeEmployee({ empCode: 'G130-DELETE' });
     const leave = await takeLeave(id, 20);
     await rollup();

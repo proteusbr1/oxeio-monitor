@@ -4,32 +4,31 @@ using System.Runtime.Versioning;
 namespace oXeio.Agent.Ui;
 
 /// <summary>
-/// ⭐⭐ <b>এজেন্টের মুখ</b> — ওয়েবের সেই লাল টাইল ও সাদা X
-/// (<c>web/public/favicon.svg</c>), exe-তে এমবেড করা।
+/// <b>The face of the agent</b>: the red tile with the white X from the web app
+/// (<c>web/public/favicon.svg</c>), embedded in the exe.
 ///
-/// ⚠️⚠️ <b>জানালার আইকন আর exe-র আইকন এক জিনিস নয়।</b> csproj-এর
-/// <c>ApplicationIcon</c> ঠিক করে Explorer, alt-tab আর "Add or remove
-/// programs" — কিন্তু <b>টাস্কবারের বোতামে</b> WinForms দেখায়
-/// <c>Form.Icon</c>, আর সেটা না দিলে নিজের ডিফল্টটাই বসায়। তাই এখানে
-/// আলাদা করে লাগে।
+/// Careful: <b>the window icon and the exe icon are not the same thing.</b> The csproj's
+/// <c>ApplicationIcon</c> decides Explorer, alt-tab and "Add or remove programs", but
+/// <b>the taskbar button</b> shows WinForms's <c>Form.Icon</c>, and if it is not set
+/// WinForms uses its own default. So it has to be set separately here.
 ///
-/// ⚠️ <b>একটাই জায়গা</b>, কারণ জানালা দুই রকম: <see cref="OwnerDrawnForm"/>
-/// (Today · About) আর <see cref="SignInForm"/> — দ্বিতীয়টা প্রথমটার
-/// উত্তরাধিকারী নয়। প্রথমে শুধু বেস ক্লাসে বসিয়ে ভাবা হয়েছিল কাজ শেষ,
-/// অথচ ইনস্টলের পর স্টাফ যে জানালাটা <b>প্রথম</b> দেখেন সেটাই বাদ পড়েছিল।
+/// Careful: <b>one place only</b>, because there are two kinds of window:
+/// <see cref="OwnerDrawnForm"/> (Today · About) and <see cref="SignInForm"/>, and the second
+/// does not inherit from the first. At first it was put only on the base class and
+/// considered done, but the window staff see <b>first</b> after install was left out.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static class BrandIcon
 {
-    /// <summary>⚠️ csproj-এর <c>LogicalName</c>-এর সাথে হুবহু মিলতে হবে</summary>
+    /// <summary>Careful: must match the csproj's <c>LogicalName</c> exactly.</summary>
     private const string ResourceName = "oXeio.Agent.brand.ico";
 
     /**
-     * একবার পড়া হয়, সব জানালা ভাগ করে নেয়।
+     * Read once, shared by all windows.
      *
-     * ⚠️⚠️ ব্যর্থ হলে <c>null</c>, ব্যতিক্রম নয়। আইকন না পাওয়ার সবচেয়ে
-     * খারাপ ফল হলো টাস্কবারে পুরোনো চেহারা — কিন্তু ছুড়ে দিলে
-     * <b>সাইন-ইন জানালাটাই খুলত না</b>, আর কর্মী কাজই শুরু করতে পারতেন না।
+     * Careful: <c>null</c> on failure, not an exception. The worst result of not finding the
+     * icon is the old look on the taskbar, but throwing would mean
+     * <b>the sign-in window would not open at all</b>, and the employee could not start work.
      */
     public static Icon? Value => Lazy.Value;
 

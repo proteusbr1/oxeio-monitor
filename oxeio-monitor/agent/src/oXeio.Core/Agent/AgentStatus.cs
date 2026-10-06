@@ -3,194 +3,189 @@ using oXeio.Core.Models;
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// সিঙ্ক কেমন চলছে — tray আইকনের রং এখান থেকেই ঠিক হয় (J07)।
+/// How sync is going. The tray icon color is decided from this (J07).
 /// </summary>
 public enum SyncHealth
 {
-    /// <summary>সব পৌঁছাচ্ছে। আইকন স্বাভাবিক।</summary>
+    /// <summary>Everything is arriving. Normal icon.</summary>
     Ok,
 
-    /// <summary>দু-একটা চেষ্টা ব্যর্থ, কিন্তু এখনো চিন্তার নয়। আইকন স্বাভাবিক, টুলটিপে ইঙ্গিত।</summary>
+    /// <summary>A few attempts failed, but not yet worrying. Normal icon, hint in the tooltip.</summary>
     Degraded,
 
     /// <summary>
-    /// টানা ব্যর্থ হচ্ছে। ⚠️ আইকন <b>লাল</b>, আর টুলটিপে সরাসরি লিখতে হবে যে
-    /// ডেটা হারায়নি, লোকালি জমছে — নইলে স্টাফ ধরে নেবে তার ঘণ্টা মুছে যাচ্ছে।
+    /// Failing repeatedly. The icon is <b>red</b>, and the tooltip must say outright that data
+    /// is not lost and is being kept locally, or staff will assume their hours are being deleted.
     /// </summary>
     Failing,
 
-    /// <summary>ডিভাইস বাতিল (H06)। ট্র্যাকিং বন্ধ, আইকনে সেটাই দেখাতে হবে।</summary>
+    /// <summary>Device revoked (H06). Tracking is stopped and the icon must show it.</summary>
     Revoked,
 }
 
 /// <summary>
-/// tray আইকন যা যা দেখায় — এটুকুই, আর কিছু নয়।
+/// Everything the tray icon shows, and nothing more.
 ///
-/// ⚠️ এখানে কোনো বাটন নেই, কোনো ইনপুট নেই। স্টাফের চাপার মতো কিছু থাকলে
-/// সেটা approval workflow-র প্রথম ধাপ হয়ে যেত (ADR-011d), আর এই সিস্টেমে
-/// সেরকম কিছু নেই। tray শুধু <b>দেখায়</b> — কারণ আইকনটা সবসময় দৃশ্যমান
-/// থাকাটাই covert installation না হওয়ার প্রমাণ।
+/// There are no buttons and no inputs. Anything staff could press would become the first step
+/// of an approval workflow (ADR-011d), and this system has none. The tray only <b>shows</b>:
+/// an always-visible icon is what proves the installation is not covert.
 /// </summary>
 public sealed record AgentStatus
 {
     public required SegmentState State { get; init; }
 
     /// <summary>
-    /// ⭐ আপডেটের অবস্থা — tray-র "Install update" আইটেমটা এটার উপরেই দাঁড়ায়।
+    /// State of the update: the tray's "Install update" item rests on this.
     ///
-    /// ⚠️ <c>required</c>, ঐচ্ছিক নয়: ঘরটা না ভরলে আইটেমটা **কোনোদিন**
-    /// দেখা যেত না, আর কেউ টেরও পেত না — নতুন ভার্সন নামানো ও যাচাই হয়ে
-    /// ডিস্কে পড়ে থাকত, অথচ স্টাফের কাছে বসানোর কোনো পথ নেই।
+    /// <c>required</c>, not optional: if it were not filled in, the item would **never** appear
+    /// and nobody would notice. A new version would be downloaded, verified and left on disk
+    /// with no way for staff to install it.
     /// </summary>
     public required UpdateStatus Update { get; init; }
 
-    /// <summary>ঢাকার আজকের দিনের ACTIVE সময়।</summary>
+    /// <summary>Today's ACTIVE time on the Dhaka calendar.</summary>
     public required TimeSpan ActiveToday { get; init; }
 
     /// <summary>
-    /// এই snapshot-টা <b>কখন</b> নেওয়া হয়েছিল (বাস্তব ঘড়ি)।
+    /// <b>When</b> this snapshot was taken (real clock).
     ///
-    /// ⭐ <see cref="ActiveToday"/> ওই মুহূর্ত পর্যন্ত সঠিক — খোলা সেগমেন্টসহ।
-    /// কিন্তু snapshot নেওয়া হয় ঘটনার তালে (heartbeat, সেগমেন্ট, স্ট্যাটাস
-    /// বদল), প্রতি সেকেন্ডে নয়। তাই জানালা এই সময়টা থেকে বাকিটুকু নিজে
-    /// গোনে, আর ঘড়িটা সেকেন্ডে সেকেন্ডে চলে (<see cref="LiveDuration"/>)।
+    /// <see cref="ActiveToday"/> is correct up to that moment, including the open segment.
+    /// But snapshots are taken on events (heartbeat, segment, status change), not every
+    /// second. So the window counts the remainder from this time itself, and the clock ticks
+    /// every second (<see cref="LiveDuration"/>).
     ///
-    /// ⚠️ <c>null</c> মানে "জানি না" — তখন <see cref="LiveDuration"/> নিজে থেকে
-    /// এক সেকেন্ডও যোগ করে না। ⚠️ ঘরটা ঐচ্ছিক রাখা হয়েছে ইচ্ছাকৃতভাবে:
-    /// <c>required</c> করলে প্রিভিউ/টেস্টের পুরোনো নির্মাণগুলো ভাঙত, আর
-    /// ডিফল্ট <c>default(DateTimeOffset)</c> (০০০১ সাল) বসলে "কেটে যাওয়া সময়"
-    /// হতো দু-হাজার বছর — অর্থাৎ প্রতিবার ছাদে ঠেকে ভুল সময় যোগ হতো।
+    /// <c>null</c> means "unknown": <see cref="LiveDuration"/> then adds not even one second on
+    /// its own. The field is optional on purpose: making it <c>required</c> would break old
+    /// preview/test constructions, and a default <c>default(DateTimeOffset)</c> (year 0001)
+    /// would make the "elapsed time" about two thousand years, hitting the cap every time and
+    /// adding a wrong amount.
     /// </summary>
     public DateTimeOffset? CountedAt { get; init; }
 
-    /// <summary>ঢাকার চলতি মাসের ACTIVE সময়। মাসিক ২০৮ ঘণ্টার সাথে এটাই মেলানো হয়।</summary>
+    /// <summary>This month's ACTIVE time on the Dhaka calendar. It is compared with the monthly 208 hours.</summary>
     public required TimeSpan ActiveThisMonth { get; init; }
 
     /// <summary>
-    /// ⭐ <see cref="ActiveThisMonth"/> সত্যিই সার্ভার থেকে এসেছে কি না।
+    /// Whether <see cref="ActiveThisMonth"/> really came from the server.
     ///
-    /// ⚠️ <b>এই পতাকাটা না থাকলে "এখনো জানি না" আর "শূন্য ঘণ্টা" এক দেখাত।</b>
-    /// এজেন্ট নিজে মাসের হিসাব রাখে না (রিবুটে তার সব শূন্য), তাই প্রথম
-    /// heartbeat আসার আগ পর্যন্ত এখানে ০ বসে থাকে। ওই ০-টাকে সত্যি ধরে
-    /// দেখালে স্টাফ প্রতিবার লগইন করে দেখত "০ / ২০৮ ঘণ্টা · ২০৮ ঘণ্টা পিছিয়ে" —
-    /// অর্থাৎ মনে হতো মাসের সব কাজ মুছে গেছে। যে ফিচারটার উদ্দেশ্যই আস্থা
-    /// তৈরি করা, সেটাই তখন প্রতিদিন সকালে আস্থা ভাঙত।
+    /// <b>Without this flag, "not known yet" and "zero hours" would look the same.</b>
+    /// The agent keeps no month total itself (everything resets on reboot), so until the first
+    /// heartbeat arrives this holds 0. Showing that 0 as true would make staff see
+    /// "0 / 208 hours · 208 hours behind" at every login, as if the month's work were wiped.
+    /// A feature whose whole purpose is building trust would break it every morning.
     ///
-    /// মিথ্যা <c>false</c>-এ দেখানোর জায়গা "হিসাব আসছে" লিখবে, শূন্য নয়।
+    /// When <c>false</c>, the display should say "calculating", not zero.
     /// </summary>
     public bool MonthlyKnown { get; init; }
 
-    /// <summary><see cref="AgentConfig.MonthlyTargetHours"/> — সাধারণত ২০৮।</summary>
+    /// <summary><see cref="AgentConfig.MonthlyTargetHours"/>, usually 208.</summary>
     public required double MonthlyTargetHours { get; init; }
 
     /// <summary>
-    /// গতি — মাসের এই দিনে যতটা হওয়ার কথা ছিল তার চেয়ে কত বেশি/কম।
-    /// ধনাত্মক মানে এগিয়ে (<see cref="EmployeeProgress.PaceSec"/>)।
+    /// Pace: how far ahead or behind where the month's progress should be on this day.
+    /// Positive means ahead (<see cref="EmployeeProgress.PaceSec"/>).
     ///
-    /// ⚠️ <c>null</c> মানে "সার্ভার বলেনি", "শূন্য" নয়। শূন্য মানে ঠিক লক্ষ্যে
-    /// আছে — দুটোকে এক করে ফেললে সার্ভার চুপ থাকা প্রতিটা মুহূর্তে স্টাফ
-    /// নিজেকে নিখুঁত অবস্থানে দেখত। null হলে দেখানোর জায়গা নিজে আনুমানিক
-    /// হিসাব করে, এবং "আনুমানিক" কথাটা লিখে দেয়।
+    /// <c>null</c> means "the server did not say", not "zero". Zero means exactly on target;
+    /// conflating the two would show staff a perfect position every moment the server is silent.
+    /// When null, the display makes its own rough estimate and labels it "approximate".
     ///
-    /// ⚠️ নামটা <c>MonthlyPace</c> নয় — <c>Ui.MonthlyPace</c> নামে ক্লাসও আছে,
-    /// আর প্রপার্টি ও টাইপের নাম এক হলে কল-সাইটে কোনটা বোঝানো হচ্ছে তা
-    /// অস্পষ্ট হয়ে যায় (<see cref="Health"/>-এর মন্তব্য দেখুন)।
+    /// The name is not <c>MonthlyPace</c>: a class called <c>Ui.MonthlyPace</c> exists, and when
+    /// a property and a type share a name it becomes unclear at the call site which is meant
+    /// (see the comment on <see cref="Health"/>).
     /// </summary>
     public TimeSpan? Pace { get; init; }
 
     /// <summary>
-    /// ⭐⭐ <b>G111</b> — সার্ভার বলেছে তাঁর একটাও <b>শেষ হয়ে যাওয়া</b>
-    /// কর্মদিবস এখনো দেখা হয়নি।
+    /// <b>G111</b>: the server says not one <b>finished</b> working day of this person has
+    /// been observed yet.
     ///
-    /// ⚠️⚠️ <see cref="Pace"/>-এর <c>null</c> দিয়ে এটা বোঝানো যেত না, আর
-    /// সেটাই এই ঘরটার গোটা কারণ। <c>null</c> মানে "সার্ভার বলেনি", আর তখন
-    /// জানালা <b>নিজের আনুমানিক হিসাবে ফিরে যায়</b> — যেটা মাসের ১ তারিখ
-    /// থেকে গোনে, অর্থাৎ ঠিক ওই না-দেখা দিনগুলোকেই ঘাটতি বলে দেখাত।
-    /// একটা ভুল আশ্বাস সারাতে গিয়ে ঠিক উল্টো দিকের একটা ভুল অভিযোগ।
+    /// <see cref="Pace"/> being <c>null</c> could not express this, which is the whole reason
+    /// for this field. <c>null</c> means "the server did not say", and the window then
+    /// <b>falls back to its own rough estimate</b>, which counts from the 1st of the month and
+    /// would show exactly those unobserved days as a shortfall. Fixing one false reassurance
+    /// would have caused the opposite: a false accusation.
     ///
-    /// ⚠️ ডিফল্ট <c>true</c> — পুরোনো সার্ভার বা প্রথম heartbeat-এর আগে
-    /// আচরণ অবিকল আগের মতোই থাকে।
+    /// Defaults to <c>true</c>, so behavior is exactly as before with an old server or before
+    /// the first heartbeat.
     /// </summary>
     public bool PaceObserved { get; init; } = true;
 
-    /// <summary>এখনো আপলোড হয়নি এমন সারির সংখ্যা।</summary>
+    /// <summary>Number of queue items not yet uploaded.</summary>
     public required int QueueDepth { get; init; }
 
-    /// <summary>শেষ যেবার সার্ভার সত্যিই কিছু নিয়েছে। কখনো না হলে null।</summary>
+    /// <summary>The last time the server actually accepted something. Null if never.</summary>
     public DateTimeOffset? LastSyncAt { get; init; }
 
     /// <summary>
-    /// ⚠️ প্রপার্টির নাম <c>Health</c>, <c>SyncHealth</c> নয় — প্রপার্টি আর তার
-    /// টাইপের নাম এক হলে ("Color Color" সমস্যা) স্ট্যাটিক কনটেক্সটে
-    /// <c>SyncHealth.Ok</c> লেখাটাই অস্পষ্ট হয়ে যেত।
+    /// The property is named <c>Health</c>, not <c>SyncHealth</c>: when a property and its type
+    /// share a name (the "Color Color" problem), writing <c>SyncHealth.Ok</c> in a static
+    /// context becomes ambiguous.
     /// </summary>
     public required SyncHealth Health { get; init; }
 
-    /// <summary>টুলটিপের দ্বিতীয় লাইন — যেমন "সার্ভারে পৌঁছাচ্ছে না, ডেটা লোকালি জমছে"।</summary>
+    /// <summary>The tooltip's second line, e.g. "Can't reach server, data saved locally".</summary>
     public string? HealthDetail { get; init; }
 
-    /// <summary><see cref="AgentCommand.PauseTracking"/> চালু আছে কি না।</summary>
+    /// <summary>Whether <see cref="AgentCommand.PauseTracking"/> is in effect.</summary>
     public required bool Paused { get; init; }
 
     /// <summary>
-    /// এই ডিভাইস কোনো কর্মীর সাথে বাঁধা কি না।
+    /// Whether this device is bound to an employee.
     ///
-    /// ⚠️⚠️ <b><c>required</c> ইচ্ছাকৃত, ডিফল্ট নয়।</b> ডিফল্ট
-    /// <c>true</c> দিলে ভুলে যাওয়া কোনো জায়গা চুপচাপ "সাইন ইন হয়ে গেছে"
-    /// বলত — অর্থাৎ ঠিক যে বাগটা সারানো হচ্ছে সেটাই আবার ফিরে আসার পথ
-    /// খোলা থাকত। ডিফল্ট <c>false</c> দিলে উল্টো বিপদ: একটা জায়গা ভুলে
-    /// গেলে সাইন-ইন করা মেশিনও "Sign in to start" দেখাত।
+    /// <b><c>required</c> on purpose, no default.</b> A default of <c>true</c> would let any
+    /// place that forgot to set it silently say "signed in", reopening the way back for the
+    /// very bug being fixed. A default of <c>false</c> has the opposite danger: forgetting one
+    /// place would make a signed-in machine show "Sign in to start".
     ///
-    /// ⭐ <c>required</c> দিলে কম্পাইলারই "কলার লেখা হয়েছে কি না" পাহারা
-    /// দেয় — এই প্রকল্পে যে ভুলটা ছয়বার হয়েছে, ঠিক সেটাই।
+    /// With <c>required</c> the compiler itself checks that every caller sets it, which is
+    /// exactly the mistake that happened six times in this project.
     /// </summary>
     public required bool Enrolled { get; init; }
 
     /// <summary>
-    /// আজকের টার্গেট। <c>null</c> = সার্ভার বলেনি · <c>Zero</c> = আজ ছুটি।
-    /// ⚠️ দুটো এক নয় — ছুটির দিনে বার দেখানোর মানে হয় না, আর "জানি না"
-    /// অবস্থায় ভুল বার দেখানোর চেয়ে কিছু না দেখানো ভালো।
+    /// Today's target. <c>null</c> = the server did not say; <c>Zero</c> = a day off.
+    /// The two are not the same: showing a bar on a day off makes no sense, and showing nothing
+    /// is better than showing a wrong bar when it is unknown.
     /// </summary>
     public TimeSpan? DailyTarget { get; init; }
 
-    /// <summary>গত ৭ দিনে (আজ ধরে) গোনা সময়।</summary>
+    /// <summary>Time counted over the last 7 days (including today).</summary>
     public TimeSpan? ActiveLast7 { get; init; }
 
-    /// <summary>ওই ৭ দিনের কর্মদিবস × দৈনিক টার্গেট।</summary>
+    /// <summary>Working days in those 7 days times the daily target.</summary>
     public TimeSpan? Last7Target { get; init; }
 
     /// <summary>
-    /// সাম্প্রতিক ৫ মিনিটের ঘরগুলোয় <b>কত শতাংশ সময়</b> কি-বোর্ড/মাউস
-    /// চলেছে (B13) — পুরোনো থেকে নতুন ক্রমে।
+    /// <b>What percentage of the time</b> keyboard/mouse was active in the recent 5-minute
+    /// slots (B13), ordered oldest to newest.
     ///
-    /// ⭐⚠️ এটা <b>কতবার চাপা হয়েছে নয়</b>, আর কোনোদিন হবেও না। "কতবার"
-    /// গুনতে low-level hook লাগে, যেটা কীলগিং — <c>04-Features § L</c>-এ
-    /// নিষিদ্ধ, আর <c>G46</c>-এ প্রস্তাবটা স্পষ্টভাবে প্রত্যাখ্যাত। এজেন্ট
-    /// প্রতি সেকেন্ডে শুধু দেখে "শেষ ইনপুট কতক্ষণ আগে", তাই সে জানতেই
-    /// পারে না কী চাপা হয়েছে বা কতবার।
+    /// This is <b>not a count of presses</b>, and never will be. Counting needs a low-level
+    /// hook, which is keylogging: forbidden in <c>04-Features § L</c>, and the proposal was
+    /// explicitly rejected in <c>G46</c>. Each second the agent only sees "how long since the
+    /// last input", so it cannot know what was pressed or how often.
     ///
-    /// idle ঘরে ০ — "হাত চলেনি" বলাটা সত্যি, ফাঁক রাখাটা নয়।
+    /// An idle slot is 0: saying "no hands moved" is true, leaving a gap is not.
     /// </summary>
     public IReadOnlyList<int> RecentBusy { get; init; } = [];
 
-    /// <summary>শেষ যে ছবিটা তোলা হয়েছে তার থাম্বনেইলের পথ। কিছু না উঠলে null।</summary>
+    /// <summary>Path of the thumbnail of the last picture taken. Null if none was taken.</summary>
     public string? LatestShotThumb { get; init; }
 
-    /// <summary>ওই ছবিটা কখন উঠেছে।</summary>
+    /// <summary>When that picture was taken.</summary>
     public DateTimeOffset? LatestShotAt { get; init; }
 
-    /// <summary>কয়টা পর্দার ছবি ওই মুহূর্তে উঠেছে — "১টির মধ্যে ১" বনাম "২টির"।</summary>
+    /// <summary>How many screens' pictures were taken at that moment: "1 of 1" vs "2".</summary>
     public int LatestShotMonitors { get; init; }
 
     /// <summary>
-    /// ০ = কিছু হয়নি, ১ = লক্ষ্য পূর্ণ। ⚠️ উপরে ক্ল্যাম্প করা <b>হয় না</b> —
-    /// ২২০ ঘণ্টা কাজ করা মানুষকে ১০০% দেখানো তার বাড়তি কাজটাকে অদৃশ্য করে দিত।
-    /// প্রোগ্রেস বার আঁকার সময় কলার নিজে <c>Math.Min(1, …)</c> করবে।
+    /// 0 = nothing done, 1 = target met. It is <b>not</b> clamped above: showing someone who
+    /// worked 220 hours as 100% would hide their extra work. The caller applies
+    /// <c>Math.Min(1, …)</c> itself when drawing the progress bar.
     /// </summary>
     public double MonthlyProgress =>
         MonthlyTargetHours <= 0 ? 0 : Math.Max(0, ActiveThisMonth.TotalHours / MonthlyTargetHours);
 
-    /// <summary>লক্ষ্য ছুঁতে আর কত। পূর্ণ হয়ে গেলে <see cref="TimeSpan.Zero"/>।</summary>
+    /// <summary>How much is left to reach the target. <see cref="TimeSpan.Zero"/> once met.</summary>
     public TimeSpan MonthlyRemaining
     {
         get
@@ -201,26 +196,26 @@ public sealed record AgentStatus
     }
 
     /// <summary>
-    /// আজকের অগ্রগতি — টার্গেট জানা না থাকলে বা ছুটির দিনে <c>null</c>।
-    /// ⚠️ <see cref="MonthlyProgress"/>-এর মতোই উপরে ক্ল্যাম্প করা হয় না;
-    /// বার আঁকার সময় কলার নিজে ছাঁটবে।
+    /// Today's progress: <c>null</c> if the target is unknown or on a day off.
+    /// Like <see cref="MonthlyProgress"/> it is not clamped above; the caller trims it when
+    /// drawing the bar.
     /// </summary>
     public double? DailyProgress =>
         DailyTarget is { } t && t > TimeSpan.Zero
             ? Math.Max(0, ActiveToday.TotalSeconds / t.TotalSeconds)
             : null;
 
-    /// <summary>গত ৭ দিনের অগ্রগতি। টার্গেট বা কাজ কোনোটা জানা না থাকলে <c>null</c>।</summary>
+    /// <summary>Progress over the last 7 days. <c>null</c> if either the target or the work is unknown.</summary>
     public double? Last7Progress =>
         Last7Target is { } t && t > TimeSpan.Zero && ActiveLast7 is { } worked
             ? Math.Max(0, worked.TotalSeconds / t.TotalSeconds)
             : null;
 
-    /// <summary>চালু হওয়ার পর প্রথম টিক আসার আগে tray যা দেখাবে।</summary>
+    /// <summary>What the tray shows after startup, before the first tick arrives.</summary>
     public static AgentStatus Starting => new()
     {
         State = SegmentState.Idle,
-        // ⚠️ চালু হওয়ার মুহূর্তে আপডেটের খবরই নেই — `Idle` মানে "কিছু জানি না"
+        // At startup nothing is known about updates: `Idle` means "I know nothing"
         Update = UpdateStatus.Idle,
         ActiveToday = TimeSpan.Zero,
         ActiveThisMonth = TimeSpan.Zero,
@@ -229,23 +224,23 @@ public sealed record AgentStatus
         Health = SyncHealth.Ok,
         Paused = false,
 
-        // ⚠️ false — চালু হওয়ার মুহূর্তে ক্রেডেনশিয়াল এখনো পড়াই হয়নি, তাই
-        //    "সাইন ইন হয়ে গেছে" ধরে নেওয়ার কোনো ভিত্তি নেই। প্রথম টিকেই
-        //    আসল মানটা বসে যায়; ভুলটা এক সেকেন্ডের, আর সেটা নিরাপদ দিকে।
+        // false: at startup the credentials have not been read yet, so there is no basis for
+        // assuming "signed in". The real value is set on the first tick; the error lasts one
+        // second and is on the safe side.
         Enrolled = false,
     };
 }
 
 /// <summary>
-/// স্ট্যাটাস দেখানোর জায়গা — বাস্তবে tray আইকন, টেস্টে একটা তালিকা।
+/// Where the status is shown: the tray icon in production, a list in tests.
 ///
-/// ⚠️ <see cref="Publish"/> ডাকা হবে ট্র্যাকিং ও সিঙ্ক থ্রেড থেকে, UI থ্রেড
-/// থেকে নয়। WinForms-এ UI ছোঁয়ার আগে ইমপ্লিমেন্টেশনকেই মার্শাল করতে হবে
-/// (<c>SynchronizationContext</c> / <c>Control.BeginInvoke</c>)। ভুলে গেলে
-/// ক্র্যাশটা সাথে সাথে হয় না — সপ্তাহ দুয়েক পর একবার হয়, আর তখন কেউ দেখে না।
+/// Careful: <see cref="Publish"/> is called from the tracking and sync threads, not the UI
+/// thread. In WinForms the implementation itself must marshal before touching the UI
+/// (<c>SynchronizationContext</c> / <c>Control.BeginInvoke</c>). Forgetting does not crash at
+/// once; it crashes a couple of weeks later, when nobody is watching.
 ///
-/// ⚠️ <see cref="Publish"/> কখনো ব্লক করবে না ও এক্সসেপশন ছুড়বে না। tray-র
-/// দোষে ঘণ্টা গোনা থামা চলবে না।
+/// Careful: <see cref="Publish"/> must never block or throw. A tray fault must not stop
+/// hours from being counted.
 /// </summary>
 public interface IAgentStatusSink
 {

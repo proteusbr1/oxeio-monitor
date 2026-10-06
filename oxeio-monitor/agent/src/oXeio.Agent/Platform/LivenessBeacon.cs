@@ -7,21 +7,20 @@ using oXeio.Core.Watchdog;
 namespace oXeio.Agent.Platform;
 
 /// <summary>
-/// ⭐ এজেন্ট বেঁচে আছে — watchdog-কে এটাই জানানোর একমাত্র উপায়।
+/// The agent is alive: this is the only way to tell the watchdog so.
 ///
-/// দুটো জিনিস, দুটো আলাদা কাজ:
+/// Two things, two separate jobs:
 /// <list type="bullet">
-/// <item><b><c>agent.lock</c></b> — এক্সক্লুসিভ ফাইল লক, প্রসেসের পুরো জীবন ধরে
-///   ধরা থাকে। এক মেশিনে দুটো এজেন্ট চলা <b>ঠেকায়</b>।</item>
-/// <item><b><c>agent.alive</c></b> — প্রতি ১৫ সেকেন্ডে লেখা হয়। প্রসেস বেঁচে
-///   আছে কিন্তু <b>আটকে গেছে</b> — সেটা ধরার একমাত্র উপায়।</item>
+/// <item><b><c>agent.lock</c></b>: an exclusive file lock, held for the process's whole life. It
+/// <b>prevents</b> two agents running on one machine.</item>
+/// <item><b><c>agent.alive</c></b>: written every 15 seconds. The only way to catch a process that
+/// is alive but <b>stuck</b>.</item>
 /// </list>
 ///
-/// <b>এটা না থাকলে যা হয়েছিল:</b> ইনস্টল করে চালানোর পর watchdog দেখল
-/// <c>agent.lock</c> কেউ ধরে নেই, ভাবল এজেন্ট মরে গেছে, আর <b>আরেকটা এজেন্ট
-/// চালু করল</b>। ৩০ সেকেন্ড পর আবার। দুটো এজেন্ট একই ঘণ্টা দুবার গুনত —
-/// আর সার্ভারের দিক থেকে সেটা "কেউ খুব বেশি কাজ করছে" ছাড়া আলাদা কিছু
-/// দেখাত না ([G57](../../../../docs/08-Gap-Analysis.md))।
+/// <b>What happened without this:</b> after install and start, the watchdog saw nobody holding
+/// <c>agent.lock</c>, thought the agent had died, and <b>started another agent</b>. Again after 30
+/// seconds. Two agents counted the same hour twice, and from the server's side that looked like
+/// nothing but "someone is working very hard" ([G57](../../../../docs/08-Gap-Analysis.md)).
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class LivenessBeacon : IDisposable
@@ -39,8 +38,8 @@ internal sealed class LivenessBeacon : IDisposable
     }
 
     /// <summary>
-    /// লক নেওয়ার চেষ্টা। <b>না পেলে <c>null</c></b> — মানে এই মেশিনে আরেকটা
-    /// এজেন্ট ইতিমধ্যেই চলছে, আর তখন এই প্রসেসের থেমে যাওয়াই ঠিক।
+    /// Try to take the lock. <b>If not obtained, <c>null</c></b>: another agent is already running
+    /// on this machine, and then this process should stop.
     /// </summary>
     public static LivenessBeacon? TryAcquire(string dataDirectory)
     {
@@ -48,9 +47,9 @@ internal sealed class LivenessBeacon : IDisposable
 
         try
         {
-            // ⚠️ FileShare.None — এটাই পুরো ব্যবস্থাটার ভিত্তি। watchdog একই
-            //    ফাইল খুলতে গিয়ে ব্যর্থ হয়, আর সেই ব্যর্থতাই তার কাছে
-            //    "এজেন্ট চলছে" খবরটা।
+            // Careful: FileShare.None is the foundation of the whole scheme. The watchdog fails
+            // when it tries to open the same file, and that failure is how it learns that "the
+            // agent is running".
             var held = new FileStream(
                 lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
 
@@ -63,7 +62,7 @@ internal sealed class LivenessBeacon : IDisposable
         }
         catch (IOException)
         {
-            // অন্য কেউ ধরে আছে — স্বাভাবিক, ব্যতিক্রম নয়
+            // someone else is holding it: normal, not an exception
             return null;
         }
         catch (UnauthorizedAccessException)
@@ -73,8 +72,8 @@ internal sealed class LivenessBeacon : IDisposable
     }
 
     /// <summary>
-    /// ব্যাকগ্রাউন্ডে প্রতি ১৫ সেকেন্ডে হার্টবিট লেখা শুরু।
-    /// প্রথমটা সাথে সাথেই — watchdog-এর প্রথম ৩০ সেকেন্ডের চেকেই যেন পায়।
+    /// Starts writing the heartbeat every 15 seconds in the background. The first one immediately,
+    /// so the watchdog's first 30-second check finds it.
     /// </summary>
     public void Start()
     {
@@ -102,24 +101,24 @@ internal sealed class LivenessBeacon : IDisposable
                 ProcessId = Environment.ProcessId,
                 SessionId = _sessionId,
 
-                // ⚠️ unbiased ঘড়ি — ঘুমের সময় গোনে না। PC ঘুমিয়ে ওঠার পর
-                //    biased ঘড়ি দিয়ে দেখলে হার্টবিট "১০ ঘণ্টা পুরোনো" মনে হতো
-                //    আর watchdog সুস্থ এজেন্টকেই মেরে ফেলত।
+                // Careful: unbiased clock, which does not count time asleep. After a PC woke from
+                // sleep, a biased clock would make the heartbeat look "10 hours old" and the
+                // watchdog would kill a healthy agent.
                 UnbiasedMs = (long)(unbiased / 10_000),
 
                 WrittenAtUtc = DateTimeOffset.UtcNow,
             };
 
-            // ⚠️ আগে temp-এ লিখে move — অর্ধেক লেখা লাইন watchdog পড়লে
-            //    parse ব্যর্থ হতো, আর সেটা "হার্টবিট নেই"-এর সমান।
+            // Careful: write to temp first, then move. If the watchdog read a half-written line,
+            // parsing would fail, which is the same as "no heartbeat".
             var temp = _heartbeatPath + ".tmp";
             File.WriteAllText(temp, AgentLiveness.Format(beat));
             File.Move(temp, _heartbeatPath, overwrite: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // একটা হার্টবিট মিস হওয়া মারাত্মক নয় — stale হতে ১২০ সেকেন্ড লাগে,
-            // অর্থাৎ পরপর ৮টা মিস করলে তবেই।
+            // Missing one heartbeat is not serious: it takes 120 seconds to go stale, i.e. only
+            // after 8 misses in a row.
             Debug.WriteLine($"could not write the heartbeat: {ex.Message}");
         }
     }
@@ -130,10 +129,10 @@ internal sealed class LivenessBeacon : IDisposable
         _lock.Dispose();
         _stopping.Dispose();
 
-        // ⚠️ হার্টবিট ফাইলটা মুছে দেওয়া হয় — নইলে এজেন্ট বন্ধ হওয়ার পরেও
-        //    ১২০ সেকেন্ড ধরে watchdog ভাবত সে বেঁচে আছে, আর ততক্ষণ কিছুই
-        //    ট্র্যাক হতো না।
+        // Careful: the heartbeat file is deleted. Otherwise even after the agent stopped, the
+        // watchdog would think it was alive for 120 seconds, and nothing would be tracked in that
+        // time.
         try { File.Delete(_heartbeatPath); }
-        catch (Exception) { /* বন্ধ হচ্ছে — আর কিছু করার নেই */ }
+        catch (Exception) { /* shutting down; nothing more to do */ }
     }
 }

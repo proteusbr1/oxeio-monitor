@@ -23,10 +23,11 @@ import {
   type HolidayEntry,
 } from '../prisma/holidays.data';
 /**
- * ⚠️ রিপোর্টের দিকটাও এখান থেকেই পরীক্ষা করা হয়, `reports.range.spec.ts`
- *    থেকে নয় — কারণ চিহ্নটার **দুটো কপি** (seed লেখে, রিপোর্ট পড়ে) এক
- *    আছে কি না, সেটা মেলাতে দুই ফাইলই একসাথে লাগে। আলাদা করলে ঠিক ওই
- *    জোড়টাই অপরীক্ষিত থেকে যেত, অথচ ওটাই ভাঙার জায়গা।
+ * Careful: the report side is also tested from here, not from
+ * `reports.range.spec.ts` — the marker has two copies (the seed writes it,
+ * the report reads it), and checking they are identical needs both files
+ * together. Separated, exactly that pair would go untested, and it is
+ * the place most likely to break.
  */
 import {
   APPROX_HOLIDAY_SUFFIX,
@@ -35,14 +36,16 @@ import {
 } from '../src/reports/reports.range';
 
 /**
- * সরকারি ছুটির তালিকা (R7 · O2)।
+ * The government holiday list (R7, O2).
  *
- * ⭐ এই ফাইলের সবচেয়ে জরুরি টেস্টগুলো কোনো নির্দিষ্ট তারিখের নয় — তারিখ তো
- * সরকার বদলাবেই। জরুরি হলো দুটো নিয়ম:
- *   ১· **আনুমানিক তারিখ আনুমানিক বলেই DB-তে যায়** (`(সম্ভাব্য)` চিহ্ন)।
- *      ওটা খসে গেলে অনুমানটা নিশ্চিত সংখ্যার ছদ্মবেশে ঢুকে পড়ত।
- *   ২· **seed কারো হাতের কাজ মোছে না** — ঘোষণা দেখে ঠিক করা তারিখ পরের
- *      `db seed`-এ ফিরে যাবে না, আর সরানো ছুটি পুরোনো তারিখে ফিরে আসবে না।
+ * The most important tests in this file are not about any specific date —
+ * the government will change dates anyway. What matters is two rules:
+ *   1. Approximate dates go into the DB marked as approximate (the
+ *      "(probable)" suffix). If it were dropped, a guess would slip in
+ *      disguised as a confirmed number.
+ *   2. The seed never deletes anyone's manual work — a date corrected after
+ *      the announcement will not revert on the next `db seed`, and a moved
+ *      holiday will not come back at its old date.
  */
 
 const entry = (over: Partial<HolidayEntry> = {}): HolidayEntry => ({
@@ -56,35 +59,35 @@ const entry = (over: Partial<HolidayEntry> = {}): HolidayEntry => ({
 const row = (date: string, name: string): ExistingHoliday => ({ date, name });
 
 /**
- * ⚠️ নিচের বেশিরভাগ `planHolidaySeedRun` টেস্ট **বছর-গেটের** কথা বলে,
- *    **মাস-গেটের** নয়। তাই "আজ" এমন একটা দিন বেছে নেওয়া হয়েছে যেদিন
- *    তালিকার প্রতিটা তারিখই ভবিষ্যতে — মাস-গেটটা তখন নিষ্ক্রিয়, আর
- *    টেস্টগুলো যা মাপতে চায় ঠিক সেটাই মাপে।
+ * Most of the `planHolidaySeedRun` tests below are about the year gate, not
+ * the month gate. So "today" is a day on which every date in the list is in
+ * the future — the month gate is then inactive, and the tests measure
+ * exactly what they mean to.
  *
- * ⚠️ `allowPast: true` দিয়ে এটা করা হয়নি ইচ্ছাকৃতভাবে: তাতে প্রতিটা
- *    টেস্ট নীরবে সম্মতি-পথটাই পরীক্ষা করত, আর ডিফল্ট পথটা (সম্মতি নেই)
- *    কার্যত অপরীক্ষিত থেকে যেত।
+ * This is deliberately not done with `allowPast: true`: every test would
+ * then silently exercise the consent path, and the default path (no consent)
+ * would go effectively untested.
  */
 const early = { today: '2026-01-01', allowPast: false };
 
-// ── তারিখ বৈধতা ─────────────────────────────────────────────────────────────
+// ── Date validity ────────────────────────────────────────────────────────────
 
 describe('isRealDate', () => {
-  it('স্বাভাবিক তারিখ মেনে নেয়', () => {
+  it('accepts a normal date', () => {
     expect(isRealDate('2026-03-21')).toBe(true);
-    expect(isRealDate('2028-02-29')).toBe(true); // অধিবর্ষ
+    expect(isRealDate('2028-02-29')).toBe(true); // leap year
   });
 
-  /** ⚠️ `new Date('2026-02-30')` চুপচাপ ২ মার্চ বানায় — থামে না */
-  it('২০২৬-০২-৩০ ধরা পড়ে', () => {
+  /** `new Date('2026-02-30')` silently becomes 2 March — it does not stop */
+  it('catches 2026-02-30', () => {
     expect(isRealDate('2026-02-30')).toBe(false);
   });
 
-  it('২০২৬-০২-২৯ ধরা পড়ে — ২০২৬ অধিবর্ষ নয়', () => {
+  it('catches 2026-02-29 — 2026 is not a leap year', () => {
     expect(isRealDate('2026-02-29')).toBe(false);
   });
 
-  it('মাস/দিনের সীমা ও ধাঁচ', () => {
+  it('month/day limits and format', () => {
     expect(isRealDate('2026-13-01')).toBe(false);
     expect(isRealDate('2026-00-10')).toBe(false);
     expect(isRealDate('2026-04-31')).toBe(false);
@@ -94,10 +97,10 @@ describe('isRealDate', () => {
   });
 });
 
-// ── তালিকা যাচাই ────────────────────────────────────────────────────────────
+// ── Validating the list ──────────────────────────────────────────────────────
 
 describe('validateHolidays', () => {
-  it('অবৈধ তারিখ ধরে', () => {
+  it('catches an invalid date', () => {
     const problems = validateHolidays([entry({ date: '2026-02-30' })]);
 
     expect(problems).toHaveLength(1);
@@ -105,10 +108,10 @@ describe('validateHolidays', () => {
   });
 
   /**
-   * ⚠️⚠️ `holiday_date` unique — একই তারিখ দুবার থাকলে seed নিঃশব্দে
-   *    একটাকে আরেকটা দিয়ে চাপা দিত, আর একটা ছুটি উধাও হতো।
+   * `holiday_date` is unique — with the same date twice, the seed would
+   * silently overwrite one with the other and a holiday would vanish.
    */
-  it('একই তারিখ দুবার থাকলে ধরে, আগেরটার নামসহ', () => {
+  it('catches the same date twice, naming the earlier one', () => {
     const problems = validateHolidays([
       entry({ date: '2026-03-21', name: 'ঈদুল ফিতর' }),
       entry({ date: '2026-03-21', name: 'অন্য কিছু' }),
@@ -118,18 +121,18 @@ describe('validateHolidays', () => {
     expect(problems[0]).toContain('ঈদুল ফিতর');
   });
 
-  it('খালি নাম ধরে — বাংলা ও ইংরেজি দুটোই', () => {
+  it('catches an empty name — both Bengali and English', () => {
     expect(validateHolidays([entry({ name: '   ' })])).toHaveLength(1);
     expect(validateHolidays([entry({ nameEn: '' })])).toHaveLength(1);
   });
 
-  /** ⚠️ API-র সীমা ১২০ অক্ষর (`CreateHolidayDto`) — চিহ্নসহ মাপা হয় */
-  it('১২০ অক্ষরের বেশি নাম ধরে', () => {
+  /** The API limit is 120 characters (`CreateHolidayDto`) — measured including the suffix */
+  it('catches a name over 120 characters', () => {
     expect(validateHolidays([entry({ name: 'ছ'.repeat(121) })])).toHaveLength(1);
   });
 
-  /** ⚠️ চিহ্নটা `approximate` থেকে আসে; হাতে লিখলে দুবার জুড়ত */
-  it('নামে হাতে লেখা "(সম্ভাব্য)" ধরে', () => {
+  /** The suffix comes from `approximate`; written by hand it would be added twice */
+  it('catches a hand-written approximate suffix in the name', () => {
     const problems = validateHolidays([
       entry({ name: 'ঈদুল ফিতর (সম্ভাব্য)' }),
     ]);
@@ -137,7 +140,7 @@ describe('validateHolidays', () => {
     expect(problems).toHaveLength(1);
   });
 
-  it('একবারে সব ভুল ফেরত দেয়, প্রথমটাতেই থামে না', () => {
+  it('returns all the errors at once, does not stop at the first', () => {
     const problems = validateHolidays([
       entry({ date: '2026-02-30' }),
       entry({ date: '2026-04-31' }),
@@ -147,38 +150,38 @@ describe('validateHolidays', () => {
     expect(problems).toHaveLength(3);
   });
 
-  it('ঠিক তালিকায় কিছু বলে না', () => {
+  it('says nothing for a correct list', () => {
     expect(validateHolidays([entry(), entry({ date: '2026-03-22' })])).toEqual(
       [],
     );
   });
 });
 
-// ── আসল তালিকাটাই ───────────────────────────────────────────────────────────
+// ── The real list itself ─────────────────────────────────────────────────────
 
-describe('BD_HOLIDAYS — রিপোতে থাকা তালিকা', () => {
-  it('কোনো ভুল নেই', () => {
+describe('BD_HOLIDAYS — the list in the repo', () => {
+  it('has no errors', () => {
     expect(validateHolidays(BD_HOLIDAYS)).toEqual([]);
   });
 
-  it('শুধু ২০২৬ ও ২০২৭ — অন্য বছর ঢুকে পড়েনি', () => {
+  it('only 2026 and 2027 — no other year has slipped in', () => {
     expect([...HOLIDAY_YEARS].sort((a, b) => a - b)).toEqual([2026, 2027]);
     for (const holiday of BD_HOLIDAYS) {
       expect(HOLIDAY_YEARS).toContain(yearOf(holiday.date));
     }
   });
 
-  it('তারিখ অনুসারে সাজানো — চোখে খুঁজতে সুবিধা, আর ফাঁক ধরা পড়ে', () => {
+  it('sorted by date — easier to scan by eye, and gaps show up', () => {
     const dates = BD_HOLIDAYS.map((h) => h.date);
     expect(dates).toEqual([...dates].sort());
   });
 
   /**
-   * ⭐⭐ **এই টেস্টটাই এই কাজের মূল কথা।** চান্দ্র/তিথি-নির্ভর ছুটির তারিখ
-   * চাঁদ দেখার পর বদলায়; পতাকাটা খসে গেলে অনুমান নিশ্চিত হিসেবে ঢুকে পড়ত,
-   * আর কেউ যাচাই করার কথাই ভাবত না।
+   * The heart of this work. Lunar and tithi-based holiday dates change after
+   * the moon is sighted; if the flag were dropped, a guess would slip in as
+   * confirmed and nobody would think to verify it.
    */
-  it('চান্দ্র ও পঞ্জিকার ছুটিগুলো approximate', () => {
+  it('lunar and calendar-based holidays are approximate', () => {
     const moonBound = [
       'শবে বরাত',
       'শবে কদর',
@@ -203,10 +206,10 @@ describe('BD_HOLIDAYS — রিপোতে থাকা তালিকা', (
   });
 
   /**
-   * ⚠️ উল্টো দিকটাও: গ্রেগরিয়ান তারিখের জাতীয় দিবস কখনো "সম্ভাব্য" নয়।
-   *    সবাইকে approximate বানিয়ে দিলে চিহ্নটার আর কোনো মানে থাকত না।
+   * The opposite direction too: a national day on a Gregorian date is never
+   * "probable". If everything were made approximate, the marker would mean nothing.
    */
-  it('নির্দিষ্ট তারিখের জাতীয় দিবসগুলো approximate নয়', () => {
+  it('fixed-date national days are not approximate', () => {
     const fixed = ['02-21', '03-26', '05-01', '08-05', '11-07', '12-16', '12-25'];
 
     for (const holiday of BD_HOLIDAYS) {
@@ -219,8 +222,8 @@ describe('BD_HOLIDAYS — রিপোতে থাকা তালিকা', (
     }
   });
 
-  /** ⚠️ যে ভুলটা এই কাজ ঠেকাচ্ছে: ঈদের দিনগুলো তালিকাতেই না থাকা */
-  it('২০২৬ ও ২০২৭ — দুই বছরেই দুটো ঈদ আছে', () => {
+  /** The mistake this work prevents: the Eid days not being in the list at all */
+  it('2026 and 2027 — both years have both Eids', () => {
     for (const year of [2026, 2027]) {
       const ofYear = BD_HOLIDAYS.filter((h) => yearOf(h.date) === year);
       expect(ofYear.some((h) => h.name.includes('ঈদুল ফিতর'))).toBe(true);
@@ -229,18 +232,18 @@ describe('BD_HOLIDAYS — রিপোতে থাকা তালিকা', (
   });
 
   /**
-   * ⚠️ ২০২৪-এ তালিকা থেকে বাদ পড়া দিন দুটো — আগের seed ওগুলো বসাত।
-   *    ফিরে এলে আবার দুটো কর্মদিবস নিঃশব্দে ছুটি হয়ে যেত।
+   * Two days dropped from the list in 2024 — the old seed used to insert them.
+   * If they came back, two work days would silently become holidays again.
    */
-  it('বাতিল হওয়া ছুটি (জাতির পিতার জন্মদিন · জাতীয় শোক দিবস) ফিরে আসেনি', () => {
+  it('cancelled holidays (Father of the Nation\'s birthday, National Mourning Day) have not returned', () => {
     const names = BD_HOLIDAYS.map((h) => h.name);
     expect(names).not.toContain('জাতির পিতার জন্মদিন');
     expect(names).not.toContain('জাতীয় শোক দিবস');
 
     /**
-     * ⚠️ তারিখ দেখে পরীক্ষা করা যেত না — এই টেস্টটা প্রথমে তা-ই করত আর
-     *    ভুল করে ধরা পড়ত: ১৫ আগস্ট ২০২৭-এ ঈদে মিলাদুন্নবী পড়েছে। বাতিল
-     *    হওয়া দিবস আর ওই দিনের অন্য একটা ছুটি এক জিনিস নয়।
+     * This could not be checked by date — the test first did that and
+     * was caught out: on 15 August 2027 Eid-e-Miladunnabi falls. A cancelled
+     * day and another holiday on that same date are not the same thing.
      */
     expect(BD_HOLIDAYS.find((h) => h.date === '2026-03-17')?.name).toBe(
       'শবে কদর',
@@ -249,25 +252,25 @@ describe('BD_HOLIDAYS — রিপোতে থাকা তালিকা', (
   });
 });
 
-// ── DB-তে যাওয়া নাম ─────────────────────────────────────────────────────────
+// ── Names that go into the DB ────────────────────────────────────────────────
 
-describe('holidayRowName ও baseName', () => {
-  it('আনুমানিক হলে চিহ্ন জোড়ে, নাহলে জোড়ে না', () => {
+describe('holidayRowName and baseName', () => {
+  it('adds the suffix when approximate, not otherwise', () => {
     expect(holidayRowName(entry({ approximate: true }))).toBe(
       `ঈদুল ফিতর${APPROX_SUFFIX}`,
     );
     expect(holidayRowName(entry({ approximate: false }))).toBe('ঈদুল ফিতর');
   });
 
-  /** ⚠️ মালিক ঘোষণা এলে চিহ্নটা মুছে দেবেন — তবু সারিটা চেনা যেতে হবে */
-  it('চিহ্ন থাকুক বা না থাকুক, baseName এক', () => {
+  /** When the announcement comes the owner will remove the suffix — the row must still be recognisable */
+  it('baseName is the same with or without the suffix', () => {
     expect(baseName(`ঈদুল ফিতর${APPROX_SUFFIX}`)).toBe('ঈদুল ফিতর');
     expect(baseName('ঈদুল ফিতর')).toBe('ঈদুল ফিতর');
     expect(baseName('  ঈদুল ফিতর  ')).toBe('ঈদুল ফিতর');
   });
 
-  /** ⚠️ লেজেই দেখা হয় — নামের মাঝে বন্ধনী থাকা মানে চিহ্ন নয় */
-  it('hasApproxSuffix শুধু লেজ দেখে', () => {
+  /** Only the tail is checked — a bracket in the middle of a name is not the marker */
+  it('hasApproxSuffix looks only at the tail', () => {
     expect(hasApproxSuffix(`ঈদুল ফিতর${APPROX_SUFFIX}`)).toBe(true);
     expect(hasApproxSuffix(`ঈদুল ফিতর${APPROX_SUFFIX}   `)).toBe(true);
     expect(hasApproxSuffix('ঈদুল ফিতর')).toBe(false);
@@ -275,66 +278,68 @@ describe('holidayRowName ও baseName', () => {
   });
 });
 
-// ── ⭐⭐ কোন মাসের হিসাব বেরিয়ে গেছে ─────────────────────────────────────────
+// ── Which month's figures have already gone out ──────────────────────────────
 
 /**
- * ⭐⭐ **এই অংশটাই এই রাউন্ডের মূল কথা।** চলতি বা অতীত মাসে একটা ছুটি বসলে
- * ওই মাসের কর্মদিবস কমে, `dailyTargetSec` বাড়ে, `monthly_summary`-র তিনটে
- * ঘর নড়ে, আর পে-রোলের `d ÷ D` ভগ্নাংশ সরাসরি টাকায় গিয়ে পড়ে। তাই "মাসটা
- * কি ইতিমধ্যে চলে গেছে" — এই একটা প্রশ্নের উত্তরের উপরেই সবটা দাঁড়ানো।
+ * This section is the heart of this round. Adding a holiday in the current
+ * or a past month reduces that month's work days, raises `dailyTargetSec`,
+ * moves three cells of `monthly_summary`, and the payroll `d / D` fraction
+ * goes straight into money. So everything stands on the answer to one
+ * question: "has the month already passed?"
  */
 describe('dhakaToday', () => {
-  it('UTC ঘড়িকে ঢাকার তারিখে বদলায়', () => {
+  it('converts the UTC clock to the Dhaka date', () => {
     expect(dhakaToday(new Date('2026-08-14T05:00:00.000Z'))).toBe('2026-08-14');
   });
 
   /**
-   * ⚠️⚠️ **আসল ফাঁদটা এটাই।** ঢাকায় ১ সেপ্টেম্বর রাত ২টা মানে UTC-তে
-   *    ৩১ আগস্ট রাত ৮টা। UTC ধরলে seed তখন আগস্টকে "চলতি মাস" ভাবত, আর
-   *    সদ্য শেষ হওয়া আগস্টের ছুটি নীরবে বসিয়ে ওই মাসের পে-রোল নাড়াত।
+   * This is the real trap. 2 AM on 1 September in Dhaka is 8 PM on 31 August
+   * in UTC. Going by UTC, the seed would think August is the "current
+   * month", and would quietly insert holidays into just-finished August and
+   * disturb that month's payroll.
    */
-  it('ঢাকার ভোররাত UTC-তে আগের দিন — তবু ঢাকার তারিখই ফেরে', () => {
+  it('early morning in Dhaka is the previous day in UTC — still the Dhaka date is returned', () => {
     expect(dhakaToday(new Date('2026-08-31T20:00:00.000Z'))).toBe('2026-09-01');
   });
 
-  it('ঢাকার মধ্যরাতের ঠিক আগে-পরে', () => {
+  it('just before and after Dhaka midnight', () => {
     expect(dhakaToday(new Date('2026-08-14T17:59:59.000Z'))).toBe('2026-08-14');
     expect(dhakaToday(new Date('2026-08-14T18:00:00.000Z'))).toBe('2026-08-15');
   });
 });
 
-describe('monthKey ও isSettledMonth', () => {
-  it('মাসের চাবি', () => {
+describe('monthKey and isSettledMonth', () => {
+  it('month key', () => {
     expect(monthKey('2026-08-26')).toBe('2026-08');
   });
 
-  /** ⭐ চলতি মাসও "চলে গেছে" — মাসের মাঝপথেই সংখ্যাগুলো লেখা হয়ে গেছে */
-  it('চলতি মাস settled ধরা হয়', () => {
+  /** The current month counts as "gone" too — the figures are already written mid-month */
+  it('the current month is treated as settled', () => {
     expect(isSettledMonth('2026-08-05', '2026-08-14')).toBe(true);
     expect(isSettledMonth('2026-08-26', '2026-08-14')).toBe(true);
     expect(isSettledMonth('2026-08-31', '2026-08-01')).toBe(true);
   });
 
-  it('অতীত মাস settled', () => {
+  it('a past month is settled', () => {
     expect(isSettledMonth('2026-03-21', '2026-08-14')).toBe(true);
     expect(isSettledMonth('2025-12-25', '2026-08-14')).toBe(true);
   });
 
-  /** ⚠️ ভবিষ্যতের মাস নিরাপদ — ওখানে কোনো monthly_summary সারিই নেই */
-  it('ভবিষ্যতের মাস settled নয়', () => {
+  /** A future month is safe — there is no monthly_summary row there at all */
+  it('a future month is not settled', () => {
     expect(isSettledMonth('2026-09-01', '2026-08-31')).toBe(false);
     expect(isSettledMonth('2027-01-24', '2026-08-14')).toBe(false);
   });
 });
 
-// ── ⚠️⚠️ প্রজ্ঞাপনহীন বছর ───────────────────────────────────────────────────
+// ── Years with no gazette yet ────────────────────────────────────────────────
 
 describe('gazetteNotes', () => {
   /**
-   * ⭐⭐ শুধু `approximate` সারি গোনা হয়। ২৬ মার্চ কবে সেটা প্রজ্ঞাপনের উপর
-   *    নির্ভর করে না — মিশিয়ে ফেললে **এক সংখ্যা, দুই সংজ্ঞা** হয়ে যেত।
+   * Only `approximate` rows are counted. When 26 March falls does not depend
+   * on the gazette — mixing them would give one number with two definitions.
    */
-  it('শুধু আনুমানিক তারিখগুলো গোনে', () => {
+  it('counts only the approximate dates', () => {
     const notes = gazetteNotes(
       [
         entry({ date: '2027-03-09', approximate: true }),
@@ -349,8 +354,8 @@ describe('gazetteNotes', () => {
     expect(notes[0]).toContain('নভেম্বর ২০২৬');
   });
 
-  /** ⚠️ না-থাকা অনিশ্চয়তা নিয়ে কথা বলার মানে নেই */
-  it('ওই বছরে আনুমানিক কিছু না থাকলে চুপ', () => {
+  /** There is no point talking about uncertainty that does not exist */
+  it('silent when that year has nothing approximate', () => {
     expect(
       gazetteNotes(
         [entry({ date: '2027-12-16', approximate: false })],
@@ -365,10 +370,10 @@ describe('gazetteNotes', () => {
   });
 
   /**
-   * ⭐⭐ আসল তালিকা — seed চালালে মালিক সত্যিই এই বার্তাটা দেখবেন, আর
-   *    সংখ্যাটা তালিকার সাথে মিলবে। হাতে লেখা কোনো সংখ্যা নয়।
+   * The real list — when the seed runs, the owner really will see this
+   * message, and the number will match the list. Not a hand-written number.
    */
-  it('আসল তালিকায় ২০২৭-এর অনিশ্চয়তা গোনা হয়, আর সংখ্যাটা তালিকা থেকেই আসে', () => {
+  it('in the real list 2027\'s uncertainty is counted, and the number comes from the list', () => {
     const notes = gazetteNotes(BD_HOLIDAYS);
     const unsure2027 = BD_HOLIDAYS.filter(
       (h) => yearOf(h.date) === 2027 && h.approximate,
@@ -381,38 +386,39 @@ describe('gazetteNotes', () => {
   });
 
   /**
-   * ⚠️ ২০২৬-এর প্রজ্ঞাপন বেরিয়ে গেছে (নভেম্বর ২০২৫) — তাই বছরটা তালিকায়
-   *    থাকা চলবে না, নইলে সতর্কবার্তাটা মিথ্যে হয়ে বাজত।
+   * The 2026 gazette is out (November 2025) — so the year must not be in the
+   * list, otherwise the warning would fire falsely.
    */
-  it('২০২৬ প্রজ্ঞাপনহীন বছরের তালিকায় নেই', () => {
+  it('2026 is not in the list of years awaiting a gazette', () => {
     expect(PENDING_GAZETTES.map((g) => g.year)).not.toContain(2026);
   });
 });
 
-// ── অনিশ্চয়তা সংখ্যা পর্যন্ত পৌঁছায় কি না ───────────────────────────────────
+// ── Whether the uncertainty reaches the numbers ──────────────────────────────
 
 /**
- * ⭐⭐ চিহ্নটা এতদিন কেবল **নামে** ছিল। কিন্তু যেসব **সংখ্যা** ওই তারিখের উপর
- * দাঁড়ানো — মাসের কর্মদিবস → দৈনিক টার্গেটের হর → `target_sec`, আর
- * পে-রোলের `d ÷ D` ভগ্নাংশ (সরাসরি টাকা) — সেখানে অনিশ্চয়তার কোনো ছাপ ছিল
- * না। এই টেস্টগুলো সেই সেতুটা পাহারা দেয়।
+ * Until now the marker lived only in the name. But the numbers that stand on
+ * those dates — the month's work days -> the denominator of the daily target
+ * -> `target_sec`, and the payroll `d / D` fraction (directly money) —
+ * carried no trace of the uncertainty. These tests guard that bridge.
  */
-describe('আনুমানিক ছুটির চিহ্ন — লেখা ও পড়া', () => {
+describe('the approximate-holiday marker — writing and reading', () => {
   /**
-   * ⚠️⚠️ **এই ফাইলের সবচেয়ে জরুরি টেস্ট।** স্ট্রিংটা দু'জায়গায় লেখা
-   *    (`prisma/holidays.data.ts` লেখে, `src/reports/reports.range.ts`
-   *    পড়ে), কারণ import দুই দিকেই ভাঙে — `src/` → `prisma/` করলে
-   *    `nest build`-এর আউটপুট `dist/src/main.js`-এ সরে যায়, আর
-   *    `prisma/` → `src/` করলে seed runtime ইমেজে ভাঙে (সেখানে `src/` নেই)।
-   *    কপি দুটো সরে গেলে seed চিহ্ন বসাত ঠিকই, কিন্তু রিপোর্ট সেটা চিনত না
-   *    আর চিরকাল "কোনো সম্ভাব্য তারিখ নেই" বলত — অনিশ্চয়তাটা নিঃশব্দে উবে
-   *    যেত, অথচ কোনো টেস্ট লাল হতো না।
+   * The most important test in this file. The string is written in two
+   * places (`prisma/holidays.data.ts` writes it, `src/reports/reports.range.ts`
+   * reads it) because an import breaks in both directions: going
+   * `src/` -> `prisma/` moves the `nest build` output to `dist/src/main.js`,
+   * and going `prisma/` -> `src/` breaks the seed in the runtime image
+   * (which has no `src/`). If the two copies drifted apart, the seed would
+   * still set the marker but the report would not recognise it and would say
+   * "no probable dates" forever — the uncertainty would silently evaporate
+   * and no test would go red.
    */
-  it('seed যা লেখে, রিপোর্ট ঠিক সেটাই পড়ে', () => {
+  it('the report reads exactly what the seed writes', () => {
     expect(APPROX_HOLIDAY_SUFFIX).toBe(APPROX_SUFFIX);
   });
 
-  it('seed-এর বানানো নাম রিপোর্ট আনুমানিক বলেই চেনে', () => {
+  it('the report recognises the seed-built name as approximate', () => {
     expect(isApproximateHoliday(holidayRowName(entry({ approximate: true })))).toBe(
       true,
     );
@@ -422,19 +428,20 @@ describe('আনুমানিক ছুটির চিহ্ন — লেখ
   });
 
   /**
-   * ⭐ ঘোষণা এলে মালিক Settings → Holidays-এ চিহ্নটা মুছে দেন। তখনই রিপোর্টের
-   *    সতর্কবার্তাও থেমে যাওয়া উচিত — নইলে পাকা তারিখকে চিরকাল "সম্ভাব্য"
-   *    বলে যেত, আর কিছুদিন পর কেউ আর সতর্কবার্তাটা পড়তই না।
+   * When the announcement comes the owner removes the marker in Settings ->
+   * Holidays. The report's warning should stop at that moment too —
+   * otherwise a settled date would be called "probable" forever, and after a
+   * while nobody would read the warning at all.
    */
-  it('মালিক চিহ্ন মুছলে সাথে সাথেই আর আনুমানিক নয়', () => {
+  it('when the owner removes the marker it is immediately no longer approximate', () => {
     expect(isApproximateHoliday('ঈদে মিলাদুন্নবী (সা.)')).toBe(false);
     expect(isApproximateHoliday(`ঈদে মিলাদুন্নবী (সা.)${APPROX_SUFFIX}  `)).toBe(
       true,
     );
   });
 
-  /** ⚠️ নামের **মাঝে** চিহ্নটা থাকলে সেটা লেজ নয় — গোনা যাবে না */
-  it('নামের মাঝে থাকলে গোনে না', () => {
+  /** If the marker is in the middle of a name it is not the tail — it must not count */
+  it('does not count when it is in the middle of the name', () => {
     expect(isApproximateHoliday('ঈদ (সম্ভাব্য) — সংশোধিত')).toBe(false);
   });
 
@@ -443,7 +450,7 @@ describe('আনুমানিক ছুটির চিহ্ন — লেখ
     name,
   });
 
-  it('শুধু আনুমানিকগুলোর তারিখ ফেরে, সাজানো', () => {
+  it('returns only the approximate dates, sorted', () => {
     expect(
       approximateHolidayDates([
         at('2026-08-26', `ঈদে মিলাদুন্নবী (সা.)${APPROX_SUFFIX}`),
@@ -454,29 +461,31 @@ describe('আনুমানিক ছুটির চিহ্ন — লেখ
   });
 
   /**
-   * ⭐⭐ **"একটাও সম্ভাব্য নেই" আর "ছুটিই নেই" এক কথা নয়।** দুটোতেই খালি
-   *    তালিকা ফেরে, আর সেটাই ঠিক — এই ফাংশন শুধু অনিশ্চয়তার কথা বলে,
-   *    ছুটি আছে কি নেই তা বলার দায়িত্ব ওর নয় (সেটা কর্মদিবসের হিসাবের)।
+   * "None is probable" and "there is no holiday" are not the same thing.
+   * Both return an empty list, and that is right — this function only speaks
+   * about uncertainty; whether a holiday exists is not its job (that belongs
+   * to the work-day calculation).
    */
-  it('সব তারিখ পাকা হলে খালি', () => {
+  it('empty when all dates are firm', () => {
     expect(approximateHolidayDates([at('2026-12-16', 'বিজয় দিবস')])).toEqual([]);
     expect(approximateHolidayDates([])).toEqual([]);
   });
 
-  /** ⚠️ একাধিক মাসের রেঞ্জ জোড়া দিলে কলার একই সারি দুবার পাঠাতে পারে */
-  it('একই তারিখ দুবার এলে একবারই গোনে', () => {
+  /** Joining the ranges of several months, the caller may send the same row twice */
+  it('the same date appearing twice is counted once', () => {
     const row = at('2026-08-26', `ঈদে মিলাদুন্নবী (সা.)${APPROX_SUFFIX}`);
 
     expect(approximateHolidayDates([row, row])).toEqual(['2026-08-26']);
   });
 
   /**
-   * ⭐⭐ চলতি মাসের আসল কেসটা: ২৬ আগস্ট ২০২৬-এ ঈদে মিলাদুন্নবী, আর ওটা
-   *    চাঁদ-নির্ভর। তারিখটা নড়লে আগস্টের কর্মদিবস বদলায় → প্রত্যেকের
-   *    `target_sec` বদলায় → পে-রোলের হরও বদলায়। তালিকা আর রিপোর্ট এখানে
-   *    একমত না হলে সংখ্যাটা নীরবে একটা অনুমানের উপর দাঁড়িয়ে থাকত।
+   * The real case for the current month: Eid-e-Miladunnabi on 26 August 2026,
+   * and it is moon-dependent. If the date moves, August's work days change ->
+   * everyone's `target_sec` changes -> the payroll denominator changes too.
+   * If the list and the report disagreed here, the number would silently
+   * rest on a guess.
    */
-  it('আগস্ট ২০২৬-এর মিলাদুন্নবী তালিকা থেকে রিপোর্ট পর্যন্ত আনুমানিক থাকে', () => {
+  it('August 2026\'s Miladunnabi stays approximate from the list through to the report', () => {
     const eidMilad = BD_HOLIDAYS.find((h) => h.date === '2026-08-26');
 
     expect(eidMilad?.approximate).toBe(true);
@@ -488,7 +497,7 @@ describe('আনুমানিক ছুটির চিহ্ন — লেখ
   });
 });
 
-// ── seed-এর পরিকল্পনা ───────────────────────────────────────────────────────
+// ── Seed planning ────────────────────────────────────────────────────────────
 
 describe('planHolidaySeed', () => {
   const list: HolidayEntry[] = [
@@ -506,7 +515,7 @@ describe('planHolidaySeed', () => {
     }),
   ];
 
-  it('খালি DB-তে সব বসে', () => {
+  it('everything is inserted into an empty DB', () => {
     const plan = planHolidaySeed(list, []);
 
     expect(plan.create).toHaveLength(3);
@@ -514,7 +523,7 @@ describe('planHolidaySeed', () => {
     expect(plan.unlisted).toEqual([]);
   });
 
-  it('ঐ তারিখে সারি থাকলে হাত দেয় না', () => {
+  it('does not touch it when a row exists on that date', () => {
     const plan = planHolidaySeed(list, [row('2026-12-16', 'বিজয় দিবস')]);
 
     expect(plan.create.map((h) => h.date)).toEqual([
@@ -524,8 +533,8 @@ describe('planHolidaySeed', () => {
     expect(plan.keptByDate.map((h) => h.date)).toEqual(['2026-12-16']);
   });
 
-  /** ⭐ মালিক নাম বদলেছেন — seed সেটা ফিরিয়ে দেয় না, শুধু জানায় */
-  it('একই তারিখে অন্য নাম থাকলে বদলায় না, রিপোর্ট করে', () => {
+  /** The owner renamed it — the seed does not revert that, it only reports */
+  it('with a different name on the same date it does not change it, it reports', () => {
     const plan = planHolidaySeed(list, [
       row('2026-12-16', 'বিজয় দিবস (সরকারি)'),
     ]);
@@ -541,14 +550,14 @@ describe('planHolidaySeed', () => {
   });
 
   /**
-   * ⚠️⚠️ **এই কেসটাই সবচেয়ে বিপজ্জনক ছিল।** মালিক ঘোষণা দেখে ঈদের গুচ্ছটা
-   *    একদিন এগিয়ে দিলেন। শুধু তারিখ দেখলে seed পুরোনো তারিখগুলো খালি পেত,
-   *    আর ওখানে আবার ছুটি বানাত — ঈদ তখন **দ্বিগুণ দিন** জুড়ে বসে থাকত,
-   *    আর মাসের কর্মদিবস নিঃশব্দে কমে যেত।
+   * This was the most dangerous case. The owner moved the Eid cluster one day
+   * earlier after the announcement. Looking only at dates, the seed would
+   * find the old dates empty and create holidays there again — Eid would sit
+   * across twice as many days and the month's work days would silently drop.
    */
-  it('গুচ্ছের একটা দিন সরানো থাকলে গোটা গুচ্ছে হাত দেয় না', () => {
+  it('if one day of a cluster is moved, the whole cluster is left alone', () => {
     const plan = planHolidaySeed(list, [
-      row('2026-03-20', 'ঈদুল ফিতর'), // মালিক ২১ → ২০ করেছেন
+      row('2026-03-20', 'ঈদুল ফিতর'), // the owner changed 21 -> 20
     ]);
 
     expect(plan.create.map((h) => h.date)).toEqual(['2026-12-16']);
@@ -558,7 +567,7 @@ describe('planHolidaySeed', () => {
     ]);
   });
 
-  it('চিহ্ন মুছে দিলেও সরানো সারিটা চেনা যায়', () => {
+  it('even with the marker removed, the moved row is recognised', () => {
     const plan = planHolidaySeed(list, [
       row('2026-03-20', `ঈদুল ফিতর${APPROX_SUFFIX}`),
     ]);
@@ -566,7 +575,7 @@ describe('planHolidaySeed', () => {
     expect(plan.create.map((h) => h.date)).toEqual(['2026-12-16']);
   });
 
-  it('গুচ্ছ ছাড়া ছুটি সরানো থাকলে শুধু সেটাই ছাড়ে', () => {
+  it('a moved holiday outside a cluster leaves only itself alone', () => {
     const plan = planHolidaySeed(list, [row('2026-12-15', 'বিজয় দিবস')]);
 
     expect(plan.keptByName).toEqual([
@@ -579,32 +588,32 @@ describe('planHolidaySeed', () => {
   });
 
   /**
-   * ⚠️⚠️ **এক জিনিস নিয়ে দুটো উল্টো কথা** — এটাই বাগটা ছিল। মালিক বিজয়
-   *    দিবস ১৬ → ১৫ ডিসেম্বরে সরালে সারিটা `keptByName`-এ উঠত ("মালিক
-   *    সরিয়েছেন, ছোঁয়া হয়নি") আর একই সাথে `unlisted`-এও ("তালিকায় নেই —
-   *    এখনো ছুটি কি?")। দুটো নোট পাশাপাশি ছাপা হতো, আর পাঠক আর কোনোটাই
-   *    বিশ্বাস করতেন না।
+   * Two contradictory statements about one thing — this was the bug. If the
+   * owner moved Victory Day from 16 to 15 December, the row would show up in
+   * `keptByName` ("owner moved it, not touched") and in `unlisted` ("not in
+   * the list — is it still a holiday?") at once. The two notes would print
+   * side by side and the reader would stop trusting either.
    */
-  it('নামে চেনা সারি আর "তালিকায় নেই" বলে না', () => {
+  it('a row recognised by name is no longer reported as "not in the list"', () => {
     const plan = planHolidaySeed(list, [row('2026-12-15', 'বিজয় দিবস')]);
 
     expect(plan.keptByName).toHaveLength(1);
     expect(plan.unlisted).toEqual([]);
   });
 
-  /** ⚠️ সরানো গুচ্ছের বেলায়ও একই কথা — ঈদ একসাথে "সরানো" ও "অচেনা" নয় */
-  it('সরানো গুচ্ছের সারিও "তালিকায় নেই" বলে না', () => {
+  /** Same for a moved cluster — Eid is not both "moved" and "unknown" */
+  it('a row of a moved cluster is not reported as "not in the list" either', () => {
     const plan = planHolidaySeed(list, [
-      row('2026-03-20', 'ঈদুল ফিতর'), // মালিক ২১ → ২০ করেছেন
-      row('2026-03-22', 'ঈদুল ফিতরের ছুটি (২য় দিন)'), // এটা নড়েনি
+      row('2026-03-20', 'ঈদুল ফিতর'), // the owner changed 21 -> 20
+      row('2026-03-22', 'ঈদুল ফিতরের ছুটি (২য় দিন)'), // this one did not move
     ]);
 
     expect(plan.keptByCluster).toHaveLength(2);
     expect(plan.unlisted).toEqual([]);
   });
 
-  /** ⚠️ একই নাম অন্য **বছরে** থাকলে সেটা ভিন্ন ছুটি — আটকানো চলবে না */
-  it('আগের বছরের একই নামের সারি এবারেরটা আটকায় না', () => {
+  /** The same name in another year is a different holiday — it must not be blocked */
+  it('a row with the same name from the previous year does not block this year\'s', () => {
     const plan = planHolidaySeed(
       [entry({ date: '2027-03-10', name: 'ঈদুল ফিতর' })],
       [row('2026-03-21', 'ঈদুল ফিতর')],
@@ -614,10 +623,10 @@ describe('planHolidaySeed', () => {
   });
 
   /**
-   * ⚠️ বাতিল হওয়া বা মালিকের নিজের যোগ করা ছুটি — দুটোর তফাত এখান থেকে বোঝা
-   *    যায় না, তাই মোছা হয় না, শুধু দেখানো হয়।
+   * A cancelled holiday or one the owner added themselves — the difference
+   * cannot be told from here, so it is not deleted, only shown.
    */
-  it('তালিকায় নেই এমন সারি দেখায়, কিন্তু মোছার তালিকায় ফেলে না', () => {
+  it('shows rows not in the list, but does not put them on the delete list', () => {
     const plan = planHolidaySeed(list, [row('2026-08-15', 'জাতীয় শোক দিবস')]);
 
     expect(plan.unlisted).toEqual([
@@ -626,18 +635,18 @@ describe('planHolidaySeed', () => {
     expect(plan.create).toHaveLength(3);
   });
 
-  /** ⚠️ যে বছর এবার বসছে না, সেই বছরের সারি নিয়ে কোনো মন্তব্য নয় */
-  it('তালিকার বাইরের বছরের সারি একেবারেই ছোঁয় না', () => {
+  /** No comment at all about rows for a year not being seeded this time */
+  it('rows for a year outside the list are left completely alone', () => {
     const plan = planHolidaySeed(list, [row('2025-12-25', 'বড়দিন')]);
 
     expect(plan.unlisted).toEqual([]);
   });
 
-  it('আসল তালিকা খালি DB-তে বসলে সংখ্যাটা মেলে', () => {
+  it('inserting the real list into an empty DB, the count matches', () => {
     const plan = planHolidaySeed(BD_HOLIDAYS, []);
 
     expect(plan.create).toHaveLength(BD_HOLIDAYS.length);
-    // ⭐ দুবার চালালে দ্বিতীয়বারে আর কিছু বসে না
+    // Running it twice, the second run inserts nothing
     const again = planHolidaySeed(
       BD_HOLIDAYS,
       plan.create.map((h) => row(h.date, holidayRowName(h))),
@@ -648,40 +657,43 @@ describe('planHolidaySeed', () => {
   });
 });
 
-// ── কোন বছর বসবে ────────────────────────────────────────────────────────────
+// ── Which years get seeded ───────────────────────────────────────────────────
 
 describe('yearsToSeed', () => {
-  it('নতুন DB-তে সব বছর', () => {
+  it('all years on a new DB', () => {
     expect(yearsToSeed([2026, 2027], [])).toEqual([2026, 2027]);
   });
 
   /**
-   * ⭐⭐ বসানো হয়ে যাওয়া বছরে seed আর ফিরে তাকায় না। কারণ মালিক ঘোষণা দেখে
-   * একটা দিন **মুছে** দিলে DB-তে তার কোনো চিহ্ন থাকে না — ফিরে তাকালে
-   * দিনটা "নেই" দেখে আবার বসত, আর ছুটি একদিন বেশি গোনা হতো।
+   * The seed never looks back at an already-seeded year. If the owner
+   * deleted a day after the announcement, the DB holds no trace of it — on
+   * looking back the day would seem "missing" and be inserted again, and one
+   * extra holiday would be counted.
    */
-  it('আগে বসানো বছর বাদ যায়', () => {
+  it('an already-seeded year is skipped', () => {
     expect(yearsToSeed([2026, 2027], [2026])).toEqual([2027]);
     expect(yearsToSeed([2026, 2027], [2026, 2027])).toEqual([]);
   });
 
-  it('নতুন বছর যোগ করলে সেটা আপনাআপনি বসে', () => {
+  it('a newly added year is seeded automatically', () => {
     expect(yearsToSeed([2026, 2027, 2028], [2026, 2027])).toEqual([2028]);
   });
 
-  it('অচেনা বছর `seeded`-এ থাকলেও ঝামেলা করে না', () => {
+  it('an unknown year in `seeded` causes no trouble', () => {
     expect(yearsToSeed([2026], [2019, 2026])).toEqual([]);
   });
 });
 
-// ── একটা seed-রান ───────────────────────────────────────────────────────────
+// ── One seed run ─────────────────────────────────────────────────────────────
 
 /**
- * ⭐⭐ **নোট প্রতিবারই ছাপে।** আগে বছর একবার বসে গেলে `seedHolidays()`
- * early-return করত, তাই `unlisted`/`renamed` নোট প্রথম রানের পর চিরতরে
- * নীরব হয়ে যেত — চলতি DB-তে `2026-08-15 জাতীয় শোক দিবস` (২০২৪-এ বাতিল)
- * বসে থেকে আগস্টের একটা কর্মদিবস কমিয়ে রাখছে, অথচ seed তা আর বলত না।
- * ⚠️ "না বলা সিদ্ধান্ত নয়, চেপে যাওয়া" — নিয়মটা seed নিজেই ভাঙছিল।
+ * The note is printed every time. Previously, once a year was seeded,
+ * `seedHolidays()` returned early, so the `unlisted`/`renamed` notes went
+ * silent for good after the first run — in a live DB `2026-08-15 National
+ * Mourning Day` (cancelled in 2024) sits there reducing one August work day,
+ * and the seed no longer said so.
+ * Not saying it is not a decision, it is suppression — the seed itself was
+ * breaking the rule.
  */
 describe('planHolidaySeedRun', () => {
   const list: HolidayEntry[] = [
@@ -702,7 +714,7 @@ describe('planHolidaySeedRun', () => {
 
   const cancelled = row('2026-08-15', 'জাতীয় শোক দিবস');
 
-  it('বছর খোলা থাকলে ওই বছরের সারিগুলোই বসে', () => {
+  it('when the year is open, that year\'s rows are inserted', () => {
     const run = planHolidaySeedRun(list, [], [2026], early);
 
     expect(run.create.map((h) => h.date)).toEqual([
@@ -713,10 +725,10 @@ describe('planHolidaySeedRun', () => {
   });
 
   /**
-   * ⭐⭐ **এই টেস্টটাই এই কাজের মূল কথা।** দুই বছরই বসানো, তাই একটাও সারি
-   * বসছে না — তবু বাতিল হওয়া ছুটিটার কথা এখনো বলা হচ্ছে।
+   * The heart of this work. Both years are already seeded, so no row is
+   * inserted — yet the cancelled holiday is still reported.
    */
-  it('সব বছর বসানো হয়ে গেলেও বাতিল ছুটির কথা বলে', () => {
+  it('even when all years are seeded, it reports the cancelled holiday', () => {
     const run = planHolidaySeedRun(list, [cancelled], [], early);
 
     expect(run.create).toEqual([]);
@@ -724,8 +736,8 @@ describe('planHolidaySeedRun', () => {
     expect(run.notes.some((n) => n.includes('জাতীয় শোক দিবস'))).toBe(true);
   });
 
-  /** ⭐ নাম বদলের কথাও প্রতিবার — একবার বলে চুপ করে যাওয়া নয় */
-  it('সব বছর বসানো হয়ে গেলেও নাম-বদলের কথা বলে', () => {
+  /** A rename is reported every time too — not said once and then forgotten */
+  it('even when all years are seeded, it reports the rename', () => {
     const run = planHolidaySeedRun(
       list,
       [
@@ -742,15 +754,15 @@ describe('planHolidaySeedRun', () => {
   });
 
   /**
-   * ⚠️⚠️ **চলতি VPS-এর আসল অবস্থা, আর এটাই ৪ নম্বর করণীয়।** পুরোনো seed
-   *    ২০২৬-০৩-১৭-তে `জাতির পিতার জন্মদিন` বসিয়ে গেছে; নতুন তালিকায় ওই
-   *    তারিখে `শবে কদর (সম্ভাব্য)`। `planHolidaySeed()` তারিখে মিল পেয়ে
-   *    নাম বদলায় না (ইচ্ছাকৃত — মালিকের হাতের কাজ যাতে না মুছে যায়), তাই
-   *    ওই সারিটা **কোনোদিনই** "(সম্ভাব্য)" চিহ্ন পাবে না। ⭐ সারানো
-   *    বাধ্যতামূলক নয়, কিন্তু **না বলাটা** চেপে যাওয়া — নোটে স্পষ্ট থাকতে
-   *    হবে, যাতে মালিক হাতে ঠিক করতে পারেন।
+   * The real state of the live VPS, and this is to-do number 4. The old seed
+   * left `Father of the Nation's birthday` on 2026-03-17; the new list has
+   * `Shab-e-Qadr (probable)` on that date. `planHolidaySeed()` matches on
+   * the date and does not rename (deliberate — so the owner's manual work is
+   * not wiped), so that row will never get the "(probable)" marker. Fixing
+   * it is not mandatory, but not saying so would be suppression — the note
+   * must say it clearly so the owner can fix it by hand.
    */
-  it('চিহ্নটা হারিয়ে যাচ্ছে — নোট সেটা স্পষ্ট করে বলে', () => {
+  it('the marker is being lost — the note says so explicitly', () => {
     const run = planHolidaySeedRun(
       [entry({ date: '2026-03-17', name: 'শবে কদর', nameEn: 'Laylat al-Qadr' })],
       [row('2026-03-17', 'জাতির পিতার জন্মদিন')],
@@ -767,11 +779,11 @@ describe('planHolidaySeedRun', () => {
   });
 
   /**
-   * ⚠️ উল্টো দিকটা: DB-র নামেও চিহ্ন থাকলে কিছু হারাচ্ছে না — তখন
-   *    "চিহ্ন পাবে না" বলাটা **মিথ্যা** হতো, আর ঠিক ওই মিথ্যাটাই এই
-   *    রাউন্ডে ঠেকানোর কথা।
+   * The opposite case: if the DB name has the marker too, nothing is lost —
+   * saying "will not get the marker" would then be false, and that is exactly
+   * the falsehood this round is meant to prevent.
    */
-  it('চিহ্ন হারাচ্ছে না এমন নাম-বদলে "চিহ্ন পাবে না" বলে না', () => {
+  it('a rename that loses no marker does not say "will not get the marker"', () => {
     const run = planHolidaySeedRun(
       [entry({ date: '2026-03-17', name: 'শবে কদর', nameEn: 'Laylat al-Qadr' })],
       [row('2026-03-17', `লাইলাতুল কদর${APPROX_SUFFIX}`)],
@@ -785,11 +797,11 @@ describe('planHolidaySeedRun', () => {
   });
 
   /**
-   * ⭐ মালিক ঘোষণা দেখে সারিটা মুছে দিয়েছেন — seed সেটা **ফিরিয়ে আনে না**
-   *    (বছরটা বন্ধ), কিন্তু চুপও থাকে না। চুপ থাকলে "তালিকা আর DB এক" বলে
-   *    ভুল ধারণা হতো।
+   * The owner deleted the row after the announcement — the seed does not
+   * bring it back (the year is closed), but it does not stay silent either.
+   * Silence would give the false impression that "the list and the DB match".
    */
-  it('বন্ধ বছরের অনুপস্থিত সারি বসায় না, কিন্তু নাম ধরে জানায়', () => {
+  it('a missing row in a closed year is not inserted, but is reported by name', () => {
     const run = planHolidaySeedRun(
       list,
       [row('2026-12-16', 'বিজয় দিবস')],
@@ -805,7 +817,7 @@ describe('planHolidaySeedRun', () => {
     expect(run.notes.some((n) => n.includes('2026-03-21'))).toBe(true);
   });
 
-  it('সব মিলে গেলে কোনো নোট নেই — চুপ থাকাটাও তখন সত্যি', () => {
+  it('when everything matches there is no note — and then silence is true too', () => {
     const run = planHolidaySeedRun(
       list,
       list.map((h) => row(h.date, holidayRowName(h))),
@@ -819,8 +831,8 @@ describe('planHolidaySeedRun', () => {
     expect(run.kept).toBe(3);
   });
 
-  /** ⚠️ যা মালিকের নজর দাবি করে (⚠️) তা আগে, যা কেবল জানানো (·) তা পরে */
-  it('নজর-দাবি করা নোটগুলো আগে আসে', () => {
+  /** Notes that demand the owner's attention (warning prefix) come first; merely informative ones (`·`) after */
+  it('notes demanding attention come first', () => {
     const run = planHolidaySeedRun(
       list,
       [cancelled, row('2026-12-15', 'বিজয় দিবস')],
@@ -834,8 +846,8 @@ describe('planHolidaySeedRun', () => {
     expect(firstPlain).toBeGreaterThan(lastWarn);
   });
 
-  /** ⭐ আসল তালিকা খালি DB-তে — প্রথম রানে কোনো অভিযোগ থাকার কথা নয় */
-  it('আসল তালিকা খালি DB-তে বসলে কোনো নোট নেই', () => {
+  /** The real list on an empty DB — there should be no complaint on the first run */
+  it('inserting the real list into an empty DB gives no notes', () => {
     const run = planHolidaySeedRun(
       BD_HOLIDAYS,
       [],
@@ -848,10 +860,10 @@ describe('planHolidaySeedRun', () => {
   });
 
   /**
-   * ⭐⭐ দ্বিতীয় রান: সব বছর বসানো, DB-তে সব সারি আছে — তবু একটা বাতিল
-   * ছুটি বসে থাকলে seed **এখনো** সেটা বলে। ঠিক এই আচরণটাই আগে ছিল না।
+   * Second run: all years seeded, all rows in the DB — yet if a cancelled
+   * holiday is sitting there, the seed still reports it. This behaviour did not exist before.
    */
-  it('আসল তালিকার দ্বিতীয় রানেও বাতিল ছুটি নিয়ে চুপ থাকে না', () => {
+  it('on the second run of the real list it does not stay silent about the cancelled holiday', () => {
     const inDb = BD_HOLIDAYS.map((h) => row(h.date, holidayRowName(h)));
     const run = planHolidaySeedRun(
       BD_HOLIDAYS,
@@ -866,52 +878,54 @@ describe('planHolidaySeedRun', () => {
   });
 });
 
-// ── ⭐⭐ চলতি ও অতীত মাসের পাহারা ────────────────────────────────────────────
+// ── Guarding the current and past months ─────────────────────────────────────
 
 /**
- * ⭐⭐ **যে বাগটা এই অংশ ঠেকায়:** ১৪ আগস্ট ২০২৬-এ VPS-এ `npm run seed`
- * চালালে আগস্টে দুটো নতুন ছুটি বসত (`2026-08-05`, `2026-08-26`)। আগস্টের
- * কর্মদিবস ২৬ → ২৪, `dailyTargetSec` ৮.০০ঘ → ৮.৬৭ঘ, `monthly_summary`-র
- * `target_sec`·`expected_sec`·`pace_sec` তিনটেই নতুন, আর G37-এর `d ÷ D`
- * ভগ্নাংশ (`src/payroll/payroll.service.ts`) সরাসরি টাকা। ⚠️ একটা রুটিন
- * কমান্ড, কোনো প্রশ্ন নয়, কোনো এরর নয় — মাসের মাঝপথে বেতন বদলে যেত।
+ * The bug this section prevents: running `npm run seed` on the VPS on 14
+ * August 2026 would have inserted two new holidays in August (`2026-08-05`,
+ * `2026-08-26`). August's work days 26 -> 24, `dailyTargetSec` 8.00h ->
+ * 8.67h, all three of `monthly_summary`'s `target_sec`, `expected_sec` and
+ * `pace_sec` new, and G37's `d / D` fraction (`src/payroll/payroll.service.ts`)
+ * is directly money. A routine command, no question, no error — and pay would
+ * change in the middle of the month.
  */
-describe('planHolidaySeedRun — চলতি/অতীত মাস', () => {
+describe('planHolidaySeedRun — current/past months', () => {
   const august = { today: '2026-08-14', allowPast: false };
 
   const list: HolidayEntry[] = [
-    entry({ date: '2026-03-21', name: 'ঈদুল ফিতর' }), // অতীত মাস
+    entry({ date: '2026-03-21', name: 'ঈদুল ফিতর' }), // past month
     entry({
       date: '2026-08-05',
       name: 'জুলাই গণঅভ্যুত্থান দিবস',
       nameEn: 'July Mass Uprising Day',
       approximate: false,
-    }), // চলতি মাস, আজকের আগে
+    }), // current month, before today
     entry({
       date: '2026-08-26',
       name: 'ঈদে মিলাদুন্নবী (সা.)',
       nameEn: 'Eid-e-Miladunnabi',
-    }), // চলতি মাস, আজকের পরে
+    }), // current month, after today
     entry({
       date: '2026-12-16',
       name: 'বিজয় দিবস',
       nameEn: 'Victory Day',
       approximate: false,
-    }), // ভবিষ্যতের মাস
+    }), // future month
   ];
 
-  it('ভবিষ্যতের মাসেরটাই শুধু বসে', () => {
+  it('only the future month\'s one is inserted', () => {
     const run = planHolidaySeedRun(list, [], [2026], august);
 
     expect(run.create.map((h) => h.date)).toEqual(['2026-12-16']);
   });
 
   /**
-   * ⚠️⚠️ চলতি মাসের **বাকি থাকা** দিনটাও (২৬ আগস্ট, আজ ১৪) আটকে যায় —
-   *    ইচ্ছাকৃত। মাসের কর্মদিবস D গোটা মাসের হিসাব; মাসের শেষ দিকের একটা
-   *    ছুটিও **গত দিনগুলোর** `target_sec` আর `pace_sec` পিছন ফিরে বদলায়।
+   * The remaining day of the current month (26 August, today the 14th) is
+   * held back too — deliberate. The month's work days D is a whole-month
+   * figure; even a holiday late in the month retroactively changes the
+   * earlier days' `target_sec` and `pace_sec`.
    */
-  it('চলতি মাসের ভবিষ্যৎ তারিখও আটকায় — D গোটা মাসের হিসাব', () => {
+  it('a future date in the current month is held back too — D is a whole-month figure', () => {
     const run = planHolidaySeedRun(list, [], [2026], august);
 
     expect(run.needsConsent.map((h) => h.date)).toEqual([
@@ -921,8 +935,8 @@ describe('planHolidaySeedRun — চলতি/অতীত মাস', () => {
     ]);
   });
 
-  /** ⚠️ চুপ করে বাদ নয় — প্রতিটার নাম ও তারিখ নোটে ওঠে */
-  it('আটকে যাওয়া প্রতিটা তারিখ নাম ধরে নোটে ওঠে', () => {
+  /** Not dropped silently — each one's name and date appear in the note */
+  it('each held-back date appears in the note by name', () => {
     const run = planHolidaySeedRun(list, [], [2026], august);
 
     for (const date of ['2026-03-21', '2026-08-05', '2026-08-26']) {
@@ -934,13 +948,13 @@ describe('planHolidaySeedRun — চলতি/অতীত মাস', () => {
   });
 
   /**
-   * ⭐ কেবল "বসানো হয়নি" নয় — **কী করে বসাতে হয় আর তারপর কী হয়**, দুটোই।
+   * Not just "not inserted" — both how to get it inserted and what happens then.
    *
-   * ⚠️ অতীত মাসের কথাটা আলাদা করে থাকতে হবে, কারণ চলতি মাস নিজে থেকে
-   *    মিলে যায় আর অতীত মাস যায় না — দুটোকে এক করে বললে মালিক ভাবতেন
-   *    সবটাই আপনাআপনি ঠিক হয়ে যাবে।
+   * The past-month part must be separate, because the current month corrects
+   * itself while a past month does not — said together, the owner would
+   * think everything would fix itself.
    */
-  it('নোটে সম্মতির পথ, টাকার কথা আর অতীত মাসের ফলাফল থাকে', () => {
+  it('the note has the consent route, the money point and the past-month consequence', () => {
     const run = planHolidaySeedRun(list, [], [2026], august);
     const howTo = run.notes.find((n) => n.includes('SEED_HOLIDAYS_PAST=true'));
 
@@ -950,7 +964,7 @@ describe('planHolidaySeedRun — চলতি/অতীত মাস', () => {
     expect(howTo).toContain('§ ২.১গ');
   });
 
-  it('সম্মতি দিলে সবগুলোই বসে, আর অভিযোগও থাকে না', () => {
+  it('with consent all are inserted, and there is no complaint either', () => {
     const run = planHolidaySeedRun(list, [], [2026], {
       today: '2026-08-14',
       allowPast: true,
@@ -962,19 +976,20 @@ describe('planHolidaySeedRun — চলতি/অতীত মাস', () => {
   });
 
   /**
-   * ⚠️⚠️ একটা সারি একই সাথে "বছর বন্ধ" আর "মাস চলে গেছে" — দুটোতেই পড়তে
-   *    পারে। তখন শুধু `heldBack`, কারণ সম্মতি দিলেও বছরটা বন্ধ থাকায় ওটা
-   *    বসত না — সম্মতি চাওয়া মানে মিথ্যে আশা দেওয়া। ⭐ এক সারি, এক কথা।
+   * A row can fall under "year closed" and "month gone" at once. Then it is
+   * only `heldBack`, because even with consent it would not be inserted while
+   * the year is closed — asking for consent would give false hope. One row,
+   * one message.
    */
-  it('বছর বন্ধ থাকলে সম্মতি চাওয়া হয় না', () => {
+  it('when the year is closed, consent is not asked for', () => {
     const run = planHolidaySeedRun(list, [], [], august);
 
     expect(run.needsConsent).toEqual([]);
     expect(run.heldBack).toHaveLength(4);
   });
 
-  /** ⚠️ DB-তে আগে থেকেই থাকা সারি এই গেটের বিষয় নয় — কিছু বসছেই না */
-  it('আগে থেকেই বসানো সারি নিয়ে সম্মতি চাওয়া হয় না', () => {
+  /** Rows already in the DB are not this gate's concern — nothing is being inserted */
+  it('consent is not asked for rows already seeded', () => {
     const run = planHolidaySeedRun(
       list,
       list.map((h) => row(h.date, holidayRowName(h))),
@@ -988,31 +1003,31 @@ describe('planHolidaySeedRun — চলতি/অতীত মাস', () => {
   });
 });
 
-// ── কোন বছর "সম্পূর্ণ বসানো" হলো ────────────────────────────────────────────
+// ── Which years count as fully seeded ────────────────────────────────────────
 
 describe('yearsSettled', () => {
   const pending = (date: string) => entry({ date });
 
-  it('কিছু আটকে না থাকলে খোলা বছরগুলোই সম্পূর্ণ', () => {
+  it('when nothing is held back, the open years are fully settled', () => {
     expect(yearsSettled([2026, 2027], [])).toEqual([2026, 2027]);
   });
 
   /**
-   * ⭐⭐ **কেন এটা দরকার:** সম্মতির অপেক্ষায় সারি রেখে বছরটা বন্ধ করে দিলে
-   *    পরের রানে `SEED_HOLIDAYS_PAST=true` দিয়েও কিছুই বসত না —
-   *    `yearsToSeed` বছরটাকেই বাদ দিয়ে দিত। ⚠️ পতাকাটা থাকত, কাজ করত না,
-   *    আর কমেন্ট বলত "সম্মতি দিলে বসবে"। কোডের মিথ্যা মন্তব্য বাগের চেয়েও
-   *    খারাপ, তাই বছরটা খোলা রাখা হয়।
+   * Why this is needed: if a year were closed while rows awaited consent, on
+   * the next run even `SEED_HOLIDAYS_PAST=true` would insert nothing —
+   * `yearsToSeed` would skip the year entirely. The flag would exist and do
+   * nothing, and a comment would say "it will be inserted with consent". A
+   * false comment in code is worse than a bug, so the year is kept open.
    */
-  it('সম্মতির অপেক্ষায় সারি থাকলে ওই বছর সম্পূর্ণ হয় না', () => {
+  it('a year with rows awaiting consent is not fully settled', () => {
     expect(yearsSettled([2026, 2027], [pending('2026-08-05')])).toEqual([2027]);
   });
 
-  it('অন্য বছরের আটকানো সারি এই বছরকে আটকায় না', () => {
+  it('another year\'s held-back row does not hold back this year', () => {
     expect(yearsSettled([2026], [pending('2027-01-24')])).toEqual([2026]);
   });
 
-  it('কোনো বছর খোলা না থাকলে খালি', () => {
+  it('empty when no year is open', () => {
     expect(yearsSettled([], [pending('2026-08-05')])).toEqual([]);
   });
 });

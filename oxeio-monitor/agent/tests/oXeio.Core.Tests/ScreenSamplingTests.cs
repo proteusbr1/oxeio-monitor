@@ -5,22 +5,22 @@ using oXeio.Core.Tracking;
 namespace oXeio.Core.Tests;
 
 /// <summary>
-/// <b>G46 — পর্দার ছাপ কখন নেওয়া হবে।</b>
+/// <b>G46: when the screen fingerprint is taken.</b>
 ///
-/// ⚠️⚠️ এই ফাইলটা আছে <b>একটাই কারণে</b>: ০.৪.১-এ ছাপ আসত স্ক্রিনশটের স্লট
-/// থেকে, আর স্লট চলত কেবল ACTIVE অবস্থায়। ফলে জমে যাওয়ার শাস্তি নিজেই
-/// নিজের প্রমাণ হয়ে দাঁড়াত, আর বেরোনোর পথ থাকত না।
+/// Careful: this file exists for <b>one reason</b>: in 0.4.1 the fingerprint came from
+/// the screenshot slot, and the slot ran only while ACTIVE. So the penalty for freezing
+/// became its own proof, with no way out.
 /// </summary>
 public class ScreenSamplingTests
 {
     private static readonly DateTimeOffset Start =
-        new(2026, 8, 17, 4, 0, 0, TimeSpan.Zero); // ঢাকায় সকাল ১০টা
+        new(2026, 8, 17, 4, 0, 0, TimeSpan.Zero); // 10 AM in Dhaka
 
     private static DateTimeOffset At(int seconds) => Start.AddSeconds(seconds);
 
-    // ── কখন ─────────────────────────────────────────────────────────────────
+    // ── when ────────────────────────────────────────────────────────────────
 
-    /// <summary>⭐ প্রথমবার সবসময়ই — তুলনা করার মতো কিছু নেই</summary>
+    /// <summary>Always the first time: there is nothing to compare against</summary>
     [Fact]
     public void First_sample_is_always_due()
     {
@@ -35,11 +35,11 @@ public class ScreenSamplingTests
     }
 
     /// <summary>
-    /// ⭐⭐ <b>জমে থাকলে অনেক ঘন ঘন</b> — এখানেই ন্যায্যতা।
+    /// <b>Much more often when frozen:</b> this is where fairness lives.
     ///
-    /// জমে থাকা মানে কর্মীর গোনা বন্ধ। তিনি ফিরে এসে কাজ শুরু করলে সেটা
-    /// সেকেন্ডে ধরা পড়া দরকার, নইলে প্রতিটা বিরতির পর এক মিনিট করে সময়
-    /// কাটা যেত — রোজ, সবার।
+    /// Frozen means the worker is not being counted. When they return and start working
+    /// this must be noticed within seconds, otherwise a minute of time would be cut
+    /// after every break: every day, for everyone.
     /// </summary>
     [Fact]
     public void Frozen_screens_are_sampled_much_faster()
@@ -48,7 +48,9 @@ public class ScreenSamplingTests
         Assert.True(ScreenSampling.Due(At(5), At(0), frozen: true));
     }
 
-    /// <summary>⚠️ ঘড়ি পিছিয়ে গেলে (NTP) নমুনা নেওয়াই হয় — থেমে যাওয়ার ক্ষতি বেশি</summary>
+    /// <summary>
+    /// Careful: if the clock goes back (NTP) a sample is still taken; stopping would cost more
+    /// </summary>
     [Fact]
     public void Clock_going_backwards_still_samples()
     {
@@ -56,9 +58,10 @@ public class ScreenSamplingTests
     }
 
     /// <summary>
-    /// ⚠️⚠️ ব্যবধান <see cref="ScreenActivity.StaleAfter"/>-এর চেয়ে যথেষ্ট
-    /// ছোট হতেই হবে। নইলে স্বাভাবিক কাজের মধ্যেই নমুনা বাসি হয়ে যেত, আর
-    /// পুরো পাহারাটা <b>নীরবে অকেজো</b> থাকত — এই প্রকল্পের সবচেয়ে চেনা ভুল।
+    /// Careful: the interval must be well below
+    /// <see cref="ScreenActivity.StaleAfter"/>. Otherwise samples would go stale in the
+    /// middle of normal work, and the whole guard would sit <b>silently useless</b>, the
+    /// most familiar mistake in this project.
     /// </summary>
     [Fact]
     public void Interval_leaves_room_before_a_sample_goes_stale()
@@ -67,7 +70,7 @@ public class ScreenSamplingTests
         Assert.True(ScreenSampling.WhenFrozen < ScreenSampling.Interval);
     }
 
-    // ── কখন অনুমোদিত ────────────────────────────────────────────────────────
+    // ── when allowed ────────────────────────────────────────────────────────
 
     [Fact]
     public void Allowed_in_the_normal_case()
@@ -83,7 +86,7 @@ public class ScreenSamplingTests
         Assert.False(ScreenSampling.Allowed(true, true, true, false));
     }
 
-    /// <summary>⚠️ অফিসের সময়ের বাইরে পর্দা ছোঁয়াই হয় না (§ ৪.২)</summary>
+    /// <summary>Careful: outside office hours the screen is not touched at all (§ 4.2)</summary>
     [Fact]
     public void Not_allowed_outside_the_window()
     {
@@ -91,9 +94,9 @@ public class ScreenSamplingTests
     }
 
     /// <summary>
-    /// ⚠️⚠️ লক করা পর্দা এমনিতেই স্থির। ওটা নমুনা হিসেবে রাখলে আনলক করার
-    /// পরেও কিছুক্ষণ "জমে আছে" দেখাত — অর্থাৎ দুপুরের খাবার সেরে ফেরা
-    /// কর্মীর সময় কাটা যেত।
+    /// Careful: a locked screen is static anyway. Keeping it as a sample would make the
+    /// screen look "frozen" for a while even after unlock, and cut the time of someone
+    /// returning from lunch.
     /// </summary>
     [Fact]
     public void Not_allowed_while_locked()
@@ -102,15 +105,15 @@ public class ScreenSamplingTests
     }
 
     /// <summary>
-    /// ⭐⭐⭐ <b>এই ফাইলের মূল টেস্ট — অচলাবস্থাটা যেন আর ফিরতে না পারে।</b>
+    /// <b>The main test of this file: so that the deadlock can never return.</b>
     ///
-    /// ঠিক যে অবস্থায় <see cref="CaptureGate"/> স্ক্রিনশট তুলতে দেয় না
-    /// (IDLE — আর সেটা ঠিকই করে, স্ক্রিনশট জমা হয় ও দেখা হয়), ঠিক সেই
-    /// অবস্থাতেই ছাপ নেওয়া <b>চলতে থাকে</b>। কারণ ছাপ কোথাও জমে না; ওটা
-    /// শুধু একটা প্রশ্নের উত্তর — <i>পর্দা বদলাচ্ছে?</i>
+    /// In exactly the state where <see cref="CaptureGate"/> does not allow a screenshot
+    /// (IDLE, and it is right to refuse: screenshots are stored and viewed), the
+    /// fingerprint is <b>still taken</b>. The fingerprint is stored nowhere; it is
+    /// just the answer to one question: <i>is the screen changing?</i>
     ///
-    /// ⚠️⚠️ এই দুটো দাবি একসাথে না থাকলে আবার সেই ফাঁদ: জমেছে → IDLE →
-    /// ছাপ বন্ধ → চিরকাল জমে আছে।
+    /// Careful: without both claims together the same trap returns: frozen -> IDLE ->
+    /// fingerprint stops -> frozen forever.
     /// </summary>
     [Fact]
     public void Sampling_continues_exactly_where_screenshots_stop()
@@ -118,12 +121,12 @@ public class ScreenSamplingTests
         var window = CaptureWindow.Default;
         var at = Start;
 
-        // স্ক্রিনশট থামে — কর্মী idle
+        // screenshots stop: the worker is idle
         Assert.Equal(
             CaptureGate.Verdict.NotActive,
             CaptureGate.Check(SegmentState.Idle, enrolled: true, revoked: false, window, at));
 
-        // ⭐ কিন্তু ছাপ নেওয়া থামে না
+        // but the fingerprint is still taken
         Assert.True(ScreenSampling.Allowed(
             enrolled: true, revoked: false, insideWindow: true, locked: false));
     }

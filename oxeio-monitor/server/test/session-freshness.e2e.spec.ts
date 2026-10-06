@@ -1,7 +1,7 @@
 import { SignJWT } from 'jose';
-// ⚠️ vitest-এর `expect` এখানে লাগে না — এই ফাইলের সব যাচাই supertest-এর
-// চেইন করা `.expect(200)` দিয়ে, যেটা আলাদা জিনিস। import করে রাখায় lint
-// লাল ছিল (`no-unused-vars`), আর CI-ও।
+// vitest's `expect` is not needed here: every check in this file uses
+// supertest's chained `.expect(200)`, which is a different thing. Importing
+// it left lint red (`no-unused-vars`), and CI too.
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 
 import {
@@ -19,25 +19,25 @@ import {
 } from './setup/harness';
 
 /**
- * **চলতি সেশন কি ডাটাবেসের বদল মানে?**
+ * Does a running session honour changes in the database?
  *
- * ⚠️⚠️ এই ফাইলটা লেখা হয়েছে একটা আসল ফাঁক থেকে। `JwtAuthGuard`-এ
- * sliding window আছে — প্রতি ৫ মিনিট পর টোকেন নতুন করে দেওয়া হয়, যাতে
- * কাজ করতে থাকা কেউ হঠাৎ লগআউট না হন। কিন্তু নতুন টোকেনটা বানানো হতো
- * **পুরোনো টোকেনের দাবি নকল করে**:
+ * This file comes from a real gap. `JwtAuthGuard` has a sliding window: every
+ * 5 minutes the token is reissued, so someone who keeps working is not
+ * suddenly logged out. But the new token was built by copying the old token's
+ * claims:
  *
  * ```ts
- * await this.tokens.issue(res, user);   // ← `user` পুরোনো টোকেন থেকে
+ * await this.tokens.issue(res, user);   // <- `user` from the old token
  * ```
  *
- * ফলে যিনি ট্যাব খোলা রেখে কাজ করে যেতেন, তাঁর ভূমিকা **কোনোদিন**
- * হালনাগাদ হতো না:
+ * So for someone who kept a tab open and kept working, their role was never
+ * updated:
  *
- *   · ম্যানেজারকে স্টাফ করা হলো → তিনি চিরকাল ম্যানেজারই থাকতেন
- *   · কর্মীকে নিষ্ক্রিয় করা হলো → তাঁর সেশন কখনো মরত না
+ *   - a manager demoted to staff stayed a manager forever
+ *   - an employee deactivated would never have their session die
  *
- * ⭐ টেস্টে সময় এগিয়ে নেওয়ার দরকার নেই — পুরোনো `iat` বসানো একটা টোকেন
- * নিজেরাই সই করে নিলেই sliding window-র শাখাটা চলে।
+ * There is no need to advance time in the test: signing a token with an old
+ * `iat` ourselves is enough to run the sliding-window branch.
  */
 let h: Harness;
 let owner: Session;
@@ -58,9 +58,9 @@ beforeEach(async () => {
 });
 
 /**
- * ⚠️ ১০ মিনিট পুরোনো `iat` — `SESSION_REFRESH_AFTER_MIN` (৫) পেরিয়ে গেছে
- * বলে গার্ড টোকেন নতুন করে দেবে, কিন্তু ৩০ মিনিটের মেয়াদ এখনো বাকি।
- * ঠিক এই জানালাটাতেই বাগটা বাস করত।
+ * An `iat` 10 minutes old: past `SESSION_REFRESH_AFTER_MIN` (5), so the guard
+ * will reissue the token, but the 30-minute expiry still has time left. The
+ * bug lived in exactly this window.
  */
 async function staleCookie(user: {
   id: number;
@@ -104,11 +104,11 @@ async function staffWithLogin(code: string, role: 'employee' | 'manager') {
   return { employeeId, user };
 }
 
-/** ⭐ `@Roles(owner, manager)` — স্টাফ এখানে ঢুকতে পারেন না */
+/** `@Roles(owner, manager)`: staff cannot get in here */
 const MANAGER_ONLY = '/api/v1/employees';
 
-describe('চলতি সেশনে ভূমিকার বদল', () => {
-  it('ম্যানেজারের পুরোনো টোকেন কাজ করে, যতক্ষণ তিনি ম্যানেজার', async () => {
+describe('role changes in a running session', () => {
+  it('a manager\'s old token works as long as they are a manager', async () => {
     const { user } = await staffWithLogin('SF-OK', 'manager');
     const cookie = await staleCookie(user);
 
@@ -116,11 +116,11 @@ describe('চলতি সেশনে ভূমিকার বদল', () => {
   });
 
   /**
-   * ⭐⭐ **এই ফাইলের মূল টেস্ট।** সংশোধনের আগে এটা ২০০ পেত — অর্থাৎ
-   * নামিয়ে দেওয়া ম্যানেজার ট্যাব খোলা রেখে কাজ করে গেলে ক্ষমতাটা
-   * ধরে রাখতেন, আর কেউ টেরও পেত না।
+   * The core test of this file. Before the fix this got 200: a demoted
+   * manager who kept a tab open and kept working would hold on to the power,
+   * and nobody would notice.
    */
-  it('স্টাফ করে দিলে পুরোনো টোকেনেও ক্ষমতা থাকে না', async () => {
+  it('after being made staff, even the old token has no power', async () => {
     const { user } = await staffWithLogin('SF-DOWN', 'manager');
     const cookie = await staleCookie(user);
 
@@ -135,8 +135,8 @@ describe('চলতি সেশনে ভূমিকার বদল', () => {
     await h.http().get(MANAGER_ONLY).set('Cookie', cookie).expect(403);
   });
 
-  /** ⭐ উল্টোটাও — ম্যানেজার বানালে নতুন করে লগইন করতে হয় না */
-  it('ম্যানেজার বানালে চলতি সেশনেই ক্ষমতা আসে', async () => {
+  /** The reverse too: making someone a manager does not require a fresh login */
+  it('after being made a manager, the power arrives in the running session', async () => {
     const { user } = await staffWithLogin('SF-UP', 'employee');
     const cookie = await staleCookie(user);
 
@@ -152,13 +152,13 @@ describe('চলতি সেশনে ভূমিকার বদল', () => {
   });
 });
 
-describe('চলতি সেশনে অ্যাকাউন্ট বন্ধ', () => {
+describe('account closed during a running session', () => {
   /**
-   * ⚠️⚠️ ছাঁটাই হওয়া কেউ ট্যাব খোলা রাখলে ড্যাশবোর্ড তাঁর কাছে **খোলাই**
-   * থেকে যেত — sliding window প্রতি ৫ মিনিটে সেশনটা বাড়িয়ে দিত, আর
-   * `is_active` কেউ দেখত না।
+   * Someone dismissed who keeps a tab open would find the dashboard still
+   * open: the sliding window extended the session every 5 minutes, and nobody
+   * looked at `is_active`.
    */
-  it('নিষ্ক্রিয় করলে চলতি সেশন মরে যায়', async () => {
+  it('deactivating kills the running session', async () => {
     const { employeeId, user } = await staffWithLogin('SF-OFF', 'manager');
     const cookie = await staleCookie(user);
 
@@ -173,7 +173,7 @@ describe('চলতি সেশনে অ্যাকাউন্ট বন্�
     await h.http().get(MANAGER_ONLY).set('Cookie', cookie).expect(401);
   });
 
-  it('ইউজার মুছে গেলেও সেশন মরে', async () => {
+  it('the session dies when the user is deleted too', async () => {
     const { user } = await staffWithLogin('SF-GONE', 'manager');
     const cookie = await staleCookie(user);
 

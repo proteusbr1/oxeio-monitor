@@ -12,28 +12,28 @@ import {
 } from './setup/harness';
 
 /**
- * ⭐⭐⭐ **ঘড়ির ভুল — একটাই অ্যালার্ট, আর সংখ্যাটা বাসি থাকে না**
- * *(৭ সেপ্টেম্বর ২০২৬, G169 · G170)*।
+ * Clock drift: one alert, and the number never goes stale
+ * (G169, G170).
  *
- * ⚠️⚠️ **G169 — যে বাগটা এই ফাইলটা পাহারা দেয়:** `ClockDriftService.record()`
- * ডাকা হয় `DeviceAuthGuard` থেকে, অর্থাৎ **প্রতিটা রিকোয়েস্টে**। চালু
- * হওয়ার মুহূর্তে এজেন্ট একসাথে কয়েকটা কল পাঠায় (সেগমেন্ট · ইভেন্ট ·
- * অ্যাপ-ব্যবহার · ছবি), আর "আগে দেখো, তারপর বসাও"-এ কোনো তালা ছিল না —
- * তাই দুটো কল একসাথে "কিছু নেই" দেখে **দুটো অ্যালার্ট** বানাত।
+ * G169, the bug this file guards: `ClockDriftService.record()` is called from
+ * `DeviceAuthGuard`, i.e. on every request. At startup the agent sends
+ * several calls at once (segments, events, app usage, screenshots), and
+ * "check first, then insert" had no lock, so two calls would both see
+ * "nothing there" and create two alerts.
  *
- * ⚠️ মাঠে ধরা (৭ সেপ্টেম্বর, OX-13): দুটো অভিন্ন *"PC clock is wrong"*,
- * **৯ মিলিসেকেন্ডের ব্যবধানে**, একই `driftSec`। মালিক সেটা দেখেই
- * বলেছিলেন *"ami eta chai na"*।
+ * Caught in the field (OX-13): two identical "PC clock is wrong" alerts, 9
+ * milliseconds apart, with the same `driftSec`. The owner saw them and said
+ * he did not want this.
  *
- * ⚠️⚠️ **G170 —** `last_drift_sec` লিখত কেবল `record()`, আর সে
- * `level === 'none'`-এ শুরুতেই ফিরে যায়। ফলে ঘড়ি ঠিক হয়ে যাওয়ার পরেও
- * পুরোনো বড় সংখ্যাটা **চিরকাল** বসে থাকত। মাঠে OX-13-এর ঘড়ি কয়েক
- * মিনিটেই মিলে গিয়েছিল, তবু ফ্লিট-তালিকা ৫৪,২২৩ সেকেন্ড দেখাচ্ছিল।
+ * G170: `last_drift_sec` was written only by `record()`, which returns early
+ * when `level === 'none'`. So after the clock was corrected, the old large
+ * number stayed forever. In the field OX-13's clock was fixed within a few
+ * minutes, yet the fleet list kept showing 54,223 seconds.
  */
 let h: Harness;
 let device: EnrolledDevice;
 
-/** ⚠️ `DRIFT_ALERT_SEC` ৩০০ — তাই অ্যালার্টের জন্য এর অনেক উপরে */
+/** `DRIFT_ALERT_SEC` is 300, so go well above it to get an alert */
 const BIG_DRIFT_SEC = 15 * 3600;
 
 beforeAll(async () => {
@@ -51,15 +51,15 @@ beforeEach(async () => {
 });
 
 /**
- * একটা সস্তা authenticated কল — গুরুত্বপূর্ণ অংশটা হলো **হেডার**, কারণ
- * drift মাপা ও লেখা দুটোই guard-এ হয়, কন্ট্রোলারে নয়।
+ * A cheap authenticated call. The important part is the header, because
+ * drift is measured and written in the guard, not in the controller.
  */
 const ping = (driftSec: number) =>
   h
     .http()
     .get('/api/v1/agent/config')
     .set('Authorization', `Bearer ${device.token}`)
-    // ⚠️ ঘড়ি **পিছিয়ে** — server − client ধনাত্মক, ঠিক মাঠের কেসটার মতো
+    // The clock is behind: server minus client is positive, like the real case
     .set('X-Client-Time', iso(new Date(realNow().getTime() - driftSec * 1000)));
 
 const driftAlerts = () =>
@@ -68,14 +68,14 @@ const driftAlerts = () =>
 const deviceRow = () =>
   h.prisma.device.findUniqueOrThrow({ where: { id: device.deviceId } });
 
-describe('G169 — একসাথে আসা কলগুলো মিলে একটাই অ্যালার্ট', () => {
+describe('G169: simultaneous calls together make one alert', () => {
   /**
-   * ⭐⭐⭐ **এই ফাইলের মূল টেস্ট** — বারোটা কল **একসাথে**, ঠিক যেভাবে
-   * এজেন্ট চালু হওয়ার মুহূর্তে পাঠায়।
+   * The main test of this file: twelve calls at once, exactly as the agent
+   * sends them at startup.
    *
-   * ⚠️ তালা তুলে নিলে এটা লাল হয়: একাধিক অ্যালার্ট তৈরি হয়।
+   * Removing the lock turns this red: more than one alert gets created.
    */
-  it('⭐ বারোটা সমান্তরাল কলেও অ্যালার্ট একটাই', async () => {
+  it('twelve parallel calls still give one alert', async () => {
     await Promise.all(
       Array.from({ length: 12 }, () => ping(BIG_DRIFT_SEC).expect(200)),
     );
@@ -83,8 +83,8 @@ describe('G169 — একসাথে আসা কলগুলো মিলে 
     expect(await driftAlerts()).toHaveLength(1);
   });
 
-  /** ⚠️ পরপর কলেও একটাই — ৬ ঘণ্টার throttle আগের মতোই কাজ করে */
-  it('পরপর কলেও একটাই', async () => {
+  /** Back-to-back calls give one too: the 6-hour throttle works as before */
+  it('back-to-back calls give one as well', async () => {
     await ping(BIG_DRIFT_SEC).expect(200);
     await ping(BIG_DRIFT_SEC).expect(200);
     await ping(BIG_DRIFT_SEC).expect(200);
@@ -93,11 +93,11 @@ describe('G169 — একসাথে আসা কলগুলো মিলে 
   });
 
   /**
-   * ⚠️⚠️ **দুই PC একে অন্যকে আটকায় না** — তালাটা `deviceId` ধরে, তাই
-   * দুজনের দুটো অ্যালার্টই বসতে হবে। তালাটা গোটা টেবিলের উপর হলে
-   * দ্বিতীয় PC-র খবরটা নীরবে চাপা পড়ত।
+   * Careful: two PCs do not block each other. The lock is per `deviceId`, so
+   * both must get their own alert. If the lock were on the whole table, the
+   * second PC's news would be silently suppressed.
    */
-  it('⭐ আলাদা দুটো PC-র জন্য আলাদা দুটো অ্যালার্ট', async () => {
+  it('two different PCs get two different alerts', async () => {
     const { code } = await createEmployeeWithCode(h.prisma, 'OX-CD2');
     const other = await enrollDevice(h, code, {
       hostname: 'PC-CD2',
@@ -120,35 +120,37 @@ describe('G169 — একসাথে আসা কলগুলো মিলে 
     expect(await driftAlerts()).toHaveLength(2);
   });
 
-  /** ⚠️ ঘড়ি ঠিক থাকলে কোনো অ্যালার্টই নয় — নিরাপত্তা-জাল */
-  it('ঘড়ি ঠিক থাকলে অ্যালার্ট নেই', async () => {
+  /** With a correct clock there is no alert at all: a safety net */
+  it('no alert when the clock is right', async () => {
     await ping(0).expect(200);
 
     expect(await driftAlerts()).toHaveLength(0);
   });
 });
 
-describe('G170 — ঘড়ি ঠিক হলে সংখ্যাটাও ঠিক হয়', () => {
+describe('G170: when the clock is fixed, the number is fixed too', () => {
   /**
-   * ⭐⭐⭐ **এই ব্লকের মূল টেস্ট।** আগে `last_drift_sec` একবার বসলে আর
-   * নামত না — কারণ `record()` `level === 'none'`-এ শুরুতেই ফিরে যায়।
+   * The main test of this block. Before, once `last_drift_sec` was set it
+   * never went down, because `record()` returns early when
+   * `level === 'none'`.
    */
-  it('⭐ ঘড়ি মিলে গেলে last_drift_sec শূন্যে ফেরে', async () => {
+  it('last_drift_sec returns to zero once the clock matches', async () => {
     await ping(BIG_DRIFT_SEC).expect(200);
     expect((await deviceRow()).lastDriftSec).toBe(BIG_DRIFT_SEC);
 
-    // ⚠️ এখন Windows ঘড়িটা মিলিয়ে নিল
+    // Now the Windows clock has been synced
     await ping(0).expect(200);
 
     expect((await deviceRow()).lastDriftSec).toBe(0);
   });
 
   /**
-   * ⚠️⚠️ **`max_drift_sec` কমে না** — ওটার প্রশ্নই আলাদা: *"সবচেয়ে খারাপ
-   * কতটা হয়েছিল"*। ঘড়ি ঠিক হয়ে গেলে ইতিহাসটা মুছে ফেলা চলবে না, নইলে
-   * বারবার ঘড়ি নড়া একটা PC চিরকাল নিষ্পাপ দেখাত।
+   * Careful: `max_drift_sec` does not go down. It answers a different
+   * question: "how bad did it ever get". The history must not be erased once
+   * the clock is right; otherwise a PC whose clock keeps wandering would look
+   * innocent forever.
    */
-  it('⭐ কিন্তু max_drift_sec ইতিহাস ধরে রাখে', async () => {
+  it('but max_drift_sec keeps the history', async () => {
     await ping(BIG_DRIFT_SEC).expect(200);
     await ping(0).expect(200);
 
@@ -158,10 +160,10 @@ describe('G170 — ঘড়ি ঠিক হলে সংখ্যাটাও 
   });
 
   /**
-   * ⚠️ ছোট drift (৫ সে.-এর নিচে) ইচ্ছাকৃতভাবে **উপেক্ষা** করা হয় —
-   *    নেটওয়ার্কের বিলম্বেই ওটুকু হয়। তাই সেটা ০ হিসেবেই লেখা থাকে।
+   * A small drift (under 5 s) is deliberately ignored: network delay alone
+   * causes that much. So it is stored as 0.
    */
-  it('পাঁচ সেকেন্ডের নিচের drift শূন্যই থাকে', async () => {
+  it('a drift under five seconds stays zero', async () => {
     await ping(3).expect(200);
 
     const row = await deviceRow();

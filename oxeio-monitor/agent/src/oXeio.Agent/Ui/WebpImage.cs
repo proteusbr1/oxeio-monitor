@@ -7,22 +7,22 @@ using SkiaSharp;
 namespace oXeio.Agent.Ui;
 
 /// <summary>
-/// WebP ফাইল → <see cref="Bitmap"/>, জানালায় আঁকার জন্য।
+/// WebP file → <see cref="Bitmap"/>, for drawing in a window.
 ///
-/// ⭐⚠️ <b>কেন এই ফাইলটা লাগল:</b> <c>Image.FromStream</c> WebP চেনে <b>না</b> —
-/// GDI+-এ ওই কোডেকটাই নেই। ব্যর্থ হলে সে বলে <i>"Parameter is not valid"</i>,
-/// যেটা পড়ে মনে হয় ফাইলটা নষ্ট। আসলে ফাইল ঠিকই আছে, পড়ার লোকটা ভুল।
+/// Why this file exists: <c>Image.FromStream</c> does <b>not</b> understand WebP, because GDI+
+/// has no such codec. On failure it says <i>"Parameter is not valid"</i>, which reads as if
+/// the file were corrupt. The file is fine; it is the reader that is wrong.
 ///
-/// SkiaSharp এজেন্টে আগে থেকেই আছে (ছবি এনকোড করাই ওর কাজ,
-/// <see cref="oXeio.Agent.Platform.Capture.WebpEncoder"/>), তাই ডিকোডও ওকে দিয়েই।
-/// নতুন কোনো নির্ভরতা যোগ হয়নি।
+/// SkiaSharp is already in the agent (encoding images is its job,
+/// <see cref="oXeio.Agent.Platform.Capture.WebpEncoder"/>), so decoding uses it too.
+/// No new dependency was added.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static class WebpImage
 {
     /// <summary>
-    /// পড়া না গেলে <c>null</c> — ব্যতিক্রম নয়। একটা প্রিভিউ না দেখানো
-    /// জানালা ভেঙে ফেলার মতো ব্যাপার নয়।
+    /// Returns <c>null</c> if it cannot be read, not an exception. Failing to show one preview
+    /// is not worth breaking the window.
     /// </summary>
     public static Bitmap? Load(string path)
     {
@@ -30,16 +30,16 @@ internal static class WebpImage
         {
             var bytes = File.ReadAllBytes(path);
 
-            // ⚠️ মাপ **না** দিয়ে ডিকোড করতে হয়। আগে এখানে
-            //    `new SKImageInfo(0, 0, …)` দেওয়া ছিল — Skia সেটাকে "শূন্য
-            //    পিক্সেলের ছবি চাই" ধরে নীরবে null ফেরত দিত, আর জানালায়
-            //    "প্রিভিউ লোড করা গেল না" লেখা উঠত যদিও ফাইলটা নিখুঁত।
+            // Decode <b>without</b> giving a size. This used to pass
+            // `new SKImageInfo(0, 0, …)`; Skia took it as "I want a zero-pixel image" and
+            // silently returned null, so the window said "could not load preview" even
+            // though the file was fine.
             using var decoded = SKBitmap.Decode(bytes);
             if (decoded is null || decoded.Width <= 0 || decoded.Height <= 0) return null;
 
-            // ⚠️ GDI-র Format32bppArgb মানে বাইট ক্রমে **BGRA**। Skia
-            //    প্ল্যাটফর্ম অনুযায়ী Rgba8888-ও দিতে পারে; হুবহু কপি করলে
-            //    তখন লাল আর নীল উল্টে যেত — ছবিটা আসত নীলচে।
+            // GDI's Format32bppArgb means <b>BGRA</b> in byte order. Depending on the platform
+            // Skia may also give Rgba8888; a straight copy would then swap red and blue and the
+            // picture would come out bluish.
             if (decoded.ColorType == SKColorType.Bgra8888) return ToBitmap(decoded);
 
             using var converted = decoded.Copy(SKColorType.Bgra8888);
@@ -55,10 +55,9 @@ internal static class WebpImage
     }
 
     /// <summary>
-    /// ⚠️ সারি ধরে কপি, একবারে নয় — Skia-র <c>RowBytes</c> আর GDI-র
-    /// <c>Stride</c> এক না-ও হতে পারে (GDI প্রতি সারি ৪ বাইটে align করে)।
-    /// একবারে কপি করলে প্রস্থ ৪-এর গুণিতক না হলে ছবিটা তির্যক হয়ে যেত —
-    /// ক্লাসিক "ছবি কাত হয়ে গেছে" বাগ।
+    /// Copies row by row, not in one go: Skia's <c>RowBytes</c> and GDI's <c>Stride</c> may
+    /// differ (GDI aligns each row to 4 bytes). A single copy would skew the image whenever the
+    /// width is not a multiple of 4, the classic "picture is slanted" bug.
     /// </summary>
     private static unsafe Bitmap ToBitmap(SKBitmap source)
     {

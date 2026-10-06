@@ -2,7 +2,7 @@ using System.Text;
 
 namespace oXeio.Agent.Security;
 
-/// <summary>কোডটা কোথা থেকে এল — লগে দেখানোর জন্য।</summary>
+/// <summary>Where the code came from: to show in the log.</summary>
 internal enum EnrollmentCodeOrigin
 {
     None,
@@ -13,9 +13,8 @@ internal enum EnrollmentCodeOrigin
 }
 
 /// <summary>
-/// ⚠️ <c>record struct</c> হলেও নিরাপদ: <see cref="Code"/> একটা
-/// <see cref="SecretText"/>, তাই জেনারেটেড <c>ToString</c>-ও শুধু
-/// fingerprint ছাপে।
+/// Careful: safe even though it is a <c>record struct</c>: <see cref="Code"/> is a
+/// <see cref="SecretText"/>, so the generated <c>ToString</c> prints only a fingerprint too.
 /// </summary>
 internal readonly record struct EnrollmentCodeLookup(
     SecretText? Code,
@@ -26,32 +25,31 @@ internal readonly record struct EnrollmentCodeLookup(
 }
 
 /// <summary>
-/// enrollment code চারটে জায়গার যেকোনোটা থেকে আসতে পারে। অগ্রাধিকার:
-/// আর্গুমেন্ট → ড্রপ-ফাইল → এনভায়রনমেন্ট → ইন্টারঅ্যাক্টিভ প্রম্পট।
+/// The enrollment code can come from any of four places. Priority: argument, drop-file,
+/// environment, interactive prompt.
 ///
-/// <b>⚠️ কমান্ড লাইনে কোড দেওয়াটা সবচেয়ে বাজে উপায়, তবু প্রথমে রাখা হয়েছে —</b>
-/// কারণ অ্যাডমিন নিজে হাতে দিলে সেটাই তার ইচ্ছা, আর সেটাকে অগ্রাহ্য করলে
-/// "কেন আমার দেওয়া কোড কাজ করছে না" বলে সময় নষ্ট হতো।
-/// কিন্তু কমান্ড লাইন <c>Get-Process</c>/Task Manager-এ দেখা যায় এবং Task
-/// Scheduler-এর XML-এ প্লেইন টেক্সটে জমা থাকে — অর্থাৎ কোডটা ওখানে থেকে যায়।
-/// তাই ইনস্টলারের জন্য <b>ড্রপ-ফাইলই</b> সুপারিশ:
-/// %ProgramData%\oXeio\enroll.code — পড়ামাত্র মুছে ফেলা হয়।
+/// <b>Careful: giving the code on the command line is the worst way, yet it is placed first:</b> if
+/// the admin supplies it by hand, that is their wish, and ignoring it would waste time on "why does
+/// the code I gave not work". But the command line is visible in <c>Get-Process</c>/Task Manager
+/// and is stored as plain text in Task Scheduler's XML, so the code stays there. That is why for
+/// the installer the <b>drop-file</b> is recommended: %ProgramData%\oXeio\enroll.code, which is
+/// deleted as soon as it is read.
 /// </summary>
 internal static class EnrollmentCodeSource
 {
     public const string EnvironmentVariableName = "OXEIO_ENROLLMENT_CODE";
 
-    /// <summary>ইনস্টলার এখানে কোডটা রেখে যায়; প্রথম পাঠেই মুছে যায়।</summary>
+    /// <summary>The installer leaves the code here; it is deleted on the first read.</summary>
     public const string DropFileName = "enroll.code";
 
     /// <summary>
-    /// ⚠️ কখনো throw করে না — কোড না পাওয়া মানে এজেন্ট বন্ধ হওয়া নয়,
-    /// শুধু enroll না-হওয়া অবস্থায় ট্র্যাকিং চালিয়ে যাওয়া।
+    /// Careful: never throws: not finding a code does not mean the agent stops, only that tracking
+    /// continues in the not-enrolled state.
     /// </summary>
     /// <param name="allowPrompt">
-    /// কনসোলে জিজ্ঞেস করা যাবে কি না। ⚠️ সার্ভিস/লগঅন-টাস্ক হিসেবে চললে
-    /// এটা false রাখতেই হবে, নইলে কোনো কনসোল ছাড়া প্রসেসটা চিরকাল
-    /// ইনপুটের অপেক্ষায় ঝুলে থাকত — আর কেউ টেরও পেত না।
+    /// Whether the console may be asked. Careful: when running as a service/logon task this must be
+    /// false, otherwise a process with no console would hang forever waiting for input, and nobody
+    /// would notice.
     /// </param>
     public static EnrollmentCodeLookup Resolve(
         string dataDirectory,
@@ -88,9 +86,9 @@ internal static class EnrollmentCodeSource
     }
 
     /// <summary>
-    /// ⚠️ পড়ার সাথে সাথেই মোছা হয়। না মুছলে একবার-ব্যবহার্য কোডটা
-    /// %ProgramData%-তে বছরের পর বছর পড়ে থাকত, আর ওই ফোল্ডার সব ইউজার পড়তে পারে।
-    /// মোছা ব্যর্থ হলে সেটা জোরে জানানো হয় — চুপ করে থাকা যাবে না।
+    /// Careful: deleted as soon as it is read. If not, the single-use code would sit in
+    /// %ProgramData% for years, and every user can read that folder. If deletion fails it is
+    /// reported loudly: it must not stay silent.
     /// </summary>
     private static string? TryReadDropFile(string path, Action<string>? log)
     {
@@ -131,9 +129,9 @@ internal static class EnrollmentCodeSource
     }
 
     /// <summary>
-    /// ⚠️ ইনপুট echo করা হয় না। কোডটা পর্দায় থাকলে কনসোলের স্ক্রলব্যাকে
-    /// থেকে যেত — আর এই এজেন্টই সেই পর্দার স্ক্রিনশট তোলে।
-    /// stdin রিডাইরেক্ট করা থাকলে <c>ReadKey</c> ছোড়ে, তাই আগেই যাচাই।
+    /// Careful: the input is not echoed. If the code were on screen it would stay in the console's
+    /// scrollback, and this very agent takes screenshots of that screen. If stdin is redirected
+    /// <c>ReadKey</c> throws, so that is checked first.
     /// </summary>
     private static string? Prompt()
     {
@@ -171,7 +169,8 @@ internal static class EnrollmentCodeSource
                     continue;
                 }
 
-                // কন্ট্রোল ক্যারেক্টার বাদ — নইলে তীর-চিহ্ন চাপলে আবর্জনা ঢুকত
+                // control characters are skipped, otherwise pressing an arrow key would put garbage
+                // in
                 if (!char.IsControl(key.KeyChar)) builder.Append(key.KeyChar);
             }
 
@@ -179,14 +178,14 @@ internal static class EnrollmentCodeSource
         }
         catch (Exception)
         {
-            // কনসোল নেই (WinExe হিসেবে চললে) — প্রম্পট বাদ, ক্র্যাশ নয়।
+            // no console (when running as WinExe): the prompt is skipped, not a crash.
             return null;
         }
     }
 
     /// <summary>
-    /// ফাঁকা বাদ। ⚠️ এর বেশি কিছু করা হয় না — ড্যাশ বা কেস "ঠিক" করতে গেলে
-    /// সার্ভারের কোডের সাথে আর মিলত না, আর ব্যবহারকারী দেখত "কোড ভুল"।
+    /// Blanks are removed. Careful: nothing more is done: trying to "fix" dashes or case would no
+    /// longer match the server's code, and the user would see "code wrong".
     /// </summary>
     private static string? Clean(string? value)
     {

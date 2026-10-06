@@ -1,48 +1,48 @@
 namespace oXeio.Core.Watchdog;
 
-/// <summary>এজেন্টের অবস্থা — "চলছে কি না" নয়, "কাজ করছে কি না"।</summary>
+/// <summary>The agent's state: not "is it running" but "is it working".</summary>
 public enum AgentHealth
 {
-    /// <summary>জানা যায়নি (ডিস্ক/ACL গোলমাল)। ⚠️ "নেই"-এর সমান ধরা যাবে না।</summary>
+    /// <summary>Could not be determined (disk/ACL trouble). Must not be treated as "absent".</summary>
     Unknown,
 
-    /// <summary>কেউ instance lock ধরে নেই — মেশিনে কোনো এজেন্ট নেই।</summary>
+    /// <summary>Nobody holds the instance lock: there is no agent on the machine.</summary>
     NotRunning,
 
-    /// <summary>lock ধরা আছে আর হার্টবিট তাজা।</summary>
+    /// <summary>The lock is held and the heartbeat is fresh.</summary>
     Healthy,
 
-    /// <summary>lock ধরা আছে কিন্তু হার্টবিট থেমে গেছে, আর pid-টা আমরা মারতে পারি।</summary>
+    /// <summary>The lock is held but the heartbeat has stopped, and we can kill the pid.</summary>
     Wedged,
 
     /// <summary>
-    /// lock ধরা আছে, হার্টবিট নেই, কিন্তু কাকে মারব জানি না —
-    /// অন্য সেশনের প্রসেস, বা AV/ব্যাকআপ ফাইলটা ধরে রেখেছে।
+    /// The lock is held, there is no heartbeat, but we do not know whom to kill:
+    /// a process in another session, or AV/backup is holding the file.
     /// </summary>
     Unreachable,
 }
 
-/// <summary>watchdog এই টিকে কী করবে।</summary>
+/// <summary>What the watchdog will do on this tick.</summary>
 public enum WatchdogAction
 {
     None,
 
-    /// <summary>এজেন্ট চালু করো।</summary>
+    /// <summary>Start the agent.</summary>
     Start,
 
-    /// <summary>জমে যাওয়া এজেন্টকে মেরে তারপর চালু করো।</summary>
+    /// <summary>Kill the wedged agent, then start it.</summary>
     Restart,
 
-    /// <summary>কিছু একটা ঠিক নেই, কিন্তু এখন হাত দেওয়া চলবে না।</summary>
+    /// <summary>Something is wrong, but it must not be touched now.</summary>
     Hold,
 
-    /// <summary>মই ফুরিয়েছে — দৃশ্যমান সংকেত দাও, তারপর ঠান্ডা হও।</summary>
+    /// <summary>The ladder is spent: give a visible signal, then cool off.</summary>
     GiveUp,
 }
 
 /// <summary>
-/// সিদ্ধান্তের কারণ। ⚠️ enum, স্ট্রিং নয় — লগের বাংলা লেখা watchdog প্রজেক্টে
-/// তৈরি হয়, যাতে Core টেস্টযোগ্য আর ভাষা-নিরপেক্ষ থাকে।
+/// The reason for the decision. An enum, not a string: the log text is built in the watchdog
+/// project, so Core stays testable and language-neutral.
 /// </summary>
 public enum WatchdogReason
 {
@@ -59,31 +59,31 @@ public enum WatchdogReason
     ProbeFailed,
 }
 
-/// <summary>এক টিকে বাইরের দুনিয়া থেকে যা যা জানা গেল।</summary>
+/// <summary>What was learned from the outside world in one tick.</summary>
 public sealed record AgentObservation
 {
-    /// <summary>lock ফাইল probe করা গেছে কি না। false = কিছুই জানি না।</summary>
+    /// <summary>Whether the lock file could be probed. false = we know nothing.</summary>
     public required bool ProbeSucceeded { get; init; }
 
-    /// <summary>কেউ <c>agent.lock</c> ধরে আছে — অর্থাৎ কোথাও একটা এজেন্ট জীবিত।</summary>
+    /// <summary>Someone holds <c>agent.lock</c>: an agent is alive somewhere.</summary>
     public required bool InstanceLockHeld { get; init; }
 
-    /// <summary>হার্টবিট ফাইল থেকে পাওয়া pid (না পেলে null)।</summary>
+    /// <summary>The pid from the heartbeat file (null if not obtained).</summary>
     public int? ProcessId { get; init; }
 
-    /// <summary>ওই pid-এ সত্যিই একটা এজেন্ট প্রসেস চলছে কি না।</summary>
+    /// <summary>Whether an agent process is really running at that pid.</summary>
     public required bool ProcessAlive { get; init; }
 
-    /// <summary>হার্টবিটে লেখা unbiased মিলিসেকেন্ড (ফাইল না পড়া গেলে null)।</summary>
+    /// <summary>The unbiased milliseconds written in the heartbeat (null if the file could not be read).</summary>
     public long? HeartbeatUnbiasedMs { get; init; }
 
-    /// <summary>watchdog-এর নিজের unbiased মিলিসেকেন্ড, এই মুহূর্তে।</summary>
+    /// <summary>The watchdog's own unbiased milliseconds, right now.</summary>
     public required long NowUnbiasedMs { get; init; }
 
-    /// <summary>watchdog ইন্টারঅ্যাকটিভ সেশনে আছে কি না (Session 0 নয়)।</summary>
+    /// <summary>Whether the watchdog is in an interactive session (not Session 0).</summary>
     public required bool SessionUsable { get; init; }
 
-    /// <summary>Windows এই মুহূর্তে বন্ধ/লগঅফ হচ্ছে কি না।</summary>
+    /// <summary>Whether Windows is shutting down/logging off right now.</summary>
     public required bool ShuttingDown { get; init; }
 }
 
@@ -93,32 +93,32 @@ public sealed record WatchdogDecision
     public required WatchdogReason Reason { get; init; }
     public required AgentHealth Health { get; init; }
 
-    /// <summary><see cref="WatchdogAction.Restart"/> হলে কাকে মারতে হবে।</summary>
+    /// <summary>Whom to kill when <see cref="WatchdogAction.Restart"/>.</summary>
     public int? KillProcessId { get; init; }
 
-    /// <summary>অপেক্ষা করতে বলা হলে আর কতক্ষণ।</summary>
+    /// <summary>How much longer, when told to wait.</summary>
     public TimeSpan? RetryIn { get; init; }
 }
 
 /// <summary>
-/// ⭐ পুরো watchdog-এর সিদ্ধান্ত এই একটা ফাংশনে — কোনো I/O নেই, তাই Windows
-/// ছাড়াই টেস্ট করা যায়।
+/// All of the watchdog's decisions in this one function: no I/O, so it can be tested without
+/// Windows.
 ///
-/// <b>নকশার মূল অসামঞ্জস্য:</b> ভুল করে "এজেন্ট নেই" ভাবার খরচ আর ভুল করে
-/// "এজেন্ট আছে" ভাবার খরচ এক নয়।
+/// <b>The key asymmetry in the design:</b> wrongly thinking "no agent" and wrongly thinking
+/// "agent present" do not cost the same.
 /// <list type="bullet">
-/// <item>ভুলে "আছে" ভাবলে — ৩০ সেকেন্ড দেরিতে চালু হয়। ঘণ্টার হিসাবে অদৃশ্য।</item>
-/// <item>ভুলে "নেই" ভাবলে — দ্বিতীয় একটা এজেন্ট চালু হয়, আর দুজন মিলে একই ঘণ্টা
-/// দুবার গোনে। পে-রোল নষ্ট, আর কেউ টেরই পায় না।</item>
+/// <item>Wrongly thinking "present": it starts 30 seconds late. Invisible in the hours count.</item>
+/// <item>Wrongly thinking "absent": a second agent starts, and the two count the same hours
+/// twice. Payroll is corrupted and nobody notices.</item>
 /// </list>
-/// তাই সন্দেহের সব সুবিধা "এজেন্ট আছে" দিকেই যায় — probe ব্যর্থ, lock কে ধরেছে
-/// জানা নেই, শাটডাউন চলছে: সবগুলোতেই <see cref="WatchdogAction.Hold"/>।
+/// So every benefit of the doubt goes to "agent present": probe failed, unknown who holds the
+/// lock, shutdown under way: all of them give <see cref="WatchdogAction.Hold"/>.
 /// </summary>
 public static class WatchdogPolicy
 {
     /// <summary>
-    /// পর্যবেক্ষণ → স্বাস্থ্য। lock ফাইলই একমাত্র প্রশ্নের ("কেউ আছে?") উত্তর;
-    /// হার্টবিট দ্বিতীয় প্রশ্নের ("সে কাজ করছে?")।
+    /// Observation → health. The lock file alone answers the first question ("is anyone
+    /// there?"); the heartbeat answers the second ("is it working?").
     /// </summary>
     public static AgentHealth Classify(AgentObservation observation, TimeSpan staleAfter)
     {
@@ -129,23 +129,23 @@ public static class WatchdogPolicy
 
         if (observation.HeartbeatUnbiasedMs is { } beat)
         {
-            // ⚠️ ঋণাত্মক বয়স = আগের বুটের ফাইল, তাজা নয়।
-            //    AgentLiveness.Age-এর মন্তব্য দেখুন।
+            // A negative age = a file from the previous boot, not fresh.
+            // See the comment on AgentLiveness.Age.
             var age = observation.NowUnbiasedMs - beat;
             if (age >= 0 && age <= (long)staleAfter.TotalMilliseconds) return AgentHealth.Healthy;
         }
 
-        // lock ধরা আছে অথচ হার্টবিট থেমে গেছে — জমে গেছে। কিন্তু মারতে হলে
-        // pid লাগে, আর সেই pid-এ সত্যিই আমাদের প্রসেস চলতে হবে।
+        // The lock is held yet the heartbeat has stopped: it is wedged. But killing needs a
+        // pid, and our process must really be running at that pid.
         return observation.ProcessAlive && observation.ProcessId is > 0
             ? AgentHealth.Wedged
             : AgentHealth.Unreachable;
     }
 
     /// <summary>
-    /// ⚠️ এই মেথড <paramref name="ladder"/>-এর স্বাস্থ্য-পর্যবেক্ষণ হালনাগাদ করে
-    /// (<see cref="RestartLadder.Observe"/>), কিন্তু <see cref="RestartLadder.RecordLaunch"/>
-    /// <b>করে না</b> — সেটা কলারের কাজ, চালু করার চেষ্টার ঠিক আগে।
+    /// This method updates the health observation of <paramref name="ladder"/>
+    /// (<see cref="RestartLadder.Observe"/>) but does <b>not</b> do
+    /// <see cref="RestartLadder.RecordLaunch"/>: that is the caller's job, just before the launch attempt.
     /// </summary>
     public static WatchdogDecision Decide(
         AgentObservation observation,
@@ -159,25 +159,25 @@ public static class WatchdogPolicy
         var limit = staleAfter ?? AgentLiveness.StaleAfter;
         var health = Classify(observation, limit);
 
-        // ── যেসব ক্ষেত্রে হাত দেওয়াই ভুল ─────────────────────────────────────
+        // ── Cases where touching anything would be wrong ──────────────────────
 
-        // Windows বন্ধ হচ্ছে — এজেন্ট এখন মরবেই, সেটা ব্যর্থতা নয়। এই সময়ে চালু
-        // করলে নতুন প্রসেসটা শাটডাউন আটকে দিতে পারে, আর মই এক ধাপ নষ্ট হতো।
+        // Windows is shutting down: the agent will die now, which is not a failure. Starting
+        // one at this time could block the shutdown, and it would waste a step of the ladder.
         if (observation.ShuttingDown)
             return Hold(WatchdogReason.ShuttingDown, health);
 
-        // ⚠️ Session 0 থেকে চালু করলে সন্তানও Session 0-তে যায়, আর সেখানে এজেন্টের
-        //    SessionGuard তাকে সাথে সাথে বন্ধ করে দেয় — অর্থাৎ নিশ্চিত-ব্যর্থ প্রসেস
-        //    বারবার তৈরি করা। ঝড়ের নিখুঁত রেসিপি।
+        // Starting from Session 0 puts the child in Session 0 too, where the agent's
+        // SessionGuard shuts it down at once: creating a certain-to-fail process again and
+        // again. A perfect recipe for a storm.
         if (!observation.SessionUsable)
             return Hold(WatchdogReason.SessionNotUsable, health);
 
-        // probe-ই হয়নি মানে lock খালি কি না জানি না। "খালি" ধরে নিলে দ্বিতীয়
-        // এজেন্ট চালু হতো — উপরের অসামঞ্জস্য দেখুন।
+        // The probe itself failed, so we do not know whether the lock is free. Assuming
+        // "free" would start a second agent; see the asymmetry above.
         if (health == AgentHealth.Unknown)
             return Hold(WatchdogReason.ProbeFailed, health);
 
-        // ── সুস্থ ────────────────────────────────────────────────────────────
+        // ── Healthy ───────────────────────────────────────────────────────────
 
         ladder.Observe(health == AgentHealth.Healthy, now);
 
@@ -189,12 +189,12 @@ public static class WatchdogPolicy
                 Health = health,
             };
 
-        // lock কে ধরে আছে জানি না — মারা যাবে না, চালুও করা যাবে না।
-        // ভুল হলে খরচ ৩০ সেকেন্ড; উল্টোটা করলে খরচ দুবার গোনা ঘণ্টা।
+        // We do not know who holds the lock: no killing and no starting.
+        // A mistake costs 30 seconds; the opposite costs hours counted twice.
         if (health == AgentHealth.Unreachable)
             return Hold(WatchdogReason.ForeignInstance, health);
 
-        // ── হাল ছাড়ার সংকেত ─────────────────────────────────────────────────
+        // ── Give-up signal ────────────────────────────────────────────────────
 
         if (ladder.IsExhausted && !ladder.AlarmRaised)
             return new WatchdogDecision
@@ -205,7 +205,7 @@ public static class WatchdogPolicy
                 RetryIn = ladder.TimeUntilNextLaunch(now),
             };
 
-        // ── ব্যাকঅফ ──────────────────────────────────────────────────────────
+        // ── Backoff ───────────────────────────────────────────────────────────
 
         if (!ladder.MayLaunch(now))
             return new WatchdogDecision
@@ -216,7 +216,7 @@ public static class WatchdogPolicy
                 RetryIn = ladder.TimeUntilNextLaunch(now),
             };
 
-        // ── চালু / রিস্টার্ট ─────────────────────────────────────────────────
+        // ── Start / restart ───────────────────────────────────────────────────
 
         var reason = ladder.IsExhausted
             ? WatchdogReason.CoolOffProbe

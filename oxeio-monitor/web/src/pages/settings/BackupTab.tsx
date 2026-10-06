@@ -17,19 +17,19 @@ import {
 } from '../../components/ui';
 
 /**
- * **R5 · G39 — অফসাইট ব্যাকআপের কনফিগ, পর্দা থেকে।**
+ * Offsite backup settings, from the screen.
  *
- * ⚠️⚠️ **কেন এটা দরকার হলো — মাঠের ঘটনা, ১৮ আগস্ট।** B2-র কী বসাতে হতো
- * VPS-এ SSH করে, `rclone config` চালিয়ে, তারপর `/etc/oxeio-offsite.env`
- * সম্পাদনা করে। মালিক চেষ্টা করলেন, আর একটা আংশিক-পেস্ট হওয়া key নিয়ে
- * `401 bad_auth_token` এল — কারণটা বুঝতে টার্মিনালে বসে খোঁজাখুঁজি।
+ * Careful — why this was needed: setting the B2 key meant SSH into the VPS, running
+ * `rclone config`, then editing `/etc/oxeio-offsite.env`. The owner tried, got
+ * `401 bad_auth_token` from a partially pasted key, and had to dig around in a
+ * terminal to understand why.
  *
- * ⭐ এখন এই পর্দাই যথেষ্ট, আর **পরীক্ষার বোতামটাই আসল**: সার্ভার সরাসরি
- * Backblaze-কে জিজ্ঞেস করে, তাই ভুল key সাথে সাথেই ধরা পড়ে — শনিবারের
- * টাইমার ব্যর্থ হওয়া পর্যন্ত অপেক্ষা করতে হয় না।
+ * Important: this screen is now enough, and **the test button is the real point**:
+ * the server asks Backblaze directly, so a wrong key is caught at once and nobody
+ * waits for Saturday's timer to fail.
  *
- * ⚠️ **পুরো application key এই পর্দায় কোনোদিন আসে না** — সার্ভার শেষ চার
- * অক্ষর ছাড়া কিছু পাঠায় না।
+ * Careful: **the full application key never reaches this screen**; the server sends
+ * only the last four characters.
  */
 /** oXeio's own backup: the offsite copy and last night's run (author's cards) */
 function OwnBackupCards() {
@@ -70,9 +70,9 @@ function OwnBackupCards() {
           </Notice>
 
           {/*
-            ⚠️⚠️ কোনটা **আসলে** খাটছে সেটা বলা হয় — না বললে মালিক পর্দায়
-               নতুন মান বসিয়ে ভাবতেন সেভ হয়নি, অথচ হয়েছে; শুধু সার্ভারের
-               ফাইলেরটা তখনো জিতছিল।
+            Careful: this says which value is **actually** in effect. Without it the
+               owner would enter a new value, think it was not saved (though it was),
+               because the one in the server's file was still winning.
           */}
           {current && (
             <div className="text-[13px]">
@@ -113,9 +113,9 @@ function OwnBackupCards() {
             mono
             placeholder={current?.configured ? 'leave empty to keep the current one' : ''}
             /*
-              ⚠️⚠️ এই বাক্যটা সাজসজ্জা নয়। Backblaze কী-টা **একবারই দেখায়**,
-                 আর ১৮ আগস্ট ঠিক সেখানেই আটকে গেছে — আংশিক পেস্ট হয়েছিল, আর
-                 আবার দেখার কোনো উপায় ছিল না।
+              Careful: this sentence is not decoration. Backblaze shows the key **only
+                 once**, and that is exactly where the owner got stuck: it was partially
+                 pasted and there was no way to see it again.
             */
             hint="31 characters. Backblaze shows it only once — copy all of it."
           />
@@ -141,10 +141,10 @@ function OwnBackupCards() {
               onClick={() =>
                 save.run(async () => {
                   /**
-                   * ⚠️ ঘর খালি রাখলে **আগেরটাই** পাঠানো হয় — নইলে শুধু
-                   * bucket-এর নাম শুধরাতে গিয়ে key মুছে যেত, আর Backblaze
-                   * application key **একবারই দেখায়** বলে ওটা আর ফেরত পাওয়া
-                   * যেত না; নতুন key বানানো ছাড়া উপায় থাকত না।
+                   * Careful: an empty field sends the **existing** value. Otherwise
+                   * fixing just the bucket name would wipe the key, and since Backblaze
+                   * shows an application key **only once**, it could not be recovered;
+                   * the only way out would be creating a new key.
                    */
                   await saveOffsiteSettings(
                     keyId.trim() || (current?.keyId ?? ''),
@@ -163,9 +163,9 @@ function OwnBackupCards() {
             </MiniButton>
 
             {/*
-              ⭐⭐ **এই বোতামটাই এই পর্দার আসল কারণ।** এটা ছাড়া সেভ করে
-                 শনিবার পর্যন্ত অপেক্ষা করতে হতো, আর কিছু না গেলে বোঝা যেত
-                 ভুল ছিল — কিন্তু কী ভুল, জানার উপায় নেই।
+              Important: **this button is the whole reason for this screen.** Without it
+                 you would save, wait until Saturday, and only realise something was
+                 wrong if nothing went through, with no way to tell what.
             */}
             <MiniButton
               disabled={probe.busy || !current?.configured}
@@ -190,8 +190,8 @@ function OwnBackupCards() {
       </Card>
 
       {/*
-        ⭐ "কনফিগ করেছি" আর "ব্যাকআপ সত্যিই হচ্ছে" এক কথা নয় — তাই শেষ
-           রানের অবস্থাটাও একই পর্দায়।
+        "Configured" and "backups are really happening" are not the same, so the last
+           run's state is on the same screen.
       */}
       <Card title="Nightly Backup" hint="What the server managed last night">
         <div className="p-4">
@@ -215,8 +215,8 @@ function OwnBackupCards() {
                     ? `Last good backup ${formatAgo(backup.lastSuccessAt)}`
                     : 'No successful backup yet'}
                 </span>
-                {/* ⚠️ সার্ভার এটা **আগেই ফরম্যাট করে** পাঠায় (স্ট্রিং) —
-                    আবার formatBytes করতে গিয়ে টাইপ ভাঙছিল */}
+                {/* Careful: the server sends this **already formatted** (a string);
+                    running formatBytes again broke the types */}
                 {backup.lastSize ? (
                   <span className="num text-ink-3">{backup.lastSize}</span>
                 ) : null}

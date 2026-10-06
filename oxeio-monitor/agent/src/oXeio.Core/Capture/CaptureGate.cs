@@ -4,42 +4,41 @@ using oXeio.Core.Tracking;
 namespace oXeio.Core.Capture;
 
 /// <summary>
-/// ছবি তোলা হবে কি না — চারটে শর্ত, এক জায়গায়।
+/// Whether a picture is taken: the conditions, all in one place.
 ///
-/// ⭐ <b>কেন আলাদা টাইপ:</b> শর্তগুলো <c>AgentHost.CaptureSlotAsync</c>-এর
-/// ভেতরে guard clause হিসেবে ছড়ানো ছিল, আর ওখানে বসে সেগুলো যাচাই করা
-/// যেত না (Win32, থ্রেড, ডিস্ক — সব জড়ানো)। ⚠️ ফলে একটা শর্ত
-/// <b>অনুপস্থিত</b> থাকলেও কোনো টেস্ট সেটা ধরত না — আর ঠিক সেটাই ঘটেছিল:
-/// <see cref="Revoked"/> শর্তটা কোনোদিন লেখাই হয়নি।
+/// <b>Why a separate type:</b> the conditions were spread as guard clauses inside
+/// <c>AgentHost.CaptureSlotAsync</c>, where they could not be verified (Win32, threads, disk,
+/// all tangled together). So even if a condition was <b>missing</b>, no test would catch it,
+/// and that is exactly what happened: the <see cref="Revoked"/> condition was never written.
 /// </summary>
 public static class CaptureGate
 {
-    /// <summary>ছবি না ওঠার কারণ — লগে ও টেস্টে দুটোতেই কাজে লাগে।</summary>
+    /// <summary>Why no picture was taken: useful in both logs and tests.</summary>
     public enum Verdict
     {
         Allowed,
 
-        /// <summary>A04 — ACTIVE ছাড়া কোনো অবস্থাতেই ছবি নয়।</summary>
+        /// <summary>A04: no picture in any state other than ACTIVE.</summary>
         NotActive,
 
-        /// <summary>A04b — ০৭:০০–২৩:০০-এর বাইরে। ⚠️ সময় গোনা তবু চলে।</summary>
+        /// <summary>A04b: outside 07:00-23:00. Time is still counted.</summary>
         OutsideWindow,
 
         /// <summary>
-        /// H06 — ডিভাইস বাতিল।
+        /// H06: the device is revoked.
         ///
-        /// ⚠️⚠️ <b>এই শর্তটাই এতদিন ছিল না।</b> revoke করলে শুধু আপলোড থামত;
-        /// ছবি ঠিকই উঠত আর ডিস্কে জমত। অর্থাৎ ছাঁটাই হওয়া কর্মীর PC-তে
-        /// স্ক্রিনশট জমতেই থাকত — কেউ দেখত না, কোথাও যেত না, কিন্তু
-        /// থাকত। ডিভাইস বাতিল করার পুরো মানেই সেটা।
+        /// <b>This condition was missing until now.</b> Revoking only stopped uploads; pictures
+        /// were still taken and piled up on disk. So screenshots kept accumulating on a dismissed
+        /// employee's PC, seen by nobody and going nowhere, but there. That defeats the whole
+        /// point of revoking a device.
         /// </summary>
         Revoked,
 
         /// <summary>
-        /// ⚠️⚠️ <b>এই শর্তটাও এতদিন ছিল না</b> — ঠিক <see cref="Revoked"/>-এর
-        /// মতোই। সাইন ইন করার আগেই ছবি উঠত, অথচ যে এখনো সাইন ইনই করেনি
-        /// তার নামে কোনো ছবি জমা রাখার ভিত্তি নেই
-        /// (<see cref="oXeio.Core.Agent.TrackingGate"/>)।
+        /// <b>This condition was missing too</b>, just like <see cref="Revoked"/>. Pictures
+        /// were taken before sign-in, though there is no basis for storing any picture under the
+        /// name of someone who has not even signed in yet
+        /// (<see cref="oXeio.Core.Agent.TrackingGate"/>).
         /// </summary>
         NotEnrolled,
 
@@ -64,12 +63,11 @@ public static class CaptureGate
     {
         ArgumentNullException.ThrowIfNull(window);
 
-        // ⚠️ সাইন-ইন ও revoke সবার আগে — বাতিল বা অ-সাইন-ইন ডিভাইসে "কেন ছবি
-        //    ওঠেনি" প্রশ্নের উত্তর "ও তখন idle ছিল" হওয়া উচিত নয়।
+        // Sign-in and revoke come first: on a revoked or not-signed-in device, the answer to "why
+        // was no picture taken" must not be "it was idle at the time".
         //
-        // ⭐ ক্রমটা এখানে **আবার লেখা হয়নি** — TrackingGate-ই একমাত্র উৎস।
-        //    দুবার লিখলে একদিন দুটো আলাদা হয়ে যেত, আর তখন ছবি ও ঘণ্টা দুটো
-        //    আলাদা নিয়মে চলত।
+        // The order is **not written again** here; TrackingGate is the only source. Written
+        // twice, the two would one day differ, and pictures and hours would follow different rules.
         switch (Agent.TrackingGate.Check(enrolled, revoked))
         {
             case Agent.TrackingGate.Verdict.Revoked: return Verdict.Revoked;

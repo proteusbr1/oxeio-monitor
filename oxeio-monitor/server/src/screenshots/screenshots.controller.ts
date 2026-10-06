@@ -19,13 +19,13 @@ import {
 } from './screenshots.service';
 
 /**
- * `/api/v1/screenshots` (গ্লোবাল প্রিফিক্স app.setup.ts-এ)।
+ * `/api/v1/screenshots` (the global prefix is set in app.setup.ts).
  *
- * ⚠️ ক্লাস-লেভেলে `@Roles(...)` **নেই**, আর সেটা ইচ্ছাকৃত। owner, manager
- *    আর স্টাফ — তিনজনেই এখানে আসতে পারে (স্পেক § ৪.৩ + J05)। কে কী দেখবে
- *    সেটা role দিয়ে নয়, **স্কোপ** দিয়ে ঠিক হয় (service.resolveEmployeeScope)।
- *    এখানে ভুল করে `@Roles(owner, manager, employee)` লিখলে মনে হতো
- *    সুরক্ষা আছে, অথচ সেটা "সবাই ঢুকতে পারবে" ছাড়া কিছুই বলত না।
+ * Careful: there is deliberately no class-level `@Roles(...)`. Owner, manager
+ * and staff can all reach this controller (spec section 4.3). What each may
+ * see is decided by **scope**, not role (service.resolveEmployeeScope).
+ * Writing `@Roles(owner, manager, employee)` here would look like protection
+ * while meaning nothing more than "everyone may enter".
  */
 @Controller('screenshots')
 export class ScreenshotsController {
@@ -42,16 +42,17 @@ export class ScreenshotsController {
   }
 
   /**
-   * ⭐⭐⭐ **E03 — কর্মীপ্রতি আজকের সবচেয়ে নতুন ছবি** *(৬ সেপ্টেম্বর ২০২৬,
-   * G159)* — `GET /api/v1/screenshots/latest`।
+   * Latest screenshot of today for each employee:
+   * `GET /api/v1/screenshots/latest`.
    *
-   * ⚠️⚠️ **কেন আলাদা রুট, গ্যালারিতে না ঢুকিয়ে:** বোর্ড এতদিন গ্যালারির
-   * **শেষ এক-দুটো পাতা** টেনে এনে ভেতর থেকে বাছত, আর যাঁর শেষ ছবিটা ওই
-   * ৬০–১২০টার জানালার বাইরে তাঁর কার্ডে লেখা উঠত *"No screenshot yet
-   * today"* — অথচ ছবি ছিল (মাঠে: OX-05-এর ১১৪টা)। পাতা ঘেঁটে অনুমান করাই
-   * ভুল পথ ছিল; প্রশ্নটার নিজের উত্তর দরকার।
+   * Why a separate route instead of reusing the gallery: the board used to
+   * fetch the last one or two gallery pages and pick from them. Anyone whose
+   * latest photo fell outside that 60-120 photo window got "No screenshot yet
+   * today" on their card even though photos existed (in the field: 114 for
+   * OX-05). Guessing from pages was the wrong approach; the question needs
+   * its own answer.
    *
-   * ⭐ অডিটে একটাই সারি, ঠিক আগের কলটার মতোই (I08)।
+   * One audit row, exactly like the gallery call.
    */
   @Get('latest')
   latest(
@@ -64,20 +65,20 @@ export class ScreenshotsController {
   /**
    * I07 — `GET /api/v1/screenshots/:id/file?token=`
    *
-   * ⚠️ `@Public()` — সেশন cookie ছাড়াই খোলে, কারণ ব্রাউজার `<img src>`-এ
-   *    কাস্টম হেডার পাঠাতে পারে না। যাচাইটা সম্পূর্ণ টোকেনের উপরে, আর
-   *    টোকেন ৫ মিনিটেই মরে যায়।
+   * Careful: `@Public()` means it opens without the session cookie, because a
+   * browser cannot send custom headers from `<img src>`. Verification rests
+   * entirely on the token, which expires after 5 minutes.
    *
-   * ⚠️ এখানে **audit লেখা হয় না** — লেখা হয়েছে লিঙ্ক বানানোর সময় (I08,
-   *    gallery)। এখানে লিখলে ব্রাউজারের ক্যাশ, প্রিফেচ বা রিট্রাই প্রতিটাই
-   *    "কেউ দেখল" হিসেবে গোনা হতো, আর এখানে "কে" বলতে টোকেনে লেখা
-   *    userId ছাড়া কিছুই নেই — সেটা তো লিঙ্ক বানানোর সময়েই জানা ছিল।
+   * Careful: no audit row is written here. It is written when the link is
+   * created (in the gallery call). Writing here would count browser cache,
+   * prefetch and retries each as "someone viewed", and the only "who" here
+   * is the userId inside the token, which was already known at link creation.
    */
   @Public()
   @Get(':id/file')
-  // মেয়াদ যেহেতু ৫ মিনিট, ততক্ষণ ব্রাউজার ক্যাশ করলে ক্ষতি নেই — গ্রিডে
-  // স্ক্রল করে ফিরে এলে প্রতিবার নতুন করে ছবি নামবে না। `private` — কোনো
-  // শেয়ার্ড প্রক্সি যেন কারো স্ক্রিনশট ধরে না রাখে।
+  // The token lives 5 minutes, so browser caching for that long is harmless;
+  // scrolling back in the grid does not re-download each photo. `private`
+  // keeps shared proxies from retaining anyone's screenshots.
   @Header('Cache-Control', 'private, max-age=300')
   async file(
     @Param('id') id: string,
@@ -85,8 +86,8 @@ export class ScreenshotsController {
   ): Promise<StreamableFile> {
     const found = await this.screenshots.resolveFile(id, query.token);
 
-    // ⚠️ পুরো ফাইল মেমরিতে না তুলে stream — ৬০টা ছবির গ্রিড একসাথে লোড
-    //    হলে readFile ব্যবহার করলে সার্ভারের RAM-এ ঢেউ উঠত।
+    // Careful: stream instead of loading the whole file into memory. With a
+    // grid of 60 photos loading at once, readFile would spike the server RAM.
     return new StreamableFile(found.stream, {
       type: SCREENSHOT_MIME,
       disposition: `inline; filename="${found.downloadName}"`,

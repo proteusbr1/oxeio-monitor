@@ -3,22 +3,22 @@ import { describe, expect, it } from 'vitest';
 import { parseStaff, shouldSeedSampleStaff } from '../prisma/parse-staff';
 
 /**
- * `staff.local.json` যাচাই।
+ * Validation of `staff.local.json`.
  *
- * ⚠️⚠️ **এখানকার প্রতিটা ভুল সরাসরি টাকার অঙ্কে গিয়ে পড়ে** — এই ফাইলটাই
- * ঠিক করে কার বেতন কত আর কে কবে যোগ দিয়েছেন। আগে কোনো যাচাই ছিল না
- * (`as Staff[]`), তাই টাইপো ধরা পড়ত Prisma-র এমন এক বার্তায় যাতে কোন
- * কর্মীর সারিতে ভুল সেটা লেখাই থাকত না।
+ * Careful: every mistake here lands directly in a money amount, because this
+ * file decides whose salary is what and who joined when. There used to be no
+ * validation (`as Staff[]`), so a typo surfaced as a Prisma message that did
+ * not say which employee's row was wrong.
  *
- * ⭐ তাই বার্তাগুলোও পরীক্ষা করা হয় — শুধু "থেমেছে" যথেষ্ট নয়, **কোথায়**
- * সেটা বলা চাই।
+ * So the messages are tested too: "it stopped" is not enough, it must say
+ * where.
  */
 const ROW = ['OX-01', 'Rakib Hasan', 'Designer', 25000] as const;
 
 const one = (row: unknown) => () => parseStaff([row]);
 
-describe('parseStaff — স্বাভাবিক পথ', () => {
-  it('চার ঘরের সারি চলে (তারিখ ছাড়া পুরোনো ফাইল)', () => {
+describe('parseStaff: happy path', () => {
+  it('a four-cell row works (old file without a date)', () => {
     expect(parseStaff([[...ROW]])).toEqual([
       {
         empCode: 'OX-01',
@@ -30,101 +30,101 @@ describe('parseStaff — স্বাভাবিক পথ', () => {
   });
 
   /**
-   * ⚠️⚠️ **সবচেয়ে জরুরি দাবি।** তারিখ না দিলে ঘরটা ফলাফলে **থাকবেই না**,
-   * `null` হয়ে নয়। seed `undefined` ঘর Prisma-কে পাঠায় না, তাই কেউ
-   * ড্যাশবোর্ডে হাতে তারিখ বসিয়ে থাকলে সেটা টিকে যায়।
+   * The most important claim. With no date, the field is absent from the
+   * result, not `null`. The seed does not send `undefined` fields to Prisma,
+   * so a date somebody set by hand in the dashboard survives.
    *
-   * `null` হলে seed আবার চালালেই ওই তারিখ মুছে যেত, আর তার সাথে G37-এর
-   * proration-ও — কোনো এরর ছাড়াই।
+   * With `null`, re-running the seed would wipe that date, and with it the
+   * proration, with no error.
    */
-  it('তারিখ না দিলে joinedOn ঘরটাই থাকে না', () => {
+  it('without a date there is no joinedOn field at all', () => {
     expect('joinedOn' in parseStaff([[...ROW]])[0]).toBe(false);
   });
 
-  it('পাঁচ ঘরের সারিতে তারিখ UTC-মধ্যরাত হয়', () => {
+  it('a five-cell row gives a date at UTC midnight', () => {
     const [row] = parseStaff([[...ROW, '2026-01-05']]);
     expect(row.joinedOn?.toISOString()).toBe('2026-01-05T00:00:00.000Z');
   });
 
   /**
-   * ⚠️ ঢাকা UTC+৬। `new Date('2026-01-01')`-কে স্থানীয় সময় ধরলে ওটা
-   * ৩১ ডিসেম্বর হয়ে যেত, আর মাসের ১ তারিখে যোগ দেওয়া কেউ **আগের মাসে**
-   * গিয়ে পড়তেন — অর্থাৎ চলতি মাসে পুরো বেতন, আগের মাসে এক দিনের।
+   * Dhaka is UTC+6. If `new Date('2026-01-01')` were read as local time it
+   * would become 31 December, and someone who joined on the 1st would land in
+   * the previous month: full salary this month, one day's pay in the last.
    */
-  it('মাসের প্রথম দিন আগের মাসে সরে যায় না', () => {
+  it('the first day of a month does not slip into the previous month', () => {
     const [row] = parseStaff([[...ROW, '2026-01-01']]);
     expect(row.joinedOn?.toISOString().slice(0, 10)).toBe('2026-01-01');
   });
 
-  it('ফাঁকা জায়গা ছেঁকে নেয়', () => {
+  it('trims whitespace', () => {
     const [row] = parseStaff([[' OX-01 ', ' Rakib ', ' Designer ', 25000]]);
     expect(row).toMatchObject({ empCode: 'OX-01', fullName: 'Rakib' });
   });
 
-  it('খালি তালিকা চলে', () => {
+  it('an empty list works', () => {
     expect(parseStaff([])).toEqual([]);
   });
 });
 
-describe('parseStaff — ভুল ধরা', () => {
-  it('তালিকা না হলে থামে', () => {
+describe('parseStaff: catching mistakes', () => {
+  it('stops when it is not a list', () => {
     expect(() => parseStaff({ 'OX-01': 25000 })).toThrow(/তালিকা/);
   });
 
-  /** ⚠️ তিন ঘর → বেতন `undefined` → Prisma-র অস্পষ্ট এরর */
-  it('ঘর কম থাকলে থামে', () => {
+  /** Three cells means salary `undefined`, which gives an unclear Prisma error. */
+  it('stops when there are too few cells', () => {
     expect(one(['OX-01', 'Rakib', 'Designer'])).toThrow(/চার বা পাঁচ ঘর/);
   });
 
-  it('ঘর বেশি থাকলেও থামে', () => {
+  it('also stops when there are too many cells', () => {
     expect(one([...ROW, '2026-01-05', 'extra'])).toThrow(/চার বা পাঁচ ঘর/);
   });
 
-  /** ⚠️ JSON-এ সংখ্যায় উদ্ধৃতি দেওয়া খুব সাধারণ ভুল */
-  it('বেতন লেখা হলে থামে', () => {
+  /** Putting quotes around a number in JSON is a very common mistake. */
+  it('stops when the salary is written as a string', () => {
     expect(one(['OX-01', 'Rakib', 'Designer', '25000'])).toThrow(/উদ্ধৃতি/);
   });
 
-  /** ⚠️ কলামটা `Int` — ভগ্নাংশ দিলে পয়সা নিঃশব্দে হারাত */
-  it('ভগ্নাংশ বেতনে থামে', () => {
+  /** The column is `Int`: a fraction would silently lose the paisa. */
+  it('stops on a fractional salary', () => {
     expect(one(['OX-01', 'Rakib', 'Designer', 25000.5])).toThrow(/ভগ্নাংশ/);
   });
 
-  it('ঋণাত্মক বেতনে থামে', () => {
+  it('stops on a negative salary', () => {
     expect(one(['OX-01', 'Rakib', 'Designer', -1])).toThrow(/ঋণাত্মক/);
   });
 
-  it('নাম খালি হলে থামে', () => {
+  it('stops when the name is empty', () => {
     expect(one(['OX-01', '   ', 'Designer', 25000])).toThrow(/নাম/);
   });
 
   /**
-   * ⚠️⚠️ একই কোড দুবার থাকলে seed-এর upsert দ্বিতীয়টা দিয়ে প্রথমটা চাপা
-   * দিত — একজন কর্মী নিঃশব্দে উধাও, অন্যজনের নাম-বেতন তার জায়গায়।
-   * copy-paste করে তালিকা বানালে এটা খুব সহজেই ঘটে।
+   * With a duplicated code, the seed's upsert would overwrite the first with
+   * the second: one employee silently vanishes and another's name and salary
+   * take their place. Easy to do when the list is built by copy-paste.
    */
-  it('একই কোড দুবার থাকলে থামে', () => {
+  it('stops when the same code appears twice', () => {
     const rows = [[...ROW], ['OX-01', 'Onno Keu', 'Manager', 40000]];
     expect(() => parseStaff(rows)).toThrow(/এই কোডটা আগেও আছে/);
   });
 
-  it('তারিখের ধাঁচ ভুল হলে থামে', () => {
+  it('stops when the date format is wrong', () => {
     expect(one([...ROW, '05-01-2026'])).toThrow(/YYYY-MM-DD/);
     expect(one([...ROW, '2026-1-5'])).toThrow(/YYYY-MM-DD/);
   });
 
   /**
-   * ⚠️⚠️ **সবচেয়ে ছলনাময় কেস।** `new Date('2026-02-30')` কোনো এরর দেয় না
-   * — JS চুপচাপ ২ মার্চ বানিয়ে দেয়। ফিরিয়ে মিলিয়ে না দেখলে টাইপোটা
-   * সরাসরি proration-এ ঢুকে পড়ত।
+   * The trickiest case. `new Date('2026-02-30')` does not throw: JS quietly
+   * makes it 2 March. Without converting back and comparing, the typo would go
+   * straight into proration.
    */
-  it('পঞ্জিকায় নেই এমন তারিখে থামে', () => {
+  it('stops on a date that does not exist in the calendar', () => {
     expect(one([...ROW, '2026-02-30'])).toThrow(/এমন কোনো তারিখ নেই/);
     expect(one([...ROW, '2026-13-01'])).toThrow(/এমন কোনো তারিখ নেই/);
   });
 
-  /** ⚠️ ২০২৪ অধিবর্ষ, ২০২৬ নয় — ২৯ ফেব্রুয়ারি বৈধ কি না বছরের উপর */
-  it('অধিবর্ষ ঠিকভাবে ধরে', () => {
+  /** 2024 is a leap year and 2026 is not: whether 29 February is valid depends on the year. */
+  it('handles leap years correctly', () => {
     expect(parseStaff([[...ROW, '2024-02-29']])[0].joinedOn).toBeInstanceOf(
       Date,
     );
@@ -132,47 +132,47 @@ describe('parseStaff — ভুল ধরা', () => {
   });
 
   /**
-   * ⭐ বার্তায় **কোড আর সারি নম্বর** দুটোই থাকে — ১২ সারির ফাইলে কোনটা
-   * ঠিক করতে হবে সেটা যেন খুঁজতে না হয়।
+   * The message carries both the code and the row number, so nobody has to
+   * search a 12-row file for the one to fix.
    */
-  it('বার্তায় কোন সারি ও কোন কর্মী সেটা বলা থাকে', () => {
+  it('the message says which row and which employee', () => {
     const rows = [[...ROW], ['OX-02', 'Karim', 'Intern', 'oops']];
     expect(() => parseStaff(rows)).toThrow(/সারি 2 \(OX-02\)/);
   });
 });
 
 /**
- * **নমুনা কর্মী আর প্রোডাকশনে ঢুকবে না।**
+ * Sample employees no longer go into production.
  *
- * ⚠️⚠️ এই টেস্টগুলো একটা মাঠের বাগ থেকে লেখা। `staff.local.json`
- * gitignore করা, তাই VPS-এ ওটা কোনোদিন থাকে না — ফলে সেখানে প্রতিবার
- * seed চললেই `staff.example.json`-এর তিনজন নমুনা কর্মী তৈরি হতো।
+ * These tests come from a bug found in the field. `staff.local.json` is
+ * gitignored, so it is never on the VPS, and every seed run there created the
+ * three sample employees from `staff.example.json`.
  *
- * ⭐ ক্ষতিটা "তালিকায় তিনটে বাড়তি নাম" নয়: ওরা দলের মাসিক টার্গেটে
- * **৬২৪ ঘণ্টা** যোগ করত, আর Live Board-এর "কত পিছিয়ে" সংখ্যাটা ততটাই
- * মিথ্যা হয়ে যেত — অথচ ওদের এক মিনিটও কাজ নেই।
+ * The harm was not "three extra names in the list": they added 624 hours to
+ * the team's monthly target, so the Live Board's "how far behind" number was
+ * wrong by exactly that much, though they had not worked a minute.
  */
 describe('shouldSeedSampleStaff', () => {
-  it('আসল তালিকা হলে সবসময় বসে — হালনাগাদের পথ বন্ধ হয় না', () => {
+  it('a real list always seeds, so the update path is not closed', () => {
     expect(shouldSeedSampleStaff(false, 0)).toBe(true);
     expect(shouldSeedSampleStaff(false, 12)).toBe(true);
   });
 
-  it('খালি ডাটাবেসে নমুনা বসে — নইলে ক্লোন করে চালিয়ে দেখা যেত না', () => {
+  it('an empty database gets the samples, so a fresh clone can be run', () => {
     expect(shouldSeedSampleStaff(true, 0)).toBe(true);
   });
 
-  /** ⭐⭐ মূল টেস্ট — এটাই সংশোধনের আগে ব্যর্থ হতো */
-  it('কর্মী থাকলে নমুনা আর বসে না', () => {
+  /** The core test: this is the one that failed before the fix. */
+  it('with employees present, the samples are no longer seeded', () => {
     expect(shouldSeedSampleStaff(true, 1)).toBe(false);
     expect(shouldSeedSampleStaff(true, 7)).toBe(false);
   });
 
   /**
-   * ⚠️ "খালি" মানে **শূন্য**, "সক্রিয় শূন্য" নয় — সবাইকে নিষ্ক্রিয় করে
-   * দেওয়া একটা চালু সিস্টেমেও নমুনা মানুষ ফিরে আসা উচিত নয়।
+   * "Empty" means zero, not "zero active": a running system where everyone was
+   * deactivated should not get the sample people back either.
    */
-  it('সবাই নিষ্ক্রিয় হলেও নমুনা ফিরে আসে না', () => {
+  it('the samples do not return even if everyone is deactivated', () => {
     expect(shouldSeedSampleStaff(true, 3)).toBe(false);
   });
 });

@@ -1,18 +1,18 @@
 /**
- * **Teams-এ পাঠানোর পে-লোড** — খাঁটি ফাংশন, কোনো নেটওয়ার্ক নেই।
+ * **Payload for sending to Teams.** Pure functions, no network.
  *
- * ⭐ আলাদা ফাইল, কারণ গড়নটাই এখানে সবচেয়ে ভঙ্গুর অংশ: JSON-এর একটা ঘর
- * ভুল হলে Teams **২০০ ফেরত দিয়েও কিছু দেখায় না** — অর্থাৎ ব্যর্থতাটা
- * নীরব। খাঁটি রাখায় গড়নটা টেস্টে বেঁধে ফেলা যায়।
+ * A separate file because the structure is the most fragile part here: if one
+ * JSON field is wrong, Teams **returns 200 and shows nothing**, so the failure
+ * is silent. Keeping it pure lets the structure be pinned down in tests.
  *
- * ⚠️⚠️ **কোন গড়ন, আর কেন:** Microsoft পুরোনো "Office 365 connector"
- * (MessageCard) তুলে দিয়েছে; এখনকার পথ **Workflows / Power Automate**-এর
- * "When a Teams webhook request is received", আর সেটা চায় একটা
- * <b>Adaptive Card</b>, নির্দিষ্ট খামে মোড়া। তাই সেই খামটাই ব্যবহার করা
- * হয়েছে — পুরোনো connector URL-ও সাধারণত এটা মেনে নেয়।
+ * Which structure and why: Microsoft retired the old "Office 365 connector"
+ * (MessageCard). The current route is **Workflows / Power Automate** with
+ * "When a Teams webhook request is received", and that wants an
+ * <b>Adaptive Card</b> wrapped in a specific envelope. So that envelope is
+ * used here; old connector URLs usually accept it too.
  */
 
-/** Teams কার্ডের বাইরের খাম — নাম তিনটে হুবহু এই বানানেই লাগে */
+/** The outer envelope of a Teams card: all three names must be spelled exactly like this */
 export interface TeamsPayload {
   type: 'message';
   attachments: {
@@ -23,17 +23,17 @@ export interface TeamsPayload {
 }
 
 /**
- * ⚠️ Adaptive Card-এর সংস্করণ **১.৪**, নতুনটা নয়। Teams-এর ডেস্কটপ ও
- * ওয়েব ক্লায়েন্ট সব সংস্করণ সমানভাবে আঁকে না, আর বেশি নতুন চাইলে কার্ডটা
- * কারো কারো কাছে **ফাঁকা** দেখাত — আবারও নীরব ব্যর্থতা।
+ * Careful: Adaptive Card version **1.4**, not a newer one. Teams' desktop and
+ * web clients do not render every version equally, and asking for something
+ * too new would show the card **blank** for some people: a silent failure again.
  */
 const CARD_VERSION = '1.4';
 
 /**
- * ⚠️⚠️ Teams-এ একটা বার্তার সীমা আছে (~২৮ KB)। সাপ্তাহিক সারাংশ ১৫ জনের
- * অফিসে অনেক ছোট, কিন্তু দল বাড়লে একদিন সীমা ছুঁতে পারে — আর তখন Teams
- * **পুরো বার্তাটাই ফেলে দিত**, অর্ধেক নয়। তাই এখানেই কেটে দেওয়া হয়, আর
- * কাটা পড়েছে সেটা বার্তাতেই লেখা থাকে।
+ * Careful: Teams has a per-message size limit (~28 KB). The weekly summary is
+ * far smaller for a 15-person office, but if the team grows it could hit the
+ * limit one day, and then Teams would **drop the whole message**, not half of
+ * it. So it is trimmed here, and the message itself says that it was trimmed.
  */
 const MAX_CHARS = 20_000;
 const TRIMMED_NOTE = '\n\n_(বার্তাটা লম্বা হওয়ায় কেটে দেওয়া হয়েছে — পুরোটা সার্ভারের লগে)_';
@@ -44,11 +44,12 @@ export function trimForTeams(text: string): string {
 }
 
 /**
- * সাদামাটা লেখা → Teams কার্ড।
+ * Plain text -> Teams card.
  *
- * ⭐ `wrap: true` আর `TextBlock` — কোনো টেবিল বা কলাম নয়। সারাংশটা
- * টেলিগ্রামের জন্য লেখা সাদা টেক্সট; ওটাকে কার্ডের ছকে ঢোকাতে গেলে
- * বার্তার উৎসটাই দুই জায়গায় দুরকম হয়ে যেত, আর একদিন একটা বদলাত অন্যটা নয়।
+ * `wrap: true` and `TextBlock`, with no tables or columns. The summary is
+ * plain text written for Telegram; forcing it into a card layout would make
+ * the message's source differ in two places, and one day one would change and
+ * the other would not.
  */
 export function teamsCard(title: string, text: string): TeamsPayload {
   return {
@@ -56,8 +57,8 @@ export function teamsCard(title: string, text: string): TeamsPayload {
     attachments: [
       {
         contentType: 'application/vnd.microsoft.card.adaptive',
-        // ⚠️ `null` **বাদ দেওয়া যাবে না** — কিছু ক্লায়েন্ট ঘরটা না পেলে
-        //    সংযুক্তিটা নীরবে বাদ দেয়।
+        // Careful: `null` **must not be omitted**. Some clients silently drop
+        // the attachment when the field is missing.
         contentUrl: null,
         content: {
           $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',

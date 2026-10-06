@@ -18,24 +18,25 @@ import { CurrentUser, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
 
 /**
- * ⚠️⚠️ `owner` ইচ্ছাকৃতভাবে **তালিকার বাইরে** — `@IsIn` তাই দ্বিতীয় জাল
- * নয়, **প্রথম** জাল। সার্ভিসও আলাদা করে আটকায়, কিন্তু এখানেই আটকালে
- * অনুরোধটা কোনো ব্যবসায়িক কোড ছোঁয়ারই সুযোগ পায় না।
+ * Careful: `owner` is deliberately **left out of the list**, so `@IsIn` is
+ * the **first** net, not the second. The service blocks it separately too,
+ * but stopping it here means the request never reaches any business code.
  */
 class ChangeRoleDto {
   /**
-   * ⭐ `researcher` যোগ হয়েছে ২৫ আগস্ট — `owner` এখনো বাইরে (ADR-011d)।
+   * `researcher` was added later; `owner` is still excluded (ADR-011d).
    *
-   * ⚠️ তালিকাটা হাতে লেখা, `UserRole` ধার করা নয়, **ইচ্ছাকৃতভাবে**:
-   * enum-এ কাল নতুন কিছু বসলে সেটা এখানে **নিজে থেকে ঢুকে পড়া উচিত নয়**।
-   * রোল হাতবদলের তালিকা বাড়ানো একটা সিদ্ধান্ত, দুর্ঘটনা নয়।
+   * Careful: the list is written by hand rather than borrowed from `UserRole`,
+   * on purpose. If a new value is added to the enum tomorrow, it must not
+   * slip in here by itself. Widening the role-assignment list is a decision,
+   * not an accident.
    */
   @IsIn(['employee', 'researcher', 'manager'])
   role!: 'employee' | 'researcher' | 'manager';
 }
 
 class ChangeEmailDto {
-  /** ⚠️ `class-validator` দিয়েই যাচাই — সার্ভিসের চেকটা দ্বিতীয় জাল */
+  /** Careful: validated with `class-validator`; the service check is the second net. */
   @IsEmail()
   email!: string;
 }
@@ -45,8 +46,8 @@ export class UsersController {
   constructor(private readonly auth: AuthService) {}
 
   /**
-   * G33 — owner কারো পাসওয়ার্ড রিসেট করে।
-   * ⚠️ রেসপন্সে আসা `tempPassword` **একবারই** দেখা যাবে — কোথাও জমা থাকে না।
+   * The owner resets someone's password.
+   * Careful: the `tempPassword` in the response can be seen **only once**; it is stored nowhere.
    */
   @Roles(UserRole.owner)
   @Post(':id/reset-password')
@@ -57,15 +58,15 @@ export class UsersController {
     @Body() dto: ResetPasswordDto,
     @Ip() ip: string,
   ): Promise<{ email: string; tempPassword: string }> {
-    // ⭐ ঘরটা খালি রাখলে আগের আচরণ — এলোমেলো পাসওয়ার্ড + বাধ্যতামূলক বদল
+    // Leaving the field empty keeps the old behaviour: random password + forced change.
     return this.auth.resetPassword(actor.userId, id, ip, dto.password);
   }
 
   /**
-   * লগইনের ইমেইল বদলানো — স্টাফের "ইউজারনেম"।
+   * Change the login email, which is the staff member's "username".
    *
-   * ⚠️ পাসওয়ার্ড আলাদা রুটে (`reset-password`), ইচ্ছাকৃতভাবে: বানান ঠিক
-   * করতে গিয়ে কারো পাসওয়ার্ড অকারণে বদলে যাওয়া উচিত নয়।
+   * Careful: the password has its own route (`reset-password`), on purpose.
+   * Fixing a spelling mistake must not change someone's password needlessly.
    */
   @Roles(UserRole.owner)
   @Patch(':id/email')
@@ -79,11 +80,11 @@ export class UsersController {
   }
 
   /**
-   * স্টাফ ↔ ম্যানেজার।
+   * Staff <-> manager.
    *
-   * ⚠️ ভূমিকা আগে বসত কেবল অ্যাকাউন্ট খোলার সময়। বদলাতে হলে অ্যাকাউন্ট
-   * মুছে নতুন করে খুলতে হতো — নতুন পাসওয়ার্ড, আর audit log-এ তাঁর
-   * পুরোনো ইতিহাস ছিঁড়ে যেত।
+   * Careful: the role used to be set only when the account was created.
+   * Changing it meant deleting the account and creating a new one, with a new
+   * password and a broken audit-log history for that person.
    */
   @Roles(UserRole.owner)
   @Patch(':id/role')

@@ -3,10 +3,9 @@ using System.Runtime.InteropServices;
 namespace oXeio.Agent.Native;
 
 /// <summary>
-/// ⚠️ <c>cbSize</c> সত্যিই যাচাই করা হয় — ভুল মান দিলে কল ব্যর্থ হয় (error 87) আর
-/// <c>dwTime</c> শূন্যই থেকে যায়। ফেরত মান না দেখে ব্যবহার করলে নিষ্ক্রিয়তা
-/// "PC চালু হওয়ার পর থেকে এখন পর্যন্ত" হিসেব হবে।
-/// ৮ বাইট: uint + uint।
+/// Careful: <c>cbSize</c> really is validated: a wrong value makes the call fail (error 87) and
+/// <c>dwTime</c> stays zero. Using it without checking the return value would compute inactivity as
+/// "since the PC was switched on until now". 8 bytes: uint + uint.
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct LASTINPUTINFO
@@ -20,14 +19,15 @@ internal struct POWERBROADCAST_SETTING
 {
     internal Guid PowerSetting;
     internal uint DataLength;
-    /// <summary>প্রথম বাইট; বাকিটা এর পরে থাকে। ডিসপ্লে স্ট্যাটাসের জন্য ৪ বাইটের DWORD।</summary>
+    /// <summary>The first byte; the rest follows it. A 4-byte DWORD for the display
+    /// status.</summary>
     internal byte Data;
 }
 
 /// <summary>
-/// ⚠️ <c>ByValTStr</c> থাকায় এটা blittable নয়, তাই source-generated marshalling-এ
-/// দেওয়া যায় না — <c>Marshal.PtrToStructure</c> দিয়ে পড়তে হয়।
-/// ⚠️ <c>Pack = 1</c> দেওয়া যাবে না; ডিফল্ট alignment-ই নেটিভ লেআউটের সাথে মেলে।
+/// Careful: because of <c>ByValTStr</c> this is not blittable, so it cannot be given to
+/// source-generated marshalling; it must be read with <c>Marshal.PtrToStructure</c>. Careful:
+/// <c>Pack = 1</c> must not be used; the default alignment is what matches the native layout.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
 internal struct WTSINFOEX_LEVEL1_W

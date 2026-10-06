@@ -3,12 +3,12 @@ using oXeio.Agent.Storage;
 namespace oXeio.Agent.Tests;
 
 /// <summary>
-/// A06 — থাম্বনেইলের পথ।
+/// A06: the thumbnail path.
 ///
-/// ⭐ চারটে আলাদা জায়গা এই নিয়মটা মানে: লেখা · পাঠানো · মোছা · অনাথ-ঝাড়ু।
-/// একটাও আলাদা হলে হয় থাম্বনেইল কখনো যেত না, নয়তো ঝাড়ুদার প্রতিটা
-/// থাম্বনেইল অনাথ ভেবে <b>মুছে দিত</b> — আর কেউ বুঝতই না কেন গ্যালারি
-/// হঠাৎ আবার ধীর হয়ে গেল।
+/// Four separate places follow this rule: write, send, delete, orphan sweep. If any
+/// one differs, either the thumbnail never gets sent, or the sweeper takes every
+/// thumbnail for an orphan and <b>deletes it</b>, and nobody would understand why the
+/// gallery suddenly became slow again.
 /// </summary>
 public class ThumbPathTests
 {
@@ -22,12 +22,12 @@ public class ThumbPathTests
             OutboxPaths.ThumbPathFor(main));
     }
 
-    /// <summary>⚠️ শেষটা .webp থাকতেই হবে — ঝাড়ুদার `*.webp` খোঁজে।</summary>
+    /// <summary>Careful: it must still end in .webp; the sweeper looks for `*.webp`.</summary>
     [Fact]
     public void থাম্বনেইলও_webp_থাকে() =>
         Assert.EndsWith(".webp", OutboxPaths.ThumbPathFor("x/y.webp"));
 
-    /// <summary>দুবার ডাকলে যেন `-thumb-thumb` না হয়ে যায়।</summary>
+    /// <summary>Calling it twice must not turn into `-thumb-thumb`.</summary>
     [Fact]
     public void নিজের_উপর_আবার_চালালে_আলাদা_পথ()
     {

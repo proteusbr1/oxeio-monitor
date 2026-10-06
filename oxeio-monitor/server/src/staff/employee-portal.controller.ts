@@ -20,8 +20,8 @@ export class EmployeePortalController {
   constructor(private readonly auth: AuthService) {}
 
   /**
-   * স্টাফের নিজস্ব ভিউয়ের অ্যাকাউন্ট (G6 · J04 · J05)।
-   * স্বচ্ছতার মূল ভিত্তি — স্টাফ নিজের ডেটা নিজেই দেখতে পাবে।
+   * Account for a staff member's own view.
+   * The foundation of transparency: staff can see their own data themselves.
    */
   @Roles(UserRole.owner)
   @Post(':id/portal-account')
@@ -38,7 +38,7 @@ export class EmployeePortalController {
       dto.email,
       dto.role ?? UserRole.employee,
       ip,
-      // ⭐ মালিক নিজে বসালে সেটাই, আর বদলানোর পর্দা আসে না (২৩ আগস্ট)
+      // If the owner sets it, that value is used and no change screen is shown.
       dto.password,
     );
   }

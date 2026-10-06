@@ -12,33 +12,33 @@ import {
 } from './heatmap';
 
 /**
- * E07 — স্টাফ × তারিখ হিটম্যাপ।
+ * Staff x date heatmap.
  *
- * ⭐ রঙের গভীরতা = ওই দিনের গোনা হওয়া ঘণ্টা, কিন্তু ⚠️ **রঙ দিয়েই সব
- *   বোঝানো যায় না**: রঙান্ধতা, ছোট পর্দা, প্রিন্ট — তিনটেই রঙকে অকেজো
- *   করে দেয়। তাই প্রতিটা ঘর একটা `<button>`:
- *     · মাউসে hover → `title`-এ সংখ্যা
- *     · আঙুলে tap / কিবোর্ডে Enter → নিচের পটিতে পুরো হিসাব
- *   ঘরগুলো `<div>` রাখলে ফোনে সংখ্যাটা দেখারই কোনো উপায় থাকত না।
+ * Colour depth = hours counted that day, but careful: **colour alone cannot carry
+ *   everything**: colour blindness, small screens and print all make colour useless.
+ *   So every cell is a `<button>`:
+ *     - mouse hover: the number in `title`
+ *     - finger tap / keyboard Enter: the full breakdown in the strip below
+ *   With `<div>` cells there would be no way to see the number on a phone.
  *
- * ⚠️ **লাল খুব মেপে**: শুধু কর্মদিবসে শূন্য ঘণ্টা (হালকা `brand-bg`) আর
- *    পিছিয়ে থাকার কলামে (`brand-ink`)। ছুটির দিনে ০ ঘণ্টা ফাঁকি নয় — ওখানে
- *    লাল বসালে প্রতি শুক্রবার গোটা পর্দা লাল হয়ে যেত আর লাল রঙের মানেই
- *    হারিয়ে যেত।
+ * Careful: **red is used very sparingly**: only for zero hours on a workday (light
+ *    `brand-bg`) and in the "behind" column (`brand-ink`). Zero hours on a day off is
+ *    not slacking; red there would turn the whole screen red every Friday and red
+ *    would lose its meaning.
  */
 
 /**
- * ধূসর → কালো র‍্যাম্প, `level` ১…৪-এর জন্য (`level` ০ = কোনো ঘণ্টাই নেই,
- * সেটার আলাদা চেহারা)।
- * ⚠️ হার্ডকোড রং নয় — ব্র্যান্ড টোকেনের উপর অস্বচ্ছতা (index.css দ্রষ্টব্য)।
+ * Grey-to-black ramp, for `level` 1...4 (`level` 0 = no hours at all, which has its
+ * own look).
+ * Careful: not hardcoded colours, but opacity over the brand token (see index.css).
  */
 const RAMP = ['bg-ink/20', 'bg-ink/45', 'bg-ink/70', 'bg-ink'] as const;
 
 /**
- * ছুটির দিনের তির্যক দাগ।
- * ⭐ দাগটা টোকেন (`--color-line`) থেকেই রং নেয়, তাই থিম বদলালে সাথে বদলায়।
- *   সলিড ধূসর বসালে সেটা র‍্যাম্পের মাঝের ধাপের মতোই দেখাত — অর্থাৎ "ছুটি"
- *   আর "আধা দিন কাজ" এক দেখাত।
+ * Diagonal hatch for days off.
+ * Important: the hatch takes its colour from the token (`--color-line`), so it
+ *   changes with the theme. A solid grey would look like a middle step of the ramp,
+ *   making "day off" and "half a day's work" look the same.
  */
 const OFF_PATTERN: CSSProperties = {
   backgroundImage:
@@ -52,9 +52,9 @@ const DAY_TYPE_LABEL = {
 } as const;
 
 /**
- * ⚠️ `1st / 2nd / 3rd / 4th` — ইংরেজিতে "since day 5" যন্ত্রের মতো শোনায়,
- *    আর সরু কলামে মাসের নাম বসানোর জায়গা নেই (নিচে `partial` দেখুন)।
- *    11–13 আলাদা করে ধরা, নইলে "11st" হতো।
+ * Careful: `1st / 2nd / 3rd / 4th`: in English "since day 5" sounds robotic, and
+ *    a narrow column has no room for the month name (see `partial` below).
+ *    11-13 are handled separately, or it would read "11st".
  */
 function ordinal(day: number): string {
   const tens = day % 100;
@@ -72,11 +72,11 @@ export function HeatGrid({
   today,
 }: {
   grid: MonthGrid;
-  /** ঢাকার আজ — কলামটা আলাদা করে চেনানোর জন্য */
+  /** Today in Dhaka, so the column can be marked */
   today: string;
 }) {
-  // ⚠️ শুধু চাবি রাখা হয়, ঘরের অবজেক্ট নয় — মাস বদলালে পুরোনো অবজেক্ট
-  //    ধরে রাখলে নতুন গ্রিডের সাথে না মেলা এক টুকরো তথ্য পর্দায় বসে থাকত।
+  // Careful: keep only the keys, not the cell objects; holding old objects after the
+  //    month changes would leave a piece of data on screen that matches no new grid.
   const [picked, setPicked] = useState<{ employeeId: number; date: string } | null>(
     null,
   );
@@ -137,14 +137,14 @@ export function HeatGrid({
             {grid.rows.map((row) => (
               <tr key={row.employeeId} className="border-b border-line/70 last:border-0">
                 {/*
-                  ⭐ পিছিয়ে/এগিয়ে সংখ্যাটা **এই জমে থাকা কলামেই** আবার লেখা।
-                     ৩১টা দিনের কলামের পর ডানদিকের সংখ্যাগুলো ছোট পর্দায়
-                     স্ক্রল না করলে দেখাই যায় না — অথচ পর্দার একমাত্র প্রশ্নের
-                     উত্তরটা ওখানেই। দুবার লেখা হচ্ছে জেনেই লেখা।
-                  ⚠️ ফোনে সরু, ডেস্কটপে চওড়া — জমে থাকা কলাম বেশি জায়গা নিলে
-                     ছোট পর্দায় হিটম্যাপের জন্য কিছুই বাঁচত না। সেই জায়গা
-                     বাঁচাতেই empCode এখানে লেখা হয় না; কোড ও ডিপার্টমেন্ট
-                     সারির `title`-এ আছে।
+                  Important: the behind/ahead number is **written again in this pinned
+                     column**. After 31 day-columns, the numbers on the right are not
+                     visible on a small screen without scrolling, yet they hold the
+                     answer to the screen's one question. Written twice, knowingly.
+                  Careful: narrow on phones, wide on desktop; if the pinned column took
+                     more room, nothing would be left for the heatmap on a small
+                     screen. To save that space the empCode is not written here; code
+                     and department are in the row's `title`.
                 */}
                 <td
                   title={`${row.fullName} · ${row.empCode}${row.department ? ` · ${row.department}` : ''}`}
@@ -156,9 +156,10 @@ export function HeatGrid({
                       <>
                         <Pace hours={row.paceHours} compact observed={row.observed} />
                         {/*
-                          ⚠️ এখানে `formatDateShort()` নয়। গোটা গ্রিডটাই এক
-                             মাসের, তাই মাসের নাম বাড়তি — আর সরু কলামে
-                             "since 5 August" লিখলে ঘাটতির সংখ্যাটাই কেটে যেত।
+                          Careful: not `formatDateShort()` here. The whole grid is one
+                             month, so the month name is extra, and writing
+                             "since 5 August" in a narrow column would cut off the
+                             shortfall number.
                         */}
                         {row.partial &&
                           ` · since the ${ordinal(Number(row.partial.from.slice(8, 10)))}`}
@@ -209,12 +210,13 @@ export function HeatGrid({
               <td className="sticky left-0 z-10 border-r border-line bg-paper px-3 py-2 text-[12px] text-ink-2">
                 Everyone
                 {/*
-                  ⭐⭐ G111 — যোগফলটা **কাদের নিয়ে**, সেটা যোগফলের পাশেই।
-                  ⚠️⚠️ যাঁদের এখনো দেখা হয়নি তাঁদের প্রত্যাশা ০, তাই তাঁদের
-                     পুরো টার্গেটটাই ডানের যোগফল থেকে নীরবে বাদ — অর্থাৎ দল
-                     যত পিছিয়ে, পাতাটা তার চেয়ে **ভালো** দেখায়। যোগ করে
-                     দেওয়া যেত না: তাতে এমন ঘাটতির দাবি হতো যেটা কেউ করেনি।
-                  ⚠️ ০ হলে লাইনটাই বসে না — নইলে রোজ একটা অর্থহীন বাক্য।
+                  Who the total is **about**, right beside the total.
+                  Careful: those not yet observed have expectation 0, so their whole
+                     target is silently left out of the total on the right; the team
+                     looks **better** than it really is behind. It could not be added
+                     in: that would claim a shortfall nobody claimed.
+                  Careful: at 0 the line is not rendered; otherwise it is a
+                     meaningless sentence every day.
                 */}
                 {grid.totals.notObserved > 0 && (
                   <div className="mt-0.5 text-[11px] font-normal text-ink-3">
@@ -248,7 +250,7 @@ export function HeatGrid({
   );
 }
 
-// ── একটা ঘর ─────────────────────────────────────────────────────────────────
+// ── One cell ────────────────────────────────────────────────────────────────
 
 function Cell({
   cell,
@@ -265,8 +267,8 @@ function Cell({
   const off = cell.kind === 'day' && cell.dayType !== 'workday';
   const worked = cell.creditedHours > 0;
 
-  // ⭐ চারটে আলাদা অবস্থা, চারটে আলাদা চেহারা — একটাও রঙের গভীরতার উপর
-  //   নির্ভর করে না, তাই রঙ না বুঝলেও পার্থক্যটা টের পাওয়া যায়।
+  // Important: four different states, four different looks, none relying on colour
+  //   depth, so the difference can be felt even without seeing colour.
   let look = '';
   let style: CSSProperties | undefined;
 
@@ -276,46 +278,46 @@ function Cell({
     look = 'border border-dotted border-line/60 opacity-50';
   } else if (cell.kind === 'untracked') {
     /**
-     * ⭐⭐ **G110 — সেদিন আমরা দেখছিলামই না।**
+     * **We were not watching that day.**
      *
-     * ⚠️⚠️ আগে এই ঘরগুলো নিচের `!off && !worked` শাখায় পড়ত, অর্থাৎ
-     * "কর্মদিবসে কিছুই হয়নি"-র লালচে ছোঁয়া পেত। ফলে একই পাতায় সংখ্যাটা
-     * বলত "কোনো দাবি নেই" আর ছবিটা বলত "ফাঁকি" — আর মানুষ আগে ছবিটা
-     * দেখে। এই ইনস্টলেশনে এজেন্ট বসেছে ১৩ আগস্ট, তাই আগস্টের প্রতিটা
-     * পাতায় ১–১২ তারিখ লালচে ছিল।
+     * Careful: these cells used to fall into the `!off && !worked` branch below, so
+     * they got the reddish "nothing happened on a workday" tint. On one page the number
+     * said "no claim" and the picture said "slacking", and people look at the picture
+     * first. On this installation the agent went in on 13 August, so days 1-12 were
+     * reddish on every August page.
      *
-     * ⭐ চেহারাটা `outside`-এর ডটেড রূপরেখা, তবে **ম্লান নয়** — Live
-     * Board-এর সাত-দিনের ফিতেয় G101 ঠিক এটাই ব্যবহার করে। দুই পর্দায় এক
-     * জিনিসের দুই চেহারা হলে মানুষকে দুবার শিখতে হতো।
-     * ⚠️ কোনো লাল নেই, কোনো র‍্যাম্প নেই — না-দেখা কোনো অভিযোগ নয়।
+     * Important: the look is `outside`'s dotted outline, but **not faded**; the Live
+     * Board's seven-day strip uses exactly this. Two looks for one thing on two
+     * screens would make people learn it twice.
+     * Careful: no red, no ramp; unobserved is not an accusation.
      */
     look = 'border border-dotted border-line';
   } else if (off && !worked) {
-    // ⚠️ ছুটির দিনে ০ ঘণ্টা = ফাঁকি নয়। এখানে কোনো লাল নেই, কোনো র‍্যাম্প নেই।
+    // Careful: 0 hours on a day off is not slacking. No red, no ramp here.
     look = 'border border-line';
     style = OFF_PATTERN;
   } else if (cell.onLeave && !worked) {
     /**
-     * ⭐⭐⭐ **অনুমোদিত ছুটি** *(৬ সেপ্টেম্বর ২০২৬, G130-এর বাকি অংশ)*।
+     * **Approved leave.**
      *
-     * ⚠️⚠️ এই শাখাটা **নিচের লাল শাখার আগে** থাকতেই হবে। ছুটির দিনে
-     * `dayType` থাকে `workday` (ওটা অফিসের ক্যালেন্ডার, একজনের নয়) আর
-     * ঘণ্টা ০ — তাই আগে ঘরটা *"কর্মদিবসে কিছুই হয়নি"* বলে **লালচে দাগ**
-     * পেত। সংখ্যা মিথ্যা বলছিল না (টার্গেট ০, কোনো ঘাটতি নয়), কিন্তু
-     * ছবিটা বলত "ফাঁকি" — আর মানুষ আগে ছবিটা দেখে।
+     * Careful: this branch **must come before the red branch below**. On a leave day
+     * `dayType` is `workday` (the office calendar, not one person's) and hours are 0,
+     * so the cell used to get a **reddish mark** for "nothing happened on a workday".
+     * The number was not lying (target 0, no shortfall), but the picture said
+     * "slacking", and people look at the picture first.
      *
-     * ⭐ চেহারাটা সাপ্তাহিক ছুটির ঘরের **কাছাকাছি, তবে এক নয়** — একই
-     * প্যাটার্ন, কিন্তু রূপরেখা ব্র্যান্ড-রঙের ম্লান আভায়। দুটো এক করে
-     * দিলে "অফিস বন্ধ" আর "ইনি ছুটিতে" আলাদা করা যেত না।
+     * Important: the look is **close to the weekly-off cell, but not the same**: the
+     * same pattern, but the outline has a faded brand tint. Merging them would make
+     * "office closed" and "this person is on leave" indistinguishable.
      */
     look = 'border border-brand/30';
     style = OFF_PATTERN;
   } else if (!off && !worked) {
-    // কর্মদিবসে কিছুই হয়নি — একমাত্র জায়গা যেখানে ঘরে লালের ছোঁয়া
+    // Nothing happened on a workday: the only place a cell gets a touch of red
     look = 'bg-brand-bg ring-1 ring-brand/25 ring-inset';
   } else {
-    // ⚠️ `level` এখানে সবসময় ১…৪ (০ হলে উপরের শাখাতেই ধরা পড়ত), তাই −১।
-    // ছুটির দিনে কাজ হলে র‍্যাম্পের উপরে সরু ব্র্যান্ড-লাল রেখা (সলিড নয়)
+    // Careful: `level` here is always 1...4 (0 would have been caught above), hence -1.
+    // Work on a day off gets a thin brand-red line over the ramp (not solid)
     look = `${RAMP[cell.level - 1]} ${off ? 'ring-1 ring-brand ring-inset' : ''}`;
   }
 
@@ -328,16 +330,17 @@ function Cell({
       aria-pressed={selected}
       style={style}
       /**
-       * ⚠️ ফোনে ঘর বড় (২৬px), ডেস্কটপে আগের ১৮px — কারণ ফোনে **এই ঘরটাই
-       *    একমাত্র দরজা**: হোভার নেই, তাই একটা দিনের হিসাব দেখার আর কোনো
-       *    উপায় নেই (`CellDetail`-এর নোট দেখুন)। ১৮px ঘরে পিচ দাঁড়াত ২০px,
-       *    অর্থাৎ আঙুলের নিচে দুটো দিন — আর ভুল ঘরে চাপ পড়লে নিচের প্যানেলে
-       *    **অন্য দিনের** হিসাব খুলত। তারিখটা ওখানে লেখা থাকে বলে ধরা পড়ে,
-       *    কিন্তু কেউ না তাকালে ধরা পড়ে না।
-       * ⚠️ ৪৪px (সুপারিশকৃত সর্বনিম্ন) দেওয়া হয়নি — ৩১টা কলামে ওটা ১৩৬৪px,
-       *    অর্থাৎ প্রতিটা সারি পড়তে তিন পর্দা টানতে হতো। ২৬px-এ পিচ ২৮px,
-       *    ভুল-ছোঁয়া অনেক কমে আর গ্রিডটা এক-দুই টানেই পার হয়।
-       * ⭐ ডেস্কটপ এক পিক্সেলও বদলায়নি — ওখানে হোভারই যথেষ্ট।
+       * Careful: cells are large on phones (26px), 18px as before on desktop, because
+       *    on a phone **this cell is the only door**: there is no hover, so there is no
+       *    other way to see a day's breakdown (see the `CellDetail` note). With 18px
+       *    cells the pitch would be 20px, two days under one finger, and a tap on
+       *    the wrong cell would open **another day's** breakdown in the panel below.
+       *    The date is written there so it can be caught, but not if nobody looks.
+       * Careful: 44px (the recommended minimum) was not used: across 31 columns that
+       *    is 1364px, so reading each row would take three screens of dragging. At
+       *    26px the pitch is 28px, mis-taps drop a lot and the grid crosses in one or
+       *    two swipes.
+       * Important: desktop did not change by a single pixel; hover is enough there.
        */
       className={`block size-[26px] rounded-[3px] transition focus:outline-none focus:ring-2 focus:ring-brand/40 sm:size-[18px] ${look} ${
         selected ? 'outline outline-2 outline-offset-1 outline-ink' : ''
@@ -352,15 +355,17 @@ function cellLabel(cell: DayCell, fullName: string): string {
   if (cell.kind === 'future') return `${when} · day has not arrived yet`;
   if (cell.kind === 'outside') return `${when} · outside their time here`;
   /**
-   * ⚠️ কথাটা "০ ঘণ্টা" নয়, **"গোনা হচ্ছিল না"** — ⭐ ফোনে হোভার নেই, তাই
-   * এই লেখাটাই অনেকের জন্য একমাত্র ব্যাখ্যা, আর ভুল পড়াটা এখানেই ঘটে।
+   * Careful: it says not "0 hours" but **"was not being counted"**. Important: phones
+   * have no hover, so this text is the only explanation for many, and this is where
+   * misreading happens.
    */
   if (cell.kind === 'untracked')
     return `${when} · not being tracked yet — this day is not counted against them`;
 
   /**
-   * ⚠️⚠️ ফোনে হোভার নেই, তাই ছুটির কারণটা লেখাতেও থাকতে হয় — নইলে
-   *    ঘরের চেহারা বদলেও প্রশ্নটা থেকেই যেত: *"এই দিনটা আলাদা কেন"*।
+   * Careful: phones have no hover, so the reason for leave must also be in the
+   *    text; otherwise the cell's look would change and the question would remain:
+   *    *"why is this day different"*.
    */
   const type = cell.onLeave
     ? 'on approved leave'
@@ -375,7 +380,7 @@ function cellLabel(cell: DayCell, fullName: string): string {
   return `${when} · ${type} · counted ${formatHoursAsDuration(cell.creditedHours)} · ${target}`;
 }
 
-// ── বেছে নেওয়া ঘরের পুরো হিসাব (ফোনে এটাই একমাত্র উপায়) ────────────────────
+// ── The full breakdown of the chosen cell (on a phone the only way) ───────────
 
 function CellDetail({
   row,
@@ -384,8 +389,8 @@ function CellDetail({
   row: EmployeeGridRow | null;
   cell: DayCell | null;
 }) {
-  // ⚠️ উচ্চতা সবসময় একই — নইলে ঘরে চাপ দিলে গোটা গ্রিডটা লাফিয়ে উঠত আর
-  //    আঙুলের নিচের ঘরটাই সরে যেত।
+  // Careful: the height is always the same; otherwise tapping a cell would make the
+  //    whole grid jump and the cell under the finger would move.
   if (!row || !cell) {
     return (
       <p className="border-t border-line px-4 py-2.5 text-xs text-ink-3">
@@ -453,12 +458,12 @@ function Field({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
-// ── পিছিয়ে / এগিয়ে ──────────────────────────────────────────────────────────
+// ── Behind / ahead ──────────────────────────────────────────────────────────
 
 /**
- * ⭐ এই একটা কলামই পর্দার আসল উত্তর — "কে পিছিয়ে আছে"।
- * ⚠️ `credited − expected`, `worked − expected` নয় (§ ২.১-ঙ) — নইলে owner-এর
- *    দেওয়া সংশোধন এখানে উধাও হয়ে যেত আর ঠিক করা ঘাটতি আবার ঘাটতি দেখাত।
+ * Important: this one column is the real answer of the screen: "who is behind".
+ * Careful: `credited - expected`, not `worked - expected`; otherwise the owner's
+ *    adjustments would vanish here and a fixed shortfall would still show as one.
  */
 function Pace({
   hours,
@@ -468,12 +473,12 @@ function Pace({
   hours: number;
   compact?: boolean;
   /**
-   * ⭐⭐ **G111** — তাঁকে একটাও শেষ-হওয়া কর্মদিবসে দেখা হয়েছে কি না।
+   * Whether they have been observed on at least one finished workday.
    *
-   * ⚠️⚠️ না দেখা হলে `hours` ঠিক ০, আর নিচের শাখাটা তখন **"On track"**
-   * লিখত — অর্থাৎ পাতাটা এমন একটা আশ্বাস দিত যেটার পেছনে একটাও
-   * পর্যবেক্ষণ নেই। নতুন কর্মীর প্রথম সপ্তাহে বা কারো এজেন্ট বসাতে দেরি
-   * হলে ঠিক তখনই এটা ঘটে, আর তখনই আশ্বাসটা সবচেয়ে ক্ষতিকর।
+   * Careful: when not observed, `hours` is exactly 0, and the branch below would
+   * write **"On track"**, a reassurance with not one observation behind it. This
+   * happens in a new employee's first week or when someone's agent is late being
+   * installed, which is exactly when the reassurance does the most harm.
    */
   observed?: boolean;
 }) {
@@ -495,7 +500,7 @@ function Pace({
   const behind = hours < 0;
   const amount = formatHoursAsDuration(Math.abs(hours));
 
-  // ⚠️ সরু কলামে `−`/`+` চিহ্নটা অনেকের চোখেই পড়ে না, তাই ওখানে কথায় লেখা
+  // Careful: in a narrow column many people miss the `-`/`+` sign, so it is spelled out in words
   return (
     <span className={`num ${behind ? 'font-semibold text-brand-ink' : 'text-ink'}`}>
       {compact ? `${behind ? 'Behind' : 'Ahead'} ${amount}` : `${behind ? '−' : '+'}${amount}`}
@@ -516,14 +521,14 @@ function MonthTarget({ row }: { row: EmployeeGridRow }) {
   }
 
   /**
-   * ⚠️⚠️ **০ আর "নেই" এক কথা নয়** — আর ০ এখন সত্যিই ঘটতে পারে।
+   * Careful: **0 and "none" are different**, and 0 can now really happen.
    *
-   * আগে এই ঘরে বসত পলিসির ফ্ল্যাট ২০৮, যা কখনো ০ হতো না। এখন সংখ্যাটা
-   * অফিস-ডে ধরে গোনা, তাই পুরো সময়টা ছুটিতে থাকলে বা মাসের একেবারে শেষে
-   * যোগ দিলে ০ আসে — বৈধভাবেই।
+   * This cell used to show the policy's flat 208, which was never 0. Now the number
+   * is counted by office days, so 0 arrives legitimately when someone was on leave
+   * the whole time or joined at the very end of the month.
    *
-   * ⭐ ProgressBar-এ পাঠালে `max={0}` হয়ে পর্দায় দাঁড়াত **"0h 0m, ০%"**,
-   * অর্থাৎ "উনি ব্যর্থ" — অথচ আসল কথা ওঁর কোনো টার্গেটই ছিল না।
+   * Important: passed to ProgressBar it would be `max={0}` and show **"0h 0m, 0%"**,
+   * meaning "they failed", when the truth is they had no target at all.
    */
   if (row.targetHoursInRange === 0) {
     return (
@@ -559,12 +564,12 @@ function MonthTarget({ row }: { row: EmployeeGridRow }) {
   );
 }
 
-// ── রঙের ব্যাখ্যা ───────────────────────────────────────────────────────────
+// ── Colour legend ───────────────────────────────────────────────────────────
 
 /**
- * ⚠️ বাদ দেবেন না। র‍্যাম্পের পাঁচটা ধূসর নিজে থেকে কিছুই বলে না — "কালো
- *    মানে দিনের টার্গেট পূর্ণ" কথাটা কোথাও লেখা না থাকলে সবাই নিজের মতো
- *    অর্থ বানিয়ে নিত।
+ * Careful: do not remove. The ramp's five greys say nothing by themselves; unless
+ *    "black means the day's target is met" is written somewhere, everyone would
+ *    make up their own meaning.
  */
 function Legend() {
   return (
@@ -590,8 +595,8 @@ function Legend() {
         Worked on a day off
       </span>
       {/*
-        ⭐ G110 — legend-এ সারিটা না থাকলে ঘরের চেহারাটা একটা ধাঁধা হয়ে
-        থাকত, আর মানুষ ধাঁধার সবচেয়ে খারাপ উত্তরটাই ধরে নেন।
+        Important: without the row in the legend the cell's look would be a puzzle,
+        and people assume the worst answer to a puzzle.
       */}
       <span className="flex items-center gap-1.5">
         <i className="size-3 rounded-[3px] border border-dotted border-line" />

@@ -21,7 +21,7 @@ import {
   useMutation,
 } from '../../components/ui';
 
-/** ⚠️ তিনটেই সবেতন — `unpaid` কেন নেই, `schema.prisma`-র নোট দেখুন */
+/** All three are paid leave; see the `schema.prisma` note on why there is no `unpaid` */
 const TYPES = [
   { value: 'casual', label: 'Casual' },
   { value: 'sick', label: 'Sick' },
@@ -29,17 +29,17 @@ const TYPES = [
 ] as const;
 
 /**
- * ⭐⭐ **R2 — ছুটির খাতা।**
+ * Leave ledger.
  *
- * ⚠️⚠️ যে সমস্যাটা এটা সারায়: ছুটির খাতা ছাড়া অনুপস্থিতি আর ছুটির মধ্যে
- * সিস্টেমের কোনো পার্থক্য ছিল না। যিনি অনুমতি নিয়ে ছুটি কাটালেন, তাঁর
- * ওই দিনগুলো পুরো আট ঘণ্টার ঘাটতি হয়ে মাসের pace-এ বসত — অর্থাৎ সংখ্যাটা
- * তাঁর নামে এমন একটা ব্যর্থতার দাবি করত যা ঘটেইনি।
+ * Careful — the problem this fixes: without a leave ledger the system could not tell
+ * absence from leave. Someone on approved leave had those days counted as a full
+ * eight-hour shortfall in the month's pace, so the number claimed a failure in
+ * their name that never happened.
  *
- * ⭐⭐ **ছুটি সবেতন।** ওই দিনের আট ঘণ্টা টার্গেট থেকে বাদ যায়, কিন্তু
- * পে-রোলের ভগ্নাংশ `d ÷ D` **অটুট**। এই বিচ্ছেদটা কোডে তিন জায়গায়
- * পাহারা দেওয়া, আর নিচের ব্যাখ্যাটা পর্দাতেও থাকে — নইলে ছুটি লিখতে
- * গিয়ে কেউ ভাবতেন বেতন কাটছেন।
+ * Important: **leave is paid.** The day's eight hours drop out of the target, but
+ * the payroll fraction `d ÷ D` is **unchanged**. This split is guarded in three
+ * places in the code, and the note below is also shown on screen, or someone
+ * entering leave might think pay is being cut.
  */
 /** Leave for one month — the month is picked on the Payroll page */
 export function LeaveTab({ month }: { month: string }) {
@@ -108,11 +108,11 @@ export function LeaveTab({ month }: { month: string }) {
                     </span>
                   )}
                   {/*
-                    ⚠️⚠️ এই লাইনটাই এই পর্দার সবচেয়ে জরুরি অংশ। শুক্রবারে
-                       বা সরকারি ছুটির দিনে লেখা একটা ছুটি টার্গেটের কিছুই
-                       কমায় না, কিন্তু সারিটা খাতায় বসে থাকে। না লিখলে
-                       মালিক ধরে নিতেন ওই দিনটা ছাড় পেয়েছে — আর সংখ্যা
-                       দেখে সেটা যাচাই করার কোনো উপায় থাকত না।
+                    Careful: this line is the most important part of the screen. Leave
+                       entered on a Friday or a public holiday reduces the target by
+                       nothing, yet the row stays in the ledger. Without the note the
+                       owner would assume that day was excused, with no way to check
+                       it from the numbers.
                   */}
                   {!row.countsTowardTarget && (
                     <span className="block text-[12px] text-idle-ink">
@@ -153,10 +153,10 @@ export function LeaveTab({ month }: { month: string }) {
             setSkipped([]);
           }}
           /**
-           * ⚠️ `mutation.run` কিছু ফেরায় না, তাই `skipped` ওর ভেতর দিয়ে
-           *    বের করা যায় না — বাদ পড়া দিনগুলো এখানেই ধরে রাখা হয়, আর
-           *    সেগুলো থাকলে মোডালটা **খোলাই থাকে**। বন্ধ করে দিলে "কোন
-           *    দিনগুলো বসেনি" প্রশ্নের উত্তর আর কোথাও থাকত না।
+           * Careful: `mutation.run` returns nothing, so `skipped` cannot come out of
+           *    it. The skipped days are held here, and while there are any the modal
+           *    **stays open**. Closing it would leave nowhere to answer "which days
+           *    were not added".
            */
           onSubmit={(body) =>
             mutation.run(async () => {
@@ -210,7 +210,7 @@ function AddLeave({
   staff: { value: string; label: string }[];
   month: string;
   busy: boolean;
-  /** আগে থেকেই খাতায় ছিল বলে যে দিনগুলো বসেনি */
+  /** Days that were not added because they were already in the ledger */
   skipped: string[];
   onClose: () => void;
   onSubmit: (body: {
@@ -228,17 +228,18 @@ function AddLeave({
   const [note, setNote] = useState('');
 
   /**
-   * ⚠️ শেষ তারিখ শুরুর আগে হলে সার্ভার ৪০০ ফেরাবে, কিন্তু বোতামটা তার
-   *    আগেই নিষ্ক্রিয় — একটা দেয়ালে পাঠানোর চেয়ে দেখিয়ে দেওয়াই ভালো।
+   * Careful: the server returns 400 if the end date is before the start, but the
+   *    button is already disabled before that; better to show it than to send
+   *    users into a wall.
    */
   const backwards = from !== '' && to !== '' && to < from;
 
   return (
     <Modal title="Add leave" onClose={onClose}>
       {/*
-        ⚠️ `skipped` চুপচাপ গিলে ফেলা যাবে না। আগে থেকেই খাতায় থাকা দিন
-           যোগ হয় না, আর "যোগ হয়েছে" বলে মোডাল বন্ধ করে দিলে মালিক ভাবতেন
-           পুরো রেঞ্জটাই বসেছে।
+        Careful: do not swallow `skipped` silently. Days already in the ledger are not
+           added, and closing the modal with "added" would make the owner think the
+           whole range went in.
       */}
       {skipped.length > 0 && (
         <Notice tone="attention">
@@ -265,7 +266,7 @@ function AddLeave({
           value={from}
           onChange={(v) => {
             setFrom(v);
-            // ⭐ একদিনের ছুটিই সবচেয়ে সাধারণ, তাই শেষ তারিখ সাথে চলে
+            // A one-day leave is the most common, so the end date follows the start
             if (to === '' || to < v) setTo(v);
           }}
           required

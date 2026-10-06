@@ -5,14 +5,14 @@ import { ScreenshotsService } from './screenshots.service';
 import { SignedUrlService } from './signed-url.service';
 
 /**
- * E06 · I07 · I08 · J05 — স্ক্রিনশট গ্যালারি ও signed URL।
+ * Screenshot gallery and signed URLs.
  *
- * PrismaModule আর AuditModule দুটোই `@Global`, ConfigModule-ও
- * `isGlobal: true` — তাই এখানে আলাদা করে `imports` লাগে না।
+ * PrismaModule and AuditModule are both `@Global` and ConfigModule is
+ * `isGlobal: true`, so no `imports` are needed here.
  *
- * `SignedUrlService` এক্সপোর্ট করা হয়েছে, কারণ Live Board (E03) কার্ডে
- * সর্বশেষ থাম্বনেইল দেখাতে গিয়ে একই সই লাগবে — সেখানে যেন কেউ নতুন করে
- * নিজের মতো টোকেন-ফরম্যাট না বানায়।
+ * `SignedUrlService` is exported because the Live Board cards need the same
+ * signature to show the latest thumbnail. Nobody should invent their own
+ * token format there.
  */
 @Module({
   controllers: [ScreenshotsController],

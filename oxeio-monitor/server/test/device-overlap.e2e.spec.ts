@@ -10,11 +10,11 @@ import { createHarness, resetDatabase, type Harness,
 } from './setup/harness';
 
 /**
- * **G32** — `device_overlap` অ্যালার্ট সত্যিই ওঠে কি না।
+ * **G32** — whether the `device_overlap` alert actually fires.
  *
- * ⚠️ ইউনিট টেস্ট (`device-overlap.spec.ts`) হিসাবটা পাহারা দেয়; এই ফাইল
- * পাহারা দেয় **প্রযোজকটাকে** — কারণ G32-র আসল বাগটাই ছিল সেটার অভাব।
- * টাইপ, লেবেল, ফিল্টার সব ছিল, শুধু কেউ অ্যালার্টটা বসাত না।
+ * The unit test (`device-overlap.spec.ts`) guards the calculation; this file
+ * guards the producer, because the original G32 bug was its absence. The
+ * type, label and filter all existed; nobody just raised the alert.
  */
 let h: Harness;
 let check: DeviceOverlapCheck;
@@ -23,22 +23,24 @@ let deviceA: number;
 let deviceB: number;
 
 /**
- * ⭐⭐ **দুটো আলাদা "এখন", আর সেটা ইচ্ছাকৃত (G140)।**
+ * Two different "now"s, and that is deliberate (G140).
  *
- * - `workDate` আসে `dhakaNoon()` থেকে — ফিক্সচারের কর্মদিবস, দুই সীমানা
- *   থেকেই ১২ ঘণ্টা দূরে, তাই মধ্যরাতে দিন ঘুরে গিয়ে ভাঙে না।
- * - `runOnce()` পায় **আসল ঘড়ি**, কারণ throttle মেলানো হয় অ্যালার্টের
- *   `created_at`-এর সাথে — আর সেটা **ডাটাবেসের** `now()` থেকে আসে।
+ * - `workDate` comes from `dhakaNoon()` — the fixture's work day, 12 hours
+ *   from both boundaries, so it does not break when the day rolls over at
+ *   midnight.
+ * - `runOnce()` gets the real clock, because the throttle is compared with
+ *   the alert's `created_at`, which comes from the database's `now()`.
  *
- * ⚠️⚠️ দুটো এক করে দুপুর পাঠানো হয়েছিল, আর টেস্ট সাথে সাথেই ধরিয়ে দিল:
- * ভোরে চালালে দুপুর আর DB-র `created_at`-এর ফারাক ৬ ঘণ্টার
- * `THROTTLE_HOURS` ছাড়িয়ে যেত, তাই "দ্বিতীয়বার চালালে আর বসে না"
- * দাবিটা ভাঙত। ⭐ অ্যাপের ঘড়ি আর ডাটাবেসের ঘড়ি এক না হলে পিন করা
- * মুহূর্ত বসানো যায় না — এটাই `realNow()`-এর একমাত্র বৈধ কারণ।
+ * The two were once merged and noon was sent; the test caught it at once:
+ * when run early in the morning, the gap between noon and the DB's
+ * `created_at` exceeded the 6-hour `THROTTLE_HOURS`, so the claim "a second
+ * run raises nothing" failed. A pinned instant cannot be used unless the
+ * app clock and the database clock are the same — that is the only valid
+ * reason for `realNow()`.
  */
 const workDate = workDateOf(dhakaNoon());
 
-/** ওই কর্মদিবসের ভেতরে একটা মুহূর্ত (ঢাকার ঘড়িতে ঘণ্টা + মিনিট) */
+/** An instant within that work day (hour + minute on the Dhaka clock) */
 const at = (hour: number, minute = 0): Date =>
   new Date(workDate.getTime() + (hour - 6) * 3_600_000 + minute * 60_000);
 
@@ -55,7 +57,7 @@ async function makeDevice(hostname: string): Promise<number> {
   return device.id;
 }
 
-/** ওই ডিভাইসে একটা ACTIVE খণ্ড */
+/** An ACTIVE segment on that device */
 async function segment(deviceId: number, from: Date, to: Date): Promise<void> {
   const session = await h.prisma.workSession.create({
     data: { employeeId, deviceId, workDate, startedAt: from, endedAt: to },
@@ -102,8 +104,8 @@ beforeEach(async () => {
   deviceB = await makeDevice('PC-LAP');
 });
 
-describe('device_overlap — প্রযোজক', () => {
-  it('আধ ঘণ্টা একসাথে চললে অ্যালার্ট ওঠে', async () => {
+describe('device_overlap — producer', () => {
+  it('the alert fires when both run together for half an hour', async () => {
     await segment(deviceA, at(9), at(13));
     await segment(deviceB, at(12, 30), at(15));
 
@@ -112,7 +114,7 @@ describe('device_overlap — প্রযোজক', () => {
     const [alert] = await alerts();
     expect(alert.severity).toBe('warning');
     expect(alert.employeeId).toBe(employeeId);
-    // ⚠️ ডিভাইস **null** — ঘটনাটা দুটো ডিভাইসের, একটার নয়
+    // The device is null — the event belongs to two devices, not one
     expect(alert.deviceId).toBeNull();
     expect(alert.title).toContain('Rakib Hasan');
 
@@ -122,12 +124,13 @@ describe('device_overlap — প্রযোজক', () => {
   });
 
   /**
-   * ⭐ সবচেয়ে জরুরি টেস্ট — একটাই ডিভাইস, কিন্তু অনেকগুলো খণ্ড, যাদের
-   * `duration_sec` (monotonic ঘড়ি) দেয়ালঘড়ির সময়ের সাথে হুবহু মেলে না।
-   * ⚠️ হিসাবটা `active_sec − worked_sec` হলে এখানেই মিথ্যা অ্যালার্ট উঠত,
-   * আর সেটা হতো সবচেয়ে খারাপ ধরনের ভুল: কারো কাজের সততা নিয়ে।
+   * The most important test — one device, but many segments whose
+   * `duration_sec` (monotonic clock) does not exactly match the wall-clock
+   * time. If the calculation were `active_sec - worked_sec`, a false alert
+   * would fire here, and that is the worst kind of mistake: it questions
+   * someone's honesty about their work.
    */
-  it('একটাই ডিভাইসে দিনভর কাজ — কিছুই ওঠে না', async () => {
+  it('working all day on a single device — nothing fires', async () => {
     await segment(deviceA, at(9), at(12));
     await segment(deviceA, at(12), at(15));
     await segment(deviceA, at(15), at(18));
@@ -136,15 +139,15 @@ describe('device_overlap — প্রযোজক', () => {
     expect(await alerts()).toHaveLength(0);
   });
 
-  it('দুটো ডিভাইস কিন্তু আলাদা সময়ে — কিছুই ওঠে না', async () => {
+  it('two devices but at different times — nothing fires', async () => {
     await segment(deviceA, at(9), at(13));
     await segment(deviceB, at(14), at(18));
 
     expect(await check.runOnce(realNow())).toBe(0);
   });
 
-  /** ⚠️ ৫ মিনিট — ল্যাপটপ নিয়ে মিটিংয়ে যাওয়ার স্বাভাবিক ছবি */
-  it('অল্প overlap-এ চুপ থাকে', async () => {
+  /** 5 minutes — the normal picture of taking a laptop to a meeting */
+  it('stays quiet for a small overlap', async () => {
     await segment(deviceA, at(9), at(13, 5));
     await segment(deviceB, at(13), at(17));
 
@@ -152,11 +155,11 @@ describe('device_overlap — প্রযোজক', () => {
   });
 
   /**
-   * ⚠️ চেকটা ঘণ্টায় একবার চলে, আর দিনের সব খণ্ড আবার পড়ে — তাই একই দিনে
-   * বারবার একই অ্যালার্ট বসার আশঙ্কা এখানে বাস্তব। `AlertsService`-এর
-   * ৬ ঘণ্টার throttle-ই সেটা ঠেকায়।
+   * The check runs once an hour and rereads all of the day's segments, so
+   * the risk of the same alert being raised repeatedly on one day is real.
+   * `AlertsService`'s 6-hour throttle is what prevents it.
    */
-  it('দ্বিতীয়বার চালালে আর বসে না (throttle)', async () => {
+  it('a second run raises nothing (throttle)', async () => {
     await segment(deviceA, at(9), at(13));
     await segment(deviceB, at(12), at(15));
 
@@ -166,29 +169,30 @@ describe('device_overlap — প্রযোজক', () => {
   });
 
   /**
-   * ⭐⭐⭐ **একই দিনে একটাই — ৬ ঘণ্টা পেরোলেও** *(৬ সেপ্টেম্বর ২০২৬, G166)*।
+   * One per day, even after 6 hours (6 September 2026, G166).
    *
-   * ⚠️⚠️ **যে বাগটা এটা পাহারা দেয়:** উপরের টেস্টটা দুবার **একই মুহূর্তে**
-   * চালাত, তাই ৬ ঘণ্টার throttle-ই যথেষ্ট মনে হতো। কিন্তু চেকটা চলে
-   * **প্রতি ঘণ্টায়**, আর প্রতিবার গোটা ঢাকা-দিনের সেগমেন্ট পড়ে — শর্তটা
-   * একবার সত্যি হলে দিনের বাকি সব টিকেও সত্যি। ফলে ৬ ঘণ্টা পরপর একই
-   * ঘটনার জন্য নতুন অ্যালার্ট, দিনে ৩–৪টা, প্রত্যেকটা আলাদা ইমেইল।
+   * The bug this guards: the test above ran twice at the same instant, so
+   * the 6-hour throttle seemed sufficient. But the check runs every hour and
+   * reads the whole Dhaka day's segments each time — once the condition is
+   * true, it stays true for every later tick that day. So a new alert for the
+   * same event every 6 hours, 3-4 a day, each one a separate email.
    *
-   * ⚠️ মাঠে একই পথে চলা `agent_down` ঠিক এটাই করেছে: ২২ আগস্ট ১৩টা
-   * জোড়ার প্রত্যেকটা ঠিক ৪বার — ০০:১৭ · ০৬:১৯ · ১২:২০ · ১৮:২০।
+   * In the field `agent_down`, on the same path, did exactly this: on 22
+   * August each of 13 pairs fired exactly 4 times — 00:17, 06:19, 12:20,
+   * 18:20.
    *
-   * ⭐ এখানে `created_at` হাতে বসানো হয়েছে আর `now`-ও পিন করা, কারণ
-   * DB-র ঘড়ির উপর ছেড়ে দিলে দাবিটা দিনের কোন সময়ে টেস্ট চলছে তার
-   * উপর নির্ভর করত (G140)।
+   * Here `created_at` is set by hand and `now` is pinned too, because
+   * leaving it to the DB clock would make the claim depend on what time of
+   * day the test runs (G140).
    */
-  it('⭐ ৬ ঘণ্টা পরেও একই দিনে দ্বিতীয় অ্যালার্ট বসে না', async () => {
+  it('a second alert is not raised the same day even after 6 hours', async () => {
     await segment(deviceA, at(9), at(13));
     await segment(deviceB, at(12), at(15));
 
     expect(await check.runOnce(realNow())).toBe(1);
 
-    // ⚠️ ভোর ১টায় সরিয়ে দেওয়া — সন্ধ্যার টিক থেকে ১৯ ঘণ্টা দূরে,
-    //    অর্থাৎ ৬ ঘণ্টার জানালার অনেক বাইরে, তবু **একই ঢাকা-দিন**
+    // Moved to 1 AM — 19 hours from the evening tick, well outside the 6-hour
+    // window, yet the same Dhaka day
     await h.prisma.alert.updateMany({ data: { createdAt: at(1) } });
 
     expect(await check.runOnce(at(20))).toBe(0);
@@ -196,25 +200,25 @@ describe('device_overlap — প্রযোজক', () => {
   });
 
   /**
-   * ⚠️⚠️ **পরের দিন আবার বসে** — এটাই উপরের ফিক্সের দাম মেটানো টেস্ট।
-   * দিনভিত্তিক চুপ থাকাটা যেন "চিরকাল চুপ" হয়ে না যায়: নতুন ঢাকা-দিন
-   * মানে নতুন ঘটনা, আর মালিকের সেটা জানা দরকার।
+   * It fires again the next day — this test pays for the fix above. Per-day
+   * silence must not turn into "silent forever": a new Dhaka day means a new
+   * event, and the owner needs to know.
    */
-  it('⭐ আগের দিনের অ্যালার্ট আজকেরটাকে আটকায় না', async () => {
+  it('yesterday\'s alert does not block today\'s', async () => {
     await segment(deviceA, at(9), at(13));
     await segment(deviceB, at(12), at(15));
 
     expect(await check.runOnce(realNow())).toBe(1);
 
-    // গতকাল রাত ১১টা — ৬ ঘণ্টার জানালাতেও নেই, আজকের দিনেও নেই
+    // Yesterday 11 PM — outside the 6-hour window and not in today either
     await h.prisma.alert.updateMany({ data: { createdAt: at(-1) } });
 
     expect(await check.runOnce(at(20))).toBe(1);
     expect(await alerts()).toHaveLength(2);
   });
 
-  /** idle খণ্ড দুই মেশিনে একসাথে থাকাটা স্বাভাবিক — একটা মেশিন লক করা পড়ে আছে */
-  it('idle খণ্ড গোনা হয় না', async () => {
+  /** idle segments on two machines at once are normal — one machine is left locked */
+  it('idle segments are not counted', async () => {
     await segment(deviceA, at(9), at(17));
 
     const session = await h.prisma.workSession.create({

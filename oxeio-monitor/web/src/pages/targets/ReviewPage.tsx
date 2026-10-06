@@ -2,21 +2,20 @@ import { Page } from '../../components/Page';
 import { TargetList } from './AllTargetsPage';
 
 /**
- * ⭐⭐ **Review** *(মালিকের নির্দেশ, ৩১ আগস্ট ২০২৬: "side bar e design pool
- * er niche review name ekta page koro. sekhane ei deleted and skip deya
- * design show korao")*।
+ * **Review.** The owner's instruction: add a page called Review in the
+ * sidebar under Design Pool, showing the deleted and skipped designs.
  *
- * ⚠️⚠️ **নিজের পাতা, কারণ এটা অন্য মানুষের কাজ।** Design Pool গবেষকের
- * রোজকার পাতা — ৩৯ হাজার সারি, চারটে কিউ, জমা দেওয়ার ঘর। বাদ-যাওয়া
- * ডিজাইন দেখা মালিক ও ম্যানেজারের কাজ, আর সেটা রোজ নয়। ⭐ এক পাতায়
- * রাখলে দুই দলের কাজ একই পর্দায় মিশে থাকত, আর ২৫ আগস্টের ছাঁটাইয়ের গোটা
- * কথাই ছিল উল্টোটা।
+ * Important: **a page of its own, because it is other people's work.** Design
+ * Pool is the researcher's daily page: 39,000 rows, four queues, the submission
+ * box. Looking at dropped designs is the owner's and manager's job, and not
+ * daily. On one page the two teams' work would mix on the same screen, and the
+ * whole point of the August trimming was the opposite.
  *
- * ⚠️ টেবিলটা **নকল নয়** — `AllTargetsPage`-এর `TargetList`-ই, কেবল
- * `to_review` কিউতে আটকানো (১৭ আগস্টে Worklog-এর সময় শেখা নিয়ম)।
+ * Careful: the table is **not a copy**; it is `AllTargetsPage`'s `TargetList`,
+ * only locked to the `to_review` queue (a rule learnt from the Worklog page).
  *
- * ⚠️ পাতাটা owner ও manager ছাড়া কেউ দেখেন না — সাইডবার, রুট আর
- * সার্ভারের `@Roles` তিন জায়গাতেই এক।
+ * Careful: nobody except owner and manager sees this page: the sidebar, the
+ * route and the server's `@Roles` are all the same.
  */
 export function ReviewPage() {
   return (

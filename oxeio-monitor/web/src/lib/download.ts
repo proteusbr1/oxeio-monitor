@@ -1,32 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
- * F05 — .xlsx ডাউনলোড।
+ * F05: .xlsx download.
  *
- * ⭐ `api<T>()` ব্যবহার করা হয় **না**। ওটা রেসপন্সকে সবসময় JSON ধরে নিয়ে
- * `JSON.parse()` করে, আর সার্ভার এখানে বাইনারি পাঠায় — ফলে ফাইলটা এসে
- * পৌঁছেও `SyntaxError` হয়ে হারিয়ে যেত। তাই আলাদা `fetch`, তারপর `blob()`।
+ * `api<T>()` is not used. It always assumes the response is JSON and calls
+ * `JSON.parse()`, while the server sends binary here, so the file would arrive
+ * and then be lost as a `SyntaxError`. Hence a separate `fetch`, then `blob()`.
  *
- * ⭐ সাধারণ `<a href download>`-ও কাজ করত, কিন্তু তখন **কখন শেষ হলো তা জানার
- * কোনো উপায় থাকত না**। এক বছরের রেঞ্জে সার্ভারের কয়েক সেকেন্ড লাগে; ওই
- * সময়টুকুতে বোতাম চুপচাপ বসে থাকলে মানুষ বারবার চাপে, আর প্রতিবার সার্ভারে
- * নতুন করে পুরো রিপোর্ট তৈরি হয়। fetch করলে বোতামটা নিষ্ক্রিয় রাখা যায় আর
- * "Preparing…" বলা যায়। ব্যর্থ হলে বার্তাটাও পর্দায় দেখানো যায় — `<a>`-এ
- * ৪০৩ এলে ব্রাউজার নীরবে একটা JSON ফাইল নামিয়ে রাখত।
+ * A plain `<a href download>` would work too, but then there would be no way to
+ * know when it finished. For a one-year range the server takes several seconds;
+ * if the button sits silent during that time people press it repeatedly, and each
+ * press makes the server build the whole report again. With fetch the button can
+ * be disabled and say "Preparing...". On failure the message can also be shown
+ * on screen: with `<a>`, a 403 would make the browser silently save a JSON file.
  */
 
 /** `attachment; filename="oxeio-attendance-2026-08-01_2026-08-11.xlsx"` */
 const DISPOSITION_NAME = /filename="?([^";]+)"?/i;
 
 export interface XlsxDownload {
-  /** ডাউনলোড চলছে — বোতাম নিষ্ক্রিয় রাখুন */
+  /** A download is running: keep the button disabled. */
   busy: boolean;
   error: string | null;
   start: (url: string, fallbackName: string) => void;
   /**
-   * পুরোনো এরর মুছে ফেলা। ⚠️ ট্যাব বদলালে এটা ডাকতে হয় — নইলে
-   * অ্যাটেনডেন্স নামাতে গিয়ে হওয়া ভুলটা সারাংশ ট্যাবেও ঝুলে থাকত, আর
-   * মনে হতো সারাংশেই কিছু একটা গোলমাল।
+   * Clear the old error. Careful: call it when the tab changes; otherwise an error
+   * from downloading Attendance would stay hanging on the Summary tab too, and
+   * it would look as if something were wrong with the Summary.
    */
   clear: () => void;
 }
@@ -35,9 +35,9 @@ export function useXlsxDownload(): XlsxDownload {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ⚠️ ফাইল তৈরি হতে কয়েক সেকেন্ড লাগে; এর মধ্যে ব্যবহারকারী অন্য ট্যাবে
-  //    চলে গেলে unmount-এর পর `setState` হতো (React-এর সতর্কবার্তা, আর
-  //    বাস্তবে হারিয়ে যাওয়া এরর)। তাই বেঁচে আছে কি না মিলিয়ে নেওয়া।
+  // Careful: building the file takes a few seconds; if the user moves to another
+  // tab meanwhile, `setState` would run after unmount (React's warning, and in
+  // practice a lost error). So check that it is still alive.
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -52,8 +52,8 @@ export function useXlsxDownload(): XlsxDownload {
 
     void (async () => {
       try {
-        // ⚠️ `credentials: 'include'` ছাড়া সেশন cookie যায় না — তখন ৪০১
-        //    এসে ব্যবহারকারী হঠাৎ লগইন পর্দায় ছিটকে যেত।
+        // Careful: without `credentials: 'include'` the session cookie is not sent; a
+        // 401 would then come and throw the user suddenly onto the login screen.
         const res = await fetch(url, { credentials: 'include' });
         if (!res.ok) throw new Error(await messageOf(res));
 
@@ -73,12 +73,12 @@ export function useXlsxDownload(): XlsxDownload {
 }
 
 /**
- * ⚠️ ব্যর্থ হলে সার্ভার JSON পাঠায় (বাইনারি নয়), তাই বার্তাটা তুলে আনা যায়।
- *    ৪০৩-এর নিজস্ব বাক্য — `<ErrorBox>` যা বলে, **হুবহু** সেটাই ("You don't
- *    have access"), যাতে দুই জায়গায় দুই রকম শোনায় না। ওখানে বদলালে এখানেও।
+ * Careful: on failure the server sends JSON (not binary), so the message can be
+ * extracted. The 403 sentence is exactly what `<ErrorBox>` says ("You don't have
+ * access"), so the two places do not sound different. Change it there and change it here.
  *
- * ⚠️ মাঝের `body.message` সার্ভারের নিজের লেখা — যেমন আসে তেমনই দেখানো হয়
- *    (`<ErrorBox>`-এর মতোই; ভাষা ঠিক করার জায়গা সার্ভার, ক্লায়েন্ট নয়)।
+ * Careful: the middle `body.message` is the server's own text, shown as it
+ * comes (as in `<ErrorBox>`; the server is the place to settle language, not the client).
  */
 async function messageOf(res: Response): Promise<string> {
   if (res.status === 403) return "You don't have access";
@@ -90,17 +90,18 @@ async function messageOf(res: Response): Promise<string> {
     if (Array.isArray(message)) return message.join(', ');
     if (typeof message === 'string') return message;
   } catch {
-    // বডি খালি বা বাইনারি — নিচের সাধারণ বার্তাটাই যাবে
+    // Body empty or binary: the generic message below will be used
   }
 
   return `Couldn't build the file (${res.status})`;
 }
 
 /**
- * ⚠️ নামটা সার্ভারই ঠিক করে (`reports.excel.ts` → `reportFilename`), কারণ
- *    ফাইলের নামে রেঞ্জটা লেখা থাকে। হেডার না পড়া গেলে (প্রক্সি ছেঁটে দিলে)
- *    fallback — নইলে ব্রাউজার `download.xlsx` নামে সেভ করত আর ডাউনলোড
- *    ফোল্ডারে কোনটা কোন রিপোর্ট বোঝার উপায় থাকত না।
+ * Careful: the server decides the name (`reportFilename` in `reports.excel.ts`),
+ * because the range is written in the file name. If the header cannot be read (a
+ * proxy trimmed it) there is a fallback; otherwise the browser would save it as
+ * `download.xlsx` and there would be no way to tell which report is which in the
+ * downloads folder.
  */
 function filenameOf(res: Response): string | null {
   const header = res.headers.get('Content-Disposition');
@@ -118,9 +119,9 @@ function saveBlob(blob: Blob, filename: string): void {
   link.click();
   link.remove();
 
-  // ⚠️⚠️ `revokeObjectURL` **অবশ্যই** করতে হবে — নইলে পুরো ফাইলটা ট্যাব বন্ধ
-  //    না করা পর্যন্ত মেমরিতে বসে থাকে, আর রিপোর্ট নামানো মানুষ পরপর দশবার
-  //    নামায়। কিন্তু `click()`-এর সাথে সাথেই revoke করা যায় না: ব্রাউজার
-  //    তখনো URL-টা পড়ছে, আর সরিয়ে নিলে ডাউনলোডটাই বাতিল হয়ে যেত।
+  // Careful: `revokeObjectURL` must be called; otherwise the whole file stays in
+  // memory until the tab is closed, and someone downloading reports does it ten
+  // times in a row. But it cannot be revoked right after `click()`: the browser
+  // is still reading the URL, and removing it would cancel the download.
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

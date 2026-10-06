@@ -3,22 +3,22 @@ using oXeio.Core.Time;
 namespace oXeio.Core.Tests;
 
 /// <summary>
-/// সার্ভারের <c>dhaka-time.ts</c>-এর সাথে হুবহু একই ফল দিতে হবে —
-/// নইলে এজেন্ট আর সার্ভার আলাদা <c>work_date</c> বের করবে।
+/// Must give exactly the same result as the server's <c>dhaka-time.ts</c>;
+/// otherwise the agent and the server would compute different <c>work_date</c> values.
 /// </summary>
 public class DhakaTimeTests
 {
     [Fact]
     public void রাত_এগারোটা_পঞ্চাশ_আগের_দিনেই_পড়ে()
     {
-        var t = new DateTimeOffset(2026, 8, 8, 17, 50, 0, TimeSpan.Zero); // ঢাকায় ২৩:৫০
+        var t = new DateTimeOffset(2026, 8, 8, 17, 50, 0, TimeSpan.Zero); // 23:50 in Dhaka
         Assert.Equal(new DateOnly(2026, 8, 8), DhakaTime.WorkDateOf(t));
     }
 
     [Fact]
     public void মধ্যরাতের_পর_নতুন_দিন()
     {
-        var t = new DateTimeOffset(2026, 8, 8, 18, 0, 0, TimeSpan.Zero); // ঢাকায় ০০:০০
+        var t = new DateTimeOffset(2026, 8, 8, 18, 0, 0, TimeSpan.Zero); // 00:00 in Dhaka
         Assert.Equal(new DateOnly(2026, 8, 9), DhakaTime.WorkDateOf(t));
     }
 
@@ -41,7 +41,7 @@ public class DhakaTimeTests
     [Fact]
     public void স্থানীয়_ঘড়ির_সময়_ঠিক_আসে()
     {
-        var t = new DateTimeOffset(2026, 8, 9, 1, 0, 0, TimeSpan.Zero); // ঢাকায় ০৭:০০
+        var t = new DateTimeOffset(2026, 8, 9, 1, 0, 0, TimeSpan.Zero); // 07:00 in Dhaka
         Assert.Equal(new TimeOnly(7, 0), DhakaTime.LocalTimeOf(t));
     }
 }

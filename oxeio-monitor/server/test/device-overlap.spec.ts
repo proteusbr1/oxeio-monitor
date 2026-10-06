@@ -5,15 +5,16 @@ import { shouldFlagOverlap } from '../src/alerts/alerts.rules';
 import { overlapSec, type DeviceSpans } from '../src/summary/summary.math';
 
 /**
- * **G32** — একই স্টাফের দুটো ডিভাইস একসাথে।
+ * **G32** — two devices of the same staff member at the same time.
  *
- * ⚠️ এই অ্যালার্টটা একজন মানুষের নামে ওঠে, ডিভাইসের নামে নয় — তাই ভুল
- * হিসাবের দাম এখানে সবচেয়ে বেশি। একটা মিথ্যা `device_overlap` মানে কারো
- * কাজের সততা নিয়ে প্রশ্ন তোলা, অথচ সে হয়তো সারাদিন একটাই মেশিনে ছিল।
+ * This alert is raised against a person, not a device, so a wrong
+ * calculation costs the most here. A false `device_overlap` questions
+ * someone's honesty about their work, when they may have used a single
+ * machine all day.
  */
 
 const at = (hh: number, mm = 0): Date =>
-  new Date(Date.UTC(2026, 7, 12, hh - 6, mm)); // ঢাকা → UTC
+  new Date(Date.UTC(2026, 7, 12, hh - 6, mm)); // Dhaka -> UTC
 
 const span = (fromH: number, toH: number) => ({
   startedAt: at(fromH),
@@ -23,64 +24,64 @@ const span = (fromH: number, toH: number) => ({
 const device = (deviceId: number, ...spans: Array<{ startedAt: Date; endedAt: Date }>):
   DeviceSpans => ({ deviceId, spans });
 
-describe('overlapSec — কত সেকেন্ড দুই মেশিন একসাথে চলেছে', () => {
-  it('ডিভাইস একটা হলে শূন্য', () =>
+describe('overlapSec — how many seconds two machines ran together', () => {
+  it('zero when there is one device', () =>
     expect(overlapSec([device(1, span(9, 17))])).toBe(0));
 
-  it('কিছুই না থাকলে শূন্য', () => expect(overlapSec([])).toBe(0));
+  it('zero when there is nothing', () => expect(overlapSec([])).toBe(0));
 
   /**
-   * ⭐ এটাই সেই ভুলটার পাহারা যেটা প্রায় হয়েই গিয়েছিল। এখানে দুটো ডিভাইস
-   * আছে কিন্তু সময়ে **মেলে না** — সকালে ডেস্কটপ, বিকেলে ল্যাপটপ। ভুল
-   * হিসাবে (`active_sec − worked_sec`) এখানেও একটা ফারাক আসতে পারত।
+   * Guards a mistake that nearly happened. Two devices, but their times do
+   * not coincide — desktop in the morning, laptop in the afternoon. The wrong
+   * calculation (`active_sec - worked_sec`) could produce a gap here too.
    */
-  it('দুটো ডিভাইস কিন্তু আলাদা সময়ে — শূন্য', () =>
+  it('two devices but at different times — zero', () =>
     expect(overlapSec([device(1, span(9, 13)), device(2, span(14, 18))])).toBe(0));
 
-  it('দুই ঘণ্টা মিলে গেলে দুই ঘণ্টা', () =>
+  it('two hours together gives two hours', () =>
     expect(overlapSec([device(1, span(9, 13)), device(2, span(11, 15))])).toBe(
       2 * 3600,
     ));
 
-  it('একটা ডিভাইসের সময় পুরোপুরি আরেকটার ভেতরে', () =>
+  it('one device\'s time entirely inside another\'s', () =>
     expect(overlapSec([device(1, span(9, 18)), device(2, span(11, 12))])).toBe(3600));
 
   /**
-   * ⚠️ একই মেশিনের দুটো ছোঁয়া-ছোঁয়া খণ্ড (রিট্রাই, সেশন আবার খোলা) যেন
-   * overlap বলে না গোনা হয় — তাই প্রতি ডিভাইসের নিজের UNION নেওয়া হয়,
-   * কাঁচা যোগফল নয়। যোগফল নিলে এখানে ফল আসত ১ ঘণ্টা, অথচ মেশিন একটাই।
+   * Two touching segments of the same machine (retry, session reopened) must
+   * not be counted as overlap — so each device's own UNION is taken, not the
+   * raw sum. A raw sum would give 1 hour here, yet there is only one machine.
    */
-  it('একই মেশিনের পরস্পরকে ছোঁয়া খণ্ড overlap নয়', () =>
+  it('touching segments of the same machine are not overlap', () =>
     expect(overlapSec([device(1, span(9, 12), span(11, 13))])).toBe(0));
 
-  it('তিনটে ডিভাইস একসাথে — জোড়াগুলোর যোগ', () =>
-    // ৯–১২, ৯–১২, ৯–১২ · একসাথে ৩ ঘণ্টা → Σ৯ − ৩ = ৬
+  it('three devices together — the sum over the pairs', () =>
+    // 9-12, 9-12, 9-12 · 3 hours together -> sum 9 - 3 = 6
     expect(
       overlapSec([device(1, span(9, 12)), device(2, span(9, 12)), device(3, span(9, 12))]),
     ).toBe(6 * 3600));
 });
 
-describe('shouldFlagOverlap — অ্যালার্ট উঠবে কি না', () => {
+describe('shouldFlagOverlap — whether the alert fires', () => {
   const input = (overlap: number, deviceCount = 2) => ({
     deviceCount,
     overlapSec: overlap,
     workedSec: 8 * 3600,
   });
 
-  it('ডিভাইস একটা হলে কখনোই নয়', () =>
+  it('never when there is one device', () =>
     expect(shouldFlagOverlap(input(9999, 1))).toBe(false));
 
   /**
-   * ⚠️ ১৪ মিনিট — রোজকার ঘটনা (ডেস্কটপ লক না করে ল্যাপটপ নিয়ে মিটিং)।
-   * দোরগোড়া নামালে প্রায় প্রতিদিন সবার নামে অ্যালার্ট উঠত, আর তখন
-   * এই অ্যালার্টটার মানেই থাকত না।
+   * 14 minutes is an everyday event (taking a laptop to a meeting without
+   * locking the desktop). With a lower threshold an alert would fire for
+   * nearly everyone nearly every day, and the alert would mean nothing.
    */
-  it('অল্প overlap-এ চুপ থাকে', () =>
+  it('stays quiet for a small overlap', () =>
     expect(shouldFlagOverlap(input(14 * 60))).toBe(false));
 
-  it('ঠিক ১৫ মিনিটে ওঠে', () =>
+  it('fires at exactly 15 minutes', () =>
     expect(shouldFlagOverlap(input(OVERLAP_ALERT_SEC))).toBe(true));
 
-  it('আধ ঘণ্টায় অবশ্যই ওঠে', () =>
+  it('definitely fires at half an hour', () =>
     expect(shouldFlagOverlap(input(30 * 60))).toBe(true));
 });

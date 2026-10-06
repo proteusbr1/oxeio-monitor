@@ -15,16 +15,16 @@ import {
 } from './alerts.rules';
 import { AlertsService, type RaiseInput } from './alerts.service';
 
-/** এক দফায় সর্বোচ্চ কত ইভেন্ট দেখা হবে — কিউ জমে গেলেও কুয়েরি ছোট থাকে */
+/** The most events looked at in one pass; keeps the query small even if a queue builds up. */
 const MAX_EVENTS_PER_RUN = 500;
 
 /**
- * G02 — এজেন্ট বন্ধ বা আনইনস্টলের চেষ্টা।
+ * G02 - an attempt to stop or uninstall the agent.
  *
- * ⭐ এটাই একমাত্র চেক যেখানে **মিথ্যা অ্যালার্টকে** নীরবতার চেয়ে কম ক্ষতিকর
- * ধরা হয়েছে। বাকি সব চেকে সন্দেহ হলে চুপ থাকা হয়; এখানে সন্দেহ হলে বলা হয়।
- * কারণ চুপচাপ বন্ধ করে রাখা এজেন্ট মানে ওই দিনের ঘণ্টা কোথাও নেই — আর
- * সেটা কেউ টের পায় মাসের শেষে, যখন আর কিছু করার থাকে না।
+ * This is the only check where a **false alert** is considered less harmful
+ * than silence. Every other check stays quiet when in doubt; this one speaks.
+ * An agent that is quietly switched off means that day's hours are nowhere, and
+ * nobody notices until month end, when nothing can be done.
  */
 @Injectable()
 export class AgentTamperCheck {
@@ -41,9 +41,9 @@ export class AgentTamperCheck {
     const stops = await this.prisma.event.findMany({
       where: {
         type: { in: [...TAMPER_EVENT_TYPES] },
-        // ⚠️ `receivedAt`, `occurredAt` নয় — এজেন্ট অফলাইনে ইভেন্ট জমিয়ে রাখে,
-        //    তাই তিন দিন আগের একটা agent_stop আজ এসে পৌঁছাতে পারে। ঘটনার
-        //    সময় ধরে খুঁজলে ওই দেরিতে আসা ঘটনাগুলো কোনোদিনই ধরা পড়ত না।
+        // Careful: `receivedAt`, not `occurredAt`. The agent stores events while
+        //    offline, so an agent_stop from three days ago can arrive today.
+        //    Searching by event time would never catch those late arrivals.
         receivedAt: { gte: since },
         deviceId: { not: null },
       },
@@ -96,8 +96,8 @@ export class AgentTamperCheck {
   }
 
   /**
-   * ওই ডিভাইসগুলোর logoff/shutdown ইভেন্ট, ঘটনার সময়ের আশপাশ থেকে।
-   * এগুলোই ঠিক করে কোন agent_stop স্বাভাবিক আর কোনটা নয়।
+   * The logoff/shutdown events of those devices, from around the time of the
+   * stop. They decide which agent_stop is normal and which is not.
    */
   private async shutdownContext(
     stops: readonly { deviceId: number | null; occurredAt: Date }[],
@@ -116,11 +116,12 @@ export class AgentTamperCheck {
       where: {
         deviceId: { in: deviceIds },
         /**
-         * ⚠️⚠️ তালিকাটা এখানে **আর হাতে লেখা নেই**। আগে ছিল, আর সেটাই
-         * নিয়মটার দ্বিতীয় কপি হয়ে দাঁড়িয়েছিল: `isTamperStop()` একটা তালিকা
-         * দেখত, কোয়েরি আরেকটা। ⭐ `agent_update` যোগ করার সময় ঠিক এই
-         * ফাঁদটাই সামনে এল — নিয়মে যোগ করলেও কোয়েরি সারিটা **টেনেই আনত না**,
-         * তাই জোড়া কখনো মিলত না আর মিথ্যা অ্যালার্ট আগের মতোই উঠত।
+         * Careful: the list is **no longer hand-written here**. It used to be,
+         * and that became a second copy of the rule: `isTamperStop()` looked at
+         * one list, the query at another. This trap showed up exactly when
+         * `agent_update` was added: even after adding it to the rule, the query
+         * **never fetched the row**, so the pair never matched and false alerts
+         * kept firing as before.
          */
         type: { in: [...CLEAN_STOP_CONTEXT] },
         occurredAt: {

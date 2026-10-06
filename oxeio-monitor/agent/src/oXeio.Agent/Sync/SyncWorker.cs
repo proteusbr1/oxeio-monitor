@@ -7,14 +7,14 @@ using oXeio.Core.Models;
 namespace oXeio.Agent.Sync;
 
 /// <summary>
-/// আউটবক্স থেকে সার্ভারে — এই লুপটাই মডিউলগুলোকে জুড়ে দেয়।
+/// From the outbox to the server: this loop is what ties the modules together.
 ///
-/// <b>ক্রম গুরুত্বপূর্ণ:</b> সেগমেন্ট সবার আগে। লিংক দুর্বল হলে বা ব্যাকলগ
-/// বড় হলে যেটা আগে যাবে সেটাই যেন <b>পে-রোলের ডেটা</b> হয়; স্ক্রিনশট
-/// (আকারে সবচেয়ে বড়, গুরুত্বে সবচেয়ে কম) সবার শেষে।
+/// <b>The order matters:</b> segments come first. When the link is weak or the backlog is
+/// large, whatever goes first should be the <b>payroll data</b>; screenshots (the biggest in
+/// size, the least important) go last.
 ///
-/// <b>প্রতিটা চক্রে সীমা আছে</b> — এক ধরনের সারি অসীমকাল চললে বাকিরা
-/// অভুক্ত থাকত। ৫০,০০০ সারির ব্যাকলগেও সেগমেন্ট আর ইভেন্ট দুটোই এগোতে থাকে।
+/// <b>Every cycle has limits:</b> if one kind of row ran indefinitely the others would
+/// starve. Even with a 50,000-row backlog, segments and events both keep moving.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class SyncWorker(
@@ -25,16 +25,16 @@ internal sealed class SyncWorker(
     SyncHealthPolicy? health = null,
     Func<DateTimeOffset>? clock = null)
 {
-    /// <summary>এক চক্রে প্রতি ধরনে সর্বোচ্চ কত ব্যাচ — starvation ঠেকাতে।</summary>
+    /// <summary>Most batches per kind in one cycle; prevents starvation.</summary>
     private const int MaxBatchesPerKindPerCycle = 4;
 
     /// <summary>
-    /// lease কতক্ষণের। আপলোডের সর্বোচ্চ সময়ের (৬০ সে.) চেয়ে যথেষ্ট বেশি,
-    /// যাতে ধীর লিংকে নিজেরই lease মেয়াদোত্তীর্ণ হয়ে দুবার না পাঠায়।
+    /// How long a lease lasts. Comfortably longer than the maximum upload time (60 s), so that
+    /// on a slow link our own lease does not expire and cause a double send.
     /// </summary>
     private static readonly TimeSpan LeaseFor = TimeSpan.FromMinutes(5);
 
-    /// <summary>⚠️ সেগমেন্ট আগে, স্ক্রিনশট শেষে — ইচ্ছাকৃত।</summary>
+    /// <summary>Segments first, screenshots last; deliberate.</summary>
     private static readonly OutboundKind[] Order =
     [
         OutboundKind.Segment,
@@ -54,7 +54,7 @@ internal sealed class SyncWorker(
         [OutboundKind.Event] = new BatchNarrowing(SyncLimits.MaxBatchSize),
         [OutboundKind.AppUsage] = new BatchNarrowing(SyncLimits.MaxBatchSize),
 
-        // ছবি multipart-এ যায়, একটা করেই — ভাগাভাগির প্রশ্নই নেই
+        // Screenshots go as multipart, one at a time; no question of splitting
         [OutboundKind.Screenshot] = new BatchNarrowing(1),
     };
 
@@ -70,8 +70,8 @@ internal sealed class SyncWorker(
     public string? HealthDetail => SyncHealthPolicy.Describe(Health, Depth.Total);
 
     /// <summary>
-    /// একবার নিষ্কাশনের চেষ্টা। ব্যতিক্রম বাইরে যায় না — এই লুপ মরে গেলে
-    /// ডেটা আর কখনো সার্ভারে পৌঁছাত না, আর সেটা কেউ দেখতেও পেত না।
+    /// One drain attempt. Exceptions do not escape: if this loop died, data would never
+    /// reach the server again and nobody would even see it.
     /// </summary>
     public async Task DrainOnceAsync(CancellationToken ct = default)
     {
@@ -79,8 +79,8 @@ internal sealed class SyncWorker(
 
         try
         {
-            // ক্র্যাশে আটকে থাকা lease ছাড়িয়ে নেওয়া — নইলে ওই সারিগুলো
-            // মেয়াদ শেষ না হওয়া পর্যন্ত অদৃশ্য থাকত
+            // Reclaim leases stuck from a crash; otherwise those rows would stay invisible
+            // until their lease expired
             var reclaimed = await store.ReclaimExpiredLeasesAsync(_clock(), ct);
             if (reclaimed > 0)
                 _log.Warn($"{reclaimed} stuck leases were released (did the previous run crash?)");
@@ -95,7 +95,7 @@ internal sealed class SyncWorker(
         }
         catch (OperationCanceledException)
         {
-            // থামতে বলা হয়েছে — স্বাভাবিক
+            // Asked to stop; normal
         }
         catch (Exception ex)
         {
@@ -104,15 +104,15 @@ internal sealed class SyncWorker(
     }
 
     /// <summary>
-    /// ⭐ শুধু একটা <paramref name="kind"/> এখনই নিষ্কাশন — বন্ধ হওয়ার সময়
-    /// বিদায়ী ইভেন্ট (<see cref="OutboundKind.Event"/>) যেন সেগমেন্ট-ব্যাকলগের
-    /// পেছনে আটকে না থাকে সেজন্য <c>AgentHost.DisposeAsync</c> full drain-এর
-    /// আগে এটা ডাকে (G136)। <see cref="DrainOnceAsync"/> সবসময় <see cref="Order"/>
-    /// ধরে সব kind ঘোরে; এখানে একটাই।
+    /// Drains just one <paramref name="kind"/> right now. At shutdown,
+    /// <c>AgentHost.DisposeAsync</c> calls this before the full drain so that the farewell
+    /// events (<see cref="OutboundKind.Event"/>) are not stuck behind the segment backlog.
+    /// <see cref="DrainOnceAsync"/> always goes through every kind in <see cref="Order"/>;
+    /// this does just one.
     ///
-    /// ⚠️ <see cref="DrainOnceAsync"/>-এর মতোই ব্যতিক্রম বাইরে যায় না — এই
-    /// পথ বন্ধ হওয়ার শেষ মুহূর্তে চলে, ওখানে ছুটে যাওয়া exception প্রসেসকে
-    /// নোংরাভাবে ফেলে দিত।
+    /// Careful: like <see cref="DrainOnceAsync"/>, exceptions do not escape. This path runs
+    /// in the last moments of shutdown, and an exception escaping there would bring the
+    /// process down messily.
     /// </summary>
     public async Task DrainKindOnceAsync(OutboundKind kind, CancellationToken ct = default)
     {
@@ -124,7 +124,7 @@ internal sealed class SyncWorker(
         }
         catch (OperationCanceledException)
         {
-            // থামতে বলা হয়েছে — স্বাভাবিক
+            // Asked to stop; normal
         }
         catch (Exception ex)
         {
@@ -148,13 +148,13 @@ internal sealed class SyncWorker(
             var outcome = await SendLeaseAsync(kind, lease, ct);
             await ApplyOutcomeAsync(kind, lease, outcome, narrowing, ct);
 
-            // Permanent-এ ব্যাচ ছোট করে **সাথে সাথেই** আবার চেষ্টা হয়, তাই
-            // লুপ চালু থাকে। বাকি সব ক্ষেত্রে ছোট ব্যাচ মানে আর কিছু নেই।
+            // On Permanent, the batch is narrowed and retried **immediately**, so the loop
+            // continues. In every other case a smaller batch means there is nothing left.
             if (outcome.Outcome != SyncOutcome.Permanent && lease.Count < narrowing.Current) return;
         }
     }
 
-    // ── পাঠানো ──────────────────────────────────────────────────────────────
+    // ── sending ─────────────────────────────────────────────────────────────
 
     private async Task<SyncResult<object>> SendLeaseAsync(
         OutboundKind kind, OutboxLease lease, CancellationToken ct)
@@ -165,8 +165,8 @@ internal sealed class SyncWorker(
 
         if (unreadable > 0)
         {
-            // ⚠️ চুপ করে থাকা যাবে না। নষ্ট সারি মানে হারানো ঘণ্টা, আর সেটা
-            //    সার্ভারের দিক থেকে দেখতে স্বাভাবিক লাগবে।
+            // Careful: we must not stay silent. A corrupt row means lost hours, and from the
+            // server's side it would look normal.
             _log.Error($"{kind}: {unreadable} rows could not be read — dropping them");
         }
 
@@ -198,8 +198,8 @@ internal sealed class SyncWorker(
 
         if (string.IsNullOrWhiteSpace(entry.FilePath) || !File.Exists(entry.FilePath))
         {
-            // ফাইলটাই নেই — সারিটা ধরে রাখার কোনো মানে নেই। এটা ঘটে যদি
-            // ডিস্ক বাজেট ছবিটা ছেঁটে ফেলে কিন্তু সারিটা রয়ে যায়।
+            // The file itself is gone, so there is no point keeping the row. This happens if
+            // the disk budget trims the image but the row remains.
             return SyncResult<object>.Permanent(null, "The screenshot file is not on disk");
         }
 
@@ -229,7 +229,7 @@ internal sealed class SyncWorker(
         RetryAfter = r.RetryAfter,
     };
 
-    // ── ফলাফল অনুযায়ী কাজ ───────────────────────────────────────────────────
+    // ── acting on the result ────────────────────────────────────────────────
 
     private async Task ApplyOutcomeAsync(
         OutboundKind kind,
@@ -253,14 +253,14 @@ internal sealed class SyncWorker(
                 await RetryLaterAsync(lease, result, now, ct);
                 break;
 
-            // ⭐ ব্যাচ ভাগ করার মানে হয় **শুধু তখনই যখন সার্ভার রায় দিয়েছে** —
-            //    কারণ তখনই আমরা জানি না ৫০০-র মধ্যে কোনটা দোষী।
-            //    নিজেরা যখন খারাপ বলি (payload পড়া গেল না, ছবির ফাইল নেই),
-            //    তখন কোনটা খারাপ সেটা আগে থেকেই জানা — ভাগ করা নিছক ৮ চক্রের
-            //    অপচয়, আর ততক্ষণ কিউয়ের মাথা আটকে থাকে।
+            // Splitting a batch makes sense **only when the server has ruled**, because only
+            // then do we not know which of the 500 is the culprit. When we ourselves call
+            // something bad (payload unreadable, image file missing), we already know which one
+            // is bad, so splitting is just a waste of 8 cycles while the head of the queue
+            // stays blocked.
             case SyncOutcome.Permanent when result.StatusCode is null:
             case SyncOutcome.Permanent when narrowing.IsIsolated:
-                // এক রেকর্ড নিয়েও প্রত্যাখ্যাত — দোষটা নিঃসন্দেহে এটারই
+                // Rejected even as a single record; the fault is certainly in this one
                 await store.AbandonAsync(
                     lease.LeaseId,
                     result.Detail ?? $"The server rejected it (HTTP {result.StatusCode})",
@@ -274,14 +274,14 @@ internal sealed class SyncWorker(
                 break;
 
             case SyncOutcome.Permanent:
-                // ব্যাচে কোথাও একটা খারাপ রেকর্ড আছে। পুরোটা ফেলে দেওয়া যাবে না —
-                // অর্ধেক করে আবার, যতক্ষণ না দোষীটা একা পড়ে।
+                // There is a bad record somewhere in the batch. We cannot throw the whole thing
+                // away; halve it and try again until the culprit is alone.
                 narrowing.OnPermanent();
                 _log.Warn(
                     $"{kind}: a batch of {lease.Count} was rejected — " +
                     $"retrying with {narrowing.Current} (hunting for the bad record)");
 
-                // সাথে সাথেই আবার — অপেক্ষার কিছু নেই, সার্ভারের দোষ নয়
+                // Again immediately; nothing to wait for, it is not the server's fault
                 await store.RetryAsync(lease.LeaseId, now, ct);
                 break;
 
@@ -289,8 +289,8 @@ internal sealed class SyncWorker(
                 Revoked = true;
                 _log.Error("⛔ This device has been revoked by the server — sync stopped");
 
-                // ⚠️ ডেটা মোছা হয় না। revoke ভুল করেও হতে পারে, আর তখন
-                //    সারিগুলো ফেরত পাওয়ার একমাত্র উপায় ওগুলো টিকে থাকা।
+                // Careful: data is not deleted. A revoke can happen by mistake, and then the
+                // only way to get the rows back is for them to have survived.
                 await store.RetryAsync(lease.LeaseId, now.AddYears(1), ct);
                 break;
         }

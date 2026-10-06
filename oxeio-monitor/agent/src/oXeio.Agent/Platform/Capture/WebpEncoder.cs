@@ -6,30 +6,31 @@ using SkiaSharp;
 namespace oXeio.Agent.Platform.Capture;
 
 /// <summary>
-/// BGRA → WebP (ADR-007)।
+/// BGRA to WebP (ADR-007).
 ///
-/// SkiaSharp বেছে নেওয়া হয়েছে, ImageSharp নয়: ImageSharp v4+ লাইসেন্স ফাইল ছাড়া
-/// <b>বিল্ডই</b> হয় না। SkiaSharp MIT, কোনো কী লাগে না।
+/// SkiaSharp was chosen, not ImageSharp: ImageSharp v4+ will not even <b>build</b> without a
+/// license file. SkiaSharp is MIT and needs no key.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static class WebpEncoder
 {
-    /// <summary>ADR-007 — quality 70-এ লেখা স্পষ্ট পড়া যায়, আকার ~১৫০ KB।</summary>
+    /// <summary>ADR-007: at quality 70 text is clearly readable, and the size is about 150
+    /// KB.</summary>
     public const int Quality = 70;
 
     /// <summary>
-    /// প্রতি মনিটরকে আলাদা করে এই প্রস্থে নামানো হয়।
-    /// ⚠️ কখনোই সব মনিটর জুড়ে একটা লম্বা ছবি বানানো হয় না — তিনটে 4K জুড়লে
-    /// ১১৫২০ পিক্সেল, সেটাকে ১৯২০-তে চাপলে একটা অক্ষরও পড়া যেত না।
+    /// Each monitor is scaled down to this width separately.
+    /// Careful: a single long image across all monitors is never made: three 4K screens side by
+    /// side are 11520 pixels, and squeezing that to 1920 would leave not one character readable.
     /// </summary>
     public const int MaxWidth = 1920;
 
-    /// <summary>A06 — গ্যালারির গ্রিডে এই প্রস্থেই যথেষ্ট।</summary>
+    /// <summary>A06: this width is enough for the gallery grid.</summary>
     public const int ThumbWidth = 320;
 
     /// <summary>
-    /// থাম্বনেইলে মান আরও কম — ৩২০px-এ কেউ লেখা পড়ে না, শুধু "কী ধরনের
-    /// পর্দা" বোঝে। ৫০-এ ফাইল ~৮ KB, আর ২০০টা ছবির গ্রিড দ্রুত ওঠে।
+    /// Even lower quality for the thumbnail: nobody reads text at 320px, they only see "what kind
+    /// of screen". At 50 the file is about 8 KB, and a grid of 200 images loads quickly.
     /// </summary>
     public const int ThumbQuality = 50;
 
@@ -54,16 +55,16 @@ internal static class WebpEncoder
     }
 
     /// <summary>
-    /// A06 — গ্যালারির গ্রিডের জন্য ছোট ছবি।
+    /// A06: a small image for the gallery grid.
     ///
-    /// ⭐ <b>এটা এজেন্টে হয়, সার্ভারে নয়</b>: সার্ভারে Node-এ ছবি রিসাইজ
-    /// করতে <c>sharp</c> লাগত (নেটিভ বাইনারি, নতুন dependency), আর এজেন্টে
-    /// SkiaSharp এমনিতেই আছে। সাথে বাড়তি লাভ — ৩০ KB বেশি পাঠিয়ে সার্ভারের
-    /// CPU বাঁচে, আর ১৫টা PC-র কাজ ১৫টা PC-তেই ভাগ হয়ে যায়।
+    /// <b>This is done in the agent, not on the server</b>: resizing images in Node on the server
+    /// would need <c>sharp</c> (a native binary, a new dependency), while SkiaSharp is already in
+    /// the agent. As a bonus, sending 30 KB more saves the server's CPU, and the work of 15 PCs is
+    /// spread over the 15 PCs.
     ///
-    /// ⚠️ ব্যর্থ হলে <c>null</c>, ব্যতিক্রম নয়। <b>থাম্বনেইল না থাকলে
-    /// গ্যালারি ফুল ছবিই দেখাবে</b> (ধীর, কিন্তু সঠিক); কিন্তু থাম্বনেইল
-    /// বানাতে গিয়ে আসল ছবিটা হারানো যাবে না — ছবিটাই মূল্যবান।
+    /// Careful: on failure <c>null</c>, not an exception. <b>Without a thumbnail the gallery shows
+    /// the full image</b> (slow, but correct); but the real image must not be lost while making a
+    /// thumbnail: the image is what matters.
     /// </summary>
     public static byte[]? EncodeThumb(byte[] webp)
     {
@@ -74,7 +75,7 @@ internal static class WebpEncoder
             using var original = SKBitmap.Decode(webp);
             if (original is null || original.Width == 0) return null;
 
-            // ইতিমধ্যেই ছোট হলে আবার এনকোড করার মানে নেই
+            // if it is already small there is no point encoding again
             if (original.Width <= ThumbWidth) return webp;
 
             var height = (int)Math.Round(original.Height * (double)ThumbWidth / original.Width);
@@ -104,7 +105,7 @@ internal static class WebpEncoder
         using var surface = SKSurface.Create(info);
         if (surface is null) return null;
 
-        // Mitchell — লেখার ধার ধরে রাখে, স্ক্রিনশটে সেটাই সবচেয়ে জরুরি
+        // Mitchell keeps the edges of text, which matters most in screenshots
         var sampling = new SKSamplingOptions(SKCubicResampler.Mitchell);
         surface.Canvas.DrawImage(image, new SKRect(0, 0, MaxWidth, targetHeight), sampling);
         surface.Canvas.Flush();

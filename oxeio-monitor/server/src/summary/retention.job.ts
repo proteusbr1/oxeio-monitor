@@ -10,55 +10,54 @@ import {
 import { JOB_TIMEZONE, RunLock, SCHEDULING_ENABLED } from './scheduling';
 import { retentionCutoff } from './summary.math';
 
-/** 07 § ১ (locked configuration) — `retention.screenshots_days` */
+/** 07 section 1 (locked configuration): `retention.screenshots_days`. */
 export const SCREENSHOT_RETENTION_DAYS = 90;
 
-/** এক দফায় কত সারি — বড় করলে একটা ব্যর্থতায় বেশি কাজ হারায় */
+/** Rows per pass; a bigger batch loses more work on a single failure. */
 const BATCH = 500;
 
-/** অসীম লুপের শেষ প্রতিরোধ (৫ লাখ সারি = কয়েক বছরের ছবি) */
+/** Last defence against an endless loop (500,000 rows = several years of photos). */
 const MAX_BATCHES = 1000;
 
 export interface RetentionResult {
   cutoff: Date | null;
-  /** এই দফায় যত সারি "মুছে ফেলার জন্য" মার্ক হলো */
+  /** Rows marked "to delete" in this pass. */
   marked: number;
   filesDeleted: number;
-  /** সারি ছিল, ফাইল ছিল না — আগের কোনো অসম্পূর্ণ রানের বাকি কাজ */
+  /** The row existed but the file did not: leftover from an earlier incomplete run. */
   filesMissing: number;
   rowsDeleted: number;
-  /** ফাইল মুছতে ব্যর্থ (লক করা?) — সারি রেখে দেওয়া হয়েছে, পরের রানে আবার */
+  /** File could not be deleted (locked?); the row is kept for the next run. */
   failed: number;
-  /** storage রুটের বাইরের পাথ — মানুষ না দেখলে ঠিক হবে না */
+  /** Path outside the storage root; needs a human to look at it. */
   unsafePaths: number;
   skipped: boolean;
 }
 
 /**
- * **K01** — রাত ২টায় ৯০ দিনের পুরোনো স্ক্রিনশট মুছে ফেলা: **DB সারি ও
- * ডিস্কের ফাইল দুটোই**।
+ * **Retention**: at 2 am, delete screenshots older than 90 days, **both the
+ * DB row and the file on disk**.
  *
- * ⭐ **কোনটা আগে — এই সিদ্ধান্তটাই এই ফাইলের মূল বিষয়।**
+ * **Which goes first is the main subject of this file.**
  *
- * দুটো সরল পথ, দুটোতেই ক্ষতি:
- *   · DB আগে → ডিস্কে অনাথ ফাইল পড়ে থাকে। কেউ টেরই পায় না, কারণ কোথাও
- *     কোনো সারি নেই যেটা ওই ফাইলের কথা মনে রেখেছে। retention-এর পুরো
- *     উদ্দেশ্যই ছিল ডিস্ক ভরতে না দেওয়া — এই পথে সেটাই ব্যর্থ, আর
- *     ব্যর্থতাটা নীরব।
- *   · ফাইল আগে → সারি থেকে যায়, গ্যালারি ৪০৪ দেখায়। বিরক্তিকর, কিন্তু
- *     দৃশ্যমান এবং সারানো যায়।
+ * Two simple orders, both harmful:
+ *   - DB first -> an orphan file stays on disk. Nobody notices, because no
+ *     row remembers that file. The whole purpose of retention was to keep the
+ *     disk from filling up; this order defeats it, silently.
+ *   - File first -> the row stays and the gallery shows 404. Annoying, but
+ *     visible and fixable.
  *
- * তৃতীয় পথটাই বেছে নেওয়া হয়েছে, আর schema সেটার জন্য আগেই জায়গা রেখেছে
- * (`screenshots.deleted_at` — "retention job এখানে মার্ক করে, তারপর ফাইল মোছে"):
+ * A third order was chosen, and the schema already has room for it
+ * (`screenshots.deleted_at`: "the retention job marks here, then deletes the file"):
  *
- *   ১· সারিগুলোতে `deleted_at` বসাও  → ছবি **আগেই** গ্যালারি থেকে উধাও,
- *      কারণ সব পাঠক `deleted_at: null` ফিল্টার করে
- *   ২· ডিস্ক থেকে ফাইল মোছো
- *   ৩· যেগুলোর ফাইল সত্যিই গেছে **শুধু সেগুলোরই** সারি হার্ড-ডিলিট
+ *   1. Set `deleted_at` on the rows -> the photo **immediately** disappears
+ *      from the gallery, since every reader filters `deleted_at: null`
+ *   2. Delete the files from disk
+ *   3. Hard-delete the rows **only for those whose file really went**
  *
- * ফলে ভাঙা সারির জানালাটা কখনো দেখাই যায় না, আর অনাথ ফাইলও থাকে না।
- * মাঝপথে প্রসেস মরে গেলে পড়ে থাকে মার্ক-করা সারি (অদৃশ্য, ক্ষতিহীন) —
- * পরের রান ঠিক সেখান থেকেই কাজ শেষ করে। জবটা তাই idempotent।
+ * So the window with a broken row is never visible, and no orphan file is
+ * left. If the process dies midway, marked rows remain (invisible, harmless)
+ * and the next run finishes from exactly there. The job is therefore idempotent.
  */
 @Injectable()
 export class RetentionJob {
@@ -70,7 +69,7 @@ export class RetentionJob {
     @Inject(SCREENSHOT_STORAGE) private readonly storage: ScreenshotStorage,
   ) {}
 
-  /** ⚠️ `timeZone` ছাড়া UTC-র রাত ২টা = ঢাকার সকাল ৮টা — অফিস-সময়ে ডিস্ক I/O। */
+  /** Careful: without `timeZone`, 2 am UTC = 8 am in Dhaka, disk I/O during office hours. */
   @Cron('0 0 2 * * *', {
     name: 'screenshot-retention',
     timeZone: JOB_TIMEZONE,
@@ -78,8 +77,8 @@ export class RetentionJob {
     waitForCompletion: true,
   })
   async scheduled(): Promise<void> {
-    // ⚠️ দ্বিতীয় তালা। এই জবটাই সবচেয়ে ধ্বংসাত্মক — টেস্ট চলাকালীন একবার
-    //    টিক করলে ফিক্সচারের ছবি ও ফাইল দুটোই চলে যেত।
+    // Careful: second lock. This is the most destructive job: ticking once
+    // during a test would remove both the fixture photos and files.
     if (!SCHEDULING_ENABLED) return;
     await this.runOnce();
   }
@@ -107,7 +106,7 @@ export class RetentionJob {
   private async purge(now: Date): Promise<RetentionResult> {
     const cutoff = retentionCutoff(now, SCREENSHOT_RETENTION_DAYS);
 
-    // ── ধাপ ১ · মার্ক ────────────────────────────────────────────────────
+    // -- Step 1: mark ------------------------------------------------------
     const { count: marked } = await this.prisma.screenshot.updateMany({
       where: { workDate: { lt: cutoff }, deletedAt: null },
       data: { deletedAt: now },
@@ -127,13 +126,15 @@ export class RetentionJob {
     const removedPaths: string[] = [];
 
     /**
-     * ⚠️ cursor দিয়ে পাতা ওল্টানো হচ্ছে, `take` দিয়ে বারবার প্রথম ব্যাচ
-     * টেনে নয়। কারণ ব্যর্থ সারিগুলো (ফাইল লক) মোছা হয় না — তারা তালিকার
-     * শুরুতেই থেকে যেত, আর লুপ চিরকাল একই ৫০০টা সারি নিয়ে ঘুরত।
+     * Careful: pages are walked with a cursor, not by repeatedly fetching the
+     * first batch with `take`. Failed rows (file locked) are not deleted, so
+     * they would stay at the head of the list and the loop would spin forever
+     * on the same 500 rows.
      *
-     * ⚠️ শর্তে `workDate < cutoff`-ও আছে, শুধু `deleted_at IS NOT NULL` নয়।
-     * ভবিষ্যতে কেউ যদি "এই ছবিটা মুছে দাও" ফিচার বানিয়ে সদ্য তোলা কোনো
-     * ছবিতে `deleted_at` বসায়, retention জব সেটাকে হার্ড-ডিলিট করে ফেলত।
+     * Careful: the condition includes `workDate < cutoff`, not only
+     * `deleted_at IS NOT NULL`. If someone later builds a "delete this photo"
+     * feature that sets `deleted_at` on a just-taken photo, the retention job
+     * would hard-delete it.
      */
     let cursor = 0n;
 
@@ -156,24 +157,25 @@ export class RetentionJob {
 
       for (const row of rows) {
         /**
-         * A06 — ⭐ **দুটো ফাইলই**: ফুল ছবি আর থাম্বনেইল।
+         * A06: **both files**: the full image and the thumbnail.
          *
-         * ⚠️ শুধু `file_path` মুছলে ভুলটা এমন যে বছরখানেক কেউ টেরই পেত না:
-         *    সারি যেত, ফুল ছবি যেত, কিন্তু `…/emp-003/thumb/` ফোল্ডারের
-         *    ছোট ছবিগুলো ডিস্কে **চিরকাল** থেকে যেত — আর DB-তে তখন এমন
-         *    কোনো সারিই নেই যে ওদের কথা মনে রেখেছে। retention-এর একমাত্র
-         *    উদ্দেশ্যই ডিস্ক ভরতে না দেওয়া; ওই পথে সেটা নীরবে ব্যর্থ হতো।
+         * Careful: deleting only `file_path` would be a mistake nobody would
+         * notice for about a year: the row goes, the full image goes, but the
+         * small images in the `.../emp-003/thumb/` folder would stay on disk
+         * **forever**, and no DB row would remember them. The only purpose of
+         * retention is to keep the disk from filling up; this way it would
+         * fail silently.
          *
-         * `thumb_path` null হতে পারে (পুরোনো সারি, বা থাম্বনেইল বানানো
-         * যায়নি) — তাই ছেঁকে নেওয়া, ধরে নেওয়া নয়।
+         * `thumb_path` can be null (old rows, or no thumbnail could be made),
+         * so it is filtered, not assumed.
          */
         const paths = [row.filePath, row.thumbPath].filter(
           (p): p is string => typeof p === 'string' && p.length > 0,
         );
 
         if (paths.some((p) => !isSafeRelPath(p))) {
-          // ⚠️ সারিটাও মোছা হচ্ছে **না** — মুছে দিলে প্রতিবেদনটা হারিয়ে যেত
-          //    আর সমস্যাটা চুপচাপ চাপা পড়ত। প্রতি রানে আবার চেঁচাবে।
+          // Careful: the row is **not** deleted either. Deleting it would lose
+          // the report and bury the problem silently. It complains on every run.
           result.unsafePaths++;
           this.logger.error(
             `screenshot ${row.id}: file_path is outside the storage root — left untouched`,
@@ -193,7 +195,7 @@ export class RetentionJob {
         removedPaths.push(...paths);
       }
 
-      // ── ধাপ ৩ · ফাইল সত্যিই গেছে, এবার সারি ───────────────────────────
+      // -- Step 3: files are really gone, now the rows ----------------------
       if (deletable.length > 0) {
         const { count } = await this.prisma.screenshot.deleteMany({
           where: { id: { in: deletable } },
@@ -223,12 +225,13 @@ export class RetentionJob {
   }
 
   /**
-   * ⚠️ ফাইল **নেই** মানে সফল, ব্যর্থ নয় (ENOENT)। আগের কোনো রান ফাইল মুছে
-   * সারি মোছার আগেই থেমে গিয়েছিল — এখন সারিটা যেতে দেওয়াই ঠিক। এটাকে
-   * ব্যর্থতা ধরলে ওই সারিগুলো চিরকাল আটকে থাকত।
+   * Careful: a file that is **missing** counts as success, not failure
+   * (ENOENT). An earlier run stopped after deleting the file but before the
+   * row, so letting the row go now is right. Treating it as a failure would
+   * leave those rows stuck forever.
    *
-   * ⚠️ অন্য যেকোনো ভুলে (ফাইল লক, পারমিশন) সারিটা **রেখে দেওয়া হয়**।
-   * মুছে দিলে ঠিক সেই অনাথ ফাইলটাই তৈরি হতো যেটা এড়াতে এত আয়োজন।
+   * Careful: on any other error (file locked, permissions) the row is **kept**.
+   * Deleting it would create exactly the orphan file all this effort avoids.
    */
   private async removeFiles(
     paths: readonly string[],

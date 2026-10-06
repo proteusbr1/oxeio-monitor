@@ -12,23 +12,23 @@ import { JOB_TIMEZONE, SCHEDULING_ENABLED } from '../summary/scheduling';
 import { BackupService, type BackupResult } from './backup.service';
 import { BACKUP_CRON } from './ops.constants';
 
-/** ⚠️ `SchedulerRegistry`-তে খোঁজার জন্য — নামটা `@Cron`-এর নামের সাথে এক */
+/** Name used to look the job up in `SchedulerRegistry`; same as the `@Cron` name */
 const JOB_NAME = 'db-backup';
 
 /**
- * **K02 · K03** — রাত ২:৩০-এর ব্যাকআপ (স্পেক § ৬.৪)।
+ * **K02 · K03** — the 02:30 nightly backup (spec § 6.4).
  *
- * ⚠️ এখানে `ScheduleModule.forRoot()` **যোগ করা হয়নি**, ইচ্ছাকৃতভাবে।
- *    `SummaryModule` ইতিমধ্যেই সেটা করে, আর forRoot **global** — তার
- *    explorer অ্যাপের সব provider স্ক্যান করে, ফলে এই `@Cron` এমনিতেই
- *    ধরা পড়ে। দুবার forRoot করলে দুটো explorer একই নামের জব দুবার
- *    রেজিস্টার করতে গিয়ে bootstrap-এই ভেঙে পড়ত।
+ * Careful: `ScheduleModule.forRoot()` is deliberately **not** added here.
+ * `SummaryModule` already does it, and forRoot is **global**: its explorer
+ * scans every provider in the app, so this `@Cron` is picked up anyway. Calling
+ * forRoot twice would make two explorers register the same job name twice and
+ * crash at bootstrap.
  *
- * ⚠️ কিন্তু সেই নির্ভরতাটা **অদৃশ্য** — কেউ `SummaryModule` সরালে বা
- *    টেস্ট-মোডের শর্তটা বদলালে ব্যাকআপ নীরবে বন্ধ হয়ে যেত, আর সেটা
- *    জানা যেত পুনরুদ্ধারের দিনে। তাই bootstrap-এ মিলিয়ে দেখা হয় জবটা
- *    সত্যিই রেজিস্টার হয়েছে কি না, আর না হলে জোরে বলা হয়। (G04-ও
- *    ধরত, কিন্তু ২৬ ঘণ্টা পরে; এটা ধরে সাথে সাথেই।)
+ * Careful: that dependency is **invisible**. If someone removed `SummaryModule`
+ * or changed the test-mode condition, the backup would silently stop, and it
+ * would be discovered on the day of a restore. So bootstrap checks that the job
+ * really is registered and complains loudly if not. (G04 would catch it too,
+ * but 26 hours later; this catches it immediately.)
  */
 @Injectable()
 export class BackupJob implements OnApplicationBootstrap {
@@ -38,9 +38,9 @@ export class BackupJob implements OnApplicationBootstrap {
     private readonly backup: BackupService,
     private readonly check: BackupCheck,
     /**
-     * ⚠️ `@Optional()` — টেস্টে `ScheduleModule` লোডই হয় না, তখন এই
-     *    provider-টা কনটেইনারে নেই। Optional না করলে টেস্টে পুরো
-     *    অ্যাপ bootstrap-এ ভাঙত।
+     * `@Optional()`: tests never load `ScheduleModule`, so this provider is not
+     * in the container. Without Optional the whole app would fail to bootstrap
+     * in tests.
      */
     @Optional()
     @Inject(SchedulerRegistry)
@@ -75,9 +75,8 @@ export class BackupJob implements OnApplicationBootstrap {
   }
 
   /**
-   * ⚠️ `timeZone` ছাড়া UTC-র ২:৩০ = ঢাকার সকাল ৮:৩০ — অফিস শুরুর মুখে
-   *    পুরো ডাটাবেসের উপর দিয়ে একটা ডাম্প। সবচেয়ে ব্যস্ত সময়ে সবচেয়ে
-   *    ভারী কাজ।
+   * Without `timeZone`, 02:30 UTC is 08:30 in Dhaka: a dump over the whole
+   * database right as the office starts. The heaviest job at the busiest time.
    */
   @Cron(BACKUP_CRON, {
     name: JOB_NAME,
@@ -86,18 +85,18 @@ export class BackupJob implements OnApplicationBootstrap {
     waitForCompletion: true,
   })
   async scheduled(): Promise<void> {
-    // ⚠️ দ্বিতীয় তালা — `disabled` ছাড়াও, retention জবের মতোই
+    // Second lock: besides `disabled`, same as the retention job
     if (!SCHEDULING_ENABLED) return;
     await this.runOnce();
   }
 
   /**
-   * ব্যাকআপ, তারপর সাথে সাথেই G04 চেক।
+   * The backup, then the G04 check right away.
    *
-   * ⭐ চেকটা এখানেই ডাকা হয় যাতে ব্যর্থতার খবর ঘণ্টাখানেক অপেক্ষা না করে।
-   * পর্যায়ক্রমিক চেকটাও (`OpsScheduler`) আলাদাভাবে চলতে থাকে — ওটার কাজ
-   * ভিন্ন: জবটা **আদৌ চলেনি** এমন অবস্থা ধরা, যেখানে এই লাইনটা কখনো
-   * চলতই না।
+   * The check is called here so news of a failure does not wait up to an hour.
+   * The periodic check (`OpsScheduler`) keeps running separately; its job is
+   * different: catching the state where the job **never ran at all**, in which
+   * case this line would never have run.
    */
   async runOnce(now = new Date()): Promise<BackupResult> {
     const result = await this.backup.runOnce(now);

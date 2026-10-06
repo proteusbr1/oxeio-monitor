@@ -9,31 +9,32 @@ import {
 } from '../src/auth/temp-password';
 
 /**
- * অস্থায়ী পাসওয়ার্ড — **টাইপ করা যায় কি না**, সেটাই এখানকার প্রশ্ন।
+ * Temporary password — whether it **can be typed** is the question here.
  *
- * ⚠️⚠️ এই ফাইলটা লেখা হয়েছে একটা মাঠের ঘটনা থেকে: মালিক স্টাফের পাসওয়ার্ড
- * রিসেট করলেন, স্টাফ এজেন্টের জানালায় কয়েকবার ভুল টাইপ করলেন, আর পর্দায়
- * এল <i>"Too many failed attempts. Try again in 13 minutes."</i> —
- * অর্থাৎ মনে হলো **রিসেটটাই কাজ করছে না**, অথচ পাসওয়ার্ড ঠিকই ছিল।
- * কারণ পুরোনো base64url-এ `l` `I` `1` আর `O` `0` পাশাপাশি থাকত।
+ * This file was written after a field incident: the owner reset a staff
+ * member's password, the staff member mistyped it a few times in the agent
+ * window, and the screen showed <i>"Too many failed attempts. Try again in 13
+ * minutes."</i> — so it looked like **the reset itself was not working**,
+ * although the password was correct. The cause: in the old base64url, `l` `I`
+ * `1` and `O` `0` sat side by side.
  */
 describe('buildTempPassword', () => {
   const bytes = (n: number) => new Uint8Array(TEMP_PASSWORD_CHARS).fill(n);
 
-  it('তিন দলে বারো অক্ষর', () => {
+  it('twelve characters in three groups', () => {
     const pw = buildTempPassword(bytes(0));
 
-    expect(pw).toHaveLength(14); // ১২ অক্ষর + ২ হাইফেন
+    expect(pw).toHaveLength(14); // 12 characters + 2 hyphens
     expect(pw.split('-')).toHaveLength(3);
     expect(pw.split('-').every((g) => g.length === 4)).toBe(true);
   });
 
   /**
-   * ⭐⭐ **এই ফাইলের মূল টেস্ট।** একটাও দ্ব্যর্থ অক্ষর থাকা চলবে না —
-   * এখানেই আসল বাগটা ছিল।
+   * **The main test of this file.** Not a single ambiguous character is
+   * allowed — this is where the real bug was.
    */
-  it('দ্ব্যর্থ অক্ষর কখনো আসে না', () => {
-    // ⚠️ ২৫৬টা মানই পরীক্ষা করা হয় — নমুনা নিলে বিরল অক্ষরটাই ফসকে যেত
+  it('ambiguous characters never appear', () => {
+    // All 256 values are tested — sampling would miss the rare character
     for (let b = 0; b < 256; b++) {
       const pw = buildTempPassword(bytes(b));
 
@@ -43,7 +44,7 @@ describe('buildTempPassword', () => {
     }
   });
 
-  it('শুধু বর্ণমালার অক্ষর আর হাইফেন', () => {
+  it('only alphabet characters and hyphens', () => {
     const pw = buildTempPassword(randomBytes(TEMP_PASSWORD_CHARS));
 
     for (const ch of pw.replace(/-/g, '')) {
@@ -51,8 +52,8 @@ describe('buildTempPassword', () => {
     }
   });
 
-  /** ⚠️ বর্ণমালা ৩২ = ২^৫, তাই `& 31` নিখুঁতভাবে সমান বণ্টন দেয় */
-  it('২৫৬টা বাইট ঠিক ৩২টা অক্ষরে ভাগ হয়, সমানভাবে', () => {
+  /** The alphabet is 32 = 2^5, so `& 31` gives a perfectly even distribution */
+  it('256 bytes split into exactly 32 characters, evenly', () => {
     const seen = new Map<string, number>();
 
     for (let b = 0; b < 256; b++) {
@@ -61,17 +62,17 @@ describe('buildTempPassword', () => {
     }
 
     expect(seen.size).toBe(32);
-    // ২৫৬ ÷ ৩২ = ৮ — প্রতিটা অক্ষর ঠিক আটবার, কেউ বেশি কেউ কম নয়
+    // 256 ÷ 32 = 8 — each character exactly eight times, none more or less
     expect([...seen.values()].every((n) => n === 8)).toBe(true);
   });
 
-  it('একই বাইটে একই ফল — ফাংশনটা খাঁটি', () => {
+  it('the same bytes give the same result — the function is pure', () => {
     const seed = randomBytes(TEMP_PASSWORD_CHARS);
 
     expect(buildTempPassword(seed)).toBe(buildTempPassword(seed));
   });
 
-  it('প্রতিটা অবস্থান নিজের বাইট থেকেই আসে', () => {
+  it('each position comes from its own byte', () => {
     const seed = new Uint8Array(TEMP_PASSWORD_CHARS);
     seed[0] = 0;
     seed[1] = 31;
@@ -83,23 +84,23 @@ describe('buildTempPassword', () => {
   });
 
   /**
-   * ⚠️⚠️ কম বাইট দিলে **থামে**। চুপচাপ ছোট পাসওয়ার্ড বানালে সেটা কেউ
-   * খেয়াল না করে বছরের পর বছর চলত — আর প্রতিটা রিসেটে দুর্বল পাসওয়ার্ড
-   * বেরোত, কোনো লক্ষণ ছাড়াই।
+   * It **stops** if given too few bytes. Quietly producing a short password
+   * would go unnoticed for years — and every reset would hand out a weak
+   * password with no sign of it.
    */
-  it('বাইট কম হলে ছুঁড়ে দেয়', () => {
+  it('throws when there are too few bytes', () => {
     expect(() => buildTempPassword(new Uint8Array(TEMP_PASSWORD_CHARS - 1))).toThrow(
       /random bytes/,
     );
     expect(() => buildTempPassword(new Uint8Array(0))).toThrow();
   });
 
-  it('বেশি বাইট দিলে অসুবিধা নেই', () => {
+  it('no problem if given more bytes', () => {
     expect(buildTempPassword(randomBytes(64))).toHaveLength(14);
   });
 
-  /** ⚠️ ছোট হাতের অক্ষর একেবারেই নেই — ফোনে বলার সময় "বড় না ছোট" লাগে না */
-  it('সব বড় হাতের', () => {
+  /** No lower-case letters at all — spelling it over the phone needs no "upper or lower" */
+  it('all upper case', () => {
     const pw = buildTempPassword(randomBytes(TEMP_PASSWORD_CHARS));
 
     expect(pw).toBe(pw.toUpperCase());

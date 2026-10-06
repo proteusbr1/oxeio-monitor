@@ -1,35 +1,35 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// সার্ভার যা যা মানে না — <c>server/src/agent/agent.constants.ts</c>-এর প্রতিরূপ।
+/// What the server will not accept: a mirror of <c>server/src/agent/agent.constants.ts</c>.
 ///
-/// সংখ্যাগুলো এখানে রাখা আছে যাতে এজেন্ট <b>পাঠানোর আগেই</b> আটকাতে পারে।
-/// সার্ভারকে ৪১৩ বলতে দেওয়া মানে ৫ MiB আপলোড করে তারপর জানা যে ওটা নেওয়া হবে না —
-/// মোবাইল ব্রডব্যান্ডের সাইটে সেটা দিনে কয়েকশো মেগাবাইট নষ্ট।
+/// The numbers are kept here so the agent can refuse <b>before sending</b>. Letting the server
+/// answer 413 means uploading 5 MiB only to learn it will not be taken; at a site on mobile
+/// broadband that wastes hundreds of megabytes a day.
 /// </summary>
 public static class SyncLimits
 {
-    /// <summary>এক ব্যাচে সর্বোচ্চ কতটা রেকর্ড — <c>MAX_BATCH_SIZE</c>।</summary>
+    /// <summary>The most records in one batch: <c>MAX_BATCH_SIZE</c>.</summary>
     public const int MaxBatchSize = 500;
 
-    /// <summary>একটা .webp-র সর্বোচ্চ সাইজ। এর বড় হলে ৪১৩ = স্থায়ী প্রত্যাখ্যান।</summary>
+    /// <summary>The maximum size of one .webp. Larger gets a 413 = permanent rejection.</summary>
     public const long MaxScreenshotBytes = 5L * 1024 * 1024;
 
     public const string ScreenshotMimeType = "image/webp";
 
-    /// <summary>এজেন্টের নিজের ঘড়ি — সার্ভার এখান থেকেই drift মাপে। প্রতিটি রিকোয়েস্টে, GET-এও।</summary>
+    /// <summary>The agent's own clock: the server measures drift from it. On every request, GETs included.</summary>
     public const string ClientTimeHeader = "x-client-time";
 
     /// <summary>
-    /// ISO-8601 round-trip। ব্যবহার:
+    /// ISO-8601 round-trip. Usage:
     /// <c>DateTimeOffset.UtcNow.ToString(SyncLimits.ClientTimeFormat, CultureInfo.InvariantCulture)</c>
     ///
-    /// ⚠️ হাতে <c>"yyyy-MM-ddTHH:mm:ssZ"</c> লিখবেন না — কাস্টম ফরম্যাটে ':' ও '.'
-    /// কালচার-নির্ভর সেপারেটর, আর 'Z' কে .NET আক্ষরিক ধরে না। "O" এসবের বাইরে।
+    /// Do not hand-write <c>"yyyy-MM-ddTHH:mm:ssZ"</c>: in a custom format ':' and '.' are
+    /// culture-dependent separators, and .NET does not take 'Z' literally. "O" avoids all this.
     /// </summary>
     public const string ClientTimeFormat = "O";
 
-    /// <summary>প্রতি ডিভাইস, প্রতি মিনিটে। এর বেশি হলে ৪২৯।</summary>
+    /// <summary>Per device, per minute. Beyond this, 429.</summary>
     public const int RateLimitIngestPerMinute = 60;
 
     /// <inheritdoc cref="RateLimitIngestPerMinute"/>

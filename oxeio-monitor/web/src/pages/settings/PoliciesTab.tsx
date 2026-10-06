@@ -31,12 +31,12 @@ import {
 } from '../../components/ui';
 
 /**
- * work policy ও ছুটি — দুটো একসাথে, কারণ এরা একই প্রশ্নের উত্তর দেয়:
- * **এই মাসে কতটা কাজ প্রত্যাশিত?**
+ * Work policy and holidays, together, because they answer the same question:
+ * **how much work is expected this month?**
  *
- * ⚠️ এখানে একটা সংখ্যা বদলালে পরের config sync-এ **প্রতিটা PC-র আচরণ**
- * বদলে যায় (idle থ্রেশহোল্ড, ছবির উইন্ডো, স্লট)। আর টার্গেট বা ছুটি
- * বদলালে কেউ এক মিনিট কাজ না করেও পিছিয়ে বা এগিয়ে যায়।
+ * Careful: changing a number here changes **every PC's behaviour** at the next
+ * config sync (idle threshold, screenshot window, slots). And changing a target or a
+ * holiday moves someone ahead or behind without them working a minute.
  */
 
 /** ISO days, Monday first — the order the checkboxes are shown in */
@@ -53,10 +53,10 @@ const OFF_DAY_LABEL: Record<number, string> = {
 };
 
 /**
- * ⚠️ ম্যানেজার পান **শুধু ছুটির অংশটা** *(১৫ আগস্ট)*। `work_policies`
- * সার্ভারে owner-only থেকেই গেছে — মাসিক টার্গেট বা ছবির উইন্ডো বদলালে
- * প্রতিটা PC-র আচরণ বদলায়। উপরের সেকশনটা না লুকালে ম্যানেজার ট্যাব খুলেই
- * একটা ৪০৩ বাক্স দেখতেন, আর ভাবতেন কিছু ভেঙে আছে।
+ * Careful: managers get **only the holidays part**. `work_policies` stays owner-only
+ * on the server: changing the monthly target or screenshot window changes every
+ * PC's behaviour. Without hiding the section above, a manager would open the tab
+ * and see a 403 box, and think something was broken.
  */
 export function PoliciesTab() {
   const { user } = useAuth();
@@ -128,7 +128,7 @@ function WorkPoliciesSection() {
             {policy.officeFrom}–{policy.officeTo}
           </span>
         ) : (
-          // ⚠️ "সারাদিন" মানে অ্যালার্ট কখনো চুপ থাকবে না — সেটা লুকোনো নয়
+          // Careful: "all day" means the alert is never quiet; that is not hiding anything
           <span className="text-ink-3">all day</span>
         ),
     },
@@ -201,13 +201,12 @@ function WorkPoliciesSection() {
             </MiniButton>
           ) : (
             /**
-             * ⚠️⚠️ **ফেরার পথটা এখানেই** *(G167)*। আগে এই শাখাটা খালি
-             * ছিল — বন্ধ পলিসির সারিতে কেবল "Edit", আর Edit ফর্ম
-             * `isActive` পাঠায়ই না। অর্থাৎ ভুল করে Close চাপলে ওয়েব
-             * থেকে ফেরার কোনো উপায় ছিল না, যদিও সার্ভারে endpoint-টা
-             * G85 থেকেই বসে আছে।
+             * **The way back is here.** This branch used to be empty: a closed
+             * policy's row had only "Edit", and the Edit form never sends `isActive`.
+             * So if someone pressed Close by mistake there was no way back from the
+             * web, though the server had the endpoint all along.
              *
-             * ⚠️ `danger` নয় — খোলার দিকটা নিরাপদ দিক।
+             * Careful: not `danger`; opening is the safe direction.
              */
             <MiniButton onClick={() => setReopening(policy)}>Reopen</MiniButton>
           )}
@@ -234,8 +233,8 @@ function WorkPoliciesSection() {
       </div>
 
       {/*
-        ⭐ সরু ধূসর, লাল নয় — এটা কোনো ভুল নয়, একটা শর্ত। সলিড লাল রাখা
-           থাকে সত্যিকারের বিপদের জন্য (নিশ্চিতকরণের বাক্সগুলো দেখুন)।
+        Thin grey, not red: this is not an error, it is a condition. Solid red is kept
+           for real danger (see the confirmation boxes).
       */}
       <Notice>
         Change a number here and the next config sync changes{' '}
@@ -313,7 +312,7 @@ function WorkPoliciesSection() {
   );
 }
 
-// ── policy ফর্ম ─────────────────────────────────────────────────────────────
+// ── Policy form ─────────────────────────────────────────────────────────────
 
 interface PolicyFormState {
   name: string;
@@ -342,9 +341,9 @@ function PolicyForm({
     expectedWorkdays: String(policy?.expectedWorkdays ?? 26),
     screenshotFrom: policy?.screenshotFrom ?? '07:00',
     screenshotTo: policy?.screenshotTo ?? '23:00',
-    // ⚠️ খালি থাকলে ৯টা–৬টা দেখানো হয়, আর সংরক্ষণে সেটাই বসে যায়।
-    //    ইচ্ছাকৃত: ঘরটা ফাঁকা রেখে সংরক্ষণ করলে সার্ভার '' বাতিল করত, আর
-    //    মালিক বুঝতেন না কেন কিছু হলো না।
+    // Careful: when empty, 9-6 is shown and that is what gets saved. Deliberate:
+    //    saving with the field blank would make the server reject '', and the owner
+    //    would not understand why nothing happened.
     officeFrom: policy?.officeFrom ?? '09:00',
     officeTo: policy?.officeTo ?? '18:00',
     idleThresholdSec: String(policy?.idleThresholdSec ?? 300),
@@ -586,13 +585,13 @@ function PolicyForm({
 }
 
 /**
- * ⭐ বন্ধ পলিসি আবার খোলা *(G167)* — `ClosePolicyDialog`-এর জোড়া।
+ * Reopening a closed policy: the pair of `ClosePolicyDialog`.
  *
- * ⚠️ এখানে `employeeCount`-এর সতর্কবার্তা **নেই**, ইচ্ছাকৃতভাবে। বন্ধ
- * করার পথে ওটা আসল বাধা (লোক থাকলে সার্ভার ফিরিয়ে দেয়), কিন্তু খোলার
- * পথে সার্ভারের একমাত্র শর্ত আলাদা: *"এটা তো এখনই খোলা"* (409)।
- * বন্ধ পলিসিতে কর্মী থাকা বৈধ, তাই ওই সংখ্যাটা এখানে ভয় দেখানো ছাড়া
- * কিছুই করত না।
+ * Careful: **no** `employeeCount` warning here, deliberately. Closing is where it is
+ * the real obstacle (the server refuses if people are on it), but the only server
+ * condition for opening is different: *"it is already open"* (409). Having
+ * employees on a closed policy is legitimate, so the number here would only
+ * frighten.
  */
 function ReopenPolicyDialog({
   policy,

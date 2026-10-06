@@ -23,16 +23,16 @@ import {
 } from '../../components/ui';
 
 /**
- * **H04 · G59** — এজেন্টের নতুন ভার্সন বিলি করা।
+ * Rolling out new agent versions.
  *
- * ⚠️⚠️ `agent_versions` টেবিলটা এতদিন **শুধু পড়া হতো**। ধাপে ধাপে
- * রোলআউট, canary, sha256 যাচাই, `halted` দিয়ে থামানো — সবকিছু তৈরি ছিল,
- * কিন্তু ওই টেবিলে সারি বসানোর কোনো পথ কোথাও ছিল না। ফলে নতুন MSI
- * ১৫টা PC-তে পৌঁছানোর একমাত্র উপায় ছিল প্রতিটা মেশিনে হাতে গিয়ে বসানো।
+ * Careful: the `agent_versions` table used to be **read only**. Staged rollout,
+ * canary, sha256 checking, stopping with `halted`: everything was built, but there
+ * was no path anywhere to insert a row into that table. So the only way to get a new
+ * MSI onto 15 PCs was to go and install it by hand on each machine.
  *
- * ⭐ এই পাতাটাই সেই ফাঁকটা বন্ধ করে — কিন্তু ইচ্ছাকৃতভাবে **ছোট**:
- * তালিকা, একটা "Publish", আর ধাপ বদলানোর একটা ড্রপডাউন। এর বেশি কিছু
- * (আপলোড, বিল্ড ট্রিগার) এখানে নেই; MSI সার্ভারে কপি করাটা আলাদা কাজ।
+ * Important: this page closes that gap, but is deliberately **small**: a list, one
+ * "Publish", and a dropdown to change the stage. Nothing more (upload, build
+ * trigger) is here; copying the MSI to the server is a separate job.
  */
 export function AgentVersionsTab() {
   const { data, loading, error, reload } = useApi(
@@ -44,10 +44,10 @@ export function AgentVersionsTab() {
   const rows = data ?? [];
 
   /**
-   * ⭐ পাইলট বাছার তালিকা — `FleetCard`-ও এই একই কল করে।
+   * The list for choosing a pilot; `FleetCard` makes this same call too.
    *
-   * ⚠️ ব্যর্থ হলে চুপচাপ খালি তালিকা: ডিভাইস আনতে না পারা মানে ভার্সনের
-   * পাতাটাই ভেঙে দেখানো নয় — ধাপ বদলানো তখনো কাজ করবে।
+   * Careful: on failure it quietly stays an empty list: failing to fetch devices
+   * must not break the versions page; changing the stage still works.
    */
   const fleet = useApi((signal) => listDevices(signal), []);
   const devices = fleet.data ?? [];
@@ -55,9 +55,9 @@ export function AgentVersionsTab() {
   return (
     <div className="space-y-4">
       {/*
-        ⚠️ এই সতর্কতাটা সবার উপরে, আর সবসময় — কারণ ভুল বিল্ড বেরিয়ে
-        গেলে ফেরার স্বয়ংক্রিয় পথ **নেই** (G69, ইচ্ছাকৃত)। যিনি
-        "Everyone" বাছবেন, তিনি যেন আগেই জানেন।
+        Careful: this warning is at the very top and always shown, because once a bad
+        build is out there is **no** automatic way back (deliberate). Whoever picks
+        "Everyone" should know in advance.
       */}
       <Notice tone="attention">
         There is no automatic rollback. If a build turns out to be bad, you
@@ -85,13 +85,13 @@ export function AgentVersionsTab() {
       </Card>
 
       {/*
-        ⭐⭐ **কোন PC কোন বিল্ডে** *(১৮ আগস্ট)* — উপরের টেবিল বলে কোন
-           ভার্সনে **কতগুলো** PC আছে, কিন্তু **কোনগুলো** সেটা পর্দার
-           কোথাও ছিল না। মালিকের প্রশ্নটা ছিল ঠিক তাই।
+        **Which PC is on which build.** The table above says how **many** PCs are
+           on each version, but **which ones** was nowhere on screen. That was exactly
+           the owner's question.
 
-        ⚠️ নতুন "Devices" ট্যাব **নয়** (G89 — সেটা মালিক নিজেই তুলে দিতে
-           বলেছিলেন)। এখানে বসেছে কারণ প্রশ্নটা এই ট্যাবেই ওঠে, আর
-           দুটো সংখ্যা পাশাপাশি থাকলে সেগুলো একমত কিনা তাও দেখা যায়।
+        Careful: **not** a new "Devices" tab (the owner asked for that to be removed).
+           It sits here because the question comes up on this tab, and with the two
+           numbers side by side you can see whether they agree.
       */}
       <FleetCard versions={rows} />
 
@@ -115,7 +115,7 @@ function VersionTable({
   onChanged,
 }: {
   rows: AgentVersionView[];
-  /** ⭐ পাইলট বাছার তালিকা — খালি হলে শুধু "Nobody" থাকে */
+  /** The list for choosing a pilot; when empty only "Nobody" is offered */
   devices: DeviceView[];
   onChanged: () => void;
 }) {
@@ -165,15 +165,15 @@ function VersionTable({
           },
           {
             /**
-             * ⭐⭐ **বেছে দেওয়া PC** *(মালিকের চাওয়া, ১ সেপ্টেম্বর ২০২৬:
-             * "OX-05 ei update age powa dorkar")*।
+             * **A chosen PC.** The owner wanted OX-05 to get this update first.
              *
-             * ⚠️⚠️ রোলআউট চলে **মেশিন ধরে** (হ্যাশ-বালতি), মানুষ ধরে নয় —
-             * তাই যে PC-তে বাগটা ধরা পড়ে, সংশোধনটা ঠিক সেখানেই আগে
-             * পরীক্ষা করা যেত না। মাঠে: OX-05-এর বালতি ৮৬, অথচ canary ৭।
+             * Careful: rollout runs **by machine** (hash buckets), not by person, so
+             * the PC where the bug is found could not be the first to test the fix.
+             * In the field OX-05's bucket was 86, while the canary was 7.
              *
-             * ⚠️ `Stopped`-এ পাইলটও পায় না — জরুরি ব্রেক সবার জন্য।
-             *    সেটা সার্ভারের নিয়মে বাঁধা, পর্দার সদিচ্ছায় নয়।
+             * Careful: at `Stopped` the pilot does not get it either: the emergency
+             *    brake is for everyone. That is bound by the server's rules, not by
+             *    the screen's good intentions.
              */
             key: 'pilot',
             header: 'First to',
@@ -194,7 +194,7 @@ function VersionTable({
                 }
                 className="rounded-md border border-line bg-surface px-2 py-1 text-[12.5px]"
               >
-                {/* ⚠️ খালি ঘরটা "কেউ নয়" — ফাঁকা দেখতে যেন প্রশ্ন না জাগে */}
+                {/* Careful: an empty value means "nobody"; so a blank looks intentional */}
                 <option value="">Nobody</option>
                 {devices.map((d) => (
                   <option key={d.id} value={d.id}>
@@ -216,8 +216,9 @@ function VersionTable({
             align: 'right',
             render: (r) =>
               /*
-                ⚠️ সারি আছে কিন্তু ফাইলটা ডিস্কে নেই — এজেন্ট নামাতে গিয়ে
-                   ৪০৪ পেত আর owner জানতেনই না। তাই এটা লাল করে বলা।
+                Careful: the row exists but the file is not on disk: the agent would
+                   get a 404 when downloading and the owner would never know. So this
+                   is shown in red.
               */
               r.fileMissing ? (
                 <Chip tone="attention">MSI missing</Chip>
@@ -233,16 +234,17 @@ function VersionTable({
             key: 'download',
             header: '',
             /*
-              ⭐⭐ **হাতে বসানোর জন্য MSI নামানো** *(১৮ আগস্ট)*।
+              **Downloading the MSI for a manual install.**
 
-              ⚠️⚠️ ০.৪.১-এর **আগের** এজেন্টে tray-তে "Install update"
-                 মেনুটাই নেই, তাই ধাপে ধাপে রোলআউট ওই PC-গুলোয় পৌঁছায় না —
-                 ফাইলটা নেমে পড়ে থাকে, কেউ জানে না। ওখানে একবার হাতে
-                 বসাতে হয়, আর তার জন্য MSI-টা হাতে পাওয়ার কোনো পথই ছিল না।
+              Careful: agents **older than** 0.4.1 have no "Install update" tray menu,
+                 so staged rollout does not reach those PCs: the file downloads and
+                 sits there, and nobody knows. They need one manual install, and there
+                 was no way to get hold of the MSI for that.
 
-              ⚠️ সাধারণ `<a download>` — কোনো JS নয়। ফাইলটা ৬২ MB, আর
-                 fetch দিয়ে মেমরিতে তুলে blob বানালে বড় ফাইলে ব্রাউজার
-                 অকারণে ভুগত; ব্রাউজারের নিজের ডাউনলোডই এখানে সঠিক যন্ত্র।
+              Careful: a plain `<a download>`, no JS. The file is 62 MB, and pulling
+                 it into memory with fetch and making a blob would strain the browser
+                 needlessly for a large file; the browser's own download is the right
+                 tool here.
             */
             render: (r) =>
               r.fileMissing ? null : (
@@ -277,9 +279,9 @@ function VersionTable({
 }
 
 /**
- * ⚠️ এখানে **sha256 চাওয়া হয় না** — সার্ভার নিজে ফাইলটা পড়ে হিসাব করে।
- * হাতে বসানো হ্যাশে একটা অক্ষর ভুল হলে ১৫টা PC ফাইলটা নামাত, হ্যাশ না
- * মেলায় বাতিল করত, আবার নামাত — চিরকাল।
+ * Careful: **sha256 is not asked for**: the server reads the file and computes it
+ * itself. One wrong character in a hand-entered hash would make 15 PCs download the
+ * file, reject it on the hash mismatch, and download it again, forever.
  */
 function PublishDialog({
   onClose,

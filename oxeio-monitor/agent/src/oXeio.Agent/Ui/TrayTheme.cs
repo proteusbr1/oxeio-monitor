@@ -4,53 +4,52 @@ using System.Runtime.Versioning;
 namespace oXeio.Agent.Ui;
 
 /// <summary>
-/// tray জানালার রং — <c>web/src/index.css</c>-এর টোকেনের হুবহু জোড়া।
+/// Colors of the tray window: an exact pairing with the tokens in <c>web/src/index.css</c>.
 ///
-/// ⭐ <b>কেন এই ফাইলটা দরকার হলো:</b> আগে জানালা আঁকা হতো
-/// <see cref="SystemColors"/> দিয়ে — <c>Window</c>, <c>WindowText</c>,
-/// <c>GrayText</c>, <c>ControlLight</c>। ফলে জানালাটা Windows যা পরে আছে
-/// তা-ই পরত, আর oXeio-র নিজের কোনো পরিচয় বহন করত না। অথচ এটাই একমাত্র
-/// পর্দা যা প্রতিটা কর্মী রোজ দেখে।
+/// <b>Why this file was needed:</b> the window used to be drawn with
+/// <see cref="SystemColors"/>: <c>Window</c>, <c>WindowText</c>, <c>GrayText</c>,
+/// <c>ControlLight</c>. So the window wore whatever Windows was wearing and carried no oXeio
+/// identity of its own, even though it is the one screen every employee sees every day.
 ///
-/// ⚠️ মানগুলো এখানে <b>হাতে লেখা ধ্রুবক</b>, কারণ CSS ফাইলটা এজেন্টের
-/// বিল্ডে আসে না। ওখানে রং বদলালে এখানেও বদলাতে হবে — সেজন্যই প্রতিটার
-/// পাশে টোকেনের নাম লেখা।
+/// Careful: the values here are <b>hand-written constants</b>, because the CSS file does not
+/// come into the agent's build. If a color is changed there it must be changed here too,
+/// which is why the token name is written next to each one.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed record TrayTheme
 {
-    /// <summary><c>--color-surface</c> — জানালার পটভূমি।</summary>
+    /// <summary><c>--color-surface</c>: the window background.</summary>
     public required Color Surface { get; init; }
 
-    /// <summary><c>--color-line</c> — হেয়ারলাইন ও বর্ডার।</summary>
+    /// <summary><c>--color-line</c>: hairlines and borders.</summary>
     public required Color Line { get; init; }
 
-    /// <summary><c>--color-ink</c> — মূল লেখা ও চলতি অগ্রগতির ভরাট।</summary>
+    /// <summary><c>--color-ink</c>: main text and the fill of the current progress.</summary>
     public required Color Ink { get; init; }
 
-    /// <summary><c>--color-ink-2</c> — লেবেল।</summary>
+    /// <summary><c>--color-ink-2</c>: labels.</summary>
     public required Color Ink2 { get; init; }
 
-    /// <summary><c>--color-ink-3</c> — পাদটীকা ও নিষ্ক্রিয় ডট।</summary>
+    /// <summary><c>--color-ink-3</c>: footnotes and inactive dots.</summary>
     public required Color Ink3 { get; init; }
 
     /// <summary>
-    /// <c>--color-brand</c>। ⚠️ এই জানালায় লাল <b>কেবল সত্যিকারের গোলমালে</b> —
-    /// "ডেটা সার্ভারে পৌঁছাচ্ছে না"। পিছিয়ে থাকা কোনো ইনসিডেন্ট নয়, ওটা
-    /// <see cref="Idle"/> আম্বারে।
+    /// <c>--color-brand</c>. Careful: in this window red is <b>only for a real problem</b>:
+    /// "data is not reaching the server". Being behind is not an incident; that is
+    /// <see cref="Idle"/> amber.
     /// </summary>
     public required Color Brand { get; init; }
 
-    /// <summary><c>--color-ok</c> — কাজ চলছে, আর মাসের টার্গেট পূর্ণ।</summary>
+    /// <summary><c>--color-ok</c>: work is running, and the monthly target is met.</summary>
     public required Color Ok { get; init; }
 
-    /// <summary><c>--color-idle</c> — থেমে আছে, আর "পিছিয়ে আছে"।</summary>
+    /// <summary><c>--color-idle</c>: paused, and "behind".</summary>
     public required Color Idle { get; init; }
 
-    /// <summary>মিটারের খালি অংশ (<c>--track</c>)।</summary>
+    /// <summary>The empty part of a meter (<c>--track</c>).</summary>
     public required Color Track { get; init; }
 
-    /// <summary>ডিফল্ট — ড্যাশবোর্ডের Midnight।</summary>
+    /// <summary>The default: the dashboard's Midnight.</summary>
     public static TrayTheme Midnight { get; } = new()
     {
         Surface = Rgb(0x16, 0x1B, 0x22),
@@ -64,7 +63,7 @@ internal sealed record TrayTheme
         Track = Rgb(0x24, 0x2B, 0x35),
     };
 
-    /// <summary>হালকা থিম — Windows আলোয় থাকলে।</summary>
+    /// <summary>The light theme, for when Windows is in light mode.</summary>
     public static TrayTheme Day { get; } = new()
     {
         Surface = Rgb(0xFF, 0xFF, 0xFF),
@@ -79,16 +78,16 @@ internal sealed record TrayTheme
     };
 
     /// <summary>
-    /// জানালা যা পরে — <b>সবসময় Midnight</b>।
+    /// What the window wears: <b>always Midnight</b>.
     ///
-    /// ⭐ মালিকের সিদ্ধান্ত (১১ আগস্ট): Windows আলোয় থাকলেও জানালাটা পণ্যের
-    /// নিজের পরিচয়ই বহন করবে, OS-এর নয়। ড্যাশবোর্ডও ঠিক তাই করে —
-    /// <c>index.css</c>-এ <c>color-scheme: dark</c>, <c>light dark</c> নয়।
-    /// দুই পর্দায় দুই চেহারা হলে স্টাফের চোখে ওগুলো দুটো আলাদা জিনিস হয়ে যেত।
+    /// The owner's decision (11 August): even when Windows is in light mode the window carries
+    /// the product's own identity, not the OS's. The dashboard does the same:
+    /// <c>color-scheme: dark</c> in <c>index.css</c>, not <c>light dark</c>.
+    /// With two different looks on the two screens, staff would see them as two different things.
     ///
-    /// ⚠️ <see cref="Day"/> মুছে ফেলা হয়নি: রংগুলো ড্যাশবোর্ডের হালকা থিমের
-    /// সাথে মিলিয়ে বাছা, আর মকআপে দুটোই আঁকা আছে। কোনোদিন সেটিংসে থিমের
-    /// সুইচ এলে ওটাই লাগবে — তখন নতুন করে রং বাছতে হবে না।
+    /// Careful: <see cref="Day"/> was not removed: its colors were chosen to match the
+    /// dashboard's light theme, and both are drawn in the mockup. If a theme switch ever
+    /// comes to settings it will be needed, and the colors will not have to be chosen again.
     /// </summary>
     public static TrayTheme Current => Midnight;
 

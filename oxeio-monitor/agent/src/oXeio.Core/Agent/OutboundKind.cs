@@ -1,15 +1,15 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// আউটবক্সের প্রতিটি সারি ঠিক একটা endpoint-এর জন্য — এই enum-টাই বলে কোনটা।
+/// Each outbox row is for exactly one endpoint; this enum says which.
 ///
-/// ক্রমটা ইচ্ছাকৃত: ঘোষণার এই ক্রমই <see cref="OutboxBudget"/>-এ "কোনটা আগে ফেলে
-/// দেওয়া যায়" বোঝাতে ব্যবহার হয় না — সেখানে আলাদা rank আছে, কারণ enum-এর ক্রম
-/// বদলালে নীরবে ভুল জিনিস মুছে যেত।
+/// The declaration order is deliberately not used in <see cref="OutboxBudget"/> to decide
+/// "which can be dropped first"; that has its own separate rank, because reordering the
+/// enum would silently delete the wrong things.
 ///
-/// ⚠️ এই enum-এর নাম SQLite-এ <b>টেক্সট</b> হিসেবে জমা হবে, সংখ্যা হিসেবে নয়।
-/// সংখ্যা জমালে ভবিষ্যতে মাঝখানে একটা সদস্য যোগ করলেই পুরোনো সারিগুলো অন্য
-/// endpoint-এ চলে যেত — আর সেটা কেউ টেরও পেত না।
+/// Careful: the enum's name is stored in SQLite as <b>text</b>, not as a number. Storing a
+/// number would mean that adding a member in the middle someday sends old rows to a different
+/// endpoint, and nobody would notice.
 /// </summary>
 public enum OutboundKind
 {
@@ -24,7 +24,7 @@ public enum OutboundKind
 
     /// <summary>
     /// <c>POST /agent/screenshots</c> — payload <see cref="ScreenshotRecord"/>,
-    /// আর আসল বাইটগুলো ডিস্কে (<see cref="OutboxItem.FilePath"/>)।
+    /// and the actual bytes are on disk (<see cref="OutboxItem.FilePath"/>).
     /// </summary>
     Screenshot,
 }

@@ -1,29 +1,29 @@
 import type { EmployeeStatus, UserRole } from '@prisma/client';
 
 /**
- * E10 — কর্মচারীর DB সারিকে API রেসপন্সে রূপ দেওয়া।
+ * Turns an employee DB row into an API response.
  *
- * এই ফাইলের একটাই কঠিন দায়িত্ব: **`monthlySalary` owner ছাড়া কারো কাছে
- * যাবে না** ([ADR-023](../../../docs/05-Options-Decisions.md), স্পেক § ৪.৩)।
+ * This file has one hard duty: **`monthlySalary` must never reach anyone but
+ * the owner** ([ADR-023](../../../docs/05-Options-Decisions.md), spec
+ * section 4.3).
  *
- * খাঁটি রাখা হয়েছে (কোনো I/O নেই) কারণ "ম্যানেজার বেতন দেখতে পায় কি না"
- * প্রশ্নটার উত্তর একটা ডাটাবেস ছাড়া টেস্ট দিয়ে প্রমাণ করা দরকার। সার্ভিসের
- * ভেতরে মিশে থাকলে প্রমাণ করতে হলে পুরো HTTP স্ট্যাক দাঁড় করাতে হতো, আর
- * তখন কেউ আর টেস্টটা লিখত না।
+ * It is kept pure (no I/O) because "can a manager see salary?" needs to be
+ * proved by a test that runs without a database. Mixed into the service, the
+ * proof would need the whole HTTP stack, and then nobody would write the test.
  */
 
 /**
- * Prisma-র `Decimal`-এর যেটুকু দরকার, শুধু সেটুকুর আকার।
+ * Only the part of Prisma's `Decimal` that is actually needed.
  *
- * ⚠️ ইচ্ছাকৃতভাবে `@prisma/client`-এর Decimal ইমপোর্ট করা হয়নি — তাহলে এই
- * ফাইলটা আর নিরিবিলি খাঁটি থাকত না, আর টেস্টে একটা আসল Decimal বানাতে হতো।
- * সাধারণ `number`-ও এই আকার মেনে চলে, তাই টেস্টে `13000` লিখলেই চলে।
+ * Careful: Prisma's Decimal is deliberately not imported, otherwise this file
+ * would no longer be quietly pure and tests would need a real Decimal. A plain
+ * `number` also satisfies this shape, so tests can simply write `13000`.
  */
 export interface Decimalish {
   toFixed(digits: number): string;
 }
 
-/** ঠিক যতটুকু কলাম সার্ভিস select করে — এর বেশি কিছু এখানে ঢোকে না */
+/** Exactly the columns the service selects; nothing more enters here. */
 export interface EmployeeRow {
   id: number;
   empCode: string;
@@ -31,19 +31,19 @@ export interface EmployeeRow {
   email: string | null;
   designation: string | null;
   department: string | null;
-  /** ⭐ কাজের ধরন — ম্যানেজারও দেখেন; এটা গোপন কিছু নয়, বেতনের মতো নয় */
+  /** Kind of work. Managers see it too; it is not secret, unlike salary. */
   staffType: 'designer' | 'researcher' | 'manager' | null;
   /**
-   * ⭐⭐ **ডিজাইনারের নিজের দৈনিক টার্গেট।**
+   * **The designer's own daily target.**
    *
-   * ⚠️⚠️ ঘরটা এখানে **ছিল না**, অথচ পর্দার টাইপ (`EmployeeView`)
-   * বরাবর দাবি করত এটা আসে। ফল নীরব: মালিক টার্গেট বসিয়ে সেভ
-   * করতেন, ফর্ম আবার খুললে ঘরটা **খালি** — যেন কিছুই বসেনি। আর
-   * খালি মানে "পলিসির ২৫ খাটবে", তাই কেউ আবার ২৫ টাইপ করে
-   * দিতে পারতেন — অথচ বসানো ছিল ০ (টার্গেট বন্ধ)।
+   * Careful: this field used to be **missing** here, while the screen type
+   * (`EmployeeView`) always claimed it was sent. The failure was silent: the
+   * owner saved a target, and on reopening the form the field was **empty**,
+   * as if nothing had been saved. Empty means "the policy's 25 applies", so
+   * someone could retype 25 when 0 (target off) had been set.
    *
-   * ⭐ whitelist ধাঁচের ফাংশনে ভুলে যাওয়ার দাম এটাই: ফাঁস নয়,
-   * **অনুপস্থিতি** — আর সেটা ধরা পড়ে অনেক দেরিতে।
+   * That is the cost of forgetting a field in a whitelist-style function:
+   * not a leak but an **absence**, and it is noticed very late.
    */
   dailyDesignTarget: number | null;
   policyId: number | null;
@@ -54,12 +54,12 @@ export interface EmployeeRow {
   policySignedAt: Date | null;
   policyDocPath: string | null;
   createdAt: Date;
-  /** ⭐ সেটআপের অবস্থা — `EMPLOYEE_SELECT` থেকে */
+  /** Setup status, from `EMPLOYEE_SELECT`. */
   devices?: { status: 'active' | 'revoked' }[];
   portalUsers?: { id: number; email: string; role: UserRole }[];
 }
 
-/** ম্যানেজার ও owner — দুজনেই এটুকু দেখে */
+/** What managers and the owner both see. */
 export interface EmployeeBaseView {
   id: number;
   empCode: string;
@@ -67,19 +67,19 @@ export interface EmployeeBaseView {
   email: string | null;
   designation: string | null;
   department: string | null;
-  /** ⭐ কাজের ধরন — ম্যানেজারও দেখেন; এটা গোপন কিছু নয়, বেতনের মতো নয় */
+  /** Kind of work. Managers see it too; it is not secret, unlike salary. */
   staffType: 'designer' | 'researcher' | 'manager' | null;
   /**
-   * ⭐⭐ **ডিজাইনারের নিজের দৈনিক টার্গেট।**
+   * **The designer's own daily target.**
    *
-   * ⚠️⚠️ ঘরটা এখানে **ছিল না**, অথচ পর্দার টাইপ (`EmployeeView`)
-   * বরাবর দাবি করত এটা আসে। ফল নীরব: মালিক টার্গেট বসিয়ে সেভ
-   * করতেন, ফর্ম আবার খুললে ঘরটা **খালি** — যেন কিছুই বসেনি। আর
-   * খালি মানে "পলিসির ২৫ খাটবে", তাই কেউ আবার ২৫ টাইপ করে
-   * দিতে পারতেন — অথচ বসানো ছিল ০ (টার্গেট বন্ধ)।
+   * Careful: this field used to be **missing** here, while the screen type
+   * (`EmployeeView`) always claimed it was sent. The failure was silent: the
+   * owner saved a target, and on reopening the form the field was **empty**,
+   * as if nothing had been saved. Empty means "the policy's 25 applies", so
+   * someone could retype 25 when 0 (target off) had been set.
    *
-   * ⭐ whitelist ধাঁচের ফাংশনে ভুলে যাওয়ার দাম এটাই: ফাঁস নয়,
-   * **অনুপস্থিতি** — আর সেটা ধরা পড়ে অনেক দেরিতে।
+   * That is the cost of forgetting a field in a whitelist-style function:
+   * not a leak but an **absence**, and it is noticed very late.
    */
   dailyDesignTarget: number | null;
   policyId: number | null;
@@ -92,61 +92,64 @@ export interface EmployeeBaseView {
   createdAt: string;
 
   /**
-   * ⭐ **এজেন্ট বসানোর জন্য তৈরি কি না** — এক নজরে।
+   * **Is the employee ready for the agent to be installed?** At a glance.
    *
-   * ⚠️ সংখ্যা নয়, `boolean` — কার কটা ডিভাইস সেটা এই পর্দার প্রশ্ন নয়,
-   * প্রশ্নটা "তার সেটআপ শেষ কি না"। সংখ্যা দিলে সেটা আরেকটা পড়ার মতো
-   * জিনিস হয়ে দাঁড়াত, অথচ কাজে লাগত না।
+   * Careful: a `boolean`, not a count. How many devices someone has is not
+   * this screen's question; the question is "is their setup finished?". A
+   * number would be one more thing to read and would not help.
    */
   hasPortalAccount: boolean;
   hasDevice: boolean;
-  /** ⭐ ডিভাইস আছে, কিন্তু সবগুলোই বন্ধ — সারিতে "Turn agent on" দেখানোর ভিত্তি */
+  /** Has devices but all are switched off; the basis for showing "Turn agent on" on the row. */
   agentSwitchedOff: boolean;
 
   /**
-   * ⭐ portal অ্যাকাউন্টের id ও লগইন ইমেইল — পাসওয়ার্ড রিসেট ও ইমেইল
-   * বদলানোর জন্য পর্দার এটাই দরকার। অ্যাকাউন্ট না থাকলে দুটোই `null`।
+   * Id and login email of the portal account; the screen needs both for
+   * password reset and email change. Both are `null` when there is no account.
    */
   portalUserId: number | null;
   portalEmail: string | null;
 
   /**
-   * ⭐ ভূমিকা — পর্দার ড্রপডাউন **বর্তমান** মান দেখিয়ে খোলার জন্য।
+   * Role, so the screen's dropdown opens showing the **current** value.
    *
-   * ⚠️ না পাঠালে ড্রপডাউন সবসময় "Staff" দেখাত, আর কেউ শুধু ইমেইল বদলাতে
-   * গিয়ে সেভ চাপলে একজন ম্যানেজার নীরবে স্টাফ হয়ে যেতেন।
+   * Careful: if it were not sent, the dropdown would always show "Staff", and
+   * someone who only wanted to change an email and pressed save would silently
+   * turn a manager into staff.
    */
   /**
-   * ⚠️⚠️ টাইপটা `UserRole` **ধার করা**, হাতে লেখা তালিকা নয়। আগে এখানে
-   * `'owner' | 'manager' | 'employee'` লেখা ছিল, আর ২৫ আগস্ট enum-এ
-   * `researcher` বসানোর সময় ⭐ **গোটা কোডবেসে এই একটাই জায়গা**
-   * কম্পাইল-এরর দিয়েছিল। বাকি সব শর্ত নীরবে ভুল দিকে গড়াত।
-   * enum ধার করলে পরের বার এটাও নীরব হয়ে যেত না — নিজেই মিলে যায়।
+   * Careful: the type is **borrowed** from `UserRole`, not a hand-written
+   * list. It used to say `'owner' | 'manager' | 'employee'`, and when
+   * `researcher` was added to the enum, this was **the only place in the whole
+   * codebase** that raised a compile error. Every other condition would have
+   * silently gone the wrong way. Borrowing the enum means this cannot go
+   * silent next time; it stays in step by itself.
    */
   portalRole: UserRole | null;
 }
 
-/** ⭐ শুধু owner-এর রেসপন্সে বেতনের ফিল্ডটা **থাকে** */
+/** Only the owner's response **contains** the salary field. */
 export interface OwnerEmployeeView extends EmployeeBaseView {
-  /** টাকা, দুই দশমিক। বসানো না থাকলে `null` — শূন্য নয় (payroll § দেখুন) */
+  /** Taka, two decimals. `null` when not set, not zero (see payroll). */
   monthlySalary: string | null;
 }
 
 export type EmployeeView = EmployeeBaseView | OwnerEmployeeView;
 
-/** স্পেক § ৪.৩ — বেতন একমাত্র owner-এর জিনিস */
+/** Spec section 4.3: salary belongs to the owner alone. */
 export function canSeeSalary(role: UserRole): boolean {
   return role === 'owner';
 }
 
 /**
- * ⭐ সারিটা কখনো spread করা হয় **না** (`{ ...row }`)। প্রতিটা ফিল্ড হাতে
- * লিখে তোলা হয়, অর্থাৎ এটা whitelist — blacklist নয়।
+ * The row is **never spread** (`{ ...row }`). Every field is picked by hand,
+ * so this is a whitelist, not a blacklist.
  *
- * পার্থক্যটা ভবিষ্যতের: স্কিমায় কাল যদি `bankAccount` বা `nid` কলাম যোগ হয়,
- * blacklist ধাঁচে (`delete copy.monthlySalary`) সেটা চুপচাপ ম্যানেজারের
- * রেসপন্সে চলে যেত। whitelist-এ ভুলে গেলে ফিল্ডটা **আসবেই না** — ফাঁস নয়,
- * অনুপস্থিতি। ভুলের দিকটা এভাবেই বেছে নেওয়া হয়েছে।
+ * The difference matters for the future: if a `bankAccount` or `nid` column
+ * is added to the schema tomorrow, a blacklist (`delete copy.monthlySalary`)
+ * would quietly send it to managers. With a whitelist, a forgotten field
+ * **does not appear**: an absence, not a leak. The error is deliberately
+ * made to fall on that side.
  */
 export function toEmployeeView(row: EmployeeRow, role: UserRole): EmployeeView {
   const base: EmployeeBaseView = {
@@ -166,20 +169,20 @@ export function toEmployeeView(row: EmployeeRow, role: UserRole): EmployeeView {
     policyDocPath: row.policyDocPath,
     createdAt: row.createdAt.toISOString(),
 
-    // ⚠️ `_count` না এলে `false` — "জানি না"-কে "নেই" ধরা হয়, কারণ এই
-    //    পর্দাটা কাজ **বাকি আছে** দেখানোর জন্য; ভুল করলে বাড়তি কাজ দেখাক,
-    //    কম নয়।
+    // Careful: `false` when `_count` is missing. "Unknown" is treated as
+    // "none", because this screen exists to show work **still to do**; if
+    // wrong, it should show extra work, not less.
     hasPortalAccount: (row.portalUsers?.length ?? 0) > 0,
     hasDevice: (row.devices ?? []).some((d) => d.status === 'active'),
 
     /**
-     * ⭐ এজেন্ট বসানো ছিল, কিন্তু এখন বন্ধ।
+     * The agent was installed but is now off.
      *
-     * ⚠️⚠️ কর্মী নিষ্ক্রিয় করলে তাঁর সব ডিভাইস revoke হয়, আর আবার সক্রিয়
-     * করলে সেগুলো **ফেরে না** (ইচ্ছাকৃত — পুরোনো টোকেন আপনাআপনি জেগে
-     * ওঠা উচিত নয়)। ফলে বোর্ডে তিনি চিরকাল "Offline", অথচ এজেন্ট তাঁর
-     * PC-তে দিব্যি চলছে। এই ঘরটাই পর্দাকে "Turn agent on" বোতামটা
-     * দেখানোর সুযোগ দেয়।
+     * Careful: deactivating an employee revokes all their devices, and
+     * reactivating them does **not** bring them back (deliberate: old tokens
+     * must not wake up on their own). So on the board they stay "Offline"
+     * forever while the agent runs fine on their PC. This field lets the
+     * screen show the "Turn agent on" button.
      */
     agentSwitchedOff:
       !(row.devices ?? []).some((d) => d.status === 'active') &&
@@ -190,18 +193,18 @@ export function toEmployeeView(row: EmployeeRow, role: UserRole): EmployeeView {
   };
 
   if (!canSeeSalary(role)) {
-    // ⚠️ এখানে `monthlySalary: undefined` লেখার লোভ হয় — JSON.stringify-এ
-    //    ফিল্ডটা উধাও হয়ে যায় বলে দেখতে ঠিকই লাগে। কিন্তু তখন অবজেক্টে
-    //    key-টা থেকে যায় (`'monthlySalary' in emp` → true), আর কোনো
-    //    ইন্টারসেপ্টর, লগার বা `JSON.stringify(obj, replacer)` সেটাকে
-    //    `null` করে বাইরে পাঠিয়ে দিতে পারত। তাই key-টা **বসানোই হয় না**।
+    // Careful: it is tempting to write `monthlySalary: undefined` here. It
+    // looks right because JSON.stringify drops the field. But the key stays on
+    // the object (`'monthlySalary' in emp` is true), and an interceptor, a
+    // logger or `JSON.stringify(obj, replacer)` could send it out as `null`.
+    // So the key is **never set**.
     return base;
   }
 
   return {
     ...base,
-    // Decimal → স্ট্রিং। ⚠️ `Number(...)` দিয়ে যাওয়া হয় না — টাকা কখনো
-    //    binary float হয়ে ফিরবে না, ১৩০০০.১০ যেন ১৩০০০.০৯৯৯… না হয়।
+    // Decimal -> string. Careful: never go through `Number(...)`. Money must
+    // never come back as a binary float; 13000.10 must not become 13000.0999...
     monthlySalary: row.monthlySalary === null ? null : row.monthlySalary.toFixed(2),
   };
 }
@@ -214,12 +217,12 @@ export function toEmployeeViews(
 }
 
 /**
- * `@db.Date` কলাম Prisma থেকে UTC-মধ্যরাত হিসেবে আসে, তাই ISO স্ট্রিংয়ের
- * প্রথম দশ অক্ষরই ক্যালেন্ডার তারিখ।
+ * A `@db.Date` column comes from Prisma as UTC midnight, so the first ten
+ * characters of the ISO string are the calendar date.
  *
- * ⚠️ এখানে ঢাকার অফসেট যোগ করা হয় **না**। এটা কোনো instant নয় — জন্মদিন
- * বা যোগদানের তারিখের মতো নিছক ক্যালেন্ডার তারিখ। টাইমজোন চাপালে ০১
- * তারিখ কখনো ৩১ হয়ে যেত।
+ * Careful: the Dhaka offset is **not** added here. This is not an instant but
+ * a plain calendar date, like a birthday or joining date. Applying a time
+ * zone would sometimes turn the 1st into the 31st.
  */
 function toDateOnly(date: Date | null): string | null {
   return date === null ? null : date.toISOString().slice(0, 10);

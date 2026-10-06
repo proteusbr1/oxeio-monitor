@@ -5,20 +5,20 @@ using oXeio.Core.Watchdog;
 namespace oXeio.Watchdog.Platform;
 
 /// <summary>
-/// সব ফাইল এক জায়গায়: <c>%ProgramData%\oXeio\</c> (07-Technical-Spec § ৩.৫)।
+/// All files in one place: <c>%ProgramData%\oXeio\</c> (07-Technical-Spec section 3.5).
 ///
-/// ⚠️ ইনস্টলারকে এই ফোল্ডারে <b>Users</b> গ্রুপকে Modify দিতে হবে। ডিফল্টে
-/// %ProgramData%-র সাবফোল্ডার শুধু যে তৈরি করেছে সে-ই লিখতে পারে; না দিলে
-/// স্ট্যান্ডার্ড ইউজারের এজেন্ট queue.db-ই খুলতে পারবে না, আর watchdog
-/// প্রতিবার "probe ব্যর্থ" দেখে হাত গুটিয়ে বসে থাকবে।
+/// The installer must grant the <b>Users</b> group Modify on this folder. By default a
+/// subfolder of %ProgramData% can be written only by whoever created it; without the grant a
+/// standard user's agent could not even open queue.db, and the watchdog would see "probe
+/// failed" every time and sit with its hands in its pockets.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class AgentPaths
 {
-    /// <summary>এজেন্টের exe-র নাম — <c>oXeio.Agent.csproj</c>-এর AssemblyName।</summary>
+    /// <summary>The agent's exe name: the AssemblyName in <c>oXeio.Agent.csproj</c>.</summary>
     internal const string AgentExeName = "oXeio.Agent.exe";
 
-    /// <summary>pid যাচাইয়ের জন্য প্রসেসের নাম (এক্সটেনশন ছাড়া)।</summary>
+    /// <summary>The process name for pid verification (no extension).</summary>
     internal const string AgentProcessName = "oXeio.Agent";
 
     internal AgentPaths(string dataDirectory) => DataDirectory = dataDirectory;
@@ -36,7 +36,7 @@ internal sealed class AgentPaths
     internal string Log => Path.Combine(DataDirectory, AgentLiveness.WatchdogLogFileName);
     internal string StopFile => Path.Combine(DataDirectory, AgentLiveness.StopFileName);
 
-    /// <summary>ফোল্ডার নেই বললে তৈরি করে। না পারলে false — কলার সেটা লগে লেখে।</summary>
+    /// <summary>Creates the folder if it is missing. false if it cannot; the caller writes that to the log.</summary>
     internal bool EnsureDirectory()
     {
         try
@@ -51,12 +51,12 @@ internal sealed class AgentPaths
     }
 
     /// <summary>
-    /// এজেন্টের exe কোথায়। ডিফল্টে watchdog-এর নিজের ফোল্ডারেই — MSI দুটোকে
-    /// একসাথে রাখে।
+    /// Where the agent's exe is. By default in the watchdog's own folder: the MSI keeps the
+    /// two together.
     ///
-    /// ⚠️ PATH-এ খোঁজা হয় না, ইচ্ছাকৃতভাবে। watchdog লগঅনে চলে, আর ইউজার নিজের
-    /// PATH-এ যা খুশি বসাতে পারে — PATH দেখে চালালে যেকোনো স্টাফ নিজের লেখা
-    /// <c>oXeio.Agent.exe</c> চালিয়ে দিতে পারত, ঘণ্টার হিসাব যা খুশি বানিয়ে।
+    /// PATH is deliberately not searched. The watchdog runs at logon, and users can put
+    /// anything on their own PATH; searching it would let any staff member run their own
+    /// <c>oXeio.Agent.exe</c> and make up the hours count as they like.
     /// </summary>
     internal static string? ResolveAgentExecutable(string? explicitPath)
     {

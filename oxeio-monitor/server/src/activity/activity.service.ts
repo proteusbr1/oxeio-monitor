@@ -58,17 +58,19 @@ export interface TeamReport extends TeamSiteReport {
 }
 
 /**
- * ⚠️ **একজনের দুটো PC চললে সময় দু-বার গোনা হয়** (স্পেক § ২.১-গ)।
+ * Careful: **if one person runs two PCs, their time is counted twice**
+ * (spec § 2.1-c).
  *
- * `worked_sec` ওই সমস্যা এড়ায় ACTIVE সেগমেন্টের **UNION** নিয়ে। কিন্তু
- * `app_usage`-এ union করার কোনো অর্থপূর্ণ উপায় নেই: একই মুহূর্তে ডেস্কটপে
- * VS Code আর ল্যাপটপে YouTube চললে "ওই সেকেন্ডটা কার" — এর সঠিক উত্তর নেই,
- * আর একটা বেছে নিলে সেটা নীরবে নীতি হয়ে যেত।
+ * `worked_sec` avoids that by taking the **UNION** of ACTIVE segments. But
+ * `app_usage` has no meaningful way to union: if VS Code runs on the desktop
+ * and YouTube on the laptop at the same moment, "whose second is it?" has no
+ * correct answer, and picking one would silently become policy.
  *
- * তাই এখানে **যোগফলই** নেওয়া হয়, আর সেটা স্পষ্ট করে বলা হয়:
- * - **অনুপাত (scorePct, sharePct) টিকে থাকে** — লব ও হর দুটোই সমানুপাতে বাড়ে
- * - **পরম সেকেন্ড কাজের ঘণ্টা নয়** — কখনোই `credited_sec`-এর সাথে মেলানো
- *   যাবে না, আর কোনো অবস্থাতেই বেতনের হিসাবে ঢোকে না
+ * So the **sum** is used here, and that is stated explicitly:
+ * - **Ratios (scorePct, sharePct) hold**: numerator and denominator grow
+ *   proportionally.
+ * - **Absolute seconds are not worked hours**: never reconcile them with
+ *   `credited_sec`, and they never enter pay calculations.
  */
 const OVERLAP_CAVEAT =
   'When one person runs more than one device the time is added up (§ 2.1-c) — the ratios stay correct, but the absolute seconds must not be treated as worked hours';
@@ -77,7 +79,7 @@ const OVERLAP_CAVEAT =
 export class ActivityService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // ── D07 · দৈনিক productivity স্কোর ─────────────────────────────────────────
+  // ── D07 · daily productivity score ────────────────────────────────────────────
 
   async productivity(query: EmployeeRangeQueryDto): Promise<ProductivityReport> {
     const range = this.range(query);
@@ -105,8 +107,8 @@ export class ActivityService {
     return {
       from: toDateKey(range.from),
       to: toDateKey(range.to),
-      // ⭐ যাদের একটাও সারি নেই তারাও তালিকায় থাকেন — শূন্য দিন চুপচাপ
-      //    বাদ দিলে "এজেন্ট বন্ধ" আর "সব ঠিক আছে" দেখতে একরকম হতো
+      // People with no rows at all stay in the list too: dropping a zero day
+      // silently would make "agent off" look the same as "all fine".
       employees: employees.map((e) => {
         const rows = folded.get(e.id);
         return {
@@ -121,7 +123,7 @@ export class ActivityService {
     };
   }
 
-  // ── D08 · টপ ১০ অ্যাপ ও সাইট ───────────────────────────────────────────────
+  // ── D08 · top 10 apps and sites ───────────────────────────────────────────────
 
   async top(query: TopQueryDto): Promise<TopReport> {
     const range = this.range(query);
@@ -142,8 +144,8 @@ export class ActivityService {
       }),
       this.prisma.appUsage.groupBy({
         by: ['domain', 'categoryId'],
-        // ⚠️ ডোমেইনহীন সারি (ব্রাউজার নয় এমন অ্যাপ) সাইটের তালিকায়
-        //    ঢুকলে "(খালি)" নামে একটা সারি সবচেয়ে উপরে বসে থাকত
+        // Careful: if rows with no domain (apps that are not browsers) entered the
+        // site list, a row named "(empty)" would sit at the very top.
         where: { ...where, domain: { not: null } },
         _sum: { durationSec: true },
         _count: { _all: true },
@@ -179,23 +181,23 @@ export class ActivityService {
         'site',
         limit,
       ),
-      // ⚠️ অ্যাপ ও সাইটের সময় **যোগ করা যাবে না** — chrome.exe-এর ৩ ঘণ্টার
-      //    ভেতরেই youtube.com-এর ১ ঘণ্টা আছে। দুটো তালিকা একই সময়ের
-      //    দুই রকম কাটাছেঁড়া, দুটো আলাদা ভাগ নয়।
+      // Careful: app and site time **cannot be added**: the 1 hour on youtube.com
+      // is inside chrome.exe's 3 hours. The two lists are two different cuts of
+      // the same time, not two separate parts.
       caveat: `${OVERLAP_CAVEAT}. App time and site time are two different breakdowns of the same time — they must not be added together`,
     };
   }
 
-  // ── D09 · টিম-ভিত্তিক সাইট সারাংশ ──────────────────────────────────────────
+  // ── D09 · per-team site summary ───────────────────────────────────────────────
 
   /**
-   * পুরো টিম মিলিয়ে কোন সাইটে কত সময়।
+   * How much time the whole team spent on each site.
    *
-   * ⚠️ `employeeId` ফিল্টার ইচ্ছাকৃতভাবে **নেই** — একজনের হিসাব চাইলে
-   * `/activity/top` আছে। দুটো এক করে ফেললে "টিমের অভ্যাস" আর "একজনের
-   * অভ্যাস" একই রেসপন্স শেপে আসত, আর কোনটা দেখা হচ্ছে বোঝা যেত না।
-   * পাশাপাশি প্রতিটা সারিতে `employees` ও `topEmployeeId` থাকে, যাতে
-   * একজনের সময়কে টিমের বলে চালানো না যায়।
+   * Careful: there is deliberately **no** `employeeId` filter. For one person's
+   * numbers there is `/activity/top`. Merging the two would return "team habits"
+   * and "one person's habits" in the same response shape, and you could not tell
+   * which one you were looking at. Each row also carries `employees` and
+   * `topEmployeeId`, so one person's time cannot be passed off as the team's.
    */
   async team(query: TeamQueryDto): Promise<TeamReport> {
     const range = this.range(query);
@@ -233,16 +235,17 @@ export class ActivityService {
     };
   }
 
-  // ── ভাগাভাগি করা অংশ ───────────────────────────────────────────────────────
+  // ── shared helpers ────────────────────────────────────────────────────────────
 
   /**
-   * ⚠️ খাঁটি `resolveRange()` HTTP-র কিছু জানে না, তাই সে `RangeError` ছোড়ে।
-   * সেটা এখানেই ৪০০-তে বদলানো হয় — নইলে ব্যবহারকারীর একটা টাইপো
-   * ৫০০ Internal Server Error হয়ে ফিরত, আর লগে অকারণে স্ট্যাক ট্রেস জমত।
+   * Careful: the pure `resolveRange()` knows nothing about HTTP, so it throws a
+   * `RangeError`. It is converted to a 400 here; otherwise a user's typo would
+   * come back as a 500 Internal Server Error and pile up needless stack traces
+   * in the log.
    */
   private range(query: RangeQueryDto): WorkDateRange {
     try {
-      // ⭐ "আজ" মানে **ঢাকার** আজ — সার্ভারের টাইমজোন যা-ই হোক
+      // "Today" means today in **Dhaka**, whatever the server's timezone.
       return resolveRange(query.from, query.to, workDateOf(new Date()));
     } catch (err) {
       if (err instanceof RangeError) {
@@ -258,18 +261,18 @@ export class ActivityService {
   ): Prisma.AppUsageWhereInput {
     return {
       workDate: { gte: range.from, lte: range.to },
-        // ⭐ R22a — শুধু ACTIVE-এ দেখা খণ্ড গোনা হয়। idle-এ দেখা সারি
-        //    এখন জমা হয় (মিটিং চেনার জন্য), কিন্তু কোনো হিসাবে যায় না।
+        // R22a - only fragments seen as ACTIVE are counted. Rows seen while idle
+        // are now stored (to detect meetings) but go into no calculation.
         segmentState: SegmentState.active,
       ...(employeeIds === undefined ? {} : { employeeId: { in: employeeIds } }),
     };
   }
 
   /**
-   * ⚠️ `monthly_salary` **কখনো** select করা হয় না। ওটা পড়ার একমাত্র জায়গা
-   * `PayrollService`, আর সেটাই owner-only ও audit করা (ADR-023)। এখানে
-   * ভুল করে `select` না লিখলে পুরো Employee সারি চলে আসত — ম্যানেজারের
-   * রেসপন্সেও বেতন ঢুকে যেত।
+   * Careful: `monthly_salary` is **never** selected. The only place that reads
+   * it is `PayrollService`, which is owner-only and audited (ADR-023). Without
+   * an explicit `select` here the whole Employee row would come back, and salary
+   * would leak into the manager's response too.
    */
   private async employees(
     employeeId?: number,
@@ -288,12 +291,14 @@ export class ActivityService {
   }
 
   /**
-   * id → ক্যাটাগরির পরিচয়। ~১১০টা সারি, তাই প্রতিবার পুরোটা পড়াই সবচেয়ে সহজ।
+   * id -> category identity. About 110 rows, so reading all of them each time
+   * is the simplest approach.
    *
-   * ⚠️ `AppCategoryService`-এর ক্যাশ **ব্যবহার করা হয় না** — ওটা `compile()`
-   * করা রুল রাখে, আর সেখানে ভুল regex-ওয়ালা রুলগুলো বাদ পড়ে যায়। রিপোর্টে
-   * ওই রুলের id-ওয়ালা পুরোনো সারি থাকতেই পারে; ক্যাশ থেকে নিলে সেগুলো
-   * নীরবে "অচেনা" দেখাত, অথচ ডাটাবেসে ক্যাটাগরি বসানোই আছে।
+   * Careful: the `AppCategoryService` cache is **not used**. It holds
+   * `compile()`d rules, which drop rules with a bad regex. Reports can still
+   * contain old rows carrying such a rule's id; going through the cache would
+   * silently show them as "unknown", although the category is stored in the
+   * database.
    */
   private async categoryMeta(): Promise<Map<number, CategoryMeta>> {
     const rows = await this.prisma.appCategory.findMany({

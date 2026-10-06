@@ -2,21 +2,21 @@ import { api } from './client';
 import { qs } from './query';
 
 /**
- * E06 — স্ক্রিনশট গ্যালারি।
+ * E06: screenshot gallery.
  *
- * সার্ভারের উৎস: `server/src/screenshots/` (screenshots.controller.ts ·
- * screenshots.service.ts)।
+ * Server source: `server/src/screenshots/` (screenshots.controller.ts,
+ * screenshots.service.ts).
  *
- * ⭐ এখানে `@Roles` **নেই** — owner, manager আর স্টাফ তিনজনেই ঢোকে। কে কী
- * দেখবে সেটা role নয়, **স্কোপ** ঠিক করে: `role = employee` হলে সার্ভার
- * সেশন থেকে employeeId নেয়, আর অন্যের আইডি চাইলে ৪০৩ (J05)।
+ * There is no `@Roles` here: owners, managers and staff all get in. What each may
+ * see is decided by scope, not role: for `role = employee` the server takes the
+ * employeeId from the session, and asking for someone else's id gives a 403 (J05).
  *
- * ⚠️ **ফুল URL কখনো জমা হয় না** (ADR-013) — `activeTitle`-এ উইন্ডোর
- * শিরোনাম ও ডোমেইন থাকে, তার বেশি কিছু নয়।
+ * Careful: the full URL is never stored (ADR-013). `activeTitle` holds the window
+ * title and the domain, nothing more.
  */
 
 export interface GalleryItem {
-  /** ⚠️ স্ট্রিং — সার্ভারে BigInt */
+  /** Careful: a string; the server uses BigInt. */
   id: string;
   employeeId: number;
   empCode: string;
@@ -31,15 +31,15 @@ export interface GalleryItem {
   activeApp: string | null;
   activeTitle: string | null;
   /**
-   * ⭐⚠️ **৫ মিনিটে মেয়াদ শেষ** (I07)। relative পথ, সরাসরি
-   * `<img src={item.thumbUrl}>`-এ বসানো যায়।
+   * Expires after 5 minutes (I07). A relative path, usable directly in
+   * `<img src={item.thumbUrl}>`.
    *
-   * ⚠️ লিঙ্কটা মরে গেলে ছবি ৪০৩ হয়ে ভাঙা আইকন দেখায়। গ্যালারি পেজে
-   *    `<img onError>` ধরে "লিঙ্কের মেয়াদ শেষ — রিফ্রেশ করুন" দেখানো দরকার,
-   *    নইলে দশ মিনিট খোলা রাখা ট্যাবে সব ছবি নীরবে ভাঙা দেখাত।
+   * Careful: once the link expires the image returns 403 and shows a broken icon.
+   * The gallery page should catch `<img onError>` and show "link expired, refresh";
+   * otherwise in a tab left open for ten minutes every image would silently look broken.
    */
   thumbUrl: string;
-  /** লাইটবক্সে ফুল ছবি — আলাদা টোকেন, একই ৫ মিনিটের মেয়াদ */
+  /** Full image for the lightbox; a separate token with the same 5-minute expiry. */
   fullUrl: string;
 }
 
@@ -56,20 +56,20 @@ export interface GalleryPage {
 }
 
 export interface GalleryQuery {
-  /** ⚠️ role=employee হলে এটা উপেক্ষিত নয় — নিজের আইডি ছাড়া দিলে ৪০৩ */
+  /** Careful: for role=employee this is not ignored; anything but their own id gives a 403. */
   employeeId?: number;
-  /** না দিলে ঢাকার আজকের কর্মদিবস */
+  /** Defaults to today's workday in Dhaka. */
   date?: string;
-  /** ১ থেকে শুরু। ⚠️ সর্বোচ্চ ১০,০০০ */
+  /** Starts at 1. Careful: at most 10,000. */
   page?: number;
 }
 
 /**
- * E06 — `GET /api/v1/screenshots?employeeId=&date=&page=`
+ * E06: `GET /api/v1/screenshots?employeeId=&date=&page=`
  *
- * ⭐ এই কলটা **audit-এ লেখা হয়** (I08) — "কে আমার স্ক্রিনশট দেখল" প্রশ্নের
- * উত্তর এখানেই তৈরি হয়। পাতাপ্রতি একটা সারি, তাই অকারণে বারবার ডাকলে
- * audit log ভরে যায়; পোলিং করবেন না।
+ * This call is written to the audit log (I08); it is what answers "who looked at
+ * my screenshots". One row per page, so calling it needlessly fills the audit
+ * log; do not poll.
  */
 export function getGallery(
   query: GalleryQuery = {},
@@ -79,11 +79,11 @@ export function getGallery(
 }
 
 /**
- * ⭐⭐⭐ **কর্মীপ্রতি আজকের সবচেয়ে নতুন ছবি** *(৬ সেপ্টেম্বর ২০২৬, G159)*।
+ * Each employee's newest screenshot today (G159).
  *
- * ⚠️⚠️ আগে এটা গ্যালারির **শেষ এক-দুটো পাতা** টেনে এনে অনুমান করা হতো, আর
- * যাঁর শেষ ছবিটা ওই ৬০–১২০টার জানালার বাইরে তাঁর কার্ডে লেখা উঠত
- * *"No screenshot yet today"* — অথচ ছবি ছিল।
+ * Careful: this used to be guessed by pulling the last one or two gallery pages,
+ * and anyone whose last screenshot fell outside that 60-120 window got "No
+ * screenshot yet today" on their card, even though a screenshot existed.
  */
 export function getLatestShotPerEmployee(
   signal?: AbortSignal,

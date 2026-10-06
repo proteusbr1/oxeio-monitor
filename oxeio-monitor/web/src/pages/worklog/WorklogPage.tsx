@@ -7,31 +7,32 @@ import { ErrorBox, Loading } from '../../components/States';
 import { TeamRoster } from '../live/TeamRoster';
 
 /**
- * **Worklog — এখন কে কাজ করছেন, কে করছেন না।**
+ * **Worklog: who is working right now, and who is not.**
  *
- * ⭐⭐ কার্ডগুলো ছিল Live Board-এর **সবচেয়ে নিচে**, ছ-টা টাইল ও চারটে
- * চার্ট পেরিয়ে। অথচ *"এখন কে কাজ করছে?"* — এটাই সবচেয়ে বেশিবার করা
- * প্রশ্ন। মালিকের অনুরোধে (১৭ আগস্ট) সেটা নিজের পাতায় এল, এক ক্লিক দূরে।
+ * The cards used to be at the **very bottom** of the Live Board, past six
+ * tiles and four charts, yet *"who is working now?"* is the most frequently
+ * asked question. At the owner's request they moved to a page of their own,
+ * one click away.
  *
- * ⚠️⚠️ **Live Board থেকে সরানো হয়েছে, নকল করা হয়নি।** দুই জায়গায় রাখলে
- * একদিন একটা বদলাত আর অন্যটা নয়। বোর্ডে এখন থাকে সারাংশ — টাইল, চার্ট
- * আর দলের টেবিল; কার্ড এখানে।
+ * Careful: **moved off the Live Board, not copied.** With both places, one
+ * day one would change and not the other. The board now keeps the summary
+ * (tiles, charts and the team table); the cards are here.
  *
- * ⚠️ রিফ্রেশের ছন্দ বোর্ডের মতোই **১৫ সেকেন্ড** (`BOARD_REFRESH_MS`-এর
- * সমান)। দুটো আলাদা হলে একই মুহূর্তে দুই পাতায় দুই সংখ্যা দেখা যেত, আর
- * কোনটা তাজা তা বলার উপায় থাকত না।
+ * Careful: the refresh rhythm is **15 seconds**, the same as the board (equal to
+ * `BOARD_REFRESH_MS`). If they differed, two pages could show two numbers at
+ * the same moment, with no way to say which is fresher.
  */
 
-/** ⚠️ `LiveBoardPage`-এর `BOARD_REFRESH_MS`-এর সাথে মিলিয়ে রাখা */
+/** Careful: keep in step with `BOARD_REFRESH_MS` in `LiveBoardPage` */
 const REFRESH_MS = 15_000;
 
 export function WorklogPage() {
   const { user } = useAuth();
 
   /**
-   * ⚠️ owner ও manager — `/live` কন্ট্রোলারের `@Roles`-এর সাথে হুবহু এক।
-   *    কর্মীর জন্য পাতাটা খুললে তাঁর ব্রাউজার প্রতি ১৫ সেকেন্ডে একটা করে
-   *    ৪০৩ কুড়াত, কোনো লাভ ছাড়াই।
+   * Careful: owner and manager: exactly the same as `@Roles` on the `/live`
+   *    controller. If the page opened for an employee, their browser would
+   *    collect a 403 every 15 seconds for no benefit.
    */
   const canView = user?.role === 'owner' || user?.role === 'manager';
 
@@ -57,9 +58,9 @@ export function WorklogPage() {
       subtitle="Who is working right now, and who is not"
     >
       {/*
-        ⚠️ রিফ্রেশে পুরো পর্দা লোডিং-এ যায় না — `usePolling` পুরোনো ডেটা
-           ধরে রাখে। উল্টোটা হলে প্রতি ১৫ সেকেন্ডে কার্ডগুলো ঝিকমিক করত
-           আর কেউ একটাও পড়ে শেষ করতে পারতেন না।
+        Careful: a refresh does not put the whole screen into loading:
+           `usePolling` keeps the old data. Otherwise the cards would flicker
+           every 15 seconds and nobody could finish reading even one.
       */}
       {board.loading && !data ? (
         <Loading label="Loading the team…" />

@@ -9,11 +9,12 @@ import {
 } from '../src/digest/digest.telegram';
 
 /**
- * **দৈনিক রিপোর্ট, টেলিগ্রামের চেহারা** *(১৮ আগস্ট ২০২৬)*।
+ * **The daily report, as it looks on Telegram** (18 August 2026).
  *
- * ⚠️⚠️ এই ফাইলের সবচেয়ে জরুরি টেস্ট দুটো: **কেউ যেন নীরবে বাদ না পড়ে**
- * (সংখ্যা না মিললে সেটা দেখতে "এজেন্ট ভাঙা"-র মতো লাগে), আর **ঘণ্টা ধরে
- * সাজানো নয়** — নইলে বার্তাটা রোজ সন্ধ্যায় একটা লিডারবোর্ড হয়ে উঠত।
+ * The two most important tests in this file: nobody is silently dropped (if
+ * the numbers do not add up it looks like "agent broken"), and the list is
+ * not sorted by hours — otherwise the message would become a leaderboard
+ * every evening.
  */
 
 const EXTRAS = { silentPcs: 0, atTime: '18:30' };
@@ -54,36 +55,37 @@ function digestOf(rows: DigestRow[], over: Partial<Digest> = {}): Digest {
 
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('hm — ঘণ্টা-মিনিট', () => {
-  /** ⚠️ দশমিক ঘণ্টা কেউ ফোনে দেখে মিনিটে রূপান্তর করেন না */
-  it('দশমিক ঘণ্টা মিনিটে', () => {
+describe('hm — hours and minutes', () => {
+  /** Nobody reading on a phone converts decimal hours into minutes */
+  it('decimal hours into minutes', () => {
     expect(hm(7.02)).toBe('7h 01m');
     expect(hm(8)).toBe('8h 00m');
     expect(hm(0)).toBe('0h 00m');
   });
 
-  /** ⚠️ চিহ্নটা কলার বসায় (− না +), তাই এখানে সবসময় ধনাত্মক */
-  it('ঋণাত্মক মান পরম হিসেবে', () => {
+  /** The caller adds the sign (- or +), so this is always positive */
+  it('a negative value is shown as its absolute value', () => {
     expect(hm(-2.5)).toBe('2h 30m');
   });
 
-  it('৬০ মিনিটে গোল হলে ঘণ্টায় ওঠে', () => {
+  it('rounding up to 60 minutes rolls into the hour', () => {
     expect(hm(7.999)).toBe('8h 00m');
   });
 });
 
 describe('escapeHtml', () => {
   /**
-   * ⚠️⚠️ বার্তাটা `parse_mode: HTML`-এ যায়। নামে একটা `&` বা `<` থাকলে
-   * Telegram গোটা কলটাই ৪০০ করত — অর্থাৎ **সেদিনের রিপোর্টই যেত না**।
+   * The message is sent with `parse_mode: HTML`. A `&` or `<` in a name would
+   * make Telegram answer the whole call with 400 — so that day's report
+   * would not go out at all.
    */
-  it('তিনটে বিপজ্জনক অক্ষর', () => {
+  it('the three dangerous characters', () => {
     expect(escapeHtml('Ali & <b>Co</b>')).toBe(
       'Ali &amp; &lt;b&gt;Co&lt;/b&gt;',
     );
   });
 
-  it('মোড়কের ভেতরে escape হয়ে বসে', () => {
+  it('is escaped inside the wrapper', () => {
     expect(asPreBlock('a & b')).toBe('<pre>a &amp; b</pre>');
   });
 });
@@ -92,11 +94,11 @@ describe('escapeHtml', () => {
 
 describe('telegramDigest', () => {
   /**
-   * ⚠️⚠️ **সবচেয়ে জরুরি টেস্ট — কেউ যেন হারিয়ে না যায়।** উপরে "১৩ জন"
-   * লেখা থাকলে নিচে তেরোটা নামই থাকতে হবে, ছুটির লোকজন সহ। না থাকলে
-   * ফাঁকটা দেখতে হুবহু "এজেন্ট কাজ করছে না"-র মতো লাগত।
+   * The most important test — nobody gets lost. If the top says "13 people",
+   * all thirteen names must be below, including those on leave. Otherwise the
+   * gap would look exactly like "the agent is not working".
    */
-  it('প্রত্যেকের নাম কোনো না কোনো দলে থাকে', () => {
+  it('everyone\'s name is in some group', () => {
     const rows = [
       row({ empCode: 'OX-01', fullName: 'Met', todayHours: 8 }),
       row({ empCode: 'OX-02', fullName: 'Under', todayHours: 5 }),
@@ -110,7 +112,7 @@ describe('telegramDigest', () => {
     expect(text).toContain('4 worked');
   });
 
-  it('টার্গেট ছোঁয়া আর না-ছোঁয়া আলাদা দলে', () => {
+  it('met-target and missed-target are separate groups', () => {
     const text = telegramDigest(
       digestOf([
         row({ fullName: 'Met', todayHours: 8.5 }),
@@ -122,16 +124,16 @@ describe('telegramDigest', () => {
 
     expect(text).toContain('MET THE TARGET · 1');
     expect(text).toContain('UNDER TARGET · 1');
-    // ⭐ ঘাটতিটা লেখা থাকে, নইলে পাঠককে মাথায় বিয়োগ করতে হতো
+    // The shortfall is written out, otherwise the reader would have to subtract in their head
     expect(text).toContain('−2h 00m');
   });
 
   /**
-   * ⚠️⚠️ **ঠিক টার্গেটে থাকা মানে ছুঁয়েছেন।** `>` লিখলে যিনি কাঁটায়
-   * কাঁটায় ৮ ঘণ্টা করেছেন তিনি রোজ "পিছিয়ে" তালিকায় পড়তেন — আর সেটা
-   * এমন একটা ভুল যেটা মানুষ ব্যক্তিগতভাবে নেয়।
+   * Exactly on target counts as met. With `>`, someone who did exactly 8
+   * hours would land in the "behind" list every day — a mistake people take
+   * personally.
    */
-  it('কাঁটায় কাঁটায় টার্গেট = ছুঁয়েছেন', () => {
+  it('exactly on target = met', () => {
     const text = telegramDigest(
       digestOf([row({ fullName: 'Exact', todayHours: 8, todayTargetHours: 8 })]),
       'oXeio',
@@ -142,8 +144,8 @@ describe('telegramDigest', () => {
     expect(text).not.toContain('UNDER TARGET');
   });
 
-  /** ⚠️ খালি দল দেখানো হয় না — রোজ চারটে খালি শিরোনাম আবার সেই দেয়াল */
-  it('খালি দলের শিরোনাম বসে না', () => {
+  /** Empty groups are not shown — four empty headings every day is that wall again */
+  it('empty group headings are not shown', () => {
     const text = telegramDigest(
       digestOf([row({ fullName: 'Met', todayHours: 8 })]),
       'oXeio',
@@ -156,11 +158,11 @@ describe('telegramDigest', () => {
   });
 
   /**
-   * ⚠️⚠️ **ক্রম কখনো ঘণ্টা ধরে নয়** — `Digest.rows` কর্মী-কোডের ক্রমে
-   * আসে, আর সেটাই অক্ষত থাকে। ঘণ্টার ক্রমে সাজালে বার্তাটা রোজ সন্ধ্যায়
-   * একটা **লিডারবোর্ড** হয়ে উঠত (README-র "কখনোই নয়")।
+   * The order is never by hours — `Digest.rows` arrives in staff-code order
+   * and that stays intact. Sorting by hours would turn the message into a
+   * leaderboard every evening (the README's "never").
    */
-  it('দলের ভেতরে ক্রম কর্মী-কোড ধরে, ঘণ্টা ধরে নয়', () => {
+  it('within a group the order is by staff code, not by hours', () => {
     const text = telegramDigest(
       digestOf([
         row({ empCode: 'OX-01', fullName: 'Alpha', todayHours: 2 }),
@@ -175,7 +177,7 @@ describe('telegramDigest', () => {
     expect(text.indexOf('Bravo')).toBeLessThan(text.indexOf('Charlie'));
   });
 
-  it('মাসে পিছিয়ে থাকলে গোনা ও প্রত্যাশা দুটোই লেখা', () => {
+  it('when behind for the month, both the count and the expectation are written', () => {
     const text = telegramDigest(
       digestOf([
         row({
@@ -194,15 +196,15 @@ describe('telegramDigest', () => {
     expect(text).toContain('BEHIND FOR THE MONTH · 1');
     expect(text).toContain('−12h 30m');
     expect(text).toContain('96h 00m of 108h 30m');
-    // ⚠️ ব্যাখ্যাটা ছাড়া সংখ্যাটা ভুল বোঝা যায়
+    // Without the explanation the number is easy to misread
     expect(text).toContain("excludes today's target");
   });
 
   /**
-   * ⭐ `agent_down`-এর গোটা টেলিগ্রাম উপস্থিতি এই এক লাইন — আগে দিনে
-   * ৩৯টা আলাদা বার্তা যেত।
+   * The whole Telegram presence of `agent_down` is this one line — it used
+   * to send 39 separate messages a day.
    */
-  it('চুপ থাকা PC এক লাইনে, আর শূন্য হলে লাইনটাই নেই', () => {
+  it('silent PCs on one line, and no line at all when zero', () => {
     const rows = [row({ fullName: 'A', todayHours: 8 })];
 
     expect(
@@ -219,12 +221,13 @@ describe('telegramDigest', () => {
   });
 
   /**
-   * ⭐⭐ **ডিজাইনের অংশ** *(২১ আগস্ট)* — মালিকের ২৫-এর টার্গেট।
+   * The design section (21 August) — the owner's target of 25.
    *
-   * ⚠️⚠️ কেবল যাঁদের ম্যাপে এন্ট্রি আছে তাঁরাই ওঠেন — গবেষকেরা নন। নইলে
-   * তাঁরা রোজ "০/২৫" হয়ে তালিকায় থাকতেন, আর সেটা অভিযোগ, তথ্য নয়।
+   * Only those with an entry in the map appear — not researchers. Otherwise
+   * they would be listed as "0/25" every day, which is an accusation, not
+   * information.
    */
-  it('ডিজাইনের অংশে কেবল ডিজাইনাররাই ওঠেন', () => {
+  it('only designers appear in the design section', () => {
     const text = telegramDigest(
       digestOf([
         row({ empCode: 'OX-07', fullName: 'Designer A', todayHours: 8 }),
@@ -239,16 +242,16 @@ describe('telegramDigest', () => {
 
     expect(text).toContain('DESIGNS TODAY · 1');
     expect(text).toContain('24/25');
-    // ⚠️ নামটা উপরের ঘণ্টার দলে থাকবেই — দাবিটা তাই **ডিজাইনের
-    //    সংখ্যা** নিয়ে: গবেষকের কোনো "/25" ওঠে না
+    // The name will be in the hours group above anyway — so the claim is
+    // about the design number: a researcher gets no "/25"
     expect(text).not.toContain('/25  Researcher B');
   });
 
-  /** ⭐ টার্গেট ছুঁলে চিহ্ন — ঘণ্টার নিয়মের সাথে মিলিয়ে (`>=`) */
-  it('টার্গেট ছুঁলে ✅, না ছুঁলে নয়', () => {
+  /** A check mark when the target is reached — consistent with the hours rule (`>=`) */
+  it('check mark when the target is reached, none otherwise', () => {
     const make = (done: number) =>
-      // ⚠️ ঘণ্টায় টার্গেটের নিচে রাখা হয়েছে ইচ্ছাকৃতভাবে — নইলে
-      //    "✅ MET THE TARGET" শিরোনামটাই দাবিটা মিথ্যা করে দিত
+      // Deliberately kept below the hours target — otherwise the
+      // "MET THE TARGET" heading would make the claim false
       telegramDigest(digestOf([row({ empCode: 'OX-07', fullName: 'A', todayHours: 5 })]), 'oXeio', {
         ...EXTRAS,
         designs: new Map([['OX-07', { done, target: 25, met: done >= 25 }]]),
@@ -259,10 +262,10 @@ describe('telegramDigest', () => {
   });
 
   /**
-   * ⭐⭐ **মালিকের বাছাই, ২২ আগস্ট** — ম্যানেজার নিজেও ডিজাইন করেন,
-   * তাই সংখ্যাটা ওঠে; কিন্তু টার্গেট নেই বলে `/25`-ও নেই, ✅-ও নেই।
+   * The owner's choice (22 August): the manager also designs, so their
+   * number appears; but with no target there is no `/25` and no check mark.
    */
-  it('টার্গেট ছাড়া কারো সংখ্যা ওঠে, কিন্তু ছাঁচ ছাড়া', () => {
+  it('someone without a target shows a number, but with no mould', () => {
     const text = telegramDigest(
       digestOf([row({ empCode: 'OX-01', fullName: 'Belal', todayHours: 5 })]),
       'oXeio',
@@ -277,17 +280,17 @@ describe('telegramDigest', () => {
     expect(text).not.toContain('✅');
   });
 
-  /** ⚠️ কারো ডিজাইন-টার্গেট না থাকলে অংশটাই বসে না */
-  it('ডিজাইনার না থাকলে অংশটাই নেই', () => {
+  /** If nobody has a design target, the section does not appear at all */
+  it('no designers means no section', () => {
     const text = telegramDigest(digestOf([row()]), 'oXeio', EXTRAS);
     expect(text).not.toContain('DESIGNS TODAY');
   });
 
   /**
-   * ⚠️ **লাইন ছোট রাখা** — সরু ফোনে ভাঁজ পড়লে কলামগুলোই ভেঙে যেত, আর
-   * তখন monospace রাখার পুরো কারণটাই বৃথা।
+   * Keep lines short — on a narrow phone, wrapping would break the columns,
+   * and then the whole reason for monospace would be pointless.
    */
-  it('কোনো লাইন ৪০ অক্ষরের বেশি নয়', () => {
+  it('no line is longer than 40 characters', () => {
     const text = telegramDigest(
       digestOf([
         row({ fullName: 'Sk Nasif Iqbal Shovon', todayHours: 7.02 }),
@@ -306,8 +309,8 @@ describe('telegramDigest', () => {
     }
   });
 
-  /** ⚠️ কোনো কর্মী না থাকলেও ক্র্যাশ নয় — মাসের শেষে সবাই নিষ্ক্রিয় হতে পারেন */
-  it('কেউ না থাকলেও বার্তা তৈরি হয়', () => {
+  /** No crash even with no staff — at month end everyone may be inactive */
+  it('the message is still built when there is nobody', () => {
     const text = telegramDigest(digestOf([]), 'oXeio', EXTRAS);
     expect(text).toContain('0 of 0 worked');
   });

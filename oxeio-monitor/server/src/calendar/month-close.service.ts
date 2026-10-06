@@ -20,17 +20,18 @@ export interface MonthClosureView {
 }
 
 /**
- * R1 — **মাস বন্ধ করা (payroll lock)।**
+ * **R1: closing a month (payroll lock).**
  *
- * ⚠️⚠️ যে সমস্যাটা এটা সারায়, আর কেন এটা "সবার আগে": `monthly_summary`-র
- * সংখ্যাগুলো `refreshMonth()` **প্রতিবার নতুন করে গোনে**, আর গোনার সময়
- * **ওই মুহূর্তের** `holidays` টেবিল পড়ে। তাই ছুটির একটা তারিখ নড়লে — বা
- * পুরোনো মাসের কোনো সময়-সংশোধন অনুমোদন/বাতিল হলে — গত মাসের `target_sec`,
- * `expected_sec`, d আর D চারটেই পিছন ফিরে বদলাত। পে-রোল ওই সারি থেকেই
- * d ও D পড়ে, অর্থাৎ **বেতন দিয়ে দেওয়ার পরেও হিসাব নড়ত**, নীরবে।
+ * Careful: the problem this fixes, and why it comes "first of all":
+ * `refreshMonth()` **recounts the `monthly_summary` numbers every time**, and
+ * when counting it reads the `holidays` table **as of that moment**. So if a
+ * holiday date moved, or a time adjustment for an old month was approved or
+ * revoked, last month's `target_sec`, `expected_sec`, d and D would all
+ * change retroactively. Payroll reads d and D from that row, so **the figures
+ * would move even after pay was given**, silently.
  *
- * ⭐ বন্ধ করা মানে সংখ্যা কোথাও **কপি করা নয়** — `monthly_summary`-তেই
- * ওগুলো থেকে যায়, শুধু কেউ আর ছোঁয় না। এক সংখ্যা, এক জায়গা।
+ * Closing does not **copy** the numbers anywhere: they stay in
+ * `monthly_summary`, and are just no longer touched. One number, one place.
  */
 @Injectable()
 export class MonthCloseService {
@@ -50,12 +51,13 @@ export class MonthCloseService {
   }
 
   /**
-   * ⚠️ **চলতি ও ভবিষ্যতের মাস বন্ধ করা যায় না।**
+   * Careful: **the current and future months cannot be closed.**
    *
-   * চলতি মাস এখনো চলছে — বন্ধ করলে আজকের ঘণ্টাগুলো আর যোগ হতো না, আর
-   * পর্দার সংখ্যা দুপুরেই জমে যেত। ⚠️ ব্যর্থতাটা হতো **নীরব**: কেউ
-   * অভিযোগ করত "আজকের ঘণ্টা উঠছে না", আর কারণ খুঁজতে কেউ এখানে আসত না।
-   * ভবিষ্যতের মাসে তো গোনার মতো কিছুই নেই।
+   * The current month is still running: closing it would stop today's hours
+   * being added, and the screen's numbers would freeze by midday. Careful: the
+   * failure would be **silent**: someone would complain "today's hours are not
+   * showing up", and nobody would think to look here. A future month has
+   * nothing to count anyway.
    */
   async close(
     actor: SessionUser,
@@ -78,18 +80,18 @@ export class MonthCloseService {
       where: { yearMonth },
     });
     if (existing) {
-      // ⚠️ ৪০৯, আর **প্রথমজনের নাম-তারিখই থাকে** — দ্বিতীয়বার বন্ধ করলে
-      //    রেকর্ডটা বদলে গেলে "কখন জমাট হয়েছিল" প্রশ্নের উত্তর হারাত।
+      // Careful: 409, and **the first closer's name and date stay**. If a second
+      // close overwrote the record, the answer to "when was it frozen" would be lost.
       throw new ConflictException(
         `${yearMonth} was already closed on ${existing.closedAt.toISOString().slice(0, 10)} by ${existing.closedBy}`,
       );
     }
 
     /**
-     * ⚠️ বন্ধ করার **ঠিক আগে** শেষবার গুনে নেওয়া হয় না — ইচ্ছাকৃত।
-     * সংখ্যাগুলো এমনিতেই প্রতি ১৫ মিনিটে তাজা (K06), আর এখানে গুনতে
-     * গেলে "বন্ধ করা" নিজেই একটা **বদল** হয়ে যেত: মালিক যে সংখ্যা দেখে
-     * বন্ধ করার সিদ্ধান্ত নিলেন, বন্ধ করার পর সেটাই অন্য হতে পারত।
+     * Careful: **no final recount right before closing**, deliberately. The
+     * numbers are fresh every 15 minutes anyway (K06), and recounting here
+     * would make "closing" itself a **change**: the number the owner saw when
+     * deciding to close could differ after closing.
      */
     const row = await this.prisma.monthClosure.create({
       data: { yearMonth, closedBy: actor.email, note: note?.trim() || null },
@@ -105,20 +107,22 @@ export class MonthCloseService {
     });
 
     /**
-     * ⭐⭐ **R26 — হিসাবের ফাইল নিজে থেকে চলে যায়।**
+     * **R26: the calculation file goes out by itself.**
      *
-     * ⚠️⚠️ `void` + `.catch()`, আর কখনো `await` নয় — তিনটে কারণেই:
-     *  ১· সারিটা **উপরেই commit হয়ে গেছে** (`create` নিজের ট্রানজেকশনে),
-     *     তাই এখানকার ব্যর্থতা মাস-বন্ধ করাকে ছুঁতে পারে না।
-     *  ২· await করলে মালিকের HTTP রিকোয়েস্ট আপলোডের পুরোটা সময় ঝুলত
-     *     (কয়েক MB, ৬০ সেকেন্ড পর্যন্ত), আর throw করলে **সফল** একটা
-     *     মাস-বন্ধ ৫০০ হয়ে ফিরত — তিনি আবার চেষ্টা করে ৪০৯ পেতেন।
-     *  ৩· `.catch()` ছাড়া একটা floating promise unhandled rejection হয়ে
-     *     গোটা API প্রসেস নামিয়ে দিত (`alerts.scheduler.ts`-এর একই শিক্ষা)।
+     * Careful: `void` + `.catch()`, and never `await`, for three reasons:
+     *  1. The row was **already committed above** (`create` in its own
+     *     transaction), so a failure here cannot touch the month closing.
+     *  2. With `await` the owner's HTTP request would hang for the whole
+     *     upload (several MB, up to 60 seconds), and if it threw, a
+     *     **successful** month close would come back as 500, and they would
+     *     retry and get a 409.
+     *  3. Without `.catch()` a floating promise becomes an unhandled rejection
+     *     and takes down the whole API process (the same lesson as in
+     *     `alerts.scheduler.ts`).
      *
-     * ⚠️ ভবিষ্যতে কেউ যদি `close()`-কে `$transaction`-এ মোড়ে, এই কলটা
-     *    অবশ্যই কলব্যাকের **বাইরে** তুলতে হবে — নইলে চলন্ত আপলোড
-     *    Prisma-র ৫ সেকেন্ডের সীমা পেরিয়ে আসল মাস-বন্ধটাই rollback করাত।
+     * Careful: if someone later wraps `close()` in a `$transaction`, this call
+     *    must be moved **outside** the callback; otherwise a running upload
+     *    would exceed Prisma's 5-second limit and roll back the real month close.
      */
     void this.delivery
       .deliverClosedMonth(yearMonth)
@@ -134,13 +138,14 @@ export class MonthCloseService {
   }
 
   /**
-   * ⚠️⚠️ খোলা যায়, কিন্তু **চিহ্নটা থেকে যায়** — audit-এ দুটো সারি
-   * (`month_closed`, `month_reopened`)। বেতন দেওয়ার পর কেউ মাস খুলে
-   * সংখ্যা বদলালে সেটা প্রমাণসহ দেখা যাবে; নীরবে ফিরে যাওয়ার পথ নেই।
+   * Careful: it can be reopened, but **the trace stays**: two rows in the
+   * audit (`month_closed`, `month_reopened`). If someone reopens a month after
+   * pay and changes the numbers, that can be shown with proof; there is no way
+   * back in silently.
    *
-   * ⭐ খোলার সাথে সাথে সংখ্যা **নিজে থেকে বদলায় না** — পরের rollup (K06,
-   * ১৫ মিনিট) বা কোনো সংশোধনে বদলাবে। তাই খোলা মানেই ক্ষতি নয়, খোলা
-   * মানে "আবার নড়তে পারে"।
+   * Reopening does not change the numbers **by itself**: the next rollup
+   * (K06, 15 minutes) or an adjustment will. So reopening is not harm in
+   * itself, it means "may move again".
    */
   async reopen(
     actor: SessionUser,
@@ -188,9 +193,9 @@ function toView(row: {
 }
 
 /**
- * ⚠️ `2026-8` বা `2026-13` নীরবে মেনে নিলে একটা কখনো-না-মেলা চাবি DB-তে
- * বসে যেত, আর মাসটা "বন্ধ" দেখাত অথচ কোনো প্রহরী কাজ করত না — কারণ
- * `refreshMonth()` খোঁজে `2026-08` ছাঁদে।
+ * Careful: silently accepting `2026-8` or `2026-13` would put a key that
+ * never matches into the DB, and the month would look "closed" while no
+ * guard worked, because `refreshMonth()` looks for the `2026-08` form.
  */
 function assertYearMonth(value: string): void {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) {

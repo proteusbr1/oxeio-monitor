@@ -6,13 +6,14 @@ import { type AuditLogPage, AuditLogService } from './audit-log.service';
 import { AuditLogQueryDto } from './audit-log.dto';
 
 /**
- * E11 — `GET /api/v1/audit-log`, **owner-only** (স্পেক § ৪.৩)।
+ * E11: `GET /api/v1/audit-log`, **owner-only** (spec § 4.3).
  *
- * ⚠️ ইচ্ছাকৃতভাবে শুধু `@Get` — কোনো POST/PATCH/DELETE নেই। যে লগ
- * বদলানো যায় সেটা আর প্রমাণ নয়, তাই লেখার দরজাটা রাখাই হয়নি।
+ * Careful: deliberately only `@Get`, with no POST/PATCH/DELETE. A log that
+ * can be changed is no longer evidence, so no write door was provided.
  *
- * ⚠️ audit log **দেখা** নিজে audit করা হয় না। করলে প্রতিটা পেজ-লোড আরেকটা
- * সারি বানাত, আর সেই সারিও দেখা যেত — টেবিলটা নিজেকেই খেতে থাকত।
+ * Careful: **viewing** the audit log is not itself audited. If it were, every
+ * page load would create another row, and that row could be viewed too: the
+ * table would keep feeding on itself.
  */
 @Roles(UserRole.owner)
 @Controller('audit-log')

@@ -25,7 +25,7 @@ const WEBP = Buffer.from([
   0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
 ]);
 
-/** এজেন্টের প্রতিটি রিকোয়েস্টে যা সবসময় থাকে: টোকেন + নিজের ঘড়ির সময় */
+/** What every agent request always carries: the token plus its own clock time */
 function asAgent<T extends { set(field: string, val: string): T }>(
   req: T,
   token: string,
@@ -50,7 +50,7 @@ beforeEach(async () => {
 });
 
 describe('enrollment (H05)', () => {
-  it('ভুল কোডে 401', async () => {
+  it('401 on a wrong code', async () => {
     await h
       .http()
       .post('/api/v1/agent/enroll')
@@ -63,12 +63,12 @@ describe('enrollment (H05)', () => {
       .expect(401);
   });
 
-  it('সঠিক কোডে টোকেন ও কনফিগ আসে', async () => {
+  it('a correct code gives a token and config', async () => {
     expect(device.token.length).toBeGreaterThan(20);
     expect(device.configVersion).toBeTruthy();
   });
 
-  it('কোড একবারই ব্যবহার করা যায়', async () => {
+  it('a code can be used only once', async () => {
     await h
       .http()
       .post('/api/v1/agent/enroll')
@@ -81,7 +81,7 @@ describe('enrollment (H05)', () => {
       .expect(401);
   });
 
-  it('টোকেন plaintext-এ জমা হয় না (I02)', async () => {
+  it('the token is not stored as plaintext (I02)', async () => {
     const row = await h.prisma.device.findFirstOrThrow({
       where: { id: device.deviceId },
     });
@@ -91,11 +91,11 @@ describe('enrollment (H05)', () => {
 });
 
 describe('device auth', () => {
-  it('টোকেন ছাড়া 401', async () => {
+  it('401 without a token', async () => {
     await h.http().get('/api/v1/agent/config').expect(401);
   });
 
-  it('ভুল টোকেনে 401', async () => {
+  it('401 with a wrong token', async () => {
     await h
       .http()
       .get('/api/v1/agent/config')
@@ -103,7 +103,7 @@ describe('device auth', () => {
       .expect(401);
   });
 
-  it('সঠিক টোকেনে কনফিগ আসে, ক্যাপচার উইন্ডো সহ', async () => {
+  it('a correct token gives the config, including the capture window', async () => {
     const res = await asAgent(
       h.http().get('/api/v1/agent/config'),
       device.token,
@@ -124,7 +124,7 @@ describe('device auth', () => {
     expect(res.body.config.utcOffsetMinutes).toBe(360);
   });
 
-  it('revoke করা ডিভাইস 403 পায় (H06)', async () => {
+  it('a revoked device gets 403 (H06)', async () => {
     await h.prisma.device.update({
       where: { id: device.deviceId },
       data: { status: 'revoked' },
@@ -139,7 +139,7 @@ describe('device auth', () => {
 });
 
 describe('heartbeat', () => {
-  it('কনফিগ ভার্সন মিললে কোনো কমান্ড নেই', async () => {
+  it('no command when the config version matches', async () => {
     const res = await asAgent(
       h.http().post('/api/v1/agent/heartbeat'),
       device.token,
@@ -156,11 +156,12 @@ describe('heartbeat', () => {
   });
 
   /**
-   * ⭐ এজেন্ট নিজে মাসের হিসাব জানে না — রিবুটের পর তার কাউন্টার শূন্য থেকে
-   * শুরু হয়। সংখ্যাটা সার্ভার না দিলে tray-তে "০ ঘ / ২০৮ঘ" দেখাত, আর স্টাফ
-   * ভাবত তার মাসের কাজ মুছে গেছে।
+   * The agent does not know the month's totals itself: after a reboot its
+   * counter starts from zero. If the server did not supply the number, the
+   * tray would show "0h / 208h" and staff would think their month's work was
+   * wiped.
    */
-  it('heartbeat-এ মাসিক অগ্রগতি ফেরত আসে', async () => {
+  it('monthly progress comes back in the heartbeat', async () => {
     const worked = todayWindow(600);
 
     await asAgent(h.http().post('/api/v1/agent/segments'), device.token)
@@ -191,68 +192,69 @@ describe('heartbeat', () => {
     expect(res.body.progress).toBeTruthy();
     expect(res.body.progress.todayActiveSec).toBe(worked.durationSec);
     expect(res.body.progress.monthActiveSec).toBe(worked.durationSec);
-    // ⭐ G37 — কর্মদিবস × ৮, তাই মাসভেদে বদলায় (ADR-025)। দাবিটা নিয়মের।
+    // G37: working days x 8, so it varies by month (ADR-025). The claim is about the rule.
     const target = res.body.progress.monthlyTargetHours as number;
     expect(target % 8).toBe(0);
     expect(target).toBeGreaterThanOrEqual(20 * 8);
     expect(target).toBeLessThanOrEqual(27 * 8);
 
-    // ── আজ ও ৭ দিনের টার্গেট — tray-র তিনটে বারের জন্য ──────────────────
+    // ── Today's and the 7-day target, for the tray's three bars ──────────────
 
     const { dailyTargetSec, week7ActiveSec, week7TargetSec } = res.body.progress;
 
     /**
-     * ⚠️ নির্দিষ্ট সংখ্যা মেলানো হয় না — মাসের কর্মদিবস কয়টা সেটা টেস্ট
-     * কোন তারিখে চলছে তার উপর নির্ভর করে, আর সেটা বাঁধলে টেস্টটা মাসে
-     * একবার নিজে থেকেই ভাঙত (G62-র মতোই সময়ের বোমা)।
-     * তাই **সম্পর্কগুলো** যাচাই করা হয়, মানগুলো নয়।
+     * Specific numbers are not matched: how many working days the month has
+     * depends on the date the test runs, and pinning that would make the test
+     * break by itself once a month (a time bomb like G62).
+     * So the relationships are checked, not the values.
      */
     expect(typeof dailyTargetSec).toBe('number');
 
-    // ছুটির দিনে ০, নইলে এক কর্মদিবসের ভাগ — ২৪ ঘণ্টার বেশি কখনো নয়
+    // 0 on a holiday, otherwise one working day's share; never more than 24 hours
     expect(dailyTargetSec).toBeGreaterThanOrEqual(0);
     expect(dailyTargetSec).toBeLessThanOrEqual(86_400);
 
-    // ৭ দিনের কাজ আজকের কাজের চেয়ে কম হতে পারে না (আজ ওই ৭ দিনের ভেতরেই)
+    // 7 days of work cannot be less than today's work (today is within those 7 days)
     expect(week7ActiveSec).toBeGreaterThanOrEqual(worked.durationSec);
 
     /**
-     * ৭ দিনে সর্বোচ্চ ৭টা কর্মদিবস, তাই টার্গেটও তার বেশি নয়।
+     * At most 7 working days in 7 days, so the target is no more than that.
      *
-     * ⚠️⚠️ **কেবল কর্মদিবসে** — আর এটাই ছিল একটা ঘুমন্ত সময়-বোমা
-     * *(ফেটেছে শুক্রবার ২১ আগস্ট ২০২৬)*। ছুটির দিনে `dailyTargetSec`
-     * **০** (সেটাই সঠিক, `progress.service.ts` দেখুন), অথচ গত ৭ দিনে
-     * ৬টা কর্মদিবস থাকায় `week7TargetSec` = ৪৮ ঘণ্টা। তখন দাবিটা দাঁড়াত
-     * `172800 ≤ 0` — অর্থাৎ টেস্টটা **প্রতি শুক্রবার** ভাঙত, আর কোডে
-     * কোনো ভুল না থাকা সত্ত্বেও।
+     * Careful: only on a working day, and this was a sleeping time bomb (it
+     * went off on Friday 21 August 2026). On a holiday `dailyTargetSec` is 0
+     * (correct, see `progress.service.ts`), yet with 6 working days in the
+     * last 7, `week7TargetSec` = 48 hours. The claim then became
+     * `172800 <= 0`, so the test would break every Friday though the code had
+     * no bug.
      *
-     * ⭐ নিচের দাবিটা (মাসিক টার্গেটের চেয়ে বড় নয়) ছুটির দিনেও খাটে, আর
-     * আসল ঝুঁকিটা — ভুল হরে ভাগ — ওটাই ধরে।
+     * The claim below (not larger than the monthly target) also holds on a
+     * holiday, and it catches the real risk: dividing by the wrong
+     * denominator.
      */
     if (dailyTargetSec > 0) {
       expect(week7TargetSec).toBeLessThanOrEqual(dailyTargetSec * 7);
     }
 
-    // ⚠️ মাসের টার্গেটের চেয়ে বড় হতে পারে না — হলে বুঝতে হবে দৈনিক ভাগটা
-    //    ভুল হরে ভাগ হচ্ছে, আর tray-তে ৭ দিনের বার সবসময় ভরা দেখাত
+    // It cannot be larger than the month's target: if it is, the daily share
+    // is being divided by the wrong denominator, and the tray's 7-day bar would always look full
     expect(week7TargetSec).toBeLessThanOrEqual(target * 3600);
   });
 
   /**
-   * ⭐ ছুটির দিনে দৈনিক টার্গেট **০**, আর সেটা "সার্ভার বলেনি" (null) থেকে
-   * আলাদা। ⚠️ দুটো এক করে ফেললে tray ছুটির দিনেও "৮ ঘণ্টা বাকি" বলে তাড়া
-   * দিত — অথচ নিয়ম হলো ছুটির দিনে কাজ করলে সেটা গোনা হয়, কিন্তু করতেই
-   * হবে এমন নয় (§ ৪)।
+   * On a holiday the daily target is 0, and that is different from "the
+   * server did not say" (null). If the two were merged, the tray would nag
+   * "8 hours left" even on a holiday, though the rule is that work on a
+   * holiday counts but is not required (section 4).
    */
-  it('ছুটির দিনে দৈনিক টার্গেট শূন্য, null নয়', async () => {
+  it('on a holiday the daily target is zero, not null', async () => {
     /**
-     * ⚠️⚠️ **ঢাকার** তারিখ, UTC-র নয় — G62-র হুবহু পুনরাবৃত্তি।
+     * Careful: the Dhaka date, not UTC's. This repeats G62 exactly.
      *
-     * আগে এখানে `getUTCFullYear/Month/Date` দিয়ে আজকের তারিখ বানানো হতো।
-     * দিনের বেলায় দুটো এক, তাই টেস্ট পাস করত। কিন্তু ঢাকার মধ্যরাত থেকে
-     * ভোর ৬টার মধ্যে UTC তখনো **আগের দিনে** — ফলে ছুটিটা বসত গতকালের
-     * ঘরে, সার্ভার আজকের দিনটাকে কর্মদিবসই দেখত, আর টার্গেট ০-র বদলে
-     * ২৮,৮০০ আসত। ঠিক ০০:২২-এ ধরা পড়েছে।
+     * Today's date used to be built here with `getUTCFullYear/Month/Date`. In
+     * the daytime the two agree, so the test passed. But between Dhaka
+     * midnight and 06:00 UTC is still on the previous day, so the holiday
+     * landed on yesterday's slot, the server saw today as a working day, and
+     * the target came out 28,800 instead of 0. Caught at exactly 00:22.
      */
     const workDate = dhakaNoon();
     workDate.setUTCHours(0, 0, 0, 0);
@@ -272,12 +274,12 @@ describe('heartbeat', () => {
   });
 
   /**
-   * ⭐ enroll-এ ভার্সন একবার বসে, তারপর আর হালনাগাদ হতো না। ⚠️ এটা শুধু
-   * ড্যাশবোর্ডের সংখ্যা নয় — heartbeat **এই মান দেখেই** ঠিক করে আপডেট
-   * অফার করবে কি না, তাই স্টেল থাকলে আপডেট হয়ে যাওয়া এজেন্টকেও একই
-   * আপডেট বারবার অফার করা হতো (G59)।
+   * The version was set once at enroll and never updated after. This is not
+   * only a dashboard number: the heartbeat decides whether to offer an update
+   * by looking at this value, so if stale, an agent that had already updated
+   * would be offered the same update again and again (G59).
    */
-  it('heartbeat-এ পাঠানো নতুন ভার্সন ডিভাইসে বসে যায়', async () => {
+  it('a new version sent in the heartbeat is stored on the device', async () => {
     await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
       .send({ state: 'active', activeSecToday: 10, agentVersion: '9.9.9' })
       .expect(200);
@@ -289,21 +291,20 @@ describe('heartbeat', () => {
   });
 
   /**
-   * ⭐⭐⭐ **রোলআউট নিজে থেকে এগোনোর একমাত্র প্রমাণ এখানেই বসে**
-   * *(৫ সেপ্টেম্বর ২০২৬)*।
+   * The only proof that the rollout advances by itself is recorded here.
    *
-   * ⚠️⚠️ `agent_version_since` না বসলে `RolloutAdvanceJob` কোনোদিন কোনো
-   * প্রমাণ পেত না, আর রোলআউট **চিরকাল canary-তেই** আটকে থাকত — অর্থাৎ ঠিক
-   * যে সমস্যাটা সারানো হচ্ছে সেটাই ফিরে আসত, কেবল আরও নীরবে। কলামটা যোগ
-   * করা আর কলামটা **ভরা** — এই প্রকল্পে দুটোর মাঝখানেই দশবারের বেশি বাগ
-   * হয়েছে।
+   * Careful: if `agent_version_since` were not set, `RolloutAdvanceJob` would
+   * never get any evidence, and the rollout would stay stuck in canary
+   * forever, i.e. the very problem being fixed would come back, only more
+   * quietly. Adding the column and filling the column: this project has had
+   * more than ten bugs between the two.
    */
-  it('⭐ নতুন ভার্সন বসলে "কবে থেকে"-ও বসে', async () => {
+  it('when a new version is set, "since when" is set too', async () => {
     /**
-     * ⚠️ `realNow()` — `dhakaNoon()` নয়, আর এটা G140-র ব্যতিক্রম নয়, তার
-     *    বৈধ ব্যবহার। সময়টা লেখে **সার্ভার**, তার নিজের ঘড়ি দিয়ে; তুলনাটাও
-     *    তাই আসল ঘড়ির সাপেক্ষেই হতে হয়। পিন করা দুপুর দিলে দিনে দুবার
-     *    ভুল ফল আসত।
+     * Careful: `realNow()`, not `dhakaNoon()`, and this is not an exception
+     * to G140 but a legitimate use of it. The time is written by the server,
+     * with its own clock, so the comparison must be against the real clock
+     * too. A pinned noon would give a wrong result twice a day.
      */
     const before = realNow();
 
@@ -322,14 +323,14 @@ describe('heartbeat', () => {
   });
 
   /**
-   * ⭐⭐⭐ **সময়টা বসে কেবল ভার্সন বদলালে — প্রতি heartbeat-এ নয়।**
+   * The time is set only when the version changes, not on every heartbeat.
    *
-   * ⚠️⚠️ এটাই এই ফিচারের সবচেয়ে সহজে ভুল হওয়া লাইন। প্রতিবার বসালে ঘড়িটা
-   * প্রতি ৩০ সেকেন্ডে শূন্য থেকে শুরু হতো, আর "ছ-ঘণ্টা ধরে টিকে আছে"
-   * শর্তটা **কোনোদিনই** সত্যি হতো না। ⭐ ব্যর্থতাটা হতো নীরব: কোনো এরর
-   * নেই, শুধু রোলআউট আর কখনো এগোত না।
+   * Careful: this is the line in this feature easiest to get wrong. If set
+   * every time, the clock would restart from zero every 30 seconds, and the
+   * condition "has survived six hours" would never become true. The failure
+   * would be silent: no error, the rollout would simply never advance.
    */
-  it('⭐ একই ভার্সনে দ্বিতীয় heartbeat — ঘড়িটা নড়ে না', async () => {
+  it('a second heartbeat on the same version: the clock does not move', async () => {
     await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
       .send({ state: 'active', activeSecToday: 10, agentVersion: '9.9.9' })
       .expect(200);
@@ -349,13 +350,13 @@ describe('heartbeat', () => {
     expect(second).toEqual(first);
   });
 
-  it('ভার্সন না পাঠালে আগেরটাই থাকে — মুছে যায় না', async () => {
+  it('when no version is sent, the earlier one stays and is not erased', async () => {
     await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
       .send({ state: 'active', activeSecToday: 10, agentVersion: '1.2.3' })
       .expect(200);
 
-    // ⚠️ পুরোনো এজেন্ট (যে ফিল্ডটা চেনেই না) heartbeat পাঠালে ভার্সন
-    //    null হয়ে যাওয়া চলবে না — তাতে আপডেট অফার বন্ধ হয়ে যেত।
+    // When an old agent (which does not know the field at all) sends a
+    // heartbeat, the version must not become null: that would stop update offers.
     await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
       .send({ state: 'active', activeSecToday: 20 })
       .expect(200);
@@ -366,7 +367,7 @@ describe('heartbeat', () => {
     expect(row.agentVersion).toBe('1.2.3');
   });
 
-  it('ভার্সন না মিললে reload_config', async () => {
+  it('reload_config when the version does not match', async () => {
     const res = await asAgent(
       h.http().post('/api/v1/agent/heartbeat'),
       device.token,
@@ -377,7 +378,7 @@ describe('heartbeat', () => {
     expect(res.body.commands).toContain('reload_config');
   });
 
-  it('last_seen_at হালনাগাদ হয় (G01-এর ভিত্তি)', async () => {
+  it('last_seen_at is updated (the basis of G01)', async () => {
     const before = await h.prisma.device.findFirstOrThrow({
       where: { id: device.deviceId },
     });
@@ -396,12 +397,13 @@ describe('heartbeat', () => {
   });
 
   /**
-   * ⭐ Live Board-এর রঙ এই দুটো কলামের উপর দাঁড়ানো। আগে `state` নেওয়া হতো
-   * কিন্তু কোথাও লেখা হতো না, তাই বোর্ড শেষ `activity_segments` সারি থেকে
-   * অনুমান করত — আর এজেন্ট সেগমেন্ট ব্যাচে পাঠায় বলে ওই অনুমান কয়েক মিনিট
-   * পুরোনো। ৩০ সেকেন্ডে রিফ্রেশ হওয়া বোর্ডের জন্য সেটা অর্থহীন।
+   * The Live Board's colour stands on these two columns. `state` used to be
+   * accepted but never written anywhere, so the board guessed from the last
+   * `activity_segments` row, and since the agent sends segments in batches
+   * that guess was several minutes old. That is meaningless for a board that
+   * refreshes every 30 seconds.
    */
-  it('heartbeat-এর state ডিভাইসে জমা হয়', async () => {
+  it('the heartbeat\'s state is stored on the device', async () => {
     await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
       .send({ state: 'idle', activeSecToday: 30 })
       .expect(200);
@@ -414,12 +416,13 @@ describe('heartbeat', () => {
   });
 
   /**
-   * ⚠️ `lastState` বদলায়নি বলে `lastStateAt`-ও না বসালে সবচেয়ে খারাপ বাগটা
-   * ফিরে আসত: এজেন্ট একটানা `active` বলতে বলতে মরে গেলে সময়টা তার মৃত্যুর
-   * মুহূর্তে আটকে থাকত না — আটকে থাকত **প্রথমবার active বলার** মুহূর্তে।
-   * বোর্ড তখন সুস্থ, সক্রিয় কর্মীর টাটকা রিপোর্টকেও বাসি ধরে ফেলে দিত।
+   * If `lastStateAt` were not also set just because `lastState` did not
+   * change, the worst bug would return: an agent that kept saying `active`
+   * and then died would not have its time stuck at the moment of death; it
+   * would be stuck at the moment it first said active. The board would then
+   * throw away a healthy, active employee's fresh report as stale.
    */
-  it('state না বদলালেও lastStateAt প্রতিবার এগোয়', async () => {
+  it('lastStateAt advances every time even when state does not change', async () => {
     await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
       .send({ state: 'active', activeSecToday: 10 })
       .expect(200);
@@ -443,14 +446,14 @@ describe('heartbeat', () => {
   });
 });
 
-describe('segments — dedupe ও যাচাই (§ ২.১-ঘ)', () => {
+describe('segments: dedupe and validation (section 2.1d)', () => {
   /**
-   * ⚠️ টাইমস্ট্যাম্প **সবসময় ঢাকার আজকের দিনের ভেতরে** রাখতে হয়।
+   * Timestamps must always stay inside today's Dhaka day.
    *
-   * আগে এখানে `minutesAgo(30)` ছিল। মধ্যরাতের ঠিক পরে টেস্ট চালালে সেটা
-   * আগের তারিখে পড়ত, সার্ভার সেগমেন্টটা মধ্যরাতে ভাগ করে দিত (§ ২.১-ক),
-   * আর `accepted` ২-এর বদলে ৩ আসত। টেস্টটা দিনের বেলা পাস করত আর রাত
-   * ১২টার পর ফেল — সবচেয়ে বিরক্তিকর ধরনের ফ্লেকি।
+   * This used to be `minutesAgo(30)`. Running the test just after midnight
+   * put it on the previous date, the server split the segment at midnight
+   * (section 2.1a), and `accepted` came out 3 instead of 2. The test passed
+   * by day and failed after 12 at night: the most irritating kind of flaky.
    */
   const dayWindow = () => {
     const w = todayWindow(900);
@@ -472,7 +475,7 @@ describe('segments — dedupe ও যাচাই (§ ২.১-ঘ)', () => {
     };
   };
 
-  it('client_uuid না থাকলে 422', async () => {
+  it('422 when client_uuid is missing', async () => {
     const { clientUuid, ...withoutUuid } = segment();
     void clientUuid;
 
@@ -481,12 +484,12 @@ describe('segments — dedupe ও যাচাই (§ ২.১-ঘ)', () => {
       .expect(422);
   });
 
-  it('একই ব্যাচ দুবার পাঠালে দ্বিতীয়বার সব duplicate', async () => {
+  it('sending the same batch twice makes everything a duplicate the second time', async () => {
     const batch = {
       segments: [
         segment({ inputScore: 72 }),
         (() => {
-          // প্রথমটার ঠিক পরের অংশ — একই দিনের ভেতরে, ওভারল্যাপ ছাড়া
+          // The part right after the first: within the same day, with no overlap
           const w = dayWindow();
           const mid = new Date(w.start.getTime() + w.half * 1_000);
           return segment({
@@ -516,19 +519,21 @@ describe('segments — dedupe ও যাচাই (§ ২.১-ঘ)', () => {
     expect(second.body).toMatchObject({ accepted: 0, duplicates: 2 });
   });
 
-  it('counts_as_work শুধু active-এ সত্যি', async () => {
+  it('counts_as_work is true only for active', async () => {
     /**
-     * ⚠️⚠️ তিনটে সেগমেন্টই **আজকের ঢাকা-দিনের ভেতরে** আর পরপর সাজানো।
+     * Careful: all three segments are inside today's Dhaka day and arranged
+     * one after another.
      *
-     * আগে `idle`/`locked`-এ `minutesAgo(15/10/9)` ছিল — আর সেটাই ঠিক ওই
-     * ফাঁদ যা এই ফাইলেরই `segment()` ডিফল্টে একবার সারানো হয়েছে (উপরের
-     * টীকা): মধ্যরাতের পরে চললে ওগুলো **আগের তারিখে** পড়ত, সার্ভার
-     * সেগমেন্ট ভাগ করত, আর `orderBy startedAt`-এ active আর প্রথমে থাকত না —
-     * `[active, idle, locked]`-এর বদলে `[idle, locked, active]`। CI ঠিক
-     * মধ্যরাতে চলে এটা ধরিয়ে দিয়েছে (§ ৩ব)।
+     * `idle`/`locked` used to have `minutesAgo(15/10/9)`, which is exactly
+     * the trap already fixed once in this file's `segment()` default (see the
+     * note above): running after midnight put them on the previous date, the
+     * server split the segment, and under `orderBy startedAt` active no
+     * longer came first: `[idle, locked, active]` instead of
+     * `[active, idle, locked]`. CI ran at exactly midnight and exposed this
+     * (section 3b).
      *
-     * ⭐ এখন active-এর জানালার **পরেই** idle, তারপর locked — সব আজকের
-     *    দিনে, তাই ক্রম সবসময় স্থির।
+     * Now idle comes right after active's window, then locked, all within
+     * today, so the order is always fixed.
      */
     const w = dayWindow();
     const mid = w.start.getTime() + w.half * 1_000;
@@ -564,7 +569,7 @@ describe('segments — dedupe ও যাচাই (§ ২.১-ঘ)', () => {
     ]);
   });
 
-  it('৫০০-র বেশি রেকর্ড হলে 400', async () => {
+  it('400 for more than 500 records', async () => {
     const segments = Array.from({ length: 501 }, () => segment());
     await asAgent(h.http().post('/api/v1/agent/segments'), device.token)
       .send({ segments })
@@ -572,8 +577,8 @@ describe('segments — dedupe ও যাচাই (§ ২.১-ঘ)', () => {
   });
 });
 
-describe('মধ্যরাতে ভাগ (§ ২.১-ক)', () => {
-  it('২৩:৫০ → ০০:১০ একটি সেগমেন্ট দুই তারিখে ভাগ হয়', async () => {
+describe('split at midnight (section 2.1a)', () => {
+  it('23:50 to 00:10: one segment is split across two dates', async () => {
     const res = await asAgent(
       h.http().post('/api/v1/agent/segments'),
       device.token,
@@ -583,7 +588,7 @@ describe('মধ্যরাতে ভাগ (§ ২.১-ক)', () => {
           {
             clientUuid: randomUUID(),
             state: 'active',
-            // ১৭:৫০Z = ঢাকায় ২৩:৫০ · ১৮:১০Z = পরদিন ০০:১০
+            // 17:50Z = 23:50 in Dhaka, 18:10Z = 00:10 the next day
             startedAt: '2026-08-08T17:50:00.000Z',
             endedAt: '2026-08-08T18:10:00.000Z',
             durationSec: 1200,
@@ -601,9 +606,9 @@ describe('মধ্যরাতে ভাগ (§ ২.১-ক)', () => {
       '2026-08-08',
       '2026-08-09',
     ]);
-    // ভাগ হলেও মোট সময় অটুট থাকে
+    // Even when split, the total time stays intact
     expect(rows[0].durationSec + rows[1].durationSec).toBe(1200);
-    // দুই টুকরোর client_uuid আলাদা, নইলে UNIQUE-এ আটকাত
+    // The two pieces have different client_uuid, or they would hit the UNIQUE constraint
     expect(rows[0].clientUuid).not.toBe(rows[1].clientUuid);
 
     const split = await h.prisma.event.findFirst({
@@ -612,7 +617,7 @@ describe('মধ্যরাতে ভাগ (§ ২.১-ক)', () => {
     expect(split).not.toBeNull();
   });
 
-  it('ভাগ হওয়া রেকর্ড আবার পাঠালেও ডুপ্লিকেট হয় না', async () => {
+  it('re-sending a split record does not make a duplicate', async () => {
     const batch = {
       segments: [
         {
@@ -640,12 +645,12 @@ describe('মধ্যরাতে ভাগ (§ ২.১-ক)', () => {
   });
 });
 
-describe('clock drift (§ ২)', () => {
-  it('এজেন্টের ঘড়ি পিছিয়ে থাকলে সার্ভার সময় সংশোধন করে', async () => {
-    const clientNow = minutesAgo(10); // PC-র ঘড়ি ১০ মিনিট পিছিয়ে
+describe('clock drift (section 2)', () => {
+  it('when the agent\'s clock is behind, the server corrects the time', async () => {
+    const clientNow = minutesAgo(10); // the PC's clock is 10 minutes behind
 
-    // ⚠️ সংশোধনের পর সেগমেন্টটা যেন আজকের দিনেই থাকে — মধ্যরাত পেরোলে
-    //    দু-ভাগ হতো, আর নিচের findFirstOrThrow প্রথম ভাগটা (শেষ ০০:০০) দিত
+    // After correction the segment must stay within today: crossing midnight
+    // would split it in two, and the findFirstOrThrow below would give the first part (ending 00:00)
     const { durationSec } = todayWindow(300);
     const clientStart = new Date(clientNow.getTime() - durationSec * 1_000);
 
@@ -668,7 +673,7 @@ describe('clock drift (§ ২)', () => {
       .expect(200);
 
     const row = await h.prisma.activitySegment.findFirstOrThrow();
-    // সংশোধনের পর শেষ সময়টা "এখন"-এর কাছাকাছি হওয়ার কথা, ১০ মিনিট আগে নয়
+    // After correction the end time should be close to "now", not 10 minutes ago
     const gapSec = Math.abs((realNow().getTime() - row.endedAt.getTime()) / 1000);
     expect(gapSec).toBeLessThan(60);
 
@@ -678,7 +683,7 @@ describe('clock drift (§ ২)', () => {
     expect(dev.lastDriftSec).toBeGreaterThan(500);
   });
 
-  it('drift ৫ মিনিটের বেশি হলে একটাই অ্যালার্ট তৈরি হয়', async () => {
+  it('drift over 5 minutes creates only one alert', async () => {
     const clientNow = minutesAgo(30);
 
     for (let i = 0; i < 3; i++) {
@@ -691,7 +696,7 @@ describe('clock drift (§ ২)', () => {
         .expect(200);
     }
 
-    // ৩ বার পাঠালেও ৬ ঘণ্টায় একটাই — নইলে দিনে হাজারখানেক অ্যালার্ট হতো
+    // Even sent 3 times, one in 6 hours: otherwise there would be about a thousand alerts a day
     const alerts = await h.prisma.alert.findMany({
       where: { type: 'clock_drift' },
     });
@@ -700,7 +705,7 @@ describe('clock drift (§ ২)', () => {
 });
 
 describe('work session', () => {
-  it('logoff সেশন বন্ধ করে', async () => {
+  it('logoff closes the session', async () => {
     const worked = todayWindow(600);
 
     await asAgent(h.http().post('/api/v1/agent/segments'), device.token)
@@ -731,10 +736,11 @@ describe('work session', () => {
   });
 
   /**
-   * G43 — অফলাইন queue রিপ্লেতে পুরোনো ব্যাচ নতুনের **পরে** আসে।
-   * আগে এতে চলতি সেশন অতীতের সময়ে বন্ধ হয়ে ended_at < started_at হয়ে যেত।
+   * G43: when an offline queue is replayed, old batches arrive after new
+   * ones. This used to close the current session at a past time, giving
+   * ended_at < started_at.
    */
-  it('ক্রম উল্টে এলেও সেশনের সীমা ভাঙে না', async () => {
+  it('the session\'s bounds do not break even when order is reversed', async () => {
     await asAgent(h.http().post('/api/v1/agent/segments'), device.token)
       .send({
         segments: [
@@ -749,7 +755,7 @@ describe('work session', () => {
       })
       .expect(200);
 
-    // এখন অনেক পুরোনো (গতকালের) ব্যাচ এল
+    // Now a much older (yesterday's) batch arrives
     await asAgent(h.http().post('/api/v1/agent/segments'), device.token)
       .send({
         segments: [
@@ -778,7 +784,7 @@ describe('work session', () => {
       expect(s.endedAt!.getTime()).toBeGreaterThan(s.startedAt.getTime());
     }
 
-    // প্রতিটি সেগমেন্ট তার সেশনের সীমার ভেতরে থাকতে হবে
+    // Every segment must be inside its session's bounds
     const segments = await h.prisma.activitySegment.findMany();
     const byId = new Map(sessions.map((s) => [s.id, s]));
     for (const seg of segments) {
@@ -789,7 +795,7 @@ describe('work session', () => {
       expect(seg.endedAt.getTime()).toBeLessThanOrEqual(s.endedAt!.getTime());
     }
 
-    // গতকালের সেশন আজকের logoff দিয়ে নয়, নিজের মধ্যরাতেই বন্ধ হবে
+    // Yesterday's session closes at its own midnight, not by today's logoff
     const yesterday = sessions.find(
       (s) => s.workDate.toISOString().slice(0, 10) === '2026-08-08',
     )!;
@@ -798,8 +804,8 @@ describe('work session', () => {
   });
 });
 
-describe('app usage ও events', () => {
-  it('app usage জমা হয়, ডোমেইনসহ', async () => {
+describe('app usage and events', () => {
+  it('app usage is stored, with the domain', async () => {
     const used = todayWindow(300);
 
     const res = await asAgent(
@@ -826,15 +832,15 @@ describe('app usage ও events', () => {
     expect(res.body.accepted).toBe(1);
     const row = await h.prisma.appUsage.findFirstOrThrow();
     expect(row.domain).toBe('github.com');
-    // কোনো নিয়ম বসানো নেই — অচেনা থাকাই ঠিক (null ≠ neutral)
+    // No rule is set: staying unknown is right (null is not neutral)
     expect(row.categoryId).toBeNull();
   });
 
   /**
-   * D05 — ⭐ এই টেস্টটাই প্রমাণ করে ক্যাটাগরি **সত্যিই বসছে**।
-   * ম্যাচারের ইউনিট টেস্ট আলাদা; এটা দেখায় ingest পথটা জোড়া লেগেছে।
+   * D05: this test proves the category is really being set. The matcher has
+   * its own unit tests; this shows the ingest path is wired up.
    */
-  it('ব্রাউজারের সাইট অনুযায়ী ক্যাটাগরি বসে, ব্রাউজার অনুযায়ী নয়', async () => {
+  it('the category is set by the browser\'s site, not by the browser', async () => {
     const used = todayWindow(300);
 
     await h.prisma.appCategory.createMany({
@@ -878,16 +884,17 @@ describe('app usage ও events', () => {
       include: { category: true },
     });
 
-    // সাবডোমেইনেও ডোমেইনের নিয়ম চলে, আর সেটা chrome.exe-কে হারায়
+    // The domain rule applies to subdomains too, and it beats chrome.exe
     expect(row.category?.category).toBe('unproductive');
     expect(row.category?.displayName).toBe('YouTube');
   });
 
   /**
-   * ⚠️ নিয়ম মুছে গেলে ক্যাশে তার id বসে থাকে, আর insert foreign key ভাঙে।
-   * তখন ৫০০ দিয়ে পাঁচ মিনিট (TTL) বসে না থেকে একবার ক্যাশ ফেলে আবার চেষ্টা।
+   * When a rule is deleted its id stays in the cache, and the insert breaks
+   * the foreign key. Instead of giving 500 and sitting there for five
+   * minutes (the TTL), it clears the cache once and tries again.
    */
-  it('নিয়ম মুছে গেলেও ব্যাচ ঢোকে', async () => {
+  it('the batch still goes in even if a rule was deleted', async () => {
     const used = todayWindow(300);
 
     const rule = await h.prisma.appCategory.create({
@@ -901,7 +908,7 @@ describe('app usage ও events', () => {
     });
     h.app.get(AppCategoryService).invalidate();
 
-    // ক্যাশে ঢোকানো, তারপর নিয়মটা উধাও — ক্যাশ কিছুই জানে না
+    // Loaded into the cache, then the rule vanishes: the cache knows nothing
     await h.app.get(AppCategoryService).rules();
     await h.prisma.appCategory.delete({ where: { id: rule.id } });
 
@@ -927,7 +934,7 @@ describe('app usage ও events', () => {
     expect(row.categoryId).toBeNull();
   });
 
-  it('event জমা হয়', async () => {
+  it('an event is stored', async () => {
     const res = await asAgent(
       h.http().post('/api/v1/agent/events'),
       device.token,
@@ -960,14 +967,14 @@ describe('screenshots', () => {
     ...over,
   });
 
-  it('webp ছাড়া অন্য ফরম্যাট 400 (ADR-007)', async () => {
+  it('a format other than webp gives 400 (ADR-007)', async () => {
     await asAgent(h.http().post('/api/v1/agent/screenshots'), device.token)
       .field('meta', JSON.stringify(meta()))
       .attach('file', WEBP, { filename: 'shot.png', contentType: 'image/png' })
       .expect(400);
   });
 
-  it('webp গ্রহণ করে ও তারিখ-ভিত্তিক পাথে রাখে', async () => {
+  it('accepts webp and stores it under a date-based path', async () => {
     const res = await asAgent(
       h.http().post('/api/v1/agent/screenshots'),
       device.token,
@@ -977,13 +984,13 @@ describe('screenshots', () => {
       .expect(201);
 
     expect(res.body.accepted).toBe(1);
-    // retention জব যেন শুধু ফোল্ডার ধরে মুছতে পারে (ADR-006)
+    // So the retention job can delete by folder alone (ADR-006)
     expect(res.body.path).toMatch(
       /^screenshots\/\d{4}\/\d{2}\/\d{2}\/emp-\d{3}\/\d{6}_m0\.webp$/,
     );
   });
 
-  it('একই স্লট ও মনিটরের ছবি দুবার এলে duplicate', async () => {
+  it('a screenshot for the same slot and monitor arriving twice is a duplicate', async () => {
     const m = JSON.stringify(meta());
 
     await asAgent(h.http().post('/api/v1/agent/screenshots'), device.token)
@@ -1005,14 +1012,14 @@ describe('screenshots', () => {
 });
 
 describe('auto-update (G34)', () => {
-  it('নতুন ভার্সন না থাকলে 204', async () => {
+  it('204 when there is no new version', async () => {
     await asAgent(
       h.http().get('/api/v1/agent/update?current=1.0.0'),
       device.token,
     ).expect(204);
   });
 
-  it('নতুন ভার্সন থাকলে hash সহ তথ্য দেয়', async () => {
+  it('when there is a new version, it gives info with the hash', async () => {
     await h.prisma.agentVersion.create({
       data: {
         version: '1.2.0',
@@ -1031,7 +1038,7 @@ describe('auto-update (G34)', () => {
     expect(res.body.sha256).toHaveLength(64);
   });
 
-  it('rollout থামানো থাকলে কিছুই দেয় না', async () => {
+  it('gives nothing when the rollout is halted', async () => {
     await h.prisma.agentVersion.create({
       data: {
         version: '1.3.0',
@@ -1047,7 +1054,7 @@ describe('auto-update (G34)', () => {
     ).expect(204);
   });
 
-  it('১.১০.০ কে ১.৯.০ এর চেয়ে নতুন ধরে (স্ট্রিং তুলনা নয়)', async () => {
+  it('1.10.0 counts as newer than 1.9.0 (not a string comparison)', async () => {
     await h.prisma.agentVersion.create({
       data: {
         version: '1.10.0',
@@ -1065,30 +1072,29 @@ describe('auto-update (G34)', () => {
   });
 
   /**
-   * ⭐⭐⭐ **"First to" — আর যে কারণে ওটা কোনোদিন কাজ করেনি**
-   * *(৫ সেপ্টেম্বর ২০২৬)*।
+   * "First to", and why it never worked (5 September).
    *
-   * ⚠️⚠️ `pilotDeviceId` ঘরটা `offerFor()`-এ যোগ হয়েছিল ১ সেপ্টেম্বর, আর
-   * **heartbeat কলারটা** `device.id` পাঠাত — কিন্তু **এই endpoint-টা
-   * পাঠাত না**। ফলে `isPilot` এখানে চিরকাল `false`।
+   * Careful: the `pilotDeviceId` field was added to `offerFor()` on 1
+   * September, and the heartbeat caller sent `device.id`, but this endpoint
+   * did not. So `isPilot` here was always `false`.
    *
-   * ⚠️⚠️ ব্যর্থতাটা বিশেষভাবে বিভ্রান্তিকর ছিল, কারণ **অর্ধেক কাজ করত**:
-   * heartbeat বেছে দেওয়া PC-কে `update_agent` কমান্ড পাঠাত (এজেন্ট জানত
-   * আপডেট আছে), তারপর সে এখানে এসে **২০৪** পেত। কোনো এরর নয়, কোনো লগ
-   * নয় — শুধু একটা আপডেট যেটা কোনোদিন নামত না।
+   * Careful: the failure was especially confusing because it half worked: the
+   * heartbeat sent the chosen PC an `update_agent` command (the agent knew an
+   * update existed), then it came here and got a 204. No error, no log, just
+   * an update that never downloaded.
    *
-   * ⭐ ফিচারটা লেখাই হয়েছিল OX-05-এর জন্য (বালতি ৮৬), আর ঠিক সে-ই
-   * কোনোদিন সেটা পায়নি। এই প্রকল্পের চেনা ছাঁদ: **চুক্তি লেখা আছে,
-   * কলার লেখা হয়নি।**
+   * The feature was written for OX-05 (bucket 86), and that very machine
+   * never got it. A familiar pattern in this project: the contract is
+   * written, the caller is not.
    */
-  it('⭐ বালতির বাইরে থাকা পাইলট PC তবু অফার পায়', async () => {
+  it('a pilot PC outside the bucket still gets the offer', async () => {
     await h.prisma.agentVersion.create({
       data: {
         version: '9.9.9',
         msiPath: 'agent/pilot.msi',
         sha256: 'd'.repeat(64),
-        // ⚠️ canary ৭% — নিচের ডিভাইসটা এতে পড়ে কি না তার উপর ভরসা করা
-        //    হয় না; পাইলট বালতিকে **অগ্রাহ্য** করে, আর সেটাই দাবি।
+        // canary is 7%: we do not rely on whether the device below falls in it;
+        // the pilot overrides the bucket, and that is the claim.
         rolloutStage: 'canary',
         pilotDeviceId: device.deviceId,
       },
@@ -1103,12 +1109,13 @@ describe('auto-update (G34)', () => {
   });
 
   /**
-   * ⚠️⚠️ **জরুরি ব্রেক পাইলটের উপরেও খাটে।** `halted` মানে বিল্ডটা মাঠে
-   * কিছু ভেঙেছে — তখন ঠিক সেই মেশিনটাতেই ওটা যেতে থাকা সবচেয়ে খারাপ,
-   * কারণ ওখানেই আমরা সবচেয়ে বেশি নজর রাখছি। ক্রমটাই এটা ঠিক করে
-   * (`isOfferedTo`-তে `percent <= 0` চেক পাইলটেরও আগে)।
+   * The emergency brake applies to the pilot too. `halted` means the build
+   * broke something in the field, and then it is worst for it to keep going
+   * to exactly that machine, since that is where we are watching most. The
+   * order decides this (the `percent <= 0` check in `isOfferedTo` comes
+   * before the pilot).
    */
-  it('⭐ `halted` হলে পাইলটও কিছু পায় না', async () => {
+  it('when `halted`, the pilot gets nothing either', async () => {
     await h.prisma.agentVersion.create({
       data: {
         version: '9.9.9',

@@ -1,21 +1,21 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// ⭐ ব্যর্থ আপলোড কখন আবার চেষ্টা করা হবে — jitter সহ exponential backoff।
+/// When a failed upload is retried: exponential backoff with jitter.
 ///
-/// <b>যে দুটো সিদ্ধান্ত এখানে সবচেয়ে গুরুত্বপূর্ণ:</b>
+/// <b>The two most important decisions here:</b>
 ///
-/// <b>১· ডিফল্টে <see cref="MaxAttempts"/> null, অর্থাৎ চেষ্টার সংখ্যায় কিছু বাদ যায় না।</b>
-/// সাইটের লাইন দশ দিন বন্ধ থাকলে ৫ মিনিটের সিলিং-এ প্রায় ২,৯০০ বার চেষ্টা হবে।
-/// "২০ বারের পর ছেড়ে দাও" নিয়মটা তখন দশ দিনের পুরো পে-রোল ডেটা মুছে দিত —
-/// আর সেটা ঘটত ঠিক সেই মেশিনে যেটার সমস্যা সবচেয়ে বেশি। সাময়িক ব্যর্থতা মানে
-/// সার্ভার এখনো "না" বলেনি; না বলা পর্যন্ত ডেটা রাখা হয়।
-/// ডেটা কমে শুধু দুই কারণে: সার্ভারের স্থায়ী প্রত্যাখ্যান
-/// (<see cref="SyncOutcome.Permanent"/>) আর ডিস্কের বাজেট (<see cref="OutboxBudget"/>)।
+/// <b>1. By default <see cref="MaxAttempts"/> is null, so no data is dropped for the number of
+/// attempts.</b> If a site's line is down for ten days, there will be about 2,900 attempts at
+/// the 5-minute ceiling. A "give up after 20 tries" rule would then delete ten days of
+/// payroll data, on exactly the machine with the most trouble. A transient failure means the
+/// server has not said "no" yet; until it does, the data is kept.
+/// Data shrinks for only two reasons: a permanent rejection by the server
+/// (<see cref="SyncOutcome.Permanent"/>) and the disk budget (<see cref="OutboxBudget"/>).
 ///
-/// <b>২· jitter সিলিং ছাড়িয়ে যেতে পারে, ইচ্ছাকৃতভাবে।</b> ১৫টা PC-র সবগুলো
-/// একই সুইচের পেছনে; লাইন ফিরলে সবাই একই সেকেন্ডে ঠিক ৫ মিনিট পরপর ধাক্কা দিত।
-/// jitter-কে সিলিং-এ ক্ল্যাম্প করলে ঠিক ওই জায়গাতেই সে আবার একসাথে হয়ে যেত।
+/// <b>2. Jitter may exceed the ceiling, on purpose.</b> All 15 PCs sit behind one switch; when
+/// the line returned they would all hit the server in the same second, exactly every 5
+/// minutes. Clamping jitter to the ceiling would make them line up again at that very point.
 /// </summary>
 public sealed record RetryPolicy
 {
@@ -42,30 +42,30 @@ public sealed record RetryPolicy
         MaxAge = maxAge;
     }
 
-    /// <summary>প্রথম ব্যর্থতার পর কত অপেক্ষা।</summary>
+    /// <summary>The wait after the first failure.</summary>
     public TimeSpan BaseDelay { get; }
 
-    /// <summary>প্রতিবার কত গুণ। ১-এর কম হলে ব্যাকঅফ নয়, তাই নাকচ।</summary>
+    /// <summary>The factor each time. Below 1 it is not backoff, so it is rejected.</summary>
     public double Multiplier { get; }
 
-    /// <summary>সিলিং — এর বেশি অপেক্ষা কখনো নয় (jitter বাদে)।</summary>
+    /// <summary>The ceiling: never wait longer than this (jitter aside).</summary>
     public TimeSpan MaxDelay { get; }
 
-    /// <summary>০.২৫ মানে ±২৫%।</summary>
+    /// <summary>0.25 means ±25%.</summary>
     public double JitterRatio { get; }
 
-    /// <summary>null = চেষ্টার সংখ্যায় কখনো হাল ছাড়া হয় না। ক্লাসের মন্তব্য দেখুন।</summary>
+    /// <summary>Null = never give up on the number of attempts. See the class comment.</summary>
     public int? MaxAttempts { get; }
 
-    /// <summary>এত পুরোনো হয়ে গেলে সারিটা আর কাজের নয় — শেষ রক্ষাকবচ।</summary>
+    /// <summary>Once a row is this old it is no longer useful: the last safeguard.</summary>
     public TimeSpan MaxAge { get; }
 
     /// <summary>
-    /// ৫ সেকেন্ড থেকে শুরু, দ্বিগুণ হয়ে ৫ মিনিটে থামে, ±২৫% jitter,
-    /// চেষ্টার কোনো সীমা নেই, ৩০ দিনের বেশি পুরোনো হলে ছাড়া হয়।
+    /// Starts at 5 seconds, doubles up to a 5-minute ceiling, ±25% jitter, no limit on
+    /// attempts, and a row is dropped once older than 30 days.
     ///
-    /// ৩০ দিন কেন: মাসিক হিসাবের চক্রই ৩০ দিন। এর চেয়ে পুরোনো ডেটা সার্ভারে
-    /// পৌঁছালেও ততদিনে ওই মাসের রিপোর্ট বেরিয়ে গেছে।
+    /// Why 30 days: the monthly accounting cycle is 30 days. Even if data older than that
+    /// reached the server, that month's report has long since gone out.
     /// </summary>
     public static RetryPolicy Default { get; } = new(
         baseDelay: TimeSpan.FromSeconds(5),
@@ -76,20 +76,20 @@ public sealed record RetryPolicy
         maxAge: TimeSpan.FromDays(30));
 
     /// <summary>
-    /// jitter ছাড়া বিশুদ্ধ ব্যাকঅফ। <paramref name="attempt"/> = এ পর্যন্ত কতবার
-    /// ব্যর্থ হয়েছে (১ = প্রথম ব্যর্থতা)।
+    /// Pure backoff without jitter. <paramref name="attempt"/> = how many failures so far
+    /// (1 = the first failure).
     ///
-    /// ⚠️ <paramref name="attempt"/> ১-এর কম হলে এক্সসেপশন নয়, ১ ধরা হয়।
-    /// এটা রিকভারির পথ — সবকিছু ভেঙে পড়ার পর <b>এই</b> কোডটাই চলতে হবে।
-    /// এখানে throw করা মানে সিঙ্ক ওয়ার্কার মরে যাওয়া, আর তখন ডেটা আর কখনো যাবে না।
+    /// If <paramref name="attempt"/> is below 1 it is treated as 1, not an exception.
+    /// This is the recovery path: after everything has fallen apart <b>this</b> code must
+    /// still run. Throwing here would kill the sync worker, and then data would never go out.
     /// </summary>
     public TimeSpan DelayFor(int attempt)
     {
         if (attempt < 1) attempt = 1;
 
-        // ⚠️ Math.Pow(2, 2880) = ∞, আর TimeSpan.FromSeconds(∞) ছুড়ে দেয়
-        //    OverflowException। দশ দিন অফলাইন থাকলেই attempt ওই ঘরে পৌঁছায়,
-        //    তাই TimeSpan বানানোর আগেই double-এই সিলিং মেলাতে হবে।
+        // Math.Pow(2, 2880) = infinity, and TimeSpan.FromSeconds(infinity) throws
+        // OverflowException. Ten days offline is enough to reach that attempt count, so the
+        // ceiling must be applied on the double before building a TimeSpan.
         var seconds = BaseDelay.TotalSeconds * Math.Pow(Multiplier, attempt - 1);
 
         return double.IsNaN(seconds) || seconds >= MaxDelay.TotalSeconds
@@ -98,12 +98,12 @@ public sealed record RetryPolicy
     }
 
     /// <summary>
-    /// jitter সহ। <paramref name="jitterSample"/> ∈ [০,১] — কলার
-    /// <c>Random.Shared.NextDouble()</c> দেয়, টেস্ট নির্দিষ্ট মান দেয়।
-    /// ০.৫ দিলে ঠিক <see cref="DelayFor(int)"/>-ই ফেরে।
+    /// With jitter. <paramref name="jitterSample"/> is in [0,1]: the caller passes
+    /// <c>Random.Shared.NextDouble()</c>, tests pass fixed values.
+    /// 0.5 returns exactly <see cref="DelayFor(int)"/>.
     ///
-    /// Core-এ <c>Random</c> রাখা হয়নি ইচ্ছাকৃতভাবে — এলোমেলোতা ভেতরে থাকলে
-    /// এই ক্লাসটা আর টেস্ট করা যেত না।
+    /// <c>Random</c> is deliberately kept out of Core: with randomness inside, this class
+    /// could not be tested.
     /// </summary>
     public TimeSpan DelayFor(int attempt, double jitterSample)
     {
@@ -114,16 +114,16 @@ public sealed record RetryPolicy
         var factor = 1 - JitterRatio + (2 * JitterRatio * sample);
         var seconds = delay.TotalSeconds * factor;
 
-        // ⚠️ jitter যেন শূন্য বা ঋণাত্মক বিলম্ব না বানায় — তাহলে সিঙ্ক লুপ
-        //    busy loop হয়ে একটা কোর খেয়ে ফেলত।
+        // Jitter must not produce a zero or negative delay, or the sync loop would become a
+        // busy loop and eat a core.
         return TimeSpan.FromSeconds(Math.Max(0.001, seconds));
     }
 
     /// <summary>
-    /// সার্ভার <c>Retry-After</c> পাঠালে সেটাই মানা হয় — নিজের হিসাব যদি ছোট হয়।
+    /// If the server sends <c>Retry-After</c> it is honored, when our own value is smaller.
     ///
-    /// সার্ভার ৪২৯-এ যখন বলে "৬০ সেকেন্ড পরে আসো", তখন ৫ সেকেন্ড পরে গিয়ে
-    /// আবার ৪২৯ খাওয়া মানে rate limit-এর কাউন্টার আরো ভরানো — নিজের পায়ে কুড়াল।
+    /// When the server says "come back in 60 seconds" on a 429, returning after 5 seconds and
+    /// getting another 429 only fills the rate-limit counter further: shooting ourselves in the foot.
     /// </summary>
     public TimeSpan DelayFor(int attempt, double jitterSample, TimeSpan? serverRetryAfter)
     {
@@ -131,20 +131,20 @@ public sealed record RetryPolicy
         return serverRetryAfter is { } theirs && theirs > mine ? theirs : mine;
     }
 
-    /// <summary>পরের চেষ্টার মুহূর্ত — <see cref="IOutboxStore.RetryAsync"/>-এ সরাসরি যায়।</summary>
+    /// <summary>The time of the next attempt: goes straight to <see cref="IOutboxStore.RetryAsync"/>.</summary>
     public DateTimeOffset NextAttemptAt(
         int attempt, DateTimeOffset now, double jitterSample, TimeSpan? serverRetryAfter = null) =>
         now + DelayFor(attempt, jitterSample, serverRetryAfter);
 
     /// <summary>
-    /// সারিটা কি আর ধরে রাখার মানে হয়?
+    /// Is it still worth keeping the row?
     ///
-    /// ⚠️ এটা শুধু <see cref="SyncOutcome.Transient"/>-এর ক্ষেত্রে ডাকবেন।
-    /// <see cref="SyncOutcome.Permanent"/> হলে এটা না দেখেই abandon,
-    /// আর <see cref="SyncOutcome.Success"/> হলে প্রশ্নই ওঠে না।
+    /// Call this only for <see cref="SyncOutcome.Transient"/>. For
+    /// <see cref="SyncOutcome.Permanent"/> abandon without looking at it, and for
+    /// <see cref="SyncOutcome.Success"/> the question does not arise.
     /// </summary>
-    /// <param name="attempt">এ পর্যন্ত কতবার ব্যর্থ (<see cref="OutboxEntry.Attempts"/>)।</param>
-    /// <param name="enqueuedAt">রেকর্ড তৈরির সময় — শেষ চেষ্টার সময় নয়।</param>
+    /// <param name="attempt">How many failures so far (<see cref="OutboxEntry.Attempts"/>).</param>
+    /// <param name="enqueuedAt">When the record was created, not the time of the last attempt.</param>
     public bool ShouldAbandon(int attempt, DateTimeOffset enqueuedAt, DateTimeOffset now)
     {
         if (MaxAttempts is { } cap && attempt >= cap) return true;

@@ -6,21 +6,22 @@ import {
 import { Chip, MiniButton } from '../../components/ui';
 
 /**
- * ⭐⭐ **"কেন বাদ দিলেন?" — আর বোতামটাই উত্তর** *(মালিকের চাওয়া, ৩১ আগস্ট
- * ২০২৬: "eta keno delete korlam seta select kora option pelam na")*।
+ * **"Why did you drop it?" and the button itself is the answer.** The owner
+ * asked for this: a deleted row gave no option saying why it was deleted.
  *
- * ⚠️⚠️ **আলাদা কোনো নিশ্চিত-বোতাম নেই, আর সেটাই এখানকার নকশা।** আগে
- * Delete চাপলে "Really delete / Cancel" উঠত — একটা প্রশ্ন যার উত্তরে কোনো
- * তথ্য নেই। ⭐ এখন ওই জায়গাটাতেই তিনটে কারণ বসে: যেটা চাপা হবে সেটাই
- * একসাথে **নিশ্চিত করা** আর **কারণ বলা**। চাপ একটাই, কিন্তু ডেটা দ্বিগুণ।
+ * Important: **there is no separate confirm button, and that is the design.**
+ * Pressing Delete used to bring up "Really delete / Cancel", a question whose
+ * answer carries no information. Now the three reasons sit in that very place:
+ * the button pressed both **confirms** and **gives the reason**. One press,
+ * twice the data.
  *
- * ⚠️ কারণ না দিয়ে বেরোনোর পথ নেই — Cancel আছে, কিন্তু "কারণ ছাড়া মুছুন"
- * নেই। ঐচ্ছিক রাখলে সবাই খালি রেখে দিতেন, ঠিক যেমন পুরোনো
- * `skipped_reason` ঘরটা ৯৩টা সারিতে NULL হয়ে পড়ে ছিল।
+ * Careful: there is no way out without a reason: Cancel exists, but "delete
+ * without a reason" does not. If optional, everyone would leave it blank, just
+ * as the old `skipped_reason` column stayed NULL on 93 rows.
  *
- * ⚠️ একই কম্পোনেন্ট **দুই জায়গায়** — Design Pool-এর Delete আর ডিজাইনারের
- * Skip। দুই জায়গায় দুই তালিকা লিখলে একদিন একটায় নতুন কারণ যোগ হতো আর
- * অন্যটায় নয়, আর তখন গোনাই অসম্ভব হতো।
+ * Careful: the same component is used in **two places**: Delete in the Design
+ * Pool and Skip on the designer's page. With two lists, one day a new reason
+ * would be added to one and not the other, and counting would become impossible.
  */
 export function DropReasonPicker({
   busy,
@@ -33,7 +34,7 @@ export function DropReasonPicker({
 }) {
   return (
     <span className="flex flex-wrap items-center justify-end gap-1.5">
-      {/* ⚠️ প্রশ্নটা লেখা থাকে — নইলে তিনটে লাল বোতাম হঠাৎ কেন উঠল বোঝা যেত না */}
+      {/* Careful: the question stays visible; otherwise it would be unclear why three red buttons appeared */}
       <span className="text-[11.5px] whitespace-nowrap text-ink-3">Why?</span>
       {DROP_REASONS.map((reason) => (
         <MiniButton
@@ -53,10 +54,10 @@ export function DropReasonPicker({
 }
 
 /**
- * ⭐ তালিকায় কারণটা দেখানো — চিপের পাশে ছোট করে।
+ * Shows the reason in the list, small, beside the chip.
  *
- * ⚠️ পুরোনো সারিতে `null` (তখন কারণ চাওয়াই হতো না), আর তখন কিছুই বসে না —
- * "—" বসালে মনে হতো কেউ ইচ্ছে করে খালি রেখেছে।
+ * Careful: old rows have `null` (no reason was asked for then), and nothing is
+ * rendered; a "—" would suggest someone left it blank on purpose.
  */
 export function DropReasonTag({ reason }: { reason: DropReason | null }) {
   if (reason === null) return null;

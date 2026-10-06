@@ -4,58 +4,59 @@ using System.Text.Json.Serialization;
 namespace oXeio.Agent.Sync;
 
 /// <summary>
-/// সার্ভারের সাথে কথা বলার JSON নিয়ম — একটাই <see cref="JsonSerializerOptions"/>,
-/// পুরো মডিউলে।
+/// The JSON rules for talking to the server: a single <see cref="JsonSerializerOptions"/>
+/// for the whole module.
 ///
-/// ⭐ <b>কেন একটাই ইনস্ট্যান্স:</b> প্রথম ব্যবহারে <c>JsonSerializerOptions</c>
-/// নিজের ভেতরে টাইপগুলোর metadata cache বানিয়ে ফেলে আর তারপর read-only হয়ে যায়।
-/// প্রতি কলে নতুন বানালে সেই cache প্রতিবার নতুন করে তৈরি হতো — সপ্তাহখানেক চলা
-/// প্রসেসে সেটা নীরব CPU ও মেমরি খরচ, অথচ কেউ প্রোফাইলার নিয়ে বসবে না।
+/// <b>Why one instance only:</b> on first use <c>JsonSerializerOptions</c> builds a metadata
+/// cache of the types inside itself and then becomes read-only. Creating a new one per call
+/// would rebuild that cache every time; in a process that runs for a week that is a silent
+/// CPU and memory cost, and nobody will sit down with a profiler to find it.
 /// </summary>
 internal static class SyncJson
 {
     /// <summary>
-    /// <b>camelCase কেন বাধ্যতামূলক:</b> সার্ভারের DTO-গুলো class-validator দিয়ে
-    /// যাচাই হয় আর তাদের প্রপার্টি camelCase (<c>clientUuid</c>, <c>durationSec</c>)।
-    /// PascalCase পাঠালে NestJS ওগুলোকে অচেনা ফিল্ড ধরে, required ফিল্ডগুলো
-    /// "অনুপস্থিত" হয় আর পুরো ব্যাচ ৪০০ খায় — অর্থাৎ
-    /// <see cref="oXeio.Core.Agent.SyncOutcome.Permanent"/>, অর্থাৎ ৫০০ সারি মুছে যায়।
-    /// একটা নামকরণ নীতির ভুলে পে-রোল ডেটা হারানোর পথ ঠিক এতটাই ছোট।
+    /// <b>Why camelCase is mandatory:</b> the server's DTOs are validated with class-validator
+    /// and their properties are camelCase (<c>clientUuid</c>, <c>durationSec</c>).
+    /// If PascalCase is sent, NestJS treats them as unknown fields, the required fields are
+    /// "missing", and the whole batch gets a 400, which is
+    /// <see cref="oXeio.Core.Agent.SyncOutcome.Permanent"/>, meaning 500 rows are deleted.
+    /// One naming-policy mistake is that short a path to losing payroll data.
     ///
-    /// <b>DateTimeOffset কেন হাতে ফরম্যাট করা হয়নি:</b> System.Text.Json ডিফল্টেই
-    /// ISO-8601 round-trip লেখে অফসেট সহ (<c>2026-08-09T14:03:02.1234567+06:00</c>),
-    /// যেটা JS-এর <c>new Date(...)</c> — অর্থাৎ সার্ভারের
-    /// <c>@Type(() =&gt; Date) @IsDate()</c> — হুবহু মেনে নেয়। কাস্টম কনভার্টার
-    /// লিখলে ঠিক এই জায়গাতেই অফসেট হারিয়ে ঢাকার সময় UTC ধরে নেওয়া হতো, আর
-    /// সবার ৬ ঘণ্টা ভুল দিনে বসত।
+    /// <b>Why DateTimeOffset is not formatted by hand:</b> System.Text.Json writes ISO-8601
+    /// round-trip with the offset by default (<c>2026-08-09T14:03:02.1234567+06:00</c>), which
+    /// JS's <c>new Date(...)</c>, and therefore the server's
+    /// <c>@Type(() =&gt; Date) @IsDate()</c>, accepts as is. A custom converter would lose the
+    /// offset at exactly this point, Dhaka time would be taken as UTC, and everyone's hours
+    /// would land 6 hours off, on the wrong day.
     ///
-    /// ⚠️ <see cref="JsonIgnoreCondition.WhenWritingNull"/> ছাড়া <c>appName: null</c>
-    /// এর মতো ফিল্ড তারে যেত; <c>@IsOptional()</c> null পেলে কিছু ভ্যালিডেটরে
-    /// সেটা "আছে কিন্তু ভুল টাইপ" হয়ে ৪০০ দেয়। না পাঠানোই নিরাপদ।
+    /// Careful: without <see cref="JsonIgnoreCondition.WhenWritingNull"/>, a field like
+    /// <c>appName: null</c> would go on the wire; when <c>@IsOptional()</c> gets null, some
+    /// validators treat it as "present but the wrong type" and return a 400. Not sending it
+    /// is the safe choice.
     /// </summary>
     internal static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
 
-        // সার্ভার ভবিষ্যতে PascalCase-এ কিছু ফেরালেও পড়া যাবে।
+        // Even if the server later returns something in PascalCase, it can still be read.
         PropertyNameCaseInsensitive = true,
 
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
 
-        // ⚠️ NestJS-এর কিছু রূপান্তর সংখ্যা স্ট্রিং হিসেবে ফেরায় ("accepted": "12")।
-        //    পড়ার সময় সেটা মেনে নেওয়া হয়, লেখার সময় নয়।
+        // Careful: some NestJS transformations return numbers as strings ("accepted": "12").
+        // That is accepted when reading, not when writing.
         NumberHandling = JsonNumberHandling.AllowReadingFromString,
 
-        // অচেনা ফিল্ড থাকলে চুপচাপ বাদ (ডিফল্ট) — সার্ভার নতুন ফিল্ড যোগ করলে
-        // পুরোনো এজেন্ট যেন না ভাঙে।
+        // Unknown fields are silently dropped (the default), so an old agent does not break
+        // when the server adds new fields.
         WriteIndented = false,
     };
 
     /// <summary>
-    /// কখনো ছোড়ে না — খারাপ JSON মানে <c>null</c>।
+    /// Never throws: bad JSON means <c>null</c>.
     ///
-    /// ⚠️ কল করার জায়গায় ঠিক করতে হবে null মানে কী: ২xx-এর পরে null মানে
-    /// "সার্ভার নিয়েছে কিন্তু উত্তরটা পড়তে পারিনি" — সেটা সফলতাই, ব্যর্থতা নয়।
+    /// Careful: the call site must decide what null means. After a 2xx, null means "the server
+    /// accepted it but we could not read the reply", which is a success, not a failure.
     /// </summary>
     internal static T? TryDeserialize<T>(string? json) where T : class
     {

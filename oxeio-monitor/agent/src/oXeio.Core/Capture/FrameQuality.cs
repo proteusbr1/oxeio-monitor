@@ -1,26 +1,26 @@
 namespace oXeio.Core.Capture;
 
 /// <summary>
-/// ⭐ ছবিটা আসলে কিছু দেখাচ্ছে, নাকি পুরো কালো?
+/// Does the picture actually show something, or is it entirely black?
 ///
-/// <b>কেন এটা সবচেয়ে দরকারি নির্ভরযোগ্যতা-ফিচার:</b> DRM-সুরক্ষিত উইন্ডো,
-/// হার্ডওয়্যার-ত্বরিত ভিডিও, ব্যাংকিং পোর্টাল বা Teams-এর "prevent capture" —
-/// এগুলোর ছবি <b>যেকোনো</b> ক্যাপচার API-তেই কালো আসে। সেটা আর "স্টাফের পর্দা
-/// সত্যিই কালো ছিল"-র মধ্যে কোনো পার্থক্য থাকে না।
+/// <b>Why this is the most useful reliability feature:</b> DRM-protected windows,
+/// hardware-accelerated video, banking portals, or Teams' "prevent capture" all come out black
+/// in <b>any</b> capture API. That cannot be told apart from "the staff member's screen really
+/// was black".
 ///
-/// চিহ্নিত না করলে মাসের পর মাস কালো ছবি জমতে থাকবে আর কেউ টেরই পাবে না।
-/// এটা <b>ঠেকানোর</b> চেষ্টা নয় — ওটা OS-এর কনটেন্ট সুরক্ষার সীমা, আর
-/// স্টাফ-মনিটরিং টুলে সেটা ডিঙানো নৈতিকভাবেই ভুল। শুধু <i>জানিয়ে রাখা</i>।
+/// Unless flagged, black pictures would pile up for months and nobody would notice. This is
+/// not an attempt to <b>prevent</b> it: that is the limit of the OS's content protection, and
+/// getting around it in a staff-monitoring tool would be ethically wrong. It only <i>makes it known</i>.
 /// </summary>
 public static class FrameQuality
 {
-    /// <summary>প্রতি কত পিক্সেলে একটা করে দেখা হবে — পুরোটা পড়ার দরকার নেই।</summary>
+    /// <summary>One sample per this many pixels: there is no need to read all of them.</summary>
     public const int SampleStride = 64;
 
-    /// <summary>এর বেশি অংশ কালো হলে ছবিটা কাজে লাগবে না।</summary>
+    /// <summary>If more than this share is black, the picture is not useful.</summary>
     public const double BlackThreshold = 0.99;
 
-    /// <summary>এর বেশি অংশ একই রঙের হলে (কালো না হলেও) সন্দেহজনক।</summary>
+    /// <summary>If more than this share is one color (even if not black), it is suspicious.</summary>
     public const double UniformThreshold = 0.99;
 
     public readonly record struct Assessment(
@@ -33,10 +33,10 @@ public static class FrameQuality
             : "almost entirely one colour";
     }
 
-    /// <param name="bgra">BGRA ৮-বিট, top-down।</param>
-    /// <param name="width">পিক্সেলে।</param>
-    /// <param name="height">পিক্সেলে।</param>
-    /// <param name="stride">প্রতি সারিতে কত বাইট (padding সহ)।</param>
+    /// <param name="bgra">BGRA 8-bit, top-down.</param>
+    /// <param name="width">In pixels.</param>
+    /// <param name="height">In pixels.</param>
+    /// <param name="stride">Bytes per row (including padding).</param>
     public static Assessment Assess(ReadOnlySpan<byte> bgra, int width, int height, int stride)
     {
         if (width <= 0 || height <= 0 || bgra.IsEmpty)

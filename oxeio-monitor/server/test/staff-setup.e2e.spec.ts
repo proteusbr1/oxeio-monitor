@@ -17,16 +17,16 @@ import {
 } from './setup/harness';
 
 /**
- * **Staff পর্দার "Setup" কলাম** — কে এজেন্ট বসানোর জন্য তৈরি।
+ * The "Setup" column of the Staff screen: who is ready for the agent to be installed.
  *
- * ⭐ **কেন এটা দরকার হলো:** ১৫ জনের রোলআউটের আগে মালিকের জানা দরকার কার
- * portal account খোলা হয়েছে আর কার হয়নি। আগে ওই তথ্যটা রেসপন্সেই আসত না,
- * তাই জানার একমাত্র উপায় ছিল প্রতিটা সারিতে ক্লিক করে দেখা। ⚠️ কেউ বাদ
- * পড়লে সেটা ধরা পড়ত **ওই PC-র সামনে দাঁড়িয়ে**, যখন স্টাফ সাইন ইন করতে
- * পারত না — অর্থাৎ সবচেয়ে খারাপ সময়ে।
+ * Why it was needed: before the 15-person rollout, the owner needs to know
+ * whose portal account has been opened and whose has not. The response used
+ * not to carry that information, so the only way to find out was to click
+ * every row. If someone was missed, it would be found while standing at that
+ * PC, when the employee could not sign in: the worst possible moment.
  *
- * ⚠️ এই টেস্টগুলো ইচ্ছাকৃতভাবে **সত্যিকারের সারি** বানায় (ইউজার, ডিভাইস) —
- * দুটো `_count` ঠিক জায়গা থেকে আসছে কি না, সেটাই আসল প্রশ্ন।
+ * These tests deliberately create real rows (users, devices): the real
+ * question is whether the two `_count` values come from the right place.
  */
 let h: Harness;
 let owner: Session;
@@ -58,23 +58,23 @@ describe('GET /employees/next-code', () => {
   };
 
   /**
-   * ⚠️⚠️ **এই টেস্টটাই সবচেয়ে জরুরি** — রুটের ক্রম।
+   * This test is the most important: the route order.
    *
-   * Nest রুট মেলায় উপর থেকে নিচে, তাই `@Get('next-code')` যদি
-   * `@Get(':id')`-এর **নিচে** বসত, তবে `next-code` অংশটা `:id` হিসেবে
-   * ধরা পড়ত আর `ParseIntPipe` ৪০০ দিত — বার্তা হতো "Validation failed
-   * (numeric string is expected)", যেটা পড়ে আসল কারণ বোঝা কঠিন।
+   * Nest matches routes from top to bottom, so if `@Get('next-code')` sat
+   * below `@Get(':id')`, `next-code` would be taken as `:id` and
+   * `ParseIntPipe` would give 400 with the message "Validation failed (numeric
+   * string is expected)", which makes the real cause hard to see.
    */
-  it('রুটটা :id-এর ফাঁদে পড়ে না', async () => {
+  it('the route does not fall into the :id trap', async () => {
     const code = await next();
     expect(code).toMatch(/^[A-Za-z_]+-\d+$/);
   });
 
-  it('কেউ না থাকলে OX-001', async () => {
+  it('OX-001 when there is nobody', async () => {
     expect(await next()).toBe('OX-001');
   });
 
-  it('সবচেয়ে বড় কোডের পরেরটা দেয়', async () => {
+  it('gives the one after the largest code', async () => {
     await createEmployeeWithCode(h.prisma, 'OX-01');
     await createEmployeeWithCode(h.prisma, 'OX-07');
 
@@ -82,11 +82,12 @@ describe('GET /employees/next-code', () => {
   });
 
   /**
-   * ⚠️⚠️ inactive কর্মীর কোডও গোনা হয়। না গুনলে ছাঁটাই হওয়া কারো কোড
-   * আবার পরামর্শ হতো, আর সেভ করতে গিয়ে ৪০৯ — অথচ পর্দায় (active
-   * ফিল্টারে) ওই কোডের কাউকে দেখা যেত না, তাই কারণটা বোঝাই যেত না।
+   * An inactive employee's code is counted too. If it were not, a dismissed
+   * person's code would be suggested again and saving would give 409, while
+   * nobody with that code was visible on screen (under the active filter), so
+   * the reason could not be understood.
    */
-  it('inactive কর্মীর কোডও গোনা হয়', async () => {
+  it('an inactive employee\'s code is counted too', async () => {
     const { employeeId } = await createEmployeeWithCode(h.prisma, 'OX-09');
     await h.prisma.employee.update({
       where: { id: employeeId },
@@ -97,12 +98,12 @@ describe('GET /employees/next-code', () => {
   });
 
   /**
-   * ⭐ আগেভাগে দেখানো কোডটাই সত্যিই বসে — এটাই আসল দাবি।
+   * The code shown in advance is the one that really gets assigned: that is the real claim.
    *
-   * ⚠️ কোড **পাঠানো হয় না**; সার্ভার নিজে বসায়। তাই এটা একই সাথে দেখায়
-   * যে পূর্বাভাস আর বাস্তবতা এক।
+   * The code is not sent; the server assigns it itself. So this also shows
+   * that the prediction and reality are the same.
    */
-  it('আগেভাগে দেখানো কোডটাই সেভ করলে বসে', async () => {
+  it('the code shown in advance is the one assigned on save', async () => {
     await createEmployeeWithCode(h.prisma, 'OX-01');
 
     const code = await next();
@@ -115,28 +116,29 @@ describe('GET /employees/next-code', () => {
     expect(res.body.empCode).toBe(code);
   });
 
-  /** ⚠️ ম্যানেজারও কর্মী যোগ করার পর্দা দেখেন, তাই তাঁরও লাগে */
-  it('ম্যানেজারও পায়', async () => {
+  /** A manager also sees the add-employee screen, so they need it too */
+  it('a manager gets it too', async () => {
     const manager = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
     await manager.http.get('/api/v1/employees/next-code').expect(200);
   });
 });
 
 /**
- * **কর্মী-কোড সিস্টেম বসায়, কেউ বদলাতে পারে না।**
+ * The system assigns the employee code, nobody can change it.
  *
- * ⚠️ কেন এই টেস্টগুলো: কোডটা মানুষের **পরিচয়** — রিপোর্ট, Excel, পে-রোল
- * শিট আর ছাপানো কাগজে ওটাই লেখা থাকে। হাতে বসানোর সুযোগ থাকলে দুটো
- * বিপদ ছিল: টাইপো (`OX-007` বনাম `OX-07`, দুটোই আসল ডেটায় ঘটেছে), আর
- * মাঝপথে বদলে ফেলা — যাতে পুরোনো কাগজ আর নতুন পর্দা দুই কথা বলত।
+ * Why these tests: the code is a person's identity: it is what is written in
+ * reports, Excel, payroll sheets and printed paper. Letting people set it by
+ * hand had two dangers: typos (`OX-007` vs `OX-07`, both happened in real
+ * data), and changing it midway, so old paper and the new screen would say
+ * two different things.
  *
- * ⭐ পর্দায় ঘরটা `disabled`, কিন্তু আসল পাহারা **এখানে** — DevTools দিয়ে
- * সরাসরি রিকোয়েস্ট পাঠালেও যাতে ঢুকতে না পারে।
+ * On screen the field is `disabled`, but the real guard is here, so that even
+ * a request sent directly through DevTools cannot get in.
  */
-describe('কর্মী-কোড — সিস্টেমের হাতে', () => {
-  // ⚠️ উপরের গ্লোবাল `beforeEach`-ই ডাটাবেস ধুয়ে owner-কে লগইন করায়
+describe('employee code: in the system\'s hands', () => {
+  // The global `beforeEach` above already wipes the database and logs the owner in
 
-  it('কোড না পাঠালেও কর্মী তৈরি হয়, আর কোড বসে', async () => {
+  it('an employee is created even without a code, and a code is assigned', async () => {
     const res = await owner.http
       .post('/api/v1/employees')
       .set('X-CSRF-Token', owner.csrf)
@@ -148,11 +150,11 @@ describe('কর্মী-কোড — সিস্টেমের হাতে
   });
 
   /**
-   * ⚠️ ৪০০, নীরবে উপেক্ষা **নয়** — `forbidNonWhitelisted`। "পাঠালাম অথচ
-   * বসল না" অবস্থাটা এই ফিল্ডে সবচেয়ে বিপজ্জনক, কারণ কোডটা মানুষ চোখে
-   * চেনে আর ধরে নিত সেটাই বসেছে।
+   * 400, not silently ignored: `forbidNonWhitelisted`. "I sent it but it did
+   * not take" is the most dangerous state for this field, because people
+   * recognise the code by eye and would assume that is what was set.
    */
-  it('তৈরির সময় কোড পাঠালে ৪০০', async () => {
+  it('sending a code at creation gives 400', async () => {
     const res = await owner.http
       .post('/api/v1/employees')
       .set('X-CSRF-Token', owner.csrf)
@@ -161,7 +163,7 @@ describe('কর্মী-কোড — সিস্টেমের হাতে
     expect(res.status).toBe(400);
   });
 
-  it('সম্পাদনায় কোড বদলাতে চাইলে ৪০০, আর কোড অটুট থাকে', async () => {
+  it('trying to change the code on edit gives 400, and the code stays intact', async () => {
     const created = await owner.http
       .post('/api/v1/employees')
       .set('X-CSRF-Token', owner.csrf)
@@ -183,8 +185,8 @@ describe('কর্মী-কোড — সিস্টেমের হাতে
     expect(after.body.empCode).toBe(before);
   });
 
-  /** ⭐ পরপর যোগ করলে কোড এগোয় — একই কোড দুবার বসে না */
-  it('পরপর তিনজন যোগ করলে তিনটে আলাদা কোড', async () => {
+  /** Adding several in a row advances the code: the same code is never assigned twice */
+  it('three added in a row get three different codes', async () => {
     const codes: string[] = [];
 
     for (const name of ['Ek', 'Dui', 'Tin']) {
@@ -200,8 +202,8 @@ describe('কর্মী-কোড — সিস্টেমের হাতে
   });
 });
 
-describe('GET /employees — সেটআপের অবস্থা', () => {
-  it('সদ্য যোগ করা কর্মীর দুটোই false', async () => {
+describe('GET /employees: setup state', () => {
+  it('a newly added employee has both false', async () => {
     await createEmployeeWithCode(h.prisma, 'SU-NEW');
 
     const row = await rowFor('SU-NEW');
@@ -210,7 +212,7 @@ describe('GET /employees — সেটআপের অবস্থা', () => {
     expect(row.hasDevice).toBe(false);
   });
 
-  it('portal account খোলার পর প্রথমটা true', async () => {
+  it('after the portal account is opened, the first is true', async () => {
     const { employeeId } = await createEmployeeWithCode(h.prisma, 'SU-LOGIN');
 
     await h.prisma.user.create({
@@ -226,11 +228,11 @@ describe('GET /employees — সেটআপের অবস্থা', () => {
     const row = await rowFor('SU-LOGIN');
 
     expect(row.hasPortalAccount).toBe(true);
-    // ⚠️ এখনো এজেন্ট বসেনি — পর্দায় "Ready to install"
+    // the agent is not installed yet: the screen shows "Ready to install"
     expect(row.hasDevice).toBe(false);
   });
 
-  it('এজেন্ট enroll হলে দ্বিতীয়টাও true', async () => {
+  it('when the agent enrolls, the second is true too', async () => {
     const { code } = await createEmployeeWithCode(h.prisma, 'SU-RUN');
     await enrollDevice(h, code);
 
@@ -238,11 +240,11 @@ describe('GET /employees — সেটআপের অবস্থা', () => {
   });
 
   /**
-   * ⚠️⚠️ **revoke করা ডিভাইস গোনা হয় না।** নইলে ছাঁটাই হওয়া বা বদলে ফেলা
-   * PC-র পুরোনো সারিটা চিরকাল "Running" দেখাত, অথচ ওই মেশিন থেকে আর
-   * একটাও ঘণ্টা আসছে না — আর মালিক ভাবতেন সব ঠিক চলছে।
+   * A revoked device is not counted. Otherwise the old row of a dismissed
+   * employee or a replaced PC would show "Running" forever, though not one
+   * hour comes from that machine any more, and the owner would think all is well.
    */
-  it('বাতিল করা ডিভাইস আর গোনা হয় না', async () => {
+  it('a revoked device is no longer counted', async () => {
     const { code } = await createEmployeeWithCode(h.prisma, 'SU-REVOKED');
     const device = await enrollDevice(h, code);
 
@@ -255,13 +257,14 @@ describe('GET /employees — সেটআপের অবস্থা', () => {
   });
 
   /**
-   * ⭐⭐ **"কখনো বসেনি" আর "বন্ধ করে দেওয়া" — দুটো আলাদা অবস্থা।**
+   * "Never installed" and "switched off" are two different states.
    *
-   * ⚠️ দুটোতেই `hasDevice` মিথ্যা, কিন্তু করণীয় সম্পূর্ণ ভিন্ন: একটায়
-   * PC-তে গিয়ে MSI বসাতে হয়, অন্যটায় সারিতেই এক ক্লিক। আলাদা না করলে
-   * মালিক বন্ধ হয়ে যাওয়া এজেন্টের জন্য আবার ইনস্টল করতে যেতেন।
+   * `hasDevice` is false in both, but what to do is completely different: one
+   * needs a trip to the PC to install the MSI, the other a single click on
+   * the row. Without telling them apart, the owner would go to reinstall for
+   * an agent that had merely been switched off.
    */
-  it('বাতিল ডিভাইস থাকলে agentSwitchedOff সত্যি', async () => {
+  it('with a revoked device, agentSwitchedOff is true', async () => {
     const { code } = await createEmployeeWithCode(h.prisma, 'SU-OFF');
     const device = await enrollDevice(h, code);
 
@@ -275,19 +278,19 @@ describe('GET /employees — সেটআপের অবস্থা', () => {
     expect(row.agentSwitchedOff).toBe(true);
   });
 
-  it('কখনো ডিভাইস না থাকলে agentSwitchedOff মিথ্যা', async () => {
+  it('with no device ever, agentSwitchedOff is false', async () => {
     await createEmployeeWithCode(h.prisma, 'SU-NEVER');
 
     expect((await rowFor('SU-NEVER')).agentSwitchedOff).toBe(false);
   });
 
   /**
-   * ⚠️ একটাও সচল থাকলে "বন্ধ" নয় — ডেস্কটপ বাতিল, ল্যাপটপ চালু।
+   * If even one is active it is not "off": the desktop is revoked, the laptop is on.
    *
-   * ⚠️ দ্বিতীয় ডিভাইসটা সরাসরি বসানো হয়, `enrollDevice` দিয়ে নয় —
-   *    enrollment কোড **একবার-ব্যবহার্য**, দ্বিতীয়বার ৪০১ দেয়।
+   * The second device is inserted directly, not through `enrollDevice`: an
+   * enrollment code is single-use, and a second use gives 401.
    */
-  it('সচল ডিভাইস থাকলে agentSwitchedOff মিথ্যা', async () => {
+  it('with an active device, agentSwitchedOff is false', async () => {
     const { code, employeeId } = await createEmployeeWithCode(h.prisma, 'SU-MIX');
     await enrollDevice(h, code);
 
@@ -308,11 +311,11 @@ describe('GET /employees — সেটআপের অবস্থা', () => {
   });
 
   /**
-   * ⚠️ ম্যানেজারও এই কলামটা দেখে — এজেন্ট বসানোর কাজটা তাঁরও। ⭐ কিন্তু
-   * `_count` থেকে শুধু **হ্যাঁ/না** যায়, ইউজারের ইমেইল বা ডিভাইসের টোকেন
-   * নয়, তাই বাড়তি কিছু ফাঁস হয় না।
+   * A manager sees this column too: installing the agent is their job as
+   * well. `_count` yields only yes/no, not the user's email or the device's
+   * token, so nothing extra leaks.
    */
-  it('রেসপন্সে ইউজার বা ডিভাইসের ভেতরের কিছু যায় না', async () => {
+  it('nothing from inside the user or device goes into the response', async () => {
     const { code } = await createEmployeeWithCode(h.prisma, 'SU-LEAK');
     await enrollDevice(h, code);
 
@@ -326,35 +329,35 @@ describe('GET /employees — সেটআপের অবস্থা', () => {
 });
 
 /**
- * ⭐⭐ **ম্যানেজারের অ্যাক্সেস** *(মালিকের সিদ্ধান্ত, ১৫ আগস্ট)।*
+ * A manager's access (the owner's decision).
  *
- * ম্যানেজার কর্মী **যোগ ও এডিট** করতে পারেন, আর Holidays ও Categories
- * পুরোপুরি চালাতে পারেন। ⚠️ কিন্তু **বেতন নয়** ([ADR-023](../../../docs/05-Options-Decisions.md))।
+ * A manager can add and edit employees, and can fully run Holidays and
+ * Categories. But not salary ([ADR-023](../../../docs/05-Options-Decisions.md)).
  *
- * ⚠️⚠️ শেষ দুটো টেস্টই আসল: `redact.ts` ম্যানেজারের **রেসপন্স থেকে**
- * বেতন ছেঁকে ফেলে, কিন্তু সেটা তাঁকে বেতন **পাঠানো** থেকে আটকায় না।
- * ওই ফাঁকটা বন্ধ না করলে ম্যানেজার এমন একটা ঘরে লিখতে পারতেন যেটা তিনি
- * পড়তেও পারেন না — আর ভুল বসালে নিজে দেখেও ধরতে পারতেন না।
+ * The last two tests are the real ones: `redact.ts` strips the salary from
+ * the manager's response, but that does not stop salary being sent to the
+ * server. Without closing that gap, a manager could write into a field they
+ * cannot read, and if they entered it wrong they could not see and catch it.
  */
-describe('ম্যানেজারের অ্যাক্সেস', () => {
+describe('manager access', () => {
   let manager: Session;
 
   beforeEach(async () => {
     manager = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
   });
 
-  it('কর্মী যোগ করতে পারেন', async () => {
+  it('can add employees', async () => {
     const res = await manager.http
       .post('/api/v1/employees')
       .set('X-CSRF-Token', manager.csrf)
       .send({ fullName: 'Manager Joge Korlen' });
 
     expect(res.status).toBe(201);
-    // ⭐ বেতনের ঘরটা রেসপন্সেই নেই — redact.ts
+    // the salary field is not in the response at all: redact.ts
     expect(res.body.monthlySalary).toBeUndefined();
   });
 
-  it('কর্মী এডিট করতে পারেন', async () => {
+  it('can edit employees', async () => {
     const created = await manager.http
       .post('/api/v1/employees')
       .set('X-CSRF-Token', manager.csrf)
@@ -368,7 +371,7 @@ describe('ম্যানেজারের অ্যাক্সেস', () => 
       .expect(200);
   });
 
-  it('holidays ও categories দুটোই পড়তে ও লিখতে পারেন', async () => {
+  it('can both read and write holidays and categories', async () => {
     await manager.http.get('/api/v1/holidays').expect(200);
     await manager.http.get('/api/v1/categories').expect(200);
 
@@ -390,8 +393,8 @@ describe('ম্যানেজারের অ্যাক্সেস', () => 
       .expect(201);
   });
 
-  /** ⚠️ deactivate · portal account · audit — এগুলো owner-এরই */
-  it('deactivate করতে পারেন না', async () => {
+  /** deactivate, portal account, audit: these belong to the owner only */
+  it('cannot deactivate', async () => {
     const created = await manager.http
       .post('/api/v1/employees')
       .set('X-CSRF-Token', manager.csrf)
@@ -407,14 +410,14 @@ describe('ম্যানেজারের অ্যাক্সেস', () => 
     await manager.http.get('/api/v1/audit-log').expect(403);
   });
 
-  it('⭐ কর্মী যোগ করার সময় বেতন পাঠালে ৪০৩', async () => {
+  it('sending a salary when adding an employee gives 403', async () => {
     const res = await manager.http
       .post('/api/v1/employees')
       .set('X-CSRF-Token', manager.csrf)
       .send({ fullName: 'Beton Soho', monthlySalary: '99000' });
 
     expect(res.status).toBe(403);
-    // ⚠️ কর্মীটাও তৈরি হয়নি — নীরবে বেতন বাদ দিয়ে সেভ করা হয় না
+    // the employee was not created either: it does not save quietly with the salary dropped
     const list = await owner.http.get('/api/v1/employees').expect(200);
     expect(
       (list.body.rows as { fullName: string }[]).some(
@@ -423,7 +426,7 @@ describe('ম্যানেজারের অ্যাক্সেস', () => 
     ).toBe(false);
   });
 
-  it('⭐ এডিটে বেতন পাঠালে ৪০৩, আর বেতন অটুট থাকে', async () => {
+  it('sending a salary on edit gives 403, and the salary stays intact', async () => {
     const created = await owner.http
       .post('/api/v1/employees')
       .set('X-CSRF-Token', owner.csrf)
@@ -436,7 +439,7 @@ describe('ম্যানেজারের অ্যাক্সেস', () => 
       .send({ monthlySalary: '99000' })
       .expect(403);
 
-    // ⚠️ `null` পাঠিয়ে মুছে ফেলাও বেতনে হাত দেওয়া — সেটাও নিষিদ্ধ
+    // sending `null` to erase it is also touching the salary: also forbidden
     await manager.http
       .patch(`/api/v1/employees/${created.body.id}`)
       .set('X-CSRF-Token', manager.csrf)

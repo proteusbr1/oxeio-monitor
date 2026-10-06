@@ -13,7 +13,7 @@ import {
 } from '../../components/ui';
 
 /**
- * The owner's public key for signed agent updates (deploy/README § ৮.১খ).
+ * The owner's public key for signed agent updates (deploy/README.md, "Signed agent updates").
  *
  * With a key here, this server refuses to publish an MSI whose `.sig` is
  * missing or wrong — PCs built with the same key would otherwise download

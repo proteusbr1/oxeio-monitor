@@ -13,11 +13,11 @@ import {
 } from '../src/pages/settings/fleet';
 
 /**
- * **কোন PC কোন বিল্ডে** — R-বহির্ভূত, মালিকের সরাসরি প্রশ্ন (১৮ আগস্ট)।
+ * **Which PC is on which build.** The owner's direct question.
  *
- * ⭐ এখানকার সবচেয়ে জরুরি টেস্ট দুটো: **০.৪.১০ বনাম ০.৪.৯** (স্ট্রিং
- * তুলনায় উল্টো), আর **গোনায় শুধু active ডিভাইস** (নইলে একই পর্দায় দুটো
- * আলাদা সংখ্যা বসত)।
+ * The two most important tests here: **0.4.10 versus 0.4.9** (reversed in
+ * string comparison), and **counting only active devices** (otherwise the same
+ * screen would show two different numbers).
  */
 
 const NOW = new Date('2026-08-18T14:40:00.000Z');
@@ -62,39 +62,39 @@ function version(over: Partial<AgentVersionView> = {}): AgentVersionView {
 
 describe('compareVersion', () => {
   /**
-   * ⚠️⚠️ **গোটা ফাইলের সবচেয়ে জরুরি টেস্ট।** স্ট্রিং তুলনায়
-   * `'0.4.10' < '0.4.9'` — বর্ণক্রমে সত্যি, আর ভুলটা নীরব: পর্দা সবচেয়ে
-   * নতুন বিল্ডটাকেই "পিছিয়ে" দেখাত, আর কেউ বুঝতেই পারত না কেন।
+   * **The most important test in the whole file.** In string comparison
+   * `'0.4.10' < '0.4.9'` is true alphabetically, and the mistake is silent: the
+   * screen would show the newest build as "behind" and nobody would know why.
    */
-  it('০.৪.১০ ০.৪.৯-এর চেয়ে নতুন', () => {
+  it('0.4.10 is newer than 0.4.9', () => {
     expect(compareVersion('0.4.10', '0.4.9')).toBe(1);
     expect(compareVersion('0.4.9', '0.4.10')).toBe(-1);
   });
 
-  it('সমান হলে শূন্য', () => {
+  it('zero when equal', () => {
     expect(compareVersion('1.2.3', '1.2.3')).toBe(0);
   });
 
-  /** ⚠️ অনুপস্থিত অংশ শূন্য — সার্ভারের `isNewer()` ঠিক এটাই করে */
-  it('অসম দৈর্ঘ্য — অনুপস্থিত অংশ শূন্য ধরা হয়', () => {
+  /** Careful: missing parts are zero: the server's `isNewer()` does exactly this */
+  it('unequal length: missing parts count as zero', () => {
     expect(compareVersion('1.2', '1.2.0')).toBe(0);
     expect(compareVersion('1.2.1', '1.2')).toBe(1);
   });
 
-  /** ⚠️ আবর্জনা এলেও যেন NaN ছড়িয়ে না পড়ে */
-  it('সংখ্যা নয় এমন অংশ শূন্য', () => {
+  /** Careful: even with garbage input NaN must not spread */
+  it('a non-numeric part is zero', () => {
     expect(compareVersion('0.4.9-beta', '0.4.9')).toBe(0);
   });
 });
 
-describe('newestOffered — সার্ভার যাকে বিলি করে', () => {
+describe('newestOffered — what the server hands out', () => {
   /**
-   * ⭐⭐ ক্রম ধরে, ভার্সন নম্বর ধরে নয় — `UpdateService.offerFor`
-   * `releasedAt desc` মেনে প্রথম non-halted সারিটা নেয়। ⚠️ এখানে নম্বর
-   * ধরে বাছলে দুটো আলাদা "নতুন" জন্মাত: পর্দা একটাকে লক্ষ্য বলত, সার্ভার
-   * অন্যটা বিলি করত।
+   * By order, not by version number: `UpdateService.offerFor` takes the first
+   * non-halted row following `releasedAt desc`. Careful: picking by number here
+   * would create two different "newest": the screen would call one the target
+   * while the server handed out another.
    */
-  it('halted বাদ দিয়ে তালিকার প্রথমটা', () => {
+  it('the first in the list, skipping halted', () => {
     const list = [
       version({ version: '0.5.0', rolloutStage: 'halted' }),
       version({ version: '0.4.9', rolloutStage: 'partial' }),
@@ -103,41 +103,42 @@ describe('newestOffered — সার্ভার যাকে বিলি ক�
     expect(newestOffered(list)).toBe('0.4.9');
   });
 
-  it('সব halted হলে লক্ষ্যই নেই', () => {
+  it('no target at all when all are halted', () => {
     expect(newestOffered([version({ rolloutStage: 'halted' })])).toBeNull();
     expect(newestOffered([])).toBeNull();
   });
 });
 
-describe('lagOf — করণীয় কী', () => {
-  it('লক্ষ্যেই আছে', () => {
+describe('lagOf — what to do', () => {
+  it('already on the target', () => {
     expect(lagOf('0.4.9', '0.4.9')).toBe('newest');
   });
 
-  /** ⚠️ হাতে বসানো আরও নতুন বিল্ড "পিছিয়ে" নয় */
-  it('লক্ষ্যের চেয়েও নতুন হলেও পিছিয়ে নয়', () => {
+  /** Careful: a hand-installed newer build is not "behind" */
+  it('not behind even when newer than the target', () => {
     expect(lagOf('0.5.0', '0.4.9')).toBe('newest');
   });
 
   /**
-   * ⭐⭐ **এই দুটো আলাদা হওয়াই এই পর্দার আসল কারণ।** ০.৪.১+ PC অপেক্ষা
-   * করলেই আপডেট নেবে; ০.৪.১-এর আগেরগুলোয় ট্রে-তে মেনুই নেই, ওখানে
-   * কাউকে গিয়ে MSI বসাতে হবে। ১৮ আগস্ট এই তফাতটা না জানার কারণেই ধরে
-   * নেওয়া হয়েছিল `partial` করলেই সবাই আপডেট পাবে।
+   * **These two being separate is the whole reason for this screen.** PCs on
+   * 0.4.1+ will take the update just by waiting; those before 0.4.1 have no
+   * tray menu at all, so someone has to go and install the MSI. On 18 August,
+   * not knowing this difference, it was assumed that `partial` would give
+   * everyone the update.
    */
-  it('০.৪.১+ নিজে থেকেই নেবে, তার আগেরগুলো নেবে না', () => {
+  it('0.4.1+ will take it by itself, the earlier ones will not', () => {
     expect(lagOf('0.4.2', '0.4.9')).toBe('behind');
     expect(lagOf('0.4.1', '0.4.9')).toBe('behind');
     expect(lagOf('0.3.8', '0.4.9')).toBe('stranded');
     expect(lagOf('0.3.7', '0.4.9')).toBe('stranded');
   });
 
-  it('ভার্সন জানা না থাকলে unknown', () => {
+  it('unknown when the version is not known', () => {
     expect(lagOf(null, '0.4.9')).toBe('unknown');
   });
 
-  /** ⚠️ লক্ষ্য না থাকলে কেউ পিছিয়ে নেই — পর্দা তখন বারটাই লুকিয়ে রাখে */
-  it('লক্ষ্য না থাকলে কেউ পিছিয়ে নয়', () => {
+  /** Careful: with no target nobody is behind: the screen then hides the bar itself */
+  it('with no target nobody is behind', () => {
     expect(lagOf('0.3.7', null)).toBe('newest');
   });
 });
@@ -147,21 +148,21 @@ describe('isQuiet', () => {
     new Date(NOW.getTime() - hoursAgo * 3_600_000).toISOString();
 
   /**
-   * ⚠️⚠️ **সারারাত বন্ধ থাকা কখনো "চুপ" নয়** — সন্ধ্যা ৬টায় বন্ধ হয়ে
-   * সকাল ৯টায় খোলা মানে ১৫ ঘণ্টা। দোরগোড়া ওর নিচে নামালে রোজ সকালে
-   * গোটা ফ্লিট লাল দেখাত, আর তখন চিহ্নটার আর কোনো মানে থাকত না।
+   * Careful: **being off all night is never "silent"**: closing at 6 pm and
+   * opening at 9 am is 15 hours. If the threshold were lowered below that, the
+   * whole fleet would look red every morning, and the mark would mean nothing.
    */
-  it('১৫ ঘণ্টা (সারারাত) চুপ নয়, ২৫ ঘণ্টা চুপ', () => {
+  it('15 hours (overnight) is not silent, 25 hours is', () => {
     expect(isQuiet(at(15), NOW)).toBe(false);
     expect(isQuiet(at(QUIET_HOURS + 1), NOW)).toBe(true);
   });
 
-  /** ⚠️ কখনো সাড়া না দেওয়া মানে "সমস্যা নেই" নয় */
-  it('কখনো সাড়া না দিলে চুপ', () => {
+  /** Careful: never having responded does not mean "no problem" */
+  it('silent if it never responded', () => {
     expect(isQuiet(null, NOW)).toBe(true);
   });
 
-  it('ভাঙা তারিখেও ক্র্যাশ নয়', () => {
+  it('no crash even with a broken date', () => {
     expect(isQuiet('not-a-date', NOW)).toBe(true);
   });
 });
@@ -170,11 +171,12 @@ describe('isQuiet', () => {
 
 describe('fleetGroups', () => {
   /**
-   * ⚠️⚠️ **শুধু active** — পাশের টেবিলের "PCs on it" কলামটাও তাই গোনে
-   * (`agent-versions.service.ts`)। revoke করা PC ধরলে **একই পর্দায় দুটো
-   * আলাদা সংখ্যা** বসত, আর কোনটা সত্যি বোঝার উপায় থাকত না।
+   * Careful: **active only**: the "PCs on it" column of the neighbouring table
+   * counts the same way (`agent-versions.service.ts`). Counting revoked PCs
+   * would put **two different numbers on the same screen**, with no way to
+   * tell which is true.
    */
-  it('revoke করা ডিভাইস গোনায় আসে না', () => {
+  it('a revoked device is not counted', () => {
     const groups = fleetGroups(
       [
         device({ id: 1, agentVersion: '0.4.9' }),
@@ -189,7 +191,7 @@ describe('fleetGroups', () => {
     expect(groups[0].rows[0].deviceId).toBe(1);
   });
 
-  it('নতুন থেকে পুরোনো ক্রমে দল', () => {
+  it('groups from newest to oldest', () => {
     const groups = fleetGroups(
       [
         device({ id: 1, agentVersion: '0.3.7' }),
@@ -204,8 +206,8 @@ describe('fleetGroups', () => {
     expect(groups.map((g) => g.lag)).toEqual(['newest', 'behind', 'stranded']);
   });
 
-  /** ⚠️ অজানা ভার্সন কোনো দল নয়, একটা ফাঁক — তাই সবার শেষে */
-  it('ভার্সন না বলা ডিভাইস সবার শেষে', () => {
+  /** Careful: an unknown version is not a group but a gap, so it goes last */
+  it('devices that gave no version go last', () => {
     const groups = fleetGroups(
       [
         device({ id: 1, agentVersion: null }),
@@ -218,8 +220,8 @@ describe('fleetGroups', () => {
     expect(groups.map((g) => g.version)).toEqual(['0.3.7', null]);
   });
 
-  /** ⚠️ দলের ভেতরে ক্রম empCode ধরে — শেষ-সাড়া বা ঘণ্টা ধরে নয় */
-  it('দলের ভেতরে empCode ক্রমে', () => {
+  /** Careful: inside a group the order is by empCode, not by last response or hours */
+  it('inside a group, in empCode order', () => {
     const groups = fleetGroups(
       [
         device({
@@ -241,8 +243,8 @@ describe('fleetGroups', () => {
     ]);
   });
 
-  /** ⚠️ কর্মীর সাথে যুক্ত নয় এমন ডিভাইস শেষে, কিন্তু **বাদ নয়** */
-  it('কারো সাথে যুক্ত নয় এমন ডিভাইস শেষে থাকে, লুকোয় না', () => {
+  /** Careful: devices not linked to an employee go last, but are **not dropped** */
+  it('devices not linked to anyone stay at the end, not hidden', () => {
     const groups = fleetGroups(
       [
         device({ id: 1, employee: null, hostname: 'SPARE' }),
@@ -263,10 +265,10 @@ describe('fleetGroups', () => {
 
 describe('fleetTally', () => {
   /**
-   * ⭐ `behind` আর `stranded` আলাদা গোনা হয় কারণ **করণীয় আলাদা** —
-   * একটায় অপেক্ষাই যথেষ্ট, অন্যটায় কাউকে গিয়ে বসাতে হবে।
+   * `behind` and `stranded` are counted separately because **the action
+   * differs**: for one, waiting is enough; for the other someone must go and install.
    */
-  it('চার ভাগে গোনে, আর যোগফল মেলে', () => {
+  it('counts in four parts, and the sum matches', () => {
     const groups = fleetGroups(
       [
         device({ id: 1, agentVersion: '0.4.9' }),
@@ -288,7 +290,7 @@ describe('fleetTally', () => {
     });
   });
 
-  it('কিছু না থাকলে সব শূন্য', () => {
+  it('all zero when there is nothing', () => {
     expect(fleetTally([]).total).toBe(0);
   });
 });

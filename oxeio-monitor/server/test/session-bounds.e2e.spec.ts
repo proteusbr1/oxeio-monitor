@@ -16,27 +16,26 @@ import {
 } from './setup/harness';
 
 /**
- * ⭐⭐⭐ **সেশনের খাম তার নিজের সেগমেন্টগুলোকে ধরে রাখে**
- * *(৬ সেপ্টেম্বর ২০২৬, G164 · G165)*।
+ * A session's envelope holds its own segments (G164, G165).
  *
- * ⚠️⚠️ **G164 — যে বাগটা এই ফাইলটা পাহারা দেয়:** `ingestSegments()` সেশনটা
- * তারিখপ্রতি একবার খুঁজত (memo), আর সেটা ঠিকই ছিল — কিন্তু সে খুঁজত
- * ব্যাচের **প্রথম** খণ্ডের সময় নিয়ে। বাকি খণ্ডগুলো memo-হিটে সোজা ওই
- * সেশনে বসত, আর `widen()` তাদের দেখতই না। ফলে সেশনের সীমা তার ভেতরের
- * সেগমেন্টগুলোর বাইরে থেকে যেত।
+ * G164, the bug this file guards: `ingestSegments()` looked the session up
+ * once per date (a memo), which was right, but it looked it up using the time
+ * of the batch's first chunk. The other chunks went straight into that
+ * session on a memo hit, and `widen()` never saw them. So the session's bounds
+ * stayed outside the segments inside it.
  *
- * ⚠️ মাঠে মাপা: ২২৬টা সেশনের **৭টা** ভাঙা — ৫২টা সেগমেন্ট, **২৪.৪৭
- * ঘণ্টা** নিজের সেশনের বাইরে। এজেন্ট প্রতিটা বন্ধ সেগমেন্ট
- * fire-and-forget কিউয়ে ফেলে, তাই ক্রমটা একটা দৌড় — ছোট idle সারিটা
- * লম্বা lock সারিটাকে হারিয়ে দিতে পারে।
+ * Measured in the field: 7 of 226 sessions were broken: 52 segments, 24.47
+ * hours outside their own session. The agent drops every closed segment into a
+ * fire-and-forget queue, so the order is a race: a short idle row can beat a
+ * long lock row.
  *
- * ⚠️⚠️ **G165 —** দেরিতে আসা বিদায়ী ইভেন্ট সেশনকে **তার নিজের শুরুর
- * আগে** বন্ধ করে দিতে পারত (`ended_at < started_at`)। ২৪ আগস্ট সেটা ৩
- * মিনিট ৩০ সেকেন্ডের ব্যবধানে ফসকেছে।
+ * G165: a late-arriving departure event could close a session before its own
+ * start (`ended_at < started_at`). On 24 August it slipped by 3 minutes 30
+ * seconds.
  *
- * ⭐ কোনো রিপোর্ট আজ `work_sessions`-এর সময় **পড়ে না**, তাই ঘণ্টা হারায়
- * না। কিন্তু সারিগুলো স্থায়ী — আর যে ফিচারটা প্রথম এই কলামগুলো পড়বে
- * (সেশন-ভিত্তিক টাইমলাইন, "আজ প্রথম কখন এলেন") সে ভাঙা ডেটাই পাবে।
+ * No report reads `work_sessions` times today, so no hours are lost. But the
+ * rows are permanent, and the first feature to read these columns (a
+ * session-based timeline, "when did they first arrive today") would get broken data.
  */
 let h: Harness;
 let device: EnrolledDevice;
@@ -70,7 +69,7 @@ function asAgent<T extends { set(field: string, val: string): T }>(
 
 const today = () => workDateOf(dhakaNoon());
 
-/** ⚠️ লেবেল নয়, ঢাকার ওই ঘণ্টার **আসল মুহূর্ত** */
+/** The real moment of that hour in Dhaka, not the label */
 const atDhakaHour = (dayLabel: Date, hour: number): Date =>
   new Date(dayLabel.getTime() - DHAKA_OFFSET_MS + hour * HOUR_MS);
 
@@ -90,7 +89,7 @@ const send = (segments: unknown[]) =>
 const sessions = () =>
   h.prisma.workSession.findMany({ orderBy: { startedAt: 'asc' } });
 
-/** একটা `shutdown` ইভেন্ট — সেশনটা বন্ধ করতে */
+/** A `shutdown` event, to close the session */
 const closeAt = (when: Date) =>
   asAgent(h.http().post('/api/v1/agent/events'), device.token)
     .send({
@@ -100,27 +99,27 @@ const closeAt = (when: Date) =>
     })
     .expect(200);
 
-describe('G164 — এক ব্যাচের প্রতিটা সেগমেন্ট সেশনের খামে ঢোকে', () => {
+describe('G164: every segment of one batch fits in the session envelope', () => {
   /**
-   * ⭐⭐⭐ **এই ফাইলের মূল টেস্ট** — ব্যাচের **শেষ** সেগমেন্টটা সবচেয়ে
-   * দেরিতে শেষ হয়, আর সেশনের শেষটা তার পরেই থাকতে হবে।
+   * The core test of this file: the last segment of the batch ends latest,
+   * and the session's end must be after it.
    *
-   * ⚠️ পুরোনো নিয়মে সেশনটা প্রথম সেগমেন্টের সময় নিয়ে তৈরি হতো আর
-   *    বাকিগুলো memo-হিটে নীরবে বসে যেত।
+   * With the old rule the session was created from the first segment's time
+   * and the rest slipped in silently on a memo hit.
    */
-  it('⭐ পরের সেগমেন্টগুলোও সেশনের সীমা টেনে বড় করে', async () => {
+  it('later segments also stretch the session bounds', async () => {
     const day = today();
 
     /**
-     * ⚠️⚠️ **সেশনটা আগে বন্ধ করা হয়, ইচ্ছাকৃতভাবে।** `widen()` খোলা
-     * সেশনের `endedAt` ছোঁয় না (ওটা logoff বা দিন-ক্লোজের কাজ), তাই
-     * সেশন খোলা রেখে পরীক্ষা করলে দাবিটা **ফাঁকা** হয়ে যেত — বাগটা
-     * থাকা অবস্থাতেও টেস্টটা সবুজ থাকত।
+     * The session is closed first, on purpose. `widen()` does not touch an
+     * open session's `endedAt` (that is the job of logoff or the day close),
+     * so testing with the session left open would make the claim empty: the
+     * test would stay green even with the bug present.
      */
     await send([span(atDhakaHour(day, 9), 10)]);
     await closeAt(atDhakaHour(day, 9.5));
 
-    // ⚠️ এখন একই ব্যাচে তিনটে — প্রথমটা ছোট, শেষেরটা অনেক পরে
+    // now three in one batch: the first is short, the last is much later
     await send([
       span(atDhakaHour(day, 10), 5),
       span(atDhakaHour(day, 11), 30),
@@ -138,14 +137,14 @@ describe('G164 — এক ব্যাচের প্রতিটা সেগ�
   });
 
   /**
-   * ⭐⭐ **উল্টো ক্রমে এলেও সেশনের শুরু পিছিয়ে যায়।**
+   * Even when they arrive in reverse order, the session start moves back.
    *
-   * ⚠️⚠️ এটাই মাঠের সেশন ৩২/৯৩-এর আকৃতি: একই ব্যাচে প্রথমে বসেছিল
-   * সকালের ছোট idle সারিটা, আর তার পরে রাত ১২টা থেকে চলা লম্বা lock
-   * সারিটা। সেশন শুরু হয়েছিল তার নিজের প্রথম সেগমেন্টের **৮ ঘণ্টা ৩৪
-   * মিনিট পরে**।
+   * This is the shape of the field's sessions 32/93: in one batch the short
+   * morning idle row went in first, then the long lock row running from
+   * midnight. The session had started 8 hours 34 minutes after its own first
+   * segment.
    */
-  it('⭐ দেরির সেগমেন্ট আগে এলেও শুরুটা আসল প্রথম সেগমেন্টেই', async () => {
+  it('a late segment arriving first still leaves the start at the real first segment', async () => {
     const day = today();
     const early = atDhakaHour(day, 0);
 
@@ -159,13 +158,13 @@ describe('G164 — এক ব্যাচের প্রতিটা সেগ�
   });
 
   /**
-   * ⚠️⚠️ **প্রতিটা সেগমেন্ট তার নিজের সেশনের ভেতরে** — এটাই আসল নিয়ম,
-   * আর উপরের দুটো এরই দুটো দিক। মাঠের কুয়েরিটাই এখানে লেখা।
+   * Every segment inside its own session: this is the real rule, and the two
+   * above are its two sides. The field's query is written right here.
    */
-  it('⭐ একটাও সেগমেন্ট নিজের সেশনের বাইরে পড়ে না', async () => {
+  it('not a single segment falls outside its own session', async () => {
     const day = today();
 
-    // ⚠️ সেশনটা বন্ধ — নইলে নিচের `endedAt` দাবিটা ফাঁকা হয়ে যেত
+    // the session is closed, otherwise the `endedAt` claim below would be empty
     await send([span(atDhakaHour(day, 8), 10)]);
     await closeAt(atDhakaHour(day, 8.5));
 
@@ -191,8 +190,8 @@ describe('G164 — এক ব্যাচের প্রতিটা সেগ�
       expect(r.startedAt.getTime()).toBeGreaterThanOrEqual(
         r.session.startedAt.getTime(),
       );
-      // ⚠️ `not.toBeNull()` আলাদা করে — নইলে সেশন খোলা থাকলে নিচের
-      //    দাবিটা নীরবে বাদ পড়ত, আর টেস্টটা কিছুই পাহারা দিত না
+      // `not.toBeNull()` separately: otherwise with an open session the claim
+      // below would be skipped silently, and the test would guard nothing
       expect(r.session.endedAt).not.toBeNull();
       expect(r.endedAt.getTime()).toBeLessThanOrEqual(
         r.session.endedAt!.getTime(),
@@ -201,14 +200,14 @@ describe('G164 — এক ব্যাচের প্রতিটা সেগ�
   });
 
   /**
-   * ⚠️ **মধ্যরাত পেরোনো সেগমেন্ট দুটো তারিখে ভাগ হয়**, আর দুটো দিনেরই
-   *    নিজের সেশন — কোনোটার খামই অন্যটার সময় ধরে না।
+   * A segment crossing midnight is split across two dates, and each day has
+   * its own session: neither envelope takes the other's time.
    */
-  it('মধ্যরাত পেরোলে দুই দিনের দুই সেশন, দুটোই নিজের সীমায়', async () => {
+  it('crossing midnight gives two sessions for two days, each within its own bounds', async () => {
     const day = today();
     const yesterday = new Date(day.getTime() - 24 * HOUR_MS);
 
-    // গতকাল রাত ১১টা থেকে ৩ ঘণ্টা — আজ ভোর ২টায় শেষ
+    // from 11pm yesterday for 3 hours: ends at 2am today
     await send([span(atDhakaHour(yesterday, 23), 180, 'locked')]);
 
     const rows = await sessions();
@@ -219,18 +218,17 @@ describe('G164 — এক ব্যাচের প্রতিটা সেগ�
   });
 });
 
-describe('G165 — সেশন নিজের শুরুর আগে বন্ধ হয় না', () => {
+describe('G165: a session is not closed before its own start', () => {
   /**
-   * ⭐⭐⭐ **এই ব্লকের মূল টেস্ট** — রিবুটের পর আটকে থাকা shutdown
-   * ইভেন্টটা সেগমেন্টের **পরে** এসে পৌঁছায়, আর তার সময় সেশনের শুরুর
-   * আগের।
+   * The core test of this block: a shutdown event held back across a reboot
+   * arrives after the segment, and its time is before the session's start.
    */
-  it('⭐ পুরোনো shutdown ইভেন্ট পরে এলে সেশনটা বন্ধ হয় না', async () => {
+  it('an old shutdown event arriving late does not close the session', async () => {
     const day = today();
     const startedAt = atDhakaHour(day, 10);
 
     await send([span(startedAt, 60)]);
-    await closeAt(atDhakaHour(day, 9)); // ⚠️ সেশন শুরুর এক ঘণ্টা আগে
+    await closeAt(atDhakaHour(day, 9)); // an hour before the session starts
 
     const [s] = await sessions();
 
@@ -238,8 +236,8 @@ describe('G165 — সেশন নিজের শুরুর আগে বন
     expect(s.endReason).toBeNull();
   });
 
-  /** ⚠️ স্বাভাবিক ক্ষেত্রে আগের মতোই — এটাই নিরাপত্তা-জাল */
-  it('স্বাভাবিক shutdown আগের মতোই সেশন বন্ধ করে', async () => {
+  /** In the normal case it is as before: this is the safety net */
+  it('a normal shutdown closes the session as before', async () => {
     const day = today();
     const startedAt = atDhakaHour(day, 10);
     const stopAt = atDhakaHour(day, 18);
@@ -254,11 +252,11 @@ describe('G165 — সেশন নিজের শুরুর আগে বন
   });
 
   /**
-   * ⚠️⚠️ **ক্ল্যাম্প নয়, বাদ** — শূন্য-দৈর্ঘ্যের সেশন আর একটা মিথ্যা
-   * `end_reason` বসানো হয় না। সেশনটা খোলাই থাকে, আর ০০:১৫-র দিন-ক্লোজ
-   * তাকে তার নিজের মধ্যরাতে বন্ধ করবে।
+   * Dropped, not clamped: no zero-length session and no false `end_reason` is
+   * set. The session simply stays open, and the 00:15 day close will close it
+   * at its own midnight.
    */
-  it('⭐ ঠিক শুরুর মুহূর্তে আসা ইভেন্ট বন্ধ করে, তার আগেরটা নয়', async () => {
+  it('an event exactly at the start closes it, the one before does not', async () => {
     const day = today();
     const startedAt = atDhakaHour(day, 10);
 
@@ -273,8 +271,8 @@ describe('G165 — সেশন নিজের শুরুর আগে বন
     );
   });
 
-  /** ⚠️ কোনো সেশনেই `ended_at < started_at` থাকতে পারে না */
-  it('⭐ একটাও ঋণাত্মক দৈর্ঘ্যের সেশন তৈরি হয় না', async () => {
+  /** No session may have `ended_at < started_at` */
+  it('no negative-length session is ever created', async () => {
     const day = today();
 
     await send([span(atDhakaHour(day, 10), 60)]);

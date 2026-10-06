@@ -3,23 +3,27 @@ import { api } from './client';
 /** Dashboard-editable settings: region, storage and backup, offsite copy, Telegram, agent update key. */
 
 /**
- * এই কর্মীর জামানত **কোন মাস থেকে** কাটা শুরু (`YYYY-MM`)।
+ * From which month this employee's deposit starts being deducted (`YYYY-MM`).
  *
- * ⚠️ `null` মানে "নিয়মের সাধারণ শুরুর মাসে ফেরত যাও" — বৈধ ও অর্থবহ।
+ * Careful: `null` means "fall back to the rule's general start month"; that is
+ * valid and meaningful.
  *
- * ⚠️⚠️ মাস এগিয়ে দিলে তার আগের কিস্তি **মুছে যায়**, আর কতগুলো গেল সেটা
- * রেসপন্সে আসে — পর্দা যেন নীরবে সারি মুছে না ফেলে।
+ * Careful: moving the month forward deletes the installments before it, and the
+ * response says how many went. The screen must not delete rows silently.
  */
 /**
- * ⚠️⚠️ **`tokenHint` — পুরো টোকেন কখনো আসে না।** সার্ভার শেষ চার অক্ষর
- * ছাড়া কিছু পাঠায় না, কারণ ব্রাউজারে গেলে সেটা DevTools, প্রক্সি লগ বা
- * স্ক্রিন শেয়ারে দেখা যেত।
+ * Careful: `tokenHint`, the full token never comes back. The server sends nothing
+ * except the last four characters, because once it reached the browser it could
+ * leak through DevTools, proxy logs or screen sharing.
  */
 export interface TelegramSettingsView {
   configured: boolean;
   tokenHint: string | null;
   chatId: string;
-  /** ⚠️ কোনটা খাটছে — ডাটাবেস না `.env`। না জানালে মালিক ভাবতেন সেভ হয়নি */
+  /**
+   * Careful: which one is in effect, the database or `.env`. Without this the owner
+   * would think the save did not take.
+   */
   source: 'database' | 'env' | 'none';
 }
 export function getTelegramSettings(
@@ -27,9 +31,7 @@ export function getTelegramSettings(
 ): Promise<TelegramSettingsView> {
   return api<TelegramSettingsView>('/settings/telegram', { signal });
 }
-/**
- * ⚠️ খালি স্ট্রিং পাঠানো **বৈধ** — মানে "মুছে দাও, `.env`-এ ফেরত যাও"।
- */
+/** Careful: sending an empty string is valid; it means "delete it, fall back to `.env`". */
 export function saveTelegramSettings(
   botToken: string,
   chatId: string,
@@ -40,28 +42,28 @@ export function saveTelegramSettings(
   });
 }
 /**
- * ⭐ পরীক্ষামূলক বার্তা — নইলে মালিক সেভ করে **শুক্রবার পর্যন্ত** অপেক্ষা
- * করতেন, আর কিছু না এলে বুঝতেন ভুল ছিল, কিন্তু কী ভুল তা জানতেন না।
+ * A test message. Without it the owner would save and then wait until Friday, and
+ * if nothing arrived would know something was wrong but not what.
  */
 export function testTelegram(): Promise<{ outcome: string }> {
   return api<{ outcome: string }>('/settings/telegram/test', { method: 'PATCH' });
 }
-// ── R5 · অফসাইট ব্যাকআপ (Backblaze B2) ──────────────────────────────────────
+// ── R5 · Offsite backup (Backblaze B2) ──────────────────────────────────────
 
 export interface OffsiteSettingsView {
   configured: boolean;
-  /** `…9f2a` — application key বসানো না থাকলে `null` */
+  /** `...9f2a`; `null` when no application key is set. */
   keyHint: string | null;
-  /** ⭐ গোপন নয় — পুরোটাই আসে, যাতে "আগেরটাই থাক" কাজ করে */
+  /** Not secret; it comes back in full so that "keep the existing one" works. */
   keyId: string;
   bucket: string;
-  /** ⚠️ কোনটা খাটছে — ডাটাবেস না সার্ভারের ফাইল */
+  /** Careful: which one is in effect, the database or the server's file. */
   source: 'database' | 'env' | 'none';
 }
 export interface B2Verdict {
   ok: boolean;
   message: string;
-  /** key-টা যে bucket-এ বাঁধা (সীমাবদ্ধ না হলে `null`) */
+  /** The bucket the key is bound to (`null` if not restricted). */
   boundTo: string | null;
 }
 export function getOffsiteSettings(
@@ -70,10 +72,10 @@ export function getOffsiteSettings(
   return api<OffsiteSettingsView>('/settings/offsite', { signal });
 }
 /**
- * ⚠️⚠️ `appKey` খালি পাঠানো মানে **"আগেরটাই থাক"** — টেলিগ্রামের চেয়ে
- * আলাদা, আর সেটা ইচ্ছাকৃত: Backblaze application key **একবারই দেখায়**,
- * তাই bucket-এর নাম শুধরাতে গিয়ে সেটা মুছে গেলে নতুন key বানাতে হতো।
- * ⭐ পুরোপুরি মুছতে হলে তিনটে ঘরই খালি রেখে সেভ।
+ * Careful: sending `appKey` empty means "keep the existing one". This differs from
+ * Telegram, on purpose: Backblaze shows an application key only once, so deleting
+ * it while fixing the bucket name would force a new key. To clear everything,
+ * save with all three fields empty.
  */
 export function saveOffsiteSettings(
   keyId: string,
@@ -86,8 +88,8 @@ export function saveOffsiteSettings(
   });
 }
 /**
- * ⭐⭐ কী-জোড়া সত্যিই কাজ করে কি না — **এখনই**। সার্ভার সরাসরি
- * Backblaze-কে জিজ্ঞেস করে, তাই ভুল key সাথে সাথেই ধরা পড়ে।
+ * Whether the key pair really works, right now. The server asks Backblaze
+ * directly, so a wrong key is caught immediately.
  */
 export function testOffsite(): Promise<B2Verdict> {
   return api<B2Verdict>('/settings/offsite/test', { method: 'POST' });

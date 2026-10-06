@@ -3,19 +3,19 @@ using oXeio.Core.Time;
 namespace oXeio.Core.Tracking;
 
 /// <summary>
-/// ছবি তোলার সময়সীমা — ADR-011c।
+/// The time window for taking pictures (ADR-011c).
 ///
-/// ⚠️ এটা <b>সময় গণনার</b> সীমা নয়। রাত ২টায় কেউ কাজ করলে তার ঘণ্টা পুরোপুরি
-/// গোনা হবে, শুধু কোনো ছবি উঠবে না। ক্লাসটার নাম তাই CaptureWindow —
-/// ShiftWindow নয়, কারণ শিফট বলে কিছু নেই।
+/// This is <b>not</b> a limit on <b>counting time</b>. If someone works at 2 a.m. their hours
+/// are counted in full; only no picture is taken. That is why the class is named
+/// CaptureWindow and not ShiftWindow: there is no such thing as a shift.
 /// </summary>
 public sealed class CaptureWindow
 {
     private readonly TimeOnly? _from;
     private readonly TimeOnly? _to;
 
-    /// <param name="from">যেমন 07:00। null হলে ২৪ ঘণ্টাই ছবি ওঠে।</param>
-    /// <param name="to">যেমন 23:00 — এই মুহূর্তটা <b>বাদ</b>।</param>
+    /// <param name="from">E.g. 07:00. If null, pictures are taken 24 hours a day.</param>
+    /// <param name="to">E.g. 23:00. This exact moment is <b>excluded</b>.</param>
     public CaptureWindow(TimeOnly? from, TimeOnly? to)
     {
         _from = from;
@@ -32,7 +32,7 @@ public sealed class CaptureWindow
 
         var now = DhakaTime.LocalTimeOf(instant);
 
-        // 23:00 → 07:00 এর মতো মধ্যরাত-পার উইন্ডোও যেন কাজ করে
+        // A window that crosses midnight, like 23:00 → 07:00, must work too
         return _from <= _to
             ? now >= _from && now < _to
             : now >= _from || now < _to;

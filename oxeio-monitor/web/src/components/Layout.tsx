@@ -13,18 +13,19 @@ import { ThemeToggle } from './ThemeToggle';
 import { formatDateMedium, workOffsetMs, workTimeZoneLabel } from '../lib/format';
 
 /**
- * নেভের ব্যাজের তাল — বোর্ডের pulse-এর মতোই ধীরে।
+ * Pace of the nav badge: slow, like the board's pulse.
  *
- * ⚠️ অ্যালার্ট মিনিটে মিনিটে বদলায় না, আর এটা **প্রতিটা পাতায়** চলে
- *    (Layout সব রুটের বাইরে)। দ্রুত ডাকলে গোটা অ্যাপ জুড়ে অকারণ ট্রাফিক হতো।
+ * Careful: alerts do not change minute by minute, and this runs on every page
+ * (Layout sits outside all routes). Polling quickly would cause pointless traffic
+ * across the whole app.
  */
 const ALERT_BADGE_MS = 120_000;
 
 /**
- * উপরের বারে পাতা-নির্দিষ্ট জিনিস বসানোর ঘরের id।
- * ⚠️ `Layout` ও `LiveBoardPage` দুটোই এটা ব্যবহার করে, তাই ধ্রুবকটা
- *    এখানেই রপ্তানি — দু-জায়গায় স্ট্রিং লিখলে একদিন একটা বদলে অন্যটা
- *    থেকে যেত, আর ঘরটা নীরবে খালি থাকত।
+ * Id of the slot in the top bar where page-specific items go.
+ * Careful: both `Layout` and `LiveBoardPage` use it, so the constant is exported
+ * from here; writing the string in two places would one day let one change while
+ * the other stayed, and the slot would silently stay empty.
  */
 export const TOPBAR_SLOT_ID = 'oxeio-topbar-slot';
 
@@ -32,15 +33,16 @@ interface NavItem {
   to: string;
   label: string;
   end?: boolean;
-  /** কোন ভূমিকা এই ট্যাবটা **দেখতে পাবে** */
+  /** Which roles can see this tab. */
   roles: Role[];
   /**
-   * ⭐⭐ **ভূমিকা ছাড়াও একটা বাড়তি শর্ত** *(২২ আগস্ট)*।
+   * An extra condition beyond the role.
    *
-   * ⚠️⚠️ Targets পাতাটা গবেষকও দেখেন, আর তাঁর ভূমিকা `employee` — অর্থাৎ
-   * `roles`-এ `employee` বসালে **সব কর্মী** ওটা দেখতেন। ⭐ তাই সার্ভারের
-   * তৈরি উত্তরটা (`canAddTargets`) দেখা হয়; নিয়মটা ওয়েবে আবার লেখা
-   * হয় না, নইলে একদিন মেনু দেখা যেত অথচ পাতা ৪০৩ দিত।
+   * Careful: the Targets page is also seen by researchers, whose role is `employee`,
+   * so putting `employee` in `roles` would show it to all staff. So the
+   * server-computed answer (`canAddTargets`) is checked instead; the rule is not
+   * rewritten on the web side, or one day the menu would show an entry whose page
+   * returns 403.
    */
   when?: (user: { canAddTargets: boolean }) => boolean;
   /** Belongs to a module the owner can switch off (Settings → Modules) */
@@ -48,45 +50,45 @@ interface NavItem {
   /** Like `feature`, but only for staff logins — the owner and managers keep it */
   staffFeature?: FeatureKey;
   /**
-   * ⭐ মকআপ ক-এর ভাগের লেবেল — এই আইটেমটার **ঠিক আগে** বসে।
+   * Section label from mockup A; it sits immediately before this item.
    *
-   * ⚠️ কেবল সাইডবারে (`lg`-এর উপরে)। ফোনের আড়াআড়ি সারিতে ভাগের লেবেল
-   *    মানে ট্যাবের মাঝে একটা লেখা যেটা চাপা যায় না — সরু পর্দায় ওটা
-   *    জায়গা খায় আর ট্যাব বলে ভুল হয়।
+   * Careful: sidebar only (above `lg`). In a phone's horizontal row a section label
+   * would be a piece of text between the tabs that cannot be pressed; on a narrow
+   * screen it takes space and looks like a tab by mistake.
    */
   section?: string;
   /**
-   * ⭐ ভাগের **ভেতরের** আইটেম — একটু ডানে সরে বসে *(২৩ আগস্ট)*।
+   * An item inside a section: shifted slightly right.
    *
-   * ⚠️ শুধু শিরোনাম দিলে "নিচে আছে" ব্যাপারটা যথেষ্ট চোখে পড়ে না;
-   * সরিয়ে বসালে চোখ এক নজরেই দেখে কোনটা কার অধীনে।
+   * With only a heading, "it is underneath" is not noticeable enough; with the
+   * indent the eye sees at a glance which item belongs to which section.
    */
   child?: boolean;
   /**
-   * ⭐ নামের পাশে একটা সংখ্যা (মকআপে `Alerts 2`)।
+   * A number beside the name (`Alerts 2` in the mockup).
    *
-   * ⚠️⚠️ `undefined` আর `0` **এক নয়**: `0` মানে "গুনেছি, কিছু নেই" — ব্যাজ
-   *    বসে না; `undefined` মানে "এখনো জানি না"। দুটোকে এক ধরলে সংখ্যা
-   *    আসার আগেই নেভ দাবি করত সব ঠিক আছে।
+   * Careful: `undefined` and `0` are not the same: `0` means "counted, nothing
+   * there" and no badge is shown; `undefined` means "not known yet". Treating them
+   * alike would make the nav claim all is well before the number arrived.
    */
   badge?: number;
 }
 
 /**
- * ⭐ **নেভ থেকেই ফিল্টার হয়, ৪০৩ থেকে নয়।** যে পর্দায় ঢোকার অনুমতি নেই
- *    সেটার নামটাই দেখানো হয় না — নইলে ম্যানেজার "সেটিংস" শব্দটা পড়ে বুঝে
- *    ফেলত কী কী তার নাগালের বাইরে আছে, আর চেপে "অনুমতি নেই" খেয়ে ভাবত
- *    কিছু ভেঙেছে। পেজের ৪০৩ পর্দাগুলো শেষ রক্ষাকবচ, প্রথম নয়।
+ * Filtering happens in the nav, not from a 403. A screen the user may not enter
+ * is not shown by name at all; otherwise a manager would read the word "Settings"
+ * and learn what is out of reach, then press it, get "not allowed" and think
+ * something broke. The pages' own 403 screens are the last line of defense, not the first.
  *
- * ⚠️ **`/staff` তালিকা-ট্যাবটা সরানো হয়েছে।** স্পেক § ৫-এ ছ-টা পর্দা, আর
- *    "স্টাফ তালিকা" তাদের একটাও নয় — কর্মী যোগ/সম্পাদনা সেটিংসের স্টাফ
- *    ট্যাবে (owner-only)। `/staff/:id` রুটটা আছে, কিন্তু সেখানে যাওয়ার পথ
- *    লাইভ বোর্ডের কার্ড। খালি `/staff` কোনো পর্দা নয়, তাই ট্যাবটা রাখলে
- *    "পাওয়া যায়নি"-তে গিয়ে ঠেকত।
+ * Careful: the `/staff` list tab was removed. The spec (section 5) has six
+ * screens and "staff list" is not one of them; adding/editing staff lives in the
+ * Settings Staff tab (owner-only). The `/staff/:id` route exists, but the way
+ * there is a Live Board card. A bare `/staff` is not a screen, so keeping the tab
+ * would have led to "not found".
  *
- * ⚠️ স্টাফের জন্য একটাই ট্যাব — সার্ভারে তার জন্য `/screenshots` ছাড়া আর
- *    কোনো ড্যাশবোর্ড endpoint খোলা নেই। একটা ট্যাবের সারি দেখতে ফাঁকা লাগে,
- *    কিন্তু চারটে ট্যাবের তিনটেয় ৪০৩ পাওয়ার চেয়ে সেটা ভালো।
+ * Careful: staff get only one tab, because the server opens no dashboard endpoint
+ * to them except `/screenshots`. A one-tab row looks empty, but that beats getting
+ * a 403 on three of four tabs.
  */
 const NAV: NavItem[] = [
   {
@@ -96,12 +98,11 @@ const NAV: NavItem[] = [
     roles: ['owner', 'manager'],
   },
   /**
-   * ⭐⭐ **Worklog** — কার্ডগুলো, Live Board-এর নিচ থেকে সরিয়ে আনা
-   * *(১৭ আগস্ট, মালিকের অনুরোধে)*।
+   * Worklog: the cards, moved up from below the Live Board.
    *
-   * ⚠️ Live Board-এর **ঠিক পরে**, কারণ প্রশ্ন দুটো পাশাপাশি: বোর্ড বলে
-   * "দল আজ কেমন করছে", Worklog বলে "এই মুহূর্তে কে কাজ করছে"। মাঝে অন্য
-   * কিছু বসালে দ্বিতীয়টা খুঁজতে হতো।
+   * Careful: placed right after the Live Board because the two questions sit
+   * together: the board says "how is the team doing today", Worklog says "who is
+   * working right now". Putting anything between would make the second hard to find.
    */
   {
     to: '/worklog',
@@ -109,35 +110,31 @@ const NAV: NavItem[] = [
     roles: ['owner', 'manager'],
   },
   /**
-   * ⭐⭐ **Targets** *(২২ আগস্ট)* — গবেষকের রোজকার পাতা।
+   * Targets: the researcher's daily page.
    *
-   * ⚠️⚠️ **সাইডবারে, Settings-এ নয়** (মালিকের সিদ্ধান্ত): এখানে **রোজ**
-   * আসতে হয়, আর Settings একবার বসিয়ে ভুলে যাওয়ার জায়গা। Deposits-ও
-   * ঠিক এই কারণেই সাইডবারে (09 § ৩ঃ)।
+   * Careful: in the sidebar, not in Settings (the owner's decision). People come
+   * here every day, while Settings is a place to set something once and forget.
+   * Deposits is in the sidebar for exactly the same reason (09 section 3).
    *
-   * ### ⭐⭐ এখানে যে হ্যাকটা ছিল, আর কেন সেটা মুছে গেল
+   * The hack that used to be here, and why it is gone: it was `roles:
+   * ['owner','manager','employee']` together with `when: (user) =>
+   * user.canAddTargets`, with a comment admitting that `employee` is there only for
+   * researchers and the real filter is `when`.
    *
-   * আগে লেখা ছিল `roles: ['owner','manager','employee']` তার সাথে
-   * `when: (user) => user.canAddTargets`, আর টীকায় স্বীকারোক্তি:
-   * *"`employee` আছে **কেবল গবেষকের জন্য**, আসল ছাঁকনিটা `when`"*।
-   *
-   * ⚠️⚠️ কারণটা ছিল বাধ্যবাধকতা, পছন্দ নয়: পোর্টালের রোল ছিল তিনটে,
-   * আর গবেষক ঢুকতেন `employee` হিসেবে। তালিকায় `employee` না লিখলে
-   * তিনি বাদ পড়তেন, লিখলে **ন-জন ডিজাইনারও** মেনুতে এটা দেখতেন।
-   *
-   * ⭐ ২৫ আগস্ট মালিক রোলটাই আলাদা করে দিলেন *("researcher and designer
-   * same kaj kore na")*, তাই তালিকাটা এখন সত্যি কথাই বলে — আর দুটো
-   * জায়গার বদলে **একটা** জায়গা পাহারা দেয়।
+   * Careful: that was forced, not chosen. The portal had three roles and
+   * researchers came in as `employee`. Leaving `employee` out of the list dropped
+   * them; putting it in showed this to all nine designers too. The owner later
+   * split the role (researchers and designers do different work), so the list now
+   * tells the truth and one place guards it instead of two.
    */
   /**
-   * ⭐ দুটো পাতা **একটা ভাগের নিচে** *(২৩ আগস্ট, মালিকের সিদ্ধান্ত)* —
-   * `Oversight → Alerts`-এর মতোই। ⚠️ ভাগের লেবেলটা কেবল সাইডবারে
-   * (`lg`-এর উপরে) দেখা যায়, তাই আইটেমের নাম দুটো **নিজেরাই** যথেষ্ট
-   * হতে হবে: ফোনের আড়াআড়ি সারিতে "Add targets"/"All targets" একা
-   * দাঁড়িয়েও বোঝা যায়।
+   * Two pages under one section, like `Oversight -> Alerts`. Careful: the section
+   * label shows only in the sidebar (above `lg`), so the two item names must be
+   * clear on their own: in a phone's horizontal row "Add targets"/"All targets"
+   * must make sense standing alone.
    *
-   * ⚠️ নাম দুটোয় আর "Design" নেই — ভাগের শিরোনামেই ওটা লেখা, আর
-   * "Targets → Add Design Targets" পড়তে দুবার একই কথা।
+   * Careful: the names no longer contain "Design", because the section title says
+   * it already, and "Targets -> Add Design Targets" says the same thing twice.
    */
   {
     to: '/targets',
@@ -155,11 +152,10 @@ const NAV: NavItem[] = [
     feature: 'designTargets',
   },
   /**
-   * ⭐⭐ **Review** *(মালিকের নির্দেশ, ৩১ আগস্ট ২০২৬)* — Design Pool-এর
-   * ঠিক নিচে।
+   * Review: right below Design Pool.
    *
-   * ⚠️ গবেষক নেই: ডিজাইনার কেন Skip দিলেন সেটা **দল সামলানোর** প্রশ্ন,
-   * আর সার্ভারের `@Roles(owner, manager)`-এর সাথে এটাই মেলে।
+   * Careful: no researchers. Why a designer skipped something is a team-management
+   * question, which matches the server's `@Roles(owner, manager)`.
    */
   {
     to: '/targets/review',
@@ -169,36 +165,34 @@ const NAV: NavItem[] = [
     feature: 'designTargets',
   },
   /**
-   * ⭐ **J05** — স্টাফের নিজের পাতা। নামটা tray-র মেনু আইটেমের সাথে
-   * **হুবহু এক** ("My data") — দুই জায়গায় দু-রকম নাম হলে স্টাফ ভাবত
-   * দুটো আলাদা জিনিস।
+   * J05: the staff member's own page. The name is exactly the same as the tray menu
+   * item ("My data"); with two different names in two places staff would think they
+   * were two different things.
    *
-   * ⚠️ শুধু স্টাফের জন্য নেভে দেখানো হয়: owner/manager-এর
-   * `users.employee_id` সাধারণত null, তাই তাঁদের কাছে পাতাটা ৪০৩ হতো।
-   * (রুটটা তবু সবার জন্য খোলা — যিনি সত্যিই কর্মী, তিনি সরাসরি গিয়ে
-   * দেখতে পারবেন।)
+   * Careful: shown in the nav only for staff: the `users.employee_id` of an
+   * owner/manager is usually null, so for them the page would return 403. (The
+   * route is still open to everyone: someone who really is an employee can go there directly.)
    */
   /**
-   * ⚠️⚠️ **এই শিরোনামটা কেবল সাজসজ্জা নয় — এটাই উপরের ভাগটা বন্ধ করে।**
-   * ভাগের লেবেল কেবল **শুরু** চিহ্নিত করে, শেষ নয়; তাই "Targets"-এর পরে
-   * কোনো শিরোনাম না থাকলে My data · Staff · Screenshots — সবই ওই
-   * ভাগের ভেতরে বলে মনে হতো *(২৩ আগস্ট)*।
+   * Careful: this heading is not just decoration, it closes the section above. A
+   * section label marks only the start, not the end; without a heading after
+   * "Targets", My data, Staff and Screenshots would all look as if they were inside
+   * that section.
    */
   /**
-   * ⚠️⚠️ `researcher`-ও এখানে — গবেষকদেরও এজেন্ট আছে, তাঁরাও মাপা হন
-   * (২৫ আগস্ট যাচাই করা: OX-04 ও OX-05 দুজনেরই সক্রিয় ডিভাইস)। ব্যক্তিগত
-   * পাতা কাজের ধরনের সাথে বাঁধা নয়।
+   * Careful: `researcher` is here too. Researchers also have an agent and are also
+   * measured (verified: both OX-04 and OX-05 have active devices). The personal page
+   * is not tied to the kind of work.
    *
-   * ⭐⭐ `manager`-ও এখানে *(২৬ আগস্ট)* — আর এটা ছাড়া ওই দিনের গোটা
-   * কাজটাই অর্থহীন হতো। অফিসের ম্যানেজার এখন রোজ ৩০টা ডিজাইন পান
-   * (`DESIGN_WORK_STAFF_TYPES`), কিন্তু তালিকাটা **এই পাতাতেই**। মেনুতে
-   * লিঙ্কটা না থাকলে তাঁর কাছে রোজ ৩০টা কাজ যেত আর তিনি সেগুলো
-   * খুঁজেই পেতেন না — URL হাতে টাইপ করা ছাড়া।
+   * `manager` is here too, and without it the work of that day would be pointless.
+   * The office manager now gets 30 designs every day (`DESIGN_WORK_STAFF_TYPES`),
+   * but the list lives on this page. Without the menu link the 30 tasks would
+   * arrive and they could not find them except by typing the URL.
    *
-   * ⚠️ পুরোনো টীকা বলত owner/manager-এর `employee_id` সাধারণত `null`
-   * তাই পাতাটা তাঁদের কাছে ৪০৩ হতো। ⭐ সেটা আর সত্যি নয়: কর্মী-সারির
-   * সাথে যুক্ত নন এমন কেউ ঢুকলে একটা বন্ধুসুলভ খালি বাক্স পান
-   * (`MyDataPage`), এরর নয়। owner এখনো বাইরে — তাঁর কর্মী-সারি নেই।
+   * Careful: an older note said an owner/manager's `employee_id` is usually `null`,
+   * so the page returned 403. That is no longer true: someone not linked to an
+   * employee row gets a friendly empty box (`MyDataPage`), not an error. The owner
+   * stays out, since they have no employee row.
    */
   {
     to: '/me',
@@ -207,20 +201,21 @@ const NAV: NavItem[] = [
     section: 'Team',
   },
   /**
-   * ⭐ মকআপ ক-এর সাইডবারে Live Board-এর ঠিক পরেই।
+   * In mockup A's sidebar, right after the Live Board.
    *
-   * ⚠️ এখানে আগে লেখা ছিল ট্যাবটা "সরানো হয়েছে" — কারণ `/staff` বলে
-   *    কোনো পাতা ছিল না, ট্যাবটা "পাওয়া যায়নি"-তে ঠেকত। এখন পাতাটা
-   *    আছে (`StaffPage`), তাই ট্যাবটাও ফিরল।
-   * ⚠️ **Settings → Staff-এর নকল নয়**: ওখানে সম্পাদনা, এখানে দেখা।
+   * Careful: this used to carry a note saying the tab was "removed", because there
+   * was no `/staff` page and the tab led to "not found". The page now exists
+   * (`StaffPage`), so the tab is back.
+   * Careful: this is not a duplicate of Settings -> Staff: editing is there,
+   * viewing is here.
    */
   /**
-   * ⚠️ owner/manager-এর তালিকায় `My data` থাকে না, তাই ভাগের শিরোনামটা
-   * এখানেও লাগে — নইলে তাঁদের পর্দায় "Targets" ভাগটা কখনো বন্ধই হতো না।
-   * ⭐ দুটোর একটাই দেখা যায়, তাই শিরোনাম দুবার বসে না।
+   * Careful: the owner's/manager's list has no `My data`, so the section heading is
+   * needed here too; otherwise the "Targets" section would never close on their
+   * screen. Only one of the two is ever visible, so the heading is not shown twice.
    */
   { to: '/staff', label: 'Staff', roles: ['owner', 'manager'], section: 'Team' },
-  /** ⚠️ গবেষক ও ডিজাইনার এখানে **নিজেরটাই** দেখেন — সার্ভার স্কোপ করে দেয় */
+  /** Careful: researchers and designers see only their own here; the server applies the scope. */
   {
     to: '/screenshots',
     label: 'Screenshots',
@@ -228,8 +223,8 @@ const NAV: NavItem[] = [
     staffFeature: 'staffScreenshots',
   },
   /**
-   * ⚠️ শুধু "Monthly" — "Monthly progress" নয়। নেভের সব ট্যাব এক-দুই শব্দে,
-   *    আর ৩৭৫px-এ লম্বা লেবেলগুলোই প্রথমে সারিটাকে স্ক্রল করায়।
+   * Careful: just "Monthly", not "Monthly progress". Every nav tab is one or two
+   * words, and at 375px the long labels are the first to make the row scroll.
    */
   { to: '/monthly', label: 'Monthly', roles: ['owner', 'manager'] },
   { to: '/reports', label: 'Reports', roles: ['owner', 'manager'] },
@@ -240,21 +235,20 @@ const NAV: NavItem[] = [
    */
   { to: '/payroll', label: 'Payroll', roles: ['owner'] },
   /**
-   * ⚠️ owner-only — অ্যালার্টে হোস্টনেম, কর্মীর নাম আর ডিভাইসের অবস্থা
-   * একসাথে থাকে (§ ৪.৩)। ম্যানেজারকে ব্যাজটাও দেখানো হয় না।
+   * Careful: owner-only. Alerts contain hostnames, employee names and device state
+   * together (section 4.3). Managers are not even shown the badge.
    */
   { to: '/alerts', label: 'Alerts', roles: ['owner'], section: 'Oversight' },
-  // ⚠️ owner-only — `App.tsx`-এ রুটটাও শুধু owner-এর জন্যই বসে
-  // ⭐ ম্যানেজারও ঢোকেন *(১৫ আগস্ট)* — Staff · Categories · Policies &
-  //    holidays, এই তিনটে ট্যাব তাঁর। বাকিগুলো `SettingsPage` নিজেই
-  //    role দেখে সরিয়ে রাখে।
+  // Careful: owner-only; the route in `App.tsx` is also set up for the owner only.
+  // Managers get in too: Staff, Categories, Policies & holidays are their three
+  // tabs; `SettingsPage` itself hides the rest by looking at the role.
   /**
-   * ⭐ I06 — **তিনটে ভূমিকারই**, owner-only নয়: এটা ট্র্যাকিংয়ের পর্দা নয়,
-   *    নিজের অ্যাকাউন্টের 2FA সেটিং। owner-only করলে ম্যানেজারের অ্যাকাউন্ট
-   *    — যার হাতে সবার ডেটা — কোনোদিন 2FA পেত না।
+   * I06: all three roles, not owner-only. This is not a tracking screen but the
+   * 2FA setting for one's own account. Making it owner-only would mean a manager's
+   * account, which holds everyone's data, would never get 2FA.
    *
-   * ⚠️ ইচ্ছাকৃতভাবে **সবার শেষে**, সেটিংসের পরেও: এটা রোজকার কাজের পর্দা
-   *    নয়, বছরে দু-একবার খোলার জায়গা।
+   * Careful: deliberately last, even after Settings: it is not a daily screen, it is
+   * a place opened once or twice a year.
    */
   {
     to: '/security',
@@ -265,16 +259,17 @@ const NAV: NavItem[] = [
 ];
 
 /**
- * ⚠️ ভূমিকার নাম **সার্ভারের `role` মান নয়**, পর্দার লেখা। `employee` →
- *    "Staff", কারণ পুরো ড্যাশবোর্ডে মানুষগুলোকে Staff বলা হয় (অভিধান § ১)।
+ * Careful: the role names are screen text, not the server's `role` values.
+ * `employee` is shown as "Staff", because people are called Staff throughout the
+ * dashboard (glossary section 1).
  */
 /**
- * ঢাকার তারিখ ও ঘড়ি — `15 Aug 2026 · 18:40`।
+ * Dhaka date and time: `15 Aug 2026 · 18:40`.
  *
- * ⚠️ UTC+৬ যোগ করে ISO থেকে কাটা হয়, `toLocaleString` দিয়ে নয় — মেশিনের
- *    টাইমজোন বা লোকেল যাই হোক ফলটা এক থাকে।
- * ⚠️ সেকেন্ড নেই: প্রতি সেকেন্ডে বদলানো একটা সংখ্যা চোখ টানে, অথচ বোর্ড
- *    রিফ্রেশ হয় ৩০ সেকেন্ডে — ঘড়িটা তখন ডেটার চেয়ে তাজা দেখাত।
+ * Careful: it adds UTC+6 and cuts from the ISO string rather than using
+ * `toLocaleString`, so the result is the same whatever the machine's timezone or locale.
+ * Careful: no seconds: a number changing every second draws the eye, yet the
+ * board refreshes every 30 seconds, so the clock would look fresher than the data.
  */
 function dhakaStamp(): string {
   const d = new Date(Date.now() + workOffsetMs());
@@ -284,11 +279,11 @@ function dhakaStamp(): string {
 }
 
 /**
- * ⚠️⚠️ `Record<Role, ...>` — `Record<string, ...>` **নয়**, আর এই বদলটাই
- * এখানে আসল কাজ। আগে `string` লেখা ছিল, তাই ২৫ আগস্ট `researcher` রোল
- * যোগ করার সময় কম্পাইলার কিছুই বলেনি — পর্দার কোণে নামটা নীরবে
- * `researcher` (ছোট হাতের, কাঁচা মান) হয়ে ফুটত।
- * ⭐ এখন enum বাড়লে এখানেই এরর হবে।
+ * Careful: `Record<Role, ...>`, not `Record<string, ...>`; this change is the real
+ * work here. It used to be `string`, so when the `researcher` role was added the
+ * compiler said nothing, and the name silently showed in the screen corner as
+ * `researcher` (lowercase, the raw value). Now when the enum grows, the error
+ * appears right here.
  */
 const ROLE_LABEL: Record<Role, string> = {
   owner: 'Owner',
@@ -302,12 +297,12 @@ export function Layout() {
   const { features } = useFeatures();
   const { pathname } = useLocation();
   /**
-   * ⭐ না-দেখা অ্যালার্টের সংখ্যা — নেভের ব্যাজের জন্য।
+   * Count of unseen alerts, for the nav badge.
    *
-   * ⚠️ owner ছাড়া কেউ ডাকে না (`listAlerts` owner-only), নইলে ম্যানেজারের
-   *    ব্রাউজার প্রতি দু-মিনিটে একটা করে ৪০৩ কুড়াত।
-   * ⚠️ ব্যর্থ হলে `undefined` — ০ নয়। সংখ্যাটা না জানলে নেভ চুপ থাকে,
-   *    "কোনো অ্যালার্ট নেই" বলে না।
+   * Careful: only the owner calls it (`listAlerts` is owner-only); otherwise a
+   * manager's browser would collect a 403 every two minutes.
+   * Careful: on failure it is `undefined`, not 0. When the number is unknown the nav
+   * stays quiet; it does not say "no alerts".
    */
   const alerts = usePolling(
     (signal) =>

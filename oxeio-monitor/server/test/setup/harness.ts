@@ -19,7 +19,7 @@ export const OWNER_PASSWORD = 'owner-password-123';
 export const MANAGER_EMAIL = 'manager@test.local';
 export const MANAGER_PASSWORD = 'manager-password-123';
 
-/** supertest-এর cookie-জার সহ agent */
+/** supertest agent with a cookie jar */
 export type HttpAgent = ReturnType<typeof request.agent>;
 
 export interface Harness {
@@ -43,7 +43,7 @@ export async function createHarness(): Promise<Harness> {
   return {
     app,
     prisma,
-    // agent() cookie জারে রাখে — লগইনের পর পরের রিকোয়েস্টে নিজেই পাঠায়
+    // agent() keeps cookies in a jar, so it sends them on later requests after login
     http: () => request.agent(app.getHttpServer()),
     close: async () => {
       await app.close();
@@ -52,32 +52,32 @@ export async function createHarness(): Promise<Harness> {
 }
 
 /**
- * প্রতিটি টেস্টের আগে ডাটাবেস পরিষ্কার করে ন্যূনতম fixture বসায়।
- * টেবিলগুলো নির্ভরতার ক্রমে TRUNCATE হয় (CASCADE দিয়ে একবারেই)।
+ * Before each test, cleans the database and inserts the minimal fixtures.
+ * Tables are TRUNCATEd in one statement (with CASCADE).
  */
 export async function resetDatabase(
   prisma: PrismaClient,
   app?: INestApplication,
 ): Promise<void> {
   /**
-   * ⚠️⚠️ **R21-এর তিনটে টেবিল এখানে ছিল না, আর ব্যর্থতাটা আসত সম্পূর্ণ
-   * অন্য জায়গা থেকে।** deposit_policy-তে employees-এর কোনো FK নেই, তাই
-   * CASCADE-এও সেটা বেঁচে যেত — এক টেস্টের বসানো নিয়ম পরের টেস্টে রয়ে
-   * যেত, ensureLedger আবার খাতা ভরত, আর ফল হতো order-নির্ভর ব্যর্থতা:
-   * একই কোডে একবার ১২টা পাস, পরেরবার ৪টা।
+   * Careful: three tables from R21 used to be missing here, and the failure
+   * showed up somewhere completely different. deposit_policy has no FK to
+   * employees, so it survived CASCADE: a rule set by one test stayed for the
+   * next, ensureLedger filled the ledger again, and the result was an
+   * order-dependent failure (12 passing in one run, 4 in the next, same code).
    *
-   * ⭐ নতুন টেবিল যোগ করলে এই তালিকাতেও বসাতে হয়। ভুলে গেলে ধরা পড়ে
-   * অনেক দূরে, অন্য কারো টেস্টে — আর কারণটা খুঁজে পাওয়া কঠিন।
+   * When you add a new table, add it to this list too. If you forget, the
+   * failure shows up far away, in someone else's test, and the cause is hard
+   * to find.
    *
-   * ⚠️⚠️ **যেসব টেবিলে employees-এর FK নেই, সেগুলোই আসল ঝুঁকি** —
-   * CASCADE ওদের ছোঁয় না, তাই তালিকা থেকে বাদ পড়লে ওরা টেস্টের পর
-   * টেস্ট বেঁচে থাকে। এখন পর্যন্ত এমন তিনটে: deposit_policy ·
-   * month_closures (একটা বন্ধ মাস পরের টেস্টে সম্পাদনা আটকে দিত) ·
-   * summary_dirty (⭐ ৬ সেপ্টেম্বর — ঠিক এই ফাঁদেই পা পড়েছিল: চাবিটা
-   * `work_date`, তাই এক টেস্টের চিহ্ন পরের টেস্টে রয়ে যেত আর গণনা
-   * মিলত না; ব্যর্থতাটা দেখাত যেন ingest ভুল দিন চিহ্নিত করছে)।
+   * Tables with no FK to employees are the real risk: CASCADE does not reach
+   * them, so if they are left out they survive test after test. There are
+   * three so far: deposit_policy, month_closures (a closed month would block
+   * edits in the next test) and summary_dirty (keyed by `work_date`, so one
+   * test's marker stayed for the next and counts did not match; the failure
+   * looked as if ingest was marking the wrong day).
    *
-   * মিলিয়ে দেখার উপায় — schema-র @@map-গুলোর সাথে এই তালিকা:
+   * To cross-check this list against the schema's @@map entries:
    *   grep -o '@@map("[a-z_]*")' prisma/schema.prisma
    */
   await prisma.$executeRawUnsafe(`
@@ -91,9 +91,9 @@ export async function resetDatabase(
     RESTART IDENTITY CASCADE
   `);
 
-  // ⚠️ `app_categories` TRUNCATE ... RESTART IDENTITY-তে id-ও রিসেট হয়।
-  //    ক্যাশে পুরোনো id বসে থাকলে পরের ingest foreign key ভাঙত — টেস্টে
-  //    সেটা '৫০০' হয়ে আসত, আর কারণ খোঁজা কঠিন হতো।
+  // `app_categories`: TRUNCATE ... RESTART IDENTITY also resets ids. If the
+  // cache keeps an old id, the next ingest breaks a foreign key (in tests this
+  // showed up as a 500) and the cause is hard to find.
   app?.get(AppCategoryService).invalidate();
   // the module switches are cached the same way; the row was just truncated
   app?.get(FeaturesService).forget();
@@ -144,11 +144,11 @@ export function hashPassword(plain: string): Promise<string> {
 
 export interface Session {
   http: HttpAgent;
-  /** double-submit CSRF টোকেন — প্রতিটি state-বদলানো রিকোয়েস্টে হেডারে লাগে */
+  /** double-submit CSRF token; goes in the header of every state-changing request */
   csrf: string;
 }
 
-/** cookie হেডার থেকে একটা নির্দিষ্ট cookie-র মান তুলে আনে */
+/** Extracts the value of one named cookie from the Set-Cookie headers */
 export function readCookie(
   setCookie: string[] | undefined,
   name: string,
@@ -177,7 +177,7 @@ export async function login(
   return { http, csrf };
 }
 
-/** পাসওয়ার্ড বদলে `mustChangePw` ছাড়িয়ে সম্পূর্ণ ব্যবহারযোগ্য সেশন */
+/** Logs in and changes the password to clear `mustChangePw`, giving a fully usable session */
 export async function loginReady(
   harness: Harness,
   email: string,
@@ -275,28 +275,29 @@ export const iso = (d: Date): string => d.toISOString();
 export const minutesAgo = (n: number): Date => new Date(Date.now() - n * 60_000);
 
 /**
- * আজকের **ঢাকা-দিনের ভেতরে** থাকা একটা সাম্প্রতিক জানালা।
+ * A recent window that stays inside today's Dhaka day.
  *
- * ⚠️ `minutesAgo(30)` দিয়ে টেস্ট লেখা যায় না, কারণ ঢাকার মধ্যরাতের পরপর
- * "৩০ মিনিট আগে" মানে **গতকাল**। তখন তিনটে টেস্ট ভাঙত, আর কারণটা কোডে
- * নয় — ঘড়িতে:
+ * Tests cannot be written with `minutesAgo(30)`: just after Dhaka midnight,
+ * "30 minutes ago" means yesterday. Three tests used to break, and the cause
+ * was the clock, not the code:
  *
- * - আজকের হিসাব ০ আসত (সেগমেন্টটা গতকালের)
- * - সেশন `logoff` নয়, `day_rollover` হয়ে বন্ধ হতো
- * - সেগমেন্ট মধ্যরাতে **দু-ভাগ** হতো, আর `findFirstOrThrow` প্রথম ভাগটা
- *   ফেরত দিত — যার শেষ ঠিক ০০:০০
+ * - today's total came out 0 (the segment belonged to yesterday)
+ * - the session closed with `day_rollover` instead of `logoff`
+ * - the segment was split in two at midnight, and `findFirstOrThrow` returned
+ *   the first half, which ends at exactly 00:00
  *
- * রোজ রাত ১২টার পর আধঘণ্টা CI লাল থাকা মানে আসল ভাঙন আর ঘড়ির ভাঙন আলাদা
- * করা যেত না। তাই জানালাটা মধ্যরাতে **ছেঁটে** দেওয়া হয়, আর টেস্ট
- * হার্ডকোড করা ৬০০ নয়, ফেরত আসা `durationSec`-ই মেলায়।
+ * With CI red for half an hour after midnight every day, a real breakage could
+ * not be told apart from a clock breakage. So the window is clipped at
+ * midnight, and tests compare the returned `durationSec` instead of a
+ * hardcoded 600.
  */
 export function todayWindow(seconds: number): {
   startedAt: Date;
   endedAt: Date;
   durationSec: number;
 } {
-  // ১ সেকেন্ড মার্জিন — endedAt "এখন"-এর ঠিক পরে হয়ে গেলে সার্ভার
-  // ভবিষ্যতের টাইমস্ট্যাম্প দেখত
+  // 1 second margin: if endedAt ended up just after "now", the server would
+  // see a future timestamp
   const endedAt = new Date(Date.now() - 1_000);
   const dhakaMidnight = workDateOf(endedAt).getTime() - DHAKA_OFFSET_MIN * 60_000;
 
@@ -311,23 +312,23 @@ export function todayWindow(seconds: number): {
   };
 }
 
-// ── G140 · টেস্টের ঘড়ি ────────────────────────────────────────────────────
+// ── Test clock ─────────────────────────────────────────────────────────────
 //
-// ⭐ সংজ্ঞাগুলো `./clock`-এ, এখানে নয় — খাঁটি-ফাংশনের স্পেকগুলো হারনেস
-//    import করতে পারে না (ওটা গোটা Nest অ্যাপ ও Postgres তোলে), অথচ
-//    ঘড়ির নিয়ম দুই জাতের স্পেকেই এক থাকা দরকার। ⚠️ এখানে আবার লিখলে
-//    দুটো সংজ্ঞা দাঁড়াত, আর একদিন একটা বদলাত।
+// The definitions live in `./clock`, not here: pure-function specs cannot
+// import the harness (it boots the whole Nest app and Postgres), yet the clock
+// rule must be the same for both kinds of spec. Writing it here again would
+// give two definitions, and one day one of them would change.
 export { dhakaNoon, dhakaTodayIso, realNow } from './clock';
 
 /**
- * ইমেইল ও কর্মী-কোডে বসানোর জন্য একটা **অনন্য** টুকরো।
+ * A unique piece to put in emails and employee codes.
  *
- * ⚠️ আগে এখানে `Date.now()` ব্যবহার হতো, আর সেটা নিরীহ **ছিল** — কিন্তু
- * ওই নামটা ফাইলে থাকলে G140-এর নিষেধটা আর ছাঁকা যেত না, আর "কোনটা নিরীহ
- * কোনটা নয়" প্রতিবার হাতে বিচার করতে হতো। ⭐ তাই অনন্যতার জন্য ঘড়ি
- * ছোঁয়াই বন্ধ — কাউন্টার + র‍্যান্ডম যথেষ্ট, আর সেটা **একই মিলিসেকেন্ডে
- * চালানো দুটো টেস্টেও** আলাদা (`Date.now()` তখন একই মান দিত, যেটা নিজেই
- * একটা বিরল ফ্লেক ছিল)।
+ * `Date.now()` used to be used here, and it was harmless, but having that name
+ * in the file meant the ban on the real clock could no longer be enforced by
+ * grep, and "which use is harmless" had to be judged by hand each time. So
+ * uniqueness no longer touches the clock: a counter plus random bytes is
+ * enough, and it stays unique even for two tests run in the same millisecond
+ * (`Date.now()` would give the same value then, which was itself a rare flake).
  */
 let uniqueCounter = 0;
 export function uniqueSuffix(): string {

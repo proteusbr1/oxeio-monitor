@@ -6,12 +6,12 @@ using oXeio.Core.Agent;
 namespace oXeio.Agent.Ui;
 
 /// <summary>
-/// "About" — সংস্করণ, ডিভাইস আইডি, সার্ভার।
+/// "About": version, device id, server.
 ///
-/// সাথে একটা ছোট তালিকা: এই এজেন্ট যা <b>করে না</b>। ওটা সাজসজ্জা নয় — লিখিত
-/// মনিটরিং পলিসিতে যা প্রতিশ্রুতি দেওয়া আছে, সেটা স্টাফের নিজের মেশিনে দুই
-/// ক্লিকে যাচাই করার জায়গা। এই জানালার তালিকা আর পলিসি ডকুমেন্ট আলাদা হয়ে
-/// গেলে বুঝতে হবে কোথাও একটা প্রতিশ্রুতি ভাঙা হয়েছে।
+/// Plus a short list of what this agent <b>does not</b> do. That is not decoration: it is
+/// a place where staff can verify, on their own machine in two clicks, what the written
+/// monitoring policy promises. If this window's list and the policy document ever drift
+/// apart, a promise has been broken somewhere.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class AboutForm : OwnerDrawnForm
@@ -25,10 +25,10 @@ internal sealed class AboutForm : OwnerDrawnForm
     }
 
     /// <summary>
-    /// এনরোলমেন্টের পর ডিভাইস আইডি বসলে নতুন করে আঁকা। UI থ্রেড থেকে।
+    /// Redraws once the device id is set after enrollment. Called from the UI thread.
     ///
-    /// ⚠️ নাম <c>Refresh</c> রাখা যায় না — <c>Control.Refresh()</c> ইতিমধ্যেই
-    /// আছে। ঢেকে দিলে বেস-ক্লাসের রেফারেন্স দিয়ে ডাকলে অন্য কোড চলত।
+    /// Careful: it cannot be named <c>Refresh</c>; <c>Control.Refresh()</c> already exists.
+    /// If we hid it, calling through a base-class reference would run different code.
     /// </summary>
     public void RedrawContent()
     {
@@ -58,8 +58,8 @@ internal sealed class AboutForm : OwnerDrawnForm
 
         stack.Gap(4);
 
-        // ⚠️ URL পুরোটা এক লাইনে না ধরলে TextStack নিজেই ভেঙে দুই লাইনে নেয় —
-        //    তাই Pair নয়, Line। Pair-এ ডান অর্ধেকে আটকে গেলে পড়া যেত না।
+        // Careful: if the URL is not given on one line, TextStack breaks it into two lines by
+        // itself, so Line and not Pair. With Pair, being stuck in the right half made it unreadable.
         stack.Line("Server", TrayFontRole.Small, Muted);
         stack.Line(options.ServerUrl);
 
@@ -104,7 +104,7 @@ internal sealed class AboutForm : OwnerDrawnForm
             $"{from.Value.ToString(@"HH\:mm", CultureInfo.InvariantCulture)}–" +
             $"{to.Value.ToString(@"HH\:mm", CultureInfo.InvariantCulture)}";
 
-        // সময় গোনা ২৪ ঘণ্টাই — এই পার্থক্যটা না লিখলে স্টাফ ভাবে রাতের কাজ গোনা হয় না
+        // Time is counted 24 hours a day; without saying this staff think night work is not counted
         return $"Screenshots are taken only between {window} (time is still counted 24 hours a day)";
     }
 }

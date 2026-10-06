@@ -19,46 +19,46 @@ import {
   type WorkdayRule,
 } from '../src/reports/reports.range';
 
-/** ঢাকার ১১ আগস্ট ২০২৬, দুপুর — "আজ" হিসেবে ব্যবহার */
+/** 11 August 2026 in Dhaka, noon: used as "today" */
 const NOW = new Date('2026-08-11T06:00:00.000Z');
 
-/** শুক্রবার ছুটি, কোনো সরকারি ছুটি নেই */
+/** Friday is the day off, no public holidays */
 const FRIDAY_OFF: WorkdayRule = { weeklyOffDays: [5], holidays: new Set() };
 
 const day = (iso: string): Date => parseWorkDate(iso);
 
-describe('তারিখ পার্স', () => {
-  it('YYYY-MM-DD থেকে UTC-midnight বানায় — Prisma @db.Date-এর সাথে মেলে', () => {
+describe('date parsing', () => {
+  it('builds UTC midnight from YYYY-MM-DD, matching Prisma @db.Date', () => {
     const d = parseWorkDate('2026-08-11');
     expect(d.toISOString()).toBe('2026-08-11T00:00:00.000Z');
     expect(toIsoDate(d)).toBe('2026-08-11');
   });
 
   /**
-   * ⭐ সবচেয়ে দরকারি টেস্ট। `Date.UTC(2026, 1, 30)` কোনো এরর দেয় না —
-   * চুপচাপ ২ মার্চ বানিয়ে দেয়। তখন "ফেব্রুয়ারির রিপোর্ট" মার্চের ডেটা
-   * নিয়ে আসত, আর কেউ ধরতেই পারত না।
+   * The most useful test. `Date.UTC(2026, 1, 30)` raises no error: it quietly
+   * makes 2 March. A "February report" would then bring March data and nobody
+   * could catch it.
    */
-  it('ক্যালেন্ডারে নেই এমন তারিখ পরের মাসে গড়িয়ে না গিয়ে নাকচ হয়', () => {
+  it('a date not in the calendar is rejected instead of rolling into the next month', () => {
     expect(() => parseWorkDate('2026-02-30')).toThrow(RangeError);
     expect(() => parseWorkDate('2026-13-01')).toThrow(RangeError);
     expect(() => parseWorkDate('2026-00-10')).toThrow(RangeError);
   });
 
-  it('লিপ ইয়ারের ২৯ ফেব্রুয়ারি চলে, সাধারণ বছরে চলে না', () => {
+  it('29 February works in a leap year and not in a normal year', () => {
     expect(toIsoDate(parseWorkDate('2028-02-29'))).toBe('2028-02-29');
     expect(() => parseWorkDate('2026-02-29')).toThrow(RangeError);
   });
 
-  it('আলগা ফরম্যাট নেওয়া হয় না', () => {
+  it('loose formats are not accepted', () => {
     expect(() => parseWorkDate('2026-8-1')).toThrow(RangeError);
     expect(() => parseWorkDate('11/08/2026')).toThrow(RangeError);
     expect(() => parseWorkDate('')).toThrow(RangeError);
   });
 });
 
-describe('রেঞ্জ যাচাই (F08)', () => {
-  it('স্বাভাবিক রেঞ্জ অক্ষত থাকে', () => {
+describe('range validation (F08)', () => {
+  it('a normal range stays intact', () => {
     const r = parseReportRange('2026-08-01', '2026-08-10', { now: NOW });
     expect(toIsoDate(r.from)).toBe('2026-08-01');
     expect(toIsoDate(r.to)).toBe('2026-08-10');
@@ -66,22 +66,22 @@ describe('রেঞ্জ যাচাই (F08)', () => {
     expect(r.clampedToToday).toBe(false);
   });
 
-  it('এক দিনের রেঞ্জও চলে (F01 — এক দিনের অ্যাটেনডেন্স)', () => {
+  it('a one-day range works too (F01: one-day attendance)', () => {
     const r = parseReportRange('2026-08-11', '2026-08-11', { now: NOW });
     expect(r.days).toBe(1);
   });
 
-  it('উল্টো রেঞ্জ নাকচ হয়', () => {
+  it('a reversed range is rejected', () => {
     expect(() =>
       parseReportRange('2026-08-10', '2026-08-01', { now: NOW }),
     ).toThrow(RangeError);
   });
 
   /**
-   * ⭐ সীমা না থাকলে `from=2000-01-01` চাইলে সার্ভার ১৫ জন × ৯৫০০ দিন সারি
-   * বানাতে বসত — মেমরি শেষ, আর পুরো ড্যাশবোর্ড বসে যেত।
+   * Without a limit, asking for `from=2000-01-01` would make the server build
+   * 15 people x 9500 days of rows: memory gone, and the whole dashboard down.
    */
-  it('৩৭০ দিনের বেশি চাইলে নাকচ হয়', () => {
+  it('more than 370 days is rejected', () => {
     expect(MAX_RANGE_DAYS).toBe(370);
 
     const ok = parseReportRange('2025-08-11', '2026-08-11', { now: NOW });
@@ -93,18 +93,19 @@ describe('রেঞ্জ যাচাই (F08)', () => {
   });
 
   /**
-   * ⭐ এই দুটো একসাথে না ধরলে সীমাটা কার্যত ফাঁকা হয়ে যেত: ছাঁটাই আগে করলে
-   * `2000-01-01 → 2999-12-31` ছেঁটে "আজ পর্যন্ত" হয়ে সীমার নিচে নেমে আসত
-   * না ঠিকই, কিন্তু `2026-08-01 → 2999-12-31` ঠিকই পাস করে যেত — অর্থাৎ
-   * ব্যবহারকারী এক প্রশ্ন করে অন্য প্রশ্নের উত্তর পেতেন।
+   * Unless both are caught together the limit would be effectively empty.
+   * If clamping came first, `2000-01-01 -> 2999-12-31` would be clamped to
+   * "until today" and still not fall under the limit, but
+   * `2026-08-01 -> 2999-12-31` would pass: the user would ask one question and
+   * get the answer to another.
    */
-  it('সীমা মাপা হয় চাওয়া রেঞ্জে, ছাঁটাইয়ের আগে', () => {
+  it('the limit is measured on the requested range, before clamping', () => {
     expect(() =>
       parseReportRange('2026-08-01', '2999-12-31', { now: NOW }),
     ).toThrow(RangeError);
   });
 
-  it('ভবিষ্যতের শেষ তারিখ আজ পর্যন্ত ছেঁটে যায়, আর সেটা জানিয়ে দেওয়া হয়', () => {
+  it('a future end date is clamped to today, and that is reported', () => {
     const r = parseReportRange('2026-08-01', '2026-08-31', { now: NOW });
 
     expect(toIsoDate(r.to)).toBe('2026-08-11');
@@ -113,17 +114,17 @@ describe('রেঞ্জ যাচাই (F08)', () => {
     expect(r.days).toBe(11);
   });
 
-  it('পুরো রেঞ্জ ভবিষ্যতে হলে নাকচ — শূন্য রিপোর্ট নয়', () => {
+  it('a range entirely in the future is rejected: not an empty report', () => {
     expect(() =>
       parseReportRange('2026-09-01', '2026-09-30', { now: NOW }),
     ).toThrow(RangeError);
   });
 
   /**
-   * ঢাকা UTC+৬। UTC-তে ১০ আগস্ট রাত ৯টা মানে ঢাকায় ১১ আগস্ট ভোর ৩টা —
-   * অর্থাৎ "আজ" ১১ তারিখ। নিজে অফসেট হিসাব লিখলে এখানেই এক দিন হারাত।
+   * Dhaka is UTC+6. 9pm UTC on 10 August is 3am on 11 August in Dhaka, so
+   * "today" is the 11th. Writing the offset arithmetic by hand would lose a day right here.
    */
-  it('"আজ" ঢাকার তারিখ ধরে, সার্ভারের UTC তারিখ ধরে নয়', () => {
+  it('"today" is the Dhaka date, not the server\'s UTC date', () => {
     const r = parseReportRange('2026-08-01', '2026-08-31', {
       now: new Date('2026-08-10T21:00:00.000Z'),
     });
@@ -131,19 +132,19 @@ describe('রেঞ্জ যাচাই (F08)', () => {
   });
 });
 
-describe('কর্মদিবস ও টার্গেট (§ ২.১-খ)', () => {
-  it('ISO দিন ঠিক আসে — শুক্রবার ৫', () => {
-    expect(isoDayOf(day('2026-08-10'))).toBe(1); // সোম
-    expect(isoDayOf(day('2026-08-14'))).toBe(5); // শুক্র
-    expect(isoDayOf(day('2026-08-16'))).toBe(7); // রবি
+describe('workdays and target (spec section 2.1b)', () => {
+  it('ISO day comes out right: Friday is 5', () => {
+    expect(isoDayOf(day('2026-08-10'))).toBe(1); // Monday
+    expect(isoDayOf(day('2026-08-14'))).toBe(5); // Friday
+    expect(isoDayOf(day('2026-08-16'))).toBe(7); // Sunday
   });
 
-  it('সাপ্তাহিক ছুটির দিন কর্মদিবস নয়', () => {
+  it('the weekly day off is not a workday', () => {
     expect(isWorkday(day('2026-08-13'), FRIDAY_OFF)).toBe(true);
     expect(isWorkday(day('2026-08-14'), FRIDAY_OFF)).toBe(false);
   });
 
-  it('ছুটির ক্যালেন্ডারের দিনও কর্মদিবস নয়', () => {
+  it('a day in the holiday calendar is not a workday either', () => {
     const rule: WorkdayRule = {
       weeklyOffDays: [5],
       holidays: new Set([day('2026-08-13').getTime()]),
@@ -151,19 +152,19 @@ describe('কর্মদিবস ও টার্গেট (§ ২.১-খ)', 
     expect(isWorkday(day('2026-08-13'), rule)).toBe(false);
   });
 
-  it('weeklyOffDay = null হলে প্রতিটি ক্যালেন্ডার দিনই কর্মদিবস', () => {
+  it('with no weekly day off, every calendar day is a workday', () => {
     const rule: WorkdayRule = { weeklyOffDays: [], holidays: new Set() };
     expect(countWorkdays(day('2026-08-01'), day('2026-08-31'), rule)).toBe(31);
   });
 
-  it('আগস্ট ২০২৬-এ শুক্রবার বাদে ২৭ কর্মদিবস', () => {
-    // ৩১ দিনের মাস, শুক্রবার ৭/১৪/২১/২৮ — চারটি
+  it('August 2026 has 27 workdays excluding Fridays', () => {
+    // a 31-day month, with four Fridays: 7/14/21/28
     expect(
       countWorkdays(day('2026-08-01'), day('2026-08-31'), FRIDAY_OFF),
     ).toBe(27);
   });
 
-  it('মোট টার্গেট ভাগ করে আবার যোগ করলে ২০৮ ঘণ্টাই ফিরে আসে', () => {
+  it('splitting the total target and adding it back gives exactly 208 hours', () => {
     const monthly = 208 * 3600;
     const workdays = countWorkdays(
       day('2026-08-01'),
@@ -176,11 +177,12 @@ describe('কর্মদিবস ও টার্গেট (§ ২.১-খ)', 
   });
 
   /**
-   * ⭐ প্রতিদিনের টার্গেট round করলে এই যোগফলটাই মেলে না। ২২ কর্মদিবসের
-   * মাসে ৭৪৮৮০০ ÷ ২২ = ৩৪০৩৬.৩৬…; round করে ২২ বার যোগ করলে ২০৭.৯৯ বা
-   * ২০৮.০১ দাঁড়াত — কেউ ঠিক টার্গেট ছুঁয়েও কাগজে ঘাটতি দেখতেন।
+   * Rounding the daily target would make this sum not match. In a 22-workday
+   * month, 748800 / 22 = 34036.36...; rounding and adding 22 times would give
+   * 207.99 or 208.01, and someone who hit the target exactly would see a
+   * shortfall on paper.
    */
-  it('ভাগ না যাওয়া কর্মদিবসেও যোগফল টার্গেট ছাড়িয়ে যায় না', () => {
+  it('even with uneven workday counts the sum does not go past the target', () => {
     const monthly = 208 * 3600;
 
     for (const workdays of [20, 21, 22, 23, 24, 25, 26, 27, 30]) {
@@ -192,52 +194,52 @@ describe('কর্মদিবস ও টার্গেট (§ ২.১-খ)', 
     }
   });
 
-  it('কর্মদিবস শূন্য হলে টার্গেট ০, Infinity নয়', () => {
+  it('zero workdays gives target 0, not Infinity', () => {
     expect(dailyTargetSec(208 * 3600, 0)).toBe(0);
   });
 
-  it('ঋণাত্মক মাসিক টার্গেট নাকচ হয়', () => {
+  it('a negative monthly target is rejected', () => {
     expect(() => dailyTargetSec(-1, 26)).toThrow(RangeError);
   });
 });
 
-describe('মাস ও বালতি', () => {
-  it('রেঞ্জের প্রতিটি মাসের পুরো সীমা ফেরে — অর্ধেক মাসেরও', () => {
+describe('months and buckets', () => {
+  it('each month in the range returns its full bounds, even a half month', () => {
     const months = monthsIn(day('2026-08-10'), day('2026-09-05'));
 
     expect(months.map((m) => m.key)).toEqual(['2026-08', '2026-09']);
-    // ⭐ ১০ আগস্ট থেকে চাইলেও হর হবে **পুরো** আগস্টের কর্মদিবস
+    // even when asked from 10 August, the denominator is the workdays of the WHOLE of August
     expect(toIsoDate(months[0].first)).toBe('2026-08-01');
     expect(toIsoDate(months[0].last)).toBe('2026-08-31');
     expect(toIsoDate(months[1].last)).toBe('2026-09-30');
   });
 
-  it('লিপ ইয়ারের ফেব্রুয়ারি ২৯ দিনে শেষ হয়', () => {
+  it('February of a leap year ends on the 29th', () => {
     const [feb] = monthsIn(day('2028-02-05'), day('2028-02-06'));
     expect(toIsoDate(feb.last)).toBe('2028-02-29');
   });
 
   /**
-   * ⭐ সপ্তাহ সোমবারে শুরু ধরলে বাংলাদেশের প্রতিটি কর্মসপ্তাহ (শনি–বৃহস্পতি)
-   * দুই বালতিতে ভাগ হয়ে যেত, আর সাপ্তাহিক সারাংশে কেউ কখনো পুরো সপ্তাহ
-   * দেখত না।
+   * If weeks started on Monday, every Bangladeshi working week (Saturday to
+   * Thursday) would be split across two buckets, and the weekly summary would
+   * never show anyone a whole week.
    */
-  it('সপ্তাহ শুরু হয় সাপ্তাহিক ছুটির পরের দিনে', () => {
-    expect(weekStartIsoDay([5])).toBe(6); // শুক্র ছুটি → শনিবার শুরু
-    expect(weekStartIsoDay([7])).toBe(1); // রবি ছুটি → সোমবার শুরু
+  it('the week starts the day after the weekly day off', () => {
+    expect(weekStartIsoDay([5])).toBe(6); // Friday off: starts on Saturday
+    expect(weekStartIsoDay([7])).toBe(1); // Sunday off: starts on Monday
     expect(weekStartIsoDay([])).toBe(1);
   });
 
-  it('সপ্তাহের বালতি শনিবার শুরু হয়ে শুক্রবারে শেষ', () => {
+  it('a week bucket starts on Saturday and ends on Friday', () => {
     const b = bucketOf(day('2026-08-11'), 'week', weekStartIsoDay([5]));
 
-    expect(b.key).toBe('2026-08-08'); // শনিবার
+    expect(b.key).toBe('2026-08-08'); // Saturday
     expect(toIsoDate(b.start)).toBe('2026-08-08');
-    expect(toIsoDate(b.end)).toBe('2026-08-14'); // শুক্রবার
+    expect(toIsoDate(b.end)).toBe('2026-08-14'); // Friday
     expect(isoDayOf(b.end)).toBe(5);
   });
 
-  it('একই সপ্তাহের সব দিন একই চাবিতে পড়ে, পরের দিনটি নতুন চাবিতে', () => {
+  it('every day of the same week falls on the same key, the next day on a new key', () => {
     const start = weekStartIsoDay([5]);
     for (const iso of ['2026-08-08', '2026-08-11', '2026-08-14']) {
       expect(bucketOf(day(iso), 'week', start).key).toBe('2026-08-08');
@@ -245,27 +247,27 @@ describe('মাস ও বালতি', () => {
     expect(bucketOf(day('2026-08-15'), 'week', start).key).toBe('2026-08-15');
   });
 
-  it('মাসের বালতি YYYY-MM — monthly_summary-র চাবির সাথে এক ফরম্যাট', () => {
+  it('the month bucket is YYYY-MM: the same format as the monthly_summary key', () => {
     const b = bucketOf(day('2026-08-11'), 'month', 6);
     expect(b.key).toBe('2026-08');
     expect(toIsoDate(b.start)).toBe('2026-08-01');
     expect(toIsoDate(b.end)).toBe('2026-08-31');
   });
 
-  it('সপ্তাহের বালতি মাস পেরিয়ে গেলেও অটুট থাকে', () => {
+  it('a week bucket stays intact across a month boundary', () => {
     const b = bucketOf(day('2026-09-01'), 'week', weekStartIsoDay([5]));
     expect(b.key).toBe('2026-08-29');
     expect(toIsoDate(b.end)).toBe('2026-09-04');
   });
 });
 
-describe('দিন গোনা ও উপস্থাপনা', () => {
-  it('দুই প্রান্তসহ দিন গোনা হয়', () => {
+describe('counting days and presentation', () => {
+  it('days are counted inclusive of both ends', () => {
     expect(daysInclusive(day('2026-08-01'), day('2026-08-01'))).toBe(1);
     expect(daysInclusive(day('2026-08-01'), day('2026-08-31'))).toBe(31);
   });
 
-  it('eachDate কোনো দিন বাদ দেয় না, ক্রমও ঠিক রাখে', () => {
+  it('eachDate drops no day and keeps the order right', () => {
     const dates = eachDate(day('2026-08-01'), day('2026-08-31'));
     expect(dates).toHaveLength(31);
     expect(toIsoDate(dates[0])).toBe('2026-08-01');
@@ -273,17 +275,17 @@ describe('দিন গোনা ও উপস্থাপনা', () => {
   });
 
   /**
-   * ⭐ ঘণ্টা **সংখ্যা** হিসেবেই ফেরে — "৭ঘ ৩২মি" নয়। Excel-এ টেক্সট হলে
-   * কলামের যোগফল বা sort কিছুই কাজ করত না।
+   * Hours come back as a number, not "7h 32m". As text in Excel, column sums
+   * and sorting would not work.
    */
-  it('সেকেন্ড → ঘণ্টা: সংখ্যা, দুই দশমিক', () => {
+  it('seconds to hours: a number, two decimals', () => {
     expect(secondsToHours(3600)).toBe(1);
-    expect(secondsToHours(27120)).toBe(7.53); // ৭ঘ ৩২মি
+    expect(secondsToHours(27120)).toBe(7.53); // 7h 32m
     expect(secondsToHours(0)).toBe(0);
     expect(typeof secondsToHours(27120)).toBe('number');
   });
 
-  it('শতাংশে হর শূন্য হলে NaN নয়, ০', () => {
+  it('percentage with a zero denominator gives 0, not NaN', () => {
     expect(sharePct(0, 0)).toBe(0);
     expect(sharePct(1, 4)).toBe(25);
     expect(sharePct(1, 3)).toBe(33.33);

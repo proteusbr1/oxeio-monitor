@@ -17,13 +17,14 @@ import {
 } from './setup/harness';
 
 /**
- * **MSI নামানো — হাতে বসানোর জন্য** *(১৮ আগস্ট)*।
+ * Downloading the MSI, for manual installation.
  *
- * ⚠️⚠️ কেন দরকার হলো: ০.৪.১-এর **আগের** এজেন্টে tray-তে "Install update"
- * মেনুটাই নেই। ফ্লিটের ১১টা PC ০.৩.৭/০.৩.৮-এ, তাই সার্ভার অফার পাঠালেও
- * ওখানে কিছুই দেখা যায় না — একবার হাতে বসাতেই হবে। অথচ MSI-টা **হাতে
- * পাওয়ার কোনো পথই ছিল না**: `/agent/update/download` শুধু ডিভাইস-টোকেনে
- * খোলে, আর owner-এর কাছে টোকেন থাকে না।
+ * Why it was needed: agents from before 0.4.1 have no "Install update" tray
+ * menu at all. The 11 PCs in the fleet are on 0.3.7/0.3.8, so even when the
+ * server sends an offer nothing shows there, and it has to be installed by
+ * hand once. Yet there was no way to get the MSI by hand:
+ * `/agent/update/download` opens only with a device token, and the owner has
+ * no token.
  */
 let h: Harness;
 let owner: Session;
@@ -32,7 +33,7 @@ const CONTENT = Buffer.from('not-a-real-msi-but-bytes-are-bytes');
 const SHA = createHash('sha256').update(CONTENT).digest('hex');
 
 async function publishVersion(version: string, relPath: string) {
-  // ⚠️ ফাইলটা সত্যিই ডিস্কে থাকতে হবে — publish নিজেই hash মিলিয়ে দেখে
+  // The file must really exist on disk: publish itself checks the hash
   const root = process.env.STORAGE_ROOT!;
   await mkdir(join(root, 'updates'), { recursive: true });
   await writeFile(join(root, relPath), CONTENT);
@@ -58,14 +59,14 @@ beforeEach(async () => {
 });
 
 describe('GET /agent-versions/:version/download', () => {
-  it('owner MSI নামাতে পারেন, আর বাইটগুলো অবিকল', async () => {
+  it('the owner can download the MSI, and the bytes are identical', async () => {
     await publishVersion('9.9.9', 'updates/oXeioAgent-9.9.9.msi');
 
     const res = await owner.http
       .get('/api/v1/agent-versions/9.9.9/download')
-      // ⚠️ `responseType('blob')` ছাড়া superagent অচেনা content-type-এর
-      //    বডি বাফারই করে না — `res.body` খালি অবজেক্ট হয়ে আসত, আর
-      //    টেস্টটা ভুল কারণে ফেল করত।
+      // Without `responseType('blob')`, superagent does not even buffer a body
+      // of an unknown content type: `res.body` would come back as an empty
+      // object, and the test would fail for the wrong reason.
       .responseType('blob')
       .expect(200);
 
@@ -73,8 +74,8 @@ describe('GET /agent-versions/:version/download', () => {
     expect(res.headers['content-disposition']).toContain('oXeioAgent-9.9.9.msi');
   });
 
-  /** ⭐ ইনস্টলার হাতে হাতে ঘোরার আগে "কে কোনটা নামাল" জানা দরকার */
-  it('নামানোটা audit_log-এ ওঠে', async () => {
+  /** Before installers circulate by hand, we need to know who downloaded which */
+  it('the download is recorded in audit_log', async () => {
     await publishVersion('9.9.9', 'updates/oXeioAgent-9.9.9.msi');
     await owner.http.get('/api/v1/agent-versions/9.9.9/download').expect(200);
 
@@ -85,28 +86,28 @@ describe('GET /agent-versions/:version/download', () => {
   });
 
   /**
-   * ⚠️ ম্যানেজারও নয় — গোটা কন্ট্রোলারই owner-only। ১৫টা PC-তে কী
-   * সফটওয়্যার চলবে সেটা মালিকের সিদ্ধান্ত, আর ইনস্টলার বিলি করাটাও
-   * ওই সিদ্ধান্তেরই অংশ।
+   * Not even the manager: the whole controller is owner-only. What software
+   * runs on the 15 PCs is the owner's decision, and handing out the installer
+   * is part of that decision.
    */
-  it('ম্যানেজার পারেন না', async () => {
+  it('a manager cannot', async () => {
     await publishVersion('9.9.9', 'updates/oXeioAgent-9.9.9.msi');
 
     const manager = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
     await manager.http.get('/api/v1/agent-versions/9.9.9/download').expect(403);
   });
 
-  it('অচেনা ভার্সনে ৪০৪', async () => {
+  it('404 for an unknown version', async () => {
     await owner.http.get('/api/v1/agent-versions/1.2.3/download').expect(404);
   });
 
   /**
-   * ⚠️⚠️ ফাইলটা storage-এর **ভেতরেই** থাকতে হবে। এই পাহারাটা
-   * `UpdateService.openMsi()`-তে বসানো, আর সেটাই এখানে পুনর্ব্যবহার করা
-   * হয়েছে — নিজে path জোড়া লাগালে পাহারাটা দুই জায়গায় থাকত, আর একদিন
-   * একটায় ঠিক হতো অন্যটায় নয়।
+   * Important: the file must be inside the storage root. This guard sits in
+   * `UpdateService.openMsi()` and is reused here; joining the path ourselves
+   * would put the guard in two places, and one day one would be fixed and
+   * not the other.
    */
-  it('storage-এর বাইরের পাথ ধরা পড়ে', async () => {
+  it('a path outside storage is caught', async () => {
     await h.prisma.agentVersion.create({
       data: {
         version: '9.9.8',

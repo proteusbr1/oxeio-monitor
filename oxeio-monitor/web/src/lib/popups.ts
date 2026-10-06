@@ -1,23 +1,23 @@
 /**
- * **একসাথে অনেকগুলো লিঙ্ক নতুন ট্যাবে** *(২৯ আগস্ট ২০২৬, মালিকের চাওয়া:
- * "30 design gula ek sathe open korar ekta button")*।
+ * Open many links in new tabs at once (the owner's request: a button to open all
+ * 30 designs together).
  *
- * ⚠️⚠️ **ব্রাউজার দ্বিতীয় ট্যাব থেকেই বাধা দেয়, আর এটাই এই ফাইলের গোটা
- * কারণ।** এক চাপে একাধিক `window.open()` মানে ব্রাউজারের চোখে পপ-আপ:
- * Chrome প্রথমটা খোলে, বাকি ২৯টা আটকায় আর ঠিকানা-বারে ছোট একটা আইকন
- * বসিয়ে চুপ করে থাকে। ⭐ তাই "খুলে দিলাম" বলে কাজ শেষ করা যায় না —
- * **কতগুলো সত্যিই খুলল** সেটা গুনতে হয়, নইলে ডিজাইনার একটা ট্যাব দেখে
- * ভাবতেন বোতামটা ভাঙা, আর বাকি ২৯টা কোথায় গেল কেউ বলত না।
+ * Careful: the browser blocks from the second tab on, and that is the whole
+ * reason for this file. Several `window.open()` calls in one press count as a
+ * pop-up to the browser: Chrome opens the first, blocks the other 29, and quietly
+ * puts a small icon in the address bar. So "I opened them" cannot end the job: it
+ * must count how many really opened. Otherwise a designer who sees one tab would
+ * think the button is broken, and nobody would say where the other 29 went.
  *
- * ⚠️ **`'noopener'` ইচ্ছাকৃতভাবে বাদ, তার বদলে হাতে `opener = null`।**
- * `window.open(url, '_blank', 'noopener')` দিলে নিরাপত্তা একই থাকত,
- * কিন্তু তখন ফেরত মান **সবসময় `null`** — অর্থাৎ আটকানো আর খোলা ট্যাব
- * আলাদা করার উপায়ই থাকত না, আর উপরের গোনাটাই অসম্ভব হতো।
+ * Careful: `'noopener'` is deliberately left out; `opener = null` is set by hand
+ * instead. With `window.open(url, '_blank', 'noopener')` the security would be the
+ * same, but the return value would then always be `null`, so there would be no way
+ * to tell a blocked tab from an opened one, and the count above would be impossible.
  */
 
 /**
- * ⚠️ `Window` নয়, শুধু যেটুকু দরকার — তাতে টেস্টে jsdom ছাড়াই নকল
- * ট্যাব বানানো যায় (`vitest.config.ts`-এ `environment: 'node'`)।
+ * Careful: not `Window`, only what is needed, so tests can build a fake tab
+ * without jsdom (`environment: 'node'` in `vitest.config.ts`).
  */
 export interface OpenedTab {
   opener: unknown;
@@ -31,12 +31,12 @@ export interface OpenTabsResult {
 }
 
 /**
- * ⭐ প্রতিটা URL আলাদা ট্যাবে, আর ফেরত আসে **কী ঘটল** — কতগুলো খুলল,
- * কতগুলো ব্রাউজার আটকাল।
+ * Each URL in its own tab, and it returns what happened: how many opened, how
+ * many the browser blocked.
  *
- * ⚠️ আটকে গেলেও লুপ থামে না। Chrome প্রথমটা খুলে বাকিগুলো আটকায়, কিন্তু
- * সব ব্রাউজার এক নিয়মে চলে না — মাঝপথে থেমে গেলে যে ট্যাবগুলো খুলতে
- * পারত সেগুলোও হারাত।
+ * Careful: the loop does not stop when one is blocked. Chrome opens the first and
+ * blocks the rest, but not all browsers follow one rule; stopping midway would
+ * lose the tabs that could have opened.
  */
 export function openInTabs(
   urls: readonly string[],
@@ -51,8 +51,8 @@ export function openInTabs(
       blocked++;
       continue;
     }
-    // ⚠️ tabnabbing — নতুন ট্যাব `window.opener` ধরে এই পাতাটাকে অন্য
-    //    কোথাও সরিয়ে দিতে পারত (`MyTargets`-এর `rel="noopener"`-এর একই কারণ)
+    // Careful: tabnabbing: the new tab could use `window.opener` to send this page
+    // elsewhere (the same reason as `rel="noopener"` in `MyTargets`)
     tab.opener = null;
     opened++;
   }
@@ -61,15 +61,15 @@ export function openInTabs(
 }
 
 /**
- * ⭐⭐ **আটকে গেলে মানুষকে কী বলতে হবে** — খাঁটি ফাংশন, তাই টেস্টযোগ্য।
+ * What to tell people when tabs were blocked: a pure function, so it is testable.
  *
- * ⚠️⚠️ বার্তায় **কী করতে হবে** সেটা থাকতেই হবে, শুধু "আটকে গেছে" নয়।
- * সমাধানটা এক জায়গাতেই — ঠিকানা-বারের পপ-আপ আইকনে গিয়ে এই সাইটকে
- * অনুমতি দেওয়া, একবারই। ⭐ ওই বাক্যটা না থাকলে ডিজাইনার বোতামটাকেই
- * ভাঙা ধরে নিতেন, আর রোজ ৩০টা লিঙ্ক হাতে খুলতেন।
+ * Careful: the message must say what to do, not just "blocked". The fix is in
+ * one place: the pop-up icon in the address bar, allowing this site, once. Without
+ * that sentence a designer would assume the button itself was broken and open 30
+ * links by hand every day.
  *
- * ⚠️ সব খুললে `null` — "সব ঠিক আছে" জাতীয় আশ্বাস পর্দায় বসে না
- * (`Notice`-এর নিয়ম)। কাজটা হয়ে গেলে ট্যাবগুলোই তার প্রমাণ।
+ * Careful: `null` when everything opened: reassurance like "all good" does not go
+ * on screen (the rule of `Notice`). When the job is done, the tabs themselves are the proof.
  */
 export function blockedNotice(total: number, blocked: number): string | null {
   if (blocked <= 0) return null;

@@ -1,45 +1,45 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 /**
- * I07 — স্ক্রিনশটের signed URL (স্পেক § ৪.২, § ৭)।
+ * Signed URLs for screenshots (spec sections 4.2 and 7).
  *
- * ⭐ টোকেন **ডাটাবেসে জমে না**। সই-ই একমাত্র প্রমাণ, তাই যাচাই করতে কোনো
- * I/O লাগে না — গ্যালারির ৬০টা ছবি লোড হওয়ার সময় ৬০টা DB লুকআপও হয় না।
- * এর দাম: টোকেন **বাতিল করা যায় না**। সেই কারণেই মেয়াদ মাত্র ৫ মিনিট —
- * revoke করতে না পারার ঝুঁকিটা সময় দিয়ে ছোট করা হয়েছে।
+ * Tokens are **not stored in the database**. The signature is the only proof,
+ * so verifying needs no I/O: loading 60 gallery photos does not cause 60 DB
+ * lookups. The cost is that a token **cannot be revoked**. That is why the
+ * lifetime is only 5 minutes; time limits the risk of not being able to revoke.
  *
- * ⚠️ signed URL মানে **লিঙ্কটাই চাবি** — যে-কেউ লিঙ্কটা পেলে (হোয়াটসঅ্যাপে
- *    পাঠানো, স্ক্রিন শেয়ার, ব্রাউজার হিস্টরি) ছবিটা দেখতে পাবে। তাই
- *    "কে দেখল" লেখা হয় **লিঙ্ক বানানোর সময়**, ছবি টানার সময় নয়
- *    (দেখুন screenshots.service.ts — I08)।
+ * Careful: with a signed URL **the link is the key**. Anyone who gets the
+ * link (sent over WhatsApp, screen share, browser history) can see the photo.
+ * So "who viewed" is recorded **when the link is created**, not when the
+ * image is fetched (see screenshots.service.ts).
  *
- * এই ফাইলে কোনো I/O নেই — পুরোটাই খাঁটি ফাংশন, তাই DB ছাড়াই
- * test/signed-url.spec.ts-এ মেয়াদ/বিকৃতি/ভুল-সিক্রেট সব পরীক্ষা করা যায়।
+ * This file has no I/O, only pure functions, so expiry, tampering and
+ * wrong-secret cases are all tested without a DB in test/signed-url.spec.ts.
  */
 
-/** স্পেক § ৪.২ — "signed URL, ৫ মিনিটে expire" */
+/** Spec section 4.2: "signed URL, expires in 5 minutes". */
 export const SIGNED_URL_TTL_SEC = 5 * 60;
 
 /**
- * টোকেনের প্রথম অংশ। ভবিষ্যতে পে-লোডের গড়ন বদলালে সংস্করণ বাড়বে, আর
- * পুরোনো গড়নের টোকেন তখন `malformed` হয়ে ঝরে যাবে।
+ * First part of the token. If the payload layout changes later, the version
+ * is bumped and tokens in the old layout are rejected as `malformed`.
  *
- * ⚠️ সংস্করণটা সইয়ের ভেতরেও আছে — নইলে কেউ শুধু উপসর্গ বদলে দিয়ে
- *    নতুন সংস্করণের পার্সারকে পুরোনো পে-লোড গেলাতে পারত।
+ * Careful: the version is also covered by the signature. Otherwise someone
+ * could change only the prefix and feed an old payload to the new parser.
  */
 export const TOKEN_VERSION = 'v1';
 
 /**
- * ⭐ কোন রূপটা দেখা যাবে সেটাও সইয়ের ভেতরে।
+ * Which variant may be viewed is also inside the signature.
  *
- * ⚠️ variant যদি ক্যোয়ারি প্যারামিটার হতো (`?token=…&variant=full`), তাহলে
- *    থাম্বনেইলের লিঙ্ক পাওয়া যে-কেউ শুধু একটা শব্দ বদলে ফুল-রেজ়লিউশন ছবি
- *    নামিয়ে নিতে পারত। গ্রিডে থাম্বনেইল দেখানো আর ফুল ছবি খোলা — দুটো
- *    আলাদা অনুমতি, তাই দুটো আলাদা টোকেন।
+ * Careful: if the variant were a query parameter (`?token=...&variant=full`),
+ * anyone holding a thumbnail link could change one word and download the
+ * full-resolution image. Showing a thumbnail in the grid and opening the full
+ * image are two separate permissions, hence two separate tokens.
  */
 export type ScreenshotVariant = 'thumb' | 'full';
 
-/** টোকেন ছোট রাখতে এক অক্ষর — লিঙ্কটা `<img src>`-এ বসে, লম্বা হলে লাভ নেই */
+/** One character, to keep the token short; the link goes into `<img src>`. */
 const VARIANT_CODE: Record<ScreenshotVariant, string> = {
   thumb: 't',
   full: 'f',
@@ -50,26 +50,26 @@ const CODE_TO_VARIANT: Record<string, ScreenshotVariant | undefined> = {
 };
 
 /**
- * ⚠️ কাঁচা `JWT_SECRET` সরাসরি ব্যবহার করা হয় না — আলাদা label দিয়ে
- *    একটা নিজস্ব চাবি বের করা হয় (domain separation)। ফলে স্ক্রিনশটের
- *    টোকেন আর সেশন JWT কখনো একে অন্যের জায়গায় খাটবে না, এমনকি ভবিষ্যতে
- *    কেউ ভুল করে একই অ্যালগরিদম বেছে নিলেও।
+ * Careful: the raw `JWT_SECRET` is not used directly. A separate key is
+ * derived with its own label (domain separation). A screenshot token and a
+ * session JWT can therefore never stand in for each other, even if someone
+ * later picks the same algorithm by mistake.
  */
 const KEY_LABEL = 'oxeio:screenshot-signed-url:v1';
 
 export interface SignedClaims {
   screenshotId: bigint;
   variant: ScreenshotVariant;
-  /** কে লিঙ্কটা চেয়েছিল — audit-এর সাথে মিলিয়ে দেখার জন্য টোকেনেই থাকে */
+  /** Who requested the link; kept in the token to cross-check with the audit log. */
   viewerUserId: number;
-  /** epoch সেকেন্ড */
+  /** Epoch seconds. */
   expiresAtSec: number;
 }
 
 export type VerifyFailure =
-  /** গড়নই ভুল — অংশের সংখ্যা, সংস্করণ, বা সংখ্যা পার্স হয়নি */
+  /** Wrong shape: part count, version, or a number failed to parse. */
   | 'malformed'
-  /** সই মেলেনি — বদলে দেওয়া টোকেন, বা অন্য সিক্রেটে বানানো */
+  /** Signature mismatch: a tampered token, or one made with another secret. */
   | 'bad_signature'
   | 'expired';
 
@@ -78,8 +78,8 @@ export type VerifyResult =
   | { ok: false; reason: VerifyFailure };
 
 /**
- * সিক্রেট থেকে এই মডিউলের নিজস্ব HMAC চাবি।
- * সার্ভার চালুর সময় একবারই ডাকা হয় (signed-url.service.ts)।
+ * This module's own HMAC key, derived from the secret.
+ * Called once at server start (signed-url.service.ts).
  */
 export function deriveSigningKey(rawSecret: string): Buffer {
   return createHmac('sha256', rawSecret).update(KEY_LABEL).digest();
@@ -92,10 +92,11 @@ export interface SignInput {
 }
 
 /**
- * `v1.f.42.1786500000.7.<sig>` — সইটা প্রথম পাঁচটা অংশের উপরেই।
+ * `v1.f.42.1786500000.7.<sig>`; the signature covers the first five parts.
  *
- * ⚠️ মেয়াদ (`exp`) সইয়ের **ভেতরে**। বাইরে রাখলে যে-কেউ সংখ্যাটা বাড়িয়ে
- *    দিয়ে লিঙ্কটাকে চিরস্থায়ী করে ফেলতে পারত, আর সই তবু মিলে যেত।
+ * Careful: the expiry (`exp`) is **inside** the signature. If it were outside,
+ * anyone could raise the number to make the link permanent and the signature
+ * would still match.
  */
 export function signScreenshotToken(
   input: SignInput,
@@ -117,12 +118,11 @@ export function signScreenshotToken(
 }
 
 /**
- * ⭐ যাচাইয়ের ক্রম: **গড়ন → সই → অর্থ → মেয়াদ**।
+ * Verification order: **shape -> signature -> meaning -> expiry**.
  *
- * ⚠️ সই মেলার আগে টোকেনের কোনো মান বিশ্বাস করা হয় না। উল্টো ক্রমে লিখলে
- *    (আগে মেয়াদ দেখে, পরে সই) কোড ভুল করত না ঠিকই, কিন্তু অভ্যাসটা
- *    বিপজ্জনক — পরে কেউ "শুধু id-টা তো পড়ছি" বলে একটা অযাচাইকৃত মান
- *    ব্যবহার করে ফেলত।
+ * Careful: no token value is trusted before the signature matches. Checking
+ * expiry first would not be wrong as such, but the habit is dangerous; later
+ * someone might use an unverified value ("I am only reading the id").
  */
 export function verifyScreenshotToken(
   token: string,
@@ -140,8 +140,8 @@ export function verifyScreenshotToken(
     return { ok: false, reason: 'bad_signature' };
   }
 
-  // এখান থেকে মানগুলো আমাদেরই লেখা — তবু অন্ধভাবে নয়, কারণ ভবিষ্যতে
-  // সংস্করণ বদলালে পুরোনো সই-করা টোকেনও এখানে এসে পড়তে পারে।
+  // From here the values are ones we wrote, but still not trusted blindly:
+  // after a future version change, old signed tokens can also reach this point.
   const variant = CODE_TO_VARIANT[variantCode];
   if (!variant) return { ok: false, reason: 'malformed' };
 
@@ -151,9 +151,9 @@ export function verifyScreenshotToken(
 
   const expiresAtSec = Number(expPart);
 
-  // ⚠️ ঠিক মেয়াদের মুহূর্তটাও "শেষ" ধরা হয় (`<=`)। এক সেকেন্ড এদিক-ওদিক
-  //    কিছুই বদলায় না, কিন্তু সীমানার আচরণ অনিশ্চিত থাকলে টেস্ট লিখতে গিয়ে
-  //    বোঝা যায় না কোনটা সঠিক।
+  // Careful: the exact expiry instant also counts as expired (`<=`). One
+  // second either way changes nothing, but an undefined boundary makes it
+  // unclear which behaviour is right when writing tests.
   if (expiresAtSec * 1000 <= nowMs) return { ok: false, reason: 'expired' };
 
   return {
@@ -172,9 +172,9 @@ function hmac(body: string, key: Buffer): string {
 }
 
 /**
- * ⚠️ `a === b` দিয়ে সই মেলালে তুলনার সময় থেকেই কত অক্ষর মিলেছে তা
- *    অনুমান করা যায় (timing attack)। `timingSafeEqual` দৈর্ঘ্য আলাদা হলে
- *    ছুঁড়ে দেয়, তাই দৈর্ঘ্যটা আগে নিজে মিলিয়ে নিতে হয়।
+ * Careful: comparing signatures with `a === b` leaks how many characters
+ * matched through the comparison time (timing attack). `timingSafeEqual`
+ * throws when the lengths differ, so the length is checked first.
  */
 function safeEqual(a: string, b: string): boolean {
   const left = Buffer.from(a, 'utf8');

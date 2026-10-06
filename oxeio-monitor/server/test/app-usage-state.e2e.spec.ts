@@ -17,16 +17,16 @@ import {
 } from './setup/harness';
 
 /**
- * **R22a — app_usage-এ "কোন অবস্থায় দেখা হয়েছে"।**
+ * R22a: the state a segment was seen in, on app_usage.
  *
- * ⚠️⚠️ মাঠে মাপা সমস্যা থেকে: এজেন্ট ACTIVE ছাড়ার সাথে সাথেই অ্যাপ দেখা
- * বন্ধ করত, তাই idle সেগমেন্টের ভেতরে একটাও সারি থাকত না — আর মিটিং
- * (Zoom-এ বসে থাকা) চেনার কোনো উপায়ই ছিল না।
+ * From a problem measured in the field: the agent stopped watching apps the
+ * moment it left ACTIVE, so an idle segment contained no rows at all, and
+ * there was no way to recognise a meeting (sitting in Zoom).
  *
- * ⭐ এই ফাইল দুটো জিনিস পাহারা দেয়, আর দুটোই আলাদা রকম জরুরি:
- * ১· পুরোনো এজেন্ট (যারা ঘরটা পাঠায় না) যেন **৪০০ না খায়** — ৪০০ মানে
- *    তাদের কাছে Permanent, অর্থাৎ ডেটা মুছে ফেলা (G49)।
- * ২· idle সারি জমা হলেও **কোনো হিসাবে যেন না ঢোকে**।
+ * This file guards two things, both important in different ways:
+ * 1. Old agents (which do not send the field) must not get a 400. A 400
+ *    means Permanent to them, i.e. the data is deleted (G49).
+ * 2. Idle rows must be stored but must not enter any calculation.
  */
 let h: Harness;
 let device: EnrolledDevice;
@@ -65,40 +65,41 @@ beforeEach(async () => {
   device = await enrollDevice(h, code);
 });
 
-describe('POST /agent/app-usage — segment state', () => {
+describe('POST /agent/app-usage: segment state', () => {
   /**
-   * ⚠️⚠️ **সবচেয়ে জরুরি টেস্ট।** ফ্লিটের সবাই এখনো পুরোনো এজেন্টে; তারা
-   * `state` ঘরটা পাঠায় না। ঘরটা বাধ্যতামূলক করলে তাদের প্রতিটা ব্যাচ ৪০০
-   * খেত, আর এজেন্ট ৪০০-কে Permanent ধরে ডেটাটা **মুছে ফেলত** (G49)।
+   * The most important test. Everyone in the fleet is still on old agents,
+   * and they do not send the `state` field. Making the field mandatory would
+   * give every batch of theirs a 400, and the agent treats 400 as Permanent
+   * and deletes the data (G49).
    */
-  it('পুরোনো এজেন্ট state না পাঠালেও চলে, আর active ধরা হয়', async () => {
+  it('an old agent that sends no state still works, and is taken as active', async () => {
     await post([usageItem()]).expect(200);
 
     const row = await h.prisma.appUsage.findFirstOrThrow();
     expect(row.segmentState).toBe('active');
   });
 
-  it('idle অবস্থার খণ্ড idle হয়েই জমা হয়', async () => {
+  it('a segment in idle state is stored as idle', async () => {
     await post([usageItem({ state: 'idle' })]).expect(200);
 
     const row = await h.prisma.appUsage.findFirstOrThrow();
     expect(row.segmentState).toBe('idle');
   });
 
-  it('অচেনা অবস্থা পাঠালে ৪০০', async () => {
+  it('an unknown state gives 400', async () => {
     await post([usageItem({ state: 'meeting' })]).expect(400);
   });
 
   /**
-   * ⭐⭐ **R22a-র মূল প্রতিশ্রুতি:** রেকর্ড থাকা আর গোনা হওয়া — দুটো
-   * আলাদা। idle-এ দেখা খণ্ড ডাটাবেসে থাকে (R22b-র জন্য), কিন্তু অ্যাপের
-   * হিসাবে (D07/D08) এক সেকেন্ডও যোগ করে না।
+   * The core promise of R22a: being recorded and being counted are two
+   * different things. A segment seen while idle stays in the database (for
+   * R22b), but adds not a single second to the app totals (D07/D08).
    *
-   * ⚠️ এটাই সেই নিয়ম যেটা আগে "idle-এ রেকর্ডই কোরো না" দিয়ে রক্ষা করা
-   * হতো — এখন ছাঁকনি দিয়ে। ভাঙলে "লাঞ্চে Excel খোলা রেখে যাওয়া"টাই
-   * ব্যবহার হিসেবে গোনা হতো।
+   * This is the rule that used to be protected by "do not record at all while
+   * idle", and is now protected by a filter. If it broke, "left Excel open
+   * and went to lunch" would count as usage.
    */
-  it('idle খণ্ড অ্যাপের হিসাবে যোগ হয় না', async () => {
+  it('an idle segment does not add to the app totals', async () => {
     const active = todayWindow(600);
     const idle = todayWindow(1200);
 
@@ -117,18 +118,18 @@ describe('POST /agent/app-usage — segment state', () => {
       }),
     ]).expect(200);
 
-    // দুটোই ডাটাবেসে আছে
+    // Both are in the database
     expect(await h.prisma.appUsage.count()).toBe(2);
 
     /**
-     * ⚠️⚠️ **ঢাকার তারিখ, UTC-র নয়** — G62-র হুবহু পুনরাবৃত্তি, আর এটাও
-     * একটা ঘুমন্ত সময়-বোমা ছিল *(ফেটেছে ২২ আগস্ট রাত ১২:০৩)*।
+     * Careful: the Dhaka date, not UTC's. This repeats G62 exactly, and was
+     * another sleeping time bomb (it went off at 00:03 on 22 August).
      *
-     * `new Date().toISOString()` UTC দেয়, আর ঢাকা UTC+৬ — তাই মধ্যরাত
-     * থেকে ভোর ৬টার মধ্যে UTC তারিখ **আগের দিন**। তখন কোয়েরিটা ভুল
-     * দিনে যেত, `zoom` সারিটা পাওয়া যেত না, আর টেস্ট ভাঙত — অথচ কোডে
-     * কোনো ভুল নেই। ⭐ ইনজেস্ট নিজে `workDateOf()` দিয়েই দিন ঠিক করে,
-     * তাই টেস্টেরও সেটাই ব্যবহার করা উচিত।
+     * `new Date().toISOString()` gives UTC, and Dhaka is UTC+6, so between
+     * midnight and 06:00 the UTC date is the previous day. The query then went
+     * to the wrong day, the `zoom` row was not found, and the test broke
+     * though the code had no bug. Ingest itself picks the day with
+     * `workDateOf()`, so the test should use the same.
      */
     const day = workDateOf(dhakaNoon()).toISOString().slice(0, 10);
     const top = await h.app
@@ -136,7 +137,7 @@ describe('POST /agent/app-usage — segment state', () => {
       .top({ from: day, to: day, limit: 10 });
 
     const zoom = top.apps.rows.find((r) => r.key === 'zoom.exe');
-    // ⚠️ কেবল ACTIVE খণ্ডটুকু — idle-এর ১২০০ সেকেন্ড যোগ হয়নি
+    // Only the ACTIVE segment: the 1200 idle seconds were not added
     expect(zoom?.seconds).toBe(active.durationSec);
   });
 });

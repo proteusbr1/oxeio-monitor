@@ -17,40 +17,39 @@ import { RegionTab } from './RegionTab';
 import { StaffTab } from './StaffTab';
 
 /**
- * E09 · E10 · E11 · D06 — সেটিংস।
+ * Settings.
  *
- * ⭐ **ম্যানেজারও ঢোকেন** *(১৫ আগস্ট)*, তবে তিনটে ট্যাবে: Staff ·
- *    Categories · Policies & holidays। Leave · Months · Agent updates ·
- *    Audit log — এগুলো owner-এরই।
+ * Important: **managers get in too**, but only on three tabs: Staff, Categories,
+ *    Policies & holidays. Leave, Months, Agent updates and Audit log are the
+ *    owner's alone.
  *
- * ⚠️ পর্দা থেকে ট্যাব লুকানো **শেষ রক্ষাকবচ নয়, প্রথমটা** — আসল পাহারা
- *    সার্ভারের `@Roles`-এ। এখানে লুকানো হয় যাতে কেউ এমন বোতাম না দেখেন
- *    যেটা চাপলে ৪০৩ আসবে।
+ * Careful: hiding a tab on screen is **the first safeguard, not the last**; the
+ *    real guard is `@Roles` on the server. Hiding here just stops people seeing a
+ *    button that would give a 403.
  *
- * ⚠️ স্টাফ (`role=employee`) এখানে এলে সোজাসুজি "অনুমতি নেই" — খালি পাতা
- *    বা ভাঙা কল দেখে বিভ্রান্ত হওয়ার চেয়ে ভালো।
+ * Careful: staff (`role=employee`) arriving here get a plain "not permitted",
+ *    better than being confused by an empty page or a failing call.
  *
- * ⭐ ট্যাবগুলো আলাদা রুট নয়, `?tab=` — দুটো কারণে:
- *    ১· `App.tsx` ছুঁতে হয় না (ওটা অন্য এজেন্টের ফাইল), অথচ
- *       "/settings?tab=audit" লিঙ্ক করে পাঠানো যায় আর রিফ্রেশেও টেকে।
- *    ২· ট্যাব বদলালে ভেতরের কোনো কম্পোনেন্ট পুনর্ব্যবহার হয় না — প্রতিটা
- *       ট্যাব নিজের ডেটা নিজে আনে, তাই স্টাফ ট্যাব থেকে ফিরে এলে বাসি
- *       তালিকা বসে থাকার সুযোগ নেই।
+ * Important: tabs are `?tab=`, not separate routes, for two reasons:
+ *    1. `App.tsx` does not need touching (it belongs to another agent's files),
+ *       yet "/settings?tab=audit" can be linked and survives a refresh.
+ *    2. No inner component is reused when the tab changes: each tab fetches its
+ *       own data, so returning from the staff tab cannot leave a stale list.
  */
 
 /**
- * ⭐ `manager: true` মানে ম্যানেজারও ট্যাবটা পান *(১৫ আগস্ট)*।
+ * `manager: true` means a manager gets the tab too.
  *
- * ⚠️ ঘরটা **প্রতিটা সারিতে লিখতেই হয়** (`false`-ও), ঐচ্ছিক নয় — তাই নতুন
- *    ট্যাব যোগ করলে TypeScript-ই মনে করিয়ে দেবে সিদ্ধান্তটা নিতে।
- *    ঐচ্ছিক রাখলে ভুলে যাওয়া আর "না" বলা দেখতে এক হয়ে যেত, আর একদিন
- *    কেউ ভুলে গিয়ে ভাবত সেটাই ঠিক আছে।
+ * Careful: the field **must be written on every row** (`false` too), it is not
+ *    optional, so adding a tab makes TypeScript remind you to decide. If optional,
+ *    forgetting and saying "no" would look the same, and one day someone would
+ *    forget and assume that was intended.
  */
 const TABS = [
   { id: 'staff', label: 'Staff', manager: true },
   { id: 'categories', label: 'Categories', manager: true },
-  // ⚠️ ম্যানেজার এখানে **শুধু ছুটি** পান (work policy owner-only), তাই
-  //    তাঁর জন্য নামটাও আলাদা — নইলে তিনি এমন কিছু খুঁজতেন যা পর্দায় নেই।
+  // Careful: a manager gets **only leave** here (the work policy is owner-only), so
+  //    the name differs for them too; otherwise they would look for something absent.
   {
     id: 'policies',
     label: 'Policies & holidays',
@@ -61,35 +60,35 @@ const TABS = [
   // rest of the month's pay; old ?tab=leave|months links are sent there.
   // the owner's call: which parts of the dashboard this company uses
   { id: 'modules', label: 'Modules', manager: false },
-  // ⚠️ audit-এর **আগে**: এটা রোজকার কাজের ট্যাব নয়, কিন্তু audit log
-  //    সবার শেষে থাকাটা প্রতিষ্ঠিত (বছরে দু-একবার খোলা হয়)
-  // ⭐ G08 — টেলিগ্রামের টোকেন ও চ্যাট আইডি। owner-only, কারণ ওই চ্যাটে
-  //    কর্মীর নাম ও ঘণ্টা যায়; কে সেটা পাবে তা ম্যানেজারের সিদ্ধান্ত নয়।
+  // Careful: **before** audit: not a daily-use tab, but audit log being last is
+  //    established (it is opened once or twice a year)
+  // Telegram token and chat ID. Owner-only, because that chat carries employee names
+  //    and hours; who gets it is not the manager's decision.
   { id: 'notifications', label: 'Notifications', manager: false },
   // Sentry — where crashes are sent; owner-only like the other credentials
   { id: 'errors', label: 'Error reporting', manager: false },
   // time zone, currency, date format — what used to need the server's .env
   { id: 'region', label: 'Region', manager: false },
-  // ⭐ R5 — অফসাইট ব্যাকআপের কী। owner-only: এটা পরিকাঠামোর ক্রেডেনশিয়াল,
-  //    আর ব্যাকআপে গোটা প্রতিষ্ঠানের ঘণ্টা, বেতন ও স্ক্রিনশট আছে।
+  // Offsite backup key. Owner-only: it is an infrastructure credential, and the
+  //    backup holds the whole company's hours, pay and screenshots.
   // where screenshots are kept, and who backs up the database
   { id: 'backup', label: 'Storage & backup', manager: false },
   { id: 'agent', label: 'Agent updates', manager: false },
-  // ⚠️ audit log-এ কে কার স্ক্রিনশট দেখেছে সেটাও থাকে — owner-এরই
+  // Careful: the audit log also records who viewed whose screenshots, so owner-only
   { id: 'audit', label: 'Audit log', manager: false },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['id'];
 
 const SUBTITLE: Record<TabKey, string> = {
-  // ⚠️⚠️ **"Devices" ট্যাবটা ইচ্ছাকৃতভাবে তুলে দেওয়া হয়েছে।** মালিকের
-  //    কথায়: *"ami Devices ei option tai chai na, eta full system take
-  //    complex banacche."* — আর তিনি ঠিক ছিলেন: একই প্রশ্নের ("Belal-এর
-  //    PC ঠিক আছে তো?") উত্তর দুই পর্দায় খুঁজতে হতো।
+  // Careful: **the "Devices" tab was removed on purpose.** The owner said he did not
+  //    want the Devices option because it made the whole system more complex, and
+  //    he was right: the same question ("is Belal's PC OK?") had to be looked up on
+  //    two screens.
   //
-  // ⭐ ওই পর্দার একমাত্র সত্যিকারের দরকারি কাজটা — বন্ধ এজেন্ট ফেরানো —
-  //    এখন Staff সারিতেই, "Turn agent on" হিসেবে। আর লুকিয়ে ফেলা নয়,
-  //    **মানুষ ধরে সাজানো**: মালিক ডিভাইস নম্বর নিয়ে ভাবেন না।
+  // The one genuinely useful job of that screen, turning a stopped agent back on, is
+  //    now in the Staff row itself, as "Turn agent on", and organised **by person**:
+  //    the owner does not think in device numbers.
   staff: 'Add, edit and deactivate people — nothing is ever deleted',
   categories: 'Which apps and sites fall into which category',
   policies: 'Monthly target, screenshot window and days off',
@@ -121,9 +120,9 @@ export function SettingsPage() {
   // these two tabs live on the Payroll page now
   const moved = raw === 'leave' ? 'leave' : raw === 'months' ? 'close' : null;
   /**
-   * ⚠️ ট্যাবটা **এই ব্যবহারকারীর জন্য** বৈধ কি না, শুধু "নাম মেলে কি না"
-   * নয়। নইলে `?tab=audit` টাইপ করলে ম্যানেজার খালি পাতা দেখতেন —
-   * নেভে কিছু নেই, অথচ কনটেন্টও নেই।
+   * Careful: whether the tab is valid **for this user**, not just whether the name
+   * matches. Otherwise typing `?tab=audit` would show a manager an empty page, with
+   * nothing in the nav and no content.
    */
   const active: TabKey =
     isTabKey(raw) && tabs.some((t) => t.id === raw) ? raw : 'staff';
@@ -134,17 +133,17 @@ export function SettingsPage() {
     return (
       <Page title="Settings">
         {/*
-          ⚠️ `<ErrorBox>` নিজেই ৪০৩ চেনে আর "আবার চেষ্টা করুন" বোতামটা
-             লুকিয়ে দেয় — বারবার চাপলেও অনুমতি আসবে না, শুধু বিভ্রান্তি
-             বাড়ত। তাই আলাদা বার্তা না লিখে সেই একই বাক্সটাই দেখানো হয়,
-             যাতে পুরো পণ্যে ৪০৩-এর চেহারা এক থাকে।
+          Careful: `<ErrorBox>` itself recognises 403 and hides its "try again"
+             button; pressing it repeatedly would never grant permission, only
+             confuse. So the same box is shown instead of writing a separate message,
+             keeping 403 looking the same across the whole product.
         */}
         <ErrorBox error={new ApiError(403, "You don't have access")} />
       </Page>
     );
   }
 
-  /** ⚠️ ম্যানেজারের policies ট্যাবে work policy নেই, তাই লেখাটাও আলাদা */
+  /** Careful: the manager's policies tab has no work policy, so the text differs too */
   const subtitle =
     !isOwner && active === 'policies'
       ? 'Days off — the hours target moves with them'
@@ -157,8 +156,8 @@ export function SettingsPage() {
           items={tabs}
           active={active}
           label="Settings sections"
-          // `replace` — ট্যাব বদলানো ব্রাউজারের ইতিহাসে জমা হলে
-          // "back" চেপে বেরোতে গিয়ে পাঁচবার ট্যাব ফিরত
+          // `replace`: if tab changes piled up in browser history, pressing "back"
+          // to leave would step through the tabs five times
           onChange={(key) => setParams({ tab: key }, { replace: true })}
         />
       </div>

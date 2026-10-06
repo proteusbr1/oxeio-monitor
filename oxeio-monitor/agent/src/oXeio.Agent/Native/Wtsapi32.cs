@@ -7,9 +7,10 @@ namespace oXeio.Agent.Native;
 internal static partial class Wtsapi32
 {
     /// <summary>
-    /// ⚠️ HWND লাগে — উইন্ডোহীন প্রসেস lock/unlock খবর পাবে না।
-    /// ⚠️ বুটের সময় Terminal Services তৈরি হওয়ার আগে ডাকলে RPC_S_INVALID_BINDING (1702)।
-    ///    তখন এজেন্ট সুস্থই দেখায়, কিন্তু সারা সেশনে একটাও lock ইভেন্ট আসে না।
+    /// Careful: an HWND is required; a process without a window will not get lock/unlock events.
+    /// Careful: called at boot before Terminal Services has been created, it returns
+    /// RPC_S_INVALID_BINDING (1702). The agent then looks healthy, but not a single lock event
+    /// arrives during the whole session.
     /// </summary>
     [LibraryImport("wtsapi32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -20,8 +21,8 @@ internal static partial class Wtsapi32
     internal static partial bool WTSUnRegisterSessionNotification(nint hWnd);
 
     /// <summary>
-    /// এই মুহূর্তে লক করা আছে কি না — ইভেন্টের অপেক্ষা না করে।
-    /// এজেন্ট চালু হওয়ার সময় জানার একমাত্র নির্ভরযোগ্য উপায়।
+    /// Whether it is locked right now, without waiting for an event. The only reliable way to know
+    /// when the agent starts up.
     /// </summary>
     [LibraryImport("wtsapi32.dll", EntryPoint = "WTSQuerySessionInformationW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

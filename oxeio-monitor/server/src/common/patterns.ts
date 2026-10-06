@@ -1,17 +1,17 @@
 
 /**
- * ⚠️ ValidationPipe গ্লোবালি `whitelist + forbidNonWhitelisted` — তাই এখানে
- * নেই এমন কোনো ফিল্ড পাঠালে ৪০০ যাবে, চুপচাপ উপেক্ষা হবে না। query-র
- * ক্ষেত্রেও একই, অর্থাৎ `?foo=bar` লিখলেও ৪০০।
+ * Careful: ValidationPipe is globally `whitelist + forbidNonWhitelisted`, so
+ * sending a field that is not declared here returns 400 rather than being
+ * silently ignored. The same holds for queries: writing `?foo=bar` also gives 400.
  */
 
 /**
- * ⭐ টাকা **স্ট্রিং হিসেবে** নেওয়া হয়, সংখ্যা হিসেবে নয়।
+ * Money is taken **as a string**, not a number.
  *
- * `13000.10` JSON থেকে number হয়ে এলে সেটা IEEE-754-এ 13000.099999999999
- * হয়ে বসে, তারপর Decimal(12,2)-এ round হয়ে ফিরে আসে — আর কেউ কোনোদিন
- * বুঝত না কেন এক পয়সা এদিক-ওদিক। স্ট্রিং সরাসরি Prisma-র Decimal-এ যায়,
- * মাঝপথে কোনো float নেই।
+ * If `13000.10` arrives from JSON as a number, it sits in IEEE-754 as
+ * 13000.099999999999 and is then rounded back by Decimal(12,2), and nobody
+ * would ever know why a paisa was off. A string goes straight into Prisma's
+ * Decimal with no float in between.
  */
 export const TAKA = /^\d{1,10}(\.\d{1,2})?$/;
 export const TAKA_MSG =

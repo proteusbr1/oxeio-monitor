@@ -3,11 +3,12 @@ using oXeio.Core.Agent;
 namespace oXeio.Core.Tests;
 
 /// <summary>
-/// E09 · K07 — সার্ভারে সেটিংস বদলালে এজেন্ট কী কী ছোঁবে।
+/// E09 / K07: what the agent touches when settings change on the server.
 ///
-/// ⚠️ এই নিয়মগুলোর দাম আছে: <see cref="ConfigChange.TouchesTracking"/> সত্যি
-/// হলে এজেন্ট চলতি সেগমেন্ট বন্ধ করে নতুন করে শুরু করে। ভুল করে সবসময় সত্যি
-/// ফেরালে Settings-এ **save** চাপলেই ১৫টা PC-র সবার সেগমেন্ট কাটা পড়ত।
+/// Careful: these rules have a cost. When <see cref="ConfigChange.TouchesTracking"/>
+/// is true the agent closes the current segment and starts a new one. If it wrongly
+/// always returned true, pressing **save** in Settings would cut everyone's segment
+/// on all 15 PCs.
 /// </summary>
 public class ConfigChangeTests
 {
@@ -23,8 +24,8 @@ public class ConfigChangeTests
     }
 
     /// <summary>
-    /// ⭐ সবচেয়ে জরুরি টেস্ট: অপ্রাসঙ্গিক ফিল্ড বদলালেও ট্র্যাকিং ছোঁয়া হয় না।
-    /// মাসিক টার্গেট বা টাইমজোন বদলানো মানে কারো সেগমেন্ট কাটা নয়।
+    /// The most important test: changing an irrelevant field does not touch tracking.
+    /// Changing the monthly target or the timezone is not a reason to cut anyone's segment.
     /// </summary>
     [Fact]
     public void মাসিক_টার্গেট_বদলালে_ট্র্যাকিং_ছোঁয়া_হয়_না()
@@ -54,8 +55,8 @@ public class ConfigChangeTests
     }
 
     /// <summary>
-    /// ⚠️ শূন্য স্লট "বদল" নয় — <c>SlotScheduler</c> ওতে ছুড়ে ফেলে, আর
-    /// একটা ভুল কনফিগে পুরো ক্যাপচার লুপ নেমে যেত।
+    /// Careful: a zero slot is not a "change"; <c>SlotScheduler</c> throws on it, and
+    /// one bad config would bring down the whole capture loop.
     /// </summary>
     [Theory]
     [InlineData(0)]
@@ -76,7 +77,9 @@ public class ConfigChangeTests
         Assert.True(change.TouchesTracking);
     }
 
-    /// <summary>⚠️ শূন্য সীমা মানে "প্রতি সেকেন্ডেই idle" — কেউ ভুলে বসালে উপেক্ষা।</summary>
+    /// <summary>
+    /// Careful: a zero limit would mean "idle every second"; if set by mistake it is ignored.
+    /// </summary>
     [Fact]
     public void শূন্য_idle_সীমা_উপেক্ষা_করা_হয়()
     {
@@ -98,8 +101,8 @@ public class ConfigChangeTests
     }
 
     /// <summary>
-    /// ⚠️ বন্ধ থাকা অবস্থায় সীমা বদলানো অর্থহীন — বন্ধ করার মতো কোনো খোলা
-    /// রেকর্ডই নেই। ভুল করে সত্যি ফেরালে এজেন্ট অকারণে `CloseAll` ডাকত।
+    /// Careful: changing the limit while stopped is meaningless; there is no open
+    /// record to close. Returning true by mistake would make the agent call `CloseAll` for nothing.
     /// </summary>
     [Fact]
     public void বন্ধ_থাকা_অ্যাপ_ট্র্যাকিংয়ে_সীমা_বদল_গোনা_হয়_না()

@@ -10,12 +10,12 @@ import {
 } from '../src/pages/live/roster';
 
 /**
- * **রোস্টারের দুটো নিয়ম** — সারির ক্রম, আর মিটার কোন সত্যি বলছে।
+ * **Two rules of the roster**: the row order, and which truth the meter tells.
  *
- * ⚠️⚠️ ক্রমের টেস্টটা নিছক আনুষ্ঠানিকতা নয়। "ঘণ্টা ধরে সাজাই" এক লাইনের
- * বদল, আর তাতে পাতাটা রোজ সকালে একটা লিডারবোর্ড হয়ে উঠত — যেটা এই পণ্য
- * ইচ্ছাকৃতভাবে করে না। নিয়মটা এখানে বাঁধা থাকলে ওই এক লাইন নীরবে ঢুকতে
- * পারবে না।
+ * Careful: the order test is not a mere formality. "Sort by hours" is a
+ * one-line change, and it would turn the page into a daily leaderboard, which
+ * this product deliberately does not do. With the rule pinned here, that one
+ * line cannot slip in silently.
  */
 
 function card(over: Partial<LiveCard> = {}): LiveCard {
@@ -24,17 +24,17 @@ function card(over: Partial<LiveCard> = {}): LiveCard {
     empCode: 'OX-01',
     fullName: 'Rakib Hasan',
     designation: 'Researcher',
-    // ⭐ ডিজাইনের টার্গেট (২১ আগস্ট) — গবেষকের জন্য খাটে না
+    // Design target: does not apply to researchers
     staffType: 'researcher',
     designsDone: 0,
-    // ⭐ "শেষ" আলাদা ঘর (২২ আগস্ট) — খোলা আর শেষ এক নয়
+    // "Finished" is a separate field: opened and finished are not the same
     designsFinished: 0,
     designTargetPerDay: 25,
     status: 'active',
     todayWorkedSec: 3_600,
     dailyTargetSec: 28_800,
     todayIsWorkday: true,
-    // ⭐ G130 — ডিফল্টে কেউ ছুটিতে নেই; ছুটির দাবিগুলো নিজের describe-এ
+    // G130: by default nobody is on leave; leave claims have their own describe
     onLeaveToday: false,
     monthWorkedSec: 72_000,
     monthTargetSec: 748_800,
@@ -44,18 +44,18 @@ function card(over: Partial<LiveCard> = {}): LiveCard {
   };
 }
 
-describe('meterKind — শূন্য আর অজানা এক নয়', () => {
-  it('কাজ গোনা হয়েছে → counted', () => {
+describe('meterKind — zero and unknown are not the same', () => {
+  it('work counted → counted', () => {
     expect(meterKind(card({ todayWorkedSec: 3_600 }))).toBe('counted');
   });
 
-  /** ⭐ মাপা হয়েছে, ফল শূন্য — এটা একটা **সত্যি**, অনুপস্থিতি নয় */
-  it('এজেন্ট আছে, সাড়াও দিয়েছে, কিন্তু আজ শূন্য → zero', () => {
+  /** Measured and the result is zero: that is a **fact**, not an absence */
+  it('agent present, responded, but zero today → zero', () => {
     expect(meterKind(card({ todayWorkedSec: 0 }))).toBe('zero');
   });
 
-  /** ⚠️⚠️ এজেন্টই বসেনি — একে "শূন্য কাজ" বলা একটা নীরব অভিযোগ হতো */
-  it('এজেন্ট বসেনি → unknown, যদিও সেকেন্ড ০', () => {
+  /** Careful: the agent was never installed: calling that "zero work" would be a silent accusation */
+  it('agent not installed → unknown, even though the seconds are 0', () => {
     expect(
       meterKind(
         card({
@@ -67,18 +67,18 @@ describe('meterKind — শূন্য আর অজানা এক নয়'
     ).toBe('unknown');
   });
 
-  it('এজেন্ট বন্ধ করে দেওয়া হয়েছে → unknown', () => {
+  it('agent switched off → unknown', () => {
     expect(meterKind(card({ agentPresence: 'switched_off' }))).toBe('unknown');
   });
 
-  it('কখনো সাড়া দেয়নি → unknown', () => {
+  it('never responded → unknown', () => {
     expect(meterKind(card({ lastHeartbeatAt: null }))).toBe('unknown');
   });
 });
 
-describe('rosterRows — ক্রম কখনো ঘণ্টা ধরে নয়', () => {
-  /** ⭐⭐ মূল পাহারা: বেশি কাজ করা মানুষ উপরে উঠে যায় না */
-  it('সার্ভারের ক্রম (empCode) অক্ষত থাকে, ঘণ্টা যাই হোক', () => {
+describe('rosterRows — the order is never by hours', () => {
+  /** The main guard: someone who works more does not rise to the top */
+  it('the server order (empCode) stays intact, whatever the hours', () => {
     const rows = rosterRows([
       card({ employeeId: 1, empCode: 'OX-01', todayWorkedSec: 60 }),
       card({ employeeId: 2, empCode: 'OX-02', todayWorkedSec: 30_000 }),
@@ -88,7 +88,7 @@ describe('rosterRows — ক্রম কখনো ঘণ্টা ধরে ন
     expect(rows.map((c) => c.empCode)).toEqual(['OX-01', 'OX-02', 'OX-03']);
   });
 
-  it('কাজ করছেন যাঁরা আগে, না-করছেন যাঁরা পরে', () => {
+  it('those working come first, those not working after', () => {
     const rows = rosterRows([
       card({ employeeId: 1, empCode: 'OX-01', status: 'offline' }),
       card({ employeeId: 2, empCode: 'OX-02', status: 'active' }),
@@ -104,8 +104,8 @@ describe('rosterRows — ক্রম কখনো ঘণ্টা ধরে ন
     ]);
   });
 
-  /** ⚠️ কেউ যেন বাদ না পড়ে, দুবারও না আসে (G88-এর শিক্ষা) */
-  it('প্রত্যেকে ঠিক একবার', () => {
+  /** Careful: nobody may be dropped, nobody may appear twice (the lesson of G88) */
+  it('everyone exactly once', () => {
     const input = [
       card({ employeeId: 1, status: 'active' }),
       card({ employeeId: 2, status: 'idle' }),
@@ -115,13 +115,13 @@ describe('rosterRows — ক্রম কখনো ঘণ্টা ধরে ন
     expect(ids).toEqual([1, 2, 3]);
   });
 
-  it('খালি তালিকায় খালি ফল', () => {
+  it('an empty list gives an empty result', () => {
     expect(rosterRows([])).toEqual([]);
   });
 });
 
-describe('restingStartsAt — দলছুট ব্যান্ড কোথায় বসবে', () => {
-  it('প্রথম না-কাজ সারির অবস্থান', () => {
+describe('restingStartsAt — where the stragglers band goes', () => {
+  it('the position of the first not-working row', () => {
     const rows = rosterRows([
       card({ employeeId: 1, status: 'active' }),
       card({ employeeId: 2, status: 'active' }),
@@ -130,19 +130,20 @@ describe('restingStartsAt — দলছুট ব্যান্ড কোথা
     expect(restingStartsAt(rows)).toBe(2);
   });
 
-  /** ⭐ সবাই কাজ করছেন — ব্যান্ডটাই আঁকা হবে না */
-  it('সবাই কাজ করলে -1', () => {
+  /** Everyone is working: the band is not drawn at all */
+  it('-1 when everyone works', () => {
     expect(
       restingStartsAt(rosterRows([card({ status: 'active' })])),
     ).toBe(-1);
   });
 
   /**
-   * ⚠️ কেউ কাজ না করলে ব্যান্ডটা **প্রথম সারিতেই** পড়ে — কম্পোনেন্ট তখন
-   *    সেটা আঁকে না (`restingAt > 0` শর্ত), নইলে টেবিলের মাথাতেই
-   *    "Not working" ব্যান্ড বসে যেত যদিও পুরো তালিকাটাই তাই।
+   * Careful: when nobody works, the band falls on the **first row**; the
+   *    component then does not draw it (the `restingAt > 0` condition),
+   *    otherwise a "Not working" band would sit at the very top of the table
+   *    even though the whole list is exactly that.
    */
-  it('কেউ কাজ না করলে ০', () => {
+  it('0 when nobody works', () => {
     const rows = rosterRows([
       card({ employeeId: 1, status: 'offline' }),
       card({ employeeId: 2, status: 'idle' }),
@@ -151,58 +152,59 @@ describe('restingStartsAt — দলছুট ব্যান্ড কোথা
   });
 });
 
-describe('designView — আজকের ডিজাইন', () => {
+describe('designView — the designs of today', () => {
   /**
-   * ⭐⭐ **কেবল "শেষ" গোনা হয়** *(মালিকের সিদ্ধান্ত, ২৩ আগস্ট ২০২৬)* —
-   * *"file khoila hole seta count koro na, only complete dile count koro"*।
+   * **Only "finished" counts.** The owner's decision: opening a file does not
+   * count, only completing does.
    *
-   * ⚠️⚠️ **কেন বদলাল।** আগে "খোলা" সংখ্যাও দেখানো হতো, আর `met`ও ওটাই
-   * ধরত। মাঠে ধরা পড়ল ম্যানেজার (OX-01) দেখাচ্ছেন **১৬** — অথচ তিনি
-   * ১৯টা ফাইলে মোট **৪৪ মিনিট** দিয়ে সেগুলো **খুলে দেখছিলেন**, বানাননি।
+   * Careful: **why this changed.** The "opened" count used to be shown, and
+   * `met` used it too. In the field, a manager (OX-01) showed **16**, though
+   * they had spent a total of **44 minutes** on 19 files, **opening and looking**
+   * at them, not making them.
    *
-   * ⭐ এই ব্লকটাই সেই সিদ্ধান্তের পাহারাদার: কেউ নীরবে `designsDone`
-   * (খোলা) ধরে বসিয়ে দিলে নিচের টেস্টগুলো ভাঙবে।
+   * This block guards that decision: if someone silently switches to
+   * `designsDone` (opened), the tests below will break.
    */
-  it('⭐⭐ ফাইল খোলা গোনা হয় না — কেবল Complete', () => {
+  it('opening a file does not count, only Complete', () => {
     /**
-     * ⚠️⚠️ **ঠিক বেলালের ঘটনাটাই** — ম্যানেজার ১০০টা ফাইল খুলেছেন কিন্তু
-     * একটাও শেষ বলেননি। আগে এটা "১০০" দেখাত; এখন কিছুই দেখায় না।
+     * Careful: **exactly the case seen in the field**: a manager opened 100
+     * files but marked none finished. This used to show "100"; now it shows nothing.
      *
-     * ⭐ ম্যানেজার বাছা হয়েছে ইচ্ছাকৃতভাবে: ডিজাইনারের টার্গেট থাকলে
-     * `০ / ২৫` দেখানোই সঠিক (তিনি মাপের আওতায়), তাই সেখানে `null` হয় না।
+     * A manager was chosen on purpose: if a designer had a target,
+     * showing `0 / 25` is right (they are under measurement), so it would not be `null`.
      */
     expect(
       designView(card({ staffType: 'manager', designsDone: 100, designsFinished: 0 })),
     ).toBeNull();
 
-    /** ⭐ একটাও খোলেননি, কিন্তু ৩টা শেষ বলেছেন → সংখ্যাটা ওঠে */
+    /** Not one opened, but 3 marked finished: the number appears */
     expect(
       designView(card({ staffType: 'manager', designsDone: 0, designsFinished: 3 })),
     ).toEqual({ done: 3, target: null, met: false });
 
-    /** ⚠️ ডিজাইনার শূন্যেও দেখা যান — টার্গেট আছে, তাই মাপটা প্রযোজ্য */
+    /** Careful: a designer is shown even at zero: they have a target, so the measure applies */
     expect(
       designView(card({ staffType: 'designer', designsDone: 100, designsFinished: 0 })),
     ).toEqual({ done: 0, target: 25, met: false });
   });
 
   /**
-   * ⭐⭐ **মালিকের বাছাই, ২২ আগস্ট** — ম্যানেজার নিজেও ডিজাইন করেন।
-   * ⚠️ ধরন বদলানোর পর সংখ্যাটা উধাও হয়ে যাচ্ছিল, অথচ কাজটা সত্যি।
+   * **The owner's choice.** Staff type changes: a manager designs too.
+   * Careful: after a change of type the number was vanishing, though the work was real.
    */
-  it('ডিজাইনার নন, তবু শেষ করেছেন — সংখ্যা ওঠে, টার্গেট ছাড়া', () => {
+  it('not a designer but finished work: the number shows, with no target', () => {
     const view = designView(card({ staffType: 'manager', designsFinished: 43 }));
     expect(view).toEqual({ done: 43, target: null, met: false });
   });
 
-  /** ⚠️⚠️ টার্গেট ছাড়া কারো `met` কখনো `true` নয় — ৪৩ > ২৫ হলেও */
-  it('টার্গেট ছাড়া কেউ কখনো সবুজ হয় না', () => {
+  /** Careful: nobody without a target ever has `met` true, even at 43 > 25 */
+  it('nobody without a target is ever green', () => {
     expect(
       designView(card({ staffType: 'manager', designsFinished: 999 }))?.met,
     ).toBe(false);
   });
 
-  it('ডিজাইনারের টার্গেটসহ হিসাব', () => {
+  it('calculation with the designer target', () => {
     expect(
       designView(card({ staffType: 'designer', designsFinished: 25 })),
     ).toEqual({ done: 25, target: 25, met: true });
@@ -212,67 +214,67 @@ describe('designView — আজকের ডিজাইন', () => {
     ).toBe(false);
   });
 
-  /** ⚠️ কাজ না করলে কিছুই নয় — "০" পড়তে অভিযোগের মতো লাগে */
-  it('ডিজাইন না করলে কিছুই নয়', () => {
+  /** Careful: nothing if no work: reading "0" feels like an accusation */
+  it('shows nothing when no design was made', () => {
     expect(designView(card({ staffType: 'researcher', designsFinished: 0 }))).toBeNull();
     expect(designView(card({ staffType: null, designsDone: 0 }))).toBeNull();
   });
 });
 
 
-describe('G130 — আজ তার কী দায়িত্ব, আর না থাকলে কেন', () => {
-  it('সাধারণ কর্মদিবস — টার্গেট আছে', () => {
+describe('G130 — what is expected today, and why not', () => {
+  it('an ordinary working day: there is a target', () => {
     expect(dayDuty(card())).toBe('target');
   });
 
   /**
-   * ⭐⭐⭐ **এই describe-এর কারণ পুরোটাই এই একটা টেস্ট।**
+   * **This whole describe exists for this one test.**
    *
-   * ⚠️⚠️ `todayIsWorkday` **অফিসের** ক্যালেন্ডার — শুক্রবার ও সরকারি ছুটি।
-   * ব্যক্তিগত ছুটি ওতে নেই, তাই ছুটিতে থাকা কর্মীর কার্ডে ফুটত
-   * **"0h / 8h" আর একটা খালি মিটার** — দেখতে হুবহু ফাঁকি দেওয়া মানুষের
-   * মতো। অথচ সংখ্যাগুলো (টার্গেট, প্রত্যাশা, pace) তাঁকে অনেক আগেই ছাড়
-   * দিয়েছে; শুধু **ছবিটা দেয়নি**।
+   * Careful: `todayIsWorkday` is the **office** calendar: Fridays and public
+   * holidays. Personal leave is not in it, so the card of someone on leave
+   * would show **"0h / 8h" and an empty meter**, looking exactly like a person
+   * slacking. Yet the numbers (target, expectation, pace) had excused them
+   * long ago; only **the picture did not**.
    */
-  it('⭐ কর্মদিবস, কিন্তু তিনি ছুটিতে — টার্গেট নেই, আর কারণটা "leave"', () => {
+  it('a working day, but on leave: no target, and the reason is "leave"', () => {
     expect(dayDuty(card({ todayIsWorkday: true, onLeaveToday: true }))).toBe(
       'leave',
     );
   });
 
   /**
-   * ⚠️⚠️ **ক্রমটা ইচ্ছাকৃত।** কারো ছুটি যদি শুক্রবারে লেখা থাকে, কার্ডে
-   * তখনো "day off"-ই ঠিক: ওই দিনে **কারোরই** টার্গেট নেই, তাই একজনকে
-   * আলাদা করে চিহ্নিত করা অর্থহীন — আর "on leave" পড়ে কেউ ভাবতেন
-   * বাকিরা কাজ করছেন।
+   * Careful: **the order is deliberate.** If someone's leave is written on a
+   * Friday, the card should still say "day off": on that day **nobody** has a
+   * target, so singling one person out is meaningless, and reading "on leave"
+   * someone would think the others are working.
    */
-  it('⭐ শুক্রবারে লেখা ছুটি — তবু "day off", "on leave" নয়', () => {
+  it('leave written on a Friday: still "day off", not "on leave"', () => {
     expect(dayDuty(card({ todayIsWorkday: false, onLeaveToday: true }))).toBe(
       'off',
     );
   });
 
-  it('সরকারি ছুটি / সাপ্তাহিক ছুটি — "off"', () => {
+  it('public holiday / weekly day off: "off"', () => {
     expect(dayDuty(card({ todayIsWorkday: false }))).toBe('off');
   });
 
   /**
-   * ⚠️ টার্গেট ০ মানে ওই দিনে কিছু করার নেই — ছুটির দিনের মতোই। ⭐ শর্তটা
-   *    রাখা হয়েছে কারণ prorate করা কর্মীর (মাসের পরে যোগ) দৈনিক টার্গেট
-   *    ০ হতে পারে, আর তখন "0h / 0h" দেখানো অর্থহীন।
+   * Careful: a target of 0 means nothing to do that day, like a day off. The
+   *    condition is there because a prorated employee (joined later in the
+   *    month) can have a daily target of 0, and showing "0h / 0h" then is meaningless.
    */
-  it('টার্গেট ০ হলে "off" — ছুটি লেখা থাকলেও', () => {
+  it('"off" when the target is 0, even if leave is written', () => {
     expect(dayDuty(card({ dailyTargetSec: 0, onLeaveToday: true }))).toBe('off');
   });
 
   /**
-   * ⭐⭐ **সমতাটাই আসল পাহারা।** ছুটির দিন আর সাপ্তাহিক ছুটি — দুটোতেই
-   * মিটার ওঠে না, অর্থাৎ `hasTarget` দুটোকে **এক** দেখে। তবু `dayDuty`
-   * দুটোকে আলাদা রাখে, কারণ পর্দার লেখাটা আলাদা। এক করে দিলে ছুটির দিনে
-   * কার্ড বলত "day off" — অর্থাৎ গোটা অফিস বন্ধ, একটা মিথ্যা সারাতে গিয়ে
-   * নতুন একটা মিথ্যা।
+   * **The inequality is the real guard.** On leave and on a weekly day off
+   * neither shows a meter, i.e. `hasTarget` treats the two as **the same**.
+   * Yet `dayDuty` keeps them apart, because the on-screen text differs. Merged,
+   * a person on leave would see the card say "day off", i.e. the whole office
+   * is closed: a new lie while fixing one.
    */
-  it('⭐ ছুটি আর সাপ্তাহিক ছুটি — দুটোতেই মিটার নেই, তবু কথা দুটো আলাদা', () => {
+  it('leave and weekly day off: neither has a meter, yet the two messages differ', () => {
     const onLeave = dayDuty(card({ onLeaveToday: true }));
     const dayOff = dayDuty(card({ todayIsWorkday: false }));
 

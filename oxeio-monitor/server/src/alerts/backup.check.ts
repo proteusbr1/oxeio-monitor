@@ -6,21 +6,22 @@ import { backupAlertText, backupVerdict } from '../ops/ops.rules';
 import { AlertsService } from './alerts.service';
 
 /**
- * **G04** — ব্যাকআপ ব্যর্থ হলে অ্যালার্ট।
+ * **G04**: alert when a backup fails.
  *
- * ⭐ **সফল হলে এই ক্লাস কিচ্ছু বলে না।** কোনো "ব্যাকআপ ঠিকঠাক হয়েছে" মেইল
- * নেই। রোজকার নিশ্চিতকরণ এক সপ্তাহেই ফিল্টারে চলে যায়, আর তার সাথে
- * যেদিন ব্যাকআপ **হয়নি** সেই বার্তাটাও — অর্থাৎ রোজ খবর দেওয়াটাই
- * শেষপর্যন্ত খবরটা হারিয়ে ফেলার সবচেয়ে নিশ্চিত উপায়।
+ * **When a backup succeeds, this class says nothing.** There is no "backup
+ * went fine" email. Daily confirmations end up in a filter within a week, and
+ * so does the message for the day the backup did **not** happen; reporting
+ * every day is the surest way to lose the news in the end.
  *
- * ⭐ চেকটা ব্যাকআপ জব থেকে **আলাদা**, আর সেটাই এর মূল মূল্য। জব নিজে
- * ব্যর্থতা জানাতে পারে শুধু যদি জবটা চলে। সবচেয়ে বিপজ্জনক অবস্থাটা হলো
- * জবটার আদৌ না চলা — সার্ভার রাত ২:৩০-এ বন্ধ ছিল, শিডিউলার রেজিস্টার হয়নি,
- * বা কন্টেইনার ক্র্যাশ লুপে। সেই নীরবতা ধরার একমাত্র উপায় বাইরে থেকে
- * ঘড়ি দেখা: "শেষ সফল ব্যাকআপ কত ঘণ্টা আগে?"
+ * The check is **separate** from the backup job, and that is its main value.
+ * The job can report a failure only if it runs. The most dangerous state is
+ * the job not running at all: the server was down at 2:30 AM, the scheduler
+ * was not registered, or the container is in a crash loop. The only way to
+ * catch that silence is to look at the clock from outside: "how many hours
+ * ago was the last successful backup?"
  *
- * ⚠️ `type` সবসময় `backup_failed`, আর deviceId/employeeId দুটোই null —
- *    ফলে throttle-এর key শুধু টাইপটাই (সার্ভারপ্রতি একটা), ৬ ঘণ্টায় একটা।
+ * Careful: `type` is always `backup_failed` and deviceId/employeeId are both
+ * null, so the throttle key is just the type (one per server), one per 6 hours.
  */
 @Injectable()
 export class BackupCheck {
@@ -57,7 +58,7 @@ export class BackupCheck {
     const snapshot = await this.state.read(this.backup.configured);
     const verdict = backupVerdict(snapshot, now);
 
-    // ⭐ সব ঠিক — কিছুই বলার নেই
+    // Everything is fine: nothing to say
     if (!verdict) return 0;
 
     const { title, detail } = backupAlertText(verdict);
@@ -74,9 +75,9 @@ export class BackupCheck {
           title,
           detail:
             detail +
-            // ⚠️ শেষ ত্রুটির বার্তাটা যোগ করা হয় কারণ ওটা না থাকলে মালিককে
-            //    সার্ভারে লগইন করে লগ পড়তে হতো — আর তখন অ্যালার্টটা শুধু
-            //    দুশ্চিন্তা দিত, দিক নয়।
+            // The last error message is appended because without it the owner
+            // would have to log into the server and read the logs, and then the
+            // alert would only cause worry, not give direction.
             (snapshot.lastError ? ` (last error: ${snapshot.lastError})` : ''),
           meta: {
             problem: verdict.problem,

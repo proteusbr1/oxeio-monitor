@@ -3,103 +3,105 @@ using oXeio.Core.Agent;
 namespace oXeio.Agent.Sync;
 
 /// <summary>
-/// <see cref="HttpSyncClient"/>-এর সব নব একজায়গায়। কোডে ছড়িয়ে না রেখে এখানে
-/// রাখার কারণ: টাইমআউট আর রেট-লিমিটের সংখ্যাগুলো একে অপরের সাথে সম্পর্কিত —
-/// একটা বদলালে আরেকটা না দেখে বদলানো বিপজ্জনক (নিচের মন্তব্যগুলো দেখুন)।
+/// Every knob of <see cref="HttpSyncClient"/> in one place. They live here rather than
+/// scattered in code because the timeout and rate-limit numbers are related to each other;
+/// changing one without looking at the other is dangerous (see the comments below).
 ///
-/// ⚠️ এখানে কোনো টোকেন বা সিক্রেট নেই, ইচ্ছাকৃতভাবে। টোকেন আসে
-/// <see cref="IDeviceTokenSource"/> দিয়ে — secrets মডিউল তার মালিক।
+/// Careful: there is deliberately no token or secret here. The token comes through
+/// <see cref="IDeviceTokenSource"/>; the secrets module owns it.
 /// </summary>
 internal sealed record SyncClientOptions
 {
     /// <summary>
-    /// সার্ভারের বেস URL, যেমন <c>https://oxeio.office.local/api/v1</c>।
+    /// The server's base URL, e.g. <c>https://oxeio.office.local/api/v1</c>.
     ///
-    /// ⚠️ শেষে '/' না থাকলে <see cref="Uri"/>-র relative জোড়া লাগানোর নিয়ম
-    /// শেষ খণ্ডটা <b>কেটে ফেলে</b>: "…/api/v1" + "agent/segments" = "…/api/agent/segments"।
-    /// তাই ক্লায়েন্ট নিজেই '/' বসিয়ে নেয়, কনফিগে ভুল থাকলেও।
+    /// Careful: without a trailing '/', <see cref="Uri"/>'s relative-join rules <b>cut off</b>
+    /// the last segment: "…/api/v1" + "agent/segments" = "…/api/agent/segments".
+    /// So the client appends the '/' itself, even if the config is wrong.
     /// </summary>
     public required Uri BaseAddress { get; init; }
 
-    /// <summary>User-Agent হেডারে যায়। সার্ভারের লগে কোন এজেন্ট কথা বলছে বোঝা যায়।</summary>
+    /// <summary>Goes in the User-Agent header, so the server log shows which agent is talking.</summary>
     public string AgentVersion { get; init; } = "0.0.0";
 
-    // ── টাইমআউট ─────────────────────────────────────────────────────────────
+    // ── timeouts ────────────────────────────────────────────────────────────
     //
-    // ⚠️ HttpClient.Timeout ব্যবহার করা হয় না (Infinite করা আছে) — ওটা পুরো
-    //    ক্লায়েন্টের জন্য একটাই মান, অথচ একটা heartbeat আর একটা ৫ MiB আপলোডের
-    //    সহনীয় সময় এক নয়। প্রতি কলে নিজস্ব CancellationTokenSource।
+    // Careful: HttpClient.Timeout is not used (it is set to Infinite). It is a single value
+    // for the whole client, but a heartbeat and a 5 MiB upload do not tolerate the same time.
+    // Each call has its own CancellationTokenSource.
 
-    /// <summary>enroll / config / heartbeat / update-check — ছোট JSON, দ্রুত হওয়ার কথা।</summary>
+    /// <summary>enroll / config / heartbeat / update-check: small JSON, expected to be fast.</summary>
     public TimeSpan ControlTimeout { get; init; } = TimeSpan.FromSeconds(20);
 
-    /// <summary>৫০০ রেকর্ডের একটা ব্যাচ। ধীর ADSL-এও ~২০০ KB এক মিনিটে যায়।</summary>
+    /// <summary>A batch of 500 records. Even on slow ADSL ~200 KB goes through in a minute.</summary>
     public TimeSpan IngestTimeout { get; init; } = TimeSpan.FromSeconds(60);
 
     /// <summary>
-    /// একটা .webp আপলোড।
+    /// One .webp upload.
     ///
-    /// ⭐ এই সংখ্যাটা স্লটের দৈর্ঘ্যের সাথে বাঁধা: ৩ মনিটর × ৬০ সেকেন্ড = ৩ মিনিট,
-    /// অর্থাৎ সবচেয়ে খারাপ অবস্থাতেও ৫ মিনিটের স্লট শেষ হওয়ার আগেই হাত খালি।
-    /// এটা বাড়ালে একটা ঝুলে থাকা কানেকশন পরের স্লটের ছবিগুলোকেও আটকে দেবে,
-    /// আর কিউ তখন প্রতি স্লটে বাড়তেই থাকবে।
+    /// Important: this number is tied to the slot length: 3 monitors x 60 seconds = 3 minutes,
+    /// so even in the worst case the hands are free before the 5 minute slot ends.
+    /// If it were raised, one hung connection would also block the next slot's screenshots,
+    /// and the queue would keep growing every slot.
     /// </summary>
     public TimeSpan ScreenshotTimeout { get; init; } = TimeSpan.FromSeconds(60);
 
-    /// <summary>MSI নামানো — কিউয়ের বাইরের কাজ, তাই লম্বা সময় দেওয়া যায়।</summary>
+    /// <summary>MSI download: work outside the queue, so a long time can be allowed.</summary>
     public TimeSpan DownloadTimeout { get; init; } = TimeSpan.FromMinutes(10);
 
-    /// <summary>TCP/TLS ধরতে কতক্ষণ। লাইন মরা থাকলে দ্রুত হাল ছেড়ে রিট্রাইয়ে যাওয়াই ভালো।</summary>
+    /// <summary>How long to wait for TCP/TLS. If the line is dead, better to give up fast and retry.</summary>
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(10);
 
     /// <summary>
-    /// ⭐ সপ্তাহের পর সপ্তাহ চলা প্রসেসের DNS সমস্যার একমাত্র সমাধান।
-    /// একটা static <c>HttpClient</c> কানেকশন পুল ধরে রাখে আর DNS আর কখনো দেখে না —
-    /// সার্ভারের IP বদলালে (নতুন রিভার্স প্রক্সি, DHCP) এজেন্ট চিরতরে ভুল ঠিকানায়
-    /// ধাক্কা দিতে থাকত। এই মেয়াদ শেষে কানেকশন ফেলে দেওয়া হয়, ফলে DNS আবার দেখা হয়।
+    /// The only fix for DNS problems in a process that runs for weeks on end.
+    /// A static <c>HttpClient</c> holds on to its connection pool and never looks at DNS
+    /// again; if the server's IP changed (new reverse proxy, DHCP) the agent would keep
+    /// hitting the wrong address forever. When this lifetime ends the connection is dropped,
+    /// so DNS is looked up again.
     /// </summary>
     public TimeSpan PooledConnectionLifetime { get; init; } = TimeSpan.FromMinutes(5);
 
-    // ── রেট লিমিট ───────────────────────────────────────────────────────────
+    // ── rate limits ─────────────────────────────────────────────────────────
 
     /// <summary>
-    /// segments / app-usage / events — প্রতি মিনিটে কতটা রিকোয়েস্ট।
+    /// segments / app-usage / events: how many requests per minute.
     ///
-    /// ⭐ সার্ভারের সীমা <see cref="SyncLimits.RateLimitIngestPerMinute"/> = ৬০।
-    /// এখানে ৫৫ রাখা হয়েছে ইচ্ছাকৃতভাবে — বাকি ৫টা heartbeat (৩০ সেকেন্ডে একটা,
-    /// অর্থাৎ ২/মিনিট), config reload আর update-check-এর জন্য তোলা। ওগুলোকেও
-    /// একই লিমিটারে ঢোকালে কিউ ড্রেন করার সময় heartbeat আটকে যেত আর ড্যাশবোর্ড
-    /// মেশিনটাকে "অফলাইন" দেখাত — অথচ সে তখন প্রাণপণে আপলোড করছে।
+    /// Important: the server's limit is <see cref="SyncLimits.RateLimitIngestPerMinute"/> = 60.
+    /// We use 55 on purpose; the other 5 are set aside for the heartbeat (one every 30
+    /// seconds, i.e. 2/minute), config reload and update-check. If those went through the
+    /// same limiter, the heartbeat would be stuck while draining the queue and the dashboard
+    /// would show the machine as "offline" even though it is uploading flat out.
     ///
-    /// ৫০,০০০ সারির ব্যাকলগের হিসাব: ৫০,০০০ ÷ ৫০০ (MaxBatchSize) = ১০০ রিকোয়েস্ট;
-    /// ১০০ ÷ ৫৫ ≈ ১.৮ মিনিট। অর্থাৎ ৪২৯ না খেয়েই পুরোটা যায়।
+    /// For a 50,000-row backlog: 50,000 / 500 (MaxBatchSize) = 100 requests;
+    /// 100 / 55 is about 1.8 minutes. So it all goes through without a single 429.
     /// </summary>
     public int IngestPermitsPerMinute { get; init; } = 55;
 
     /// <summary>
-    /// সার্ভারের সীমা <see cref="SyncLimits.RateLimitScreenshotPerMinute"/> = ২০;
-    /// এখানে ১৮ — সীমার গায়ে গা লাগিয়ে চললে ঘড়ির সামান্য অমিলেই ৪২৯।
+    /// The server's limit is <see cref="SyncLimits.RateLimitScreenshotPerMinute"/> = 20;
+    /// we use 18, because running right at the limit gives a 429 on the slightest clock
+    /// mismatch.
     ///
-    /// হিসাব: এক দিনে সর্বোচ্চ ২ মনিটর × ১২ স্লট/ঘণ্টা × ১৬ ঘণ্টা = ৩৮৪টা ছবি।
-    /// ১৮/মিনিটে সেটা ~২২ মিনিট। সাত দিন অফলাইন থাকলে ২,৬৮৮টা ≈ আড়াই ঘণ্টা —
-    /// লাইন ফেরার পর নিজে নিজেই শেষ হয়ে যায়, কারো কিছু করার দরকার নেই।
+    /// The numbers: at most 2 monitors x 12 slots/hour x 16 hours = 384 screenshots a day.
+    /// At 18/minute that is ~22 minutes. After seven days offline it is 2,688, about two and a
+    /// half hours; it finishes by itself once the line is back, and nobody has to do anything.
     /// </summary>
     public int ScreenshotPermitsPerMinute { get; init; } = 18;
 
     /// <summary>
-    /// নামানো MSI এর চেয়ে বড় হলে থামিয়ে দেওয়া হয়।
-    /// ⚠️ ছাড়া দিলে একটা ভুল রুট (HTML স্ট্রিম) ডিস্ক ভরিয়ে দিতে পারত, আর তখন
-    /// আউটবক্স আর কিছু লিখতে পারত না — অর্থাৎ ডেটা হারাত।
+    /// A download larger than this is stopped.
+    /// Careful: without it a wrong route (an HTML stream) could fill the disk, and then the
+    /// outbox could not write anything, which means lost data.
     /// </summary>
     public long MaxUpdateBytes { get; init; } = 256L * 1024 * 1024;
 
     /// <summary>
-    /// **I01** — সার্ভারের সার্টের SPKI হ্যাশ (base64), কমা দিয়ে ভাগ করা।
-    /// খালি হলে পিনিং বন্ধ, আর তখন Windows-এর নিজের যাচাইটাই একমাত্র ভরসা।
+    /// The SPKI hash of the server's certificate (base64), comma separated.
+    /// When empty, pinning is off, and Windows's own validation is the only safeguard.
     /// </summary>
     public string? ServerPin { get; init; }
 
-    /// <summary>স্ট্রিং URL থেকে — কনফিগ ফাইল থেকে পড়ার সহজ পথ।</summary>
+    /// <summary>From a string URL: an easy way to read from a config file.</summary>
     public static SyncClientOptions For(string baseUrl, string agentVersion = "0.0.0") =>
         new() { BaseAddress = new Uri(baseUrl, UriKind.Absolute), AgentVersion = agentVersion };
 }

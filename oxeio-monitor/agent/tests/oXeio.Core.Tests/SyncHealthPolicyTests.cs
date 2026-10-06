@@ -12,7 +12,7 @@ public class SyncHealthPolicyTests
     [Fact]
     public void কিউ_খালি_থাকলে_সবসময়_সুস্থ()
     {
-        // রাত ৩টায় পাঠানোর কিছু নেই — তখন লাল দেখানোর মানে হয় না
+        // At 3 AM there is nothing to send, so showing red makes no sense
         var h = P.Evaluate(
             lastSuccessAt: Start,
             startedAt: Start,
@@ -48,9 +48,9 @@ public class SyncHealthPolicyTests
     }
 
     /// <summary>
-    /// সদ্য ইনস্টল করা এজেন্ট এখনো একবারও সফল হয়নি। চালু হওয়ার সময় থেকে
-    /// না গুনলে সে প্রথম মিনিট থেকেই লাল দেখাত — আর স্টাফের প্রথম অভিজ্ঞতাই
-    /// হতো "কিছু একটা নষ্ট"।
+    /// A freshly installed agent has not succeeded even once yet. If it were not counted
+    /// from the start time it would show red from the first minute, and staff's very
+    /// first experience would be "something is broken".
     /// </summary>
     [Fact]
     public void কখনো_সফল_না_হলে_চালু_হওয়ার_সময়_থেকে_গোনা_হয়()
@@ -67,7 +67,7 @@ public class SyncHealthPolicyTests
     [Fact]
     public void Revoke_সবকিছুর_আগে()
     {
-        // কিউ খালি, সদ্য সিঙ্ক হয়েছে — তবু revoked-ই জিতবে
+        // queue empty, synced just now; revoked still wins
         var h = P.Evaluate(Start, Start, 0, revoked: true, now: Start);
 
         Assert.Equal(SyncHealth.Revoked, h);

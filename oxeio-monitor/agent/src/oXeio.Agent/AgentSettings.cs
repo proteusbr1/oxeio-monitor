@@ -8,62 +8,60 @@ using oXeio.Agent.Security;
 namespace oXeio.Agent;
 
 /// <summary>
-/// এজেন্ট কোথায় কথা বলবে — MSI ইনস্টল করার সময় লিখে দেয়।
+/// Where the agent talks to: written by the MSI at install time.
 ///
-/// ⚠️ এখানে <b>কোনো গোপন তথ্য থাকে না</b>। ডিভাইস টোকেন আলাদা ফাইলে,
-/// DPAPI দিয়ে সুরক্ষিত (<see cref="DeviceTokenStore"/>)। এই ফাইলটা
-/// পড়তে পারা মানে শুধু সার্ভারের ঠিকানা জানা।
+/// Careful: <b>no secrets are kept here</b>. The device token is in a separate file, protected with
+/// DPAPI (<see cref="DeviceTokenStore"/>). Being able to read this file only reveals the server's
+/// address.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed record AgentSettings
 {
     /// <summary>
-    /// উদাহরণ: <c>https://oxeio.office.local</c> — <b>শুধু ঠিকানা</b>, কোনো পথ নয়।
+    /// Example: <c>https://oxeio.office.local</c>. <b>Address only</b>, no path.
     ///
-    /// ⚠️ API-র prefix (<c>/api/v1</c>) এখানে লিখতে হয় না; <see cref="ApiRoot"/>
-    /// নিজে জুড়ে নেয়। ওটা সার্ভারের ভেতরের ব্যাপার — অফিসের অ্যাডমিনকে
-    /// মনে রাখতে বলা মানে একদিন কেউ ভুলে যাবে, আর তখন এজেন্ট প্রতিটা
-    /// রিকোয়েস্টে ৪০৪ খেয়ে চুপচাপ কিছুই পাঠাবে না।
+    /// Careful: the API prefix (<c>/api/v1</c>) is not written here; <see cref="ApiRoot"/> adds it.
+    /// That is a server internal; asking the office admin to remember it means someone will forget
+    /// one day, and then the agent would get a 404 on every request and quietly send nothing.
     /// </summary>
     public required string ServerUrl { get; init; }
 
-    /// <summary>সার্ভারের গ্লোবাল prefix — <c>server/src/main.ts</c>-এ সেট করা।</summary>
+    /// <summary>The server's global prefix, set in <c>server/src/main.ts</c>.</summary>
     public const string ApiPrefix = "api/v1";
 
     /// <summary>
-    /// <see cref="ServerUrl"/> + <see cref="ApiPrefix"/>। শেষে স্ল্যাশ থাকে,
-    /// কারণ <c>Uri</c> আপেক্ষিক পথ জোড়ার সময় শেষ খণ্ডটা <b>কেটে ফেলে</b> —
-    /// স্ল্যাশ ছাড়া <c>…/api/v1</c> + <c>agent/enroll</c> হতো
-    /// <c>…/api/agent/enroll</c>।
+    /// <see cref="ServerUrl"/> + <see cref="ApiPrefix"/>. It ends with a slash, because when
+    /// <c>Uri</c> joins a relative path it <b>drops the last segment</b>; without the slash,
+    /// <c>.../api/v1</c> + <c>agent/enroll</c> would become <c>.../api/agent/enroll</c>.
     /// </summary>
     [JsonIgnore]
     public Uri ApiRoot => new(new Uri(ServerUrl.TrimEnd('/') + "/"), ApiPrefix + "/");
 
-    /// <summary>স্টাফ নিজের ডেটা যেখানে দেখবে (J02)। না থাকলে মেনু আইটেমটা নিষ্ক্রিয়।</summary>
+    /// <summary>Where staff can see their own data (J02). If absent, the menu item is
+    /// disabled.</summary>
     public string? StaffPortalUrl { get; init; }
 
-    /// <summary>সই করা মনিটরিং পলিসির কপি (J04)।</summary>
+    /// <summary>Copy of the signed monitoring policy (J04).</summary>
     public string? PolicyUrl { get; init; }
 
-    /// <summary>ইনস্টলের সময় দেওয়া একবার-ব্যবহার্য কোড (H05)। enroll হয়ে গেলে অগ্রাহ্য।</summary>
+    /// <summary>One-time code supplied at install (H05). Ignored once enrolled.</summary>
     public string? EnrollmentCode { get; init; }
 
     /// <summary>
-    /// **I01** — সার্ভারের সার্টের SPKI হ্যাশ (base64), কমা দিয়ে ভাগ করা।
+    /// <b>I01:</b> the SPKI hash (base64) of the server's certificate, comma-separated.
     ///
-    /// ⭐ অফিসের সার্ভারে স্ব-স্বাক্ষরিত সার্ট, তাই "বিশ্বস্ত CA" বলে
-    /// কিছু নেই — পিনই একমাত্র উপায় যাতে এজেন্ট নিশ্চিত হতে পারে ওপাশে
-    /// আমাদের সার্ভারই আছে (রানবুক § ৬)।
+    /// The office server uses a self-signed certificate, so there is no "trusted CA"; the pin is
+    /// the only way the agent can be sure our server is on the other end (runbook section 6).
     ///
-    /// ⚠️ **একাধিক পিন রাখা যায়, আর নবায়নের দিন রাখতেই হবে** — পুরোনো ও
-    /// নতুন দুটোই কিছুক্ষণ বৈধ না থাকলে সার্ট বদলানোর মুহূর্তে ১৫টা
-    /// এজেন্ট একসাথে সংযোগ হারাত (§ ৭.১)।
+    /// Careful: <b>several pins may be set, and on renewal day they must be</b>. If the old and new
+    /// certificates are not both valid for a while, all 15 agents would lose their connection at
+    /// the moment the certificate changes (section 7.1).
     ///
-    /// ⚠️ না দিলে পিনিং **বন্ধ** থাকে — তখন শুধু Windows-এর নিজের যাচাই।
-    /// এটা আজকের ইচ্ছাকৃত ট্রেড-অফ: রানবুক § ৬.৪ সুপারিশ করেছিল পিন
-    /// বাধ্যতামূলক করার, কিন্তু তাতে আজকের পাইলট (যেখানে সার্টই বসানো
-    /// হয়নি) সংযোগই করতে পারত না। প্রোডাকশনে `SERVERPIN` দেওয়া
-    /// চেকলিস্টের অংশ, আর না দিলে এজেন্ট লগে সেটা স্পষ্ট করে বলে।
+    /// Careful: if not set, pinning is <b>off</b> and only Windows' own validation applies. This is
+    /// a deliberate trade-off for now: runbook section 6.4 recommended making the pin mandatory,
+    /// but that would stop today's pilot (where no certificate has been installed yet) from
+    /// connecting at all. Setting `SERVERPIN` in production is part of the checklist, and when it
+    /// is missing the agent says so clearly in the log.
     /// </summary>
     public string? ServerPin { get; init; }
 
@@ -78,13 +76,13 @@ internal sealed record AgentSettings
     public bool IsUsable => Uri.TryCreate(ServerUrl, UriKind.Absolute, out var u)
                             && (u.Scheme == Uri.UriSchemeHttps || u.Scheme == Uri.UriSchemeHttp);
 
-    /// <summary>ফাইলের নাম — ডেটা ফোল্ডারেই, টোকেনের পাশে।</summary>
+    /// <summary>File name: in the data folder, next to the token.</summary>
     public const string FileName = "agent.json";
 
     /// <summary>
-    /// ⚠️ ডেভেলপমেন্টে ফাইল ছাড়া চালানোর একমাত্র পথ। প্রোডাকশনে এই
-    /// পরিবেশ-চলক থাকে না, তাই ভুল করে কারো মেশিনে অন্য সার্ভারে ডেটা
-    /// যাওয়ার ঝুঁকি নেই।
+    /// Careful: the only way to run without the file during development. This environment variable
+    /// does not exist in production, so there is no risk of data going to a different server from
+    /// someone's machine by mistake.
     /// </summary>
     public const string ServerUrlEnvVar = "OXEIO_SERVER_URL";
 
@@ -95,20 +93,20 @@ internal sealed record AgentSettings
         AllowTrailingCommas = true,
     };
 
-    /// <summary>MSI এখানে লেখে। আনইনস্টলে Windows নিজেই মুছে দেয়।</summary>
+    /// <summary>The MSI writes here. Windows removes it itself on uninstall.</summary>
     public const string RegistryKey = @"SOFTWARE\oXeio\Agent";
 
     public static AgentSettings? Load(out string source) => Load(null, out source);
 
     /// <summary>
-    /// পড়া যায়নি মানে কনফিগার করা হয়নি — <c>null</c> ফেরে, ব্যতিক্রম নয়।
-    /// কলার তখন স্পষ্ট বার্তা দেখাতে পারে, স্ট্যাক ট্রেস নয়।
+    /// If it cannot be read, it is not configured: returns <c>null</c>, not an exception, so the
+    /// caller can show a clear message rather than a stack trace.
     ///
-    /// তিন জায়গায় খোঁজা হয়, এই ক্রমে:
+    /// It looks in three places, in this order:
     /// <list type="number">
-    /// <item>পরিবেশ-চলক — শুধু ডেভেলপমেন্টে</item>
-    /// <item>রেজিস্ট্রি <c>HKLM\SOFTWARE\oXeio\Agent</c> — MSI যেখানে লেখে</item>
-    /// <item><c>agent.json</c> — হাতে বসানোর পথ</item>
+    /// <item>environment variable: development only</item>
+    /// <item>registry <c>HKLM\SOFTWARE\oXeio\Agent</c>: where the MSI writes</item>
+    /// <item><c>agent.json</c>: the manual route</item>
     /// </list>
     /// </summary>
     public static AgentSettings? Load(string? directory, out string source)
@@ -145,10 +143,10 @@ internal sealed record AgentSettings
     }
 
     /// <summary>
-    /// ⚠️ <c>Registry.LocalMachine</c> খোলা হয় <b>64-বিট ভিউতে</b> জোর করে।
-    /// এজেন্ট 32-বিট হিসেবে চললে (বা ভবিষ্যতে কেউ AnyCPU বানালে) Windows
-    /// নীরবে <c>WOW6432Node</c>-এ পাঠাত, যেখানে MSI কিছু লেখেইনি — আর তখন
-    /// এজেন্ট "কনফিগার করা হয়নি" বলে বসে থাকত, অথচ ইনস্টল ঠিকই হয়েছে।
+    /// Careful: <c>Registry.LocalMachine</c> is opened <b>forcibly in the 64-bit view</b>. If the
+    /// agent ran as 32-bit (or someone makes it AnyCPU in the future), Windows would silently
+    /// redirect to <c>WOW6432Node</c>, where the MSI wrote nothing, and the agent would sit saying
+    /// "not configured" although the install was fine.
     /// </summary>
     private static AgentSettings? FromRegistry()
     {

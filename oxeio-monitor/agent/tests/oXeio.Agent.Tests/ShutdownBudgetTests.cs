@@ -1,30 +1,31 @@
 namespace oXeio.Agent.Tests;
 
 /// <summary>
-/// ⭐⭐ <b>R29-B · G136 — বন্ধ হওয়ার বাজেটগুলো পরস্পরের ভেতরে থাকতেই হবে।</b>
+/// <b>R29-B / G136: the shutdown budgets must nest inside each other.</b>
 ///
-/// ⚠️⚠️ এই ফাইলটার কারণ একটাই: শর্তগুলো এতদিন <b>কেবল মন্তব্যে</b> লেখা ছিল
-/// (<i>"Program.ShutdownBudget-এর ভেতরে থাকতে হবে"</i>), আর মন্তব্য কাউকে
-/// থামায় না। একটা বাজেট বাড়িয়ে দিলে ফল হতো নীরব: drain নিজে থামত না,
-/// Windows প্রসেসটাকে <b>মাঝপথে</b> মেরে ফেলত, আর ঠিক যে <c>agent_stop</c>-এর
-/// জন্য পুরো অপেক্ষা সেটাই হারাত। কম্পাইলার ধরত না, মাঠে ধরা পড়ত মাস পরে —
-/// সকালের বাসি agent_down দেয়াল হয়ে।
+/// Careful: this file exists for one reason. Until now these conditions were written
+/// <b>only in comments</b> (<i>"must stay within Program.ShutdownBudget"</i>), and a
+/// comment stops nobody. Raising one budget would fail silently: the drain would not
+/// stop itself, Windows would kill the process <b>midway</b>, and the very
+/// <c>agent_stop</c> that the whole wait is for would be lost. The compiler would not
+/// catch it; it would show up in the field months later, as a stale agent_down wall
+/// in the morning.
 ///
-/// ⭐ সংখ্যা নয়, <b>সম্পর্ক</b> পরীক্ষা করা হয়: কেউ ২.৫ সে.-কে ৩ করলে টেস্ট
-/// চুপ থাকবে যতক্ষণ ছাদগুলো মানা হচ্ছে।
+/// It tests the <b>relationships</b>, not the numbers: if someone changes 2.5 s to 3,
+/// the test stays quiet as long as the ceilings are respected.
 /// </summary>
 public class ShutdownBudgetTests
 {
     /// <summary>
-    /// Windows অসাড় অ্যাপকে কতক্ষণ সময় দেয় — <c>WaitToKillAppTimeout</c>-এর
-    /// ডিফল্ট (৫০০০ ms)। ⚠️ রেজিস্ট্রিতে কমানো যায়, তাই এটা <b>ছাদ</b>,
-    /// প্রতিশ্রুতি নয়; আমরা তার অনেক নিচে থাকি।
+    /// How long Windows gives an unresponsive app: the default of
+    /// <c>WaitToKillAppTimeout</c> (5000 ms). Careful: it can be lowered in the
+    /// registry, so this is a <b>ceiling</b>, not a promise; we stay far below it.
     /// </summary>
     private static readonly TimeSpan WindowsKillTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// ⭐ <c>WM_ENDSESSION</c>-এ UI থ্রেড আটকে থাকে, তাই এই ছাদটাই সবচেয়ে
-    /// সংবেদনশীল — এর বেশি হলে ব্যবহারকারী "অ্যাপ সাড়া দিচ্ছে না" দেখতেন।
+    /// On <c>WM_ENDSESSION</c> the UI thread is blocked, so this ceiling is the most
+    /// sensitive one: above it the user would see "app is not responding".
     /// </summary>
     [Fact]
     public void শাটডাউনে_UI_থ্রেড_Windows_এর_সীমার_অর্ধেকের_কমই_আটকায়() =>
@@ -34,9 +35,9 @@ public class ShutdownBudgetTests
             $"Windows-এর {WindowsKillTimeout}-এর অর্ধেকের কম হতে হবে");
 
     /// <summary>
-    /// ⚠️⚠️ বাইরের ছাদ ভেতরের দুই ধাপের যোগফলের সমান হতে হবে — কম হলে ছাদটা
-    /// <b>অন্য জিনিস মাপত</b> যা সে মাপছে বলে দাবি করে, আর লেখা দেরি হলে
-    /// পাঠানোর সময়ই থাকত না।
+    /// Careful: the outer ceiling must equal the sum of the two inner steps. If it is
+    /// smaller, the ceiling would <b>measure something other</b> than what it claims to,
+    /// and if the write ran late there would be no time left to send.
     /// </summary>
     [Fact]
     public void বাইরের_ছাদ_ভেতরের_দুই_ধাপের_যোগফল() =>
@@ -44,7 +45,10 @@ public class ShutdownBudgetTests
             AgentHost.EndSessionEnqueueWait + AgentHost.EndSessionSendBudget,
             AgentHost.EndSessionTotalBudget);
 
-    /// <summary>⚠️ লেখার অপেক্ষা পাঠানোর ছাদের ভেতরেই — নইলে পাঠানোর সময়ই থাকত না।</summary>
+    /// <summary>
+    /// Careful: the write wait is inside the send ceiling; otherwise there would be no time to
+    /// send.
+    /// </summary>
     [Fact]
     public void কিউয়ে_লেখার_অপেক্ষা_পাঠানোর_ছাদের_ভেতরে() =>
         Assert.True(
@@ -52,29 +56,28 @@ public class ShutdownBudgetTests
             "EndSessionEnqueueWait must leave room for the send itself");
 
     /// <summary>
-    /// ⚠️⚠️ <c>DisposeAsync</c>-এর যেটুকু কাজে <b>কোনো বাজেট নেই</b> —
-    /// <c>_stopping.CancelAsync()</c>, দুটো <c>CloseAll</c>, চারটে
-    /// <c>Dispose()</c>, আর <c>_outbox.DisposeAsync()</c>-এর SQLite
-    /// checkpoint। ⭐ সংখ্যাটা মাপা নয়, <b>জায়গা রাখা</b>: বাজেটওয়ালা
-    /// ধাপগুলো যেন ছাদটা <b>ছুঁয়ে</b> না ফেলে।
+    /// Careful: the part of <c>DisposeAsync</c> that has <b>no budget</b>:
+    /// <c>_stopping.CancelAsync()</c>, two <c>CloseAll</c> calls, four
+    /// <c>Dispose()</c> calls, and the SQLite checkpoint of <c>_outbox.DisposeAsync()</c>.
+    /// The number is not measured, it is <b>headroom</b>: so the budgeted steps do not
+    /// <b>touch</b> the ceiling.
     /// </summary>
     private static readonly TimeSpan DisposeOverhead = TimeSpan.FromMilliseconds(400);
 
     /// <summary>
-    /// ⭐⭐⭐ <c>DisposeAsync</c>-এর <b>তিনটে</b> ধাপ মিলে
-    /// <c>Program.ShutdownBudget</c> ছাড়াতে পারে না।
+    /// The <b>three</b> steps of <c>DisposeAsync</c> together cannot exceed
+    /// <c>Program.ShutdownBudget</c>.
     ///
-    /// ⚠️⚠️ <b>এই টেস্টটাই আগে ভুল ছিল</b> <i>(৬ সেপ্টেম্বর ২০২৬, G161)</i>।
-    /// এটা যোগ করত কেবল <b>দুটো</b> drain (২ + ১.৫ = ৩.৫ ≤ ৪ — সবুজ), আর
-    /// তার আগে যে <see cref="AgentHost.StopEnqueueBudget"/> ধাপটা পরপর
-    /// চলে সেটা কোনো যোগফলেই ঢুকত না। আলাদা একটা টেস্ট তাকে একা মাপত
-    /// (<c>২ &lt; ৪</c> — সবুজ)। ফলে আসল যোগফল <b>৫.৫ &gt; ৪</b> হয়েও
-    /// সুইট সবুজ থাকত।
+    /// Careful: <b>this test used to be wrong</b> (G161). It added only the <b>two</b>
+    /// drains (2 + 1.5 = 3.5 &lt;= 4, green), and the
+    /// <see cref="AgentHost.StopEnqueueBudget"/> step that runs just before them was in
+    /// no sum. A separate test measured it alone (<c>2 &lt; 4</c>, green). So the suite
+    /// stayed green even though the real sum was <b>5.5 &gt; 4</b>.
     ///
-    /// ⚠️ এটাই এই ফাইলের নিজের ভূমিকায় বর্ণিত ব্যর্থতা — "শর্তটা মন্তব্যে
-    /// লেখা ছিল, পাহারা ছিল না" — শুধু এবার <b>পাহারাটাই</b> অসম্পূর্ণ ছিল।
-    /// ⭐ তাই এখন <b>একটাই</b> টেস্ট, আর তাতে তিনটে ধাপই আছে: ভবিষ্যতে
-    /// চতুর্থ ধাপ যোগ হলে সেটাও এখানেই বসবে।
+    /// Careful: this is exactly the failure described in this file's own introduction,
+    /// "the condition was in a comment, nothing guarded it", except this time the
+    /// <b>guard itself</b> was incomplete. So there is now <b>one</b> test containing
+    /// all three steps; if a fourth step is added later it belongs here too.
     /// </summary>
     [Fact]
     public void Dispose_এর_তিনটে_ধাপ_মিলে_শাটডাউন_বাজেটের_ভেতরে()
@@ -90,18 +93,18 @@ public class ShutdownBudgetTests
             $"ShutdownBudget ({Program.ShutdownBudget})-এর ভেতরে থাকতে হবে");
     }
 
-    /// <summary>⚠️ আর গোটা DisposeAsync-ও Windows-এর সীমার নিচে।</summary>
+    /// <summary>Careful: the whole DisposeAsync is also below Windows' limit.</summary>
     [Fact]
     public void শাটডাউন_বাজেট_Windows_এর_সীমার_নিচে() =>
         Assert.True(Program.ShutdownBudget < WindowsKillTimeout);
 
     /// <summary>
-    /// ⭐ দুই শাটডাউন-পথ একই কাজে একই বাজেট নেয় <i>(G161)</i>।
+    /// Both shutdown paths take the same budget for the same job (G161).
     ///
-    /// ⚠️ <c>WM_ENDSESSION</c>-এর পথ আর <c>DisposeAsync</c>-এর পথ — দুটোই
-    /// একটা SQLite INSERT-এর জন্য অপেক্ষা করে, তারপর একটা ছোট POST পাঠায়।
-    /// সংখ্যা দুরকম হলে একদিন একটা পথ ঠিক করা হতো আর অন্যটা বাসি থেকে
-    /// যেত — এই প্রকল্পে ঠিক সেটাই বারবার হয়েছে।
+    /// Careful: the <c>WM_ENDSESSION</c> path and the <c>DisposeAsync</c> path both wait
+    /// for one SQLite INSERT and then send one small POST. With two different numbers,
+    /// one day one path would be fixed and the other left stale; that is exactly what
+    /// keeps happening in this project.
     /// </summary>
     [Fact]
     public void দুই_শাটডাউন_পথ_একই_কাজে_একই_বাজেট_নেয়()

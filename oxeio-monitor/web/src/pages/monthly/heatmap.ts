@@ -2,59 +2,58 @@ import type { AttendanceReport, AttendanceRow, DayType } from '../../api/reports
 import { monthEndOf, parseWorkDate } from '../../lib/format';
 
 /**
- * E07 — `GET /reports/attendance`-এর সমতল সারিগুলোকে স্টাফ × তারিখ গ্রিডে
- * সাজানো। এখানে **কোনো JSX নেই** ইচ্ছাকৃতভাবে: হিসাবটা যথেষ্ট সূক্ষ্ম
- * (ছুটি, কর্মকালের বাইরের দিন, ভবিষ্যৎ, মাসের টার্গেট) যে রেন্ডারের সাথে
- * মিশিয়ে ফেললে পরে কেউ আর ধরতেই পারত না কোন নিয়মটা কোথায় বসেছে।
+ * Arranges the flat rows of `GET /reports/attendance` into a staff x date grid.
+ * There is **deliberately no JSX** here: the calculation is subtle enough (leave,
+ * days outside employment, the future, the month's target) that mixing it with
+ * rendering would make it impossible to tell later which rule lives where.
  *
- * ⚠️ সার্ভার একটা দিনে একটাই সারি দেয়, আর **কর্মকালের বাইরের দিনে কোনো
- *    সারিই দেয় না** (reports.service.ts-এর `employedOn`)। তাই "সারি নেই"
- *    মানে তিনটে আলাদা জিনিস হতে পারে — ভবিষ্যৎ, কর্মকালের বাইরে, নাকি
- *    সত্যিই শূন্য দিন। তিনটেকে এক দেখালে ২০ তারিখে যোগ দেওয়া কর্মীকে
- *    ১৯ দিন ফাঁকিবাজ মনে হতো।
+ * Careful: the server returns one row per day, and **no row at all for days outside
+ *    employment** (`employedOn` in reports.service.ts). So "no row" can mean three
+ *    different things: the future, outside employment, or a genuinely zero day.
+ *    Showing all three alike would make someone who joined on the 20th look like
+ *    they skipped 19 days.
  */
 
 export type CellKind =
-  /** সারি আছে — ঘণ্টা শূন্যও হতে পারে */
+  /** A row exists; the hours may still be zero */
   | 'day'
-  /** `meta.to`-র পরের দিন — এখনো আসেনি */
+  /** The day after `meta.to`; has not happened yet */
   | 'future'
-  /** ওই দিনে কর্মী এই অফিসে ছিলেন না (যোগ দেওয়ার আগে / ছেড়ে যাওয়ার পরে) */
+  /** The employee was not at this office that day (before joining / after leaving) */
   | 'outside'
   /**
-   * ⭐⭐ **G110** — কর্মদিবস, কর্মকালের ভেতরে, কিন্তু **তাঁকে তখনো দেখা
-   * শুরু হয়নি** (`meta.trackedFrom`-এর আগে)।
+   * **Not yet tracked**: a workday, within employment, but **they were not being
+   * watched yet** (before `meta.trackedFrom`).
    *
-   * ⚠️⚠️ এই অবস্থাটা আলাদা করার আগে ওরা "কর্মদিবসে কিছুই হয়নি"-র লালচে
-   * ছোঁয়া পেত। ফলে একই পাতায় **সংখ্যাটা বলত "কোনো দাবি নেই"** (প্রত্যাশা
-   * ওই দিনগুলো ধরেই না) আর **ছবিটা বলত "ফাঁকি"** — আর মানুষ আগে ছবিটা
-   * দেখে। এই ইনস্টলেশনে এজেন্ট বসেছে ১৩ আগস্ট, তাই আগস্টের প্রতিটা পাতায়
-   * ১–১২ তারিখ লালচে ছিল।
+   * Careful: before this state was separated, such days got the reddish "nothing
+   * happened on a workday" tint. So on one page **the number said "no claim"** (the
+   * expectation ignores those days) while **the picture said "slacking"**, and people
+   * look at the picture first. On this installation the agent went in on 13 August,
+   * so days 1-12 of August were reddish on every page.
    *
-   * ⭐ Live Board-এর সাত-দিনের ফিতে G101-এ ঠিক এই কারণেই ডটেড রূপরেখা
-   * পেয়েছিল; Monthly বাদ পড়েছিল। চেহারাটা তাই ইচ্ছাকৃতভাবে **এক**।
+   * Important: the Live Board's seven-day strip got a dotted outline for exactly this
+   * reason; Monthly was missed. So the look is deliberately **the same**.
    */
   | 'untracked';
 
 export interface DayCell {
   /** `YYYY-MM-DD` */
   date: string;
-  /** মাসের কত তারিখ (1…31) */
+  /** Day of the month (1...31) */
   day: number;
   kind: CellKind;
-  /** `kind === 'day'` না হলে `null` */
+  /** `null` unless `kind === 'day'` */
   dayType: DayType | null;
   /**
-   * ⭐⭐⭐ **ওই দিনটা তাঁর অনুমোদিত ছুটি ছিল কি না** *(৬ সেপ্টেম্বর ২০২৬)*।
+   * **Whether that day was the employee's approved leave.**
    *
-   * ⚠️⚠️ **যে বাগটা এটা সারায়:** সার্ভার `onLeave` পাঠাত (G130, R2)
-   * কিন্তু হিটম্যাপ ঘরটা কোনোদিন পড়েনি। ছুটির দিনে `dayType` থাকে
-   * `workday` (ওটা **অফিসের** ক্যালেন্ডার, একজনের নয়) আর ঘণ্টা ০ —
-   * তাই ঘরটা পড়ত *"কর্মদিবসে কিছুই হয়নি"* শাখায়, আর অনুমোদিত ছুটি
-   * পর্দায় **লালচে ফাঁকির দাগ** পেত।
+   * Careful — the bug this fixes: the server sent `onLeave` but the heatmap cell
+   * never read it. On a leave day `dayType` is `workday` (that is the **office**
+   * calendar, not one person's) and hours are 0, so the cell fell into the "nothing
+   * happened on a workday" branch and approved leave got a **reddish slacking tint**.
    *
-   * ⚠️ `dayType`-এর সাথে মেশানো নয় — ওটা বলে দিনটা অফিসের ক্যালেন্ডারে
-   *    কী, এটা বলে **ওই একজনের** কী।
+   * Careful: not to be mixed with `dayType`: that says what the day is in the office
+   * calendar; this says what it is for **this one person**.
    */
   onLeave: boolean;
   workedHours: number;
@@ -62,10 +61,10 @@ export interface DayCell {
   creditedHours: number;
   targetHours: number;
   /**
-   * ০–৪ — ধূসর → কালো র‍্যাম্পের ধাপ।
-   * ⭐ ধাপগুলো **ওই কর্মীর দৈনিক টার্গেটের অনুপাতে**, পরম ঘণ্টায় নয়। নীতি
-   *   বদলে ২০৮ থেকে ১৮০ হলে র‍্যাম্পও সাথে সাথে ঠিক হয়ে যায়; পরম সংখ্যা
-   *   বসিয়ে রাখলে "কালো = পূর্ণ দিন" কথাটা নীরবে মিথ্যা হয়ে যেত।
+   * 0-4: steps of the grey-to-black ramp.
+   * Important: the steps are **relative to that employee's daily target**, not
+   *   absolute hours. If policy changes from 208 to 180, the ramp adjusts at once;
+   *   hardcoded absolute numbers would silently falsify "black = a full day".
    */
   level: 0 | 1 | 2 | 3 | 4;
 }
@@ -75,53 +74,54 @@ export interface EmployeeGridRow {
   empCode: string;
   fullName: string;
   department: string | null;
-  /** মাসের প্রতিটি তারিখের জন্য একটা করে — দৈর্ঘ্য সবসময় `days.length` */
+  /** One per date of the month; the length is always `days.length` */
   cells: DayCell[];
 
-  /** এ পর্যন্ত গোনা হয়েছে (worked + owner-এর সংশোধন) */
+  /** Counted so far (worked + the owner's adjustments) */
   creditedHours: number;
-  /** এ পর্যন্ত নিখাদ কাজ — সংশোধন ছাড়া */
+  /** Pure work so far, without adjustments */
   workedHours: number;
   /**
-   * এ পর্যন্ত যতটুকু হওয়ার কথা ছিল (§ ২.১-খ-র `expected_sec`)।
-   * ⚠️ **সার্ভার থেকে আসা সংখ্যা** (`meta.expectedHours`) — এখানে যোগ করে
-   *    বানানো হয় না। কেন, `buildMonthGrid()`-এর ভেতরের নোট দেখুন।
+   * How much was expected by now (`expected_sec`).
+   * Careful: **a number from the server** (`meta.expectedHours`), not built up by
+   *    summing here. See the note inside `buildMonthGrid()` for why.
    */
   expectedHours: number;
-  /** `credited − expected`. ঋণাত্মক = পিছিয়ে আছেন */
+  /** `credited - expected`. Negative = behind */
   paceHours: number;
   daysWithWork: number;
 
-  /** এক কর্মদিবসের টার্গেট — মাসজুড়ে ধ্রুব। জানা না গেলে `null` */
+  /** One workday's target; constant across the month. `null` if unknown */
   dailyTargetHours: number | null;
-  /** পুরো মাসের টার্গেট (সাধারণত ২০৮)। বের করা না গেলে `null` */
+  /** The whole month's target (usually 208). `null` if it cannot be worked out */
   targetHoursInRange: number | null;
-  /** ⚠️ সত্যি হলে সংখ্যাটা আন্দাজ — পর্দায় `≈` দিয়ে দেখাতে হবে */
+  /** Careful: when true the number is an estimate; show it with `≈` on screen */
   monthTargetEstimated: boolean;
 
-  /** কর্মকাল মাসের একাংশ হলে প্রথম ও শেষ কার্যকর দিন, নইলে `null` */
+  /** First and last effective day if employment covers part of the month, else `null` */
   partial: { from: string; to: string } | null;
 
   /**
-   * ⭐⭐ **G111** — তাঁর একটাও **শেষ হয়ে যাওয়া** কর্মদিবস দেখা হয়েছে কি না।
+   * Whether **at least one finished** workday of theirs has been observed.
    *
-   * ⚠️⚠️ `false` হলে উপরের `expectedHours` ০, তাই `paceHours`-ও ০ — আর
-   * পর্দায় সেটা দেখতে **হুবহু টার্গেট পূরণ করা মানুষের মতো**। সারিটা তখন
-   * সংখ্যা নয়, একটা বাক্য দেখায়।
+   * Careful: when `false`, `expectedHours` above is 0, so `paceHours` is 0 too, and
+   * on screen that looks **exactly like someone who met the target**. The row then
+   * shows a sentence instead of numbers.
    *
-   * ⚠️ সার্ভারের রায় (`meta.observed`), এখানে গোনা নয়: `expectedHours === 0`
-   * "সব দিন ছুটি ছিল"-ও হতে পারে, আর তখন কথাটা মিথ্যা হতো।
+   * Careful: this is the server's verdict (`meta.observed`), not counted here:
+   * `expectedHours === 0` could also mean "every day was leave", and then the
+   * sentence would be false.
    */
   observed: boolean;
 }
 
 export interface MonthGrid {
-  /** মাসের সব তারিখ, ১ থেকে শেষ দিন */
+  /** Every date of the month, from the 1st to the last day */
   days: string[];
   rows: EmployeeGridRow[];
-  /** যে তারিখগুলোয় **সবারই** ছুটি — কলামের শিরোনাম ধূসর করার জন্য */
+  /** Dates that are a day off for **everyone**; used to grey the column header */
   officeOffDays: Set<string>;
-  /** `meta.to`-র পরের দিনগুলো */
+  /** Days after `meta.to` */
   futureDays: Set<string>;
   totals: {
     employees: number;
@@ -129,26 +129,26 @@ export interface MonthGrid {
     expectedHours: number;
     targetHoursInRange: number | null;
     monthTargetEstimated: boolean;
-    /** যাঁরা `expected`-এর চেয়ে পিছিয়ে */
+    /** Those behind `expected` */
     behind: number;
     /**
-     * ⭐⭐ **G111** — কতজনের হিসাব এখনো শুরুই হয়নি।
+     * How many people have not been counted yet.
      *
-     * ⚠️⚠️ উপরের `expectedHours` তাঁদের **ধরেই না**, তাই পাদটীকার
-     * যোগফলটা নীরবে কম দেখায় — দল যত পিছিয়ে, পাতাটা তার চেয়ে ভালো।
-     * সংখ্যাটা বাদ দেওয়া হয়নি, **বলা** হয়েছে।
+     * Careful: `expectedHours` above **leaves them out**, so the footer total
+     * silently looks lower, and the page looks better than the team really is behind.
+     * The number is not dropped; it is **stated**.
      */
     notObserved: number;
   };
 }
 
-/** ঋণাত্মক/ধনাত্মক নয় — এত ছোট ব্যবধানকে "সমান" ধরা হয় (≈ ৩ মিনিট) */
+/** Neither negative nor positive: a gap this small counts as "equal" (about 3 minutes) */
 export const PACE_EPSILON = 0.05;
 
 /**
- * সাজানোর ক্রম।
- * ⭐ ডিফল্ট `pace` — এই পর্দার একটাই প্রশ্ন, "কে পিছিয়ে আছে"। উত্তরটা
- *   সবার উপরের সারিতেই থাকা দরকার, স্ক্রল করে খুঁজে বের করার জিনিস নয়।
+ * Sort order.
+ * Important: the default is `pace`; this screen has one question, "who is behind".
+ *   The answer should be in the top row, not something to scroll and find.
  */
 export type GridSort = 'pace' | 'name';
 
@@ -161,7 +161,7 @@ export function buildMonthGrid(
   const lastCovered = report.meta.to;
   const futureDays = new Set(days.filter((d) => d > lastCovered));
 
-  // employeeId → (date → সারি)
+  // employeeId -> (date -> row)
   const byEmployee = new Map<number, Map<string, AttendanceRow>>();
   const identity = new Map<number, AttendanceRow>();
 
@@ -180,8 +180,8 @@ export function buildMonthGrid(
   for (const [employeeId, dates] of byEmployee) {
     const who = identity.get(employeeId)!;
 
-    // ⚠️ র‍্যাম্প বসানোর **আগে** দৈনিক টার্গেট জানা দরকার, তাই দুই পাশ।
-    //    ছুটির দিনের টার্গেট ০, তাই সবচেয়ে বড় মানটাই কর্মদিবসের টার্গেট।
+    // Careful: the daily target must be known **before** placing the ramp, hence two
+    //    passes. A day off has target 0, so the largest value is the workday target.
     let dailyTargetHours = 0;
     for (const row of dates.values()) {
       if (row.targetHours > dailyTargetHours) dailyTargetHours = row.targetHours;
@@ -189,13 +189,13 @@ export function buildMonthGrid(
     const dailyTarget = dailyTargetHours > 0 ? dailyTargetHours : null;
 
     /**
-     * ⭐ G110 — কবে থেকে তাঁকে দেখা শুরু। ⚠️ **শুধু ঘর আঁকার জন্য**;
-     * প্রত্যাশা এখনো সার্ভারের `expectedHours` থেকেই আসে। এই তারিখ দিয়ে
-     * যোগ করতে গেলে "আজকের দিন বাদ" নিয়মটাও এখানে লিখতে হতো, আর ঠিক
-     * সেভাবেই আগের বাগটা জন্মেছিল।
+     * Since when they have been watched. Careful: **only for drawing the cell**;
+     * the expectation still comes from the server's `expectedHours`. Adding it up
+     * from this date would also require writing the "today is excluded" rule here,
+     * and that is exactly how the earlier bug was born.
      *
-     * ⚠️ `null` = তাঁকে **কখনোই** দেখা হয়নি, তাই মাসের সব কর্মদিবসই
-     *    না-দেখা। `undefined`-ও একই — meta-তে না থাকা মানে খবর নেই।
+     * Careful: `null` = they were **never** watched, so every workday in the month is
+     *    unobserved. `undefined` is the same: absent from meta means no information.
      */
     const seenFrom = report.meta.trackedFrom[employeeId] ?? null;
 
@@ -211,7 +211,7 @@ export function buildMonthGrid(
       const row = dates.get(date);
 
       if (!row) {
-        // সারি নেই — হয় দিনটা এখনো আসেনি, নয়তো ওই দিনে কর্মী ছিলেন না
+        // No row: either the day has not come yet, or the employee was not there that day
         cells.push(blankCell(date, date > lastCovered ? 'future' : 'outside'));
         continue;
       }
@@ -225,15 +225,15 @@ export function buildMonthGrid(
       if (row.dayType === 'weekly_off') weeklyOffWeekday ??= weekdayIndexOf(date);
 
       /**
-       * ⭐⭐ **G110 — না-দেখা কর্মদিবস আর ফাঁকি দেওয়া কর্মদিবস এক নয়।**
+       * **An unobserved workday is not the same as a slacked workday.**
        *
-       * ⚠️ তিনটে শর্তই দরকার, আর প্রতিটার নিজের কারণ আছে:
-       *   ১· **কর্মদিবস** — ছুটির দিনের নিজের চেহারা আগে থেকেই ঠিক আছে,
-       *      ওটা বদলানোর কোনো কারণ নেই।
-       *   ২· **শূন্য ঘণ্টা** — owner সংশোধন দিয়ে না-দেখা দিনেও ঘণ্টা
-       *      বসাতে পারেন; বসালে দিনটা সত্যিই কিছু দেখিয়েছে, তখন ডটেড
-       *      ঘরে ঢেকে দিলে ওই ঘণ্টাগুলোই পর্দা থেকে উধাও হতো।
-       *   ৩· **ট্র্যাকিং-শুরুর আগে** — এটাই আসল প্রশ্ন।
+       * Careful: all three conditions are needed, each with its own reason:
+       *   1. **Workday**: a day off already has its own look, and there is no reason
+       *      to change it.
+       *   2. **Zero hours**: the owner can enter hours by adjustment even on an
+       *      unobserved day; if so the day did show something, and covering it with
+       *      the dotted cell would make those hours vanish from the screen.
+       *   3. **Before tracking started**: this is the real question.
        */
       const untracked =
         row.dayType === 'workday' &&
@@ -254,44 +254,43 @@ export function buildMonthGrid(
       });
     }
 
-    // ⭐ সার্ভার পুরো মাসের টার্গেট **জানে** — নীতিতে লেখা সংখ্যা (২০৮)।
-    //    আগে এটা এখানে অনুমান করা হতো: হয়ে যাওয়া দিনের যোগফল + বাকি
-    //    দিনের দৈনিক টার্গেট। ⚠️ বাকি দিন গোনার সময় শুধু সাপ্তাহিক ছুটি
-    //    বাদ যেত, **সরকারি ছুটি নয়** — আগস্ট ২০২৬-এ তাই ২০৮ নয় ২১৬
-    //    দেখাত, অর্থাৎ প্রত্যেকে ৮ ঘণ্টা বেশি পিছিয়ে আছেন মনে হতো।
-    //    অথচ পে-রোল হিসাব করত ২০৮ ধরে — ড্যাশবোর্ড আর বেতন দুটো আলাদা
-    //    সংখ্যা বললে কোনোটাই বিশ্বাসযোগ্য থাকে না।
+    // The server **knows** the whole month's target, the number written in policy
+    //    (208). It used to be guessed here: sum of elapsed days + the daily target of
+    //    the remaining days. Careful: counting the remaining days excluded only weekly
+    //    offs, **not public holidays**, so in August 2026 it showed 216 instead of
+    //    208, as if everyone were 8 hours further behind. Payroll meanwhile used 208;
+    //    when dashboard and pay say two different numbers, neither is believable.
     const monthTarget = report.meta.targetHoursInRange[employeeId] ?? null;
 
     /**
-     * ⭐⭐ **প্রত্যাশা সার্ভার থেকে আসে — এখানে যোগ করা হয় না।**
+     * **The expectation comes from the server; it is not summed here.**
      *
-     * ⚠️⚠️ আগে এখানে লেখা ছিল `expectedHours += row.targetHours`, অর্থাৎ
-     *    মাসের ১ তারিখ থেকে আজ পর্যন্ত প্রতিটি দিনের টার্গেটের যোগফল।
-     *    দুটো জিনিস ব্রাউজার জানে না, আর দুটোতেই ভুল হতো:
+     * Careful: this used to read `expectedHours += row.targetHours`, the sum of every
+     *    day's target from the 1st of the month to today. The browser does not know
+     *    two things, and both made it wrong:
      *
-     *      ১· **কর্মীকে কবে থেকে দেখা শুরু হয়েছে।** এই ইনস্টলেশনে এজেন্ট
-     *         বসেছে ১৩ আগস্ট ২০২৬ — তার আগে কে কত কাজ করেছে আমরা জানি না।
-     *         মাসের ১ থেকে গুনলে ওই না-দেখা দিনগুলো নীরবে "০ ঘণ্টা কাজ"
-     *         হয়ে যেত, আর পাতাটা প্রত্যেককে ~৯৪ ঘণ্টা পিছিয়ে দেখাত —
-     *         এমন এক সময়ের জন্য যখন মাপার যন্ত্রটাই বসেনি।
-     *         **অনুপস্থিত পর্যবেক্ষণ ব্যর্থতা নয়।**
+     *      1. **Since when the employee has been watched.** On this installation the
+     *         agent went in on 13 August 2026; before that we do not know how much
+     *         anyone worked. Counting from the 1st would silently turn those
+     *         unobserved days into "0 hours worked", and the page would show everyone
+     *         about 94 hours behind, for a time when the measuring tool was not even
+     *         installed. **Absent observation is not failure.**
      *
-     *      ২· **আজকের দিনটা প্রত্যাশায় ধরা হয় না।** ধরলে ভোর ৬টায় গোটা
-     *         দল "১১৪ ঘণ্টা পিছিয়ে" দেখাত আর সন্ধ্যা নাগাদ সংখ্যাটা নিজে
-     *         থেকেই ঠিক হয়ে যেত — একই দল দিনে দুবার দুই রায় পেত, কেবল
-     *         ঘড়ির কাঁটার কারণে।
+     *      2. **Today is not counted in the expectation.** If it were, at 6am the
+     *         whole team would show "114 hours behind" and by evening the number
+     *         would fix itself: the same team would get two verdicts a day, purely
+     *         from the clock.
      *
-     * ⭐ জানালার সংজ্ঞা একটাই, আর সেটা সার্ভারে (`summary.math.ts` →
-     *    `elapsedWindow()`)। Live Board, tray/`/me` আর দৈনিক ইমেইলও ওটাই
-     *    ব্যবহার করে। শুধু "ট্র্যাকিং কবে শুরু" তারিখটা পাঠিয়ে এখানে যোগ
-     *    করানো যেত, কিন্তু তাহলে "আজকের দিন বাদ" নিয়মটা **আবার** এই
-     *    ফাইলে লেখা থাকত — আর ঠিক সেভাবেই বাগটা জন্মেছিল। ক্লায়েন্টে
-     *    এখন কোনো নিয়ম নেই, শুধু পড়া আছে।
+     * Important: there is one definition of the window, on the server
+     *    (`summary.math.ts` -> `elapsedWindow()`). The Live Board, tray, `/me` and the
+     *    daily email use it too. Sending only the tracking-start date and summing
+     *    here would have put the "exclude today" rule in this file **again**, and
+     *    that is exactly how the bug was born. The client now has no rules, only
+     *    reads.
      *
-     * ⚠️ `?? 0` — সারি আছে অথচ meta-তে নেই, এমন হওয়ার কথা নয় (দুটোই একই
-     *    কর্মী-তালিকা থেকে)। তবু হলে "কোনো দাবি নেই" ধরা হয়, "পিছিয়ে" নয়:
-     *    অজানাকে ঘাটতি বলা মানে একজন মানুষ সম্পর্কে একটা অভিযোগ।
+     * Careful: `?? 0`: a row existing but missing from meta should not happen (both
+     *    come from the same employee list). If it does, it counts as "no claim", not
+     *    "behind": calling the unknown a shortfall is an accusation against a person.
      */
     const expectedHours = report.meta.expectedHours[employeeId] ?? 0;
 
@@ -308,18 +307,18 @@ export function buildMonthGrid(
       daysWithWork,
       dailyTargetHours: dailyTarget,
       targetHoursInRange: monthTarget,
-      // সার্ভার থেকে আসা সংখ্যা — আর অনুমান নয়
+      // A number from the server, no longer an estimate
       monthTargetEstimated: false,
-      // ⭐ মাসের মাঝে যোগ দিলে/ছেড়ে গেলে তাঁর টার্গেট এমনিতেই কম — সেটা
-      //   না বললে "ইনি তো মাত্র ১০৪ ঘণ্টা" দেখে ভুল সিদ্ধান্ত হতো
+      // Important: someone who joined or left mid-month has a lower target anyway;
+      //   without saying so, "only 104 hours" would lead to a wrong decision
       partial:
         firstDay && lastDay && (firstDay !== days[0] || lastDay < lastCovered)
           ? { from: firstDay, to: lastDay }
           : null,
       /**
-       * ⚠️ `?? true` — meta-তে না থাকলে **"দেখা হয়েছে"** ধরা হয়, নইলে
-       *    পুরোনো একটা সার্ভারের সাথে গোটা পাতা "কারো হিসাব নেই" দেখাত।
-       *    সংখ্যাগুলো তখনো ঠিকই থাকত, শুধু ব্যাখ্যাটা মিথ্যা হতো।
+       * Careful: `?? true`: if absent from meta, treat as **"observed"**; otherwise
+       *    against an older server the whole page would show "nobody has a figure".
+       *    The numbers would still be right, only the explanation would be false.
        */
       observed: report.meta.observed[employeeId] ?? true,
     });
@@ -340,12 +339,12 @@ export function buildMonthGrid(
   };
 }
 
-// ── ভেতরের অংশ ──────────────────────────────────────────────────────────────
+// ── Internals ───────────────────────────────────────────────────────────────
 
 /**
- * ⚠️ পরম ঘণ্টা নয়, **অনুপাত**। fallback-টা তখনই লাগে যখন কর্মীর দৈনিক
- *    টার্গেটই জানা যায়নি (যেমন এলাকা জুড়ে ছুটি ছিল) — তখন মকআপের ধাপগুলোই
- *    ব্যবহার হয়, নইলে সব ঘর একই রঙের হয়ে যেত।
+ * Careful: a **ratio**, not absolute hours. The fallback is needed only when the
+ *    employee's daily target was never known (e.g. the whole region was on holiday);
+ *    then the mockup's steps are used, or every cell would be the same colour.
  */
 function levelOf(hours: number, dailyTarget: number | null): 0 | 1 | 2 | 3 | 4 {
   if (!(hours > 0)) return 0;
@@ -370,7 +369,7 @@ function blankCell(date: string, kind: CellKind): DayCell {
     day: dayNumber(date),
     kind,
     dayType: null,
-    // ⚠️ ফাঁকা ঘর (ভবিষ্যৎ / কর্মকালের বাইরে) — ছুটির প্রশ্নই ওঠে না
+    // Careful: an empty cell (future / outside employment); leave does not apply
     onLeave: false,
     workedHours: 0,
     adjustmentHours: 0,
@@ -381,9 +380,10 @@ function blankCell(date: string, kind: CellKind): DayCell {
 }
 
 /**
- * যে তারিখে **সব** কর্মীরই ছুটি — কলামের শিরোনাম ধূসর করার জন্য।
- * ⚠️ কারো কারো ছুটি হলে কলামটা ধূসর করা যাবে না: নীতি আলাদা হলে একজনের
- *    শুক্রবার আরেকজনের কর্মদিবস, আর তখন কলাম ধূসর দেখে ভুল বোঝা যেত।
+ * The dates on which **every** employee is off; used to grey the column header.
+ * Careful: if only some are off, the column must not be greyed: with different
+ *    policies one person's Friday is another's workday, and a grey column would
+ *    mislead.
  */
 function officeOffDaysOf(
   days: string[],
@@ -424,9 +424,9 @@ function totalsOf(rows: EmployeeGridRow[]): MonthGrid['totals'] {
       if (row.monthTargetEstimated) monthTargetEstimated = true;
     }
     /**
-     * ⚠️⚠️ **G111 — "পিছিয়ে" গোনার আগে "দেখা হয়েছে" কি না।** যাঁকে এখনো
-     * দেখাই হয়নি তাঁর `paceHours` ঠিক ০, তাই তিনি "পিছিয়ে" নন — কিন্তু
-     * "ঠিক আছেন"-ও নন। দুটো তালিকার কোনোটাতেই না রেখে আলাদা করে গোনা হয়।
+     * Careful: **before counting "behind", check "observed".** Someone not yet
+     * observed has `paceHours` of exactly 0, so they are not "behind", but not
+     * "fine" either. They are counted separately, in neither list.
      */
     if (!row.observed) {
       notObserved += 1;
@@ -446,7 +446,7 @@ function totalsOf(rows: EmployeeGridRow[]): MonthGrid['totals'] {
   };
 }
 
-// ── তারিখের ছোট সহায়ক ───────────────────────────────────────────────────────
+// ── Small date helpers ──────────────────────────────────────────────────────
 
 /** `'2026-08'` → `['2026-08-01', … '2026-08-31']` */
 export function daysOfMonth(monthKey: string): string[] {
@@ -463,9 +463,9 @@ function dayNumber(date: string): number {
 }
 
 /**
- * রবি = 0 … শনি = 6।
- * ⚠️ `parseWorkDate()` UTC-midnight দেয়, তাই `getUTCDay()` — `getDay()`
- *    লিখলে ব্রাউজারের টাইমজোনে বার এক ঘর সরে যেত।
+ * Sunday = 0 ... Saturday = 6.
+ * Careful: `parseWorkDate()` returns UTC midnight, hence `getUTCDay()`; with
+ *    `getDay()` the weekday would shift by one in the browser's timezone.
  */
 function weekdayIndexOf(date: string): number {
   return parseWorkDate(date)?.getUTCDay() ?? -1;

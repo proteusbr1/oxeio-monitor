@@ -17,27 +17,28 @@ import {
 } from './setup/harness';
 
 /**
- * ⭐ প্রতিটা নতুন endpoint **অন্তত একবার** সত্যিকারের HTTP দিয়ে ডাকা।
+ * Every new endpoint is called at least once over real HTTP.
  *
- * সাতটা মডিউল সমান্তরালে লেখা হয়েছে, আর তাদের টেস্ট প্রায় সবই খাঁটি
- * ফাংশনের — গণিতটা যাচাই হয়েছে, কিন্তু **একটা endpoint-ও কখনো ডাকা হয়নি**।
- * যা ওতে ধরা পড়ত না:
+ * Seven modules were written in parallel, and nearly all their tests cover
+ * pure functions — the maths is verified, but no endpoint was ever called.
+ * What those tests would miss:
  *
- * - দুটো কন্ট্রোলার একই পথ দাবি করলে (যেমন `/employees/:id`) — Express
- *   প্রথমটাকেই ডাকে, দ্বিতীয়টা চিরকাল নীরবে অচল থাকত
- * - গার্ড ভুল বসানো — ম্যানেজার owner-only রুটে ঢুকে যেত
- * - Prisma-র কোয়েরি ভুল — টাইপ ঠিক, কিন্তু চালালে ভাঙে
- * - রেসপন্সে BigInt — JSON.stringify ছুড়ে ফেলে, ৫০০ হয়ে যায়
+ * - Two controllers claiming the same path (e.g. `/employees/:id`) — Express
+ *   calls the first, and the second would stay silently dead forever
+ * - A guard placed wrongly — a manager getting into an owner-only route
+ * - A wrong Prisma query — the types are fine but it breaks when run
+ * - A BigInt in a response — JSON.stringify throws and it becomes a 500
  *
- * ⚠️ এখানে ব্যবসায়িক সঠিকতা যাচাই হচ্ছে না — শুধু "চলে, আর ঠিক লোককে
- * ঠিক উত্তর দেয়"। সংখ্যাগুলো ঠিক কি না সেটা .math স্পেকগুলোর কাজ।
+ * Business correctness is not checked here — only that it runs and gives the
+ * right answer to the right person. Whether the numbers are right is the job
+ * of the .math specs.
  */
 
 let h: Harness;
 let employeeId: number;
 let deviceId: number;
 
-/** যেকোনো ২xx/৪xx চলবে, কিন্তু ৫xx মানে endpoint-টা ভাঙা */
+/** Any 2xx/4xx is fine, but a 5xx means the endpoint is broken */
 const notServerError = (status: number, where: string) => {
   expect(status, `${where} → ${status}`).toBeLessThan(500);
 };
@@ -60,7 +61,7 @@ beforeEach(async () => {
 const TODAY = dhakaTodayIso();
 const MONTH = TODAY.slice(0, 7);
 
-/** owner ও manager দুজনেই পড়তে পারবে (§ ৪.৩) */
+/** Both owner and manager can read these (section 4.3) */
 const SHARED_READS = (id: number): string[] => [
   '/api/v1/live',
   `/api/v1/employees/${id}/timeline?date=${TODAY}`,
@@ -71,25 +72,25 @@ const SHARED_READS = (id: number): string[] => [
   `/api/v1/activity/productivity?employeeId=${id}&from=${TODAY}&to=${TODAY}`,
   `/api/v1/activity/top?employeeId=${id}&from=${TODAY}&to=${TODAY}`,
   `/api/v1/activity/team?from=${TODAY}&to=${TODAY}`,
-  // ⭐ ১৫ আগস্ট থেকে ম্যানেজারেরও — মালিকের সিদ্ধান্ত। দুটোই তিনি
-  //    **বদলাতেও** পারেন; সেই লেখার দিকটা `staff-setup.e2e.spec.ts`-এ।
+  // Since 15 August the manager too — the owner's decision. The manager can also
+  // change both; the write side is in `staff-setup.e2e.spec.ts`.
   '/api/v1/categories',
   '/api/v1/holidays',
 ];
 
-/** শুধু owner (§ ৪.৩) */
+/** Owner only (section 4.3) */
 const OWNER_ONLY_READS = [
   '/api/v1/devices',
-  // ⚠️ ছুটি ম্যানেজারের, কিন্তু work policy নয় — মাসিক টার্গেট ও ছবির
-  //    উইন্ডো বদলালে প্রতিটা PC-র আচরণ বদলায়, সেটা owner-এরই থাকল।
+  // Leave belongs to the manager, but work policy does not — changing the
+  // monthly target and screenshot window changes every PC's behaviour, so it stays with the owner.
   '/api/v1/work-policies',
   '/api/v1/audit-log',
   '/api/v1/alerts',
   `/api/v1/payroll?month=${MONTH}`,
 ];
 
-describe('সব endpoint সত্যিই সাড়া দেয়', () => {
-  it('owner-এর জন্য কোনোটাই ৫০০ দেয় না', async () => {
+describe('every endpoint really responds', () => {
+  it('none returns 500 for the owner', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     for (const url of [...SHARED_READS(employeeId), ...OWNER_ONLY_READS]) {
@@ -101,7 +102,7 @@ describe('সব endpoint সত্যিই সাড়া দেয়', () =
     }
   });
 
-  it('manager শেয়ার্ড রুট পড়তে পারে', async () => {
+  it('manager can read the shared routes', async () => {
     const s = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
 
     for (const url of SHARED_READS(employeeId)) {
@@ -112,10 +113,10 @@ describe('সব endpoint সত্যিই সাড়া দেয়', () =
   });
 
   /**
-   * ⚠️ ক্লাস-লেভেল `@Roles(owner)` ভুলে গেলে বা মেথডে বসালে এটাই ধরবে।
-   * পরে কেউ নতুন owner-only endpoint যোগ করলে এই তালিকায় লিখে দিলেই হলো।
+   * This catches a forgotten class-level `@Roles(owner)` or one placed on a
+   * method. If someone later adds a new owner-only endpoint, just add it to this list.
    */
-  it('manager owner-only রুটে ৪০৩ পায়', async () => {
+  it('manager gets 403 on owner-only routes', async () => {
     const s = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
 
     for (const url of OWNER_ONLY_READS) {
@@ -125,27 +126,26 @@ describe('সব endpoint সত্যিই সাড়া দেয়', () =
   });
 
   /**
-   * ⭐⭐⭐ **গবেষক গোটা দলের ডেটার ধারেকাছেও যান না** *(২৫ আগস্ট ২০২৬)*।
+   * A researcher never gets near the whole team's data (25 August 2026).
    *
-   * ### ⚠️⚠️ এই তালিকাটা কেন গোটা ফাইলের সবচেয়ে জরুরি জাল
+   * Why this list is the most important net in the whole file: adding a new
+   * value to `UserRole` looks harmless, but many conditions in the codebase
+   * were written in a deny-list style (`role !== 'employee'`), i.e. "if not
+   * staff, let them see everything". A new role then falls silently inward,
+   * not outward. Two places were measured:
    *
-   * `UserRole`-এ একটা নতুন মান বসানো দেখতে নিরীহ — কিন্তু কোডবেসের
-   * অনেক শর্ত লেখা ছিল **না-তালিকা** ধাঁচে (`role !== 'employee'`),
-   * অর্থাৎ *"স্টাফ না হলে সব দেখতে দাও"*। ⭐ নতুন ভূমিকা তখন নীরবে
-   * **ভেতরের দিকে** পড়ে, বাইরে নয়। মাপা গেছে দুটো জায়গায়:
+   *   - `screenshots.service` -> `resolveEmployeeScope` returned `null`, and
+   *     `null` means no filter: everyone's pictures, every day
+   *   - `adjustments.service` -> `assertCanSee` was skipped entirely
    *
-   *   · `screenshots.service` → `resolveEmployeeScope` `null` ফেরত দিত,
-   *     আর `null` মানে *ফিল্টার নেই* — সবার ছবি, সব দিনের
-   *   · `adjustments.service` → `assertCanSee` পুরো এড়িয়ে যেত
+   * The compiler said nothing: across the whole codebase the new value caused
+   * only two compile errors, both merely about widening a type.
    *
-   * ⚠️⚠️ কম্পাইলার কিছুই বলত না — গোটা কোডবেসে নতুন মানটা **মাত্র দুটো**
-   * জায়গায় কম্পাইল-এরর দিয়েছিল, আর দুটোই নিছক টাইপ-চওড়া করার ব্যাপার।
-   *
-   * ⭐ তাই পাহারাটা তালিকা ধরে: owner ও manager-এর জন্য খোলা **প্রতিটা**
-   * রুটে গবেষককে ৪০৩ পেতেই হবে। ভবিষ্যতে কেউ নতুন রুট যোগ করলে সেটা
-   * এমনিতেই এই তালিকায় চলে আসে।
+   * So the guard goes by the list: on every route open to owner and manager,
+   * a researcher must get 403. If someone adds a new route later it joins
+   * this list automatically.
    */
-  it('⭐⭐ গবেষক owner/manager-এর কোনো রুটেই ঢোকেন না', async () => {
+  it('a researcher cannot enter any owner/manager route', async () => {
     const them = await h.prisma.employee.create({
       data: { empCode: 'OX-79', fullName: 'Researcher', staffType: 'researcher' },
     });
@@ -169,13 +169,13 @@ describe('সব endpoint সত্যিই সাড়া দেয়', () =
   });
 
   /**
-   * ⚠️⚠️ **আর এটাই ওই ফাঁদের সরাসরি পাহারা।** `employeeId` **ছাড়া**
-   * `/screenshots` ডাকলে পুরোনো কোড *"ফিল্টার নেই"* ধরে **সবার** ছবি
-   * ফেরত দিত। গবেষকেরও নিজের এজেন্ট আছে (মাঠে যাচাই করা), তাই তিনি
-   * এই রুটটা রোজই ছোঁন — ⭐ প্রশ্নটা "ঢুকতে পারেন কি না" নয়, **"কতটা
-   * দেখতে পান"**।
+   * And this is the direct guard against that trap. Calling `/screenshots`
+   * without `employeeId` made the old code read it as "no filter" and return
+   * everyone's pictures. A researcher also has their own agent (verified in
+   * the field), so they touch this route every day — the question is not
+   * whether they can get in, but how much they can see.
    */
-  it('⭐⭐ গবেষক নিজের ছবিই দেখেন — সবার নয়', async () => {
+  it('a researcher sees only their own pictures — not everyone\'s', async () => {
     const them = await h.prisma.employee.create({
       data: { empCode: 'OX-80', fullName: 'Researcher', staffType: 'researcher' },
     });
@@ -192,21 +192,21 @@ describe('সব endpoint সত্যিই সাড়া দেয়', () =
 
     const s = await loginReady(h, 'r-shot@test.local', 'staff-password-123');
 
-    // ⭐ নিজের — খোলা
+    // Their own — open
     const mine = await s.http.get(`/api/v1/screenshots?date=${TODAY}`);
     expect(mine.status).toBeLessThan(400);
     for (const row of mine.body.rows ?? []) {
       expect(row.employeeId, 'নিজের ছবি ছাড়া কিছু আসার কথা নয়').toBe(them.id);
     }
 
-    // ⚠️ অন্যেরটা চেয়ে দেখা — চুপচাপ নিজেরটা দেওয়া হয় না, ৪০৩
+    // Asking for someone else's — it is not silently swapped for their own, it is 403
     const theirs = await s.http.get(
       `/api/v1/screenshots?employeeId=${employeeId}&date=${TODAY}`,
     );
     expect(theirs.status, 'অন্যের ছবি চাইলে ৪০৩').toBe(403);
   });
 
-  it('লগইন ছাড়া সব বন্ধ', async () => {
+  it('everything is closed without login', async () => {
     for (const url of [...SHARED_READS(employeeId), ...OWNER_ONLY_READS]) {
       const res = await h.http().get(url);
       expect(res.status, `${url} → লগইন ছাড়াই খোলা!`).toBe(401);
@@ -214,13 +214,13 @@ describe('সব endpoint সত্যিই সাড়া দেয়', () =
   });
 });
 
-describe('বেতন কখনো ম্যানেজারের কাছে যায় না', () => {
+describe('pay never reaches the manager', () => {
   /**
-   * ⭐ সিস্টেমের সবচেয়ে সংবেদনশীল ফিল্ড। ⚠️ `null` করে পাঠানোও যথেষ্ট নয় —
-   * ফিল্ডটা রেসপন্সে **থাকবেই না**, নইলে একদিন কেউ `?? 0` লিখে দিত আর
-   * ফিল্ডটা ফিরে আসত।
+   * The most sensitive field in the system. Sending `null` is not enough
+   * either — the field must not be in the response at all, otherwise one day
+   * someone would write `?? 0` and the field would come back.
    */
-  it('employees তালিকায় monthlySalary নেই', async () => {
+  it('monthlySalary is not in the employees list', async () => {
     const s = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
 
     const res = await s.http.get('/api/v1/employees');
@@ -231,7 +231,7 @@ describe('বেতন কখনো ম্যানেজারের কাছ�
     expect(body).not.toContain('monthly_salary');
   });
 
-  it('owner তালিকায় monthlySalary পায়', async () => {
+  it('the owner list has monthlySalary', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     const res = await s.http.get('/api/v1/employees');
@@ -240,12 +240,12 @@ describe('বেতন কখনো ম্যানেজারের কাছ�
   });
 });
 
-describe('ফুল URL বা উইন্ডো টাইটেল কখনো রিপোর্টে ওঠে না', () => {
+describe('a full URL or window title never appears in a report', () => {
   /**
-   * ADR-013 — ডোমেইনের বাইরে কিছু জমাই হয় না, কিন্তু `windowTitle` জমা হয়।
-   * অ্যাক্টিভিটি রিপোর্টে সেটা ফেরত গেলে "কে কোন ফাইল খুলেছে" ফাঁস হতো।
+   * ADR-013 — nothing beyond the domain is stored, but `windowTitle` is
+   * stored. If it came back in the activity report, "who opened which file" would leak.
    */
-  it('activity রিপোর্টে windowTitle থাকে না', async () => {
+  it('the activity report has no windowTitle', async () => {
     const now = dhakaNoon();
     await h.prisma.appUsage.create({
       data: {

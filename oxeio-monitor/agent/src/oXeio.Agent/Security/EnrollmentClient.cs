@@ -4,57 +4,58 @@ using oXeio.Core.Agent;
 
 namespace oXeio.Agent.Security;
 
-/// <summary>enroll করার চেষ্টা ঠিক যে ক'রকম ভাবে শেষ হতে পারে।</summary>
+/// <summary>Exactly the ways an enroll attempt can end.</summary>
 internal enum EnrollmentStatus
 {
-    /// <summary>আগেই হয়ে আছে — সার্ভারে যাওয়াই হয়নি।</summary>
+    /// <summary>Already done: the server was never contacted.</summary>
     AlreadyEnrolled,
 
-    /// <summary>সফল, টোকেন ডিস্কে লেখা হয়ে গেছে।</summary>
+    /// <summary>Success, and the token has been written to disk.</summary>
     Enrolled,
 
     /// <summary>
-    /// কোডটা সার্ভার নেয়নি — ব্যবহার হয়ে গেছে, মেয়াদ শেষ, বা ভুল।
-    /// ⚠️ একই কোড দিয়ে আবার চেষ্টা করা অর্থহীন; নতুন কোড লাগবে।
+    /// The server did not accept the code: already used, expired, or wrong. Careful: retrying with
+    /// the same code is pointless; a new code is needed.
     /// </summary>
     CodeRejected,
 
     /// <summary>
-    /// সার্ভার পাওয়া যায়নি বা ৫xx/৪২৯ দিয়েছে। <b>মারাত্মক নয়</b> —
-    /// পরে আবার চেষ্টা করলেই হবে, একই কোড দিয়ে।
+    /// The server was not found or returned 5xx/429. <b>Not fatal</b>: just try again later, with
+    /// the same code.
     /// </summary>
     ServerUnreachable,
 
-    /// <summary>ডিভাইস বাতিল (H06)। enroll করার চেষ্টাও আর করা যাবে না।</summary>
+    /// <summary>Device revoked (H06). Not even an enroll attempt can be made any more.</summary>
     Revoked,
 
-    /// <summary>স্থায়ী machineGuid বানানো যায়নি — <see cref="MachineIdentity.UsableForEnrollment"/>।</summary>
+    /// <summary>A permanent machineGuid could not be created:
+    /// <see cref="MachineIdentity.UsableForEnrollment"/>.</summary>
     IdentityUnusable,
 
     /// <summary>
-    /// ⭐ 2FA চালু — ছ-অঙ্কের কোড ছাড়া এগোনো যাবে না। ব্যর্থতা নয়,
-    /// **দ্বিতীয় ধাপ**: জানালাটা তখন কোডের ঘরটা দেখায়।
+    /// 2FA is on: cannot proceed without the six-digit code. Not a failure but the **second step**:
+    /// the window then shows the code field.
     /// </summary>
     NeedsTotp,
 
     /// <summary>
-    /// ⚠️ অ্যাকাউন্টটা কোনো কর্মীর সারিতে বাঁধা নয় (owner/manager), বা
-    /// পরপর ভুল পাসওয়ার্ডে সাময়িক তালা পড়েছে। দুটোতেই আবার চেষ্টা করে
-    /// লাভ নেই — মানুষকে অন্য কিছু করতে হবে, তাই আলাদা status।
+    /// Careful: the account is not tied to any staff row (owner/manager), or it has been
+    /// temporarily locked after repeated wrong passwords. In both cases trying again is no use: a
+    /// person has to do something else, hence a separate status.
     /// </summary>
     SignInRejected,
 
     /// <summary>
-    /// সার্ভার টোকেন দিয়েছে কিন্তু ডিস্কে লেখা গেল না।
-    /// ⚠️ এটাই সবচেয়ে খারাপ ফল — টোকেন একবারই আসে, তাই সেটা চিরতরে গেল
-    /// এবং নতুন enrollment code ছাড়া আর কিছু করার নেই।
+    /// The server gave a token but it could not be written to disk. Careful: this is the worst
+    /// outcome: the token comes only once, so it is gone for good and nothing can be done without a
+    /// new enrollment code.
     /// </summary>
     StorageFailed,
 }
 
 /// <summary>
-/// enroll-এর ফল। ⚠️ এখানে টোকেন <b>নেই</b>, ইচ্ছাকৃতভাবে।
-/// কলার এটা নির্ভয়ে লগে ছাপতে পারে।
+/// The enroll result. Careful: the token is deliberately <b>not</b> in here. The caller can safely
+/// print it to the log.
 /// </summary>
 internal sealed record EnrollmentResult(
     EnrollmentStatus Status,
@@ -65,47 +66,47 @@ internal sealed record EnrollmentResult(
 {
     public bool Ok => Status is EnrollmentStatus.Enrolled or EnrollmentStatus.AlreadyEnrolled;
 
-    /// <summary>একই কোড নিয়ে পরে আবার চেষ্টা করার মানে আছে কি না।</summary>
+    /// <summary>Whether it makes sense to try again later with the same code.</summary>
     public bool Retryable => Status is EnrollmentStatus.ServerUnreachable;
 }
 
 /// <summary>
-/// ⭐ একবারের কাজ: <c>POST /agent/enroll</c>, তারপর টোকেন ডিস্কে।
+/// A one-time job: <c>POST /agent/enroll</c>, then the token to disk.
 ///
-/// <b>যে তিনটে ব্যর্থতা আলাদা করে সামলাতেই হবে (নইলে ইনস্টল দিন ভেস্তে যায়):</b>
+/// <b>Three failures that must be handled separately (or install day is ruined):</b>
 ///
-/// ১· <b>কোড আগেই ব্যবহার হয়ে গেছে / মেয়াদ শেষ</b> → সার্ভার ৪xx দেয়,
-///    <see cref="SyncOutcomeClassifier"/> সেটাকে Permanent বলে।
-///    রিট্রাই করলে শুধু rate limit ভরত। অ্যাডমিনকে নতুন কোড চাইতে বলা হয়।
+/// 1. <b>The code was already used / expired:</b> the server gives 4xx, and
+/// <see cref="SyncOutcomeClassifier"/> calls that Permanent. Retrying would only fill the rate
+/// limit. The admin is told to ask for a new code.
 ///
-/// ২· <b>ইনস্টলের সময় সার্ভার পাওয়া যাচ্ছে না</b> (সাইটের লাইন বন্ধ, VPN ওঠেনি) →
-///    এটা <b>মারাত্মক নয়</b>। ইনস্টলার ব্যর্থ হবে না, এজেন্ট চালু হবে, ট্র্যাকিং
-///    ডিফল্ট কনফিগে চলতেই থাকবে আর ডেটা outbox-এ জমবে; লাইন ফিরলে
-///    <see cref="EnrollWithRetryAsync"/> নিজে থেকেই enroll সেরে নেবে।
-///    ⚠️ এখানে ইনস্টল আটকে দিলে ১৫টা PC-র সেটআপ একটা রাউটার রিবুটের
-///    জন্য থেমে থাকত, আর ওই দিনের ঘণ্টাও কেউ পেত না।
+/// 2. <b>The server cannot be reached at install time</b> (site line down, VPN not up): this is
+/// <b>not fatal</b>. The installer will not fail, the agent starts, tracking keeps running on the
+/// default config and data piles up in the outbox; when the line returns,
+/// <see cref="EnrollWithRetryAsync"/> completes the enroll by itself. Careful: if install were
+/// blocked here, setting up 15 PCs would wait for a router reboot, and nobody would get that day's
+/// hours either.
 ///
-/// ৩· <b>টোকেন এসেছে কিন্তু ডিস্কে লেখা গেল না</b> → <see cref="EnrollmentStatus.StorageFailed"/>।
-///    টোকেন একবারই আসে, তাই চুপ করে থাকা যাবে না।
+/// 3. <b>The token came but could not be written to disk:</b>
+///    <see cref="EnrollmentStatus.StorageFailed"/>. The token comes only once, so we must not stay
+///    silent.
 ///
-/// ⚠️ <b>লগ ফাঁসের ফাঁদ:</b> <see cref="EnrollResponse"/> একটা <c>record</c>,
-/// অর্থাৎ তার জেনারেটেড <c>ToString</c> <c>DeviceToken</c>-সহ সব ছাপে।
-/// তাই এই ক্লাসে রেসপন্স অবজেক্টটা <b>কখনো</b> লগে যায় না; টোকেন সাথে সাথে
-/// <see cref="SecretText"/>-এ মুড়ে ফেলা হয় আর বাইরে যায়
-/// <see cref="EnrollmentResult"/>, যাতে টোকেন নেই।
+/// Careful: <b>log-leak trap:</b> <see cref="EnrollResponse"/> is a <c>record</c>, so its generated
+/// <c>ToString</c> prints everything including <c>DeviceToken</c>. So in this class the response
+/// object <b>never</b> goes to the log; the token is wrapped in <see cref="SecretText"/>
+/// immediately and what goes outside is <see cref="EnrollmentResult"/>, which has no token.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class EnrollmentClient
 {
     /// <summary>
-    /// enrollment code ২৪ ঘণ্টায় মেয়াদ শেষ (H05), তাই এর বেশি রিট্রাই করে লাভ নেই।
+    /// The enrollment code expires in 24 hours (H05), so retrying beyond that is pointless.
     /// </summary>
     public static readonly TimeSpan DefaultGiveUpAfter = TimeSpan.FromHours(24);
 
     /// <summary>
-    /// enroll-এর জন্য আলাদা পলিসি — outbox-এর ৫ সেকেন্ড থেকে শুরু করলে
-    /// লাইন বন্ধ থাকা অবস্থায় প্রথম মিনিটেই ডজনখানেক ব্যর্থ চেষ্টা লগ ভরিয়ে দিত।
-    /// enroll তাড়ার কাজ নয়: ১০ সেকেন্ড থেকে শুরু, সিলিং ৫ মিনিট।
+    /// A separate policy for enroll: starting from the outbox's 5 seconds, a dozen failed attempts
+    /// in the first minute while the line is down would flood the log. Enroll is not urgent: start
+    /// at 10 seconds, ceiling 5 minutes.
     /// </summary>
     private static readonly RetryPolicy Policy = new(
         baseDelay: TimeSpan.FromSeconds(10),
@@ -136,10 +137,11 @@ internal sealed class EnrollmentClient
     }
 
     /// <summary>
-    /// একবার চেষ্টা। ⚠️ কখনো throw করে না —
-    /// <see cref="ISyncClient"/>-ও করে না, আর ডিস্কের ব্যর্থতা এখানে ধরা হয়।
+    /// One attempt. Careful: never throws: <see cref="ISyncClient"/> does not either, and disk
+    /// failures are caught here.
     /// </summary>
-    /// <param name="monitors">১–৮। এর বাইরে হলে ক্ল্যাম্প করা হয়, নইলে সার্ভার ৪০০ দিত।</param>
+    /// <param name="monitors">1-8. Outside that it is clamped, otherwise the server would give
+    /// 400.</param>
     public async Task<EnrollmentResult> EnrollAsync(
         SecretText enrollmentCode, int? monitors = null, CancellationToken ct = default)
     {
@@ -155,10 +157,10 @@ internal sealed class EnrollmentClient
                 _credentials.Employee?.EmpCode);
         }
 
-        // ⭐ সার্ভারে যাওয়ার **আগেই** নিশ্চিত হওয়া যে টোকেনটা রাখা যাবে।
-        //    কোড একবার-ব্যবহার্য: enroll সফল হয়ে টোকেন এলো অথচ ডিস্কে লেখা
-        //    গেল না — তখন কোডও গেল, টোকেনও গেল, আর সার্ভারে অনাথ ডিভাইস
-        //    পড়ে রইল। আসল মেশিনে ঠিক এটাই ঘটেছিল।
+        // Make sure **before going to the server** that the token can be kept. The code is
+        // single-use: if enroll succeeded and the token came but the disk write failed, the code is
+        // gone, the token is gone, and an orphan device is left on the server. This is exactly what
+        // happened on a real machine.
         if (!_store.CanPersist(out var storageError))
         {
             return new EnrollmentResult(
@@ -176,8 +178,8 @@ internal sealed class EnrollmentClient
 
         if (enrollmentCode.IsBlank)
         {
-            // নেটওয়ার্কে যাওয়ার দরকারই নেই — সার্ভার এটাকে ৪০০ দিত আর
-            // rate limit-এর কাউন্টার অকারণে বাড়ত।
+            // No need to go to the network at all: the server would give 400 and the rate-limit
+            // counter would rise for nothing.
             return new EnrollmentResult(EnrollmentStatus.CodeRejected, "The enrolment code is empty.");
         }
 
@@ -189,12 +191,13 @@ internal sealed class EnrollmentClient
             MachineGuid = identity.MachineGuid,
             OsVersion = identity.OsVersion,
             AgentVersion = _agentVersion,
-            // ⚠️ ক্ল্যাম্প — সার্ভার ১–৮-এর বাইরে হলে পুরো enroll-ই ৪০০ দেয়,
-            //    আর মনিটর গোনার ভুলের জন্য enroll আটকে যাওয়াটা অর্থহীন।
+            // Careful: clamp: if the server sees a value outside 1-8 the whole enroll gets 400, and
+            // blocking enroll over a monitor-counting mistake is pointless.
             Monitors = monitors is { } count ? (int?)Math.Clamp(count, 1, 8) : null,
         };
 
-        // ⚠️ কোডটা লগে যায় না — SecretText.ToString() শুধু fingerprint ছাপে।
+        // Careful: the code does not go to the log: SecretText.ToString() prints only a
+        // fingerprint.
         _log?.Invoke($"Enrolment attempt: code={enrollmentCode} · {identity.Describe()}");
 
         var response = await _sync.EnrollAsync(request, ct).ConfigureAwait(false);
@@ -205,8 +208,8 @@ internal sealed class EnrollmentClient
                 return Persist(body, identity);
 
             case SyncOutcome.Success:
-                // ২xx কিন্তু বডি নেই — সাধারণত মাঝখানে বসা proxy। রেকর্ডের দোষ নয়,
-                // তাই রিট্রাইযোগ্য ধরা হচ্ছে।
+                // 2xx but no body: usually a proxy in the middle. Not the record's fault, so it is
+                // treated as retryable.
                 return new EnrollmentResult(
                     EnrollmentStatus.ServerUnreachable,
                     "The server said success but the enrol body was empty (proxy?). It will be retried later.",
@@ -237,18 +240,18 @@ internal sealed class EnrollmentClient
     }
 
     /// <summary>
-    /// ⭐⭐ <b>স্টাফ নিজের ইমেইল-পাসওয়ার্ড দিয়ে নিজের PC যোগ করে।</b>
+    /// <b>Staff add their own PC with their own email and password.</b>
     ///
-    /// ⚠️ পাসওয়ার্ড <see cref="SecretText"/>-এ, তাই ভুল করেও লগে যায় না —
-    /// enrollment code-এর বেলায় যে সাবধানতা, এখানে সেটা আরও জরুরি।
+    /// Careful: the password is in <see cref="SecretText"/>, so it cannot reach the log by mistake:
+    /// the care taken with the enrollment code matters even more here.
     ///
-    /// ⚠️ পাসওয়ার্ড <b>কোথাও জমা হয় না</b>। এই কলটাতেই সেটা ডিভাইস
-    /// টোকেনে বদলে যায়, আর ডিস্কে যায় শুধু টোকেনটা (DPAPI দিয়ে)।
+    /// Careful: the password is <b>stored nowhere</b>. In this very call it is exchanged for a
+    /// device token, and only the token goes to disk (via DPAPI).
     ///
-    /// ⚠️ <see cref="EnrollmentStatus.SignInRejected"/> আর
-    /// <see cref="EnrollmentStatus.ServerUnreachable"/> আলাদা রাখা হয়েছে
-    /// ইচ্ছাকৃতভাবে: প্রথমটায় মানুষকে **অন্য কিছু** করতে হবে (ঠিক
-    /// অ্যাকাউন্ট, বা কয়েক মিনিট অপেক্ষা), দ্বিতীয়টায় শুধু আবার চাপলেই হয়।
+    /// Careful: <see cref="EnrollmentStatus.SignInRejected"/> and
+    /// <see cref="EnrollmentStatus.ServerUnreachable"/> are kept separate on purpose: for the first
+    /// the person must do **something else** (the right account, or wait a few minutes), for the
+    /// second just pressing again is enough.
     /// </summary>
     public async Task<EnrollmentResult> SignInAsync(
         string email,
@@ -269,8 +272,8 @@ internal sealed class EnrollmentClient
                 _credentials.Employee?.EmpCode);
         }
 
-        // ⭐ সার্ভারে যাওয়ার **আগেই** নিশ্চিত হওয়া যে টোকেনটা রাখা যাবে —
-        //    কারণ টোকেন একবারই আসে (enroll-এর মতোই)।
+        // Make sure **before going to the server** that the token can be kept, because the token
+        // comes only once (just like enroll).
         if (!_store.CanPersist(out var storageError))
         {
             return new EnrollmentResult(
@@ -288,8 +291,8 @@ internal sealed class EnrollmentClient
 
         if (string.IsNullOrWhiteSpace(email) || password.IsBlank)
         {
-            // নেটওয়ার্কে যাওয়ার দরকার নেই — সার্ভার ৪০০ দিত আর throttle-এর
-            // কাউন্টার অকারণে বাড়ত
+            // No need to go to the network: the server would give 400 and the throttle counter
+            // would rise for nothing
             return new EnrollmentResult(
                 EnrollmentStatus.SignInRejected, "Enter your email and password.");
         }
@@ -307,7 +310,7 @@ internal sealed class EnrollmentClient
             Monitors = monitors is { } count ? (int?)Math.Clamp(count, 1, 8) : null,
         };
 
-        // ⚠️ ইমেইলটুকুই লগে যায়, পাসওয়ার্ড নয়
+        // Careful: only the email goes to the log, not the password
         _log?.Invoke($"Sign-in attempt: {email} · {identity.Describe()}");
 
         var response = await _sync.EnrollWithLoginAsync(request, ct).ConfigureAwait(false);
@@ -342,17 +345,17 @@ internal sealed class EnrollmentClient
         }
 
         /**
-         * ⚠️⚠️ এখানে <see cref="SyncOutcome"/> দেখে কাজ চলে **না**, স্ট্যাটাস
-         * কোডটাই দেখতে হয় — আর সেটা বাগ নয়, দুটো প্রেক্ষাপটের পার্থক্য।
+         * Careful: here the work is **not** done by looking at <see cref="SyncOutcome"/>; the
+         * status code itself must be looked at, and that is not a bug but the difference between
+         * two contexts.
          *
-         * `SyncOutcomeClassifier` বানানো হয়েছে **ডেটা সিঙ্কের** জন্য, যেখানে
-         * ৪০১ = "টোকেন হয়তো রিফ্রেশ হচ্ছে, কিউটা ফেলে দিয়ো না" → Transient।
-         * সাইন-ইনে ৪০১-এর মানে ঠিক উল্টো আর একেবারে নিশ্চিত: **পাসওয়ার্ড
-         * ভুল**। ওই শ্রেণিবিভাগ মেনে চললে স্টাফ ভুল পাসওয়ার্ড দিয়ে
-         * "সার্ভারে পৌঁছানো যাচ্ছে না" পড়ত — আর নেটওয়ার্কের লোক ডেকে
-         * আধঘণ্টা নষ্ট করত।
+         * `SyncOutcomeClassifier` was built for **data sync**, where 401 = "the token may be
+         * refreshing, do not throw the queue away" and so Transient. In sign-in, 401 means exactly
+         * the opposite and is completely certain: **wrong password**. Following that
+         * classification, staff who typed a wrong password would read "cannot reach the server",
+         * and call the network person and waste half an hour.
          *
-         * একই কারণে ৪২৯ এখানে "পরে আবার" নয়, "তালা পড়েছে, অপেক্ষা করুন"।
+         * For the same reason 429 here is not "later again" but "locked, please wait".
          */
         return response.StatusCode switch
         {
@@ -361,7 +364,7 @@ internal sealed class EnrollmentClient
                 "Email or password is incorrect.",
                 HttpStatus: 401),
 
-            // owner/manager-এর অ্যাকাউন্ট — সার্ভারের বার্তাটাই কাজের
+            // an owner/manager account: the server's message itself is what is useful
             403 => new EnrollmentResult(
                 EnrollmentStatus.SignInRejected,
                 response.Detail ?? "This account cannot be used on a staff PC.",
@@ -385,11 +388,11 @@ internal sealed class EnrollmentClient
     }
 
     /// <summary>
-    /// লাইন না থাকা অবস্থায় ইনস্টল হলে এটাই ব্যাকগ্রাউন্ডে চলতে থাকে।
+    /// If installed while there is no line, this is what keeps running in the background.
     ///
-    /// ⚠️ <paramref name="giveUpAfter"/> ২৪ ঘণ্টা, কারণ কোডের মেয়াদই ২৪ ঘণ্টা —
-    /// এর পরে চেষ্টা চালিয়ে যাওয়া মানে শুধু সার্ভারে ৪xx-এর ঝড় তোলা।
-    /// থেমে গেলে ট্রে-তে লাল হয়ে অ্যাডমিনকে জানানোর দায়িত্ব কলারের।
+    /// Careful: <paramref name="giveUpAfter"/> is 24 hours, because the code's own lifetime is 24
+    /// hours; trying beyond that only raises a storm of 4xx on the server. When it gives up,
+    /// telling the admin by turning the tray red is the caller's job.
     /// </summary>
     public async Task<EnrollmentResult> EnrollWithRetryAsync(
         SecretText enrollmentCode,
@@ -428,16 +431,17 @@ internal sealed class EnrollmentClient
             }
             catch (OperationCanceledException)
             {
-                // এজেন্ট বন্ধ হচ্ছে। শেষ ফলটাই ফেরত — এটা ব্যর্থতা নয়।
+                // the agent is shutting down. The last result is returned: this is not a failure.
                 return result;
             }
         }
     }
 
     /// <summary>
-    /// ⭐ ক্রম: আগে ডিস্ক, তারপর মেমরি।
-    /// উল্টো হলে ডিস্কে লেখা ব্যর্থ হলেও এজেন্ট চলত, আর রিবুটের পর টোকেন উধাও —
-    /// অথচ সার্ভার ততক্ষণে টোকেনটা ভুলে গেছে (শুধু sha256 রাখে)।
+    /// Order: disk first, then memory.
+    /// If reversed, the agent would run even when the disk write failed, and after a reboot the
+    /// token would be gone, by which time the server has forgotten the token (it keeps only a
+    /// sha256).
     /// </summary>
     private EnrollmentResult Persist(EnrollResponse body, MachineIdentity identity)
     {

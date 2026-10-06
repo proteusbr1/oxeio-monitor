@@ -15,13 +15,14 @@ import {
 } from './setup/harness';
 
 /**
- * **বন্ধ হয়ে যাওয়া এজেন্ট আবার চালু** — কর্মী ধরে, ডিভাইস ধরে নয়।
+ * **Turning a stopped agent back on** — per employee, not per device.
  *
- * ⚠️⚠️ এটা দরকার হয় কারণ `deactivate()` কর্মীর সব ডিভাইস revoke করে, আর
- * `reactivate()` সেগুলো **ইচ্ছাকৃতভাবে ফেরায় না** (ফিরে আসা কর্মীর পুরোনো
- * টোকেন আপনাআপনি জেগে ওঠা উচিত নয়)। ফলে বোর্ডে তিনি চিরকাল "Offline"
- * থাকতেন, অথচ এজেন্ট তাঁর PC-তে দিব্যি চলছে — আর ফেরার পথ ছিল একমাত্র
- * আলাদা Devices পর্দায়, যেটা মালিক তুলে দিতে বলেছেন।
+ * This is needed because `deactivate()` revokes all of an employee's devices,
+ * and `reactivate()` **deliberately does not restore them** (a returning
+ * employee's old tokens should not wake up by themselves). As a result they
+ * would stay "Offline" on the board forever, although the agent runs fine on
+ * their PC — and the only way back was the separate Devices screen, which the
+ * owner asked to be removed.
  */
 let h: Harness;
 let owner: Session;
@@ -60,17 +61,17 @@ const statusOf = async (deviceId: number) =>
 
 describe('POST /employees/:id/agent/turn-on', () => {
   /**
-   * ⭐⭐ **এই ফাইলের মূল টেস্ট — মালিকের আসল যাত্রাপথ।**
-   * নিষ্ক্রিয় → আবার সক্রিয় → এজেন্ট চালু → সব আগের মতো।
+   * **The main test of this file — the owner's real journey.**
+   * Deactivated → activated again → agent turned on → everything as before.
    */
-  it('নিষ্ক্রিয় করে ফেরালে এজেন্ট আবার চালু করা যায়', async () => {
+  it('after deactivating and restoring, the agent can be turned on again', async () => {
     const { code, employeeId } = await createEmployeeWithCode(h.prisma, 'TA-BACK');
     const device = await enrollDevice(h, code);
 
     await deactivate(employeeId).expect(200);
     expect(await statusOf(device.deviceId)).toBe('revoked');
 
-    // ⚠️ শুধু reactivate ডিভাইস ফেরায় না — ইচ্ছাকৃত
+    // Only reactivate does not restore devices — deliberate
     await reactivate(employeeId).expect(200);
     expect(await statusOf(device.deviceId)).toBe('revoked');
 
@@ -81,10 +82,11 @@ describe('POST /employees/:id/agent/turn-on', () => {
   });
 
   /**
-   * ⚠️⚠️ নিষ্ক্রিয় কর্মীর ডিভাইস ফেরানো যায় না — নইলে ছাঁটাই হওয়া কারো
-   * মেশিন আবার ঘণ্টা পাঠাতে শুরু করত, অথচ Staff পর্দায় তিনি "Inactive"।
+   * The devices of a deactivated employee cannot be restored — otherwise the
+   * machine of someone who was dismissed would start sending hours again,
+   * while the Staff screen shows them "Inactive".
    */
-  it('কর্মী নিষ্ক্রিয় থাকলে আটকায়, আর কারণ বলে', async () => {
+  it('blocked when the employee is inactive, and says why', async () => {
     const { code, employeeId } = await createEmployeeWithCode(h.prisma, 'TA-OFF');
     const device = await enrollDevice(h, code);
     await deactivate(employeeId).expect(200);
@@ -96,7 +98,7 @@ describe('POST /employees/:id/agent/turn-on', () => {
     expect(await statusOf(device.deviceId)).toBe('revoked');
   });
 
-  it('বন্ধ কিছু না থাকলে কিছুই বদলায় না', async () => {
+  it('nothing changes when nothing is stopped', async () => {
     const { code, employeeId } = await createEmployeeWithCode(h.prisma, 'TA-NOOP');
     const device = await enrollDevice(h, code);
 
@@ -106,8 +108,8 @@ describe('POST /employees/:id/agent/turn-on', () => {
     expect(await statusOf(device.deviceId)).toBe('active');
   });
 
-  /** ⚠️ কিছু না বদলালে audit-এ ঘটনা লেখা হয় না */
-  it('কিছু না বদলালে ইতিহাসে সারি জমে না', async () => {
+  /** Nothing in audit when nothing changed */
+  it('no row piles up in history when nothing changed', async () => {
     const { code, employeeId } = await createEmployeeWithCode(h.prisma, 'TA-QUIET');
     await enrollDevice(h, code);
     await h.prisma.auditLog.deleteMany({});
@@ -120,7 +122,7 @@ describe('POST /employees/:id/agent/turn-on', () => {
     expect(rows).toHaveLength(0);
   });
 
-  it('আসল বদল ইতিহাসে ওঠে, কতগুলো ফিরল সেটাসহ', async () => {
+  it('a real change goes into history, with how many came back', async () => {
     const { code, employeeId } = await createEmployeeWithCode(h.prisma, 'TA-AUDIT');
     await enrollDevice(h, code);
     await deactivate(employeeId).expect(200);
@@ -136,24 +138,24 @@ describe('POST /employees/:id/agent/turn-on', () => {
   });
 
   /**
-   * ⚠️ অন্য কর্মীর ডিভাইস ছোঁয়া যাবে না — `updateMany`-র `where` ভুল
-   *    হলে একজনকে ফেরাতে গিয়ে **সবার** বন্ধ মেশিন জেগে উঠত।
+   * Another employee's devices must not be touched — if the `where` of
+   *    `updateMany` were wrong, restoring one person would wake **everyone's** stopped machines.
    */
-  it('অন্য কারো ডিভাইস ছোঁয়া হয় না', async () => {
+  it("another person's devices are not touched", async () => {
     const a = await createEmployeeWithCode(h.prisma, 'TA-A');
     const b = await createEmployeeWithCode(h.prisma, 'TA-B');
     /**
-     * ⚠️⚠️ আলাদা `machineGuid` দিতেই হবে। enroll `machineGuid` ধরে upsert
-     *    করে, তাই একই GUID-এ দ্বিতীয়বার enroll করলে **নতুন সারি হয় না** —
-     *    প্রথম সারিটাই দ্বিতীয় কর্মীর নামে সরে যায়, আর টেস্টটা তখন
-     *    যা মাপতে চাইছে তা আর মাপেই না।
+     * A separate `machineGuid` is a must. Enroll upserts on `machineGuid`,
+     *    so enrolling a second time with the same GUID **does not create a new
+     *    row** — the first row moves to the second employee's name, and then
+     *    the test no longer measures what it means to measure.
      */
     const deviceA = await enrollDevice(h, a.code, {
       machineGuid: 'ta-a-guid',
       hostname: 'PC-TA-A',
     });
-    // ⚠️ hostname-ও আলাদা — (hostname, windowsUsername) জোড়াটাও unique,
-    //    আর একই জোড়ায় দ্বিতীয়বার enroll করলে ৪০৯।
+    // hostname is separate too — the (hostname, windowsUsername) pair is also
+    //    unique, and enrolling a second time with the same pair gives 409.
     const deviceB = await enrollDevice(h, b.code, {
       machineGuid: 'ta-b-guid',
       hostname: 'PC-TA-B',
@@ -169,18 +171,18 @@ describe('POST /employees/:id/agent/turn-on', () => {
     expect(await statusOf(deviceB.deviceId)).toBe('revoked');
   });
 
-  it('অচেনা কর্মী ৪০৪', async () => {
+  it('unknown employee 404', async () => {
     await turnOn(999_999).expect(404);
   });
 
   /**
-   * ⚠️⚠️ **ম্যানেজার পারেন না — ইচ্ছাকৃত।** ম্যানেজার Staff পর্দা দেখেন,
-   * তাই বোতামটাও তাঁর চোখে পড়ে। কিন্তু এজেন্ট ফেরানো মানে **পুরোনো
-   * টোকেন আবার জাগানো** — হারিয়ে যাওয়া ল্যাপটপ হলে যে ধরে আছে সে-ও
-   * ফিরে আসে। ওটা owner-এর সিদ্ধান্ত, আর সেজন্যই রুটটা owner-only
-   * কন্ট্রোলারে রাখা হয়েছে।
+   * **A manager cannot — deliberate.** A manager sees the Staff screen, so the
+   * button is in their sight too. But turning an agent back on means **waking
+   * old tokens again** — with a lost laptop, whoever holds it comes back too.
+   * That is the owner's decision, and that is why the route is kept in the
+   * owner-only controller.
    */
-  it('ম্যানেজার পারেন না — পুরোনো টোকেন জাগানো owner-এর সিদ্ধান্ত', async () => {
+  it("a manager cannot — waking old tokens is the owner's decision", async () => {
     const { code, employeeId } = await createEmployeeWithCode(h.prisma, 'TA-MGR');
     await enrollDevice(h, code);
     await deactivate(employeeId).expect(200);

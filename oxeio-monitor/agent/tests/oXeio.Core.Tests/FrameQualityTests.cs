@@ -21,7 +21,7 @@ public class FrameQualityTests
         return buf;
     }
 
-    /// <summary>প্রতিটি পিক্সেল আলাদা — বাস্তব ডেস্কটপের মতো।</summary>
+    /// <summary>Every pixel is different, like a real desktop.</summary>
     private static byte[] Noisy()
     {
         var buf = new byte[Stride * H];
@@ -43,7 +43,7 @@ public class FrameQualityTests
     [Fact]
     public void এক_রঙের_ছবিও_চিহ্নিত_হয়()
     {
-        // DRM-সুরক্ষিত উইন্ডো সবসময় কালো নয় — কখনো সাদা বা ধূসরও আসে
+        // A DRM-protected window is not always black; sometimes it comes out white or gray
         var a = FrameQuality.Assess(Filled(255, 255, 255), W, H, Stride);
 
         Assert.True(a.Degraded);
@@ -75,9 +75,9 @@ public class FrameQualityTests
     }
 
     /// <summary>
-    /// একটা মনিটর কালো আর বাকিটা স্বাভাবিক — এমন মিশ্র ছবি যেন ভুল করে
-    /// "ঠিক আছে" না বলা হয়। অর্ধেক কালো হলে threshold পেরোয় না, সেটাই কাম্য:
-    /// প্রতি মনিটরের ছবি আলাদা করে পরীক্ষা হয়।
+    /// One monitor black and the rest normal: such a mixed image must not wrongly be
+    /// called "fine". If half is black it does not cross the threshold, and that is
+    /// desired: each monitor's image is checked separately.
     /// </summary>
     [Fact]
     public void অর্ধেক_কালো_হলে_খারাপ_বলা_হয়_না()

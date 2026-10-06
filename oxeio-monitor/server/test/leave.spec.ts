@@ -13,24 +13,24 @@ const HOUR = 3600;
 const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 
 /**
- * ⭐⭐ **R2 — ছুটি: চারটে পর্দা, একটাই সংখ্যা।**
+ * R2 — leave: four screens, one number.
  *
- * ছুটি ঠিক চার জায়গায় ঢোকে, আর তার তিনটেই একটা ভগ্নাংশের অংশ:
+ * Leave enters in exactly four places, and three of them are parts of one fraction:
  *
  * ```
- *   targetSec  = (d − ছুটি) × দৈনিক          ← prorate()
- *   expected   = targetSec × (কেটে যাওয়া − ছুটি)  ← elapsedWorkdays()  [লব]
+ *   targetSec  = (d − leave) × daily               ← prorate()
+ *   expected   = targetSec × (elapsed − leave)     ← elapsedWorkdays()  [numerator]
  *                            ─────────────────
- *                              (d − ছুটি)          ← proratedExpectedSec() [হর]
+ *                              (d − leave)         ← proratedExpectedSec() [denominator]
  * ```
  *
- * ⚠️⚠️ **এক দিকে বাদ দিয়ে অন্য দিকে না দেওয়াটাই এখানকার একমাত্র বাগ যা
- * নীরবে ভুল সংখ্যা দেয়** — ব্যতিক্রম ছোড়ে না, টেস্ট লাল হয় না, শুধু
- * ছুটি নেওয়া মানুষটা মাসভর "পিছিয়ে" দেখায়। তাই এই ফাইলের টেস্টগুলো
- * সংখ্যা মেলায় না, **অপরিবর্তনীয় সম্পর্ক** মেলায়।
+ * Removing leave on one side and not the other is the only bug here that
+ * silently gives a wrong number — it throws nothing, no test goes red, and
+ * the person on leave simply shows "behind" all month. So the tests in this
+ * file do not match numbers, they match invariant relationships.
  */
 
-/** সেপ্টেম্বর ২০২৬ — শুক্রবার সাপ্তাহিক ছুটি, ২৬ কর্মদিবস */
+/** September 2026 — Friday is the weekly holiday, 26 work days */
 const SEPT = {
   monthStart: day('2026-09-01'),
   monthEnd: day('2026-09-30'),
@@ -42,48 +42,48 @@ const SEPT = {
   policyWorkdays: 26,
 };
 
-describe('countLeaveWorkdays — কেবল কর্মদিবসই গোনে', () => {
+describe('countLeaveWorkdays — counts work days only', () => {
   const from = day('2026-09-01');
   const to = day('2026-09-30');
 
-  it('কর্মদিবসের ছুটি গোনা হয়', () => {
+  it('leave on a work day is counted', () => {
     const leave = new Set([day('2026-09-01').getTime(), day('2026-09-02').getTime()]);
     expect(countLeaveWorkdays(leave, from, to, [5], new Set())).toBe(2);
   });
 
-  it('শুক্রবার (৪ সেপ্টেম্বর) গোনা হয় না', () => {
+  it('a Friday (4 September) is not counted', () => {
     const leave = new Set([day('2026-09-04').getTime()]);
     expect(countLeaveWorkdays(leave, from, to, [5], new Set())).toBe(0);
   });
 
-  it('সরকারি ছুটির দিন গোনা হয় না', () => {
+  it('a government holiday is not counted', () => {
     const leave = new Set([day('2026-09-07').getTime()]);
     const holidays = new Set([day('2026-09-07').getTime()]);
     expect(countLeaveWorkdays(leave, from, to, [5], holidays)).toBe(0);
   });
 
-  it('জানালার বাইরের তারিখ গোনা হয় না', () => {
+  it('a date outside the window is not counted', () => {
     const leave = new Set([day('2026-08-31').getTime(), day('2026-10-01').getTime()]);
     expect(countLeaveWorkdays(leave, from, to, [5], new Set())).toBe(0);
   });
 
-  it('খালি বা অনুপস্থিত সেটে শূন্য', () => {
+  it('zero for an empty or missing set', () => {
     expect(countLeaveWorkdays(undefined, from, to, [5], new Set())).toBe(0);
     expect(countLeaveWorkdays(new Set(), from, to, [5], new Set())).toBe(0);
   });
 });
 
-describe('rollupMonth — ছুটি', () => {
+describe('rollupMonth — leave', () => {
   /**
-   * ⚠️⚠️ **এটা একটা সত্যিকারের ক্র্যাশ ছিল**, কোনো কাল্পনিক ধার নয়।
+   * This was a real crash, not a hypothetical one.
    *
-   * পুরোনো গার্ডটা ছিল `targetSec === 0 && expectedWorkdays > 0` → throw।
-   * গোটা মাস ছুটিতে থাকা কর্মীর ক্ষেত্রে **দুটোই সত্যি**: টার্গেট ০
-   * (ছুটি টার্গেট কমায়) আর d অটুট (ছুটি সবেতন)। আর `refreshMonth()`
-   * সবার সারি একটাই লুপে লেখে — অর্থাৎ একজনের ছুটি **গোটা দলের** মাসিক
-   * সারি লেখা বন্ধ করে দিত।
+   * The old guard was `targetSec === 0 && expectedWorkdays > 0` -> throw.
+   * For a staff member on leave the whole month both are true: the target is
+   * 0 (leave reduces the target) and d is intact (leave is paid). And
+   * `refreshMonth()` writes everyone's row in one loop — so one person's
+   * leave would stop the monthly rows being written for the whole team.
    */
-  it('⭐⭐ গোটা মাস ছুটি থাকলেও ছোড়ে না', () => {
+  it('does not throw even when the whole month is leave', () => {
     expect(() =>
       rollupMonth({
         workedSec: 0,
@@ -99,8 +99,8 @@ describe('rollupMonth — ছুটি', () => {
     ).not.toThrow();
   });
 
-  /** ⭐ যা ধরার জন্য গার্ডটা ছিল, সেটা এখনো ধরা পড়ে */
-  it('ছুটি বাদ দেওয়ার পরও কর্মদিবস থাকলে টার্গেট ০ হতে পারে না', () => {
+  /** What the guard was there to catch is still caught */
+  it('the target cannot be 0 if work days remain after removing leave', () => {
     expect(() =>
       rollupMonth({
         workedSec: 0,
@@ -116,7 +116,7 @@ describe('rollupMonth — ছুটি', () => {
     ).toThrow(RangeError);
   });
 
-  it('গোটা মাস ছুটিতে থাকলে প্রত্যাশা ০ — অর্থাৎ কোনো ঘাটতিও নেই', () => {
+  it('with the whole month on leave the expectation is 0 — so no shortfall either', () => {
     const m = rollupMonth({
       workedSec: 0,
       adjustmentSec: 0,
@@ -132,7 +132,7 @@ describe('rollupMonth — ছুটি', () => {
     expect(m.expectedSec).toBe(0);
     expect(m.paceSec).toBe(0);
     expect(m.shortfallSec).toBe(0);
-    // ⭐ তবু d ও D অটুট — বেতন পুরো
+    // Yet d and D are intact — pay is in full
     expect(m.expectedWorkdays).toBe(26);
     expect(m.monthWorkdays).toBe(26);
     expect(m.leaveWorkdays).toBe(26);
@@ -140,24 +140,24 @@ describe('rollupMonth — ছুটি', () => {
 });
 
 /**
- * ⭐⭐ **এই describe-টাই এই ফাইলের কারণ।**
+ * This describe is the reason for this file.
  *
- * ছুটি লব ও হর দুটোতেই বাদ যায়, তাই **একটা বিল-যোগ্য দিনের হার অপরিবর্তিত
- * থাকে**। অর্থাৎ ছুটি নেওয়ার পর প্রত্যাশা কমে ঠিক ততটুকুই, যতটুকু দিন
- * তিনি কাজ করেননি — এক সেকেন্ডও বেশি বা কম নয়।
+ * Leave is removed from both numerator and denominator, so the rate for one
+ * billable day stays unchanged. That is, after taking leave the expectation
+ * drops by exactly the days they did not work — not a second more or less.
  */
-describe('প্রত্যাশা — ছুটি লব ও হর দুটোতেই', () => {
+describe('expectation — leave in both numerator and denominator', () => {
   const DAILY = 8 * HOUR;
 
-  it('⭐⭐ ছুটির আগে-পরে "প্রতি কেটে যাওয়া দিনে প্রত্যাশা" এক থাকে', () => {
-    // ছুটি নেই: ২৬ দিনের টার্গেট, ১০ দিন কেটেছে
+  it('the "expectation per elapsed day" is the same before and after leave', () => {
+    // No leave: a 26-day target, 10 days elapsed
     const plain = proratedExpectedSec({
       targetSec: 26 * DAILY,
       expectedWorkdays: 26,
       workdaysElapsed: 10,
     });
 
-    // ৪ দিন ছুটি, যার ২ দিন ইতিমধ্যে কেটে গেছে
+    // 4 days of leave, 2 of which have already passed
     const withLeave = proratedExpectedSec({
       targetSec: 22 * DAILY,
       expectedWorkdays: 26,
@@ -167,16 +167,16 @@ describe('প্রত্যাশা — ছুটি লব ও হর দু�
 
     expect(plain).toBe(10 * DAILY);
     expect(withLeave).toBe(8 * DAILY);
-    // ⭐ দুটোই ঠিক ৮ ঘণ্টা প্রতি কাজের দিন — হার বদলায়নি
+    // Both are exactly 8 hours per work day — the rate has not changed
     expect(withLeave / 8).toBe(plain / 10);
   });
 
   /**
-   * ⚠️⚠️ যদি কেউ ভবিষ্যতে হর থেকে ছুটি বাদ দিতে ভুলে যায় (অথবা লব থেকে),
-   *    এই টেস্টটাই একমাত্র জিনিস যা ধরবে — কারণ সংখ্যাটা তখনো "যুক্তিসঙ্গত"
-   *    দেখাবে, শুধু ভুল হবে।
+   * If someone later forgets to remove leave from the denominator (or the
+   * numerator), this test is the only thing that will catch it — because the
+   * number will still look reasonable, just wrong.
    */
-  it('⚠️ কেবল লবে বাদ দিলে হার কমে যেত — সেটা যেন না হয়', () => {
+  it('removing it only from the numerator would drop the rate — that must not happen', () => {
     const correct = proratedExpectedSec({
       targetSec: 22 * DAILY,
       expectedWorkdays: 26,
@@ -185,7 +185,7 @@ describe('প্রত্যাশা — ছুটি লব ও হর দু�
     });
     const buggy = proratedExpectedSec({
       targetSec: 22 * DAILY,
-      expectedWorkdays: 26, // হর থেকে ছুটি বাদ দিতে ভুলে গেলে
+      expectedWorkdays: 26, // if leave were forgotten in the denominator
       workdaysElapsed: 8,
     });
 
@@ -193,7 +193,7 @@ describe('প্রত্যাশা — ছুটি লব ও হর দু�
     expect(buggy).toBeLessThan(correct);
   });
 
-  it('মাসের সব দিন ছুটি হলে হর ০ — প্রত্যাশাও ০, ভাগ নয়', () => {
+  it('when every day of the month is leave the denominator is 0 — expectation 0 too, no division', () => {
     const p = proratedExpectedSec({
       targetSec: 0,
       expectedWorkdays: 26,
@@ -205,14 +205,14 @@ describe('প্রত্যাশা — ছুটি লব ও হর দু�
   });
 
   /**
-   * ⭐⭐ **tray আর মাসিক সারি একই সংখ্যা বলে** — G88-এর মূল নিয়ম।
+   * The tray and the monthly row say the same number — the core rule of G88.
    *
-   * ⚠️ tray আলাদা ফাংশন ডাকে (`progress.math.ts`), কারণ ওটা ছোড়ে না।
-   *    ছুটি সেখানে আলাদা করে না পৌঁছালে কর্মী তাঁর নিজের পর্দায় "পিছিয়ে"
-   *    দেখতেন আর মালিক Live Board-এ "ঠিক আছে" — আর tray-ই সেই পর্দা যেটা
-   *    তিনি সারাদিন দেখেন।
+   * The tray calls a different function (`progress.math.ts`) because it does
+   * not throw. If leave did not reach it separately, staff would see
+   * "behind" on their own screen while the owner saw "fine" on the Live
+   * Board — and the tray is the screen they look at all day.
    */
-  it('⭐⭐ tray-র প্রত্যাশা মাসিক সারির সাথে হুবহু মেলে', () => {
+  it('the tray\'s expectation matches the monthly row exactly', () => {
     const shared = {
       expectedWorkdays: 26,
       leaveWorkdays: 4,
@@ -231,7 +231,7 @@ describe('প্রত্যাশা — ছুটি লব ও হর দু�
   });
 });
 
-describe('elapsedWorkdays — ছুটি', () => {
+describe('elapsedWorkdays — leave', () => {
   const BASE = {
     periodStart: day('2026-09-01'),
     periodEnd: day('2026-09-30'),
@@ -243,20 +243,20 @@ describe('elapsedWorkdays — ছুটি', () => {
     holidays: new Set<number>(),
   };
 
-  it('জানালার ভেতরের ছুটি বাদ যায়', () => {
+  it('leave inside the window is removed', () => {
     const plain = elapsedWorkdays(BASE);
     const leave = new Set([day('2026-09-01').getTime(), day('2026-09-02').getTime()]);
     expect(elapsedWorkdays(BASE, leave)).toBe(plain - 2);
   });
 
-  /** ⚠️ আজকের দিনটা জানালার বাইরে (আজ শেষ হয়নি) — আজকের ছুটিও তাই বাইরে */
-  it('আজকের ছুটি বাদ যায় না, কারণ আজকের দিনটাই এখনো গোনা হয়নি', () => {
+  /** Today is outside the window (today is not over) — so today's leave is outside too */
+  it('today\'s leave is not removed, because today itself is not counted yet', () => {
     const plain = elapsedWorkdays(BASE);
     const leave = new Set([day('2026-09-15').getTime()]);
     expect(elapsedWorkdays(BASE, leave)).toBe(plain);
   });
 
-  it('ঋণাত্মক হয় না', () => {
+  it('is never negative', () => {
     const all = new Set<number>();
     for (let n = 1; n <= 30; n++) all.add(day(`2026-09-${String(n).padStart(2, '0')}`).getTime());
     expect(elapsedWorkdays(BASE, all)).toBe(0);
@@ -264,12 +264,12 @@ describe('elapsedWorkdays — ছুটি', () => {
 });
 
 /**
- * ⭐ শেষ পাহারাটা গোটা শৃঙ্খলের: `prorate()` → `elapsedWorkdays()` →
- * `proratedExpectedSec()`, ঠিক যে ক্রমে `summary.service.ts` ডাকে।
+ * The last guard is for the whole chain: `prorate()` -> `elapsedWorkdays()` ->
+ * `proratedExpectedSec()`, in exactly the order `summary.service.ts` calls them.
  */
-describe('পুরো শৃঙ্খল — ছুটির পরেও ঘাটতি জন্মায় না', () => {
-  it('⭐⭐ ছুটি কাটিয়ে ফিরে আসা কেউ "পিছিয়ে" দেখায় না', () => {
-    // ১ থেকে ৩ সেপ্টেম্বর ছুটি (তিনটেই কর্মদিবস)
+describe('the whole chain — no shortfall arises even after leave', () => {
+  it('someone back from leave does not show "behind"', () => {
+    // Leave from 1 to 3 September (all three are work days)
     const leaveDates = new Set([
       day('2026-09-01').getTime(),
       day('2026-09-02').getTime(),
@@ -299,7 +299,7 @@ describe('পুরো শৃঙ্খল — ছুটির পরেও ঘ�
       workdaysElapsed: elapsed,
     });
 
-    // ⭐ ছুটির পরে ফিরে ঠিক ওই কাজের দিনগুলোই কাজ করলে pace ঠিক ০
+    // Returning after leave and working exactly those work days gives pace exactly 0
     const credited = elapsed * 8 * HOUR;
     expect(credited - expected).toBe(0);
   });

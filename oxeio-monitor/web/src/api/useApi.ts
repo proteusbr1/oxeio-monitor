@@ -9,38 +9,38 @@ import {
 import { isAbortError } from './client';
 
 /**
- * ডেটা আনার দুটো হুক — `useApi` (একবার) আর `usePolling` (বারবার)।
+ * Two data-fetching hooks: `useApi` (once) and `usePolling` (repeatedly).
  *
- * ⭐ ছ-টা পেজেই এই দুটো ছাড়া `useEffect` + `fetch` লিখবেন না। কারণ নিচের
- *    তিনটে ফাঁদ প্রতিটা পেজে আলাদা করে এড়ানো প্রায় অসম্ভব:
- *      · unmount-এর পর `setState`
- *      · **race** — পুরোনো রিকোয়েস্ট দেরিতে ফিরে নতুন ডেটা মুছে দেওয়া
- *      · লুকোনো ট্যাবে সারারাত পোলিং
+ * In all six pages, do not write `useEffect` + `fetch` by hand. Avoiding the
+ * three traps below separately in every page is nearly impossible:
+ *   - `setState` after unmount
+ *   - a race: an old request returns late and overwrites newer data
+ *   - polling all night in a hidden tab
  */
 
 export interface ApiResult<T> {
-  /** সফল হওয়া শেষ রেসপন্স। কিছু না এলে `null`। */
+  /** The last successful response; `null` if none has arrived. */
   data: T | null;
-  /** ব্যর্থ হলে — `ApiError` হলে `.status` দেখে ৪০৩ আলাদা করা যায় */
+  /** On failure; for an `ApiError`, check `.status` to tell a 403 apart. */
   error: Error | null;
-  /** একটা রিকোয়েস্ট এখন চলছে কি না */
+  /** Whether a request is in flight right now. */
   loading: boolean;
-  /** শেষ সফল রেসপন্স কখন এল — "শেষ হালনাগাদ 22:10" দেখাতে */
+  /** When the last successful response arrived; for showing "Last updated 22:10". */
   updatedAt: Date | null;
-  /** আবার আনা — `<ErrorBox retry={reload}>`-এ সরাসরি দেওয়া যায় */
+  /** Fetch again; can be passed straight to `<ErrorBox retry={reload}>`. */
   reload: () => void;
 }
 
 export interface PollingResult<T> extends ApiResult<T> {
-  /** ⭐ ট্যাব লুকোনো বলে পোলিং থেমে আছে — পেজ চাইলে সেটা বলতে পারে */
+  /** Polling is paused because the tab is hidden; a page can say so if it wants. */
   paused: boolean;
 }
 
 /**
- * ⚠️ fetcher-টা `signal` পায় — সেটা `api()`-কে দিয়ে দিলে বাতিল হওয়া
- *    রিকোয়েস্ট সত্যিই নেটওয়ার্ক থেকেও সরে যায়:
+ * Careful: the fetcher receives a `signal`. Pass it on to `api()` so a cancelled
+ * request is also dropped from the network:
  *
- *    `useApi((signal) => getLiveBoard(signal), [])`
+ * `useApi((signal) => getLiveBoard(signal), [])`
  */
 export type Fetcher<T> = (signal: AbortSignal) => Promise<T>;
 
@@ -59,7 +59,7 @@ const INITIAL: State<never> = {
 };
 
 /**
- * এক দফা ডেটা আনা। `deps` বদলালে আবার আনে।
+ * One round of fetching. Fetches again when `deps` change.
  *
  * ```tsx
  * const { data, error, loading, reload } = useApi(
@@ -71,8 +71,8 @@ const INITIAL: State<never> = {
  * if (!data || data.segments.length === 0) return <Empty title="…" />;
  * ```
  *
- * ⚠️ `deps` বদলালে `data` **শূন্য করা হয়** — অন্য কর্মীর নাম বসিয়ে আগের
- *    কর্মীর ঘণ্টা এক মুহূর্তের জন্যও দেখানো যায় না।
+ * Careful: when `deps` change, `data` is cleared, so the previous employee's hours
+ * are never shown, even for a moment, under another employee's name.
  */
 export function useApi<T>(
   fetcher: Fetcher<T>,
@@ -84,14 +84,14 @@ export function useApi<T>(
   useEffect(() => {
     const controller = run();
     return () => {
-      // ⭐ দুটোই দরকার: `abort()` নেটওয়ার্ক থামায়, `invalidate()` দেরিতে
-      //    ফেরা রেসপন্সকে অকেজো করে। শুধু abort-এ ভরসা করা যায় না — রেসপন্স
-      //    ইতিমধ্যেই এসে গিয়ে `.then` সারিতে অপেক্ষা করতে পারে।
+      // Both are needed: `abort()` stops the network, `invalidate()` makes a late
+      // response useless. Relying on abort alone is not enough: the response may have
+      // already arrived and be waiting in the `.then` queue.
       invalidate();
       controller.abort();
     };
-    // ⚠️ `deps` ইচ্ছাকৃতভাবে ছড়ানো — কোন কোন মান বদলালে আবার আনতে হবে
-    //    সেটা কল করা পেজই জানে, এই হুক নয়।
+    // Careful: `deps` is deliberately spread: the calling page knows which values
+    // should trigger a refetch, not this hook.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [run, invalidate, tick, ...deps]);
 
@@ -99,16 +99,17 @@ export function useApi<T>(
 }
 
 /**
- * প্রতি `intervalMs` মিলিসেকেন্ডে আবার আনা — লাইভ বোর্ডের ৩০ সেকেন্ড (E01)।
+ * Refetch every `intervalMs` milliseconds: the live board's 30 seconds (E01).
  *
- * ⭐ পুরোনো `data` **মুছে যায় না** — প্রতি ৩০ সেকেন্ডে বোর্ড সাদা হয়ে গেলে
- *    পড়াই যেত না। রিফ্রেশ চলাকালীন `loading` সত্যি থাকে, ডেটা আগেরটাই থাকে।
+ * The old `data` is not cleared: a board that went blank every 30 seconds could
+ * not be read. While a refresh runs `loading` is true and the data stays the
+ * previous data.
  *
- * ⭐⚠️ ট্যাব লুকোনো থাকলে টাইমারটা **বন্ধ** (`document.hidden`)। নইলে
- *    ড্যাশবোর্ড খোলা রেখে কেউ বাড়ি চলে গেলে সারারাত প্রতি ৩০ সেকেন্ডে
- *    সার্ভারে হিট হতো — পনেরোটা ট্যাব থেকে রাতে ২১,৬০০ রিকোয়েস্ট।
- *    ট্যাবে ফিরলে সাথে সাথেই একবার আনা হয়, নইলে ব্যবহারকারী ৩০ সেকেন্ড
- *    ধরে বাসি বোর্ড দেখত আর বুঝতেই পারত না।
+ * Careful: the timer stops while the tab is hidden (`document.hidden`). Otherwise
+ * someone leaving a dashboard open and going home would hit the server every 30
+ * seconds all night: 21,600 requests overnight from fifteen tabs. On returning to
+ * the tab it fetches once immediately, otherwise the user would look at a stale
+ * board for 30 seconds without knowing.
  */
 export function usePolling<T>(
   fetcher: Fetcher<T>,
@@ -149,8 +150,9 @@ export function usePolling<T>(
       startTimer();
     };
 
-    // ⚠️ প্রথমবার সবসময় আনা হয়, ট্যাব লুকোনো থাকলেও — নইলে ব্যাকগ্রাউন্ডে
-    //    খোলা ট্যাবে ফিরে এসে ৩০ সেকেন্ড খালি পর্দা দেখা যেত।
+    // Careful: the first fetch always happens, even when the tab is hidden;
+    // otherwise returning to a tab opened in the background would show an empty
+    // screen for 30 seconds.
     fetchNow();
     setPaused(document.hidden);
     if (!document.hidden) startTimer();
@@ -169,37 +171,39 @@ export function usePolling<T>(
   return { ...runner.state, reload: runner.reload, paused };
 }
 
-// ── ভেতরের অংশ ──────────────────────────────────────────────────────────────
+// ── Internals ───────────────────────────────────────────────────────────────
 
 interface Runner<T> {
   state: State<T>;
-  /** একটা রিকোয়েস্ট শুরু করে তার controller ফেরত দেয় */
+  /** Starts a request and returns its controller. */
   run: () => AbortController;
-  /** চলমান রিকোয়েস্টগুলোর ফলাফল আর নেওয়া হবে না */
+  /** Results of in-flight requests will no longer be used. */
   invalidate: () => void;
   reload: () => void;
   /**
-   * ⚠️ `reload()` ডাকলে এটা বাড়ে, আর এটা effect-এর deps-এ থাকে বলেই
-   *    effect আবার চলে। deps-এ রাখতে ভুললে reload বোতামটা নীরবে কিছুই
-   *    করত না — কোনো এরর নয়, শুধু একটা মরা বোতাম।
+   * Careful: `reload()` increments this, and because it is in the effect's deps the
+   * effect runs again. If it were left out of the deps, the reload button would
+   * silently do nothing: no error, just a dead button.
    */
   tick: number;
 }
 
 /**
- * দুটো হুকের সাধারণ যন্ত্রপাতি।
+ * Machinery shared by both hooks.
  *
- * ⭐ **generation counter**-টাই এখানকার আসল কথা। `AbortController` একা যথেষ্ট
- *    নয়: রেসপন্স এসে গিয়ে `.then` চলার আগে যদি নতুন রিকোয়েস্ট শুরু হয়,
- *    abort তখন আর কিছু থামাতে পারে না — পুরোনো ফলাফল নতুনটার উপরে বসে যেত।
- *    যেমন তারিখ দ্রুত দুবার বদলালে ১০ তারিখের ডেটা ৯ তারিখের পর্দায় বসত।
+ * The generation counter is the real point here. `AbortController` alone is not
+ * enough: if a new request starts after the response has already arrived but
+ * before `.then` has run, abort can no longer stop anything and the old result
+ * would land on top of the new one. For example, if the date is changed twice
+ * quickly, the 10th's data could end up on the 9th's screen.
  */
 function useRunner<T>(fetcher: Fetcher<T>, clearOnStart: boolean): Runner<T> {
   const [state, setState] = useState<State<T>>(INITIAL as State<T>);
 
-  // ⚠️ প্রতি রেন্ডারে fetcher-এর পরিচয় বদলায় (অ্যারো ফাংশন), তাই সেটা
-  //    deps-এ রাখা যায় না — রাখলে অসীম লুপ হতো। ref-এ রেখে সবসময়
-  //    সর্বশেষটাই ডাকা হয়। ⚠️ assign করা হয় effect-এ, রেন্ডারের ভেতরে নয়।
+  // Careful: the fetcher's identity changes on every render (arrow function), so
+  // it cannot go in the deps, which would cause an infinite loop. It is kept in a
+  // ref so the latest one is always called. Careful: it is assigned in an
+  // effect, not during render.
   const fetcherRef = useRef(fetcher);
   useEffect(() => {
     fetcherRef.current = fetcher;
@@ -209,9 +213,9 @@ function useRunner<T>(fetcher: Fetcher<T>, clearOnStart: boolean): Runner<T> {
   const aliveRef = useRef(true);
 
   useEffect(() => {
-    // ⚠️ StrictMode-এ effect দুবার চলে (mount → cleanup → mount), তাই
-    //    প্রতিবার `true` বসানো দরকার — নইলে দ্বিতীয় mount-এ কোনো ডেটাই
-    //    বসত না, আর সেটা শুধু dev-এ ঘটত বলে ধরাও পড়ত না।
+    // Careful: in StrictMode the effect runs twice (mount, cleanup, mount), so
+    // `true` must be set every time. Otherwise the second mount would never set any
+    // data, and since this only happens in dev it would not even be noticed.
     aliveRef.current = true;
     return () => {
       aliveRef.current = false;
@@ -239,14 +243,14 @@ function useRunner<T>(fetcher: Fetcher<T>, clearOnStart: boolean): Runner<T> {
         setState({ data, error: null, loading: false, updatedAt: new Date() });
       },
       (err: unknown) => {
-        // বাতিল করা রিকোয়েস্ট ব্যর্থতা নয় — এটাকে এরর দেখালে তারিখ
-        // বদলানোর মতো নিরীহ কাজেও পর্দায় লাল বার্তা উঠত
+        // A cancelled request is not a failure. Showing it as an error would put a red
+        // message on screen even for harmless actions like changing the date.
         if (isAbortError(err)) return;
         if (gen !== genRef.current || !aliveRef.current) return;
 
         setState((prev) => ({
-          // ⭐ পোলিং-এ পুরোনো ডেটা ধরে রাখা হয়: এক দফা নেটওয়ার্ক হোঁচট
-          //    খেলে গোটা বোর্ড উধাও হওয়ার চেয়ে বাসি সংখ্যা + এরর বার্তা ভালো
+          // When polling, the old data is kept: after one network hiccup, stale numbers
+          // plus an error message beat the whole board disappearing.
           data: clearOnStart ? null : prev.data,
           error: err instanceof Error ? err : new Error(String(err)),
           loading: false,
@@ -258,9 +262,9 @@ function useRunner<T>(fetcher: Fetcher<T>, clearOnStart: boolean): Runner<T> {
     return controller;
   }, [clearOnStart]);
 
-  // ⭐ `reload` সরাসরি `run()` ডাকে না — একটা tick বাড়িয়ে effect-কেই আবার
-  //    চালায়। ফলে abort ও cleanup-এর নিয়মগুলো এক জায়গাতেই থাকে; সরাসরি
-  //    ডাকলে ওই রিকোয়েস্টটা unmount-এ বাতিল হতো না।
+  // `reload` does not call `run()` directly. It bumps a tick, which makes the
+  // effect run again. That keeps the abort and cleanup rules in one place; a
+  // direct call would leave that request uncancelled on unmount.
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((t) => t + 1), []);
 

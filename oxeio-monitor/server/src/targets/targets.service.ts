@@ -38,12 +38,12 @@ import {
 } from './targets.rules';
 
 /**
- * ⭐⭐ 'YYYY-MM-DD' → ওই দিনের **ঢাকার মধ্যরাত**।
+ * 'YYYY-MM-DD' becomes the Dhaka midnight of that day.
  *
- * ⚠️ মডিউল-স্তরে রাখা হয়েছে ইচ্ছাকৃতভাবে: `list()`-এর ছাঁকনি আর
- * `stats()`-এর গণনা — দুটোকে **হুবহু এক তারিখ** ধরতে হয়। চিপে ১৩২ লিখে
- * ক্লিক করার পর ৯০টা এলে কেউ আর কোনো সংখ্যাই বিশ্বাস করবে না, আর এই
- * প্রকল্পে ঠিক এভাবেই একই সূত্র দুই জায়গায় লেখা হয়ে বাগ জন্মেছে।
+ * Careful: this sits at module level on purpose. The `list()` filter and the
+ * `stats()` count must use exactly the same date. If a chip says 132 and
+ * clicking it shows 90, nobody will trust any number again, and this project
+ * has had bugs precisely because the same formula was written in two places.
  */
 const dhakaStart = (day: string): Date =>
   new Date(`${day}T00:00:00${LOCAL_OFFSET_ISO}`);
@@ -51,77 +51,78 @@ const nextDay = (day: string): Date =>
   new Date(dhakaStart(day).getTime() + 86_400_000);
 
 /**
- * ⭐ দুটো `'YYYY-MM-DD'`-র মধ্যে পরেরটা।
+ * The later of two `'YYYY-MM-DD'` strings.
  *
- * ⚠️ লেখার তুলনাই যথেষ্ট — ISO তারিখে অক্ষরের ক্রম আর সময়ের ক্রম এক।
+ * Comparing as text is enough: for ISO dates, character order is time order.
  */
 const laterDay = (a: string, b: string): string => (a >= b ? a : b);
 
 /**
- * ⭐ ওই মুহূর্তটা **ঢাকার কোন দিনে** পড়ে — `'YYYY-MM-DD'`।
+ * Which Dhaka day an instant falls on, as `'YYYY-MM-DD'`.
  *
- * ⚠️ `toISOString().slice(0,10)` লিখলে UTC-র দিন আসত, আর ঢাকায় ভোর ৬টার
- * আগে সেটা **গতকাল** দেখাত। রাত ১১টায় Complete চেপে ভুল ধরলে Undo-টা
- * তখন "গতকালের কাজ" বলে আটকে যেত।
+ * Careful: `toISOString().slice(0,10)` would give the UTC day, which shows
+ * yesterday before 06:00 in Dhaka. Someone who pressed Complete at 11 pm and
+ * spotted a mistake would then find Undo blocked as "yesterday's work".
  */
 const workDateStr = (at: Date): string =>
   workDateOf(at).toISOString().slice(0, 10);
 
 /**
- * ⚠️⚠️ পর্দায় সর্বোচ্চ কতগুলো বাদ-পড়া লাইন দেখানো হবে *(২৩ আগস্ট ২০২৬)*।
+ * The most rejected lines shown on screen.
  *
- * ছাদ তোলার পর ৪৫,০০০ লাইন পেস্ট করা সম্ভব। কেউ ভুল ফাইল পেস্ট করলে
- * **সবগুলোই** বাদ পড়ত, আর তখন গোটা তালিকা ব্রাউজারে পাঠালে উত্তরটা কয়েক
- * MB হতো আর পর্দায় ৪৫,০০০ সারির টেবিল বসত — ব্রাউজার জমে যেত।
+ * With the ceiling raised, pasting 45,000 lines is possible. If someone
+ * pastes the wrong file, all of them would be rejected, and sending the whole
+ * list to the browser would make the response several MB and put a
+ * 45,000-row table on screen, freezing the browser.
  *
- * ⭐ সংখ্যাটা (`rejectedTotal`) **সত্যি থাকে**, কেবল তালিকাটা ছাঁটা হয়।
- * ২০০টা দেখলেই ভুলের ধরনটা বোঝা যায়; ২০১তম সারি নতুন কিছু বলে না।
+ * The count (`rejectedTotal`) stays true; only the list is trimmed. Seeing
+ * 200 is enough to understand the kind of mistake; row 201 says nothing new.
  */
 export const REJECTED_SHOWN = 200;
 
 export interface BulkResult {
-  /** নতুন করে যতগুলো ঢুকল */
+  /** How many were newly added */
   added: number;
-  /** ⚠️ আগে থেকেই ছিল — ভুল নয়, কিন্তু জানা দরকার */
+  /** Already existed: not a mistake, but worth knowing */
   alreadyKnown: number;
-  /** ⚠️ সর্বোচ্চ `REJECTED_SHOWN`টা — আসল সংখ্যা `rejectedTotal`-এ */
+  /** At most `REJECTED_SHOWN`; the true count is in `rejectedTotal` */
   rejected: RejectedLine[];
-  /** ⭐ কতগুলো সত্যিই বাদ পড়েছে — তালিকা ছাঁটা হলেও এটা পুরো সংখ্যা */
+  /** How many were really rejected; the full count even when the list is trimmed */
   rejectedTotal: number;
-  /** পুলে এখন কতগুলো অপেক্ষায় */
+  /** How many are now waiting in the pool */
   poolSize: number;
 }
 
 /**
- * ⚠️ এক পাতায় ৫০টা — বেশি দিলে ৩৯ হাজারের টেবিলে স্ক্রল করাই কষ্ট হতো,
- * কম দিলে গবেষককে বারবার "পরের পাতা" চাপতে হতো।
+ * 50 per page: more would make scrolling a 39-thousand-row table painful, and
+ * fewer would make the researcher keep pressing "next page".
  */
 export const TARGET_PAGE_SIZE = 50;
 
 /**
- * ⚠️ এক ডাকে সর্বোচ্চ কতগুলো মোছা যাবে। পর্দায় এক পাতায় ৫০টা, তাই
- * বাস্তবে কেউ এর কাছেও পৌঁছাবেন না — ছাদটা মানুষকে নয়, দুর্ঘটনা ও
- * বেঢপ কোয়েরি আটকাতে (`BulkDto`-র ছাদের একই যুক্তি)।
+/**
+ * The most rows one call can delete. The screen shows 50 per page, so nobody
+ * will get near this; the ceiling stops accidents and oversized queries, not
+ * people (same reasoning as the `BulkDto` ceiling).
  */
 export const DELETE_MAX = 500;
 
 export interface DeleteResult {
-  /** কতগুলো সত্যিই `deleted` হলো */
+  /** How many were really marked `deleted` */
   deleted: number;
   /**
-   * ⚠️⚠️ **শেষ হয়ে যাওয়া বলে যেগুলো ছোঁয়া হয়নি।** সংখ্যাটা ফেরত যায়
-   * বলেই পর্দা সত্যি কথাটা বলতে পারে — নইলে ৫০টা বেছে ৪৮টা মুছত আর
-   * কেউ জানত না বাকি দুটোর কী হলো।
+   * Careful: rows that were not touched because they are already done. The
+   * number is returned so the screen can tell the truth; otherwise 50 would be
+   * selected, 48 deleted, and nobody would know what happened to the other two.
    */
   keptDone: number;
 }
 
 /**
- * ⭐⭐ **Design Pool-এ খোঁজার শর্ত** *(৬ সেপ্টেম্বর ২০২৬)* — ASIN, নাকি
- * Job নম্বর, নাকি দুটোই।
+ * What the Design Pool search matches: the ASIN, the job number, or both.
  *
- * ⚠️ শুধু-অঙ্ক লেখা হলে `OR` — কিছু ASIN পুরোপুরি সংখ্যায় হয়, আর তখন
- *    কেবল Job নম্বর খুঁজলে ওই সারিটা নীরবে হারিয়ে যেত।
+ * Careful: digits-only input uses `OR`. Some ASINs are entirely numeric, and
+ * searching only by job number would silently lose such a row.
  */
 type TargetSearchMatch =
   | { asin: { contains: string } }
@@ -133,78 +134,75 @@ export interface TargetRow {
   url: string;
   status: DesignTargetStatus;
   jobNumber: number | null;
-  /** ⚠️ ছেড়ে যাওয়া কর্মীর সারিতে `null` — নামটা `sourceNote`-এ */
+  /** `null` on a row of staff who have left; the name is in `sourceNote` */
   assignedTo: { empCode: string; fullName: string } | null;
   assignedAt: string | null;
-  /** ⭐ ফাইলটা প্রথমবার খোলা হয়েছে — "কাজ চলছে" */
+  /** The file was first opened: "work in progress" */
   startedAt: string | null;
   completedAt: string | null;
   completedVia: string | null;
 
   /**
-   * ⭐⭐ **ওই জব-নম্বরের ফাইল ডিজাইন-অ্যাপে মোট কত সেকেন্ড পর্দায় ছিল**
-   * *(৯ সেপ্টেম্বর ২০২৬)*।
+   * Total seconds the file with that job number was on screen in the design
+   * app.
    *
-   * ⚠️⚠️ **তিনটে অবস্থা** — `> 0` মাপা হয়েছে · `0` **শেষ বলা হয়েছে
-   * অথচ কখনো খোলা হয়নি** · `null` বলার মতো কিছু নেই। মাঝেরটা কেবল
-   * শেষ-বলা সারিতেই বসে: হাতে থাকা কাজের ফাইল এখনো খোলা না হওয়া
-   * স্বাভাবিক, আর সেখানে `no trace` লেখা মানে **অভিযোগ সেখানে যেখানে
-   * কোনো দাবিই করা হয়নি**। নিয়মটা [`fileSecOf`](./targets.rules.ts)-এ।
+   * Careful: three states. `> 0` is measured; `0` means "marked done yet
+   * never opened"; `null` means nothing to say. The middle one appears only on
+   * rows marked done: a file in hand not yet being opened is normal, and
+   * writing `no trace` there would be an accusation where no claim was made.
+   * The rule is in [`fileSecOf`](./targets.rules.ts).
    *
-   * ⚠️ এটা "কাজ হয়েছে কি না" নয় — সেভ না করা বা নাম বদলানো ফাইল
-   * এখানে ধরা পড়ে না। সংখ্যাটা **প্রসঙ্গ, রায় নয়**।
+   * This is not "was the work done": files that were not saved or were
+   * renamed are not caught here. The number is context, not a verdict.
    */
   fileSec: number | null;
-  /** পুরোনো Excel-এর কাঁচা লেখা — "Hafiz-24-05-2026" */
+  /** Raw text from the old Excel, e.g. "Hafiz-24-05-2026" */
   sourceNote: string | null;
 
   /**
-   * ⭐⭐ **কেন সারিটা কাজের বাইরে গেল** *(৩১ আগস্ট ২০২৬)* — `not_found` ·
-   * `copyright` · `events`।
+   * Why the row went out of work: `not_found`, `copyright` or `events`.
    *
-   * ⚠️ `skipped` ও `deleted` **দুটোতেই** থাকে; বাকি অবস্থায় `null`।
-   * পর্দায় লেখাটা `DROP_REASON_LABELS` থেকে আসে, এই মান থেকে নয় —
-   * তাই লেখাটা বদলালেও জমা ডেটা অক্ষত থাকে।
+   * Present on both `skipped` and `deleted`; `null` in other states. The text
+   * on screen comes from `DROP_REASON_LABELS`, not from this value, so
+   * changing the label leaves stored data intact.
    */
   dropReason: string | null;
 
   /**
-   * ⭐⭐ **মালিক/ম্যানেজার এটা দেখে নিয়েছেন** *(৩১ আগস্ট ২০২৬)* — `null`
-   * মানে এখনো কিউতে আছে।
+   * The owner/manager has reviewed this. `null` means still in the queue.
    *
-   * ⚠️ কেবল বাদ-যাওয়া সারিতেই অর্থবহ; বাকি সব সারিতে চিরকাল `null`।
+   * Meaningful only on dropped rows; always `null` on every other row.
    */
   reviewedAt: string | null;
   reviewedBy: { fullName: string; role: string } | null;
 
   /**
-   * ⚠️⚠️ নিচের ঘরগুলো `list()` **আগে থেকেই ফেরত দিত**, কিন্তু এই টাইপে
-   * লেখা ছিল না — অর্থাৎ চুক্তিটা বাস্তবের চেয়ে ছোট ছিল, আর TypeScript
-   * সেটা ধরত না (`.map()`-এর ফল কাঠামোগতভাবে assignable)। ⭐ ২৫ আগস্ট
-   * বানান-যাচাইয়ের ঘর যোগ করতে গিয়ে ধরা পড়ল; একসাথে সবগুলো লেখা হলো।
+   * Careful: `list()` already returned the fields below, but this type did not
+   * list them, so the contract was smaller than reality and TypeScript did not
+   * notice (the result of `.map()` is structurally assignable). It was caught
+   * when adding the spelling-check fields; all were written in together.
    */
   completedBy: { fullName: string; role: string } | null;
 
   /**
-   * ⭐⭐ **কে টার্গেটটা এনেছেন** *(মালিকের চাওয়া, ২৫ আগস্ট ২০২৬:
-   * "Design Pool e ke target list add koreche seta ami dekhote cai")*।
+   * Who brought the target in.
    *
-   * ⚠️ `assignedTo`-র সাথে গুলিয়ে ফেলবেন না — ওটা **কর্মী** (যিনি ডিজাইন
-   * করবেন), এটা **ব্যবহারকারী** (যিনি লিঙ্কটা এনেছেন)। দুটো আলাদা id-র
-   * জগৎ: `assigned_to_id → employees`, `added_by_id → users`।
+   * Do not confuse it with `assignedTo`: that is the staff member (who will
+   * design it), this is the user (who brought the link). Two separate id
+   * spaces: `assigned_to_id -> employees`, `added_by_id -> users`.
    *
-   * ⚠️ `null` হয় না — কলামটা `NOT NULL`, প্রতিটা সারির একজন উৎস আছে।
-   * তবু টাইপে `| null` রাখা হয়েছে **নয়**, কারণ মিথ্যা ঐচ্ছিকতা পর্দায়
-   * অকারণ `?? '—'` ডেকে আনত।
+   * It is never `null`: the column is `NOT NULL`, so every row has a source.
+   * The type deliberately has no `| null`, because false optionality would
+   * force pointless `?? '—'` on screen.
    */
   addedBy: { fullName: string; role: string };
-  /** ⭐ কবে এসেছে — একই ব্যাচের সারিগুলো এক মুহূর্তে বসে */
+  /** When it arrived; rows of the same batch land at one instant */
   addedAt: string;
-  /** ⭐ বানান দেখা হয়েছে — `null` = এখনো দেখা হয়নি (ADR-038) */
+  /** Spelling checked; `null` = not checked yet (ADR-038) */
   checkedAt: string | null;
-  /** ⭐ ভুল পাওয়া গেছে — `null` **আর** `checkedAt` বসানো = ঠিক ছিল */
+  /** A mistake was found; `null` with `checkedAt` set = it was correct */
   errorFoundAt: string | null;
-  /** ⭐ ভুলটা ঠিক করা হয়েছে */
+  /** The mistake was fixed */
   fixedAt: string | null;
   uploadedAt: string | null;
   liveAt: string | null;
@@ -217,25 +215,25 @@ export interface MyTarget {
   url: string;
   jobNumber: number | null;
   assignedAt: string | null;
-  /** ⭐ ফাইলটা খোলা হয়েছে — পর্দায় "কাজ চলছে" */
+  /** The file was opened: "work in progress" on screen */
   startedAt: string | null;
   /**
-   * ⭐⭐ **আজ শেষ করা হয়েছে** *(মালিকের রিপোর্ট, ২৫ আগস্ট)*।
+   * Finished today.
    *
-   * ⚠️⚠️ `null` = এখনো হাতে আছে। এই ঘরটাই ঠিক করে সারিটা পর্দার কোন
-   * ভাগে বসবে আর Undo বোতামটা ওঠে কি না।
+   * Careful: `null` = still in hand. This field decides which section of the
+   * screen the row goes in and whether the Undo button appears.
    *
-   * ⚠️ **আজকের** বাইরের কিছু এখানে আসেই না (`mine()` দেখুন), তাই
-   * মান থাকা মানেই "আজ শেষ করা, এখনো ফেরানো যায়"।
+   * Nothing outside today ever appears here (see `mine()`), so a value means
+   * "finished today, can still be undone".
    */
   completedAt: string | null;
 }
 
 /**
- * **ডিজাইন-টার্গেট** *(২২ আগস্ট ২০২৬)* — জমা, বণ্টন, আর শেষ হওয়া।
+ * Design targets: submission, distribution and completion.
  *
- * ⭐ গবেষকেরা রোজ ~৫০০টা Amazon URL জমা করেন; সকালে র‍্যান্ডম বণ্টন হয়;
- * ডিজাইনার একটা করে নিয়ে কাজ করেন।
+ * Researchers submit about 500 Amazon URLs a day; distribution is random in
+ * the morning; each designer takes one at a time and works on it.
  */
 @Injectable()
 export class TargetsService {
@@ -248,34 +246,34 @@ export class TargetsService {
   ) {}
 
   /**
-   * ⭐⭐ **কে টার্গেট দেখতে ও জমা দিতে পারবেন** — মালিক · ম্যানেজার ·
-   * **গবেষক** *(২৩ আগস্ট; রোল-ভিত্তিক হলো ২৫ আগস্ট)*।
+   * Who can view and submit targets: owner, manager, researcher.
    *
-   * ⚠️ পড়া ও লেখার পাহারা **একটাই**, আর সেটা ইচ্ছাকৃত: পুরো তালিকায়
-   * দেখা যায় গোটা দলের কাজ কোথায় দাঁড়িয়ে — সেটা ডিজাইনারের দেখার
-   * জিনিস নয়। ⭐ তিনি নিজের ৩০টা দেখেন `/me/targets`-এ।
+   * Reading and writing share one guard, on purpose: the full list shows where
+   * the whole team's work stands, which is not for a designer to see. A
+   * designer sees their own 30 in `/me/targets`.
    *
-   * ### ⚠️⚠️ এখানে আগে যা লেখা ছিল, আর কেন সেটা আর সত্যি নয়
+   * ### What this used to say, and why it is no longer true
    *
-   * পুরোনো টীকা বলত: *"গবেষককে `@Roles()` দিয়ে আটকানো যায় না — পোর্টালের
-   * রোল তিনটে (owner · manager · employee), আর গবেষক ঢোকেন `employee`
-   * হিসেবে"*। তাই অনুমতিটা **অন্য টেবিলের** `staff_type` ধরে নিতে হতো,
-   * প্রতি রিকোয়েস্টে একটা করে ডাটাবেস কল খরচ করে।
+   * The old note said: "A researcher cannot be blocked with `@Roles()`: the
+   * portal has three roles (owner, manager, employee), and researchers log in
+   * as `employee`." So permission had to be inferred from `staff_type` in
+   * another table, costing one database call per request.
    *
-   * ⭐⭐ ২৫ আগস্ট মালিক ওই ভিতটাই সরিয়ে দিলেন — *"researcher and designer
-   * same kaj kore na, tai eder access o same hobe na"*। `UserRole`-এ এখন
-   * `researcher` আছে, তাই প্রশ্নটা আর দুই টেবিলে ভাগ নয়।
+   * Then the owner removed that foundation: researchers and designers do
+   * different work, so their access should differ too. `UserRole` now has
+   * `researcher`, so the question is no longer split across two tables.
    *
-   * ফল তিনটে, আর তিনটেই লাভ:
-   *   · ডাটাবেস কল **উধাও** — ফাংশনটা এখন সমার্থক (sync)
-   *   · সাইডবারের `roles: [...] + when: canAddTargets` হ্যাকটা **মুছে গেল**
-   *   · অনুমতি **এক জায়গায়** — আর দুই টেবিলে ভাগ থাকাটাই ২৪ আগস্টের
-   *     গণ্ডগোলটা সম্ভব করেছিল (ADR-038)
+   * Three results, all gains:
+   *   - the database call is gone: the function is now synchronous
+   *   - the sidebar hack of `roles: [...] + when: canAddTargets` is gone
+   *   - permission is in one place; the split across two tables is what made
+   *     the 24 August mess possible (ADR-038)
    *
-   * ⚠️ পুরোনো টীকার আরেকটা আশঙ্কা ছিল — *"টোকেনে ধরনটা বসালে মালিক ধরন
-   * বদলানোর পরেও পুরোনো টোকেন পুরোনো অনুমতি নিয়ে ঘুরত"*। সেটাও আর খাটে
-   * না: `JwtAuthGuard` প্রতি ৫ মিনিটে ভূমিকাটা **ডাটাবেস থেকে নতুন করে
-   * পড়ে** (সেখানকার টীকা দেখুন)। রোল বদলালে কাউকে লগআউট করতে হয় না।
+   * The old note also feared that "if the type goes into the token, an old
+   * token keeps the old permission after the owner changes the type". That no
+   * longer applies either: `JwtAuthGuard` re-reads the role from the database
+   * every 5 minutes (see the note there). Changing a role does not require
+   * logging anyone out.
    */
   assertCanUse(actor: SessionUser): void {
     if (canUseTargets(actor.role)) return;
@@ -286,24 +284,24 @@ export class TargetsService {
   }
 
   /**
-   * ⭐⭐ **কে বানান যাচাই করতে পারেন** — মালিক · ম্যানেজার · গবেষক।
+   * Who can check spelling: owner, manager, researcher.
    *
-   * ### ⚠️⚠️ এই ফাংশনটা এক দিনে দুবার বদলেছে, আর ইতিহাসটা কাজে লাগে
+   * ### This function changed twice in one day, and the history is useful
    *
-   * **২৫ আগস্ট, সকাল** — মালিক: *"ami chai ei access ami manager and
-   * sumaiya pak"*। তখন এটা ছিল `employees.can_proofread` টিক-ঘর ধরে,
-   * অর্থাৎ **ব্যক্তি ধরে**।
+   * Morning: the owner wanted this access for the manager and one named
+   * proofreader. It was then based on the `employees.can_proofread` checkbox,
+   * i.e. per person.
    *
-   * **২৫ আগস্ট, পরে** — মালিক: *"sob researcher ra sei access gula pabe...
-   * researcher and designer same kaj kore na, tai eder access o same hobe
-   * na"*। অর্থাৎ প্রশ্নটা কখনোই *"কোন মানুষ"* ছিল না, ছিল *"কোন কাজ"*।
-   * ⭐ তাই টিক-ঘরটা তুলে দেওয়া হয়েছে আর রোলই অধিকারটা বহন করে।
+   * Later: the owner said all researchers get this access, because researchers
+   * and designers do different work. So the question was never "which person"
+   * but "which kind of work". The checkbox was removed and the role now
+   * carries the right.
    *
-   * ⚠️⚠️ **সূত্রটা আজ `assertCanUse`-এর হুবহু সমান, তবু ফাংশন দুটো আলাদা**
-   * — আর এটা ইচ্ছাকৃত, এই কোডবেসের নিয়ম মেনেই (`App.tsx`-এ
-   * `mayOpenSettings` কেন `isOwner || isManager` নয়, সেই একই কারণ)।
-   * শর্তের **নাম** থাকলে ভবিষ্যতে একটা বদলাতে গিয়ে অন্যটা খুঁজে বেড়াতে
-   * হয় না। মিলে যাওয়া সমান হওয়া নয়।
+   * Careful: today the formula is identical to `assertCanUse`, yet the two
+   * functions stay separate, on purpose and following this code base's rule
+   * (the same reason `mayOpenSettings` in `App.tsx` is not `isOwner ||
+   * isManager`). With a named condition, changing one later does not mean
+   * hunting for the other. Matching is not the same as being equal.
    */
   assertCanProofread(actor: SessionUser): void {
     if (canUseTargets(actor.role)) return;
@@ -314,15 +312,16 @@ export class TargetsService {
   }
 
   /**
-   * ⭐⭐ **একবারে ৫০০টা URL।**
+   * Up to 500 URLs at once.
    *
-   * ⚠️⚠️ **ডুপ্লিকেট দুই স্তরে ছাঁকা হয়:** পেস্টের ভেতরে (`parseBulk`) আর
-   * ডাটাবেসের বিপরীতে (`skipDuplicates`)। দ্বিতীয়টা ছাড়া `createMany`
-   * পুরো ব্যাচটাই বাতিল করত — অর্থাৎ ৫০০টার মধ্যে একটা পুরোনো ASIN
-   * থাকলেই গবেষকের গোটা দিনের কাজ জমা হতো না।
+   * Careful: duplicates are filtered at two levels: inside the paste
+   * (`parseBulk`) and against the database (`skipDuplicates`). Without the
+   * second, `createMany` would cancel the whole batch, so one old ASIN among
+   * 500 would stop the researcher's whole day of work from being submitted.
    *
-   * ⚠️ কতগুলো **সত্যিই** ঢুকল সেটা `createMany`-র `count` থেকে নেওয়া হয়,
-   * অনুমান করে নয় — "৫০০টা জমা হয়েছে" বলে ৪৩৭টা ঢোকাটা নীরব মিথ্যা।
+   * Careful: how many were really inserted comes from the `count` of
+   * `createMany`, not from a guess. Saying "500 submitted" when 437 went in
+   * would be a silent lie.
    */
   async bulkAdd(actor: SessionUser, text: string, ip: string): Promise<BulkResult> {
     await this.assertCanUse(actor);
@@ -330,18 +329,17 @@ export class TargetsService {
     const { accepted, rejected } = parseBulk(text);
 
     /**
-     * ⭐⭐ **কাজের নম্বর বসে জমা দেওয়ার মুহূর্তেই** *(২৩ আগস্ট, মালিকের
-     * চাওয়া: "every target er job no thakobe")*।
+     * The job number is assigned at submission time.
      *
-     * ⚠️ আগে নম্বরটা বসত **বরাদ্দের সময়**, যাতে কখনো বরাদ্দ না হওয়া
-     * সারি সিরিয়াল না খায়। কিন্তু তাতে পুলে পড়ে থাকা সারির কোনো পরিচয়
-     * থাকত না — মালিক তালিকায় একটা সারি দেখিয়ে বলতে পারতেন না "এই
-     * নম্বরটা"। ⭐ সিরিয়াল ৪ বাইটের int, তাই ৩৯ হাজার নয়, ২০০ কোটি
-     * পর্যন্ত চলে; খরচটা কল্পিত ছিল।
+     * It used to be assigned at allocation time, so rows never allocated would
+     * not consume serials. But then a row sitting in the pool had no identity,
+     * and the owner could not point at a row and say "this number". The serial
+     * is a 4-byte int, so it lasts to 2 billion, not 39 thousand; the cost
+     * was imaginary.
      *
-     * ⚠️ `createMany` দিয়ে `nextval` ডাকা যায় না, তাই raw insert —
-     * কিন্তু `ON CONFLICT DO NOTHING` রাখা হয়েছে, নইলে ৫০০টার মধ্যে
-     * একটা পুরোনো ASIN থাকলেই গোটা ব্যাচ বাতিল হতো।
+     * `nextval` cannot be called through `createMany`, so this is a raw
+     * insert, but `ON CONFLICT DO NOTHING` is kept; otherwise one old ASIN
+     * among 500 would cancel the whole batch.
      */
     const created =
       accepted.length === 0
@@ -365,8 +363,8 @@ export class TargetsService {
       targetType: 'design_targets',
       targetId: 'bulk',
       ipAddress: ip,
-      // ⚠️ ASIN-গুলো audit-এ যায় না — পাঁচশো আইডি লগে বসিয়ে লাভ নেই,
-      //    আর তালিকাটা টেবিলেই আছে
+      // The ASINs do not go into the audit log: five hundred ids in the log
+      // help nobody, and the list is in the table anyway
       meta: {
         added: created.count,
         rejected: rejected.length,
@@ -377,8 +375,9 @@ export class TargetsService {
     return {
       added: created.count,
       alreadyKnown: accepted.length - created.count,
-      // ⚠️ ছাঁটাটা এখানে, `parseBulk()`-এ নয় — ওই ফাংশনের কাজ সত্যি বলা,
-      //    পর্দার সুবিধা দেখা নয়। ছাদটা সীমান্তে বসে (audit-এও পুরো সংখ্যাই যায়)।
+      // Trimmed here, not in `parseBulk()`: that function's job is to tell the
+      // truth, not to suit the screen. The ceiling sits at the border (the
+      // audit log still gets the full count).
       rejected: rejected.slice(0, REJECTED_SHOWN),
       rejectedTotal: rejected.length,
       poolSize,
@@ -386,34 +385,36 @@ export class TargetsService {
   }
 
   /**
-   * ⭐⭐ **রোজকার বণ্টন — র‍্যান্ডম, কিন্তু ন্যায্য।**
+   * The daily distribution: random, but fair.
    *
-   * ⚠️⚠️ **বাছাই র‍্যান্ডম হয় ডাটাবেসেই** (`ORDER BY random()`), মেমরিতে
-   * নয়। গোটা পুল (হাজার হাজার সারি) টেনে এনে জাভাস্ক্রিপ্টে মেশানো
-   * যেত, কিন্তু পুল বড় হলে সেটা রোজ সকালে একটা অকারণ বোঝা হতো।
+   * Careful: the pick is random in the database itself (`ORDER BY random()`),
+   * not in memory. The whole pool (thousands of rows) could be pulled and
+   * shuffled in JavaScript, but as the pool grows that would be a pointless
+   * load every morning.
    *
-   * ⚠️⚠️ **এক লেনদেনে দাবি করা হয়** — `status = 'pool'` শর্তসহ update।
-   * দুটো রান একসাথে চললে (মালিক বোতাম চাপলেন আর জবও চলল) দুজনের হাতে
-   * একই টার্গেট পড়ে যেত। শর্তটাই আসল পাহারা।
+   * Careful: claiming happens in one transaction, as an update with the
+   * `status = 'pool'` condition. If two runs overlapped (the owner pressing
+   * the button while the job runs), the same target would land in two hands.
+   * That condition is the real guard.
    *
-   * ⚠️ কখনো throw করে না — বণ্টন ব্যর্থ হলে কাল আবার চেষ্টা হবে; এর
-   * জন্য সার্ভার নামা চলবে না।
+   * Never throws: if distribution fails it is tried again tomorrow, and that
+   * is no reason for the server to go down.
    */
   async distribute(now: Date = new Date()): Promise<{ assigned: number }> {
     let assigned = 0;
 
     try {
       const designers = await this.prisma.employee.findMany({
-        // ⭐ কারা পান সেটা এক জায়গায় লেখা — `DESIGN_WORK_STAFF_TYPES`-এর
-        //    টীকায় কারণসহ (২৬ আগস্ট: ম্যানেজারও ডিজাইন করেন)
+        // Who receives is written in one place, with the reason, in the note
+        // on `DESIGN_WORK_STAFF_TYPES` (managers design too)
         where: {
           status: 'active',
           staffType: { in: [...DESIGN_WORK_STAFF_TYPES] },
         },
         select: { id: true, empCode: true },
-        // ⚠️ কর্মী-কোড ধরে — পুলে ঘাটতি থাকলে কে আগে পাবে সেটা **অনুমেয়**
-        //    থাকা দরকার; র‍্যান্ডম হলে রোজ আলাদা লোক বঞ্চিত হতেন আর কেউ
-        //    কারণ বলতে পারত না। (বাছাই র‍্যান্ডম, ক্রম নয়।)
+        // By staff code: when the pool is short, who goes first must be
+        // predictable. If it were random, a different person would miss out
+        // each day and nobody could say why. (The pick is random, not the order.)
         orderBy: { empCode: 'asc' },
       });
       if (designers.length === 0) return { assigned: 0 };
@@ -461,14 +462,14 @@ export class TargetsService {
   }
 
   /**
-   * একজনের জন্য `size`টা টার্গেট পুল থেকে দাবি করা।
+   * Claims `size` targets from the pool for one person.
    *
-   * ⚠️⚠️ `WHERE status = 'pool'` শর্তটা update-এর ভেতরেই — দুটো রান
-   * একসাথে চললেও একই সারি দুজনের হাতে পড়তে পারে না।
+   * Careful: the `WHERE status = 'pool'` condition is inside the update, so
+   * even if two runs overlap, one row cannot land in two hands.
    *
-   * ⭐ কাজের নম্বর বসে **এখানেই**, বরাদ্দের মুহূর্তে — পুলে পড়ে থাকা
-   * টার্গেটের নম্বর থাকে না। নইলে কখনো বরাদ্দ না হওয়া হাজারখানেক
-   * টার্গেট সিরিয়াল খেয়ে ফেলত।
+   * The job number is assigned here, at allocation; targets left in the pool
+   * have none. Otherwise about a thousand never-allocated targets would eat
+   * serials.
    */
   private async claimFor(
     employeeId: number,
@@ -506,32 +507,32 @@ export class TargetsService {
   }
 
   /**
-   * ⭐⭐ **দিন শেষে না-করা টার্গেট পুলে ফেরত** *(মালিকের নিয়ম, ২২ আগস্ট:
-   * "din sheshe baki design gula amar main list e back asbe")*।
+   * End of day: return untouched targets to the pool.
    *
-   * কাউকে ৩০টা দেওয়া হলো, তিনি ১৫টা করলেন — বাকি ১৫টা পুলে ফিরে যায়,
-   * আর ভবিষ্যতে আবার বিলি হয়। ⭐ এতে কোনো টার্গেট কারো হাতে **আটকে
-   * থাকে না**; পুল সবসময় সত্যিকারের বাকি কাজটাই দেখায়।
+   * If someone was given 30 and did 15, the other 15 go back to the pool and
+   * are handed out again later. So no target gets stuck in anyone's hand, and
+   * the pool always shows the work that is really left.
    *
-   * ⚠️⚠️ **যেটা আজ ছোঁয়া হয়েছে সেটা ফেরত যায় না — আর এটাই এখানকার
-   * সবচেয়ে জরুরি শর্ত।** কেউ একটা ডিজাইন খুলে কাজ শুরু করেছেন কিন্তু
-   * আজ শেষ করতে পারেননি — সরল নিয়মে ওটাও ফিরে যেত, আর কাল অন্য কারো
-   * হাতে পড়ত। দুজনের শ্রম নষ্ট, আর কেউ বুঝতই না কেন।
-   * ⭐ "ছোঁয়া" মানে ফাইলটা খোলা হয়েছে, অর্থাৎ নম্বরটা আজকের
-   * `design_credits`-এ আছে — একই সংকেত যা দিয়ে "শেষ হয়েছে" ধরা হয়।
+   * Careful: anything touched today is not returned, and this is the most
+   * important condition here. If someone opened a design and started work but
+   * could not finish it today, the simple rule would send it back too, and it
+   * would land in someone else's hands tomorrow. Two people's effort wasted,
+   * and nobody would understand why. "Touched" means the file was opened,
+   * i.e. the number is in today's `design_credits`, the same signal used to
+   * detect "done".
    *
-   * ⚠️ **কাজের নম্বর মুছে ফেলা হয় না।** নম্বরটা ASIN-এর, বরাদ্দের নয় —
-   * একবার বসলে চিরকাল ওটাই। মুছে দিলে (ক) সিরিয়াল অকারণে ফুরাত,
-   * (খ) পুরোনো ফাইলের নাম কোনোদিন কিছুর সাথে মিলত না।
+   * Careful: the job number is not cleared. The number belongs to the ASIN,
+   * not to the allocation: once set, it stays forever. Clearing it would (a)
+   * burn serials for nothing and (b) leave old file names matching nothing.
    *
-   * ⚠️ কখনো throw করে না।
+   * Never throws.
    */
   async returnUnworked(workDate: Date): Promise<{ returned: number }> {
     try {
       /**
-       * ⚠️ আজ যে নম্বরগুলো কারো ফাইলে দেখা গেছে — কর্মী ধরে।
-       * ⭐ `design_credits.design_id` টেক্সট, আর `job_number` সংখ্যা;
-       * মেলানোটা তাই টেক্সটেই করা হয় (নম্বরের রূপ এক, `1000042`)।
+       * Numbers seen in someone's file today, per staff member.
+       * `design_credits.design_id` is text and `job_number` is a number, so
+       * the match is done as text (the number's form is the same, `1000042`).
        */
       const touched = await this.prisma.designCredit.findMany({
         where: { firstWorkDate: workDate },
@@ -546,18 +547,18 @@ export class TargetsService {
       });
 
       const ids = open
-        // ⚠️⚠️ **শুরু হওয়া টার্গেট ফেরত যায় না** — `startedAt` বসা মানে
-        //    ফাইলটা কোনো একদিন খোলা হয়েছে, অর্থাৎ কাজ চলছে। আজকের
-        //    ক্রেডিট দেখাটা তার চেয়ে সংকীর্ণ ছিল: তিন দিন ধরে চলা কাজ
-        //    যেদিন কেউ ফাইলটা খোলেনি, সেদিনই ফেরত চলে যেত।
+        // Careful: started targets are not returned. A set `startedAt` means
+        // the file was opened some day, i.e. work is in progress. Checking only
+        // today's credit was narrower: work running for three days would be
+        // returned on the one day nobody opened the file.
         .filter((t) => t.startedAt === null)
         .filter((t) => !keep.has(`${t.assignedToId}:${t.jobNumber}`))
         .map((t) => t.id);
       if (ids.length === 0) return { returned: 0 };
 
       const { count } = await this.prisma.designTarget.updateMany({
-        // ⚠️ `status` শর্তটা এখানেও — এই ফাঁকে কেউ শেষ করে ফেললে তাঁর
-        //    কাজটা যেন পুলে ফেরত না যায়
+        // The `status` condition is here too, so that if someone finishes in
+        // the meantime, their work does not go back to the pool
         where: { id: { in: ids }, status: DesignTargetStatus.assigned },
         data: { status: DesignTargetStatus.pool, assignedToId: null, assignedAt: null },
       });
@@ -574,20 +575,20 @@ export class TargetsService {
   }
 
   /**
-   * ⭐ ডিজাইনারের নিজের তালিকা — হাতে থাকা, **আর আজ শেষ করা**।
+   * The designer's own list: what is in hand, and what was finished today.
    *
-   * ### ⚠️⚠️ কেন আজকেরগুলোও আসে *(মালিকের রিপোর্ট, ২৫ আগস্ট)*
+   * ### Why today's finished ones are included
    *
-   * মালিক: *"onek somoy vule kew colplete press kore felole byak anote
-   * paren na"*। কারণটা এখানেই ছিল — শর্তটা ছিল কেবল `assigned`, তাই
-   * Complete চাপার সাথে সাথে সারিটা **পর্দা থেকেই উধাও** হতো।
-   * ⭐ ফেরানোর বোতাম দূরে থাক, জিনিসটাই আর দেখা যেত না।
+   * The owner reported that if someone presses Complete by mistake they
+   * cannot undo it. The cause was here: the condition was only `assigned`, so
+   * the moment Complete was pressed the row vanished from the screen. There
+   * was no Undo button to press, because the row was not even visible.
    *
-   * ⚠️ আজকের বাইরে যাওয়া হয়নি: গতকালের Complete ফেরালে **গতকালের
-   * সংখ্যাও** বদলে যেত, আর তখন কেউ চাইলে খারাপ দিনের কাজ ভালো দিনে
-   * সরিয়ে নিতে পারতেন। পুরোনোগুলো মালিক ফেরাতে পারেন।
+   * Careful: it goes no further than today. Undoing yesterday's Complete would
+   * change yesterday's numbers too, and someone could move work from a bad day
+   * to a good one. The owner can undo older ones.
    *
-   * ⚠️ "আজ" মানে **ঢাকার দিন** — রিপোর্ট যেভাবে গোনে, হুবহু সেভাবেই।
+   * Careful: "today" means the Dhaka day, counted exactly as reports count it.
    */
   async mine(employeeId: number): Promise<MyTarget[]> {
     const rows = await this.prisma.designTarget.findMany({
@@ -609,8 +610,8 @@ export class TargetsService {
         startedAt: true,
         completedAt: true,
       },
-      // ⚠️ যেটা আগে এসেছে সেটা আগে — নইলে পুরোনো টার্গেট চিরকাল তলায়
-      //    পড়ে থাকত আর কেউ ধরত না
+      // Earlier first: otherwise old targets would sink to the bottom for good
+      // and nobody would pick them up
       orderBy: { assignedAt: 'asc' },
     });
 
@@ -626,27 +627,27 @@ export class TargetsService {
   }
 
   /**
-   * ⭐⭐ **"শেষ" ফিরিয়ে নেওয়া** *(মালিকের রিপোর্ট, ২৫ আগস্ট)*।
+   * Take back a "done".
    *
-   * ⚠️⚠️ `completedAt` · `completedVia` · `completedById` — **তিনটেই**
-   * মুছতে হয়, কেবল `status` ফেরালে হয় না। কারণ কিউগুলো `status` ধরে
-   * নয়, **`completedAt` ধরে** চলে (`to_check`, `to_upload`) — শুধু
-   * অবস্থা ফেরালে সারিটা "হাতে আছে" দেখাত অথচ আপলোডের কিউতে বসে
-   * থাকত। ⭐ পুলে-ফেরত পাঠানোর ডালটাও ঠিক এই তিনটেই মোছে।
+   * Careful: `completedAt`, `completedVia` and `completedById` must all be
+   * cleared; restoring only `status` is not enough. The queues run on
+   * `completedAt` (`to_check`, `to_upload`), not on `status`, so changing only
+   * the status would show the row "in hand" while it still sat in the upload
+   * queue. The return-to-pool branch clears exactly these three too.
    *
-   * ⚠️ কিন্তু `assignedToId`/`assignedAt`/`startedAt` **ছোঁয়া হয় না** —
-   * কাজটা যাঁর ছিল তাঁরই থাকে। ওগুলো মুছলে সারিটা পুলে ফিরে যেত, আর
-   * ডিজাইনার নিজের ভুল শুধরাতে গিয়ে কাজটাই হারাতেন।
+   * But `assignedToId`/`assignedAt`/`startedAt` are not touched: the work stays
+   * with whoever had it. Clearing them would send the row back to the pool, and
+   * a designer correcting their own mistake would lose the work.
    */
   private async clearCompletion(
     where: Prisma.DesignTargetWhereInput,
     by: { userId: number; ip: string | null },
   ): Promise<number> {
     /**
-     * ⚠️⚠️ **মোছার আগে পড়ে নেওয়া হয়, আর সেটাই এখানকার আসল কথা।**
-     * `completed_at` · `completed_via` · `completed_by_id` — তিনটেই
-     * `null` হয়ে যাচ্ছে, অর্থাৎ কাজটা কখনো শেষ হয়েছিল সেই প্রমাণটাই
-     * সারি থেকে উধাও। ⭐ পরে পড়লে আর কিছুই পাওয়া যেত না।
+     * Careful: the row is read before clearing, and that is the real point.
+     * `completed_at`, `completed_via` and `completed_by_id` are all about to
+     * become `null`, so the proof that the work was ever finished disappears
+     * from the row. Reading afterwards would find nothing.
      */
     const before = await this.prisma.designTarget.findFirst({
       where,
@@ -674,13 +675,13 @@ export class TargetsService {
     if (count === 0) return 0;
 
     /**
-     * ⭐⭐ **এটাই একমাত্র মুছে-ফেলা কাজ যার নিজের চিহ্ন থাকে না** — তাই
-     * লগটাই একমাত্র জায়গা *(মালিকের প্রশ্নে যোগ হয়েছে, ২৫ আগস্ট:
-     * "ei access ta ki designer der pawa uchit?")*।
+     * This is the only clearing action that leaves no trace of its own, so the
+     * log is the only place. (Added after the owner asked whether designers
+     * should have this access.)
      *
-     * ⚠️ প্রশ্নটার আসল সমস্যা ছিল অধিকার নয়, **যাচাই করার উপায় না
-     * থাকা**। লগ থাকলে প্রশ্নটা "বিশ্বাস করব কি না" থেকে "দরকার হলে
-     * দেখে নেব"-তে নেমে আসে।
+     * The real problem with that question was not the right itself but having
+     * no way to verify. With a log, the question drops from "do we trust them"
+     * to "we can check if needed".
      */
     await this.audit.record({
       userId: by.userId,
@@ -692,7 +693,7 @@ export class TargetsService {
         asin: before.asin,
         jobNumber: before.jobNumber,
         assignedToId: before.assignedToId,
-        // ⚠️ যা মুছে গেল — সারিতে এগুলো আর নেই
+        // What was cleared: the row no longer has these
         completedAt: before.completedAt?.toISOString() ?? null,
         completedVia: before.completedVia,
         completedById: before.completedById,
@@ -703,11 +704,11 @@ export class TargetsService {
   }
 
   /**
-   * ⭐ ডিজাইনারের নিজের Undo — **আজকের**, **নিজের**, আর **এখনো এগোয়নি**।
+   * The designer's own Undo: today's, their own, and not yet moved along.
    *
-   * ⚠️⚠️ `count === 0` হলে চুপ করে থাকা যায় না। "Undo চাপলাম, কিছুই হলো
-   * না" — এটাই সেই নীরব ব্যর্থতা যা মানুষকে সিস্টেমের উপর আস্থা হারায়।
-   * ⭐ তাই কেন হলো না, সেটা খুঁজে বলা হয়।
+   * Careful: staying silent when `count === 0` is not an option. "I pressed
+   * Undo and nothing happened" is the silent failure that makes people lose
+   * trust in the system. So it works out why it did not happen and says so.
    */
   async undoMine(
     employeeId: number,
@@ -721,8 +722,8 @@ export class TargetsService {
         assignedToId: employeeId,
         status: DesignTargetStatus.done,
         completedAt: { gte: dhakaStart(workDateStr(now)) },
-        // ⚠️ শেকলে এগিয়ে যাওয়া সারি ফেরানো যায় না — কেউ বানান দেখে
-        //    ফেলেছেন বা Amazon-এ পাঠিয়ে দিয়েছেন, সেটা আর "ভুলে চাপা" নয়
+        // A row that moved along the chain cannot be undone: once someone has
+        // checked the spelling or sent it to Amazon, it is no longer "pressed by mistake"
         checkedAt: null,
         uploadedAt: null,
         liveAt: null,
@@ -747,7 +748,7 @@ export class TargetsService {
       throw new ForbiddenException('That design is not on your list.');
     }
     if (row.status !== DesignTargetStatus.done || row.completedAt === null) {
-      // ⭐ দুবার চাপলে এখানেই এসে পড়ে — আর সেটা ব্যর্থতা নয়
+      // Pressing twice lands here, and that is not a failure
       return { ok: true };
     }
     if (row.checkedAt !== null || row.uploadedAt !== null || row.liveAt !== null) {
@@ -761,11 +762,11 @@ export class TargetsService {
   }
 
   /**
-   * ⭐ মালিক ও ম্যানেজারের Undo — **যেকোনো দিনের, যে কারো**।
+   * Undo for owner and manager: any day, anyone's.
    *
-   * ⚠️ দিনের সীমা নেই, কারণ পুরোনো ভুল শোধরানোই এর একমাত্র কাজ। কিন্তু
-   * শেকলে এগিয়ে যাওয়া সারি এখানেও ফেরানো যায় না — ওটা ফেরালে বানান-কিউ
-   * আর আপলোডের সংখ্যাগুলো একসাথে মিথ্যে হয়ে যেত।
+   * No day limit, since correcting old mistakes is its only job. But a row
+   * that moved along the chain cannot be undone here either: undoing it would
+   * make the spelling queue and the upload counts wrong together.
    */
   async undoComplete(
     id: number,
@@ -796,10 +797,11 @@ export class TargetsService {
   }
 
   /**
-   * ⭐ "এটা বাদ দিলাম"।
+   * "I dropped this".
    *
-   * ⚠️⚠️ **শর্তে `assignedToId` আছে** — নিজের টার্গেট ছাড়া কেউ কিছু
-   * ছুঁতে পারে না। আইডি অনুমান করে অন্যের সারি বদলানোর পথ বন্ধ।
+   * Careful: the condition includes `assignedToId`: nobody can touch a target
+   * that is not theirs. This closes the path of guessing ids to change
+   * someone else's row.
    */
   async skip(
     employeeId: number,
@@ -809,23 +811,24 @@ export class TargetsService {
   ): Promise<{ ok: boolean }> {
     const { count } = await this.prisma.designTarget.updateMany({
       where: { id, assignedToId: employeeId, status: DesignTargetStatus.assigned },
-      // ⚠️⚠️ কারণটা এখন **বাধ্যতামূলক** *(৩১ আগস্ট)* — ঐচ্ছিক থাকায়
-      //    পর্দা কোনোদিন কিছু পাঠায়ইনি, আর ৯৩টা skipped সারির একটাতেও
-      //    কারণ লেখা ছিল না। ⭐ ঘরটা `dropReason`, কারণ Delete-ও এখানেই লেখে।
+      // Careful: the reason is now mandatory. While it was optional the screen
+      // never sent one, and none of the 93 skipped rows had a reason. The
+      // field is `dropReason` because Delete writes here too.
       data: { status: DesignTargetStatus.skipped, dropReason: reason },
     });
 
-    // ⭐ বাদ দেওয়াও হাত খালি করে — তাই এখানেও (মালিকের নিয়ম: "complete + skip")
+    // Dropping also empties the hand, so top up here too (owner's rule: "complete + skip")
     if (count > 0) await this.topUp(employeeId, now);
 
     return { ok: count > 0 };
   }
 
   /**
-   * "শেষ করেছি" — হাতে চিহ্ন।
+   * "I finished": a manual mark.
    *
-   * ⚠️ `completedVia: 'manual'` লেখা থাকে, যাতে পরে বলা যায় কোনটা সিস্টেম
-   * নিজে ধরেছে আর কোনটা কেউ হাতে বলেছে। সংখ্যাটা এক, কিন্তু ভরসা এক নয়।
+   * Careful: `completedVia: 'manual'` is stored so it can later be told which
+   * were detected by the system and which were declared by hand. The count is
+   * the same, but the trust is not.
    */
   async markDone(
     employeeId: number,
@@ -834,12 +837,13 @@ export class TargetsService {
     now: Date = new Date(),
   ): Promise<{ ok: boolean }> {
     /**
-     * ⭐⭐⭐ **দিনের সীমা** *(মালিকের নিয়ম, ৯ সেপ্টেম্বর ২০২৬)* — সীমাটা
-     * তাঁর নিজের দৈনিক টার্গেটের সংখ্যাই ([`dailyCompletionCap`]).
+     * The daily limit (owner's rule): the cap is the person's own daily target
+     * ([`dailyCompletionCap`]).
      *
-     * ⚠️⚠️ **এটা কেবল এই পথে** — অর্থাৎ ডিজাইনার নিজে যেখানে বোতাম
-     * চাপেন (`POST /me/targets/:id/done`)। মালিক বা ম্যানেজারের
-     * `update()` পথটা ছোঁয়া হয়নি, নইলে ভুল সংশোধনের রাস্তাই বন্ধ হতো।
+     * Careful: this applies only on this path, i.e. where the designer
+     * presses the button (`POST /me/targets/:id/done`). The owner's and
+     * manager's `update()` path is untouched; otherwise the way to correct
+     * mistakes would be closed.
      */
     // Serialize completion decisions per employee across API instances.
     // Transaction locks are released on commit/rollback; namespace differs from clock drift.
@@ -872,20 +876,20 @@ export class TargetsService {
   }
 
   /**
-   * ⭐⭐⭐ **সব ডিজাইনারের হাত দেখে নেওয়া** *(৯ সেপ্টেম্বর ২০২৬)* —
-   * যাঁর দরকার, কেবল তাঁকেই দেওয়া হয়।
+   * Checks every designer's hand and gives more only to those who need it.
    *
-   * ⚠️⚠️ **কেন ঘটনার সাথে সাথে চালানোই যথেষ্ট নয়।** `topUp()` ডাকা হয়
-   * শেষ বা বাদ দেওয়ার **পরে**, অর্থাৎ কিছু একটা হাতে থাকতেই হয়। যাঁর
-   * হাতে **একটাও নেই** তিনি কিছু চাপতেই পারেন না — আর ঠিক তাঁর কথাই
-   * মালিক বলেছিলেন (*"তার কাছে করার মতো আর ডিজাইন নেই"*)।
+   * Careful: running right after an event is not enough. `topUp()` is called
+   * after a completion or skip, so something must already be in hand. Someone
+   * with nothing in hand cannot press anything, yet they are exactly who the
+   * owner meant ("they have no designs left to work on").
    *
-   * ⚠️ মাঠে ওই অবস্থাটা হয়: সকালে পুলে কম থাকলে `allocationSizes`
-   * কর্মী-কোডের ক্রমে দেয় আর শেষজন **কিছুই পান না**; মাঝদিনে যোগ দেওয়া
-   * কেউ, বা যাঁর ধরন সেদিনই `designer` করা হলো — সবারই একই দশা।
+   * This happens in the field: when the pool is short in the morning,
+   * `allocationSizes` serves staff in code order and the last person gets
+   * nothing. The same goes for someone who joins mid-day, or whose type was
+   * set to `designer` that same day.
    *
-   * ⭐ `topUp()` নিজেই idempotent (হাত ভরা থাকলে ০ ফেরত দেয়), তাই
-   * বারবার চালানো নিরাপদ।
+   * `topUp()` is itself idempotent (it returns 0 if the hand is full), so
+   * running it repeatedly is safe.
    */
   async topUpAll(now: Date = new Date()): Promise<void> {
     const designers = await this.prisma.employee.findMany({
@@ -898,10 +902,10 @@ export class TargetsService {
   }
 
   /**
-   * ⭐ **এই কর্মীর দিনের সীমা** — `null` মানে সীমা নেই।
+   * This person's daily limit. `null` means no limit.
    *
-   * ⚠️ সংখ্যাটা তিন জায়গা থেকে আসে (কর্মীর নিজের ঘর → পলিসি → নেই), আর
-   * সেই ক্রমটা `designTargetOf()`-এ একবারই লেখা।
+   * The number comes from three places (the person's own field, then the
+   * policy, then none), and that order is written once, in `designTargetOf()`.
    */
   private async capFor(
     employeeId: number,
@@ -925,15 +929,16 @@ export class TargetsService {
   }
 
   /**
-   * ⭐ **আজ ঢাকার দিনে কতগুলো "শেষ" বলা হয়েছে।**
+   * How many were marked done in today's Dhaka day.
    *
-   * ⚠️⚠️ সীমানা দুটো `localMidnightOf`/`nextLocalMidnight` থেকে — হাতে
-   * কষা হয় না। `workDateOf()` একটা **লেবেল**, মুহূর্ত নয়; ওটা সরাসরি
-   * বসালে দিনটা ঢাকার ভোর ৬টায় শুরু হতো, আর এই রেপোতে ঠিক ওই ভুলটাই
-   * সবচেয়ে বেশিবার হয়েছে।
+   * Careful: the boundaries come from `localMidnightOf`/`nextLocalMidnight`,
+   * not computed by hand. `workDateOf()` is a label, not an instant; using it
+   * directly would start the day at 06:00 Dhaka, and this repo has made
+   * exactly that mistake most often.
    *
-   * ⚠️ গোনা হয় `assignedToId` ধরে, `completedById` ধরে নয় — ড্যাশবোর্ডের
-   * সংখ্যাটাও তাই, আর দুটো আলাদা হলে পর্দা ও সীমা দুটো কথা বলত।
+   * Careful: counted by `assignedToId`, not `completedById`. The dashboard
+   * number does the same, and if the two differed the screen and the limit
+   * would say different things.
    */
   private async completedToday(
     employeeId: number,
@@ -949,15 +954,16 @@ export class TargetsService {
   }
 
   /**
-   * ⭐⭐⭐ **হাতে যথেষ্ট না থাকলে আরও দেওয়া** *(মালিকের নিয়ম,
-   * ৯ সেপ্টেম্বর ২০২৬)* — শেষ বা বাদ দেওয়ার ঠিক পরেই।
+   * Gives more when the hand is not full enough (owner's rule), right after a
+   * completion or skip.
    *
-   * ⚠️⚠️ **কখনো throw করে না।** টপ-আপ একটা সুবিধা; ওটা ব্যর্থ হলে
-   * ডিজাইনারের "শেষ করেছি" চাপাটা ব্যর্থ হবে না।
+   * Careful: never throws. Top-up is a convenience; if it fails, the
+   * designer's press of "I finished" must not fail.
    *
-   * ⭐ ঘটনার সাথে সাথে চলে, কোনো টিকের অপেক্ষায় নয় — নইলে কেউ হাত খালি
-   * নিয়ে দশ মিনিট বসে থাকতেন। সকালের বণ্টনের যন্ত্রটাই (`claimFor`)
-   * ব্যবহার হয়, তাই পুল থেকে তোলার নিয়ম এক জায়গাতেই থাকে।
+   * It runs immediately on the event, not waiting for a tick; otherwise
+   * someone with an empty hand would sit idle for ten minutes. It uses the
+   * same machinery as the morning distribution (`claimFor`), so the rule for
+   * taking from the pool stays in one place.
    */
   private async topUp(employeeId: number, now: Date): Promise<void> {
     try {
@@ -969,8 +975,8 @@ export class TargetsService {
           policy: { select: { dailyDesignTarget: true } },
         },
       });
-      // ⚠️ টার্গেট যাঁর নেই (ম্যানেজার), তাঁর জন্য কিছুই নয় — সকালের
-      //    বণ্টনই যথেষ্ট, আর তাঁর ছোঁয়ার মতো কোনো সংখ্যা নেই
+      // Nothing for someone without a target (the manager): the morning
+      // distribution is enough, and there is no number for them to reach
       if (emp === null || !hasDesignTarget(emp.staffType)) return;
 
       const [completedToday, openCount, issuedToday] = await Promise.all([
@@ -978,7 +984,7 @@ export class TargetsService {
         this.prisma.designTarget.count({
           where: { assignedToId: employeeId, status: DesignTargetStatus.assigned },
         }),
-        // ⭐ আজ মোট কতগুলো দেওয়া হয়েছে — দিনের ছাদটা এর উপরেই দাঁড়ায়
+        // The total issued today: the daily ceiling stands on this
         this.prisma.designTarget.count({
           where: {
             assignedToId: employeeId,
@@ -1017,43 +1023,42 @@ export class TargetsService {
   }
 
   /**
-   * ⭐⭐ **ফাইলের নাম থেকে "কাজ শুরু হয়েছে" ধরা।**
+   * Detects "work started" from the file name.
    *
-   * ⚠️⚠️ **আগে এটাকেই "শেষ" ধরা হতো, আর সেটা ভুল ছিল** *(সারানো ২৩
-   * আগস্ট, মালিকের প্রশ্নে)*। এজেন্ট শিরোনাম থেকে নম্বরটা তখনই দেখে যখন
-   * ফাইলটা **সামনে আসে** — অর্থাৎ কাজ শুরুর মুহূর্তে। ওটাকে "শেষ" ধরায়
-   * টার্গেট **খোলামাত্র বন্ধ** হয়ে যেত, আর ডিজাইনার পরদিন সেটা তালিকায়
-   * খুঁজে পেতেন না।
+   * Careful: this used to be treated as "done", which was wrong (fixed on the
+   * owner's question). The agent sees the number in the title when the file
+   * comes to the front, i.e. at the moment work starts. Treating that as
+   * "done" closed a target as soon as it was opened, and the designer could
+   * not find it in the list the next day.
    *
-   * ⭐ সিস্টেম এখন যা **সত্যিই জানে** সেটুকুই বলে: কাজ শুরু হয়েছে।
-   * শেষ হওয়া বলেন ডিজাইনার নিজে (`markDone`)।
+   * The system now says only what it really knows: work has started. The
+   * designer declares "done" themselves (`markDone`).
    *
-   * ডিজাইনার বরাদ্দ পাওয়া নম্বরটা ফাইলের নামে বসান
-   * (`1000042-Funny Cat T-Shirt.ai`), আর ওই নম্বরটাই `design_credits`-এ
-   * উঠে আসে। এখানে সেটা মিলিয়ে টার্গেটটা বন্ধ করা হয়।
+   * The designer puts the assigned number in the file name
+   * (`1000042-Funny Cat T-Shirt.ai`), and that number surfaces in
+   * `design_credits`. Here it is matched to start the target.
    *
-   * ⚠️⚠️ **শর্তে `assignedToId` আছে** — একজনের ফাইল আরেকজনের টার্গেট
-   * বন্ধ করতে পারবে না। নম্বর দুজনের কাছে থাকার কথা নয়, কিন্তু "কথা নয়"
-   * আর "পারবে না" এক জিনিস নয়।
+   * Careful: the condition includes `assignedToId`: one person's file cannot
+   * close another's target. The number should never be with two people, but
+   * "should not" and "cannot" are not the same thing.
    *
-   * ⚠️ কখনো throw করে না — এটা একটা সুবিধা, আর এর জন্য দৈনিক সারাংশ
-   * আটকে যাওয়া চলবে না।
+   * Never throws: this is a convenience, and it must not block the daily
+   * summary.
    */
   async markStartedByJobNumbers(
     employeeId: number,
     /**
-     * ⭐⭐⭐ **নম্বর → সেদিন সবচেয়ে আগে যে মুহূর্তে ফাইলটা খোলা দেখা গেছে**
-     * *(৬ সেপ্টেম্বর ২০২৬, G163)*।
+     * Number to the earliest instant that day the file was seen open.
      *
-     * ⚠️⚠️ আগে এটা ছিল `numbers: string[]` আর একটা `now: Date` — আর
-     * কলার ওই `now`-এর জায়গায় **কর্মদিবসের লেবেল** পাঠাত। লেবেলটা
-     * UTC-মধ্যরাত, অর্থাৎ **ঢাকার ভোর ৬টা**, তাই প্রতিটা টার্গেটের
-     * "কাজ শুরু" ওই এক মুহূর্তেই বসত। মাঠে ৭১১টার ৭১১টা — একটাই সময়,
-     * আর প্রত্যেকটাই তার নিজের `assigned_at`-এর আগে (বণ্টন সকাল ৮টায়)।
+     * This used to be `numbers: string[]` plus a `now: Date`, and the caller
+     * passed the work-day label in place of `now`. The label is UTC midnight,
+     * i.e. 06:00 Dhaka, so every target's "work started" got that one instant:
+     * 711 of 711 in the field, all the same time, and each before its own
+     * `assigned_at` (distribution is at 08:00).
      *
-     * ⭐ এখন ঘরটা একটা `Map` — অর্থাৎ **প্রতিটা নম্বরের নিজের মুহূর্ত
-     * ছাড়া ডাকাই যায় না**। একটা সাধারণ `Date` ঘর রাখলে কেউ আবার
-     * লেবেল পাঠাত, আর কম্পাইলার চুপ থাকত।
+     * The field is now a `Map`, so each number cannot be passed without its
+     * own instant. A plain `Date` field would let someone pass the label again
+     * with the compiler silent.
      */
     startedAt: ReadonlyMap<string, Date>,
   ): Promise<number> {
@@ -1068,17 +1073,17 @@ export class TargetsService {
 
     try {
       /**
-       * ⚠️ আগে একটাই `updateMany` ছিল, কারণ সবার সময় এক ছিল। এখন
-       * প্রতিটার নিজের সময়, তাই আগে দেখা হয় **কারা এখনো অচিহ্নিত** —
-       * সাধারণত দিনে ০–৪টা। বাকি নম্বরগুলোয় কোনো কুয়েরিই যায় না।
+       * There used to be a single `updateMany`, because every time was the
+       * same. Each now has its own time, so first look up which are still
+       * unmarked: usually 0-4 a day. The other numbers cause no query at all.
        */
       const pending = await this.prisma.designTarget.findMany({
         where: {
           jobNumber: { in: [...at.keys()] },
           assignedToId: employeeId,
           status: DesignTargetStatus.assigned,
-          // ⚠️ যেটায় আগেই চিহ্ন বসেছে সেটা আবার ছোঁয়া হয় না — নইলে
-          //    "কবে শুরু" রোজ আজকের তারিখে সরে যেত
+          // One already marked is not touched again; otherwise "when started"
+          // would slide to today's date every day
           startedAt: null,
         },
         select: { id: true, jobNumber: true },
@@ -1090,8 +1095,8 @@ export class TargetsService {
         const when = row.jobNumber === null ? undefined : at.get(row.jobNumber);
         if (when === undefined) continue;
 
-        // ⚠️ `startedAt: null` শর্তটা এখানেও — উপরের পড়া আর এই লেখার
-        //    মাঝে অন্য একটা রান চিহ্ন বসিয়ে ফেলতে পারে
+        // The `startedAt: null` condition is here too: another run could set
+        // the mark between the read above and this write
         const { count: n } = await this.prisma.designTarget.updateMany({
           where: { id: row.id, startedAt: null },
           data: { startedAt: when },
@@ -1112,47 +1117,47 @@ export class TargetsService {
   }
 
   /**
-   * ⭐ খোঁজার শর্তটার আকৃতি — `where`-এ ছড়িয়ে দেওয়া হয়।
+   * Shape of the search condition, spread into `where`.
    *
-   * ⚠️ `OR` ঐচ্ছিক: শুধু-অঙ্ক লেখা হলে Job নম্বর **আর** ASIN দুটোই দেখা
-   *    হয়, নইলে কেবল ASIN।
+   * `OR` is optional: digits-only input searches both job number and ASIN,
+   * otherwise only ASIN.
    */
   /**
-   * ⭐⭐ **পুরো তালিকা** *(২৩ আগস্ট, মালিকের চাওয়া)* — ছাঁকনি ও পাতা ভাগসহ।
+   * The full list, with filters and paging.
    *
-   * ⚠️⚠️ **পাতা ভাগ বাধ্যতামূলক, ঐচ্ছিক নয়:** টেবিলে **৩৯ হাজারের বেশি**
-   * সারি। সব একসাথে পাঠালে উত্তরটা কয়েক MB হতো, আর ব্রাউজার ওই টেবিল
-   * আঁকতে গিয়ে জমে যেত।
+   * Careful: paging is mandatory, not optional. The table has more than 39
+   * thousand rows; sending all of them would make the response several MB and
+   * the browser would freeze drawing it.
    *
-   * ⭐⭐ `q` দিয়ে **ASIN বা Job নম্বর** — দুটোই *(৬ সেপ্টেম্বর ২০২৬,
-   * মালিকের চাওয়া)*। পর্দায় প্রতিটা সারির নিচে Job নম্বরটা লেখা থাকে,
-   * অথচ ওটা দিয়ে খোঁজা যেত না — একমাত্র পরিচয় ছিল ASIN।
+   * `q` matches an ASIN or a job number, both. The job number is printed under
+   * every row on screen, yet could not be searched; the ASIN was the only
+   * identity.
    *
-   * ⚠️⚠️ **URL দিয়ে আর খোঁজা যায় না** — আগে `asinOf()` দিয়ে লিঙ্ক থেকে
-   * ASIN বের করা হতো, কিন্তু মালিক ওটা তুলে দিতে বলেছেন। ⭐ পর্দা তাই
-   * লিঙ্ক পেস্ট করলে **সরাসরি বলে দেয়**, নইলে ফলটা হতো একটা নীরব
-   * খালি তালিকা — এই অ্যাপে সবচেয়ে অপছন্দের ব্যর্থতা।
+   * Careful: searching by URL no longer works. `asinOf()` used to extract the
+   * ASIN from a link, but the owner asked for that to be removed. So the
+   * screen says so directly when a link is pasted; otherwise the result would
+   * be a silent empty list, the failure this app likes least.
    */
   async list(query: {
     status?: DesignTargetStatus;
     q?: string;
     page?: number;
-    /** ⭐ কোন ডিজাইনারের — `employees.id` */
+    /** Which designer: `employees.id` */
     staffId?: number;
     /**
-     * ⭐ কে এনেছেন — `users.id` *(২৫ আগস্ট)*।
+     * Who brought them in: `users.id`.
      *
-     * ⚠️⚠️ `staffId`-র সাথে **আলাদা id-র জগৎ**: ওটা `employees`, এটা
-     * `users`। একটার সংখ্যা অন্যটায় বসালে চুপচাপ ভুল মানুষের সারি
-     * আসত — কোনো এরর নয়, কেবল ভুল উত্তর।
+     * Careful: a different id space from `staffId` (that is `employees`, this
+     * is `users`). Putting one's number into the other would quietly return
+     * the wrong person's rows: no error, just a wrong answer.
      */
     addedById?: number;
-    /** ⭐ 'YYYY-MM-DD' — শেষ কাজের তারিখ এই দিন থেকে */
+    /** 'YYYY-MM-DD': date of the last activity, from this day */
     from?: string;
-    /** ⭐ 'YYYY-MM-DD' — এই দিন পর্যন্ত (দিনটাসহ) */
+    /** 'YYYY-MM-DD': up to and including this day */
     to?: string;
-    /** ⭐ শেকলের কোন ধাপে আটকে — গবেষকের কিউ (২৪ আগস্ট) */
-    /** ⚠️ `no_file` ধাপ নয়, একটা **প্রশ্ন** — ৯ সেপ্টেম্বর ২০২৬ */
+    /** Which step of the chain it is stuck on: the researcher's queue */
+    /** `no_file` is not a step but a question */
     stage?:
       | 'to_check'
       | 'to_fix'
@@ -1165,23 +1170,22 @@ export class TargetsService {
     total: number;
     page: number;
     pages: number;
-    /** ⭐ কোন দিন থেকে শিরোনাম জমা আছে — `fileSec === null` কেন, তার উত্তর */
+    /** Since which day titles have been stored; explains why `fileSec === null` */
     traceSince: string | null;
   }> {
     const page = Math.max(1, query.page ?? 1);
 
     /**
-     * ⭐⭐ **ASIN নাকি Job নম্বর** — পার্থক্যটা এক লাইনে: শুধু অঙ্ক হলে
-     * Job নম্বর, নইলে ASIN।
+     * ASIN or job number: the difference in one line: digits only means job
+     * number, otherwise ASIN.
      *
-     * ⚠️ তবু অঙ্ক হলে **দুটোই** দেখা হয় (`OR`)। কিছু ASIN পুরোপুরি
-     * সংখ্যায় হয় (পুরোনো ISBN-ধাঁচের), আর তখন কেবল Job নম্বর খুঁজলে
-     * ওই সারিটা কোনোদিন পাওয়া যেত না — নীরবে।
+     * Even so, digits search both (`OR`). Some ASINs are entirely numeric
+     * (old ISBN style), and searching only by job number would never find that
+     * row, silently.
      *
-     * ⚠️⚠️ `Number()` করার আগে **সীমা দেখা হয়**: `job_number` কলামটা
-     * `Int`, তাই ২,১৪৭,৪৮৩,৬৪৭-এর বড় কিছু পাঠালে Prisma ছুড়ত আর
-     * খোঁজাটা ৫০০ হয়ে ফিরত — অথচ ব্যবহারকারী শুধু একটা লম্বা সংখ্যা
-     * লিখেছেন।
+     * Careful: the range is checked before `Number()`. `job_number` is an
+     * `Int`, so anything above 2,147,483,647 would make Prisma throw and the
+     * search return 500, when the user merely typed a long number.
      */
     const INT32_MAX = 2_147_483_647;
     let match: TargetSearchMatch | undefined;
@@ -1198,18 +1202,19 @@ export class TargetsService {
     }
 
     /**
-     * ⭐⭐ **তারিখটা `lastActivityAt` ধরে** *(২৩ আগস্ট ২০২৬)* — অর্থাৎ
-     * "শেষ যা ঘটেছে"।
+     * The date applies to `lastActivityAt`, i.e. "the last thing that
+     * happened".
      *
-     * ⚠️⚠️ অবস্থাভেদে আলাদা ঘর ধরা হয়নি (done হলে completedAt, assigned
-     * হলে assignedAt) — সেটা করলে "কোন তারিখ ছাঁকা হচ্ছে" প্রশ্নটা
-     * প্রতিবার বদলাত, আর ক্রম ও ছাঁকনি দুটো আলাদা ভিত্তিতে দাঁড়াত।
+     * Careful: a different field per status was deliberately not used
+     * (completedAt if done, assignedAt if assigned). That would change "which
+     * date is being filtered" every time, and sorting and filtering would
+     * stand on different bases.
      *
-     * ⭐ এক ভিত্তি রাখায় ফলটা স্বাভাবিকভাবেই ঠিক হয়: `done` বাছলে ওই
-     * সারির `lastActivityAt` মানেই `completedAt`, কারণ সেটাই সবচেয়ে পরের।
+     * With one basis the result is naturally right: choosing `done` makes the
+     * row's `lastActivityAt` its `completedAt`, since that is the latest.
      *
-     * ⚠️ `to`-তে দিনটা **অন্তর্ভুক্ত** — মানুষ "২৩ তারিখ পর্যন্ত" বললে
-     * ২৩ তারিখটাও বোঝায়। তাই পরের দিনের শুরু পর্যন্ত (`lt`) দেখা হয়।
+     * Careful: the day in `to` is inclusive. People saying "up to the 23rd"
+     * mean the 23rd as well, so it looks up to the start of the next day (`lt`).
      */
 
     const activity =
@@ -1221,29 +1226,29 @@ export class TargetsService {
         : undefined;
 
     /**
-     * ⭐⭐ **গবেষকের দুটো কিউ** *(২৪ আগস্ট ২০২৬)* — শেকলের ঠিক কোন ধাপে
-     * সারিটা আটকে আছে।
+     * The researcher's two queues: exactly which step of the chain a row is
+     * stuck on.
      *
-     * ⚠️ `to_upload`-এ **কাটা-তারিখ** আছে, `to_live`-এ নেই — কারণটা
-     *    [targets.rules.ts](./targets.rules.ts)-এর `UPLOAD_QUEUE_FROM`-এ:
-     *    পুরোনো ২৭ হাজার ইমপোর্ট-করা সারি বাদ না দিলে কিউটা পাহাড় হতো।
-     *    `to_live`-এ ওই সমস্যা নেই, কারণ Uploaded চাপা সারিই মাত্র একটা।
+     * `to_upload` has a cut-off date and `to_live` does not. The reason is
+     * `UPLOAD_QUEUE_FROM` in [targets.rules.ts](./targets.rules.ts): without
+     * excluding the old 27 thousand imported rows the queue would be a
+     * mountain. `to_live` has no such problem, since only rows where Uploaded
+     * was pressed qualify.
      */
     /**
-     * ⭐⭐ **কোন দিন থেকে শিরোনাম জমা আছে** *(৯ সেপ্টেম্বর ২০২৬)* —
-     * "ফাইলের চিহ্ন নেই" বলার অধিকার এই তারিখটার পর থেকেই।
+     * Since which day titles have been stored. The right to say "no file
+     * trace" begins only after this date.
      *
-     * ⚠️ প্রতিটা পাতায় একবার ডাকা হয়; ধ্রুবক বসানো হয়নি ইচ্ছাকৃতভাবে,
-     * কারণ কোনোদিন পুরোনো সারি ছাঁটা শুরু হলে সীমানাটা নিজে থেকেই
-     * এগোবে — কারো মনে রাখতে হবে না।
+     * Called once per page. It is deliberately not a constant: if old rows are
+     * ever trimmed, the boundary moves by itself and nobody has to remember.
      */
     const traceSince = await this.trace.since();
     const since = traceSince === null ? null : dhakaStart(traceSince);
 
     /**
-     * ⭐ কেবল **এই একটা ধাপের** জন্য — আর প্রশ্নটা `design_targets` থেকে
-     * জিজ্ঞেস করা হয় বলে খরচ ৯৩০ ms থেকে ২৫ ms-এ নামে
-     * ([`unseenJobNumbers`](./file-trace.service.ts))।
+     * Only for this one step. Because the question is asked from
+     * `design_targets`, the cost drops from 930 ms to 25 ms
+     * ([`unseenJobNumbers`](./file-trace.service.ts)).
      */
     const noFileFrom =
       traceSince === null
@@ -1257,23 +1262,23 @@ export class TargetsService {
 
     const stage =
       /**
-       * ⭐⭐⭐ **শেষ বলা হয়েছে, অথচ ফাইলটা কখনো খোলা হয়নি**
-       * *(মালিকের চাওয়া, ৯ সেপ্টেম্বর ২০২৬: "kha banao")*।
+       * Marked done, yet the file was never opened.
        *
-       * ⚠️⚠️ **এটা অ্যালার্ট নয়, আর সেটাই মালিকের শর্ত ছিল** — *"নীরব
-       * তালিকা"*। কারণ চিহ্ন না থাকার নির্দোষ ব্যাখ্যা অনেক: ফাইলটা সেভ
-       * করা হয়নি (মাঠে একজন গোটা দিন `Untitled-20*`-এ কাজ করেন), নামের
-       * সামনে নম্বর বসানো হয়নি, বা কাজটা অন্য অ্যাপে হয়েছে। ⭐ তাই
-       * তালিকাটা একটা **প্রশ্ন**, অভিযোগ নয়।
+       * Careful: this is not an alert, and that was the owner's condition: a
+       * "silent list". There are many innocent explanations for no trace: the
+       * file was not saved (in the field one person works all day in
+       * `Untitled-20*`), the number was not put in front of the name, or the
+       * work was done in another app. So the list is a question, not an
+       * accusation.
        *
-       * ⚠️⚠️ দুটো সীমা **একসাথে** খাটে, আর দুটোরই আলাদা কারণ:
-       *   · `UPLOAD_QUEUE_FROM` — পুরোনো ২৭ হাজার ইমপোর্ট করা সারি বাদ
-       *   · `traceSince` — এর আগে আমরা শিরোনাম **দেখতামই না**
-       * পরেরটা যেটা, সেটাই ধরা হয়।
+       * Careful: two limits apply together, each with its own reason:
+       *   - `UPLOAD_QUEUE_FROM`: excludes the old 27 thousand imported rows
+       *   - `traceSince`: before this we did not see titles at all
+       * Whichever is later is used.
        */
       query.stage === 'no_file'
         ? noFileFrom === null
-          ? // ⚠️ একটাও শিরোনাম জমা নেই — তখন কারো নামে কিছু বলার অধিকার নেই
+          ? // No titles stored at all: then there is no right to say anything about anyone
             { id: { in: [] as number[] } }
           : {
               completedAt: { not: null, gte: noFileFrom },
@@ -1291,28 +1296,28 @@ export class TargetsService {
                 completedAt: { not: null, gte: dhakaStart(UPLOAD_QUEUE_FROM) },
                 uploadedAt: null,
                 /**
-                 * ⚠️⚠️ **যেগুলোয় ভুল পাওয়া গেছে অথচ ঠিক হয়নি — বাদ**
-                 * *(মালিকের সিদ্ধান্ত, ২৫ আগস্ট)*। জানা-ভাঙা ডিজাইন
-                 * Amazon-এ যাবে না।
+                 * Careful: rows where a mistake was found but not yet fixed are
+                 * excluded (owner's decision). A known-broken design must not
+                 * go to Amazon.
                  *
-                 * ⭐ কিন্তু **এখনো দেখা হয়নি** এমন সারি আটকায় না — আটকালে
-                 * আজকের ১৩২টা কিউ রাতারাতি ০ হয়ে যেত, আর কেউ শুরুই করত না।
+                 * Rows not yet checked are not blocked, though. Blocking them
+                 * would drop today's queue of 132 to 0 overnight, and nobody
+                 * would start.
                  */
                 NOT: { errorFoundAt: { not: null }, fixedAt: null },
               }
             : query.stage === 'to_live'
               ? { uploadedAt: { not: null }, liveAt: null }
               : /**
-                 * ⭐⭐ **বাদ-যাওয়া অথচ কেউ দেখেনি** *(৩১ আগস্ট ২০২৬)*।
+                 * Dropped but nobody has looked.
                  *
-                 * ⚠️⚠️ **কাটা-তারিখের বদলে `dropReason: { not: null }`,
-                 * আর এটাই এখানকার একমাত্র চালাকি।** পুরোনো ৯৩টা `skipped`
-                 * সারিতে কোনো কারণ লেখা নেই (কারণ চাওয়ার ব্যবস্থাটা ৩১
-                 * আগস্টের), তাই ম্যানেজারের "দেখে নেওয়ার" কিছুই নেই —
-                 * ওগুলো এমনিতেই বাদ পড়ে যায়। ⭐ `UPLOAD_QUEUE_FROM`-এর মতো
-                 * একটা তারিখ-ধ্রুবক লাগেনি: শর্তটা **অর্থ** ধরে চলে,
-                 * ক্যালেন্ডার ধরে নয় — আর তাই একদিন তারিখ বদলানোর কথা
-                 * কারো মনে রাখতে হবে না।
+                 * Careful: `dropReason: { not: null }` instead of a cut-off
+                 * date is the only clever bit here. The old 93 `skipped` rows
+                 * have no reason (asking for one began on 31 August), so there
+                 * is nothing for the manager to review in them; they simply
+                 * fall out. No date constant like `UPLOAD_QUEUE_FROM` was
+                 * needed: the condition follows meaning, not the calendar, so
+                 * nobody has to remember to change a date one day.
                  */
                 query.stage === 'to_review'
                 ? {
@@ -1360,29 +1365,29 @@ export class TargetsService {
           reviewedAt: true,
           reviewedBy: { select: { fullName: true, role: true } },
           assignedTo: { select: { empCode: true, fullName: true } },
-          // ⭐ কে "শেষ" বলেছেন — বরাদ্দ পাওয়া মানুষ আর শেষ করা মানুষ
-          //    এক না-ও হতে পারে (মালিক নিজেও চাপতে পারেন)
+          // Who said "done": the person assigned and the person who finished
+          // may differ (the owner can press it too)
           completedBy: { select: { fullName: true, role: true } },
           /**
-           * ⭐ কে এনেছেন *(২৫ আগস্ট)* — ভূমিকাসহ, কারণ পর্দায় "গবেষক
-           * এনেছেন" আর "মালিক এনেছেন" দুটো আলাদা খবর।
+           * Who brought it in, with their role, since "a researcher brought
+           * it" and "the owner brought it" are different news on screen.
            *
-           * ⚠️ relation-টা স্কিমায় **আগে থেকেই ছিল** (`addedTargets`),
-           * শুধু কখনো তোলা হয়নি — তাই কোনো মাইগ্রেশন লাগেনি।
+           * The relation already existed in the schema (`addedTargets`) and
+           * was simply never selected, so no migration was needed.
            */
           addedBy: { select: { fullName: true, role: true } },
           addedAt: true,
         },
         /**
-         * ⭐⭐ **শেষ যা ঘটেছে, সেটাই আগে** *(২৩ আগস্ট ২০২৬)*।
+         * Latest activity first.
          *
-         * ⚠️⚠️ আগে ছিল `id desc` — অর্থাৎ **কবে যোগ হয়েছে**, কবে কাজ
-         * হয়েছে নয়। ৩১,৩১১টা `done` সারির মাঝে দশ মিনিট আগে করা একটা
-         * ভুল যেকোনো জায়গায় থাকত, আর খুঁজে পাওয়া যেত না।
+         * Careful: this used to be `id desc`, i.e. when it was added, not when
+         * the work happened. Among 31,311 `done` rows, a mistake made ten
+         * minutes ago could be anywhere and could not be found.
          *
-         * ⚠️ `id` দ্বিতীয় ধাপ হিসেবে রাখা — একই মুহূর্তে জমা হওয়া
-         * সারিগুলোর ক্রম যাতে প্রতিবার এক থাকে (নইলে পাতা বদলালে
-         * একই সারি দুবার বা শূন্যবার দেখা যেত)।
+         * `id` is the second key so rows submitted at the same instant keep
+         * the same order every time (otherwise paging could show the same row
+         * twice or not at all).
          */
         orderBy: [{ lastActivityAt: 'desc' }, { id: 'desc' }],
         skip: (page - 1) * TARGET_PAGE_SIZE,
@@ -1391,8 +1396,8 @@ export class TargetsService {
     ]);
 
     /**
-     * ⭐ কেবল **পর্দায় থাকা** সারিগুলোর জন্য — ৫০টা নম্বর, ৫০টা
-     * ইনডেক্স-লুকআপ। গোটা টেবিল কখনো পড়া হয় না।
+     * Only for the rows on screen: 50 numbers, 50 index lookups. The whole
+     * table is never read.
      */
     const seconds = await this.trace.secondsFor(
       rows.map((r) => r.jobNumber).filter((n): n is number => n !== null),
@@ -1433,16 +1438,15 @@ export class TargetsService {
   }
 
   /**
-   * ⭐⭐ **তালিকা সম্পাদনা** *(২৩ আগস্ট, মালিকের চাওয়া)* — owner ·
-   * manager · গবেষক।
+   * Edit the list: owner, manager, researcher.
    *
-   * ⚠️⚠️ **ASIN বদলানো যায় না, আর সেটা ইচ্ছাকৃত।** ওটা সারিটার
-   * **পরিচয়** — বদলালে ডুপ্লিকেট-প্রহরীর গোটা ভিত্তিটাই নড়ে যেত, আর
-   * ইতিহাসে "এই পণ্যটা হয়েছিল" কথাটা মিথ্যা হয়ে যেত। ভুল ASIN হলে
-   * সারিটা মুছে নতুন করে জমা দিন।
+   * Careful: the ASIN cannot be changed, on purpose. It is the row's identity;
+   * changing it would shake the whole basis of the duplicate guard, and "this
+   * product was made" in the history would become false. For a wrong ASIN,
+   * delete the row and submit it again.
    *
-   * ⭐ যা বদলানো যায়: **অবস্থা**। পুলে ফেরত পাঠানো (কারো হাত থেকে
-   * তুলে নেওয়া), শেষ বলে চিহ্ন দেওয়া, বা বাদ দেওয়া।
+   * What can change is the status: return to the pool (taking it out of
+   * someone's hand), mark done, or drop.
    */
   async update(
     id: number,
@@ -1451,10 +1455,10 @@ export class TargetsService {
     userId: number,
   ): Promise<{ ok: boolean }> {
     /**
-     * ⚠️ পুলে ফেরত পাঠানো মানে **মালিকানাও ছেড়ে দেওয়া** — নইলে সারিটা
-     * পুলে থেকেও কারো নামে বাঁধা থাকত, আর পরের বণ্টনে দুজনের হাতে
-     * পড়ার পথ খুলে যেত।
-     * ⚠️ কাজের নম্বর মুছি না — ওটা ASIN-এর, বরাদ্দের নয়।
+     * Careful: returning to the pool also gives up ownership; otherwise the
+     * row would sit in the pool yet stay tied to someone, and the next
+     * distribution could put it in two hands.
+     * The job number is not cleared: it belongs to the ASIN, not the allocation.
      */
     const data =
       status === DesignTargetStatus.pool
@@ -1465,23 +1469,23 @@ export class TargetsService {
             startedAt: null,
             completedAt: null,
             completedVia: null,
-            // ⚠️ এটাও মুছতে হয় — নইলে পুলে ফেরত যাওয়া সারিতে "কে শেষ
-            //    করেছিল" লেখা থেকে যেত, অথচ কাজটা আর শেষ নয়
+            // This must be cleared too; otherwise a row returned to the pool
+            // would keep "who finished it" though the work is no longer done
             completedById: null,
             /**
-             * ⚠️⚠️ **কারণটাও মুছে যায়** *(৩১ আগস্ট ২০২৬)*। সারিটা আবার
-             * পুলে ফিরছে মানে "Not Found" কথাটা আর সত্যি নয় — কেউ দেখে
-             * নিয়েছেন যে পাতাটা আছে, বা ভুল করে মোছা হয়েছিল। ⭐ কারণ
-             * রেখে দিলে পরের বার কেউ বণ্টন পেয়ে দেখতেন সারিটা
-             * "Copyright" বলে দাগানো, অথচ সেটা মীমাংসিত।
+             * Careful: the reason is cleared too. A row going back to the pool
+             * means "Not Found" is no longer true: someone checked and the
+             * page exists, or it was deleted by mistake. Keeping the reason
+             * would show a later recipient a row marked "Copyright" that is
+             * already settled.
              */
             dropReason: null,
             /**
-             * ⚠️⚠️ **"দেখা হয়েছে" চিহ্নটাও মুছে যায়** *(৩১ আগস্ট)*। সারিটা
-             * পুলে ফিরছে মানে সেটা আর বাদ-যাওয়া নয়, অর্থাৎ ম্যানেজার কী
-             * দেখেছিলেন তার কোনো বিষয়ই আর নেই। ⭐ রেখে দিলে ভবিষ্যতে কেউ
-             * আবার Skip করলে সারিটা **কিউতেই উঠত না** — পুরোনো একটা
-             * চিহ্নের কারণে নতুন সমস্যা চাপা পড়ত।
+             * Careful: the "reviewed" mark is cleared too. A row returning to
+             * the pool is no longer dropped, so there is nothing left for the
+             * manager's review to refer to. Keeping it would mean that if
+             * someone Skips it again, the row would never reach the queue: an
+             * old mark hiding a new problem.
              */
             reviewedAt: null,
             reviewedById: null,
@@ -1520,28 +1524,25 @@ export class TargetsService {
   }
 
   /**
-   * ⭐⭐ **মুছে ফেলা — সারিটা থাকে, কেবল মরা বলে দাগানো হয়**
-   * *(মালিকের রিপোর্ট, ২৯ আগস্ট ২০২৬: "pool er kiso asin amazon e page
-   * nei… delete korle delete hisabe pool e thakobe but karo kase
-   * distribute hobena")*।
+   * Delete: the row stays and is only marked dead.
    *
-   * ⚠️⚠️ **আগে এটা সত্যিকারের `DELETE` ছিল, আর তাতেই বাগটা।** সারি
-   * উধাও হলে `asin` UNIQUE প্রহরীও উধাও — কাল কেউ ওই মরা ASIN আবার
-   * পেস্ট করলে নতুন কাজ হিসেবে ঢুকত, বণ্টনে যেত, আর ডিজাইনার আবার গিয়ে
-   * দেখতেন "Sorry, not found"। ⭐ পুরোনো টীকায় দামটা লেখাই ছিল, শুধু
-   * বিকল্পটা ছিল না; এখন `deleted` অবস্থাটাই সেই বিকল্প।
+   * Careful: this used to be a real `DELETE`, and that was the bug. With the
+   * row gone, the `asin` UNIQUE guard went too: if someone pasted that dead
+   * ASIN again tomorrow it would enter as new work, go into distribution, and
+   * a designer would again find "Sorry, not found". The old note had spelled
+   * out the cost but had no alternative; the `deleted` status is now that
+   * alternative.
    *
-   * ⚠️⚠️ **শেষ হয়ে যাওয়া সারি ছোঁয়া হয় না।** `done` মানে কেউ সত্যিই
-   * ডিজাইনটা বানিয়েছেন — ওটা মুছলে তাঁর দিনের গোনা কমে যেত, আর
-   * আপলোডের কিউ থেকেও জিনিসটা নীরবে হারাত। ⭐ ভুল করে বেছে ফেললে কী
-   * হলো সেটা `keptDone` ধরে পর্দায় বলা হয়, চুপ করে বাদ দেওয়া হয় না।
+   * Careful: rows that are done are not touched. `done` means someone really
+   * made the design; deleting it would lower their day's count and silently
+   * drop it from the upload queue. If selected by mistake, `keptDone` tells
+   * the screen what happened; it is not skipped silently.
    *
-   * ⭐ **হাতে থাকা (`assigned`) সারি মোছা যায়, আর সেটাই সবচেয়ে দরকারি
-   * ক্ষেত্র** — ডিজাইনার লিঙ্কটা খুলে তবেই বুঝতে পারেন পাতাটা নেই।
-   * ⚠️ `assignedToId` মোছা হয় না (কার হাতে ছিল সেটা ইতিহাস), কিন্তু
-   * অবস্থা বদলে যাওয়ায় সারিটা তাঁর তালিকা থেকে সরে যায় আর তাঁর
-   * "হাতে ৩০টা"-র গোনাতেও পড়ে না — অর্থাৎ পরের বণ্টনে বদলিটা এমনিতেই
-   * এসে যায়।
+   * A row in hand (`assigned`) can be deleted, and that is the most useful
+   * case: the designer only learns the page does not exist by opening the
+   * link. `assignedToId` is not cleared (who held it is history), but the
+   * status change moves the row off their list and out of their "30 in hand"
+   * count, so the next distribution supplies a replacement by itself.
    */
   async softDelete(
     ids: readonly number[],
@@ -1549,7 +1550,7 @@ export class TargetsService {
     ip: string,
     reason: DropReason,
   ): Promise<DeleteResult> {
-    // ⚠️ একই id দুবার এলে দুবার গোনা হতো — পর্দায় সংখ্যাটা তখন বাড়িয়ে দেখাত
+    // The same id twice would be counted twice, inflating the number on screen
     const wanted = [...new Set(ids)];
     if (wanted.length === 0) return { deleted: 0, keptDone: 0 };
 
@@ -1575,7 +1576,7 @@ export class TargetsService {
         targetType: 'design_targets',
         targetId: deleted.length === 1 ? String(deleted[0].id) : 'bulk',
         ipAddress: ip,
-        // ⚠️ ASIN-গুলো নয়, সংখ্যাগুলো — তালিকাটা টেবিলেই আছে (`bulkAdd`-এর একই নিয়ম)
+        // The counts, not the ASINs: the list is in the table (same rule as `bulkAdd`)
         meta: { deleted: count, keptDone, asked: wanted.length, reason },
       });
     }
@@ -1583,16 +1584,17 @@ export class TargetsService {
     return { deleted: count, keptDone };
   }
 
-  /** পুলের অবস্থা — ইনবক্সের পর্দায় */
+  /** The pool's state, for the inbox screen */
   /**
-   * ⭐ **ছাঁকনির ড্রপডাউনের জন্য ডিজাইনারের তালিকা** *(২৩ আগস্ট ২০২৬)*।
+   * The designer list for the filter dropdown.
    *
-   * ⚠️⚠️ সাধারণ স্টাফ-তালিকার রুট ব্যবহার করা যেত না — ওটা owner/manager
-   * only, অথচ এই পাতা **গবেষকও** দেখেন। তাই আলাদা, আর এখানে কেবল
-   * নাম-কোড যায়; বেতন বা ফোন নম্বরের মতো কিছু নয়।
+   * Careful: the ordinary staff-list route could not be used: it is
+   * owner/manager only, yet researchers see this page too. So this is
+   * separate, and only name and code go out, nothing like salary or phone.
    *
-   * ⚠️ ছেড়ে যাওয়া কর্মীও থাকেন — তাঁদের নামেই পুরোনো টার্গেট বাঁধা,
-   *    আর ছাঁকনি থেকে বাদ দিলে ওই সারিগুলো কোনোদিন খুঁজে পাওয়া যেত না।
+   * Staff who have left are included too: old targets are tied to their
+   * names, and leaving them out of the filter would make those rows
+   * unfindable.
    */
   async designers(): Promise<{ id: number; empCode: string; fullName: string }[]> {
     return this.prisma.employee.findMany({
@@ -1603,16 +1605,16 @@ export class TargetsService {
   }
 
   /**
-   * ⭐⭐ **কে কতগুলো টার্গেট এনেছেন** *(মালিকের চাওয়া, ২৫ আগস্ট:
-   * "Design Pool e ke target list add koreche seta ami dekhote cai")*।
+   * How many targets each person has brought in.
    *
-   * ⚠️ সংখ্যাটা ড্রপডাউনেই দেখানো হয়, আর সেটাই আসল উত্তর: মালিক একটাও
-   * ক্লিক না করে দেখেন কে কতটা এনেছেন। ছাঁকনিটা তার পরের ধাপ।
+   * The number is shown in the dropdown itself, and that is the real answer:
+   * the owner sees who brought how many without a single click. The filter
+   * is the next step.
    *
-   * ⚠️⚠️ `designers()`-এর মতো `employees` নয়, **`users`** — টার্গেট আনেন
-   * ব্যবহারকারী (মালিক · ম্যানেজার · গবেষক), আর মালিকের কোনো
-   * `employees` সারিই নেই। ওই টেবিল ধরে খুঁজলে ৩৯ হাজার সারির উৎসটাই
-   * তালিকা থেকে উধাও হয়ে যেত।
+   * Careful: unlike `designers()` this is `users`, not `employees`: targets
+   * are brought in by users (owner, manager, researcher), and the owner has
+   * no `employees` row at all. Going through that table would drop the
+   * source of 39 thousand rows from the list.
    */
   async adders(): Promise<
     { id: number; fullName: string; role: UserRole; count: number }[]
@@ -1631,7 +1633,7 @@ export class TargetsService {
 
     return users
       .map((u) => ({ ...u, count: countOf.get(u.id) ?? 0 }))
-      // ⭐ যিনি সবচেয়ে বেশি এনেছেন তিনি আগে — তালিকাটা ছোট (আজ ৩ জন)
+      // Whoever brought the most is first; the list is short (3 people today)
       .sort((a, b) => b.count - a.count);
   }
 
@@ -1640,22 +1642,22 @@ export class TargetsService {
       perDesigner: number;
       uploaded: number;
       live: number;
-      /** ⭐ বানান দেখা বাকি (ADR-038) */
+      /** Spelling check pending (ADR-038) */
       toCheck: number;
-      /** ⭐ ভুল পাওয়া গেছে, ঠিক করা হয়নি */
+      /** A mistake was found and not yet fixed */
       toFix: number;
-      /** ⭐ গবেষকের কিউ — শেষ হয়েছে অথচ আপলোড হয়নি (কাটা-তারিখের পরের) */
+      /** The researcher's queue: done but not uploaded (after the cut-off date) */
       toUpload: number;
-      /** ⭐ আপলোড হয়েছে অথচ লাইভ হয়নি */
+      /** Uploaded but not yet live */
       toLive: number;
     }
   > {
     /**
-     * ⭐⭐ **আপলোড ও লাইভ আলাদা করে গোনা** *(২৩ আগস্ট ২০২৬)*।
+     * Uploaded and live are counted separately.
      *
-     * ⚠️ `status` দিয়ে গোনা যায় না — ওগুলো তারিখ, অবস্থা নয় (ইচ্ছাকৃত,
-     * schema-র নোট দেখুন)। একটা কাজ একই সাথে `done` **আর** আপলোড **আর**
-     * লাইভ হতে পারে, আর সেটাই ঠিক।
+     * Careful: `status` cannot count them, since those are dates, not states
+     * (deliberate; see the note in the schema). One job can be `done` and
+     * uploaded and live all at once, and that is correct.
      */
     const [rows, uploaded, live, toCheck, toFix, toUpload, toLive, toReview] =
       await Promise.all([
@@ -1666,9 +1668,10 @@ export class TargetsService {
       this.prisma.designTarget.count({ where: { uploadedAt: { not: null } } }),
       this.prisma.designTarget.count({ where: { liveAt: { not: null } } }),
       /**
-       * ⚠️⚠️ এই দুটো সংখ্যা **`list()`-এর ছাঁকনির হুবহু যমজ** হতে হবে —
-       * চিপে ১৩২ লিখে ক্লিক করলে ৯০টা এলে কেউ আর সংখ্যাটা বিশ্বাস করবে না।
-       * ⭐ কাটা-তারিখটা এক জায়গায় (`UPLOAD_QUEUE_FROM`), তাই দুটো একসাথেই নড়ে।
+       * Careful: these two numbers must be exact twins of the `list()`
+       * filters. If a chip says 132 and clicking it shows 90, nobody will
+       * trust the number again. The cut-off date is in one place
+       * (`UPLOAD_QUEUE_FROM`), so both move together.
        */
       this.prisma.designTarget.count({
         where: {
@@ -1683,15 +1686,15 @@ export class TargetsService {
         where: {
           completedAt: { not: null, gte: dhakaStart(UPLOAD_QUEUE_FROM) },
           uploadedAt: null,
-          // ⚠️ ভুল পাওয়া অথচ ঠিক-না-হওয়া সারি বাদ — `list()`-এর যমজ
+          // Rows with a mistake found but not fixed are excluded: twin of `list()`
           NOT: { errorFoundAt: { not: null }, fixedAt: null },
         },
       }),
       this.prisma.designTarget.count({
         where: { uploadedAt: { not: null }, liveAt: null },
       }),
-      // ⭐ `list()`-এর `to_review` শর্তের যমজ — দুটো আলাদা হলে চিপের সংখ্যা
-      //    আর তালিকার সংখ্যা মিলত না (২৪ আগস্টের শিক্ষা)
+      // Twin of the `to_review` condition in `list()`: if the two differed, the
+      // chip's number and the list's number would not match (the 24 August lesson)
       this.prisma.designTarget.count({
         where: {
           status: {
@@ -1709,12 +1712,13 @@ export class TargetsService {
       done: 0,
       skipped: 0,
       /**
-       * ⭐ মরা ASIN — Amazon-এ পাতাটাই নেই *(২৯ আগস্ট)*।
+       * Dead ASIN: the page does not exist on Amazon.
        *
-       * ⚠️⚠️ শূন্যগুলো এখানে **হাতে লেখা, আর সেটাই ইচ্ছাকৃত**: টাইপটা
-       * `Record<DesignTargetStatus, number>`, তাই enum-এ নতুন মান বসলে
-       * টাইপচেক এখানে থামে। ⭐ ২৯ আগস্ট ঠিক তা-ই হয়েছে — নইলে নতুন
-       * অবস্থাটা গোনার বাইরে থেকে যেত আর পর্দায় কেউ টেরও পেত না।
+       * Careful: the zeros are written by hand here, on purpose: the type is
+       * `Record<DesignTargetStatus, number>`, so when a new value is added to
+       * the enum, the type check stops here. That is exactly what happened on
+       * 29 August; otherwise the new status would have stayed out of the count
+       * and nobody on screen would have noticed.
        */
       deleted: 0,
       perDesigner: POOL_PER_DESIGNER,
@@ -1732,25 +1736,26 @@ export class TargetsService {
   }
 
   /**
-   * ⭐ **"আপলোড হয়েছে"** — owner · manager · গবেষক *(২৩ আগস্ট ২০২৬)*।
+   * "Uploaded": owner, manager, researcher.
    *
-   * ⚠️ শেষ হওয়ার আগে আপলোড হতে পারে না, তাই `completedAt` না থাকলে
-   *    আটকানো হয় — নইলে পাইপলাইনের ক্রমটাই অর্থহীন হতো।
+   * It cannot be uploaded before it is finished, so a missing `completedAt`
+   * is rejected; otherwise the order of the pipeline would mean nothing.
    */
   /**
-   * ⭐⭐ **"বানান দেখলাম"** *(ADR-038, ২৫ আগস্ট ২০২৬)* — সুমাইয়ার দুটো
-   * বোতামের পেছনের একটাই মেথড।
+   * "Spelling checked" (ADR-038): the one method behind the proofreader's two
+   * buttons.
    *
-   * ⚠️⚠️ **যন্ত্র বানান পড়ে না** — লেখাটা `.ai`/`.psd`-র ভেতরে, আর
-   * নীতিমালায় প্রতিশ্রুতি দেওয়া আছে ফাইল খোলা হয় না। ⭐ যন্ত্র শুধু
-   * **হিসাব রাখে**: কোনগুলো দেখা বাকি, কে দেখলেন, কী পেলেন। মাঠে আসল
-   * সমস্যাটাও এটাই — ভুল খোঁজা নয়, *কোনগুলো দেখতে হবে* সেটা জানা।
+   * Careful: the machine does not read spelling. The text is inside the
+   * `.ai`/`.psd` and the policy promises files are not opened. The machine
+   * only keeps the books: which are still to check, who checked, what they
+   * found. In the field the real problem is exactly this: not finding
+   * mistakes, but knowing which ones to check.
    *
-   * ⚠️ `ok: false` মানে ভুল পাওয়া গেছে — তখন `errorFoundAt`ও বসে, আর
-   *    সারিটা "ঠিক করতে হবে" কিউতে চলে যায়।
+   * `ok: false` means a mistake was found: `errorFoundAt` is set too, and the
+   * row goes into the "to fix" queue.
    *
-   * ⚠️ **idempotent** — আবার চাপলে তারিখ সরে না। নইলে একই সারিতে দুবার
-   *    চাপলে "কবে দেখা হয়েছিল" আজকের তারিখে লাফ দিত।
+   * Careful: idempotent. Pressing again does not move the date; otherwise
+   * pressing twice on a row would make "when it was checked" jump to today.
    */
   async markChecked(
     id: number,
@@ -1782,12 +1787,13 @@ export class TargetsService {
   }
 
   /**
-   * ⭐⭐ **"ঠিক করেছি"** — বেলালের বোতাম।
+   * "Fixed": the fixer's button.
    *
-   * ⚠️⚠️ `assignedToId` **ছোঁয়া হয় না**। ডিজাইনটা মূল ডিজাইনারেরই থাকে,
-   * আর সেটা এই মেথডের সবচেয়ে জরুরি লাইন — নইলে যিনি ঠিক করলেন তাঁর নামে
-   * কাজটা চলে যেত, আর ২৩ আগস্টের গোটা তদন্তটা শুরুই হয়েছিল ঠিক এমন
-   * একটা ফুলে যাওয়া সংখ্যা দেখে ("বেলাল ১৬টা ডিজাইন করেছে?")।
+   * Careful: `assignedToId` is not touched. The design stays with the
+   * original designer, and that is the most important line in this method:
+   * otherwise the work would pass to whoever fixed it, and the whole 23 August
+   * investigation began with exactly such an inflated number ("Belal made 16
+   * designs?").
    */
   async markFixed(id: number, userId: number, now: Date): Promise<{ ok: true }> {
     const target = await this.prisma.designTarget.findUnique({
@@ -1810,15 +1816,15 @@ export class TargetsService {
   }
 
   /**
-   * ⭐⭐ **"দেখে নিয়েছি"** *(মালিকের চাওয়া, ৩১ আগস্ট ২০২৬)* — মালিক ও
-   * ম্যানেজারের কিউ খালি করার একমাত্র পথ।
+   * "Reviewed": the only way for the owner and manager to empty their queue.
    *
-   * ⚠️⚠️ **সারিটার অবস্থা বদলায় না** — `skipped` `skipped`-ই থাকে। এটা
-   * কোনো সিদ্ধান্ত নয়, একটা **স্বীকৃতি**: "আমি দেখেছি"। ⭐ সিদ্ধান্ত
-   * নিতে চাইলে পাশের বোতামটা আছে (পুলে ফেরত), আর সেটা আলাদা কাজ।
+   * Careful: the row's status does not change; `skipped` stays `skipped`.
+   * This is not a decision but an acknowledgement: "I have seen it". To
+   * decide, the button beside it exists (return to the pool), and that is a
+   * separate action.
    *
-   * ⚠️ কেবল বাদ-যাওয়া ও কারণসহ সারিতেই চলে — নইলে যেকোনো সারিতে চিহ্ন
-   * বসিয়ে দেওয়া যেত, আর ঘরটার মানে হারাত।
+   * It works only on dropped rows that have a reason; otherwise any row could
+   * be marked and the field would lose its meaning.
    */
   async markReviewed(
     id: number,
@@ -1848,8 +1854,8 @@ export class TargetsService {
         'This design is not finished yet, so it cannot be marked uploaded.',
       );
     }
-    // ⚠️ আগে চিহ্ন বসে থাকলে তারিখটা সরানো হয় না — "কবে আপলোড হলো"
-    //    প্রতিবার আজকের তারিখে লাফ দিত
+    // If already marked the date does not move; otherwise "when uploaded"
+    // would jump to today's date every time
     if (target.uploadedAt !== null) return { ok: true };
 
     await this.prisma.designTarget.update({
@@ -1860,13 +1866,13 @@ export class TargetsService {
   }
 
   /**
-   * ⭐⭐ **"Amazon-এ লাইভ হয়েছে"** — সাথে নতুন পণ্যের ASIN।
+   * "Live on Amazon", with the new product's ASIN.
    *
-   * ⚠️⚠️ ASIN-টা **আমাদের নিজের** পণ্যের, গবেষকের আনা নমুনার নয়। এটাই
-   * ভবিষ্যতে বিক্রির হিসাবের সাথে জোড়া লাগার সেতু।
+   * Careful: the ASIN is of our own product, not the sample the researcher
+   * brought. It is the bridge to later join with sales figures.
    *
-   * ⚠️ আপলোড না হয়ে লাইভ হতে পারে না — Amazon-এ কিছু ওঠাতে হলে আগে
-   *    পাঠাতেই হয়।
+   * It cannot go live without being uploaded: to put anything on Amazon it
+   * must first be sent.
    */
   async markLive(id: number, liveAsin: string | null, now: Date): Promise<{ ok: true }> {
     const target = await this.prisma.designTarget.findUnique({

@@ -1,81 +1,84 @@
 /**
- * লগইন লকআউটের মাপ — খাঁটি ফাংশন, `.env` থেকে পড়া মান ব্যাখ্যা করে।
+ * Login lockout sizing: pure functions that interpret the values read from `.env`.
  *
- * ⚠️⚠️ **কেন এটা আলাদা করে খুলতে হলো:** মাপগুলো হার্ডকোড ছিল — ৫ বার ভুল,
- * ১৫ মিনিট লক। ব্রুট-ফোর্সের বিরুদ্ধে যুক্তিসঙ্গত, কিন্তু বাস্তবে যা ঘটল:
- * মালিক স্টাফের পাসওয়ার্ড রিসেট করলেন, স্টাফ কয়েকবার ভুল টাইপ করলেন
- * (পাসওয়ার্ডটা তখন `l/1/O/0` মেশানো ছিল), আর পর্দায় এল
- * <i>"Try again in 13 minutes."</i> — একটা ১৫ জনের অফিসে যেখানে সবাই
- * পাশের ঘরে বসে, এটা সুরক্ষা নয়, শুধু বাধা।
+ * Careful: why this had to be opened up: the sizes were hardcoded, 5 wrong
+ * attempts and a 15-minute lock. Reasonable against brute force, but what
+ * actually happened: the owner reset a staff member's password, the staff
+ * member mistyped a few times (the password had a mix of `l/1/O/0`), and the
+ * screen said <i>"Try again in 13 minutes."</i> In a 15-person office where
+ * everyone sits in the next room, that is not protection, just an obstacle.
  *
- * ⭐ তাই মাপ দুটো এখন `.env`-এ, আর ডিফল্টও অনেক নরম।
+ * So both sizes now live in `.env`, and the defaults are much softer.
  *
- * ⚠️ পুরোপুরি বন্ধ করা যায় — `LOGIN_LOCK_MINUTES=0`। একটাই নব, তাই
- * "কোনটা বন্ধ করলে কী হয়" মনে রাখতে হয় না।
+ * Careful: it can be turned off entirely with `LOGIN_LOCK_MINUTES=0`. There
+ * is a single knob, so nobody has to remember "what happens if I turn off which one".
  */
 
 export interface ThrottleLimits {
-  /** কতবার ভুলের পর লক — **একই ইমেইল + একই IP** জোড়ার জন্য */
+  /** Failures before locking, for the **same email + same IP** pair */
   maxFails: number;
   /**
-   * ⭐⭐ কতবার ভুলের পর **গোটা IP** লক — ইমেইল যাই হোক (G116)।
+   * After how many failures the **whole IP** is locked, whatever the email (G116).
    *
-   * ⚠️⚠️ **এই ঘরটা কেন দরকার হলো:** জোড়া-চাবি (`email|ip`) কেবল ধরে
-   *    "একজনের পাসওয়ার্ড বারবার অনুমান"। কিন্তু আসল আক্রমণটা উল্টো —
-   *    এক IP থেকে **হাজারটা আলাদা ইমেইল**, প্রতিটার জন্য এক-দুবার। তখন
-   *    প্রতিটা চেষ্টা আলাদা চাবিতে পড়ত, কোনো কাউন্টার সীমা ছুঁত না, আর
-   *    তালা **কখনো পড়ত না**। অচেনা ইমেইলেও ব্যর্থতা গোনা হয়
-   *    (`auth.service.ts`), তাই এই কাউন্টারটাই ওই ফাঁকটা বন্ধ করে।
+   * Careful: why this field was needed: the pair key (`email|ip`) only
+   *    catches "one person's password guessed repeatedly". But the real
+   *    attack is the reverse: **a thousand different emails** from one IP,
+   *    one or two tries each. Then every attempt landed in a different key,
+   *    no counter reached its limit, and the lock **never fell**. Failures
+   *    are counted for unknown emails too (`auth.service.ts`), so this
+   *    counter closes that gap.
    *
-   * ⚠️ সীমাটা ইচ্ছাকৃতভাবে **অনেক উঁচু**: গোটা অফিস একটাই IP-র পেছনে,
-   *    তাই পাসওয়ার্ড রিসেটের দিনে সাতজনের কয়েকটা করে টাইপো মিলে সহজেই
-   *    ২০–৩০ হয়ে যেতে পারে। এটা নিরাপত্তার শেষ কথা নয়, বরং "অসীম" থেকে
-   *    "মাপা" — আর ওই তফাতটাই এখানে আসল।
+   * Careful: the limit is deliberately **much higher**: the whole office sits
+   *    behind one IP, so on a password-reset day a few typos each from seven
+   *    people can easily add up to 20-30. This is not the last word in
+   *    security; it moves things from "unlimited" to "measured", and that
+   *    difference is what matters here.
    */
   ipMaxFails: number;
-  /** কতক্ষণ লক — মিলিসেকেন্ড */
+  /** How long the lock lasts, in milliseconds */
   lockMs: number;
-  /** `false` হলে লকআউট পুরোপুরি বন্ধ */
+  /** When `false`, lockout is switched off entirely */
   enabled: boolean;
 }
 
 /**
- * ⚠️ ডিফল্ট **১০ বার / ২ মিনিট** — আগে ছিল ৫ বার / ১৫ মিনিট।
+ * Careful: the default is **10 attempts / 2 minutes**; it used to be 5 attempts / 15 minutes.
  *
- * ⭐ যুক্তি: অনলাইনে পাসওয়ার্ড অনুমান করা ঠেকাতে গুরুত্বপূর্ণ হলো
- * **হার**, সময়ের দৈর্ঘ্য নয়। ২ মিনিটের লকও প্রতি ঘণ্টায় চেষ্টা ৩০০-তে
- * নামিয়ে আনে, অর্থাৎ অনুমান করে ভাঙা তখনও অসম্ভব। কিন্তু টাইপো করা
- * স্টাফের জন্য ১৫ মিনিট আর ২ মিনিটের তফাত বিরাট।
+ * Reasoning: against online password guessing what matters is the **rate**,
+ * not the length of the lock. Even a 2-minute lock cuts attempts to 300 an
+ * hour, so cracking by guessing is still impossible. But for a staff member
+ * who mistyped, the difference between 15 minutes and 2 is huge.
  */
 const DEFAULT_MAX_FAILS = 10;
 const DEFAULT_LOCK_MINUTES = 2;
 
 /**
- * ⭐ IP-সীমা ডিফল্টে জোড়া-সীমার **পাঁচ গুণ** — আলাদা একটা সংখ্যা নয়,
- * গুণিতক। কেউ `LOGIN_MAX_FAILS` নরম করলে IP-সীমাও সাথে নরম হয়, তাই দুটো
- * নব কখনো একে অন্যের বিরুদ্ধে দাঁড়ায় না।
+ * The IP limit defaults to **five times** the pair limit: a multiple, not a
+ * separate number. If someone softens `LOGIN_MAX_FAILS` the IP limit softens
+ * with it, so the two knobs never work against each other.
  *
- * ⚠️ ডিফল্টে ৫০ ভুল / ২ মিনিট। শুনতে ঢিলে, কিন্তু হিসাবটা এরকম: এতে
- * ঘণ্টায় চেষ্টা নামে ~১৫০০-তে, আর **আগে ছিল অসীম**। ৭টা অ্যাকাউন্টের
- * শক্ত পাসওয়ার্ডের বিরুদ্ধে ওটা কার্যকর বাধা; আর অফিসের কেউ কোনোদিন
- * ৫০ বার ভুল করবে না।
+ * Careful: by default 50 failures / 2 minutes. It sounds loose, but the
+ * arithmetic is this: attempts drop to ~1500 an hour, and **before it was
+ * unlimited**. Against 7 accounts with strong passwords that is an effective
+ * barrier, and nobody in the office will ever fail 50 times.
  */
 const IP_FAILS_MULTIPLIER = 5;
 
 /**
- * ⚠️ উপরের সীমা রাখা হয়েছে ইচ্ছাকৃতভাবে। `LOGIN_LOCK_MINUTES=100000`
- * টাইপ করে ফেললে কেউ কার্যত চিরকালের জন্য নিজেকে তালাবন্ধ করে ফেলত,
- * আর কাউন্টার মেমরিতে বলে ফেরার একমাত্র পথ হতো সার্ভার রিস্টার্ট।
+ * Careful: the upper limit is deliberate. If someone typed
+ * `LOGIN_LOCK_MINUTES=100000` they would effectively lock themselves out
+ * forever, and since the counter is in memory the only way back would be a
+ * server restart.
  */
 const MAX_LOCK_MINUTES = 60;
 const MAX_FAILS_CEILING = 100;
 
 /**
- * @param raw `.env` থেকে আসা কাঁচা মান — যাচাই করা হয়নি ধরে নেওয়া হয়।
+ * @param raw The raw value from `.env`, assumed unvalidated.
  *
- * ⚠️ অবৈধ মানে **থামা হয় না, ডিফল্টে ফেরা হয়**। লগইন হলো ভেতরে ঢোকার
- * একমাত্র দরজা; `.env`-এর একটা টাইপোর জন্য গোটা সার্ভার না ওঠা মানে
- * মালিক নিজের সিস্টেম থেকেই বেরিয়ে যেতেন।
+ * Careful: an invalid value **does not stop things, it falls back to the
+ * default**. Login is the only door in; a server that fails to start because
+ * of one typo in `.env` would lock the owner out of their own system.
  */
 export function resolveThrottle(raw: {
   maxFails?: string | number | null;
@@ -90,11 +93,11 @@ export function resolveThrottle(raw: {
   );
 
   /**
-   * ⚠️ ডিফল্ট গুণিতক থেকে, আর সিলিংও জোড়া-সীমার সিলিংয়ের পাঁচ গুণ —
-   *    নইলে `LOGIN_MAX_FAILS=100` দিলে IP-সীমা (৫০০) সিলিংয়ে আটকে গিয়ে
-   *    **জোড়া-সীমার চেয়ে ছোট** হয়ে যেত, অর্থাৎ IP আগে লক হতো আর নবটার
-   *    মানেই উল্টে যেত।
-   * ⚠️ নিচের সীমা `maxFails` — IP-সীমা কখনো জোড়া-সীমার চেয়ে কম হতে পারে না।
+   * Careful: the default comes from the multiple, and the ceiling is five
+   *    times the pair ceiling too; otherwise `LOGIN_MAX_FAILS=100` would pin
+   *    the IP limit (500) at the ceiling and make it **smaller than the pair
+   *    limit**, so the IP would lock first and the knob's meaning would invert.
+   * Careful: the lower bound is `maxFails`: the IP limit can never be lower than the pair limit.
    */
   const ipMaxFails = clamp(
     toNumber(raw.ipMaxFails, maxFails * IP_FAILS_MULTIPLIER),
@@ -105,7 +108,7 @@ export function resolveThrottle(raw: {
 
   const lockMinutes = toNumber(raw.lockMinutes, DEFAULT_LOCK_MINUTES);
 
-  // ⚠️ শূন্য বৈধ, আর এর মানে "বন্ধ" — clamp-এর নিচের সীমায় আটকানো যাবে না
+  // Careful: zero is valid and means "off"; it must not be caught by clamp's lower bound
   if (lockMinutes === 0) {
     return { maxFails, ipMaxFails, lockMs: 0, enabled: false };
   }
@@ -115,9 +118,9 @@ export function resolveThrottle(raw: {
 }
 
 /**
- * ⚠️ `Number('')` শূন্য দেয়, আর `Number(undefined)` দেয় `NaN` — দুটোকেই
- * "দেওয়া হয়নি" ধরতে হবে। খালি স্ট্রিংকে শূন্য ধরলে `.env`-এ
- * `LOGIN_LOCK_MINUTES=` লেখা থাকলেই লকআউট নীরবে বন্ধ হয়ে যেত।
+ * Careful: `Number('')` gives zero and `Number(undefined)` gives `NaN`; both
+ * must count as "not provided". If an empty string counted as zero, merely
+ * writing `LOGIN_LOCK_MINUTES=` in `.env` would silently turn lockout off.
  */
 function toNumber(value: string | number | null | undefined, fallback: number): number {
   if (value === null || value === undefined) return fallback;
@@ -127,8 +130,8 @@ function toNumber(value: string | number | null | undefined, fallback: number): 
   return Number.isFinite(n) ? Math.floor(n) : fallback;
 }
 
-/** ⚠️ সীমার বাইরে গেলে ডিফল্ট — সীমায় কেটে দেওয়া নয়। কেউ ৯৯৯ লিখলে
- *  তার উদ্দেশ্য বোঝা যায় না, তাই অনুমান না করে চেনা মানে ফেরা নিরাপদ। */
+/** Careful: out of range falls back to the default; it is not clamped to the limit. If someone
+ *  writes 999 their intent is unclear, so returning to a known value is safer than guessing. */
 function clamp(n: number, min: number, max: number, fallback: number): number {
   return n >= min && n <= max ? n : fallback;
 }

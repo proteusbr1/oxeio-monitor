@@ -9,10 +9,9 @@ import {
 } from '../src/staff/redact';
 
 /**
- * ⚠️ `monthlySalary`-তে সাধারণ `number` বসানো হয়েছে — `Decimalish`-এর
- * আকারই তো `toFixed(digits)`, আর `number` সেটা মেনে চলে। এজন্যই
- * `redact.ts`-এ Prisma-র Decimal ইমপোর্ট করা হয়নি: টেস্টে ডাটাবেসের
- * কোনো টাইপ দরকার হয় না।
+ * `monthlySalary` is a plain `number` here: the shape of `Decimalish` is just
+ * `toFixed(digits)`, and `number` satisfies it. That is why `redact.ts` does
+ * not import Prisma's Decimal: tests need no database types.
  */
 function row(overrides: Partial<EmployeeRow> = {}): EmployeeRow {
   return {
@@ -22,9 +21,9 @@ function row(overrides: Partial<EmployeeRow> = {}): EmployeeRow {
     email: 'rumana@example.com',
     designation: 'Designer',
     department: 'Creative',
-    // ⭐ কাজের ধরন (২১ আগস্ট) — designation-এর পাশে, বিকল্প নয়
+    // work type, next to designation, not a replacement for it
     staffType: 'designer',
-    /** ⭐ নিজের দৈনিক টার্গেট — `null` = পলিসিরটা খাটবে */
+    /** the person's own daily target; `null` means the policy's applies */
     dailyDesignTarget: null,
     policyId: 1,
     monthlySalary: 13000,
@@ -38,41 +37,42 @@ function row(overrides: Partial<EmployeeRow> = {}): EmployeeRow {
   };
 }
 
-describe('redact — বেতন কার কাছে যাবে (ADR-023 · স্পেক § ৪.৩)', () => {
-  it('owner বেতন দেখতে পায়, দুই দশমিকের স্ট্রিং হিসেবে', () => {
+describe('redact: who gets to see the salary (ADR-023, spec section 4.3)', () => {
+  it('the owner sees the salary, as a string with two decimals', () => {
     const view = toEmployeeView(row(), 'owner') as OwnerEmployeeView;
 
     expect(view.monthlySalary).toBe('13000.00');
   });
 
-  /** ⭐ পুরো ফাইলটার কারণ এই একটা টেস্ট */
-  it('ম্যানেজারের রেসপন্সে ফিল্ডটাই থাকে না — null নয়, অনুপস্থিত', () => {
+  /** This single test is the reason for the whole file */
+  it('the manager response has no such field at all: not null, absent', () => {
     const view = toEmployeeView(row(), 'manager');
 
     expect('monthlySalary' in view).toBe(false);
     expect(Object.keys(view)).not.toContain('monthlySalary');
   });
 
-  it('স্টাফ নিজেও (role = employee) বেতনের ফিল্ড পায় না', () => {
+  it('staff themselves (role = employee) do not get the salary field either', () => {
     const view = toEmployeeView(row(), 'employee');
 
     expect('monthlySalary' in view).toBe(false);
   });
 
   /**
-   * ⚠️ `monthlySalary: undefined` লিখলে JSON-এ ফিল্ডটা উধাও হয় ঠিকই, কিন্তু
-   * `in` তখনো true বলত। এই দুটো টেস্ট একসাথে সেই ফাঁকিটা ধরে ফেলে।
+   * With `monthlySalary: undefined` the field does vanish from JSON, but `in`
+   * would still say true. These two tests together catch that trick.
    */
-  it('ম্যানেজারের JSON-এও শব্দটা কোথাও নেই', () => {
+  it('the word does not appear anywhere in the manager\'s JSON either', () => {
     const json = JSON.stringify(toEmployeeView(row(), 'manager'));
 
     expect(json).not.toContain('monthlySalary');
     expect(json).not.toContain('13000');
   });
 
-  it('owner-এর ক্ষেত্রে বেতন বসানো না থাকলে null যায় — ফিল্ডটা তবু থাকে', () => {
-    // "বেতন বসানো নেই" আর "ম্যানেজার দেখতে পায় না" দুটো আলাদা তথ্য;
-    // দুটোকেই "ফিল্ড নেই" বানিয়ে ফেললে owner বুঝতেই পারত না কার বেতন বাকি
+  it('for the owner, an unset salary goes out as null: the field is still there', () => {
+    // "salary not set" and "the manager cannot see it" are two different
+    // facts; making both "no field" would leave the owner unable to tell
+    // whose salary is still missing
     const view = toEmployeeView(
       row({ monthlySalary: null }),
       'owner',
@@ -83,13 +83,13 @@ describe('redact — বেতন কার কাছে যাবে (ADR-023 �
   });
 
   /**
-   * ⭐ whitelist বনাম blacklist-এর আসল পরীক্ষা।
+   * The real test of whitelist versus blacklist.
    *
-   * স্কিমায় কাল যদি `bankAccount` যোগ হয় আর কেউ `redact.ts` হালনাগাদ করতে
-   * ভুলে যায় — blacklist ধাঁচে (`delete copy.monthlySalary`) সেটা চুপচাপ
-   * ম্যানেজারের রেসপন্সে চলে যেত। এখানে যায় না।
+   * If `bankAccount` is added to the schema tomorrow and someone forgets to
+   * update `redact.ts`, a blacklist approach (`delete copy.monthlySalary`)
+   * would quietly send it in the manager's response. Here it does not go.
    */
-  it('সারিতে অচেনা সংবেদনশীল কলাম থাকলেও সেটা রেসপন্সে ওঠে না', () => {
+  it('an unknown sensitive column on the row does not reach the response', () => {
     const future = {
       ...row(),
       bankAccount: '0123456789',
@@ -103,7 +103,7 @@ describe('redact — বেতন কার কাছে যাবে (ADR-023 �
     }
   });
 
-  it('তারিখের কলাম YYYY-MM-DD হয়, টাইমস্ট্যাম্প পুরো ISO', () => {
+  it('date columns are YYYY-MM-DD, timestamps are full ISO', () => {
     const view = toEmployeeView(row(), 'owner');
 
     expect(view.joinedOn).toBe('2025-03-01');
@@ -111,7 +111,7 @@ describe('redact — বেতন কার কাছে যাবে (ADR-023 �
     expect(view.policySignedAt).toBe('2025-03-02T04:30:00.000Z');
   });
 
-  it('তালিকার প্রতিটা সারিতেই একই নিয়ম খাটে', () => {
+  it('the same rule applies to every row of a list', () => {
     const rows = [row({ id: 1 }), row({ id: 2, monthlySalary: 10000 })];
 
     const asManager = toEmployeeViews(rows, 'manager');
@@ -125,17 +125,18 @@ describe('redact — বেতন কার কাছে যাবে (ADR-023 �
     ]);
   });
 
-  it('canSeeSalary শুধু owner-এ true', () => {
+  it('canSeeSalary is true only for owner', () => {
     expect(canSeeSalary('owner')).toBe(true);
     expect(canSeeSalary('manager')).toBe(false);
     expect(canSeeSalary('employee')).toBe(false);
   });
 
   /**
-   * ⚠️ `Number(13000.10).toString()` = '13000.1' — এক দশমিক। বেতনের অঙ্ক
-   * এভাবে দেখালে ফ্রন্টএন্ডে কখনো ১০.৫ কখনো ১০.৫০ দেখাত।
+   * `Number(13000.10).toString()` = '13000.1', one decimal. Showing salary
+   * amounts like that would make the frontend display 10.5 sometimes and
+   * 10.50 other times.
    */
-  it('ভগ্নাংশওয়ালা বেতনেও দুই দশমিক থাকে', () => {
+  it('a salary with a fraction still keeps two decimals', () => {
     const view = toEmployeeView(
       row({ monthlySalary: 13000.1 }),
       'owner',

@@ -14,15 +14,16 @@ import {
 } from './setup/harness';
 
 /**
- * ⭐⭐ **owner-lockout।**
+ * Owner lockout.
  *
- * ⚠️ এই সিস্টেমে "পাসওয়ার্ড ভুলে গেছি" বলে কোনো ইমেইল-লিংক নেই
- * (ইচ্ছাকৃত — অফিসের ভেতরের সার্ভার)। ফলে একমাত্র owner পাসওয়ার্ড বা
- * 2FA-র ফোন হারালে **গোটা সিস্টেমে ঢোকার আর কোনো উপায় ছিল না** — ঘণ্টা
- * জমা হতেই থাকত, কেউ দেখতে পারত না, বেতনের হিসাবও বেরোত না।
+ * Careful: this system has no "forgot password" email link (deliberate: it is
+ * an in-office server). So if the only owner loses the password or the 2FA
+ * phone, there used to be no way into the whole system: hours kept piling up
+ * with nobody able to see them, and payroll could not be produced.
  *
- * টেস্টগুলোর সবচেয়ে জরুরি অংশ শেষেরটা: রিসেটের পর নতুন পাসওয়ার্ডে
- * **সত্যিই লগইন হয়** কি না। হ্যাশ বসানো আর লগইন করতে পারা এক কথা নয়।
+ * The most important test is the last one: after a reset, can you really log
+ * in with the new password? Storing a hash is not the same as being able to
+ * log in.
  */
 let h: Harness;
 
@@ -38,8 +39,8 @@ beforeEach(async () => {
   await resetDatabase(h.prisma, h.app);
 });
 
-describe('owner রিকভারি', () => {
-  it('একমাত্র owner হলে ইমেইল না দিলেও চলে', async () => {
+describe('owner recovery', () => {
+  it('works without an email when there is only one owner', async () => {
     const result = await recoverOwner(h.prisma);
 
     expect(result.ok).toBe(true);
@@ -52,17 +53,17 @@ describe('owner রিকভারি', () => {
     const user = await h.prisma.user.findUniqueOrThrow({
       where: { email: OWNER_EMAIL },
     });
-    // ⚠️ পাসওয়ার্ড পর্দায় দেখা গেছে — প্রথম লগইনেই বদলাতেই হবে
+    // The password was visible on screen, so it must be changed at first login
     expect(user.mustChangePw).toBe(true);
     expect(await verify(user.passwordHash, result.password)).toBe(true);
   });
 
   /**
-   * ⭐ lockout-এর **দ্বিতীয় অর্ধেক**। ফোন হারানো পাসওয়ার্ড ভোলার চেয়ে কম
-   * সাধারণ নয়; শুধু পাসওয়ার্ড রিসেট করলে ওই অবস্থায় লগইনের পরের ধাপেই
-   * আবার আটকে যেত।
+   * The second half of the lockout. Losing the phone is no less common than
+   * forgetting the password; resetting only the password would leave the owner
+   * stuck again at the next login step.
    */
-  it('2FA থাকলে সেটাও সরিয়ে দেয়, আর বলে দেয় সরিয়েছে', async () => {
+  it('also removes 2FA if set, and says it did', async () => {
     await h.prisma.user.update({
       where: { email: OWNER_EMAIL },
       data: { totpSecret: 'v1:whatever-envelope' },
@@ -78,8 +79,8 @@ describe('owner রিকভারি', () => {
     expect(user.totpSecret).toBeNull();
   });
 
-  /** ⚠️ নিষ্ক্রিয় থাকলে পাসওয়ার্ড ঠিক করেও লগইন আটকে থাকত */
-  it('নিষ্ক্রিয় করা owner-কে ফিরিয়ে আনে', async () => {
+  /** An inactive owner would stay locked out even with the password fixed. */
+  it('reactivates a deactivated owner', async () => {
     await h.prisma.user.update({
       where: { email: OWNER_EMAIL },
       data: { isActive: false },
@@ -94,11 +95,11 @@ describe('owner রিকভারি', () => {
   });
 
   /**
-   * ⚠️ "প্রথমটা নিয়ে নাও" লিখলে ভুল অ্যাকাউন্টের পাসওয়ার্ড বদলে যেত —
-   * অর্থাৎ যিনি ঠিকঠাক ঢুকছিলেন তিনিও আটকে যেতেন, আর আসল সমস্যাটা
-   * থেকেই যেত।
+   * "Just take the first one" would change the password of the wrong account:
+   * the person who was logging in fine would be locked out, and the real
+   * problem would remain.
    */
-  it('একাধিক owner থাকলে নিজে থেকে বেছে নেয় না', async () => {
+  it('does not pick by itself when there are several owners', async () => {
     await h.prisma.user.create({
       data: {
         email: 'second-owner@test.local',
@@ -112,21 +113,21 @@ describe('owner রিকভারি', () => {
     expect(blind.ok).toBe(false);
     if (!blind.ok) expect(blind.reason).toBe('ambiguous');
 
-    // ইমেইল বলে দিলে ঠিক ওইটাই
+    // If an email is given, exactly that one
     const picked = await recoverOwner(h.prisma, {
       email: 'second-owner@test.local',
     });
     expect(picked.ok && picked.email).toBe('second-owner@test.local');
 
-    // ⚠️ আসল owner-এর পাসওয়ার্ড অক্ষত — নইলে একজনকে ফেরাতে গিয়ে
-    //    আরেকজনকে বের করে দেওয়া হতো
+    // The real owner's password is untouched; otherwise rescuing one person
+    // would lock out another
     const untouched = await h.prisma.user.findUniqueOrThrow({
       where: { email: OWNER_EMAIL },
     });
     expect(await verify(untouched.passwordHash, OWNER_PASSWORD)).toBe(true);
   });
 
-  it('ভুল ইমেইল দিলে কিছুই বদলায় না', async () => {
+  it('changes nothing when given a wrong email', async () => {
     const result = await recoverOwner(h.prisma, { email: 'nobody@test.local' });
 
     expect(result.ok).toBe(false);
@@ -138,8 +139,8 @@ describe('owner রিকভারি', () => {
     expect(await verify(user.passwordHash, OWNER_PASSWORD)).toBe(true);
   });
 
-  /** ⭐ ডাটাবেস ফেরানোর পর, বা কেউ ভুল করে একমাত্র অ্যাকাউন্টটা মুছে ফেললে */
-  it('একটাও owner না থাকলে নতুন একটা বানায়', async () => {
+  /** After restoring a database, or if someone deleted the only account by mistake. */
+  it('creates a new one when there is no owner at all', async () => {
     await h.prisma.auditLog.deleteMany({});
     await h.prisma.user.deleteMany({ where: { role: UserRole.owner } });
 
@@ -157,11 +158,11 @@ describe('owner রিকভারি', () => {
   });
 
   /**
-   * ⚠️ চিহ্ন না রেখে owner-এর পাসওয়ার্ড বদলে ফেলা যাবে না। ওয়েব থেকে
-   * হয়নি বলেই বরং লেখাটা বেশি জরুরি — `meta.via = 'cli'` দেখেই তদন্তে
-   * বোঝা যাবে কেউ সার্ভারের শেলে গিয়েছিল।
+   * Changing an owner's password must leave a trace. Precisely because it did
+   * not happen via the web, the record matters more: `meta.via = 'cli'` tells
+   * an investigation that someone was in the server shell.
    */
-  it('অডিট লগে চিহ্ন রেখে যায়', async () => {
+  it('leaves a trace in the audit log', async () => {
     await h.prisma.auditLog.deleteMany({});
 
     await recoverOwner(h.prisma);
@@ -176,17 +177,17 @@ describe('owner রিকভারি', () => {
   });
 
   /**
-   * ⭐⭐ **আসল প্রশ্নটা এটাই** — হ্যাশ বসানো আর সত্যিই লগইন করতে পারা এক
-   * কথা নয়। argon2-র প্যারামিটার আলাদা হলে, বা `isActive`/`mustChangePw`
-   * নিয়ে লগইনের কোনো শর্ত থাকলে, উপরের সব টেস্ট পাস করেও owner তালাবন্ধই
-   * থাকতেন।
+   * The real question: storing a hash is not the same as being able to log in.
+   * If the argon2 parameters differ, or a login condition on
+   * `isActive`/`mustChangePw` exists, the owner would stay locked out even
+   * with all the tests above passing.
    */
-  it('নতুন পাসওয়ার্ড দিয়ে সত্যিই লগইন হয়', async () => {
+  it('really logs in with the new password', async () => {
     const result = await recoverOwner(h.prisma);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    // ⚠️ `login()` নিজেই ২০০ আশা করে — ব্যর্থ হলে এখানেই ছুড়বে
+    // `login()` itself expects 200, so it throws right here on failure
     const session = await login(h, OWNER_EMAIL, result.password);
 
     const me = await session.http.get('/api/v1/auth/me').expect(200);

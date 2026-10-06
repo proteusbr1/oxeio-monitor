@@ -23,41 +23,40 @@ import {
 import { ShotLightbox } from './ShotLightbox';
 
 /**
- * **দলের রোস্টার — এক পর্দায় সবাই।**
+ * **Team roster: everyone on one screen.**
  *
- * ⭐⭐ মালিকের বাছাই *(১৮ আগস্ট, তিনটে মকআপ দেখে — দিক "B · One-screen
- * roster")*। আগে এখানে ছিল কার্ডের গ্রিড; ১৩ জনের জন্য সেটা ছিল চার
- * কলামে চারটে সারি, আর <b>প্রতিটা কার্ডের ৫২% জায়গা</b> নিত এমন একটা
- * স্ক্রিনশট যেটা ওই মাপে পড়াই যায় না। "এখন কে কাজ করছে, কেউ কি আটকে
- * আছে" — উত্তর পেতে ১২টা কার্ড পড়তে হতো।
+ * Important: the owner chose this after seeing three mockups (direction "B ·
+ * One-screen roster"). It used to be a grid of cards; for 13 people that was four
+ * rows of four columns, and <b>52% of each card</b> went to a screenshot that cannot
+ * be read at that size. "Who is working now, is anyone stuck" meant reading 12 cards.
  *
- * ⚠️⚠️ <b>এটা Live Board-এর `TeamTable`-এর নকল নয়, আর হতেও দেওয়া যাবে
- * না।</b> ভাগটা স্পষ্ট রাখা হয়েছে:
+ * Careful: <b>this is not a copy of the Live Board's `TeamTable`, and must not be
+ * allowed to become one.</b> The split is kept explicit:
  *
  * | | `TeamTable` (Live Board) | `TeamRoster` (Worklog) |
  * |---|---|---|
- * | প্রশ্ন | "লক্ষ্যের বিপরীতে কে কোথায়" | "**এখন** কে কাজ করছে" |
- * | ক্রম | অগ্রগতি অনুযায়ী | **এমপ্লয়ি-কোড, কখনো ঘণ্টা নয়** |
- * | কলাম | টার্গেট · অগ্রগতি | **স্ক্রিনশট · শেষ সাড়া** |
+ * | Question | "who is where against target" | "who is working **now**" |
+ * | Order | by progress | **employee code, never hours** |
+ * | Columns | target, progress | **screenshot, last response** |
  *
- * ⚠️ দুটোর কলাম এক হয়ে গেলে একটাকে মুছে দিতে হবে — দুই পাতায় দু-রকম
- * "একই" টেবিল থাকা মানেই একদিন তারা দ্বিমত করবে (G88-এর শিক্ষা)।
+ * Careful: if the two ever end up with the same columns, one must be deleted; two
+ * "identical" tables on two pages will one day disagree (the lesson of G88).
  *
- * ⭐ মকআপের যে দুটো জিনিস <b>ইচ্ছাকৃতভাবে বসানো হয়নি</b>:
- *  ১· <b>দলের median দাগ</b> — প্রতিটা বারে বসালে গাণিতিকভাবেই রোজ
- *     অর্ধেক দল "দাগের নিচে" দেখাত, চিরকাল। সাজানোর ক্রম মালিক বদলাতে
- *     পারেন, কিন্তু ওই দাগ সবসময় জ্বলে থাকত — জ্যামিতিতে গাঁথা লিডারবোর্ড।
- *  ২· <b>sort-করার ভান করা হেডার</b> — `Table`-এ sort নেই, তাই তীরচিহ্ন
- *     থাকলে সেটা এমন একটা সামর্থ্যের বিজ্ঞাপন দিত যা নেই।
+ * Important: two things from the mockup were <b>deliberately left out</b>:
+ *  1. <b>The team median line</b>: on every bar it would mathematically show half
+ *     the team "below the line", every day, forever. The owner can change the sort
+ *     order, but that line would always burn: a leaderboard built into geometry.
+ *  2. <b>Headers pretending to sort</b>: `Table` has no sorting, so an arrow would
+ *     advertise a capability that does not exist.
  */
 
 /**
- * ছবির রিফ্রেশ — **৪ মিনিট**, বোর্ডের নিজের ছন্দের চেয়ে অনেক ধীরে।
+ * Screenshot refresh: **4 minutes**, much slower than the board's own rhythm.
  *
- * ⚠️⚠️ সংখ্যাটা কমানো যাবে না। কারণ `latestShots.ts`-এর মাথায়:
- * `GET /screenshots`-এর প্রতিটা কল একটা করে audit সারি লেখে (I08 — "কে
- * আমার স্ক্রিনশট দেখল"), আর ছবি এমনিতেই জমে **৫ মিনিট পরপর** — ঘন ঘন
- * ডাকলে একই ছবিই ফিরে আসে, শুধু খাতাটা মোটা হয়।
+ * Careful: do not lower this. As explained at the top of `latestShots.ts`, every
+ * `GET /screenshots` call writes an audit row ("who looked at my screenshots"),
+ * and screenshots only accumulate **every 5 minutes** anyway; polling more often
+ * returns the same image and only fattens the ledger.
  */
 const SHOT_REFRESH_MS = 4 * 60_000;
 
@@ -67,9 +66,9 @@ export function TeamRoster({
   withTarget,
 }: {
   cards: readonly LiveCard[];
-  /** ⚠️ স্টাফের ব্রাউজার যেন অকারণে ৪০৩ না কুড়ায় */
+  /** Careful: so that a staff member's browser does not collect pointless 403s */
   canView: boolean;
-  /** আজ কতজনের টার্গেট আছে — ছুটির দিনে ০, আর তখন হেডারের লেখা বদলায় */
+  /** How many have a target today; 0 on a day off, and the header text changes */
   withTarget: number;
 }) {
   const [openFor, setOpenFor] = useState<number | null>(null);
@@ -112,22 +111,24 @@ export function TeamRoster({
       render: (c) => <TodayCell card={c} />,
     },
     /*
-      ⭐⭐ **ডিজাইন** *(২১ আগস্ট)* — মালিকের চাওয়া দৈনিক ২৫-এর হিসাব।
+      **Design** column: the owner's daily 25 count.
 
-      ⚠️⚠️ কলামটা **কেবল তখনই** বসে যখন দলে অন্তত একজন ডিজাইনার আছেন।
-         সবসময় বসালে গবেষকদের সারিতে রোজ একটা খালি ঘর থাকত, আর খালি ঘর
-         দেখতে "ডেটা আসেনি"-র মতো লাগে — অথচ মাপটাই তাঁদের নয়।
+      Careful: the column appears **only when** the team has at least one designer.
+         Always showing it would leave an empty cell every day in researchers' rows,
+         and an empty cell looks like "no data yet", when they are simply not
+         measured on it.
     */
     ...(rows.some((c) => designView(c) !== null)
       ? [
           {
             key: 'designs',
             /**
-             * ⭐ একটাই শব্দ — একটাই সংখ্যা ধরা হয় ([ADR-037](../../../../docs/05-Options-Decisions.md))।
+             * One word, one number counted (ADR-037, see the link below).
              *
-             * ⚠️⚠️ আগে লেখা ছিল `Designs · opened / done`। ঘরের সংখ্যা
-             * বদলানোর পরও শিরোনামটা বাদ পড়েছিল — ধরা পড়েছে লাইভ বান্ডল
-             * গ্রেপ করে, তাই সারাইয়ের পর আবার দেখা হয়েছে ([09 § ৩ঞ২](../../../../docs/09-Build-Log.md))।
+             * Careful: it used to say `Designs · opened / done`. After the cell's
+             * number changed, the heading was left behind; this was caught by grepping
+             * the live bundle, so it was re-checked after the fix
+             * ([Build Log](../../../../docs/09-Build-Log.md)).
              */
             header: 'Designs',
             align: 'right' as const,
@@ -138,8 +139,8 @@ export function TeamRoster({
       : []),
     {
       key: 'month',
-      /* ⚠️ "/ 208h" হেডারে লেখা যাবে না — টার্গেট কর্মীভেদে আলাদা ও
-         proration-নির্ভর (G37), তাই সংখ্যাটা প্রতিটা সারিতেই থাকতে হবে */
+      /* Careful: "/ 208h" must not go in the header: the target differs per employee
+         and depends on proration (G37), so the number must appear in every row */
       header: 'This month',
       align: 'right',
       className: 'hidden min-w-[150px] sm:table-cell',
@@ -148,7 +149,7 @@ export function TeamRoster({
     {
       key: 'screen',
       header: 'Screen',
-      /* ⚠️ ছোট পর্দায় প্রথমে এটাই যায় — ৬৪px ছবিতে এমনিতেও কিছু পড়া যায় না */
+      /* Careful: this goes first on small screens; nothing is readable in a 64px image anyway */
       className: 'hidden w-[84px] lg:table-cell',
       render: (c) => (
         <ShotThumb
@@ -167,8 +168,8 @@ export function TeamRoster({
       ),
     },
     {
-      /* ⭐ যে কলামটা মালিকের প্রশ্নের উত্তর দেয়, সেটাই **সবার শেষে** ঝরে —
-         সরু পর্দাতেও "কে কাজ করছে" টিকে থাকে */
+      /* The column that answers the owner's question is the **last** to drop, so
+         "who is working" survives even on a narrow screen */
       key: 'status',
       header: '',
       align: 'right',
@@ -187,7 +188,7 @@ export function TeamRoster({
         }
       />
 
-      {/* ⭐ এক লাইনে দলের অবস্থা — কার্ড গোনার আগেই উত্তর */}
+      {/* The team's state on one line: the answer comes before counting cards */}
       <CountsStrip
         total={rows.length}
         working={workingCount}
@@ -207,9 +208,9 @@ export function TeamRoster({
                 Not working · {restingCount}
               </div>
               {/*
-                ⚠️ এই বাক্যটা সাজসজ্জা নয়। এটা না থাকলে নিচের ধূসর সারিগুলো
-                   একটা অভিযোগের তালিকার মতো পড়ত — অথচ PC বন্ধ করে বাড়ি
-                   যাওয়াটাই স্বাভাবিক, আর তাতে ঠিক করার মতো কিছুই নেই।
+                Careful: this sentence is not decoration. Without it the grey rows
+                   below would read like a list of accusations, when switching off the
+                   PC and going home is normal and there is nothing to fix.
               */}
               <div className="text-[12px] text-ink-3">
                 Off the clock is normal — the agent is healthy, nothing to fix.
@@ -228,8 +229,8 @@ export function TeamRoster({
       <StatusLegend />
 
       {/*
-        ⭐ `/live` কোনো `caveat` ফিল্ড পাঠায় না, কিন্তু শর্তটা সত্যি —
-           সেখানে worked সেকেন্ড **যোগফল**, UNION নয়।
+        `/live` sends no `caveat` field, but the condition is true: there, worked
+           seconds are a **sum**, not a UNION.
       */}
       <Caveat>
         When one person runs more than one PC at the same time, that stretch is
@@ -237,7 +238,7 @@ export function TeamRoster({
         15 minutes raises its own alert.
       </Caveat>
 
-      {/* ⚠️ ছবি আনতে না পারা পাতা ভেঙে যাওয়া নয় — তাই ছোট করে, আলাদা করে */}
+      {/* Failing to fetch images is not the page breaking, so it is small and separate */}
       {shots.error && !shots.data && (
         <p className="mt-2 text-xs text-ink-3">
           Screenshots couldn&rsquo;t be loaded — the Screen column stays empty.
@@ -257,13 +258,14 @@ export function TeamRoster({
 }
 
 /**
- * ⭐ দলের অবস্থা এক লাইনে — **শুধু যা সত্যিই জানা যায়**।
+ * The team's state on one line: **only what is genuinely known**.
  *
- * ⚠️⚠️ এখানে "Agents reporting 13/13" জাতীয় কিছু লেখা হয়নি, যদিও মকআপে
- * ছিল। `/live` ওই সংখ্যাটা দেয় না (`agent_down` ১৭ আগস্ট `LiveStatus`
- * থেকে উঠে গেছে, ওই খবর এখন Alerts-এ)। যা দেয় তা-ই লেখা: কে কাজ করছে,
- * আর কার এজেন্টই বসেনি/বন্ধ করা আছে। ⭐ না-জানা সংখ্যা আত্মবিশ্বাসের
- * সাথে ছাপাটাই এই কোডবেসের সবচেয়ে দামি ভুল ছিল।
+ * Careful: nothing like "Agents reporting 13/13" is written here, though the mockup
+ * had it. `/live` does not provide that number (`agent_down` was removed from
+ * `LiveStatus`; that information now lives in Alerts). It shows what it does
+ * provide: who is working, and whose agent is not installed or is switched off.
+ * Important: printing an unknown number with confidence was this codebase's most
+ * expensive mistake.
  */
 function CountsStrip({
   total,
@@ -294,8 +296,8 @@ function CountsStrip({
       <span>
         <span className="num font-medium text-ink-2">{total}</span> on the team
       </span>
-      {/* ⚠️ শূন্য হলে লাইনটাই নেই — "0 problems" লেখা মানে রোজ একটা
-          অ-খবরকে খবরের জায়গা দেওয়া */}
+      {/* Careful: at zero the line is absent; writing "0 problems" would give a
+          non-news item a place among the news every day */}
       {noAgent > 0 && (
         <>
           <span className="text-line">·</span>
@@ -310,20 +312,20 @@ function CountsStrip({
 }
 
 /**
- * আজকের ঘর — সংখ্যা, তার নিচে মিটার।
+ * Today's cell: the number, with the meter below it.
  *
- * ⚠️ টার্গেটটা **সার্ভারের `dailyTargetSec`**, "8h" নয় — ২৭ কর্মদিবসের
- *    মাসে সেটা নিজে থেকেই "7h 42m" দেখাবে, আর কর্মীভেদেও আলাদা।
+ * Careful: the target is the **server's `dailyTargetSec`**, not "8h"; in a
+ *    27-workday month it automatically shows "7h 42m", and it differs per employee.
  */
 function TodayCell({ card }: { card: LiveCard }) {
   const kind = meterKind(card);
   /**
-   * ⭐⭐ G130 — শর্তটা এখানে আর লেখা নেই (`roster.ts`-এর `dayDuty()`)।
+   * The condition is no longer written here (`dayDuty()` in `roster.ts`).
    *
-   * ⚠️⚠️ আগে এটা ছিল `todayIsWorkday && dailyTargetSec > 0`, আর
-   * `todayIsWorkday` **ব্যক্তিগত ছুটি চেনে না**। ফলে ছুটিতে থাকা কর্মীর
-   * ঘরে ফুটত "0h / 8h" আর একটা খালি মিটার — দেখতে হুবহু ফাঁকি দেওয়া
-   * মানুষের মতো, অথচ সংখ্যাগুলো তাঁকে অনেক আগেই ছাড় দিয়েছে।
+   * Careful: it used to be `todayIsWorkday && dailyTargetSec > 0`, and
+   * `todayIsWorkday` **does not know personal leave**. So the cell of someone on
+   * leave showed "0h / 8h" and an empty meter, looking exactly like someone
+   * slacking, though the numbers had excused them long ago.
    */
   const duty = dayDuty(card);
   const hasTarget = duty === 'target';
@@ -336,14 +338,14 @@ function TodayCell({ card }: { card: LiveCard }) {
             kind === 'counted' ? '' : 'text-ink-3'
           }`}
         >
-          {/* ⚠️ শূন্য আর অজানা — সংখ্যাতেও আলাদা, শুধু বারে নয় */}
+          {/* Careful: zero and unknown differ in the number too, not only in the bar */}
           {kind === 'unknown' ? '—' : formatDuration(card.todayWorkedSec)}
         </span>
         <span className="num text-[11px] text-ink-3">
           {/*
-            ⚠️ "day off" বলতে **গোটা অফিস বন্ধ** বোঝায়। ছুটিতে থাকা একজনের
-               বেলায় ওটা মিথ্যা, আর মিথ্যাটা তাঁর পক্ষেও নয় বিপক্ষেও নয় —
-               শুধু কারণটা ভুল বলে। তাই আলাদা কথা।
+            Careful: "day off" means the **whole office is closed**. For one person
+               on leave it is false, though not for or against them, just a wrong
+               reason. So it says something different.
           */}
           {hasTarget
             ? `/ ${targetText(card.dailyTargetSec)}`
@@ -366,15 +368,16 @@ function TodayCell({ card }: { card: LiveCard }) {
 }
 
 /**
- * ⚠️ মাসের বারে কোনো pace-দাগ **নেই**, ইচ্ছাকৃতভাবে — মাঝ-মাসের দাগ
- * প্রতিটা সারিকে একটা অভিযোগে বদলে দিত। মাস এখানে প্রেক্ষাপট, রায় নয়।
+ * Careful: the month bar deliberately has **no** pace marker; a mid-month marker
+ * would turn every row into an accusation. The month is context here, not a verdict.
  */
 function MonthCell({ card }: { card: LiveCard }) {
   /**
-   * ⚠️⚠️ একই সততার নিয়ম মাসের ঘরেও। এজেন্টই বসেনি এমন কর্মীর মাস
-   * `0m / 208h` লিখলে সেটা "এ মাসে কিছুই করেননি" বলে দাঁড়াত — অথচ তাঁকে
-   * মাপাই হয়নি। ⭐ তবে শর্তটা **সংখ্যার উপরেও**: এজেন্ট আজ সরানো হলেও
-   * মাসের আগের ঘণ্টাগুলো সত্যিই মাপা, তাই সেগুলো লুকোনো হয় না।
+   * Careful: the same honesty rule applies to the month cell. Writing `0m / 208h`
+   * for an employee whose agent was never installed would read "did nothing this
+   * month", though they were not measured. Important: the condition also covers
+   * **the number itself**: even if the agent was removed today, the month's earlier
+   * hours were genuinely measured, so they are not hidden.
    */
   const unknown = meterKind(card) === 'unknown' && card.monthWorkedSec === 0;
 
@@ -405,10 +408,10 @@ function MonthCell({ card }: { card: LiveCard }) {
 }
 
 /**
- * ৬৪×৪০ থাম্বনেইল — পড়ার জন্য নয়, **চিনে নেওয়ার** জন্য।
+ * 64x40 thumbnail: for **recognising**, not for reading.
  *
- * ⭐ ক্লিক করলে পুরো ছবি (`ShotLightbox`)। ⚠️ ছবি না থাকলে ফাঁকা গর্ত নয়,
- * একটা ছোট ড্যাশ-করা ঘর — "নেই" আর "লোড হয়নি" এক দেখানো চলবে না।
+ * Click for the full image (`ShotLightbox`). Careful: with no image it is not an
+ * empty hole but a small dashed box; "none" and "not loaded" must not look alike.
  */
 function ShotThumb({
   card,
@@ -445,7 +448,7 @@ function ShotThumb({
   );
 }
 
-/** পুরো ঘণ্টা হলে `8h`, নইলে `7h 42m` — সার্ভারের সংখ্যা থেকেই */
+/** `8h` for whole hours, otherwise `7h 42m`; straight from the server's number */
 function targetText(targetSec: number): string {
   return targetSec % 3600 === 0
     ? `${formatHours(targetSec, 0)}h`
@@ -453,10 +456,10 @@ function targetText(targetSec: number): string {
 }
 
 /**
- * ⚠️⚠️ heartbeat না থাকার **তিনটে আলাদা কারণ**, আর মালিকের করণীয়ও তিন
- * রকম। আগে তিনটেই "Never checked in" পড়ত — তাই একই সারিতে ১৬:৫০-এর
- * স্ক্রিনশট আর "কখনো সাড়া দেয়নি" পাশাপাশি বসত, যা নিজেই নিজেকে মিথ্যা
- * প্রমাণ করত (G88)।
+ * Careful: there are **three different reasons** for no heartbeat, and three
+ * different things for the owner to do. All three used to read "Never checked in", so
+ * the same row held a 16:50 screenshot next to "never responded", which
+ * contradicted itself (G88).
  */
 function heartbeatLabel(card: LiveCard): string {
   if (card.lastHeartbeatAt !== null) return formatAgo(card.lastHeartbeatAt);

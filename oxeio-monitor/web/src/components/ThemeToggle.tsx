@@ -1,36 +1,36 @@
 import { useCallback, useEffect, useState } from 'react';
 
 /**
- * লাইট/ডার্ক সুইচ।
+ * Light/dark switch.
  *
- * রংগুলো সব `index.css`-এর টোকেনে, `light-dark()`-এর ভেতরে। এই ফাইলের
- * একমাত্র কাজ `<html>`-এ `data-theme` বসানো — বাকিটা CSS নিজেই করে।
+ * All colors live in `index.css` tokens, inside `light-dark()`. This file's only
+ * job is to set `data-theme` on `<html>`; CSS does the rest.
  *
- * ⭐ **দুটো অবস্থা, তিনটে নয়।** আগে "কিছুই বাছা হয়নি" বলে তৃতীয় একটা
- * অবস্থা ছিল, আর তখন OS-কে অনুসরণ করা হতো। এখন **ডিফল্ট গাঢ়** (Midnight,
- * মালিকের বাছা), `prefers-color-scheme` ইচ্ছে করেই দেখা হয় না — একই অফিসের
- * দুজন যেন এক পর্দা দেখে। বাছাইটা `localStorage`-এ থাকে, তাই পরেরবারও
- * মনে থাকে।
+ * Two states, not three. There used to be a third, "nothing chosen", which
+ * followed the OS. Now the default is dark (Midnight, the owner's choice), and
+ * `prefers-color-scheme` is deliberately ignored so two people in the same office
+ * see the same screen. The choice is kept in `localStorage`, so it is remembered
+ * next time.
  *
- * ⚠️ OS অনুসরণ ফিরিয়ে আনতে হলে `index.css`-এর `color-scheme` আর নিচের
- *    ডিফল্ট — **দুটোই** বদলাতে হবে। একটা বদলালে JS-এর ভাবনা আর CSS-এর
- *    আঁকা দুই রকম হতো, আর `dark:` ক্লাসগুলো টোকেনের সাথে মিলত না।
+ * Careful: to bring back OS-following, both `color-scheme` in `index.css` and the
+ * default below must change. Changing only one would make JS think one thing and
+ * CSS draw another, and the `dark:` classes would not match the tokens.
  */
 
 export type Theme = 'light' | 'dark';
 
 const STORAGE_KEY = 'oxeio.theme';
 
-/** ⭐ কিছু বাছা না থাকলে যেটা — Midnight */
+/** What applies when nothing is chosen: Midnight. */
 const DEFAULT_THEME: Theme = 'dark';
 
 /**
- * ⚠️ `localStorage` ছুঁলেই throw করতে পারে (কড়া প্রাইভেসি সেটিং, কিছু
- *    কিয়স্ক প্রোফাইল)। থিম না পড়তে পারা অ্যাপ ভেঙে ফেলার মতো কারণ নয় —
- *    তখন ডিফল্টেই চলুক।
- * ⚠️ মানটা যাচাই করা হয়: কেউ হাতে `'banana'` বসিয়ে দিলে সেটা `<html>`-এ
- *    বসত আর `light-dark()` চুপচাপ ডিফল্টে ফিরে যেত, অথচ বোতামটা উল্টো
- *    ছবি দেখাত — দুটোয় দুই কথা।
+ * Careful: merely touching `localStorage` can throw (strict privacy settings, some
+ * kiosk profiles). Being unable to read the theme is no reason to break the app;
+ * run with the default then.
+ * Careful: the value is validated: if someone hand-set `'banana'`, it would land
+ * on `<html>` and `light-dark()` would silently fall back to the default, while
+ * the button would show the opposite picture; two different stories.
  */
 function readPreference(): Theme | null {
   try {
@@ -45,7 +45,7 @@ function writePreference(theme: Theme): void {
   try {
     localStorage.setItem(STORAGE_KEY, theme);
   } catch {
-    // পছন্দ জমল না — এই সেশনে কাজ করবে, পরেরবার আবার ডিফল্ট
+    // Preference not saved: it works for this session, the default returns next time
   }
 }
 
@@ -54,32 +54,33 @@ function stamp(theme: Theme): void {
 }
 
 /**
- * ⭐⚠️ মডিউল লোড হওয়ার সাথে সাথেই একবার — React রেন্ডারের **আগে**।
+ * Once, as soon as the module loads, before React renders.
  *
- * `index.html`-এ কোনো স্ক্রিপ্ট বসানো যায়নি (ফাইলটা এই কাজের আওতার
- * বাইরে), তাই সবচেয়ে আগের যে বিন্দুতে পৌঁছানো যায় সেটা এখানে — বান্ডল
- * চালু হওয়ার মুহূর্ত, `<div id="root">` তখনো খালি। ফলে "আমি লাইট বেছেছি"
- * ব্যবহারকারী এক ঝলক গাঢ় পর্দা দেখেন না।
+ * No script could be placed in `index.html` (the file is outside the scope of this
+ * work), so the earliest reachable point is here: the moment the bundle starts,
+ * when `<div id="root">` is still empty. So a user who chose light does not see a
+ * flash of the dark screen.
  *
- * ডিফল্টে থাকা ব্যবহারকারীর জন্য এই স্ট্যাম্পটা লাগতই না — `index.css`-এর
- * `color-scheme: dark` HTML পার্স হওয়ার সময়েই ঠিক রংটা আঁকে, আর `dark:`
- * ভ্যারিয়েন্টটাও "লাইট নয়" ধরে নেয়। তবু বসানো হয়, যাতে DOM দেখে সবসময়
- * বলা যায় এখন কোন থিম চলছে।
+ * For a user on the default this stamp is not needed: `color-scheme: dark` in
+ * `index.css` already draws the right color while the HTML is parsed, and the
+ * `dark:` variant treats "not light" as dark. It is still applied so the DOM
+ * always shows which theme is running.
  */
 if (typeof document !== 'undefined') {
   stamp(readPreference() ?? DEFAULT_THEME);
 }
 
 export interface ThemeState {
-  /** এই মুহূর্তে যেটা চলছে */
+  /** The theme currently in effect. */
   theme: Theme;
   toggle: () => void;
 }
 
 /**
- * ⚠️ এখন একমাত্র ব্যবহারকারী `ThemeToggle` নিজে। দ্বিতীয় কেউ ডাকলে
- *    দুটো আলাদা `useState` হবে আর একটায় টগল করলে অন্যটা জানত না —
- *    তখন এটাকে context-এ তুলতে হবে (`stamp` করা DOM-ই সত্য, state নয়)।
+ * Careful: at present the only user is `ThemeToggle` itself. If a second caller
+ * appeared there would be two separate `useState`s and toggling one would not
+ * inform the other; then this must move to context (the stamped DOM is the truth,
+ * not state).
  */
 export function useTheme(): ThemeState {
   const [theme, setTheme] = useState<Theme>(
@@ -87,11 +88,11 @@ export function useTheme(): ThemeState {
   );
 
   /**
-   * ⚠️ অন্য ট্যাবে থিম বদলালে এই ট্যাবটাও সাথে বদলায়। না রাখলে দুটো ট্যাব
-   *    দুই থিমে বসে থাকত, আর ফিরে এসে মনে হতো সুইচটা কাজ করেনি।
-   *    (`storage` ইভেন্ট শুধু *অন্য* ট্যাব থেকে আসে, নিজের লেখায় নয়।)
-   * ⚠️ `e.key === null` মানে কেউ পুরো `localStorage` মুছেছে — তখনও
-   *    আবার পড়া হয়, অর্থাৎ ডিফল্টে ফিরে যায়।
+   * Careful: when the theme changes in another tab, this tab changes too. Without
+   * it two tabs would sit in two themes and, coming back, the switch would seem not
+   * to work. (The `storage` event only arrives from other tabs, not from our own writes.)
+   * Careful: `e.key === null` means someone cleared the whole `localStorage`; it is
+   * read again then too, i.e. it returns to the default.
    */
   useEffect(() => {
     const onStorage = (e: StorageEvent): void => {
@@ -118,11 +119,11 @@ export function useTheme(): ThemeState {
 }
 
 /**
- * হেডারের বোতাম।
+ * Header button.
  *
- * ⚠️ হেডারের ফিল্ড দুই থিমেই গাঢ় (`--color-chrome`), তাই এখানকার রং
- *    ink/paper টোকেন নয় — লগআউট বোতামের মতো সাদার অস্বচ্ছতা। টোকেন
- *    বসালে ডার্কে প্রায়-সাদা লেখা প্রায়-সাদা হয়ে মিলিয়ে যেত।
+ * Careful: the header field is dark in both themes (`--color-chrome`), so the
+ * colors here are not ink/paper tokens but white with opacity, like the logout
+ * button. With tokens, near-white text in dark would fade into near-white.
  */
 export function ThemeToggle() {
   const { theme, toggle } = useTheme();
@@ -143,7 +144,7 @@ export function ThemeToggle() {
   );
 }
 
-/* ছবিদুটো `currentColor` ব্যবহার করে — hover-এ বোতামের সাথেই উজ্জ্বল হয় */
+/* The icons use `currentColor`, so they brighten with the button on hover */
 
 function MoonIcon() {
   return (

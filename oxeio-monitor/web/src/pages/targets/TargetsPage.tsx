@@ -16,18 +16,18 @@ import { Chip, Notice, ServerError, useMutation } from '../../components/ui';
 import { Table } from '../../components/Table';
 
 /**
- * **ডিজাইন-টার্গেট জমা** *(২২ আগস্ট ২০২৬)* — সাইডবারে "Add Design Targets"।
+ * **Submitting design targets**: "Add Design Targets" in the sidebar.
  *
- * ⚠️ তালিকাটা **আলাদা পাতায়** *(২৩ আগস্ট, মালিকের সিদ্ধান্ত)*: জমা
- * দেওয়া আর ঘেঁটে দেখা দুটো আলাদা কাজ, আর এক পাতায় থাকলে ৫০০ লাইন
- * পেস্ট করতে গিয়ে প্রতিবার তালিকাটাও লোড হতো।
+ * Careful: the list is on a **separate page** (owner's decision): submitting
+ * and browsing are two different jobs, and on one page every paste of 500 lines
+ * would also load the list.
  *
- * ⭐ গবেষকেরা রোজ ~৫০০টা Amazon URL জমা দেন; সকাল ৮টায় ডিজাইনারদের
- * মধ্যে র‍্যান্ডম বণ্টন হয়।
+ * Researchers submit about 500 Amazon URLs a day; at 8 am they are randomly
+ * distributed among the designers.
  *
- * ⚠️⚠️ **পাতাটা সাইডবারে, Settings-এ নয়** *(মালিকের সিদ্ধান্ত)* — গবেষক
- * এখানে **রোজ** আসবেন, আর Settings একবার বসিয়ে ভুলে যাওয়ার জায়গা।
- * ঠিক এই কারণেই Deposits-ও সাইডবারে গেছে (09 § ৩ঃ)।
+ * Important: **the page is in the sidebar, not in Settings** (owner's
+ * decision): researchers will come here **every day**, and Settings is a
+ * set-and-forget place. For the same reason Deposits is in the sidebar too (09 § 3).
  */
 export function TargetsPage() {
   const { user } = useAuth();
@@ -58,32 +58,32 @@ export function TargetsPage() {
             {s && (
               <>
                 {/*
-                  ⭐⭐ **ক্রমটাই এখানে আসল কথা** *(২৩ আগস্ট ২০২৬)*।
-                  আগে চারটে টাইল পাশাপাশি ছিল, আর তাতে বোঝা যেত না কাজটা
-                  কোন পথে এগোয়। ⚠️ এখন বাঁ থেকে ডানে পড়লেই ফুটোটা দেখা
-                  যায়: ৩০ দেওয়া → ২৫ ডিজাইন → ২০ আপলোড → ১২ লাইভ।
+                  **The order is the point here.** The four tiles used to sit
+                  side by side, so you could not see which way the work moves.
+                  Now, read left to right, the leak shows up:
+                  30 given → 25 designed → 20 uploaded → 12 live.
                 */}
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                   <Tile n={s.pool} label="In the pool" tone="text-ink" />
                   <Tile n={s.assigned} label="In hand" tone="text-data" />
                   <Tile n={s.done} label="Designed" tone="text-ink" />
                   <Tile n={s.uploaded} label="Uploaded" tone="text-data" />
-                  {/* ⭐ শেষ ধাপটাই একমাত্র যেটা টাকা আনে — তাই সবুজ */}
+                  {/* The last step is the only one that brings in money, so it is green */}
                   <Tile n={s.live} label="Live on Amazon" tone="text-ok" />
                 </div>
 
                 {/*
-                  ⚠️ "বাদ দেওয়া" লুকোনো হয় না — সংখ্যাটা বাড়তে থাকলে
-                     বোঝা যায় সংগ্রহের মান পড়ছে, আর সেটা জানা দরকার।
-                  ⭐ তবে পাইপলাইনের বাইরে, কারণ এটা ধাপ নয় — বেরিয়ে যাওয়া।
+                  Careful: "dropped" is not hidden: if the number keeps growing
+                     it shows the quality of sourcing is falling, and that needs to be known.
+                  It sits outside the pipeline, though, because it is not a step: it is an exit.
                 */}
                 {/*
-                  ⭐⭐ **দুটো সংখ্যা, আর ওদের মানে এক নয়** *(২৯ আগস্ট ২০২৬)*।
-                     `skipped` = ডিজাইনার করতে চাননি (মানুষের সিদ্ধান্ত),
-                     `deleted` = Amazon-এ পাতাটাই নেই (জগতের ঘটনা)।
-                  ⚠️⚠️ এক করে দেখালে সংখ্যাটা বাড়তে দেখে কেউ বুঝত না দোষটা
-                     কার — সংগ্রহের, নাকি ডিজাইনারের। ⭐ আর দ্বিতীয়টাই
-                     গবেষকের তালিকা কতটা বাসি তার একমাত্র মাপ।
+                  **Two numbers, and they do not mean the same.**
+                     `skipped` = the designer chose not to do it (a human decision),
+                     `deleted` = the page does not exist on Amazon (a fact of the world).
+                  Careful: shown as one, someone seeing the number grow could not tell
+                     whose fault it is: sourcing or the designer. And the second
+                     is the only measure of how stale the researcher's list is.
                 */}
                 <div className="mt-3 text-[12px] text-ink-3">
                   Dropped along the way:{' '}
@@ -125,8 +125,8 @@ export function TargetsPage() {
                   submit.run(async () => {
                     const res = await addTargets(text);
                     setResult(res);
-                    // ⚠️ বাক্সটা খালি করা হয় **সফল হলে তবেই** — নইলে
-                    //    নেটওয়ার্ক ভাঙলে ৫০০ লাইন হারিয়ে যেত
+                    // Careful: the box is cleared **only on success**; otherwise a
+                    //    network failure would lose the 500 lines
                     setText('');
                     stats.reload();
                   })
@@ -136,8 +136,8 @@ export function TargetsPage() {
               </Button>
 
               {/*
-                ⚠️ owner/manager-only: বণ্টন একবার হয়ে গেলে ফেরানো যায় না
-                   (কাজের নম্বর বসে যায়), তাই বোতামটা সবার হাতে নয়।
+                Careful: owner/manager only: once distribution has happened it cannot be
+                   undone (job numbers get assigned), so the button is not for everyone.
               */}
               {canDistribute && (
                 <Button
@@ -177,18 +177,18 @@ function Tile({ n, label, tone }: { n: number; label: string; tone: string }) {
 }
 
 /**
- * ⭐⭐ **যা নেওয়া গেল না, তার পুরো হিসাব।**
+ * **The full account of what could not be taken.**
  *
- * ⚠️⚠️ ৫০০-র মধ্যে ৬টা বাদ পড়লে গবেষকের জানা দরকার **কোন ৬টা** — লাইন
- * নম্বর, যা লেখা ছিল, আর কারণ। না দেখালে ওই ছটা লিঙ্ক চিরতরে হারাত,
- * আর কেউ বুঝতেই পারত না কিছু হারিয়েছে।
+ * Careful: if 6 of 500 are dropped, the researcher needs to know **which 6**:
+ * line number, what was written, and the reason. Without it those six links
+ * would be lost for good and nobody would realise anything was lost.
  */
 function BulkOutcome({ result }: { result: BulkResult }) {
   return (
     <div className="space-y-3">
       <div className="rounded-lg border border-ok/40 bg-ok-bg px-3 py-2.5 text-[13.5px] text-ok-ink">
         <span className="num font-semibold">{result.added}</span> added ·{' '}
-        {/* ⚠️ "আগে থেকেই ছিল" ভুল নয়, কিন্তু সংখ্যাটা লুকোনোও নয় */}
+        {/* Careful: "already existed" is not an error, but the count is not hidden either */}
         <span className="num font-semibold">{result.alreadyKnown}</span> already
         known · <span className="num font-semibold">{result.rejectedTotal}</span>{' '}
         could not be used — pool is now{' '}
@@ -196,10 +196,10 @@ function BulkOutcome({ result }: { result: BulkResult }) {
       </div>
 
       {/*
-        ⚠️⚠️ ছাদ তোলার পর ৪৫,০০০ লাইন পেস্ট করা সম্ভব। ভুল ফাইল পেস্ট
-        করলে সবগুলোই বাদ পড়ত, আর গোটা তালিকা আঁকতে গেলে ব্রাউজার জমে
-        যেত। ⭐ তাই সার্ভার ২০০টা পাঠায়, কিন্তু **সংখ্যাটা সত্যি থাকে** —
-        আর কতগুলো দেখানো হচ্ছে না সেটাও লেখা হয়, নীরবে কাটা হয় না।
+        Careful: since the cap was raised, pasting 45,000 lines is possible. Pasting
+        the wrong file would reject all of them, and drawing the whole list would
+        freeze the browser. So the server sends 200, but **the count stays true**,
+        and how many are not shown is also written; nothing is cut silently.
       */}
       {result.rejectedTotal > result.rejected.length && (
         <div className="text-[12px] text-ink-3">
@@ -226,8 +226,8 @@ function BulkOutcome({ result }: { result: BulkResult }) {
               key: 'text',
               header: 'What was pasted',
               render: (r) => (
-                // ⚠️ `truncate` নয় — লিঙ্কটা পুরো দেখা দরকার, নইলে
-                //    গবেষক মিলিয়ে নিতে পারতেন না কোনটা
+                // Careful: not `truncate`: the link must be fully visible, otherwise
+                //    the researcher could not match which one it was
                 <span className="num break-all text-[12px] text-ink-2">{r.text}</span>
               ),
             },

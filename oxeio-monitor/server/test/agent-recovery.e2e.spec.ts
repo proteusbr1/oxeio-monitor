@@ -12,23 +12,23 @@ import {
 } from './setup/harness';
 
 /**
- * **#১ — ফিরে এলে agent_down নিজে বন্ধ (auto-close)।**
+ * #1: agent_down closes itself when the agent comes back (auto-close).
  *
- * ⚠️⚠️ মালিকের অভিযোগ থেকে: সকালে উঠে ১১টা "Agent down" warning — সবই
- * রাতে-বন্ধ-হয়ে আবার-চালু-হওয়া PC-র বাসি alert (goodbye ইভেন্ট সার্ভারে
- * পৌঁছায়নি, G136)।
+ * From the owner's complaint: waking up to 11 "Agent down" warnings, all
+ * stale alerts from PCs that were switched off at night and started again
+ * (the goodbye event never reached the server, G136).
  *
- * ⭐ এই ফাইল পাহারা দেয়: এজেন্ট আবার ডেটা পাঠাতে শুরু করলে তার খোলা
- * agent_down `resolvedAt` পায়, `openCount` কমে — কিন্তু সারিটা **ডিলিট হয়
- * না**, "Show all"-এ থেকে যায়, আর মানুষ যে acknowledge করেনি সেটাও স্পষ্ট
- * থাকে (`acknowledgedAt` অটুট)।
+ * This file guards: when the agent starts sending data again, its open
+ * agent_down gets `resolvedAt` and `openCount` drops, but the row is not
+ * deleted. It stays in "Show all", and it stays clear that no human
+ * acknowledged it (`acknowledgedAt` intact).
  */
 let h: Harness;
 let check: AgentDownCheck;
 let alerts: AlertsService;
 let employeeId: number;
 
-/** status:'active' + একটা নির্দিষ্ট lastSeenAt নিয়ে ডিভাইস; কোনো clean-stop ইভেন্ট নেই */
+/** A device with status 'active' and a fixed lastSeenAt; no clean-stop event */
 async function seedDevice(
   lastSeenAt: Date,
   hostname = 'PC-SILENT',
@@ -48,23 +48,25 @@ async function seedDevice(
 }
 
 /**
- * ⭐⭐ **স্থির ঘড়ি — আর এটাই এই ফাইলের সবচেয়ে জরুরি লাইন।**
+ * A fixed clock: the most important line in this file.
  *
- * ⚠️⚠️ এখানে আগে `new Date()` ছিল, অর্থাৎ CI যখন চলত তখনকার আসল সময়।
- * কিন্তু `AgentDownCheck.runOnce()` অ্যালার্ট তোলে **কেবল অফিস-সময়ে**
- * (`isAgentWatchOpen` — ৯:০০ + ১৫ মিনিট ছাড়)। ফলে দিনে CI সবুজ, রাতে
- * লাল — ৪ সেপ্টেম্বর রাত ১১:১৯-এ ঠিক তাই হয়েছে, পাঁচটা টেস্ট একসাথে।
+ * This used to be `new Date()`, i.e. the real time when CI ran. But
+ * `AgentDownCheck.runOnce()` raises alerts only during office hours
+ * (`isAgentWatchOpen`: 9:00 plus a 15-minute grace). So CI was green by day
+ * and red at night; on 4 September at 23:19 exactly that happened, five tests
+ * at once.
  *
- * ⭐ ব্যর্থতাটা **কোডের নয়, টেস্টের** — অ্যালার্ট চাপা দেওয়াটাই সঠিক
- * আচরণ (২৩ আগস্টে ছটা মিথ্যা অ্যালার্টের পর ওটা বসানো হয়েছিল)। তাই
- * নিয়মটা শিথিল না করে **টেস্টকে একটা জানা মুহূর্তে দাঁড় করানো হলো**।
+ * The failure was in the test, not the code: suppressing the alert is the
+ * correct behaviour (it was added after six false alerts on 23 August). So
+ * instead of loosening the rule, the test is pinned to a known moment.
  *
- * ⚠️ বুধবার বাছা হয়েছে ইচ্ছাকৃতভাবে — শুক্রবার সাপ্তাহিক ছুটি, তখন
- * `isOfficeOpen()` এমনিতেই বন্ধ বলত আর টেস্ট আবার সময়-নির্ভর হতো।
+ * Wednesday was chosen on purpose: Friday is the weekly holiday, when
+ * `isOfficeOpen()` would say closed anyway and the test would depend on time
+ * again.
  */
-const NOW = new Date('2026-09-02T05:00:00.000Z'); // বুধবার, ঢাকার ১১:০০
+const NOW = new Date('2026-09-02T05:00:00.000Z'); // Wednesday, 11:00 in Dhaka
 
-/** `NOW`-এর সাপেক্ষে — ⚠️ `harness`-এর `minutesAgo` আসল ঘড়ি ধরে, তাই নয় */
+/** Relative to `NOW`; note `harness`'s `minutesAgo` uses the real clock, so not that */
 const before = (minutes: number): Date =>
   new Date(NOW.getTime() - minutes * 60_000);
 
@@ -73,8 +75,8 @@ const agentDownRows = () =>
 
 beforeAll(async () => {
   h = await createHarness();
-  // ⚠️ শিডিউলার NODE_ENV=test-এ বন্ধ (alerts.scheduler.ts) — runOnce/
-  //    resolveReturned নিজে হাতে ডাকি, নইলে টিক মাঝপথে ফিক্সচার নাড়াত।
+  // The scheduler is off under NODE_ENV=test (alerts.scheduler.ts); we call
+  // runOnce/resolveReturned by hand, or a tick would move fixtures mid-test.
   check = h.app.get(AgentDownCheck);
   alerts = h.app.get(AlertsService);
 });
@@ -93,20 +95,19 @@ beforeEach(async () => {
 });
 
 /**
- * ⭐⭐⭐ **ছুটিতে থাকা কর্মীর PC চুপ থাকলে অ্যালার্ট নয়** *(৬ সেপ্টেম্বর ২০২৬,
- * G157)*।
+ * No alert when a PC of someone on leave is silent (G157).
  *
- * ⚠️⚠️ **যে ফাঁকটা এই describe-টা পাহারা দেয়:** ছুটির খাতা এসেছে R2/G130-তে
- * (৫ সেপ্টেম্বর), কিন্তু **কোনো অ্যালার্ট-পরীক্ষা কোনোদিন `leaves` টেবিলটা
- * পড়েনি**। ফলে মালিকের নিজের অনুমোদন করা ছুটির দিনেও *"এজেন্ট চুপ"* খবর
- * যেত — অর্থাৎ সিস্টেম এমন কিছু নিয়ে নালিশ করত যেটা সে নিজেই জানত।
+ * The gap this describe guards: the leave register arrived in R2/G130 (5
+ * September), but no alert test ever read the `leaves` table. So even on a
+ * leave day the owner himself approved, the "agent silent" alert went out,
+ * i.e. the system complained about something it knew about itself.
  *
- * ⚠️ মাঠে মেপে দেখা: মাত্র **৩টা** ছুটির দিনে **১১টা** মিথ্যা অ্যালার্ট
- * (৮টা `agent_down` + ৩টা `no_activity_today`)।
+ * Measured in the field: on just 3 leave days, 11 false alerts (8
+ * `agent_down` plus 3 `no_activity_today`).
  */
-describe('G157 — ছুটির দিনে agent_down নয়', () => {
-  /** ⭐⭐⭐ এই describe-এর মূল টেস্ট */
-  it('⭐ ছুটিতে থাকলে চুপ PC-তেও অ্যালার্ট ওঠে না', async () => {
+describe('G157: no agent_down on a leave day', () => {
+  /** The main test of this describe */
+  it('no alert even for a silent PC when on leave', async () => {
     await seedDevice(before(30));
     await h.prisma.leave.create({
       data: { employeeId, leaveDate: workDateOf(NOW), createdBy: 'test' },
@@ -116,21 +117,21 @@ describe('G157 — ছুটির দিনে agent_down নয়', () => {
   });
 
   /**
-   * ⚠️⚠️ **দ্বিতীয় টেস্টটাই আসল পাহারা** — প্রথমটা একা থাকলে চেকটা
-   * সবসময় ০ ফেরত দিয়েও সবুজ থাকত।
+   * The second test is the real guard: on its own, the first would stay
+   * green even if the check always returned 0.
    */
-  it('⭐ ছুটি না থাকলে আগের মতোই অ্যালার্ট ওঠে', async () => {
+  it('without leave the alert is raised as before', async () => {
     await seedDevice(before(30));
 
     expect(await check.runOnce(NOW)).toBe(1);
   });
 
   /**
-   * ⚠️ **অন্য কারো ছুটি এই PC-র পাহারা বন্ধ করে না** — ছুটি একজনের
-   *    ব্যাপার, অফিসের নয়। মিশিয়ে ফেললে একজনের ছুটি গোটা দলের পাহারা
-   *    নিভিয়ে দিত।
+   * Someone else's leave does not switch off this PC's watch: leave is one
+   * person's matter, not the office's. Mixing them would let one person's
+   * leave turn off the whole team's watch.
    */
-  it('⭐ অন্য কর্মীর ছুটিতে পাহারা অটুট', async () => {
+  it('another employee\'s leave leaves the watch intact', async () => {
     const other = await h.prisma.employee.create({
       data: { empCode: 'OX-LV2', fullName: 'Onno Karmi' },
     });
@@ -143,9 +144,9 @@ describe('G157 — ছুটির দিনে agent_down নয়', () => {
   });
 });
 
-describe('agent_down — ফিরে এলে নিজে বন্ধ', () => {
-  /** ⭐⭐ মূল দাবি: চুপ → alert ওঠে; ফিরে এলে সেটাই resolve হয়। */
-  it('চুপ ডিভাইসে alert ওঠে, ফিরে এলে সেটাই resolve হয়', async () => {
+describe('agent_down: closes itself on return', () => {
+  /** The main claim: silent, an alert is raised; on return it is resolved. */
+  it('a silent device raises an alert, and returning resolves it', async () => {
     const now = NOW;
     const deviceId = await seedDevice(before(30));
 
@@ -154,7 +155,7 @@ describe('agent_down — ফিরে এলে নিজে বন্ধ', () =
     expect(raised.resolvedAt).toBeNull();
     expect((await alerts.list({})).openCount).toBe(1);
 
-    // এজেন্ট আবার হাজিরা দিলো (lastSeenAt সাম্প্রতিক)
+    // The agent checked in again (lastSeenAt is recent)
     await h.prisma.device.update({
       where: { id: deviceId },
       data: { lastSeenAt: before(1) },
@@ -165,11 +166,11 @@ describe('agent_down — ফিরে এলে নিজে বন্ধ', () =
     const [after] = await agentDownRows();
     expect(after.resolvedAt).not.toBeNull();
     expect(after.resolvedReason).toBe('agent returned');
-    // ⚠️ মানুষ দেখেনি — acknowledgedAt অটুট, দুটো আলাদা ঘটনা
+    // Nobody has seen it: acknowledgedAt is intact, the two are separate events
     expect(after.acknowledgedAt).toBeNull();
   });
 
-  it('resolve হলে openCount কমে, কিন্তু "Show all"-এ ইতিহাসে থাকে', async () => {
+  it('on resolve openCount drops, but it stays in history under "Show all"', async () => {
     const now = NOW;
     const deviceId = await seedDevice(before(30));
     await check.runOnce(now);
@@ -182,26 +183,26 @@ describe('agent_down — ফিরে এলে নিজে বন্ধ', () =
 
     const open = await alerts.list({});
     expect(open.openCount).toBe(0);
-    expect(open.rows).toHaveLength(0); // ডিফল্ট (open) তালিকায় নেই
+    expect(open.rows).toHaveLength(0); // not in the default (open) list
 
     const all = await alerts.list({ status: 'all' });
-    expect(all.rows).toHaveLength(1); // কিন্তু ইতিহাসে আছে
+    expect(all.rows).toHaveLength(1); // but it is in history
   });
 
-  it('এখনো চুপ থাকা ডিভাইসের alert বন্ধ হয় না', async () => {
+  it('the alert of a device that is still silent is not closed', async () => {
     const now = NOW;
     await seedDevice(before(30));
     await check.runOnce(now);
 
-    // lastSeenAt বদলায়নি — এখনো চুপ
+    // lastSeenAt has not changed: still silent
     expect(await check.resolveReturned(now)).toBe(0);
     const [row] = await agentDownRows();
     expect(row.resolvedAt).toBeNull();
     expect((await alerts.list({})).openCount).toBe(1);
   });
 
-  /** ⚠️ প্রতি ৫-মিনিট টিকে চলে — দ্বিতীয়বার যেন reason/সময় নতুন করে না বসে */
-  it('idempotent — দ্বিতীয়বার resolveReturned আর কিছু ছোঁয় না', async () => {
+  /** It runs on every 5-minute tick, so the reason/time must not be set again the second time */
+  it('idempotent: a second resolveReturned touches nothing more', async () => {
     const now = NOW;
     const deviceId = await seedDevice(before(30));
     await check.runOnce(now);
@@ -219,8 +220,8 @@ describe('agent_down — ফিরে এলে নিজে বন্ধ', () =
     expect(second.resolvedAt?.getTime()).toBe(firstAt?.getTime());
   });
 
-  /** ⚠️ revoke করা ডিভাইসের চুপ থাকাটাই উদ্দেশ্য — এই পথে বন্ধ নয় */
-  it('revoke করা ডিভাইসের alert এই পথে বন্ধ হয় না', async () => {
+  /** A revoked device is meant to be silent, so it is not closed this way */
+  it('the alert of a revoked device is not closed this way', async () => {
     const now = NOW;
     const deviceId = await seedDevice(before(30));
     await check.runOnce(now);

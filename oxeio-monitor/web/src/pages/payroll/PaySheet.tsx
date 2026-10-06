@@ -14,19 +14,19 @@ import {
 } from '../../lib/format';
 
 /**
- * F03 — মাসিক পে-রোল ঘণ্টা শিট। **owner-only**।
+ * Monthly payroll hours sheet. **Owner-only**.
  *
- * ⭐⚠️ এই কম্পোনেন্টটা ম্যানেজারের পর্দায় কখনো render হয় না — `ReportsPage`
- *    ট্যাবটাই বানায় না (`user.role === 'owner'` না হলে)। ৪০৩ দেখিয়ে আটকানো
- *    যথেষ্ট নয়: তাহলে "পে-রোল" নামের একটা ট্যাব দেখা যেত, আর **বেতনের
- *    ব্যবস্থাটা যে আছে সেটাই** জানা হয়ে যেত (§ ৪.৩, ADR-023)।
+ * Important: this component never renders on a manager's screen, because `ReportsPage`
+ *    does not build the tab unless `user.role === 'owner'`. Showing a 403 is not
+ *    enough: a tab called "Payroll" would be visible, revealing **that a salary
+ *    system exists at all** (section 4.3, ADR-023).
  *
- * ⚠️ প্রতিটা কল সার্ভারে audit-এ লেখা হয় (`payroll_view`) — তাই অকারণে
- *    বারবার fetch করা হয় না, আর `useApi` মাস বদলালেই কেবল আবার আনে।
+ * Careful: every call is written to the server's audit log (`payroll_view`), so it
+ *    does not fetch needlessly, and `useApi` refetches only when the month changes.
  *
- * ⚠️ সব ঘণ্টা ও টাকা **স্ট্রিং** (Decimal)। `Number()` করে যোগ-বিয়োগ করা
- *    হয় না — `formatTaka()` শুধু কমা বসায়, নইলে ১৩০০০.১০ পর্দায়
- *    ১৩০০০.০৯৯৯… হয়ে যেত।
+ * Careful: all hours and money are **strings** (Decimal). Never add or subtract
+ *    them via `Number()`; `formatTaka()` only inserts commas, otherwise 13000.10
+ *    would show as 13000.0999… on screen.
  */
 /**
  * The sheet itself, from a result someone else loaded — the Payroll page
@@ -75,11 +75,12 @@ export function PayrollSheetView({
       header: 'Target',
       align: 'right',
       /**
-       * ⭐ **G37** — টার্গেট এখন **তার কর্মদিবস × ৮**, ফ্ল্যাট ২০৮ নয়।
+       * Target is now **the employee's workdays x 8**, not a flat 208.
        *
-       * ⚠️ পুরো মাস না থাকলে নিচে দিনের হিসাবটা দেখানো হয় (`১৩ / ২৭ দিন`)।
-       * ছাড়া দিলে owner দেখতেন একজনের টার্গেট ২১৬ঘ আর আরেকজনের ১০৪ঘ,
-       * কোনো ব্যাখ্যা ছাড়াই — আর বেতনের ঘরেও কম সংখ্যা, কারণ অদৃশ্য।
+       * Careful: when the employee was not there for the whole month, the day count
+       * is shown below (`13 / 27 days`). Without it the owner would see one person's
+       * target as 216h and another's as 104h with no explanation, and the lower
+       * number in the pay column would have an invisible cause.
        */
       render: (row) => (
         <div className="flex flex-col items-end">
@@ -127,9 +128,9 @@ export function PayrollSheetView({
     },
     {
       /**
-       * ⚠️⚠️ এই কলামে **কেবল ঘণ্টা** — কোনো টাকা নয়। OT-র হার নির্ধারিত
-       *    হয়নি (O4), তাই সার্ভারও কোনো অঙ্ক পাঠায় না। এখানে নিজে থেকে
-       *    "× ১.৫" বসিয়ে দিলে সেটাই নীরবে কোম্পানির নীতি হয়ে যেত।
+       * Careful: **hours only** in this column, no money. The OT rate has not been
+       *    set (O4), so the server sends no amount either. Hardcoding "x 1.5" here
+       *    would silently become company policy.
        */
       key: 'overtime',
       header: 'Overtime',
@@ -145,8 +146,8 @@ export function PayrollSheetView({
       key: 'salary',
       header: 'Monthly salary',
       align: 'right',
-      // ⚠️ `null` = বেতন **বসানো নেই**, শূন্য নয়। `—` লিখলে দুটো এক দেখাত,
-      //    আর তখন কারো বেতন বসাতে ভুলে যাওয়া ধরাই পড়ত না।
+      // Careful: `null` = salary **not set**, not zero. Rendering `—` for both would
+      //    look the same, and a forgotten salary entry would never be noticed.
       render: (row) =>
         row.monthlySalary === null ? (
           <span className="text-[11.5px] text-ink-3">Not set</span>
@@ -183,10 +184,10 @@ export function PayrollSheetView({
     },
     {
       /**
-       * ⭐⭐ **R21 — এই মাসের জামানতের কিস্তি**।
+       * This month's deposit instalment.
        *
-       * ⚠️ `—` মানে এই মাসে কিস্তি নেই (খাতা শুরু হয়নি, বা নিষ্পত্তি
-       *    হয়ে গেছে)। ০ নয়, কারণ ৳০-র কিস্তি বলে কিছু নেই (G145)।
+       * Careful: `—` means no instalment this month (the ledger has not started or is
+       *    settled). It is not 0, because an instalment of ৳0 does not exist.
        */
       key: 'deposit',
       header: 'Deposit',
@@ -202,14 +203,14 @@ export function PayrollSheetView({
     },
     {
       /**
-       * ⭐⭐⭐ **হাতে যা যাবে** — শিটের শেষ কথা, তাই এটাই মোটা করে লেখা।
+       * **Take-home pay**: the last word of the sheet, so it is bold.
        *
-       * ⚠️⚠️ **এই কলামটা ছ-দিন আগেও ছিল না**, অথচ সার্ভার সংখ্যাটা
-       * পাঠাচ্ছিল আর নিচের সতর্কবার্তাটা এর নাম ধরেই কথা বলত
-       * (*"Net payable stops at zero"*)। ফলে মালিক টাকা দিতেন
-       * `Payable` দেখে — জামানত না কেটেই।
+       * Careful: **this column did not exist until recently**, yet the server was
+       * already sending the number and the warning below referred to it by name
+       * (*"Net payable stops at zero"*). So the owner paid from `Payable`, without
+       * deducting the deposit.
        *
-       * ⚠️ `null` = বেতন বসানো নেই, তাই নিট বের করা যায় না। শূন্য নয়।
+       * Careful: `null` = salary not set, so net cannot be computed. Not zero.
        */
       key: 'net',
       header: 'Net payable',
@@ -238,7 +239,7 @@ export function PayrollSheetView({
         />
       </Card>
 
-      {/* ⭐ O4 — সার্ভারের `payroll.math.ts`-ও ঠিক এই কথাটাই বলে */}
+      {/* O4: the server's `payroll.math.ts` says exactly the same thing */}
       <Caveat>
         No money is calculated for overtime — there is no separate overtime
         rate (O4, settled 23 Aug). “Payable” above is only the salary minus the
@@ -262,8 +263,8 @@ export function PayrollSheetView({
       )}
 
       {/*
-        ⚠️⚠️ R21 — নিট শূন্যে থামা নীরবে ঘটতে দেওয়া যায় না। সার্ভার ঘরটা
-        বরাবরই পাঠাত, শুধু পর্দা পড়ত না।
+        Careful: net stopping at zero must not happen silently. The server always sent
+        this field; the screen just did not show it.
       */}
       {data.depositExceedsPayable.length > 0 && (
         <Caveat>
@@ -276,9 +277,9 @@ export function PayrollSheetView({
       )}
 
       {/*
-        ⭐⭐ G108 — এই পাতার সংখ্যাগুলোই সবচেয়ে বেশি ক্ষতি করতে পারে, কারণ
-        এখানেই `d ÷ D` দিয়ে সত্যিই টাকা কাটা হয়। তারিখ নড়লে ছাপা হয়ে
-        যাওয়া শিটটাই ভুল হয়ে যায়।
+        Important: the numbers on this page can do the most harm, because this is where
+        `d ÷ D` really cuts money. If a date moves, the printed sheet itself becomes
+        wrong.
       */}
       {data.approximateHolidayDates.length > 0 && (
         <Caveat>

@@ -15,25 +15,25 @@ import { ReportsService } from './reports.service';
 import { summaryWorkbook } from './reports.sheets';
 
 /**
- * **R26 — মাস বন্ধ হলে হিসাবের ফাইল নিজে থেকে চলে যায়।**
+ * **R26: when a month is closed, the figures file goes out by itself.**
  *
- * ⭐⭐ আগে রিপোর্ট ছিল কেবল **অন-ডিমান্ড ডাউনলোড**, আর ডাইজেস্ট ছিল কেবল
- * **টেক্সট**। ফলে মাস বন্ধ করার পর মালিককে মনে করে পাতা খুলে, রেঞ্জ
- * বেছে, ফাইল নামাতে হতো — আর যেদিন ভুলে যেতেন, সেদিন ওই মাসের কোনো
- * স্থায়ী কপিই থাকত না।
+ * Reports used to be **on-demand downloads** only, and the digest was **text**
+ * only. After closing a month the owner had to remember to open the page,
+ * pick a range and download the file, and on the day they forgot there would
+ * be no permanent copy of that month.
  *
- * ⚠️⚠️ **এটা কখনো throw করে না, আর কখনো মাস বন্ধ হওয়া আটকায় না।**
- * `MonthCloseService.close()` এটাকে ডাকে fire-and-forget হিসেবে, commit-এর
- * পরে। কারণটা মাপা: একটা কয়েক-MB আপলোড ৬০ সেকেন্ড পর্যন্ত নিতে পারে, আর
- * সেটা await করলে মালিকের HTTP রিকোয়েস্ট ওতক্ষণ ঝুলত; throw করলে
- * **সম্পূর্ণ সফল** একটা মাস-বন্ধ ৫০০ হয়ে ফিরত, আর তিনি আবার চেষ্টা করে
- * ৪০৯ পেতেন ("মাস তো বন্ধই")।
+ * **This never throws and never stops a month from closing.**
+ * `MonthCloseService.close()` calls it fire-and-forget, after the commit. The
+ * reason is measured: an upload of a few MB can take up to 60 seconds, and
+ * awaiting it would hold the owner's HTTP request that long; throwing would
+ * turn a **fully successful** month close into a 500, and they would retry and
+ * get a 409 ("the month is already closed").
  *
- * ⭐ **কোন রিপোর্ট যায়:** মাসের **সারাংশ** (ঘণ্টা), পে-রোল নয়।
- * ⚠️⚠️ এটা সচেতন সিদ্ধান্ত, অলসতা নয়: পে-রোলের শিটে **বেতন** থাকে, আর
- * টেলিগ্রামের বার্তা বাইরের একটা সেবার সার্ভারে জমে থাকে। বেতন ওখানে
- * পাঠানো মালিকের নিজের সিদ্ধান্ত হওয়া উচিত — কোড নিজে থেকে করে ফেলার
- * জিনিস নয়। দরকার হলে পরে একটা স্পষ্ট সেটিং দিয়ে যোগ করা যাবে।
+ * **Which report goes:** the month's **summary** (hours), not payroll. This is
+ * a deliberate decision, not laziness: the payroll sheet has **salaries**, and
+ * a Telegram message sits on an outside service's servers. Sending salaries
+ * there should be the owner's own decision, not something code does by itself.
+ * If needed it can be added later with an explicit setting.
  */
 @Injectable()
 export class MonthDeliveryService {
@@ -53,11 +53,11 @@ export class MonthDeliveryService {
   }
 
   /**
-   * এক মাসের ফাইল বানিয়ে যে চ্যানেলগুলো কনফিগার করা আছে সেগুলোয় পাঠায়।
+   * Builds one month's file and sends it to whichever channels are configured.
    *
-   * ফেরত দেয় কোথায় কী হলো — টেস্ট ও ভবিষ্যতের ops-পর্দার জন্য।
-   * ⚠️ কখনো throw করে না; ভেতরের সবটুকু try/catch-এ মোড়া, তাই কল-সাইটের
-   *    `.catch()` দ্বিতীয় জাল, একমাত্র জাল নয়।
+   * Returns what happened where, for tests and a future ops screen.
+   * It never throws; everything inside is wrapped in try/catch, so the call
+   * site's `.catch()` is a second net, not the only one.
    */
   async deliverClosedMonth(yearMonth: string): Promise<{
     telegram: 'sent' | 'not_configured' | 'failed' | 'skipped';
@@ -67,12 +67,12 @@ export class MonthDeliveryService {
       const { from, to } = monthRange(yearMonth);
 
       /**
-       * ⚠️ `summaryFile()` নয়, `summary()` + `summaryWorkbook()`।
+       * `summary()` + `summaryWorkbook()`, not `summaryFile()`.
        *
-       * ⭐⭐ কারণটা audit খাতার সততা: `*File()` ভেতরে `export_report` সারি
-       * লেখে, আর তাতে একজন **ব্যবহারকারীর আইডি** লাগে। জব হিসেবে ডাকলে
-       * ওখানে কারো নাম বসাতে হতো, আর খাতায় এমন একটা ডাউনলোড দেখাত যা
-       * কোনো মানুষ করেনি — "কে আমার হিসাব দেখল" প্রশ্নের উত্তরটাই নষ্ট।
+       * The reason is the honesty of the audit ledger: `*File()` writes an
+       * `export_report` row inside, which needs a **user id**. Called as a job,
+       * someone's name would have to go there, and the ledger would show a
+       * download no person made, ruining the answer to "who looked at my figures".
        */
       const report = await this.reports.summary({
         from,
@@ -80,8 +80,8 @@ export class MonthDeliveryService {
         groupBy: 'month',
       });
 
-      // ⚠️ সারি না থাকলে ফাইল পাঠানোর মানে নেই — খালি শিট পাঠালে সেটা
-      //    "কেউ কাজ করেনি" বলে পড়ত, অথচ আসলে হয়তো ডেটাই নেই।
+      // No point sending a file with no rows: an empty sheet would read as
+      // "nobody worked", when there may simply be no data.
       if (report.rows.length === 0) {
         this.logger.warn(
           `${yearMonth} closed, but the summary has no rows — nothing was sent`,
@@ -112,7 +112,7 @@ export class MonthDeliveryService {
 
       return { telegram, email };
     } catch (err) {
-      // ⚠️ মাসটা ইতিমধ্যেই বন্ধ — এখানকার ব্যর্থতা সেটাকে ছোঁয় না
+      // The month is already closed; a failure here does not touch that
       this.logger.error(
         `Could not deliver the ${yearMonth} report: ${
           err instanceof Error ? err.message : 'unknown error'
@@ -124,9 +124,9 @@ export class MonthDeliveryService {
   }
 
   /**
-   * ⚠️ প্রাপক বাছাই `digestRecipients()` দিয়েই — **ম্যানেজাররা বাদ**।
-   * এই ফাইলে প্রতিটা কর্মীর নাম ও ঘণ্টা আছে, আর সেটা owner-only পর্দার
-   * সমান জিনিস; ইমেইলে পাঠিয়ে role-এর দেয়ালটা ফাঁকি দেওয়া চলবে না।
+   * Recipients are chosen with `digestRecipients()`: **managers are excluded**.
+   * This file has every employee's name and hours, the same as an owner-only
+   * screen; sending it by email must not sidestep the role wall.
    */
   private async emailIt(
     yearMonth: string,

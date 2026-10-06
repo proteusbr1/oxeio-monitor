@@ -6,15 +6,15 @@ using oXeio.Agent.Native;
 namespace oXeio.Agent.Platform;
 
 /// <summary>
-/// ঘুম ও জাগরণের খবর।
+/// News of sleep and wake.
 ///
-/// <b>এটা শুধু দ্রুত জানার উপায় — সত্যের উৎস নয়।</b> ঘুম ধরার আসল দায়িত্ব
-/// <see cref="oXeio.Core.Tracking.SleepGapDetector"/>-এর, কারণ ব্যাটারি ফুরিয়ে বা
-/// তাপজনিত কারণে PC ঘুমালে Windows কোনো নোটিফিকেশনই পাঠায় না।
-/// এখানে রেজিস্টার করা হয় শুধু দ্রুত জানার জন্য।
+/// <b>This is only a way to find out quickly, not the source of truth.</b> Detecting sleep is
+/// really the job of <see cref="oXeio.Core.Tracking.SleepGapDetector"/>, because when a PC sleeps
+/// from a flat battery or for thermal reasons, Windows sends no notification at all. Registration
+/// here is only for finding out quickly.
 ///
-/// <c>RegisterSuspendResumeNotification</c> modern standby-র জন্য জোড়াতালি নয়, এটাই নিয়ম:
-/// S0ix-এ Windows আর বিনা অনুরোধে ব্রডকাস্ট পাঠায় না, রেজিস্টার করলেই পাঠায়।
+/// <c>RegisterSuspendResumeNotification</c> is not a workaround for modern standby, it is the rule:
+/// in S0ix Windows no longer sends the broadcast unasked, and sends it once registered.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class PowerMonitor : IDisposable
@@ -23,7 +23,8 @@ internal sealed class PowerMonitor : IDisposable
     private nint _suspendResume;
     private nint _displayStatus;
 
-    /// <summary>resume দুবার আসতে পারে (0x12 ও 0x07) — এই সময়ের ভেতরে একটাই ধরা হয়।</summary>
+    /// <summary>Resume can arrive twice (0x12 and 0x07): within this time only one is
+    /// counted.</summary>
     private static readonly TimeSpan ResumeDedupe = TimeSpan.FromSeconds(5);
     private DateTimeOffset _lastResume = DateTimeOffset.MinValue;
 
@@ -37,7 +38,7 @@ internal sealed class PowerMonitor : IDisposable
         if (_suspendResume == 0)
             return (false, Marshal.GetLastPInvokeError());
 
-        // ডিসপ্লে বন্ধ হওয়া = modern standby-তে ঢোকার সবচেয়ে আগের সংকেত
+        // display turning off = the earliest signal of entering modern standby
         _displayStatus = User32.RegisterPowerSettingNotification(
             _hwnd, in Win32.GUID_SESSION_DISPLAY_STATUS, Win32.DEVICE_NOTIFY_WINDOW_HANDLE);
 
@@ -45,7 +46,8 @@ internal sealed class PowerMonitor : IDisposable
     }
 
     /// <summary>
-    /// <c>WM_POWERBROADCAST</c>-এর অর্থ বের করে। resume দুবার এলে একবারই ফেরত দেয়।
+    /// Works out the meaning of <c>WM_POWERBROADCAST</c>. If resume arrives twice, it returns it
+    /// only once.
     /// </summary>
     public PowerSignal? Interpret(nint wParam, nint lParam, DateTimeOffset now)
     {
@@ -81,7 +83,7 @@ internal sealed class PowerMonitor : IDisposable
         if (setting.PowerSetting != Win32.GUID_SESSION_DISPLAY_STATUS || setting.DataLength < 4)
             return -1;
 
-        // Data হলো ৪ বাইটের DWORD, স্ট্রাকচারের শেষে
+        // Data is a 4-byte DWORD, at the end of the structure
         var dataOffset = Marshal.OffsetOf<POWERBROADCAST_SETTING>(nameof(POWERBROADCAST_SETTING.Data));
         return Marshal.ReadInt32(lParam + dataOffset.ToInt32());
     }

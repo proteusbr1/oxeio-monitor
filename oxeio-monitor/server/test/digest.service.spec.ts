@@ -15,13 +15,13 @@ import type {
 } from '../src/reports/reports.types';
 
 /**
- * F07 — ডাইজেস্টের **প্রতিশ্রুতি**গুলো, DB ছাড়াই।
+ * F07 — the digest's promises, without a DB.
  *
- * ⭐ এখানকার সবচেয়ে জরুরি টেস্ট একটাই বাক্য: **ডাইজেস্ট কখনো সার্ভার
- * নামাতে পারবে না।** একটা মৃত SMTP, একটা মুছে ফেলা work policy বা
- * ডাটাবেসের সাময়িক টাইমআউট — কোনোটার দামই "মনিটরিং বন্ধ" হতে পারে না।
- * cron কলব্যাক থেকে বেরিয়ে যাওয়া rejected promise Node-এ unhandled
- * rejection, আর সেটা গোটা প্রসেস ফেলে দেয়।
+ * The most important test here is one sentence: the digest can never bring
+ * the server down. A dead SMTP, a deleted work policy or a transient database
+ * timeout — none of them may cost "monitoring is off". A rejected promise
+ * escaping a cron callback is an unhandled rejection in Node, and that kills
+ * the whole process.
  */
 
 const meta: ReportMeta = {
@@ -34,17 +34,17 @@ const meta: ReportMeta = {
   excludedEmployees: [],
   targetHoursInRange: {},
   /**
-   * ⭐ কর্মী ১-এর জন্য "গতকাল পর্যন্ত ৬৪ ঘণ্টা হওয়ার কথা ছিল" — সার্ভারের
-   * একটাই সংজ্ঞা থেকে আসা সংখ্যা (`elapsedWindow()`)। নিচের summary সারিতে
-   * গোনা হয়েছে ৪০, তাই তিনি ২৪ ঘণ্টা পিছিয়ে।
+   * For staff 1: "should have 64 hours up to yesterday" — a number from the
+   * server's single definition (`elapsedWindow()`). The summary row below
+   * counts 40, so they are 24 hours behind.
    *
-   * ⚠️ খালি রাখলে প্রত্যাশা ০ ধরা হতো আর কেউ "পিছিয়ে" থাকত না — অর্থাৎ
-   * ডাইজেস্টের সবচেয়ে জরুরি তালিকাটা নীরবে খালি চলে যেত।
+   * If left empty the expectation would be taken as 0 and nobody would be
+   * "behind" — the digest's most important list would silently come out empty.
    */
   expectedHours: { 1: 64 },
-  // ⚠️ এই নমুনা জগতে কোনো ছুটিই নেই, তাই খালি — "কোনো সম্ভাব্য তারিখ নেই"
+  // No holidays at all in this sample world, so empty — "no possible dates"
   approximateHolidayDates: [],
-  // ⚠️ নমুনায় কেউ 'না-দেখা' নয় — এই ফিক্সচার G110/G111 নিয়ে কোনো দাবি করে না
+  // Nobody in the sample is 'unobserved' — this fixture makes no claim about G110/G111
   observed: {},
   trackedFrom: {},
 };
@@ -61,12 +61,12 @@ const attendance: AttendanceReport = {
       date: '2026-08-11',
       dayType: 'workday',
       status: 'worked',
-      // ⚠️ নমুনায় কেউ ছুটিতে নেই — এই ফিক্সচার G130 নিয়ে দাবি করে না
+      // Nobody in the sample is on leave — this fixture makes no claim about G130
       onLeave: false,
       workedHours: 7.5,
       idleHours: 0.5,
       adjustmentHours: 0,
-      // ⭐ ডিজাইনের সংখ্যা (২১ আগস্ট) — ডিজাইনার না হলে null
+      // Design count (21 August) — null when not a designer
     designsDone: null,
     creditedHours: 7.5,
       targetHours: 8,
@@ -128,13 +128,13 @@ function makeService(
       findMany: () =>
         Promise.resolve(over.owners ?? [{ email: 'owner@example.com' }]),
     },
-    // ⚠️ "আজ কতগুলো PC চুপ ছিল" — টেলিগ্রামের এক লাইনের জন্য (১৮ আগস্ট)
+    // "How many PCs were silent today" — for the one Telegram line (18 August)
     alert: { findMany: () => Promise.resolve([]) },
     /**
-     * ⚠️⚠️ ডিজাইনের সংখ্যা *(২১ আগস্ট)*। স্টাব না দিলে `designsToday()`
-     * ছুড়ত, আর সেটা ধরা পড়ে `logger.warn`-এ — ফলে "SMTP নেই" টেস্টের
-     * warn-গোনা ১ থেকে ২ হয়ে যেত। ⭐ ব্যর্থতাটা নীরব নয়, সেটাই চাই;
-     * শুধু টেস্টে সেটা ঘটার কারণ থাকা উচিত নয়।
+     * The design count (21 August). Without the stub `designsToday()` would
+     * throw, caught by `logger.warn`, so the "no SMTP" test's warn count would
+     * go from 1 to 2. The failure is not silent, which is what we want; it
+     * just should not have a reason to happen in the tests.
      */
     employee: { findMany: () => Promise.resolve([]) },
     designCredit: { groupBy: () => Promise.resolve([]) },
@@ -164,13 +164,13 @@ function makeService(
   } as unknown as ConfigService;
 
   /**
-   * ⚠️ টেলিগ্রাম কনফিগ করা নেই ধরে নেওয়া — এই ফাইলের টেস্টগুলো ইমেইলের
-   *    আচরণ নিয়ে। টেলিগ্রামকে টেনে আনলে প্রতিটা দাবির অর্থ ঘোলাটে হতো।
+   * Telegram is assumed not configured — the tests in this file are about
+   * email behaviour. Pulling Telegram in would blur the meaning of every claim.
    */
   const telegram = {
     send: () => Promise.resolve('not_configured' as const),
-    // ⚠️ দৈনিক রিপোর্ট এখন `sendHtml()` দিয়ে যায় (monospace) — স্টাবে
-    //    না থাকলে গোটা `runOnce()` ছুড়ে বসত
+    // The daily report now goes through `sendHtml()` (monospace) — if it were
+    // missing from the stub, the whole `runOnce()` would throw
     sendHtml: () => Promise.resolve('not_configured' as const),
   } as unknown as TelegramChannel;
 
@@ -183,11 +183,11 @@ function makeService(
   };
 }
 
-/** UTC ১২:৩০ = ঢাকার সন্ধ্যা ৬:৩০ — জবটা ঠিক এই সময়েই চলে */
+/** UTC 12:30 = 6:30 PM in Dhaka — the job runs at exactly this time */
 const AT_6_30_PM = new Date('2026-08-11T12:30:00.000Z');
 
-describe('DigestService — কোন রেঞ্জ চাওয়া হয়', () => {
-  it('⭐ আজকের একদিনের F01 আর মাসের ১ তারিখ → আজকের F02', async () => {
+describe('DigestService — which range is requested', () => {
+  it('today\'s single-day F01 and the 1st of the month -> today\'s F02', async () => {
     const { service, calls } = makeService();
     await service.runOnce(AT_6_30_PM);
 
@@ -197,8 +197,8 @@ describe('DigestService — কোন রেঞ্জ চাওয়া হয�
     ]);
   });
 
-  it('⚠️ "আজ" মানে ঢাকার আজ — UTC-তে তখনো গতকাল হলেও', async () => {
-    // UTC ১১ আগস্ট ২০:০০ = ঢাকার ১২ আগস্ট ভোর ২টা
+  it('"today" means Dhaka\'s today — even when it is still yesterday in UTC', async () => {
+    // UTC 11 August 20:00 = 2:00 AM on 12 August in Dhaka
     const { service, calls } = makeService();
     await service.runOnce(new Date('2026-08-11T20:00:00.000Z'));
 
@@ -207,8 +207,8 @@ describe('DigestService — কোন রেঞ্জ চাওয়া হয�
   });
 });
 
-describe('DigestService — কার কাছে যায়', () => {
-  it('ডিফল্টে সক্রিয় owner-দের ইমেইলে', async () => {
+describe('DigestService — who it goes to', () => {
+  it('by default to the active owners\' emails', async () => {
     const { service, sent } = makeService({
       owners: [{ email: 'a@x.com' }, { email: 'b@x.com' }],
     });
@@ -220,7 +220,7 @@ describe('DigestService — কার কাছে যায়', () => {
     expect(result.outcome).toBe('sent');
   });
 
-  it('DIGEST_EMAIL_TO থাকলে সেটাই — কমা দিয়ে ভাগ, ফাঁকা বাদ', async () => {
+  it('DIGEST_EMAIL_TO when set — split on commas, blanks dropped', async () => {
     const { service, sent } = makeService({
       env: { DIGEST_EMAIL_TO: ' ops@x.com , , hr@x.com ' },
     });
@@ -229,7 +229,7 @@ describe('DigestService — কার কাছে যায়', () => {
     expect(sent[0].to).toEqual(['ops@x.com', 'hr@x.com']);
   });
 
-  it('⚠️ ALERT_EMAIL_TO ব্যবহার করা হয় না — অ্যালার্ট আর ডাইজেস্ট আলাদা তালিকা', () => {
+  it('ALERT_EMAIL_TO is not used — alerts and digest are separate lists', () => {
     const { service, sent } = makeService({
       env: { ALERT_EMAIL_TO: 'sysadmin@x.com' },
       owners: [{ email: 'owner@x.com' }],
@@ -241,8 +241,8 @@ describe('DigestService — কার কাছে যায়', () => {
   });
 });
 
-describe('DigestService — SMTP না থাকলে', () => {
-  it('⚠️ ক্র্যাশ নয়, আর পুরো সারাংশটা লগে যায়', async () => {
+describe('DigestService — without SMTP', () => {
+  it('no crash, and the whole summary goes to the log', async () => {
     const { service, sent } = makeService({ outcome: 'not_configured' });
     const warn = vi
       .spyOn(
@@ -254,14 +254,14 @@ describe('DigestService — SMTP না থাকলে', () => {
     const result = await service.runOnce(AT_6_30_PM);
 
     expect(result.outcome).toBe('not_configured');
-    // ⭐ শুধু "পাঠানো গেল না" নয় — সংখ্যাগুলোও লগে থাকে, নইলে SMTP ঠিক
-    //    করার দিন পেছনের দিনগুলো চিরতরে হারিয়ে যেত
+    // Not just "could not send" — the numbers are in the log too, otherwise
+    // on the day SMTP is fixed the earlier days would be lost for good
     expect(warn).toHaveBeenCalledOnce();
     expect(warn.mock.calls[0][0]).toContain(sent[0].body);
     warn.mockRestore();
   });
 
-  it('পাঠানো ব্যর্থ হলেও ফলটা একটা মান, ব্যতিক্রম নয়', async () => {
+  it('even if sending fails the result is a value, not an exception', async () => {
     const { service } = makeService({ outcome: 'failed' });
     vi.spyOn(
       (service as unknown as { logger: { warn: (m: string) => void } }).logger,
@@ -274,8 +274,8 @@ describe('DigestService — SMTP না থাকলে', () => {
   });
 });
 
-describe('DigestJob — কখনো throw করে না', () => {
-  it('⭐ রিপোর্ট ৫০০ ছুড়লেও জব শান্তভাবে null ফেরায়', async () => {
+describe('DigestJob — never throws', () => {
+  it('even if the report throws a 500, the job quietly returns null', async () => {
     const { service } = makeService({
       reports: {
         attendance: () =>
@@ -293,7 +293,7 @@ describe('DigestJob — কখনো throw করে না', () => {
     await expect(job.runOnce(AT_6_30_PM)).resolves.toBeNull();
   });
 
-  it('সফল হলে ফলটাই ফেরে', async () => {
+  it('on success the result is returned', async () => {
     const { service } = makeService();
     const job = new DigestJob(service);
 
@@ -304,11 +304,11 @@ describe('DigestJob — কখনো throw করে না', () => {
     });
   });
 
-  it('⚠️ টেস্টে শিডিউলার বন্ধ — `scheduled()` কিছুই করে না', async () => {
+  it('the scheduler is off in tests — `scheduled()` does nothing', async () => {
     const { service, sent } = makeService();
     const job = new DigestJob(service);
 
-    // NODE_ENV=test, তাই SCHEDULING_ENABLED = false
+    // NODE_ENV=test, so SCHEDULING_ENABLED = false
     await job.scheduled();
     expect(sent).toHaveLength(0);
   });

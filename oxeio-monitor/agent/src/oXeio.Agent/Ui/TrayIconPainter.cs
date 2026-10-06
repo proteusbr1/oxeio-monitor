@@ -9,7 +9,7 @@ using oXeio.Core.Models;
 
 namespace oXeio.Agent.Ui;
 
-/// <summary>tray আইকন যে কয়টা চেহারা নিতে পারে — এর বাইরে কিছু নেই।</summary>
+/// <summary>The appearances the tray icon can take; there is nothing outside this.</summary>
 internal enum TrayVisual
 {
     Active,
@@ -23,12 +23,12 @@ internal enum TrayVisual
 internal static class TrayVisuals
 {
     /// <summary>
-    /// ⚠️ সিঙ্কের অবস্থা স্টেটের চেয়ে <b>উপরে</b>। "ডেটা সার্ভারে যাচ্ছে না" খবরটা
-    /// "আমি এখন নিষ্ক্রিয়" খবরের চেয়ে জরুরি — নিষ্ক্রিয়তা এক মিনিটে নিজে থেকেই
-    /// ঠিক হয়ে যায়, সংযোগ হয় না।
+    /// Careful: sync health ranks <b>above</b> the state. The news "data is not reaching the
+    /// server" is more urgent than "I am idle now"; idleness fixes itself within a minute,
+    /// a connection does not.
     ///
-    /// <see cref="SyncHealth.Degraded"/> ইচ্ছাকৃতভাবে আইকন বদলায় না — দিনে দশবার
-    /// লাল হলে স্টাফ লাল রংটাকেই উপেক্ষা করতে শিখে যেত, আর তখন আসল J07 অকেজো।
+    /// <see cref="SyncHealth.Degraded"/> deliberately does not change the icon: if it turned
+    /// red ten times a day staff would learn to ignore red itself, and the real J07 would be useless.
     /// </summary>
     public static TrayVisual For(AgentStatus status) => status.Health switch
     {
@@ -45,19 +45,19 @@ internal static class TrayVisuals
 }
 
 /// <summary>
-/// আইকনগুলো কোডেই আঁকা হয় — রিপোতে কোনো <c>.ico</c> বাইনারি নেই।
+/// The icons are drawn in code; there is no <c>.ico</c> binary in the repo.
 ///
-/// কেন: বাইনারি ফাইলের ডিফ পড়া যায় না, কে কবে বদলাল বোঝা যায় না, আর DPI অনুযায়ী
-/// মাপ বদলাতে হলে প্রতিবারই নতুন ফাইল লাগত। এখানে মাপটা চালানোর সময় ঠিক হয়।
+/// Why: a binary file's diff cannot be read, you cannot tell who changed it when, and
+/// changing size per DPI would need a new file every time. Here the size is decided at run time.
 ///
-/// ⚠️ রং-ই একমাত্র পার্থক্য নয়, প্রতিটা অবস্থার আলাদা <b>আকৃতি</b> আছে। লাল-সবুজ
-/// পার্থক্য পুরুষদের প্রায় ৮%-এর চোখে ধরা পড়ে না; ১৫ জনের অফিসে সেটা প্রায়
-/// নিশ্চিতভাবেই কেউ একজন।
+/// Careful: color is not the only difference; each state has its own <b>shape</b>. A red-green
+/// difference is invisible to about 8% of men, and in an office of 15 that is almost
+/// certainly somebody.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class TrayIconPainter : IDisposable
 {
-    /// <summary>আইকন আর তার HICON একসাথে — দুটোই আমাদের ছাড়তে হবে।</summary>
+    /// <summary>The icon and its HICON together; we have to release both.</summary>
     private readonly record struct Entry(Icon Icon, nint Handle);
 
     private readonly Dictionary<TrayVisual, Entry> _cache = new();
@@ -71,7 +71,7 @@ internal sealed class TrayIconPainter : IDisposable
 
     public int Size => _size;
 
-    /// <summary>একবার আঁকা হয়, তারপর ক্যাশ থেকেই আসে।</summary>
+    /// <summary>Drawn once, then served from the cache.</summary>
     public Icon Get(TrayVisual visual)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -83,13 +83,13 @@ internal sealed class TrayIconPainter : IDisposable
         return entry.Icon;
     }
 
-    // ── মাপ ────────────────────────────────────────────────────────────────
+    // ── size ───────────────────────────────────────────────────────────────
 
     private static int ResolveSize()
     {
-        // ⚠️ ম্যানিফেস্টে PerMonitorV2 বসানো আছে, তাই এই মাপটা প্রক্রিয়া শুরুর সময়ের
-        //    প্রাইমারি মনিটরের DPI অনুযায়ী আসে। পরে DPI বদলালে shell নিজেই স্কেল
-        //    করে নেয় — একটু নরম দেখায়, কিন্তু নতুন আইকন বানানোর ঝুঁকির চেয়ে ভালো।
+        // Careful: the manifest sets PerMonitorV2, so this size comes from the DPI of the
+        // primary monitor at process start. If the DPI changes later the shell scales it
+        // itself: slightly softer, but better than the risk of building new icons.
         var side = Math.Max(SystemInformation.SmallIconSize.Width,
                             SystemInformation.SmallIconSize.Height);
 
@@ -98,7 +98,7 @@ internal sealed class TrayIconPainter : IDisposable
         return side;
     }
 
-    // ── আঁকা ───────────────────────────────────────────────────────────────
+    // ── drawing ────────────────────────────────────────────────────────────
 
     private static Entry Render(TrayVisual visual, int size)
     {
@@ -111,7 +111,7 @@ internal sealed class TrayIconPainter : IDisposable
 
             var palette = PaletteFor(visual);
 
-            // বাইরে একটু ফাঁকা — নইলে অ্যান্টি-এলিয়াস করা কিনারা টাস্কবারে কাটা দেখায়
+            // A little empty space outside, otherwise the anti-aliased edge looks clipped on the taskbar
             var pad = Math.Max(1f, size * 0.07f);
             var body = new RectangleF(pad, pad, size - (2 * pad), size - (2 * pad));
 
@@ -120,9 +120,9 @@ internal sealed class TrayIconPainter : IDisposable
                 g.FillEllipse(fill, body);
             }
 
-            // ⚠️ গাঢ় কিনারা বাধ্যতামূলক: Windows-এর হালকা টাস্কবারে হালকা আইকন আর
-            //    গাঢ় টাস্কবারে গাঢ় আইকন মিলিয়ে যায়। ভেতরের গ্লিফ সবসময় সাদা,
-            //    বাইরের রিং সবসময় গাঢ় — দুই থিমেই আলাদা করে দেখা যায়।
+            // Careful: a dark edge is mandatory: a light icon on Windows's light taskbar and a
+            // dark icon on the dark taskbar blend in. The inner glyph is always white and the
+            // outer ring always dark, so it stands out on both themes.
             using (var edge = new Pen(palette.Edge, Math.Max(1f, size * 0.08f)))
             {
                 g.DrawEllipse(edge, body);
@@ -161,7 +161,7 @@ internal sealed class TrayIconPainter : IDisposable
     {
         var cx = body.X + (body.Width / 2f);
         var cy = body.Y + (body.Height / 2f);
-        var u = body.Width; // ১ একক = আইকনের ব্যাস, সব মাপ এর অনুপাতে
+        var u = body.Width; // 1 unit = the icon's diameter; every size is proportional to it
 
         using var pen = new Pen(glyph, Math.Max(1.4f, u * 0.13f))
         {
@@ -186,7 +186,7 @@ internal sealed class TrayIconPainter : IDisposable
 
             case TrayVisual.Idle:
             {
-                // ফাঁপা বৃত্ত — "চলছে, কিন্তু কিছু ঘটছে না"
+                // Hollow circle: "running, but nothing is happening"
                 var r = u * 0.22f;
                 g.DrawEllipse(pen, cx - r, cy - r, r * 2, r * 2);
                 break;
@@ -214,7 +214,7 @@ internal sealed class TrayIconPainter : IDisposable
 
             case TrayVisual.Failing:
             {
-                // ! — রং না দেখেও বোঝা যায় "কিছু একটা ঠিক নেই"
+                // ! : you can tell "something is wrong" without seeing the color
                 g.FillRectangle(brush, cx - (u * 0.06f), cy - (u * 0.26f), u * 0.12f, u * 0.31f);
                 g.FillEllipse(brush, cx - (u * 0.07f), cy + (u * 0.13f), u * 0.14f, u * 0.14f);
                 break;
@@ -222,7 +222,7 @@ internal sealed class TrayIconPainter : IDisposable
 
             default:
             {
-                // ✕ — বাতিল
+                // X : canceled
                 g.DrawLine(pen, cx - (u * 0.19f), cy - (u * 0.19f), cx + (u * 0.19f), cy + (u * 0.19f));
                 g.DrawLine(pen, cx + (u * 0.19f), cy - (u * 0.19f), cx - (u * 0.19f), cy + (u * 0.19f));
                 break;
@@ -233,14 +233,14 @@ internal sealed class TrayIconPainter : IDisposable
     // ── Bitmap → Icon ──────────────────────────────────────────────────────
 
     /// <summary>
-    /// ⚠️ এখানে <c>Icon.Clone()</c> ব্যবহার করা <b>হয়নি</b>, যদিও সেটাই স্বাভাবিক
-    /// পথ মনে হয়। <c>Icon.FromHandle</c>-এ তৈরি আইকনের কোনো iconData থাকে না, আর
-    /// সেই অবস্থায় <c>Clone()</c> হ্যান্ডেলটা <b>শেয়ার</b> করে, কপি করে না। তখন
-    /// HICON ধ্বংস করলে ক্লোনটাও অকেজো হয়ে যেত — এবং লক্ষণ হতো "কয়েক ঘণ্টা পর
-    /// আইকন হঠাৎ ফাঁকা", যেটা ডিবাগ করা প্রায় অসম্ভব।
+    /// Careful: <c>Icon.Clone()</c> is <b>not</b> used here, even though it seems the natural
+    /// route. An icon created by <c>Icon.FromHandle</c> has no iconData, and in that state
+    /// <c>Clone()</c> <b>shares</b> the handle instead of copying it. Destroying the HICON
+    /// would then break the clone too, and the symptom would be "the icon suddenly goes blank
+    /// after a few hours", which is nearly impossible to debug.
     ///
-    /// তাই র‍্যাপার আর হ্যান্ডেল দুটোই ধরে রাখা হয়: র‍্যাপার <see cref="Dispose"/>-এ
-    /// ছাড়ে, হ্যান্ডেল <see cref="TrayNative.DestroyIcon"/>-এ।
+    /// So both the wrapper and the handle are kept: the wrapper is released in
+    /// <see cref="Dispose"/>, the handle in <see cref="TrayNative.DestroyIcon"/>.
     /// </summary>
     private static Entry FromBitmap(Bitmap bitmap)
     {
@@ -255,9 +255,9 @@ internal sealed class TrayIconPainter : IDisposable
 
         foreach (var entry in _cache.Values)
         {
-            // ⚠️ ক্রম: আগে র‍্যাপার, তারপর হ্যান্ডেল। আর এই মেথড ডাকার আগে
-            //    NotifyIcon.Icon = null করা থাকতে হবে — নইলে shell এমন একটা
-            //    HICON আঁকতে যাবে যেটা আর নেই।
+            // Careful: order: the wrapper first, then the handle. And before this method is
+            // called, NotifyIcon.Icon = null must already have been set; otherwise the shell
+            // will try to draw an HICON that no longer exists.
             entry.Icon.Dispose();
             TrayNative.DestroyIcon(entry.Handle);
         }

@@ -3,117 +3,116 @@ using System.Globalization;
 namespace oXeio.Core.Watchdog;
 
 /// <summary>
-/// এজেন্ট নিয়মিত যে এক লাইন লিখে রাখে, আর watchdog যেটা পড়ে।
+/// The one line the agent writes regularly, and which the watchdog reads.
 ///
-/// <b>কেন ফাইল, mutex নয়:</b> mutex শুধু বলে "একটা প্রসেস আছে"। কিন্তু জমে যাওয়া
-/// (wedged) প্রসেসও দিব্যি বেঁচে থাকে আর তার mutex-ও ধরে রাখে — অর্থাৎ যে
-/// ব্যর্থতাটা ধরার জন্য watchdog লেখা হচ্ছে, mutex ঠিক সেটাই ধরতে পারে না।
-/// টাইমস্ট্যাম্প লেখা ফাইল প্রমাণ করে এজেন্টের লুপ <b>ঘুরছে</b>, শুধু বেঁচে নেই।
+/// <b>Why a file, not a mutex:</b> a mutex only says "a process exists". But a wedged process
+/// is perfectly alive and holds its mutex too, so the very failure the watchdog is written
+/// to catch is exactly what a mutex cannot catch. A file with a timestamp proves the agent's
+/// loop is <b>turning</b>, not merely alive.
 ///
-/// ⚠️ এজেন্ট IDLE বা LOCKED অবস্থাতেও এই ফাইল লিখতে থাকবে। liveness মানে
-/// এজেন্টের লুপ চলছে কি না — ইউজার কাজ করছে কি না, সেটা সম্পূর্ণ আলাদা প্রশ্ন।
-/// দুটো মিলিয়ে ফেললে দুপুরের খাওয়ার সময় প্রতিদিন এজেন্ট খুন হতো।
+/// The agent keeps writing this file while IDLE or LOCKED too. Liveness means whether the
+/// agent's loop is running; whether the user is working is an entirely separate question.
+/// Mix them up and the agent would be killed every day at lunchtime.
 /// </summary>
 public sealed record AgentHeartbeat
 {
-    /// <summary>ফরম্যাটের সংস্করণ — পুরোনো watchdog নতুন এজেন্টকে যেন ভুল না বোঝে।</summary>
+    /// <summary>Format version: so an old watchdog does not misread a new agent.</summary>
     public required int Version { get; init; }
 
-    /// <summary>জমে যাওয়া এজেন্টকে মারতে হলে এটাই লাগে।</summary>
+    /// <summary>Needed to kill a wedged agent.</summary>
     public required int ProcessId { get; init; }
 
-    /// <summary>কোন Windows সেশনে চলছে — শুধু লগের জন্য।</summary>
+    /// <summary>Which Windows session it runs in: for the log only.</summary>
     public required uint SessionId { get; init; }
 
     /// <summary>
-    /// ⭐ <c>QueryUnbiasedInterruptTime</c> মিলিসেকেন্ডে — লেখার মুহূর্তে।
+    /// <c>QueryUnbiasedInterruptTime</c> in milliseconds, at the moment of writing.
     ///
-    /// দেয়াল-ঘড়ি নয়, ইচ্ছাকৃতভাবে। কেউ PC-র ঘড়ি এক ঘণ্টা পিছিয়ে দিলে প্রতিটা
-    /// হার্টবিট এক ঘণ্টা বাসি দেখাত আর watchdog সুস্থ এজেন্টকে মেরে ফেলত।
+    /// Deliberately not the wall clock. If someone set the PC's clock back an hour, every
+    /// heartbeat would look an hour stale and the watchdog would kill a healthy agent.
     ///
-    /// ⚠️ <c>GetTickCount64</c>-ও নয়: ওটা ঘুমের সময় গোনে, তাই ল্যাপটপ রাতে
-    /// ঘুমিয়ে সকালে উঠলে হার্টবিট ৮ ঘণ্টা বাসি দেখাত — জেগে ওঠার সাথে সাথেই
-    /// এজেন্ট খুন। unbiased ঘড়ি ঘুমের সময় থেমে থাকে, তাই ঘুম শেষে বয়স যা ছিল
-    /// তা-ই থাকে।
+    /// Not <c>GetTickCount64</c> either: it counts sleep time, so a laptop that slept
+    /// overnight would show an 8-hour-stale heartbeat on waking, and the agent would be killed
+    /// the moment it woke. The unbiased clock stands still during sleep, so after sleep the age
+    /// is what it was.
     ///
-    /// দুই প্রসেসই একই মেশিনের একই কাউন্টার পড়ে, তাই বিয়োগটা অর্থবহ।
-    /// বুট হলে কাউন্টার শূন্য থেকে শুরু — সেই কারণেই আগের বুটের ফাইল
-    /// "ভবিষ্যতের" দেখায়, আর <see cref="AgentLiveness.Age"/> সেটাকে
-    /// তাজা না ধরে <c>null</c> ফেরায়।
+    /// Both processes read the same counter on the same machine, so the subtraction is
+    /// meaningful. On boot the counter starts from zero; that is why the previous boot's file
+    /// looks like it is "in the future", and <see cref="AgentLiveness.Age"/> returns <c>null</c>
+    /// for it instead of treating it as fresh.
     /// </summary>
     public required long UnbiasedMs { get; init; }
 
     /// <summary>
-    /// মানুষের পড়ার জন্য। ⚠️ তাজা কি না ঠিক করতে এটা <b>কখনো</b> ব্যবহার হয় না —
-    /// এটা দেয়াল-ঘড়ি, আর দেয়াল-ঘড়ি পিছিয়ে যেতে পারে।
+    /// For people to read. It is <b>never</b> used to decide freshness: it is the wall clock,
+    /// and the wall clock can go backwards.
     /// </summary>
     public required DateTimeOffset WrittenAtUtc { get; init; }
 }
 
 /// <summary>
-/// এজেন্ট আর watchdog-এর মধ্যেকার চুক্তি — ফাইলের নাম, সময়ের সীমা, আর
-/// এক লাইনের ফরম্যাট। দুই প্রসেস এই একটাই ক্লাস ব্যবহার করে, নইলে একদিন
-/// একজন <c>agent.alive</c> লিখত আর অন্যজন <c>agent.heartbeat</c> খুঁজত।
+/// The contract between the agent and the watchdog: file names, time limits, and the
+/// one-line format. Both processes use this single class, or one day one would write
+/// <c>agent.alive</c> and the other look for <c>agent.heartbeat</c>.
 /// </summary>
 public static class AgentLiveness
 {
     public const int CurrentVersion = 1;
 
-    /// <summary>এজেন্ট লেখে (%ProgramData%\oXeio\ এর ভেতরে)।</summary>
+    /// <summary>Written by the agent (inside %ProgramData%\oXeio\).</summary>
     public const string HeartbeatFileName = "agent.alive";
 
     /// <summary>
-    /// এজেন্ট পুরো আয়ু জুড়ে <c>FileShare.None</c>-এ খুলে ধরে রাখে —
-    /// এটাই single-instance interlock (<see cref="RestartLadder"/>-এর মন্তব্য দেখুন)।
+    /// The agent holds this open with <c>FileShare.None</c> for its whole life: this is the
+    /// single-instance interlock (see the comment on <see cref="RestartLadder"/>).
     /// </summary>
     public const string AgentLockFileName = "agent.lock";
 
-    /// <summary>watchdog নিজে দুবার না চলার জন্য একই কৌশল।</summary>
+    /// <summary>The same technique so the watchdog itself does not run twice.</summary>
     public const string WatchdogLockFileName = "watchdog.lock";
 
-    /// <summary>হাল ছেড়ে দেওয়ার দৃশ্যমান চিহ্ন।</summary>
+    /// <summary>A visible sign of having given up.</summary>
     public const string AlarmFileName = "watchdog.alarm";
 
     public const string WatchdogLogFileName = "watchdog.log";
 
-    /// <summary>ইনস্টলার/আনইনস্টলার এই ফাইল বানিয়ে watchdog-কে ভদ্রভাবে থামাতে পারে।</summary>
+    /// <summary>The installer/uninstaller can create this file to stop the watchdog politely.</summary>
     public const string StopFileName = "watchdog.stop";
 
-    /// <summary>এজেন্ট কত পরপর লেখে।</summary>
+    /// <summary>How often the agent writes.</summary>
     public static TimeSpan HeartbeatInterval => TimeSpan.FromSeconds(15);
 
     /// <summary>
-    /// এর চেয়ে বাসি হলে এজেন্ট জমে গেছে ধরা হয় — অর্থাৎ টানা ৮টা লেখা মিস।
+    /// Staler than this and the agent is considered wedged: 8 writes in a row missed.
     ///
-    /// ⚠️ ব্যবধানের ২ বা ৩ গুণ রাখা <b>যাবে না</b>। AV-র ফুল স্ক্যান, ডিস্কের
-    /// এক মুহূর্তের ঝিমুনি বা GC-র একটা লম্বা pause — এসবে একটা-দুটো লেখা মিস
-    /// হওয়া স্বাভাবিক। ৮ গুণ ব্যবধান রেখে ভুল করে সুস্থ এজেন্ট মারার ঝুঁকি
-    /// কমানো হয়েছে; বিনিময়ে সত্যিকারের জমে যাওয়া ধরতে ২ মিনিট দেরি হয়, যেটা
-    /// মাসিক ২০৮ ঘণ্টার হিসাবে ধর্তব্যই নয়।
+    /// Do <b>not</b> set it to 2 or 3 times the interval. A full AV scan, a momentary disk
+    /// hiccup or one long GC pause can make a write or two get missed. Using 8 times the
+    /// interval cuts the risk of wrongly killing a healthy agent; the price is a 2-minute
+    /// delay in catching a real wedge, which is negligible against the monthly 208 hours.
     /// </summary>
     public static TimeSpan StaleAfter => TimeSpan.FromSeconds(120);
 
-    /// <summary>watchdog কত পরপর তাকায়।</summary>
+    /// <summary>How often the watchdog looks.</summary>
     public static TimeSpan CheckInterval => TimeSpan.FromSeconds(30);
 
     public static string Format(AgentHeartbeat beat)
     {
         ArgumentNullException.ThrowIfNull(beat);
 
-        // ⚠️ InvariantCulture বাধ্যতামূলক। বাংলা locale-এ সংখ্যা বাংলা অঙ্কে
-        //    লেখা হলে watchdog-এর parse ব্যর্থ হতো, আর তখন সুস্থ এজেন্টকেই
-        //    "হার্টবিট নেই" ধরে মারা হতো।
+        // InvariantCulture is mandatory. If numbers were written in Bengali digits under a
+        // Bengali locale, the watchdog's parse would fail and a healthy agent would be killed
+        // as having "no heartbeat".
         return string.Create(
             CultureInfo.InvariantCulture,
             $"v={beat.Version} pid={beat.ProcessId} session={beat.SessionId} unbiased={beat.UnbiasedMs} utc={beat.WrittenAtUtc.UtcDateTime:O}");
     }
 
     /// <summary>
-    /// ভাঙা বা অসম্পূর্ণ লাইন হলে <c>null</c>।
+    /// <c>null</c> for a broken or incomplete line.
     ///
-    /// অচেনা ক্ষেত্র ইচ্ছাকৃতভাবে উপেক্ষা করা হয়: এজেন্ট আপডেট হয়ে একটা নতুন
-    /// ক্ষেত্র যোগ করলে পুরোনো watchdog যেন parse-এ ব্যর্থ হয়ে গোটা বহরকে
-    /// রিস্টার্ট-লুপে না ফেলে। আপডেটের সময়টাই সবচেয়ে নাজুক মুহূর্ত।
+    /// Unknown fields are ignored on purpose: if an updated agent adds a new field, an old
+    /// watchdog must not fail to parse and throw the whole fleet into a restart loop. The
+    /// moment of an update is the most fragile one.
     /// </summary>
     public static AgentHeartbeat? TryParse(string? line)
     {
@@ -164,8 +163,8 @@ public static class AgentLiveness
             }
         }
 
-        // ⚠️ অর্ধেক লেখা ফাইল (এজেন্ট লেখার মাঝপথে মরেছে) এখানেই আটকায়।
-        //    pid বা unbiased ছাড়া হার্টবিটের কোনো মানে নেই।
+        // A half-written file (the agent died midway through writing) is stopped here.
+        // A heartbeat without pid or unbiased is meaningless.
         if (version is null || pid is not > 0 || unbiased is not >= 0) return null;
 
         return new AgentHeartbeat
@@ -179,13 +178,13 @@ public static class AgentLiveness
     }
 
     /// <summary>
-    /// হার্টবিট কত পুরোনো। <c>null</c> মানে "এই বুটের নয়" — অর্থাৎ ব্যবহারের অযোগ্য।
+    /// How old the heartbeat is. <c>null</c> means "not from this boot", i.e. unusable.
     ///
-    /// ⚠️ ঋণাত্মক বয়সকে "খুব তাজা" ধরা <b>যাবে না</b>। unbiased কাউন্টার এক বুটের
-    /// ভেতরে কখনো পিছায় না, তাই ভবিষ্যতের মান মানে ফাইলটা <b>আগের বুটে</b> লেখা
-    /// (রিবুটের পর ফাইল ডিস্কে থেকে যায়, কাউন্টার শূন্য থেকে শুরু হয়)। ওটাকে তাজা
-    /// ধরলে watchdog মৃত এজেন্টকে চিরকাল সুস্থ ভাবত আর কোনোদিন চালু করত না —
-    /// অর্থাৎ রিবুটের পর কারো সময় গোনাই হতো না।
+    /// A negative age must <b>not</b> be treated as "very fresh". The unbiased counter never
+    /// goes backwards within one boot, so a future value means the file was written in an
+    /// <b>earlier boot</b> (after a reboot the file stays on disk and the counter starts from
+    /// zero). Treating it as fresh would make the watchdog think a dead agent healthy forever
+    /// and never start it, so after a reboot nobody's time would be counted.
     /// </summary>
     public static TimeSpan? Age(AgentHeartbeat beat, long nowUnbiasedMs)
     {

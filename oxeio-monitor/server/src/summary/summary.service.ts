@@ -18,43 +18,45 @@ import {
   type Span,
 } from './summary.math';
 
-/** work policy না থাকলে স্পেকের ডিফল্ট (07 § ১) */
+/** Spec default when there is no work policy (07 section 1). */
 const DEFAULT_TARGET_HOURS = 208;
 
 /**
- * ⚠️ পলিসি না থাকলে ২৬ — কারণ ২০৮ ÷ ২৬ = ৮ ঘণ্টা, স্পেকের দৈনিক টার্গেট।
- * দুটো ডিফল্ট আলাদা হয়ে গেলে দৈনিক টার্গেট নীরবে অন্য সংখ্যা হয়ে যেত।
+ * Careful: 26 when there is no policy, because 208 / 26 = 8 hours, the spec's
+ * daily target. If the two defaults drifted apart, the daily target would
+ * silently become another number.
  */
 const DEFAULT_POLICY_WORKDAYS = 26;
 
 interface EmployeePolicy {
   id: number;
-  /** পলিসির মাসিক টার্গেট (২০৮ঘ) — ⚠️ এটা আর সরাসরি target_sec নয়, G37-এর পর */
+  /** The policy's monthly target (208 h). Careful: since G37 this is not `target_sec` itself. */
   targetSec: number;
-  /** পলিসির `expected_workdays` (২৬) — দৈনিক টার্গেট এটা দিয়েই ভাগ হয় */
+  /** The policy's `expected_workdays` (26); the daily target is divided by this. */
   policyWorkdays: number;
-  /** ISO দিন (শুক্র = ৫), null = প্রতিটি দিনই কর্মদিবস */
+  /** ISO weekdays (Friday = 5); null = every day is a workday. */
   weeklyOffDays: readonly number[];
-  /** G37 — `null` = আগে থেকেই আছে / এখনো আছে */
+  /** G37: `null` = has been there from before / still there. */
   joinedOn: Date | null;
   leftOn: Date | null;
 }
 
 /**
- * ⭐ একটা টিকে সর্বোচ্চ কতগুলো পুরোনো দিন গোনা হবে।
+ * The most old days that will be counted in one tick.
  *
- * ⚠️ ১৪ — অর্থাৎ দু-সপ্তাহের ব্যাকলগ একটা টিকেই মিটে যায়, অথচ একটা টিক
- *    ১৫ মিনিটের বাজেট ছাড়ায় না (একটা দিন গুনতে লাগে সেকেন্ডের ভগ্নাংশ)।
+ * Careful: 14, so a two-week backlog is cleared in a single tick, while one
+ * tick still does not exceed the 15-minute budget (counting a day takes a
+ * fraction of a second).
  */
 export const DIRTY_PER_TICK = 14;
 
-/** ⭐ নিষ্কাশনের ফল — লগে ও টেস্টে দুটোতেই পড়া হয় */
+/** Result of draining; read both in the log and in tests. */
 export interface DrainResult {
-  /** কতগুলো দিন সত্যিই আবার গোনা হলো */
+  /** How many days were really recounted. */
   refreshed: number;
-  /** বন্ধ মাসে পড়ায় বাদ (R1) — চিহ্ন তবু তোলা হয়েছে */
+  /** Skipped because they fall in a closed month (R1); the mark is still cleared. */
   closed: number;
-  /** এখনো কিউতে বাকি — ছাদে আটকালে শূন্যের বেশি */
+  /** Still left in the queue; above zero when the cap was hit. */
   pending: number;
 }
 
@@ -64,15 +66,16 @@ export interface RefreshResult {
 }
 
 /**
- * ⭐ `daily_summary` ও `monthly_summary` — rollup লেখার একমাত্র জায়গা।
+ * `daily_summary` and `monthly_summary`: the only place that writes the rollup.
  *
- * K06 (প্রতি ১৫ মিনিট) আর K05 (দিন-ক্লোজ) দুটোই এই একই কোড ডাকে। আলাদা
- * করে লিখলে দিন-ক্লোজে কোনো একটা কলাম অন্যভাবে হিসাব হতো, আর দিনের বেলার
- * সংখ্যা মাঝরাতে নীরবে বদলে যেত — যে বাগ ধরা পড়তে মাস লেগে যায়।
+ * K06 (every 15 minutes) and K05 (day close) both call this same code. Written
+ * separately, some column would be computed differently at day close, and
+ * the daytime number would silently change at midnight, a bug that takes
+ * months to catch.
  *
- * ⚠️ এই সার্ভিস `activity_segments`-এ **কখনো হাত দেয় না**। কাঁচা ডেটা
- * অপরিবর্তনীয় (§ ২.১-ঙ, নিয়ম ৪) — সারাংশ যেকোনো সময় শূন্য থেকে আবার
- * বানানো যায়, আর সেজন্যই upsert, insert নয়।
+ * Careful: this service **never touches** `activity_segments`. Raw data is
+ * immutable (spec 2.1-e, rule 4); the summary can be rebuilt from zero at
+ * any time, which is why it upserts rather than inserts.
  */
 @Injectable()
 export class SummaryService {
@@ -80,41 +83,41 @@ export class SummaryService {
 
   constructor(
     private readonly prisma: PrismaService,
-    /** ⭐ ফাইলের নামে পাওয়া নম্বর দিয়ে বরাদ্দ করা টার্গেট বন্ধ করতে (২২ আগস্ট) */
+    /** Used to close assigned targets using the number found in a file name. */
     private readonly targets: TargetsService,
   ) {}
 
-  /** ঢাকার আজকের কর্মদিবস — K06-এর প্রবেশপথ। */
+  /** Dhaka's current work day: the entry point for K06. */
   refreshToday(now: Date = new Date()): Promise<RefreshResult> {
     return this.refreshDate(workDateOf(now), now);
   }
 
   /**
-   * ⭐⭐⭐ **দেরিতে আসা দিনগুলো আবার গুনে নেওয়া** *(৬ সেপ্টেম্বর ২০২৬)*।
+   * **Recounting late-arriving days.**
    *
-   * ⚠️⚠️ **যে বাগটা এটা সারায়:** rollup চলত কেবল **দুটো** দিনের উপর — আজ
-   * (K06) আর গতকাল (K05, ০০:১৫-তে **একবার**)। এর বাইরের কোনো দিনের
-   * সেগমেন্ট পরে এলে `daily_summary`-তে কোনোদিন উঠত না, আর সেখান থেকে
-   * মাসিক সারি ও বেতনের ঘাটতি। মাঠে মাপা ক্ষতি: **৩৯টা (কর্মী, দিন)
-   * জোড়া, ১৭.৭৮ ঘণ্টা**।
+   * Careful: **the bug this fixes:** the rollup only ran over **two** days:
+   * today (K06) and yesterday (K05, **once** at 00:15). Segments for any
+   * other day arriving later never reached `daily_summary`, nor the monthly
+   * row and salary shortfall built from it. Measured loss in the field: **39
+   * (employee, day) pairs, 17.78 hours**.
    *
-   * ⚠️ **একবারে কতগুলো, তার ছাদ আছে** — একটা দিন গুনতে গোটা দলের সেগমেন্ট
-   * merge করতে হয়, আর জবটা চলে ১৫ মিনিট পরপর। ছাদ না থাকলে বড় ব্যাকলগে
-   * একটা টিক পরের টিককে ছাড়িয়ে যেত, আর `RunLock` ওগুলো একে একে বাদ দিত।
-   * ⭐ ছাদে আটকালে বাকিগুলো পরের টিকে আসে — কারণ চিহ্ন মোছা হয় **গোনার
-   * পরে**।
+   * Careful: **there is a cap per run:** counting one day means merging the
+   * whole team's segments, and the job runs every 15 minutes. Without a cap,
+   * a big backlog would make one tick outlast the next and `RunLock` would
+   * skip them one by one. When the cap is hit, the rest come in the next
+   * tick, because the mark is cleared **after counting**.
    *
-   * ⚠️⚠️ **বন্ধ মাস ছোঁয়া হয় না** (R1)। ⭐ কিন্তু চিহ্নটা তবু **তুলে
-   * দেওয়া হয়** — নইলে ওই সারিটা চিরকাল কিউয়ের মাথায় বসে থাকত আর
-   * প্রতিটা টিকে একবার করে বৃথা চেষ্টা হতো।
+   * Careful: **closed months are not touched** (R1). But the mark is still
+   * **cleared**, otherwise that row would sit at the head of the queue
+   * forever and cost one pointless attempt every tick.
    */
   async drainDirty(
     now: Date = new Date(),
     limit = DIRTY_PER_TICK,
   ): Promise<DrainResult> {
     const marks = await this.prisma.summaryDirty.findMany({
-      // ⚠️ পুরোনো আগে — নইলে ব্যাকলগ থাকলে সবচেয়ে পুরোনো দিনটা
-      //    চিরকাল অপেক্ষা করত
+      // Careful: oldest first, otherwise with a backlog the oldest day
+      // would wait forever.
       orderBy: { markedAt: 'asc' },
       take: limit,
       select: { workDate: true },
@@ -137,8 +140,8 @@ export class SummaryService {
         closed += 1;
       }
 
-      // ⚠️ চিহ্ন মোছা হয় **গোনার পরে** — মাঝপথে থেমে গেলে দিনটা যেন
-      //    পরের টিকে আবার আসে
+      // Careful: the mark is cleared **after counting**, so if it stops midway
+      // the day comes again in the next tick.
       await this.prisma.summaryDirty.delete({
         where: { workDate: mark.workDate },
       });
@@ -149,28 +152,28 @@ export class SummaryService {
   }
 
   /**
-   * একটা কর্মদিবসের সারাংশ নতুন করে বসায়, তারপর ওই দিনের মাসটাও।
+   * Re-sets one work day's summary, then that day's month as well.
    *
-   * ⚠️ **সব active কর্মীর** জন্য চলে, শুধু যাদের ডেটা আছে তাদের নয়। খরচ
-   * নগণ্য (১৫ জন), আর বিনিময়ে যে দিন কেউ একেবারেই কাজ করেনি সেদিনও একটা
-   * `no_activity` সারি তৈরি হয় — হিটম্যাপে ওই ফাঁকা ঘরটা তখন "ডেটা আসেনি"
-   * নাকি "কাজ হয়নি" সেই সন্দেহ আর থাকে না।
+   * Careful: it runs for **every active employee**, not only those with
+   * data. The cost is negligible (15 people), and in exchange a `no_activity`
+   * row exists even on a day when nobody worked, so on the heatmap an empty
+   * cell is never in doubt between "data did not arrive" and "no work was done".
    */
   async refreshDate(
     workDate: Date,
     now: Date = new Date(),
     /**
-     * ⭐⭐⭐ **যাঁরা active নন, তবু এবার গুনতে হবে** *(৬ সেপ্টেম্বর ২০২৬)*।
+     * **Employees who are not active but must be counted this time.**
      *
-     * ⚠️⚠️ **যে বাগটা এটা সারায়:** নিষ্ক্রিয় কর্মীর জন্য সময়-সংশোধন
-     * ডাটাবেসে বসত, পর্দায় দেখাও যেত, কিন্তু rollup কেবল **active**
-     * কর্মীদের নিয়ে চলে — তাই সংখ্যাটা `daily_summary`-তে কোনোদিন
-     * পৌঁছাত না, আর বেতনেও নয়। কোনো এরর নয়, শুধু একটা সংশোধন যা
-     * কিছুই বদলাত না।
+     * Careful: **the bug this fixes:** a time adjustment for an inactive
+     * employee was saved in the database and shown on screen, but the rollup
+     * runs only over **active** employees, so the number never reached
+     * `daily_summary`, nor payroll. No error, just a correction that changed
+     * nothing.
      *
-     * ⚠️ চলে যাওয়া কর্মীর **শেষ মাসের** হিসাব ঠিক করা একটা বৈধ কাজ
-     *    (চূড়ান্ত পাওনা মেটানোর আগে), তাই পথটা বন্ধ করা হয়নি — কেবল
-     *    ওই একজনকে এই রানে যোগ করা হয়।
+     * Careful: fixing a departed employee's **last month** is a valid task
+     * (before the final dues are settled), so the path was not closed; only
+     * that one person is added to this run.
      */
     also: readonly number[] = [],
   ): Promise<RefreshResult> {
@@ -195,19 +198,20 @@ export class SummaryService {
       }),
       this.prisma.screenshot.groupBy({
         by: ['employeeId'],
-        // ⚠️ retention যেগুলো মুছে ফেলার জন্য মার্ক করেছে সেগুলো বাদ —
-        //    গ্যালারিতে যা দেখা যায় না, গোনাতেও তা থাকা উচিত নয়
+        // Careful: exclude rows retention has marked for deletion; what the
+        // gallery cannot show should not be counted either.
         where: { workDate, employeeId: { in: ids }, deletedAt: null },
         _count: { _all: true },
       }),
       this.prisma.timeAdjustment.groupBy({
         by: ['employeeId'],
-        // ⚠️ revoke করা সংশোধন বাদ (§ ২.১-ঙ) — ডিলিট হয় না, তাই ফিল্টারই ভরসা
+        // Careful: revoked adjustments are excluded (spec 2.1-e). They are not
+        // deleted, so this filter is what we rely on.
         where: { workDate, employeeId: { in: ids }, revokedAt: null },
         _sum: { deltaSec: true },
       }),
       this.prisma.appUsage.findMany({
-        // ⭐ R22a — শুধু ACTIVE-এ দেখা খণ্ড (idle সারি হিসাবে যায় না)
+        // R22a: only spans seen while ACTIVE (idle rows do not count).
         where: {
           workDate,
           employeeId: { in: ids },
@@ -223,15 +227,16 @@ export class SummaryService {
       }),
       this.prisma.holiday.findUnique({ where: { holidayDate: workDate } }),
       /**
-       * ⭐⭐ **ডিজাইনের নম্বর** *(২১ আগস্ট)* — ডিজাইন-অ্যাপের শিরোনাম।
+       * **Design numbers**: the title of design apps.
        *
-       * ⚠️ উপরের `usage` কোয়েরিটা কাজে লাগানো যেত না: ওটা `categoryId`
-       * থাকা ও **ACTIVE** সারিই আনে (productivity-র হিসাব), অথচ ডিজাইনের
-       * নম্বর ওই দুটো শর্তের বাইরেও থাকে — Illustrator ক্যাটাগরিতে না
-       * পড়লেই ডিজাইন গোনা বন্ধ হয়ে যেত, আর কেউ বুঝতেই পারত না কেন।
+       * Careful: the `usage` query above could not be reused: it fetches only
+       * rows that have a `categoryId` and are **ACTIVE** (for productivity),
+       * but design numbers exist outside those two conditions as well. If
+       * Illustrator did not fall in a category, design counting would stop
+       * and nobody would understand why.
        *
-       * ⚠️ `windowTitle` এখানে আসে ঠিকই, কিন্তু **কোথাও জমা হয় না** —
-       * `designIdsInDay()` কেবল সামনের নম্বরটা ফেরত দেয় (মালিকের শর্ত)।
+       * Careful: `windowTitle` is fetched here, but **stored nowhere**:
+       * `designFirstSeenInDay()` returns only the leading number (the owner's condition).
        */
       this.prisma.appUsage.findMany({
         where: {
@@ -240,9 +245,9 @@ export class SummaryService {
           processName: { in: ['Illustrator.exe', 'Photoshop.exe'] },
         },
         /**
-         * ⚠️ `startedAt`-ও আসে *(G163)* — টার্গেটে "কাজ শুরু" চিহ্নটা ঠিক
-         *    এই মুহূর্তটাই। আগে আনা হতো না, তাই কলার বাধ্য হয়ে কর্মদিবসের
-         *    লেবেলটা বসাত, আর সবার "শুরু" হয়ে যেত ভোর ৬টা।
+         * Careful: `startedAt` is fetched too (G163): the target's "work
+         * started" mark is exactly this moment. It was not fetched before, so
+         * the caller had to use the work-day label and everyone's "start" became 6 am.
          */
         select: {
           employeeId: true,
@@ -268,7 +273,7 @@ export class SummaryService {
           : u.category?.category === 'unproductive'
             ? unproductiveBy
             : null;
-      // neutral আর ক্যাটাগরিহীন — দুটোই productivity ভগ্নাংশের বাইরে
+      // neutral and uncategorised both stay outside the productivity fraction
       if (bucket === null) continue;
       push(bucket, u.employeeId, u);
     }
@@ -289,9 +294,9 @@ export class SummaryService {
         isOffDay: !isWorkday(workDate, e.weeklyOffDays, holidays),
       });
 
-      // ⚠️ `summarizeDay`-র ভেতরে ঢোকানো হয়নি — ওটা **সময়ের** খাঁটি অঙ্ক,
-      //    আর ডিজাইনের সংখ্যা সময় নয়। মিশিয়ে দিলে ওই ফাংশনের টেস্টগুলোয়
-      //    হঠাৎ ডাটাবেসের দরকার পড়ত।
+      // Careful: not put inside `summarizeDay`; that is a pure calculation of
+      // **time**, and a design count is not time. Mixing them would suddenly
+      // require a database in that function's tests.
       const designsDone = designsBy.get(e.id) ?? 0;
 
       ops.push(
@@ -309,8 +314,8 @@ export class SummaryService {
       );
     }
 
-    // এক ট্রানজেকশনে — ১৫টা আলাদা রাউন্ড-ট্রিপের বদলে একটাই, আর ড্যাশবোর্ড
-    // কখনো "অর্ধেক কর্মীর হালনাগাদ, বাকিদের পুরোনো" অবস্থায় দেখে না
+    // One transaction: one round trip instead of 15 separate ones, and the
+    // dashboard never sees "half the staff updated, the rest stale".
     await this.prisma.$transaction(ops);
 
     await this.refreshMonth(workDate, employees, now);
@@ -319,25 +324,26 @@ export class SummaryService {
   }
 
   /**
-   * ⭐⭐ **আজ কতগুলো নতুন ডিজাইন** — কর্মী ধরে।
+   * **How many new designs today**, per employee.
    *
-   * ⚠️⚠️ **"খোলা" আর "নতুন" এক নয়, আর তফাতটা বড়।** গতকালের ফাইল আজ আবার
-   * খুললে সেটা আজকের কাজ নয়। মাঠে মেপে দেখা গেছে একজনের ৩৯ নেমে দাঁড়ায়
-   * **২৪**-এ — অর্থাৎ সরল "আজ যতগুলো দেখা গেছে" নিয়মটা টার্গেটের চেয়ে
-   * ৫০%-ও বেশি দেখাতে পারত, আর সেই সংখ্যার উপর কারো মূল্যায়ন দাঁড়াত।
+   * Careful: **"opened" and "new" are not the same, and the gap is big.**
+   * Reopening yesterday's file today is not today's work. Measured in the
+   * field, one person's 39 drops to **24**; the simple "everything seen
+   * today" rule could show over 50% above the target, and someone's
+   * evaluation would stand on that number.
    *
-   * ⭐ তাই প্রতিটা (কর্মী, ডিজাইন) জোড়া `design_credits`-এ **একবারই** বসে;
-   * প্রাথমিক কী-ই দ্বিতীয়বার বসতে দেয় না (`skipDuplicates`)। "আজকের
-   * সংখ্যা" = আজকের তারিখে দাবি করা সারি।
+   * So each (employee, design) pair goes into `design_credits` **only once**;
+   * the primary key does not allow a second insert (`skipDuplicates`). "Today's
+   * number" = the rows claimed on today's date.
    *
-   * ⚠️⚠️ **ক্রমের একটা সীমা লিখে রাখা দরকার:** ক্রেডিট দাবি হয় *যে দিনটা
-   * আগে হিসাব হয়* তার নামে। স্বাভাবিক চলায় দিন এগোয় সামনের দিকে, তাই
-   * ঠিকই থাকে — কিন্তু কেউ **পুরোনো** একটা দিন নতুন করে হিসাব করালে ওই
-   * দিনের ডিজাইনগুলো ইতিমধ্যে পরের দিনের নামে বসে থাকতে পারে, আর তখন
-   * পুরোনো দিনটা কম দেখাবে। ব্যাকফিল করলে **পুরোনো থেকে নতুন** ক্রমে।
+   * Careful: **one limit of ordering needs writing down:** credit is claimed
+   * in the name of *whichever day is computed first*. In normal running days
+   * move forward, so that is fine, but if someone recomputes an **old** day,
+   * that day's designs may already sit under a later day, and the old day
+   * will show fewer. When backfilling, go **oldest to newest**.
    *
-   * ⚠️ কখনো throw করে না — ডিজাইনের সংখ্যা একটা বাড়তি মাপ; ওটার জন্য
-   * ঘণ্টার সারাংশ আটকে যাওয়া চলবে না।
+   * Careful: it never throws; the design count is an extra measure, and the
+   * hours summary must not be blocked because of it.
    */
   private async claimDesigns(
     titles: readonly {
@@ -355,25 +361,24 @@ export class SummaryService {
 
     try {
       for (const [employeeId, rows] of byEmployee) {
-        // ⭐ G163 — নম্বরের সাথে "কখন প্রথম দেখা গেল" মুহূর্তটাও
+        // G163: along with the number, the moment it was "first seen".
         const firstSeen = designFirstSeenInDay(rows);
         if (firstSeen.size === 0) continue;
 
         const raw = new Set(firstSeen.keys());
 
         /**
-         * ⭐⭐ **সাত অঙ্ক বা বেশি হলে নম্বরটা সত্যিই বরাদ্দ করা হতে হবে**
-         * *(২২ আগস্ট ২০২৬)*।
+         * **At seven digits or more the number must really be assigned**.
          *
-         * ⚠️⚠️ শিরোনাম-নিয়মটা সাত অঙ্ক পর্যন্ত নেয় (কাজের নম্বর
-         * ১০,০০,০০০ থেকে শুরু), কিন্তু সাত অঙ্কের **স্টক-আইডিও** আছে —
-         * `1536601_4406`, `5524618`, `9937760`। মাঠে এক দিনেই চারটে
-         * ঢুকেছিল, আর ওগুলো ডিজাইন বলে গোনা হচ্ছিল।
+         * Careful: the title rule accepts up to seven digits (job numbers
+         * start at 1,000,000), but seven-digit **stock IDs** exist too:
+         * `1536601_4406`, `5524618`, `9937760`. Four came in on a single day
+         * in the field, and they were being counted as designs.
          *
-         * ⭐ অঙ্ক গুনে অনুমান করার বদলে **তালিকায় আছে কি না** দেখা হয় —
-         * এটাই একমাত্র নিখুঁত পার্থক্য।
+         * Instead of guessing from digit count, **check whether it is in the
+         * list**; that is the only exact way to tell.
          *
-         * ⚠️ কুয়েরিটা কেবল লম্বা নম্বরগুলোর জন্য; দিনে সাধারণত ০–৪টা।
+         * Careful: the query is only for the long numbers; usually 0-4 a day.
          */
         const longOnes = [...raw]
           .map((id) => Number.parseInt(id, 10))
@@ -403,18 +408,18 @@ export class SummaryService {
         });
 
         /**
-         * ⭐⭐ **বরাদ্দ করা টার্গেটে "কাজ শুরু" চিহ্ন** *(২৩ আগস্ট)*।
+         * **"Work started" mark on assigned targets.**
          *
-         * ⚠️⚠️ আগে এখানে টার্গেট **বন্ধ** করা হতো, আর সেটা ভুল ছিল:
-         * শিরোনামে নম্বরটা দেখা যায় ফাইল **খোলার** মুহূর্তে, শেষ করার
-         * নয়। শেষ হওয়া এখন ডিজাইনার নিজে বলেন।
+         * Careful: this used to **close** the target here, and that was
+         * wrong: the number appears in a title when the file is **opened**,
+         * not when it is finished. Finishing is now said by the designer.
          *
-         * ⚠️ একই `ids` সেট — দুবার শিরোনাম পড়া হয় না।
+         * Careful: the same `ids` set, so the titles are not read twice.
          */
         /**
-         * ⚠️⚠️ **কর্মদিবসের লেবেল নয়, আসল মুহূর্ত** *(G163)*। এখানে আগে
-         * `workDate` যেত — অর্থাৎ ঢাকার ভোর ৬টা — আর MyTargets-এ জব
-         * খোলামাত্র লেখা উঠত *"Started 5 hours ago"*।
+         * Careful: **the real moment, not the work-day label** (G163). `workDate`
+         * used to go here, i.e. 6 am Dhaka time, and in MyTargets "Started 5
+         * hours ago" appeared the moment a job was opened.
          */
         await this.targets.markStartedByJobNumbers(
           employeeId,
@@ -422,8 +427,8 @@ export class SummaryService {
         );
       }
 
-      // ⚠️ দাবি করার **পরে** গোনা হয়, আগে নয় — নইলে আজ প্রথমবার দেখা
-      //    ডিজাইনগুলো এই রানে গোনায় পড়ত না, আর সংখ্যাটা একদিন পিছিয়ে থাকত।
+      // Careful: counted **after** claiming, not before; otherwise designs seen
+      // for the first time today would miss this run's count and the number would lag a day.
       const claimed = await this.prisma.designCredit.groupBy({
         by: ['employeeId'],
         where: { firstWorkDate: workDate, employeeId: { in: [...byEmployee.keys()] } },
@@ -443,12 +448,12 @@ export class SummaryService {
   }
 
   /**
-   * ওই তারিখ যে মাসে পড়ে, সেই মাসের rollup।
+   * The rollup for the month that date falls in.
    *
-   * ⚠️ মাস বের হয় **`workDate` থেকে, `now` থেকে নয়**। ১ তারিখ রাত ০০:১৫-তে
-   * দিন-ক্লোজ আগের মাসের শেষ দিনটা বন্ধ করে; `now` ধরলে হালনাগাদ হতো সদ্য
-   * শুরু হওয়া নতুন মাসের সারিতে, আর আগের মাসের শেষ দিনের ঘণ্টা পে-রোলে
-   * কোনোদিনই যোগ হতো না।
+   * Careful: the month comes **from `workDate`, not from `now`**. At 00:15 on
+   * the 1st, day close closes the last day of the previous month; going by
+   * `now` would update the row of the newly started month, and that last
+   * day's hours would never be added to payroll.
    */
   private async refreshMonth(
     workDate: Date,
@@ -459,18 +464,19 @@ export class SummaryService {
     const ids = employees.map((e) => e.id);
 
     /**
-     * ⭐⭐ **R1 — বন্ধ মাস আর গোনা হয় না।** এটাই পুরো ফিচারটার একমাত্র
-     * কার্যকর লাইন; বাকি সব (endpoint, ৪০৯, পর্দা) এর চারপাশের মোড়ক।
+     * **R1: a closed month is no longer recounted.** This is the one
+     * effective line of the whole feature; everything else (endpoint, 409,
+     * screen) is wrapping around it.
      *
-     * ⚠️⚠️ কেন দরকার: নিচের হিসাবটা **প্রতিবার ওই মুহূর্তের `holidays`
-     *    টেবিল পড়ে** আর `prorate()` দিয়ে d ও D আবার গোনে। তাই ছুটির একটা
-     *    তারিখ নড়লেই গত মাসের `target_sec` · `expected_sec` ·
-     *    `expected_workdays` · `month_workdays` চারটেই পিছন ফিরে বদলাত —
-     *    আর পে-রোল ওই সারি থেকেই d ও D পড়ে, অর্থাৎ **বেতন দিয়ে দেওয়ার
-     *    পরেও হিসাব নড়ত**, নীরবে।
+     * Careful: why it is needed: the calculation below **reads the
+     * `holidays` table as it is at that moment each time** and recomputes d
+     * and D with `prorate()`. So if a holiday date moved, last month's
+     * `target_sec`, `expected_sec`, `expected_workdays` and `month_workdays`
+     * would all change retroactively, and payroll reads d and D from that
+     * row, so **the figures would move even after salary was paid**, silently.
      *
-     * ⚠️ ফেরত যাওয়া হয় **নীরবে নয়** — লগে লেখা হয়, নইলে "সংখ্যা আপডেট
-     *    হচ্ছে না কেন" খুঁজতে গিয়ে কেউ এখানে পৌঁছাত না।
+     * Careful: it returns **not silently**; it logs, otherwise someone
+     * asking "why are the numbers not updating" would never reach here.
      */
     const closed = await this.prisma.monthClosure.findUnique({
       where: { yearMonth },
@@ -488,8 +494,8 @@ export class SummaryService {
         where: { employeeId: { in: ids }, workDate: { gte: start, lte: end } },
         select: {
           employeeId: true,
-          // ⭐ ৬ সেপ্টেম্বর — কোন দিনগুলো সত্যিই **দেখা** হয়েছে, সেটা
-          //    জানতে সারির তারিখটাই একমাত্র সূত্র (`observedWorkdays`)
+          // 6 September: to know which days were really **observed**, the
+          // row's date is the only source (`observedWorkdays`).
           workDate: true,
           workedSec: true,
           adjustmentSec: true,
@@ -500,11 +506,11 @@ export class SummaryService {
         select: { holidayDate: true },
       }),
       /**
-       * ⭐⭐ R2 — **এই মাসে এই কর্মীদের ছুটি**, কর্মীপ্রতি।
+       * R2: **these employees' leave in this month**, per employee.
        *
-       * ⚠️⚠️ `holidays`-এর সাথে এক সেটে মেশানো হয় **না**। `holidays`
-       *    সংস্থার, আর ওটা দিয়েই D গোনা হয় — একজনের ছুটি ওখানে ঢুকলে
-       *    গোটা দলের বেতনের হর বদলে যেত।
+       * Careful: **not** mixed into the same set as `holidays`. `holidays`
+       * belongs to the organisation and D is counted with it; if one person's
+       * leave went in, the denominator of the whole team's salary would change.
        */
       this.prisma.leave.findMany({
         where: { employeeId: { in: ids }, leaveDate: { gte: start, lte: end } },
@@ -515,34 +521,35 @@ export class SummaryService {
         select: { employeeId: true, targetMetAt: true },
       }),
       /**
-       * ⭐⭐ **সার্ভার কবে থেকে এই কর্মীকে নিয়ে হিসাব করছে** — তার সবচেয়ে
-       * পুরোনো `daily_summary` সারি।
+       * **Since when the server has been computing for this employee**: their
+       * oldest `daily_summary` row.
        *
-       * ⚠️⚠️ নামটা যেন বিভ্রান্ত না করে: এটা **"এজেন্ট কবে বসেছে" নয়**।
-       *    ঠিক নিচের লুপটাই (`refreshDate()`) প্রতিটি active কর্মীর সারি
-       *    লেখে, ডেটা থাক বা না থাক — তাই কেউ active হওয়ার দিনেই তার
-       *    প্রথম সারি বসে যায়, এজেন্ট তখনো না পৌঁছালেও।
+       * Careful: do not let the name mislead: this is **not "when the agent
+       * was installed"**. The loop just below (`refreshDate()`) writes a row
+       * for every active employee, with or without data, so someone's first
+       * row appears on the day they become active, even if the agent has not arrived yet.
        *
-       * ⚠️⚠️ **কর্মীপ্রতি, সংস্থা-স্তরে নয়** — এখানে আগে `where` ছাড়া
-       *    একটাই `findFirst` ছিল, অর্থাৎ পুরো সংস্থার প্রথম দিন। তাতে
-       *    দুটো ভুল হতো:
-       *      ১· পরে যোগ হওয়া কর্মীর জানালা সংস্থার প্রথম দিন থেকে শুরু
-       *         হতো — অর্থাৎ সে সিস্টেমে আসার **আগের** মাসগুলোও তার
-       *         ঘাটতিতে ঢুকত (`joined_on` খালি বা ঢিলে হলে যা খুবই সম্ভব)।
-       *      ২· কোয়েরিটা নিষ্ক্রিয় কর্মীর সারিও পড়ত, তাই বহু আগে চলে
-       *         যাওয়া কারো ডেটা গোটা দলের জানালা পিছিয়ে দিত।
+       * Careful: **per employee, not organisation-wide**: this used to be a
+       * single `findFirst` with no `where`, i.e. the organisation's first
+       * day. That caused two mistakes:
+       *   1. A later-joining employee's window started from the
+       *      organisation's first day, so months from **before** they were in
+       *      the system counted in their shortfall (very possible when
+       *      `joined_on` is empty or loose).
+       *   2. The query also read inactive employees' rows, so the data of
+       *      someone who left long ago could push back the whole team's window.
        *
-       * ⚠️⚠️ **যেটা এটা সারায় না:** ১ অক্টোবর যোগ দিয়ে ৮ অক্টোবর এজেন্ট
-       *    পাওয়া কর্মীর ৫টা এজেন্টহীন দিন এখনো পুরো ঘাটতি — কারণ ১
-       *    তারিখেই তার `no_activity` সারি লেখা হয়ে যায়। আগে এখানে ঠিক
-       *    এই কেসটা "সারানো হয়েছে" বলে দাবি করা ছিল; দাবিটা মিথ্যা ছিল।
-       *    ⭐ সারাতে হলে গোনা শুরু করতে হতো প্রথম **`worked`** সারি থেকে,
-       *    আর তাতে সত্যিকারের প্রথম-দিকের অনুপস্থিতিও অদৃশ্য হয়ে যেত।
+       * Careful: **what this does not fix:** for an employee who joined on 1
+       * October and got the agent on 8 October, the 5 agentless days are still
+       * a full shortfall, because their `no_activity` row is written on the
+       * 1st. This used to claim that exactly this case was "fixed"; the claim
+       * was false. Fixing it would mean starting the count from the first
+       * **`worked`** row, which would make real early absences invisible too.
        *
-       * ⚠️ **মাস দিয়ে ছাঁকা হয় না** — ইচ্ছাকৃত। প্রশ্নটা "এই মাসে তার
-       *    ডেটা আছে কি" নয়, "তাকে কবে থেকে দেখছি"। মাস দিয়ে ছাঁকলে প্রতিটি
-       *    মাসের ১ তারিখেই ট্র্যাকিং নতুন করে "শুরু" হতো, আর সেপ্টেম্বরের
-       *    প্রত্যাশা আগস্টের মতোই ভুল কাটা পড়ত।
+       * Careful: **not filtered by month**, deliberately. The question is not
+       * "does this person have data this month" but "since when have we been
+       * watching them". Filtering by month would restart tracking on the 1st
+       * of every month, and September's expectation would be wrongly cut just like August's.
        */
       trackedFromBy(this.prisma, ids),
     ]);
@@ -559,11 +566,11 @@ export class SummaryService {
     const metAtBy = new Map(existing.map((m) => [m.employeeId, m.targetMetAt]));
 
     /**
-     * ⚠️ `refreshDate()` আজকের দৈনিক সারি **আগে** লিখে তারপর এখানে আসে,
-     * তাই একেবারে প্রথম রানে এটা আজকের তারিখই হবে — আর তখন প্রত্যাশা ০,
-     * যেটাই সৎ: শেষ হয়ে যাওয়া একটা দিনও এখনো দেখা হয়নি।
+     * Careful: `refreshDate()` writes today's daily row **first** and then
+     * comes here, so on the very first run this will be today's date, and the
+     * expectation is then 0, which is honest: not even one finished day has been observed yet.
      */
-    // ⭐ হেল্পার Map-ই ফেরত দেয় — এখানে আর জোড়া লাগানোর কিছু নেই
+    // The helper returns the Map itself; nothing left to stitch together here.
 
     const today = workDateOf(now);
 
@@ -574,12 +581,13 @@ export class SummaryService {
       const leaveDates = leaveBy.get(e.id);
 
       /**
-       * ⭐⭐ **G37 · ADR-025** — টার্গেট আর ফ্ল্যাট ২০৮ নয়, **তার কর্মদিবস
-       * × দৈনিক টার্গেট**। যে ১৫ তারিখে যোগ দিয়েছে তার টার্গেট ১৪ × ৮।
+       * **G37 / ADR-025**: the target is no longer the flat 208 but **their
+       * workdays x daily target**. Someone who joined on the 15th has a
+       * target of 14 x 8.
        *
-       * ⚠️ `expectedWorkdays` কলামটার **মানে এখানেই বদলায়** — "মাসের
-       * কর্মদিবস" থেকে "তার কর্মদিবস"। D আলাদা কলামে যায়, কারণ পে-রোলে
-       * d ÷ D লাগে আর দুটো একই সময়ের হিসাব হওয়া চাই।
+       * Careful: **the meaning** of the `expectedWorkdays` column changes
+       * right here: from "the month's workdays" to "their workdays". D goes in
+       * a separate column, because payroll needs d / D and both must be from the same period.
        */
       const p = prorate({
         monthStart: start,
@@ -594,16 +602,17 @@ export class SummaryService {
       });
 
       /**
-       * ⚠️ `workdaysElapsed`-ও তার কর্মকালের ভেতরেই গোনা হয়। নইলে ১৫
-       * তারিখে যোগ দেওয়া কর্মী মাসের শুরু থেকে "পিছিয়ে" দেখাত — প্রথম
-       * দিনেই ৮০ ঘণ্টা ঘাটতি নিয়ে শুরু করত।
+       * Careful: `workdaysElapsed` is also counted only within their period
+       * of employment. Otherwise an employee who joined on the 15th would show
+       * "behind" from the start of the month, beginning on day one with an
+       * 80-hour shortfall.
        *
-       * ⭐⭐ জানালার তিনটে সীমাই (**তার** ট্র্যাকিং-শুরু, যোগ/ছাড়ার দিন,
-       *    আর আজকের দিনটা বাদ) `elapsedWorkdays()`-এ — কেন, সেখানকার নোট
-       *    দেখুন। tray (`progress.service.ts`), Live Board আর রিপোর্ট
-       *    (F01/F02) **এই একই ফাংশনটাই** ডাকে, তাই চার পর্দায় সংখ্যাটা
-       *    আর আলাদা হতে পারে না। হিসাবটা খাঁটি ফাংশনে রাখা হয়েছে বলেই
-       *    `tracking-start.spec.ts` ডাটাবেস ছাড়াই প্রতিটা ধার পরীক্ষা করে।
+       * All three bounds of the window (**their** tracking start, joining and
+       * leaving days, and excluding today) are in `elapsedWorkdays()`; see the
+       * note there for why. The tray (`progress.service.ts`), Live Board and
+       * reports (F01/F02) call **this same function**, so the number cannot
+       * differ across the four screens. Because the calculation is a pure
+       * function, `tracking-start.spec.ts` tests every edge without a database.
        */
       const numbers = rollupMonth({
         workedSec: sum(rows.map((r) => r.workedSec)),
@@ -612,10 +621,11 @@ export class SummaryService {
         expectedWorkdays: p.employeeWorkdays,
         monthWorkdays: p.monthWorkdays,
         /**
-         * ⭐⭐ R2 — ছুটি **তিন জায়গায় একসাথে** যেতে হয়, নয়তো সংখ্যাগুলো
-         * পরস্পরবিরোধী হয়: টার্গেটে (`prorate` — কমে), প্রত্যাশার হরে
-         * (এখানে — কমে), আর প্রত্যাশার লবে (`elapsedWorkdays`-এর দ্বিতীয়
-         * আর্গুমেন্ট — কমে)। **d ও D-তে যায় না** — ছুটি সবেতন।
+         * R2: leave must go in **three places together**, otherwise the
+         * numbers contradict each other: in the target (`prorate`, lowers),
+         * in the expectation's denominator (here, lowers), and in the
+         * expectation's numerator (the second argument of `elapsedWorkdays`,
+         * lowers). It **does not go into d and D**: leave is paid.
          */
         leaveWorkdays: p.leaveWorkdays,
         workdaysElapsed: elapsedWorkdays({
@@ -625,28 +635,29 @@ export class SummaryService {
           joinedOn: e.joinedOn,
           leftOn: e.leftOn,
           /**
-           * ⚠️⚠️ **`?? today`, `?? null` নয়** — এটাই G120-এর আসল লাইন।
-           * `null` মানে `maxDate()`-এ "সীমা নেই", তাই যার এজেন্ট কোনোদিন
-           * কিছু পাঠায়নি তার জানালা **পুরো মাস** জুড়ে খুলে যেত — অর্থাৎ
-           * আগের চেয়েও বেশি ঘাটতি। `today` দিলে জানালা খালি, প্রত্যাশা ০।
+           * Careful: **`?? today`, not `?? null`**; this is the real line of
+           * G120. `null` means "no bound" in `maxDate()`, so for someone whose
+           * agent never sent anything the window would open across the **whole
+           * month**, an even bigger shortfall than before. With `today` the
+           * window is empty and the expectation is 0.
            */
           trackingStartedOn: firstSeen.get(e.id) ?? today,
           weeklyOffDays: e.weeklyOffDays,
           holidays,
         }, leaveDates),
         /**
-         * ⭐⭐⭐ **যতগুলো কর্মদিবস আমরা সত্যিই দেখেছি** *(৬ সেপ্টেম্বর
-         * ২০২৬, মালিকের সিদ্ধান্ত: "না-দেখা দিনের জন্য কর্তন হবে না")*।
+         * **How many workdays we actually observed** (the owner's decision: no
+         * deduction for unobserved days).
          *
-         * ⚠️⚠️ উপরের `workdaysElapsed` গোনে **ক্যালেন্ডার** কর্মদিবস, তাই
-         * সিস্টেম যেদিন একেবারেই চলেনি সেদিনও পুরো ৮ ঘণ্টার প্রত্যাশা
-         * হয়েই থাকত। মাঠে তার দাম: আগস্টে ট্র্যাকিং শুরু ১৩–১৫ তারিখে,
-         * অথচ বেতনের টার্গেট পুরো মাসের — ১২ জনের কর্তন দাঁড়াত ৳৭৯,৭৮৮,
-         * যার ৳৬১,২৮০ না-দেখা দিনের জন্য।
+         * Careful: `workdaysElapsed` above counts **calendar** workdays, so a
+         * day when the system did not run at all would still be a full 8-hour
+         * expectation. Cost in the field: tracking began on 13-15 August, yet
+         * the salary target was the whole month's; the deduction for 12 people
+         * came to ৳79,788, of which ৳61,280 was for unobserved days.
          *
-         * ⭐ "দেখা" মানে ওই দিনের `daily_summary` সারিটা লেখা হয়েছিল।
-         * ⚠️ সারি **আছে অথচ ০ ঘণ্টা** মানে অনুপস্থিতি — সেটা ঘাটতিই
-         *    থাকে, নইলে উল্টো দিকের ভুল হতো।
+         * "Observed" means that day's `daily_summary` row was written.
+         * Careful: a row that **exists with 0 hours** means absence, which
+         * stays a shortfall, otherwise it would be a mistake in the other direction.
          */
         observedWorkdays: observedWorkdays(
           {
@@ -666,12 +677,12 @@ export class SummaryService {
       });
 
       /**
-       * ⭐ প্রথমবার টার্গেট ছোঁয়ার সময়টা ধরে রাখা হয় — বারবার লেখা হয় না,
-       * নইলে প্রতি ১৫ মিনিটে "এইমাত্র টার্গেট পূরণ হলো" হয়ে যেত।
+       * The moment the target was first reached is kept; it is not rewritten
+       * every time, otherwise every 15 minutes it would become "target just met".
        *
-       * ⚠️ আবার টার্গেটের নিচে নেমে গেলে (কোনো সংশোধন revoke হলে) সময়টা
-       * মুছে দেওয়া হয়। রেখে দিলে সারিটা এমন একটা অর্জনের দাবি করত যেটা
-       * আর সত্যি নয়।
+       * Careful: if it drops below the target again (when an adjustment is
+       * revoked), the time is cleared. Keeping it would make the row claim an
+       * achievement that is no longer true.
        */
       const targetMetAt = numbers.targetMet
         ? (metAtBy.get(e.id) ?? now)
@@ -696,17 +707,17 @@ export class SummaryService {
   }
 
   /**
-   * ⚠️ শুধু `active` কর্মী — `payroll.service.ts`-এর মতোই। চলে যাওয়া কারো
-   * পুরোনো rollup সারি থেকে যায় (রিপোর্টের জন্য দরকার), কিন্তু নতুন করে
-   * হিসাব হয় না — তাঁর তো আর ডেটাই আসছে না।
+   * Careful: only `active` employees, like `payroll.service.ts`. A departed
+   * employee's old rollup rows stay (reports need them) but are not
+   * recomputed, since no more data is arriving for them.
    */
   private async activeEmployees(
     also: readonly number[] = [],
   ): Promise<EmployeePolicy[]> {
     const rows = await this.prisma.employee.findMany({
       /**
-       * ⚠️ `also` খালি হলে শর্তটা হুবহু আগের মতোই — `OR`-এর দ্বিতীয়
-       *    শাখা তখন `id in []`, যা কাউকেই মেলায় না।
+       * Careful: when `also` is empty the condition is exactly as before; the
+       * second branch of the `OR` is then `id in []`, which matches nobody.
        */
       where:
         also.length === 0

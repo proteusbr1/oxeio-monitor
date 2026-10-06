@@ -3,14 +3,14 @@ using oXeio.Core.Agent;
 namespace oXeio.Core.Tests;
 
 /// <summary>
-/// <b>অবস্থা বদলালে সার্ভারকে কখন জানানো হবে।</b>
+/// <b>When the server is told about a state change.</b>
 ///
-/// ⚠️⚠️ মালিকের অভিযোগ থেকে: idle থেকে কাজ শুরু করলে বোর্ডে "Working"
-/// আসতে <b>১০–১৫ সেকেন্ড</b> লাগত। বাগ ছিল না — এজেন্ট এক সেকেন্ডেই টের
-/// পায়, কিন্তু heartbeat যেত ১৫ সেকেন্ড পরপর।
+/// Careful: this came from the owner's complaint that after returning from idle,
+/// "Working" took <b>10-15 seconds</b> to appear on the board. It was not a bug: the
+/// agent notices within a second, but the heartbeat went out every 15 seconds.
 ///
-/// ⭐ এখানকার টেস্টগুলো দুটো বিপরীত দাবি একসাথে পাহারা দেয়: বদলটা
-/// <b>দ্রুত</b> যায়, কিন্তু সার্ভারে <b>ঢেউ ওঠে না</b>।
+/// The tests here guard two opposite claims together: the change goes out
+/// <b>quickly</b>, but the server <b>does not get a flood</b>.
 /// </summary>
 public class HeartbeatUrgencyTests
 {
@@ -21,7 +21,7 @@ public class HeartbeatUrgencyTests
 
     private static readonly TimeSpan Normal = TimeSpan.FromSeconds(15);
 
-    // ── কিছু বদলায়নি — স্বাভাবিক ছন্দ ───────────────────────────────────────
+    // ── nothing changed: the normal rhythm ──────────────────────────────────
 
     [Fact]
     public void Without_a_change_it_waits_the_normal_interval()
@@ -47,14 +47,14 @@ public class HeartbeatUrgencyTests
             HeartbeatUrgency.Next(At(20), At(0), Normal, stateChanged: false));
     }
 
-    // ── অবস্থা বদলেছে ───────────────────────────────────────────────────────
+    // ── the state changed ───────────────────────────────────────────────────
 
     /**
-     * ⭐⭐⭐ <b>এই ফাইলের মূল দাবি।</b> কর্মী কাজ শুরু করার সাথে সাথেই
-     * খবরটা যায় — পরের নির্ধারিত heartbeat-এর জন্য অপেক্ষা নয়।
+     * <b>The main claim of this file.</b> The moment a worker starts working, the news
+     * goes out; no waiting for the next scheduled heartbeat.
      *
-     * ⚠️ ক্ষতিটা কেবল দেরির নয়, বিশ্বাসের: মালিক পর্দায় দেখেন "Idle",
-     * পাশে গিয়ে দেখেন তিনি টাইপ করছেন।
+     * Careful: the damage is not only delay but trust: the owner sees "Idle" on screen,
+     * walks over, and finds the person typing.
      */
     [Fact]
     public void A_state_change_is_reported_at_once()
@@ -65,11 +65,11 @@ public class HeartbeatUrgencyTests
     }
 
     /**
-     * ⭐⭐ <b>উল্টো দিকের দাবি — সার্ভারে ঢেউ ওঠে না।</b>
+     * <b>The opposite claim: no flood to the server.</b>
      *
-     * ⚠️⚠️ কেউ পড়তে পড়তে টুকে নিলে অবস্থা সেকেন্ডে সেকেন্ডে বদলায়।
-     * ছাদ না থাকলে ১৫টা PC মিলে সার্ভারে অনবরত ধাক্কা দিত, আর লাভ শূন্য —
-     * মানুষের চোখে ৩ সেকেন্ড আর ০ সেকেন্ড এক।
+     * Careful: when someone copies notes while reading, the state flips every second.
+     * Without a ceiling, 15 PCs would hammer the server constantly for zero gain:
+     * to a human eye, 3 seconds and 0 seconds are the same.
      */
     [Fact]
     public void Two_changes_in_a_row_are_not_two_beats_in_a_row()
@@ -83,7 +83,7 @@ public class HeartbeatUrgencyTests
             HeartbeatUrgency.Next(At(2), At(0), Normal, stateChanged: true));
     }
 
-    /// <summary>⚠️ সীমানা — ঠিক MinGap-এ অপেক্ষা শেষ</summary>
+    /// <summary>Careful: boundary, the wait ends exactly at MinGap</summary>
     [Fact]
     public void The_floor_is_exactly_the_min_gap()
     {
@@ -99,10 +99,10 @@ public class HeartbeatUrgencyTests
     }
 
     /**
-     * ⭐ বদল সবসময় <b>দ্রুত করে</b>, কখনো ধীর করে না।
+     * A change always makes things <b>faster</b>, never slower.
      *
-     * ⚠️ নইলে একটা অদ্ভুত অবস্থা তৈরি হতো: অবস্থা বদলানোর কারণে খবরটা
-     * আরও দেরিতে যেত।
+     * Careful: otherwise a strange state would arise where the news went out even later
+     * because the state changed.
      */
     [Theory]
     [InlineData(0)]
@@ -119,9 +119,9 @@ public class HeartbeatUrgencyTests
     }
 
     /**
-     * ⚠️⚠️ ঘড়ি পিছিয়ে গেলে (NTP সংশোধন) হিসাবটা ঋণাত্মক হতো, আর অপেক্ষা
-     * দাঁড়াত <b>বিশাল</b> — heartbeat ঘণ্টার পর ঘণ্টা বন্ধ, আর G01
-     * অ্যালার্ট প্রতিটা মেশিনে জ্বলে উঠত।
+     * Careful: if the clock goes back (an NTP correction) the calculation would be
+     * negative and the wait would become <b>huge</b>: the heartbeat would stop for hours
+     * and the G01 alert would fire on every machine.
      */
     [Fact]
     public void A_clock_going_backwards_does_not_stall_the_heartbeat()

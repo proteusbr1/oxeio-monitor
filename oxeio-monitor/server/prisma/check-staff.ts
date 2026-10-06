@@ -1,13 +1,12 @@
 /**
- * `staff.local.json` ঠিক আছে কি না — **ডাটাবেস ছাড়াই**।
+ * Checks that `staff.local.json` is valid, **without a database**.
  *
- * ⭐ **কেন এটা দরকার হলো:** তালিকাটা ঠিক আছে কি না জানার একমাত্র উপায় ছিল
- * পুরো seed চালানো — অর্থাৎ ফাইল `scp` করে VPS-এ পাঠিয়ে, সেখানে কনটেইনার
- * চালিয়ে, তারপর এরর পড়া। একটা কমার ভুলের জন্য পুরো চক্রটা ঘুরতে হতো, আর
- * এরর আসত ডকারের লগের ভেতর থেকে।
+ * Why it exists: the only way to validate the list used to be running the whole
+ * seed, i.e. `scp` the file to the VPS, run the container there and dig the
+ * error out of the Docker logs. One stray comma meant a full round trip.
  *
- * ⚠️ এটা ডাটাবেসে **কিছুই লেখে না** — শুধু পড়ে আর বলে কী দেখল। তাই
- * নিশ্চিন্তে যতবার খুশি চালানো যায়।
+ * It writes **nothing** to the database; it only reads and reports, so it is
+ * safe to run as often as you like.
  *
  *     npm run check:staff
  */
@@ -34,9 +33,10 @@ try {
     raw = JSON.parse(text);
   } catch (e) {
     /**
-     * ⚠️⚠️ JSON-এর নিজের এরর আলাদা করে ধরা হয়, কারণ কারণটা প্রায় সবসময়
-     *    একই — সারির শেষে **বাড়তি কমা**, বা তারিখ যোগ করতে গিয়ে `]`
-     *    ভুল জায়গায়। Node-এর মূল বার্তা অক্ষরের অবস্থান বলে, লাইন নয়।
+     * Careful: JSON syntax errors are caught separately because the cause is
+     * almost always the same: a **trailing comma** after the last row, or a
+     * `]` in the wrong place after adding a date. Node's own message gives a
+     * character offset, not a line number.
      */
     console.error(`❌ ফাইলটা বৈধ JSON নয়: ${(e as Error).message}`);
     console.error(
@@ -64,9 +64,10 @@ for (const r of rows) {
 }
 
 /**
- * ⚠️⚠️ তারিখ না থাকা **কোনো এরর নয়** (চার ঘরের সারি বৈধ), কিন্তু চুপ করে
- * থাকাও চলে না — G37 তখন ওই কর্মীকে পুরো-মাস ধরে নেবে, আর সেটা কোথাও
- * দেখা যাবে না। তাই গোনাটা এখানে বলা হয়, exit code বদলায় না।
+ * Careful: a missing join date is **not an error** (a four-column row is valid),
+ * but it must not pass silently either: payroll proration then treats that
+ * person as a full month, and nothing else would show it. So the count is
+ * printed here; the exit code does not change.
  */
 if (withDate < rows.length) {
   console.log(

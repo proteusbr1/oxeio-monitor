@@ -22,23 +22,24 @@ import type { PrismaService } from '../src/prisma/prisma.service';
 import { LocalScreenshotStorage } from '../src/storage/local.storage';
 
 /**
- * **G81 — "সারি আছে" আর "ফাইল আছে" এক কথা নয়।**
+ * G81: "the row exists" and "the file exists" are not the same thing.
  *
- * ⚠️⚠️ এই ফাইলটা লেখা হয়েছে একটা মাঠের বাগ থেকে, আর বাগটা ছিল **সম্পূর্ণ
- * নীরব**। VPS-এ গ্যালারিতে *"10 this day"* দেখাত, অথচ দশটাই ভাঙা আইকন —
- * সারি আছে, ফাইল নেই।
+ * This file comes from a field bug, and the bug was completely silent. On the
+ * VPS the gallery showed *"10 this day"*, yet all ten were broken icons: the
+ * row exists, the file does not.
  *
- * ঘটনাটা ছিল এই:
+ * What happened:
  *
  * ```
- * ডিস্কে লেখা ব্যর্থ  →  এজেন্ট রিট্রাই  →  DB বলে "সারি তো আছে" (P2002)
- *                    →  সার্ভার { accepted: 0, duplicate: true } ফেরত দেয়
- *                    →  এজেন্ট আউটবক্স থেকে ছবিটা মুছে ফেলে  →  চিরতরে হারাল
+ * disk write fails -> agent retries -> DB says "row exists" (P2002)
+ *                  -> server returns { accepted: 0, duplicate: true }
+ *                  -> agent deletes the image from its outbox -> lost for good
  * ```
  *
- * ⭐ DB ছাড়াই টেস্ট করা যায়, কারণ এখানকার প্রশ্ন দুটোই I/O-র: **ফাইলটা
- * ডিস্কে আছে কি না**, আর **না থাকলে বসানো হয় কি না**। তাই Prisma নকল, কিন্তু
- * ফাইল-সিস্টেম আসল — নইলে টেস্টটা ঠিক সেই জিনিসটাই মাপত না যেটা ভেঙেছিল।
+ * It can be tested without a DB, because both questions here are about I/O:
+ * whether the file is on disk, and whether it gets put there if not. So
+ * Prisma is faked but the file system is real; otherwise the test would not
+ * measure the very thing that broke.
  */
 
 const DRIFT: Drift = { skewMs: 0, corrected: false } as unknown as Drift;
@@ -62,7 +63,7 @@ function webp(bytes = 1234): Express.Multer.File {
   } as unknown as Express.Multer.File;
 }
 
-/** P2002 — Prisma-র UNIQUE ভাঙার এররটা হুবহু, কারণ কোড সেটাই চেনে */
+/** P2002: Prisma's UNIQUE violation error exactly, because the code recognises that */
 function uniqueViolation(): Prisma.PrismaClientKnownRequestError {
   return new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
     code: 'P2002',
@@ -83,7 +84,7 @@ afterEach(async () => {
 function makeService(prisma: Partial<PrismaService>): ScreenshotIngestService {
   const storage = new LocalScreenshotStorage(root);
 
-  // ঘড়ির সংশোধন এখানে অপ্রাসঙ্গিক — যা এল তাই ফেরত
+  // clock correction is irrelevant here: return whatever came in
   const clock = {
     correct: (value: string) => new Date(value),
   } as unknown as ClockDriftService;
@@ -91,13 +92,13 @@ function makeService(prisma: Partial<PrismaService>): ScreenshotIngestService {
   return new ScreenshotIngestService(prisma as PrismaService, clock, storage);
 }
 
-describe('G81 · চালুর সময় storage-এ লেখা যায় কি না', () => {
-  it('লেখা গেলে চুপচাপ উঠে যায়', async () => {
+describe('G81: can storage be written at startup', () => {
+  it('when writable, it starts up quietly', async () => {
     const svc = makeService({});
     await expect(svc.onModuleInit()).resolves.toBeUndefined();
   });
 
-  it('ফোল্ডার না থাকলে বানিয়ে নেয় — এটা ব্যর্থতা নয়', async () => {
+  it('creates the folder if missing: that is not a failure', async () => {
     const nested = join(root, 'a', 'b', 'c');
     const storage = new LocalScreenshotStorage(nested);
     const svc = new ScreenshotIngestService(
@@ -111,24 +112,24 @@ describe('G81 · চালুর সময় storage-এ লেখা যায
   });
 
   /**
-   * ⭐⭐ এটাই এই ফাইলের সবচেয়ে জরুরি টেস্ট। ঠিক এই অবস্থাতেই সার্ভার আগে
-   * **দিব্যি উঠে বসে থাকত** আর প্রতিটা ছবি নীরবে হারাত।
+   * This is the most important test in this file. In exactly this state the
+   * server used to start up happily and silently lose every screenshot.
    *
-   * ⚠️ read-only ফোল্ডার বানিয়ে মাপা হয়, `access()` নকল করে নয় — কারণ
-   * `access(W_OK)` সফল বলেও পরে লেখা আটকাতে পারে, আর সেই ফাঁকটাই তো
-   * সারাতে বসা।
+   * It is measured with a real read-only folder, not a faked `access()`:
+   * `access(W_OK)` can succeed and writing can still be blocked later, and
+   * that gap is exactly what is being fixed.
    */
-  // ⚠️ Windows-এ **বাদ**, আর কারণটা টেস্টের নয়, OS-এর: `chmod 0o555` ওখানে
-  //    ফোল্ডারকে read-only করে না (POSIX বিট বলে কিছু নেই), তাই লেখা সফল
-  //    হয় আর টেস্ট লাল দেখায়। ⭐ CI Linux-এ চলে, সেখানে এটা আসল পাহারা।
-  //    না বাদ দিলে উইন্ডোজে `npm run test:nodb` সবসময় একটা লাল দেখাত, আর
-  //    "একটা তো সবসময় লাল থাকেই" — এভাবেই আসল লাল চোখ এড়িয়ে যায়।
+  // Skipped on Windows, and the reason is the OS, not the test: `chmod 0o555`
+  // does not make a folder read-only there (there are no POSIX bits), so the
+  // write succeeds and the test shows red. CI runs on Linux, where this is the
+  // real guard. Without the skip, `npm run test:nodb` on Windows would always
+  // show one red test, and "one is always red" is how a real red gets overlooked.
   it.skipIf(process.platform === 'win32')(
-    'লেখা না গেলে জোরে থামে, আর বার্তায় সারানোর পথ থাকে',
+    'when it cannot be written it stops loudly, and the message says how to fix it',
     async () => {
       const locked = join(root, 'locked');
       await mkdir(locked, { recursive: true });
-      // dr-xr-xr-x — ঢোকা যায়, লেখা যায় না
+      // dr-xr-xr-x: can enter, cannot write
       await import('node:fs/promises').then((fs) => fs.chmod(locked, 0o555));
 
       const storage = new LocalScreenshotStorage(locked);
@@ -141,19 +142,19 @@ describe('G81 · চালুর সময় storage-এ লেখা যায
       await expect(svc.onModuleInit()).rejects.toThrow(
         /Screenshot storage is not writable/,
       );
-      // ⭐ বার্তাটা শুধু "ভেঙেছে" নয়, **কী করতে হবে** বলে — নইলে ডকারের
-      //    uid-এর ফাঁদটা কেউ ধরতে পারত না
+      // The message does not just say "broken", it says what to do: otherwise
+      // nobody would catch the Docker uid trap
       await expect(svc.onModuleInit()).rejects.toThrow(/chown -R 1000:1000/);
     },
   );
 });
 
-describe('G81 · duplicate পথ — সারি আছে, ফাইল নেই', () => {
+describe('G81: the duplicate path: row exists, file does not', () => {
   /**
-   * সত্যিকারের ডুপ্লিকেট: সারিও আছে, ফাইলও আছে। এজেন্ট নিশ্চিন্তে
-   * কিউ থেকে মুছে ফেলুক — এটাই আগের আচরণ, আর এটাই ঠিক।
+   * A real duplicate: the row exists and so does the file. The agent may delete
+   * it from the queue without worry: this is the old behaviour, and it is correct.
    */
-  it('ফাইল ডিস্কে থাকলে সত্যিকারের duplicate বলে', async () => {
+  it('when the file is on disk, it reports a real duplicate', async () => {
     const existingPath = 'screenshots/2026/08/13/emp-003/192954_m0.webp';
     await mkdir(join(root, 'screenshots/2026/08/13/emp-003'), {
       recursive: true,
@@ -180,16 +181,16 @@ describe('G81 · duplicate পথ — সারি আছে, ফাইল ন�
       path: existingPath,
       thumbPath: 'screenshots/2026/08/13/emp-003/192954_m0.thumb.webp',
     });
-    // ফাইলটা ছোঁয়াই হয়নি
+    // the file was not touched at all
     await expect(readFile(join(root, existingPath), 'utf8')).resolves.toBe(
       'already here',
     );
   });
 
   /**
-   * ⭐⭐ মূল টেস্ট — এটা সংশোধনের **আগে ব্যর্থ হতো**।
+   * The core test: this failed before the fix.
    */
-  it('ফাইল না থাকলে বাইটগুলো বসিয়ে দেয়, আর সফল বলে', async () => {
+  it('when the file is missing it puts the bytes there, and reports success', async () => {
     const existingPath = 'screenshots/2026/08/13/emp-003/192954_m0.webp';
 
     const svc = makeService({
@@ -205,7 +206,7 @@ describe('G81 · duplicate পথ — সারি আছে, ফাইল ন�
 
     const result = await svc.ingest(DEVICE, DRIFT, META, webp(99));
 
-    // ⭐ accepted: 1 — এজেন্টের দিক থেকে বাইটগুলো **এইবারই** পৌঁছাল
+    // accepted: 1, because from the agent's side the bytes arrived just now
     expect(result.accepted).toBe(1);
     expect(result.duplicate).toBe(false);
     expect(result.path).toBe(existingPath);
@@ -215,12 +216,12 @@ describe('G81 · duplicate পথ — সারি আছে, ফাইল ন�
   });
 
   /**
-   * ⚠️⚠️ সবচেয়ে সূক্ষ্ম টেস্ট। রিট্রাইয়ে `captured_at`-এর সেকেন্ড এক না
-   * হলে হিসাব করা ফাইলের নামও বদলায়। নতুন পথে লিখলে সারিটা এক ফাইলের
-   * দিকে দেখাত আর বাইট পড়ে থাকত অন্য ফাইলে — অর্থাৎ ঠিক যে অমিলটা
-   * সারাতে বসা, সেটাই আবার তৈরি হতো।
+   * The subtlest test. On a retry, if the seconds of `captured_at` differ, the
+   * computed file name differs too. Writing to the new path would leave the row
+   * pointing at one file and the bytes in another: re-creating exactly the
+   * mismatch that is being fixed.
    */
-  it('সারির নিজের পথে লেখে, নতুন করে হিসাব করা পথে নয়', async () => {
+  it('writes to the row\'s own path, not to a freshly computed one', async () => {
     const rowPath = 'screenshots/2026/08/13/emp-003/000001_m0.webp';
 
     const svc = makeService({
@@ -239,11 +240,11 @@ describe('G81 · duplicate পথ — সারি আছে, ফাইল ন�
   });
 
   /**
-   * ⚠️ সারিটা এর মধ্যে মুছে গেছে (retention জব, বা কেউ হাতে)। বিরল, কিন্তু
-   * তখন মেরামতের কিছু নেই — আর সবচেয়ে জরুরি, **ছুঁড়ে দেওয়া চলবে না**,
-   * নইলে এজেন্ট ৫০০ পেয়ে একই ছবি চিরকাল রিট্রাই করত।
+   * The row was deleted in the meantime (the retention job, or someone by
+   * hand). Rare, but then there is nothing to repair, and above all it must not
+   * throw: otherwise the agent would get a 500 and retry the same image forever.
    */
-  it('সারিটাই না পেলে আগের আচরণে ফেরে, ছোঁড়ে না', async () => {
+  it('when the row itself is not found, it falls back to the old behaviour, no throw', async () => {
     const svc = makeService({
       screenshot: {
         create: vi.fn().mockRejectedValue(uniqueViolation()),
@@ -257,8 +258,8 @@ describe('G81 · duplicate পথ — সারি আছে, ফাইল ন�
     expect(result.duplicate).toBe(true);
   });
 
-  /** P2002 ছাড়া অন্য এরর যেন গিলে ফেলা না হয় */
-  it('অন্য কোনো DB এরর চাপা পড়ে না', async () => {
+  /** Errors other than P2002 must not be swallowed */
+  it('any other DB error is not suppressed', async () => {
     const svc = makeService({
       screenshot: {
         create: vi.fn().mockRejectedValue(new Error('connection lost')),

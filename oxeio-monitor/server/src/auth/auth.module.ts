@@ -13,16 +13,17 @@ import { TokenService } from './token.service';
 import { TwoFactorService } from './two-factor.service';
 
 /**
- * চারটি গার্ডই **গ্লোবাল** — নিরাপত্তা opt-out মডেলে, opt-in নয়।
- * নতুন কোনো কন্ট্রোলার লিখলে সেটা ডিফল্টভাবেই সুরক্ষিত থাকবে;
- * খোলা রাখতে হলে ইচ্ছাকৃতভাবে `@Public()` লিখতে হবে।
+ * All four guards are **global**: security is opt-out, not opt-in. Any new
+ * controller you write is protected by default; to leave it open you must
+ * deliberately write `@Public()`.
  *
- * ক্রম গুরুত্বপূর্ণ:
- *   JWT → CSRF → পাসওয়ার্ড বদলের বাধ্যবাধকতা → role
+ * The order matters:
+ *   JWT -> CSRF -> forced password change -> role
  *
- * JWT আগে কেন: CSRF আগে রাখলে লগইন না করা রিকোয়েস্টও "CSRF মেলেনি" (403) পেত,
- * অথচ আসল কারণ "লগইন করুন" (401)। নিরাপত্তায় ক্ষতি নেই — CSRF আক্রমণ তো
- * ভুক্তভোগীর cookie নিয়েই হয়, অর্থাৎ সে লগইন করা থাকেই।
+ * Why JWT first: with CSRF first, a request that was not logged in would also
+ * get "CSRF mismatch" (403) when the real reason is "log in" (401). No
+ * security loss either way: a CSRF attack uses the victim's cookie, so the
+ * victim is logged in anyway.
  */
 @Module({
   controllers: [AuthController],

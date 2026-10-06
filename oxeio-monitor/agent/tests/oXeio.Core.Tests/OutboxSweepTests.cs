@@ -3,12 +3,12 @@ using oXeio.Core.Agent;
 namespace oXeio.Core.Tests;
 
 /// <summary>
-/// A05 — কিউয়ের ডিস্ক-বাজেট কখন প্রয়োগ হবে।
+/// A05: when the queue's disk budget is enforced.
 ///
-/// ⚠️⚠️ নিয়মটা `EnforceBudgetAsync`-এর ডকে **লেখাই ছিল** ("স্টার্টআপে
-/// একবার, তারপর ঘণ্টায় একবার আর LastWriteError দেখা দিলেই"), কিন্তু
-/// কলারটা কোনোদিন লেখা হয়নি — গোটা বাজেট-ব্যবস্থা তৈরি হয়ে অচল পড়ে ছিল।
-/// এই টেস্টগুলো সেই নিয়মটার পাহারা।
+/// Careful: the rule was **written** in the doc of `EnforceBudgetAsync` ("once at
+/// startup, then once an hour, and whenever LastWriteError appears"), but the caller was
+/// never written, so the whole budget mechanism was built and then sat idle. These tests
+/// guard that rule.
 /// </summary>
 public class OutboxSweepTests
 {
@@ -36,8 +36,8 @@ public class OutboxSweepTests
             OutboxSweep.Check(Now.AddMinutes(-61), Now, Hourly, hasWriteError: false));
 
     /// <summary>
-    /// ⚠️ ঠিক এক ঘণ্টার মাথাতেও চলা চাই। `>` লিখলে ঝাড়ুটা প্রতিবার এক টিক
-    /// পিছিয়ে যেত, আর দিন শেষে কয়েকবার কম চলত।
+    /// Careful: it must run exactly at the one-hour mark too. Writing `>` would make the
+    /// sweep slip a tick later each time and run a few times fewer by the end of the day.
     /// </summary>
     [Fact]
     public void ঠিক_এক_ঘণ্টার_মাথায়ও_চলে() =>
@@ -46,8 +46,8 @@ public class OutboxSweepTests
             OutboxSweep.Check(Now.AddHours(-1), Now, Hourly, hasWriteError: false));
 
     /// <summary>
-    /// ⭐ লেখা ব্যর্থ মানে ডিস্ক ভরে গেছে — ঠিক তখনই জায়গা দরকার।
-    /// ঘণ্টার অপেক্ষায় থাকলে মাঝের সময়টুকুর ডেটা নীরবে হারাত।
+    /// A failed write means the disk is full, which is exactly when room is needed.
+    /// Waiting for the hour would silently lose the data in between.
     /// </summary>
     [Fact]
     public void লেখা_ব্যর্থ_হলে_অপেক্ষা_নেই() =>

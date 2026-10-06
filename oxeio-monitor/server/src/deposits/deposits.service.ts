@@ -55,34 +55,37 @@ export interface DepositBalance {
   months: number;
   balance: string;
   balancePaisa: number;
-  /** নিষ্পত্তি হয়ে গেলে খাতা বন্ধ — তখন `balance` কেবল ইতিহাস */
+  /** Once settled the ledger is closed — `balance` is then only history */
   settlement: DepositSettlementView | null;
 
   /**
-   * ⭐ এই কর্মীর জন্য মালিকের বেছে দেওয়া শুরুর মাস — না দিলে `null`।
+   * The start month the owner picked for this employee — `null` if none.
    *
-   * ⚠️ `effectiveStart`-ও পাঠানো হয়, কারণ পর্দায় দরকার **কোন মাস থেকে
-   * সত্যিই কাটা হচ্ছে** — সেটা override, যোগদানের মাস আর নিয়মের মাস
-   * তিনটের মধ্যে কোনটা জিতেছে তার উপর নির্ভর করে। শুধু override পাঠালে
-   * খালি ঘর দেখে মালিক বুঝতেন না আসলে কোন মাস খাটছে।
+   * Careful: `effectiveStart` is sent too, because the screen needs **the
+   * month deductions really start from** — that depends on which of the
+   * override, the joining month and the policy month won. Sending only the
+   * override would leave an empty cell, and the owner would not know which
+   * month is actually in force.
    */
   startYearMonth: string | null;
   effectiveStart: string | null;
 }
 
 /**
- * R21 — **সিকিউরিটি মানি (জামানত)।**
+ * **Security money (deposit).**
  *
- * মালিকের কথা *(১৫ আগস্ট)*: প্রতি মাসে বেতন থেকে ৫০০ টাকা কেটে রাখা হয়,
- * আর কেউ ৩০ দিন আগে জানিয়ে চাকরি ছাড়লে পুরো জমাটা ফেরত পান।
+ * The owner's rule: 500 taka is held back from salary each month, and anyone
+ * who leaves after giving 30 days' notice gets the whole amount back.
  *
- * ⭐⭐ **খাতাটা লিখে রাখা হয়, গোনা হয় না** — কারণ জমা টাকা একটা ঘটনার
- * ইতিহাস, আজকের নিয়মের ফল নয়। অঙ্কটা কাল ৬০০ হলে গত ছ-মাসের জমাও পিছন
- * ফিরে বাড়ত, আর খাতা এমন টাকা দাবি করত যা কেউ কোনোদিন দেননি।
+ * **The ledger is written down, not calculated** — the money held is the
+ * history of an event, not the result of today's rule. If the amount became 600
+ * tomorrow, the last six months' deposits would grow backwards, and the ledger
+ * would claim money nobody ever paid.
  *
- * ⚠️ কিস্তি বসে **অলসভাবে** (`ensureLedger`) — কোনো cron নেই। কারণ cron
- * হলে সার্ভার এক দিন বন্ধ থাকলেই একটা মাস নীরবে বাদ পড়ত, আর কেউ টের
- * পেত না। এখানে যে-ই খাতাটা খোলেন, খাতা তখনই আজকের দিন পর্যন্ত পূর্ণ হয়।
+ * Careful: instalments are posted **lazily** (`ensureLedger`) — there is no
+ * cron. With a cron, one day of server downtime would silently skip a month
+ * and nobody would notice. Here, whoever opens the ledger fills it up to
+ * today at that moment.
  */
 @Injectable()
 export class DepositsService {
@@ -93,7 +96,7 @@ export class DepositsService {
     private readonly audit: AuditService,
   ) {}
 
-  /** ঢাকার ক্যালেন্ডারে চলতি মাস — `2026-08` */
+  /** The current month in the Dhaka calendar — `2026-08` */
   private currentMonth(): YearMonth {
     return workDateOf(new Date()).toISOString().slice(0, 7);
   }
@@ -102,9 +105,10 @@ export class DepositsService {
     const row = await this.prisma.depositPolicy.findUnique({ where: { id: 1 } });
 
     /**
-     * ⚠️ সারিটা migration-এই বসে যায়। তবু না পেলে **ছোড়া হয়**, ফাঁকা
-     * ডিফল্ট বানানো হয় না — নইলে ডাটাবেস অর্ধেক বসা অবস্থায় সিস্টেম
-     * নিজের বানানো একটা নিয়ম দিয়ে কর্মীর বেতন কাটা শুরু করত।
+     * Careful: the row is inserted by the migration. If it is still missing, an
+     * error is **thrown**, no empty default is made up — otherwise, with the
+     * database half set up, the system would start deducting employees' pay
+     * under a rule of its own invention.
      */
     if (!row) {
       throw new NotFoundException(
@@ -135,11 +139,11 @@ export class DepositsService {
     }
 
     /**
-     * ⚠️⚠️ শুরুর মাস **পিছিয়ে** দিলে আগের মাসগুলোয় নতুন কিস্তি বসবে, আর
-     * সেটা ঠিকই আছে — মালিক তখন ইচ্ছে করেই পুরোনো মাস যোগ করছেন। কিন্তু
-     * **এগিয়ে** দিলে আগের কিস্তিগুলো নিজে থেকে মুছে যায় না: টাকাটা তো
-     * কেটে নেওয়া হয়েই গেছে। ভুল হলে সারিটা হাতে মুছতে হবে — নীরবে টাকা
-     * উবে যাওয়ার চেয়ে সেটাই ভালো।
+     * Careful: moving the start month **back** will post new instalments in the
+     * earlier months, and that is right — the owner is deliberately adding old
+     * months. But moving it **forward** does not remove the earlier instalments
+     * by itself: that money has already been deducted. If it was a mistake, the
+     * row has to be deleted by hand — better than money silently vanishing.
      */
     await this.prisma.depositPolicy.update({
       where: { id: 1 },
@@ -160,9 +164,9 @@ export class DepositsService {
       targetType: 'deposit_policy',
       targetId: 1,
       ipAddress: ip,
-      // ⚠️ `{ ...before }` — `DepositPolicyView` একটা interface, আর Prisma-র
-      //    `InputJsonValue` index signature চায়। spread করলে সেটা মেলে,
-      //    আর `as any` লিখে টাইপটা চুপ করাতে হয় না।
+      // Careful: `{ ...before }` — `DepositPolicyView` is an interface, and
+      // Prisma's `InputJsonValue` wants an index signature. Spreading satisfies
+      // that, so no `as any` is needed to silence the type.
       meta: { before: { ...before }, after: { ...after } },
     });
 
@@ -170,11 +174,11 @@ export class DepositsService {
   }
 
   /**
-   * ⭐⭐ খাতাটা আজকের দিন পর্যন্ত পূর্ণ করা — **idempotent**।
+   * Fill the ledger up to today — **idempotent**.
    *
-   * ⚠️ `skipDuplicates` ছাড়া দুটো ট্যাব একসাথে খুললেই দুবার কিস্তি বসত।
-   * চাবিটা (`employee_id`, `year_month`) ডাটাবেসেও UNIQUE, তাই দৌড়ের
-   * শেষ রক্ষাকবচও ওখানেই।
+   * Careful: without `skipDuplicates`, opening two tabs at once would post an
+   * instalment twice. The key (`employee_id`, `year_month`) is also UNIQUE in
+   * the database, so the last safeguard against the race is there too.
    */
   private async ensureLedger(): Promise<void> {
     const policy = await this.prisma.depositPolicy.findUnique({
@@ -195,8 +199,8 @@ export class DepositsService {
       },
     });
 
-    // ⚠️ নিষ্পত্তি হয়ে যাওয়া কর্মীর খাতায় আর কিস্তি বসে না — টাকাটা
-    //    ফেরত (বা বাজেয়াপ্ত) হয়ে গেছে, খাতাটা বন্ধ।
+    // Careful: a settled employee's ledger gets no more instalments — the money
+    // has been refunded (or forfeited), the ledger is closed.
     const settled = new Set(
       (
         await this.prisma.depositSettlement.findMany({
@@ -212,20 +216,20 @@ export class DepositsService {
       if (settled.has(e.id)) continue;
 
       /**
-       * ⚠️ যোগ দেওয়ার **আগের** মাসে কিস্তি বসে না। `joined_on` না থাকলে
-       * নিয়মের শুরুর মাসই ধরা হয় — অনুমান করে পিছিয়ে যাওয়ার চেয়ে
-       * নিরাপদ, কারণ পিছিয়ে গেলে খাতা এমন টাকা দাবি করত যা তখন তিনি
-       * এখানেই ছিলেন না।
+       * Careful: no instalment is posted for months **before** joining. If
+       * `joined_on` is missing, the policy's start month is used — safer than
+       * guessing and going back, because going back would make the ledger claim
+       * money from a time when they were not here.
        */
-      // ⭐ নিয়মটা `deposit.math.ts`-এ, একটাই সংজ্ঞা — পর্দা আর খাতা
-      //    যেন কোনোদিন আলাদা মাস না বলে
+      // The rule is in `deposit.math.ts`, one definition — so the screen and the
+      // ledger never name different months
       const from = effectiveDepositStart({
         override: e.depositStartYearMonth,
         joinedMonth: e.joinedOn ? e.joinedOn.toISOString().slice(0, 7) : null,
         policyStart: policy.startYearMonth,
       });
 
-      // ⚠️ চলে গেলে তাঁর শেষ মাস পর্যন্তই — তার পরের মাসে বেতনই নেই।
+      // Careful: if they left, only up to their last month — no salary after that.
       const leftMonth = e.leftOn ? e.leftOn.toISOString().slice(0, 7) : null;
       const to = leftMonth && leftMonth < now ? leftMonth : now;
 
@@ -239,26 +243,30 @@ export class DepositsService {
     if (rows.length === 0) return;
 
     /**
-     * ⭐⭐⭐ **বন্ধ মাসে নতুন কিস্তি বসে না** *(৬ সেপ্টেম্বর ২০২৬, G158 · R1)*।
+     * **No new instalments in a closed month.**
      *
-     * ⚠️⚠️ **যে বাগটা এটা সারায়:** টাকার প্রতিটা পথ বন্ধ মাস ছুঁতে অস্বীকার
-     * করে — `correctInstalment()` · সময়-সংশোধন · ছুটি · rollup · বেতনের
-     * ইতিহাস — কেবল `ensureLedger()` করত না। অথচ এটাই সবচেয়ে বেশি চলে:
-     * Deposits পাতা · কর্মীর নিজের `/me/deposit` · **আর পে-রোল শিট নিজেই**।
+     * Careful: **the bug this fixes:** every money path refuses to touch a
+     * closed month — `correctInstalment()`, time corrections, leave, rollup,
+     * payroll history — only `ensureLedger()` did not. Yet it runs the most:
+     * Deposits page, the employee's own `/me/deposit`, **and the payroll sheet itself**.
      *
-     * ⚠️ ফলে বন্ধ মাসে একটা ফাঁক থাকলে (দেরিতে যোগ দেওয়া কর্মী, নিয়ম
-     * সাময়িক বন্ধ করে আবার চালু, বা শুরুর মাস পিছিয়ে দেওয়া) পরের যেকোনো
-     * পাতা-লোডে ওই মাসে ৳৫০০ ঢুকে যেত — **কাগজ বেরিয়ে যাওয়ার পরে**। খাতা
-     * বলত টাকাটা কাটা হয়েছে, অথচ বেতনের কাগজে সেটা নেই।
+     * Careful: so if a closed month had a gap (a late joiner, the rule paused
+     * and resumed, or the start month moved back), the next page load would
+     * push ৳500 into that month — **after the paper had gone out**. The ledger
+     * would say the money was deducted, but the payslip would not show it.
      *
-     * ⚠️⚠️ **ছুড়ে ফেলা হয় না, ছেঁকে বাদ দেওয়া হয়** — এটা প্রতিটা পাতা-লোডে
-     * চলে, তাই throw করলে Deposits পাতা · কর্মীর পোর্টাল · পে-রোল শিট
-     * তিনটেই একসাথে ভাঙত।
+     * Careful: **it is filtered out, not thrown** — this runs on every page
+     * load, so throwing would break the Deposits page, the employee portal and
+     * the payroll sheet all at once.
      *
-     * ⚠️ **মাস ধরে ছাঁকা, রেঞ্জ ধরে নয়** — বন্ধ মাস অবিচ্ছিন্ন নয় (মাঝের
-     * মাস খোলা থাকতে পারে, আর `month-close` খুলেও দিতে পারে)। "সবচেয়ে নতুন
-     * বন্ধ মাস পর্যন্ত বাদ" নিয়মে ফাঁক মিস হতো আর পরের মাসগুলো চিরতরে
-     * আটকে যেত।
+     * Careful: **it is filtered out, not thrown** — this runs on every page
+     * load, so throwing would break the Deposits page, the employee portal and
+     * the payroll sheet all at once.
+     *
+     * Careful: **filtered by month, not by range** — closed months are not
+     * contiguous (a month in the middle can be open, and `month-close` can
+     * reopen one). A "skip up to the newest closed month" rule would miss gaps
+     * and lock later months forever.
      */
     const months = [...new Set(rows.map((r) => r.yearMonth))];
     const shut = new Set(
@@ -274,7 +282,7 @@ export class DepositsService {
     const skipped = rows.length - open.length;
 
     if (skipped > 0) {
-      // ⚠️ নীরবে বাদ দেওয়া হয় না — এই ফাঁকটা এত দিন টিকেই ছিল নীরবতার জোরে
+      // Careful: not dropped silently — this gap survived for so long thanks to silence
       this.logger.warn(
         `জামানতের ${skipped}টা কিস্তি বসানো হলো না — বন্ধ মাস (${[...shut].join(', ')})। ` +
           'দরকার হলে মাসটা আগে খুলুন।',
@@ -294,19 +302,21 @@ export class DepositsService {
   }
 
   /**
-   * ⭐⭐ **এই কর্মীর জামানত কোন মাস থেকে কাটা শুরু** — মালিক হাতে বসান।
+   * **From which month this employee's deposit deductions start** — set by the
+   * owner by hand.
    *
-   * ⚠️⚠️ **পুরোনো কিস্তি সরানো হয়, আর সেটাই এই ফিচারের আসল কাজ।** শুরুর
-   * মাস পিছিয়ে দিলে নতুন কিস্তি বসে; **এগিয়ে দিলে আগের ভুল কিস্তিগুলো
-   * মুছে যায়**। না মুছলে "ভুল সংশোধন" করেও খাতায় ভুলটা রয়ে যেত, আর
-   * মালিক ভাবতেন সেভ হয়নি।
+   * Careful: **old instalments are removed, and that is the real job of this
+   * feature.** Moving the start month back posts new instalments; **moving it
+   * forward deletes the earlier wrong instalments**. Without deleting, even
+   * after "correcting the mistake" the ledger would keep it, and the owner
+   * would think it had not saved.
    *
-   * ⚠️ মুছে ফেলা সারিগুলো **স্বয়ংক্রিয়ভাবে বসানো** কিস্তি, হাতে লেখা
-   * কিছু নয় — তাই এটা ইতিহাস মোছা নয়, ভুল হিসাব ঠিক করা। কতগুলো গেল
-   * সেটা audit log-এ লেখা থাকে।
+   * Careful: the deleted rows are **automatically posted** instalments, nothing
+   * written by hand — so this is correcting a wrong calculation, not erasing
+   * history. How many were removed is written to the audit log.
    *
-   * ⚠️⚠️ নিষ্পত্তি হয়ে যাওয়া কর্মীর খাতা **বন্ধ** — টাকা ফেরত বা বাজেয়াপ্ত
-   * হয়ে গেছে, তাই সেখানে হাত দেওয়া মানে মিটে যাওয়া হিসাব নাড়ানো।
+   * Careful: a settled employee's ledger is **closed** — the money has been
+   * refunded or forfeited, so touching it would disturb a finished account.
    */
   async setStartMonth(
     actor: SessionUser,
@@ -325,8 +335,8 @@ export class DepositsService {
     }
 
     /**
-     * ⚠️ ভবিষ্যতের মাস আটকানো — নইলে খাতাটা চুপচাপ খালি হয়ে যেত (কোনো
-     *    কিস্তিই আর বসত না), আর কারণটা পর্দায় কোথাও লেখা থাকত না।
+     * Careful: future months are refused — otherwise the ledger would quietly go
+     *    empty (no instalment would ever be posted), and the screen would not say why.
      */
     if (yearMonth !== null && yearMonth > this.currentMonth()) {
       throw new BadRequestException('That month has not started yet');
@@ -342,7 +352,7 @@ export class DepositsService {
       );
     }
 
-    // ⚠️ কিছুই বদলায়নি — audit-এ ঘটনা লেখা হয় না
+    // Careful: nothing changed — no event is written to the audit log
     if ((employee.depositStartYearMonth ?? null) === yearMonth) {
       return { removed: 0, added: 0 };
     }
@@ -353,18 +363,20 @@ export class DepositsService {
     });
 
     /**
-     * ⚠️ আগের মাসগুলোর কিস্তি সরানো হয় **শুধু নতুন শুরু বসালে**। `null`
-     *    করলে (নিয়মের সাধারণ মাসে ফেরত) কিছু মোছা হয় না — তখন খাতাটা
-     *    এমনিতেই আবার ভরে যাবে, আর অকারণে সারি মুছে ঝুঁকি নেওয়ার মানে নেই।
+     * Careful: earlier months' instalments are removed **only when a new start
+     *    is set**. With `null` (back to the policy's general month) nothing is
+     *    deleted — the ledger will fill up again by itself, and there is no
+     *    point risking deleting rows for nothing.
      */
     let removed = 0;
     if (yearMonth !== null) {
       /**
-       * ⚠️⚠️ **বন্ধ মাসের সারি মোছাও যায় না** *(৬ সেপ্টেম্বর ২০২৬, G158)*।
+       * Careful: **rows of closed months cannot be deleted either**.
        *
-       * কেবল বসানোটা আটকালে অর্ধেক কাজ হতো: শুরুর মাস এগিয়ে দিলে এই
-       * `deleteMany` বন্ধ মাসের কিস্তিটাও মুছে ফেলত, আর কাগজে-লেখা টাকা
-       * খাতা থেকে উধাও হয়ে যেত। ⭐ R1-এর নিয়ম দু-দিকেই: বন্ধ মাস **নড়ে না**।
+       * Blocking only the posting would be half the job: moving the start month
+       * forward would make this `deleteMany` remove a closed month's instalment
+       * too, and money already on paper would vanish from the ledger. The rule
+       * applies both ways: a closed month **does not move**.
        */
       const closed = (
         await this.prisma.monthClosure.findMany({ select: { yearMonth: true } })
@@ -407,31 +419,33 @@ export class DepositsService {
   }
 
   /**
-   * ⭐⭐⭐ **বসে যাওয়া একটা কিস্তির অঙ্ক সংশোধন** *(৫ সেপ্টেম্বর ২০২৬)*।
+   * **Correcting the amount of an instalment already posted.**
    *
-   * ⚠️⚠️ **কেন দরকার হলো:** খাতায় ভুল অঙ্কে একটা কিস্তি বসে গেলে সেটা
-   * ঠিক করার **কোনো পথই ছিল না**। `ensureLedger()` চলে
-   * `createMany({ skipDuplicates: true })` দিয়ে, তাই বিদ্যমান সারি কখনো
-   * হালনাগাদ হয় না — আর সেটা ইচ্ছাকৃত (নিয়মের অঙ্ক বদলালে পুরোনো মাস
-   * ফিরে লেখা হয় না)। ফলে মাঠে একটা ৳০ সারি দু-সপ্তাহ ধরে বসে ছিল, আর
-   * পাতা দেখাত *"2 months held · ৳500"*।
+   * Careful: **why it was needed:** once an instalment was posted with a wrong
+   * amount there was **no way at all** to fix it. `ensureLedger()` runs with
+   * `createMany({ skipDuplicates: true })`, so an existing row is never
+   * updated — and that is deliberate (when the rule's amount changes, old
+   * months are not rewritten). As a result a ৳0 row sat in the field for two
+   * weeks, and the page showed *"2 months held · ৳500"*.
    *
-   * ⭐ ওটা শেষমেশ সারানো গেছে একটা **কৌশলে**: শুরুর মাস এগিয়ে দিয়ে সারিটা
-   * মুছে, তারপর নিয়মে ফিরিয়ে নতুন করে বসিয়ে। কাজ করেছে **কেবল কারণ ভুল
-   * মাসটা শুরুর দিকে ছিল**; মাঝের কোনো মাস হলে ওই কৌশল আগের সব মাসও
-   * মুছে দিত। কৌশলটা কোথাও লেখাও ছিল না।
+   * It was eventually fixed with a **trick**: move the start month forward to
+   * delete the row, then set it back to the rule so it was re-posted. It worked
+   * **only because the wrong month was at the beginning**; for a month in the
+   * middle the trick would have deleted all the earlier months too. The trick
+   * was not written down anywhere.
    *
-   * ⚠️ **এটা "নিয়ম বদল" নয়, "ভুল সংশোধন"** — তাই `reason` বাধ্যতামূলক,
-   * ঠিক `time_adjustments`-এর মতো। ছ-মাস পরে "ওই মাসে অন্যদের ৫০০, এর
-   * ৩০০ কেন" প্রশ্নের উত্তর খাতাতেই থাকা দরকার।
+   * Careful: **this is "correcting a mistake", not "changing the rule"** — so
+   * `reason` is mandatory, just like `time_adjustments`. Six months later the
+   * ledger itself has to answer "why 300 for this person when others got 500
+   * that month".
    *
-   * ⚠️⚠️ **শূন্য বসানো যায় না** — ডাটাবেসের `CHECK`-ও তা আটকায়। মকুব মানে
-   * ওই মাসে কিস্তি **নেই**, ৳০-এর কিস্তি **আছে**; দুটো এক করে ফেললে
-   * "কত মাস জমা হয়েছে" প্রশ্নের উত্তরই নষ্ট হয়। শুরুর দিকের মাস বাদ দিতে
-   * `setStartMonth()` আছে।
-   * ⏳ **মাঝের একটা মাস মকুব করার কোনো ব্যবস্থা এখনো নেই** — লাগলে সেটা
-   *    আলাদা সিদ্ধান্ত (সারি রেখে `waived` চিহ্ন, নাকি মুছে ফেলা), আর
-   *    মুছে ফেললে `ensureLedger()` ওটা আবার বসিয়ে দেবে।
+   * Careful: **zero cannot be entered** — the database `CHECK` blocks it too.
+   * A waiver means there is **no** instalment that month, not an instalment of
+   * ৳0; merging the two ruins the answer to "how many months have been paid".
+   * To skip early months there is `setStartMonth()`.
+   * TODO: there is **still no way to waive a month in the middle** — if needed
+   *    it is a separate decision (keep the row with a `waived` flag, or delete
+   *    it), and if deleted, `ensureLedger()` would post it again.
    */
   async correctInstalment(
     actor: SessionUser,
@@ -446,9 +460,9 @@ export class DepositsService {
     }
 
     /**
-     * ⚠️ ০ বা ঋণাত্মক এখানেই আটকানো, ডাটাবেসের `CHECK`-এর ভরসায় নয় —
-     *    নইলে বার্তাটা হতো একটা কাঁচা Postgres এরর, আর মালিক বুঝতেন না
-     *    কী ভুল করলেন।
+     * Careful: 0 or negative is stopped here, not left to the database `CHECK` —
+     *    otherwise the message would be a raw Postgres error, and the owner
+     *    would not understand what they did wrong.
      */
     if (!Number.isInteger(amountPaisa) || amountPaisa <= 0) {
       throw new BadRequestException(
@@ -470,9 +484,9 @@ export class DepositsService {
     if (!employee) throw new NotFoundException('Staff member not found');
 
     /**
-     * ⚠️ নিষ্পত্তি হয়ে গেলে খাতা বন্ধ — টাকা ফেরত বা বাজেয়াপ্ত হয়ে গেছে,
-     *    তাই এখন অঙ্ক বদলানো মানে মিটে যাওয়া হিসাব নাড়ানো।
-     *    ⭐ শর্তটা `setStartMonth()`-এর হুবহু একই।
+     * Careful: once settled the ledger is closed — the money has been refunded
+     *    or forfeited, so changing the amount now would disturb a finished account.
+     *    The condition is exactly the same as in `setStartMonth()`.
      */
     const settled = await this.prisma.depositSettlement.findFirst({
       where: { employeeId },
@@ -485,9 +499,10 @@ export class DepositsService {
     }
 
     /**
-     * ⚠️⚠️ **বন্ধ মাসে সংশোধন নয়** (R1) — ছুটি ও সংশোধনের ঠিক একই নিয়ম।
-     *    বন্ধ মাস মানে ওই মাসের কাগজ বেরিয়ে গেছে; খাতা বদলালে কাগজ আর
-     *    খাতা দুই কথা বলত, আর কেউ টের পেত না।
+     * Careful: **no correction in a closed month** (R1) — exactly the same rule
+     *    as for leave and corrections. A closed month means that month's paper
+     *    has gone out; changing the ledger would make paper and ledger say two
+     *    things, and nobody would notice.
      */
     const closed = await this.prisma.monthClosure.findUnique({
       where: { yearMonth },
@@ -500,9 +515,10 @@ export class DepositsService {
     }
 
     /**
-     * ⚠️ সারিটা **থাকতে হবে**। না থাকলে এটা সংশোধন নয়, নতুন কিস্তি বসানো —
-     *    আর সেটা `ensureLedger()`-এর কাজ, নিয়ম ধরে। এখানে বসাতে দিলে
-     *    খাতায় এমন মাস ঢুকত যেটা কোনো নিয়ম থেকে আসেনি।
+     * Careful: the row **must exist**. If it does not, this is not a correction
+     *    but posting a new instalment — and that is `ensureLedger()`'s job,
+     *    following the rule. Allowing it here would put a month in the ledger
+     *    that came from no rule.
      */
     const row = await this.prisma.securityDeposit.findUnique({
       where: { employeeId_yearMonth: { employeeId, yearMonth } },
@@ -513,7 +529,7 @@ export class DepositsService {
       );
     }
 
-    // ⚠️ কিছুই বদলায়নি — খাতায় ঘটনা লেখা হয় না (setStartMonth-এর একই নিয়ম)
+    // Careful: nothing changed — no event is written to the ledger (same rule as setStartMonth)
     if (row.amountPaisa === amountPaisa) return { from: row.amountPaisa, to: amountPaisa };
 
     await this.prisma.securityDeposit.update({
@@ -545,11 +561,11 @@ export class DepositsService {
   }
 
   /**
-   * ⭐ একটা মাসের কিস্তিগুলো, কর্মী ধরে — পে-রোলের শিট এটাই ডাকে।
+   * One month's instalments, per employee — the payroll sheet calls this.
    *
-   * ⚠️ ম্যাপে **যাঁর কিস্তি বসেনি তাঁর চাবিই থাকে না**, শূন্য নয়। শিটে
-   * "৳০ কাটা হয়েছে" আর "কাটার কথাই ছিল না" দুটো আলাদা কথা, আর শূন্য
-   * বসালে দুটোই এক দেখাত।
+   * Careful: in the map, **an employee with no instalment has no key**, not
+   * zero. On the sheet "৳0 deducted" and "was never meant to be deducted" are
+   * different things, and a zero would show both the same.
    */
   async instalmentsFor(yearMonth: string): Promise<Map<number, number>> {
     await this.ensureLedger();
@@ -562,7 +578,7 @@ export class DepositsService {
     return new Map(rows.map((r) => [r.employeeId, r.amountPaisa]));
   }
 
-  /** একজনের মাস-ধরে তালিকা ও মোট — স্টাফ নিজেরটা দেখতে এটাই ডাকে */
+  /** One person's month-by-month list and total — staff call this to see their own */
   async forEmployee(employeeId: number): Promise<{
     months: DepositMonth[];
     total: string;
@@ -595,7 +611,7 @@ export class DepositsService {
     };
   }
 
-  /** সবার জমা — owner-এর পর্দার তালিকা */
+  /** Everyone's deposits — the list for the owner's screen */
   async balances(): Promise<{ rows: DepositBalance[]; policy: DepositPolicyView }> {
     await this.ensureLedger();
 
@@ -630,7 +646,7 @@ export class DepositsService {
         const balancePaisa = agg?._sum.amountPaisa ?? 0;
         const settlement = settledOf.get(e.id);
 
-        // ⭐ `ensureLedger()` যে ফাংশনটা ডাকে, এখানেও ঠিক সেটাই
+        // The same function `ensureLedger()` calls, used here too
         const effectiveStart = effectiveDepositStart({
           override: e.depositStartYearMonth,
           joinedMonth: e.joinedOn ? e.joinedOn.toISOString().slice(0, 7) : null,
@@ -654,13 +670,13 @@ export class DepositsService {
   }
 
   /**
-   * ⭐⭐ **নিষ্পত্তি — সিদ্ধান্তটা মালিকের, হিসাবটা সিস্টেমের।**
+   * **Settlement — the owner decides, the system does the arithmetic.**
    *
-   * ⚠️ নিয়ম মিলুক বা না মিলুক, `outcome` মালিকই পাঠান। সিস্টেম শুধু
-   * `noticeDaysGiven` বের করে সারিতে লিখে রাখে — যাতে ছ-মাস পরে কেউ
-   * জিজ্ঞেস করলে "কিসের ভিত্তিতে" প্রশ্নের উত্তর খাতাতেই থাকে।
-   * ব্যতিক্রম সবসময়ই থাকে (হাসপাতাল, পারিবারিক কারণ), আর সেগুলো কোনো
-   * `if`-এ ধরা যায় না।
+   * Careful: whether or not the rule is met, the owner sends `outcome`. The
+   * system only works out `noticeDaysGiven` and records it on the row — so
+   * that if someone asks six months later "on what basis", the answer is in
+   * the ledger. There are always exceptions (hospital, family reasons), and
+   * no `if` can capture them.
    */
   async settle(
     actor: SessionUser,
@@ -678,8 +694,8 @@ export class DepositsService {
       where: { employeeId },
     });
     if (existing) {
-      // ⚠️ ৪০৯, নীরবে দ্বিতীয় সারি নয় — টাকা দুবার ফেরত দেওয়ার হিসাব
-      //    কোথাও লেখা থাকত না।
+      // Careful: 409, not silently a second row — nowhere would record that the
+      // money was refunded twice.
       throw new ConflictException(
         `${employee.empCode}-এর জামানত ইতিমধ্যে নিষ্পত্তি হয়েছে (${existing.outcome})।`,
       );
@@ -724,8 +740,8 @@ export class DepositsService {
         empCode: employee.empCode,
         outcome: dto.outcome,
         amount: paisaToTaka(amountPaisa),
-        // ⭐ নিয়ম কী বলেছিল আর মালিক কী করলেন — দুটোই থাকে, কারণ ব্যতিক্রম
-        //    হলে ঠিক ওই জোড়াটাই পরে দেখতে হবে
+        // What the rule said and what the owner did — both are kept, because
+        // for an exception that very pair is what has to be looked at later
         noticeDaysGiven: notice.daysGiven,
         noticeDaysRule: notice.daysRule,
         followedRule: notice.meetsRule === (dto.outcome === 'refunded'),

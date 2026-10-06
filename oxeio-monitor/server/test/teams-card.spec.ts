@@ -3,22 +3,22 @@ import { describe, expect, it } from 'vitest';
 import { teamsCard, trimForTeams } from '../src/alerts/teams.card';
 
 /**
- * **Teams-এ পাঠানোর পে-লোডের গড়ন।**
+ * **The shape of the payload sent to Teams.**
  *
- * ⚠️⚠️ এই ফাইলটা কেন দরকার, তার একটাই কারণ: <b>Teams ভুল গড়নেও ২০০ ফেরত
- * দেয়</b>, আর চ্যানেলে কিচ্ছু দেখা যায় না। অর্থাৎ ব্যর্থতাটা সম্পূর্ণ
- * নীরব — সার্ভারের লগ বলবে "sent", অথচ কেউ কোনোদিন কিছু পায়নি।
+ * The one reason this file is needed: <b>Teams returns 200 even for a wrong
+ * shape</b>, and nothing shows in the channel. So the failure is completely
+ * silent — the server log says "sent", yet nobody ever received anything.
  *
- * ⭐ HTTP স্তরে এটা ধরা যায় না, তাই গড়নটা এখানে বেঁধে রাখা হয়েছে।
+ * This cannot be caught at the HTTP level, so the shape is pinned here.
  */
 describe('teamsCard', () => {
   const card = teamsCard('oXeio — সাপ্তাহিক', 'Belal: 38h · Ali: 41h');
 
   /**
-   * ⚠️⚠️ তিনটে নামই হুবহু এই বানানে লাগে। একটাও বদলালে Teams সংযুক্তিটা
-   * নীরবে ফেলে দেয়।
+   * All three names must be spelled exactly like this. If any is changed,
+   * Teams silently drops the attachment.
    */
-  it('খামের নামগুলো হুবহু', () => {
+  it('the envelope names are exact', () => {
     expect(card.type).toBe('message');
     expect(card.attachments[0].contentType).toBe(
       'application/vnd.microsoft.card.adaptive',
@@ -26,63 +26,63 @@ describe('teamsCard', () => {
     expect(card.attachments[0].content.type).toBe('AdaptiveCard');
   });
 
-  /** ⚠️ `contentUrl` না থাকলে কিছু ক্লায়েন্ট সংযুক্তিটা বাদ দেয় */
-  it('contentUrl থাকে, null হয়ে', () => {
+  /** Without `contentUrl` some clients drop the attachment */
+  it('contentUrl is present, as null', () => {
     expect(card.attachments[0]).toHaveProperty('contentUrl', null);
   });
 
   /**
-   * ⚠️ সংস্করণ ১.৪ — বেশি নতুন চাইলে কারো কারো ক্লায়েন্টে কার্ডটা
-   * **ফাঁকা** দেখাত, আবারও নীরব ব্যর্থতা।
+   * Version 1.4 — asking for anything newer would show the card **blank** on
+   * some clients, another silent failure.
    */
-  it('Adaptive Card সংস্করণ ১.৪', () => {
+  it('Adaptive Card version 1.4', () => {
     expect(card.attachments[0].content.version).toBe('1.4');
   });
 
-  it('শিরোনাম ও লেখা দুটোই কার্ডে থাকে', () => {
+  it('both the title and the text are in the card', () => {
     const body = card.attachments[0].content.body as { text: string }[];
 
     expect(body[0].text).toBe('oXeio — সাপ্তাহিক');
     expect(body[1].text).toContain('Belal: 38h');
   });
 
-  /** ⭐ `wrap` ছাড়া লম্বা লাইন কেটে যেত, আর নাম অর্ধেক দেখাত */
-  it('দুটো ব্লকেই wrap চালু', () => {
+  /** Without `wrap`, long lines would be cut off and a name would show half */
+  it('wrap is on in both blocks', () => {
     const body = card.attachments[0].content.body as { wrap: boolean }[];
 
     expect(body[0].wrap).toBe(true);
     expect(body[1].wrap).toBe(true);
   });
 
-  it('JSON-এ রূপান্তর করা যায়', () => {
+  it('can be converted to JSON', () => {
     expect(() => JSON.stringify(card)).not.toThrow();
   });
 });
 
 describe('trimForTeams', () => {
-  it('ছোট লেখা অক্ষত', () => {
+  it('short text is left intact', () => {
     expect(trimForTeams('ছোট')).toBe('ছোট');
   });
 
   /**
-   * ⚠️⚠️ Teams-এর সীমা ছাড়ালে <b>পুরো বার্তাটাই ফেলে দেয়</b>, অর্ধেক নয়।
-   * তাই নিজে কেটে দেওয়া — নইলে দল বড় হওয়ার দিন সাপ্তাহিক সারাংশ হঠাৎ
-   * নীরবে আসা বন্ধ হয়ে যেত।
+   * If it exceeds Teams' limit, Teams drops <b>the whole message</b>, not half.
+   * So we trim it ourselves — otherwise the weekly summary would suddenly stop
+   * arriving, silently, the day the team grows.
    */
-  it('অনেক বড় লেখা কেটে দেওয়া হয়', () => {
+  it('very long text is trimmed', () => {
     const trimmed = trimForTeams('ক'.repeat(30_000));
 
     expect(trimmed.length).toBeLessThanOrEqual(20_000);
   });
 
-  /** ⭐ কাটা পড়েছে সেটা বার্তাতেই বলা — নইলে কেউ ভাবত হিসাবই কম */
-  it('কাটা পড়লে সেটা লেখা থাকে', () => {
+  /** Say in the message itself that it was trimmed — otherwise people would think the figures are just low */
+  it('when trimmed, that is stated', () => {
     const trimmed = trimForTeams('ক'.repeat(30_000));
 
     expect(trimmed).toContain('কেটে দেওয়া হয়েছে');
   });
 
-  it('ঠিক সীমানায় কাটা হয় না', () => {
+  it('it is not trimmed exactly at the limit', () => {
     const exact = 'ক'.repeat(20_000);
 
     expect(trimForTeams(exact)).toBe(exact);

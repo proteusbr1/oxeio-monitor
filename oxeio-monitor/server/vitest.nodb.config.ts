@@ -4,20 +4,21 @@ import swc from 'unplugin-swc';
 import { defineConfig } from 'vitest/config';
 
 /**
- * ⭐⭐ **ডাটাবেস ছাড়া টেস্ট** — `npm run test:nodb`।
+ * **Tests without a database** — `npm run test:nodb`.
  *
- * ⚠️ কেন আলাদা কনফিগ: `vitest.config.ts`-এর `globalSetup` একটা আসল
- * Postgres তোলে ও migration চালায়। সেটা CI-তে ঠিক আছে, কিন্তু যাঁর
- * মেশিনে Docker নেই (সিস্টেম VPS-এ চলে যাওয়ার পর এখানে তাই) তাঁর পক্ষে
- * **একটা খাঁটি ফাংশনের টেস্টও** চালানো যেত না — অথচ পে-রোল আর জামানতের
- * গোটা হিসাবটাই খাঁটি ফাংশনে লেখা, ঠিক এই কারণেই।
+ * Why a separate config: the `globalSetup` in `vitest.config.ts` starts a real
+ * Postgres and runs migrations. That is fine in CI, but anyone without Docker on
+ * their machine (the system now runs on a VPS) could not run even **a single
+ * pure-function test** — although all payroll and deposit math is written as
+ * pure functions for exactly this reason.
  *
- * ⚠️ এখানে `*.e2e.spec.ts` ইচ্ছাকৃতভাবে **বাদ** — ওগুলো ডাটাবেস ছাড়া
- * চলবেই না, আর তালিকায় রাখলে প্রতিবার লাল দেখে মনে হতো কিছু ভেঙেছে।
- * সবুজ মানে "যা চালানো গেছে সব ঠিক", **"সব ঠিক" নয়** — শেষ কথা CI।
+ * `*.e2e.spec.ts` is deliberately **excluded**: those cannot run without a
+ * database, and listing them would show red every time and look like a break.
+ * Green here means "everything that could run is fine", **not** "everything is
+ * fine" — CI has the final word.
  */
 export default defineConfig({
-  // ⚠️ SWC ছাড়া NestJS-এর DI ভাঙে (`vitest.config.ts`-এর নোট দেখুন)
+  // Without SWC, NestJS DI breaks (see the note in `vitest.config.ts`)
   plugins: [swc.vite({ module: { type: 'es6' } })],
   test: {
     environment: 'node',
@@ -25,9 +26,9 @@ export default defineConfig({
     exclude: ['test/**/*.e2e.spec.ts', 'node_modules/**'],
     env: {
       NODE_ENV: 'test',
-      // ⚠️ `screenshot-heal.spec.ts` ডাটাবেস ছাড়াই চলে, কিন্তু একটা লেখার
-      //    মতো ফোল্ডার চায় — না দিলে ওটাই একমাত্র লাল টেস্ট হয়ে বসত, আর
-      //    কারণটা "ডাটাবেস নেই" বলে ভুল বোঝা যেত।
+      // `screenshot-heal.spec.ts` needs no database but wants a writable
+      // folder. Without this it would be the only red test, and the cause
+      // would be misread as "no database".
       STORAGE_ROOT: resolve(import.meta.dirname, '.tmp-test-storage'),
     },
   },

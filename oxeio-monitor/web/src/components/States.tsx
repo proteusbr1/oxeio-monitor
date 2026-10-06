@@ -3,13 +3,13 @@ import type { ReactNode } from 'react';
 import { ApiError } from '../api/client';
 
 /**
- * ⭐ **প্রতিটা পেজে তিনটে অবস্থা** — লোড হচ্ছে · ভুল হয়েছে · কিছু নেই।
+ * Every page has three states: loading, error, nothing to show.
  *
- * ⚠️ খালি অবস্থাটা ভুলবেন না। নতুন অফিসে প্রথম দিন সব পেজই খালি থাকবে,
- *    আর তখন সাদা পর্দা দেখলে মনে হবে সিস্টেমটা ভাঙা। `<Empty>`-এর `hint`
- *    সবসময় বলে দেবে **এরপর কী করতে হবে**।
+ * Careful: do not forget the empty state. On a new office's first day every page
+ * will be empty, and a white screen would look like a broken system. The `hint`
+ * of `<Empty>` should always say what to do next.
  *
- * ব্যবহারের ছাঁচ:
+ * Usage pattern:
  * ```tsx
  * if (loading && !data) return <Loading />;
  * if (error) return <ErrorBox error={error} retry={reload} />;
@@ -26,7 +26,7 @@ export function Loading({ label = 'Loading…' }: { label?: string }) {
       aria-live="polite"
     >
       <div className="flex items-center gap-2.5">
-        {/* সরু ব্র্যান্ড-লাল রিং — ঘুরছে মানে "কাজ চলছে", ভুল নয় */}
+        {/* Thin brand-red ring: spinning means "work in progress", not an error */}
         <span
           aria-hidden
           className="size-4 animate-spin rounded-full border-2 border-line border-t-brand"
@@ -38,25 +38,25 @@ export function Loading({ label = 'Loading…' }: { label?: string }) {
 }
 
 /**
- * ভুলের বাক্স।
+ * Error box.
  *
- * ⭐ **৪০৩ আলাদা করে দেখানো হয়** — ম্যানেজার owner-only ডেটা চাইলে
- * "সার্ভারে সমস্যা" নয়, "You don't have access" বলা দরকার। আর তখন
- * "Retry" বোতামটাও দেখানো হয় না: বারবার চাপলেও অনুমতি আসবে না, শুধু
- * বিভ্রান্তি বাড়ত।
+ * A 403 is shown separately: when a manager asks for owner-only data it should
+ * say "You don't have access", not "server problem". The "Retry" button is not
+ * shown then either: pressing it repeatedly will not grant permission, it would
+ * only add confusion.
  *
- * ⚠️ ৪০৩ যেন প্রথমেই না আসে — owner-only জিনিস ম্যানেজারকে **দেখানোই
- *    হবে না** (`useAuth().user.role`)। এই বাক্সটা শেষ রক্ষাকবচ।
+ * Careful: a 403 should not come first: owner-only things must not be shown to a
+ * manager at all (`useAuth().user.role`). This box is the last line of defense.
  *
- * ⚠️⚠️ **`error.message` সার্ভারের নিজের বার্তা** — ৪০৩/৪০৪ ছাড়া বাকি
- *    ভুলে পর্দায় ওটাই হুবহু বসে। ইচ্ছাকৃত: বার্তাটা এখানে বানানো হয় না,
- *    শুধু দেখানো হয়, কারণ "কী ভুল হলো" সবচেয়ে ভালো জানে সার্ভারই।
- *    সার্ভারের ব্যবহারকারী-মুখী বার্তাগুলো এখন ইংরেজি (একসাথে অনুবাদ করা
- *    হয়েছে), তাই পর্দা মিশ্র ভাষায় থাকে না।
+ * Careful: `error.message` is the server's own message. For every error except
+ * 403/404 it is shown on screen verbatim. Intentional: the message is not
+ * composed here, only displayed, because the server knows best what went wrong.
+ * The server's user-facing messages are now in English (translated together), so
+ * the screen does not end up in mixed languages.
  *
- * ⚠️ ক্লায়েন্টে অনুবাদের টেবিল **বসাবেন না** — তাহলে সার্ভারে নতুন কোনো
- *    বার্তা যোগ হলে সেটা নীরবে অনূদিত-না-হয়ে বেরোত আর কেউ ধরতে পারত না।
- *    ভাষা ঠিক করার জায়গা সার্ভার, এখানে নয়।
+ * Careful: do not add a translation table on the client. If a new message were
+ * added on the server, it would silently come out untranslated and nobody would
+ * notice. The server is the place to settle language, not here.
  */
 export function ErrorBox({
   error,
@@ -102,11 +102,11 @@ export function ErrorBox({
 }
 
 /**
- * কিছু নেই।
+ * Nothing to show.
  *
- * ⚠️ `hint` ঐচ্ছিক নয় বললেই চলে — "কিছু নেই" একা বললে ব্যবহারকারী বুঝতে
- *    পারে না এটা স্বাভাবিক না কি ভাঙা। "এজেন্ট বসানো হয়েছে তো?" ধরনের
- *    একটা বাক্যই পার্থক্যটা তৈরি করে।
+ * Careful: `hint` is almost mandatory. Saying only "nothing here" leaves the user
+ * unable to tell whether this is normal or broken. One sentence like "is the
+ * agent installed?" makes the difference.
  */
 export function Empty({
   title,
@@ -115,7 +115,7 @@ export function Empty({
 }: {
   title: ReactNode;
   hint?: ReactNode;
-  /** "Add staff" ধরনের পরের পদক্ষেপ */
+  /** The next step, like "Add staff". */
   action?: ReactNode;
 }) {
   return (
@@ -128,13 +128,13 @@ export function Empty({
 }
 
 /**
- * ছোট্ট সতর্কবার্তা — সার্ভারের `caveat` ফিল্ড দেখানোর জন্য।
+ * A small warning, for showing the server's `caveat` field.
  *
- * ⭐ কিছু রেসপন্সে `caveat` আসে: "When one person runs more than one device
- * the time is added up…"। ⚠️ ওটা **লুকিয়ে ফেলা যাবে না** — অনুপাত ঠিক
- * থাকলেও পরম সেকেন্ডকে কাজের ঘণ্টা ধরা যায় না, আর সেটা না জানালে কেউ ভুল
- * সিদ্ধান্ত নেবে।
- * সরু আউটলাইন, সলিড লাল নয় — এটা ভুল নয়, শুধু একটা শর্ত।
+ * Some responses carry a `caveat`: "When one person runs more than one device the
+ * time is added up...". Careful: it must not be hidden: even if the ratio is
+ * right, absolute seconds cannot be taken as hours worked, and without being told,
+ * someone will make a wrong decision. Thin outline, not solid red: it is not an
+ * error, only a condition.
  */
 export function Caveat({ children }: { children: ReactNode }) {
   return (

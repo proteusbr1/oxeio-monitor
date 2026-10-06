@@ -84,11 +84,11 @@ void Promise.all([
 });
 
 /**
- * ⭐ PWA — হোমস্ক্রিন থেকে খোলার জন্য অ্যাপ-শেল ক্যাশ হয়।
+ * PWA: the app shell is cached so it can be opened from the home screen.
  *
- * ⚠️ রেন্ডারের **পরে** ডাকা হয়: ফাংশনটা নিজে `load` ইভেন্টের অপেক্ষা করে,
- *    তাই এটা প্রথম পেইন্টের সাথে কিছুর জন্য লড়ে না।
- * ⚠️⚠️ সার্ভিস ওয়ার্কার **কোনো API উত্তর ক্যাশ করে না** — কারণ `pwa-sw.ts`-এ
- *    লেখা (লাইভ সংখ্যা + স্ক্রিনশট)।
+ * Careful: called after render: the function itself waits for the `load` event,
+ * so it does not compete with the first paint.
+ * Careful: the service worker caches no API responses, for the reason written in
+ * `pwa-sw.ts` (live numbers + screenshots).
  */
 registerServiceWorker();

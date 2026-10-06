@@ -1,34 +1,33 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// একটা ঘটনা — <c>POST /agent/events</c>-এর <c>events[]</c>-এর এলিমেন্ট।
+/// One event: an element of <c>events[]</c> in <c>POST /agent/events</c>.
 ///
-/// ইভেন্ট হলো <b>ঘটনার লগ</b>, ঘণ্টার হিসাব নয়। ঘণ্টা আসে শুধু
-/// <see cref="oXeio.Core.Models.ActivitySegment"/> থেকে। তাই ইভেন্ট হারালে
-/// পে-রোল নড়ে না — শুধু ডিবাগিং কঠিন হয়।
+/// Events are a <b>log of what happened</b>, not the hours calculation. Hours come only from
+/// <see cref="oXeio.Core.Models.ActivitySegment"/>. So losing an event does not move payroll;
+/// it only makes debugging harder.
 /// </summary>
 public sealed record AgentEventRecord
 {
     public required Guid ClientUuid { get; init; }
 
-    /// <summary><see cref="AgentEventTypes"/>-এর একটা। সর্বোচ্চ ৫০ অক্ষর।</summary>
+    /// <summary>One of <see cref="AgentEventTypes"/>. At most 50 characters.</summary>
     public required string Type { get; init; }
 
     public required DateTimeOffset OccurredAt { get; init; }
 
     /// <summary>
-    /// JSON অবজেক্ট হিসেবে যায়। ছোট রাখুন — এখানে ডায়াগনস্টিক থাকে, ডেটা নয়।
+    /// Sent as a JSON object. Keep it small: it holds diagnostics, not data.
     ///
-    /// ⚠️ এখানে কখনো ফাইলের নাম, URL বা উইন্ডোর টেক্সট ঢোকাবেন না। মেটা ফিল্ডে
-    /// কোনো ভ্যালিডেশন নেই, তাই "একটু ডিবাগ ইনফো" দিয়েই প্রাইভেসির নিয়ম ফাঁকি
-    /// দেওয়া সবচেয়ে সহজ এখানেই।
+    /// Careful: never put file names, URLs or window text here. The meta field has no
+    /// validation, so "just a bit of debug info" is the easiest way to sidestep the privacy rules.
     /// </summary>
     public IReadOnlyDictionary<string, object?>? Meta { get; init; }
 }
 
 /// <summary>
-/// সার্ভারের <c>schema.prisma</c>-তে লেখা তালিকাটাই — স্ট্রিং হাতে লিখলে
-/// একটা টাইপো সারা মাস চুপচাপ ভুল টাইপ পাঠাত, আর সার্ভার সেটা মেনেও নিত।
+/// The same list as in the server's <c>schema.prisma</c>. Typing the strings by hand would
+/// let one typo send a wrong type all month, and the server would accept it.
 /// </summary>
 public static class AgentEventTypes
 {
@@ -38,36 +37,32 @@ public static class AgentEventTypes
     public const string Logoff = "logoff";
 
     /// <summary>
-    /// ⭐ PC বন্ধ/রিস্টার্ট — <c>logoff</c> থেকে আলাদা।
+    /// PC shutdown/restart, distinct from <c>logoff</c>.
     ///
-    /// সার্ভারের G02 অ্যালার্ট (<c>alerts.rules.ts</c>) একটা <c>agent_stop</c>-কে
-    /// "স্বাভাবিক" বলে <b>কেবল তখনই</b>, যখন তার আশেপাশে একটা <c>logoff</c> বা
-    /// <c>shutdown</c> আছে। দুটোর কোনোটাই না পাঠালে প্রতিটা রাতের স্বাভাবিক
-    /// শাটডাউনই "হস্তক্ষেপ" হয়ে অ্যালার্ট তুলত — অর্থাৎ ১৫টা PC থেকে রোজ
-    /// ১৫টা মিথ্যা অ্যালার্ট, আর তার পরেই কেউ আর অ্যালার্ট পড়ত না।
+    /// The server's G02 alert (<c>alerts.rules.ts</c>) treats an <c>agent_stop</c> as "normal"
+    /// <b>only</b> when a <c>logoff</c> or <c>shutdown</c> is nearby. If neither were sent,
+    /// every normal nightly shutdown would count as an "intervention" and raise an alert:
+    /// 15 false alerts a day from 15 PCs, after which nobody would read alerts any more.
     /// </summary>
     public const string Shutdown = "shutdown";
 
     /// <summary>
-    /// ⭐⭐ <b>Restart Manager আমাদের বন্ধ করাচ্ছে — সাধারণত আপডেট বসাতে।</b>
+    /// <b>The Restart Manager is making us shut down, usually to install an update.</b>
     ///
-    /// ⚠️⚠️ এটা <b>সেশন শেষ নয়</b>, তাই <see cref="Shutdown"/> বলা যেত না —
-    /// বললে প্রতিটা আপডেট একটা ভুয়া "PC বন্ধ" রেকর্ড রেখে যেত।
+    /// Important: this is <b>not the end of a session</b>, so it could not be called
+    /// <see cref="Shutdown"/>; doing so would leave a bogus "PC shut down" record on every update.
     ///
-    /// ⚠️⚠️ কিন্তু কিছুই না পাঠানোও ভুল ছিল, আর সেটাই এতদিন হতো। উপরের
-    /// <see cref="Shutdown"/>-এর নোট যে ফাঁদটার কথা বলে, আপডেট ঠিক সেই
-    /// ফাঁদেই পড়ত: <c>agent_stop</c> যেত, কিন্তু পাশে <c>logoff</c>/<c>shutdown</c>
-    /// কিছুই থাকত না — তাই সার্ভারের G02 প্রতিটা আপডেটকে <b>হস্তক্ষেপ</b>
-    /// ধরে <c>agent_killed</c> অ্যালার্ট তুলত। ⭐ হাতে গিয়ে একটা-দুটো PC
-    /// আপডেট করলে সেটা চোখে পড়ত না; রোলআউট চালু হলে একসাথে ১২টা।
+    /// But sending nothing was wrong too, and that is what used to happen. Updates fell into the
+    /// trap described in the <see cref="Shutdown"/> note: an <c>agent_stop</c> went out with no
+    /// <c>logoff</c>/<c>shutdown</c> beside it, so the server's G02 treated every update as an
+    /// <b>intervention</b> and raised an <c>agent_killed</c> alert. Updating one or two PCs by
+    /// hand went unnoticed; once the rollout started, it was 12 at a time.
     ///
-    /// ⭐ সার্ভার এটাকে <c>agent_stop</c>-এর <b>বৈধ সঙ্গী</b> ধরে
-    /// (<c>alerts.rules.ts</c> → <c>CLEAN_STOP_CONTEXT</c>), ঠিক যেভাবে
-    /// <c>logoff</c>/<c>shutdown</c>-কে ধরে।
+    /// The server treats this as a <b>valid companion</b> of <c>agent_stop</c>
+    /// (<c>alerts.rules.ts</c> → <c>CLEAN_STOP_CONTEXT</c>), just as it does <c>logoff</c>/<c>shutdown</c>.
     ///
-    /// ⚠️ কেউ এজেন্ট মেরে দিলে এই ইভেন্টটা যায় না — তাই আসল হস্তক্ষেপ
-    /// এখনো ধরা পড়ে। ছাড়টা শুধু ওই পথের, যেটা দিয়ে Windows নিজে আমাদের
-    /// বন্ধ করায়।
+    /// Careful: if someone kills the agent this event is not sent, so a real intervention is
+    /// still caught. The exemption covers only the path Windows itself uses to make us stop.
     /// </summary>
     public const string AgentUpdate = "agent_update";
 

@@ -2,21 +2,20 @@ import { workDateOf } from '../agent/util/dhaka-time';
 import { isOffWeekday } from '../summary/weekly-off';
 
 /**
- * রিপোর্টের **খাঁটি** অংশ — তারিখ পার্স, রেঞ্জের সীমা (F08), কর্মদিবস গোনা,
- * দৈনিক টার্গেট বের করা, বালতিতে (সপ্তাহ/মাস) ভাগ করা।
+ * The **pure** part of the reports: date parsing, range limits (F08), counting
+ * work days, working out the daily target, splitting into buckets (week/month).
  *
- * আলাদা ফাইলে রাখার কারণ: রিপোর্টে ভুল প্রায় সবসময় **এখানেই** হয় — এক দিন
- * এদিক-ওদিক, একটা ছুটির দিন গোনায় ঢুকে যাওয়া, কিংবা মাস বদলের সময় টার্গেট
- * পাল্টাতে ভুলে যাওয়া। DB বা HTTP-র সাথে মিশে থাকলে এগুলো নিরিবিলি পরীক্ষা
- * করা যেত না, অথচ ছাপা রিপোর্টই শেষ পর্যন্ত মানুষ বিশ্বাস করে।
+ * Kept in a separate file because mistakes in reports almost always happen
+ * **here**: one day off, a holiday sneaking into the count, or forgetting to
+ * change the target at a month boundary. Mixed with the DB or HTTP these could
+ * not be tested in isolation, yet in the end people trust the printed report.
  *
- * ⚠️ সব তারিখ এখানে **UTC-midnight Date** হিসেবে চলে — ঠিক যেভাবে Prisma
- *    `@db.Date` কলাম (`work_date`, `holiday_date`) ফেরত দেয় এবং
- *    `dhaka-time.workDateOf()` বানায়। তাই তুলনা সরাসরি মিলে যায়, কোনো
- *    টাইমজোন রূপান্তর লাগে না।
+ * All dates here run as **UTC-midnight Dates**, just as Prisma's `@db.Date`
+ * columns (`work_date`, `holiday_date`) return them and `dhaka-time.workDateOf()`
+ * builds them. So comparisons match directly, with no timezone conversion.
  */
 
-/** F08 — এক রিকোয়েস্টে সর্বোচ্চ কত দিন চাওয়া যাবে। */
+/** F08: the most days that can be requested in one request. */
 export const MAX_RANGE_DAYS = 370;
 
 const DAY_MS = 86_400_000;
@@ -24,12 +23,12 @@ const SEC_PER_HOUR = 3600;
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /**
- * 'YYYY-MM-DD' → ওই তারিখের UTC-midnight।
+ * 'YYYY-MM-DD' → UTC-midnight of that date.
  *
- * ⚠️ `new Date('2026-8-1')` লোকাল টাইমজোনে পার্স হয়, আর `Date.UTC(2026, 1, 30)`
- *    চুপচাপ ২ মার্চ বানিয়ে দেয়। দুটোর কোনোটাই এরর দেয় না — শুধু রিপোর্টের
- *    তারিখ এক দিন সরে যায়। তাই ফরম্যাট regex দিয়ে বাঁধা, আর তৈরি হওয়া
- *    তারিখটা আবার মিলিয়ে দেখা হয় (round-trip)।
+ * `new Date('2026-8-1')` parses in the local timezone, and `Date.UTC(2026, 1, 30)`
+ * quietly makes it 2 March. Neither gives an error; the report's date just
+ * shifts by a day. So the format is bound with a regex, and the resulting date
+ * is checked again (round-trip).
  */
 export function parseWorkDate(text: string): Date {
   const m = ISO_DATE_RE.exec(text);
@@ -54,9 +53,9 @@ export function parseWorkDate(text: string): Date {
 }
 
 /**
- * UTC-midnight Date → 'YYYY-MM-DD'।
- * ⚠️ `toLocaleDateString()` বা `getFullYear()` ব্যবহার করা হয় না — সার্ভার
- *    ঢাকার বাইরে (বা CI-তে UTC-র পশ্চিমে) চললে ওগুলো এক দিন পিছিয়ে দিত।
+ * UTC-midnight Date → 'YYYY-MM-DD'.
+ * `toLocaleDateString()` or `getFullYear()` are not used: with the server
+ * outside Dhaka (or west of UTC in CI) they would be a day behind.
  */
 export function toIsoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -66,22 +65,22 @@ export function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * DAY_MS);
 }
 
-/** দুই তারিখের মধ্যে দিনসংখ্যা, **দুই প্রান্তসহ** (একই দিন হলে ১)। */
+/** Number of days between two dates, **both ends included** (1 if the same day). */
 export function daysInclusive(from: Date, to: Date): number {
   return Math.floor((to.getTime() - from.getTime()) / DAY_MS) + 1;
 }
 
 /**
- * ISO দিন: সোম = ১ … রবি = ৭।
- * ⚠️ `getDay()` নয়, `getUTCDay()` — তারিখগুলো UTC-midnight, তাই লোকাল getter
- *    ঋণাত্মক অফসেটের মেশিনে আগের দিন ধরিয়ে দিত (শুক্রবারের ছুটি বৃহস্পতিবারে
- *    সরে যেত)। `work_policies.weekly_off_day`-ও ISO সংখ্যা।
+ * ISO day: Monday = 1 ... Sunday = 7.
+ * `getUTCDay()`, not `getDay()`: the dates are UTC-midnight, so a local getter
+ * on a machine with a negative offset would give the previous day (a Friday
+ * holiday would move to Thursday). `work_policies.weekly_off_day` is an ISO number too.
  */
 export function isoDayOf(date: Date): number {
   return ((date.getUTCDay() + 6) % 7) + 1;
 }
 
-/** 'YYYY-MM' — `monthly_summary.year_month`-এর সাথে হুবহু এক ফরম্যাট। */
+/** 'YYYY-MM' — exactly the same format as `monthly_summary.year_month`. */
 export function monthKeyOf(date: Date): string {
   return toIsoDate(date).slice(0, 7);
 }
@@ -91,7 +90,7 @@ export function monthBoundsOf(date: Date): { first: Date; last: Date } {
   const month = date.getUTCMonth();
   return {
     first: new Date(Date.UTC(year, month, 1)),
-    // পরের মাসের ০ তারিখ = এই মাসের শেষ দিন — লিপ ইয়ারও নিজে থেকেই মেলে
+    // Day 0 of the next month = the last day of this month; leap years work out by themselves
     last: new Date(Date.UTC(year, month + 1, 0)),
   };
 }
@@ -105,18 +104,19 @@ export function eachDate(from: Date, to: Date): Date[] {
 }
 
 /**
- * রেঞ্জ যে যে মাস ছুঁয়েছে, প্রত্যেকটির **পুরো** সীমা।
+ * For every month the range touches, that month's **whole** bounds.
  *
- * ⚠️ **দৈনিক টার্গেটের হর এখান থেকে আসে না** — ওটা পলিসির
- * `expected_workdays` (`dailyTargetSec()`-এর নোট)। আগে এই ফাংশনের কারণ
- * হিসেবে ঠিক উল্টোটা লেখা ছিল, আর সেই লেখাটাই ভুল হরটাকে বৈধ দেখাত।
+ * The **denominator of the daily target does not come from here**: it is the
+ * policy's `expected_workdays` (see the note on `dailyTargetSec()`). This
+ * function's reason used to be written as exactly the opposite, and that text
+ * made the wrong denominator look valid.
  *
- * ⭐ তবু পুরো মাস দরকার, দুটো কারণে:
- *   ১· `meta.approximateHolidayDates` পাঠককে বলে **এই মাসগুলোর** কোন
- *      তারিখ এখনো পাকা নয়। রেঞ্জ কেটে আনলে ২৬ আগস্টের অনিশ্চিত ছুটিটা
- *      ১–১৪ আগস্টের রিপোর্টে চাপা পড়ত।
- *   ২· পে-রোলের `d ÷ D` ভগ্নাংশে D = **ওই মাসের** ক্যালেন্ডার কর্মদিবস,
- *      অর্থাৎ মাসের যেকোনো ছুটি নড়লে টাকা নড়ে — রেঞ্জের বাইরে পড়লেও।
+ * The whole month is still needed, for two reasons:
+ *   1. `meta.approximateHolidayDates` tells the reader which dates in **these
+ *      months** are not final. Trimming to the range would bury the uncertain
+ *      26 August holiday in a report for 1-14 August.
+ *   2. In payroll's `d ÷ D` fraction, D = **that month's** calendar work days,
+ *      so if any holiday in the month moves, money moves, even outside the range.
  */
 export function monthsIn(
   from: Date,
@@ -136,38 +136,38 @@ export function monthsIn(
   return out;
 }
 
-// ── রেঞ্জ যাচাই (F08) ───────────────────────────────────────────────────────
+// ── Range validation (F08) ──────────────────────────────────────────────────
 
 export interface ReportRange {
   from: Date;
-  /** কার্যকর শেষ তারিখ — ভবিষ্যতে চাইলে আজ পর্যন্ত ছেঁটে দেওয়া হয় */
+  /** The effective end date: a future request is clamped to today */
   to: Date;
-  /** যা চাওয়া হয়েছিল — ছাঁটাই হয়েছে কি না বোঝার জন্য রেসপন্সে যায় */
+  /** What was requested; goes in the response to show whether it was clamped */
   requestedTo: Date;
   clampedToToday: boolean;
-  /** কার্যকর দিনসংখ্যা */
+  /** The effective number of days */
   days: number;
 }
 
 export interface ParseRangeOptions {
-  /** টেস্টে নির্দিষ্ট সময় বসানোর জন্য */
+  /** To set a fixed time in tests */
   now?: Date;
   maxDays?: number;
 }
 
 /**
- * F08 — যেকোনো from–to, কিন্তু **সীমা বেঁধে**।
+ * F08: any from–to, but **with limits**.
  *
- * ⚠️ সীমা যাচাই হয় **চাওয়া** রেঞ্জের উপর, ছাঁটাইয়ের আগে। উল্টো করলে
- *    `from=2000-01-01&to=2999-12-31` আজ পর্যন্ত ছেঁটে গিয়ে "১১ দিন" হয়ে
- *    পাস করে যেত — অর্থাৎ সার্ভার একদম অন্য প্রশ্নের উত্তর দিত, অথচ
- *    ব্যবহারকারী জানতই না।
+ * The limit is checked on the **requested** range, before clamping. The other
+ * way round, `from=2000-01-01&to=2999-12-31` would be clamped to today and pass
+ * as "11 days", so the server would answer a completely different question
+ * without the user knowing.
  *
- * ⭐ ভবিষ্যতের তারিখ **নাকচ না করে ছেঁটে** দেওয়া হয়, কারণ ড্যাশবোর্ডে
- * "এই মাস" বাছলে ১১ আগস্টেই ১–৩১ আগস্ট চাওয়া হয় — ওটা এরর দেখানোর মতো
- * ভুল নয়। কিন্তু ছাঁটাইটা চুপচাপ নয়: `clampedToToday` রেসপন্সে যায় এবং
- * Excel-এর "তথ্য" শিটেও লেখা থাকে। না ছাঁটলে ভবিষ্যতের কর্মদিবসগুলোর
- * টার্গেট যোগ হয়ে সবার নামে বিশাল ঘাটতি দেখাত।
+ * Future dates are **clamped, not rejected**, because on the dashboard picking
+ * "this month" on 11 August asks for 1-31 August; that is not a mistake worth
+ * an error. But the clamping is not silent: `clampedToToday` goes in the
+ * response and is written on Excel's "Info" sheet too. Without clamping, the
+ * targets of future work days would be added up and show everyone a huge shortfall.
  */
 export function parseReportRange(
   fromText: string,
@@ -189,7 +189,7 @@ export function parseReportRange(
     );
   }
 
-  // আজকের ঢাকার তারিখ — নিজে অফসেট হিসাব না করে dhaka-time দিয়েই
+  // Today's date in Dhaka, through dhaka-time rather than computing the offset ourselves
   const today = workDateOf(opts.now ?? new Date());
 
   if (from.getTime() > today.getTime()) {
@@ -210,21 +210,21 @@ export function parseReportRange(
   };
 }
 
-// ── কর্মদিবস ও টার্গেট (§ ২.১-খ) ────────────────────────────────────────────
+// ── Work days and the target (§ 2.1-b) ──────────────────────────────────────
 
 export interface WorkdayRule {
-  /** ISO দিন (শুক্র = ৫)। null হলে প্রতিটি ক্যালেন্ডার দিনই কর্মদিবস। */
+  /** ISO days (Friday = 5). If null, every calendar day is a work day. */
   weeklyOffDays: readonly number[];
   /**
-   * ছুটির দিনগুলোর `getTime()`।
-   * ⚠️ Date অবজেক্ট Set-এ রেফারেন্স ধরে মেলে, মান ধরে নয় — তাই epoch ms।
+   * The `getTime()` of the holidays.
+   * A Date object in a Set matches by reference, not value, hence epoch ms.
    */
   holidays: ReadonlySet<number>;
 }
 
 /**
- * ⚠️ এটা **ব্লক নয়** — ছুটির দিনে কেউ কাজ করলে ঘণ্টা পুরোপুরি গোনা হবে
- *    (§ ২.১-খ)। এই ফাংশন শুধু বলে ওই দিনটার **টার্গেট** আছে কি না।
+ * This is **not a block**: if someone works on a holiday the hours count in
+ * full (§ 2.1-b). This function only says whether that day has a **target**.
  */
 export function isWorkday(date: Date, rule: WorkdayRule): boolean {
   if (rule.holidays.has(date.getTime())) return false;
@@ -247,32 +247,32 @@ export function countWorkdays(
 }
 
 /**
- * এক কর্মদিবসের টার্গেট, সেকেন্ডে।
+ * One work day's target, in seconds.
  *
- * ⭐⭐ **হর পলিসির `expected_workdays` (২৬) — ওই মাসের ক্যালেন্ডার কর্মদিবস
- * নয়।** এটাই § ২.১-খ-এর `expected_sec = target_sec × workdays_elapsed ÷
- * expected_workdays` সূত্রের একক রূপ, আর `summary/proration.ts`-এর
- * `prorate()` হুবহু এই একই ভাগ করে।
+ * **The denominator is the policy's `expected_workdays` (26), not that month's
+ * calendar work days.** This is the single-day form of § 2.1-b's formula
+ * `expected_sec = target_sec × workdays_elapsed ÷ expected_workdays`, and
+ * `prorate()` in `summary/proration.ts` does exactly the same division.
  *
- * ⚠️⚠️ **কেন ক্যালেন্ডার নয়, সেটাই এই ফাংশনের গোটা বক্তব্য।** হর ওই মাসের
- * কর্মদিবস হলে ছুটি বাড়লে দৈনিক টার্গেট **বাড়ত** আর মাসের মোট ২০৮
- * ঘণ্টাতেই থেকে যেত — অর্থাৎ সরকারি ছুটি দিয়ে কর্মীর কোনো লাভই হতো না,
- * শুধু বাকি দিনগুলোর বোঝা ভারী হতো। পলিসির ধ্রুবক দিয়ে ভাগ করলে দিনটা
- * সবসময় ৮ ঘণ্টাই থাকে আর ছুটির মাসে মোট নেমে আসে (২৫ × ৮ = ২০০) — এটাই
- * মানুষ যা বোঝে তার সাথে মেলে।
+ * **Why not the calendar is the whole point of this function.** If the
+ * denominator were the month's work days, more holidays would **raise** the
+ * daily target while the month's total stayed at 208 hours: public holidays
+ * would give staff no benefit, only make the remaining days heavier. Dividing
+ * by the policy constant keeps the day at 8 hours and the total falls in a
+ * holiday month (25 × 8 = 200), which matches what people expect.
  *
- * ⚠️ ফল **round করা হয় না**। ২২ কর্মদিবসের পলিসিতে ৭৪৮৮০০ ÷ ২২ =
- *    ৩৪০৩৬.৩৬…; প্রতিদিন round করে যোগ করলে মাসের শেষে টার্গেট আসল
- *    সংখ্যায় গিয়ে ঠেকত না — অর্থাৎ কেউ ঠিক টার্গেট ছুঁয়েও কাগজে ঘাটতি
- *    দেখত। round শুধু একদম শেষে, ঘণ্টায় রূপান্তরের সময়।
+ * The result is **not rounded**. In a 22-work-day policy 748800 ÷ 22 =
+ * 34036.36...; rounding each day and adding up would not reach the real
+ * number at month end, so someone could hit the target exactly and still see a
+ * shortfall on paper. Round only at the very end, when converting to hours.
  *
- * ⚠️ হর শূন্য হলে ০ ফেরে — Infinity নয়। বাস্তবে অপৌঁছনীয়:
- *    `expected_workdays` কলামটা non-null, default ২৬, আর DTO-তে
- *    `@Min(1) @Max(31)` (`admin/dto.ts`)।
+ * A zero denominator returns 0, not Infinity. In practice unreachable: the
+ * `expected_workdays` column is non-null, default 26, and the DTO has
+ * `@Min(1) @Max(31)` (`admin/dto.ts`).
  */
 export function dailyTargetSec(
   monthlyTargetSec: number,
-  /** পলিসির `expected_workdays` — ক্যালেন্ডার থেকে গোনা সংখ্যা নয় */
+  /** The policy's `expected_workdays`, not a number counted from the calendar */
   expectedWorkdays: number,
 ): number {
   if (!Number.isFinite(monthlyTargetSec) || monthlyTargetSec < 0) {
@@ -282,14 +282,14 @@ export function dailyTargetSec(
   return monthlyTargetSec / expectedWorkdays;
 }
 
-// ── পরিসর ও পরিসরের টার্গেট ─────────────────────────────────────────────────
+// ── Spans and a span's target ───────────────────────────────────────────────
 
 /**
- * দুই প্রান্তই ধরা একটা তারিখ-পরিসর।
+ * A date span with both ends included.
  *
- * ⚠️ `summary.math.ts`-এর `ElapsedWindow`-ও হুবহু এই আকৃতি, তাই ওটা সরাসরি
- *    এখানে পাঠানো যায়। ইচ্ছাকৃতভাবে import করা হয়নি: এই ফাইলে DB বা
- *    rollup-এর কোনো ধারণা ঢুকতে দেওয়া হয় না।
+ * `summary.math.ts`'s `ElapsedWindow` has exactly this shape too, so it can be
+ * passed straight in. It is deliberately not imported: this file must not take
+ * in any notion of the DB or the rollup.
  */
 export interface DateSpan {
   from: Date;
@@ -297,11 +297,10 @@ export interface DateSpan {
 }
 
 /**
- * দুই পরিসরের ছেদ, না মিললে `null`।
+ * The overlap of two spans, `null` if they do not meet.
  *
- * ⭐ `null` আর "০ দিনের পরিসর" আলাদা রাখা হয়েছে — কলার তখন "শূন্য কারণ
- * ছেদ নেই" আর "শূন্য কারণ ওই দিনগুলোয় কোনো কর্মদিবস নেই" দুটো আলাদা করে
- * বলতে পারে।
+ * `null` is kept distinct from "a 0-day span", so the caller can tell "zero
+ * because there is no overlap" from "zero because those days have no work days".
  */
 export function overlapOf(a: DateSpan, b: DateSpan): DateSpan | null {
   const from = a.from.getTime() >= b.from.getTime() ? a.from : b.from;
@@ -310,102 +309,105 @@ export function overlapOf(a: DateSpan, b: DateSpan): DateSpan | null {
 }
 
 /**
- * ওই পরিসরের মোট টার্গেট, সেকেন্ডে = **কর্মদিবস × দৈনিক টার্গেট**।
+ * The span's total target, in seconds = **work days × daily target**.
  *
- * ⭐⭐ এটাই `prorate()`-এর `targetSec`-এর হুবহু একই সূত্র (ওখানে
- * `employeeWorkdays × dailyTargetSec`)। দুটো এক থাকে কি না, তা
- * `test/reports.target.spec.ts`-এর একটা টেস্ট **ঘণ্টা মিলিয়ে** পাহারা দেয়
- * — শুধু কর্মদিবসের সংখ্যা মিলিয়ে নয়, কারণ আগের রাউন্ডে ঠিক ওভাবেই
- * ৮.০০ বনাম ৮.৩২ ঘণ্টার ফারাক সবুজ টেস্টের ফাঁক দিয়ে বেরিয়ে গিয়েছিল।
+ * This is exactly the same formula as `prorate()`'s `targetSec` (there:
+ * `employeeWorkdays × dailyTargetSec`). Whether the two stay the same is
+ * guarded by a test in `test/reports.target.spec.ts` that **compares hours**,
+ * not just the work-day counts, because last round exactly that way a
+ * 8.00 vs 8.32 hours difference slipped through a green test.
  *
- * ⚠️ গুণ, দিনে-দিনে যোগ নয় — দৈনিক টার্গেট এখন প্রতিটি মাসে এক (হর
- *    পলিসির ধ্রুবক), তাই দুটো একই **ঘণ্টা** দেয়। আগে হর মাসভেদে বদলাত,
- *    তখন দুই মাস ছোঁয়া রেঞ্জে গুণ করলে ভুল হতো। রিপোর্টের কলামগুলো
- *    দিনে-দিনে ছাপা হয়, তাই "যোগফল = এই সংখ্যা" থাকাটা জরুরি — ওটার
- *    জন্যও আলাদা টেস্ট আছে।
+ * Multiply, do not add day by day: the daily target is now the same in every
+ * month (the denominator is the policy constant), so the two give the same
+ * **hours**. When the denominator varied by month, multiplying across a range
+ * touching two months would have been wrong. The report's columns are printed
+ * day by day, so "sum = this number" must hold; there is a separate test for that too.
  */
 export function targetSecIn(
   span: DateSpan,
   rule: WorkdayRule,
-  /** `dailyTargetSec()`-এর ফল — round না করা */
+  /** The result of `dailyTargetSec()`, not rounded */
   perWorkdaySec: number,
 ): number {
   return countWorkdays(span.from, span.to, rule) * perWorkdaySec;
 }
 
-// ── আনুমানিক ছুটি: অনিশ্চয়তা সংখ্যা পর্যন্ত পৌঁছানো ─────────────────────────
+// ── Approximate holidays: carrying uncertainty down to the number ───────────
 
 /**
- * আনুমানিক ছুটির DB-নামের শেষে বসা লেজ — seed এটাই লিখে যায়।
+ * The tail at the end of an approximate holiday's DB name; the seed writes exactly this.
  *
- * ⚠️⚠️ **হ্যাঁ, স্ট্রিংটা দু'জায়গায় লেখা** (এখানে আর
- *    `prisma/holidays.data.ts`-এর `APPROX_SUFFIX`-এ) — আর সেটা ইচ্ছাকৃত,
- *    কারণ import দুই দিকেই ভাঙে:
- *    · `src/` → `prisma/` import করলে `nest build`-এর rootDir সরে যায় আর
- *      আউটপুট `dist/main.js`-এর বদলে `dist/src/main.js`-এ পড়ে —
- *      `start:prod` (`node dist/main.js`) তখন ফাইলটাই খুঁজে পেত না
- *      (`tsconfig.build.json`-এর নোট ঠিক এই কারণেই prisma/ বাদ দেয়)।
- *    · উল্টোটা, `prisma/` → `src/` import করলে seed **runtime ইমেজে** ভাঙত —
- *      ওখানে `prisma/` ও `dist/` আছে, `src/` নেই (`server/Dockerfile`)।
- *    তাই দুটো কপি, আর দুটো যে এক থাকে তা `test/holidays.spec.ts`-এর একটা
- *    টেস্ট পাহারা দেয়। কপিটা নীরবে সরে গেলে রিপোর্ট চিরকাল "কোনো সম্ভাব্য
- *    তারিখ নেই" বলত — অর্থাৎ অনিশ্চয়তাটা নিঃশব্দে উবে যেত, যা এই ফাইলের
- *    সবচেয়ে বড় পাপ।
+ * Yes, the string is written in two places (here and `APPROX_SUFFIX` in
+ * `prisma/holidays.data.ts`), and that is deliberate, because an import breaks
+ * both ways:
+ *    - If `src/` imported `prisma/`, `nest build`'s rootDir would move and the
+ *      output would land in `dist/src/main.js` instead of `dist/main.js`;
+ *      `start:prod` (`node dist/main.js`) would then not find the file at all
+ *      (`tsconfig.build.json`'s note excludes prisma/ for exactly this reason).
+ *    - The other way, if `prisma/` imported `src/`, the seed would break in the
+ *      **runtime image**: it has `prisma/` and `dist/` but no `src/`
+ *      (`server/Dockerfile`).
+ *    So there are two copies, and a test in `test/holidays.spec.ts` guards that
+ *    they stay the same. If the copy silently drifted, the report would say "no
+ *    probable dates" forever, so the uncertainty would vanish quietly, the
+ *    biggest sin of this file. (The Bengali word means "probable".)
  */
 export const APPROX_HOLIDAY_SUFFIX = ' (সম্ভাব্য)';
 
 /**
- * DB-র ছুটির নামে অনিশ্চয়তার চিহ্নটা আছে কি না।
+ * Whether the holiday's name in the DB carries the uncertainty marker.
  *
- * ⭐ চিহ্নটা **নামেই** থাকে, আলাদা কলামে নয় (কেন, তা
- * `prisma/holidays.data.ts`-এর মাথায় লেখা)। এর একটা ভালো পার্শ্বফল আছে:
- * সরকার ঘোষণা দিলে মালিক Settings → Holidays-এ চিহ্নটা মুছে দেন, আর এই
- * ফাংশন **সেই মুহূর্ত থেকেই** `false` বলে। রিপোর্ট আর ছুটির পাতা তাই কখনো
- * দুই কথা বলে না — একটা তালিকা ফাইল দেখে বললে বলত।
+ * The marker lives **in the name**, not in a separate column (the reason is
+ * written at the top of `prisma/holidays.data.ts`). That has a nice side
+ * effect: when the government announces the date, the owner removes the marker
+ * in Settings → Holidays, and this function says `false` **from that moment**.
+ * So the report and the holidays page never disagree; reading a list file
+ * would have disagreed.
  */
 export function isApproximateHoliday(name: string): boolean {
   return name.trim().endsWith(APPROX_HOLIDAY_SUFFIX.trim());
 }
 
-/** একটা ছুটির সারি, অনিশ্চয়তা গুনতে যতটুকু লাগে */
+/** One holiday row, with just what is needed to count uncertainty */
 export interface NamedHoliday {
-  /** UTC-midnight — `holidays.holiday_date` ঠিক এভাবেই ফেরে */
+  /** UTC-midnight: exactly how `holidays.holiday_date` comes back */
   date: Date;
-  /** DB-তে লেখা নাম — চিহ্নটা এখান থেকেই পড়া হয় */
+  /** The name as written in the DB; the marker is read from here */
   name: string;
 }
 
 /**
- * যে ছুটির দিনগুলোর উপর হিসাবটা দাঁড়ানো, তার মধ্যে কোন **তারিখগুলো এখনো
- * পাকা নয়** — 'YYYY-MM-DD', সাজানো।
+ * Of the holidays the calculation rests on, which **dates are not final yet**:
+ * 'YYYY-MM-DD', sorted.
  *
- * ⭐⭐ **যে সারিগুলো দিয়ে কর্মদিবস গোনা হয়েছে, ঠিক সেগুলোই দিন** — এক
- *    সংখ্যা, এক সংজ্ঞা। আলাদা কোনো কোয়েরি বা তালিকা-ফাইল থেকে গুনলে
- *    রিপোর্টের হর আর রিপোর্টের সতর্কবার্তা দুই জায়গা থেকে আসত, আর একদিন
- *    দুটো আলাদা কথা বলত।
+ * **Pass exactly the rows the work days were counted with**: one number, one
+ * definition. Counting from a separate query or a list file would make the
+ * report's denominator and the report's warning come from two places, and one
+ * day they would say different things.
  *
- * ⭐⭐ **কেন দরকার:** ছুটির তারিখ নড়লে ওই দিনটা কর্মদিবস কি না তা বদলায় —
- *    অর্থাৎ এই রিপোর্টের টার্গেটের **কয়টা দিন** বদলায় (হর নয়, হর পলিসির
- *    ধ্রুবক), আর পে-রোলের `d ÷ D` ভগ্নাংশও বদলায় — অর্থাৎ **সরাসরি
- *    টাকা**। ২৬ আগস্ট ২০২৬-এর ঈদে
- *    মিলাদুন্নবী ঠিক এমন একটা তারিখ: চাঁদ দেখার উপর নির্ভরশীল, অথচ ওটা
- *    বসলেই আগস্টের কর্মদিবস কমে আর প্রত্যেকের `target_sec` বদলায়। চিহ্নটা
- *    এতদিন কেবল **নামে** ছিল, সংখ্যার পাশে ছিল না — তাই টার্গেটটা একটা
- *    অনুমানের উপর দাঁড়িয়ে থাকত, কোনো সতর্কবার্তা ছাড়াই।
+ * **Why it is needed:** when a holiday date moves, whether that day is a work
+ * day changes, so **how many days** the report's target covers changes (not the
+ * denominator; that is the policy constant), and payroll's `d ÷ D` fraction
+ * changes too, i.e. **directly the money**. Eid-e-Milad-un-Nabi on 26 August
+ * 2026 is exactly such a date: it depends on moon sighting, yet once it is
+ * fixed August's work days drop and everyone's `target_sec` changes. The marker
+ * used to be only in the **name**, not beside the number, so the target rested
+ * on an assumption with no warning.
  *
- * ⚠️ এটা "কতটা ভুল" বলে না, বলে "কোথায় ভুল হতে পারে"। খালি তালিকা মানে
- *    এই মাসগুলোর প্রতিটা ছুটি পাকা — "ছুটি নেই" নয়।
+ * It does not say "how wrong", it says "where it could be wrong". An empty list
+ * means every holiday in these months is final, not "no holidays".
  *
- * ⚠️ সাপ্তাহিক ছুটির দিনে পড়া আনুমানিক ছুটিও গোনা হয়। আজ ওটা কর্মদিবস
- *    কমায় না ঠিকই, কিন্তু তারিখটা **নড়তে পারে** — নড়ে কর্মদিবসে পড়লেই হর
- *    বদলাবে। "আজ প্রভাব নেই" আর "অনিশ্চয়তা নেই" এক কথা নয়।
+ * An approximate holiday that falls on a weekly off day is counted too. Today
+ * it does not reduce work days, true, but the date **can move**, and if it
+ * moves onto a work day the denominator will change. "No effect today" and "no
+ * uncertainty" are not the same thing.
  */
 export function approximateHolidayDates(
   rows: readonly NamedHoliday[],
 ): string[] {
-  // ⚠️ Set — `holiday_date` unique, তবু একাধিক মাসের রেঞ্জ জোড়া দিলে
-  //    কলার ভুল করে একই সারি দুবার পাঠাতে পারে; তখন একই তারিখ দুবার
-  //    গোনা হয়ে "২টি সম্ভাব্য তারিখ" বলত, অথচ তারিখ একটাই।
+  // A Set: `holiday_date` is unique, but when ranges of several months are
+  // joined the caller may send the same row twice by mistake; the same date would
+  // then be counted twice and say "2 probable dates" when there is only one.
   const out = new Set<string>();
   for (const row of rows) {
     if (isApproximateHoliday(row.name)) out.add(toIsoDate(row.date));
@@ -413,24 +415,24 @@ export function approximateHolidayDates(
   return [...out].sort();
 }
 
-// ── সপ্তাহ / মাসের বালতি (F02) ──────────────────────────────────────────────
+// ── Week / month buckets (F02) ──────────────────────────────────────────────
 
 export type GroupBy = 'week' | 'month';
 
 export interface Bucket {
-  /** মাসে 'YYYY-MM', সপ্তাহে সপ্তাহ-শুরুর তারিখ 'YYYY-MM-DD' */
+  /** 'YYYY-MM' for months, the week's start date 'YYYY-MM-DD' for weeks */
   key: string;
   start: Date;
   end: Date;
 }
 
 /**
- * সপ্তাহ কোন দিনে শুরু — **সাপ্তাহিক ছুটির পরের দিন**।
+ * The day a week starts: **the day after the weekly off day**.
  *
- * ⭐ হার্ডকোড করা হয়নি। ছুটি শুক্রবার (ISO ৫) হলে সপ্তাহ শুরু শনিবার, তাই
- * ছুটির দিনটা সপ্তাহের শেষে পড়ে আর কর্মসপ্তাহ দুই বালতিতে ভাগ হয় না।
- * সোমবার ধরে নিলে বাংলাদেশের প্রতিটি কর্মসপ্তাহ মাঝখান থেকে কেটে যেত।
- * ছুটি না থাকলে (null) আন্তর্জাতিক অভ্যাস — সোমবার।
+ * Not hardcoded. If the off day is Friday (ISO 5) the week starts on Saturday,
+ * so the off day falls at the end of the week and a work week is not split
+ * across two buckets. Assuming Monday would cut every Bangladeshi work week in
+ * the middle. With no off day (null), the international habit: Monday.
  */
 export function weekStartIsoDay(weeklyOffDays: readonly number[]): number {
   if (weeklyOffDays.length === 0 || weeklyOffDays.length >= 7) return 1;
@@ -475,20 +477,20 @@ export function bucketOf(
   return { key: toIsoDate(start), start, end };
 }
 
-// ── উপস্থাপনা ───────────────────────────────────────────────────────────────
+// ── Presentation ────────────────────────────────────────────────────────────
 
 /**
- * সেকেন্ড → ঘণ্টা, দুই দশমিক, **সংখ্যা হিসেবে**।
+ * Seconds → hours, two decimals, **as a number**.
  *
- * ⭐ "৭ঘ ৩২মি" নয় — Excel-এ ওটা টেক্সট হয়ে যায়, তখন কলাম যোগ করা বা
- * sort করা কিছুই চলে না, অথচ রিপোর্ট খুলেই মানুষ প্রথমে ওটাই করে।
- * সাজানো লেখা বানানো ফ্রন্টএন্ডের কাজ, রিপোর্টের নয়।
+ * Not "7h 32m": in Excel that becomes text, and then summing or sorting the
+ * column does not work, yet those are the first things people do on opening a
+ * report. Building a formatted string is the frontend's job, not the report's.
  */
 export function secondsToHours(sec: number): number {
   return Math.round(sec / (SEC_PER_HOUR / 100)) / 100;
 }
 
-/** শতাংশ, দুই দশমিক। হর শূন্য হলে ০ — NaN নয়। */
+/** A percentage, two decimals. 0 if the denominator is zero, not NaN. */
 export function sharePct(part: number, whole: number): number {
   if (whole <= 0) return 0;
   return Math.round((part / whole) * 10000) / 100;

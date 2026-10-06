@@ -20,11 +20,11 @@ import {
 } from './setup/harness';
 
 /**
- * **R5 — অফসাইট ব্যাকআপের কনফিগ, পর্দা থেকে।**
+ * **R5 — the offsite backup config, from the screen.**
  *
- * ⚠️⚠️ এই ফাইলের সবচেয়ে জরুরি কাজ একটাই: **application key যেন কোনোভাবেই
- * ব্রাউজারে ফেরত না যায়**। বাকি সব ভুল সারানো যায়; ফাঁস হওয়া কী সারানো
- * যায় না।
+ * The one most important job of this file: the application key must never
+ * go back to the browser in any way. Everything else can be repaired; a
+ * leaked key cannot.
  */
 
 const KEY_ID = '005c1fee02c86c20000000002';
@@ -53,35 +53,36 @@ const save = (body: Record<string, string>) =>
     .send(body);
 
 // ════════════════════════════════════════════════════════════════════════════
-// খাঁটি নিয়ম
+// Pure rules
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('keyHint — কতটুকু দেখানো নিরাপদ', () => {
-  it('শেষ চার অক্ষর', () => {
+describe('keyHint — how much is safe to show', () => {
+  it('the last four characters', () => {
     expect(keyHint(APP_KEY)).toBe(`…${APP_KEY.slice(-4)}`);
   });
 
-  /** ⚠️ খুব ছোট মান — অংশ দেখিয়ে লাভ নেই, পুরোটা দেখানোর ঝুঁকি আছে */
-  it('চার অক্ষরের কম হলে কিছুই নয়', () => {
+  /** A very short value — showing part gains nothing and risks showing all of it */
+  it('nothing when fewer than four characters', () => {
     expect(keyHint('abc')).toBeNull();
     expect(keyHint('   ')).toBeNull();
   });
 });
 
-describe('resolveOffsite — কোনটা খাটবে', () => {
+describe('resolveOffsite — which one applies', () => {
   const full = { keyId: 'a', appKey: 'b', bucket: 'c' };
 
-  it('তিনটে ঘরই ভরা থাকলে ডাটাবেস জেতে', () => {
+  it('when all three fields are filled, the database wins', () => {
     const r = resolveOffsite(full, { keyId: 'x', appKey: 'y', bucket: 'z' });
     expect(r.source).toBe('database');
     expect(r.settings?.keyId).toBe('a');
   });
 
   /**
-   * ⚠️⚠️ সবচেয়ে জরুরি নিয়ম: **আধা-ভরা ডাটাবেস যেন কাজ করা কনফিগ ভাঙতে
-   * না পারে**। নইলে পর্দায় একটা ঘর ভরে সেভ চাপলেই অফসাইট চুপচাপ বন্ধ।
+   * The most important rule: a half-filled database must not be able to break
+   * a working config. Otherwise filling one field on screen and pressing save
+   * would silently switch offsite off.
    */
-  it('ডাটাবেসের একটা ঘর খালি থাকলে সার্ভারেরটাই খাটে', () => {
+  it('when one database field is empty, the server\'s config applies', () => {
     const r = resolveOffsite(
       { keyId: 'a', appKey: '', bucket: 'c' },
       { keyId: 'x', appKey: 'y', bucket: 'z' },
@@ -90,20 +91,20 @@ describe('resolveOffsite — কোনটা খাটবে', () => {
     expect(r.settings?.keyId).toBe('x');
   });
 
-  it('কোথাওই পুরো সেট না থাকলে none', () => {
+  it('none when there is no full set anywhere', () => {
     expect(resolveOffsite(null, {}).source).toBe('none');
     expect(resolveOffsite({ keyId: 'a' }, { bucket: 'z' }).source).toBe('none');
   });
 });
 
-describe('b2Verdict — B2-র উত্তর পড়া', () => {
-  it('৪০১ মানে key ভুল, আর করণীয়ও বলা থাকে', () => {
+describe('b2Verdict — reading B2\'s answer', () => {
+  it('401 means the key is wrong, and the action to take is stated too', () => {
     const v = b2Verdict({ status: 401 }, 'oxeio-backups');
     expect(v.ok).toBe(false);
     expect(v.message).toContain('shown only once');
   });
 
-  it('২০০ + একই bucket = ঠিক আছে', () => {
+  it('200 + the same bucket = fine', () => {
     const v = b2Verdict(
       { status: 200, allowed: { bucketName: 'oxeio-backups' } },
       'oxeio-backups',
@@ -113,10 +114,11 @@ describe('b2Verdict — B2-র উত্তর পড়া', () => {
   });
 
   /**
-   * ⭐⭐ key ঠিক, কিন্তু **অন্য bucket-এ বাঁধা** — নীরব ব্যর্থতার চমৎকার
-   * উৎস: সব সবুজ দেখাত, আর ব্যাকআপ যেত অন্য কোথাও (বা কোথাওই না)।
+   * The key is right, but bound to another bucket — a classic source of
+   * silent failure: everything looked green and the backup went somewhere
+   * else (or nowhere).
    */
-  it('অন্য bucket-এ বাঁধা key ধরা পড়ে', () => {
+  it('a key bound to another bucket is caught', () => {
     const v = b2Verdict(
       { status: 200, allowed: { bucketName: 'someone-else' } },
       'oxeio-backups',
@@ -125,20 +127,20 @@ describe('b2Verdict — B2-র উত্তর পড়া', () => {
     expect(v.message).toContain('someone-else');
   });
 
-  it('সীমাবদ্ধ না হলেও চলে', () => {
+  it('works even when not restricted', () => {
     expect(b2Verdict({ status: 200, allowed: {} }, 'oxeio-backups').ok).toBe(true);
   });
 
-  it('অন্য কোনো এররে B2-র বার্তাই দেখানো হয়', () => {
+  it('on any other error B2\'s own message is shown', () => {
     const v = b2Verdict({ status: 503, message: 'service unavailable' }, 'b');
     expect(v.ok).toBe(false);
     expect(v.message).toContain('service unavailable');
   });
 });
 
-describe('offsiteView — পর্দায় যা যায়', () => {
-  /** ⚠️⚠️ গোটা ফাইলের সবচেয়ে জরুরি টেস্ট */
-  it('পুরো application key কখনো ভিউতে থাকে না', () => {
+describe('offsiteView — what goes to the screen', () => {
+  /** The most important test in the whole file */
+  it('the full application key is never in the view', () => {
     const view = offsiteView(
       resolveOffsite({ keyId: KEY_ID, appKey: APP_KEY, bucket: 'b' }, {}),
     );
@@ -152,13 +154,13 @@ describe('offsiteView — পর্দায় যা যায়', () => {
 // ════════════════════════════════════════════════════════════════════════════
 
 describe('GET/PATCH /settings/offsite', () => {
-  it('কিছু বসানো না থাকলে none', async () => {
+  it('none when nothing is set', async () => {
     const res = await owner.http.get('/api/v1/settings/offsite').expect(200);
     expect(res.body.source).toBe('none');
     expect(res.body.configured).toBe(false);
   });
 
-  it('বসানো যায়, আর ফেরত আসে কেবল ইঙ্গিত', async () => {
+  it('can be set, and only a hint comes back', async () => {
     const res = await save({
       keyId: KEY_ID,
       appKey: APP_KEY,
@@ -169,16 +171,16 @@ describe('GET/PATCH /settings/offsite', () => {
     expect(res.body.source).toBe('database');
     expect(res.body.bucket).toBe('oxeio-backups');
     expect(res.body.keyId).toBe(KEY_ID);
-    // ⚠️⚠️ কী নিজে কখনো নয়
+    // Never the key itself
     expect(JSON.stringify(res.body)).not.toContain(APP_KEY);
   });
 
   /**
-   * ⭐⭐ **B2 application key একবারই দেখায়** — তাই bucket-এর নাম শুধরাতে
-   * গিয়ে সেটা মুছে গেলে মালিককে নতুন key বানাতে হতো। খালি ঘর মানে
-   * "আগেরটাই থাক"।
+   * A B2 application key is shown only once — so if correcting the bucket
+   * name wiped it, the owner would have to create a new key. An empty field
+   * means "keep the existing one".
    */
-  it('bucket বদলাতে গিয়ে key মুছে যায় না', async () => {
+  it('changing the bucket does not wipe the key', async () => {
     await save({ keyId: KEY_ID, appKey: APP_KEY, bucket: 'first' }).expect(200);
 
     const res = await save({ keyId: '', appKey: '', bucket: 'second' }).expect(200);
@@ -189,8 +191,8 @@ describe('GET/PATCH /settings/offsite', () => {
     expect(res.body.keyHint).toBe(`…${APP_KEY.slice(-4)}`);
   });
 
-  /** ⭐ পুরোপুরি মুছতে হলে তিনটে ঘরই খালি */
-  it('তিনটে ঘরই খালি রাখলে মুছে যায়', async () => {
+  /** To delete completely, all three fields must be empty */
+  it('leaving all three empty deletes it', async () => {
     await save({ keyId: KEY_ID, appKey: APP_KEY, bucket: 'b' }).expect(200);
 
     const res = await save({ keyId: '', appKey: '', bucket: '' }).expect(200);
@@ -198,8 +200,8 @@ describe('GET/PATCH /settings/offsite', () => {
     expect(res.body.source).toBe('none');
   });
 
-  /** ⚠️⚠️ audit log ম্যানেজারও দেখেন — গোপন মান ওখানে বসলে আর মোছা যায় না */
-  it('audit-এ কী যায় না, শুধু "বসানো হয়েছে কি না"', async () => {
+  /** The manager can see the audit log too — a secret value there could never be removed */
+  it('the key does not go to audit, only "whether it was set"', async () => {
     await save({ keyId: KEY_ID, appKey: APP_KEY, bucket: 'b' }).expect(200);
 
     const row = await h.prisma.auditLog.findFirstOrThrow({
@@ -209,7 +211,7 @@ describe('GET/PATCH /settings/offsite', () => {
     expect((row.meta as Record<string, unknown>).keySet).toBe(true);
   });
 
-  it('ম্যানেজার পারেন না', async () => {
+  it('a manager cannot', async () => {
     const manager = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
     await manager.http.get('/api/v1/settings/offsite').expect(403);
     await manager.http
@@ -219,8 +221,8 @@ describe('GET/PATCH /settings/offsite', () => {
       .expect(403);
   });
 
-  /** ⚠️ কিছু বসানো না থাকলে পরীক্ষা চালানোর মানে নেই — কিন্তু ৫০০ও নয় */
-  it('কনফিগ ছাড়া test চালালে ভদ্র উত্তর', async () => {
+  /** With nothing set there is no point running the test — but no 500 either */
+  it('running the test without config gives a polite answer', async () => {
     const res = await owner.http
       .post('/api/v1/settings/offsite/test')
       .set('X-CSRF-Token', owner.csrf)

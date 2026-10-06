@@ -8,17 +8,17 @@ using oXeio.Agent.Native;
 namespace oXeio.Agent.Platform;
 
 /// <summary>
-/// এজেন্টের একমাত্র উইন্ডো — দেখা যায় না, কিন্তু সব খবর এখান দিয়েই আসে।
+/// The agent's only window: invisible, but all the news comes through it.
 ///
-/// ⚠️ <b>message-only (HWND_MESSAGE) উইন্ডো নয়, ইচ্ছাকৃতভাবে।</b>
-/// ব্রডকাস্ট মেসেজ শুধু top-level উইন্ডোতেই পৌঁছায়। message-only উইন্ডো বানালে
-/// কোডটা পরিষ্কার দেখাত, রেজিস্ট্রেশনও সফল হতো, কিন্তু পাওয়ার নোটিফিকেশন
-/// কখনো আসত না — আর "কিছুই ঘটছে না" দেখে সেটা বোঝাও যেত না।
-/// তাই WS_POPUP + WS_EX_TOOLWINDOW: top-level, কিন্তু টাস্কবার বা Alt+Tab-এ নেই।
+/// Careful: <b>not a message-only (HWND_MESSAGE) window, deliberately.</b> Broadcast messages reach
+/// only top-level windows. A message-only window would make the code look cleaner and the
+/// registration would succeed, but power notifications would never arrive, and with "nothing
+/// happening" it could not even be noticed. So WS_POPUP + WS_EX_TOOLWINDOW: top-level, but not on
+/// the taskbar or in Alt+Tab.
 ///
-/// <c>Microsoft.Win32.SystemEvents</c> ব্যবহার করা হয়নি — ওটা NOTIFY_FOR_THIS_SESSION
-/// হার্ডকোড করে, lParam ফেলে দেয়, আর PBT_APMRESUMEAUTOMATIC (0x12) — যেটা Windows-এর
-/// একমাত্র নিশ্চিত resume সংকেত — সেটাকেই ধরে না।
+/// <c>Microsoft.Win32.SystemEvents</c> was not used: it hard-codes NOTIFY_FOR_THIS_SESSION, drops
+/// lParam, and does not catch PBT_APMRESUMEAUTOMATIC (0x12), which is Windows' only reliable resume
+/// signal.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class MessageWindow : NativeWindow, IDisposable
@@ -47,15 +47,15 @@ internal sealed class MessageWindow : NativeWindow, IDisposable
 
     protected override void WndProc(ref Message m)
     {
-        // হ্যান্ডলারে দেরি করা যাবে না — suspend-এর বাজেট মাত্র ~২ সেকেন্ড,
-        // আর সেটা সব প্রসেস মিলিয়ে, প্রতি প্রসেসে নয়।
+        // The handler must not be slow: the suspend budget is only about 2 seconds, and that is for
+        // all processes combined, not per process.
         try
         {
             _onMessage(m);
         }
         catch
         {
-            // মেসেজ পাম্প কখনোই ভাঙতে দেওয়া যাবে না
+            // the message pump must never be allowed to break
         }
 
         base.WndProc(ref m);

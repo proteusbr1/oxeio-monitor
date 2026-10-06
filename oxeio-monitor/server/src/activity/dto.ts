@@ -13,26 +13,27 @@ import {
 } from 'class-validator';
 
 /**
- * D06–D09-এর ইনপুট।
+ * Input for D06-D09.
  *
- * ⚠️ গ্লোবাল `ValidationPipe`-এ `whitelist` + `forbidNonWhitelisted`
- * ([app.setup.ts](../app.setup.ts)) — তাই এখানে **না থাকা** কোনো ফিল্ড
- * বা query প্যারামিটার এলে সরাসরি ৪০০। টাইপো নীরবে উপেক্ষিত হয় না।
+ * Careful: the global `ValidationPipe` uses `whitelist` + `forbidNonWhitelisted`
+ * ([app.setup.ts](../app.setup.ts)), so any field or query parameter that is
+ * **not declared here** gets a 400 straight away. Typos are never ignored
+ * silently.
  */
 
-/** `YYYY-MM-DD` — আসল তারিখ কি না সেটা `parseWorkDate()` দেখে। */
+/** `YYYY-MM-DD`; whether it is a real date is checked by `parseWorkDate()`. */
 const DATE_FORMAT = /^\d{4}-\d{2}-\d{2}$/;
 
-// ── D06 · ক্যাটাগরি রুল ──────────────────────────────────────────────────────
+// ── D06 · category rules ──────────────────────────────────────────────────────
 
 export class CreateCategoryDto {
   @IsEnum(MatchType)
   matchType!: MatchType;
 
   /**
-   * `code.exe` · `youtube.com` · regex।
-   * ⚠️ ফরম্যাট ঠিক আছে কি না দেখে `patternProblem()` — class-validator নয়,
-   * কারণ নিয়মটা `matchType`-এর উপর নির্ভর করে।
+   * `code.exe` · `youtube.com` · regex.
+   * Careful: the format is checked by `patternProblem()`, not class-validator,
+   * because the rule depends on `matchType`.
    */
   @IsString()
   @MaxLength(260)
@@ -46,9 +47,10 @@ export class CreateCategoryDto {
   category!: Productivity;
 
   /**
-   * ⚠️ **ছোট সংখ্যা আগে জেতে।** seed-এ ব্রাউজারের ২০০, বাকি সবার ১০০ —
-   * অর্থাৎ ডোমেইনের নিয়ম ব্রাউজারের নিয়মকে হারায়। উল্টো বুঝে ২০০ বসালে
-   * নতুন রুলটা কার্যত সবার শেষে পড়ত ([category-matcher.ts](./category-matcher.ts))।
+   * Careful: **the smaller number wins.** In the seed, browsers have 200 and
+   * everything else 100, so a domain rule beats a browser rule. Entering 200
+   * with the opposite assumption would put the new rule effectively last
+   * ([category-matcher.ts](./category-matcher.ts)).
    */
   @IsOptional()
   @IsInt()
@@ -58,9 +60,9 @@ export class CreateCategoryDto {
 }
 
 /**
- * সব ফিল্ডই ঐচ্ছিক — কিন্তু **সবগুলো ফাঁকা রাখা যাবে না**।
- * খালি `{}` পাঠালে সার্ভিস ৪০০ দেয়: নইলে ২০০ ফেরত যেত, মালিক ভাবতেন
- * পরিবর্তনটা হয়ে গেছে, অথচ কিছুই বদলায়নি।
+ * All fields are optional, but **they cannot all be left empty**.
+ * An empty `{}` gets a 400 from the service; otherwise it would return 200, the
+ * owner would think the change was made, and nothing would have changed.
  */
 export class UpdateCategoryDto {
   @IsOptional() @IsEnum(MatchType) matchType?: MatchType;
@@ -72,26 +74,26 @@ export class UpdateCategoryDto {
 
 export class RecategorizeDto {
   /**
-   * `true` হলে শুধু `category_id IS NULL` সারিগুলো — অনেক দ্রুত।
-   * নতুন রুল **যোগ** করার পর এটাই যথেষ্ট।
+   * When `true`, only rows with `category_id IS NULL` are processed, which is
+   * much faster. That is enough after **adding** a new rule.
    *
-   * ⚠️ রুল **বদলানো বা মোছার** পর `false` লাগে, নইলে পুরোনো সিদ্ধান্ত
-   * বসানো সারিগুলো পুরোনোই থেকে যেত।
+   * Careful: after **changing or deleting** a rule it must be `false`, or rows
+   * that already received the old decision would keep it.
    */
   @IsOptional()
   @IsBoolean()
   onlyUnmatched?: boolean;
 }
 
-// ── D07–D09 · রিপোর্টের রেঞ্জ ────────────────────────────────────────────────
+// ── D07-D09 · report ranges ───────────────────────────────────────────────────
 
 export class RangeQueryDto {
-  /** না দিলে চলতি মাসের ১ তারিখ */
+  /** The 1st of the current month if omitted. */
   @IsOptional()
   @Matches(DATE_FORMAT, { message: '`from` must be in YYYY-MM-DD format' })
   from?: string;
 
-  /** না দিলে ঢাকার আজকের তারিখ */
+  /** Today's date in Dhaka if omitted. */
   @IsOptional()
   @Matches(DATE_FORMAT, { message: '`to` must be in YYYY-MM-DD format' })
   to?: string;
@@ -99,8 +101,8 @@ export class RangeQueryDto {
 
 export class EmployeeRangeQueryDto extends RangeQueryDto {
   /**
-   * না দিলে **সব active কর্মী**।
-   * ⚠️ `@Type(() => Number)` লাগে — query স্ট্রিং সবসময় string হয়ে আসে।
+   * **All active staff** if omitted.
+   * Careful: `@Type(() => Number)` is needed, since query strings always arrive as strings.
    */
   @IsOptional()
   @Type(() => Number)
@@ -110,7 +112,7 @@ export class EmployeeRangeQueryDto extends RangeQueryDto {
 }
 
 export class TopQueryDto extends EmployeeRangeQueryDto {
-  /** ডিফল্ট ১০ (D08)। উপরের সীমা আছে যাতে একটা GET পুরো টেবিল না ঢালে। */
+  /** Default 10 (D08). The upper bound keeps one GET from dumping the whole table. */
   @IsOptional()
   @Type(() => Number)
   @IsInt()

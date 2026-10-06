@@ -2,19 +2,19 @@ import { Injectable, Logger } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
 
-/** § ২ — 02-Workflow-এর তিন ধাপ */
+/** § 2 - the three steps in 02-Workflow. */
 export const DRIFT_IGNORE_SEC = 5;
 export const DRIFT_ALERT_SEC = 300;
 
 /**
- * ⭐ advisory lock-এর namespace *(G169)* — যেকোনো ধ্রুবক সংখ্যা, কেবল
- * অন্য কোনো lock-এর সাথে সংঘর্ষ না করলেই হলো। দ্বিতীয় ঘরটা `deviceId`,
- * তাই দুটো **আলাদা** PC একে অন্যকে আটকায় না।
+ * Namespace for the advisory lock (G169): any constant will do, as long as it
+ * does not collide with another lock. The second key is `deviceId`, so two
+ * **different** PCs never block each other.
  */
 const CLOCK_DRIFT_LOCK = 8_413_001;
 
 export interface Drift {
-  /** server_time − client_time · ধনাত্মক = PC-র ঘড়ি পিছিয়ে */
+  /** server_time - client_time; positive = the PC's clock is behind. */
   seconds: number;
   level: 'none' | 'corrected' | 'alert';
 }
@@ -26,8 +26,8 @@ export class ClockDriftService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * এজেন্টের ঘড়ি আর সার্ভারের ঘড়ির পার্থক্য।
-   * `X-Client-Time` না এলে drift = 0 ধরা হয় (পুরোনো এজেন্ট)।
+   * The difference between the agent's clock and the server's clock.
+   * If `X-Client-Time` is absent, drift is taken as 0 (old agents).
    */
   measure(clientTime: Date | null, serverTime = new Date()): Drift {
     if (!clientTime || Number.isNaN(clientTime.getTime())) {
@@ -45,15 +45,15 @@ export class ClockDriftService {
   }
 
   /**
-   * এজেন্টের ঘড়িতে মাপা সময়কে সার্ভারের সময়ে নিয়ে আসে।
-   * ⚠️ সেগমেন্টের **দৈর্ঘ্য** এতে বদলায় না — সেটা এজেন্টের monotonic clock
-   *    থেকে আসে, তাই ঘড়ি বদলালেও অটুট (§ ৩.২)।
+   * Converts a time measured on the agent's clock to server time.
+   * Careful: this does not change a segment's **length**, which comes from the
+   * agent's monotonic clock and so survives clock changes (§ 3.2).
    */
   correct(t: Date, drift: Drift): Date {
     return drift.seconds === 0 ? t : new Date(t.getTime() + drift.seconds * 1000);
   }
 
-  /** ডিভাইসে drift-এর রেকর্ড রাখা, আর বেশি হলে অ্যালার্ট */
+  /** Record drift on the device, and raise an alert if it is large. */
   async record(
     deviceId: number,
     employeeId: number | null,
@@ -64,16 +64,16 @@ export class ClockDriftService {
     const abs = Math.abs(drift.seconds);
 
     /**
-     * ⚠️ **`last_drift_sec` এখানে আর লেখা হয় না** *(৭ সেপ্টেম্বর ২০২৬, G170)*।
-     * ওটা এখন `DeviceAuthGuard`-এর `last_seen_at` UPDATE-এর সাথে যায়, কারণ
-     * এই মেথডটা `level === 'none'`-এ ফিরে যায় — অর্থাৎ ঘড়ি **ঠিক হয়ে গেলে**
-     * সংখ্যাটা কোনোদিন শূন্যে ফিরত না।
+     * Careful: **`last_drift_sec` is no longer written here** (G170). It is
+     * written with the `last_seen_at` UPDATE in `DeviceAuthGuard`, because this
+     * method returns early on `level === 'none'`, so once the clock was
+     * **corrected** the number never went back to zero.
      *
-     * ⭐ এখানে থাকে কেবল `max_drift_sec` — "সবচেয়ে খারাপ কতটা হয়েছিল",
-     * আর সেটা সংজ্ঞা অনুযায়ীই কমে না।
+     * Only `max_drift_sec` is kept here: "how bad it ever got", which by
+     * definition never decreases.
      *
-     * ⚠️ শর্তে `max_drift_sec < abs` — নইলে প্রতিটা রিকোয়েস্টে একটা
-     * অর্থহীন লেখা হতো।
+     * Careful: the condition `max_drift_sec < abs` avoids a pointless write on
+     * every request.
      */
     await this.prisma.$executeRaw`
       UPDATE devices
@@ -83,35 +83,37 @@ export class ClockDriftService {
     if (drift.level !== 'alert') return;
 
     /**
-     * ⚠️ এজেন্ট প্রতি মিনিটেই ডেটা পাঠায় — প্রতিবার অ্যালার্ট বানালে
-     * ঘড়ি ভুল থাকা একটা PC দিনে হাজারখানেক অ্যালার্ট তৈরি করত।
-     * ৬ ঘণ্টায় একটাই, আর সেটা acknowledge না করা পর্যন্ত আর নয়।
+     * Careful: the agent sends data every minute; alerting every time would let
+     * one PC with a wrong clock create about a thousand alerts a day.
+     * So only one per 6 hours, and none until that one is acknowledged.
      *
-     * ⭐⭐⭐ **কিন্তু "দেখো, তারপর বসাও" একটা দৌড়** *(৭ সেপ্টেম্বর ২০২৬, G169)*।
+     * **But "check, then insert" is a race** (G169).
      *
-     * ⚠️⚠️ এই মেথডটা ডাকা হয় `DeviceAuthGuard` থেকে — অর্থাৎ **প্রতিটা
-     * রিকোয়েস্টে**, heartbeat-এ নয়। চালু হওয়ার মুহূর্তে এজেন্ট একসাথে
-     * কয়েকটা কল পাঠায় (সেগমেন্ট · ইভেন্ট · অ্যাপ-ব্যবহার · ছবি), আর
-     * দুটো কল একই সাথে `findFirst` চালিয়ে **দুজনেই "কিছু নেই" দেখে**
-     * দুটো অ্যালার্ট বানিয়ে ফেলত।
+     * Careful: this method is called from `DeviceAuthGuard`, i.e. on **every
+     * request**, not just the heartbeat. At startup the agent sends several
+     * calls at once (segments, events, app usage, screenshots), and two calls
+     * running `findFirst` at the same time would **both see "nothing there"**
+     * and create two alerts.
      *
-     * ⚠️ মাঠে ধরা (৭ সেপ্টেম্বর, OX-13): দুটো অভিন্ন *"PC clock is wrong"*,
-     * **৯ মিলিসেকেন্ডের ব্যবধানে** (০৯:১৭:০০.১৮০ আর .১৮৯), একই `driftSec`।
-     * মালিক সেটা দেখেই বলেছিলেন *"ami eta chai na"*।
+     * Seen in the field (OX-13): two identical "PC clock is wrong" alerts
+     * **9 milliseconds apart** (09:17:00.180 and .189) with the same `driftSec`.
+     * The owner saw them and said he did not want that.
      *
-     * ⭐ **advisory lock, নতুন কলাম বা index নয়।** partial unique index-ও
-     * কাজ করত, কিন্তু Prisma সেটা চেনে না (WHERE-সহ index তার schema-য়
-     * প্রকাশ করা যায় না) — তাই পরের `migrate` প্রতিবার drift দেখাত।
-     * ⚠️ `pg_advisory_xact_lock` ট্রানজেকশন শেষে **নিজেই** ছাড়ে, তাই
-     * ভুলে আটকে থাকার পথ নেই।
+     * **An advisory lock, not a new column or index.** A partial unique index
+     * would also work, but Prisma does not recognise it (an index with WHERE
+     * cannot be expressed in its schema), so every later `migrate` would report
+     * drift.
+     * Careful: `pg_advisory_xact_lock` is released **by itself** when the
+     * transaction ends, so it cannot be left held by mistake.
      */
     const created = await this.prisma.$transaction(async (tx) => {
       /**
-       * ⚠️⚠️ **তিনটে খুঁটিনাটি, আর তিনটেই না মানলে চলে না:**
-       * · `$queryRaw`, `$executeRaw` নয় — এটা `SELECT`, count-ফেরত DML নয়;
-       * · `::int` cast — নইলে Postgres bind-parameter-এর ধরন ঠিক করতে পারে না;
-       * · `::text` — ফাংশনটা `void` ফেরায়, আর Prisma `void` কলাম পড়তে পারে না
-       *   (*"Failed to deserialize column of type 'void'"*)।
+       * Careful: **three details, and all three are required:**
+       * - `$queryRaw`, not `$executeRaw`: this is a `SELECT`, not DML that
+       *   returns a count;
+       * - the `::int` cast, or Postgres cannot decide the bind-parameter type;
+       * - `::text`: the function returns `void`, and Prisma cannot read a `void`
+       *   column (*"Failed to deserialize column of type 'void'"*).
        */
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(${CLOCK_DRIFT_LOCK}::int, ${deviceId}::int)::text AS locked`;
 
@@ -120,8 +122,8 @@ export class ClockDriftService {
           type: 'clock_drift',
           deviceId,
           acknowledgedAt: null,
-          // ⚠️ "এখনো খোলা" = unacked **এবং** unresolved। আগেরটা বন্ধ হয়ে থাকলে
-          //    নতুন drift সত্যিই নতুন খবর — চাপা দেওয়া উচিত নয়।
+          // Careful: "still open" = unacked **and** unresolved. If the previous one
+          // is closed, a new drift really is new information and must not be suppressed.
           resolvedAt: null,
           createdAt: { gte: new Date(Date.now() - 6 * 60 * 60 * 1000) },
         },

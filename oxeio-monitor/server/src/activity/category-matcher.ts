@@ -1,16 +1,18 @@
 import type { MatchType, Productivity } from '@prisma/client';
 
 /**
- * অ্যাপ/সাইটকে productive · neutral · unproductive-এ ফেলা (D05) —
- * খাঁটি ফাংশন, কোনো I/O নেই।
+ * Classify an app/site as productive, neutral or unproductive (D05).
+ * A pure function with no I/O.
  *
- * আলাদা ফাইলে রাখার কারণ [payroll.math.ts](../payroll/payroll.math.ts)-এর
- * মতোই: এই সিদ্ধান্তটা রিপোর্টে গিয়ে "কে কতটা কাজ করেছে" বলে দাঁড়ায়।
- * ডাটাবেসের সাথে মিশে থাকলে নিরিবিলি পরীক্ষা করা যেত না।
+ * It lives in its own file for the same reason as
+ * [payroll.math.ts](../payroll/payroll.math.ts): this decision ends up in
+ * reports as "who worked how much", and it could not be tested in isolation if
+ * it were mixed with the database.
  *
- * ⚠️ **ক্যাটাগরি কখনো বেতনের হিসাবে ঢোকে না।** টাকার হিসাব একমাত্র
- * সেকেন্ডের উপর ([09 § ৪](../../../../docs/09-Build-Log.md))। কেউ সারাদিন
- * "unproductive" থাকলেও তার ঘণ্টা কাটা যায় না — এটা তথ্য, শাস্তি নয়।
+ * Careful: **categories never enter pay calculations.** Money depends only on
+ * seconds ([09 § 4](../../../../docs/09-Build-Log.md)). Someone who is
+ * "unproductive" all day still has no hours deducted; this is information, not
+ * punishment.
  */
 
 export interface CategoryRule {
@@ -19,18 +21,18 @@ export interface CategoryRule {
   pattern: string;
   displayName: string;
   category: Productivity;
-  /** ⚠️ **ছোট সংখ্যা আগে জেতে** — নিচের compile() দেখুন */
+  /** Careful: **the smaller number wins**; see compile() below. */
   priority: number;
 }
 
 export interface CompiledRule extends CategoryRule {
-  /** process/domain-এর জন্য ছোট হাতের প্যাটার্ন */
+  /** Lower-case pattern for process/domain. */
   needle: string;
-  /** title_regex-এর জন্য; নইলে null */
+  /** For title_regex; otherwise null. */
   regex: RegExp | null;
 }
 
-/** যা দেখে সিদ্ধান্ত হয় — `app_usage`-এর একটা সারির তিনটে ফিল্ড। */
+/** What the decision is based on: three fields of one `app_usage` row. */
 export interface UsageFacts {
   processName: string;
   domain?: string | null;
@@ -38,31 +40,32 @@ export interface UsageFacts {
 }
 
 /**
- * ⚠️ `title_regex` মালিকের লেখা (D06), আর JavaScript-এ regex-এর কোনো
- * টাইমআউট নেই — catastrophic backtracking হলে পুরো Node ইভেন্ট লুপ আটকে
- * যায়। দুটো রক্ষাকবচ: প্যাটার্ন ছোট রাখা, আর টাইটেল এমনিতেই ১০০০ অক্ষরে
- * বাঁধা (`AppUsageDto`)। দুটোই সম্পূর্ণ সমাধান নয় — তাই এই ম্যাচ-টাইপটা
- * seed-এ ব্যবহার করা হয়নি, আর D06-এ যোগ করার সময় নিয়মটা audit হবে।
+ * Careful: `title_regex` is written by the owner (D06), and JavaScript regex has
+ * no timeout, so catastrophic backtracking would block the whole Node event
+ * loop. Two safeguards: keep patterns short, and the title is already capped at
+ * 1000 characters (`AppUsageDto`). Neither is a complete fix, so this match
+ * type is not used in the seed, and rules are audited when added in D06.
  */
 export const MAX_REGEX_LENGTH = 200;
 
 /**
- * নিয়মগুলোকে একবার সাজিয়ে ও কম্পাইল করে রাখা। ম্যাচ করার সময় শুধু
- * **প্রথম মিল**টাই নেওয়া হয়, তাই সাজানোর ক্রমটাই আসল সিদ্ধান্ত।
+ * Sort and compile the rules once. Matching takes only the **first hit**, so
+ * the sort order is the real decision.
  *
- * ⭐ **ক্রম: priority ↑ → প্যাটার্নের দৈর্ঘ্য ↓ → id ↑**
+ * **Order: priority asc, then pattern length desc, then id asc.**
  *
- * ১· **priority — ছোট সংখ্যা আগে।** seed-এ ব্রাউজারগুলোর priority ২০০,
- *    বাকি সবার ১০০। উল্টো করলে `chrome.exe` (neutral) সবসময় জিতত আর
- *    **প্রতিটা ব্রাউজিং মিনিট neutral হয়ে যেত** — youtube.com-ও, github.com-ও।
- *    D05-এর গোটা উদ্দেশ্যই তখন ব্যর্থ, অথচ কোথাও কোনো এরর দেখাত না।
+ * 1. **priority: the smaller number comes first.** In the seed, browsers have
+ *    priority 200 and everything else 100. Reversed, `chrome.exe` (neutral)
+ *    would always win and **every browsing minute would become neutral**,
+ *    youtube.com and github.com alike. That defeats the whole purpose of D05,
+ *    and no error would show anywhere.
  *
- * ২· **দৈর্ঘ্য — লম্বা প্যাটার্ন আগে**, অর্থাৎ বেশি নির্দিষ্টটা।
- *    `mail.google.com` (productive) আর `google.com` (neutral) দুটোই
- *    Gmail-এর সাথে মেলে; নির্দিষ্টটা না জিতলে Gmail "neutral" হতো।
+ * 2. **length: the longer pattern comes first**, i.e. the more specific one.
+ *    `mail.google.com` (productive) and `google.com` (neutral) both match
+ *    Gmail; if the specific one did not win, Gmail would be "neutral".
  *
- * ৩· **id — শুধু নিশ্চিততার জন্য।** সমান হলে ফল যেন প্রতিবার এক থাকে;
- *    নইলে একই সারি দু-বার ক্যাটাগরি করলে দু-রকম ফল আসতে পারত।
+ * 3. **id: only for determinism.** On a tie the result stays the same each
+ *    time; otherwise categorizing the same row twice could give two results.
  */
 export function compile(rules: readonly CategoryRule[]): CompiledRule[] {
   const compiled: CompiledRule[] = [];
@@ -79,8 +82,8 @@ export function compile(rules: readonly CategoryRule[]): CompiledRule[] {
       try {
         regex = new RegExp(rule.pattern, 'i');
       } catch {
-        // ⚠️ ভুল regex-এ ingest ভেঙে পড়া চলবে না — একটা নিয়ম বাদ পড়া
-        //    অনেক কম ক্ষতি। কোন নিয়মটা বাদ পড়ল সেটা সার্ভিস লগে যায়।
+        // Careful: a bad regex must not break ingest; skipping one rule does far
+        // less harm. The skipped rule is reported in the service log.
         continue;
       }
     }
@@ -96,7 +99,7 @@ export function compile(rules: readonly CategoryRule[]): CompiledRule[] {
   );
 }
 
-/** মিল না পেলে <c>null</c> — অচেনা অ্যাপ জোর করে কোনো ঘরে ফেলা হয় না। */
+/** `null` if nothing matches; an unknown app is never forced into a category. */
 export function matchCategory(
   rules: readonly CompiledRule[],
   facts: UsageFacts,
@@ -125,15 +128,15 @@ export function matchCategory(
 }
 
 /**
- * ডোমেইন মিলছে কি না — নিজে, নাকি সাবডোমেইন হিসেবে।
+ * Whether the domain matches, either exactly or as a subdomain.
  *
- * ⚠️ **সাধারণ `includes()` বা `endsWith()` দিয়ে করা যায় না।**
- * `endsWith('google.com')` লিখলে `notgoogle.com` আর `evilgoogle.com`-ও
- * "Google" হয়ে যেত। তাই মিলটা **লেবেলের সীমানায়** হতে হবে —
- * `mail.google.com` ✅, কিন্তু `notgoogle.com` ❌।
+ * Careful: **plain `includes()` or `endsWith()` is not enough.**
+ * `endsWith('google.com')` would also make `notgoogle.com` and
+ * `evilgoogle.com` count as "Google". So the match must fall on a **label
+ * boundary**: `mail.google.com` yes, `notgoogle.com` no.
  *
- * এতে `atlassian.net` নিয়মটা `acme.atlassian.net`-এও কাজ করে, যেটা
- * দরকারি: প্রতিটা কোম্পানির Jira আলাদা সাবডোমেইনে থাকে।
+ * This way an `atlassian.net` rule also works for `acme.atlassian.net`, which
+ * is needed because each company's Jira lives on its own subdomain.
  */
 function domainMatches(domain: string, pattern: string): boolean {
   if (domain === pattern) return true;

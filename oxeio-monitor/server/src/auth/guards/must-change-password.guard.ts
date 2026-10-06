@@ -10,9 +10,9 @@ import { ALLOW_PW_CHANGE, IS_PUBLIC } from '../decorators';
 import type { AuthedRequest } from '../types';
 
 /**
- * G33 — seed বা owner-এর দেওয়া অস্থায়ী পাসওয়ার্ড নিয়ে কেউ যেন
- * সিস্টেম ব্যবহার করতে না পারে। বদলানোর আগে সব রুট বন্ধ,
- * শুধু `@AllowWhileMustChangePw()` চিহ্নিত রুটগুলো খোলা।
+ * G33: nobody may use the system with a temporary password from the seed or
+ * the owner. Until it is changed every route is closed, except the routes
+ * marked `@AllowWhileMustChangePw()`.
  */
 @Injectable()
 export class MustChangePasswordGuard implements CanActivate {

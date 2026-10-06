@@ -8,36 +8,38 @@ using oXeio.Core.Agent;
 
 namespace oXeio.Agent.Security;
 
-/// <summary>ডিস্ক থেকে ক্রেডেনশিয়াল পড়ার ফলাফল।</summary>
+/// <summary>The result of reading the credentials from disk.</summary>
 internal enum CredentialLoadStatus
 {
-    /// <summary>সব ঠিক আছে, টোকেন ব্যবহারযোগ্য।</summary>
+    /// <summary>All fine, the token is usable.</summary>
     Loaded,
 
-    /// <summary>ফাইলই নেই — এখনো enroll করা হয়নি। এটা ত্রুটি নয়।</summary>
+    /// <summary>There is no file: not enrolled yet. This is not an error.</summary>
     NotEnrolled,
 
-    /// <summary>ফাইল আছে কিন্তু খোলা গেল না (DPAPI ব্যর্থ, JSON নষ্ট, পড়ার অনুমতি নেই)।</summary>
+    /// <summary>The file exists but could not be opened (DPAPI failed, JSON corrupt, no read
+    /// permission).</summary>
     Unreadable,
 
     /// <summary>
-    /// ফাইল খুলেছে, কিন্তু ভেতরের machineGuid/hostname এই মেশিনের সাথে মেলে না —
-    /// অর্থাৎ টোকেনটা অন্য PC-র। প্রায় সবসময়ই ডিস্ক-ইমেজ ক্লোনের ফল।
+    /// The file opened, but the machineGuid/hostname inside does not match this machine: the token
+    /// belongs to another PC. Almost always the result of a disk-image clone.
     /// </summary>
     BindingMismatch,
 }
 
 /// <summary>
-/// ডিস্কে যা জমা থাকে। ⚠️ ইচ্ছাকৃতভাবে <c>record</c> নয় —
-/// record হলে জেনারেটেড <c>ToString</c> টোকেনসহ সব ছাপত।
-/// <see cref="Token"/> নিজেও <see cref="SecretText"/>, তাই দুই স্তরের সুরক্ষা।
+/// What is stored on disk. Careful: deliberately not a <c>record</c>: a record's generated
+/// <c>ToString</c> would print everything, token included. <see cref="Token"/> is itself a
+/// <see cref="SecretText"/>, so there are two layers of protection.
 /// </summary>
 internal sealed class DeviceCredentialRecord
 {
     public required int DeviceId { get; init; }
     public required SecretText Token { get; init; }
 
-    /// <summary>enroll করার মুহূর্তে এই মেশিনের পরিচয় — ক্লোন ধরার চাবি।</summary>
+    /// <summary>This machine's identity at the moment of enrolling: the key for catching
+    /// clones.</summary>
     public required string MachineGuid { get; init; }
 
     /// <inheritdoc cref="MachineGuid"/>
@@ -51,64 +53,65 @@ internal sealed class DeviceCredentialRecord
         $"device #{DeviceId} · {Employee.EmpCode} · token={Token} · enrolled {EnrolledAt:u}";
 }
 
-/// <summary>পড়ার ফল। <see cref="Record"/> শুধু <see cref="CredentialLoadStatus.Loaded"/>-এ ভরা থাকে।</summary>
+/// <summary>The read result. <see cref="Record"/> is filled only for
+/// <see cref="CredentialLoadStatus.Loaded"/>.</summary>
 internal sealed record CredentialLoad(
     CredentialLoadStatus Status,
     DeviceCredentialRecord? Record,
     string? Detail);
 
-/// <summary>লেখার ফল। enroll-এর উত্তর একবারই আসে, তাই ব্যর্থতা চেপে যাওয়া চলবে না।</summary>
+/// <summary>The write result. The enroll reply comes only once, so a failure must not be
+/// suppressed.</summary>
 internal readonly record struct CredentialSave(bool Ok, string? Detail);
 
 /// <summary>
-/// ⭐ device token ডিস্কে রাখা ও ফিরিয়ে আনা — DPAPI (LocalMachine) দিয়ে ঢাকা,
-/// %ProgramData%\oXeio\device.dat-এ, নিজের ACL সহ।
+/// Storing the device token on disk and bringing it back: wrapped with DPAPI (LocalMachine), in
+/// %ProgramData%\oXeio\device.dat, with its own ACL.
 ///
-/// <b>১· LocalMachine স্কোপ, CurrentUser নয় — কেন:</b>
-/// enroll হয় ইনস্টলারের সময়, প্রায়ই IT অ্যাডমিনের অ্যাকাউন্টে (বা SYSTEM-এ);
-/// এজেন্ট পরে চলে স্টাফের অ্যাকাউন্টে। CurrentUser স্কোপে ব্লবটা ইউজারের
-/// DPAPI master key দিয়ে ঢাকা পড়ত, আর <b>অন্য কোনো অ্যাকাউন্ট সেটা খুলতেই পারত না</b> —
-/// অর্থাৎ ইনস্টল করার পরদিন সকালে এজেন্ট ৪০১ খেয়ে চুপ করে বসে থাকত।
-/// একই কারণে প্রোফাইল রিসেট বা পাসওয়ার্ড রিসেটে (ডোমেইন ছাড়া মেশিনে DPAPI
-/// master key নষ্ট হয়ে যায়) টোকেন চিরতরে হারাত, আর প্রতিবার নতুন enrollment
-/// code লাগত। LocalMachine স্কোপে ওই দুটোর কোনোটাই ঘটে না।
+/// <b>1. LocalMachine scope, not CurrentUser, and why:</b>
+/// enrollment happens at install time, often in the IT admin's account (or SYSTEM); the agent later
+/// runs in the staff account. With CurrentUser scope the blob would be wrapped with the user's
+/// DPAPI master key, and <b>no other account could open it at all</b>: the morning after install
+/// the agent would get a 401 and sit silent. For the same reason, on a profile reset or password
+/// reset (on a non-domain machine the DPAPI master key is destroyed) the token would be lost for
+/// good, and a new enrollment code would be needed every time. With LocalMachine scope neither
+/// happens.
 ///
-/// <b>২· LocalMachine স্কোপ কী দেয় আর কী দেয় না — সৎ হিসাব:</b>
-/// দেয়: ডিস্ক খুলে নিয়ে গেলে, ব্যাকআপ ফাঁস হলে, বা ফাইলটা অন্য PC-তে কপি করলে
-/// টোকেন খোলা যায় না (DPAPI master key ওই মেশিনেই থাকে)।
-/// দেয় না: <b>এই</b> PC-র যেকোনো লোকাল ইউজার, যে ফাইলটা পড়তে পারে, সে
-/// <c>Unprotect</c>ও করতে পারে। ফাইল ACL-ই তাই আসল সীমানা, DPAPI নয়।
-/// শক্ত করতে হলে একমাত্র পথ এজেন্টকে LocalSystem সার্ভিস বানানো (তখন
-/// <c>restrictToAdministrators: true</c>) — সেটা আলাদা সিদ্ধান্ত, এখানে নয়।
+/// <b>2. What LocalMachine scope gives and does not give, honestly:</b> It gives: if the disk is
+/// taken out, a backup leaks, or the file is copied to another PC, the token cannot be opened (the
+/// DPAPI master key stays on that machine). It does not give: <b>on this</b> PC, any local user who
+/// can read the file can also <c>Unprotect</c> it. So the file ACL is the real boundary, not DPAPI.
+/// The only way to tighten this is to make the agent a LocalSystem service (then
+/// <c>restrictToAdministrators: true</c>); that is a separate decision, not made here.
 ///
-/// <b>৩· ACL যা বসানো হয়:</b> ফাইলে inheritance বন্ধ (protected), তারপর
-/// SYSTEM = Full, BUILTIN\Administrators = Full, BUILTIN\Users = <b>Read</b>।
-/// Users-কে Read দিতেই হয়, কারণ এজেন্ট স্টাফের অ্যাকাউন্টে চলে অথচ ফাইলটা
-/// অ্যাডমিনের হাতে তৈরি হয়। Users-এর Write নেই, আর ফোল্ডারে
-/// <c>DeleteSubdirectoriesAndFiles</c> নেই — তাই সাধারণ ইউজার টোকেন মুছে
-/// এজেন্টকে থামাতেও পারে না।
+/// <b>3. The ACL that is applied:</b> inheritance off (protected) on the file, then SYSTEM = Full,
+/// BUILTIN\Administrators = Full, BUILTIN\Users = <b>Read</b>. Users must get Read, because the
+/// agent runs in the staff account while the file is created by an admin. Users have no Write, and
+/// no <c>DeleteSubdirectoriesAndFiles</c> on the folder, so an ordinary user cannot delete the
+/// token to stop the agent either.
 ///
-/// ⚠️ ডিরেক্টরিটা ইতিমধ্যে থাকলে তার ACL <b>ছোঁয়া হয় না</b> — outbox মডিউলও
-/// ওখানেই লেখে, আর তাদের ইচ্ছাকৃত সেটিং পাল্টে দিলে ওদিকে ডেটা লেখা বন্ধ হয়ে যেত।
+/// Careful: if the directory already exists its ACL is <b>not touched</b>: the outbox module writes
+/// there too, and changing their deliberate setting would stop data being written on that side.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class DeviceTokenStore
 {
-    /// <summary>স্কিমা ভার্সন — ভবিষ্যতে ফরম্যাট বদলালে পুরোনো ফাইল চেনার জন্য।</summary>
+    /// <summary>Schema version: so that old files can be recognised if the format changes in
+    /// future.</summary>
     private const int SchemaVersion = 1;
 
     public const string DefaultFileName = "device.dat";
 
     /// <summary>
-    /// বাতিল হয়ে যাওয়া ক্রেডেনশিয়াল এখানে সরানো হয়, মোছা হয় না।
-    /// ⚠️ মুছে ফেললে "কেন হঠাৎ re-enroll চাইছে" প্রশ্নের উত্তর আর কোথাও থাকত না।
+    /// Credentials that have been revoked are moved here, not deleted. Careful: if deleted, the
+    /// question "why is it suddenly asking to re-enroll" would have no answer anywhere.
     /// </summary>
     public const string QuarantineFileName = "device.dat.orphaned";
 
     /// <summary>
-    /// DPAPI-র optional entropy। ⚠️ এটা গোপন কিছু <b>নয়</b> — বাইনারিতেই আছে।
-    /// কাজ একটাই: একই মেশিনের অন্য কোনো LocalMachine-DPAPI অ্যাপ যেন ভুল করে
-    /// আমাদের ব্লব খুলে না ফেলে। একে "বাড়তি নিরাপত্তা" বলে দাবি করা হচ্ছে না।
+    /// DPAPI's optional entropy. Careful: this is <b>not</b> a secret: it is in the binary. Its one
+    /// job: so that another LocalMachine-DPAPI app on the same machine does not open our blob by
+    /// mistake. It is not claimed to be "extra security".
     /// </summary>
     private static readonly byte[] Entropy =
         "oXeio.agent.device-credentials.v1"u8.ToArray();
@@ -131,14 +134,14 @@ internal sealed class DeviceTokenStore
 
     public string FilePath { get; }
 
-    /// <summary><c>%ProgramData%\oXeio</c> — <see cref="AgentDataDirectory"/> দেখুন।</summary>
+    /// <summary><c>%ProgramData%\oXeio</c>: see <see cref="AgentDataDirectory"/>.</summary>
     public static string DefaultDirectory() => AgentDataDirectory.Default;
 
-    // ── পড়া ─────────────────────────────────────────────────────────────────
+    // ── Reading ──────────────────────────────────────────────────────────
 
     /// <summary>
-    /// ⚠️ কখনো throw করে না। এটা স্টার্টআপ পথ; এখানে একটা এক্সসেপশন মানে
-    /// এজেন্ট চালুই হলো না, আর তখন ওই PC-র কেউ সারা মাস ঘণ্টা পেত না।
+    /// Careful: never throws. This is the startup path; an exception here would mean the agent did
+    /// not start at all, and then nobody on that PC would get hours all month.
     /// </summary>
     public CredentialLoad Load(MachineIdentity identity)
     {
@@ -159,9 +162,9 @@ internal sealed class DeviceTokenStore
             }
             catch (CryptographicException ex)
             {
-                // ⚠️ এখানে এলে সবচেয়ে সম্ভাব্য কারণ: ফাইলটা অন্য মেশিন থেকে কপি
-                //    হয়েছে (DPAPI master key মেলেনি), অথবা Windows আবার ইনস্টল
-                //    হয়েছে। রিট্রাই করে লাভ নেই — নতুন enroll লাগবে।
+                // Careful: if we get here, the most likely cause is that the file was copied from
+                // another machine (the DPAPI master key did not match), or Windows was reinstalled.
+                // Retrying is pointless: a new enroll is needed.
                 return new CredentialLoad(
                     CredentialLoadStatus.Unreadable, null,
                     "DPAPI could not unprotect it (the file is probably from another machine): " + ex.Message);
@@ -187,25 +190,25 @@ internal sealed class DeviceTokenStore
         }
         finally
         {
-            // প্লেইনটেক্সট বাফারটা যত কম সময় মেমরিতে থাকে তত ভালো।
-            // ⚠️ এতে টোকেন-string মোছে না (string মোছা যায় না) — এটা
-            //    defence-in-depth, গ্যারান্টি নয়। SecretText-এর মন্তব্য দেখুন।
+            // The less time the plaintext buffer stays in memory, the better. Careful: this does
+            // not wipe the token string (a string cannot be wiped): it is defence-in-depth, not a
+            // guarantee. See SecretText's comment.
             if (plaintext is not null) CryptographicOperations.ZeroMemory(plaintext);
         }
     }
 
     /// <summary>
-    /// ⭐ ক্লোন ধরার একমাত্র নির্ভরযোগ্য জায়গা।
+    /// The only reliable place to catch clones.
     ///
-    /// ডিস্ক-ইমেজ ক্লোনে <b>সবকিছুই</b> কপি হয় — MachineGuid, DPAPI master key,
-    /// এমনকি এই device.dat-ও। তাই DPAPI বা GUID দিয়ে ক্লোন চেনা যায় না।
-    /// একটাই জিনিস আলাদা হতে বাধ্য: <b>hostname</b> (Windows একই নামের দুটো
-    /// মেশিন নেটওয়ার্কে থাকতে দেয় না, আর ইমেজ বসানোর পর নাম বদলাতেই হয়)।
+    /// In a disk-image clone <b>everything</b> is copied: MachineGuid, the DPAPI master key, even
+    /// this device.dat. So clones cannot be recognised by DPAPI or GUID. Exactly one thing is bound
+    /// to differ: the <b>hostname</b> (Windows does not allow two machines with the same name on
+    /// the network, and after laying an image the name must be changed).
     ///
-    /// তাই hostname না মিললে টোকেন ব্যবহার করা হয় না।
-    /// দাম: কেউ ইচ্ছে করে PC-র নাম বদলালে একবার re-enroll লাগবে।
-    /// লাভ: ১৫টা PC নীরবে একজনের নামে ঘণ্টা জমা করবে না।
-    /// এই দুটোর মধ্যে দ্বিতীয়টা অপূরণীয়, প্রথমটা পাঁচ মিনিটের কাজ — তাই এই পছন্দ।
+    /// So if the hostname does not match, the token is not used.
+    /// Cost: if someone renames a PC on purpose, one re-enroll is needed. Gain: 15 PCs will not
+    /// silently accumulate hours under one person's name. Of the two, the second is irreparable and
+    /// the first is five minutes of work, hence this choice.
     /// </summary>
     private static string? DescribeBindingMismatch(DeviceCredentialRecord record, MachineIdentity identity)
     {
@@ -224,12 +227,12 @@ internal sealed class DeviceTokenStore
         return null;
     }
 
-    // ── লেখা ────────────────────────────────────────────────────────────────
+    // ── Writing ──────────────────────────────────────────────────────────
 
     /// <summary>
-    /// ⚠️ enroll-এর উত্তরে টোকেন <b>একবারই</b> আসে (সার্ভারে শুধু sha256 থাকে)।
-    /// তাই এটা ব্যর্থ হলে টোকেনটা চিরতরে গেল — কলারকে জোরে জানাতে হবে যে
-    /// নতুন enrollment code ছাড়া আর কিছু করার নেই। নীরবে false ফেরানো চলবে না।
+    /// Careful: the token comes in the enroll reply <b>only once</b> (the server keeps only a
+    /// sha256). So if this fails the token is gone for good: the caller must be told loudly that
+    /// nothing can be done without a new enrollment code. It must not return false silently.
     /// </summary>
     public CredentialSave Save(DeviceCredentialRecord record)
     {
@@ -249,8 +252,8 @@ internal sealed class DeviceTokenStore
         }
         catch (Exception ex)
         {
-            // ⚠️ ex.Message-এ টোকেন নেই — record-এর ToString-ও নিরাপদ।
-            //    এখানে record ছাপা হলেও শুধু fingerprint যেত।
+            // Careful: ex.Message contains no token, and the record's ToString is safe too: even if
+            // the record were printed here, only the fingerprint would go.
             return new CredentialSave(false, ex.GetType().Name + ": " + ex.Message);
         }
         finally
@@ -260,25 +263,25 @@ internal sealed class DeviceTokenStore
     }
 
     /// <summary>
-    /// ⚠️ ACL <b>অস্থায়ী ফাইলে</b> বসানো হয়, তারপর move।
-    /// <c>File.Move(..., overwrite: true)</c> ভেতরে MoveFileEx/REPLACE_EXISTING —
-    /// গন্তব্যের security descriptor বাতিল হয়ে <b>উৎসেরটা</b> সাথে আসে।
-    /// অর্থাৎ শেষ ফাইলে ACL বসিয়ে তারপর overwrite করলে ACL নীরবে হারিয়ে যেত
-    /// আর টোকেন ProgramData-র ঢিলে ACL নিয়ে পড়ে থাকত।
+    /// Careful: the ACL is applied to a <b>temporary file</b>, then moved. <c>File.Move(...,
+    /// overwrite: true)</c> internally uses MoveFileEx/REPLACE_EXISTING: the destination's security
+    /// descriptor is discarded and <b>the source's</b> comes along. So setting the ACL on the final
+    /// file and then overwriting would silently lose the ACL, and the token would sit with
+    /// ProgramData's loose ACL.
     ///
-    /// move নিজে NTFS-এ atomic, তাই বিদ্যুৎ চলে গেলেও অর্ধেক লেখা ফাইল থাকে না —
-    /// হয় পুরোনো টোকেন, নয় নতুনটা।
+    /// The move itself is atomic on NTFS, so even if the power goes there is no half-written file:
+    /// either the old token or the new one.
     /// </summary>
     /// <summary>
-    /// ⭐ টোকেন সত্যিই লেখা যাবে কি না — <b>সার্ভারে যাওয়ার আগে</b> দেখা হয়।
+    /// Whether the token can really be written: checked <b>before going to the server</b>.
     ///
-    /// <b>কেন এটা দরকার:</b> enrollment কোড একবার-ব্যবহার্য। সার্ভার কোডটা
-    /// খরচ করে ডিভাইস বানিয়ে টোকেন ফেরত দেয় — <b>একবারই</b>। ওই মুহূর্তে
-    /// ডিস্কে লেখা ব্যর্থ হলে কোডটাও গেল, টোকেনটাও গেল, আর সার্ভারে একটা
-    /// অনাথ ডিভাইস পড়ে রইল। ঠিক করতে হলে অ্যাডমিনকে নতুন কোড বানাতে হয়।
+    /// <b>Why this is needed:</b> an enrollment code is single-use. The server consumes the code,
+    /// creates a device and returns the token, <b>once only</b>. If the disk write fails at that
+    /// moment, the code is gone, the token is gone, and an orphan device is left on the server. To
+    /// fix it an admin must create a new code.
     ///
-    /// আসল মেশিনে চালিয়ে ঠিক এটাই ঘটেছিল। তাই আগে একটা প্রোব ফাইল লিখে —
-    /// একই ACL, একই পথ — নিশ্চিত হওয়া হয়।
+    /// This is exactly what happened when run on a real machine. So a probe file is written first,
+    /// with the same ACL and the same path, to be sure.
     /// </summary>
     public bool CanPersist(out string? error)
     {
@@ -290,9 +293,9 @@ internal sealed class DeviceTokenStore
             EnsureDirectory();
             if (File.Exists(probe)) File.Delete(probe);
 
-            // ⚠️ আসল লেখার ধাপগুলো হুবহু — ফাইল বানানো, ACL বসানো, তারপর
-            //    লেখা। শুধু "ফোল্ডারে লেখা যায় কি না" দেখলে এই বাগটা ধরা
-            //    পড়ত না, কারণ ফোল্ডারে লেখা যাচ্ছিলই।
+            // Careful: the real write steps exactly: creating the file, setting the ACL, then
+            // writing. Only checking "can the folder be written" would not have caught this bug,
+            // because the folder was writable.
             using (new FileStream(probe, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { }
             new FileInfo(probe).SetAccessControl(BuildFileSecurity());
 
@@ -312,7 +315,7 @@ internal sealed class DeviceTokenStore
         finally
         {
             try { if (File.Exists(probe)) File.Delete(probe); }
-            catch (Exception) { /* প্রোব রেখে যাওয়া ক্ষতিকর নয় */ }
+            catch (Exception) { /* leaving the probe behind does no harm */ }
         }
     }
 
@@ -320,11 +323,12 @@ internal sealed class DeviceTokenStore
     {
         var temp = FilePath + ".tmp";
 
-        // আগের চেষ্টার আবর্জনা পড়ে থাকলে — না মুছলে নিচের CreateNew ব্যর্থ হতো।
+        // if leftovers from an earlier attempt are present: if not deleted, the CreateNew below
+        // would fail.
         if (File.Exists(temp)) File.Delete(temp);
 
-        // খালি ফাইল বানিয়ে আগে ACL, তারপর বাইট। এই ক্রমে গোপন বাইট কখনো
-        // উত্তরাধিকারসূত্রে পাওয়া ঢিলে ACL নিয়ে ডিস্কে বসে না।
+        // Create an empty file, set the ACL first, then the bytes. In this order the secret bytes
+        // never land on disk with the loose inherited ACL.
         using (new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { }
 
         new FileInfo(temp).SetAccessControl(BuildFileSecurity());
@@ -333,8 +337,8 @@ internal sealed class DeviceTokenStore
         {
             fs.Write(blob, 0, blob.Length);
 
-            // ⚠️ flushToDisk: true — নইলে enroll-এর পরপরই বিদ্যুৎ গেলে
-            //    ফাইলটা ০ বাইট থাকত, আর টোকেন আর কোনোদিন পাওয়া যেত না।
+            // Careful: flushToDisk: true, otherwise if power failed right after enroll the file
+            // would stay 0 bytes, and the token could never be recovered.
             fs.Flush(flushToDisk: true);
         }
 
@@ -345,9 +349,8 @@ internal sealed class DeviceTokenStore
     {
         var security = new FileSecurity();
 
-        // ⚠️ প্রথম কাজ: উত্তরাধিকার বন্ধ। ProgramData-র ডিফল্ট ACL-এ
-        //    Authenticated Users-এর লেখার অধিকার আছে; সেটা টেনে আনলে
-        //    যেকোনো ইউজার টোকেন ফাইল বদলে দিতে পারত।
+        // Careful: first thing: inheritance off. ProgramData's default ACL gives Authenticated
+        // Users write rights; if that were pulled in, any user could change the token file.
         security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
 
         security.AddAccessRule(new FileSystemAccessRule(
@@ -360,19 +363,17 @@ internal sealed class DeviceTokenStore
 
         if (!_restrictToAdministrators)
         {
-            // ⚠️ আগে এখানে `BUILTIN\Users : Read` ছিল, এই ধারণায় যে
-            //    "ইনস্টলার (অ্যাডমিন) লেখে, এজেন্ট (স্টাফ) পড়ে"।
-            //    **ধারণাটা ভুল** — enrollment এজেন্টই করে, ইনস্টলার নয়।
-            //    ফলে এজেন্ট ফাইলটা বানিয়ে, তাতে নিজেকে Read দিয়ে, তারপর
-            //    Write করতে গিয়ে নিজের ফাইলেই "Access denied" খেত।
+            // Careful: this used to be `BUILTIN\Users : Read` here, on the idea that "the installer
+            // (admin) writes and the agent (staff) reads". **That idea was wrong**: the agent does
+            // the enrollment, not the installer. So the agent created the file, gave itself Read on
+            // it, then tried to Write and got "Access denied" on its own file.
             //
-            //    আসল মেশিনে চালিয়ে ধরা পড়েছে: device.dat.tmp তৈরি হয়েছিল,
-            //    ০ বাইট, আর enrollment কোডটা ততক্ষণে খরচ হয়ে গেছে।
+            // Caught by running on a real machine: device.dat.tmp had been created, 0 bytes, and
+            // the enrollment code had already been consumed.
             //
-            //    এখন যে অ্যাকাউন্টে এজেন্ট চলছে **সেটাই** Modify পায়।
-            //    Users-এর blanket Read সরানো হয়েছে — DPAPI LocalMachine স্কোপে
-            //    থাকায় ওই Read মানে ছিল ওই PC-র যেকোনো ইউজার টোকেনটা
-            //    খুলে ফেলতে পারত।
+            // Now **the account the agent is running in** gets Modify. The blanket Read for Users
+            // was removed: because of the DPAPI LocalMachine scope, that Read meant any user on
+            // that PC could open the token.
             using var me = WindowsIdentity.GetCurrent();
             if (me.User is { } sid)
             {
@@ -384,15 +385,16 @@ internal sealed class DeviceTokenStore
         return security;
     }
 
-    /// <summary>ফোল্ডার না থাকলে শক্ত ACL সহ বানায় — <see cref="AgentDataDirectory"/>।</summary>
+    /// <summary>Creates the folder with a strict ACL if it is absent:
+    /// <see cref="AgentDataDirectory"/>.</summary>
     private void EnsureDirectory() => AgentDataDirectory.Ensure(DirectoryPath);
 
-    // ── মোছা ও সরানো ────────────────────────────────────────────────────────
+    // ── Deleting and moving ──────────────────────────────────────────────
 
     /// <summary>
-    /// ডিভাইস revoke হলে (H06) বা binding ভাঙলে। ⚠️ NTFS/SSD-তে "নিরাপদ মুছে
-    /// ফেলা" বলে কিছু নেই (journal, TRIM, shadow copy) — চেষ্টাও করা হচ্ছে না।
-    /// টোকেন সার্ভারে ইতিমধ্যে বাতিল, তাই পড়ে থাকা বাইট দিয়ে কিছু হয় না।
+    /// When a device is revoked (H06) or the binding is broken. Careful: on NTFS/SSD there is no
+    /// such thing as "secure delete" (journal, TRIM, shadow copy), and no attempt is made. The
+    /// token is already revoked on the server, so leftover bytes are useless.
     /// </summary>
     public bool TryDelete(string reason)
     {
@@ -426,10 +428,10 @@ internal sealed class DeviceTokenStore
     // ── JSON ────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// হাতে লেখা JSON, রিফ্লেকশন-নির্ভর <c>JsonSerializer.Serialize&lt;T&gt;</c> নয়।
-    /// কারণ দুটো: (ক) কোন ফিল্ড ডিস্কে যাচ্ছে তা এক নজরে দেখা যায় — গোপন কিছু
-    /// ভুল করে ঢুকে পড়ার সুযোগ নেই; (খ) ভবিষ্যতে trimming চালু করলে
-    /// রিফ্লেকশন নীরবে ভেঙে পড়ত।
+    /// Hand-written JSON, not reflection-based <c>JsonSerializer.Serialize&lt;T&gt;</c>. Two
+    /// reasons: (a) which fields go to disk can be seen at a glance, so there is no chance of a
+    /// secret slipping in by mistake; (b) if trimming is enabled in future, reflection would break
+    /// silently.
     /// </summary>
     private static byte[] Serialize(DeviceCredentialRecord record)
     {
@@ -459,7 +461,7 @@ internal sealed class DeviceTokenStore
         var exact = new byte[length];
         Buffer.BlockCopy(buffer.GetBuffer(), 0, exact, 0, length);
 
-        // MemoryStream-এর ভেতরের বাফারেও টোকেন ছিল — সেটাও মুছে দেওয়া হচ্ছে।
+        // the MemoryStream's internal buffer also held the token: that is wiped too.
         CryptographicOperations.ZeroMemory(buffer.GetBuffer());
 
         return exact;
@@ -509,8 +511,8 @@ internal sealed class DeviceTokenStore
         }
         catch (Exception ex)
         {
-            // ⚠️ JsonException-এর মেসেজে কখনো কখনো আশপাশের কাঁচা টেক্সট থাকে,
-            //    আর সেই টেক্সটে টোকেন থাকতে পারে। তাই ex.Message ব্যবহার করা হয় না।
+            // Careful: a JsonException's message sometimes contains the surrounding raw text, and
+            // that text may contain the token. So ex.Message is not used.
             error = "could not read the credentials file (" + ex.GetType().Name + ")";
             return null;
         }

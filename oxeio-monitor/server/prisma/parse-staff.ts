@@ -1,40 +1,41 @@
 /**
- * `staff.local.json` পড়ে যাচাই করা — খাঁটি ফাংশন, কোনো I/O নেই।
+ * Reads and validates `staff.local.json` — pure functions, no I/O.
  *
- * ⭐ **কেন আলাদা ফাইল:** `seed.ts` import হলেই নিজে চলতে শুরু করে
- * (`main()` নিচে ডাকা), তাই ওর ভেতরের কিছু টেস্ট করা যায় না। অথচ এই
- * ফাইলটাই ঠিক করে দেয় **কার বেতন কত** — ভুল ধরার জায়গা এটাই।
+ * Why a separate file: importing `seed.ts` starts it running (`main()` is
+ * called at the bottom), so nothing inside it can be tested. This file decides
+ * **who earns what**, so it is the right place to catch mistakes.
  *
- * ⚠️⚠️ **আগে কোনো যাচাই ছিল না** — শুধু `JSON.parse(...) as Staff[]`,
- * অর্থাৎ TypeScript-এর কাছে মিথ্যে বলা। ফল:
+ * Important: there used to be no validation at all, only
+ * `JSON.parse(...) as Staff[]`, which lies to TypeScript. The results:
  *
- * - তিন ঘরের সারি → `monthlySalary` হতো `undefined` → Prisma থামত এমন
- *   বার্তা নিয়ে যাতে **কোন কর্মীর সারিতে ভুল সেটা লেখাই থাকত না**।
- * - `"25000"` (উদ্ধৃতিসহ) → Prisma-র টাইপ এরর, একই অস্পষ্ট বার্তা।
- * - `25000.5` → পয়সা নিঃশব্দে হারাত, কারণ কলামটা `Int`।
+ * - A three-column row left `monthlySalary` `undefined`, and Prisma failed with
+ *   a message that **did not say which employee's row was wrong**.
+ * - `"25000"` (quoted) gave a Prisma type error with the same vague message.
+ * - `25000.5` silently lost the fraction, because the column is an `Int`.
  *
- * ⚠️ তাই প্রতিটা বার্তায় **কোড আর ঘরের নাম** থাকে — ১২ সারির ফাইলে কোনটা
- * ঠিক করতে হবে সেটা যেন খুঁজতে না হয়।
+ * So every message includes the **employee code and the field name**; in a
+ * 12-row file you should not have to hunt for the row to fix.
  */
 
-/** যাচাই হয়ে যাওয়া একটি সারি — `joinedOn` তারিখে রূপান্তরিত */
+/** One validated row, with `joinedOn` converted to a Date. */
 export interface StaffRow {
   empCode: string;
   fullName: string;
   designation: string;
   monthlySalary: number;
-  /** ⚠️ `undefined` মানে "ঘরটা ছোঁয়া হবে না", `null` নয় — নিচে দেখুন */
+  /** Careful: `undefined` means "leave the column untouched", not `null` (see below). */
   joinedOn?: Date;
 }
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * `YYYY-MM-DD` → UTC-মধ্যরাত।
+ * `YYYY-MM-DD` to UTC midnight.
  *
- * ⚠️ `@db.Date` কলাম UTC-মধ্যরাত ধরে (`countWorkdays`-ও তাই)। স্থানীয় সময়
- * দিয়ে `new Date('2026-01-05')` করলে ঢাকায় ওটা **আগের দিন** হয়ে যেত, আর
- * মাসের ১ তারিখে যোগ দেওয়া কেউ আগের মাসে গিয়ে পড়তেন।
+ * Careful: `@db.Date` columns use UTC midnight (so does `countWorkdays`).
+ * Building the date in local time would turn `2026-01-05` into the **previous
+ * day** in Dhaka, and someone who joined on the 1st of a month would land in
+ * the previous month.
  */
 function parseDate(where: string, value: string): Date {
   if (!DATE.test(value)) {
@@ -47,8 +48,8 @@ function parseDate(where: string, value: string): Date {
   }
 
   /**
-   * ⚠️ `2026-02-30` → JS চুপচাপ ২ মার্চ বানিয়ে দেয়, `Invalid Date` নয়।
-   *    ফিরিয়ে মিলিয়ে না দেখলে টাইপোটা সরাসরি proration-এ ঢুকে যেত।
+   * `2026-02-30` becomes 2 March in JS instead of `Invalid Date`. Without
+   * this round-trip comparison the typo would go straight into proration.
    */
   if (date.toISOString().slice(0, 10) !== value) {
     throw new Error(`${where}: joinedOn "${value}" — এমন কোনো তারিখ নেই`);
@@ -64,10 +65,11 @@ function str(where: string, field: string, value: unknown): string {
 }
 
 /**
- * @param raw `JSON.parse()`-এর ফল — বিশ্বাস করা হয় না।
+ * @param raw The result of `JSON.parse()` — not trusted.
  *
- * ⚠️ ভুল পেলে **থেমে যাওয়া হয়**, সারিটা বাদ দেওয়া হয় না। বাদ দিলে একজন
- * কর্মী নিঃশব্দে অনুপস্থিত থাকতেন, আর সেটা ধরা পড়ত মাস শেষে বেতনের সময়।
+ * Careful: on a bad row this **throws**; it does not skip the row. Skipping
+ * would silently drop an employee, and nobody would notice until payroll at
+ * the end of the month.
  */
 export function parseStaff(raw: unknown): StaffRow[] {
   if (!Array.isArray(raw)) {
@@ -78,7 +80,7 @@ export function parseStaff(raw: unknown): StaffRow[] {
   const seen = new Set<string>();
 
   raw.forEach((row: unknown, i: number) => {
-    // ⚠️ সারি নম্বর ১ থেকে — ফাইল খুলে গোনার সাথে মেলাতে
+    // Row numbers start at 1 so they match counting rows in the open file.
     const at = `সারি ${i + 1}`;
 
     if (!Array.isArray(row) || row.length < 4 || row.length > 5) {
@@ -93,9 +95,10 @@ export function parseStaff(raw: unknown): StaffRow[] {
     const where = `${at} (${empCode})`;
 
     /**
-     * ⚠️⚠️ একই কোড দুবার থাকলে seed-এর upsert **দ্বিতীয়টা দিয়ে প্রথমটা
-     *    চাপা দিত** — কোনো এরর ছাড়াই একজন কর্মী উধাও, অন্যজনের নাম-বেতন
-     *    তার জায়গায়। copy-paste করে তালিকা বানালে এটা খুব সহজেই ঘটে।
+     * Careful: with a duplicate code the seed's upsert would **overwrite the
+     * first row with the second**: one employee vanishes without any error
+     * and the other's name and salary take their place. Easy to do when the
+     * list is built by copy-paste.
      */
     if (seen.has(empCode)) {
       throw new Error(`${where}: এই কোডটা আগেও আছে — প্রতিটা কোড আলাদা হতে হবে`);
@@ -108,7 +111,7 @@ export function parseStaff(raw: unknown): StaffRow[] {
         `${where}: বেতন সংখ্যা হতে হবে — উদ্ধৃতি ছাড়া, যেমন 25000`,
       );
     }
-    // ⚠️ কলামটা `Int`; ভগ্নাংশ দিলে পয়সা নিঃশব্দে কাটা পড়ত
+    // The column is an `Int`; a fraction would be silently truncated.
     if (!Number.isInteger(monthlySalary) || monthlySalary < 0) {
       throw new Error(`${where}: বেতন ভগ্নাংশ বা ঋণাত্মক হতে পারে না`);
     }
@@ -128,23 +131,23 @@ export function parseStaff(raw: unknown): StaffRow[] {
 }
 
 /**
- * ⭐⭐ নমুনা তালিকা দিয়ে seed চললে কর্মী বসানো হবে কি না।
+ * Whether the seed should insert staff when it is running from the sample list.
  *
- * ⚠️⚠️ ১৪ আগস্টের বাগটা এখানেই ঠেকে। `staff.local.json` **gitignore করা**,
- *    তাই VPS-এ ওটা কোনোদিন থাকে না — ফলে সেখানে প্রতিবার seed চললেই
- *    `staff.example.json`-এর তিনজন নমুনা কর্মী (বেতন ০) তৈরি হতো। ওরা ঠিক
- *    এভাবেই প্রোডাকশনে ঢুকেছিল, দলের টার্গেটে **৬২৪ ঘণ্টা** যোগ করে, আর
- *    "কত পিছিয়ে" সংখ্যাটা মিথ্যা বানিয়ে।
+ * Important: this guards against a production bug. `staff.local.json` is
+ * **gitignored**, so it never exists on the VPS, and every seed run there
+ * created the three sample employees from `staff.example.json` (salary 0).
+ * That is exactly how they got into production, adding **624 hours** to the
+ * team target and making the "how far behind" figure wrong.
  *
- * ⭐ নিয়মটা ইচ্ছাকৃতভাবে **সরু**: শুধু নমুনা তালিকার বেলায়, আর শুধু
- *    ডাটাবেসে ইতিমধ্যে কেউ থাকলে।
- *    · আসল তালিকা (`staff.local.json`) থাকলে seed আগের মতোই সব বসায় —
- *      কর্মী হালনাগাদ করার পথটা বন্ধ হয় না।
- *    · খালি ডাটাবেসে নমুনাগুলো আগের মতোই বসে — নইলে কেউ রিপো ক্লোন করে
- *      প্রকল্পটা চালিয়েই দেখতে পারত না।
+ * The rule is deliberately **narrow**: it applies only to the sample list, and
+ * only when the database already has employees.
+ * - With a real list (`staff.local.json`) the seed inserts everything as
+ *   before, so updating staff still works.
+ * - With an empty database the samples are inserted as before; otherwise
+ *   nobody could clone the repo and just try the project.
  *
- * ⚠️ খালি ডাটাবেস মানে **শূন্য**, "সক্রিয় শূন্য" নয়: সবাইকে নিষ্ক্রিয়
- *    করে দেওয়া একটা চালু সিস্টেমেও নমুনা মানুষ ফিরে আসা উচিত নয়।
+ * Careful: "empty" means **zero** employees, not "zero active" — a live system
+ * where everyone was deactivated must not get the sample people back.
  */
 export function shouldSeedSampleStaff(
   usingExample: boolean,

@@ -15,19 +15,19 @@ import {
 } from './setup/harness';
 
 /**
- * ⭐⭐⭐ **দিনের দুটো সীমা** *(মালিকের নিয়ম, ৯ সেপ্টেম্বর ২০২৬)*।
+ * Two daily limits (the owner's rule).
  *
- * > *"daily 30 ta design distribute korar pore karo jodi complete + skip
- * > miliye 30 ta hoy … take tokhon tumi arO kiso design dibe jate se daily
- * > target 25 ta hit korte pare. er sathe etaO korbe kono designer daily
- * > 25 tar beshi design complete korte parbena."*
+ * After 30 designs have been distributed to someone in a day (complete +
+ * skip), top up their hand so they can still hit the daily target of 25. And
+ * no designer may complete more than 25 designs in a day.
  *
- * ⚠️⚠️ দুটো নিয়ম **পরস্পরের বিপরীত দিকে টানে**, আর সেটাই এই ফাইলের
- * সবচেয়ে জরুরি দাবি: টার্গেট ছোঁয়া হয়ে গেলে টপ-আপ **থেমে যেতে হবে**,
- * নইলে সীমা বলত *"আর শেষ কোরো না"* আর টপ-আপ আরও কাজ ঢালত — হাত ভরে
- * যেত এমন কাজে যা আজ ছোঁয়াই যাবে না।
+ * Careful: the two rules pull in opposite directions, and that is the most
+ * important claim in this file: once the target is reached the top-up must
+ * stop. Otherwise the limit would say "don't finish any more" while the
+ * top-up kept pouring in more work, filling the hand with work that can never
+ * be touched today.
  *
- * ⚠️ এই ফাইলে কোনো পিন-করা তারিখ নেই (G140) — সব `dhakaNoon()`-এর সাপেক্ষে।
+ * This file has no pinned dates; everything is relative to `dhakaNoon()`.
  */
 let h: Harness;
 let targets: TargetsService;
@@ -55,13 +55,13 @@ async function person(
   const { employeeId } = await createEmployeeWithCode(h.prisma, code);
 
   /**
-   * ⚠️⚠️ **পলিসিটা জুড়ে দেওয়া হয় ইচ্ছাকৃতভাবে** — হারনেসের পলিসিতে
-   * `dailyDesignTarget = 25` বসানো আছে।
+   * The policy is attached deliberately — the harness policy has
+   * `dailyDesignTarget = 25`.
    *
-   * ⭐ নইলে ম্যানেজারের দাবিটা **ভুল কারণে** সবুজ থাকত: পলিসি না থাকায়
-   * `designTargetOf()` এমনিতেই ০ ফেরত দিত, আর `hasDesignTarget()`
-   * তুলে দিলেও টেস্ট ধরত না। সাবোতাজে ঠিক সেটাই ধরা পড়েছিল
-   * (৯ সেপ্টেম্বর) — দাবিটা ছিল ফাঁকা।
+   * Without it the manager claim would pass for the wrong reason: with no
+   * policy, `designTargetOf()` returns 0 anyway, and removing
+   * `hasDesignTarget()` would go unnoticed by the test. Sabotage testing
+   * caught exactly that, so the claim was vacuous.
    */
   const policy = await h.prisma.workPolicy.findFirstOrThrow();
 
@@ -76,7 +76,7 @@ async function person(
 let asinSeq = 0;
 const nextAsin = () => `B${String(++asinSeq).padStart(9, '0')}`;
 
-/** পুলে `n`টা টার্গেট — টপ-আপ এখান থেকেই তোলে */
+/** `n` targets in the pool — the top-up draws from here */
 async function pool(n: number): Promise<void> {
   const owner = await h.prisma.user.findFirstOrThrow();
 
@@ -89,7 +89,7 @@ async function pool(n: number): Promise<void> {
   });
 }
 
-/** ওই কর্মীর হাতে `n`টা — ফেরত আসে তাদের id */
+/** `n` in that staff member's hand — returns their ids */
 async function inHand(employeeId: number, n: number, at: Date): Promise<number[]> {
   const owner = await h.prisma.user.findFirstOrThrow();
   const ids: number[] = [];
@@ -110,7 +110,7 @@ async function inHand(employeeId: number, n: number, at: Date): Promise<number[]
   return ids;
 }
 
-/** আজ ঢাকার দিনে `n`টা ইতিমধ্যেই শেষ করা */
+/** `n` already finished in today's Dhaka day */
 async function alreadyDone(employeeId: number, n: number, at: Date): Promise<void> {
   const owner = await h.prisma.user.findFirstOrThrow();
 
@@ -135,14 +135,14 @@ const openCountOf = (employeeId: number) =>
     where: { assignedToId: employeeId, status: 'assigned' },
   });
 
-describe('দিনের সীমা — ২৫-এর বেশি "শেষ" বলা যায় না', () => {
+describe('daily limit — cannot finish more than 25', () => {
   /**
-   * ⭐⭐⭐ **এই ফাইলের প্রধান দাবি।**
+   * The main claim of this file.
    *
-   * ⚠️⚠️ আর সাথের দাবিটাও সমান জরুরি: **সারিটা হাতেই থেকে যায়**। মুছে
-   * গেলে বা পুলে ফিরে গেলে সত্যিকারের করা কাজ হারিয়ে যেত।
+   * The companion claim is just as important: the row stays in the hand. If
+   * it were deleted or went back to the pool, real work done would be lost.
    */
-  it('⭐⭐⭐ ২৫ হয়ে গেলে ২৬তমটা আটকায়, আর সারিটা হাতেই থাকে', async () => {
+  it('once 25 are done the 26th is blocked, and the row stays in the hand', async () => {
     const now = dhakaNoon();
     const emp = await person('OX-Q1', 'designer', TARGET);
 
@@ -173,7 +173,7 @@ describe('দিনের সীমা — ২৫-এর বেশি "শেষ
     expect(await openCountOf(emp)).toBe(1);
   });
 
-  it('⭐⭐ ২৪-এ থাকলে ২৫তমটা যায়', async () => {
+  it('at 24, the 25th goes through', async () => {
     const now = dhakaNoon();
     const emp = await person('OX-Q2', 'designer', TARGET);
 
@@ -184,12 +184,12 @@ describe('দিনের সীমা — ২৫-এর বেশি "শেষ
   });
 
   /**
-   * ⭐⭐⭐ **ম্যানেজারের সীমা নেই।**
+   * The manager has no limit.
    *
-   * ⚠️⚠️ মাঠে OX-01 দিনে ৪৪ পর্যন্ত করেন আর তাঁর কোনো টার্গেটই নেই।
-   * সীমা বসালে তাঁর কাজ নীরবে আটকে যেত — কোনো পর্দা সেটা বলত না।
+   * In the field OX-01 does up to 44 a day and has no target at all. A limit
+   * would silently block their work, and no screen would say so.
    */
-  it('⭐⭐⭐ যাঁর টার্গেট নেই তাঁর সীমাও নেই', async () => {
+  it('someone with no target has no limit either', async () => {
     const now = dhakaNoon();
     const emp = await person('OX-Q3', 'manager');
 
@@ -199,8 +199,8 @@ describe('দিনের সীমা — ২৫-এর বেশি "শেষ
     await expect(targets.markDone(emp, id, 1, now)).resolves.toEqual({ ok: true });
   });
 
-  /** ⚠️ ০ মানে "টার্গেট বন্ধ", শাস্তি নয় — সীমাও বসে না */
-  it('⭐⭐ টার্গেট ০ হলে সীমা নেই', async () => {
+  /** A target of 0 means "target off", not a penalty — no limit applies either */
+  it('with a target of 0 there is no limit', async () => {
     const now = dhakaNoon();
     const emp = await person('OX-Q4', 'designer', 0);
 
@@ -211,13 +211,14 @@ describe('দিনের সীমা — ২৫-এর বেশি "শেষ
   });
 
   /**
-   * ⭐⭐⭐ **দিনটা ঢাকার, UTC-র নয়** — এই রেপোর সবচেয়ে বেশিবার হওয়া ভুল।
+   * The day is the Dhaka day, not the UTC day — the most repeated mistake in
+   * this repo.
    *
-   * ⚠️⚠️ গতকালের ২৫টা আজকের হিসাবে ঢুকলে ডিজাইনার সকালেই আটকে যেতেন।
-   * ফিক্সচারটা বসানো হয় গতকালের ঢাকা-দুপুরে, আর দাবিটা হলো আজ কিছুই
-   * আটকাবে না।
+   * If yesterday's 25 counted toward today, a designer would be blocked in
+   * the morning. The fixture is placed at yesterday's Dhaka noon, and the
+   * claim is that nothing is blocked today.
    */
-  it('⭐⭐⭐ গতকালের "শেষ" আজকের সীমায় গোনা হয় না', async () => {
+  it('yesterday\'s "done" does not count toward today\'s limit', async () => {
     const now = dhakaNoon();
     const yesterday = new Date(localMidnightOf(now).getTime() - 12 * 3600_000);
     const emp = await person('OX-Q5', 'designer', TARGET);
@@ -229,13 +230,14 @@ describe('দিনের সীমা — ২৫-এর বেশি "শেষ
   });
 
   /**
-   * ⭐⭐⭐ **ঢাকার দিনের শেষ ঘণ্টাটাও আজই** — UTC ধরলে ওটা কালকে পড়ত।
+   * The last hour of the Dhaka day is still today — by UTC it would fall on
+   * tomorrow.
    *
-   * ⚠️ ঢাকার রাত ১১টা মানে UTC-তে বিকেল ৫টা **একই দিনের**; কিন্তু
-   * `workDateOf()`-এর লেবেলটা সরাসরি সীমানা ধরলে দিনটা ভোর ৬টায় শুরু
-   * হতো, আর রাত ১১টার কাজ **পরের দিনে** পড়ত।
+   * 11 PM in Dhaka is 5 PM UTC of the same day; but if the `workDateOf()`
+   * label were used directly as the boundary, the day would start at 6 AM and
+   * work done at 11 PM would fall on the next day.
    */
-  it('⭐⭐⭐ ঢাকার রাত ১১টার কাজ আজকের সীমাতেই পড়ে', async () => {
+  it('work at 11 PM Dhaka time falls within today\'s limit', async () => {
     const now = dhakaNoon();
     const lateTonight = new Date(nextLocalMidnight(now).getTime() - 3600_000);
     const emp = await person('OX-Q6', 'designer', TARGET);
@@ -249,12 +251,12 @@ describe('দিনের সীমা — ২৫-এর বেশি "শেষ
   });
 
   /**
-   * ⭐⭐ **মালিক/ম্যানেজারের পথটা আটকায় না** *(ইচ্ছাকৃত)*।
+   * The owner/manager path is not blocked (deliberate).
    *
-   * ⚠️ নইলে ভুল সংশোধনের রাস্তাই বন্ধ হতো। কে চেপেছেন সেটা
-   * `completed_by_id`-তে এমনিতেই লেখা থাকে।
+   * Otherwise there would be no way to correct a mistake. Who pressed it is
+   * recorded anyway in `completed_by_id`.
    */
-  it('⭐⭐ মালিকের `update()` পথে সীমা খাটে না', async () => {
+  it('the limit does not apply on the owner\'s `update()` path', async () => {
     const now = dhakaNoon();
     const emp = await person('OX-Q7', 'designer', TARGET);
     const owner = await h.prisma.user.findFirstOrThrow();
@@ -269,13 +271,14 @@ describe('দিনের সীমা — ২৫-এর বেশি "শেষ
   });
 });
 
-describe('টপ-আপ — টার্গেট ছোঁয়ার মতো কাজ হাতে রাখা', () => {
+describe('top-up — keeping enough work in hand to reach the target', () => {
   /**
-   * ⭐⭐⭐ **মালিকের বলা অবস্থাটা** — হাতের সব শেষ, তবু ২৫ হয়নি।
+   * The situation the owner described: everything in hand is done, yet 25 is
+   * not reached.
    *
-   * ১০টা শেষ, হাতে আর কিছু নেই → বাকি ১৫-র জন্য ৩০:২৫ অনুপাতে ১৮টা।
+   * 10 done, nothing left in hand -> 18 for the remaining 15, at a 30:25 ratio.
    */
-  it('⭐⭐⭐ শেষ টার্গেটটা শেষ করলেই হাত আবার ভরে', async () => {
+  it('finishing the last target refills the hand', async () => {
     const now = dhakaNoon();
     const emp = await person('OX-Q8', 'designer', TARGET);
 
@@ -285,12 +288,12 @@ describe('টপ-আপ — টার্গেট ছোঁয়ার মত�
 
     await targets.markDone(emp, last, 1, now);
 
-    // ⭐ ১০ শেষ, বাকি ১৫ → ceil(15 × 30 / 25) = ১৮
+    // 10 done, 15 remaining -> ceil(15 x 30 / 25) = 18
     expect(await openCountOf(emp)).toBe(18);
   });
 
-  /** ⭐⭐⭐ **বাদ দেওয়াও হাত খালি করে** — মালিকের কথায় "complete + skip" */
-  it('⭐⭐⭐ শেষ টার্গেটটা বাদ দিলেও হাত ভরে', async () => {
+  /** Skipping also empties the hand — "complete + skip" in the owner's words */
+  it('skipping the last target also refills the hand', async () => {
     const now = dhakaNoon();
     const emp = await person('OX-Q9', 'designer', TARGET);
 
@@ -303,10 +306,10 @@ describe('টপ-আপ — টার্গেট ছোঁয়ার মত�
   });
 
   /**
-   * ⭐⭐⭐ **হাতে যথেষ্ট থাকলে কিছুই দেওয়া হয় না** — আর মাঠে এটাই
-   * স্বাভাবিক অবস্থা: ৭ ও ৮ সেপ্টেম্বরে সবার হাতে ছিল ১৭–২৯টা।
+   * Nothing is given when there is enough in hand — and in the field this is
+   * the normal state: on 7 and 8 September everyone had 17-29 in hand.
    */
-  it('⭐⭐⭐ হাত ভরা থাকলে টপ-আপ হয় না', async () => {
+  it('no top-up when the hand is full', async () => {
     const now = dhakaNoon();
     const emp = await person('OX-QA', 'designer', TARGET);
 
@@ -315,17 +318,18 @@ describe('টপ-আপ — টার্গেট ছোঁয়ার মত�
 
     await targets.markDone(emp, ids[0], 1, now);
 
-    // ⚠️ একটা শেষ হলো, বাকি ২৯ হাতে — ২৪ বাকির জন্য ২৯-ই যথেষ্ট
+    // One finished, 29 remain in hand — 29 is enough for the remaining 24
     expect(await openCountOf(emp)).toBe(POOL_PER_DESIGNER - 1);
   });
 
   /**
-   * ⭐⭐⭐ **দুটো নিয়মের সংঘর্ষটা এখানেই মেটে।**
+   * This is where the clash of the two rules is settled.
    *
-   * ⚠️⚠️ টার্গেট ছোঁয়া হয়ে গেলে টপ-আপ থেমে যায় — নইলে সীমা বলত "আর
-   * শেষ কোরো না" আর টপ-আপ হাত ভরিয়ে দিত এমন কাজে যা আজ ছোঁয়াই যাবে না।
+   * Once the target is reached the top-up stops — otherwise the limit would
+   * say "don't finish any more" and the top-up would fill the hand with work
+   * that can never be touched today.
    */
-  it('⭐⭐⭐ ২৫ ছোঁয়ার পর হাত খালি হলেও আর কিছু দেওয়া হয় না', async () => {
+  it('after reaching 25, nothing more is given even when the hand is empty', async () => {
     const now = dhakaNoon();
     const emp = await person('OX-QB', 'designer', TARGET);
 
@@ -338,8 +342,8 @@ describe('টপ-আপ — টার্গেট ছোঁয়ার মত�
     expect(await openCountOf(emp)).toBe(0);
   });
 
-  /** ⚠️ ম্যানেজারের টার্গেট নেই — সকালের বণ্টনই তাঁর জন্য যথেষ্ট */
-  it('⭐⭐ যাঁর টার্গেট নেই, তাঁর টপ-আপও নেই', async () => {
+  /** The manager has no target — the morning distribution is enough for them */
+  it('someone with no target gets no top-up either', async () => {
     const now = dhakaNoon();
     const emp = await person('OX-QC', 'manager');
 
@@ -352,12 +356,12 @@ describe('টপ-আপ — টার্গেট ছোঁয়ার মত�
   });
 
   /**
-   * ⭐⭐⭐ **পুল খালি হলে "শেষ করেছি" চাপাটা ব্যর্থ হবে না।**
+   * An empty pool must not make the "I finished" press fail.
    *
-   * ⚠️⚠️ টপ-আপ একটা সুবিধা, শর্ত নয়। ওটা throw করলে পুল ফুরোনোর দিনে
-   * কেউ নিজের কাজ শেষ বলেই চিহ্ন দিতে পারতেন না।
+   * The top-up is a convenience, not a condition. If it threw, on the day the
+   * pool ran out nobody could mark their work as done.
    */
-  it('⭐⭐⭐ পুল খালি — তবু কাজটা শেষ হয়', async () => {
+  it('the pool is empty — the work is still completed', async () => {
     const now = dhakaNoon();
     const emp = await person('OX-QD', 'designer', TARGET);
 
@@ -369,14 +373,15 @@ describe('টপ-আপ — টার্গেট ছোঁয়ার মত�
 
 
   /**
-   * ⭐⭐⭐ **ভোররাত — যে ঘণ্টাগুলোয় সীমাটা নীরবে বন্ধ হয়ে যেত।**
+   * Early morning — the hours when the limit would silently switch off.
    *
-   * ⚠️⚠️ `workDateOf()` ঢাকার দিনটাকে UTC-মধ্যরাত হিসেবে লেখে, অর্থাৎ
-   * **ঢাকার ভোর ৬টা**। ওটা সীমানা ধরলে রাত ১২টা–৬টার মধ্যে গণনার শুরুটা
-   * **ভবিষ্যতে** পড়ত, সংখ্যা আসত শূন্য, আর সীমা পুরো বন্ধ থাকত —
-   * কেউ ওই ছয় ঘণ্টায় যত খুশি শেষ করতে পারতেন।
+   * `workDateOf()` writes the Dhaka day as a UTC midnight, i.e. 6 AM Dhaka
+   * time. Using that as the boundary, between 12 AM and 6 AM the start of the
+   * count would fall in the future, the number would come out zero, and the
+   * limit would be completely off — anyone could finish as many as they liked
+   * in those six hours.
    */
-  it('⭐⭐⭐ ঢাকার রাত ৩টাতেও আজকের হিসাব ঠিক থাকে', async () => {
+  it('the count for today is still right at 3 AM Dhaka time', async () => {
     const now = dhakaNoon();
     const at3am = new Date(localMidnightOf(now).getTime() + 3 * 3600_000);
     const emp = await person('OX-QF', 'designer', TARGET);
@@ -390,15 +395,15 @@ describe('টপ-আপ — টার্গেট ছোঁয়ার মত�
   });
 
   /**
-   * ⭐⭐⭐ **দিনের ছাদ মাঠেও খাটে** — একটার পর একটা বাদ দিয়ে গেলে
-   * পুল অসীমবার ঘাঁটা যায় না।
+   * The daily ceiling holds in the field too — skipping one after another
+   * must not let the pool be mined without limit.
    */
-  it('⭐⭐⭐ ৬০টা দেওয়া হয়ে গেলে আর টপ-আপ হয় না', async () => {
+  it('once 60 have been issued, there is no more top-up', async () => {
     const now = dhakaNoon();
     const emp = await person('OX-QG', 'designer', TARGET);
 
     await pool(50);
-    // ⚠️ আজ ইতিমধ্যেই ছাদের সমান দেওয়া হয়েছে
+    // Already issued today up to the ceiling
     const ids = await inHand(emp, MAX_ISSUED_PER_DAY, now);
     await h.prisma.designTarget.updateMany({
       where: { id: { in: ids.slice(1) } },
@@ -411,14 +416,15 @@ describe('টপ-আপ — টার্গেট ছোঁয়ার মত�
   });
 
   /**
-   * ⭐⭐⭐ **যাঁর হাতে একটাও নেই, তিনি কিছু চাপতেই পারেন না।**
+   * Someone with nothing in hand cannot press anything.
    *
-   * ⚠️⚠️ ঘটনার সাথে সাথে চালানো টপ-আপ (`markDone`/`skip`-এর পরে) ঠিক
-   * **তাঁকেই** ছুঁতে পারে না যাঁর কথা মালিক বলেছিলেন। মাঠে ওই দশা হয়
-   * যখন সকালে পুলে কম থাকে — `allocationSizes` কর্মী-কোডের ক্রমে দেয়,
-   * আর শেষজন কিছুই পান না। ⭐ তাই ঘণ্টার টিকটা আলাদা করে লাগে।
+   * A top-up run immediately on an event (after `markDone`/`skip`) cannot
+   * reach exactly the person the owner described. In the field that happens
+   * when the pool is short in the morning: `allocationSizes` goes in
+   * staff-code order and the last person gets nothing. That is why the hourly
+   * tick is needed separately.
    */
-  it('⭐⭐⭐ খালি হাতে ঘণ্টার টিকই একমাত্র ভরসা', async () => {
+  it('with an empty hand, the hourly tick is the only hope', async () => {
     const now = dhakaNoon();
     const emp = await person('OX-QH', 'designer', TARGET);
 
@@ -430,8 +436,8 @@ describe('টপ-আপ — টার্গেট ছোঁয়ার মত�
     expect(await openCountOf(emp)).toBe(POOL_PER_DESIGNER);
   });
 
-  /** ⭐⭐ টিকটা idempotent — হাত ভরা থাকলে দ্বিতীয়বারে কিছুই বদলায় না */
-  it('⭐⭐ টিক বারবার চললেও হাত ৩০-এর বেশি হয় না', async () => {
+  /** The tick is idempotent — with a full hand a second run changes nothing */
+  it('however often the tick runs, the hand never exceeds 30', async () => {
     const now = dhakaNoon();
     const emp = await person('OX-QI', 'designer', TARGET);
 
@@ -443,8 +449,8 @@ describe('টপ-আপ — টার্গেট ছোঁয়ার মত�
     expect(await openCountOf(emp)).toBe(POOL_PER_DESIGNER);
   });
 
-  /** ⚠️ পুলে যতটা আছে ততটাই — বাকিটা নীরবে বানানো হয় না */
-  it('⭐⭐ পুলে কম থাকলে যতটা আছে ততটাই', async () => {
+  /** Only as many as the pool has — the rest are not silently created */
+  it('with a short pool, only as many as exist', async () => {
     const now = dhakaNoon();
     const emp = await person('OX-QE', 'designer', TARGET);
 

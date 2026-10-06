@@ -7,7 +7,7 @@ import type { Role } from "./staff";
 // ── E11 · audit log (owner-only) ────────────────────────────────────────────
 
 export interface AuditLogRow {
-  /** ⚠️ স্ট্রিং — সার্ভারে BigInt */
+  /** A string — `BigInt` on the server */
   id: string;
   occurredAt: string;
   /** `login` · `view_screenshot` · `payroll_view` · `change_setting` · `revoke_device` … */
@@ -15,17 +15,17 @@ export interface AuditLogRow {
   targetType: string | null;
   targetId: string | null;
   ipAddress: string | null;
-  /** ⚠️ যেকোনো আকারের JSON — অন্ধভাবে render না করে `JSON.stringify` করে দেখান */
+  /** JSON of any shape — show it via `JSON.stringify`, never render it blindly */
   meta: unknown;
-  /** ইউজার মুছে গেলে `null` */
+  /** `null` when the user has been deleted */
   user: {
     id: number;
     email: string;
     fullName: string;
     /**
-     * ⚠️ টাইপটা `Role`, `string` নয় — নইলে ভূমিকার মানচিত্রগুলো
-     * (`Record<Role, …>`) এই সারিটার উপর পাহারা দিতে পারত না, আর
-     * enum বাড়লে পর্দায় নীরবে কাঁচা মান ফুটত।
+     * The type is `Role`, not `string`: otherwise the role maps
+     * (`Record<Role, …>`) could not guard this row, and a new enum value
+     * would silently show up raw on screen.
      */
     role: Role;
   } | null;
@@ -42,11 +42,11 @@ export interface AuditLogQuery {
   action?: string;
   targetType?: string;
   targetId?: string;
-  /** ⚠️ ISO-8601 **instant** (`2026-08-10T00:00:00Z`), শুধু তারিখ নয় */
+  /** ISO-8601 **instant** (`2026-08-10T00:00:00Z`), not just a date */
   from?: string;
   to?: string;
   page?: number;
-  /** ডিফল্ট ৫০, সর্বোচ্চ ২০০ — বেশি চাইলে ৪০০ */
+  /** Default 50, max 200 — asking for more gets a 400 */
   pageSize?: number;
 }
 export function listAuditLog(

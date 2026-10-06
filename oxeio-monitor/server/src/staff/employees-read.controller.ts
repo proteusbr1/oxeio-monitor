@@ -8,18 +8,20 @@ import { EmployeesService } from './employees.service';
 import type { EmployeeView } from './redact';
 
 /**
- * ⭐ E10-এর সবচেয়ে সূক্ষ্ম জায়গা — **কর্মচারীর তালিকা owner-only নয়**।
+ * The subtlest part of the staff module: **the employee list is not owner-only**.
  *
- * স্পেক § ৪.৩ বলে ম্যানেজার লাইভ ভিউ, টাইমলাইন ও রিপোর্ট দেখবে; সেগুলোর
- * কোনোটাই নামের তালিকা ছাড়া অর্থবহ নয়। তাই পড়ার রুট দুটো ইচ্ছাকৃতভাবে
- * `@Roles(owner)` ক্লাসের **বাইরে**, আলাদা কন্ট্রোলারে।
+ * Spec section 4.3 says managers see the live view, timeline and reports, and
+ * none of those make sense without the list of names. So the two read routes
+ * are deliberately **outside** the `@Roles(owner)` class, in a separate
+ * controller.
  *
- * ⚠️ কেন আলাদা *ফাইলে*, একই ফাইলে দুটো ক্লাস নয়: পরে কেউ নতুন endpoint
- * লিখতে গিয়ে ভুল ক্লাসে বসিয়ে দিলে সেটা নীরবে ম্যানেজারের নাগালে চলে
- * যেত। ফাইলের নামটাই (`-read`) সীমানাটা মনে করিয়ে দেয়।
+ * Careful: why a separate *file* rather than two classes in one file: someone
+ * adding a new endpoint later could put it in the wrong class, and it would
+ * silently become reachable by managers. The file name (`-read`) is the
+ * reminder of the boundary.
  *
- * ⚠️ আর বেতন? সেটা এখানে role দেখে ছাঁকা হয় না — `redact.ts`-এ ছাঁকা হয়,
- * এক জায়গায়, আর সেটারই টেস্ট আছে।
+ * Careful: salary is not filtered here by role. It is filtered in
+ * `redact.ts`, in one place, and that place has tests.
  */
 @Roles(UserRole.owner, UserRole.manager)
 @Controller('employees')
@@ -37,12 +39,12 @@ export class EmployeesReadController {
   }
 
   /**
-   * `GET /api/v1/employees/next-code` — নতুন কর্মীর ফর্মের পরামর্শ।
+   * `GET /api/v1/employees/next-code`: suggestion for the new-employee form.
    *
-   * ⚠️⚠️ এই রুটটা `@Get(':id')`-এর **আগে** থাকতেই হবে। Nest রুট মেলায়
-   * উপর থেকে নিচে, তাই নিচে বসালে `next-code` অংশটা `:id` হিসেবে ধরা
-   * পড়ত আর `ParseIntPipe` ৪০০ দিত — বার্তাটা হতো "Validation failed
-   * (numeric string is expected)", যেটা পড়ে আসল কারণ বোঝা কঠিন।
+   * Careful: this route must come **before** `@Get(':id')`. Nest matches
+   * routes top to bottom, so placed below, `next-code` would be taken as `:id`
+   * and `ParseIntPipe` would return 400 with "Validation failed (numeric
+   * string is expected)", which hides the real cause.
    */
   @Get('next-code')
   nextCode(): Promise<{ code: string }> {

@@ -3,7 +3,7 @@ import { qs } from './query';
 
 /** Payroll: the pay sheet, leave, month closing and security deposits. */
 
-/** একজনের মাস-ধরে খাতা — owner-এর সংশোধনের পর্দার জন্য */
+/** One person's month-by-month ledger, for the owner's correction screen. */
 export interface DepositMonths {
   months: { yearMonth: string; amount: string }[];
   total: string;
@@ -12,10 +12,11 @@ export interface DepositMonths {
   noticeDays: number;
 }
 /**
- * ⚠️⚠️ **মাসগুলো এতদিন কেবল কর্মীর নিজের পাতায় দেখা যেত** (`/me/deposit`)।
- * মালিকের পাতায় ছিল শুধু যোগফল — *"2 months held · ৳500"* — আর ওই দুটো
- * সংখ্যা একসাথে পড়লে অর্থহীন হতে পারে। মাঠে ঠিক তাই হয়েছিল: একটা মাস
- * ৳০-তে বসে ছিল, আর কেউ ধরতেই পারছিল না কেন যোগফল মেলে না।
+ * Careful: the months used to be visible only on the employee's own page
+ * (`/me/deposit`). The owner's page had only the total, e.g. "2 months held
+ * ৳500", and those two numbers read together can be meaningless. That is exactly
+ * what happened in the field: one month sat at ৳0 and nobody could tell why the
+ * total did not add up.
  */
 export function depositMonths(
   employeeId: number,
@@ -24,11 +25,11 @@ export function depositMonths(
   return api<DepositMonths>(`/deposits/${employeeId}/months`, { signal });
 }
 /**
- * ⭐⭐ বসে যাওয়া একটা কিস্তির অঙ্ক সংশোধন।
+ * Correct the amount of an installment that has already been recorded.
  *
- * ⚠️ এতদিন এর কোনো পথ ছিল না — `ensureLedger()` বিদ্যমান সারি কখনো
- * হালনাগাদ করে না (ইচ্ছাকৃত), তাই ভুল অঙ্ক চিরকাল বসে থাকত।
- * ⚠️ `reason` বাধ্যতামূলক, আর `amountPaisa` শূন্য হতে পারে না।
+ * Careful: there used to be no way to do this. `ensureLedger()` never updates an
+ * existing row (intentionally), so a wrong amount stayed forever. `reason` is
+ * required, and `amountPaisa` cannot be zero.
  */
 export function correctDepositInstalment(
   employeeId: number,
@@ -50,22 +51,22 @@ export function setDepositStart(
     { method: 'PATCH', body: { yearMonth } },
   );
 }
-// ── R1 · মাস বন্ধ করা ────────────────────────────────────────────────────────
+// ── R1 · Closing a month ─────────────────────────────────────────────────────
 
 export interface MonthClosureView {
   /** '2026-08' */
   yearMonth: string;
   /** ISO instant */
   closedAt: string;
-  /** ⚠️ ইমেইল — ইউজার মুছে গেলেও "কে বন্ধ করেছিল" টিকে থাকা দরকার */
+  /** Careful: an email, because "who closed it" must survive even if the user is deleted. */
   closedBy: string;
   note: string | null;
 }
 /**
- * R1 — `GET /api/v1/months` · owner-only।
+ * R1: `GET /api/v1/months`, owner-only.
  *
- * ⭐ শুধু **বন্ধ** মাসগুলোই ফেরে, সব মাস নয় — খোলা মাস মানে "এখনো নড়তে
- * পারে", আর সেটা অনুপস্থিতি দিয়েই বোঝা যায়।
+ * Only closed months are returned, not all months: an open month means "can still
+ * change", and that is understood from its absence.
  */
 export function listMonthClosures(
   signal?: AbortSignal,
@@ -82,9 +83,8 @@ export function closeMonth(
   });
 }
 /**
- * ⚠️ খোলা মানে বন্ধের রেকর্ডটা তুলে নেওয়া — তাই `DELETE`।
- * ⭐ audit-এ দুটো সারিই (`month_closed`, `month_reopened`) থেকে যায়,
- *    অর্থাৎ ইতিহাস মোছে না।
+ * Careful: reopening means removing the close record, hence `DELETE`. Both audit
+ * rows (`month_closed`, `month_reopened`) stay, so history is not erased.
  */
 export function reopenMonth(
   yearMonth: string,
@@ -93,7 +93,7 @@ export function reopenMonth(
     method: 'DELETE',
   });
 }
-// ── R2 · ছুটির খাতা ──────────────────────────────────────────────────────────
+// ── R2 · Leave ledger ────────────────────────────────────────────────────────
 
 export interface LeaveView {
   id: number;
@@ -101,20 +101,20 @@ export interface LeaveView {
   employeeName: string;
   /** 'YYYY-MM-DD' */
   leaveDate: string;
-  /** `casual` · `sick` · `annual` — ⚠️ তিনটেই সবেতন */
+  /** `casual` | `sick` | `annual`. Careful: all three are paid leave. */
   type: string;
   note: string | null;
   createdBy: string;
   /**
-   * ⭐⭐ ওই দিনটা ওই কর্মীর কর্মদিবস ছিল কি না।
+   * Whether that day was a workday for that employee.
    *
-   * ⚠️ `false` মানে সারিটা খাতায় আছে কিন্তু **টার্গেটের কিছুই কমায়নি** —
-   *    শুক্রবার বা সরকারি ছুটির দিনে লেখা ছুটি। পর্দায় এটা আলাদা করে না
-   *    দেখালে খাতাটা একটা ছাড়ের দাবি করত যা সে দেয়নি।
+   * Careful: `false` means the row is in the ledger but reduced none of the target:
+   * leave written on a Friday or a public holiday. If the screen does not show this
+   * separately, the ledger would claim an exemption it did not give.
    */
   countsTowardTarget: boolean;
 }
-/** R2 — `GET /api/v1/leaves?month=YYYY-MM` · ⚠️ মাস বাধ্যতামূলক */
+/** R2: `GET /api/v1/leaves?month=YYYY-MM`. Careful: the month is required. */
 export function listLeaves(
   month: string,
   signal?: AbortSignal,
@@ -130,10 +130,10 @@ export interface CreateLeaveBody {
   note?: string;
 }
 /**
- * ⭐ রেঞ্জ ধরে — মানুষ "১০ থেকে ১৪" ছুটি নেয়, "১০" পাঁচবার নয়।
+ * By range: people take leave "from the 10th to the 14th", not "the 10th" five times.
  *
- * ⚠️ `skipped` খালি না হলে **সেটা দেখাতেই হবে**: ওই দিনগুলো আগে থেকেই
- *    খাতায় ছিল, তাই যোগ হয়নি। "৫টা যোগ হয়েছে" বলাটা তখন মিথ্যা হতো।
+ * Careful: when `skipped` is not empty it must be shown. Those days were already
+ * in the ledger, so they were not added; saying "5 added" would then be a lie.
  */
 export function createLeave(
   body: CreateLeaveBody,
@@ -146,16 +146,16 @@ export function createLeave(
 export function deleteLeave(id: number): Promise<void> {
   return api<void>(`/leaves/${id}`, { method: 'DELETE' });
 }
-// ── R21 · সিকিউরিটি মানি (জামানত) ────────────────────────────────────────
+// ── R21 · Security money (deposit) ───────────────────────────────────────
 
 /**
- * ⚠️ পুরো পথটা **owner-only** — জামানত সরাসরি বেতনের অংশ, আর বেতনের কোনো
- * সংখ্যা ম্যানেজারের নাগালে নেই (ADR-023 · ADR-027)।
+ * Careful: the whole path is owner-only. The deposit is directly part of pay, and
+ * no pay figure is within a manager's reach (ADR-023, ADR-027).
  */
 export interface DepositPolicyView {
   /** '500.00' */
   amount: string;
-  /** ⭐ পাঠানোর সময় **পয়সায়** যায় — ৫০০ টাকা = ৫০০০০ */
+  /** Sent in paisa: 500 taka = 50000. */
   amountPaisa: number;
   startYearMonth: string;
   noticeDays: number;
@@ -176,11 +176,11 @@ export interface DepositSettlementView {
 }
 export interface DepositBalance {
   /**
-   * ⭐ মালিকের বেছে দেওয়া শুরুর মাস — না দিলে `null` (নিয়মই চলছে)।
+   * The start month chosen by the owner; `null` if not set (the default rule applies).
    *
-   * ⚠️ `effectiveStart`-ও আসে, কারণ পর্দায় দরকার **কোন মাস থেকে সত্যিই
-   * কাটা হচ্ছে**। শুধু override দেখালে খালি ঘর দেখে মালিক বুঝতেন না
-   * আসলে কোন মাস খাটছে।
+   * Careful: `effectiveStart` also comes back, because the screen needs to show
+   * which month deductions really start from. Showing only the override would
+   * leave the owner looking at an empty cell, unable to tell which month is in effect.
    */
   startYearMonth: string | null;
   effectiveStart: string | null;
@@ -189,7 +189,7 @@ export interface DepositBalance {
   empCode: string;
   fullName: string;
   status: string;
-  /** কত মাসের কিস্তি বসেছে */
+  /** How many months of installments have been recorded. */
   months: number;
   balance: string;
   balancePaisa: number;
@@ -216,7 +216,7 @@ export function updateDepositPolicy(
 }
 export interface SettleDepositBody {
   outcome: 'refunded' | 'forfeited';
-  /** 'YYYY-MM-DD' — ⚠️ দুটোই ঐচ্ছিক, "জানা নেই" আর "শূন্য দিন" এক নয় */
+  /** 'YYYY-MM-DD'. Careful: both are optional; "unknown" and "zero days" are not the same. */
   noticeGivenOn?: string;
   lastWorkingDay?: string;
   note?: string;
@@ -230,52 +230,51 @@ export function settleDeposit(
     body,
   });
 }
-// ── F03 · পে-রোল (owner-only) ───────────────────────────────────────────────
+// ── F03 · Payroll (owner-only) ───────────────────────────────────────────────
 
 export interface PayrollRow {
   employeeId: number;
   empCode: string;
   fullName: string;
   /**
-   * ⭐ কাজের ধরন *(২২ আগস্ট)* — আগে এখানে `designation` ছিল।
+   * Kind of work; this used to be `designation`.
    *
-   * ⚠️ পদবির ঘরটা ফর্ম থেকে তুলে দেওয়া হয়েছে (মালিকের সিদ্ধান্ত), তাই
-   * নতুন কর্মীর জন্য ওটা চিরকাল খালি থাকত — অর্থাৎ পর্দায় নীরবে কিছুই
-   * দেখাত না।
+   * Careful: the designation field was removed from the form (the owner's
+   * decision), so it would have stayed empty forever for new staff, silently showing
+   * nothing on screen.
    */
   staffType: 'designer' | 'researcher' | 'manager' | null;
   /**
-   * ⭐ `null` = এই কর্মীর বেতন **বসানো নেই** — শূন্য নয়। দুটোকে এক করে
-   * দেখালে শিটে চুপচাপ ভুল সংখ্যা যেত।
-   * ⚠️ সব টাকা ও ঘণ্টা **স্ট্রিং** — Decimal, float নয়। `Number()` করে
-   *    হিসাব করবেন না, `formatTaka()` / `formatHoursAsDuration()` ব্যবহার করুন।
+   * `null` = this employee's salary is not set, which is not the same as zero.
+   * Showing them the same way would silently put a wrong number on the sheet.
+   * Careful: all money and hours are strings (Decimal, not float). Do not compute
+   * with `Number()`; use `formatTaka()` / `formatHoursAsDuration()`.
    */
   monthlySalary: string | null;
   targetHours: string;
   /**
-   * ⭐⭐⭐ **টার্গেটের যতটুকু সত্যিই দেখা হয়েছে** *(৬ সেপ্টেম্বর ২০২৬)*।
+   * How much of the target was actually observed.
    *
-   * ⚠️⚠️ কর্তন **এটার** সাপেক্ষে, `targetHours`-এর নয় — মালিকের সিদ্ধান্ত:
-   * *"না-দেখা দিনের জন্য কর্তন হবে না"*। দুটো আলাদা করে দেখানো হয়, নইলে
-   * *"টার্গেট ২০৮ ঘণ্টা অথচ ঘাটতি মাত্র ২ ঘণ্টা কেন"* প্রশ্নের উত্তর
-   * পর্দায় থাকত না।
+   * Careful: the deduction is against this, not against `targetHours`. This is the
+   * owner's decision: "no deduction for days we did not observe". Both are shown
+   * separately; otherwise the screen could not answer "the target is 208 hours, so
+   * why is the shortfall only 2 hours?".
    */
   observedTargetHours: string;
-  /** ⭐ যতগুলো কর্মদিবসের সারি সত্যিই লেখা হয়েছিল *(৬ সেপ্টেম্বর)* */
+  /** How many workday rows were actually written. */
   observedWorkdays: number;
-  /** ⭐ G37 — তার কর্মদিবস (d) ও মাসের কর্মদিবস (D)। d < D মানে prorated */
+  /** G37: the employee's workdays (d) and the month's workdays (D). d < D means prorated. */
   workdays: number;
   monthWorkdays: number;
   /**
-   * ⭐⭐⭐ **R21 — এই মাসে জামানতের কিস্তি, আর হাতে যা যাবে**
-   * *(৬ সেপ্টেম্বর ২০২৬-এ পর্দায় বসানো)*।
+   * R21: this month's deposit installment, and what will actually be handed over.
    *
-   * ⚠️⚠️ সার্ভার এই দুটো **প্রথম দিন থেকেই** পাঠাচ্ছিল, কিন্তু পর্দা
-   * ওগুলো ঘোষণাও করেনি, দেখায়ওনি — অর্থাৎ মালিক যে শিট দেখে টাকা দেন
-   * সেখানে **gross** লেখা থাকত, আর খাতা বলত ৳১১,০০০ কেটে রাখা হয়েছে।
-   * ⭐ এই রেপোর চেনা পাপ: চুক্তি লেখা আছে, কলার লেখা হয়নি।
+   * Careful: the server sent both of these from day one, but the screen neither
+   * declared nor showed them. So the sheet the owner pays from showed gross, while
+   * the ledger said 11,000 had been withheld. This repo's familiar sin: the contract
+   * is written, the caller is not.
    *
-   * ⚠️ `null` — বেতন বসানো না থাকলে নিট হিসাব করা যায় না।
+   * Careful: `null` when no salary is set, since net cannot be computed.
    */
   securityDeposit: string | null;
   netPayable: string | null;
@@ -290,35 +289,35 @@ export interface PayrollSheet {
   /** `YYYY-MM` */
   yearMonth: string;
   rows: PayrollRow[];
-  /** ⭐ যাদের বেতন বসানো নেই — নাম ধরে দেখাতে হবে */
+  /** Staff with no salary set; they must be shown by name. */
   missingSalary: string[];
-  /** যাদের ওই মাসের rollup এখনো হয়নি — এঁরা `rows`-এ **নেই** */
+  /** Staff whose rollup for that month has not run yet; they are not in `rows`. */
   missingSummary: string[];
 
   /**
-   * ⚠️⚠️ **R21** — যাঁদের ওই মাসের প্রদেয় জামানতের কিস্তির চেয়ে কম, তাই
-   * নিট শূন্যে থেমেছে।
+   * R21: staff whose payable deposit installment for that month was larger than
+   * their pay, so the net stopped at zero.
    *
-   * ⚠️ সার্ভার ঘরটা **অনেক আগে থেকেই পাঠাত**, এখানে declare করা ছিল না —
-   * তাই পর্দা জানতই না, আর নীরবে থামাটাই ঘটত। অথচ `payroll.service.ts`-এর
-   * ডকেই লেখা: *"নীরবে থামালে খাতায় ৫০০ জমা দেখাত অথচ টাকাটা কোনোদিন
-   * কাটাই যেত না"*।
+   * Careful: the server sent this field long ago but it was not declared here, so
+   * the screen did not know and the silent stop is what happened. `payroll.service.ts`
+   * itself says: "if we stopped silently, the ledger would show 500 held while the
+   * money was never deducted".
    */
   depositExceedsPayable: string[];
 
   /**
-   * ⭐⭐ **G108** — এই মাসের যেসব ছুটির তারিখ এখনো পাকা নয়।
-   * ⚠️ প্রতিটা সারির `payable` দাঁড়িয়ে `d ÷ D`-এর উপর, আর `D` গোনা হয়
-   * এই মাসের ছুটির তালিকা ধরে — একটা তারিখ নড়লে **টাকা** নড়ে।
+   * G108: holiday dates in this month that are not final yet.
+   * Careful: each row's `payable` rests on `d / D`, and `D` is counted from this
+   * month's holiday list, so when a date moves, money moves.
    */
   approximateHolidayDates: string[];
 }
 /**
- * F03 — `GET /api/v1/payroll?month=YYYY-MM`
+ * F03: `GET /api/v1/payroll?month=YYYY-MM`
  *
- * ⭐⚠️ **owner-only, এবং প্রতিটা কল audit-এ লেখা হয়** (payroll_view)।
- * ম্যানেজারকে এই পেজের লিঙ্কও দেখানো যাবে না — `user.role === 'owner'`
- * না হলে রুটটাই render করবেন না, শুধু ৪০৩ ধরলে হবে না।
+ * Careful: owner-only, and every call is written to the audit log (payroll_view).
+ * Do not even show a manager the link to this page: do not render the route unless
+ * `user.role === 'owner'`; catching the 403 alone is not enough.
  */
 export function getPayroll(
   month: string,

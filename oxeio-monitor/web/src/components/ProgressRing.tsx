@@ -1,38 +1,38 @@
 import { pctOf } from '../lib/format';
 
 /**
- * E02 — অগ্রগতির রিং।
+ * E02: progress ring.
  *
- * ⭐⚠️ রিংটা **কীসের** অগ্রগতি সেটা কলার ঠিক করে, এই কম্পোনেন্ট নয়। আগে
- *    aria-label-এ "মাসিক অগ্রগতি" হার্ডকোড করা ছিল; লাইভ বোর্ড রিংটাকে
- *    **আজকের** টার্গেটে সরানোর পর ওই লেখাটা নীরবে মিথ্যা বলত — পর্দায়
- *    দিনের হিসাব, অথচ স্ক্রিন রিডার বলত "মাসিক"। তাই `ariaLabel`।
+ * Careful: what the ring measures is decided by the caller, not by this
+ * component. The aria-label used to be hard-coded to "monthly progress"; after
+ * the live board moved the ring to today's target, that text silently lied: the
+ * screen showed the day while a screen reader said "monthly". Hence `ariaLabel`.
  *
- * ⚠️ যে রিং দিনের টার্গেট দেখায় আর যেটা মাসের, দুটোকে **একই পাতায় একই
- *    আকারে** বসাবেন না — একই আকৃতি দুটো আলাদা জিনিস বোঝালে কেউ আর
- *    কোনোটাই বিশ্বাস করত না।
+ * Careful: do not put a ring for the day's target and one for the month's on the
+ * same page in the same shape; if one shape means two different things, nobody
+ * trusts either.
  *
- * ⭐ **রিংটা সবুজ** — যতটুকু কাজ হয়েছে ততটুকুই সবুজ *(১৭ আগস্ট)*।
+ * The ring is green: as much as has been done is green.
  *
- *    আগে চলতি অবস্থাটা ছিল নিরপেক্ষ `ink` (ডার্ক থিমে সাদা), আর সবুজ হতো
- *    কেবল টার্গেট ছোঁয়ার পর। মালিক পর্দায় দেখে বললেন সাদাটা মানানসই নয় —
- *    ⭐ আর যুক্তিটা ঠিক: **কাজ হয়ে যাওয়া মানেই ভালো খবর**, ৮ ঘণ্টা পূর্ণ
- *    হওয়ার আগেও। সাদা রিংটা "এখনো কিছু হয়নি"-র মতো পড়াত।
+ * The in-progress state used to be neutral `ink` (white in the dark theme), and
+ * it turned green only after the target was reached. The owner saw it on screen
+ * and said the white did not fit, and the reasoning holds: work done is good
+ * news, even before the 8 hours are complete. A white ring read as "nothing
+ * done yet".
  *
- * ⚠️⚠️ তবু **"হয়ে গেছে" আর "হচ্ছে" আলাদা থাকতেই হবে**, নইলে টার্গেট
- *    ছোঁয়ার মুহূর্তটা হারিয়ে যেত। তাই দুই ধাপ: চলতি অবস্থায় **হালকা**
- *    সবুজ (`ok/70`), আর টার্গেট ছুঁলে **গাঢ়** সবুজ — সাথে বৃত্তটাও তখন
- *    সম্পূর্ণ, কোথাও ফাঁক থাকে না। রঙ আর আকৃতি দুটো মিলে খবরটা দেয়,
- *    একা রঙের উপর ভরসা নয় (রং-অন্ধতার জন্যও সেটাই দরকার)।
+ * Careful: "done" and "in progress" must still stay distinguishable, or the moment
+ * of reaching the target would be lost. So there are two steps: light green
+ * (`ok/70`) while in progress, dark green once the target is reached, and the
+ * circle is then complete with no gap. Color and shape together carry the news,
+ * not color alone (which colour-blind users also need).
  *
- * ⚠️⚠️ চলতি অবস্থাটা আগে **ব্র্যান্ড-লাল** ছিল, আর সেটাই Midnight-এ ধরা
- *    পড়া আসল ভুল: `--color-attention` আর `--color-brand` **হুবহু একই
- *    হেক্স**। অর্থাৎ "সরু লাল = ব্র্যান্ড, ভরাট লাল = সতর্কতা" পার্থক্যটা
- *    রং দেখে বোঝার উপায় নেই, শুধু ওজন দেখে — আর ৪px-এর ভরাট চাপ একটা
- *    বৃত্তচাপ ওজনে "সতর্কতা"-র দিকেই পড়ে। ফলে রোজ কাজ করা প্রতিটা মানুষের
- *    কার্ডে সারাদিন একটা লাল রিং জ্বলত, আর দু-দিনেই লাল মানে "কিছু না"
- *    হয়ে যেত (index.css-এর নিয়ম দেখুন)। লাল এখন **শুধু** ঘাটতি ও
- *    এজেন্ট বন্ধের জন্য।
+ * Careful: the in-progress state used to be brand red, and that was the real
+ * mistake caught in Midnight: `--color-attention` and `--color-brand` are the
+ * same hex. So the difference "thin red = brand, solid red = warning" cannot be
+ * seen from color, only from weight, and a 4px solid arc leans toward "warning".
+ * Every working person's card would then show a red ring all day, and in two days
+ * red would mean "nothing" (see the rule in index.css). Red is now only for
+ * shortfall and agent off.
  */
 export function ProgressRing({
   value,
@@ -41,25 +41,25 @@ export function ProgressRing({
   label,
   ariaLabel = 'Progress',
 }: {
-  /** যত হয়েছে (সেকেন্ড বা ঘণ্টা — একই একক হলেই হলো) */
+  /** Amount done (seconds or hours; any unit, as long as it is the same one). */
   value: number;
-  /** যত হওয়ার কথা। ⚠️ শূন্য বা অবৈধ হলে রিং খালি দেখায়, NaN নয়। */
+  /** Amount expected. Careful: if zero or invalid the ring shows empty, not NaN. */
   max: number;
   size?: number;
   /**
-   * মাঝের লেখা। না দিলে শতাংশ বসে।
-   * ⚠️ `null` দিলে কিছুই বসে না — ছোট রিংয়ে (< ৩৬px) লেখা পড়াই যায় না।
+   * Centre text. Percentage if omitted.
+   * Careful: `null` shows nothing; in a small ring (under 36px) the text cannot be read anyway.
    */
   label?: string | null;
   /**
-   * কীসের অগ্রগতি — `"Today's target"`, `"This month"`। শতাংশটা নিজে
-   * থেকেই পরে জুড়ে যায়, তাই এখানে শুধু নামটুকু লিখুন।
+   * What the progress is of: `"Today's target"`, `"This month"`. The percentage is
+   * appended automatically, so write only the name here.
    */
   ariaLabel?: string;
 }) {
   const pct = pctOf(value, max);
-  // ⚠️ ১০০%-এর বেশি হলেও রিং ভরাট থামে — নইলে ১৪০% হলে বৃত্তটা আবার
-  //    শুরু থেকে আঁকা শুরু করত আর দেখতে ৪০%-এর মতো লাগত।
+  // Careful: the fill stops even above 100%; otherwise at 140% the circle would
+  // start drawing again from the beginning and look like 40%.
   const shown = Math.min(100, Math.max(0, pct));
   const met = pct >= 100;
 
@@ -78,7 +78,7 @@ export function ProgressRing({
       aria-label={`${ariaLabel} — ${Math.round(pct)} percent`}
       title={`${ariaLabel} — ${Math.round(pct)}%`}
     >
-      {/* -90° ঘুরিয়ে দেওয়া, যাতে ভরাট উপর থেকে শুরু হয় */}
+      {/* Rotated by -90 degrees so the fill starts at the top */}
       <svg width={size} height={size} className="-rotate-90">
         <circle
           cx={size / 2}
@@ -118,11 +118,12 @@ export function ProgressRing({
 }
 
 /**
- * সরু অনুভূমিক বার — যেখানে রিং বড্ড বেশি (টেবিলের সারিতে, তালিকায়)।
+ * Thin horizontal bar: for where a ring is too much (table rows, lists).
  *
- * ⚠️⚠️ **রঙের নিয়ম রিংয়েরই** — হুবহু। এক পাতায় একই মাপ (আজ কত কাজ হলো)
- * দুই আকৃতিতে দেখা যায়; দুটোর রং আলাদা হলে পাঠক ভাবতেন দুটো আলাদা কথা
- * বলছে। তাই রিংয়ের রং বদলালে এটাও একই সাথে বদলায়।
+ * Careful: the color rule is exactly the ring's. On one page the same measure
+ * (how much work today) appears in two shapes; if the two had different colors the
+ * reader would think they said different things. So when the ring's color
+ * changes, this changes with it.
  */
 export function ProgressBar({
   value,
@@ -134,15 +135,15 @@ export function ProgressBar({
   value: number;
   max: number;
   className?: string;
-  /** রিংয়ের মতোই — কীসের অগ্রগতি */
+  /** Like the ring: what the progress is of. */
   ariaLabel?: string;
   /**
-   * ⭐ `'ok'` — শুরু থেকেই **গাঢ়** সবুজ *(১৫ আগস্ট)*।
+   * `'ok'`: dark green from the start.
    *
-   * ⚠️ ১৭ আগস্ট থেকে `'auto'`-ও সবুজ, শুধু হালকা — তাই তফাতটা এখন
-   *    "সবুজ কি না" নয়, **"গাঢ় কি না"**। মানেটা অবিকল আগেরই: যেখানে
-   *    **কোনো টার্গেটই নেই** সেখানে "হয়ে গেছে/হয়নি" প্রশ্নটাই ওঠে না
-   *    (ছুটির দিনে করা কাজ), তাই বারটা অসম্পূর্ণ দেখানোর কারণ নেই।
+   * Careful: since 17 August `'auto'` is green too, only lighter, so the difference
+   * is now "dark or not", not "green or not". The meaning is exactly as before:
+   * where there is no target at all, the question "done or not" does not arise
+   * (work done on a day off), so there is no reason to show the bar incomplete.
    */
   tone?: 'auto' | 'ok';
 }) {
@@ -167,24 +168,24 @@ export function ProgressBar({
 }
 
 /**
- * ⭐⭐ **আজকের মিটার — তিনটে আলাদা সত্যি, তিনটে আলাদা চেহারা।**
+ * Today's meter: three different truths, three different looks.
  *
- * `ProgressBar` জানে একটাই গল্প: "কতটা হয়েছে"। কিন্তু রোস্টারে তিন রকম
- * সারি পাশাপাশি বসে, আর ওদের গুলিয়ে ফেলা যাবে না:
+ * `ProgressBar` knows only one story: "how much is done". But the roster has
+ * three kinds of rows side by side, and they must not be confused:
  *
- * | অবস্থা | চেহারা | মানে |
+ * | State | Look | Meaning |
  * |---|---|---|
- * | `counted` | ভরাট সবুজ | মাপা হয়েছে, এতটা কাজ হয়েছে |
- * | `zero` | **ড্যাশ করা খালি** | মাপা হয়েছে, আজ শূন্য |
- * | `unknown` | **হ্যাচ করা** | মাপাই হয়নি (এজেন্ট বসেনি / কখনো সাড়া দেয়নি) |
+ * | `counted` | solid green | measured, this much work done |
+ * | `zero` | dashed empty | measured, zero today |
+ * | `unknown` | hatched | not measured at all (agent not installed / never responded) |
  *
- * ⚠️⚠️ শেষ দুটো আগে **একই খালি বার** ছিল, আর তাতে "এজেন্ট বসানোই হয়নি"
- * নীরবে "আজ কিছু করেননি"-র অভিযোগ হয়ে যেত। ⭐ ভাগটা এখানে **রঙ দিয়ে
- * নয়, টেক্সচার দিয়ে** — বর্ণান্ধতায়ও পার্থক্যটা টেকে (`TeamBars`-এর
- * মাপা ΔE-র শিক্ষা: হিউয়ের উপর ভরসা করা যায় না)।
+ * Careful: the last two used to be the same empty bar, so "agent never installed"
+ * silently became an accusation of "did nothing today". The split here is made
+ * with texture, not color, so the difference survives color blindness (the lesson
+ * of `TeamBars`' measured ΔE: hue cannot be relied on).
  *
- * ⚠️ ন্যূনতম প্রস্থ ২px — নইলে ০.৩% কাজ GDI-র মতোই শূন্যে গোল হয়ে যেত,
- * আর "একটু" ও "কিছুই না" এক দেখাত।
+ * Careful: minimum width 2px; otherwise 0.3% of work would round to zero, and
+ * "a little" and "nothing" would look the same.
  */
 export function TodayMeter({
   kind,
@@ -205,9 +206,9 @@ export function TodayMeter({
       <div
         className={`h-1.5 rounded-full ${
           unknown
-            ? // হ্যাচ — "গোনাই হয়নি"
+            ? // hatched: "not counted at all"
               'bg-[repeating-linear-gradient(135deg,var(--color-line)_0_3px,transparent_3px_6px)]'
-            : // ড্যাশ করা খালি ঘর — "গোনা হয়েছে, শূন্য"
+            : // dashed empty cell: "counted, zero"
               'border border-dashed border-line'
         } ${className}`}
         role="img"

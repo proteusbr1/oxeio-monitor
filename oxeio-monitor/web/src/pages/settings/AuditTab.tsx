@@ -20,29 +20,29 @@ import {
 import { Chip, FilterChip, MiniButton, Notice } from '../../components/ui';
 
 /**
- * E11 — audit log ভিউয়ার (owner-only)।
+ * Audit log viewer (owner-only).
  *
- * ⭐ এই পর্দার আসল কাজ একটাই প্রশ্নের উত্তর দেওয়া: **কে কার স্ক্রিনশট
- *    দেখল।** নজরদারির যন্ত্রে সেই নজরদারির উপরেও একটা নজর থাকা দরকার,
- *    নইলে "কেউ আমার ছবি দেখেছে কি না" প্রশ্নটার কোনো উত্তরই থাকত না।
- *    তাই ওটাকে এক ক্লিকের ফিল্টার বানানো হয়েছে, ড্রপডাউনে লুকোনো নয়।
+ * Important: the real job of this screen is answering one question: **who looked at
+ *    whose screenshots.** A surveillance tool needs some watching of that
+ *    surveillance too, or "has anyone viewed my pictures?" would have no answer. So
+ *    it is a one-click filter, not hidden in a dropdown.
  *
- * ⚠️ লগ শুধু পড়া যায় — লেখা, মোছা বা সম্পাদনার কোনো পথ সার্ভারে নেই।
- *    যে লগ বদলানো যায়, সেটা আর প্রমাণ নয়।
+ * Careful: the log is read-only; the server has no path to write, delete or edit
+ *    it. A log that can be changed is no longer evidence.
  */
 
-/** ⚠️ সার্ভারে যে যে `action` সত্যিই বসানো হয় — অনুমান নয়, সোর্স থেকে নেওয়া */
+/** Careful: the `action` values the server really writes, taken from the source, not guessed */
 const ACTIONS: { value: string; label: string }[] = [
   { value: '', label: 'All events' },
   { value: 'view_screenshot', label: 'Screenshot viewed' },
   { value: 'payroll_view', label: 'Salary viewed' },
   { value: 'change_setting', label: 'Setting changed' },
   /**
-   * ⭐⭐ **শেষ হওয়া ডিজাইন "শেষ নয়" করা** *(২৫ আগস্ট ২০২৬)*।
+   * **Un-finishing a finished design.**
    *
-   * ⚠️ তালিকায় উপরের দিকে রাখা হয়েছে ইচ্ছাকৃতভাবে — এটাই একমাত্র কাজ
-   * যা নিজের চিহ্ন **মুছে দেয়** (`completed_at` ও `completed_by_id`
-   * দুটোই `null` হয়ে যায়), তাই লগ ছাড়া অন্য কোথাও দেখার উপায় নেই।
+   * Careful: kept near the top of the list on purpose. It is the only action that
+   * **erases its own trace** (`completed_at` and `completed_by_id` both become
+   * `null`), so the log is the only place to see it.
    */
   { value: 'design_undone', label: 'Design un-completed' },
   { value: 'revoke_device', label: 'Device revoked' },
@@ -60,13 +60,12 @@ const ACTION_LABEL: Record<string, string> = Object.fromEntries(
 );
 
 /**
- * ⚠️⚠️ `Record<Role, ...>` — `Record<string, ...>` **নয়**।
+ * Careful: `Record<Role, ...>`, **not** `Record<string, ...>`.
  *
- * ২৫ আগস্ট `UserRole`-এ `researcher` যোগ করার সময় `Layout.tsx`-এর
- * মানচিত্রটা ঠিক করা হয়েছিল, কিন্তু **এটা চোখ এড়িয়ে গিয়েছিল** —
- * কারণ `string` লেখা থাকায় কম্পাইলার কিছুই বলেনি। ⭐ ফল: audit log-এ
- * গবেষকের সারিতে কাঁচা `researcher` লেখা ফুটত।
- * এখন enum বাড়লে এখানেই এরর হবে।
+ * When `researcher` was added to `UserRole`, the map in `Layout.tsx` was fixed but
+ * **this one was missed**, because with `string` the compiler said nothing. Result:
+ * the raw word `researcher` appeared in the researcher's rows of the audit log.
+ * Now, if the enum grows, this line errors.
  */
 const ROLE_LABEL: Record<Role, string> = {
   owner: 'Owner',
@@ -78,16 +77,16 @@ const ROLE_LABEL: Record<Role, string> = {
 const PAGE_SIZE = 50;
 
 /**
- * ⚠️ `from`/`to` এখানে **instant**, নিছক তারিখ নয় (`@IsISO8601()`)। ঢাকার
- *    অফসেটটা স্পষ্ট করে বসানো হয়: `?from=2026-08-10` লিখলে সার্ভার ওটাকে
- *    UTC মধ্যরাত ধরত, আর ঢাকার সকাল ৬টার আগের ঘটনাগুলো আগের দিনে পড়ে
- *    যেত — অর্থাৎ ভোরে কে কী দেখল সেটা খুঁজে পাওয়া যেত না।
+ * Careful: `from`/`to` here are **instants**, not plain dates (`@IsISO8601()`). The
+ *    Dhaka offset is added explicitly: `?from=2026-08-10` would be read by the
+ *    server as UTC midnight, so events before 6am Dhaka time would fall on the
+ *    previous day, and who looked at what in the early morning could not be found.
  */
 function dayStart(date: string): string {
   return `${date}T00:00:00.000${workOffsetIso()}`;
 }
 
-/** ⚠️ সার্ভারে `lte` — inclusive। তাই দিনের শেষ মিলিসেকেন্ড পর্যন্ত। */
+/** Careful: the server's `lte` is inclusive, so this runs to the last millisecond of the day. */
 function dayEnd(date: string): string {
   return `${date}T23:59:59.999${workOffsetIso()}`;
 }
@@ -115,8 +114,8 @@ export function AuditTab() {
     [range.from, range.to, action, user?.id, page],
   );
 
-  /** ⚠️ ফিল্টার বদলালে পাতাও ১-এ ফেরা দরকার — নইলে ৩ নম্বর পাতায় থেকে
-   *     নতুন ফিল্টারে কিছুই না পেয়ে মনে হতো "কোনো ঘটনা ঘটেনি" */
+  /** Careful: changing a filter must also return to page 1, or staying on page 3 and
+   *     finding nothing under the new filter would look like "nothing happened" */
   const changeAction = (next: string): void => {
     setAction(next);
     setPage(1);
@@ -131,9 +130,9 @@ export function AuditTab() {
       key: 'time',
       header: 'When',
       render: (row) => (
-        // ⚠️ সময়টা ঢাকার — `formatTime()` অফসেটটা স্পষ্ট করে বসায়।
-        //    `toLocaleTimeString()` হলে VPN-এ থাকা কেউ ভুল সময় দেখত, আর
-        //    "কে কখন দেখল" প্রশ্নের উত্তরটাই বেঠিক হয়ে যেত।
+        // Careful: the time is Dhaka time; `formatTime()` adds the offset explicitly.
+        //    With `toLocaleTimeString()`, someone on a VPN would see the wrong time and
+        //    the answer to "who looked when" would be wrong.
         <span
           className="num whitespace-nowrap"
           title={formatDateTime(row.occurredAt)}
@@ -148,8 +147,8 @@ export function AuditTab() {
       header: 'Who',
       render: (row) => {
         const actor = row.user;
-        // ⚠️ ইউজার মুছে গেলেও সারিটা থেকে যায় — লগ প্রমাণ, তাই কখনো
-        //    ফাঁকা করে দেওয়া হয় না
+        // Careful: the row stays even if the user was deleted; the log is evidence, so
+        //    it is never blanked
         if (!actor) {
           return <span className="text-ink-3">Deleted account</span>;
         }
@@ -175,9 +174,9 @@ export function AuditTab() {
     {
       key: 'action',
       header: 'What',
-      // ⭐ লাল **শুধু** ব্যর্থ লগইনে। স্ক্রিনশট বা বেতন দেখাও লাল করে দিলে
-      //    ওই ফিল্টারে গোটা টেবিলটাই লাল হয়ে যেত, আর তখন সত্যিকারের
-      //    সমস্যাটা (কেউ বারবার ভুল পাসওয়ার্ড দিচ্ছে) আর চোখে পড়ত না।
+      // Important: red **only** for failed logins. If viewing screenshots or pay were
+      //    red too, the whole table would be red under that filter and the real
+      //    problem (someone repeatedly entering a wrong password) would go unseen.
       render: (row) => (
         <Chip tone={row.action === 'login_failed' ? 'attention' : 'counted'}>
           {ACTION_LABEL[row.action] ?? row.action}
@@ -247,7 +246,7 @@ export function AuditTab() {
           </label>
         </div>
 
-        {/* ⭐ এই পেজের সবচেয়ে জরুরি প্রশ্নটা এক ক্লিক দূরে */}
+        {/* The most important question on this page is one click away */}
         <MiniButton
           onClick={() => changeAction('view_screenshot')}
           title="Only the screenshot-viewing events"
@@ -313,15 +312,14 @@ export function AuditTab() {
 }
 
 /**
- * `meta` যেকোনো আকারের JSON (সার্ভারে `Prisma.JsonValue`)।
+ * `meta` is JSON of any shape (`Prisma.JsonValue` on the server).
  *
- * ⚠️ অন্ধভাবে render করলে React অবজেক্ট পেয়ে ছুড়ত ("Objects are not valid
- *    as a React child") — গোটা পেজটা সাদা হয়ে যেত, আর কারণটা পর্দায়
- *    দেখা যেত না। তাই সবসময় `JSON.stringify`।
+ * Careful: rendering it blindly would hand React an object and throw ("Objects are
+ *    not valid as a React child"); the whole page would go white and the cause would
+ *    not show on screen. So always `JSON.stringify`.
  *
- * ⭐ ডিফল্টে বন্ধ: `view_screenshot`-এর meta-তে কার ছবি, কয়টা, কোন
- *    তারিখের — সবই থাকে, আর সেটা প্রতিটা সারিতে খুলে রাখলে টেবিলটা পড়াই
- *    যেত না।
+ * Important: collapsed by default: the `view_screenshot` meta holds whose image, how
+ *    many, which date, and with it expanded on every row the table could not be read.
  */
 function Meta({ meta }: { meta: unknown }) {
   const [open, setOpen] = useState(false);

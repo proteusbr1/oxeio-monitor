@@ -2,36 +2,38 @@ import { WORK_TIMEZONE_LABEL } from '../agent/util/dhaka-time';
 import type { AttendanceRow, SummaryRow } from '../reports/reports.types';
 
 /**
- * F07 — দৈনিক ডাইজেস্টের সব হিসাব ও ইমেইলের লেখা। খাঁটি ফাংশন, কোনো I/O নেই।
+ * F07 — all calculations and wording of the daily digest email. Pure
+ * functions, no I/O.
  *
- * ⭐ **এখানে কোনো নতুন সংজ্ঞা নেই।** ঘণ্টা, টার্গেট, ছুটি, কর্মদিবস — সব
- * আসে `ReportsService`-এর তৈরি করা F01/F02 সারি থেকে। ইচ্ছে করলে এখানে
- * `daily_summary` আর work policy সরাসরি পড়ে টার্গেট বের করা যেত, কিন্তু
- * তাতে ছুটির ক্যালেন্ডার ও দৈনিক টার্গেটের **তৃতীয় একটা বাস্তবায়ন** তৈরি
- * হতো — আর একদিন ইমেইল বলত ৮.০০ ঘণ্টা টার্গেট, রিপোর্ট বলত ৭.৯৪, আর
- * কোনটা সত্যি কেউ বলতে পারত না। ডাইজেস্ট তাই রিপোর্টেরই কণ্ঠস্বর।
+ * **There is no new definition here.** Hours, target, leave, work day — all
+ * come from the F01/F02 rows built by `ReportsService`. This file could have
+ * read `daily_summary` and the work policy directly to work out the target,
+ * but that would create a **third implementation** of the holiday calendar and
+ * daily target — and one day the email would say a target of 8.00 hours while
+ * the report said 7.94, and nobody could say which was true. The digest is
+ * therefore the report's own voice.
  *
- * ⭐⭐ **"এ পর্যন্ত কত হওয়ার কথা ছিল"-ও এখন রিপোর্টের meta থেকেই আসে**
- * (`expectedHours`)। আগে এটুকু এখানে নিজে গোনা হতো — মাসের টার্গেট বিয়োগ
- * আজকের টার্গেট — আর সেটাই ছিল প্রত্যাশার জানালার একটা আলাদা সংজ্ঞা,
- * যেটা "ট্র্যাকিং কবে শুরু" ধারণাটা চিনত না। ফলে ইমেইল আর ড্যাশবোর্ড একই
- * কর্মীর নামে দু-রকম ঘাটতি বলত।
+ * **"How much should have been done so far" now also comes from the report's
+ * meta** (`expectedHours`). It used to be counted here — month target minus
+ * today's target — and that was a separate definition of the expectation
+ * window which did not know the "when did tracking start" idea. So the email
+ * and the dashboard gave two different shortfalls for the same employee.
  *
- * ⚠️ **এই ইমেইলে কখনো স্ক্রিনশট, অ্যাপের নাম বা ডোমেইন যায় না** — শুধু
- * ঘণ্টা। ইমেইল ফরওয়ার্ড হয়, আর্কাইভ হয়, ফোনে নোটিফিকেশনে ভেসে ওঠে;
- * কারো ব্রাউজিং ওখানে পাঠানো মানে ড্যাশবোর্ডের role-এর দেয়ালটা কার্যত
- * তুলে দেওয়া। এই ফাইলের কোনো টাইপে ডোমেইন বা ফাইলের নামের জায়গাই নেই —
- * সেটা দুর্ঘটনা নয়।
+ * Careful: **no screenshot, app name or domain ever goes into this email** —
+ * only hours. Emails get forwarded, archived, and float up in phone
+ * notifications; sending someone's browsing there would effectively remove the
+ * dashboard's role wall. No type in this file has room for a domain or a file
+ * name — that is not an accident.
  *
- * ⚠️ **টাকার কোনো কথা নেই** — বেতন owner-only ও audit করা (ADR-023)।
+ * Careful: **no money** — salary is owner-only and audited (ADR-023).
  */
 
-/** ঘণ্টা দুই দশমিকে — ইমেইলের সব সংখ্যা একই চেহারার */
+/** Hours to two decimals — every number in the email looks the same */
 function h(hours: number): string {
   return hours.toFixed(2);
 }
 
-/** দুই দশমিকে গোল করা (রিপোর্টের ঘণ্টাগুলো এমনিতেই দুই দশমিকে) */
+/** Round to two decimals (the report's hours are already two decimals) */
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
@@ -40,62 +42,63 @@ export interface DigestRow {
   employeeId: number;
   empCode: string;
   fullName: string;
-  /** আজকের `credited` ঘণ্টা — কাজ + owner-এর সংশোধন */
+  /** Today's `credited` hours — work plus the owner's corrections */
   todayHours: number;
-  /** আজকের টার্গেট; ছুটির দিনে ০ */
+  /** Today's target; 0 on a day off */
   todayTargetHours: number;
-  /** আজ কর্মদিবস নয় (সাপ্তাহিক ছুটি বা ক্যালেন্ডার ছুটি) */
+  /** Not a work day today (weekly off day or calendar holiday) */
   offToday: boolean;
-  /** কর্মদিবস, অথচ আজ একটুও কাজ হয়নি */
+  /** A work day, yet no work at all today */
   idleToday: boolean;
-  /** চলতি মাসে আজ পর্যন্ত মোট `credited` */
+  /** Total `credited` this month up to today */
   monthHours: number;
   /**
-   * ⭐⭐ **গতকাল পর্যন্ত** যত ঘণ্টা হওয়ার কথা ছিল।
+   * **How many hours should have been done up to yesterday.**
    *
-   * ⚠️ সংখ্যাটা এখানে **হিসাব করা হয় না** — সোজা `ReportMeta.expectedHours`
-   * থেকে আসে, অর্থাৎ `summary.math.ts`-এর `elapsedWindow()` যে জানালাটা
-   * ঠিক করে ঠিক সেটাই। tray, Live Board আর Monthly পাতা একই সংখ্যা দেখায়।
+   * Careful: the number is **not calculated** here — it comes straight from
+   * `ReportMeta.expectedHours`, i.e. exactly the window that `elapsedWindow()`
+   * in `summary.math.ts` decides. The tray, the Live Board and the Monthly page
+   * show the same number.
    *
-   * ⚠️⚠️ আগে এটা `মাসের টার্গেট (১ তারিখ→আজ) − আজকের টার্গেট` করে বের করা
-   * হতো। **আজকের দিনটা বাদ** — ওই অংশটা ঠিকই ছিল, আর কারণটাও জরুরি:
-   * `monthly_summary.pace_sec` সেই সময় আজকের দিনটাও গুনত, তাই সন্ধ্যা
-   * ৬:৩০-এ প্রত্যাশার মধ্যে আজকের পুরো ৮ ঘণ্টা ধরা থাকত অথচ দিনটা শেষ
-   * হয়নি — "পিছিয়ে" তালিকায় প্রতিদিন সবাই থাকত আর তালিকাটা তিন দিনেই পড়া
-   * বন্ধ হয়ে যেত।
+   * Careful: it used to be worked out as `month target (1st → today) − today's
+   * target`. **Today is excluded** — that part was right, and the reason
+   * matters: `monthly_summary.pace_sec` then counted today too, so at 6:30 pm
+   * the expectation held today's whole 8 hours although the day was not over —
+   * everyone would sit on the "behind" list every day and it would stop being
+   * read within three days.
    *
-   * ⚠️ কিন্তু **শুরুটা ভুল ছিল**: গোনা হতো মাসের ১ তারিখ থেকে, অথচ এই
-   * ইনস্টলেশনে এজেন্ট বসেছে ১৩ আগস্ট। এজেন্ট বসার আগের দিনগুলো নীরবে
-   * "০ ঘণ্টা কাজ" হয়ে যেত, আর ইমেইল প্রত্যেককে ~৯৪ ঘণ্টা পিছিয়ে দেখাত।
-   * **অনুপস্থিত পর্যবেক্ষণ ব্যর্থতা নয়।**
+   * Careful: but **the start was wrong**: counting began on the 1st of the
+   * month, while on this installation the agent was installed on 13 August.
+   * The days before the agent silently became "0 hours worked", and the email
+   * showed everyone ~94 hours behind. **Not being observed is not a failure.**
    *
-   * হিসাবটা এখনো ইচ্ছাকৃতভাবে **উদার**: আজকের কাজ পুরো গোনা হয়, আজকের
-   * দাবি গোনা হয় না। তাই এই তালিকায় নাম ওঠা মানে শেষ হয়ে যাওয়া ও
-   * **দেখা হয়েছে** এমন দিনগুলোরই প্রকৃত ঘাটতি — মিথ্যে অ্যালার্ম নয়।
+   * The calculation is still deliberately **generous**: today's work is
+   * counted in full, today's claim is not. So a name on this list means a real
+   * shortfall from days that have ended and were **observed** — not a false alarm.
    */
   expectedHours: number;
-  /** `monthHours − expectedHours`; ঋণাত্মক = পিছিয়ে */
+  /** `monthHours − expectedHours`; negative = behind */
   paceHours: number;
   behind: boolean;
 }
 
 export interface Digest {
-  /** ঢাকার আজকের তারিখ, YYYY-MM-DD */
+  /** Today's date in Dhaka, YYYY-MM-DD */
   workDate: string;
-  /** মাসের যে অংশ হিসাবে এসেছে */
+  /** The part of the month that was counted */
   monthFrom: string;
   monthTo: string;
-  /** এমপ কোড অনুযায়ী সাজানো — রিপোর্টের সাথে একই ক্রম */
+  /** Sorted by employee code — the same order as the report */
   rows: DigestRow[];
-  /** সবচেয়ে বেশি পিছিয়ে আগে */
+  /** Furthest behind first */
   behind: DigestRow[];
-  /** কর্মদিবস, অথচ আজ শূন্য */
+  /** A work day, yet zero today */
   idle: DigestRow[];
   totals: {
     employees: number;
-    /** আজ কারা কিছু না কিছু করেছেন */
+    /** Who did some work today */
     workedToday: number;
-    /** আজকের মোট credited ঘণ্টা */
+    /** Today's total credited hours */
     hoursToday: number;
   };
 }
@@ -104,46 +107,47 @@ export interface DigestSource {
   workDate: string;
   monthFrom: string;
   monthTo: string;
-  /** F01, ঠিক একটি দিনের (আজকের) সারি */
+  /** F01, rows for exactly one day (today) */
   today: readonly AttendanceRow[];
-  /** F02 `groupBy=month`, মাসের ১ তারিখ → আজ */
+  /** F02 `groupBy=month`, from the 1st of the month → today */
   month: readonly SummaryRow[];
   /**
-   * ⭐⭐ F02-এর `meta.expectedHours` — কর্মীপ্রতি "গতকাল পর্যন্ত কত হওয়ার
-   * কথা ছিল", **সার্ভারের একমাত্র সংজ্ঞা** থেকে।
+   * F02's `meta.expectedHours` — per employee, "how much should have been done
+   * up to yesterday", from **the server's single definition**.
    *
-   * ⚠️ এখানে নিজে গুনে নেওয়া যেত (মাসের টার্গেট বিয়োগ আজকের টার্গেট),
-   * আর আগে তাই করা হতো — কিন্তু তাতে জানালার একটা **দ্বিতীয় সংজ্ঞা**
-   * দাঁড়াত, যেটা ট্র্যাকিং শুরুর দিনটা চিনত না। ইমেইল আর ড্যাশবোর্ড তখন
-   * একই কর্মীর নামে দু-রকম ঘাটতি বলত, আর কোনটা সত্যি তার উত্তর থাকত না।
+   * Careful: it could be counted here (month target minus today's target), and
+   * it used to be — but that would create a **second definition** of the
+   * window, one that did not know the day tracking started. The email and the
+   * dashboard would then give two shortfalls for the same employee, with no
+   * answer to which is true.
    *
-   * ⚠️ কারো এন্ট্রি না থাকলে `0` ধরা হয়, অর্থাৎ "তার নামে কোনো দাবি নেই"।
-   * দিকটা ইচ্ছাকৃত: অজানাকে **ঘাটতি** বলে ধরলে সেটা একজন মানুষ সম্পর্কে
-   * একটা অভিযোগ হয়ে যেত।
+   * Careful: if someone has no entry, it is taken as `0`, meaning "no claim
+   * against them". The direction is deliberate: counting the unknown as a
+   * **shortfall** would turn into an accusation against a person.
    */
   expectedHours: Readonly<Record<number, number>>;
 }
 
 /**
- * F01 + F02 → ডাইজেস্টের সারি।
+ * F01 + F02 → the digest's rows.
  *
- * ⚠️ ভিত্তি **আজকের অ্যাটেনডেন্স সারি**, কর্মীর তালিকা নয়। যিনি আজ
- * কর্মরত নন (যোগ দেননি বা ছেড়ে গেছেন) তাঁর সারি F01-এই থাকে না, আর
- * ইমেইলেও থাকা উচিত নয় — নইলে ছেড়ে যাওয়া কর্মী রোজ "০ ঘণ্টা" নিয়ে
- * তালিকায় বসে থাকতেন।
+ * Careful: the base is **today's attendance rows**, not the employee list.
+ * Someone not employed today (not yet joined, or left) has no row in F01 and
+ * should not be in the email — otherwise an employee who left would sit in the
+ * list every day with "0 hours".
  *
- * ⚠️ **"কেন শূন্য" সেটা এখানে বলার চেষ্টা করা হয় না।** এজেন্ট বন্ধ, PC
- * বন্ধ, না কি সত্যিই কাজ হয়নি — তার উত্তর অ্যালার্টে (G01 · G06), আর
- * সেখানে heartbeat ও tamper দুটোই দেখা হয়। এখানে আবার আন্দাজ করলে
- * দ্বিতীয় একটা দুর্বল agent-down সনাক্তকারী তৈরি হতো, যেটা মাঝে মাঝে
- * অন্য কথা বলত।
+ * Careful: **no attempt is made to say "why zero".** Agent off, PC off, or
+ * really no work — the answer is in the alerts (G01 · G06), which look at both
+ * heartbeat and tamper. Guessing again here would create a second, weaker
+ * agent-down detector that sometimes said something different.
  */
 export function buildDigest(source: DigestSource): Digest {
   const monthBy = new Map<number, SummaryRow>();
   for (const row of source.month) {
-    // ⚠️ `groupBy=month` হলেও রেঞ্জ দুই মাসে ছড়ালে একজনের দুটো সারি আসত।
-    //    ডাইজেস্ট চলতি মাসের ১ তারিখ থেকে চায়, তাই একটাই — তবু শেষেরটাই
-    //    রাখা হয় যাতে ভুল করে বড় রেঞ্জ এলে অন্তত **সাম্প্রতিক** মাসটা বসে।
+    // Careful: even with `groupBy=month`, a range spanning two months would
+    //    give one person two rows. The digest wants the 1st of the current month,
+    //    so there is one — still, the last is kept so that if a larger range
+    //    arrives by mistake, at least the **most recent** month wins.
     monthBy.set(row.employeeId, row);
   }
 
@@ -153,10 +157,10 @@ export function buildDigest(source: DigestSource): Digest {
     const monthHours = month?.creditedHours ?? 0;
 
     /**
-     * ⭐ সার্ভারের হিসাব করা জানালা — ট্র্যাকিং শুরু থেকে গতকাল পর্যন্ত।
-     * ⚠️ `Math.max(0, …)` রাখা হয়েছে: সার্ভার ঋণাত্মক পাঠায় না, কিন্তু
-     *    "প্রত্যাশা −৩ ঘণ্টা" কথাটার কোনো মানে নেই, আর একটা ভুল সংখ্যা
-     *    এখানে ইমেইলে ছাপা হয়ে যেত।
+     * The window the server calculated — from tracking start to yesterday.
+     * Careful: `Math.max(0, …)` is kept: the server does not send negatives,
+     *    but "expectation −3 hours" means nothing, and a wrong number would
+     *    get printed in the email.
      */
     const expectedHours = Math.max(
       0,
@@ -177,10 +181,10 @@ export function buildDigest(source: DigestSource): Digest {
       expectedHours,
       paceHours,
       /**
-       * ⚠️ কোনো সহনশীলতা (`< -0.5 ঘণ্টা` জাতীয়) ধরে নেওয়া হয়নি। "কত
-       * পিছিয়ে থাকলে জানানো দরকার" সেটা ব্যবসায়িক সিদ্ধান্ত, কেউ নেয়নি;
-       * একটা সংখ্যা বসিয়ে দিলে সেটাই নীরবে নীতি হয়ে যেত। বদলে ইমেইলে
-       * আসল ঘণ্টাটাই লেখা থাকে, আর কতটা গুরুতর সেটা পাঠক ঠিক করেন।
+       * Careful: no tolerance (such as `< -0.5 hours`) is assumed. "How far
+       * behind before we tell" is a business decision nobody has made; putting
+       * a number in would silently become policy. Instead the email states the
+       * actual hours, and the reader decides how serious it is.
        */
       behind: paceHours < 0,
     };
@@ -190,7 +194,7 @@ export function buildDigest(source: DigestSource): Digest {
 
   const behind = rows
     .filter((r) => r.behind)
-    // বেশি পিছিয়ে আগে; সমান হলে কোডের ক্রমে — একই দিনের দুটো রান একই ইমেইল
+    // Furthest behind first; ties by code — so two runs on the same day give the same email
     .sort((a, b) => a.paceHours - b.paceHours || (a.empCode < b.empCode ? -1 : 1));
 
   return {
@@ -208,15 +212,15 @@ export function buildDigest(source: DigestSource): Digest {
   };
 }
 
-// ── ইমেইলের লেখা ─────────────────────────────────────────────────────────────
+// ── Email text ───────────────────────────────────────────────────────────────
 
 /**
- * ⚠️ subject-এ কারো নাম নেই।
+ * Careful: no one's name in the subject.
  *
- * ইমেইলের বিষয় ফোনের লক স্ক্রিনে, প্রিভিউ প্যানেলে আর ফরোয়ার্ড করা
- * থ্রেডের মাথায় ভেসে থাকে — সেখানে "করিম ৩ ঘণ্টা পিছিয়ে" লেখা থাকা মানে
- * একজন কর্মীর হিসাব এমন লোকের চোখে পড়া যিনি ইমেইলটা খোলেননি।
- * সংখ্যা নিরাপদ, নাম নয়।
+ * The email subject floats on the phone lock screen, in the preview pane and
+ * at the top of forwarded threads — "Karim 3 hours behind" there means one
+ * employee's figures in front of someone who did not open the email.
+ * Numbers are safe, names are not.
  */
 export function digestSubject(digest: Digest): string {
   const behind =
@@ -225,12 +229,12 @@ export function digestSubject(digest: Digest): string {
 }
 
 /**
- * প্লেইন টেক্সট বডি।
+ * The plain-text body.
  *
- * ⚠️ ছাপার মতো কলাম সাজানোর চেষ্টা করা হয়নি (`padEnd` ইত্যাদি)। বাংলা
- * অক্ষরের প্রস্থ ফন্টে ফন্টে আলাদা আর যুক্তাক্ষর একাধিক code unit — তাই
- * সাজানো কলাম কারো কারো ক্লায়েন্টে সোজা, কারো কারোটায় এলোমেলো দেখাত।
- * সরল বুলেট সব জায়গায় একরকম পড়া যায়।
+ * Careful: no attempt is made to lay out printed-style columns (`padEnd`
+ * etc.). Bengali glyph widths differ from font to font and conjuncts are
+ * several code units — so aligned columns would look straight in some clients
+ * and ragged in others. Simple bullets read the same everywhere.
  */
 export function digestBody(digest: Digest, orgName: string): string {
   const { totals } = digest;
@@ -279,8 +283,9 @@ export function digestBody(digest: Digest, orgName: string): string {
     '  • "Hours" means credited — work plus adjustments made by the owner.',
     "  • The behind figures leave out today's target, because the day is not over",
     '    yet. So the shortfall listed here is from days that have already ended.',
-    // ⭐ এই লাইনটা না থাকলে পাঠক ধরে নিতেন প্রত্যাশা মাসের ১ তারিখ থেকে গোনা,
-    //    আর এজেন্ট বসার আগের দিনগুলো নীরবে কারো ঘাটতি হয়ে যেত।
+    // This line is needed: without it the reader would assume the expectation is
+    // counted from the 1st of the month, and days before the agent was installed
+    // would silently become someone's shortfall.
     '  • They also leave out any day before tracking started for that person —',
     '    days nobody was measuring are not counted as a shortfall.',
     '  • Why someone has zero hours (agent down, PC off, or a day off) is not',

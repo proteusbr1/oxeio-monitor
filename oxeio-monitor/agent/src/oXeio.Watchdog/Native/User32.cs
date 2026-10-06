@@ -6,20 +6,20 @@ namespace oXeio.Watchdog.Native;
 [SupportedOSPlatform("windows")]
 internal static partial class User32
 {
-    /// <summary>বর্তমান সেশন শাট ডাউন / লগ অফ হচ্ছে কি না।</summary>
+    /// <summary>Whether the current session is shutting down / logging off.</summary>
     private const int SM_SHUTTINGDOWN = 0x2000;
 
     [LibraryImport("user32.dll")]
     private static partial int GetSystemMetrics(int nIndex);
 
     /// <summary>
-    /// ⭐ শাটডাউন টের পাওয়ার সবচেয়ে সস্তা উপায় — কোনো উইন্ডো, কোনো message pump,
-    /// কোনো <c>WM_QUERYENDSESSION</c> হ্যান্ডলার লাগে না।
+    /// The cheapest way to detect shutdown: no window, no message pump, no
+    /// <c>WM_QUERYENDSESSION</c> handler needed.
     ///
-    /// কেন দরকার: শাটডাউনের সময় Windows এজেন্টকে মেরে ফেলে। সেটাকে ক্র্যাশ ধরে
-    /// নতুন প্রসেস চালু করলে — (ক) মইয়ের একটা ধাপ অকারণে নষ্ট হতো, (খ) নতুন
-    /// প্রসেসটা শাটডাউন আটকে দিয়ে "Windows is shutting down" পর্দায় মেশিন
-    /// ঝুলিয়ে রাখত, আর (গ) পরের বুটে watchdog শুরুই করত এক ধাপ পিছিয়ে।
+    /// Why needed: at shutdown Windows kills the agent. Treating that as a crash and starting a
+    /// new process would (a) waste a step of the ladder for nothing, (b) let the new process
+    /// block the shutdown and leave the machine hanging on the "Windows is shutting down"
+    /// screen, and (c) make the watchdog start the next boot one step behind.
     /// </summary>
     internal static bool IsShuttingDown() => GetSystemMetrics(SM_SHUTTINGDOWN) != 0;
 }

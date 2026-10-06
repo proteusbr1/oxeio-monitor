@@ -1,23 +1,23 @@
 import { api } from './client';
 
 /**
- * **K02 · K04** — সার্ভারের হেলথ ও হাতে চালানো জব।
+ * Server health and manually triggered jobs (K02, K04).
  *
- * সার্ভারের উৎস: `server/src/ops/ops.health.service.ts` ও `ops.controller.ts`।
+ * Server source: `server/src/ops/ops.health.service.ts` and `ops.controller.ts`.
  *
- * ⚠️ পুরোটাই **owner-only**, ক্লাস-লেভেলে। উত্তরে ডিস্কের আকার, ব্যাকআপের
- * ইতিহাস আর কতগুলো ডিভাইস চুপ — একসাথে এগুলো দিয়ে অফিসের অবকাঠামোর ছবি
- * আঁকা যায়, তাই ম্যানেজারও এখানে ঢোকেন না।
+ * Careful: everything here is owner-only, at class level. The response has disk
+ * size, backup history and how many devices are silent; together they sketch the
+ * office's infrastructure, so even managers do not get in.
  *
- * ⚠️ এটা `GET /health`-এর সাথে **গুলিয়ে ফেলবেন না** — ওটা পাবলিক
- * liveness (Docker healthcheck ও Live Board ওটার উপরেই দাঁড়ানো)।
+ * Do not confuse this with `GET /health`, which is the public liveness check
+ * (the Docker healthcheck and the Live Board depend on it).
  */
 
 export type HealthStatus = 'ok' | 'degraded' | 'down';
 
 export interface OpsHealth {
   status: HealthStatus;
-  /** খালি অ্যারে = সব ঠিক */
+  /** Empty array = all fine. */
   problems: string[];
   checkedAt: string;
   uptimeSec: number;
@@ -52,17 +52,19 @@ export interface OpsHealth {
     copyOutcome: 'ok' | 'failed' | null;
     copyError: string | null;
     /**
-     * ⭐ G04 যে verdict দেখে অ্যালার্ট করে, হুবহু সেটাই। `null` = সব ঠিক।
+     * Exactly the verdict G04 looks at when raising an alert. `null` = all fine.
      *
-     * ⚠️ "সফল হলে কিছুই বলে না" — নীরবতাই এখানে ইতিবাচক খবর, আর সেই
-     * নীরবতাই খবরটাকে মূল্য দেয় (`ops.rules.ts` § G04)।
+     * Careful: "says nothing on success". Silence is the good news here, and that
+     * silence is what gives the news its value (`ops.rules.ts` section G04).
      */
     problem: 'not_configured' | 'failed' | 'never' | 'stale' | null;
   };
 
   devices: {
     active: number;
-    /** ⚠️ শুধু গোনা — রাতে সবাই চুপ থাকাই স্বাভাবিক, তাই status খারাপ হয় না */
+    /**
+     * Careful: count only. Everyone being silent at night is normal, so status does not go bad.
+     */
     silent: number;
     silenceThresholdMin: number;
   };
@@ -78,7 +80,7 @@ export function getOpsHealth(signal?: AbortSignal): Promise<OpsHealth> {
   return api<OpsHealth>('/ops/health', { signal });
 }
 
-/** ⚠️ উত্তরে কোনো ফাইল-পাথ বা পাসফ্রেজ আসে না, ইচ্ছাকৃতভাবে */
+/** Careful: the response deliberately contains no file path or passphrase. */
 export interface ManualBackupResult {
   ok: boolean;
   skipped: string | null;
@@ -91,8 +93,8 @@ export interface ManualBackupResult {
 }
 
 /**
- * ⭐ থাকার কারণ: যে ব্যাকআপ কখনো পরীক্ষা করা হয়নি সেটা ব্যাকআপ নয়,
- * অনুমান। রাত ২:৩০ পর্যন্ত অপেক্ষা না করে ইনস্টলের দিনই যাচাই করা যায়।
+ * Why it exists: a backup that has never been tested is not a backup, it is a
+ * guess. This lets you verify on install day instead of waiting for 02:30.
  */
 export function runBackupNow(): Promise<ManualBackupResult> {
   return api<ManualBackupResult>('/ops/backup/run', { method: 'POST' });
@@ -110,9 +112,9 @@ export interface RetentionResult {
 }
 
 /**
- * ⭐ K01 — নীতিমালায় স্টাফকে লিখিতভাবে বলা আছে "৯০ দিন পর ছবি নিজে
- * থেকেই মুছে যাবে"। রাতের cron আছে, কিন্তু চোখে দেখা না গেলে সেটা
- * প্রতিশ্রুতি, ব্যবস্থা নয়।
+ * K01: the policy tells staff in writing that "screenshots are deleted
+ * automatically after 90 days". The nightly cron exists, but unless it can be
+ * seen working, that is a promise, not a mechanism.
  */
 export function runRetentionNow(): Promise<RetentionResult> {
   return api<RetentionResult>('/ops/retention/run', { method: 'POST' });

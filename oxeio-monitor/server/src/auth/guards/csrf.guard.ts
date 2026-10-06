@@ -13,13 +13,13 @@ import type { AuthedRequest } from '../types';
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 /**
- * Double-submit CSRF (ADR-016)।
+ * Double-submit CSRF (ADR-016).
  *
- * টোকেন cookie-তে আছে (httpOnly নয়) — ফ্রন্টএন্ড সেটা পড়ে `X-CSRF-Token`
- * হেডারে পাঠায়। ভিন্ন origin থেকে আসা রিকোয়েস্ট cookie পাঠাতে পারলেও
- * **পড়তে** পারে না, তাই হেডারটা মেলাতে পারে না।
+ * The token is in a cookie (not httpOnly); the frontend reads it and sends it
+ * in the `X-CSRF-Token` header. A request from a different origin can send the
+ * cookie but cannot **read** it, so it cannot match the header.
  *
- * SameSite=Strict-ও আছে; এটা দ্বিতীয় স্তর।
+ * SameSite=Strict is also set; that is the second layer.
  */
 @Injectable()
 export class CsrfGuard implements CanActivate {
@@ -34,7 +34,7 @@ export class CsrfGuard implements CanActivate {
       ctx.getHandler(),
       ctx.getClass(),
     ]);
-    // login-এর সময় এখনো cookie-ই নেই — তাই public রুটে CSRF চেক অর্থহীন
+    // At login there is no cookie yet, so a CSRF check on public routes is meaningless
     if (isPublic) return true;
 
     const cookies = req.cookies as Record<string, string> | undefined;

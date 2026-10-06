@@ -7,19 +7,20 @@ import { ROLLOUT_SOAK_HOURS } from '../src/agent/rollout';
 import { createHarness, realNow, resetDatabase, type Harness } from './setup/harness';
 
 /**
- * ⭐⭐⭐ **H04 — রোলআউট নিজে থেকে এগোয়, জোড়ার মুখ পর্যন্ত**
- * *(৫ সেপ্টেম্বর ২০২৬)*।
+ * H04: the rollout advances by itself, up to the pair boundary.
  *
- * মালিক: *"update gula office staff ra pacche na. every single pc te
- * manually install korte hocche."*
+ * Background: office staff were not receiving updates, and every single PC
+ * had to be installed manually.
  *
- * ⚠️ নিয়মগুলো নিজে `rollout-advance.spec.ts`-এ পরীক্ষিত (খাঁটি ফাংশন, DB
- * ছাড়াই)। **এখানকার প্রশ্ন আলাদা:** কোয়েরিটা কি ঠিক সারিগুলো টানে, কলামটা
- * কি আদৌ পড়া হয়, আর ধাপ বদলালে সেটা কি সত্যিই ডাটাবেসে বসে?
+ * The rules themselves are tested in `rollout-advance.spec.ts` (pure
+ * functions, no DB). The question here is different: does the query pull
+ * exactly the right rows, is the column actually read, and when the stage
+ * changes does it really land in the database?
  *
- * ⚠️⚠️ এই প্রকল্পে ঠিক এই ছাঁদে দশবারের বেশি বাগ হয়েছে — **চুক্তি লেখা আছে,
- * কলার লেখা হয়নি**। আর এখানে ফলটা হতো বিশেষভাবে নীরব: ধাপ বাড়ত না, কেউ
- * আপডেট পেত না, আর কোনো এররও উঠত না।
+ * Careful: this project has had more than ten bugs of exactly this shape: the
+ * contract is written but the caller was not. Here the result would be
+ * especially silent: the stage would not advance, nobody would get the
+ * update, and no error would be raised.
  */
 let h: Harness;
 let job: RolloutAdvanceJob;
@@ -40,20 +41,21 @@ beforeEach(async () => {
 });
 
 /**
- * ⚠️ **আসল ঘড়ি, পিন করা সময় নয়** (G140-র বৈধ ব্যবহার): `lastSeenAt` ও
- * `agentVersionSince` DB-তে বসে, আর জব ওগুলোর সাথে `now` মেলায়। দুই দিকে
- * দুই ঘড়ি মেশালে "৬ ঘণ্টা" শর্তটা যান্ত্রিকভাবেই ভুল হতো।
+ * The real clock, not a pinned time (a legitimate use per the test-clock
+ * rule): `lastSeenAt` and `agentVersionSince` are set in the DB, and the job
+ * compares them with `now`. Mixing two clocks on the two sides would make the
+ * "6 hours" condition mechanically wrong.
  */
 const ago = (ms: number) => new Date(realNow().getTime() - ms);
 
 /**
- * ⚠️⚠️ **ডিফল্ট প্রকাশ-সময় অতীতে** *(৬ সেপ্টেম্বর ২০২৬)*, `realNow()` নয়।
+ * The default release time is in the past, not `realNow()`.
  *
- * soak-ঘড়ির মেঝে এখন `stage_changed_at` (নিচে), তাই "এইমাত্র প্রকাশিত"
- * ভার্সন কখনো এগোয় না — আর সেটাই সঠিক। কিন্তু বাস্তবে একটা ডিভাইস ছ-ঘণ্টা
- * ধরে যে বিল্ড চালাচ্ছে, সেটা অন্তত ছ-ঘণ্টা আগেই প্রকাশিত হয়েছিল।
- * ⭐ তাই ফিক্সচারের ডিফল্টটাও সেই বাস্তবতাই ধরে; ধাপ সদ্য বদলেছে এমন
- * কেসের জন্য কলার নিজেই `realNow()` পাঠাতে পারে।
+ * The floor of the soak clock is now `stage_changed_at` (below), so a
+ * "just published" version never advances, which is correct. But in reality a
+ * build a device has been running for six hours was published at least six
+ * hours earlier. So the fixture's default assumes that reality; for cases where
+ * the stage just changed, the caller can pass `realNow()` itself.
  */
 async function publish(
   version: string,
@@ -68,12 +70,13 @@ async function publish(
       rolloutStage: stage,
       releasedAt,
       /**
-       * ⭐⭐ **soak-ঘড়ির মেঝেটাও `releasedAt`-এ** *(৬ সেপ্টেম্বর ২০২৬)*।
+       * The soak clock's floor is also `releasedAt`.
        *
-       * ⚠️⚠️ ডিফল্ট `now()` — অর্থাৎ সারি বানানোর **আসল** মুহূর্ত। ফিক্সচার
-       * `releasedAt` অতীতে বসায় আর জব চালায় ভবিষ্যতের `now` দিয়ে, তাই মেঝেটা
-       * না বসালে প্রতিটা টেস্টে ধাপ মনে হতো "এইমাত্র বদলেছে" আর জব কখনো
-       * এগোত না। ⭐ প্রকাশও একটা ধাপ-বদল, তাই দুটো এক হওয়াই সঠিক।
+       * The default is `now()`, i.e. the real moment the row is created. The
+       * fixture sets `releasedAt` in the past and runs the job with a future
+       * `now`, so without setting the floor every test would look as if the
+       * stage "just changed" and the job would never advance. Publishing is
+       * also a stage change, so the two being equal is correct.
        */
       stageChangedAt: releasedAt,
     },
@@ -102,7 +105,7 @@ async function device(opts: {
   return d.id;
 }
 
-/** ছ-ঘণ্টার বেশি এই বিল্ডে, এইমাত্র সাড়া দিয়েছে */
+/** On this build for more than six hours, and just responded */
 const proven = (tag: string, version: string) =>
   device({
     tag,
@@ -115,8 +118,8 @@ const stageOf = async (version: string) =>
   (await h.prisma.agentVersion.findUniqueOrThrow({ where: { version } }))
     .rolloutStage;
 
-describe('রোলআউট নিজে থেকে এগোয়', () => {
-  it('সুস্থ canary — ধাপ partial-এ ওঠে', async () => {
+describe('the rollout advances by itself', () => {
+  it('a healthy canary: the stage moves up to partial', async () => {
     await publish('0.4.11', 'canary');
     await proven('a', '0.4.11');
 
@@ -126,7 +129,7 @@ describe('রোলআউট নিজে থেকে এগোয়', () => {
     expect(await stageOf('0.4.11')).toBe('partial');
   });
 
-  it('partial — পরের ধাপে all', async () => {
+  it('partial: next stage is all', async () => {
     await publish('0.4.11', 'partial');
     await proven('a', '0.4.11');
 
@@ -136,12 +139,12 @@ describe('রোলআউট নিজে থেকে এগোয়', () => {
   });
 
   /**
-   * ⭐⭐ **এক টিকে এক ধাপ** — canary থেকে সরাসরি all-এ লাফ দেয় না।
+   * One stage per tick: it does not jump straight from canary to all.
    *
-   * ⚠️ লাফ দিলে partial ধাপটার কোনো মানেই থাকত না, আর ৫০%-এ থেমে দেখার
-   *    সুযোগটাই হারাত।
+   * A jump would leave the partial stage meaningless and lose the chance to
+   * stop and look at 50%.
    */
-  it('⭐ এক টিকে এক ধাপ — canary → all লাফ নয়', async () => {
+  it('one stage per tick: no canary to all jump', async () => {
     await publish('0.4.11', 'canary');
     await proven('a', '0.4.11');
 
@@ -150,14 +153,14 @@ describe('রোলআউট নিজে থেকে এগোয়', () => {
   });
 
   /**
-   * ⭐⭐⭐ **এই ফাইলের সবচেয়ে জরুরি টেস্ট।**
+   * The most important test in this file.
    *
-   * ⚠️⚠️ `halted` মানে মালিক জরুরি ব্রেক চেপেছেন — সাধারণত এই কারণেই যে
-   * বিল্ডটা মাঠে কিছু ভেঙেছে। যন্ত্র ওটা খুলতে পারলে ভাঙা বিল্ডটা **নিজে
-   * থেকেই** বাকি সব PC-তে চলে যেত, আর মালিকের হাতে থামানোর কোনো উপায়
-   * থাকত না। ⭐ ঝুঁকিটা নতুন: আগে ধাপ বাড়ত কেবল মানুষের ক্লিকে।
+   * `halted` means the owner pressed the emergency brake, usually because the
+   * build broke something in the field. If a machine could open it, the broken
+   * build would go to every other PC by itself and the owner would have no way
+   * to stop it. The risk is new: before, a stage only advanced by a human click.
    */
-  it('⭐ `halted` কখনো খোলে না — সুস্থ মেশিন থাকলেও', async () => {
+  it('`halted` never opens, even with healthy machines', async () => {
     await publish('0.4.11', 'halted');
     await proven('a', '0.4.11');
 
@@ -168,12 +171,13 @@ describe('রোলআউট নিজে থেকে এগোয়', () => {
   });
 
   /**
-   * ⭐⭐ **কেউ ইনস্টল না করলে ধাপ বাড়ে না** — canary-র পুরো মানেটাই এটা।
+   * If nobody installs it, the stage does not advance: that is the whole
+   * point of canary.
    *
-   * ⚠️ শর্তটা "প্রকাশের ছ-ঘণ্টা পর" হলে এই টেস্টটাই ব্যর্থ হতো: ভার্সনটা
-   *    অনেক আগে প্রকাশিত, অথচ **একটাও মেশিন সেটা চালাচ্ছে না**।
+   * If the condition were "six hours after release" this test would fail: the
+   * version was released long ago, yet not a single machine is running it.
    */
-  it('⭐ কোনো মেশিন এই বিল্ডে নেই — পুরোনো রিলিজ হলেও ধাপ বাড়ে না', async () => {
+  it('no machine is on this build: even an old release does not advance', async () => {
     await publish('0.4.11', 'canary', ago(30 * HOUR_MS));
     await device({ tag: 'old', agentVersion: '0.4.10', sinceMs: 40 * HOUR_MS, seenMs: 60_000 });
 
@@ -183,13 +187,14 @@ describe('রোলআউট নিজে থেকে এগোয়', () => {
   });
 
   /**
-   * ⭐⭐⭐ **ভাঙা বিল্ড নিজে থেকে ছড়ায় না।**
+   * A broken build does not spread by itself.
    *
-   * ⚠️⚠️ মেশিনটা ছ-ঘণ্টার বেশি এই বিল্ডে আছে, কিন্তু **চুপ হয়ে গেছে** —
-   * ঠিক যা ঘটত যদি নতুন বিল্ড এজেন্টকে ক্র্যাশ করাত। শুধু soak দেখলে এটা
-   * "প্রমাণ" হয়ে যেত, আর সবচেয়ে খারাপ বিল্ডটাই সবার কাছে পৌঁছে যেত।
+   * The machine has been on this build for over six hours, but has gone
+   * silent, exactly what would happen if the new build crashed the agent. With
+   * soak alone this would count as "proof" and the worst build would reach
+   * everyone.
    */
-  it('⭐ এজেন্ট চুপ হয়ে গেছে — ধাপ বাড়ে না', async () => {
+  it('the agent has gone silent: the stage does not advance', async () => {
     await publish('0.4.11', 'canary');
     await device({
       tag: 'dead',
@@ -203,7 +208,7 @@ describe('রোলআউট নিজে থেকে এগোয়', () => {
     expect(await stageOf('0.4.11')).toBe('canary');
   });
 
-  it('সবে বসানো হয়েছে — অপেক্ষা করে', async () => {
+  it('just installed: waits', async () => {
     await publish('0.4.11', 'canary');
     await device({
       tag: 'fresh',
@@ -218,11 +223,11 @@ describe('রোলআউট নিজে থেকে এগোয়', () => {
   });
 
   /**
-   * ⚠️ **মাইগ্রেশনের দিনের আচরণ।** পুরোনো সব সারিতে `agent_version_since`
-   *    খালি; "জানি না"-কে "অনেকদিন ধরে চলছে" ধরলে ঠিক ওই দিনই চলতি
-   *    ভার্সনটা এক লাফে সবার কাছে চলে যেত — কারো কিছু না করেই।
+   * Behaviour on migration day. In all old rows `agent_version_since` is
+   * empty; treating "unknown" as "running for a long time" would send the
+   * current version to everyone in one jump on that very day, with nobody doing anything.
    */
-  it('⭐ `agent_version_since` খালি — প্রমাণ নয়', async () => {
+  it('`agent_version_since` empty: not proof', async () => {
     await publish('0.4.11', 'canary');
     await device({ tag: 'unknown', agentVersion: '0.4.11', sinceMs: null, seenMs: 60_000 });
 
@@ -231,8 +236,8 @@ describe('রোলআউট নিজে থেকে এগোয়', () => {
     expect(await stageOf('0.4.11')).toBe('canary');
   });
 
-  /** ⚠️ বাতিল করা PC-র heartbeat কোনো প্রমাণ নয় */
-  it('revoked ডিভাইস প্রমাণ দেয় না', async () => {
+  /** The heartbeat of a revoked PC is not proof */
+  it('a revoked device gives no proof', async () => {
     await publish('0.4.11', 'canary');
     await device({
       tag: 'revoked',
@@ -248,11 +253,11 @@ describe('রোলআউট নিজে থেকে এগোয়', () => {
   });
 
   /**
-   * ⭐⭐ **জব ঠিক সেই ভার্সনটাই ধরে যেটা `offerFor()` বিলি করে** — সবচেয়ে
-   * নতুন non-halted। ⚠️ পুরোনো একটার ধাপ বাড়ালে বদলটা হতো নীরব ও
-   * অর্থহীন: কেউ ওটা অফারই পায় না।
+   * The job picks exactly the version `offerFor()` hands out: the newest
+   * non-halted one. Advancing an old one would be silent and pointless:
+   * nobody is offered it.
    */
-  it('⭐ পুরোনো ভার্সন ছোঁয়া হয় না', async () => {
+  it('old versions are not touched', async () => {
     await publish('0.4.10', 'canary', ago(40 * HOUR_MS));
     await publish('0.4.11', 'canary', ago(20 * HOUR_MS));
     await proven('a', '0.4.11');
@@ -264,14 +269,15 @@ describe('রোলআউট নিজে থেকে এগোয়', () => {
   });
 
   /**
-   * ⭐⭐ **খাতায় লেখা থাকে, আর সেটা ঐচ্ছিক নয়।** ধাপ বদলানো এতদিন সবসময়
-   * একজন মানুষের কাজ ছিল, তাই খাতায় নাম থাকত। যন্ত্র করলে খাতাটা ফাঁকা
-   * যেত — আর কেউ দেখত "কাল ৭%, আজ ১০০%", কে বা কী করল তার উত্তর নেই।
+   * It is written to the ledger, and that is not optional. Changing a stage
+   * used to always be a human's job, so the ledger had a name. If a machine
+   * did it, the ledger would be blank, and someone would see "7% yesterday,
+   * 100% today" with no answer to who or what did it.
    *
-   * ⚠️ `change_agent_rollout` নয়, আলাদা action — "একজন মানুষ সিদ্ধান্ত
-   *    নিয়েছেন" আর "শর্ত পূরণ হয়েছে" দুটো আলাদা দায়।
+   * A separate action, not `change_agent_rollout`: "a human decided" and "the
+   * condition was met" are two different responsibilities.
    */
-  it('⭐ অডিটে আলাদা করে লেখা থাকে, আর userId খালি', async () => {
+  it('the audit log records it separately, with userId empty', async () => {
     await publish('0.4.11', 'canary');
     await proven('a', '0.4.11');
 
@@ -287,25 +293,26 @@ describe('রোলআউট নিজে থেকে এগোয়', () => {
   });
 
   /**
-   * ⭐⭐⭐ **মাইগ্রেশনের পরদিন কী ঘটবে — আর কেন backfill লাগল।**
+   * What happens the day after migration, and why a backfill was needed.
    *
-   * ⚠️⚠️ কলামটা ভরে কেবল **ভার্সন বদলালে**। কিন্তু যে ১২টা PC এখন
-   * ০.৪.৯/০.৪.১০ চালাচ্ছে, তাদের ভার্সন আর বদলাবে না — তাই ঘরটা চিরকাল
-   * NULL থাকত, জব কোনো প্রমাণ পেত না, আর **চলতি ভার্সনটা চিরকাল
-   * canary-তেই আটকে থাকত**। অর্থাৎ ঠিক যে সমস্যাটা সারানো হচ্ছে, সেটাই
-   * মাইগ্রেশনের পরেও রয়ে যেত — শুধু নতুন মোড়কে।
+   * The column is filled only when the version changes. But the 12 PCs now
+   * running 0.4.9/0.4.10 will never change version, so the cell would stay
+   * NULL forever, the job would never find proof, and the current version would
+   * stay stuck in canary forever. That is, the very problem being fixed would
+   * survive the migration in new packaging.
    *
-   * ⭐ তাই মাইগ্রেশনে একটা `UPDATE ... SET now()` — ঘড়িটা deploy থেকে
-   * শুরু হয়। ⚠️ মানটা আসল শুরুর সময় নয়, একটা **নিচের সীমা**, আর ভুলটা
-   * নিরাপদ দিকেই: ছ-ঘণ্টা অপেক্ষা করতেই হবে, কম নয়।
+   * So the migration does an `UPDATE ... SET now()`: the clock starts at
+   * deploy. The value is not the real start time but a lower bound, and the
+   * error is on the safe side: it must wait the six hours, never less.
    *
-   * ⚠️ এই টেস্টটা backfill-এর **আচরণটা** পাহারা দেয়, SQL নয়: deploy-এর
-   * ঠিক পরে (ঘড়ি সবে শুরু) কিছুই ঘটে না, আর ছ-ঘণ্টা পর ঠিক **এক ধাপ**।
+   * This test guards the behaviour of the backfill, not the SQL: right after
+   * deploy (clock just started) nothing happens, and after six hours exactly
+   * one stage.
    */
-  it('⭐ backfill-এর পর — সাথে সাথে নয়, ছ-ঘণ্টা পর এক ধাপ', async () => {
+  it('after the backfill: not at once, one stage after six hours', async () => {
     await publish('0.4.10', 'canary');
 
-    // deploy-এর মুহূর্ত: ঘড়ি সবে বসেছে
+    // the moment of deploy: the clock has just been set
     const id = await device({
       tag: 'backfilled',
       agentVersion: '0.4.10',
@@ -316,7 +323,7 @@ describe('রোলআউট নিজে থেকে এগোয়', () => {
     await job.runOnce();
     expect(await stageOf('0.4.10')).toBe('canary');
 
-    // ছ-ঘণ্টা পার — ঘড়িটা পিছিয়ে দিয়ে সেটাই দেখানো
+    // six hours passed: shown by moving the clock back
     await h.prisma.device.update({
       where: { id },
       data: { agentVersionSince: ago((ROLLOUT_SOAK_HOURS + 1) * HOUR_MS) },
@@ -326,7 +333,7 @@ describe('রোলআউট নিজে থেকে এগোয়', () => {
     expect(await stageOf('0.4.10')).toBe('partial');
   });
 
-  it('কোনো ভার্সনই প্রকাশ না হলে চুপচাপ ফেরে', async () => {
+  it('with no version published at all, it returns quietly', async () => {
     const result = await job.runOnce();
     expect(result).toMatchObject({ version: null, to: null, skipped: false });
   });

@@ -1,37 +1,36 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// কখন tray আইকন হলুদ হবে, আর কখন লাল (J07)।
+/// When the tray icon turns yellow and when red (J07).
 ///
-/// <b>কেন সময়ের ভিত্তিতে, ব্যর্থতার সংখ্যায় নয়:</b> "টানা ৫ বার ব্যর্থ" শোনায়
-/// পরিষ্কার, কিন্তু ব্যাকঅফের কারণে ৫ বার ব্যর্থতা ২ মিনিটেও হতে পারে, আবার
-/// ৪০ মিনিটেও। স্টাফ বা অ্যাডমিন যেটা জানতে চায় সেটা হলো
-/// <b>"আমার ডেটা কতক্ষণ ধরে আটকে আছে"</b> — সংখ্যা নয়, সময়।
+/// <b>Why time-based, not failure-count-based:</b> "5 failures in a row" sounds clear, but
+/// because of backoff 5 failures can take 2 minutes or 40 minutes. What staff or an admin want
+/// to know is <b>"how long has my data been stuck"</b>: time, not a count.
 ///
-/// <b>কেন খালি কিউ সবসময় সুস্থ:</b> রাত ৩টায় কিছু পাঠানোর মতো নেই বলে
-/// আইকন লাল হওয়া উচিত নয়। লাল রং তখনই অর্থবহ যখন সত্যিই ডেটা আটকে আছে।
+/// <b>Why an empty queue is always healthy:</b> the icon must not turn red at 3 a.m. just
+/// because there is nothing to send. Red is meaningful only when data is really stuck.
 /// </summary>
 public sealed record SyncHealthPolicy(TimeSpan DegradedAfter, TimeSpan FailingAfter)
 {
     /// <summary>
-    /// ১৫ মিনিট — তিনটে স্ক্রিনশট স্লট। এর কমে অফিসের সাধারণ নেট-ঝাঁকুনিতেও
-    /// আইকন রং বদলাত, আর তখন রং বদলানোর মানেই থাকত না।
+    /// 15 minutes, three screenshot slots. Any less and ordinary office network blips would
+    /// change the icon color, at which point the color change would mean nothing.
     /// </summary>
     public static readonly TimeSpan DefaultDegradedAfter = TimeSpan.FromMinutes(15);
 
     /// <summary>
-    /// ২ ঘণ্টা — এতক্ষণে সাধারণ নেট-সমস্যা মিটে যেত। এখনো আটকে থাকা মানে
-    /// কেউ না দেখলে সমস্যাটা মিটবে না।
+    /// 2 hours: an ordinary network problem would have cleared by now. Still stuck means the
+    /// problem will not clear unless someone looks at it.
     /// </summary>
     public static readonly TimeSpan DefaultFailingAfter = TimeSpan.FromHours(2);
 
     public static SyncHealthPolicy Default { get; } =
         new(DefaultDegradedAfter, DefaultFailingAfter);
 
-    /// <param name="lastSuccessAt">শেষ সফল সিঙ্ক। কখনো সফল না হলে <c>null</c>।</param>
-    /// <param name="startedAt">এজেন্ট চালু হওয়ার সময় — প্রথম সিঙ্কের আগে এটাই ভিত্তি।</param>
-    /// <param name="queueDepth">কতগুলো সারি পাঠানোর অপেক্ষায়।</param>
-    /// <param name="revoked">সার্ভার এই ডিভাইস বাতিল করেছে কি না।</param>
+    /// <param name="lastSuccessAt">The last successful sync. <c>null</c> if never.</param>
+    /// <param name="startedAt">When the agent started; before the first sync this is the baseline.</param>
+    /// <param name="queueDepth">How many rows are waiting to be sent.</param>
+    /// <param name="revoked">Whether the server has revoked this device.</param>
     public SyncHealth Evaluate(
         DateTimeOffset? lastSuccessAt,
         DateTimeOffset startedAt,
@@ -39,14 +38,14 @@ public sealed record SyncHealthPolicy(TimeSpan DegradedAfter, TimeSpan FailingAf
         bool revoked,
         DateTimeOffset now)
     {
-        // ⚠️ সবার আগে — revoke হলে বাকি কিছুই আর গুরুত্বপূর্ণ নয়।
+        // First of all: once revoked, nothing else matters.
         if (revoked) return SyncHealth.Revoked;
 
-        // পাঠানোর কিছু নেই মানে আটকে থাকারও কিছু নেই।
+        // Nothing to send means nothing can be stuck.
         if (queueDepth <= 0) return SyncHealth.Ok;
 
-        // কখনো সফল হয়নি — তাহলে চালু হওয়ার সময় থেকে গোনা। নইলে সদ্য
-        // ইনস্টল করা এজেন্ট প্রথম মিনিট থেকেই লাল দেখাত।
+        // Never succeeded: count from the start time. Otherwise a freshly installed agent
+        // would show red from the first minute.
         var since = now - (lastSuccessAt ?? startedAt);
 
         if (since >= FailingAfter) return SyncHealth.Failing;
@@ -55,7 +54,7 @@ public sealed record SyncHealthPolicy(TimeSpan DegradedAfter, TimeSpan FailingAf
         return SyncHealth.Ok;
     }
 
-    /// <summary>স্টাফকে যা দেখানো হবে — J07-এর নির্দিষ্ট বাক্যটি সহ।</summary>
+    /// <summary>What staff will be shown, including J07's specified sentence.</summary>
     public static string? Describe(SyncHealth health, int queueDepth) => health switch
     {
         SyncHealth.Ok => null,

@@ -28,11 +28,11 @@ import type {
 } from '../src/reports/reports.types';
 
 /**
- * F06 — PDF এক্সপোর্ট।
+ * F06: PDF export.
  *
- * ⭐ এখানে যা পরীক্ষা করা হয়, তার প্রায় প্রতিটাই এমন ভুল যেটা হলে **কোনো
- * এরর উঠত না** — শুধু ছাপা কাগজে একটা ঘর ফাঁকা থাকত, বা একটা সতর্কবার্তা
- * উধাও হয়ে যেত। ডাটাবেস লাগে না, তাই এগুলো নিরিবিলি চলে।
+ * Almost everything tested here is a mistake that would raise no error: a
+ * cell would just be blank on the printed paper, or a warning would vanish.
+ * No database is needed, so these run quietly.
  */
 
 const meta: ReportMeta = {
@@ -45,9 +45,9 @@ const meta: ReportMeta = {
   excludedEmployees: [],
   targetHoursInRange: {},
   expectedHours: {},
-  // ⚠️ এই নমুনা জগতে কোনো ছুটিই নেই, তাই খালি — "কোনো সম্ভাব্য তারিখ নেই"
+  // This sample world has no holidays, so empty: "no approximate dates"
   approximateHolidayDates: [],
-  // ⚠️ নমুনায় কেউ 'না-দেখা' নয় — এই ফিক্সচার G110/G111 নিয়ে কোনো দাবি করে না
+  // nobody in the sample is 'unobserved': this fixture makes no claim about G110/G111
   observed: {},
   trackedFrom: {},
 };
@@ -65,12 +65,12 @@ function attendance(over: Partial<AttendanceReport> = {}): AttendanceReport {
         date: '2026-08-11',
         dayType: 'workday',
         status: 'worked',
-        // ⚠️ নমুনায় কেউ ছুটিতে নেই — এই ফিক্সচার G130 নিয়ে দাবি করে না
+        // nobody in the sample is on leave: this fixture makes no claim about G130
         onLeave: false,
         workedHours: 7.5,
         idleHours: 0.5,
         adjustmentHours: 0,
-        // ⭐ ডিজাইনের সংখ্যা (২১ আগস্ট) — ডিজাইনার না হলে null
+        // the designs count: null unless the person is a designer
     designsDone: null,
     creditedHours: 7.5,
         targetHours: 8,
@@ -115,129 +115,129 @@ function summary(over: Partial<SummaryReport> = {}): SummaryReport {
   };
 }
 
-describe('toPdfText — কোন লেখা আদৌ ছাপা যাবে', () => {
-  it('ASCII অক্ষর অক্ষত থাকে', () => {
+describe('toPdfText: which text can be printed at all', () => {
+  it('ASCII characters stay intact', () => {
     expect(toPdfText('OX-001 Jane Doe')).toEqual({
       text: 'OX-001 Jane Doe',
       lossy: false,
     });
   });
 
-  it('Latin-1 উচ্চারণচিহ্ন ছাপা যায় — ইউরোপীয় নাম বাদ পড়ে না', () => {
+  it('Latin-1 accents can be printed: European names are not dropped', () => {
     expect(toPdfText('Ábel Kovács')).toEqual({
       text: 'Ábel Kovács',
       lossy: false,
     });
   });
 
-  it('বাংলা অক্ষর ? হয় এবং lossy বলে জানায়', () => {
+  it('Bengali letters become ? and it reports lossy', () => {
     const out = toPdfText('মামুন');
     expect(out.lossy).toBe(true);
-    // ⚠️ মুছে ফেলা হয় না — খালি স্ট্রিং "নাম নেই"-এর সমান দেখাত
+    // not removed: an empty string would look the same as "no name"
     expect(out.text).toBe(UNPRINTABLE.repeat('মামুন'.length));
     expect(out.text.length).toBeGreaterThan(0);
   });
 
-  it('null ও খালি স্ট্রিং খালি ঘর হয়, lossy নয়', () => {
+  it('null and empty string give an empty cell, not lossy', () => {
     expect(toPdfText(null)).toEqual({ text: EMPTY_CELL, lossy: false });
     expect(toPdfText('')).toEqual({ text: EMPTY_CELL, lossy: false });
     expect(toPdfText(undefined)).toEqual({ text: EMPTY_CELL, lossy: false });
   });
 
-  it('ইউনিকোড যতিচিহ্ন ASCII হয়, কিন্তু lossy নয়', () => {
-    // ⚠️ এগুলো WinAnsi-তে আছে, তবু বদলানো হয় — একই ড্যাশের দু-রকম বাইট
-    //    থাকলে প্রস্থ মাপা অনির্দেশ্য হতো
+  it('Unicode punctuation becomes ASCII, but is not lossy', () => {
+    // These exist in WinAnsi but are still replaced: two kinds of byte for
+    // the same dash would make width measurement unpredictable
     expect(toPdfText('“a” – b… ‘c’')).toEqual({
       text: '"a" - b... \'c\'',
       lossy: false,
     });
   });
 
-  it('NBSP সাধারণ স্পেস হয় — নইলে ছাপায় দেখতে এক, মাপে আলাদা', () => {
+  it('NBSP becomes a normal space: same look in print, different measure', () => {
     expect(toPdfText('a b').text).toBe('a b');
   });
 });
 
-describe('personLabel — বাংলা নামের ঘরে কী বসবে', () => {
-  it('ছাপা-যোগ্য নাম যেমন আছে তেমনই থাকে', () => {
+describe('personLabel: what goes in the cell for a Bengali name', () => {
+  it('a printable name stays as it is', () => {
     expect(personLabel('Jane Doe', 'OX-001')).toEqual({
       text: 'Jane Doe',
       lossy: false,
     });
   });
 
-  it('⭐ বাংলা নামের বদলে এমপ কোড বসে, প্রশ্নচিহ্নের সারি নয়', () => {
-    // ??????? দেখে কেউ কর্মীকে চিনতে পারতেন না; কোডটা পাশের কলামেই আছে
-    // আর সবাই সেটা চেনে
+  it('a Bengali name is replaced by the employee code, not a row of question marks', () => {
+    // Nobody could recognise an employee from ???????; the code is in the
+    // next column anyway and everybody knows it
     expect(personLabel('মামুনুর রশিদ', 'OX-004')).toEqual({
       text: 'OX-004',
       lossy: true,
     });
   });
 
-  it('কোডও ছাপা না গেলে ফাঁকা নয়, চিহ্ন বসে', () => {
+  it('if even the code cannot be printed, a marker is used, not blank', () => {
     const out = personLabel('মামুন', 'কোড');
     expect(out.lossy).toBe(true);
     expect(out.text).toContain(UNPRINTABLE);
   });
 });
 
-describe('truncateToWidth — ঘরের বাইরে লেখা গড়িয়ে না পড়া', () => {
-  // এক অক্ষর = ১০pt, এমন সরল মাপক
+describe('truncateToWidth: text must not spill out of the cell', () => {
+  // a simple measure: one character = 10pt
   const measure = (s: string): number => s.length * 10;
 
-  it('আঁটলে অক্ষত', () => {
+  it('unchanged if it fits', () => {
     expect(truncateToWidth('abc', 100, measure)).toBe('abc');
   });
 
-  it('না আঁটলে ... সহ কাটা — কাটা পড়েছে সেটা দেখা যায়', () => {
+  it('cut with ... if it does not fit, so the cut is visible', () => {
     expect(truncateToWidth('abcdefgh', 60, measure)).toBe('abc...');
   });
 
-  it('... নিজেও না আঁটলে যতটুকু আঁটে ততটুকু কাঁচা লেখা', () => {
+  it('if even ... does not fit, as much raw text as fits', () => {
     expect(truncateToWidth('abcdefgh', 25, measure)).toBe('ab');
   });
 
-  it('প্রস্থ শূন্য বা ঋণাত্মক হলে খালি — অসীম লুপ নয়', () => {
+  it('empty for zero or negative width, not an infinite loop', () => {
     expect(truncateToWidth('abc', 0, measure)).toBe('');
     expect(truncateToWidth('abc', -5, measure)).toBe('');
   });
 });
 
-describe('hoursText ও dhakaStamp', () => {
-  it('ঘণ্টা সবসময় দুই দশমিক — কলামে দশমিক বিন্দু এক লাইনে দাঁড়ায়', () => {
+describe('hoursText and dhakaStamp', () => {
+  it('hours always have two decimals, so decimal points line up in a column', () => {
     expect(hoursText(7)).toBe('7.00');
     expect(hoursText(7.5)).toBe('7.50');
     expect(hoursText(-0.25)).toBe('-0.25');
   });
 
-  it('অসীম/NaN ফাঁকা ঘর — "NaN" ছাপা হয় না', () => {
+  it('infinite/NaN gives a blank cell: "NaN" is never printed', () => {
     expect(hoursText(Number.NaN)).toBe(EMPTY_CELL);
     expect(hoursText(Number.POSITIVE_INFINITY)).toBe(EMPTY_CELL);
   });
 
-  it('⚠️ তৈরির সময় ঢাকার ঘড়িতে, সার্ভারের টাইমজোনে নয়', () => {
-    // UTC ১২:৩৪ = ঢাকার ১৮:৩৪
+  it('creation time is in the Dhaka clock, not the server timezone', () => {
+    // 12:34 UTC = 18:34 in Dhaka
     expect(dhakaStamp(new Date('2026-08-11T12:34:56.000Z'))).toBe(
       '2026-08-11 18:34 (Asia/Dhaka)',
     );
   });
 
-  it('UTC-র তারিখ বদলের আগে-পরে ঢাকার তারিখ এক দিন এগিয়ে থাকে', () => {
-    // UTC ১১ আগস্ট ২০:০০ = ঢাকার ১২ আগস্ট ০২:০০
+  it('around the UTC date change the Dhaka date is a day ahead', () => {
+    // 20:00 UTC on 11 August = 02:00 on 12 August in Dhaka
     expect(dhakaStamp(new Date('2026-08-11T20:00:00.000Z'))).toBe(
       '2026-08-12 02:00 (Asia/Dhaka)',
     );
   });
 });
 
-describe('truncationNote — বাদ পড়া সারি চুপচাপ হারায় না', () => {
-  it('সব সারি দেখানো হলে কোনো নোট নেই', () => {
+describe('truncationNote: dropped rows are not lost silently', () => {
+  it('no note when all rows are shown', () => {
     expect(truncationNote(50, 50)).toBeNull();
     expect(truncationNote(10, 50)).toBeNull();
   });
 
-  it('কাটা পড়লে দুটো সংখ্যাই লেখা থাকে ও Excel-এর কথা বলা হয়', () => {
+  it('when cut, both numbers are written and Excel is mentioned', () => {
     const note = truncationNote(5000, 2000);
     expect(note).toContain('2000');
     expect(note).toContain('5000');
@@ -245,8 +245,8 @@ describe('truncationNote — বাদ পড়া সারি চুপচা
   });
 });
 
-describe('attendanceLines — রিপোর্ট → ছাপার লাইন', () => {
-  it('সংখ্যা দুই দশমিকে, লেবেল ইংরেজিতে', () => {
+describe('attendanceLines: report to print lines', () => {
+  it('numbers with two decimals, labels in English', () => {
     const { lines, lossy } = attendanceLines(attendance());
 
     expect(lossy).toBe(false);
@@ -261,7 +261,7 @@ describe('attendanceLines — রিপোর্ট → ছাপার লা�
     });
   });
 
-  it('⭐ বাংলা নাম থাকলে lossy ওঠে — নইলে পাদটীকাটা কখনো বসত না', () => {
+  it('a Bengali name sets lossy, otherwise the footnote would never appear', () => {
     const report = attendance();
     report.rows[0].fullName = 'মামুনুর রশিদ';
 
@@ -270,18 +270,18 @@ describe('attendanceLines — রিপোর্ট → ছাপার লা�
     expect(lines[0].name).toBe('OX-001');
   });
 
-  it('⚠️ শুধু বিভাগ বাংলা হলেও lossy ওঠে', () => {
+  it('a Bengali department alone also sets lossy', () => {
     const report = attendance();
     report.rows[0].department = 'প্রকৌশল';
 
     const { lines, lossy } = attendanceLines(report);
     expect(lossy).toBe(true);
-    // নাম ঠিকই থাকে — কেবল বিভাগের ঘরে চিহ্ন
+    // the name stays fine: only the department cell gets the marker
     expect(lines[0].name).toBe('Jane Doe');
     expect(lines[0].department).toContain(UNPRINTABLE);
   });
 
-  it('বিভাগ না থাকলে খালি ঘর, lossy নয়', () => {
+  it('no department gives a blank cell, not lossy', () => {
     const report = attendance();
     report.rows[0].department = null;
 
@@ -292,12 +292,12 @@ describe('attendanceLines — রিপোর্ট → ছাপার লা�
 });
 
 describe('summaryLines', () => {
-  it('দিনসংখ্যা পূর্ণসংখ্যা, ঘণ্টা দুই দশমিক', () => {
+  it('day counts are integers, hours have two decimals', () => {
     const { lines } = summaryLines(summary());
 
     expect(lines[0]).toMatchObject({
       bucket: '2026-08',
-      // ⚠️ "৯.০০ কর্মদিবস" পড়তে অদ্ভুত, আর ঘণ্টার সাথে গুলিয়ে যেত
+      // "9.00 workdays" reads oddly and would be confused with hours
       workdays: '9',
       daysWithWork: '8',
       credited: '63.50',
@@ -307,8 +307,8 @@ describe('summaryLines', () => {
   });
 });
 
-describe('ফাইলের নাম ও MIME', () => {
-  it('⚠️ এক্সটেনশন ফরম্যাট অনুযায়ী — PDF কখনো .xlsx নামে সেভ হয় না', () => {
+describe('file name and MIME', () => {
+  it('the extension follows the format: a PDF is never saved as .xlsx', () => {
     expect(reportFilename('attendance', '2026-08-01', '2026-08-11', 'pdf')).toBe(
       'oxeio-attendance-2026-08-01_2026-08-11.pdf',
     );
@@ -317,31 +317,31 @@ describe('ফাইলের নাম ও MIME', () => {
     );
   });
 
-  it('নাম পুরোটাই ASCII — Content-Disposition ভাঙে না', () => {
+  it('the name is entirely ASCII, so Content-Disposition does not break', () => {
     const name = reportFilename('attendance', '2026-08-01', '2026-08-11', 'pdf');
     expect(/^[\x20-\x7E]+$/.test(name)).toBe(true);
   });
 
-  it('MIME ম্যাপে দুটোই আছে', () => {
+  it('the MIME map has both', () => {
     expect(MIME_OF.pdf).toBe(PDF_MIME);
     expect(MIME_OF.xlsx).toContain('spreadsheetml');
   });
 });
 
-describe('PDF তৈরি (pdfkit)', () => {
-  it('আসল PDF বাইট বেরোয়', async () => {
+describe('PDF generation (pdfkit)', () => {
+  it('real PDF bytes come out', async () => {
     const buffer = await attendancePdf(attendance(), 'oXeio Office');
 
     expect(buffer.byteLength).toBeGreaterThan(500);
     expect(buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
 
-  it('সারাংশেরও', async () => {
+  it('the summary too', async () => {
     const buffer = await summaryPdf(summary(), 'oXeio Office');
     expect(buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
 
-  it('⭐ শূন্য সারিতেও ভাঙে না — খালি রেঞ্জ একটা বৈধ ফল', async () => {
+  it('zero rows does not break it: an empty range is a valid result', async () => {
     const empty = attendance({
       rows: [],
       totals: {
@@ -358,7 +358,7 @@ describe('PDF তৈরি (pdfkit)', () => {
     expect(buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
 
-  it('অনেক সারিতে একাধিক পাতা হয়, তবু একটাই ফাইল', async () => {
+  it('many rows make several pages, still one file', async () => {
     const base = attendance();
     const many = attendance({
       rows: Array.from({ length: 300 }, () => ({ ...base.rows[0] })),

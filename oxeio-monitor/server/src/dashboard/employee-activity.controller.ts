@@ -10,22 +10,22 @@ import {
 import { WorkDateQueryDto } from './dto';
 
 /**
- * E04/E05 — একজন কর্মীর একদিনের বিস্তারিত।
+ * One employee's details for one day.
  *
- * ⚠️ পথ `employees` — `src/users/employee-portal.controller.ts`-ও একই prefix
- * ব্যবহার করে, কিন্তু সেটা `POST :id/portal-account`। method+path আলাদা
- * বলে সংঘাত নেই; নতুন রুট যোগ করার আগে ওই ফাইলটাও দেখে নেওয়া দরকার।
+ * Careful: the path is `employees` — `src/users/employee-portal.controller.ts`
+ * uses the same prefix, but only for `POST :id/portal-account`. Method+path
+ * differ, so there is no clash; check that file too before adding a new route.
  *
- * ⚠️ owner + manager (§ ৪.৩)। `role = employee` এখানে ঢুকতে পারবে না —
- * স্টাফের নিজের ভিউ (J04) আলাদা পথে হবে, নইলে একজন স্টাফ `:id` বদলে
- * সহকর্মীর পুরো দিন দেখে ফেলত।
+ * Careful: owner + manager only (§ 4.3). `role = employee` must not get in —
+ * staff's own view is a separate path, otherwise a staff member could change
+ * `:id` and see a colleague's whole day.
  */
 @Roles(UserRole.owner, UserRole.manager)
 @Controller('employees')
 export class EmployeeActivityController {
   constructor(private readonly dashboard: DashboardService) {}
 
-  /** E04 — `GET /api/v1/employees/3/timeline?date=2026-08-10` */
+  /** `GET /api/v1/employees/3/timeline?date=2026-08-10` */
   @Get(':id/timeline')
   timeline(
     @Param('id', ParseIntPipe) id: number,
@@ -34,7 +34,7 @@ export class EmployeeActivityController {
     return this.dashboard.timeline(id, query.date);
   }
 
-  /** E05 — `GET /api/v1/employees/3/hourly?date=2026-08-10` */
+  /** `GET /api/v1/employees/3/hourly?date=2026-08-10` */
   @Get(':id/hourly')
   hourly(
     @Param('id', ParseIntPipe) id: number,

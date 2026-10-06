@@ -25,7 +25,7 @@ import { formatWorkDate, pageSlice, parseWorkDate } from './gallery.math';
 import { SignedUrlService } from './signed-url.service';
 
 export interface GalleryItem {
-  /** ⚠️ string, number নয় — `screenshots.id` BigInt, আর BigInt JSON-এ যায় না */
+  /** Careful: a string, not a number; `screenshots.id` is a BigInt, which JSON cannot carry. */
   id: string;
   employeeId: number;
   empCode: string;
@@ -37,11 +37,11 @@ export interface GalleryItem {
   height: number | null;
   sizeBytes: number | null;
   activeApp: string | null;
-  /** ⚠️ শুধু উইন্ডোর শিরোনাম আর ডোমেইন — ফুল URL কখনো জমা হয় না (§ ৭) */
+  /** Careful: only the window title and domain; the full URL is never stored (spec section 7). */
   activeTitle: string | null;
-  /** ৫ মিনিটে expire (I07) */
+  /** Expires after 5 minutes (I07). */
   thumbUrl: string;
-  /** লাইটবক্সে ফুল ছবি — আলাদা টোকেন, আলাদা variant */
+  /** Full image for the lightbox: a separate token, a separate variant. */
   fullUrl: string;
 }
 
@@ -66,7 +66,7 @@ export interface ResolvedScreenshotFile {
   downloadName: string;
 }
 
-/** ADR-007 — এজেন্ট শুধু webp পাঠায়, তাই এটাই একমাত্র content-type */
+/** ADR-007: the agent sends only webp, so this is the only content type. */
 export const SCREENSHOT_MIME = 'image/webp';
 
 @Injectable()
@@ -86,8 +86,8 @@ export class ScreenshotsService {
   /**
    * E06 — `GET /api/v1/screenshots?employeeId=&date=&page=`
    *
-   * I08-ও এখানেই: গ্রিডটা তৈরি হওয়া মানেই ছবিগুলো দেখানো হয়ে গেছে, তাই
-   * অডিট এখানে লেখা হয়, `/file` endpoint-এ নয়।
+   * Audit (I08) is written here too: building the grid already means the
+   * photos have been shown, so the audit is written here, not in the `/file` endpoint.
    */
   async gallery(
     actor: SessionUser,
@@ -99,8 +99,8 @@ export class ScreenshotsService {
 
     const where: Prisma.ScreenshotWhereInput = {
       workDate,
-      // ⚠️ retention job আগে `deleted_at` বসায়, ফাইল মোছে পরে (ADR-006)।
-      //    এই শর্তটা না দিলে গ্যালারিতে সারি দেখা যেত অথচ ছবি ৪০৪ হতো।
+      // Careful: the retention job sets `deleted_at` first and deletes the file
+      // later (ADR-006). Without this condition the gallery would show rows whose photo is a 404.
       deletedAt: null,
       ...(employeeId === null ? {} : { employeeId }),
     };
@@ -110,9 +110,9 @@ export class ScreenshotsService {
 
     const rows = await this.prisma.screenshot.findMany({
       where,
-      // ⚠️ `capturedAt`-এ টাই হতে পারে (একই স্লটে দুই মনিটর, বা একই
-      //    মিলিসেকেন্ড)। সম্পূর্ণ ক্রম না দিলে দুই পাতায় একই ছবি দুবার আসত
-      //    আর অন্য একটা ছবি কোনো পাতাতেই থাকত না — নীরবে।
+      // Careful: `capturedAt` can tie (two monitors in one slot, or the same
+      // millisecond). Without a total order the same photo could appear on two
+      // pages and another on none, silently.
       orderBy: [{ capturedAt: 'asc' }, { monitorIndex: 'asc' }, { id: 'asc' }],
       skip: slice.skip,
       take: slice.take,
@@ -127,8 +127,8 @@ export class ScreenshotsService {
         sizeBytes: true,
         activeApp: true,
         activeTitle: true,
-        // ⚠️ employee থেকে শুধু নাম-কোড। `monthly_salary` এখানে select
-        //    করা হয় না — বেতন শুধু payroll endpoint-এ (ADR-023)।
+        // Careful: only name and code from the employee. `monthly_salary` is
+        // not selected here; salary belongs only to the payroll endpoint (ADR-023).
         employee: { select: { empCode: true, fullName: true } },
       },
     });
@@ -167,11 +167,11 @@ export class ScreenshotsService {
   /**
    * I07 — `GET /api/v1/screenshots/:id/file?token=`
    *
-   * ⚠️ এই রুটে কোনো সেশন লাগে না (`@Public()`) — **টোকেনটাই পরিচয়**।
-   *    কারণ `<img src="…">` দিয়ে ছবি লোড হয়, আর সেখানে কাস্টম হেডার
-   *    বসানো যায় না। অনুমতির যাচাই তাই আগেই হয়ে গেছে: টোকেন বানানোর সময়
-   *    (gallery)। স্টাফ শুধু নিজের ছবির টোকেনই পায়, তাই অন্যেরটার লিঙ্ক
-   *    সে বানাতেই পারে না (J05)।
+   * Careful: this route needs no session (`@Public()`); **the token is the
+   * identity**. Photos load through `<img src="...">`, where custom headers
+   * cannot be set. So the permission check has already happened, when the
+   * token was created (gallery). Staff only get tokens for their own photos,
+   * so they cannot create a link to anyone else's (J05).
    */
   async resolveFile(
     idParam: string,
@@ -190,9 +190,10 @@ export class ScreenshotsService {
       );
     }
 
-    // ⚠️ টোকেনে লেখা id আর পথের id মিলিয়ে দেখতেই হবে। না মেলালে একটা
-    //    বৈধ টোকেন নিয়ে `:id` বদলে দিয়ে **যেকোনো** স্ক্রিনশট টেনে নেওয়া
-    //    যেত — সইটা তখনো "বৈধ" বলত, কারণ সই তো টোকেনের, পথের নয়।
+    // Careful: the id in the token must be compared with the id in the path.
+    // Otherwise someone could take a valid token, change `:id`, and fetch
+    // **any** screenshot, and the signature would still say "valid", because
+    // the signature belongs to the token, not the path.
     const { screenshotId, variant, viewerUserId } = result.claims;
     if (screenshotId !== BigInt(idParam)) {
       throw new ForbiddenException('This token is not for this screenshot');
@@ -206,20 +207,21 @@ export class ScreenshotsService {
       throw new NotFoundException('Screenshot does not exist or has been deleted');
 
     /**
-     * A06 — ⭐ থাম্বনেইল **সবসময় ঐচ্ছিক**, দুই স্তরেই:
+     * A06: **the thumbnail is always optional**, at both levels:
      *
-     *   ১· `thumb_path` null — পুরোনো সারি, বা এমন এজেন্ট যে এখনো
-     *      থাম্বনেইল পাঠায় না। ফুল ছবিই যাবে, ঠিক আগের মতো।
-     *   ২· পথ আছে কিন্তু ডিস্কে ফাইল নেই — ব্যাকআপ রিস্টোর যদি `thumb/`
-     *      ফোল্ডার বাদ দিয়ে থাকে (দেখুন thumb.ts — বাদ দেওয়াই ইচ্ছাকৃত),
-     *      তখন ঠিক এটাই হবে। এখানে fallback না থাকলে গোটা গ্যালারি
-     *      ভাঙা ছবিতে ভরে যেত, অথচ ফুল ছবিগুলো ডিস্কে দিব্যি ছিল।
+     *   1. `thumb_path` is null: an old row, or an agent that does not send
+     *      thumbnails yet. The full image goes, exactly as before.
+     *   2. The path exists but the file is missing on disk: if a backup
+     *      restore left out the `thumb/` folder (see thumb.ts; leaving it out
+     *      is deliberate), exactly this happens. Without a fallback here the
+     *      whole gallery would fill with broken images while the full images
+     *      sat fine on disk.
      *
-     * ⚠️ এটা `variant` সই করার নিয়মের ব্যতিক্রম **নয়**। thumb → full-এ
-     *    নামা সার্ভারের নিজের সিদ্ধান্ত, আর তা কেবল **নিচের দিকে** —
-     *    URL ঘেঁটে কেউ এটা ঘটাতে পারে না, আর ফুলের টোকেন কখনো thumb
-     *    হয়ে যায় না। ঝুঁকিটা "সবাই একটু বেশি বাইট নামাল", "কেউ যা
-     *    দেখার কথা নয় তা দেখল" নয়।
+     * Careful: this is **not** an exception to the rule of signing the
+     * `variant`. Dropping from thumb to full is the server's own decision, and
+     * only **downwards**: nobody can trigger it by fiddling with the URL, and a
+     * full token never turns into a thumb. The risk is "everyone downloaded a
+     * few more bytes", not "someone saw what they should not".
      */
     const wantsThumb = variant === 'thumb' && shot.thumbPath !== null;
     const relPath = wantsThumb ? shot.thumbPath! : shot.filePath;
@@ -260,18 +262,18 @@ export class ScreenshotsService {
     };
   }
 
-  // ── ভেতরের সাহায্যকারী ─────────────────────────────────────────────
+  // -- Internal helpers -----------------------------------------------
 
   /**
-   * পথটা storage রুটের ভেতরে কি না দেখে, তারপর ফাইলটা আছে কি না।
+   * Checks the path is inside the storage root, then whether the file exists.
    *
-   * ⚠️ রুটের বাইরে হলে `null` নয় — সরাসরি 404 ছুঁড়ে দেয়। পার্থক্যটা
-   *    জরুরি: "ফাইল নেই" থেকে থাম্বনেইল ফুল ছবিতে **ফেরত যেতে পারে**,
-   *    কিন্তু "পথটা সন্দেহজনক" থেকে কোথাও ফেরত যাওয়া চলে না। দুটোকে এক
-   *    করে ফেললে একটা বিকৃত `thumb_path` চুপচাপ ফুল ছবি সার্ভ করিয়ে
-   *    নিত, আর লগে শুধু একটা নিরীহ warn থাকত।
+   * Careful: outside the root it throws a 404 directly, not `null`. The
+   * difference matters: "file missing" lets a thumbnail **fall back** to the
+   * full image, but "suspicious path" must never fall back anywhere. Merging
+   * the two would let a corrupted `thumb_path` quietly serve the full image,
+   * with only a harmless warning in the log.
    *
-   * @returns `null` মানে পথ ঠিক আছে, কিন্তু ডিস্কে ফাইলটা নেই
+   * @returns `null` means the path is fine, but the file is not on disk
    */
   private async openInStorage(
     id: bigint,
@@ -316,8 +318,8 @@ export class ScreenshotsService {
 
   private resolveDate(iso?: string): Date {
     if (iso === undefined) {
-      // ⚠️ ঢাকার "আজ", সার্ভারের UTC "আজ" নয় — রাত ১২টা থেকে ভোর ৬টার
-      //    মধ্যে দুটো আলাদা তারিখ হয়।
+      // Careful: Dhaka's "today", not the server's UTC "today"; between
+      // midnight and 6 am they are two different dates.
       return workDateOf(new Date());
     }
     const parsed = parseWorkDate(iso);
@@ -326,9 +328,9 @@ export class ScreenshotsService {
   }
 
   /**
-   * J05 — ⭐ role=employee হলে `employeeId` **সেশন থেকে**, ক্যোয়ারি থেকে নয়।
+   * J05: for role=employee, `employeeId` comes **from the session**, not from the query.
    *
-   * @returns `null` মানে ফিল্টার নেই (owner/manager, ওই দিনের সবার ছবি)
+   * @returns `null` means no filter (owner/manager: everyone's photos for that day)
    */
   /**
    * Whose pictures this person may see — and, for anyone but the owner and
@@ -350,36 +352,36 @@ export class ScreenshotsService {
     requested?: number,
   ): number | null {
     /**
-     * ⚠️⚠️ শর্তটা **"owner বা manager কি না"**, "employee নয় কি না" নয় —
-     * আর পার্থক্যটা এক অক্ষরের নয়, নিরাপত্তার।
+     * Careful: the condition is **"is owner or manager"**, not "is not
+     * employee", and the difference is not one of letters but of security.
      *
-     * ২৫ আগস্ট `UserRole`-এ `researcher` বসানোর সময় ধরা পড়ল: আগের লেখা
-     * `role !== employee` শর্তে নতুন যেকোনো রোল **এই ডালেই পড়ত**, আর
-     * `null` মানে *ফিল্টার নেই* — অর্থাৎ গবেষকরা **সবার স্ক্রিনশট, সব
-     * দিনের** দেখতে পেতেন। ⭐ কোনো কম্পাইল-এরর হতো না, কোনো টেস্ট লাল
-     * হতো না, কেউ কিছু বলত না।
+     * It was caught when `researcher` was added to `UserRole`: the earlier
+     * `role !== employee` condition would send any new role **down this
+     * branch**, and `null` means *no filter*, so researchers would have seen
+     * **everyone's screenshots, for every day**. There would be no compile
+     * error, no failing test, and nobody would say anything.
      *
-     * ⚠️ এই কন্ট্রোলারে ক্লাস-লেভেল `@Roles` **ইচ্ছাকৃতভাবে নেই** (ওখানকার
-     * কমেন্ট দেখুন), তাই এই লাইনটাই একমাত্র পাহারা — উপরে কিছু আটকাত না।
+     * Careful: this controller deliberately has **no class-level `@Roles`**
+     * (see the comment there), so this line is the only guard; nothing above stops anyone.
      *
-     * ⭐ নিয়ম: অনুমতি **হ্যাঁ-তালিকা** ধরে লিখুন, না-তালিকা ধরে নয়। তাহলে
-     * নতুন রোল ডিফল্টে **বাইরে** থাকে, ভেতরে নয়।
+     * Rule: write permissions as an **allow list**, not a deny list. Then a
+     * new role is **outside** by default, not inside.
      */
     if (actor.role === UserRole.owner || actor.role === UserRole.manager) {
       return requested ?? null;
     }
 
     if (actor.employeeId === null) {
-      // role=employee অথচ কোনো স্টাফের সাথে যুক্ত নয় — অ্যাকাউন্ট তৈরিতে
-      // ভুল। খালি লিস্ট দিলে সমস্যাটা চাপা পড়ে যেত।
+      // role=employee but not linked to any staff member: a mistake in account
+      // creation. Returning an empty list would hide the problem.
       throw new ForbiddenException(
         'This account is not linked to any staff member',
       );
     }
 
-    // ⚠️ অন্যের আইডি চাইলে চুপচাপ নিজেরটা ফেরত দেওয়া হয় না — তাহলে
-    //    ফ্রন্টএন্ড ভাবত ফিল্টারটা কাজ করেছে, আর স্ক্রিনে অন্য নাম নিয়ে
-    //    নিজের ছবি দেখাত।
+    // Careful: when someone asks for another person's id we do not quietly
+    // return their own; the frontend would think the filter worked and show
+    // their own photos under another name.
     if (requested !== undefined && requested !== actor.employeeId) {
       throw new ForbiddenException('You can only view your own screenshots');
     }
@@ -388,32 +390,34 @@ export class ScreenshotsService {
   }
 
   /**
-   * I08 — ⭐ "কে আমার স্ক্রিনশট দেখল" প্রশ্নের উত্তর এখানেই তৈরি হয়।
-   * স্টাফের কাছে পুরো সিস্টেমটার বিশ্বাসযোগ্যতা এই সারিগুলোর উপরে দাঁড়ানো।
+   * I08: the answer to "who viewed my screenshots" is produced here. For
+   * staff, the credibility of the whole system rests on these rows.
    *
-   * ⭐ পাতাপ্রতি **একটি** সারি, ছবিপ্রতি নয়। গ্রিডে ৬০টা ছবি একসাথে খোলে,
-   *    তাই ৬০টা আলাদা সারি একই তথ্যই ৬০ বার লিখত — শুধু audit_log ফুলে
-   *    যেত আর E11-এর ভিউয়ারে আসল ঘটনাগুলো হারিয়ে যেত। কোন কোন ছবি
-   *    দেখানো হলো, সেটা `meta.screenshotIds`-এ পুরোটাই আছে।
+   * **One** row per page, not per photo. A grid opens 60 photos at once, so
+   * 60 separate rows would write the same fact 60 times; audit_log would only
+   * bloat and the real events would get lost in the E11 viewer. Which photos
+   * were shown is all in `meta.screenshotIds`.
    *
-   * ⚠️ কিছুই না দেখানো হলে (খালি পাতা) কিছু লেখা হয় না — কেউ কিছু দেখেনি।
+   * Careful: if nothing is shown (an empty page) nothing is written; nobody saw anything.
    */
   /**
-   * ⭐⭐⭐ **আজকের দিনে কর্মীপ্রতি সবচেয়ে নতুন ছবিটা** *(৬ সেপ্টেম্বর ২০২৬,
-   * G159)* — Live Board ও Worklog-এর কার্ডের জন্য।
+   * **Each employee's newest photo of today** (G159): for the Live Board and
+   * Worklog cards.
    *
-   * ⚠️⚠️ **যে বাগটা এটা সারায়:** পর্দা এতদিন গ্যালারির **শেষ এক-দুটো পাতা**
-   * (৬০–১২০টা ছবি) টেনে এনে তার ভেতর থেকে কর্মীপ্রতি নতুনটা বাছত। যাঁর শেষ
-   * ছবিটা ওই জানালার বাইরে — যিনি আগে বেরিয়ে গেছেন, বা দল বড় — তাঁর কার্ডে
-   * লেখা উঠত *"No screenshot yet today"*। ⚠️ মাঠের হিসাব: ২৫ আগস্ট সন্ধ্যায়
-   * OX-05-এর **১১৪টা** ছবি ছিল, তবু কার্ড বলত একটাও নেই।
+   * Careful: **the bug this fixes:** the screen used to fetch the gallery's
+   * **last one or two pages** (60-120 photos) and pick each employee's newest
+   * from inside them. Someone whose last photo fell outside that window (who
+   * left early, or a big team) got *"No screenshot yet today"* on their card.
+   * Field figures: on the evening of 25 August OX-05 had **114** photos, yet
+   * the card said there were none.
    *
-   * ⭐ এখানে অনুমান নেই: প্রতি কর্মীর সর্বোচ্চ `capturedAt` বের করে ঠিক
-   * সেই সারিগুলোই আনা হয়।
+   * No guessing here: take each employee's maximum `capturedAt` and fetch
+   * exactly those rows.
    *
-   * ⚠️ **অডিট আগের মতোই একটাই সারি** — কর্মীপ্রতি নয়। এই পথটা ঠিক আগের
-   * কলটারই বদলি, তাই *"কে আমার স্ক্রিনশট দেখল"* (I08) খাতাটা আগের মতোই
-   * থাকে; নইলে বোর্ড খোলামাত্র ১২টা সারি লিখে খাতাটা আবর্জনায় ভরে যেত।
+   * Careful: **audit is still one row, as before**, not one per employee.
+   * This path replaces exactly that earlier call, so the *"who viewed my
+   * screenshots"* (I08) ledger stays as it was; otherwise opening the board
+   * would write 12 rows and fill the ledger with junk.
    */
   async latestPerEmployee(
     actor: SessionUser,
@@ -422,8 +426,8 @@ export class ScreenshotsService {
     const workDate = workDateOf(new Date());
 
     /**
-     * ⚠️ কর্মী নিজে ডাকলে কেবল নিজেরটা — গ্যালারির হুবহু একই নিয়ম।
-     *    এখানে আলাদা করে লিখলে একদিন একটা বদলাত আর অন্যটা নয়।
+     * Careful: when an employee calls it, only their own: exactly the gallery's
+     * rule. Written separately here, one day one would change and not the other.
      */
     // the same rule as the gallery — a researcher sees only their own too
     const mine = await this.scopeFor(actor);
@@ -434,7 +438,7 @@ export class ScreenshotsService {
       ...(mine === null ? {} : { employeeId: mine }),
     };
 
-    // ⭐ ধাপ ১ — কর্মীপ্রতি সবচেয়ে নতুন মুহূর্তটা
+    // Step 1: each employee's newest moment.
     const peaks = await this.prisma.screenshot.groupBy({
       by: ['employeeId'],
       where,
@@ -446,10 +450,10 @@ export class ScreenshotsService {
     }
 
     /**
-     * ⭐ ধাপ ২ — ঠিক ওই মুহূর্তগুলোর সারি।
+     * Step 2: the rows at exactly those moments.
      *
-     * ⚠️ একই মুহূর্তে দুই মনিটরের দুটো ছবি থাকতে পারে, তাই এখান থেকে
-     *    একাধিক সারি আসতেই পারে — নিচের `reduce` কর্মীপ্রতি একটাই রাখে।
+     * Careful: two photos from two monitors can share a moment, so more than
+     * one row can come back; the `reduce` below keeps one per employee.
      */
     const moments = peaks
       .map((p) => p._max.capturedAt)
@@ -518,7 +522,7 @@ export class ScreenshotsService {
     await this.audit.record({
       userId: actor.userId,
       action: 'view_screenshot',
-      // কার ছবি — একজনের ফিল্টার থাকলে তার আইডি, নইলে E11 meta দেখবে
+      // Whose photos: the id if one person is filtered, otherwise E11 looks at meta.
       targetType: 'employee',
       targetId: employeeId ?? undefined,
       ipAddress: ip,
@@ -526,17 +530,18 @@ export class ScreenshotsService {
         date: formatWorkDate(workDate),
         page,
         count: rows.length,
-        // ⚠️ BigInt সরাসরi JSON-এ দিলে Prisma ছুঁড়ে দেয় — string করতেই হবে
+        // Careful: giving a BigInt straight to JSON makes Prisma throw; it must be a string.
         screenshotIds: rows.map((r) => r.id.toString()),
         employeeIds: subjects,
         /**
-         * নিজের ছবি নিজে দেখলে (J05) — E11-এ এগুলো আলাদা করা যায়।
+         * Marks viewing one's own photos (J05); E11 can tell these apart.
          *
-         * ⚠️ আগে লেখা ছিল `role === employee` — রোল ধরে অনুমান। ২৫
-         * আগস্ট `researcher` রোল আসার পর সেটা মিথ্যা হয়ে যেত: গবেষকও
-         * মাপা হন, নিজের ছবি দেখেন, অথচ audit log-এ সেটা **অন্যের ছবি
-         * দেখা** বলে লেখা থাকত। ⭐ এখন প্রশ্নটা সরাসরি — সারিগুলো কি
-         * তাঁর নিজেরই? রোল যা-ই হোক, উত্তরটা বদলায় না।
+         * Careful: this used to be `role === employee`, a guess from the role.
+         * After the `researcher` role arrived it would have become false:
+         * researchers are also measured and view their own photos, yet the
+         * audit log would have recorded it as **viewing someone else's**. Now
+         * the question is direct: are the rows their own? Whatever the role,
+         * the answer does not change.
          */
         self: actor.employeeId !== null && employeeId === actor.employeeId,
       },

@@ -1,47 +1,49 @@
 import type { PrismaService } from '../prisma/prisma.service';
 
 /**
- * ⭐⭐ **"এই কর্মীকে আমরা কবে থেকে দেখছি"** — এক জায়গায়, চার কলারের জন্য
- * *(G120, ২৪ আগস্ট ২০২৬)*।
+ * **"Since when have we been watching this employee"**: one place, for four callers.
  *
- * ## যে বাগটা এটা সারায়
+ * ## The bug this fixes
  *
- * আগে সংখ্যাটা আসত `daily_summary`-র সবচেয়ে পুরোনো সারি থেকে। ⚠️⚠️ কিন্তু
- * `refreshDate()` **প্রতিটি active কর্মীর** সারি লেখে, ডেটা থাক বা না থাক —
- * আর সেটা ইচ্ছাকৃত, নইলে হিটম্যাপে *"ডেটা আসেনি"* আর *"কাজ হয়নি"* আলাদা
- * করা যেত না।
+ * The number used to come from the oldest `daily_summary` row. But
+ * `refreshDate()` writes a row for **every active employee**, with or without
+ * data, and that is deliberate, otherwise the heatmap could not tell
+ * *"no data arrived"* from *"no work was done"*.
  *
- * ফলে সংখ্যাটা আসলে মাপত **"সার্ভার কবে থেকে এই কর্মীকে নিয়ে চলছে"**,
- * *"তার এজেন্ট কবে বসেছে"* নয়। ১ অক্টোবর কর্মী তৈরি হলে ওই দিনই তার
- * `no_activity` সারি বসে যেত, তাই ৮ অক্টোবর এজেন্ট বসলেও **মাঝের সাতটা দিন
- * পুরো ঘাটতি** হয়ে থাকত — অর্থাৎ *"অনুপস্থিত পর্যবেক্ষণ ব্যর্থতা নয়"*
- * নীতিটা ঠিক নতুন কর্মীর বেলাতেই খাটত না।
+ * So the number really measured **"since when the server has been running
+ * with this employee"**, not *"since when their agent was installed"*. If an
+ * employee was created on 1 October, a `no_activity` row appeared that same
+ * day, so even if the agent went in on 8 October, **the seven days in between
+ * counted as a full shortfall**. The principle *"absent monitoring is not a
+ * failure"* did not hold for exactly the new employee.
  *
- * ## কেন `work_sessions`
+ * ## Why `work_sessions`
  *
- * এই টেবিলের সারি **কেবল ingest ট্রানজেকশনের ভেতরে** জন্মায় — অর্থাৎ
- * এজেন্ট সত্যিই কিছু পাঠালে তবেই। ⭐ আর retention একে ছোঁয় না (কেবল
- * স্ক্রিনশট মোছা হয়), তাই এক বছর পরেও একই ইনপুট থেকে একই উত্তর বেরোবে।
+ * Rows in this table are created **only inside the ingest transaction**,
+ * i.e. only when the agent actually sent something. Retention does not touch
+ * it (only screenshots are deleted), so a year later the same input gives the
+ * same answer.
  *
- * ⚠️ **`daily_summary` নয়** — উপরের কারণেই। ⚠️ **`activity_segments`ও নয়**:
- * একই সংকেত, কিন্তু দুই-তিন অর্ডার বেশি সারি, আর `groupBy` Postgres-এ পুরো
- * index স্ক্যান করে।
+ * Careful: **not `daily_summary`**, for the reason above. **Not
+ * `activity_segments` either**: the same signal, but two or three orders of
+ * magnitude more rows, and `groupBy` makes Postgres scan the whole index.
  *
- * ⚠️⚠️ **`devices.enrolled_at`ও নয়** — মাঠে মেপে বাতিল *(২৩ আগস্ট)*: ওটা
- * **"শেষ enrollment"**, প্রথমটা নয়, তাই এজেন্ট আবার বসালে তারিখ এগিয়ে যায়।
- * প্রমাণ: OX-07-এর ডিভাইস id **১** (সবার আগে তৈরি) অথচ enroll ১৫ আগস্ট,
- * যেখানে ids ২–৬-এর ১৩ আগস্ট।
+ * Careful: **not `devices.enrolled_at` either**; measured in the field and
+ * rejected: it is the **last enrollment**, not the first, so reinstalling the
+ * agent moves the date forward. Proof: OX-07's device has id **1** (created
+ * first) yet enrolled on 15 August, while ids 2-6 enrolled on 13 August.
  *
- * ## ⚠️⚠️ অনুপস্থিত কর্মীর মানে — কলারকেই ঠিক করতে হয়
+ * ## Careful: what a missing employee means; the caller must decide
  *
- * যার একটাও সেশন নেই, তার ঘর **Map-এ বসেই না**। কারণ `summary.math.ts`-এর
- * `maxDate()`-এ `null` মানে *"এই সীমাটা নেই"* — সে কখনো জেতে না, ফলে
- * জানালা পুরো মাস জুড়ে খুলে যেত আর **প্রত্যাশা আজকের চেয়েও বেশি** হতো।
+ * Someone with no session at all is **not put in the Map**. In `maxDate()` in
+ * `summary.math.ts`, `null` means *"this bound does not exist"*; it never
+ * wins, so the window would open across the whole month and **expectation
+ * would be higher than today's**.
  *
- * ⭐ তাই `elapsedWindow()`-এ পাঠানোর সময় কলার লেখে **`?? today`** — জানালা
- * খালি, প্রত্যাশা ০, *"তাকে এখনো দেখাই হয়নি"*।
- * ⚠️ ব্যতিক্রম `dashboard`-এর `TrendStaff.trackedFrom`, যেখানে `null`-এর
- * অর্থ **উল্টো** (কখনো দেখা হয়নি ⇒ প্রত্যাশা ০) — ওখানে `?? null`-ই থাকে।
+ * So when passing to `elapsedWindow()` the caller writes **`?? today`**: empty
+ * window, expectation 0, *"we have not started watching them yet"*.
+ * The exception is `TrendStaff.trackedFrom` in `dashboard`, where `null` means
+ * the **opposite** (never watched => expectation 0); there it stays `?? null`.
  */
 export async function trackedFromBy(
   prisma: PrismaService,
@@ -50,9 +52,10 @@ export async function trackedFromBy(
   if (employeeIds.length === 0) return new Map();
 
   /**
-   * ⚠️ **মাস দিয়ে ছাঁকা হয় না** — ইচ্ছাকৃত। প্রশ্নটা *"এই মাসে ডেটা আছে
-   * কি"* নয়, *"তাকে কবে থেকে দেখছি"*। ছাঁকলে প্রতি মাসের ১ তারিখে
-   * ট্র্যাকিং নতুন করে শুরু হতো, আর প্রত্যাশা চিরকাল ভুল কাটা পড়ত।
+   * Careful: **not filtered by month**, deliberately. The question is not
+   * *"is there data this month"* but *"since when have we been watching
+   * them"*. Filtering would restart tracking on the 1st of every month and
+   * expectation would be wrongly cut forever.
    */
   const rows = await prisma.workSession.groupBy({
     by: ['employeeId'],

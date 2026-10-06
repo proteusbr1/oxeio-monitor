@@ -14,15 +14,17 @@ import {
 } from './setup/harness';
 
 /**
- * **R21** — এই কর্মীর জামানত **কোন মাস থেকে** কাটা শুরু।
+ * **R21** — the month from which this staff member's deposit deduction starts.
  *
- * ⚠️⚠️ এতদিন শুরুর মাস ছিল গোটা অফিসের জন্য একটাই। কিন্তু কর্মীরা আলাদা
- * সময়ে যোগ দেন, আর কারো কাটা শুরু হয়েছিল অন্য মাস থেকে — সেটা বলার কোনো
- * জায়গাই ছিল না, তাই খাতা ভুল থাকত আর ঠিক করার উপায়ও ছিল না।
+ * Careful: the start month used to be a single value for the whole office.
+ * But staff join at different times, and some had deductions begin in another
+ * month, with nowhere to record that. The ledger was wrong and there was no
+ * way to correct it.
  *
- * ⭐⭐ এই ফাইলের সবচেয়ে জরুরি দাবি: **মাস এগিয়ে দিলে আগের ভুল কিস্তি
- * মুছে যায়।** না মুছলে "সংশোধন" করেও খাতায় ভুলটা রয়ে যেত, আর মালিক
- * ভাবতেন সেভই হয়নি।
+ * The most important claim in this file: moving the month forward removes the
+ * earlier wrong instalments. If they were not removed, even after a
+ * "correction" the ledger would still hold the mistake, and the owner would
+ * think the save had not worked.
  */
 let h: Harness;
 let owner: Session;
@@ -78,11 +80,11 @@ const months = () =>
     select: { yearMonth: true },
   });
 
-/** খাতা ভরাতে তালিকাটা একবার ডাকা — `balances()` নিজেই `ensureLedger()` চালায় */
+/** Calls the list once to fill the ledger — `balances()` itself runs `ensureLedger()` */
 const fillLedger = () => owner.http.get('/api/v1/deposits').expect(200);
 
 describe('PATCH /deposits/:id/start', () => {
-  it('না বসালে নিয়মের শুরুর মাস থেকেই খাতা ভরে', async () => {
+  it('without an override, the ledger fills from the rule\'s start month', async () => {
     await fillLedger();
 
     const rows = await months();
@@ -90,10 +92,10 @@ describe('PATCH /deposits/:id/start', () => {
   });
 
   /**
-   * ⭐⭐ **এই ফাইলের মূল টেস্ট।** মাস এগিয়ে দিলে আগের কিস্তি মুছে যায় —
-   * নইলে ভুল সংশোধনের কোনো মানেই থাকে না।
+   * The core test of this file. Moving the month forward removes the earlier
+   * instalments — otherwise correcting a mistake would be meaningless.
    */
-  it('মাস এগিয়ে দিলে আগের কিস্তি মুছে যায়', async () => {
+  it('moving the month forward removes the earlier instalments', async () => {
     await fillLedger();
     expect((await months())[0].yearMonth).toBe(POLICY_START);
 
@@ -103,7 +105,7 @@ describe('PATCH /deposits/:id/start', () => {
     expect((await months())[0].yearMonth).toBe('2026-05');
   });
 
-  it('মাস পিছিয়ে দিলে আগের মাসগুলোও যোগ হয়', async () => {
+  it('moving the month back adds the earlier months too', async () => {
     await setStart('2026-06').expect(200);
     await fillLedger();
     expect((await months())[0].yearMonth).toBe('2026-06');
@@ -114,8 +116,8 @@ describe('PATCH /deposits/:id/start', () => {
     expect((await months())[0].yearMonth).toBe('2026-02');
   });
 
-  /** ⭐ `null` — নিয়মের সাধারণ মাসে ফেরত, আর সেটাও একটা বৈধ কাজ */
-  it('null দিলে নিয়মের মাসে ফিরে যায়', async () => {
+  /** `null` — back to the rule's normal month, which is also a valid action */
+  it('null returns to the rule\'s month', async () => {
     await setStart('2026-06').expect(200);
     await setStart(null).expect(200);
     await fillLedger();
@@ -125,7 +127,7 @@ describe('PATCH /deposits/:id/start', () => {
     expect(row.depositStartYearMonth).toBeNull();
   });
 
-  it('তালিকায় বেছে দেওয়া ও কার্যকর — দুটোই আসে', async () => {
+  it('the list returns both the chosen and the effective month', async () => {
     await setStart('2026-04').expect(200);
 
     const res = await owner.http.get('/api/v1/deposits').expect(200);
@@ -137,11 +139,11 @@ describe('PATCH /deposits/:id/start', () => {
   });
 
   /**
-   * ⭐⭐ **যোগদানের তারিখের উপরেও মালিকের কথাই চলে।** `joined_on` প্রায়ই
-   * অনুমান বা ফাঁকা; এই ঘরটা মালিক নিজে বেছে দেন — অনুমান বিবৃতিকে
-   * হারালে সংশোধন করেও কিছু বদলাত না, আর কেন তা বোঝা যেত না।
+   * The owner's word also beats the joining date. `joined_on` is often a guess
+   * or empty; the owner picks this field personally, so if a guess beat a
+   * statement, a correction would change nothing and nobody could tell why.
    */
-  it('joined_on-এর চেয়ে মালিকের বেছে দেওয়া মাসই চলে', async () => {
+  it('the owner\'s chosen month beats joined_on', async () => {
     await h.prisma.employee.update({
       where: { id: employeeId },
       data: { joinedOn: new Date('2026-07-01T00:00:00.000Z') },
@@ -153,26 +155,26 @@ describe('PATCH /deposits/:id/start', () => {
     expect((await months())[0].yearMonth).toBe('2026-03');
   });
 
-  it('ভুল ধাঁচ ৪০০', async () => {
+  it('wrong shape gives 400', async () => {
     await setStart('2026/03').expect(400);
     await setStart('March').expect(400);
   });
 
-  /** ⚠️ ভবিষ্যতের মাস দিলে খাতা চুপচাপ খালি হয়ে যেত */
-  it('ভবিষ্যতের মাস ৪০০', async () => {
+  /** A future month would silently leave the ledger empty */
+  it('a future month gives 400', async () => {
     await setStart('2099-01').expect(400);
   });
 
-  /** ⚠️⚠️ নিষ্পত্তি হয়ে গেলে খাতা বন্ধ — মিটে যাওয়া হিসাব নাড়ানো যাবে না */
-  it('নিষ্পত্তি হয়ে গেলে বদলানো যায় না', async () => {
+  /** Once settled the ledger is closed — a settled account must not be moved */
+  it('cannot be changed after settlement', async () => {
     await fillLedger();
     await h.prisma.depositSettlement.create({
       data: {
         employeeId,
         outcome: 'refunded',
         amountPaisa: 50_000,
-        // ⚠️ বাধ্যতামূলক — নিষ্পত্তির সময় নিয়মটা কত দিনের ছিল, সেটাও
-        //    সারিতেই লেখা থাকে (নিয়ম পরে বদলালেও ইতিহাস নড়ে না)
+        // Required — the number of days the rule specified at settlement time is
+        // also stored in the row (history does not move if the rule changes later)
         noticeDaysRule: 30,
         settledBy: 'owner@test',
       },
@@ -184,12 +186,12 @@ describe('PATCH /deposits/:id/start', () => {
     expect(res.body.message).toMatch(/settled/i);
   });
 
-  it('অচেনা কর্মী ৪০৪', async () => {
+  it('unknown staff member gives 404', async () => {
     await setStart('2026-05', 999_999).expect(404);
   });
 
-  /** ⚠️ জামানত সরাসরি বেতনের অংশ — ম্যানেজারও নয় (ADR-023 · ADR-027) */
-  it('ম্যানেজার পারেন না', async () => {
+  /** The deposit is directly part of pay — not even the manager may (ADR-023, ADR-027) */
+  it('a manager cannot', async () => {
     const manager = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
 
     await manager.http
@@ -199,7 +201,7 @@ describe('PATCH /deposits/:id/start', () => {
       .expect(403);
   });
 
-  it('একই মাস আবার বসালে কিছুই বদলায় না', async () => {
+  it('setting the same month again changes nothing', async () => {
     await setStart('2026-05').expect(200);
 
     const res = await setStart('2026-05').expect(200);
@@ -207,7 +209,7 @@ describe('PATCH /deposits/:id/start', () => {
     expect(res.body).toEqual({ removed: 0, added: 0 });
   });
 
-  it('বদলটা audit log-এ ওঠে', async () => {
+  it('the change appears in the audit log', async () => {
     await setStart('2026-05').expect(200);
 
     const row = await h.prisma.auditLog.findFirstOrThrow({

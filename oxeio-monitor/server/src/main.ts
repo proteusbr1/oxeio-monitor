@@ -14,31 +14,31 @@ import { ReportingLogger } from './error-reporting/reporting-logger';
 import { REGION_SETTING_KEY } from './settings/region-key';
 
 /**
- * I01 — TLS চালু করার সিদ্ধান্ত।
+ * I01 — the decision to turn TLS on.
  *
- * ⭐ এই কাজটা `NestFactory.create()`-এর **আগেই** করতে হয়, কারণ Node-এর
- * HTTP আর HTTPS সার্ভার দুটো আলাদা জিনিস — সার্ভার তৈরি হয়ে যাওয়ার পর
- * "এখন থেকে TLS" বলার কোনো উপায় নেই। তাই এখানে `ConfigService` ব্যবহার
- * করা যায় না (সে DI কনটেইনারের ভেতরে, আর কনটেইনার তখনো নেই) — সরাসরি
- * `process.env` পড়া হয়। ⚠️ ফলে এই দুটো চলক `.env`-এ থাকলেও কাজ করবে না
- * যদি না প্রসেসের পরিবেশে আসে; docker-compose বা systemd থেকেই দিতে হবে।
+ * This must happen **before** `NestFactory.create()`: Node's HTTP and HTTPS
+ * servers are different things, and once the server exists there is no way to
+ * say "TLS from now on". So `ConfigService` cannot be used here (it lives in the
+ * DI container, which does not exist yet); `process.env` is read directly.
+ * Careful: the two variables therefore do nothing from `.env` unless they reach
+ * the process environment; they must come from docker-compose or systemd.
  *
- * তিনটে অবস্থা, ইচ্ছাকৃতভাবেই আলাদা:
+ * Three states, deliberately distinct:
  *
- * ১· **দুটোই খালি** → HTTP। ডেভেলপমেন্টে সার্ট বানানোর ঝামেলা নেই, আর
- *    আগের আচরণ হুবহু অক্ষত থাকে।
+ * 1. **Both empty** → HTTP. No hassle making certs in development, and the
+ *    previous behaviour stays exactly as it was.
  *
- * ২· **দুটোই দেওয়া** → HTTPS।
+ * 2. **Both set** → HTTPS.
  *
- * ৩· **একটা দেওয়া, আরেকটা নয়** → প্রসেস উঠবেই না।
+ * 3. **One set, the other not** → the process refuses to start.
  *
- * ⚠️ তৃতীয় অবস্থাটায় "যা পেয়েছি তাই দিয়ে চালাই" বা "HTTP-তে নেমে যাই"
- * করা হয়নি, আর এটাই এখানকার সবচেয়ে গুরুত্বপূর্ণ সিদ্ধান্ত। প্রোডাকশনে
- * নীরবে HTTP-তে নেমে গেলে সার্ভার দিব্যি চলত, ড্যাশবোর্ড খুলত, আর
- * এজেন্টগুলো তাদের **ডিভাইস টোকেন প্লেইনটেক্সটে** LAN-এ পাঠাতে থাকত —
- * অফিসের যেকোনো মেশিন থেকে ধরে ফেলা যায়। কেউ টের পেত না, কারণ বাইরে থেকে
- * সবকিছু কাজ করছে বলেই মনে হতো। একটা টাইপো (`TLS_KEY` বনাম `TLS_KEYFILE`)
- * এভাবে মাসের পর মাস নিরাপত্তা ফুটো করে রাখতে পারত।
+ * Important: in the third state we do not "run with what we have" or "fall back
+ * to HTTP"; this is the key decision here. A silent fall back to HTTP in
+ * production would leave the server running, the dashboard opening, and the
+ * agents sending their **device tokens in plaintext** over the LAN, where any
+ * machine in the office could capture them. Nobody would notice, because
+ * everything would look fine from outside. One typo (`TLS_KEY` vs
+ * `TLS_KEYFILE`) could leave a security hole open for months.
  */
 function loadTlsOptions(): { key: Buffer; cert: Buffer } | undefined {
   const certPath = process.env.TLS_CERT?.trim();
@@ -54,9 +54,9 @@ function loadTlsOptions(): { key: Buffer; cert: Buffer } | undefined {
     );
   }
 
-  // ⚠️ readFileSync — ইচ্ছাকৃতভাবে synchronous। এটা প্রসেসের জীবনে একবারই
-  //    চলে, এবং ব্যর্থ হলে সার্ভার ওঠার কোনো মানেই নেই। async করলে ভুলটা
-  //    পরে, অন্য কোথাও ধরা পড়ত।
+  // Careful: readFileSync is synchronous on purpose. It runs once in the life of
+  // the process, and if it fails there is no point starting the server. With
+  // async the mistake would surface later, somewhere else.
   const read = (label: string, path: string): Buffer => {
     try {
       return readFileSync(path);
@@ -133,22 +133,22 @@ async function bootstrap(): Promise<void> {
   const port = config.get<number>('PORT', 3000);
   await app.listen(port, '0.0.0.0');
 
-  // ⚠️ scheme-টা লগে থাকা দরকার। "সার্ভার চলছে" দেখে অ্যাডমিন ধরে নিতে
-  //    পারতেন TLS চালু আছে; কোন প্রোটোকলে চলছে সেটা লেখা না থাকলে ভুলটা
-  //    ধরা পড়ত এজেন্ট সংযোগ করতে না পারার দিন।
+  // Careful: the scheme must be in the log. From "server is running" an admin
+  // could assume TLS is on; without the protocol written down, the mistake would
+  // only surface on the day an agent fails to connect.
   app
     .get(Logger)
     .log(`oXeio API ${httpsOptions ? 'https' : 'http'}://0.0.0.0:${port}`);
 }
 
-// ⚠️ ধরা না পড়া rejection Node-এ কুৎসিত স্ট্যাক ট্রেস দিয়ে মরে, আর
-//    ১৫টা PC-র মালিক সেটা পড়ে কিছুই বোঝেন না। TLS-এর ভুল কনফিগ এখানে
-//    এসেই থামে — এক লাইনের পরিষ্কার কারণ, তারপর exit 1 (docker
-//    `restart: unless-stopped` যেন অসীমবার চেষ্টা না করে সেটাও এতে বোঝা যায়)।
+// Careful: an uncaught rejection kills Node with an ugly stack trace, and the
+// owner of the 15 PCs cannot make sense of it. A misconfigured TLS stops here:
+// one clear line, then exit 1 (this also makes it clear why docker's
+// `restart: unless-stopped` should not retry forever).
 void bootstrap().catch((error: unknown) => {
   const why = error instanceof Error ? error.message : String(error);
-  // ⚠️ `console` — pino logger নয়। এই পর্যায়ে DI কনটেইনার ভেঙে পড়া
-  //    থাকতে পারে, অর্থাৎ logger-টাই হয়তো নেই।
+  // Careful: `console`, not the pino logger. At this stage the DI container may
+  // have collapsed, so the logger itself may not exist.
   console.error(`oXeio API failed to start: ${why}`);
   process.exit(1);
 });

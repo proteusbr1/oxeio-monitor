@@ -6,25 +6,25 @@ import { overlapSec, unionSec, type Span } from '../summary/summary.math';
 import { shouldFlagOverlap } from './alerts.rules';
 import { AlertsService, type RaiseInput } from './alerts.service';
 
-/** জমানোর সময় লাগে; `DeviceSpans`-এর `spans` readonly, তাই আলাদা টাইপ */
+/** Needed while accumulating; `DeviceSpans.spans` is readonly, hence a separate type */
 interface MutableDeviceSpans {
   deviceId: number;
   spans: Span[];
 }
 
 /**
- * **G32** — একই স্টাফের দুটো ডিভাইস একই সময়ে চলছে।
+ * **G32**: two devices of the same staff member running at the same time.
  *
- * ⚠️⚠️ এতদিন `device_overlap` ছিল **নাম মাত্র**: টাইপের ইউনিয়নে ছিল,
- * ওয়েবের ফিল্টারে ছিল, ops-এর লেবেলে ছিল, স্পেকের তিন জায়গায় "অ্যালার্ট
- * উঠবে" লেখা ছিল — কিন্তু **তোলার কোড কোথাও ছিল না**। অর্থাৎ ফিল্টারটা
- * এমন এক ধরনের অ্যালার্ট বেছে নিত যেটা কোনোদিন তৈরিই হয়নি।
+ * Until now `device_overlap` existed **in name only**: it was in the type
+ * union, in the web filter, in ops' labels, and "an alert will be raised" was
+ * written in three places in the spec, but **no code anywhere raised it**. So
+ * the filter selected a kind of alert that had never been created.
  *
- * ⭐ <b>এটা কারো বিরুদ্ধে অভিযোগ নয়</b>, আর সেটা এই ক্লাসের বার্তাগুলোতেও
- * সাবধানে রাখা হয়েছে। ঘণ্টার হিসাবে overlap-এর কোনো প্রভাব পড়ে না —
- * `worked_sec` এমনিতেই UNION (§ ২.১-গ), তাই সময় দুবার গোনা হয় না।
- * স্পেক বলে সাধারণ কারণ দুটো: এক PC দুজন ব্যবহার করছে, অথবা কোনো
- * ভুলে-ফেলে-রাখা মেশিন চালু আছে। দুটোই ব্যবস্থাপনার তথ্য, বিচারের নয়।
+ * <b>This is not an accusation against anyone</b>, and the messages in this
+ * class are worded carefully to say so. Overlap has no effect on the hours:
+ * `worked_sec` is a UNION anyway (§ 2.1(c)), so time is not counted twice. The
+ * spec names two common causes: one PC used by two people, or a forgotten
+ * machine left on. Both are management information, not judgment.
  */
 @Injectable()
 export class DeviceOverlapCheck {
@@ -39,14 +39,14 @@ export class DeviceOverlapCheck {
     const workDate = workDateOf(now);
 
     /**
-     * ⚠️ `daily_summary` নয়, কাঁচা `activity_segments` — কারণ সারাংশে
-     * ডিভাইসের ভাগটাই নেই (`daily_summary`-র প্রাইমারি কী employee + date)।
-     * ওখান থেকে `active_sec − worked_sec` কষা যেত, কিন্তু সেটা ভুল হিসাব —
-     * কেন, তা `overlapSec()`-এর ডকে।
+     * Raw `activity_segments`, not `daily_summary`, because the summary has no
+     * per-device split (its primary key is employee + date). One could compute
+     * `active_sec - worked_sec` from it, but that is the wrong calculation; see
+     * the doc of `overlapSec()` for why.
      *
-     * ⚠️ শুধু `countsAsWork` — idle বা locked খণ্ড দুই মেশিনে একসাথে
-     * থাকাটা একেবারেই স্বাভাবিক (একটা মেশিন লক করা পড়ে আছে), ওটা নিয়ে
-     * কাউকে জানানোর কিছু নেই।
+     * Only `countsAsWork`: idle or locked segments on two machines at once are
+     * perfectly normal (one machine is just sitting locked), and there is
+     * nothing to tell anyone about that.
      */
     const segments = await this.prisma.activitySegment.findMany({
       where: { workDate, countsAsWork: true },
@@ -61,11 +61,12 @@ export class DeviceOverlapCheck {
 
     if (segments.length === 0) return 0;
 
-    // employee → device → খণ্ডগুলো
+    // employee -> device -> segments
     //
-    // ⚠️ গোছানোটা এখানে, SQL-এ নয়। `GROUP BY` দিয়ে overlap বের করতে হলে
-    //    উইন্ডো ফাংশনে interval merge লিখতে হতো — সেটা পরীক্ষা করা যেত
-    //    শুধু ডাটাবেস সহ, আর ভুল হলে ফল সরাসরি কারো নামে অ্যালার্ট।
+    // Careful: the grouping happens here, not in SQL. Computing overlap with
+    // `GROUP BY` would need an interval merge in window functions, which could
+    // be tested only with a database, and a mistake would put an alert
+    // straight onto someone's name.
     const byEmployee = new Map<number, Map<number, MutableDeviceSpans>>();
 
     for (const s of segments) {
@@ -88,7 +89,7 @@ export class DeviceOverlapCheck {
       [];
 
     for (const [employeeId, devices] of byEmployee) {
-      // একটাই ডিভাইস — গোটা হিসাবটাই এড়ানো যায়
+      // Only one device: the whole calculation can be skipped
       if (devices.size < 2) continue;
 
       const list = [...devices.values()];
@@ -110,7 +111,7 @@ export class DeviceOverlapCheck {
 
     if (flagged.length === 0) return 0;
 
-    // নাম ছাড়া বার্তাটা পড়ে কেউ কিছু করতে পারত না
+    // Without names nobody could act on the message
     const names = new Map(
       (
         await this.prisma.employee.findMany({
@@ -130,10 +131,10 @@ export class DeviceOverlapCheck {
         type: 'device_overlap' as const,
         severity: 'warning' as const,
         /**
-         * ⚠️ `deviceId` ইচ্ছাকৃতভাবে null — ঘটনাটা **দুটো** ডিভাইসের,
-         * একটার নয়। যেকোনো একটাকে বেছে নিলে throttle-এর key ওই ডিভাইসের
-         * সাথে বাঁধা পড়ত, আর পরের ঘণ্টায় অন্যটা বেছে নিলে একই দিনের
-         * একই ঘটনায় দ্বিতীয় অ্যালার্ট বসত।
+         * `deviceId` is deliberately null: the event belongs to **both**
+         * devices, not one. Picking either would tie the throttle key to that
+         * device, and if the other were picked in the next hour the same
+         * event on the same day would raise a second alert.
          */
         deviceId: null,
         employeeId: f.employeeId,

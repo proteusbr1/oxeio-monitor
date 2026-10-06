@@ -14,14 +14,14 @@ import {
 } from './setup/harness';
 
 /**
- * **R21 — সিকিউরিটি মানি (জামানত)।**
+ * **R21 — security money (deposit).**
  *
- * মালিকের কথা *(১৫ আগস্ট)*: প্রতি মাসে ৫০০ টাকা কেটে রাখা হয়, আর কেউ
- * ৩০ দিন আগে জানিয়ে ছাড়লে পুরোটা ফেরত পান।
+ * The owner's rule (15 August): 500 taka is held back every month, and anyone
+ * who leaves with 30 days' notice gets all of it back.
  *
- * ⚠️ এখানকার টেস্টগুলো টাকার, তাই প্রশ্নগুলোও টাকার: **দুবার কাটা হয় কি
- * না**, **যোগ দেওয়ার আগের মাসে কাটা হয় কি না**, আর **নিয়ম বদলালে
- * পুরোনো কিস্তি নড়ে কি না**।
+ * This is money, so the questions are about money: is anything deducted
+ * twice, is anything deducted for a month before the person joined, and do
+ * old instalments stay put when the rule changes.
  */
 let h: Harness;
 let owner: Session;
@@ -34,7 +34,7 @@ afterAll(async () => {
   await h.close();
 });
 
-/** ঢাকার চলতি মাস — টেস্টের প্রত্যাশাও এটার সাথে মেলে */
+/** The current Dhaka month — the tests' expectations match it */
 const thisMonth = dhakaNoon().toISOString().slice(0, 7);
 
 /** '2026-09' → '2026-08' */
@@ -49,8 +49,8 @@ beforeEach(async () => {
   owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
   /**
-   * ⚠️ `resetDatabase` টেবিল খালি করে, তাই migration-এ বসানো নিয়মের
-   * সারিটাও চলে যায় — প্রতিটা টেস্টে নতুন করে বসাতে হয়।
+   * `resetDatabase` empties the tables, so the rule row inserted by the
+   * migration goes too — it has to be re-inserted in every test.
    */
   await h.prisma.depositPolicy.upsert({
     where: { id: 1 },
@@ -95,8 +95,8 @@ const balances = async () => {
   };
 };
 
-describe('জামানতের খাতা', () => {
-  it('চলতি মাসে একজনের একটাই কিস্তি বসে', async () => {
+describe('the deposit ledger', () => {
+  it('a person gets exactly one instalment in the current month', async () => {
     const staff = await addStaff('Jomanot Ek');
 
     const { rows, policy } = await balances();
@@ -108,10 +108,10 @@ describe('জামানতের খাতা', () => {
   });
 
   /**
-   * ⭐⭐ **এই টেস্টটাই সবচেয়ে জরুরি।** খাতাটা পাতা খোলার সময় তৈরি হয়,
-   * কোনো cron-এ নয় — তাই "দুবার খুললে দুবার কাটা" ঠিক এখানেই ঘটতে পারত।
+   * The most important test. The ledger is created when a page is opened, not
+   * by a cron job, so "opened twice, deducted twice" could happen right here.
    */
-  it('⭐ বারবার খাতা খুললেও জমা বাড়ে না', async () => {
+  it('opening the ledger repeatedly does not increase the balance', async () => {
     const staff = await addStaff('Bar Bar');
 
     await balances();
@@ -123,8 +123,8 @@ describe('জামানতের খাতা', () => {
     expect(row?.balance).toBe('500.00');
   });
 
-  it('⚠️ যোগ দেওয়ার আগের মাসে কিস্তি বসে না', async () => {
-    // নিয়ম শুরু চলতি মাসে, আর ইনি যোগ দিয়েছেন পরের মাসে — একটাও নয়
+  it('no instalment is created for a month before the person joined', async () => {
+    // The rule starts this month and this person joins next month — none at all
     const nextMonthDate = `${nextMonthOf(thisMonth)}-05`;
     const staff = await addStaff('Pore Joge Diyechen', nextMonthDate);
 
@@ -136,14 +136,14 @@ describe('জামানতের খাতা', () => {
   });
 
   /**
-   * ⚠️⚠️ নিয়মের অঙ্ক বদলালে **পুরোনো কিস্তি বদলায় না** — কারণ প্রতিটা
-   * সারিতে ওই মাসের অঙ্কটা লেখা থাকে। উল্টোটা হলে আজ ৬০০ করলে গত
-   * মাসগুলোর জমাও পিছন ফিরে বেড়ে যেত, আর খাতা এমন টাকা দাবি করত যা
-   * কেউ কোনোদিন দেননি।
+   * Changing the rule's amount does not change old instalments, because each
+   * row stores that month's amount. Otherwise setting 600 today would push up
+   * the deposits of past months retroactively, and the ledger would claim
+   * money nobody ever paid.
    */
-  it('⭐⭐ অঙ্ক বদলালে আগের মাসের কিস্তি অটুট থাকে', async () => {
+  it('changing the amount leaves earlier months\' instalments intact', async () => {
     const staff = await addStaff('Purono Kisti');
-    await balances(); // চলতি মাসের কিস্তিটা ৫০০-তে বসে গেল
+    await balances(); // the current month's instalment is now fixed at 500
 
     await owner.http
       .patch('/api/v1/deposits/policy')
@@ -155,11 +155,11 @@ describe('জামানতের খাতা', () => {
     const row = rows.find((r) => r.employeeId === staff.id);
 
     expect(policy.amount).toBe('600.00');
-    // ⭐ নতুন অঙ্ক নতুন মাস থেকে — এই মাসেরটা ৫০০-ই
+    // The new amount applies from the new month — this month's is still 500
     expect(row?.balance).toBe('500.00');
   });
 
-  it('নিয়ম বন্ধ করলে নতুন কিস্তি বসে না, পুরোনো জমা থাকে', async () => {
+  it('switching the rule off adds no new instalments and keeps old deposits', async () => {
     const staff = await addStaff('Bondho Niyom');
     await balances();
 
@@ -174,8 +174,8 @@ describe('জামানতের খাতা', () => {
   });
 });
 
-describe('নিষ্পত্তি — ফেরত না বাজেয়াপ্ত', () => {
-  it('⭐ ৩০ দিনের নোটিশ হলে ফেরত, আর হিসাবটা সারিতে লেখা থাকে', async () => {
+describe('settlement — refund or forfeit', () => {
+  it('with 30 days\' notice it is refunded, and the calculation is stored in the row', async () => {
     const staff = await addStaff('Niyom Mene');
     await balances();
 
@@ -196,11 +196,11 @@ describe('নিষ্পত্তি — ফেরত না বাজেয়
   });
 
   /**
-   * ⭐ নিয়ম না মিললেও মালিক ফেরত দিতে **পারেন** — সিদ্ধান্তটা তাঁরই।
-   * সিস্টেম শুধু হিসাবটা লিখে রাখে, আটকায় না। ব্যতিক্রম সবসময়ই থাকে,
-   * আর সেগুলো কোনো `if`-এ ধরা যায় না।
+   * The owner may refund even when the rule is not met — the decision is
+   * theirs. The system only records the calculation and does not block.
+   * Exceptions always exist, and no `if` can capture them.
    */
-  it('⭐ নিয়ম না মিললেও মালিক ফেরত দিতে পারেন — শুধু হিসাবটা লেখা থাকে', async () => {
+  it('the owner may refund even if the rule is not met — the calculation is just recorded', async () => {
     const staff = await addStaff('Byatikrom');
     await balances();
 
@@ -220,7 +220,7 @@ describe('নিষ্পত্তি — ফেরত না বাজেয়
     expect(res.body.note).toBe('হাসপাতালে ভর্তি ছিলেন');
   });
 
-  it('⚠️ দ্বিতীয়বার নিষ্পত্তি করা যায় না — ৪০৯', async () => {
+  it('a second settlement is not allowed — 409', async () => {
     const staff = await addStaff('Dubar Noy');
     await balances();
 
@@ -237,7 +237,7 @@ describe('নিষ্পত্তি — ফেরত না বাজেয়
       .expect(409);
   });
 
-  it('নিষ্পত্তির পরে নতুন কিস্তি আর বসে না', async () => {
+  it('no new instalments are created after settlement', async () => {
     const staff = await addStaff('Khata Bondho');
     await balances();
 
@@ -254,7 +254,7 @@ describe('নিষ্পত্তি — ফেরত না বাজেয়
     expect(row?.settlement?.outcome).toBe('refunded');
   });
 
-  it('⚠️ outcome-এ অন্য কিছু পাঠালে ৪০০', async () => {
+  it('anything else as outcome gives 400', async () => {
     const staff = await addStaff('Bhul Outcome');
 
     await owner.http
@@ -265,11 +265,11 @@ describe('নিষ্পত্তি — ফেরত না বাজেয়
   });
 });
 
-describe('কে দেখতে পান', () => {
+describe('who can see it', () => {
   /**
-   * ⚠️⚠️ জামানত সরাসরি বেতনের অংশ, তাই ম্যানেজারও নয় (ADR-023 · ADR-027)।
+   * The deposit is directly part of pay, so not even the manager (ADR-023, ADR-027).
    */
-  it('ম্যানেজার জামানতের পাতায় ঢুকতে পারেন না — ৪০৩', async () => {
+  it('a manager cannot open the deposit page — 403', async () => {
     const manager = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
 
     await manager.http.get('/api/v1/deposits').expect(403);
@@ -281,14 +281,14 @@ describe('কে দেখতে পান', () => {
   });
 
   /**
-   * ⭐⭐ স্টাফ **নিজের** জমা দেখেন, আর সেটা বেতনের নিয়ম ভাঙে না — অঙ্কটা
-   * তাঁর নিজের টাকা, বেতনের হিসাব নয়।
+   * Staff see their own deposit, and that does not break the pay rules — the
+   * amount is their own money, not part of the pay calculation.
    */
-  it('⭐ স্টাফ নিজের জমা দেখেন, মাস ধরে', async () => {
+  it('staff see their own deposit, month by month', async () => {
     const staff = await addStaff('Nijer Jomma');
     await balances();
 
-    // ⚠️ পাসওয়ার্ডটা সার্ভার বানায় আর একবারই ফেরত দেয় — অনুমান করা যায় না
+    // The server generates the password and returns it only once — it cannot be guessed
     const account = await owner.http
       .post(`/api/v1/employees/${staff.id}/portal-account`)
       .set('X-CSRF-Token', owner.csrf)
@@ -309,8 +309,8 @@ describe('কে দেখতে পান', () => {
   });
 });
 
-describe('পে-রোলের শিটে', () => {
-  it('⭐ প্রদেয় থেকে ৫০০ কেটে নিট দেখায়, আর দুটো সংখ্যাই থাকে', async () => {
+describe('on the payroll sheet', () => {
+  it('shows net after deducting 500 from payable, and both numbers are present', async () => {
     const staff = await addStaff('Payroll Kata');
     await balances();
 
@@ -322,11 +322,11 @@ describe('পে-রোলের শিটে', () => {
       (r) => r.employeeId === staff.id,
     );
 
-    // ⚠️ rollup না থাকলে সারিটাই থাকে না — তখন এই টেস্টের বলার কিছু নেই
+    // Without a rollup there is no row at all — then this test has nothing to say
     if (!row) return;
 
     expect(row.securityDeposit).toBe('500.00');
-    // নিট = প্রদেয় − ৫০০, আর দুটো সংখ্যাই আলাদা করে থাকে
+    // net = payable - 500, and both numbers are kept separately
     expect(Number(row.netPayable)).toBeCloseTo(Number(row.payable) - 500, 2);
   });
 
@@ -379,34 +379,36 @@ function nextMonthOf(ym: string): string {
 }
 
 /**
- * ⭐⭐⭐ **বসে যাওয়া কিস্তির অঙ্ক সংশোধন** *(৫ সেপ্টেম্বর ২০২৬)*।
+ * Correcting the amount of an already-created instalment (5 September 2026).
  *
- * ⚠️⚠️ **মাঠে ধরা পড়েছে, আর প্রশ্নটা এসেছে মালিকের কাছ থেকে:**
- * *"Saifur OX-10 2 mase 500 joma dekhacche keno?"* — একটা মাসের কিস্তি
- * ৳০-তে বসে ছিল, তাই পাতা দেখাত *"2 months held · ৳500"*। দুটোই সত্যি,
- * একসাথে পড়লে অর্থহীন।
+ * Found in the field, raised by the owner: "why does Saifur OX-10 show 500
+ * deposited for 2 months?" One month's instalment had been created at 0, so
+ * the page showed "2 months held · 500". Both facts were true, and read
+ * together they made no sense.
  *
- * ⚠️⚠️ **আর সেটা ঠিক করার কোনো পথই ছিল না।** `ensureLedger()` চলে
- * `createMany({ skipDuplicates: true })` দিয়ে, তাই বিদ্যমান সারি কখনো
- * হালনাগাদ হয় না — আর সেটা ইচ্ছাকৃত (নিয়মের অঙ্ক বদলালে পুরোনো মাস ফিরে
- * লেখা হয় না)। শেষমেশ সারানো গেছে একটা **কৌশলে** (শুরুর মাস এগিয়ে দিয়ে
- * সারিটা মুছে, তারপর নিয়মে ফিরিয়ে নতুন করে বসিয়ে), যেটা কেবল **শুরুর
- * দিকের** মাসে খাটে আর কোথাও লেখাও ছিল না।
+ * There was also no way to fix it. `ensureLedger()` uses
+ * `createMany({ skipDuplicates: true })`, so existing rows are never updated,
+ * and that is deliberate (changing the rule's amount must not rewrite old
+ * months). It was eventually repaired with a trick: move the start month
+ * forward to delete the row, then move it back so it is re-created. That only
+ * works for months at the start of the range, and was not written down
+ * anywhere.
  */
 /**
- * ⭐⭐⭐ **বন্ধ মাসে খাতা নড়ে না — দু-দিকেই** *(৬ সেপ্টেম্বর ২০২৬, G158 · R1)*।
+/**
+ * A closed month does not move in either direction (6 September 2026).
  *
- * ⚠️⚠️ **যে ফাঁকটা এই describe-টা পাহারা দেয়:** টাকার প্রতিটা পথ বন্ধ মাস
- * ছুঁতে অস্বীকার করে — `correctInstalment()` · সময়-সংশোধন · ছুটি · rollup ·
- * বেতনের ইতিহাস — কেবল `ensureLedger()` করত না। অথচ ওটাই সবচেয়ে বেশি চলে:
- * Deposits পাতা · কর্মীর নিজের `/me/deposit` · **আর পে-রোল শিট নিজেই**।
+ * The gap this describe guards: every money path refuses to touch a closed
+ * month — `correctInstalment()`, time adjustments, leave, rollup, pay history
+ * — except `ensureLedger()`. Yet that is the one that runs most: the Deposits
+ * page, the staff member's own `/me/deposit`, and the payroll sheet itself.
  *
- * ⚠️ ফলে বন্ধ মাসে একটা ফাঁক থাকলে পরের যেকোনো পাতা-লোডে ওই মাসে ৳৫০০
- * ঢুকে যেত — কাগজ বেরিয়ে যাওয়ার **পরে**। খাতা বলত টাকাটা কাটা হয়েছে,
- * অথচ বেতনের কাগজে সেটা নেই।
+ * So a gap in a closed month would get 500 inserted into that month on any
+ * later page load, after the paper had gone out. The ledger would say the
+ * money was deducted while the pay slip did not show it.
  */
-describe('বন্ধ মাসে খাতা নড়ে না', () => {
-  it('⭐ বন্ধ মাসে নতুন কিস্তি বসে না', async () => {
+describe('a closed month does not move the ledger', () => {
+  it('no new instalment is created in a closed month', async () => {
     const staff = await addStaff('Bondho Mash');
     await balances();
 
@@ -415,14 +417,14 @@ describe('বন্ধ মাসে খাতা নড়ে না', () => {
       .expect(200)).body.months as { yearMonth: string }[];
     expect(months.length).toBeGreaterThan(0);
 
-    // ⚠️ সারিটা মুছে ফাঁক বানানো — ঠিক যেভাবে দেরিতে যোগ দেওয়া কর্মীর
-    //    ক্ষেত্রে ফাঁক তৈরি হয়
+    // Delete the row to create a gap — exactly how the gap arises for a
+    // late-joining staff member
     await h.prisma.securityDeposit.deleteMany({ where: { employeeId: staff.id } });
     await h.prisma.monthClosure.create({
       data: { yearMonth: thisMonth, closedBy: 'test' },
     });
 
-    // পাতা-লোড → ensureLedger()
+    // page load -> ensureLedger()
     await balances();
 
     const after = await h.prisma.securityDeposit.count({
@@ -432,10 +434,10 @@ describe('বন্ধ মাসে খাতা নড়ে না', () => {
   });
 
   /**
-   * ⚠️⚠️ **দ্বিতীয় টেস্টটাই আসল পাহারা** — প্রথমটা একা থাকলে
-   * `ensureLedger()` পুরোপুরি বন্ধ করে দিলেও সবুজ থাকত।
+   * The second test is the real guard — on its own, the first would stay
+   * green even if `ensureLedger()` were switched off completely.
    */
-  it('⭐ খোলা মাসে আগের মতোই বসে', async () => {
+  it('in an open month it is created as before', async () => {
     const staff = await addStaff('Khola Mash');
     await balances();
 
@@ -449,18 +451,18 @@ describe('বন্ধ মাসে খাতা নড়ে না', () => {
   });
 
   /**
-   * ⭐⭐ **উল্টো দিকটাও** — শুরুর মাস এগিয়ে দিলে বন্ধ মাসের সারিটা
-   * মুছে যায় না। ⚠️ কেবল বসানোটা আটকালে অর্ধেক কাজ হতো: কাগজে-লেখা
-   * টাকা খাতা থেকে উধাও হয়ে যেত।
+   * The opposite direction too: moving the start month forward does not
+   * delete a closed month's row. Blocking only the insert would be half the
+   * job — money written on the pay slip would vanish from the ledger.
    */
-  it('⭐ শুরুর মাস এগোলেও বন্ধ মাসের সারি টেকে', async () => {
+  it('a closed month\'s row survives when the start month moves forward', async () => {
     const staff = await addStaff('Bondho Mochha');
     await balances();
 
     /**
-     * ⚠️ আগের একটা মাসের কিস্তি হাতে বসানো — `addStaff()` কেবল চলতি মাসের
-     *    সারি বানায়, আর `setStartMonth()` ভবিষ্যতের মাস নেয় না, তাই মোছার
-     *    লক্ষ্য বানাতে হলে অতীতে একটা সারি লাগে।
+     * Manually insert an instalment for an earlier month — `addStaff()` only
+     * creates the current month's row and `setStartMonth()` does not accept
+     * future months, so a past row is needed as a deletion target.
      */
     const past = prevMonth(thisMonth);
     await h.prisma.securityDeposit.create({
@@ -470,7 +472,7 @@ describe('বন্ধ মাসে খাতা নড়ে না', () => {
       data: { yearMonth: past, closedBy: 'test' },
     });
 
-    // শুরুর মাস চলতি মাসে সরালে আগের সব মাস মোছার কথা
+    // Moving the start month to the current month is supposed to delete all earlier months
     await owner.http
       .patch(`/api/v1/deposits/${staff.id}/start`)
       .set('X-CSRF-Token', owner.csrf)
@@ -484,7 +486,7 @@ describe('বন্ধ মাসে খাতা নড়ে না', () => {
   });
 });
 
-describe('কিস্তির অঙ্ক সংশোধন', () => {
+describe('correcting an instalment amount', () => {
   const correct = (
     employeeId: number,
     yearMonth: string,
@@ -496,7 +498,7 @@ describe('কিস্তির অঙ্ক সংশোধন', () => {
       .set('X-CSRF-Token', owner.csrf)
       .send({ yearMonth, amountPaisa, reason });
 
-  it('অঙ্ক বদলায়, আর যোগফলেও দেখা যায়', async () => {
+  it('the amount changes, and the total shows it', async () => {
     const staff = await addStaff('Songshodhon Ek');
     await balances();
 
@@ -509,18 +511,18 @@ describe('কিস্তির অঙ্ক সংশোধন', () => {
   });
 
   /**
-   * ⭐⭐⭐ **এই describe-এর সবচেয়ে জরুরি টেস্ট।**
+   * The most important test in this describe.
    *
-   * ⚠️⚠️ শূন্য বসানোই ছিল মূল বাগের উৎস — মালিক "এই মাসটা মকুব" বোঝাতে
-   * ৳০ বসিয়েছিলেন, আর তাতে খাতায় এমন একটা সারি রয়ে গেল যেটা **একটা মাস
-   * গোনে কিন্তু কোনো টাকা ধরে না**। মকুব মানে ওই মাসে কিস্তি **নেই**,
-   * ৳০-এর কিস্তি **আছে** — দুটো এক করে ফেললে "কত মাস জমা হয়েছে" প্রশ্নের
-   * উত্তরই নষ্ট হয়।
+   * Setting zero was the source of the original bug: the owner entered 0 to
+   * mean "waive this month", which left a row in the ledger that counts a
+   * month but holds no money. Waived means there is no instalment that month;
+   * an instalment of 0 exists. Mixing the two ruins the answer to "how many
+   * months have been paid".
    *
-   * ⭐ ডাটাবেসেও `CHECK (amount_paisa > 0)` বসানো হয়েছে, কিন্তু বাধাটা
-   * এখানেই আটকানো হয় — নইলে বার্তাটা হতো একটা কাঁচা Postgres এরর।
+   * The database also has `CHECK (amount_paisa > 0)`, but the check is
+   * stopped here first — otherwise the message would be a raw Postgres error.
    */
-  it('⭐ শূন্য বসানো যায় না — মকুব আর ৳০ এক নয়', async () => {
+  it('zero cannot be set — waiving and 0 are not the same', async () => {
     const staff = await addStaff('Songshodhon Shunno');
     await balances();
 
@@ -530,7 +532,7 @@ describe('কিস্তির অঙ্ক সংশোধন', () => {
     expect(rows.find((r) => r.employeeId === staff.id)!.balance).toBe('500.00');
   });
 
-  it('ঋণাত্মক অঙ্কও নয়', async () => {
+  it('a negative amount is not allowed either', async () => {
     const staff = await addStaff('Songshodhon Rin');
     await balances();
 
@@ -538,10 +540,11 @@ describe('কিস্তির অঙ্ক সংশোধন', () => {
   });
 
   /**
-   * ⚠️ কারণ ছাড়া সংশোধন নয় — ছ-মাস পরে "ওই মাসে এর অঙ্ক আলাদা কেন"
-   *    প্রশ্নের একমাত্র উত্তর ওই লাইনটাই। `time_adjustments`-এর একই নিয়ম।
+   * No correction without a reason — six months later, that line is the only
+   * answer to "why is this person's amount different that month?". Same rule
+   * as `time_adjustments`.
    */
-  it('⭐ কারণ ছাড়া সংশোধন নয়', async () => {
+  it('no correction without a reason', async () => {
     const staff = await addStaff('Songshodhon Karon');
     await balances();
 
@@ -549,11 +552,12 @@ describe('কিস্তির অঙ্ক সংশোধন', () => {
   });
 
   /**
-   * ⚠️⚠️ **সারি না থাকলে বসানো যায় না** — তাহলে এটা সংশোধন নয়, নতুন
-   * কিস্তি বসানো, আর সেটা নিয়মের (`ensureLedger`) কাজ। বসাতে দিলে খাতায়
-   * এমন মাস ঢুকত যেটা কোনো নিয়ম থেকে আসেনি।
+   * Cannot set where there is no row — that would be creating a new
+   * instalment, not correcting one, and creating instalments is the rule's
+   * job (`ensureLedger`). Allowing it would put a month in the ledger that
+   * came from no rule.
    */
-  it('⭐ যে মাসে কিস্তিই নেই, সেখানে বসানো যায় না', async () => {
+  it('cannot set a month that has no instalment', async () => {
     const staff = await addStaff('Songshodhon Nei');
     await balances();
 
@@ -561,11 +565,11 @@ describe('কিস্তির অঙ্ক সংশোধন', () => {
   });
 
   /**
-   * ⚠️⚠️ **বন্ধ মাসে সংশোধন নয়** (R1) — ছুটির হুবহু একই নিয়ম। বন্ধ মাস
-   * মানে ওই মাসের কাগজ বেরিয়ে গেছে; খাতা বদলালে কাগজ আর খাতা দুই কথা
-   * বলত, আর কেউ টের পেত না।
+   * No correction in a closed month (R1) — exactly the same rule as leave.
+   * A closed month means that month's paper has gone out; changing the ledger
+   * would make paper and ledger say different things, unnoticed.
    */
-  it('⭐ বন্ধ মাসে সংশোধন আটকায়', async () => {
+  it('correction in a closed month is blocked', async () => {
     const staff = await addStaff('Songshodhon Bondho');
     await balances();
 
@@ -576,8 +580,8 @@ describe('কিস্তির অঙ্ক সংশোধন', () => {
     await correct(staff.id, thisMonth, 30_000).expect(409);
   });
 
-  /** ⚠️ নিষ্পত্তির পর খাতা বন্ধ — `setStartMonth`-এর হুবহু একই শর্ত */
-  it('নিষ্পত্তির পর আর সংশোধন নয়', async () => {
+  /** After settlement the ledger is closed — exactly the same condition as `setStartMonth` */
+  it('no more corrections after settlement', async () => {
     const staff = await addStaff('Songshodhon Nishpotti');
     await balances();
 
@@ -591,11 +595,11 @@ describe('কিস্তির অঙ্ক সংশোধন', () => {
   });
 
   /**
-   * ⭐⭐ **কারণটা খাতায় লেখা থাকে** — সংশোধনটা নীরবে ঘটতে পারবে না।
-   * ⚠️ আগের ও পরের অঙ্ক দুটোই, নইলে "কত থেকে কত" প্রশ্নের উত্তর
-   *    অডিট থেকে বের করা যেত না।
+   * The reason is written to the ledger — a correction cannot happen
+   * silently. Both the before and after amounts are stored, otherwise "from
+   * what to what" could not be answered from the audit log.
    */
-  it('⭐ অডিটে আগের-পরের অঙ্ক ও কারণ লেখা থাকে', async () => {
+  it('the audit log records the before and after amounts and the reason', async () => {
     const staff = await addStaff('Songshodhon Audit');
     await balances();
 
@@ -616,20 +620,20 @@ describe('কিস্তির অঙ্ক সংশোধন', () => {
   });
 
   /**
-   * ⭐⭐ **সংশোধনটা টেকে — পরের `ensureLedger()` ওটা ফিরিয়ে দেয় না।**
+   * The correction sticks — a later `ensureLedger()` does not revert it.
    *
-   * ⚠️⚠️ এটাই সবচেয়ে সহজে ভাঙার জায়গা: `ensureLedger()` প্রতিটা রিকোয়েস্টে
-   * চলে। `skipDuplicates` বদলে `upsert` হয়ে গেলে সংশোধনটা নীরবে মুছে
-   * নিয়মের অঙ্কে ফিরে যেত — আর কেউ ধরতে পারত না, কারণ পর্দায় কোনো এরর
-   * নেই, শুধু সংখ্যাটা আবার আগেরটা।
+   * This is the easiest place to break things: `ensureLedger()` runs on every
+   * request. If `skipDuplicates` became `upsert`, the correction would be
+   * silently overwritten with the rule's amount and nobody would notice,
+   * because there is no error on screen, only the number going back.
    */
-  it('⭐ পরের রিফ্রেশেও সংশোধন টিকে থাকে', async () => {
+  it('the correction survives the next refresh', async () => {
     const staff = await addStaff('Songshodhon Tike');
     await balances();
 
     await correct(staff.id, thisMonth, 30_000).expect(200);
 
-    // ⚠️ তিনবার — প্রতিবারই `ensureLedger()` চলে
+    // Three times — `ensureLedger()` runs each time
     await balances();
     await balances();
     const { rows } = await balances();
@@ -638,18 +642,18 @@ describe('কিস্তির অঙ্ক সংশোধন', () => {
   });
 
   /**
-   * ⭐⭐⭐ **শেষ পাহারাটা ডাটাবেসেই** *(৫ সেপ্টেম্বর ২০২৬)*।
+   * The last guard is in the database itself (5 September 2026).
    *
-   * ⚠️⚠️ উপরের "শূন্য বসানো যায় না" টেস্টটা আসলে **DTO-র `@Min(1)`**
-   * ধরে ফেলে, সার্ভিসে পৌঁছানোর আগেই। সেটা ভালো, কিন্তু তাতে প্রমাণ হয়
-   * না যে **অন্য কোনো পথ দিয়েও** ৳০ ঢুকতে পারবে না — আর মাঠের সারিটা
-   * ঠিক ওভাবেই ঢুকেছিল (HTTP নয়, সরাসরি)।
+   * The "zero cannot be set" test above is actually caught by the DTO's
+   * `@Min(1)` before it reaches the service. That is good, but it does not
+   * prove that 0 cannot get in some other way, and the field row got in
+   * exactly that way (directly, not over HTTP).
    *
-   * ⭐ `deposit_policy`-তে `CHECK (amount_paisa > 0)` প্রথম দিন থেকেই ছিল,
-   * কিন্তু **খাতার সারিতে ছিল না** — অথচ ভুল মানটা ওখানেই বসে। এই টেস্ট
-   * সেই নতুন CHECK-টাকে পাহারা দেয়, DTO-কে সম্পূর্ণ পাশ কাটিয়ে।
+   * `deposit_policy` has had `CHECK (amount_paisa > 0)` from day one, but the
+   * ledger rows did not, and that is where the wrong value lands. This test
+   * guards the new CHECK, bypassing the DTO entirely.
    */
-  it('⭐ ডাটাবেসই ৳০ কিস্তি নিতে অস্বীকার করে', async () => {
+  it('the database itself refuses a 0 instalment', async () => {
     const staff = await addStaff('Songshodhon DB');
     await balances();
 
@@ -659,7 +663,7 @@ describe('কিস্তির অঙ্ক সংশোধন', () => {
       }),
     ).rejects.toThrow();
 
-    // ⚠️ ঋণাত্মকও — একই CHECK
+    // Negative too — same CHECK
     await expect(
       h.prisma.securityDeposit.create({
         data: { employeeId: staff.id, yearMonth: '2020-02', amountPaisa: -1 },
@@ -668,11 +672,12 @@ describe('কিস্তির অঙ্ক সংশোধন', () => {
   });
 
   /**
-   * ⭐⭐ **মাস-ধরে তালিকাটা মালিকও দেখতে পান** — এতদিন কেবল কর্মীর নিজের
-   * পাতায় (`/me/deposit`) ছিল। ⚠️ ওটা না থাকায় মাঠের বাগটা দু-সপ্তাহ
-   * ধরা পড়েনি: যোগফল দেখে বোঝার উপায়ই ছিল না কোন মাসটা ভুল।
+   * The owner can also see the month-by-month list — it used to exist only
+   * on the staff member's own page (`/me/deposit`). Without it the field bug
+   * went unnoticed for two weeks: the total gave no way to tell which month
+   * was wrong.
    */
-  it('⭐ মালিক মাস-ধরে খাতা দেখতে পান', async () => {
+  it('the owner can see the ledger month by month', async () => {
     const staff = await addStaff('Songshodhon Mash');
     await balances();
     await correct(staff.id, thisMonth, 30_000).expect(200);

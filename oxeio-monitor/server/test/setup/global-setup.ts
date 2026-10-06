@@ -9,12 +9,12 @@ import {
 } from './test-db-url';
 
 /**
- * পুরো টেস্ট রানে **একবার** চলে:
- *   ১· `oxeio_test` ডাটাবেস (না থাকলে) তৈরি
- *   ২· তাতে সব migration প্রয়োগ
+ * Runs once for the whole test run:
+ *   1. create the `oxeio_test` database (if missing)
+ *   2. apply all migrations to it
  *
- * seed ইচ্ছাকৃতভাবে চালানো হয় না — টেস্ট নিজের fixture নিজেই বসায়,
- * নইলে seed বদলালেই টেস্ট ভাঙত।
+ * The seed is deliberately not run: each test sets up its own fixtures,
+ * otherwise changing the seed would break tests.
  */
 export default async function setup(): Promise<void> {
   const dbName = testDatabaseName();
@@ -28,15 +28,15 @@ export default async function setup(): Promise<void> {
       `SELECT count(*) AS count FROM pg_database WHERE datname = '${dbName}'`,
     );
     if (Number(existing[0]?.count ?? 0) === 0) {
-      // CREATE DATABASE ট্রানজেকশনে চলে না, তাই $executeRawUnsafe
+      // CREATE DATABASE cannot run inside a transaction, hence $executeRawUnsafe
       await admin.$executeRawUnsafe(`CREATE DATABASE "${dbName}"`);
     }
   } finally {
     await admin.$disconnect();
   }
 
-  // execFileSync দিয়ে নয় — Windows-এ `.cmd` সরাসরি spawn করলে Node EINVAL দেয়
-  // (২০+ ভার্সনের নিরাপত্তা পরিবর্তন)। execSync শেল ব্যবহার করে, তাই নিরাপদ।
+  // Not execFileSync: on Windows, spawning a `.cmd` directly gives Node EINVAL
+  // (a security change in Node 20+). execSync uses a shell, so it is safe.
   execSync('npx prisma migrate deploy', {
     stdio: 'inherit',
     env: { ...process.env, DATABASE_URL: testDatabaseUrl() },

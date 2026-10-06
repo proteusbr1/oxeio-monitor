@@ -1,21 +1,21 @@
 /**
- * ⭐ সার্ভিস ওয়ার্কার রেজিস্টার করা — অ্যাপের একমাত্র জায়গা যেখান থেকে
- *    `sw.js` চালু হয়।
+ * Registers the service worker: the only place in the app where `sw.js`
+ *    is started.
  *
- * সার্ভিস ওয়ার্কারটা নিজে `src/pwa-sw.ts`-এ, আর সে কী ক্যাশ করে (এবং
- * ⚠️ কী **কখনো** করে না) তার পুরো ব্যাখ্যা ওই ফাইলের মাথায়।
+ * The service worker itself is in `src/pwa-sw.ts`, and the full explanation of
+ * what it caches (and, importantly, what it **never** caches) is at the top of that file.
  */
 
 /**
- * ⚠️ ঘণ্টায় একবারের বেশি আপডেট খোঁজা হয় না।
+ * Careful: updates are checked at most once an hour.
  *
- * ⭐ এই অ্যাপ ফোনের হোমস্ক্রিন থেকে খোলে, আর তখন ট্যাবটা **দিনের পর দিন**
- *    খোলা থাকে — কেউ "বন্ধ করে আবার খোলে" না। ব্রাউজার নিজে আপডেট খোঁজে
- *    কেবল নেভিগেশনের সময়, তাই এটা ছাড়া নতুন ডিপ্লয় ফোনে সপ্তাহখানেক
- *    পৌঁছাত না — অথচ ডেস্কটপে সবাই নতুন কোড দেখত। "আমার ফোনে অন্যরকম
- *    দেখাচ্ছে" ধরনের বাগ খুঁজে বের করা সবচেয়ে কঠিন।
- * ⚠️ থ্রটল ছাড়া লিখলে অ্যাপ-সুইচারে বারবার ঢোকা-বেরোনোয় প্রতিবার
- *    `/sw.js` ডাকা হতো — মোবাইল ডেটায় অকারণ খরচ।
+ * This app is opened from the phone's home screen, and then the tab stays
+ *    open **for days on end**; nobody "closes and reopens" it. The browser itself
+ *    checks for updates only at navigation, so without this a new deploy would take
+ *    about a week to reach phones, while on desktop everyone saw the new code.
+ *    "It looks different on my phone" bugs are the hardest to track down.
+ * Careful: written without the throttle, every switch in and out of the app
+ *    switcher would fetch `/sw.js` again: needless cost on mobile data.
  */
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -23,52 +23,52 @@ export function registerServiceWorker(): void {
   if (!('serviceWorker' in navigator)) return;
 
   /**
-   * ⚠️⚠️ ডেভ মোডে **রেজিস্টার নয়, বরং উল্টোটা** — যা আছে তা সরানো হয়।
+   * Careful: in dev mode it does **not register, quite the opposite**: whatever exists is removed.
    *
-   * `sw.js` কেবল `vite build`-এ তৈরি হয় (`vite.config.ts`-এর প্লাগইন)।
-   * ডেভ সার্ভারে ফাইলটাই নেই, তাই রেজিস্টার করলে শুধু ৪০৪।
+   * `sw.js` is only produced by `vite build` (the plugin in `vite.config.ts`).
+   * The dev server does not have the file, so registering would only give a 404.
    *
-   * ⭐ আসল বিপদটা উল্টো দিকের: কেউ একবার `npm run preview` চালিয়ে
-   *    localhost-এ ওয়ার্কারটা বসিয়ে ফেললে সেটা **origin-এ থেকে যায়**।
-   *    তারপর `npm run dev`-এ ফিরলে ওই পুরোনো ওয়ার্কার নেভিগেশন ধরে
-   *    বসে থাকত আর বিল্ড করা পুরোনো অ্যাপ পরিবেশন করত — ডেভেলপার কোড
-   *    বদলে বদলে দেখত কিছুই বদলাচ্ছে না। এই ফাঁদে একবার পড়লে ঘণ্টা যায়।
+   * The real danger is the other way round: once someone runs `npm run
+   *    preview` and installs the worker on localhost, it **stays on the
+   *    origin**. Back on `npm run dev`, that old worker would sit on navigations
+   *    and serve the old built app, and the developer would keep changing code
+   *    and see nothing change. Falling into this trap once costs hours.
    */
   if (!import.meta.env.PROD) {
     void navigator.serviceWorker
       .getRegistrations()
       .then((regs) => Promise.all(regs.map((reg) => reg.unregister())))
-      // ⚠️ চুপচাপ — ডেভে ওয়ার্কার সরাতে না পারা অ্যাপ ভাঙার কারণ নয়।
+      // Careful: stay quiet: failing to remove the worker in dev is no reason to break the app.
       .catch(() => {});
     return;
   }
 
   /**
-   * ⚠️ `load`-এর পরে, আগে নয়। রেজিস্ট্রেশন নিজেই `sw.js` নামায় আর
-   *    install-এ পুরো শেল আবার নামায় — প্রথম রেন্ডারের সাথে ব্যান্ডউইথের
-   *    জন্য লড়লে ধীর সংযোগে পাতাটা দেরিতে আসত। PWA-র লাভ পরের বার,
-   *    এই বারের গতি নষ্ট করে নয়।
+   * Careful: after `load`, not before. Registration itself downloads `sw.js`
+   *    and install downloads the whole shell again; competing with the first
+   *    render for bandwidth would make the page arrive late on a slow
+   *    connection. The PWA's benefit is for next time, not at the cost of this time's speed.
    */
   window.addEventListener('load', () => {
     void navigator.serviceWorker
       .register('/sw.js', { scope: '/' })
       .then((registration) => watchForUpdates(registration))
       /**
-       * ⚠️ ব্যর্থ হলে চুপচাপ। HTTPS ছাড়া (localhost বাদে) ব্রাউজার
-       *    রেজিস্ট্রেশন আটকে দেয়, আর কিছু কর্পোরেট/প্রাইভেসি সেটিংয়েও।
-       *    ⭐ কোনোটাই অ্যাপ ভাঙে না — সার্ভিস ওয়ার্কার ছাড়া ড্যাশবোর্ড
-       *    আগের মতোই পুরোপুরি চলে, শুধু হোমস্ক্রিন/অফলাইনের সুবিধাটা থাকে না।
+       * Careful: if it fails, stay quiet. Without HTTPS (except localhost) the
+       *    browser blocks registration, and some corporate/privacy settings do too.
+       *    Neither breaks the app: without a service worker the dashboard works
+       *    exactly as before, only the home-screen/offline benefit is missing.
        */
       .catch(() => {});
   });
 }
 
 /**
- * ট্যাব আবার দৃশ্যমান হলে নতুন সংস্করণ এসেছে কি না দেখা।
+ * When the tab becomes visible again, check whether a new version has come.
  *
- * ⭐ নতুন কিছু পেলে বাকিটা সার্ভিস ওয়ার্কার নিজেই করে (`skipWaiting` +
- *    `clientsClaim`, কারণ `pwa-sw.ts`-এ লেখা)। এখানে জোর করে রিলোড করা
- *    হয় না — ব্যবহারকারী ফর্ম ভরার মাঝপথে থাকতে পারেন।
+ * If something new is found, the service worker does the rest itself
+ *    (`skipWaiting` + `clientsClaim`, as explained in `pwa-sw.ts`). A reload is
+ *    not forced here: the user may be in the middle of filling a form.
  */
 function watchForUpdates(registration: ServiceWorkerRegistration): void {
   let lastCheck = Date.now();
@@ -77,7 +77,7 @@ function watchForUpdates(registration: ServiceWorkerRegistration): void {
     if (document.visibilityState !== 'visible') return;
     if (Date.now() - lastCheck < UPDATE_CHECK_INTERVAL_MS) return;
     lastCheck = Date.now();
-    // ⚠️ চুপচাপ — অফলাইনে এটা ব্যর্থ হবেই, আর সেটা স্বাভাবিক।
+    // Careful: stay quiet: offline this is bound to fail, and that is normal.
     void registration.update().catch(() => {});
   });
 }

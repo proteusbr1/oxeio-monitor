@@ -4,13 +4,13 @@ using oXeio.Core.Agent;
 namespace oXeio.Agent.Tests;
 
 /// <summary>
-/// heartbeat-এর উত্তরে আসা <c>progress</c> — tray-র "এ মাসে x / ২০৮ঘ"-এর
-/// একমাত্র উৎস।
+/// The <c>progress</c> in the heartbeat reply: the only source of the tray's
+/// "x / 208h this month".
 ///
-/// ⭐ এই ফিল্ডটা DTO-তে ছিলই না, ফলে সার্ভার সংখ্যাটা পাঠালেও এজেন্ট চুপচাপ
-/// ফেলে দিত আর tray চিরকাল <b>০ ঘণ্টা</b> দেখাত। বাগটা নীরব ছিল কারণ সার্ভারের
-/// দিকে সব ঠিকই ছিল — শুধু একটা ঘর অনুপস্থিত। J03 (লক্ষ্যপূরণের বেলুন) আর
-/// J04 (আজকের হিসাব) দুটোই এর উপর দাঁড়িয়ে।
+/// This field was missing from the DTO, so even when the server sent the number the
+/// agent silently dropped it and the tray showed <b>0 hours</b> forever. The bug was
+/// silent because everything on the server side was correct; one field was simply
+/// absent. J03 (goal-reached balloon) and J04 (today's total) both depend on it.
 /// </summary>
 public class HeartbeatProgressTests
 {
@@ -21,7 +21,7 @@ public class HeartbeatProgressTests
         return SyncWire.ToHeartbeatResponse(dto!);
     }
 
-    /// <summary>সার্ভারের <c>agent.controller.ts</c> ঠিক এই আকৃতিটাই ফেরায়।</summary>
+    /// <summary>The server's <c>agent.controller.ts</c> returns exactly this shape.</summary>
     [Fact]
     public void সার্ভারের_progress_পড়া_হয()
     {
@@ -43,11 +43,13 @@ public class HeartbeatProgressTests
         Assert.Equal(228_240, response.Progress.MonthActiveSec);
         Assert.Equal(208, response.Progress.MonthlyTargetHours);
 
-        // সার্ভার এখনো pace পাঠায় না — null-ই থাকতে হবে, ০ নয়
+        // The server does not send pace yet: it must stay null, not 0
         Assert.Null(response.Progress.PaceSec);
     }
 
-    /// <summary>ডিভাইসের সাথে কর্মী যুক্ত না থাকলে সার্ভার <c>null</c> পাঠায়।</summary>
+    /// <summary>
+    /// The server sends <c>null</c> when no staff member is linked to the device.
+    /// </summary>
     [Fact]
     public void কর্মী_যুক্ত_না_থাকলে_null()
     {
@@ -57,9 +59,9 @@ public class HeartbeatProgressTests
     }
 
     /// <summary>
-    /// ⚠️ টার্গেট ০ এলে পুরো progress বাতিল। শূন্য টার্গেটে
-    /// <see cref="AgentStatus.MonthlyProgress"/> ০ ফেরত দেয়, অর্থাৎ পুরো মাস
-    /// কাজ করা মানুষের প্রগ্রেস বার সারা মাস খালি দেখাত।
+    /// Careful: a target of 0 voids the whole progress. With a zero target
+    /// <see cref="AgentStatus.MonthlyProgress"/> returns 0, so the progress bar of
+    /// someone who worked the whole month would look empty all month.
     /// </summary>
     [Fact]
     public void শূন্য_টার্গেট_মেনে_নেওয়া_হয_না()
@@ -71,9 +73,9 @@ public class HeartbeatProgressTests
     }
 
     /// <summary>
-    /// ⭐ সবচেয়ে জরুরি সুরক্ষা: অগ্রগতির একটা ঘর হারানোর দাম যেন
-    /// <b>কমান্ড</b> হারানো না হয়। সার্ভার একদিন একটা ফিল্ড বাদ দিলে বা নতুন
-    /// ফিল্ড যোগ করলেও revoke/reload_config পৌঁছাতে হবে।
+    /// The most important safeguard: losing one progress field must never cost a
+    /// <b>command</b>. Even if the server one day drops a field or adds a new one,
+    /// revoke/reload_config must still arrive.
     /// </summary>
     [Fact]
     public void progress_ভাঙা_থাকলেও_কমান্ড_পৌঁছায়()
@@ -90,11 +92,11 @@ public class HeartbeatProgressTests
         Assert.Contains(AgentCommand.Revoke, response.Commands);
         Assert.Equal("v9", response.ConfigVersion);
 
-        // monthlyTargetHours নেই → progress বিশ্বাসযোগ্য নয়, কিন্তু কমান্ড এসেছে
+        // No monthlyTargetHours, so progress is not trustworthy, but the command arrived
         Assert.Null(response.Progress);
     }
 
-    /// <summary>সার্ভার একদিন pace পাঠালে সেটা যেন আপনাআপনিই কাজে লাগে (B05b)।</summary>
+    /// <summary>If the server one day sends pace, it should be used automatically (B05b).</summary>
     [Fact]
     public void paceSec_এলে_পড়া_হয()
     {
@@ -114,11 +116,11 @@ public class HeartbeatProgressTests
     }
 
     /// <summary>
-    /// ⭐⭐ <b>G111</b> — সার্ভার বলে দেয় pace-এর ০ কোন ধরনের ০।
+    /// <b>G111</b>: the server says which kind of 0 the pace 0 is.
     ///
-    /// ⚠️⚠️ যাঁর একটাও শেষ-হওয়া কর্মদিবস দেখা হয়নি, তাঁর <c>paceSec</c> ঠিক
-    /// <c>0</c> আসে — আর ০ মানে "ঠিক লক্ষ্যে আছে"। পতাকাটা না পড়লে নতুন
-    /// কর্মীর প্রথম দিনে tray "0:00 ahead" লিখত।
+    /// Careful: for someone with no finished workday seen yet, <c>paceSec</c> is exactly
+    /// <c>0</c>, and 0 means "right on target". If the flag were not read, a new
+    /// staff member's first day would show "0:00 ahead" in the tray.
     /// </summary>
     [Fact]
     public void observed_মিথ্যা_এলে_পড়া_হয()
@@ -141,10 +143,10 @@ public class HeartbeatProgressTests
     }
 
     /// <summary>
-    /// ⚠️⚠️ <b>পুরোনো সার্ভারে আচরণ অবিকল আগের মতো।</b> ফিল্ডটা না এলে
-    /// <c>null</c> — <c>false</c> নয়। <c>false</c> ধরে নিলে সার্ভার আপডেটের
-    /// আগে <b>প্রতিটা</b> tray "Not observed yet" লিখত, অথচ সবার হিসাবই
-    /// ঠিকঠাক চলছিল: একটা সত্যি বলতে গিয়ে সবার কাছে মিথ্যা।
+    /// Careful: <b>behavior with an old server is exactly as before.</b> If the field
+    /// is absent the value is <c>null</c>, not <c>false</c>. Assuming <c>false</c> would
+    /// make <b>every</b> tray say "Not observed yet" before the server update, although
+    /// everyone's totals were fine: telling one truth and lying to everyone.
     /// </summary>
     [Fact]
     public void পুরোনো_সার্ভার_observed_না_পাঠালে_null()

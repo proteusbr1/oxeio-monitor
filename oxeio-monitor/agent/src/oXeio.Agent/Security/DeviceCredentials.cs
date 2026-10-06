@@ -6,15 +6,14 @@ using oXeio.Core.Agent;
 namespace oXeio.Agent.Security;
 
 /// <summary>
-/// <see cref="IDeviceCredentials"/>-এর একমাত্র ইমপ্লিমেন্টেশন —
-/// <see cref="DeviceTokenStore"/> (ডিস্ক) আর <see cref="MachineIdentity"/> (মেশিন)
-/// দুটোকে এক জায়গায় এনে বাকি এজেন্টকে দেয়।
+/// The only implementation of <see cref="IDeviceCredentials"/>: it brings
+/// <see cref="DeviceTokenStore"/> (disk) and <see cref="MachineIdentity"/> (machine) together in
+/// one place and gives them to the rest of the agent.
 ///
-/// ⚠️ পুরো অবস্থাটা একটা <c>lock</c>-এর নিচে। enroll (স্টার্টআপ থ্রেড),
-/// পড়া (সিঙ্ক ওয়ার্কার) আর revoke (heartbeat-এর উত্তর) — তিনটে থ্রেড একই
-/// ফিল্ডগুলো ছোঁয়। <c>volatile</c> দিয়ে চালানো যেত না, কারণ টোকেন আর deviceId
-/// একসাথে বদলাতে হয়; আলাদা আলাদা বদলালে এক মুহূর্তের জন্য নতুন টোকেন আর পুরোনো
-/// deviceId মিলে যেত।
+/// Careful: the whole state is under one <c>lock</c>. Enroll (startup thread), read (sync worker)
+/// and revoke (the heartbeat reply): three threads touch the same fields. <c>volatile</c> would not
+/// do, because the token and deviceId must change together; changed separately, a new token and an
+/// old deviceId would pair up for a moment.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class DeviceCredentials : IDeviceCredentials, IDeviceTokenSource
@@ -35,7 +34,8 @@ internal sealed class DeviceCredentials : IDeviceCredentials, IDeviceTokenSource
         _log = log;
     }
 
-    /// <summary>স্টার্টআপে একবার। ⚠️ throw করে না — ডিস্ক নষ্ট থাকলেও এজেন্ট চালু হবে।</summary>
+    /// <summary>Once at startup. Careful: does not throw; the agent starts even if the disk is
+    /// corrupt.</summary>
     public static DeviceCredentials Open(
         DeviceTokenStore store, MachineIdentity identity, Action<string>? log = null)
     {
@@ -89,9 +89,9 @@ internal sealed class DeviceCredentials : IDeviceCredentials, IDeviceTokenSource
     }
 
     /// <summary>
-    /// টোকেনটা <see cref="ISyncClient"/>-এর ভেতরে ঠেলে দেয়। মাঝপথে কোনো
-    /// ভেরিয়েবলে, লগে বা রিটার্ন ভ্যালুতে থামে না —
-    /// <see cref="SecretText.Reveal"/>-এর অনুমোদিত চারটে কল-সাইটের একটা।
+    /// Pushes the token into <see cref="ISyncClient"/>. It does not stop on the way in any
+    /// variable, log or return value: one of the four permitted call sites of
+    /// <see cref="SecretText.Reveal"/>.
     /// </summary>
     public void ApplyTo(ISyncClient client)
     {
@@ -107,18 +107,15 @@ internal sealed class DeviceCredentials : IDeviceCredentials, IDeviceTokenSource
     }
 
     /// <summary>
-    /// <see cref="HttpSyncClient"/>-এর পছন্দের সংযোগ: প্রতি রিকোয়েস্টে সে
-    /// নিজেই এখান থেকে টোকেন তুলে নেয়, তাই enroll বা revoke-এর পর কাউকে
-    /// আলাদা করে ঠেলে দিতে হয় না।
+    /// <see cref="HttpSyncClient"/>'s preferred connection: on each request it takes the token from
+    /// here itself, so after enroll or revoke nobody has to be pushed separately.
     ///
-    /// ⚠️ explicit ইমপ্লিমেন্টেশন — <see cref="DeviceCredentials"/>-এর সাধারণ
-    /// সারফেসে একটা <c>string? CurrentToken</c> ঝুলে থাকলে সেটাই একদিন
-    /// লগে চলে যেত। <see cref="IDeviceTokenSource"/> হিসেবে না ধরলে এটা
-    /// চোখেই পড়ে না।
+    /// Careful: an explicit implementation. If a <c>string? CurrentToken</c> hung on
+    /// <see cref="DeviceCredentials"/>'s ordinary surface, it would end up in a log one day. Unless
+    /// it is taken as <see cref="IDeviceTokenSource"/> it is not even visible.
     ///
-    /// ⚠️ ডিস্ক পড়া হয় না, DPAPI চলে না — শুধু lock নিয়ে ক্যাশ করা মান।
-    /// ওদের চুক্তিতে এটা স্পষ্ট বলা আছে, আর প্রতি রিকোয়েস্টে DPAPI ডাকলে
-    /// আপলোড লুপ CPU খেয়ে ফেলত।
+    /// Careful: no disk read, no DPAPI: only the value cached under the lock. Their contract says
+    /// so explicitly, and calling DPAPI on every request would make the upload loop eat the CPU.
     /// </summary>
     string? IDeviceTokenSource.CurrentToken
     {
@@ -133,9 +130,9 @@ internal sealed class DeviceCredentials : IDeviceCredentials, IDeviceTokenSource
 
         lock (_gate)
         {
-            // ⚠️ revoke হয়ে যাওয়া ডিভাইসে ডিস্ক আবার পড়া হয় না। পড়লে —
-            //    আর কেউ যদি পুরোনো device.dat ফিরিয়ে আনত — বাতিল ডিভাইস
-            //    চুপচাপ আবার ট্র্যাকিং শুরু করে দিত, যেটা H06-এর উল্টো।
+            // Careful: on a revoked device the disk is not read again. If it were, and someone
+            // brought back an old device.dat, a revoked device would quietly start tracking again,
+            // the opposite of H06.
             if (_revoked) return false;
 
             var load = _store.Load(Identity);
@@ -158,10 +155,10 @@ internal sealed class DeviceCredentials : IDeviceCredentials, IDeviceTokenSource
     }
 
     /// <summary>
-    /// enroll সফল হয়ে ডিস্কে লেখা হয়ে যাওয়ার <b>পরে</b> ডাকা হয়।
-    /// ⚠️ ক্রম উল্টে গেলে (আগে মেমরিতে, পরে ডিস্কে) ডিস্কে লেখা ব্যর্থ হলেও
-    /// এজেন্ট দিব্যি চলত, আর রিবুটের পর টোকেন উধাও — অথচ ততক্ষণে সেই একবারের
-    /// টোকেনটা সার্ভারও ভুলে গেছে।
+    /// Called <b>after</b> a successful enroll has been written to disk. Careful: if the order were
+    /// reversed (memory first, then disk), the agent would run happily even if the disk write
+    /// failed, and after a reboot the token would be gone, by which time the server has forgotten
+    /// that one-time token too.
     /// </summary>
     internal void Adopt(DeviceCredentialRecord record)
     {
@@ -195,24 +192,23 @@ internal sealed class DeviceCredentials : IDeviceCredentials, IDeviceTokenSource
     }
 
     /// <summary>
-    /// স্টাফ নিজে সাইন আউট করলে।
+    /// When the staff member signs out themselves.
     ///
-    /// ⚠️⚠️ <b><see cref="Revoke"/>-এর সাথে একমাত্র কিন্তু নির্ণায়ক তফাত:
-    /// <c>_revoked</c> ছোঁয়া হয় না।</b> ফলে <see cref="NeedsEnrollment"/>
-    /// আবার সত্যি হয় আর সাইন-ইন জানালা ফিরে আসে। revoke ডাকলে মেশিনটা
-    /// "অফিস বন্ধ করে দিয়েছে" অবস্থায় আটকে যেত, অথচ অফিস কিছুই করেনি।
+    /// Careful: <b>the only but decisive difference from <see cref="Revoke"/>: <c>_revoked</c> is
+    /// not touched.</b> So <see cref="NeedsEnrollment"/> becomes true again and the sign-in window
+    /// comes back. Calling revoke would leave the machine stuck in the "office has shut it down"
+    /// state, when the office did nothing.
     ///
-    /// ⚠️ <c>Identity.UsableForEnrollment</c> মিথ্যা হলে
-    /// <see cref="NeedsEnrollment"/> তবুও মিথ্যা থাকবে — সেটা ঠিক আছে,
-    /// কারণ ওই মেশিনে প্রথমবারও সাইন ইন করা যেত না।
+    /// Careful: if <c>Identity.UsableForEnrollment</c> is false, <see cref="NeedsEnrollment"/>
+    /// stays false anyway; that is fine, because signing in could not have worked on that machine
+    /// the first time either.
     /// </summary>
     public void SignOut(string reason)
     {
         lock (_gate)
         {
-            // ⚠️ ইতিমধ্যে সাইন আউট (বা কখনো সাইন ইনই হয়নি) — তখন কিছু
-            //    করার নেই। তবু TryDelete ডাকা হয় না, নইলে প্রতিবার মেনু
-            //    চাপায় ডিস্কে অকারণ লেখালেখি হতো।
+            // Careful: already signed out (or never signed in): there is nothing to do. Even so,
+            // TryDelete is not called, otherwise every menu click would write to disk for nothing.
             if (_record is null) return;
 
             _record = null;
@@ -227,9 +223,9 @@ internal sealed class DeviceCredentials : IDeviceCredentials, IDeviceTokenSource
     }
 
     /// <summary>
-    /// ⚠️ হ্যান্ডলারের এক্সসেপশন গিলে ফেলা হয়। সিঙ্ক মডিউলের একটা ভাঙা
-    /// সাবস্ক্রাইবার যেন enroll বা revoke-এর পথ আটকে না দেয় — revoke আটকে গেলে
-    /// বাতিল ডিভাইস ট্র্যাকিং চালিয়েই যেত।
+    /// Careful: handler exceptions are swallowed. A broken subscriber in the sync module must not
+    /// block the enroll or revoke path: if revoke were blocked, a revoked device would keep
+    /// tracking.
     /// </summary>
     private void RaiseChanged()
     {
@@ -249,7 +245,7 @@ internal sealed class DeviceCredentials : IDeviceCredentials, IDeviceTokenSource
         }
     }
 
-    /// <summary>ট্রে/লগে দেখানোর এক লাইন — গোপন কিছু নেই।</summary>
+    /// <summary>One line to show in the tray/log: nothing secret.</summary>
     public string Describe()
     {
         lock (_gate)

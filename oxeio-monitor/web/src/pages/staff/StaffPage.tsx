@@ -8,24 +8,24 @@ import { StatusChip } from '../../components/StatusDot';
 import { PersonCell, Table, type Column } from '../../components/Table';
 import { formatDuration, formatTime } from '../../lib/format';
 
-/** বোর্ডের মতোই ৩০ সেকেন্ড — দুটো পর্দা একই সংখ্যা দেখায়, একই তালে */
+/** 30 seconds like the board: both screens show the same numbers, in step */
 const REFRESH_MS = 30_000;
 
 /**
- * ⭐⭐ **Staff — সবাইকে এক তালিকায়** *(মালিকের চাওয়া, ১৫ আগস্ট)*।
+ * **Staff: everyone in one list.**
  *
- * ⚠️⚠️ **এটা Settings → Staff-এর নকল নয়, আর সেই পার্থক্যটাই এই পাতার
- * অস্তিত্বের কারণ।** ওখানে কর্মী **সম্পাদনা** করা হয় — বেতন, পলিসি,
- * portal অ্যাকাউন্ট, এজেন্ট চালু করা। এখানে কেবল **দেখা** হয়: কে এখন
- * কী করছে, আজ কত হলো, এজেন্ট কথা বলছে কি না।
+ * Careful: **this is not a copy of Settings → Staff, and that difference is
+ * the reason this page exists.** There staff are **edited**: pay, policy,
+ * portal account, enabling the agent. Here they are only **viewed**: who is
+ * doing what now, how much today, whether the agent is talking.
  *
- * ⚠️ আগে সাইডবারে `/staff` বলে একটা ট্যাব ছিল, আর সেটা **তুলে দেওয়া
- * হয়েছিল** — কারণ পাতাটা ছিলই না, ট্যাবটা "পাওয়া যায়নি"-তে গিয়ে ঠেকত।
- * মকআপ ক-এ ওটা আছে, আর মালিক বলেছেন নকল না বানিয়ে **আসল পাতা** বানাতে।
+ * Careful: the sidebar used to have a `/staff` tab that was **removed** because
+ * the page did not exist and the tab ended in "not found". Mockup A has it, and
+ * the owner asked for a **real page** rather than a fake.
  *
- * ⭐ ডেটা `/live` থেকেই — নতুন কোনো endpoint নয়। ⚠️ তাই বোর্ড আর এই
- * পাতা কখনো দুই সংখ্যা বলতে পারে না (G88); একটা নতুন কোয়েরি লিখলে
- * ঠিক সেই দরজাটাই আবার খুলত।
+ * The data comes from `/live`, with no new endpoint. So the board and this
+ * page can never report two different numbers (G88); a new query would
+ * reopen exactly that door.
  */
 export function StaffPage() {
   const navigate = useNavigate();
@@ -79,12 +79,12 @@ export function StaffPage() {
       header: 'Agent last spoke',
       align: 'right',
       /*
-        ⭐ এই কলামটাই এই পাতার একমাত্র জিনিস যা বোর্ডে নেই — বোর্ডে
-           অবস্থাটা রঙে বোঝা যায়, কিন্তু "কতক্ষণ আগে" সংখ্যাটা নয়।
+        This column is the one thing on this page that the board lacks: the
+           board shows state by colour, but not the "how long ago" number.
 
-        ⚠️ `—` মানে **একবারও সাড়া দেয়নি**, "এইমাত্র" নয়। এজেন্ট বসানো
-           আছে অথচ কোনোদিন কথা বলেনি — ওটা আলাদা ঘটনা, আর ফাঁকা ঘর
-           দিয়ে সেটা বোঝা যেত না।
+        Careful: `—` means **never responded**, not "just now". An agent that
+           is installed but never spoke is a separate case, and an empty cell
+           would not tell it apart.
       */
       render: (c) =>
         c.lastHeartbeatAt ? (
@@ -123,8 +123,8 @@ export function StaffPage() {
           rows={cards}
           rowKey={(c) => String(c.employeeId)}
           /*
-            ⭐ সারিতে ক্লিক করলে তাঁর নিজের পাতা — মকআপে তালিকাটার
-               একমাত্র কাজই ছিল ওখানে পৌঁছে দেওয়া।
+            Clicking a row opens that person's own page; in the mockup the
+               list's only job was to get you there.
           */
           onRowClick={(c) => navigate(`/staff/${c.employeeId}`)}
         />

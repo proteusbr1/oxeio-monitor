@@ -20,13 +20,13 @@ import {
 } from './setup/harness';
 
 /**
- * **H04 · G59** — এজেন্টের নতুন ভার্সন বিলি করার পথ।
+ * H04, G59: the path for rolling out a new agent version.
  *
- * ⚠️⚠️ `agent_versions` টেবিলটা এতদিন **শুধু পড়া হতো**। পুরো auto-update
- * ব্যবস্থা তৈরি — ধাপে ধাপে অফার, canary, sha256 যাচাই, `halted` দিয়ে
- * থামানো — কিন্তু ওই টেবিলে সারি বসানোর কোনো পথ কোথাও ছিল না। ফলে
- * আজকের MSI ০.২.০ ১৫টা PC-তে পৌঁছানোর একমাত্র উপায় ছিল প্রতিটা মেশিনে
- * হাতে গিয়ে বসানো।
+ * Until now the `agent_versions` table was only read. The whole auto-update
+ * system was built (staged offers, canary, sha256 verification, stopping via
+ * `halted`), but there was no way anywhere to insert a row into that table.
+ * So the only way to get today's MSI 0.2.0 onto 15 PCs was to go to each
+ * machine and install it by hand.
  */
 let h: Harness;
 let owner: Session;
@@ -35,7 +35,7 @@ let root: string;
 const MSI = Buffer.from('not really an msi, but bytes are bytes');
 const SHA = createHash('sha256').update(MSI).digest('hex');
 
-/** storage রুটের ভেতরে একটা নকল MSI */
+/** A fake MSI inside the storage root */
 async function putMsi(rel: string, body = MSI): Promise<void> {
   const abs = resolve(root, rel);
   await mkdir(join(abs, '..'), { recursive: true });
@@ -64,26 +64,27 @@ beforeEach(async () => {
   owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 });
 
-describe('POST /agent-versions — বিলির জন্য নথিভুক্ত করা', () => {
-  it('ফাইল থেকে sha256 নিজেই হিসাব করে', async () => {
+describe('POST /agent-versions: registering for rollout', () => {
+  it('computes the sha256 from the file itself', async () => {
     const rel = `updates/${randomUUID()}.msi`;
     await putMsi(rel);
 
     const res = await publish({ version: '0.2.0', msiPath: rel });
 
     expect(res.status).toBe(201);
-    // ⭐ হাতে হ্যাশ দিতে হয়নি — এজেন্ট এই সংখ্যাটাই মিলিয়ে দেখবে
+    // No hash had to be given by hand: the agent will check this very number
     expect(res.body.sha256).toBe(SHA);
     expect(res.body.sizeBytes).toBe(MSI.length);
-    // ⚠️ ডিফল্ট canary — একবারে সবাইকে দেওয়াটা আলাদা সিদ্ধান্ত
+    // Default is canary: giving it to everyone at once is a separate decision
     expect(res.body.rolloutStage).toBe('canary');
   });
 
   /**
-   * ⚠️ হাতে বসানো হ্যাশে একটা অক্ষর ভুল হলে ১৫টা PC ফাইলটা নামাত,
-   * sha256 না মেলায় বাতিল করত, আবার নামাত — চিরকাল।
+   * With one character wrong in a hand-entered hash, 15 PCs would download
+   * the file, reject it because the sha256 does not match, and download it
+   * again, forever.
    */
-  it('হাতে দেওয়া ভুল sha256-এ ৪০০', async () => {
+  it('400 on a wrong hand-entered sha256', async () => {
     const rel = `updates/${randomUUID()}.msi`;
     await putMsi(rel);
 
@@ -97,7 +98,7 @@ describe('POST /agent-versions — বিলির জন্য নথিভু�
     expect(await h.prisma.agentVersion.count()).toBe(0);
   });
 
-  it('ঠিক sha256 দিলে চলে', async () => {
+  it('a correct sha256 is accepted', async () => {
     const rel = `updates/${randomUUID()}.msi`;
     await putMsi(rel);
 
@@ -105,7 +106,7 @@ describe('POST /agent-versions — বিলির জন্য নথিভু�
     expect(res.status).toBe(201);
   });
 
-  it('ফাইলটা ডিস্কে না থাকলে ৪০০', async () => {
+  it('400 if the file is not on disk', async () => {
     const res = await publish({ version: '0.2.0', msiPath: 'updates/nope.msi' });
 
     expect(res.status).toBe(400);
@@ -113,11 +114,11 @@ describe('POST /agent-versions — বিলির জন্য নথিভু�
   });
 
   /**
-   * ⚠️ `update.service.ts`-এর `openMsi()` storage রুটের বাইরের পাথ
-   * প্রত্যাখ্যান করে। এখানে না দেখলে ভুলটা ধরা পড়ত ডাউনলোডের সময় —
-   * বিলি করার অনেক পরে, ১৫টা PC ব্যর্থ ডাউনলোড করার পর।
+   * `openMsi()` in `update.service.ts` rejects paths outside the storage
+   * root. If not checked here, the mistake would show up at download time,
+   * long after rollout, after 15 PCs had failed downloads.
    */
-  it('storage রুটের বাইরের পাথে ৪০০', async () => {
+  it('400 for a path outside the storage root', async () => {
     const res = await publish({
       version: '0.2.0',
       msiPath: '../../outside.msi',
@@ -126,11 +127,11 @@ describe('POST /agent-versions — বিলির জন্য নথিভু�
   });
 
   /**
-   * ⭐ পুরোনো বা সমান ভার্সন বিলি করলে `isNewer()` মিথ্যা হতো, অর্থাৎ
-   * কোনো এজেন্টকে কোনোদিন অফার করা হতো না — আর owner ভাবতেন বিলি
-   * হয়ে গেছে। নীরব ব্যর্থতা, তাই এখানেই আটকানো।
+   * Rolling out an older or equal version would make `isNewer()` false, so
+   * no agent would ever be offered it, and the owner would think it was
+   * rolled out. A silent failure, so it is blocked here.
    */
-  it('পুরোনো ভার্সন বিলি করা যায় না', async () => {
+  it('an older version cannot be rolled out', async () => {
     const a = `updates/${randomUUID()}.msi`;
     const b = `updates/${randomUUID()}.msi`;
     await putMsi(a);
@@ -142,7 +143,7 @@ describe('POST /agent-versions — বিলির জন্য নথিভু�
     expect(older.status).toBe(400);
   });
 
-  it('একই ভার্সন দুবার — ৪০৯', async () => {
+  it('the same version twice gives 409', async () => {
     const rel = `updates/${randomUUID()}.msi`;
     await putMsi(rel);
 
@@ -150,7 +151,7 @@ describe('POST /agent-versions — বিলির জন্য নথিভু�
     expect((await publish({ version: '0.2.0', msiPath: rel })).status).toBe(409);
   });
 
-  it('ভার্সনের ফরম্যাট ভুল হলে ৪০০', async () => {
+  it('400 on a wrong version format', async () => {
     const rel = `updates/${randomUUID()}.msi`;
     await putMsi(rel);
 
@@ -160,7 +161,7 @@ describe('POST /agent-versions — বিলির জন্য নথিভু�
     }
   });
 
-  it('ম্যানেজার পারে না', async () => {
+  it('a manager cannot', async () => {
     const manager = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
 
     const res = await manager.http
@@ -171,7 +172,7 @@ describe('POST /agent-versions — বিলির জন্য নথিভু�
     expect(res.status).toBe(403);
   });
 
-  it('audit_log-এ ওঠে', async () => {
+  it('is recorded in audit_log', async () => {
     const rel = `updates/${randomUUID()}.msi`;
     await putMsi(rel);
     await h.prisma.auditLog.deleteMany({});
@@ -192,7 +193,7 @@ describe('POST /agent-versions/:version/stage', () => {
     await publish({ version: '0.2.0', msiPath: rel });
   });
 
-  it('ধাপ বদলানো যায়', async () => {
+  it('the stage can be changed', async () => {
     const res = await owner.http
       .post('/api/v1/agent-versions/0.2.0/stage')
       .set('X-CSRF-Token', owner.csrf)
@@ -203,11 +204,11 @@ describe('POST /agent-versions/:version/stage', () => {
   });
 
   /**
-   * ⭐ **সবচেয়ে জরুরি বোতাম।** খারাপ আপডেট বেরিয়ে গেলে স্বয়ংক্রিয়
-   * rollback নেই (G69) — যারা পেয়ে গেছে তাদের হাতে ঠিক করতে হবে।
-   * কিন্তু এখানে থামালে বাকিরা বেঁচে যায়, আর সেটা সেকেন্ডের কাজ।
+   * The most important button. If a bad update goes out there is no
+   * automatic rollback (G69); whoever already got it has to be fixed by hand.
+   * But stopping here saves the rest, and it takes seconds.
    */
-  it('halted করলে আর কাউকে অফার হয় না', async () => {
+  it('once halted, nobody is offered it any more', async () => {
     await owner.http
       .post('/api/v1/agent-versions/0.2.0/stage')
       .set('X-CSRF-Token', owner.csrf)
@@ -220,7 +221,7 @@ describe('POST /agent-versions/:version/stage', () => {
     expect(row.rolloutStage).toBe('halted');
   });
 
-  it('অচেনা ভার্সনে ৪০৪', async () => {
+  it('404 for an unknown version', async () => {
     const res = await owner.http
       .post('/api/v1/agent-versions/9.9.9/stage')
       .set('X-CSRF-Token', owner.csrf)
@@ -229,7 +230,7 @@ describe('POST /agent-versions/:version/stage', () => {
     expect(res.status).toBe(404);
   });
 
-  it('আগে-পরে দুটোই audit_log-এ', async () => {
+  it('both before and after go into audit_log', async () => {
     await h.prisma.auditLog.deleteMany({});
 
     await owner.http
@@ -248,13 +249,13 @@ describe('POST /agent-versions/:version/stage', () => {
 });
 
 describe('GET /agent-versions', () => {
-  it('ফাইল হারিয়ে গেলে সেটা বলে দেয়', async () => {
+  it('says so when the file has gone missing', async () => {
     const rel = `updates/${randomUUID()}.msi`;
     await putMsi(rel);
     await publish({ version: '0.2.0', msiPath: rel });
 
-    // ⚠️ সারি বসানোর পর কেউ ফাইলটা মুছে ফেললে — তালিকায় সেটা দেখা
-    //    দরকার, নইলে এজেন্ট নামাতে গিয়ে ৪০৪ পেত আর owner জানতেনই না
+    // If someone deletes the file after the row is inserted, the list must
+    // show it; otherwise the agent would get a 404 on download and the owner would never know
     await h.prisma.agentVersion.update({
       where: { version: '0.2.0' },
       data: { msiPath: 'updates/vanished.msi' },
@@ -269,16 +270,17 @@ describe('GET /agent-versions', () => {
 
 
 /**
- * ⭐⭐⭐ **canary-র বালতি খালি হলে ভার্সনটা চিরকাল আটকে থাকত**
- * *(৭ সেপ্টেম্বর ২০২৬, G168)*।
+ * If the canary bucket is empty, the version would be stuck forever
+ * (G168).
  *
- * ⚠️⚠️ নিয়মটার ইউনিট টেস্ট আছে `rollout.spec.ts`-এ। **এই ব্লকটা কলারের**,
- * আর সেটাই এখানে বেশি জরুরি: এই রেপোতে *"চুক্তি লেখা আছে, কলার লেখা
- * হয়নি"* ভুলটা **দশবার** হয়েছে (G141 · G144 · G146 · G149 · G156 ·
- * G159 · G167)। নিয়ম সবুজ অথচ কেউ ডাকে না — সেটাই এখানকার চেনা পাপ।
+ * The rule has unit tests in `rollout.spec.ts`. This block is about the
+ * caller, and that matters more here: in this repo the mistake of "the
+ * contract is written, the caller is not" has happened ten times (G141,
+ * G144, G146, G149, G156, G159, G167). The rule is green yet nobody calls
+ * it: that is the familiar sin here.
  */
-describe('G168 — প্রকাশের সময় pilot আপনিই বসে', () => {
-  /** ওই মেশিনগুলোর কেউই canary-তে পড়ে না, এমন একটা ভার্সন */
+describe('G168: a pilot is set automatically at publish time', () => {
+  /** A version where none of those machines falls in canary */
   const emptyCanaryVersion = (guids: readonly string[]): string => {
     for (let i = 0; i < 500; i += 1) {
       const v = `9.0.${i}`;
@@ -307,7 +309,7 @@ describe('G168 — প্রকাশের সময় pilot আপনিই �
         machineGuid,
         tokenHash: randomUUID(),
         status,
-        // ⚠️ G140 — স্পেকে `new Date()` নয়; হারনেসের ঘড়ি
+        // G140: not `new Date()` in a spec; the harness clock
         lastSeenAt: dhakaNoon(),
       },
     });
@@ -320,8 +322,8 @@ describe('G168 — প্রকাশের সময় pilot আপনিই �
     await makeDevice('c'),
   ];
 
-  /** ⭐⭐⭐ এই ব্লকের মূল টেস্ট */
-  it('⭐ বালতি খালি হলে প্রকাশেই একজন pilot বসে', async () => {
+  /** The main test of this block */
+  it('when the bucket is empty, one pilot is set at publish', async () => {
     const devices = await fleet();
     const rel = `updates/${randomUUID()}.msi`;
     await putMsi(rel);
@@ -333,8 +335,8 @@ describe('G168 — প্রকাশের সময় pilot আপনিই �
     expect(devices.some((d) => d.id === res.body.pilotDeviceId)).toBe(true);
   });
 
-  /** ⚠️ কেউ এমনিতেই পড়লে হস্তক্ষেপ নয় */
-  it('⭐ কেউ বালতিতে পড়লে pilot বসে না', async () => {
+  /** If someone falls in anyway, no intervention */
+  it('when someone falls in the bucket, no pilot is set', async () => {
     const devices = await fleet();
     const rel = `updates/${randomUUID()}.msi`;
     await putMsi(rel);
@@ -345,8 +347,8 @@ describe('G168 — প্রকাশের সময় pilot আপনিই �
     expect(res.body.pilotDeviceId).toBeNull();
   });
 
-  /** ⚠️ `all`-এ সবাই এমনিতেই পাচ্ছে — pilot অর্থহীন */
-  it('all-এ প্রকাশ করলে pilot বসে না', async () => {
+  /** On `all` everyone gets it anyway, so a pilot is meaningless */
+  it('publishing to all sets no pilot', async () => {
     const devices = await fleet();
     const rel = `updates/${randomUUID()}.msi`;
     await putMsi(rel);
@@ -362,11 +364,11 @@ describe('G168 — প্রকাশের সময় pilot আপনিই �
   });
 
   /**
-   * ⚠️⚠️ **বাতিল করা PC গিনিপিগ হতে পারে না** — সে তো আপডেটই পায় না
-   * (`isOfferedTo`-র আগেই `update.service` তাকে ছেঁকে দেয়), তাই তার
-   * কাছ থেকে কোনো প্রমাণ আসবে না আর অচলাবস্থাটা রয়েই যেত।
+   * A revoked PC cannot be the guinea pig: it never gets updates at all
+   * (`update.service` filters it out before `isOfferedTo`), so no evidence
+   * would come from it and the deadlock would remain.
    */
-  it('⭐ বাতিল করা PC pilot হয় না', async () => {
+  it('a revoked PC does not become the pilot', async () => {
     const revoked = await makeDevice('rev', 'revoked');
     const alive = await makeDevice('live');
     const rel = `updates/${randomUUID()}.msi`;
@@ -379,10 +381,10 @@ describe('G168 — প্রকাশের সময় pilot আপনিই �
   });
 
   /**
-   * ⚠️⚠️ **হাতে ধাপ বদলালেও একই ফাঁদ** — মালিক `all` থেকে `canary`-তে
-   * নামালে বালতি আবার খালি হতে পারে।
+   * The same trap applies to a manual stage change: if the owner moves from
+   * `all` down to `canary`, the bucket could be empty again.
    */
-  it('⭐ হাতে canary-তে নামালেও pilot বসে', async () => {
+  it('a pilot is set when manually moved down to canary too', async () => {
     const devices = await fleet();
     const rel = `updates/${randomUUID()}.msi`;
     await putMsi(rel);
@@ -401,10 +403,10 @@ describe('G168 — প্রকাশের সময় pilot আপনিই �
   });
 
   /**
-   * ⚠️⚠️ **মালিকের বাছাই কখনো বদলানো হয় না।** তিনি একটা মেশিন বেছে
-   * দিলে সেটাই থাকে — নিজে থেকে বসানোটা কেবল **ফাঁকা ঘর** ভরার জন্য।
+   * The owner's choice is never changed. If they pick a machine it stays;
+   * the automatic setting only fills an empty slot.
    */
-  it('⭐ মালিকের বেছে দেওয়া pilot চাপা পড়ে না', async () => {
+  it('a pilot chosen by the owner is not overridden', async () => {
     const devices = await fleet();
     const rel = `updates/${randomUUID()}.msi`;
     await putMsi(rel);
@@ -424,13 +426,14 @@ describe('G168 — প্রকাশের সময় pilot আপনিই �
   });
 
   /**
-   * ⭐⭐⭐ **আসল দাবিটা এটাই** — pilot বসেছে কি না তা নয়, **অফারটা
-   * সত্যিই যাচ্ছে** কি না। বালতি খালি ছিল, তবু এখন একজন অফার পান।
+   * The real claim is this: not whether a pilot was set, but whether the
+   * offer is really going out. The bucket was empty, yet now one machine
+   * gets an offer.
    *
-   * ⚠️ এই টেস্টটা না থাকলে pilot কলামে একটা সংখ্যা বসেই সন্তুষ্ট থাকা
-   *    যেত, অথচ `UpdateService` সেটা পড়ে কি না কেউ যাচাই করত না।
+   * Without this test, a number in the pilot column could satisfy everyone
+   * while nobody checked that `UpdateService` reads it.
    */
-  it('⭐⭐ এবং সেই মেশিনটা সত্যিই আপডেটের অফার পায়', async () => {
+  it('and that machine really gets the update offer', async () => {
     const devices = await fleet();
     const rel = `updates/${randomUUID()}.msi`;
     await putMsi(rel);
@@ -441,12 +444,12 @@ describe('G168 — প্রকাশের সময় pilot আপনিই �
     const pilot = devices.find((d) => d.id === res.body.pilotDeviceId)!;
     const updates = h.app.get(UpdateService);
 
-    // ⚠️ pilot — অফার পান
+    // The pilot gets an offer
     expect(
       await updates.offerFor('0.0.1', pilot.machineGuid, pilot.id),
     ).not.toBeNull();
 
-    // ⚠️ বাকিরা — এখনো নয়, কারণ ধাপটা এখনো canary
+    // The others do not yet, because the stage is still canary
     for (const other of devices.filter((d) => d.id !== pilot.id)) {
       expect(
         await updates.offerFor('0.0.1', other.machineGuid, other.id),

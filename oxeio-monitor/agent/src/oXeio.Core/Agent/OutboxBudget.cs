@@ -1,19 +1,19 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// <see cref="OutboxBudget.Plan"/>-এর ফল। দুটো তালিকা আলাদা রাখা হয়েছে যাতে
-/// লগে "পুরোনো হয়ে বাদ" আর "জায়গা নেই বলে বাদ" আলাদা করে লেখা যায় — দ্বিতীয়টা
-/// দেখা গেলেই বোঝা যায় ডিস্কের বাজেট বা রিটেনশন বদলানো দরকার।
+/// Result of <see cref="OutboxBudget.Plan"/>. The two lists are kept apart so the log can say
+/// "dropped as too old" and "dropped for lack of space" separately; seeing the second means
+/// the disk budget or the retention needs changing.
 /// </summary>
 public sealed record EvictionPlan
 {
-    /// <summary>বয়সের নিয়মে বাদ।</summary>
+    /// <summary>Dropped by the age rule.</summary>
     public required IReadOnlyList<long> ExpiredRowIds { get; init; }
 
-    /// <summary>ডিস্কের ক্যাপ ছাড়ানোয় বাদ।</summary>
+    /// <summary>Dropped for exceeding the disk cap.</summary>
     public required IReadOnlyList<long> OverBudgetRowIds { get; init; }
 
-    /// <summary>দুটো মিলিয়ে — <see cref="IOutboxStore.EvictAsync"/>-এ এটাই যায়।</summary>
+    /// <summary>Both combined: this is what goes to <see cref="IOutboxStore.EvictAsync"/>.</summary>
     public required IReadOnlyList<long> RowIds { get; init; }
 
     public required long BytesBefore { get; init; }
@@ -34,22 +34,22 @@ public sealed record EvictionPlan
 }
 
 /// <summary>
-/// ⭐ ডিস্ক ভরে গেলে কী ফেলে দেওয়া হবে — বিশুদ্ধ নীতি, কোনো I/O নেই।
+/// What gets thrown away when the disk is full: pure policy, no I/O.
 ///
-/// <b>ক্রমটাই আসল কথা:</b> স্ক্রিনশট → app-usage → event → segment।
+/// <b>The order is the whole point:</b> screenshot → app-usage → event → segment.
 ///
 /// <code>
-/// স্ক্রিনশট : ~২০০ KB × ২৮৮ স্লট × ৩ মনিটর ≈ দিনে ১৭০ MB   ← আয়তনের ৯৯%
-/// segment   : ~২০০ বাইট × দিনে কয়েকশো        ≈ দিনে ১০০ KB   ← পে-রোল
+/// screenshots: ~200 KB x 288 slots x 3 monitors = ~170 MB per day   (99% of the volume)
+/// segment    : ~200 bytes x a few hundred per day = ~100 KB per day (payroll)
 /// </code>
 ///
-/// অর্থাৎ একটা স্ক্রিনশট ফেলে দিলে হাজারখানেক সেগমেন্টের সমান জায়গা খালি হয়।
-/// একটা সেগমেন্ট ফেলে দিলে জায়গা প্রায় কিছুই খালি হয় না, কিন্তু কারো বেতনের
-/// ঘণ্টা চিরতরে হারায়। তাই segment <b>সবার শেষে</b>, আর বাস্তবে তার পালা কখনো
-/// আসে না — সেটাই ইচ্ছাকৃত নকশা, দুর্ঘটনা নয়।
+/// So dropping one screenshot frees as much space as about a thousand segments. Dropping one
+/// segment frees almost nothing, but someone's payroll hours are lost forever. So segments
+/// go <b>last of all</b>, and in practice their turn never comes; that is the intended
+/// design, not an accident.
 ///
-/// ⚠️ ধার নেওয়া (leased) সারি কখনো বাদ যায় না — ওগুলো এই মুহূর্তে আপলোড হচ্ছে,
-/// আর নিচ থেকে ফাইল সরিয়ে নিলে আপলোডটা মাঝপথে ভেঙে পড়ত।
+/// Leased rows are never dropped: they are being uploaded right now, and pulling the file out
+/// from under them would break the upload midway.
 /// </summary>
 public sealed record OutboxBudget
 {
@@ -67,29 +67,29 @@ public sealed record OutboxBudget
         SegmentMaxAge = segmentMaxAge;
     }
 
-    /// <summary>এর ওপরে গেলে ছাঁটাই শুরু।</summary>
+    /// <summary>Trimming starts once above this.</summary>
     public long CapBytes { get; }
 
     /// <summary>
-    /// ছাঁটাই করে এখানে নামানো হয়। ক্যাপের চেয়ে কম রাখা হয়েছে হিস্টেরেসিসের জন্য —
-    /// ঠিক ক্যাপে থামলে পরের প্রতিটা স্ক্রিনশটেই আবার একটা করে ছাঁটাই চলত।
+    /// Trimming brings it down to this. Kept below the cap for hysteresis: stopping exactly at
+    /// the cap would trigger another trim on every following screenshot.
     /// </summary>
     public long TargetBytes { get; }
 
-    /// <summary>স্ক্রিনশট / app-usage / event কতদিন পর অকেজো।</summary>
+    /// <summary>How long until screenshots / app-usage / events become useless.</summary>
     public TimeSpan MaxAge { get; }
 
     /// <summary>
-    /// সেগমেন্টের আলাদা, অনেক লম্বা মেয়াদ। ⚠️ এক করে ফেলবেন না —
-    /// দুই সপ্তাহের লাইন-বিভ্রাটে পুরো পাক্ষিকের বেতন মুছে যেত।
+    /// Segments get their own, much longer lifetime. Do not merge them: a two-week
+    /// connectivity outage would wipe out a whole fortnight's pay.
     /// </summary>
     public TimeSpan SegmentMaxAge { get; }
 
     /// <summary>
-    /// ২ GiB ক্যাপ, ১.৫ GiB লক্ষ্য, ৭ দিন, সেগমেন্টে ৩০ দিন।
+    /// 2 GiB cap, 1.5 GiB target, 7 days, 30 days for segments.
     ///
-    /// ২ GiB কেন: দিনে ~১৭০ MB × ৭ দিন ≈ ১.২ GB, অর্থাৎ ডকের বলা সাত দিনের
-    /// অফলাইন সহনশীলতা পুরোটাই ধরে, তবু অফিস-PC-র ডিস্কে টের পাওয়ার মতো নয়।
+    /// Why 2 GiB: ~170 MB per day x 7 days = ~1.2 GB, which covers the whole seven days of
+    /// offline tolerance the docs promise, yet is not noticeable on an office PC's disk.
     /// </summary>
     public static OutboxBudget Default { get; } = new(
         capBytes: 2L * 1024 * 1024 * 1024,
@@ -98,9 +98,9 @@ public sealed record OutboxBudget
         segmentMaxAge: TimeSpan.FromDays(30));
 
     /// <summary>
-    /// স্ক্রিনশট আগে, সেগমেন্ট শেষে। ⚠️ <see cref="OutboundKind"/>-এর enum-ক্রমের
-    /// ওপর নির্ভর করা হয়নি — সেখানে একটা সদস্য সরালেই নীরবে বেতনের ডেটা
-    /// সবার আগে মুছতে শুরু করত।
+    /// Screenshots first, segments last. This deliberately does not rely on the enum order of
+    /// <see cref="OutboundKind"/>: moving one member there would silently start deleting
+    /// payroll data first.
     /// </summary>
     public static int EvictionRank(OutboundKind kind) => kind switch
     {
@@ -112,8 +112,8 @@ public sealed record OutboxBudget
     };
 
     /// <param name="entries">
-    /// পুরো আউটবক্সের জরিপ (<see cref="IOutboxStore.SurveyAsync"/>)। অংশবিশেষ দিলে
-    /// মোট বাইটের হিসাব কম হবে আর ছাঁটাই কম হবে।
+    /// A survey of the whole outbox (<see cref="IOutboxStore.SurveyAsync"/>). Passing only part
+    /// of it undercounts total bytes and trims less.
     /// </param>
     public EvictionPlan Plan(IReadOnlyList<OutboxEntryInfo> entries, DateTimeOffset now)
     {
@@ -151,7 +151,7 @@ public sealed record OutboxBudget
 
         if (remaining > CapBytes)
         {
-            // ধার নেওয়াগুলো বাদ, তারপর "সবচেয়ে কম দামি আগে, তার মধ্যে পুরোনো আগে"
+            // Leased rows are excluded, then "cheapest first, and within that oldest first"
             var candidates = survivors
                 .Where(x => !x.Leased)
                 .OrderBy(x => EvictionRank(x.Kind))

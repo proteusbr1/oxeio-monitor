@@ -1,46 +1,45 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// H04 — নামানো আপডেট কোন অবস্থায় আছে।
+/// H04: the state a downloaded update is in.
 ///
-/// ⭐ <b>এজেন্ট নিজে থেকে MSI চালায় না।</b> সে শুধু নামায়, হ্যাশ মেলায়,
-/// আর "প্রস্তুত" বলে রেখে দেয়।
+/// <b>The agent never runs the MSI on its own.</b> It only downloads, checks the hash, and
+/// leaves it marked "ready".
 ///
-/// কারণটা এই রিপোর নিজেরই অভিজ্ঞতা
-/// ([G58](../../../../docs/08-Gap-Analysis.md)): একটা ভুল LaunchCondition
-/// নিয়ে MSI বিলি হয়ে গিয়েছিল, আর তারপর দেখা গেল <b>নতুন MSI দিয়ে সেটা
-/// ঠিক করা যায় না</b> — মেজর আপগ্রেডে পুরোনো প্যাকেজ নিজের ক্যাশ করা MSI
-/// দিয়েই সরে, বাগসহ। ওই এক মেশিনে হাতে গিয়ে ঠিক করতে হয়েছিল।
-/// ১৫টা PC-তে রাত ৩টায় নিজে থেকে সেটা ঘটলে সকালে পুরো অফিসের ট্র্যাকিং
-/// বন্ধ থাকত, আর ১৫ বার হাতে যেতে হতো।
+/// The reason is this repo's own experience
+/// ([G58](../../../../docs/08-Gap-Analysis.md)): an MSI shipped with a wrong LaunchCondition,
+/// and then it turned out that <b>a new MSI could not fix it</b>: in a major upgrade the old
+/// package is removed using its own cached MSI, bug included. That one machine had to be
+/// fixed by hand. If that happened automatically on 15 PCs at 3 a.m., the whole office's
+/// tracking would be down in the morning and 15 visits by hand would be needed.
 ///
-/// তাই ভাগটা ইচ্ছাকৃত: <b>নামানো ও যাচাই স্বয়ংক্রিয়, বসানো মানুষের হাতে।</b>
-/// সার্ভারের ধাপে ধাপে রোলআউট (canary → partial → all) ঠিক করে দেয়
-/// কোন মেশিন কখন প্রস্তাব পাবে; মালিক ড্যাশবোর্ড থেকে দেখে সিদ্ধান্ত নেন।
+/// So the split is deliberate: <b>download and verification are automatic, installation is
+/// in a person's hands.</b> The server's staged rollout (canary → partial → all) decides which
+/// machine gets the offer when; the owner watches the dashboard and decides.
 /// </summary>
 public enum UpdateStage
 {
-    /// <summary>নতুন কিছু নেই।</summary>
+    /// <summary>Nothing new.</summary>
     None,
 
-    /// <summary>সার্ভার প্রস্তাব দিয়েছে, নামানো এখনো হয়নি।</summary>
+    /// <summary>The server has made an offer; not downloaded yet.</summary>
     Offered,
 
-    /// <summary>নামানো হয়েছে, কিন্তু হ্যাশ এখনো মেলানো হয়নি।</summary>
+    /// <summary>Downloaded, but the hash has not been checked yet.</summary>
     Downloaded,
 
-    /// <summary>⭐ হ্যাশ মিলেছে — বসানোর জন্য প্রস্তুত।</summary>
+    /// <summary>The hash matched: ready to install.</summary>
     Verified,
 
     /// <summary>
-    /// নামানো গেছে কিন্তু হ্যাশ মেলেনি — ফাইলটা মুছে ফেলা হয়েছে।
-    /// ⚠️ এটা নীরবে চাপা দেওয়ার জিনিস নয়: হয় ট্রান্সফার নষ্ট হয়েছে,
-    /// নয় কেউ মাঝপথে ফাইল বদলেছে। দ্বিতীয়টা সত্যি হলে সেটা আক্রমণ।
+    /// Downloaded but the hash did not match: the file was deleted.
+    /// Not something to suppress quietly: either the transfer was damaged or someone changed
+    /// the file midway. If the second is true, it is an attack.
     /// </summary>
     Corrupt,
 }
 
-/// <summary>এই মুহূর্তে আপডেটের ছবি — tray ও ডায়াগনস্টিক দুটোই এটা দেখায়।</summary>
+/// <summary>The current picture of the update: the tray and diagnostics both show it.</summary>
 public sealed record UpdateStatus
 {
     public static readonly UpdateStatus Idle = new() { Stage = UpdateStage.None };
@@ -49,15 +48,15 @@ public sealed record UpdateStatus
 
     public string? Version { get; init; }
 
-    /// <summary>যাচাই হয়ে গেলে MSI-টা ডিস্কে ঠিক কোথায়।</summary>
+    /// <summary>Exactly where the MSI is on disk once verified.</summary>
     public string? MsiPath { get; init; }
 
     public bool Mandatory { get; init; }
 
-    /// <summary>কী ভুল হয়েছিল — ব্যর্থ হলে।</summary>
+    /// <summary>What went wrong, if it failed.</summary>
     public string? Detail { get; init; }
 
-    /// <summary>স্টাফকে দেখানোর মতো এক লাইন।</summary>
+    /// <summary>One line suitable to show staff.</summary>
     public string Describe() => Stage switch
     {
         UpdateStage.None => "Running the latest version",
@@ -65,7 +64,7 @@ public sealed record UpdateStatus
         UpdateStage.Downloaded => $"New version {Version} — verifying",
         UpdateStage.Verified => $"New version {Version} is ready to install",
 
-        // ⚠️ "সমস্যা হয়েছে" বললে কেউ কিছু করত না। কী করতে হবে সেটা বলা হচ্ছে।
+        // Saying "there was a problem" would lead nobody to act; this says what to do.
         UpdateStage.Corrupt => $"Version {Version} downloaded but the file did not match — tell IT",
 
         _ => "Unknown",

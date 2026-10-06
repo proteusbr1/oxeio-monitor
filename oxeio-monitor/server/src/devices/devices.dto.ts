@@ -23,9 +23,9 @@ export class DeviceListQueryDto {
   status?: DeviceStatus;
 }
 /**
- * ⭐ কারণ বাধ্যতামূলক — `time_adjustments.reason`-এর মতোই।
- * দূর থেকে কারো মেশিন থামিয়ে দেওয়া এমন কাজ যার ব্যাখ্যা ছয় মাস পরেও
- * লাগতে পারে, আর তখন কারো মনে থাকবে না।
+ * The reason is mandatory — like `time_adjustments.reason`.
+ * Stopping someone's machine remotely is an action whose explanation may be
+ * needed six months later, when nobody will remember.
  */
 export class RevokeDeviceDto {
   @IsString() @MinLength(3) @MaxLength(500)
@@ -39,27 +39,28 @@ export class CreateEnrollmentCodeDto {
   @IsInt() @Min(1)
   employeeId!: number;
 }
-// ── H04 · এজেন্টের ভার্সন বিলি ──────────────────────────────────────────────
+// ── H04 · rolling out agent versions ────────────────────────────────────────
 
 /**
- * ⚠️ `sha256` **ঐচ্ছিক**, আর সেটাই মূল সিদ্ধান্ত: সার্ভার নিজে ফাইল পড়ে
- * হিসাব করে। দিলে **মিলিয়ে দেখা হয়** — না মিললে ৪০০।
+ * Careful: `sha256` is **optional**, and that is the main decision: the server
+ * reads the file and computes it itself. If given, it is **checked against
+ * that** — a mismatch gives 400.
  *
- * হাতে বসানো হ্যাশে একটা অক্ষর ভুল হলে ১৫টা PC ফাইলটা নামাত, sha256
- * না মেলায় বাতিল করত, আবার নামাত — চিরকাল। লগে কেবল "hash mismatch"
- * লেখা থাকত, ভুলটা যে টাইপোতে সেটা কেউ ধরত না।
+ * With one character wrong in a hand-entered hash, 15 PCs would download the
+ * file, reject it for the sha256 mismatch, and download again — forever. The
+ * log would say only "hash mismatch", and nobody would see that the cause was a typo.
  */
 export class PublishVersionDto {
   /**
-   * ⚠️ SemVer — `rollout.ts`-এর `isNewer()` এই ফরম্যাটই তুলনা করে।
-   * `0.2` বা `v0.2.0` দিলে তুলনাটা এলোমেলো হতো।
+   * Careful: SemVer — `isNewer()` in `rollout.ts` compares exactly this format.
+   * Giving `0.2` or `v0.2.0` would make the comparison unpredictable.
    */
   @Matches(/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/, {
     message: 'version must look like 0.2.0',
   })
   version!: string;
 
-  /** storage রুটের ভেতরের পাথ — `updates/oXeioAgent-0.2.0.msi` */
+  /** Path inside the storage root — `updates/oXeioAgent-0.2.0.msi` */
   @IsString() @MaxLength(400)
   msiPath!: string;
 
@@ -85,11 +86,12 @@ export class SetStageDto {
   isMandatory?: boolean;
 
   /**
-   * ⭐⭐ **যে একটা PC বালতি নির্বিশেষে আগে পাবে** *(১ সেপ্টেম্বর ২০২৬)*।
+   * **The one PC that gets it first, regardless of bucket.**
    *
-   * ⚠️ `null` পাঠানো মানে **পাইলট তুলে দেওয়া**, আর ঘরটা না পাঠানো মানে
-   * "যা ছিল তাই থাক" — দুটো আলাদা কথা, তাই `@IsOptional()` আর
-   * `@ValidateIf` দুটোই লাগে। নইলে ধাপ বদলাতে গেলেই পাইলট নীরবে মুছে যেত।
+   * Careful: sending `null` means **remove the pilot**, while not sending the
+   * field means "leave it as it was" — two different things, so both
+   * `@IsOptional()` and `@ValidateIf` are needed. Otherwise changing the stage
+   * would silently wipe the pilot.
    */
   @IsOptional()
   @ValidateIf((_, value) => value !== null)

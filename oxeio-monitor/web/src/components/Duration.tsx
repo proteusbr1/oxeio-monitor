@@ -5,16 +5,16 @@ import {
 } from '../lib/format';
 
 /**
- * সময়কাল দেখানো — সেকেন্ড → `7h 32m`।
+ * Showing a duration: seconds to `7h 32m`.
  *
- * ⭐ `.num` ক্লাসটা এখানেই বসে (tabular-nums)। সরাসরি `formatDuration()`
- *    ডেকে `<span>`-এ বসালে ক্লাসটা বসাতে ভুলে যাওয়া যেত, আর তখন লাইভ
- *    বোর্ডের ঘণ্টাগুলো প্রতি ৩০ সেকেন্ডের রিফ্রেশে সামান্য লাফাত — দেখতে
- *    অস্থির, আর সংখ্যাগুলোকে অবিশ্বাস্য করে তোলে।
+ * The `.num` class (tabular-nums) is applied here. Calling `formatDuration()`
+ * directly and putting the result in a `<span>` makes it easy to forget the
+ * class, and then the live board's hours would jump slightly on every 30-second
+ * refresh: restless to look at, and it makes the numbers feel unreliable.
  *
- * ⚠️ `tone="muted"` দিন যখন সময়টা **গোনা হয়নি** (idle, locked)। নিরেট
- *    `ink` = গোনা হওয়া কাজ, ধূসর = গোনা হয়নি — এই পার্থক্যটাই ব্র্যান্ডের
- *    নিয়ম। (⚠️ "কালো" নয় — Midnight থিমে `ink` প্রায় সাদা।)
+ * Careful: use `tone="muted"` when the time was not counted (idle, locked). Solid
+ * `ink` = counted work, grey = not counted; that difference is the brand's rule.
+ * (Not "black": in the Midnight theme `ink` is almost white.)
  */
 export function Duration({
   seconds,
@@ -41,12 +41,12 @@ export function Duration({
 }
 
 /**
- * দশমিক ঘণ্টা → `7h 32m`।
+ * Decimal hours to `7h 32m`.
  *
- * ⚠️ রিপোর্টের API ঘণ্টা পাঠায় (`workedHours: 7.53`), পে-রোল ঘণ্টা
- *    **স্ট্রিং** হিসেবে (`'7.53'`) — দুটোই এখানে চলে। এই সেতুটা না থাকলে
- *    রিপোর্ট পেজে "7.53" আর লাইভ বোর্ডে "7h 32m" দেখা যেত, আর কেউ
- *    মেলাতে পারত না যে দুটো একই সংখ্যা।
+ * Careful: the reports API sends hours (`workedHours: 7.53`) while payroll sends
+ * hours as a string (`'7.53'`); both work here. Without this bridge the report
+ * page would show "7.53" and the live board "7h 32m", and nobody could tell they
+ * were the same number.
  */
 export function Hours({
   hours,

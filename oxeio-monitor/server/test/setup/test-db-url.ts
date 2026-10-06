@@ -1,11 +1,11 @@
 /**
- * টেস্ট কখনোই ডেভ ডাটাবেস ছোঁয় না — একই Postgres ইনস্ট্যান্সে
- * আলাদা একটা `*_test` ডাটাবেসে চলে।
+ * Tests never touch the dev database: they run in a separate `*_test`
+ * database on the same Postgres instance.
  *
- * ⚠️ [02-Workflow §9](../../../docs/02-Workflow.md)-এ Testcontainers-এর কথা আছে।
- *    ইচ্ছাকৃতভাবে সেটা নেওয়া হয়নি: docker compose-এ Postgres তো চলছেই,
- *    প্রতি রানে নতুন কন্টেইনার তোলা মানে অকারণে ৩০+ সেকেন্ড আর একটা ডিপেন্ডেন্সি।
- *    CI-তে service container দিলে এই একই কোড কাজ করবে।
+ * Note: [02-Workflow §9](../../../docs/02-Workflow.md) mentions Testcontainers.
+ * It was deliberately not adopted: Postgres already runs in docker compose,
+ * and starting a fresh container per run costs 30+ seconds and a dependency
+ * for nothing. With a service container in CI, this same code works.
  */
 export function testDatabaseUrl(): string {
   const base = process.env.DATABASE_URL;
@@ -23,7 +23,7 @@ export function testDatabaseUrl(): string {
   return url.toString();
 }
 
-/** `CREATE DATABASE` চালাতে হলে অন্য একটা ডাটাবেসে কানেক্ট করতে হয় */
+/** To run `CREATE DATABASE` you have to connect to a different database */
 export function adminDatabaseUrl(): string {
   const url = new URL(process.env.DATABASE_URL as string);
   url.pathname = '/postgres';

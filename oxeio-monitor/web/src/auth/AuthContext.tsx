@@ -16,37 +16,37 @@ import { IdleWarning } from './IdleWarning';
 import { login as loginRequest, type LoginCredentials } from './twoFactorApi';
 import { useIdleLogout } from './useIdleLogout';
 
-/** লগইন চেষ্টার ফল — পাসওয়ার্ড ঠিক হলেও কাজ শেষ না-ও হতে পারে (I06) */
+/** Result of a login attempt: even with the right password the flow may not be finished (I06). */
 export interface SignInResult {
-  /** true হলে কোড চেয়ে আবার `signIn` ডাকতে হবে */
+  /** When true, ask for the code and call `signIn` again. */
   needsTotp: boolean;
-  /** রিকভারি কোড দিয়ে ঢুকেছে — কটা বাকি সেটা জানানো দরকার */
+  /** Signed in with a recovery code; the user must be told how many remain. */
   usedRecoveryCode: boolean;
   recoveryCodesLeft: number | null;
 }
 
 interface AuthState {
   user: Me | null;
-  /** প্রথম `/auth/me` কল শেষ হওয়ার আগে রুট সিদ্ধান্ত নেওয়া যাবে না */
+  /** Route decisions cannot be made before the first `/auth/me` call finishes. */
   loading: boolean;
   signIn: (creds: LoginCredentials) => Promise<SignInResult>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
   /**
-   * I09 — নিষ্ক্রিয়তায় নিজে থেকে বেরিয়ে যাওয়ার পর true। লগইন পর্দা
-   * এটা দেখেই "ভুল পাসওয়ার্ড" নয়, "সময় শেষ" বার্তাটা দেখায়।
+   * I09: true after being signed out automatically for inactivity. The login screen
+   * uses it to show a "time ran out" message instead of "wrong password".
    */
   timedOut: boolean;
   /**
-   * ⭐⭐ সার্ভারের সাথে কথাই বলা যায়নি — **সেশন শেষ নয়**।
+   * The server could not be reached at all; this is NOT an ended session.
    *
-   * ⚠️ আগে দুটো অবস্থা এক করে ফেলা হতো: `me()` যে কারণেই ব্যর্থ হোক
-   *    (৪০১ হোক, নাকি প্লেন নেই) লগইন পর্দা উঠত। ব্রাউজার ট্যাবে ওটা
-   *    বিরল, কিন্তু হোমস্ক্রিনের PWA মোবাইল ডেটায় বারবার ঠান্ডা-চালু হয় —
-   *    ওখানে এটাই নিত্য ঘটনা। ফল দুটোই খারাপ: মালিক ভাবতেন সেশন শেষ
-   *    হয়ে গেছে (অথচ cookie দিব্যি বেঁচে), আর নেট ফিরে এলেও অ্যাপ নিজে
-   *    থেকে ফিরত না। "জানি না"-কে "লগ আউট" বলা — নিষিদ্ধ রূপান্তরটারই
-   *    আরেক মুখ।
+   * Careful: the two states used to be merged: whatever the reason `me()` failed
+   * (a 401, or just no network), the login screen came up. In a browser tab that is
+   * rare, but a home-screen PWA cold-starts repeatedly on mobile data, and there it
+   * is routine. Both outcomes were bad: the owner thought the session had ended
+   * (while the cookie was perfectly alive), and the app did not recover by itself
+   * when the network returned. Treating "don't know" as "logged out" is another
+   * face of the forbidden conversion.
    */
   offline: boolean;
 }
@@ -75,16 +75,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // যেকোনো রিকোয়েস্টে সেশন শেষ হলে (৩০ মিনিট নিষ্ক্রিয়তা — I09)
-    // সাথে সাথেই লগইন পর্দায় ফিরে যাওয়া
+    // When a session ends on any request (30 minutes of inactivity, I09),
+    // go back to the login screen immediately.
     setUnauthorizedHandler(() => setUser(null));
     void refresh();
   }, [refresh]);
 
   /**
-   * ⭐ নেট ফিরে এলে নিজে থেকেই আবার দেখা। এটা না থাকলে ব্যবহারকারীকে
-   * হাতে রিফ্রেশ করতে হতো — আর হোমস্ক্রিনের অ্যাপে "রিফ্রেশ" বোতামই নেই,
-   * তাই তাঁকে অ্যাপ বন্ধ করে আবার খুলতে হতো।
+   * When the network returns, check again on its own. Without this the user would
+   * have to refresh by hand, and a home-screen app has no "refresh" button, so they
+   * would have to close and reopen the app.
    */
   useEffect(() => {
     const onOnline = (): void => void refresh();
@@ -96,8 +96,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (creds: LoginCredentials): Promise<SignInResult> => {
       const res = await loginRequest(creds);
 
-      // ⚠️ `needsTotp` মানে কোনো cookie বসেনি — এখানে `refresh()` ডাকলে
-      //    ৪০১ খেয়ে ব্যবহারকারী আবার শূন্য থেকে শুরু করত।
+      // Careful: `needsTotp` means no cookie was set. Calling `refresh()` here would
+      // get a 401 and the user would start over from zero.
       if (res.needsTotp) {
         return { needsTotp: true, usedRecoveryCode: false, recoveryCodesLeft: null };
       }
@@ -122,10 +122,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
-   * I09 — সময় ফুরালে সার্ভারেও cookie মুছে দেওয়া হয়।
-   * ⚠️ শুধু `setUser(null)` করলে cookie ব্রাউজারে থেকে যেত; তারপর পাতা
-   *    রিফ্রেশ করলে `/auth/me` সফল হয়ে ব্যবহারকারী আবার ভেতরে ঢুকে যেত —
-   *    অর্থাৎ অটো-লগআউট আসলে কিছুই করত না।
+   * I09: when time runs out, the cookie is also cleared on the server.
+   * Careful: with only `setUser(null)` the cookie would stay in the browser; after
+   * a page refresh `/auth/me` would succeed and the user would be back in, so
+   * auto-logout would effectively do nothing.
    */
   const expire = useCallback(() => {
     setTimedOut(true);
@@ -143,9 +143,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext value={value}>
       {children}
       {/*
-        ⚠️ সতর্কবার্তাটা প্রোভাইডারেই বসে, কোনো একটা পাতায় নয় — তাহলে
-           যে পাতাতেই ব্যবহারকারী থাকুক, বার্তাটা পায়। `Layout`-এ বসালে
-           লগইন/পাসওয়ার্ড বদলের পর্দাগুলো বাদ পড়ত।
+        Careful: the warning is mounted in the provider, not in any one page, so
+        the user gets it whichever page they are on. Putting it in `Layout`
+        would leave out the login and change-password screens.
       */}
       {user !== null && idle.phase === 'warning' && (
         <IdleWarning

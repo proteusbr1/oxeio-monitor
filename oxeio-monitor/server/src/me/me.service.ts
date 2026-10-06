@@ -14,7 +14,7 @@ import { SCREENSHOT_RETENTION_DAYS } from '../summary/retention.job';
 import { isWorkday } from '../summary/summary.math';
 import type { SessionUser } from '../auth/types';
 
-/** কর্মীর নিজের পাতার উপরের অংশ */
+/** The top section of the employee's own page */
 export interface MySummary {
   employee: {
     empCode: string;
@@ -24,54 +24,55 @@ export interface MySummary {
   };
   progress: EmployeeProgress;
   /**
-   * ⭐ নীতিমালায় সই করার তারিখ। স্টাফ নিজে দেখতে পায় **ইচ্ছাকৃতভাবে** —
-   * "কবে থেকে, কী শর্তে" প্রশ্নের উত্তরটা তার নিজের কাছেই থাকা দরকার।
+   * Date the policy was signed. The staff member sees it **on purpose**: the
+   * answer to "since when, and on what terms" should be in their own hands.
    */
   policySignedAt: string | null;
-  /** ⭐ "ছবি কতদিন থাকে" — প্রতিশ্রুতিটা সংখ্যাসহ, পাতাতেই */
+  /** "How long screenshots are kept": the promise, with the number, on the page itself */
   screenshotRetentionDays: number;
   /**
-   * ⭐⭐ **আজকের ডিজাইন** *(২১ আগস্ট)* — কিছু না করলে `null`।
+   * **Today's designs**: `null` when there is nothing to show.
    *
-   * ⚠️⚠️ স্টাফ নিজে দেখতে পান, আর সেটা **ইচ্ছাকৃত**: যে সংখ্যা দিয়ে
-   * তাঁকে মাপা হবে, সেটা তাঁর নিজের কাছেও থাকা দরকার। একই যুক্তিতে
-   * `policySignedAt` ও retention-ও এই পাতায়।
-   * ⚠️ `null` মানে "এই মাপটা আপনার জন্য নয়" — শূন্য নয়।
+   * Staff see this themselves **on purpose**: the number they are measured by
+   * should be available to them too. By the same logic `policySignedAt` and
+   * the retention are on this page.
+   * `null` means "this measure does not apply to you", not zero.
    */
   designs: DesignView | null;
 }
 
-/** একটা দিনের সারি — কর্মীর নিজের তালিকায় */
+/** One day's row in the employee's own list */
 export interface MyDay {
   workDate: string;
-  /** ওই দিনে গোনা সেকেন্ড (ACTIVE-এর যোগফল) */
+  /** Seconds counted that day (sum of ACTIVE) */
   workedSec: number;
-  /** owner-এর সংশোধন, ± */
+  /** The owner's correction, ± */
   adjustmentSec: number;
-  /** worked + adjustment — মাসের টার্গেটে এটাই যায় */
+  /** worked + adjustment; this is what goes toward the month's target */
   creditedSec: number;
-  /** সাপ্তাহিক ছুটি বা ক্যালেন্ডার ছুটি */
+  /** Weekly off day or calendar holiday */
   isOffDay: boolean;
 }
 
 const MS_PER_DAY = 86_400_000;
 
-/** ⚠️ একবারে কত দিন — ছাদ না থাকলে কেউ `from=2000-01-01` দিয়ে পুরো টেবিল টানত */
+/** How many days at once. Without a ceiling someone could pull the whole table
+ * with `from=2000-01-01`. */
 export const MY_DAYS_MAX = 92;
 
 /**
- * **J04 · J05 · J08** — কর্মীর **নিজের** ডেটা।
+ * **J04 · J05 · J08** — the employee's **own** data.
  *
- * ⭐⭐ <b>এখানে কোনো `employeeId` প্যারামিটার নেই, আর সেটাই মূল নকশা।</b>
- * পথে আইডি থাকলে একজন স্টাফ সংখ্যাটা বদলে সহকর্মীর পুরো দিন দেখে ফেলত —
- * `employee-activity.controller.ts`-এর ডকেও ঠিক এই আশঙ্কাটা লেখা আছে
- * (*"স্টাফের নিজের ভিউ আলাদা পথে হবে"*)। আইডি আসে **সেশন থেকে**, তাই
- * ভুল করারও উপায় নেই।
+ * <b>There is no `employeeId` parameter here, and that is the core design.</b>
+ * With an id in the path a staff member could change the number and see a
+ * colleague's whole day; the doc of `employee-activity.controller.ts` states
+ * the same worry (the staff's own view must go on a separate path). The id
+ * comes **from the session**, so there is no way to get it wrong.
  *
- * ⭐ <b>সংখ্যাগুলো `ProgressService` থেকেই আসে — নতুন করে কষা হয় না।</b>
- * ওটাই এজেন্টের tray-কে খাওয়ায়। আলাদা করে লিখলে একদিন tray বলত "৫:৪২"
- * আর ওয়েব বলত "৫:৩৯", আর স্টাফের প্রশ্ন হতো *"কোনটা সত্যি?"* — যে
- * ফিচারের পুরো উদ্দেশ্য আস্থা, সেটাই তখন আস্থা ভাঙত।
+ * <b>The numbers come from `ProgressService`; they are not recomputed.</b>
+ * It also feeds the agent's tray. A separate calculation would one day have
+ * the tray say "5:42" and the web say "5:39", and staff would ask "which one
+ * is true?", breaking trust, the whole point of this feature.
  */
 @Injectable()
 export class MeService {
@@ -82,24 +83,24 @@ export class MeService {
   ) {}
 
   /**
-   * ⭐⭐ **R21 — নিজের জামানত কত জমল।**
+   * **R21: how much of their own deposit has built up.**
    *
-   * ⚠️ কর্মীর পাতায় বেতনের কোনো সংখ্যা নেই, আর এটা সেই নিয়ম ভাঙে না:
-   * জমার অঙ্কটা **তাঁর নিজের টাকা**, বেতনের হিসাব নয়। মালিক কত বেতন
-   * দেন সেটা এখান থেকে বের করা যায় না।
+   * The employee page shows no salary figures, and this does not break that
+   * rule: the deposited amount is **their own money**, not a salary
+   * calculation. What the owner pays cannot be derived from it.
    *
-   * ⭐ মাস ধরে তালিকাটাও যায়, শুধু মোট নয় — "কোন মাসে কাটা হয়েছে"
-   * প্রশ্নের উত্তর নিজের পাতাতেই থাকা দরকার, নইলে মিলিয়ে দেখতে হলে
-   * মালিকের কাছে যেতে হতো, আর তখন ফিচারটার উদ্দেশ্যই ব্যর্থ।
+   * The month-by-month list is returned too, not just the total. The answer to
+   * "which month was it deducted" should be on their own page; otherwise they
+   * would have to go to the owner to cross-check, defeating the feature.
    */
   myDeposit(actor: SessionUser) {
     return this.deposits.forEmployee(this.employeeIdOf(actor));
   }
 
   /**
-   * ⚠️ owner ও manager-এর `employeeId` সাধারণত `null` — তাঁরা কর্মীর
-   * সারিতে বাঁধা নন। তাঁদের জন্য এই পাতাটা নেই, আর সেটা ভুল নয়:
-   * তাঁরা `staff/:id`-তে সবার ডেটাই দেখেন।
+   * The `employeeId` of an owner or manager is usually `null`: they are not
+   * bound to an employee row. This page does not exist for them, and that is not
+   * a bug: they see everyone's data under `staff/:id`.
    */
   private employeeIdOf(actor: SessionUser): number {
     if (actor.employeeId === null) {
@@ -128,7 +129,7 @@ export class MeService {
         },
       }),
       this.progress.forEmployee(employeeId, now),
-      // ⭐ আজ দাবি করা ডিজাইন — ইনডেক্স করা (employee_id, first_work_date)
+      // Designs claimed today (indexed on employee_id, first_work_date)
       this.prisma.designCredit.count({
         where: { employeeId, firstWorkDate: workDateOf(now) },
       }),
@@ -145,9 +146,9 @@ export class MeService {
       policySignedAt: isoDate(employee.policySignedAt),
       screenshotRetentionDays: SCREENSHOT_RETENTION_DAYS,
       /**
-       * ⚠️ নিয়মটা এক জায়গায় (`designView`) — তিনটে অবস্থা: টার্গেটসহ ·
-       * টার্গেট ছাড়া শুধু সংখ্যা · কিছুই নয়। ⭐ চার পর্দাই একই ফাংশন
-       * ডাকে, তাই কোনোদিন দুই পর্দা দু-রকম বলবে না।
+       * The rule lives in one place (`designView`) and has three states: with a
+       * target, a bare count without a target, and nothing. All four screens call
+       * the same function, so two screens can never disagree.
        */
       designs: designView(
         employee.staffType,
@@ -169,13 +170,13 @@ export class MeService {
     const employeeId = this.employeeIdOf(actor);
 
     /**
-     * ⚠️ DTO শুধু **আকৃতি** দেখে (regex); ৩১ ফেব্রুয়ারি ধরা পড়ে এখানে,
-     * `parseWorkDate()`-এর round-trip যাচাইয়ে।
+     * The DTO only checks the **shape** (regex); 31 February is caught here, by
+     * the round-trip check in `parseWorkDate()`.
      *
-     * ⚠️ খাঁটি ফাংশনটা HTTP-র কিছু জানে না, তাই `RangeError` ছোড়ে — আর
-     * সেটা এখানেই ৪০০-তে বদলাতে হয় (গ্লোবাল কোনো filter এটা করে না,
-     * `activity.service.ts`-ও ঠিক এভাবেই করে)। না করলে ব্যবহারকারীর
-     * একটা টাইপো ৫০০ হয়ে ফিরত আর লগে অকারণে স্ট্যাক ট্রেস জমত।
+     * The pure function knows nothing about HTTP, so it throws `RangeError`, and
+     * it must be turned into a 400 right here (no global filter does it;
+     * `activity.service.ts` does exactly the same). Otherwise a user's typo would
+     * come back as a 500 and pile up needless stack traces in the log.
      */
     let start: Date;
     let end: Date;
@@ -189,8 +190,8 @@ export class MeService {
 
     if (start > end) return [];
 
-    // ⚠️ ভবিষ্যতের দিন চাওয়া হলে আজ পর্যন্তই — ফাঁকা সারির লম্বা লেজ
-    //    দেখিয়ে "কিছুই করোনি" ধরনের ছাপ ফেলার কোনো মানে নেই।
+    // A future day is clamped to today; a long tail of empty rows would only
+    // give the impression of "you did nothing".
     const today = workDateOf(now);
     const last = end > today ? today : end;
 
@@ -204,9 +205,9 @@ export class MeService {
 
     const [segments, adjustments, employee, holidayRows] = await Promise.all([
       /**
-       * ⚠️ কাঁচা `activity_segments`, `daily_summary` নয় — ঠিক যে কারণে
-       * `ProgressService`-ও তাই করে: rollup ১৫ মিনিট পরপর চলে, আর স্টাফ
-       * নিজের আজকের ঘণ্টা দেখতে এসে "০" পেলে ধরে নিত ডেটা হারিয়ে গেছে।
+       * Raw `activity_segments`, not `daily_summary`, for the same reason
+       * `ProgressService` does it: the rollup runs every 15 minutes, and a staff
+       * member checking today's hours and seeing "0" would assume data was lost.
        */
       this.prisma.activitySegment.groupBy({
         by: ['workDate'],
@@ -217,7 +218,7 @@ export class MeService {
         },
         _sum: { durationSec: true },
       }),
-      // ⚠️ `revokedAt: null` — বাতিল করা সংশোধন ঘণ্টা ফেরত দেয় না
+      // `revokedAt: null`: a revoked adjustment does not give hours back
       this.prisma.timeAdjustment.groupBy({
         by: ['workDate'],
         where: {
@@ -249,10 +250,10 @@ export class MeService {
     const rows: MyDay[] = [];
 
     /**
-     * ⚠️ **প্রতিটা দিনের সারি তৈরি হয়, শুধু যেদিন কাজ হয়েছে সেদিনের নয়।**
-     * ফাঁক রেখে দিলে তালিকায় ৯ আর ১১ তারিখ পাশাপাশি বসত, আর ১০ তারিখটা
-     * "ছিলই না" মনে হতো — অথচ ওটাই সেই দিন যেদিন এজেন্ট বন্ধ ছিল, অর্থাৎ
-     * ঠিক যেদিনটা নিয়ে স্টাফের প্রশ্ন থাকে।
+     * **A row is created for every day, not only the days with work.** With gaps,
+     * the 9th and 11th would sit side by side and the 10th would look like it
+     * never existed, yet that is the day the agent was off, which is exactly the
+     * day staff have questions about.
      */
     for (let t = first.getTime(); t <= last.getTime(); t += MS_PER_DAY) {
       const worked = workedBy.get(t) ?? 0;
@@ -264,19 +265,19 @@ export class MeService {
         workedSec: worked,
         adjustmentSec: adjustment,
         creditedSec: worked + adjustment,
-        // ⚠️ `isWorkday()` — একই ফাংশন যেটা মাসের টার্গেট কষতে ব্যবহার হয়।
-        //    আলাদা করে "শুক্রবার?" লিখলে `holidays` টেবিলটা বাদ পড়ত, আর
-        //    ঈদের দিনগুলো তালিকায় সাধারণ কর্মদিবস হিসেবে দেখাত।
+        // `isWorkday()` is the same function used to compute the month's target.
+        // Writing a separate "is it Friday?" check would skip the `holidays`
+        // table, and Eid days would show up as ordinary work days.
         isOffDay: !isWorkday(date, off, holidays),
       });
     }
 
-    // নতুন দিন আগে — মানুষ প্রথমে আজকেরটাই খোঁজে
+    // Newest day first: people look for today's row first
     return rows.reverse();
   }
 }
 
-/** `@db.Date` → `YYYY-MM-DD`, null হলে null */
+/** `@db.Date` → `YYYY-MM-DD`, null stays null */
 function isoDate(value: Date | null): string | null {
   return value === null ? null : value.toISOString().slice(0, 10);
 }

@@ -15,28 +15,28 @@ import { ListAlertsDto } from './alerts.dto';
 import { AlertsService, type AlertPage, type AlertRow } from './alerts.service';
 
 /**
- * ⚠️ পুরো কন্ট্রোলারটাই **owner-only** — মেথডে নয়, ক্লাস-লেভেলে।
- * পরে কেউ নতুন endpoint যোগ করলে সেটাও আপনাআপনি owner-only থাকবে।
+ * Careful: the whole controller is **owner-only**, set at class level rather
+ * than per method. Any endpoint added later is owner-only automatically.
  *
- * অ্যালার্টে হোস্টনেম, কর্মীর নাম আর ডিভাইসের অবস্থা একসাথে থাকে — স্পেক
- * § ৪.৩ অনুযায়ী device/audit ঘরানার তথ্য ম্যানেজারের নাগালের বাইরে।
+ * Alerts carry hostnames, staff names and device state together. Per spec
+ * § 4.3, device/audit-style data is out of the manager's reach.
  */
 @Roles(UserRole.owner)
 @Controller('alerts')
 export class AlertsController {
   constructor(private readonly alerts: AlertsService) {}
 
-  /** G01–G07 — `GET /api/v1/alerts?status=open&type=agent_down&page=1&limit=50` */
+  /** `GET /api/v1/alerts?status=open&type=agent_down&page=1&limit=50` */
   @Get()
   list(@Query() query: ListAlertsDto): Promise<AlertPage> {
     return this.alerts.list(query);
   }
 
   /**
-   * `POST /api/v1/alerts/acknowledge-all` — একসাথে সব খোলা অ্যালার্ট দেখেছি।
+   * `POST /api/v1/alerts/acknowledge-all` — mark every open alert as seen at once.
    *
-   * ⚠️ `:id/acknowledge`-এর **আগে** ঘোষণা করা — নইলে `acknowledge-all`
-   *    একটা `:id` হিসেবে পড়ার ঝুঁকি (রুট-মেলানোর ক্রম)।
+   * Careful: declared **before** `:id/acknowledge`, otherwise `acknowledge-all`
+   * could be matched as an `:id` (route matching order).
    */
   @Post('acknowledge-all')
   @HttpCode(HttpStatus.OK)
@@ -45,11 +45,11 @@ export class AlertsController {
   }
 
   /**
-   * `POST /api/v1/alerts/:id/acknowledge` — "দেখেছি" বলা।
+   * `POST /api/v1/alerts/:id/acknowledge` — mark an alert as seen.
    *
-   * ⚠️ অ্যালার্ট কখনো ডিলিট হয় না, শুধু acknowledged হয়। কী কী ভুল হয়েছিল
-   *    তার ইতিহাসটাই পরে সবচেয়ে কাজে লাগে — বিশেষ করে ঘণ্টা সংশোধনের
-   *    (`time_adjustments.evidence_alert_id`) প্রমাণ হিসেবে।
+   * Careful: alerts are never deleted, only acknowledged. The history of what
+   * went wrong is the most useful thing later, especially as evidence for hour
+   * adjustments (`time_adjustments.evidence_alert_id`).
    */
   @Post(':id/acknowledge')
   @HttpCode(HttpStatus.OK)

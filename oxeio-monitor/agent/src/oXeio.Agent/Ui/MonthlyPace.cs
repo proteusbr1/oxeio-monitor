@@ -3,45 +3,45 @@ using oXeio.Core.Time;
 namespace oXeio.Agent.Ui;
 
 /// <summary>
-/// "এগিয়ে না পিছিয়ে" — মাসের এই দিনে কত ঘণ্টা হয়ে থাকার কথা ছিল, আর কত হয়েছে।
-/// খাঁটি হিসাব: কোনো I/O নেই, কোনো Win32 নেই, ঘড়িও বাইরে থেকে দেওয়া।
+/// "Ahead or behind": how many hours should have been done by this day of the month, and how
+/// many have been done. Pure calculation: no I/O, no Win32, and the clock is passed in.
 ///
 /// <code>
-/// expected = target × (কর্মদিবস অতিবাহিত / মাসের মোট কর্মদিবস)
-/// pace     = worked − expected        // ধনাত্মক = এগিয়ে
+/// expected = target × (workdays elapsed / total workdays in the month)
+/// pace     = worked − expected        // positive = ahead
 /// </code>
 ///
-/// ⭐⚠️ <b>এটা আনুমানিক, আর সেটা লুকানো যাবে না।</b> স্পেকে (07 § ২.১-খ)
-/// কর্মদিবস মানে সাপ্তাহিক ছুটি <b>এবং</b> <c>holidays</c> টেবিলের বাইরের দিন।
-/// এজেন্ট ছুটির তালিকা জানে না — সার্ভার সেটা পাঠায় না। তাই এখানকার সংখ্যা
-/// ড্যাশবোর্ডের সংখ্যার সাথে এক-দুই ঘণ্টা মিলবে না।
+/// <b>This is an estimate, and that must not be hidden.</b> In the spec (07 § 2.1-b) a
+/// workday means a day that is outside both the weekly day off <b>and</b> the
+/// <c>holidays</c> table. The agent does not know the holiday list; the server does not send
+/// it. So the number here will differ from the dashboard's by an hour or two.
 ///
-/// সেজন্য দুটো নিয়ম, দুটোই বাধ্যতামূলক:
+/// So there are two rules, both mandatory:
 /// <list type="number">
-/// <item>সার্ভার <see cref="oXeio.Core.Agent.EmployeeProgress.PaceSec"/> পাঠালে
-///       <b>সেটাই</b> দেখাতে হবে, এই হিসাব নয়।</item>
-/// <item>এই হিসাব দেখালে জানালায় "আনুমানিক" শব্দটা থাকতে হবে। না থাকলে স্টাফ
-///       দুই জায়গায় দুই সংখ্যা দেখে ধরে নিত একটা মিথ্যা বলছে — আর এই
-///       জানালার পুরো উদ্দেশ্যই আস্থা তৈরি করা।</item>
+/// <item>If the server sends <see cref="oXeio.Core.Agent.EmployeeProgress.PaceSec"/>,
+///       <b>that</b> must be shown, not this calculation.</item>
+/// <item>When this calculation is shown, the window must carry the word "estimated". Without
+///       it, staff seeing two different numbers in two places would assume one is lying, and
+///       the whole purpose of this window is to build trust.</item>
 /// </list>
 /// </summary>
 internal static class MonthlyPace
 {
     /// <summary>
-    /// সাপ্তাহিক ছুটি — 07 § ২.১-খ-এর <c>weekly_off_day: friday</c>।
+    /// The weekly day off: <c>weekly_off_day: friday</c> from 07 § 2.1-b.
     ///
-    /// ⚠️ কনফিগে (<see cref="oXeio.Core.Agent.AgentConfig"/>) এই ঘরটা নেই, তাই
-    /// ধ্রুবক হিসেবে বসানো। অফিস কোনোদিন ছুটির দিন বদলালে এখানেও বদলাতে হবে —
-    /// নইলে জানালাটা নীরবে ভুল "এগিয়ে/পিছিয়ে" দেখাবে।
+    /// Careful: the config (<see cref="oXeio.Core.Agent.AgentConfig"/>) has no such field, so
+    /// it is set as a constant. If the office ever changes its day off, it has to be changed
+    /// here too; otherwise the window will silently show a wrong "ahead/behind".
     /// </summary>
     public const DayOfWeek WeeklyOff = DayOfWeek.Friday;
 
     /// <summary>
-    /// <paramref name="worked"/> = এ মাসে সত্যিই গোনা সময়।
-    /// ফেরত: ধনাত্মক মানে এগিয়ে, ঋণাত্মক মানে পিছিয়ে।
+    /// <paramref name="worked"/> = the time actually counted this month.
+    /// Returns: positive means ahead, negative means behind.
     ///
-    /// লক্ষ্য ০ বা ঋণাত্মক হলে <c>null</c> — "লক্ষ্য নেই" অবস্থায় এগিয়ে বা
-    /// পিছিয়ে থাকার কোনো মানে হয় না, আর ০ দেখালে সেটা "ঠিক লক্ষ্যে" পড়া হতো।
+    /// <c>null</c> if the target is 0 or negative: with "no target", being ahead or behind
+    /// makes no sense, and showing 0 would be read as "exactly on target".
     /// </summary>
     public static TimeSpan? Estimate(TimeSpan worked, double targetHours, DateTimeOffset now)
     {
@@ -59,7 +59,7 @@ internal static class MonthlyPace
         return worked - expected;
     }
 
-    /// <summary>ওই মাসে মোট কত কর্মদিবস (সাপ্তাহিক ছুটি বাদে)।</summary>
+    /// <summary>Total workdays in that month (excluding the weekly day off).</summary>
     public static int WorkdaysInMonth(int year, int month)
     {
         var days = DateTime.DaysInMonth(year, month);
@@ -74,13 +74,13 @@ internal static class MonthlyPace
     }
 
     /// <summary>
-    /// মাসের ১ তারিখ থেকে <paramref name="today"/> <b>সহ</b> কত কর্মদিবস গেছে।
+    /// How many workdays have passed from the 1st of the month up to and <b>including</b> <paramref name="today"/>.
     ///
-    /// ⚠️ আজকের দিনটা গোনা হয়, অথচ দিনটা এখনো শেষ হয়নি — অর্থাৎ সকাল ন-টায়
-    /// সবাই একদিন "পিছিয়ে" দেখাবে। এটা ইচ্ছাকৃত: সন্ধ্যায় লক্ষ্য পূরণ হলে
-    /// সংখ্যাটা শূন্যে ফেরে, তাই মাসের শেষ কর্মদিবসে expected ঠিক টার্গেটেই
-    /// গিয়ে ঠেকে (07 § ২.১-খ)। আজকের দিন বাদ দিলে উল্টোটা হতো — মাস শেষেও
-    /// একদিনের কাজ "বাড়তি" দেখাত, অর্থাৎ ভুয়া "এগিয়ে"।
+    /// Careful: today is counted even though the day is not over yet, so at nine in the
+    /// morning everyone will show one day "behind". This is deliberate: when the target is met
+    /// in the evening the number returns to zero, so on the last workday of the month expected
+    /// lands exactly on the target (07 § 2.1-b). Excluding today would do the opposite: even at
+    /// month end one day's work would look "extra", a false "ahead".
     /// </summary>
     public static int WorkdaysElapsed(DateOnly today)
     {
@@ -94,48 +94,48 @@ internal static class MonthlyPace
         return count;
     }
 
-    /// <summary>জানালার নিচের লাইনে গতি নিয়ে কী লেখা হবে।</summary>
+    /// <summary>What to write about pace on the window's bottom line.</summary>
     internal enum PaceView
     {
-        /// <summary>⭐ G111 — সার্ভার বলেছে একটাও শেষ-হওয়া কর্মদিবস দেখা হয়নি।</summary>
+        /// <summary>G111: the server said no finished workday has been observed yet.</summary>
         NotObserved,
 
-        /// <summary>সার্ভারের পাঠানো সংখ্যা — ড্যাশবোর্ডের সংখ্যাটাই।</summary>
+        /// <summary>The number sent by the server: the same number as the dashboard's.</summary>
         Server,
 
-        /// <summary>আমাদের নিজের আন্দাজ; লেবেলে "(estimated)" থাকতেই হবে।</summary>
+        /// <summary>Our own guess; the label must say "(estimated)".</summary>
         Estimated,
 
-        /// <summary>লক্ষ্যই নেই — গতির কোনো মানে হয় না, লাইনটা বাদ।</summary>
+        /// <summary>No target at all: pace means nothing, the line is omitted.</summary>
         None,
     }
 
     /// <summary>
-    /// ⭐⭐ <b>কোন কথাটা লেখা হবে — আর কোন ক্রমে সিদ্ধান্ত নেওয়া হবে।</b>
+    /// <b>Which statement is written, and in what order the decision is made.</b>
     ///
-    /// ⚠️⚠️ <b>ক্রমটাই এখানে আসল জিনিস, আর সেজন্যই এটা খাঁটি ফাংশন।</b>
-    /// <see cref="PaceView.NotObserved"/> সবার আগে দেখতে হয়। পরে দেখলে
-    /// <see cref="Estimate"/> আগেই চলে যেত, আর ওই আন্দাজ মাসের ১ তারিখ থেকে
-    /// গোনে — অর্থাৎ ঠিক সেই না-দেখা দিনগুলোকেই ঘাটতি বলে দেখাত, যেগুলোর
-    /// জন্য সার্ভার ইচ্ছাকৃতভাবে কোনো দাবি করেনি। একটা ভুল আশ্বাস
-    /// ("0:00 ahead") সারাতে গিয়ে উল্টো দিকের একটা ভুল অভিযোগ।
+    /// Careful: <b>the order is the real substance here, which is why this is a pure
+    /// function.</b> <see cref="PaceView.NotObserved"/> must be checked first. Checked later,
+    /// <see cref="Estimate"/> would already have been chosen, and that estimate counts from
+    /// the 1st of the month, so it would show exactly the unobserved days as a shortfall,
+    /// days for which the server deliberately made no claim. Fixing one false reassurance
+    /// ("0:00 ahead") would create a false accusation in the other direction.
     ///
-    /// ⚠️ এটা <see cref="TodayForm"/>-এর ভেতরে <c>if</c>-এর সিঁড়ি হয়ে থাকতে
-    /// পারত, কিন্তু তাহলে ক্রমটার উপর <b>একটাও assertion</b> থাকত না —
-    /// WinForms-এর আঁকা কোড টেস্ট থেকে ছোঁয়া যায় না।
+    /// Careful: this could have stayed as an <c>if</c> ladder inside <see cref="TodayForm"/>,
+    /// but then there would be <b>not a single assertion</b> on the order; WinForms drawing
+    /// code cannot be reached from tests.
     /// </summary>
     /// <param name="paceObserved">
-    /// <see cref="oXeio.Core.Agent.AgentStatus.PaceObserved"/> — সার্ভার
-    /// না বললে <c>true</c>, অর্থাৎ পুরোনো সার্ভারে আচরণ অবিকল আগের মতো।
+    /// <see cref="oXeio.Core.Agent.AgentStatus.PaceObserved"/>: <c>true</c> if the server did
+    /// not say, so behavior with an old server is exactly as before.
     /// </param>
-    /// <param name="serverPace">সার্ভারের সংখ্যা, না পাঠালে <c>null</c>।</param>
-    /// <param name="estimate">আমাদের আন্দাজ (<see cref="Estimate"/>), না হলে <c>null</c>।</param>
+    /// <param name="serverPace">The server's number, or <c>null</c> if not sent.</param>
+    /// <param name="estimate">Our estimate (<see cref="Estimate"/>), or <c>null</c>.</param>
     internal static PaceView ViewFor(
         bool paceObserved,
         TimeSpan? serverPace,
         TimeSpan? estimate)
     {
-        // ⚠️⚠️ এই শাখাটা সরিয়ে নিচে বসালে G111 নীরবে ফিরে আসে
+        // Careful: moving this branch below would silently bring G111 back
         if (!paceObserved) return PaceView.NotObserved;
 
         if (serverPace is not null) return PaceView.Server;

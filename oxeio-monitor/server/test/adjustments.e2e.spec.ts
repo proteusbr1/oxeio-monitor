@@ -21,17 +21,17 @@ import {
 } from './setup/harness';
 
 /**
- * **B14 · G35 · ADR-011e** — সিস্টেমের দোষে হারানো ঘণ্টা owner ফেরত দেন।
+ * B14, G35, ADR-011e: the owner gives back hours lost through the system's fault.
  *
- * ⚠️⚠️ পড়ার দিকটা মাসের পর মাস সম্পূর্ণ ছিল (`progress.service`,
- * `summary.service`, `payroll.math`, `reports`) — শুধু **লেখার পথ ছিল না**,
- * তাই যোগফলটা চিরকাল ০ থাকত আর কোথাও কোনো ভুল দেখাত না। এই টেস্টগুলো
- * সেই পথটার পাহারা।
+ * The read side was complete for months (`progress.service`,
+ * `summary.service`, `payroll.math`, `reports`); only the write path was
+ * missing, so the sum stayed 0 forever and nothing showed a mistake. These
+ * tests guard that path.
  */
 let h: Harness;
 let employeeId: number;
 
-/** ঢাকার আজকের তারিখ — ⚠️ UTC নয় (G62 · § ৩ঘ), আর হারনেস থেকে (G140) */
+/** Today's date in Dhaka: not UTC (G62, section 3d), and taken from the harness (G140) */
 const todayDhaka = (): string => dhakaTodayIso();
 
 beforeAll(async () => {
@@ -64,8 +64,8 @@ const body = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-describe('ঘণ্টা ফেরত দেওয়া', () => {
-  it('owner সংশোধন বসাতে পারে', async () => {
+describe('giving hours back', () => {
+  it('the owner can post an adjustment', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     const res = await s.http
@@ -76,35 +76,36 @@ describe('ঘণ্টা ফেরত দেওয়া', () => {
     expect(res.status).toBe(201);
     expect(res.body.deltaSec).toBe(7200);
     expect(res.body.active).toBe(true);
-    // ⚠️ BigInt স্ট্রিং হয়ে আসা চাই — নইলে JSON.stringify ৫০০ দিত
+    // The BigInt must come back as a string, or JSON.stringify would give a 500
     expect(typeof res.body.id).toBe('string');
   });
 
   /**
-   * ⭐⭐ এটাই মডিউলটার আসল কারণ: সংশোধন **কাঁচা সেগমেন্ট ছোঁয় না**, কিন্তু
-   * tray-র সংখ্যায় সাথে সাথে যোগ হয় (`progress.service` সরাসরি
-   * `time_adjustments` পড়ে)।
+   * This is the real reason for the module: an adjustment does not touch raw
+   * segments, but adds to the tray's numbers at once (`progress.service`
+   * reads `time_adjustments` directly).
    */
-  it('heartbeat-এর pace-এ সাথে সাথেই যোগ হয়', async () => {
+  it('adds to the heartbeat pace immediately', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     /**
-     * ⚠️⚠️ **কর্মীকে একটা ট্র্যাকিং-বেসলাইন দিতে হয়, নইলে টেস্টটা যা মাপতে
-     * চায় তা মাপে না।**
+     * Careful: the employee needs a tracking baseline, or the test does not
+     * measure what it means to.
      *
-     * এই টেস্টের দাবি: সংশোধনের `deltaSec` **সরাসরি** pace-এ যোগ হয়, তাই
-     * ডেল্টা ঠিক ৩৬০০। কিন্তু `trackingStartedOn` আসে কর্মীর **প্রথম**
-     * `daily_summary` সারি থেকে (`progress.service` → `firstSeen`)। বেসলাইন
-     * না থাকলে সংশোধন POST করার সময় `AdjustmentsService.refresh()` **আজকের**
-     * তারিখে প্রথম সারিটা বানিয়ে দেয় — আর তখন elapsed-উইন্ডো আজ থেকে শুরু
-     * হয়ে **খালি** হয়ে যায়, expected ৪৬০৮০০ → ০-তে নামে। ফলে ডেল্টায়
-     * ৩৬০০ নয়, গোটা মাসের প্রত্যাশাটাই চলে আসত (মেপে দেখা: before=−460800,
-     * after=3600)। সংখ্যাটা রোজ বাড়ত বলে CI-ও রোজ লাল হতো।
+     * The test claims that the adjustment's `deltaSec` is added directly to
+     * the pace, so the delta is exactly 3600. But `trackingStartedOn` comes
+     * from the employee's first `daily_summary` row (`progress.service`,
+     * `firstSeen`). Without a baseline, when the adjustment is POSTed
+     * `AdjustmentsService.refresh()` creates the first row for today, and
+     * then the elapsed window starts today and becomes empty: expected drops
+     * from 460800 to 0. So the delta would carry the whole month's
+     * expectation instead of 3600 (measured: before=-460800, after=3600). The
+     * number grew every day, so CI would go red every day too.
      *
-     * ⭐ মাসের শুরুতে একটা `daily_summary` বসিয়ে দিলে `firstSeen` **স্থির**
-     * থাকে (আজকের নতুন সারিও min বদলায় না), তাই একমাত্র যা বদলায় তা
-     * `creditedSec` — ঠিক ৩৬০০। এটাই বাস্তবের ছবি: আসল কর্মীর সবসময়ই
-     * আগের দিনের ট্র্যাকিং থাকে।
+     * Putting a `daily_summary` at the start of the month keeps `firstSeen`
+     * fixed (today's new row does not change the min), so the only thing that
+     * changes is `creditedSec`: exactly 3600. This is the real picture too: a
+     * real employee always has earlier days of tracking.
      */
     const dhakaNow = dhakaNoon();
     const monthStart = new Date(
@@ -135,7 +136,7 @@ describe('ঘণ্টা ফেরত দেওয়া', () => {
     expect(after.paceSec - before.paceSec).toBe(3600);
   });
 
-  it('কাঁচা সেগমেন্ট অটুট থাকে', async () => {
+  it('raw segments stay intact', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     const before = await h.prisma.activitySegment.count();
 
@@ -148,7 +149,7 @@ describe('ঘণ্টা ফেরত দেওয়া', () => {
     expect(await h.prisma.activitySegment.count()).toBe(before);
   });
 
-  it('ঋণাত্মক সংশোধনও বসে (কেটে নেওয়া)', async () => {
+  it('a negative adjustment is posted too (a deduction)', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     const res = await s.http
@@ -161,19 +162,19 @@ describe('ঘণ্টা ফেরত দেওয়া', () => {
   });
 });
 
-describe('যা মেনে নেওয়া হয় না', () => {
+describe('what is not accepted', () => {
   const bad: [string, Record<string, unknown>][] = [
-    ['শূন্য delta', { deltaSec: 0 }],
-    ['২৪ ঘণ্টার বেশি', { deltaSec: 86_401 }],
-    ['−২৪ ঘণ্টার বেশি', { deltaSec: -86_401 }],
-    ['কারণ ছাড়া', { reason: '' }],
-    ['খুব ছোট কারণ', { reason: 'ok' }],
-    ['অচেনা cause', { cause: 'because' }],
-    ['ভুল তারিখ', { workDate: '12-08-2026' }],
+    ['zero delta', { deltaSec: 0 }],
+    ['more than 24 hours', { deltaSec: 86_401 }],
+    ['more than -24 hours', { deltaSec: -86_401 }],
+    ['no reason', { reason: '' }],
+    ['a very short reason', { reason: 'ok' }],
+    ['unknown cause', { cause: 'because' }],
+    ['wrong date', { workDate: '12-08-2026' }],
   ];
 
   for (const [name, over] of bad) {
-    it(`${name} → ৪০০`, async () => {
+    it(`${name} gives 400`, async () => {
       const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
       const res = await s.http
@@ -186,10 +187,10 @@ describe('যা মেনে নেওয়া হয় না', () => {
   }
 
   /**
-   * ⚠️ `deltaSec` একটা `Int`। কেউ সেকেন্ডের জায়গায় মিলিসেকেন্ড বসালে
-   * (৭২,০০,০০০) সেটা নীরবে ঢুকে মাসে ২,০০০ ঘণ্টা যোগ করত।
+   * `deltaSec` is an `Int`. If someone put milliseconds in place of seconds
+   * (7,200,000) it would go in silently and add 2,000 hours to the month.
    */
-  it('মিলিসেকেন্ড বসালে ধরা পড়ে', async () => {
+  it('catches milliseconds being entered', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     const res = await s.http
@@ -200,7 +201,7 @@ describe('যা মেনে নেওয়া হয় না', () => {
     expect(res.status).toBe(400);
   });
 
-  it('ভবিষ্যতের দিন → ৪০০', async () => {
+  it('a future day gives 400', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     const later = dhakaNoon(3).toISOString().slice(0, 10);
 
@@ -212,7 +213,7 @@ describe('যা মেনে নেওয়া হয় না', () => {
     expect(res.status).toBe(400);
   });
 
-  it('অচেনা কর্মী → ৪০৪', async () => {
+  it('an unknown employee gives 404', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     const res = await s.http
@@ -224,8 +225,8 @@ describe('যা মেনে নেওয়া হয় না', () => {
   });
 });
 
-describe('বাতিল করা', () => {
-  it('revoke-এ গোনা বন্ধ হয়, সারি থেকে যায়', async () => {
+describe('revoking', () => {
+  it('revoke stops it being counted, and the row stays', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     const created = await s.http
@@ -243,11 +244,11 @@ describe('বাতিল করা', () => {
     expect(res.body.active).toBe(false);
     expect(res.body.revokeReason).toBe('Counted twice by mistake');
 
-    // ⚠️ ডিলিট নয় — সারিটা থেকে যায়, নইলে ইতিহাস হারাত
+    // Not a delete: the row stays, or the history would be lost
     expect(await h.prisma.timeAdjustment.count()).toBe(1);
   });
 
-  it('দুবার বাতিল করা যায় না', async () => {
+  it('cannot be revoked twice', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     const created = await s.http
@@ -271,8 +272,8 @@ describe('বাতিল করা', () => {
   });
 });
 
-describe('কে দেখতে পায় (J08)', () => {
-  it('ম্যানেজার দেখতে পায়, বসাতে পারে না', async () => {
+describe('who can see (J08)', () => {
+  it('a manager can see but cannot post', async () => {
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     await owner.http
       .post(`/api/v1/employees/${employeeId}/time-adjustments`)
@@ -296,22 +297,24 @@ describe('কে দেখতে পায় (J08)', () => {
   });
 
   /**
-   * ⭐⭐⭐ **গবেষক অন্যের বেতনের সমন্বয় দেখতে পান না** *(২৫ আগস্ট ২০২৬)*।
+   * A researcher cannot see someone else's pay adjustments.
    *
-   * ⚠️⚠️ এই টেস্টটাই আজকের সবচেয়ে দামি, আর কারণটা ভয় জাগানো।
-   * `assertCanSee`-তে লেখা ছিল `if (role !== employee) return;` — অর্থাৎ
-   * *"স্টাফ না হলে সব দেখতে দাও"*। `UserRole`-এ `researcher` বসানোর
-   * মুহূর্তে নতুন ভূমিকাটা **ওই ডালেই** পড়ত, পাহারাটা পুরো এড়িয়ে যেত,
-   * আর যে কারো বোনাস-কাটতির হিসাব খুলে যেত।
+   * Careful: this is the most valuable test today, and the reason is
+   * frightening. `assertCanSee` had `if (role !== employee) return;`, i.e.
+   * "if not staff, let them see everything". The moment `researcher` was
+   * added to `UserRole`, the new role would fall into that very branch, skip
+   * the guard entirely, and anyone's bonus-and-deduction figures would be
+   * open.
    *
-   * ⚠️ কোনো কম্পাইল-এরর হতো না। কোনো টেস্ট লাল হতো না। এই কন্ট্রোলারে
-   * ক্লাস-লেভেল `@Roles` **ইচ্ছাকৃতভাবে নেই** (স্কোপিংটা সার্ভিসের কাজ),
-   * তাই উপরেও কিছু আটকাত না।
+   * There would be no compile error and no red test. This controller
+   * deliberately has no class-level `@Roles` (scoping is the service's job),
+   * so nothing above would stop it either.
    *
-   * ⭐ শর্তটা এখন হ্যাঁ-তালিকা (`owner || manager`), আর এই টেস্টটা তার
-   * পাহারা: enum-এ **পরের** নতুন মানটাও যেন নিজে থেকে ঢুকে না পড়ে।
+   * The condition is now an allow-list (`owner || manager`), and this test
+   * guards it: the next new value added to the enum must not slip in by
+   * itself.
    */
-  it('⭐⭐ গবেষক অন্যের সমন্বয় দেখতে পান না', async () => {
+  it('a researcher cannot see others\' adjustments', async () => {
     const owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     await owner.http
       .post(`/api/v1/employees/${employeeId}/time-adjustments`)
@@ -319,7 +322,7 @@ describe('কে দেখতে পায় (J08)', () => {
       .send(body())
       .expect(201);
 
-    // গবেষক — নিজের আলাদা কর্মী-সারি, আর ভূমিকা `researcher`
+    // The researcher has their own separate staff row, and the role `researcher`
     const them = await h.prisma.employee.create({
       data: { empCode: 'OX-78', fullName: 'Researcher', staffType: 'researcher' },
     });
@@ -341,14 +344,14 @@ describe('কে দেখতে পায় (J08)', () => {
     );
     expect(read.status).toBe(403);
 
-    // ⭐ নিজেরটা দেখতে পান — পাহারাটা "সব বন্ধ" নয়, "নিজেরটুকু"
+    // They can see their own: the guard is not "everything closed" but "only your own"
     const mine = await session.http.get(
       `/api/v1/employees/${them.id}/time-adjustments`,
     );
     expect(mine.status).toBe(200);
   });
 
-  it('লগইন ছাড়া বন্ধ', async () => {
+  it('closed without login', async () => {
     const res = await h
       .http()
       .get(`/api/v1/employees/${employeeId}/time-adjustments`);
@@ -357,8 +360,8 @@ describe('কে দেখতে পায় (J08)', () => {
   });
 });
 
-describe('অডিট', () => {
-  it('বসানো ও বাতিল — দুটোই আলাদা action-এ বসে', async () => {
+describe('audit', () => {
+  it('posting and revoking each land under a separate action', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     const created = await s.http
@@ -381,24 +384,25 @@ describe('অডিট', () => {
     expect(actions).toContain('time_adjustment');
     expect(actions).toContain('time_adjustment_revoke');
 
-    // ⭐ কারণটা audit-এও থাকা চাই — সারি বাতিল হলেও কেন হয়েছিল তা থেকে যায়
+    // The reason must be in the audit log too: even if the row is revoked, why it happened remains
     expect(JSON.stringify(rows)).toContain('power cut');
   });
 });
 
 /**
- * ⭐⭐⭐ **নিষ্ক্রিয় কর্মীর সংশোধনও খাতায় পৌঁছায়** *(৬ সেপ্টেম্বর ২০২৬)*।
+ * An inactive employee's adjustment also reaches the ledger (6 September).
  *
- * ⚠️⚠️ **যে বাগটা এই describe-টা পাহারা দেয়:** rollup (`refreshDate`) কেবল
- * **active** কর্মীদের নিয়ে চলে। তাই চলে যাওয়া কারো জন্য সংশোধন বসালে সারিটা
- * `time_adjustments`-এ ঢুকত, পর্দায় দেখাও যেত, কিন্তু `daily_summary`-তে
- * **কোনোদিন পৌঁছাত না** — আর সেখান থেকে মাসিক সারি ও চূড়ান্ত পাওনায়ও নয়।
- * কোনো এরর নেই, শুধু একটা সংশোধন যা কিছুই বদলাত না।
+ * The bug this describe guards: the rollup (`refreshDate`) runs only over
+ * active employees. So when an adjustment was posted for someone who had
+ * left, the row went into `time_adjustments` and showed on screen, but never
+ * reached `daily_summary`, and so never the monthly row or the final
+ * settlement. No error, just an adjustment that changed nothing.
  *
- * ⭐ চলে যাওয়া কর্মীর **শেষ মাসের** হিসাব ঠিক করা একটা বৈধ কাজ (পাওনা
- * মেটানোর আগে), তাই পথটা বন্ধ করা হয়নি — কেবল ওই একজনকে ওই রানে যোগ করা হয়।
+ * Correcting a departed employee's last month is a legitimate job (before
+ * settling dues), so the path was not closed; only that one person is added
+ * to that run.
  */
-describe('নিষ্ক্রিয় কর্মীর সংশোধন', () => {
+describe('adjustment for an inactive employee', () => {
   const creditedOf = async (id: number) =>
     (
       await h.prisma.dailySummary.findFirst({
@@ -407,11 +411,11 @@ describe('নিষ্ক্রিয় কর্মীর সংশোধন',
       })
     )?.creditedSec ?? null;
 
-  /** ⭐⭐⭐ এই describe-এর মূল টেস্ট */
-  it('⭐ চলে যাওয়া কর্মীর সংশোধনও `daily_summary`-তে ওঠে', async () => {
+  /** The main test of this describe */
+  it('the adjustment of an employee who left also reaches `daily_summary`', async () => {
     await h.prisma.employee.update({
       where: { id: employeeId },
-      // ⚠️ `new Date()` নয় — ফিক্সচারের মুহূর্ত সবসময় হারনেসের ঘড়ি থেকে (G140)
+      // Not `new Date()`: a fixture's instant always comes from the harness clock (G140)
       data: { status: 'inactive', leftOn: dhakaNoon() },
     });
 
@@ -426,9 +430,10 @@ describe('নিষ্ক্রিয় কর্মীর সংশোধন',
   });
 
   /**
-   * ⚠️ active কর্মীর আচরণ বদলায়নি — নতুন শর্তটা যেন পুরোনো পথটা না ভাঙে।
+   * An active employee's behaviour has not changed: the new condition must
+   * not break the old path.
    */
-  it('active কর্মীর আচরণ আগের মতোই', async () => {
+  it('an active employee behaves as before', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
     await s.http
       .post(`/api/v1/employees/${employeeId}/time-adjustments`)
@@ -440,16 +445,17 @@ describe('নিষ্ক্রিয় কর্মীর সংশোধন',
   });
 });
 
-describe('সেগমেন্টের সাথে মিলিয়ে', () => {
+describe('reconciling with segments', () => {
   /**
-   * ⭐ `credited = worked + adjustment` — payroll ও pace দুটোই এই যোগের
-   * উপর দাঁড়ানো (§ ২.১-ঙ · G35)।
+   * `credited = worked + adjustment`: payroll and pace both stand on this sum
+   * (section 2.1e, G35).
    *
-   * ⚠️ সেগমেন্টটা **আসল ingest পথ দিয়ে** ঢোকানো হয়, হাতে সারি বসিয়ে নয়:
-   * `activity_segments`-এর `sessionId` ও `deviceId` দুটোই বাধ্যতামূলক, আর
-   * হাতে বসাতে গেলে সেশন-সীমানার নিয়মগুলো (§ ২.১-ক) এড়িয়ে যাওয়া হতো।
+   * The segment is inserted through the real ingest path, not by putting a
+   * row in by hand: both `sessionId` and `deviceId` are mandatory on
+   * `activity_segments`, and inserting by hand would skip the session
+   * boundary rules (section 2.1a).
    */
-  it('worked সময়ের সাথে যোগ হয়, বদলে দেয় না', async () => {
+  it('adds to worked time, does not replace it', async () => {
     const { employeeId: withDevice, code } = await createEmployeeWithCode(
       h.prisma,
       'OX-78',
@@ -487,13 +493,13 @@ describe('সেগমেন্টের সাথে মিলিয়ে', ()
       where: { employeeId: withDevice },
     });
 
-    // ⭐ দুটোই বসা চাই: কাঁচা কাজ আর সংশোধন — একটা আরেকটাকে বদলায় না
+    // Both must be present: the raw work and the adjustment, neither changes the other
     //
-    // ⚠️⚠️ `worked.durationSec`, হার্ডকোড `1800` নয়। `todayWindow()`
-    //    মধ্যরাতের কাছে জানালাটা **ঢাকার আজকের দিনে ক্ল্যাম্প** করে, তাই
-    //    ০০:০১-এ চললে সেটা ১৮০০ সে. নয়, বড়জোর ৫৮ সে. দেয় (harness § টীকা)।
-    //    যা পাঠানো হয়েছে ঠিক সেটাই মেলানো হয়, নইলে টেস্টটা রোজ মধ্যরাতে
-    //    ~২ মিনিটের জানালায় লাল হতো (CI ঠিক ওই সময়েই চলেছিল — § ৩ব)।
+    // Careful: `worked.durationSec`, not a hard-coded `1800`. Near midnight
+    // `todayWindow()` clamps the window to today in Dhaka, so at 00:01 it
+    // gives at most 58 s, not 1800 s (see the note in the harness). Matching
+    // exactly what was sent avoids the test going red every night in a window
+    // of about 2 minutes (CI ran at exactly that time: section 3b).
     expect(summary?.activeSec).toBe(worked.durationSec);
     expect(summary?.adjustmentSec).toBe(1800);
   });

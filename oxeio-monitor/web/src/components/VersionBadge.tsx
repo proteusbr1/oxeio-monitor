@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react';
 
 /**
- * ⭐⭐ কোণায় বসা বিল্ড-নম্বর — **কোন কোডটা এই মুহূর্তে চলছে**।
+ * The build number in the corner: which code is running right now.
  *
- * ⚠️ সংখ্যাটা হাতে লেখা হয় না, **git থেকে আসে** (`git rev-list --count`,
- *    `deploy/vps-update.sh` বিল্ডের সময় ভরে দেয়)। প্রতি কমিটে ঠিক এক
- *    বাড়ে, তাই "প্রতিটা বদলে ভার্সন বাড়বে" কথাটা কারো মনে রাখার উপর
- *    নির্ভর করে না।
+ * Careful: the number is not hand-written; it comes from git (`git rev-list
+ * --count`, filled in at build time by `deploy/vps-update.sh`). It goes up by
+ * exactly one per commit, so "bump the version on every change" does not depend on
+ * anyone remembering.
  *
- * ⚠️⚠️ **হাতে বাড়ানো সংখ্যা একদিন পিছিয়ে পড়ত**, আর তখন পর্দা বলত নতুন
- *    কোড চলছে অথচ চলত পুরোনোটা। ভুল ভার্সন না-থাকা ভার্সনের চেয়ে খারাপ,
- *    কারণ ওটা দেখে মানুষ **অন্য জায়গায়** ভুল খুঁজতে শুরু করে।
+ * Careful: a hand-bumped number would one day fall behind, and then the screen
+ * would say new code is running while the old code ran. A wrong version is worse
+ * than no version, because people go looking for the bug somewhere else.
  */
 
 const BUILD = import.meta.env.VITE_APP_BUILD || 'dev';
@@ -26,14 +26,15 @@ export function VersionBadge() {
   const [api, setApi] = useState<ApiVersion | null>(null);
 
   /**
-   * ⭐ API-র ভার্সনও একবার আনা হয় — **অর্ধেক ডিপ্লয় ধরার একমাত্র উপায়**।
+   * The API's version is fetched once too: the only way to catch a half deploy.
    *
-   * ⚠️ নতুন ওয়েব + পুরোনো api একটা সম্পূর্ণ নীরব অবস্থা: পাতা নতুন
-   *    দেখায়, অথচ API পুরোনো উত্তর দেয়। এই মিলটা না দেখালে "ফিক্সটা তো
-   *    বসিয়েছি, কাজ করছে না কেন" প্রশ্নের উত্তর খুঁজতে ঘণ্টা যেত।
+   * Careful: new web + old api is a completely silent state: the page looks new
+   * while the API gives old answers. Without showing this match, the question "I
+   * deployed the fix, why is it not working" would cost hours.
    *
-   * ⚠️ একবারই ডাকা হয়, পোলিং নয় — ভার্সন পাতার আয়ুতে বদলায় না। আর
-   *    `/health` লগইন ছাড়াই খোলে, তাই লগইন পাতাতেও ব্যাজটা সত্যি বলে।
+   * Careful: called once, no polling: the version does not change during a page's
+   * life. And `/health` opens without login, so the badge tells the truth on the
+   * login page too.
    */
   useEffect(() => {
     let alive = true;
@@ -42,7 +43,7 @@ export function VersionBadge() {
       .then((j: ApiVersion | null) => {
         if (alive && j) setApi({ build: j.build, commit: j.commit });
       })
-      // ⚠️ চুপচাপ — ভার্সন দেখাতে না পারা কখনো পাতার সমস্যা নয়।
+      // Careful: silent: being unable to show the version is never the page's problem.
       .catch(() => {});
     return () => {
       alive = false;
@@ -50,8 +51,8 @@ export function VersionBadge() {
   }, []);
 
   /**
-   * ⚠️ মিল না হলেই সতর্কতা — তবে `dev` বিল্ডে নয়, নইলে ডেভেলপারের মেশিনে
-   *    ব্যাজটা সারাক্ষণ লাল থাকত আর কেউ আর তাকাত না।
+   * Careful: warn whenever they differ, but not in a `dev` build; otherwise the
+   * badge would be red all the time on a developer's machine and nobody would look.
    */
   const mismatch =
     api !== null && BUILD !== 'dev' && api.build !== 'dev' && api.build !== BUILD;
@@ -67,34 +68,33 @@ export function VersionBadge() {
 
   return (
     /*
-      ⚠️ `fixed` + `pointer-events-none` — ব্যাজটা কোণে বসে থাকে, কিন্তু
-         নিচের বোতাম বা লিঙ্কে ক্লিক আটকায় না। শুধু ভেতরের লেখাটুকু
-         hover ধরে, যাতে বিস্তারিত দেখা যায়।
-      ⚠️ `z-40` — মোডাল (z-50) ও তার ছায়ার নিচে। ব্যাজ কোনোদিন ডায়ালগের
-         উপরে বসতে পারে না।
-
-      ⚠️⚠️ **ছোঁয়ার পর্দায় ব্যাজটা কোনো ক্লিকই ধরে না** (`hover: hover`
-         থাকলে তবেই `pointer-events-auto`)। কারণটা সোজা: বিস্তারিত পাওয়ার
-         একমাত্র পথ `title` টুলটিপ, আর টুলটিপ ফোনে কখনোই ওঠে না — অর্থাৎ
-         ওখানে ব্যাজটা ক্লিক ধরে **শুধু অন্যের ট্যাপ খেয়ে ফেলার জন্য**।
-         ডান-নিচের কোণাটা ঠিক সেই জায়গা যেখানে সেটিংসের সারির বোতাম আর
-         পাতার শেষ কাজগুলো বসে, তাই ওখানে আঙুল দিলে কিছুই হতো না আর মনে
-         হতো বোতামটা ভাঙা।
-    */
+     * Careful: `fixed` + `pointer-events-none`: the badge sits in the corner but
+     * does not block clicks on buttons or links beneath it. Only the inner text
+     * catches hover, so details can be seen.
+     * Careful: `z-40`: below modals (z-50) and their shadow. The badge can never sit
+     * above a dialog.
+     *
+     * Careful: on touch screens the badge catches no clicks at all
+     * (`pointer-events-auto` only if `hover: hover`). The reason is simple: the only
+     * way to get details is the `title` tooltip, and a tooltip never appears on a
+     * phone, so there the badge would catch clicks only to swallow someone else's
+     * tap. The bottom-right corner is exactly where the Settings row's buttons and
+     * the last actions on a page sit, so a finger there would do nothing and the
+     * button would seem broken.
+     */
     <div className="pointer-events-none fixed right-2 bottom-2 z-40 select-none">
       {/*
-        ⚠️⚠️ **আগে এটা পড়াই যেত না** *(মালিকের রিপোর্ট, ৩১ আগস্ট ২০২৬:
-           "vershoning ta ekotu boro… chokei mele na")*। ছিল ১০px, `ink-3`
-           (সবচেয়ে ম্লান কালি), আর পটভূমি ৭০% স্বচ্ছ — অর্থাৎ তিনটে জিনিস
-           একসাথে ব্যাজটাকে মুছে দিচ্ছিল।
+        Careful: this used to be unreadable (the owner's report): it was 10px,
+           `ink-3` (the faintest ink) and a 70% transparent background, so three
 
-        ⭐ এখন ১২px · `ink-2` · **নিরেট** পটভূমি · একটা বর্ডার। ⚠️ তবু
-           ছোটই — এটা পাতার কাজের অংশ নয়, একটা রসিদ; বড় করলে প্রতিটা
-           পর্দার কোণে চোখ টানত। ⭐ যতটুকু না হলে **পড়া যায় না**, ঠিক
-           ততটুকুই বাড়ানো হয়েছে।
 
-        ⚠️ বর্ডারটা জরুরি: ব্যাজটা যেকোনো পটভূমির উপরে বসে (টেবিল, চার্ট,
-           খালি জায়গা), আর নিরেট রং ছাড়া ওটা কখনো কখনো মিশে যেত।
+        Now it is 12px, `ink-2`, a solid background and a border. It is still
+           small: it is a receipt, not part of the page's work, and a larger one
+           would draw the eye in every screen corner. It was enlarged only as
+           much as needed to be readable.
+
+        Careful: the border matters: the badge sits on any background (table,
+           chart, empty space), and without a solid color it sometimes blended in.
       */}
       <span
         className={`num rounded-md border px-2 py-1 text-[12px] tabular-nums [@media(hover:hover)]:pointer-events-auto ${

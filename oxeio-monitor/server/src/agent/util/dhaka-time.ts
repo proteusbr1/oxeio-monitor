@@ -1,11 +1,12 @@
 import { fixedOffsetMinutes as fixedOffsetMinutesOf } from './fixed-offset';
 
 /**
- * Asia/Dhaka = UTC+06:00, কোনো DST নেই — তাই অফসেট ধ্রুবক ধরে হিসাব করা নিরাপদ।
+ * Asia/Dhaka = UTC+06:00 with no DST, so it is safe to compute with a constant offset.
  *
- * ⚠️ v1-এ শুধু Asia/Dhaka সাপোর্টেড। `work_policies.timezone` কলামটা আছে ভবিষ্যতের
- *    জন্য, কিন্তু অন্য টাইমজোনে যেতে হলে এখানে একটা আসল tz লাইব্রেরি
- *    (যেমন Temporal বা luxon) বসাতে হবে — DST থাকলে এই সরল হিসাব ভাঙবে।
+ * Careful: in v1 only Asia/Dhaka is supported. The `work_policies.timezone`
+ *    column exists for the future, but supporting another timezone needs a real
+ *    tz library here (such as Temporal or luxon); this simple arithmetic breaks
+ *    wherever DST exists.
  *
  * Update: any zone WITHOUT DST can now be chosen with `WORK_TIMEZONE`
  * (default Asia/Dhaka). Zones with DST are still refused at startup, for the
@@ -60,8 +61,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const OFFSET_MS = DHAKA_OFFSET_MIN * 60 * 1000;
 
 /**
- * কোনো instant ঢাকার সময়ে কোন তারিখে পড়ে।
- * ফেরত আসে ওই তারিখের UTC-midnight — Prisma-র `@db.Date` ঠিক এটাই চায়।
+ * Which date an instant falls on in Dhaka time.
+ * Returns that date's UTC midnight, which is exactly what Prisma's `@db.Date` wants.
  */
 export function workDateOf(instant: Date): Date {
   const shifted = new Date(instant.getTime() + OFFSET_MS);
@@ -75,41 +76,42 @@ export function workDateOf(instant: Date): Date {
 }
 
 /**
- * ⭐⭐⭐ **ওই instant-এর ঢাকা-দিনটা যে মুহূর্তে শুরু হয়েছে** *(G166)*।
+ * **The moment the Dhaka day of that instant started** (G166).
  *
- * ⚠️⚠️ <b>`workDateOf()` নয়।</b> ওটা একটা **লেবেল** — ঢাকার দিনটাকে
- * UTC-মধ্যরাত হিসেবে লেখা। ওই মানটাকে সরাসরি মুহূর্ত ধরে ব্যবহার করলে
- * সীমানাটা **৬ ঘণ্টা দেরিতে** বসে, অর্থাৎ ঢাকার ভোর ৬টায়। এই প্রকল্পে
- * এই একটা ভুলই সবচেয়ে বেশিবার হয়েছে, তাই সংখ্যাটা আর কোথাও হাতে কষা
- * হয় না — সবাই এখান থেকে নেয়।
+ * Careful: <b>not `workDateOf()`.</b> That is a **label**: the Dhaka day written
+ * as a UTC midnight. Using that value directly as a moment puts the boundary
+ * **6 hours late**, i.e. at 6 am Dhaka time. This one mistake has happened more
+ * often than any other in this project, so the number is never worked out by
+ * hand anywhere else; everyone takes it from here.
  */
 export function localMidnightOf(instant: Date): Date {
   return new Date(workDateOf(instant).getTime() - OFFSET_MS);
 }
 
-/** ওই instant-এর ঠিক পরের **স্থানীয়** মধ্যরাত, UTC instant হিসেবে (§ ২.১-ক) */
+/** The next **local** midnight after the instant, as a UTC instant (§ 2.1-a). */
 export function nextLocalMidnight(instant: Date): Date {
   return new Date(localMidnightOf(instant).getTime() + DAY_MS);
 }
 
 /**
- * ওই instant ঢাকার সময়ে কত ঘণ্টায় (০–২৩)।
+ * The hour (0-23) of the instant in Dhaka time.
  *
- * ⚠️ `getHours()` সার্ভারের টাইমজোন ধরে — সার্ভার UTC-তে চললে ঢাকার রাত
- * ২টা এখানে সন্ধ্যা ৮টা দেখাত। retention আর দিন-ক্লোজ দুটোই এই সংখ্যার
- * উপর দাঁড়ানো, তাই ভুল হলে জব ভুল সময়ে চলত।
+ * Careful: `getHours()` uses the server's timezone, so a server running in UTC
+ * would show 2 am Dhaka time as 8 pm here. Retention and day-close both depend
+ * on this number, so a mistake would run the jobs at the wrong time.
  */
 export function dhakaHourOf(instant: Date): number {
   return new Date(instant.getTime() + OFFSET_MS).getUTCHours();
 }
 
 /**
- * ঢাকার ঘড়ি, `HH:MM` — যেমন `18:30`।
+ * The Dhaka clock as `HH:MM`, e.g. `18:30`.
  *
- * ⚠️ `dhakaHourOf`-এর মতোই একই কৌশলে (offset যোগ করে UTC পড়া), আর একই
- * কারণে: `getHours()` সার্ভারের টাইমজোন ধরত, আর কনটেইনার UTC-তে চলে।
- * ⭐ দৈনিক রিপোর্টে এটা লেখা থাকে যাতে পাঠক জানেন সংখ্যাগুলো **কোন
- * মুহূর্তের** — সন্ধ্যা ৬:৩০-এর হিসাবে অনেকেই তখনো কাজে।
+ * Careful: same technique as `dhakaHourOf` (add the offset, read UTC), for the
+ * same reason: `getHours()` would use the server's timezone, and containers run
+ * in UTC.
+ * The daily report prints this so readers know **which moment** the numbers
+ * are from; many people are still at work as of 6:30 pm.
  */
 export function dhakaClock(instant: Date): string {
   const local = new Date(instant.getTime() + OFFSET_MS);
@@ -123,7 +125,7 @@ export function sameWorkDate(a: Date, b: Date): boolean {
   return workDateOf(a).getTime() === workDateOf(b).getTime();
 }
 
-/** ফাইলের পাথ বানাতে — ঢাকার তারিখ অনুযায়ী YYYY/MM/DD */
+/** For building file paths: YYYY/MM/DD by the Dhaka date. */
 export function dhakaPathParts(instant: Date): {
   year: string;
   month: string;

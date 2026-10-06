@@ -4,19 +4,19 @@ using System.Runtime.Versioning;
 namespace oXeio.Watchdog.Platform;
 
 /// <summary>
-/// এজেন্ট প্রসেসকে দেখা, মারা আর চালু করা। ⚠️ কোনো মেথড ছোড়ে না —
-/// watchdog-এর লুপ থেকে একটা এক্সসেপশন বেরোলে পাহারাদারই মরে যেত, আর তখন
-/// মেশিনে কেউ কাউকে দেখার থাকত না।
+/// Looking at, killing and starting the agent process. No method throws: if an exception
+/// escaped from the watchdog's loop the guard itself would die, and nobody on the machine
+/// would be left watching anyone.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal static class AgentProcess
 {
     /// <summary>
-    /// ওই pid-এ সত্যিই আমাদের এজেন্ট চলছে কি না।
+    /// Whether our agent is really running at that pid.
     ///
-    /// ⚠️ নাম মিলিয়ে দেখা বাধ্যতামূলক। Windows pid পুনর্ব্যবহার করে, আর হার্টবিট
-    /// ফাইলের pid কয়েক মিনিট পুরোনো হতে পারে। শুধু "এই pid-এ কিছু একটা চলছে"
-    /// দেখলে watchdog একদিন <c>explorer.exe</c>-কে মেরে বসত।
+    /// The name check is mandatory. Windows reuses pids, and the pid in the heartbeat file can
+    /// be several minutes old. Looking only at "something is running at this pid", the
+    /// watchdog would one day kill <c>explorer.exe</c>.
     /// </summary>
     public static bool IsAlive(int pid)
     {
@@ -30,24 +30,24 @@ internal static class AgentProcess
         }
         catch (Exception)
         {
-            // ArgumentException = ওই pid-এ কিছু নেই। InvalidOperationException =
-            // মাঝপথে মরে গেছে। Win32Exception = অন্য ইউজারের প্রসেস, খোলা গেল না।
-            // তিনটেরই মানে "আমরা একে দেখতে পাচ্ছি না", অর্থাৎ মারা যাবে না।
+            // ArgumentException = nothing at that pid. InvalidOperationException = it died
+            // midway. Win32Exception = another user's process, could not be opened.
+            // All three mean "we cannot see it", so it will not be killed.
             return false;
         }
     }
 
     /// <summary>
-    /// জমে যাওয়া এজেন্টকে মারে আর সে সত্যিই মরল কি না দেখে।
+    /// Kills a wedged agent and checks that it really died.
     ///
-    /// ভদ্র সংকেত পাঠানোর চেষ্টা করা হয় না, ইচ্ছাকৃতভাবে: এই পথে আসাই হয়েছে
-    /// কারণ প্রসেসটা ২ মিনিট ধরে কোনো সাড়া দিচ্ছে না। যে লুপ হার্টবিট লিখতে
-    /// পারছে না, সে কোনো ইভেন্টও পড়তে পারবে না।
+    /// No attempt is made to send a polite signal, deliberately: we only get here because the
+    /// process has not responded for 2 minutes. A loop that cannot write a heartbeat cannot
+    /// read any event either.
     ///
-    /// ⚠️ শক্ত kill নিরাপদ, কারণ outbox নকশাগতভাবেই ক্র্যাশ-সহনশীল: সারি ডিস্কেই
-    /// থাকে, lease-এর মেয়াদ শেষ হলে <c>ReclaimExpiredLeasesAsync</c> সেগুলো
-    /// ফিরিয়ে আনে, আর প্রতিটা রেকর্ডে ClientUuid থাকায় দুবার পাঠানোও ক্ষতিকর নয়।
-    /// সবচেয়ে খারাপ ক্ষতি — মাঝপথে থাকা একটা ব্যাচ আবার পাঠাতে হবে।
+    /// A hard kill is safe because the outbox is crash-tolerant by design: rows stay on disk,
+    /// when a lease expires <c>ReclaimExpiredLeasesAsync</c> brings them back, and since every
+    /// record has a ClientUuid, sending twice does no harm. The worst loss is that a batch
+    /// that was midway has to be sent again.
     /// </summary>
     public static bool TryKill(int pid, TimeSpan waitFor, out string detail)
     {
@@ -64,10 +64,10 @@ internal static class AgentProcess
 
             process.Kill(entireProcessTree: false);
 
-            // ⚠️ অপেক্ষা না করলে পরের ধাপেই নতুন এজেন্ট চালু হতো, আর মরতে থাকা
-            //    পুরোনোটা তখনো agent.lock ধরে আছে — নতুনটা সাথে সাথে বেরিয়ে যেত,
-            //    আর মই সেটাকে একটা ব্যর্থতা হিসেবে গুনত। কয়েকবারে হাল ছাড়ার
-            //    দশায় পৌঁছে যেত, অথচ আসলে কিছুই ভাঙেনি।
+            // Without waiting, the next step would start a new agent while the dying old one
+            // still holds agent.lock: the new one would exit at once and the ladder would count
+            // that as a failure. After a few of those it would reach the give-up state, when in
+            // fact nothing was broken.
             if (!process.WaitForExit((int)waitFor.TotalMilliseconds))
             {
                 detail = $"pid {pid} did not die within {waitFor.TotalSeconds:F0} seconds of being killed";
@@ -92,8 +92,8 @@ internal static class AgentProcess
         {
             var info = new ProcessStartInfo(exePath)
             {
-                // ⚠️ ShellExecute দিলে প্রসেসটা explorer.exe-র সন্তান হতো, আমাদের নয় —
-                //    তখন pid ফেরত পাওয়াও অনিশ্চিত হতো।
+                // With ShellExecute the process would be a child of explorer.exe, not ours,
+                // and then getting the pid back would also be uncertain.
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 WorkingDirectory = Path.GetDirectoryName(exePath) ?? AppContext.BaseDirectory,

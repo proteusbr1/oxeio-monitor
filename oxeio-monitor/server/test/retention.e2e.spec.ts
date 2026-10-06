@@ -21,18 +21,18 @@ import {
 } from './setup/harness';
 
 /**
- * **K01** — ৯০ দিনের পুরোনো ছবি মোছার জব।
+ * K01: the job that deletes screenshots older than 90 days.
  *
- * ⭐ **এই টেস্টগুলো কেন দরকার ছিল:** জবটা লেখা ছিল, `@Cron` বসানোও ছিল,
- * কিন্তু জবের শরীরটা কোনোদিন চালিয়ে দেখা হয়নি — একটাও টেস্ট ছিল না।
- * অথচ নীতিমালায় স্টাফকে **লিখিতভাবে** বলা আছে "৯০ দিন পর ছবি নিজে
- * থেকেই মুছে যাবে"। ওটা না ঘটলে প্রতিশ্রুতিভঙ্গ, আর ধরা পড়ত কেবল
- * ডিস্ক ভরে গেলে — অর্থাৎ বছরখানেক পরে।
+ * Why these tests were needed: the job was written and `@Cron` was in place,
+ * but the job body had never been run: there was not a single test. Yet the
+ * policy tells staff in writing that "screenshots delete themselves after 90
+ * days". If that does not happen it is a broken promise, and it would only
+ * be noticed when the disk fills up, about a year later.
  *
- * ⚠️ এই ফাইল **সত্যিকারের ফাইল** লেখে ও মোছে (`STORAGE_ROOT` →
- * `server/test/.tmp-test-storage`, vitest.config.ts-এ বাঁধা)। মকড fs
- * দিয়ে করলে ঠিক যে জিনিসগুলো ভুল হতে পারে — পাথের হিসাব, ফোল্ডার খালি
- * হওয়া, ENOENT — সেগুলোর একটাও পরীক্ষা হতো না।
+ * This file writes and deletes real files (`STORAGE_ROOT` ->
+ * `server/test/.tmp-test-storage`, set in vitest.config.ts). With a mocked fs,
+ * exactly the things that can go wrong (path arithmetic, folders becoming
+ * empty, ENOENT) would not be tested at all.
  */
 let h: Harness;
 let job: RetentionJob;
@@ -40,26 +40,26 @@ let employeeId: number;
 let deviceId: number;
 let root: string;
 
-/** ছবির সারি + ডিস্কে সত্যিকারের ফাইল (ফুল + থাম্ব) */
+/** A screenshot row plus real files on disk (full image + thumb) */
 async function makeShot(opts: {
   daysAgo: number;
   deletedAt?: Date | null;
-  /** ফাইলটা ডিস্কে সত্যিই বসবে কি না — অসম্পূর্ণ আগের রান নকল করতে */
+  /** whether the files really get written to disk: to fake an incomplete earlier run */
   writeFiles?: boolean;
-  /** পাথ ওভাররাইড — `..` ঢুকিয়ে unsafe কেস বানাতে */
+  /** path override: to build the unsafe case by slipping in `..` */
   filePath?: string;
 }): Promise<{ id: bigint; filePath: string; thumbPath: string }> {
   /**
-   * ⚠️⚠️ **`work_date` ঢাকার হিসাবে বসাতে হয়, UTC-তে নয়।**
+   * `work_date` must be set by the Dhaka calculation, not UTC.
    *
-   * জবের কাটঅফ `retentionCutoff()` = `workDateOf(now) − ৯০ দিন`, অর্থাৎ
-   * **ঢাকার** কর্মদিবস ধরে। ফিক্সচারটা আগে `Date.now()` থেকে UTC তারিখ
-   * নিত — আর রাত ১২টা থেকে ভোর ৬টার মধ্যে (ঢাকা UTC+৬) UTC তারিখ একদিন
-   * পিছিয়ে থাকে। ফলে `daysAgo: 90` আসলে ৯১ ঢাকা-দিন আগের সারি বানাত, আর
-   * সীমানার টেস্টটা **প্রতি রাতে ওই ছয় ঘণ্টায় ফেল করত**।
+   * The job's cutoff `retentionCutoff()` = `workDateOf(now) - 90 days`, i.e.
+   * it uses the Dhaka workday. The fixture used to take the UTC date from
+   * `Date.now()`, and between midnight and 6am (Dhaka is UTC+6) the UTC date
+   * is a day behind. So `daysAgo: 90` really built a row 91 Dhaka days old,
+   * and the boundary test failed every night in those six hours.
    *
-   * ⭐ ধরা পড়েছে ঠিক তাই — রাত ১২:৩০-এ চালাতে গিয়ে। দিনের বেলা চালালে
-   * চিরকাল সবুজ থাকত।
+   * It was caught exactly that way: by running at 00:30. Run in the daytime,
+   * it would have stayed green forever.
    */
   const when = dhakaNoon(-opts.daysAgo);
   const day = workDateOf(when).toISOString().slice(0, 10);
@@ -120,16 +120,16 @@ beforeEach(async () => {
   deviceId = device.deviceId;
 });
 
-describe('retention জব — শরীরটা সত্যিই চলে', () => {
-  it('৯০ দিনের পুরোনো ছবি: সারি ও ডিস্কের দুটো ফাইলই যায়', async () => {
+describe('retention job: the body really runs', () => {
+  it('a screenshot older than 90 days: the row and both files on disk go', async () => {
     const old = await makeShot({ daysAgo: 120 });
 
     const result = await job.runOnce();
 
     expect(result.skipped).toBe(false);
     expect(result.marked).toBe(1);
-    // ⭐ A06 — **দুটো** ফাইল: ফুল ছবি আর থাম্বনেইল। শুধু ফুলটা মুছলে
-    //    এই সংখ্যা ১ হতো, আর thumb/ ফোল্ডার চিরকাল ডিস্কে থাকত।
+    // A06: two files, the full image and the thumbnail. If only the full one
+    // were deleted this number would be 1, and the thumb/ folder would stay on disk forever.
     expect(result.filesDeleted).toBe(2);
     expect(result.rowsDeleted).toBe(1);
     expect(result.failed).toBe(0);
@@ -139,7 +139,7 @@ describe('retention জব — শরীরটা সত্যিই চলে',
     expect(await h.prisma.screenshot.findUnique({ where: { id: old.id } })).toBeNull();
   });
 
-  it('সাম্প্রতিক ছবি ছোঁয়াও হয় না', async () => {
+  it('a recent screenshot is not even touched', async () => {
     const fresh = await makeShot({ daysAgo: 10 });
 
     const result = await job.runOnce();
@@ -153,12 +153,12 @@ describe('retention জব — শরীরটা সত্যিই চলে',
   });
 
   /**
-   * ⚠️ সীমানার ঠিক এপাশ-ওপাশ। `retentionCutoff` ঢাকার আজকের তারিখ থেকে
-   * ৯০ দিন পিছোয়, আর শর্তটা `workDate < cutoff` — তাই ঠিক ৯০ দিন আগের
-   * ছবিটা **থেকে যায়**, ৯১ দিনেরটা যায়। `<=` লিখলে প্রতিশ্রুত ৯০ দিনের
-   * বদলে ৮৯ দিন পাওয়া যেত, আর কেউ টেরই পেত না।
+   * Just either side of the boundary. `retentionCutoff` goes back 90 days from
+   * today's Dhaka date and the condition is `workDate < cutoff`, so a
+   * screenshot exactly 90 days old stays and a 91-day-old one goes. Writing
+   * `<=` would give 89 days instead of the promised 90, and nobody would notice.
    */
-  it('ঠিক ৯০ দিনেরটা থাকে, ৯১ দিনেরটা যায়', async () => {
+  it('exactly 90 days old stays, 91 days old goes', async () => {
     const ninety = await makeShot({ daysAgo: 90 });
     const ninetyOne = await makeShot({ daysAgo: 91 });
 
@@ -169,11 +169,11 @@ describe('retention জব — শরীরটা সত্যিই চলে',
   });
 
   /**
-   * ⭐ জবটার নকশার মূল দাবি — মাঝপথে প্রসেস মরে গেলে পড়ে থাকে মার্ক-করা
-   * সারি, আর পরের রান সেখান থেকেই শেষ করে। এখানে সেই অবস্থাটা হাতে
-   * বানানো: `deleted_at` বসানো, কিন্তু ফাইল আগেই মুছে গেছে।
+   * The core claim of the job's design: if the process dies midway, a marked
+   * row is left behind and the next run finishes from there. Here that state
+   * is built by hand: `deleted_at` set, but the files already gone.
    */
-  it('আগের অসম্পূর্ণ রানের বাকি কাজ শেষ করে (ফাইল নেই = সফল)', async () => {
+  it('finishes what an earlier incomplete run left (no file = success)', async () => {
     const half = await makeShot({
       daysAgo: 120,
       deletedAt: dhakaNoon(),
@@ -182,7 +182,7 @@ describe('retention জব — শরীরটা সত্যিই চলে',
 
     const result = await job.runOnce();
 
-    // মার্ক আগেই করা ছিল, তাই এই রানে নতুন করে কিছু মার্ক হয়নি
+    // the mark was already done, so nothing new is marked in this run
     expect(result.marked).toBe(0);
     expect(result.filesMissing).toBe(2);
     expect(result.filesDeleted).toBe(0);
@@ -190,7 +190,7 @@ describe('retention জব — শরীরটা সত্যিই চলে',
     expect(await h.prisma.screenshot.findUnique({ where: { id: half.id } })).toBeNull();
   });
 
-  it('দ্বিতীয়বার চালালে কিছুই বদলায় না (idempotent)', async () => {
+  it('running a second time changes nothing (idempotent)', async () => {
     await makeShot({ daysAgo: 120 });
 
     const first = await job.runOnce();
@@ -204,11 +204,11 @@ describe('retention জব — শরীরটা সত্যিই চলে',
   });
 
   /**
-   * ⭐⭐ সবচেয়ে জরুরি টেস্ট। `file_path` ডাটাবেসের কলাম; একটা `..` ঢুকে
-   * পড়লে জবটা storage-এর বাইরের ফাইল `unlink` করত। সারিটা **রেখে দেওয়া
-   * হয়** ইচ্ছাকৃতভাবে — মুছে দিলে প্রতিবেদনটাই হারাত।
+   * The most important test. `file_path` is a database column; if a `..` got
+   * in, the job would `unlink` a file outside storage. The row is kept on
+   * purpose: deleting it would lose the report of the problem.
    */
-  it('storage রুটের বাইরের পাথ ছোঁয় না, সারিটাও রেখে দেয়', async () => {
+  it('does not touch a path outside the storage root, and keeps the row', async () => {
     const evilRel = '../outside-the-root.webp';
     const evilAbs = resolve(root, evilRel);
     await writeFile(evilAbs, 'do-not-delete-me');
@@ -224,23 +224,24 @@ describe('retention জব — শরীরটা সত্যিই চলে',
 
       expect(result.unsafePaths).toBe(1);
       expect(result.rowsDeleted).toBe(0);
-      // ফাইলটা এখনো ওখানেই
+      // the file is still there
       await expect(access(evilAbs)).resolves.toBeUndefined();
-      // সারিটাও — পরের রানে আবার চেঁচাবে
+      // the row too: it will complain again on the next run
       expect(await h.prisma.screenshot.findUnique({ where: { id: bad.id } })).not.toBeNull();
     } finally {
-      // ⚠️ এই একটা ফাইল ইচ্ছাকৃতভাবে `STORAGE_ROOT`-এর **বাইরে** লেখা হয়,
-      //    তাই `.tmp-test-storage/` মোছার সাথে যায় না — আর ওই ফোল্ডারটাই
-      //    গিটে ignore করা। নিজে না মুছলে `server/`-এ পড়ে থাকত।
+      // This one file is deliberately written outside `STORAGE_ROOT`, so it
+      // does not go with the deletion of `.tmp-test-storage/`, and that folder
+      // is what git ignores. If we did not delete it ourselves it would be left in `server/`.
       await unlink(evilAbs).catch(() => {});
     }
   });
 
   /**
-   * ⚠️ পাথ `…/YYYY/MM/DD/emp-001/`, আর থাম্ব `…/emp-001/thumb/`। গভীরতম
-   * ফোল্ডার আগে না মুছলে `emp-001` চিরকাল ENOTEMPTY-তে আটকে থাকত।
+   * The path is `.../YYYY/MM/DD/emp-001/` and the thumb is `.../emp-001/thumb/`.
+   * If the deepest folder is not removed first, `emp-001` would be stuck on
+   * ENOTEMPTY forever.
    */
-  it('খালি হয়ে যাওয়া ফোল্ডারও সরিয়ে দেয়', async () => {
+  it('also removes folders that have become empty', async () => {
     const old = await makeShot({ daysAgo: 120 });
     const dayDir = dirname(dirname(old.filePath)); // …/YYYY/MM/DD
 
@@ -253,7 +254,7 @@ describe('retention জব — শরীরটা সত্যিই চলে',
 });
 
 describe('POST /ops/retention/run', () => {
-  it('owner হাতে চালাতে পারে', async () => {
+  it('the owner can run it by hand', async () => {
     const old = await makeShot({ daysAgo: 120 });
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
@@ -270,10 +271,10 @@ describe('POST /ops/retention/run', () => {
   });
 
   /**
-   * ⚠️ CSRF টোকেন **দিয়েই** পাঠানো হচ্ছে — নইলে ৪০৩ আসত CSRF থেকে, আর
-   * টেস্টটা পাস করত ভুল কারণে; role guard-টা কোনোদিন পরীক্ষাই হতো না।
+   * The CSRF token is sent on purpose: otherwise CSRF would answer 403 and
+   * the test would pass for the wrong reason; the role guard would never be tested.
    */
-  it('ম্যানেজার পারে না — গোটা কন্ট্রোলারই owner-only', async () => {
+  it('a manager cannot: the whole controller is owner-only', async () => {
     const s = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
 
     const res = await s.http
@@ -284,7 +285,7 @@ describe('POST /ops/retention/run', () => {
     expect(res.status).toBe(403);
   });
 
-  it('লগইন ছাড়া পারা যায় না', async () => {
+  it('cannot be run without logging in', async () => {
     const res = await h.http().post('/api/v1/ops/retention/run').send({});
     expect(res.status).toBe(401);
   });

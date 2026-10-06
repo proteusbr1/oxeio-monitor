@@ -16,11 +16,11 @@ import {
 } from './setup/harness';
 
 /**
- * **স্টাফ ↔ ম্যানেজার** — portal অ্যাকাউন্টের ভূমিকা বদলানো।
+ * Staff and manager: changing the role of a portal account.
  *
- * ⚠️⚠️ আগে ভূমিকা বসত কেবল অ্যাকাউন্ট **খোলার সময়**। কাউকে ম্যানেজার
- * করতে হলে তাঁর অ্যাকাউন্ট মুছে নতুন করে খুলতে হতো — নতুন পাসওয়ার্ড, আর
- * `user_id`-নির্ভর সব ইতিহাস (audit log) ছিঁড়ে যেত।
+ * Careful: the role used to be set only when the account was created. To make
+ * someone a manager, their account had to be deleted and recreated: a new
+ * password, and all history tied to `user_id` (the audit log) was cut.
  */
 let h: Harness;
 let owner: Session;
@@ -65,7 +65,7 @@ const setRole = (userId: number, role: string) =>
     .send({ role });
 
 describe('PATCH /users/:id/role', () => {
-  it('স্টাফকে ম্যানেজার করা যায়', async () => {
+  it('staff can be made a manager', async () => {
     const { userId } = await staffWithLogin('RL-UP');
 
     const res = await setRole(userId, 'manager').expect(200);
@@ -76,7 +76,7 @@ describe('PATCH /users/:id/role', () => {
     ).toBe('manager');
   });
 
-  it('ম্যানেজারকে আবার স্টাফ করা যায়', async () => {
+  it('a manager can be made staff again', async () => {
     const { userId } = await staffWithLogin('RL-DOWN', 'manager');
 
     await setRole(userId, 'employee').expect(200);
@@ -87,11 +87,12 @@ describe('PATCH /users/:id/role', () => {
   });
 
   /**
-   * ⚠️⚠️ **owner এখান থেকে দেওয়াও যায় না।** owner মানে বেতন, audit log আর
-   * সেটিংসের চাবি — সেটা একটা ড্রপডাউনের এক ক্লিকে হাতবদল হওয়ার জিনিস নয়।
-   * ⭐ DTO-তেই আটকায়, তাই অনুরোধটা ব্যবসায়িক কোড ছোঁয়ারই সুযোগ পায় না।
+   * Careful: owner cannot be granted from here either. Owner is the key to
+   * payroll, the audit log and settings, which should not change hands with
+   * one click on a dropdown. The DTO itself blocks it, so the request never
+   * reaches the business code.
    */
-  it('owner বানানো যায় না', async () => {
+  it('cannot create an owner', async () => {
     const { userId } = await staffWithLogin('RL-OWNER');
 
     await setRole(userId, 'owner').expect(400);
@@ -101,7 +102,7 @@ describe('PATCH /users/:id/role', () => {
     ).toBe('employee');
   });
 
-  it('অচেনা ভূমিকা ৪০০', async () => {
+  it('unknown role gives 400', async () => {
     const { userId } = await staffWithLogin('RL-JUNK');
 
     await setRole(userId, 'superadmin').expect(400);
@@ -109,11 +110,11 @@ describe('PATCH /users/:id/role', () => {
   });
 
   /**
-   * ⚠️⚠️ **owner-এর ভূমিকা কাড়াও যায় না।** এই রুটে ঢুকতে owner হতে হয়,
-   * তাই নিজেকে নামিয়ে দিলে কেউ আর ঢুকতেই পারতেন না — ফেরার পথ হতো
-   * সার্ভারে `recover-owner` স্ক্রিপ্ট।
+   * Careful: the owner's role cannot be taken away either. Getting into this
+   * route requires being the owner, so demoting oneself would lock everyone
+   * out, and the way back would be the `recover-owner` script on the server.
    */
-  it('owner-কে নামানো যায় না', async () => {
+  it('cannot demote the owner', async () => {
     const ownerUser = await h.prisma.user.findFirstOrThrow({
       where: { email: OWNER_EMAIL },
     });
@@ -126,7 +127,7 @@ describe('PATCH /users/:id/role', () => {
     ).toBe('owner');
   });
 
-  it('ম্যানেজার এই রুট ছুঁতে পারেন না', async () => {
+  it('a manager cannot touch this route', async () => {
     const { userId } = await staffWithLogin('RL-NOPE');
     const manager = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
 
@@ -137,12 +138,12 @@ describe('PATCH /users/:id/role', () => {
       .expect(403);
   });
 
-  it('অচেনা ইউজার ৪০৪', async () => {
+  it('unknown user gives 404', async () => {
     await setRole(999_999, 'manager').expect(404);
   });
 
-  /** ⚠️ একই ভূমিকা বসালে audit log-এ "বদল" লেখা হয় না */
-  it('একই ভূমিকা বসালে ইতিহাসে কিছু জমে না', async () => {
+  /** Setting the same role writes no "change" in the audit log */
+  it('setting the same role leaves nothing in history', async () => {
     const { userId } = await staffWithLogin('RL-SAME');
     await h.prisma.auditLog.deleteMany({});
 
@@ -154,7 +155,7 @@ describe('PATCH /users/:id/role', () => {
     expect(rows).toHaveLength(0);
   });
 
-  it('আসল বদল ইতিহাসে ওঠে, আগের ভূমিকাসহ', async () => {
+  it('a real change is recorded in history, with the previous role', async () => {
     const { userId } = await staffWithLogin('RL-AUDIT');
 
     await setRole(userId, 'manager').expect(200);
@@ -164,8 +165,8 @@ describe('PATCH /users/:id/role', () => {
       orderBy: { id: 'desc' },
     });
 
-    // ⭐ আগেরটাও লেখা — শুধু নতুন মান থাকলে "কে কখন ম্যানেজার হলো"
-    //    প্রশ্নের উত্তর দেওয়া যেত না
+    // The old value is stored too: with only the new value, "who became a
+    // manager and when" could not be answered
     expect(row.meta).toMatchObject({
       op: 'change_role',
       from: 'employee',
@@ -173,8 +174,8 @@ describe('PATCH /users/:id/role', () => {
     });
   });
 
-  /** ⭐ পাসওয়ার্ড ছোঁয়া হয় না — ভূমিকা বদলে কারো লগইন ভাঙা উচিত নয় */
-  it('পাসওয়ার্ড অক্ষত থাকে', async () => {
+  /** The password is not touched: changing a role must not break anyone's login */
+  it('the password stays intact', async () => {
     const { userId, email } = await staffWithLogin('RL-PW');
 
     await setRole(userId, 'manager').expect(200);

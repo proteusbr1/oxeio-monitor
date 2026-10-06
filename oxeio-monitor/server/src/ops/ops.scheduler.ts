@@ -10,23 +10,23 @@ import { TelegramChannel } from '../alerts/telegram.channel';
 import { BACKUP_CHECK_TICK_MS, TELEGRAM_TICK_MS } from './ops.constants';
 
 /**
- * G04-এর পর্যায়ক্রমিক চেক আর G08-এর টেলিগ্রাম sweep।
+ * G04's periodic check and G08's Telegram sweep.
  *
- * ⚠️ `AlertsScheduler`-এর মতোই সাধারণ `setInterval`, `@Cron` নয় — একই
- *    কারণে: এই দুটোর কোনোটাই "দিনের নির্দিষ্ট সময়ে" চলার জিনিস নয়, আর
- *    `@Cron` ব্যবহার করলে ওদের চলা-না-চলা নির্ভর করত অন্য একটা মডিউলের
- *    `ScheduleModule.forRoot()`-এর উপর। রাতের ব্যাকআপে ওই নির্ভরতাটুকু
- *    মানা হয়েছে (টাইমজোন-সহ দৈনিক সময় দরকার), কিন্তু এখানে দরকার নেই।
+ * Like `AlertsScheduler`, a plain `setInterval`, not `@Cron`, for the same
+ * reason: neither of these runs "at a specific time of day", and with `@Cron`
+ * whether they run would depend on another module's `ScheduleModule.forRoot()`.
+ * The nightly backup accepts that dependency (it needs a daily time with a
+ * timezone), but here it is not needed.
  *
- * ⚠️ টেস্টে কোনো টাইমার নয় — নইলে টেস্ট চলাকালীন sweep অন্য এজেন্টের
- *    ফিক্সচারের অ্যালার্টে `channels_sent` বসিয়ে দিত, আর ব্যর্থতাগুলো
- *    এলোমেলো জায়গায় দেখা দিত।
+ * No timers in tests: otherwise during a test the sweep would set
+ * `channels_sent` on alerts from another agent's fixtures, and failures would
+ * show up in random places.
  */
 @Injectable()
 export class OpsScheduler implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(OpsScheduler.name);
   private readonly timers: NodeJS.Timeout[] = [];
-  /** আগের দফা এখনো চললে পরেরটা বাদ */
+  /** If the previous round is still running, skip the next */
   private readonly running = new Set<string>();
 
   constructor(
@@ -50,14 +50,14 @@ export class OpsScheduler implements OnApplicationBootstrap, OnModuleDestroy {
     });
 
     /**
-     * ⚠️⚠️ **শর্ত ছাড়াই বসানো হয় — ইচ্ছাকৃত।**
+     * **Set up unconditionally, on purpose.**
      *
-     * আগে `configured` দেখে বসানো হতো, কিন্তু এখন মালিক **চলতে চলতে**
-     * পর্দা থেকে টোকেন বসাতে পারেন। চালুর সময়ের শর্ত রাখলে তিনি সেভ
-     * করতেন, কিছুই ঘটত না, আর সার্ভার রিস্টার্ট না করা পর্যন্ত কারণটা
-     * জানার উপায় থাকত না।
+     * It used to check `configured` first, but now the owner can set the token
+     * from the screen **while the server runs**. With a startup condition they
+     * would save, nothing would happen, and there would be no way to learn why
+     * until the server restarted.
      *
-     * ⭐ কনফিগ না থাকলে `runOnce()` এমনিতেই শূন্য ফেরত দেয় — খরচ নগণ্য।
+     * With no config `runOnce()` returns zero anyway, so the cost is negligible.
      */
     this.schedule('telegram', TELEGRAM_TICK_MS, (now) =>
       this.telegram.runOnce(now),
@@ -73,7 +73,7 @@ export class OpsScheduler implements OnApplicationBootstrap, OnModuleDestroy {
     this.timers.length = 0;
   }
 
-  /** হাতে চালানোর জন্য — শিডিউলার বন্ধ থাকলেও (যেমন টেস্টে) কাজ করে */
+  /** For manual runs; works even when the scheduler is off (e.g. in tests) */
   async runAllOnce(now = new Date()): Promise<number> {
     const raised = await this.backupCheck.runOnce(now);
     await this.telegram.runOnce(now);
@@ -89,15 +89,15 @@ export class OpsScheduler implements OnApplicationBootstrap, OnModuleDestroy {
       void this.tick(name, task);
     }, everyMs);
 
-    // ⚠️ unref — টাইমার যেন প্রসেসকে বাঁচিয়ে না রাখে
+    // unref: the timer must not keep the process alive
     timer.unref();
     this.timers.push(timer);
   }
 
   /**
-   * ⭐ প্রতিটা টিক try/catch-এ মোড়া — `setInterval`-এর কলব্যাক থেকে
-   * বেরিয়ে যাওয়া rejected promise Node-এ পুরো সার্ভার নামিয়ে দেয়।
-   * ব্যাকআপের খবর নিতে গিয়ে মনিটরিং বন্ধ হওয়াটা হাস্যকর হতো।
+   * Every tick is wrapped in try/catch: a rejected promise escaping a
+   * `setInterval` callback brings the whole server down in Node. Monitoring
+   * stopping while checking on the backup would be absurd.
    */
   private async tick(
     name: string,

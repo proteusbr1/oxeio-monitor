@@ -11,22 +11,23 @@ import {
 import type { FreshUrls } from './useFreshUrls';
 
 /**
- * E06 — লাইটবক্স: ফুল সাইজ ছবি, ← → দিয়ে আগের/পরের, Esc-এ বন্ধ।
+ * Lightbox: full-size image, ← → for previous/next, Esc to close.
  *
- * ⭐ **কম্পোনেন্টটা খোলা অবস্থাতেই mount হয়** (`{open && <Lightbox/>}`), তাই
- * নিচের effect-গুলোর `[]` deps মানে "যতবার খোলা হবে, ততবার"। লুকিয়ে রাখা
- * (`hidden`) কম্পোনেন্ট হলে স্ক্রল-লক আর ফোকাস ফেরানোর হিসাব রাখতে হতো
- * হাতে, আর একটাও ভুলে গেলে পেজটা চিরকাল স্ক্রল-বিহীন হয়ে থাকত।
+ * Important: **the component is mounted only while open** (`{open && <Lightbox/>}`),
+ * so the `[]` deps of the effects below mean "every time it opens". A hidden
+ * (`hidden`) component would need hand-kept bookkeeping for scroll lock and focus
+ * restore, and forgetting one would leave the page unscrollable forever.
  *
- * ⚠️ তিনটে জিনিস একসাথে না করলে কি-বোর্ড নেভিগেশন আর পেজ স্ক্রল গোলমাল
- *    পাকায়:
- *      · পেছনের পেজের স্ক্রল বন্ধ — নইলে ↓ চাপলে ছবির পেছনে গ্রিড সরত
- *      · ফোকাস লাইটবক্সেই আটকানো — নইলে Tab চেপে পেছনের বোতামে চলে যেত,
- *        আর তখন ← → আর কাজ করত না (কোনো এরর ছাড়াই)
- *      · বন্ধ করলে ফোকাস যেখান থেকে এসেছিল সেখানেই ফেরত
+ * Careful: unless all three of these are done together, keyboard navigation and
+ *    page scroll misbehave:
+ *      - lock scrolling of the page behind, or pressing ↓ would move the grid
+ *        behind the image
+ *      - trap focus in the lightbox, or Tab would reach a button behind it and
+ *        ← → would stop working (with no error)
+ *      - on close, return focus to where it came from
  */
 
-/** Tab-এর ফাঁদ পাতার জন্য — `tabindex="-1"` (মোড়কটা নিজে) বাদ */
+/** For the Tab trap: excludes `tabindex="-1"` (the wrapper itself) */
 const FOCUSABLE =
   'button:not([disabled]), a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
@@ -47,9 +48,9 @@ export function Lightbox({
   const dialogRef = useRef<HTMLDivElement>(null);
 
   /**
-   * ⚠️ `ready`-টা state-এ না রেখে "কোন src লোড হয়েছে" রাখা হয়েছে। state-এ
-   *    রাখলে ছবি বদলানোর পরেও এক রেন্ডার আগেরটার `ready=true` থেকে যেত,
-   *    আর নতুন ছবির উপরে পুরোনোটার নাম বসে থাকত।
+   * Careful: instead of a `ready` state, this keeps "which src has loaded". With a
+   *    plain state, after the image changed `ready=true` would linger for one render
+   *    and the new image would show the old one's name.
    */
   const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
 
@@ -60,7 +61,7 @@ export function Lightbox({
   const hasPrev = index > 0;
   const hasNext = index < items.length - 1;
 
-  // ── কি-বোর্ড ────────────────────────────────────────────────────────
+  // ── Keyboard ─────────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
@@ -81,21 +82,21 @@ export function Lightbox({
       if (event.key === 'Tab') trapTab(event, dialogRef.current);
     };
 
-    // ⚠️ document-এ, capture ধাপে — কম্পোনেন্টের ভেতরে `onKeyDown` দিলে
-    //    ফোকাস কোনোভাবে বেরিয়ে গেলে (ব্রাউজারের address bar থেকে ফিরে
-    //    এলে) ← → নীরবে কাজ করা বন্ধ করত।
+    // Careful: on document, in the capture phase. An `onKeyDown` inside the component
+    //    would silently stop ← → working if focus ever left (e.g. coming back from
+    //    the browser address bar).
     document.addEventListener('keydown', onKey, true);
     return () => document.removeEventListener('keydown', onKey, true);
   }, [index, items.length, onIndex, onClose]);
 
-  // ── স্ক্রল-লক ও ফোকাস ───────────────────────────────────────────────
+  // ── Scroll lock and focus ────────────────────────────────────────────
   useEffect(() => {
     const opener =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
-    // ⚠️ আগের মানটা মনে রাখা হয় — অন্য কেউ (ভবিষ্যতের কোনো ড্রয়ার) ইতিমধ্যে
-    //    লক করে থাকলে বন্ধ করার সময় তার লকটাও খুলে যেত।
+    // Careful: remember the previous value. If someone else (a future drawer) has
+    //    already locked scroll, closing this would unlock theirs too.
     const previousOverflow = document.body.style.overflow;
 
     document.body.style.overflow = 'hidden';
@@ -124,10 +125,10 @@ export function Lightbox({
               {item.empCode}
             </span>
           </div>
-          {/* ⚠️ `.num` **শুধু** ঘড়ির সংখ্যার উপরে। তারিখে মাসের নাম থাকে
-              ("10 August 2026") — গোটাটা `.num` করলে মাসের নামটাও মনো
-              ফন্টে চলে যেত, আর tabular-nums-এর সমান-প্রস্থ অক্ষরে শব্দটা
-              টেলিগ্রামের মতো ছড়িয়ে বসত। অঙ্ক মনোয়, শব্দ নয়। */}
+          {/* Careful: `.num` goes **only** on the clock digits. The date contains a month
+              name ("10 August 2026"); making all of it `.num` would put the month name in
+              the mono font too, and the words would spread out like a telegram in
+              tabular-nums's equal-width characters. Digits are mono, words are not. */}
           <div className="text-[11.5px] text-white/55">
             {formatDate(workDateOf(item.capturedAt))}
             {' · '}
@@ -145,9 +146,9 @@ export function Lightbox({
         </button>
       </header>
 
-      {/* ⚠️ ছবির চারপাশের ফাঁকা জায়গায় ক্লিক করলে বন্ধ — কিন্তু ছবিতে নয়।
-          `e.target === e.currentTarget` না মিলিয়ে দিলে ছবিতে ক্লিক করেও
-          লাইটবক্স বন্ধ হয়ে যেত, আর জুম করতে গিয়ে বারবার বেরিয়ে আসতে হতো। */}
+      {/* Careful: clicking the empty space around the image closes it, but clicking the
+          image does not. Without the `e.target === e.currentTarget` check, clicking the
+          image would close the lightbox, and zooming would keep kicking you out. */}
       <div
         onMouseDown={(event) => {
           if (event.target === event.currentTarget) onClose();
@@ -171,9 +172,9 @@ export function Lightbox({
               />
             )}
             <img
-              // ⚠️ `key` বদলালে React পুরোনো <img>-টা ফেলে নতুন বসায় — নইলে
-              //    আগের ছবিটা নতুনটা নামা পর্যন্ত পর্দায় থেকে যেত, আর ← →
-              //    চেপে মনে হতো কিছুই বদলায়নি।
+              // Careful: when `key` changes, React drops the old <img> and mounts a new
+              //    one. Otherwise the old image would stay on screen until the new one
+              //    loaded, and ← → would seem to do nothing.
               key={src}
               src={src}
               alt={`${item.fullName}, screenshot at ${formatTime(item.capturedAt)}`}
@@ -184,24 +185,24 @@ export function Lightbox({
               }}
               onError={() => urls.reportError(item, 'full')}
               /**
-               * ⚠️⚠️ **`max-h-full` এখানে কিছুই আটকায় না** — আর ক্লাসগুলো
-               *    পড়ে সেটা বোঝার উপায় নেই, তাই ভুলটা এতদিন টিকে ছিল।
+               * Careful: **`max-h-full` blocks nothing here**, and nobody can tell by
+               *    reading the classes, which is why the bug lasted so long.
                *
-               *    শতাংশ `max-height` তখনই খাটে যখন অভিভাবকের উচ্চতা
-               *    "definite"। ঘরটা `grid` + `place-items-center`, আর
-               *    `align-items: center` বসালে item নিজের কনটেন্ট থেকে মাপ
-               *    নেয় — "১০০% কীসের?" প্রশ্নটা চক্রাকার হয়ে যায়, তাই
-               *    ব্রাউজার সীমাটা **উপেক্ষা করে**।
+               *    A percentage `max-height` only works when the parent's height is
+               *    "definite". The cell is `grid` + `place-items-center`, and with
+               *    `align-items: center` the item takes its size from its content;
+               *    "100% of what?" becomes circular, so the browser **ignores the
+               *    limit**.
                *
-               *    ⚠️ ফলে `object-contain`-ও অকেজো: ১৯২০×১০৮০ ছবি ৮৫৫px
-               *    পর্দায় **১০৬৭px** উঁচু হয়ে বসত (মেপে দেখা), ৭২৩px ঘর
-               *    উপচে গোটা পর্দা ঢেকে ফেলত, আর নিচের ফুটার ও ← →
-               *    বোতামগুলো বাইরে চলে যেত।
+               *    Careful: so `object-contain` is useless too: a 1920x1080 image
+               *    on an 855px screen ended up **1067px** tall (measured), overflowed
+               *    the 723px cell, covered the whole screen and pushed the footer and
+               *    the ← → buttons out of view.
                *
-               * ⭐ তাই **viewport-ভিত্তিক** সীমা — কোনো অভিভাবকের উপর
-               *    নির্ভর করে না, তাই ভবিষ্যতে কেউ মোড়কের layout বদলালেও
-               *    ভাঙবে না। `100dvh` মোবাইলের ঠিকানা-বার লুকোলে/দেখালেও
-               *    সঠিক থাকে, আর ১১rem হেডার+ফুটারের জায়গা।
+               *    Important: hence a **viewport-based** limit. It depends on no
+               *    parent, so it will not break if someone changes the wrapper's
+               *    layout. `100dvh` stays correct when a mobile address bar hides or
+               *    shows, and 11rem is the space for header + footer.
                */
               style={{ maxHeight: 'calc(100dvh - 11rem)' }}
               className={`max-w-full object-contain transition-opacity ${
@@ -235,8 +236,8 @@ export function Lightbox({
         </span>
 
         <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-white/55">
-          {/* ⭐ স্লট আর তোলার সময় আলাদা করে দেখানো — এটাই বোঝায় ছবিটা ৫
-              মিনিটের ঘরে **এলোমেলো মুহূর্তে** তোলা, ঘড়ি ধরে নয় (§ ২.৩) */}
+          {/* Show slot and capture time separately; this conveys that the shot was
+              taken at a **random moment** within the 5-minute slot, not on the clock */}
           <span>
             Slot <span className="num">{formatTime(item.slotStart)}</span> ·
             captured{' '}
@@ -247,8 +248,8 @@ export function Lightbox({
               Monitor <span className="num">{item.monitorIndex + 1}</span>
             </span>
           )}
-          {/* ⚠️ রেজ়লিউশনে হাজারের কমা বসে না — `formatCount` দিলে
-              "1,920×1,080" হতো, যেটা কেউ রেজ়লিউশন বলে চেনে না */}
+          {/* Careful: resolutions get no thousands comma; `formatCount` would give
+              "1,920×1,080", which nobody recognises as a resolution */}
           {item.width !== null && item.height !== null && (
             <span className="num">
               {item.width}×{item.height}
@@ -260,8 +261,8 @@ export function Lightbox({
         </div>
 
         <p className="w-full text-[11px] text-white/40">
-          {/* ⚠️ ফুল URL কখনো জমা হয় না — এখানে যা দেখছেন সেটা উইন্ডোর
-              শিরোনাম, বড়জোর ডোমেইন (ADR-013) */}
+          {/* Careful: the full URL is never stored; what you see here is the window
+              title, at most the domain (ADR-013) */}
           {item.activeApp ?? '—'}
           {item.activeTitle ? ` · ${item.activeTitle}` : ''}
           <span className="ml-2 hidden sm:inline">
@@ -277,11 +278,11 @@ const NAV_BUTTON =
   'rounded-md border border-white/20 px-2.5 py-1.5 text-xs text-white/85 transition hover:border-brand hover:text-white focus:outline-none focus:ring-2 focus:ring-brand/40 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-white/20';
 
 /**
- * ফোকাস লাইটবক্সের ভেতরেই ঘোরে।
+ * Focus cycles inside the lightbox only.
  *
- * ⚠️ ভেতরে কোনো ফোকাসযোগ্য জিনিস না থাকলে (তাত্ত্বিকভাবে) Tab মোড়কেই ফিরে
- *    আসে — নইলে ফোকাস পেছনের পেজে চলে যেত আর ব্যবহারকারী বুঝতে পারত না
- *    সে কোথায় আছে।
+ * Careful: if there is nothing focusable inside (theoretically), Tab returns to the
+ *    wrapper; otherwise focus would go to the page behind and the user would not
+ *    know where they are.
  */
 function trapTab(event: KeyboardEvent, root: HTMLElement | null): void {
   if (!root) return;

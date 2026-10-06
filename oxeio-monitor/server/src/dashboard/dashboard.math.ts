@@ -1,10 +1,10 @@
 /**
- * লাইভ বোর্ড (E01/E02) ও টাইমলাইনের (E04/E05) খাঁটি হিসাব — কোনো I/O নেই।
+ * Pure calculations for the live board and the timeline — no I/O.
  *
- * আলাদা ফাইলে রাখার কারণ payroll.math-এর মতোই: এই তিনটে নিয়ম
- * (স্ট্যাটাস নির্ধারণ · ঘণ্টার বালতিতে ভাগ · তারিখ parse) ভুল হলে
- * ড্যাশবোর্ড **কোনো এরর দেখাবে না** — শুধু নীরবে ভুল সংখ্যা দেখাবে।
- * ডাটাবেস ছাড়া পরীক্ষা করা যায় বলেই ভুলগুলো এখানে ধরা পড়ে।
+ * Kept in its own file for the same reason as payroll.math: these three rules
+ * (status decision, splitting into hour buckets, date parsing) fail
+ * **silently** — the dashboard shows no error, just a wrong number. Being
+ * testable without a database is how such mistakes get caught here.
  */
 import type { SegmentState } from '@prisma/client';
 
@@ -17,49 +17,54 @@ const OFFSET_MS = DHAKA_OFFSET_MIN * 60 * MS;
 export const HOURS_PER_DAY = 24;
 
 /**
- * ⚠️ এজেন্ট বন্ধ (🔴) আর কর্মী চলে গেছে (⚪) — দুটো সম্পূর্ণ আলাদা ঘটনা।
- * প্রথমটা IT-র সমস্যা, দ্বিতীয়টা স্বাভাবিক। একটাকে আরেকটার রঙে দেখালে
- * হয় মিথ্যা অভিযোগ হয়, নয় আসল সমস্যা চাপা পড়ে।
+ * Careful: "agent switched off" (red) and "employee has left" (grey) are two
+ * completely different events. The first is an IT problem, the second is
+ * normal. Showing one in the other's colour either makes a false accusation or
+ * hides a real problem.
  */
 /**
- * ⚠️⚠️ **`AGENT_DOWN_AFTER_SEC` তুলে দেওয়া হয়েছে** (ছিল ৬০০ সে.)।
+ * Careful: **`AGENT_DOWN_AFTER_SEC` was removed** (it was 600 s).
  *
- * ওটা দিয়ে ঠিক হতো এজেন্ট "মরেছে" কি না — কেবল কত সময় চুপ, সেটা দেখে।
- * ⚠️ কিন্তু চুপ থাকার **দৈর্ঘ্য** কোনোদিনই বলতে পারে না ঘটনাটা কী: রাত
- * ন-টায় সবাই দশ ঘণ্টা চুপ, আর তাদের PC ঠিকঠাক বন্ধই আছে। ফলে রোজ
- * সন্ধ্যায় গোটা দল 🔴 হয়ে যেত (১৫ আগস্ট মাঠে ধরা পড়েছে), আর তাতে লাল
- * রঙের মানেই হারিয়ে যেত।
+ * It decided whether an agent was "dead" purely from how long it had been
+ * silent. But the **length** of the silence can never tell what happened: at
+ * 9 pm everyone is silent for ten hours and their PCs are simply switched
+ * off. The whole team turned red every evening (seen in the field), and red
+ * lost its meaning.
  *
- * ⭐ এখন প্রশ্নটা **শেষ কথাটার** — `decideLiveStatus()` দেখুন। ধ্রুবকটা
- * রেখে দিলে পরের পাঠক ধরে নিতেন নিয়মটা এখনো সময়ের, তাই মুছে ফেলাই সৎ।
+ * Now the question is about the **last thing the agent said** — see
+ * `decideLiveStatus()`. Keeping the constant would make the next reader assume
+ * the rule is still time-based, so deleting it is the honest option.
  */
 export const OFFLINE_AFTER_SEC = 90;
 
-/** কার্ডের চারটি রঙ (E01)। SegmentState-এর `locked` এখানে `idle`-এ মেশে। */
+/** The card's colours. SegmentState's `locked` is merged into `idle` here. */
 /**
- * কার্ডের **তিনটে** রঙ (E01)। `SegmentState`-এর `locked` এখানে `idle`-এ মেশে।
+ * The card has **three** colours. `SegmentState`'s `locked` is merged into
+ * `idle` here.
  *
- * ⚠️⚠️ **`agent_down` তুলে দেওয়া হয়েছে** *(১৭ আগস্ট)* — বিস্তারিত
- * <c>decideLiveStatus</c>-এ। সংক্ষেপে: বোর্ড কোনোদিনই নিশ্চিতভাবে বলতে
- * পারত না এজেন্ট "মরেছে" নাকি "PC বন্ধ", অথচ লাল রঙটা নিশ্চয়তার ভান করত।
- * ⭐ ওই প্রশ্নের সত্যিকারের উত্তর দেয় `AgentDownCheck`, আর সেটা
- * **অ্যালার্টে** যায় — যেখানে ভুল হলে সংশোধনও করা যায়।
+ * Careful: **`agent_down` was removed** — details in <c>decideLiveStatus</c>.
+ * In short: the board could never tell whether an agent was "dead" or the PC
+ * was "switched off", yet the red colour pretended to be certain. The real
+ * answer to that question comes from `AgentDownCheck`, which raises an
+ * **alert** — where a mistake can also be corrected.
  */
 export type LiveStatus = 'active' | 'idle' | 'offline';
 
 /**
- * একটা ডিভাইস সম্পর্কে বোর্ডের জানা সবটুকু (`devices` সারির তিনটে কলাম)।
+ * Everything the board knows about one device (three columns of the `devices`
+ * row).
  *
- * ⚠️ তিনটে তিনটে **আলাদা** প্রশ্নের উত্তর, আর গুলিয়ে ফেললে বোর্ড কোনো এরর
- *    ছাড়াই ভুল রঙ দেখাবে:
- *    · `lastSeenAt`  — এজেন্ট বেঁচে আছে কি না (এজেন্টের *যেকোনো* রিকোয়েস্টে বসে)
- *    · `lastState`   — সে শেষবার কী বলেছিল (শুধু heartbeat-এ বসে)
- *    · `lastStateAt` — **কখন** বলেছিল, অর্থাৎ কথাটা এখনো বিশ্বাসযোগ্য কি না
+ * Careful: they answer three **different** questions, and mixing them up
+ * shows the wrong colour with no error:
+ *    · `lastSeenAt`  — whether the agent is alive (set on *any* agent request)
+ *    · `lastState`   — what it said last time (set on heartbeat only)
+ *    · `lastStateAt` — **when** it said it, i.e. whether it is still credible
  */
 export interface DeviceReport {
   /**
-   * ⚠️ revoked ডিভাইসও এখন তালিকায় **আসে** — আগে কোয়েরিতেই ছাঁকা হতো।
-   * ছেঁকে ফেললে "কখনো বসেনি" আর "বন্ধ করে দেওয়া" আলাদা করা যেত না।
+   * Careful: revoked devices now **do** appear in the list — the query used
+   * to filter them out. Filtering made it impossible to tell "never installed"
+   * from "switched off".
    */
   status: 'active' | 'revoked';
   lastSeenAt: Date | null;
@@ -68,53 +73,56 @@ export interface DeviceReport {
 }
 
 /**
- * ⭐ এজেন্টের **উপস্থিতি** — রঙ নয়, ব্যাখ্যা।
+ * The agent's **presence** — an explanation, not a colour.
  *
- * ⚠️⚠️ তিনটেই বোর্ডে ধূসর "Offline" দেখায়, কিন্তু মালিকের করণীয় তিন রকম।
- * আগে তফাতটা ছিলই না, আর ফল ছিল একটা **স্ববিরোধী কার্ড**: উপরে ১৬:৫০-এর
- * স্ক্রিনশট, নিচে *"Never checked in"* — একই কার্ডে দুটো পরস্পরবিরোধী কথা।
+ * Careful: all three show a grey "Offline" on the board, but the owner has to
+ * do something different in each case. The difference used to be missing,
+ * which produced a **self-contradicting card**: a 16:50 screenshot on top and
+ * *"Never checked in"* below.
  */
 export type AgentPresence =
-  /** কখনো এজেন্ট বসানোই হয়নি — নতুন কর্মী, PC এখনো দেওয়া হয়নি */
+  /** No agent was ever installed — a new employee whose PC has not been issued yet */
   | 'never_installed'
   /**
-   * ডিভাইস আছে, কিন্তু সবগুলোই বন্ধ করে দেওয়া (H06)।
+   * Devices exist, but all of them have been revoked.
    *
-   * ⚠️ কর্মী **নিষ্ক্রিয় করলেও** এটা ঘটে — `deactivate()` তাঁর সব ডিভাইস
-   * revoke করে, আর `reactivate()` ইচ্ছাকৃতভাবে সেগুলো ফেরায় না।
+   * Careful: this also happens when the employee is **deactivated** —
+   * `deactivate()` revokes all their devices, and `reactivate()` deliberately
+   * does not restore them.
    */
   | 'switched_off'
-  /** অন্তত একটা সচল ডিভাইস আছে */
+  /** At least one active device exists */
   | 'installed';
 
 export interface LiveStatusInput {
   /**
-   * ওই কর্মীর **সব সচল (non-revoked) ডিভাইস**।
-   * ⚠️ ডিভাইসপ্রতি আলাদা করে বিচার করলে ডেস্কটপ বন্ধ থাকলেই ল্যাপটপে কাজ
-   * করা কর্মীকে offline দেখাত (§ ২.১-গ — একজনের একাধিক ডিভাইস)।
+   * All of the employee's **active (non-revoked) devices**.
+   * Careful: judging per device would show an employee working on the laptop
+   * as offline whenever the desktop is off (§ 2.1c — one person, many devices).
    */
   devices: readonly DeviceReport[];
   /**
-   * শেষ `activity_segments` সারির state — **শুধু fallback**।
+   * State of the last `activity_segments` row — **a fallback only**.
    *
-   * ⚠️ এটাকে প্রথম পছন্দ করা যায় না: এজেন্ট সেগমেন্ট **ব্যাচে** পাঠায়, তাই
-   * সারিটা কয়েক মিনিট পুরোনো হতে পারে — কর্মী তিন মিনিট আগে উঠে গেলেও
-   * কার্ড সবুজ থাকত। আবার একেবারে বাদও দেওয়া যায় না: `last_state` কলামটা
-   * নতুন, তাই মাইগ্রেশনের পরে (বা এখনো heartbeat না পাঠানো এজেন্টে) ওটা
-   * null — তখন এই অনুমানই একমাত্র খবর।
+   * Careful: it cannot be the first choice. The agent sends segments in
+   * **batches**, so the row can be minutes old — the card would stay green
+   * three minutes after the employee left. It cannot be dropped either: the
+   * `last_state` column is new, so after the migration (or for an agent that
+   * has not sent a heartbeat yet) it is null, and this guess is the only
+   * information left.
    */
   fallbackState: SegmentState | null;
   now: Date;
 }
 
 /**
- * ⭐ কার্ডের রঙ ঠিক করার একমাত্র জায়গা।
+ * The one place that decides the card's colour.
  *
- * ⭐ তিনটে উত্তর, তিনটেই কর্মীর সম্পর্কে: **কাজ করছেন · থেমে আছেন ·
- * নেই**। যন্ত্র ঠিক আছে কি না — সেটা বোর্ডের প্রশ্নই নয়।
+ * Three answers, all about the employee: **working · paused · not there**.
+ * Whether the machine is healthy is not the board's question.
  */
 /**
- * ⚠️ শুধু গোনার জন্য নয় — এই এক লাইনটাই ঠিক করে কার্ডে কী **লেখা** হবে।
+ * Careful: this one line also decides what the card **says**, not just what is counted.
  */
 export function agentPresence(devices: readonly DeviceReport[]): AgentPresence {
   if (devices.length === 0) return 'never_installed';
@@ -127,103 +135,105 @@ export function decideLiveStatus(input: LiveStatusInput): LiveStatus {
   const { fallbackState, now } = input;
 
   /**
-   * ⚠️⚠️ বাতিল ডিভাইস এখানে **গোনা হয় না** — আগে কোয়েরিই ওগুলো বাদ দিত,
-   * এখন বাদ দেওয়াটা এখানে, স্পষ্ট করে। না ছাঁকলে বহু মাস আগে বন্ধ করা
-   * একটা মেশিনের পুরোনো `lastSeenAt` কর্মীকে "সবুজ" দেখাত।
+   * Careful: revoked devices are **not counted** here. The query used to drop
+   * them; now the exclusion is explicit and in this function. Without it, the
+   * old `lastSeenAt` of a machine revoked months ago would show the employee
+   * as "green".
    */
   const devices = input.devices.filter((d) => d.status === 'active');
 
-  // ⚠️ সচল ডিভাইস নেই মানে এজেন্ট "পড়ে গেছে" নয় — হয় নতুন কর্মী (PC
-  //    এখনো দেওয়া হয়নি), নয় ডিভাইসটা বন্ধ করে দেওয়া হয়েছে। দুটোর
-  //    কোনোটাই লাল অ্যালার্মের মতো জরুরি নয়, আর ভুয়া লাল জ্বললে লাল
-  //    রঙের মানেই হারিয়ে যেত। তফাতটা `agentPresence` লেখায় বলে।
+  // Careful: no active device does not mean the agent has "fallen over" — it is
+  // either a new employee (PC not issued yet) or a revoked device. Neither is
+  // as urgent as a red alarm, and a false red would make red meaningless.
+  // `agentPresence` text explains the difference.
   if (devices.length === 0) return 'offline';
 
   const lastSeenAt = latestHeartbeat(devices);
 
   /**
-   * ডিভাইস আছে কিন্তু একবারও সাড়া দেয়নি — ইনস্টল হয়েও চালু হয়নি।
+   * A device exists but has never responded — installed but never started.
    *
-   * ⚠️ এটা সত্যিই একটা সমস্যা, কিন্তু **বোর্ডের কাজ নয়** — কার্ডে
-   * `agentPresence` লেখাটাই ("Never checked in") ঘটনাটা বলে দেয়, আর
-   * অ্যালার্ট ব্যবস্থা আলাদা করে খবর পাঠায়।
+   * Careful: this is a real problem, but **not the board's job** — the card's
+   * `agentPresence` text ("Never checked in") already says it, and the alert
+   * system sends a separate notification.
    */
   if (lastSeenAt === null) return 'offline';
 
   const ageSec = secondsSince(lastSeenAt, now);
 
   /**
-   * ⭐⭐⭐ **চুপ হয়ে যাওয়া এজেন্ট: মরেছে, না বাড়ি গেছে?** — বোর্ড এই
-   * প্রশ্নের উত্তর দেওয়ার চেষ্টা **আর করে না**।
+   * **A silent agent: dead, or gone home?** The board **no longer tries** to
+   * answer this.
    *
-   * ⚠️⚠️ এখানে আগে কেবল ঘড়ি দেখা হতো — `> ৬০০ সে.` হলেই `agent_down`,
-   * নইলে `offline`। ফলে `offline` কেবল ৯০ সে. থেকে ১০ মিনিটের **সরু
-   * জানালাতেই** সম্ভব ছিল, আর তার পরে সবাই চিরকালের জন্য লাল।
+   * Careful: the clock alone used to decide — `> 600 s` meant `agent_down`,
+   * otherwise `offline`. So `offline` was only possible in the narrow window
+   * between 90 s and 10 minutes, and after that everyone stayed red forever.
    *
-   * ⚠️⚠️ পরিণতিটা রোজকার, আর মাঠে ধরা পড়েছে: **প্রতিদিন সন্ধ্যায়, সবাই
-   * বাড়ি যাওয়ার দশ মিনিট পর গোটা দল 🔴 হয়ে যেত।** ১৫ আগস্ট সন্ধ্যায়
-   * বোর্ড দেখাচ্ছিল `Agent down 12`, `Offline 0` — অথচ কিছুই ভাঙেনি,
-   * অফিস ছুটি হয়েছিল। আর এভাবেই **লাল রঙের মানেই হারিয়ে যায়**, যেটা
-   * ঠেকাতে এই ফাইলের বাকি সব নিয়ম লেখা।
+   * Careful: the consequence was daily and seen in the field: **every evening,
+   * ten minutes after everyone went home, the whole team turned red.** One
+   * evening the board showed `Agent down 12`, `Offline 0` — yet nothing was
+   * broken, the office had just closed. That is how **red loses its meaning**,
+   * which is exactly what all the other rules in this file exist to prevent.
    *
-   * তারপর চেষ্টা হলো **শেষ কথাটা** দেখে ঠিক করার: `active` বলে হঠাৎ চুপ
-   * হলে 🔴, `idle`/`locked` বলে চুপ হলে ⚪। যুক্তি ছিল — কেউ কাজ শেষে PC
-   * বন্ধ করলে তার আগে অন্তত এক মিনিট নিষ্ক্রিয় থাকেন।
+   * The next attempt used the **last thing said**: going silent right after
+   * `active` meant red, after `idle`/`locked` meant grey. The reasoning was
+   * that someone switching the PC off is idle for at least a minute first.
    *
-   * ⚠️⚠️ **ওই অনুমানটাও ভাঙল, ১৭ আগস্ট।** কেউ কাজ করতে করতেই Shut down
-   * চাপলে গোটা shutdown এক মিনিটের কম সময়ে শেষ হয়ে যায় — পরের heartbeat
-   * আর যায় না, তাই সার্ভারের কাছে শেষ কথাটা `active`ই থেকে যায়। ফল:
-   * বাড়ি চলে যাওয়া একজন কর্মী বোর্ডে **লাল**, অথচ কিছুই ভাঙেনি। মালিক
-   * সেটা দেখে ভেবেছিলেন নতুন এজেন্ট ভেঙেছে, আর একটা গোটা রিলিজ থামানো হয়।
+   * Careful: **that assumption broke too.** If someone presses Shut down
+   * while working, the whole shutdown finishes in under a minute — the next
+   * heartbeat never goes out, so the server's last word stays `active`. Result:
+   * an employee who had gone home showed **red**, though nothing was broken.
+   * The owner took it for a broken new agent, and a whole release was halted.
    *
-   * ⭐⭐⭐ **তাই প্রশ্নটাই তোলা হলো।** বোর্ডের কাছে যে তথ্য আছে তা দিয়ে
-   * "মরেছে না বন্ধ" কখনোই নিশ্চিত করে বলা যায় না — কারণ বিদায়ী ইভেন্টটা
-   * (shutdown/logoff) এজেন্ট **ডিস্কে** লিখে রাখে আর পাঠায় পরের বার চালু
-   * হলে। যে প্রশ্নের উত্তর জানা নেই, তার উত্তর অনুমান করে **লাল রঙে**
-   * লেখা সবচেয়ে খারাপ পথ — কারণ ভুয়া লাল জ্বললে লাল রঙের মানেই হারায়।
+   * **So the question itself was removed.** The data the board has can never
+   * establish "dead or switched off" — the parting event (shutdown/logoff) is
+   * written to **disk** by the agent and sent on the next start. Answering an
+   * unanswerable question with a guess in **red** is the worst option, since a
+   * false red destroys the meaning of red.
    *
-   * ⭐ প্রশ্নটার আসল উত্তরদাতা `AgentDownCheck` (G01): সে ওই বিদায়ী
-   * ইভেন্টগুলো দেখে, `isExpectedSilence()` দিয়ে ছাঁকে, আর তারপর
-   * **অ্যালার্ট** তোলে। বোর্ড এখন শুধু কর্মীর কথা বলে, যন্ত্রের নয়।
+   * The real answer comes from `AgentDownCheck`: it looks at those parting
+   * events, filters them with `isExpectedSilence()`, and then raises an
+   * **alert**. The board now speaks only about the employee, not the machine.
    */
   if (ageSec > OFFLINE_AFTER_SEC) return 'offline';
 
-  // ⭐ এজেন্ট নিজে যা বলেছে সেটাই প্রথম সত্য; সেগমেন্ট থেকে অনুমান কেবল
-  //    তখনই, যখন এজেন্ট কিছু বলেনি বা তার কথাটা বাসি হয়ে গেছে।
+  // The agent's own report is the first truth; a guess from segments is used
+  // only when the agent said nothing or its report has gone stale.
   const state = freshReportedState(devices, now) ?? fallbackState;
 
-  // ⚠️ এজেন্ট জীবিত, কিন্তু কেউ কিছু বলেনি (পুরোনো এজেন্ট, আর ব্যাচও এখনো
-  //    পৌঁছায়নি)। "জানি না"-কে active দেখানো যাবে না — না-জানা সময় কখনো
-  //    কাজের সময় হিসেবে দাবি করা হয় না।
+  // Careful: the agent is alive but nobody has said anything (old agent, and
+  // the batch has not arrived yet). "Don't know" must not be shown as active —
+  // unknown time is never claimed as work time.
   if (state === null) return 'idle';
 
-  // `locked` আলাদা রঙ পায় না — বোর্ডে মাত্র চারটে রঙ, আর স্টাফের দিক থেকে
-  // PC লক করা আর নিষ্ক্রিয় বসে থাকা একই: কোনোটাই কাজের সময় নয়।
+  // `locked` gets no colour of its own — the board has only three colours, and
+  // from the employee's side a locked PC and sitting idle are the same: neither
+  // is work time.
   return state === 'active' ? 'active' : 'idle';
 }
 
 /*
- * ⚠️ এখানে ছিল `partingState()` — "চুপ হওয়ার আগে শেষ কথা কী ছিল"।
- *    ওটার একমাত্র কাজ ছিল 🔴 আর ⚪ আলাদা করা, আর সেই ভাগটাই তুলে দেওয়া
- *    হয়েছে (উপরে `decideLiveStatus` দেখুন)। ফাংশনটা রেখে দিলে পরের
- *    পাঠক ধরে নিতেন নিয়মটা এখনো আছে।
+ * Careful: `partingState()` used to be here — "what was the last thing said
+ * before going silent". Its only job was to separate red from grey, and that
+ * split has been removed (see `decideLiveStatus` above). Keeping the function
+ * would make the next reader think the rule still exists.
  *
- * ⭐ `devices.last_state` কলামটা কিন্তু থাকছে — `AgentDownCheck` ওটা
- *    ব্যবহার করে, আর ওখানেই প্রশ্নটার সঠিক জায়গা।
+ * The `devices.last_state` column stays, though — `AgentDownCheck` uses it,
+ * and that is the right home for the question.
  */
 
 /**
- * কর্মীর সব ডিভাইসের মধ্যে সবচেয়ে সাম্প্রতিক `lastSeenAt`।
+ * The most recent `lastSeenAt` across all of the employee's devices.
  *
- * কার্ডের `lastHeartbeatAt`-ও এটাই — এক জায়গায় রাখা হয়েছে যাতে "কত আগে
- * সাড়া দিয়েছিল" লেখাটা আর রঙটা কোনোদিন দুই হিসাব থেকে না আসে।
+ * The card's `lastHeartbeatAt` is this too — kept in one place so that the
+ * "responded N ago" text and the colour never come from two calculations.
  */
 export function latestHeartbeat(devices: readonly DeviceReport[]): Date | null {
   let latest: Date | null = null;
   for (const d of devices) {
-    // ⚠️ বাতিল ডিভাইসের পুরোনো heartbeat গোনা হয় না — নইলে বন্ধ করে
-    //    দেওয়া মেশিনের সাত দিন আগের সাড়া "Seen 7 days ago" হয়ে দেখাত,
-    //    অথচ ওটা আর কোনোদিন সাড়া দেবে না।
+    // Careful: a revoked device's old heartbeat is not counted — otherwise the
+    // response of a machine switched off seven days ago would show "Seen 7
+    // days ago", though it will never respond again.
     if (d.status !== 'active') continue;
     if (d.lastSeenAt === null) continue;
     if (latest === null || d.lastSeenAt.getTime() > latest.getTime()) {
@@ -234,22 +244,23 @@ export function latestHeartbeat(devices: readonly DeviceReport[]): Date | null {
 }
 
 /**
- * ⭐ heartbeat-এ বলা state, **যদি সেটা এখনো টাটকা হয়** — নইলে null।
+ * The state reported in the heartbeat, **if it is still fresh** — otherwise null.
  *
- * ⚠️ বাসি রিপোর্ট বিশ্বাস করা যায় না। এজেন্ট মরে যাওয়ার মুহূর্তে সে
- *    `active` বলে গিয়েছিল; ওই মানটা কলামে বসে থাকে চিরকাল। মেয়াদ না বসালে
- *    বন্ধ PC-র কার্ড **সবুজ হয়েই আটকে থাকত** — আর সেটা offline দেখানোর
- *    চেয়েও খারাপ, কারণ তখন না-কাজের সময় কাজ বলে দাবি করা হতো।
+ * Careful: a stale report cannot be trusted. At the moment an agent dies it
+ * may have said `active`; that value stays in the column forever. Without an
+ * expiry, the card of a switched-off PC would **stay green** — worse than
+ * showing offline, since non-work time would be claimed as work.
  *
- * ⚠️ মেয়াদ ইচ্ছাকৃতভাবে `OFFLINE_AFTER_SEC`-ই, আলাদা কোনো ধ্রুবক নয়:
- *    রিপোর্ট এর চেয়ে পুরোনো মানে এজেন্ট ততক্ষণ চুপ ছিল, আর চুপ থাকার
- *    মানে এই ফাইলে একটাই। দুটো নব থাকলে একদিন একটা বদলাত, আরেকটা নয়।
+ * Careful: the expiry is deliberately `OFFLINE_AFTER_SEC` itself, not a
+ * separate constant: a report older than that means the agent was silent that
+ * long, and silence has exactly one meaning in this file. With two knobs, one
+ * day one would change and the other would not.
  *
- * ⚠️ একাধিক ডিভাইসে **যেকোনো একটা** সচল রিপোর্ট `active` হলেই কর্মী active
- *    — "সবচেয়ে সাম্প্রতিকটা নাও" নয়। ডেস্কটপ লক করে ল্যাপটপে কাজ করলে
- *    দুটো ডিভাইসই প্রতি ৩০ সেকেন্ডে heartbeat পাঠায়, তাই "সবচেয়ে
- *    সাম্প্রতিক" কার্যত এলোমেলো — কার্ডের রঙ রিফ্রেশে রিফ্রেশে সবুজ-ধূসর
- *    করত, অথচ কর্মী একটানা কাজ করছে।
+ * Careful: with several devices the employee is active if **any** active
+ * report says `active` — not "take the most recent". If someone locks the
+ * desktop and works on the laptop, both devices send a heartbeat every 30
+ * seconds, so "most recent" is effectively random — the card colour would
+ * flip green-grey on every refresh while the employee works continuously.
  */
 export function freshReportedState(
   devices: readonly DeviceReport[],
@@ -272,15 +283,15 @@ export function freshReportedState(
 }
 
 /**
- * ⚠️ ঋণাত্মক হতে পারে এবং সেটাই চাওয়া — ডিভাইসের ঘড়ি সামান্য এগিয়ে থাকলে
- * (drift) "ভবিষ্যতের" heartbeat আসে, আর `Math.abs` বসালে সেটা পুরোনো মনে
- * হয়ে সুস্থ এজেন্টকে offline দেখাত।
+ * Careful: it can be negative, and that is intended — if a device clock runs
+ * slightly ahead (drift), a "future" heartbeat arrives, and `Math.abs` would
+ * make it look old and show a healthy agent as offline.
  */
 function secondsSince(then: Date, now: Date): number {
   return (now.getTime() - then.getTime()) / MS;
 }
 
-/** ঢাকার ওই তারিখের স্থানীয় মধ্যরাত, UTC instant হিসেবে। */
+/** Local midnight in Dhaka for that date, as a UTC instant. */
 function dayStartUtcMs(workDate: Date): number {
   return workDate.getTime() - OFFSET_MS;
 }
@@ -288,23 +299,24 @@ function dayStartUtcMs(workDate: Date): number {
 export interface HourSpreadInput {
   startedAt: Date;
   endedAt: Date;
-  /** monotonic ঘড়ি থেকে আসা প্রকৃত দৈর্ঘ্য (§ ৩.২) */
+  /** Actual duration from the monotonic clock (§ 3.2) */
   durationSec: number;
 }
 
 /**
- * ⭐ E05 — একটা সেগমেন্টকে ২৪টা ঘণ্টা-বালতিতে **অনুপাতে** ছড়িয়ে দেওয়া।
+ * Spreads one segment **proportionally** across the 24 hour buckets.
  *
- * ⚠️ পুরো সেগমেন্টটা তার শুরুর ঘণ্টায় ফেলে দেওয়া সবচেয়ে সহজ ভুল।
- *    ১০:৪৫ থেকে ১২:১৫ পর্যন্ত ৯০ মিনিট কাজ তখন দেখাত "১০টায় ৯০ মিনিট" —
- *    অর্থাৎ এক ঘণ্টার বালতিতে দেড় ঘণ্টা, আর ১১টার ঘরে শূন্য। চার্টটা
- *    দেখতে ঠিকঠাক থাকত, কিন্তু বলত সম্পূর্ণ ভুল গল্প।
+ * Careful: dropping the whole segment into its starting hour is the easiest
+ * mistake. 90 minutes of work from 10:45 to 12:15 would show as "90 minutes at
+ * 10 o'clock" — an hour bucket holding an hour and a half, and nothing in the
+ * 11:00 slot. The chart would look fine but tell a completely wrong story.
  *
- * ⭐ ভাগ করা হয় `durationSec`-কে, দেয়ালঘড়ির ব্যবধানকে নয় — কিন্তু **অনুপাত**
- *    আসে দেয়ালঘড়ি থেকে। কারণ দুটো সংখ্যা এক নয়: durationSec monotonic
- *    ঘড়ির (PC-র ঘড়ি বদলালেও অটুট), আর ঘণ্টার সীমানা দেয়ালঘড়ির। এভাবে
- *    চার্টের মোট সবসময় টাইমলাইনের মোটের সমান থাকে — দুই স্ক্রিনে দুই
- *    সংখ্যা দেখা গেলে কোনটা সত্যি সেটা আর প্রমাণ করা যেত না।
+ * It is `durationSec` that gets divided, not the wall-clock span — but the
+ * **proportions** come from the wall clock. The two numbers differ:
+ * durationSec is from the monotonic clock (unaffected if the PC clock is
+ * changed), while hour boundaries are wall-clock. This keeps the chart's
+ * total always equal to the timeline's total — if two screens showed two
+ * numbers, there would be no way to prove which is right.
  */
 export function spreadIntoHourBuckets(
   segments: readonly HourSpreadInput[],
@@ -317,26 +329,26 @@ export function spreadIntoHourBuckets(
   for (const seg of segments) {
     if (seg.durationSec <= 0) continue;
 
-    // § ২.১-ক অনুযায়ী সেগমেন্ট মধ্যরাত পার হওয়ার কথা নয়, তবু clamp করা হয় —
-    // পুরোনো এজেন্টের পাঠানো ডেটা সার্ভার ভাগ করার আগেই ঢুকে থাকতে পারে।
+    // By § 2.1a a segment should not cross midnight, but it is clamped anyway —
+    // data from an old agent may have arrived before the server splits it.
     const start = Math.max(seg.startedAt.getTime(), dayStart);
     const end = Math.min(seg.endedAt.getTime(), dayEnd);
     const span = end - start;
 
     if (span <= 0) {
-      // দেয়ালঘড়ির ব্যবধান শূন্য বা উল্টো (ঘড়ি পিছিয়ে গেছে) — অনুপাত বের
-      // করা যায় না, তাই পুরোটা শুরুর ঘণ্টায়। সময়টা হারিয়ে ফেলার চেয়ে
-      // এক বালতিতে থাকা ভালো, কারণ দিনের মোট তাহলেও ঠিক থাকে।
+      // The wall-clock span is zero or negative (clock went back) — no
+      // proportion can be computed, so the whole duration goes to the starting
+      // hour. Better in one bucket than lost, since the day's total stays right.
       const hour = hourIndexOf(seg.startedAt.getTime(), dayStart);
       if (hour !== null) buckets[hour] += seg.durationSec;
       continue;
     }
 
-    // ⚠️ প্রতি ঘণ্টায় আলাদা করে Math.round করলে ২৪টা রাউন্ডিং জমে গিয়ে
-    //    বালতির যোগফল durationSec-এর চেয়ে কয়েক সেকেন্ড কম-বেশি হতো।
-    //    তাই **ক্রমযোজিত** (cumulative) হিসাব: প্রতিবার "এ পর্যন্ত মোট কত
-    //    হওয়ার কথা" বের করে, আগে যা দেওয়া হয়েছে তার বাকিটুকু বসানো হয়।
-    //    শেষ ঘণ্টায় covered === span, তাই যোগফল হুবহু durationSec-ই হয়।
+    // Careful: calling Math.round separately for each hour would accumulate 24
+    // roundings, and the bucket sum would be a few seconds off durationSec.
+    // So the calculation is **cumulative**: each time work out "how much should
+    // be assigned in total so far" and add only what is still missing.
+    // In the last hour covered === span, so the sum is exactly durationSec.
     let coveredMs = 0;
     let assignedSec = 0;
 
@@ -358,19 +370,19 @@ export function spreadIntoHourBuckets(
   return buckets;
 }
 
-/** এক ঘণ্টায় গোটা দলের ছবি */
+/** The whole team's picture for one hour */
 export interface TeamHour {
-  /** ঢাকার স্থানীয় ঘণ্টা, ০–২৩ */
+  /** Local hour in Dhaka, 0-23 */
   hour: number;
-  /** ওই ঘণ্টায় দলের মোট গোনা সেকেন্ড */
+  /** The team's total counted seconds in that hour */
   activeSec: number;
   /**
-   * ওই ঘণ্টায় **কতজন** কিছু না কিছু কাজ করেছেন।
+   * **How many people** did some work in that hour.
    *
-   * ⭐ দুটো সংখ্যা আলাদা করে রাখা দরকার, কারণ একা `activeSec` প্রশ্নটার
-   * অর্ধেক উত্তর দেয়: ৪ ঘণ্টা মানে চারজন এক ঘণ্টা, নাকি একজন চার ঘণ্টা?
-   * cockpit-এ পার্থক্যটা গুরুত্বপূর্ণ — প্রথমটা স্বাভাবিক সকাল, দ্বিতীয়টা
-   * একজনের একা কাজ করা রাত।
+   * The two numbers must be kept apart, because `activeSec` alone answers only
+   * half the question: does 4 hours mean four people for one hour, or one
+   * person for four hours? On the cockpit the difference matters — the first
+   * is a normal morning, the second a night with one person working alone.
    */
   people: number;
 }
@@ -380,21 +392,22 @@ interface TeamHourInput extends HourSpreadInput {
 }
 
 /**
- * ⭐ E01 — গোটা দলের দিনের ছন্দ, ২৪টা বালতিতে।
+ * The whole team's rhythm for the day, in 24 buckets.
  *
- * ⚠️ **কর্মীপ্রতি আলাদা করে ছড়ানো হয়, একসাথে নয়** — আর এটাই এখানকার
- *    একমাত্র সূক্ষ্ম সিদ্ধান্ত। সব সেগমেন্ট এক গাদা করে
- *    `spreadIntoHourBuckets`-এ দিলে মোট সেকেন্ড ঠিকই আসত, কিন্তু
- *    **কতজন** সেটা আর বের করা যেত না — বালতিতে ঢোকার পর সেগমেন্টগুলো
- *    আর কার, তা জানা যায় না।
+ * Careful: **each employee is spread separately, not all together** — the
+ * only subtle decision here. Feeding every segment into
+ * `spreadIntoHourBuckets` in one pile would still give the right total
+ * seconds, but **how many people** could no longer be worked out — once
+ * segments are in a bucket, it is unknown whose they were.
  *
- * ⭐ ছড়ানোর নিয়মটা হুবহু একই ফাংশন (`spreadIntoHourBuckets`) থেকে আসে,
- *    তাই একজনের `/hourly` চার্ট আর দলের ছন্দ কখনো আলাদা গল্প বলবে না।
- *    নিয়মটা নকল করলে একদিন একটা বদলাত আর অন্যটা নয়।
+ * The spreading rule comes from the very same function
+ * (`spreadIntoHourBuckets`), so one person's `/hourly` chart and the team's
+ * rhythm never tell different stories. Copying the rule would let one change
+ * and not the other someday.
  *
- * ⚠️ `people` গোনা হয় `> 0` দিয়ে, কোনো সীমা ছাড়া। এক সেকেন্ডও যদি ওই
- *    ঘণ্টায় পড়ে, মানুষটা "ছিলেন" — সীমা বসালে সেটা হতো একটা নীরব মত,
- *    আর কেউ জানত না কেন ভোর ৬টার একজন উধাও।
+ * Careful: `people` is counted with `> 0`, with no threshold. If even one
+ * second falls in that hour, the person "was there" — a threshold would be a
+ * silent opinion, and nobody would know why someone at 6 am vanished.
  */
 export function spreadTeamIntoHourBuckets(
   segments: readonly TeamHourInput[],
@@ -432,12 +445,12 @@ function hourIndexOf(instantMs: number, dayStartMs: number): number | null {
 }
 
 /**
- * `?date=YYYY-MM-DD` → ওই কর্মদিবস, UTC-midnight Date হিসেবে
- * (Prisma-র `@db.Date` ঠিক এটাই চায়, workDateOf-ও এটাই ফেরত দেয়)।
+ * `?date=YYYY-MM-DD` → that work day, as a UTC-midnight Date
+ * (this is exactly what Prisma's `@db.Date` wants, and what workDateOf returns).
  *
- * ⚠️ সরাসরি `new Date('2026-02-31')` লিখলে JS চুপচাপ ৩ মার্চ বানিয়ে দেয়।
- *    তখন ব্যবহারকারী ৩১ ফেব্রুয়ারি চেয়ে ৩ মার্চের ডেটা দেখত এবং বুঝতেই
- *    পারত না — তাই ফিরিয়ে দেওয়া মানগুলো আবার মিলিয়ে দেখা হয়।
+ * Careful: writing `new Date('2026-02-31')` directly makes JS silently produce
+ * 3 March. The user would ask for 31 February, see 3 March's data and never
+ * notice — so the returned values are checked against the input again.
  */
 export function parseWorkDate(raw: string): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
@@ -457,12 +470,12 @@ export function parseWorkDate(raw: string): Date | null {
 }
 
 /**
- * কর্মদিবস → `YYYY-MM-DD`।
+ * Work day → `YYYY-MM-DD`.
  *
- * ⚠️ `@db.Date` সরাসরি JSON-এ পাঠালে `2026-08-10T00:00:00.000Z` যেত।
- *    ঢাকায় ওই instant আসলে ১০ তারিখ ভোর ৬টা — ব্রাউজার সেটাকে স্থানীয়
- *    সময়ে দেখাতে গিয়ে কারো কারো কাছে আগের দিন দেখাত। তাই তারিখ সবসময়
- *    স্ট্রিং হিসেবেই যায়, Date হিসেবে নয়।
+ * Careful: sending `@db.Date` straight into JSON would give
+ * `2026-08-10T00:00:00.000Z`. In Dhaka that instant is 6 am on the 10th — a
+ * browser converting it to local time showed the previous day for some
+ * people. So dates always travel as strings, never as Date.
  */
 export function formatWorkDate(workDate: Date): string {
   const pad = (n: number): string => String(n).padStart(2, '0');
@@ -473,19 +486,19 @@ export function formatWorkDate(workDate: Date): string {
   ].join('-');
 }
 
-/** ঢাকার ওই তারিখের মাসের ১ তারিখ — মাসিক রিং-এর শুরু (E02)। */
+/** The 1st of the month containing that Dhaka date — start of the monthly ring. */
 export function monthStartOf(workDate: Date): Date {
   return new Date(
     Date.UTC(workDate.getUTCFullYear(), workDate.getUTCMonth(), 1),
   );
 }
 
-/** আগের কর্মদিবস — লাইভ বোর্ডে মধ্যরাতের আশেপাশের সেগমেন্ট ধরার জন্য। */
+/** The previous work day — to catch segments around midnight on the live board. */
 export function previousWorkDate(workDate: Date): Date {
   return new Date(workDate.getTime() - HOURS_PER_DAY * HOUR_MS);
 }
 
-/** এক কর্মীর সাত দিনের যোগফল — `rankLaggards`-এর কাঁচামাল */
+/** One employee's seven-day total — the raw material for `rankLaggards` */
 export interface WorkedInWindow {
   creditedSec: number;
   daysCounted: number;
@@ -499,23 +512,24 @@ export interface LaggardRow {
 }
 
 /**
- * ⭐⭐ **সবচেয়ে কম ঘণ্টা যাঁদের** *(মালিকের চাওয়া, ৩০ আগস্ট ২০২৬)* — নিচ
- * থেকে কয়েকজন।
+ * **Who has worked the fewest hours** *(owner's request)* — a few people from
+ * the bottom.
  *
- * ⚠️⚠️ **ভিত্তিটা কর্মীর তালিকা, কোয়েরির ফল নয় — আর এটাই এখানকার একমাত্র
- * আসল সিদ্ধান্ত।** যোগফলের সারি ধরে সাজালে যিনি জানালার ভেতরে **একদিনও**
- * কাজ করেননি তাঁর কোনো সারিই থাকত না, তাই তিনি তালিকা থেকে উধাও হতেন —
- * অথচ "সবচেয়ে কম কাজ" প্রশ্নের উত্তর ঠিক তিনিই। ⭐ তাই প্রত্যেককে ধরে
- * নিয়ে শূন্য বসানো হয়, তারপর সাজানো।
+ * Careful: **the base is the employee list, not the query result** — the
+ * only real decision here. Sorting the total rows would leave out anyone who
+ * worked **not one day** in the window (they have no row), so they would
+ * vanish from the list — yet they are exactly the answer to "who worked the
+ * least". So everyone is assumed to have zero first, then sorted.
  *
- * ⚠️ সমান ঘণ্টায় নাম ধরে ক্রম — নইলে শূন্যওয়ালা কয়েকজনের ক্রম প্রতি
- * রিফ্রেশে বদলাত, আর পর্দাটা অস্থির দেখাত।
+ * Careful: ties on hours are broken by name — otherwise several people with
+ * zero would change order on every refresh and the screen would look jumpy.
  *
- * ⚠️ `daysCounted` শুধু সাথে নিয়ে যাওয়া হয়, ক্রমে ব্যবহার হয় **না**।
- * গড় ধরে সাজানো যেত ("দিনে কত"), কিন্তু তখন যিনি এক দিন এসে সাত ঘণ্টা
- * করেছেন তিনি তালিকার **উপরে** থাকতেন — অথচ সপ্তাহে তাঁর ঘণ্টাই সবচেয়ে
- * কম। ⭐ প্রশ্নটা ছিল "কম কাজ", "কম গড়" নয়; আর কত দিনে সেটা পর্দায়
- * পাশেই লেখা থাকে বলে ভুল পড়ার সুযোগও থাকে না।
+ * Careful: `daysCounted` is only carried along, **not** used for ordering.
+ * Sorting by average ("per day") was possible, but then someone who came in
+ * one day and worked seven hours would rank **above** — though their hours
+ * for the week are the fewest. The question was "least work", not "lowest
+ * average"; and since the number of days is shown next to it on screen, there
+ * is no chance of misreading it.
  */
 export function rankLaggards(
   names: ReadonlyMap<number, string>,

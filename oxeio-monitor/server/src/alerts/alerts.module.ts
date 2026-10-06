@@ -15,21 +15,21 @@ import { DiskCheck } from './disk.check';
 import { NoActivityCheck } from './no-activity.check';
 
 /**
- * G01–G07 — অ্যালার্ট।
+ * Alerts.
  *
- * `AlertsService` export করা হয়েছে যাতে অন্য মডিউল (যেমন ব্যাকআপ জব → G04,
- * বা overlap সনাক্তকরণ → `device_overlap`) নিজেরা `prisma.alert.create()` না
- * লিখে এখান দিয়েই অ্যালার্ট বসায় — ⭐ throttle-টা তখন আপনাআপনি পেয়ে যায়।
+ * `AlertsService` is exported so other modules (e.g. the backup job, or
+ * overlap detection for `device_overlap`) insert alerts through it instead of
+ * writing `prisma.alert.create()` themselves. The throttle then applies automatically.
  *
- * ⚠️ PrismaModule `@Global`, তাই এখানে আলাদা করে import করার দরকার নেই।
+ * Careful: PrismaModule is `@Global`, so it does not need to be imported here.
  */
 @Module({
   controllers: [AlertsController, TelegramSettingsController],
   providers: [
     AlertsService,
     AlertMailer,
-    // ⭐ কন্ট্রোলারের `test` রুটটা এটা ডাকে — ops-এর ইনস্ট্যান্স নয়,
-    //    কারণ ওটা অন্য মডিউলে আর sweep চালায়
+    // The controller's `test` route calls this one, not ops' instance,
+    // because that one lives in another module and runs the sweep
     TelegramChannel,
     AlertDispatcher,
     AgentDownCheck,

@@ -84,20 +84,22 @@ export class LocalScreenshotStorage implements ScreenshotStorage {
   }
 
   /**
-   * খালি হয়ে যাওয়া তারিখ-ফোল্ডারগুলো সরিয়ে দেয়।
+   * Removes date folders that have become empty.
    *
-   * পাথ `…/YYYY/MM/DD/emp-003/` — বছরে ~৩৬৫ × কর্মীসংখ্যা ফোল্ডার। ফাইল
-   * মুছে ফোল্ডার রেখে দিলে কয়েক বছরে হাজার হাজার খালি ডিরেক্টরি জমত, আর
-   * ব্যাকআপের robocopy প্রতি রাতে সেগুলোই হাঁটত।
+   * Paths look like `.../YYYY/MM/DD/emp-003/`, so there are ~365 x headcount
+   * folders per year. Deleting files but keeping folders would pile up
+   * thousands of empty directories within a few years, and the backup
+   * robocopy would walk them every night.
    *
-   * ⭐ A06-এর `…/emp-003/thumb/` এমনিতেই সামলে যায়, আর সেটা কাকতালীয় নয়:
-   * উপরে **প্রতিটা** পাথের `dirname` আলাদা করে `touchedDirs`-এ যোগ হয়
-   * (ফুল ছবিরটাও, থাম্বনেইলেরটাও), আর নিচে গভীরতম ফোল্ডার আগে ধরা হয় —
-   * তাই `thumb/` আগে খালি হয়, তবেই `emp-003` খালি হতে পারে। উল্টো ক্রমে
-   * `emp-003` চিরকাল ENOTEMPTY-তে আটকে থাকত, আর গোটা তারিখ-গাছটা রয়ে যেত।
+   * The `.../emp-003/thumb/` folders are handled too, and not by accident:
+   * above, the `dirname` of **every** path (full image and thumbnail alike)
+   * is added to `touchedDirs`, and below the deepest folders are visited
+   * first. So `thumb/` empties first, and only then can `emp-003` empty. In
+   * the opposite order `emp-003` would be stuck on ENOTEMPTY forever and the
+   * whole date tree would remain.
    *
-   * ⚠️ `rmdir` (recursive নয়) — ফোল্ডারে কিছু থাকলে নিজেই ব্যর্থ হয়। এখানে
-   * `rm -rf` জাতীয় কিছু ব্যবহার করলে একটা পাথের ভুলে গোটা গাছ যেত।
+   * Careful: `rmdir` (not recursive) fails by itself if a folder has content.
+   * Something like `rm -rf` here would take a whole tree on one path mistake.
    */
   //  (moved here from retention.job.ts with the code it describes)
   async afterRemove(relPaths: readonly string[]): Promise<void> {

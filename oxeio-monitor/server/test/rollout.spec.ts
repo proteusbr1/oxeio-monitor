@@ -8,34 +8,34 @@ import {
 } from '../src/agent/rollout';
 
 /**
- * H04 — ধাপে ধাপে রোলআউট।
+ * H04: staged rollout.
  *
- * ⭐ এই নিয়মগুলোর ভুল ধরা পড়ে **অফিসের ১৫টা PC-তে**, আর ততক্ষণে দেরি
- * হয়ে গেছে: [G58](../../docs/08-Gap-Analysis.md) দেখিয়েছে খারাপ MSI একবার
- * বিলি হলে নতুন MSI দিয়ে ঠিক করা যায় না, হাতে যেতে হয়।
+ * A mistake in these rules is found on the office's 15 PCs, by which time it
+ * is too late: G58 (docs/08-Gap-Analysis.md) showed that once a bad MSI has
+ * been delivered, a new MSI cannot fix it; someone has to go by hand.
  */
 
-// অফিসের ১৫টা মেশিনের মতো করে
+// like the office's 15 machines
 const FLEET = Array.from({ length: 15 }, (_, i) => `machine-guid-${i}`);
 
 const offered = (stage: 'canary' | 'partial' | 'all' | 'halted', v: string) =>
   FLEET.filter((g) => isOfferedTo(stage, g, v));
 
-describe('rollout — ধাপগুলো', () => {
-  it('halted-এ কেউ পায় না', () => {
+describe('rollout: the stages', () => {
+  it('nobody gets it on halted', () => {
     expect(offered('halted', '1.2.0')).toHaveLength(0);
   });
 
-  it('all-এ সবাই পায়', () => {
+  it('everyone gets it on all', () => {
     expect(offered('all', '1.2.0')).toHaveLength(FLEET.length);
   });
 
   /**
-   * ⚠️ ১৫ ডিভাইসে "১০%" মানে ১.৫ — গোল করলে ০ বা ২। canary-র মানেই
-   * গুটিকয়েক, তাই সংখ্যাটা এমন রাখা হয়েছে যাতে বাস্তবে ১–২টা পড়ে।
+   * With 15 devices "10%" means 1.5, rounded to 0 or 2. Canary is by
+   * definition a handful, so the number is chosen so that in practice 1-2 fall in.
    */
-  it('canary-তে খুব কম মেশিন — শূন্যও নয়, সবাইও নয়', () => {
-    // একাধিক ভার্সনে দেখা, কারণ বালতি ভার্সনের উপরেও নির্ভর করে
+  it('canary has very few machines: neither zero nor everyone', () => {
+    // checked over several versions, because the bucket also depends on the version
     const counts = ['1.2.0', '1.3.0', '2.0.0', '2.1.0'].map(
       (v) => offered('canary', v).length,
     );
@@ -44,7 +44,7 @@ describe('rollout — ধাপগুলো', () => {
     expect(counts.reduce((a, b) => a + b, 0)).toBeGreaterThan(0);
   });
 
-  it('partial canary-র চেয়ে বেশি, all-এর চেয়ে কম', () => {
+  it('partial is more than canary and fewer than all', () => {
     const v = '1.2.0';
     expect(offered('partial', v).length).toBeGreaterThanOrEqual(
       offered('canary', v).length,
@@ -52,8 +52,8 @@ describe('rollout — ধাপগুলো', () => {
     expect(offered('partial', v).length).toBeLessThan(FLEET.length);
   });
 
-  /** canary যারা পেয়েছে, partial-এও তারা পাবে — নইলে আপডেট **ফিরে যেত** */
-  it('ধাপ বাড়লে কেউ আপডেট হারায় না', () => {
+  /** Whoever got canary also gets partial, otherwise the update would go backwards */
+  it('nobody loses the update when the stage rises', () => {
     const v = '1.2.0';
     for (const g of offered('canary', v)) {
       expect(isOfferedTo('partial', g, v), g).toBe(true);
@@ -62,10 +62,10 @@ describe('rollout — ধাপগুলো', () => {
   });
 });
 
-describe('rollout — বালতি', () => {
-  it('একই মেশিন ও ভার্সনে সবসময় একই উত্তর', () => {
-    // ⚠️ এলোমেলো হলে প্রতি heartbeat-এ ভিন্ন উত্তর আসত — canary
-    //    বলে কিছুই থাকত না
+describe('rollout: buckets', () => {
+  it('the same machine and version always give the same answer', () => {
+    // If random, every heartbeat would get a different answer and there
+    // would be no such thing as canary
     const a = rolloutBucket('guid-x', '1.2.0');
     const b = rolloutBucket('guid-x', '1.2.0');
 
@@ -75,10 +75,11 @@ describe('rollout — বালতি', () => {
   });
 
   /**
-   * ⭐ ভার্সন বালতিতে না মেশালে **একই হতভাগা মেশিন চিরকাল** প্রতিটা
-   * আপডেটের গিনিপিগ হতো, আর একজন স্টাফের PC-ই বারবার ভাঙত।
+   * Without mixing the version into the bucket, the same unlucky machine would
+   * be the guinea pig for every update forever, and one staff member's PC would
+   * break again and again.
    */
-  it('ভার্সন বদলালে গিনিপিগও বদলায়', () => {
+  it('when the version changes, the guinea pig changes too', () => {
     const first = offered('canary', '1.2.0').join();
     const later = ['1.3.0', '1.4.0', '2.0.0'].map((v) =>
       offered('canary', v).join(),
@@ -88,7 +89,7 @@ describe('rollout — বালতি', () => {
   });
 });
 
-describe('rollout — ভার্সনের তুলনা', () => {
+describe('rollout: version comparison', () => {
   it.each([
     ['1.10.0', '1.9.0', true],
     ['1.9.0', '1.10.0', false],
@@ -100,42 +101,42 @@ describe('rollout — ভার্সনের তুলনা', () => {
     expect(isNewer(a, b)).toBe(expected);
   });
 
-  /** ⚠️ স্ট্রিং তুলনায় '1.10.0' < '1.9.0' — ক্লাসিক ফাঁদ */
-  it('স্ট্রিং তুলনার ফাঁদে পড়ে না', () => {
+  /** String comparison says '1.10.0' < '1.9.0': the classic trap */
+  it('does not fall into the string-comparison trap', () => {
     expect('1.10.0' > '1.9.0').toBe(false);
     expect(isNewer('1.10.0', '1.9.0')).toBe(true);
   });
 });
 /**
- * ⭐⭐ **বেছে দেওয়া PC (pilot)** *(১ সেপ্টেম্বর ২০২৬, মালিকের চাওয়া:
- * "OX-05 ei update age powa dorkar")*।
+ * A chosen PC (pilot).
  *
- * ⚠️⚠️ ফাঁকটা নকশার: বালতি ঠিক হয় **মেশিন ধরে**, মানুষ ধরে নয় — তাই যে
- * PC-তে বাগটা ধরা পড়ে, সংশোধনটা ঠিক সেখানেই আগে পরীক্ষা করা যেত না।
- * মাঠে মাপা: OX-05-এর বালতি ৮৬, অথচ canary ৭ · partial ৫০।
+ * The gap is in the design: the bucket is decided per machine, not per
+ * person, so the PC where a bug was found could not be the first to test the
+ * fix. Measured in the field: OX-05's bucket is 86, while canary is 7 and
+ * partial is 50. The owner asked that OX-05 get the update first.
  */
-describe('rollout — বেছে দেওয়া PC', () => {
-  /** বালতি ৫০-এর উপরে, অর্থাৎ canary বা partial কোনোটাতেই পড়ে না */
+describe('rollout: a chosen PC', () => {
+  /** Bucket above 50, so it falls in neither canary nor partial */
   const outsider = FLEET.find(
     (g) => rolloutBucket(g, '1.0.0') >= 50,
   ) as string;
 
-  it('বালতির বাইরে থাকলেও পাইলট অফার পায়', () => {
+  it('a pilot gets the offer even when outside the bucket', () => {
     expect(isOfferedTo('canary', outsider, '1.0.0')).toBe(false);
     expect(isOfferedTo('canary', outsider, '1.0.0', true)).toBe(true);
     expect(isOfferedTo('partial', outsider, '1.0.0', true)).toBe(true);
   });
 
   /**
-   * ⚠️⚠️ **সবচেয়ে জরুরি দাবি:** থামানো বিল্ড পাইলটেও যায় না। নইলে খারাপ
-   * আপডেট থামানোর পরেও ঠিক সেই মেশিনটায় যেতেই থাকত যেটায় আমরা সবচেয়ে
-   * বেশি নজর রাখছি — আর স্বয়ংক্রিয় rollback নেই (G69)।
+   * The most important claim: a halted build does not go to the pilot either.
+   * Otherwise, after stopping a bad update, it would keep going to exactly the
+   * machine we are watching most closely, and there is no automatic rollback (G69).
    */
-  it('halted-এ পাইলটও পায় না', () => {
+  it('a pilot does not get it on halted either', () => {
     expect(isOfferedTo('halted', outsider, '1.0.0', true)).toBe(false);
   });
 
-  it('পাইলট না দিলে আগের আচরণ অপরিবর্তিত', () => {
+  it('without the pilot flag, the old behaviour is unchanged', () => {
     for (const guid of FLEET) {
       expect(isOfferedTo('canary', guid, '1.0.0', false)).toBe(
         isOfferedTo('canary', guid, '1.0.0'),
@@ -143,7 +144,7 @@ describe('rollout — বেছে দেওয়া PC', () => {
     }
   });
 
-  it('all-এ সবাই পায়, পাইলট হোক বা না হোক', () => {
+  it('everyone gets it on all, pilot or not', () => {
     expect(isOfferedTo('all', outsider, '1.0.0')).toBe(true);
     expect(isOfferedTo('all', outsider, '1.0.0', true)).toBe(true);
   });
@@ -151,21 +152,20 @@ describe('rollout — বেছে দেওয়া PC', () => {
 
 
 /**
- * ⭐⭐⭐ **canary-র বালতি খালি হলে ভার্সনটা চিরকাল আটকে থাকত**
- * *(৭ সেপ্টেম্বর ২০২৬, G168)*।
+ * If canary's bucket is empty, the version would stay stuck forever (G168).
  *
- * ⚠️⚠️ বালতি পড়ে **মেশিন ধরে**, আর অফিসে আলাদা `machine_guid` মাত্র
- * **নয়টা** (উইন্ডোজ ইমেজ ক্লোন করা — ১২টা PC, ৯টা GUID)। ৯টা মেশিনে ৭%
- * মানে গড়ে ০.৬৩টা, অর্থাৎ **প্রায়ই কেউই বালতিতে পড়ে না**।
+ * The bucket is per machine, and the office has only nine distinct
+ * `machine_guid`s (the Windows image was cloned: 12 PCs, 9 GUIDs). 7% of nine
+ * machines is 0.63 on average, so very often nobody falls in the bucket.
  *
- * ⚠️ কেউ অফার না পেলে কেউ ইনস্টল করে না → `RolloutAdvanceJob` কোনো প্রমাণ
- * পায় না → ধাপ বাড়ে না → ভার্সনটা **চিরকাল canary-তেই**। ঠিক সেই
- * অচলাবস্থা যেটা সারাতে ৫ সেপ্টেম্বর গোটা জবটা লেখা হয়েছিল।
+ * If nobody is offered the update, nobody installs it, so `RolloutAdvanceJob`
+ * gets no proof, the stage does not advance, and the version stays in canary
+ * forever: exactly the deadlock the whole job was written to fix.
  *
- * ⚠️⚠️ **তত্ত্ব নয়, মেপে দেখা:** অফিসের আসল ৯টা GUID নিয়ে ২০০টা সম্ভাব্য
- * ভার্সন-নম্বরে চালিয়ে **১০১টাতেই (৫০%)** বালতি খালি পাওয়া গেছে।
+ * Measured, not theory: with the office's real nine GUIDs over 200 possible
+ * version numbers, the bucket was empty for 101 of them (50%).
  */
-describe('G168 — বালতি খালি হলে একজনকে বেছে নেওয়া', () => {
+describe('G168: picking one person when the bucket is empty', () => {
   const now = new Date('2026-09-07T04:00:00Z');
   const fresh = new Date(now.getTime() - 60 * 60 * 1000);
   const stale = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
@@ -176,7 +176,7 @@ describe('G168 — বালতি খালি হলে একজনকে ব
     lastSeenAt,
   });
 
-  /** ওই মেশিনগুলোর কেউই canary-তে পড়ে না, এমন একটা ভার্সন */
+  /** A version in which none of those machines falls in canary */
   const versionWithEmptyCanary = (guids: readonly string[]): string => {
     for (let i = 0; i < 500; i += 1) {
       const v = `9.0.${i}`;
@@ -185,7 +185,7 @@ describe('G168 — বালতি খালি হলে একজনকে ব
     throw new Error('no version with an empty canary bucket');
   };
 
-  /** অন্তত একজন canary-তে পড়ে, এমন একটা ভার্সন */
+  /** A version in which at least one falls in canary */
   const versionWithSomeoneInCanary = (guids: readonly string[]): string => {
     for (let i = 0; i < 500; i += 1) {
       const v = `9.0.${i}`;
@@ -197,8 +197,8 @@ describe('G168 — বালতি খালি হলে একজনকে ব
   const people = [cand(1), cand(2), cand(3), cand(4), cand(5)];
   const guids = people.map((p) => p.machineGuid);
 
-  /** ⭐⭐⭐ এই ব্লকের মূল দাবি */
-  it('⭐ বালতি খালি হলে একজন pilot ফেরত আসে', () => {
+  /** The core claim of this block */
+  it('when the bucket is empty, one pilot is returned', () => {
     const v = versionWithEmptyCanary(guids);
     const picked = pilotNeededFor('canary', people, v, now);
 
@@ -207,19 +207,19 @@ describe('G168 — বালতি খালি হলে একজনকে ব
     expect(people.some((p) => p.id === picked)).toBe(true);
   });
 
-  /** ⚠️ কেউ এমনিতেই পড়লে হস্তক্ষেপ নয় — নিয়মটা নিজেই কাজ করছে */
-  it('⭐ কেউ বালতিতে পড়লে কিছু করা হয় না', () => {
+  /** If someone falls in anyway, no intervention: the rule is working by itself */
+  it('when someone falls in the bucket, nothing is done', () => {
     const v = versionWithSomeoneInCanary(guids);
 
     expect(pilotNeededFor('canary', people, v, now)).toBeNull();
   });
 
   /**
-   * ⚠️⚠️ `all`-এ সবাই এমনিতেই পাচ্ছে, আর `halted` মানে **ইচ্ছাকৃতভাবে**
-   * কাউকে নয় — জরুরি ব্রেক। দুটোতেই pilot বসানো ভুল হতো, আর দ্বিতীয়টা
-   * সরাসরি বিপজ্জনক: থামানোর পরেও একটা মেশিনে খারাপ বিল্ড যেত।
+   * Everyone already gets it on `all`, and `halted` means deliberately nobody:
+   * the emergency brake. A pilot would be wrong in both, and the second is
+   * directly dangerous: after stopping, a bad build would still go to one machine.
    */
-  it('⭐ all আর halted — দুটোতেই কিছু করা হয় না', () => {
+  it('on all and halted, nothing is done in either', () => {
     const v = versionWithEmptyCanary(guids);
 
     expect(pilotNeededFor('all', people, v, now)).toBeNull();
@@ -227,22 +227,22 @@ describe('G168 — বালতি খালি হলে একজনকে ব
   });
 
   /**
-   * ⚠️⚠️ **জীবিত মেশিন আগে** — যে PC এক দিনেও সাড়া দেয়নি সে কোনো প্রমাণ
-   * দিতে পারবে না, আর তাকে বাছলে অচলাবস্থাটা রয়েই যেত।
+   * Live machines first: a PC that has not responded in a day cannot give any
+   * proof, and picking it would leave the deadlock in place.
    */
-  it('⭐ অনেকদিন চুপ থাকা মেশিন বাছা হয় না', () => {
+  it('a machine silent for a long time is not picked', () => {
     const v = versionWithEmptyCanary(guids);
     const mixed = [cand(1, stale), cand(2, stale), cand(3, fresh)];
 
-    // ⚠️ ৩ নম্বরই একমাত্র জীবিত — বালতির সংখ্যা যাই হোক
+    // number 3 is the only live one, whatever the bucket numbers
     expect(pilotNeededFor('canary', mixed, versionWithEmptyCanary(
       mixed.map((m) => m.machineGuid),
     ), now)).toBe(3);
     expect(v).toBeTruthy();
   });
 
-  /** ⭐ কেউ জীবিত না থাকলে সবার মধ্যে থেকেই — না-বাছাইয়ের চেয়ে ভালো */
-  it('কেউ জীবিত না থাকলেও একজন বাছা হয়', () => {
+  /** If nobody is alive, pick from everyone: better than not picking */
+  it('even if nobody is alive, one is picked', () => {
     const dead = [cand(1, stale), cand(2, stale), cand(3, null)];
     const v = versionWithEmptyCanary(dead.map((d) => d.machineGuid));
 
@@ -250,11 +250,11 @@ describe('G168 — বালতি খালি হলে একজনকে ব
   });
 
   /**
-   * ⚠️ বাছাইটা **নির্ধারিত** — একই ইনপুটে সবসময় একই উত্তর। এলোমেলো হলে
-   *    প্রতিটা প্রকাশে অন্য একজন গিনিপিগ হতেন, আর কেন সেই মেশিনটা বাছা
-   *    হলো সেই প্রশ্নের কোনো উত্তর থাকত না।
+   * The pick is deterministic: the same input always gives the same answer. If
+   * random, a different person would be the guinea pig at every release, and
+   * there would be no answer to why that machine was chosen.
    */
-  it('⭐ একই ইনপুটে সবসময় একই উত্তর', () => {
+  it('the same input always gives the same answer', () => {
     const v = versionWithEmptyCanary(guids);
     const once = pilotNeededFor('canary', people, v, now);
 
@@ -263,8 +263,8 @@ describe('G168 — বালতি খালি হলে একজনকে ব
     }
   });
 
-  /** ⚠️ যাকে বাছা হয়, তার বালতির সংখ্যাই সবচেয়ে কম */
-  it('⭐ বালতির সংখ্যা সবচেয়ে কম যার, তাকেই', () => {
+  /** The one picked has the lowest bucket number */
+  it('the one with the lowest bucket number is chosen', () => {
     const v = versionWithEmptyCanary(guids);
     const picked = pilotNeededFor('canary', people, v, now);
 
@@ -274,7 +274,7 @@ describe('G168 — বালতি খালি হলে একজনকে ব
     expect(rolloutBucket(chosen.machineGuid, v)).toBe(lowest);
   });
 
-  it('একটাও ডিভাইস না থাকলে null', () => {
+  it('null when there are no devices at all', () => {
     expect(pilotNeededFor('canary', [], '9.9.9', now)).toBeNull();
   });
 });

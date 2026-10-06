@@ -4,22 +4,22 @@ using System.Windows.Forms;
 namespace oXeio.Agent.Ui;
 
 /// <summary>
-/// ব্যাকগ্রাউন্ড থ্রেড থেকে UI থ্রেডে কাজ পাঠানোর একমাত্র পথ।
+/// The only path for sending work from a background thread to the UI thread.
 ///
-/// <b>কেন <c>SynchronizationContext.Current</c> ব্যবহার করা হয়নি:</b> সেটা null হয়
-/// যতক্ষণ না WinForms-এর কোনো Control তৈরি হয়েছে, আর <c>Application.Run</c> চালু
-/// হওয়ার আগে ও পরে দুই রকম হতে পারে। tray তৈরি হয় প্রক্রিয়ার একদম শুরুতে, তাই
-/// "যা আছে তা ধরে নিই" চললে অর্ধেক ক্ষেত্রে কাজ চুপচাপ ভুল থ্রেডে চলত — আর ভুল
-/// থ্রেডে NotifyIcon ছোঁয়ার শাস্তি সাথে সাথে আসে না, সপ্তাহ দুয়েক পর একবার আসে।
+/// <b>Why <c>SynchronizationContext.Current</c> is not used:</b> it is null until some
+/// WinForms Control has been created, and it can differ before and after
+/// <c>Application.Run</c> starts. The tray is created at the very start of the process, so
+/// "assume whatever is there" would silently run work on the wrong thread half the time, and
+/// touching NotifyIcon from the wrong thread does not punish you at once; it bites a couple
+/// of weeks later.
 ///
-/// এখানে বরং একটা নিজস্ব <see cref="Control"/> বানিয়ে <b>তখনই</b> তার হ্যান্ডেল
-/// তৈরি করে নেওয়া হয়। প্যারেন্টহীন Control-এর হ্যান্ডেল WinForms নিজের parking
-/// উইন্ডোতে ঝুলিয়ে রাখে, আর যে থ্রেডে হ্যান্ডেল তৈরি হয়েছে সেই থ্রেডেই
-/// <c>BeginInvoke</c>-এর কাজ চলে। অর্থাৎ "UI থ্রেড" মানে এখানে নির্দিষ্টভাবে
-/// যে থ্রেডে এই অবজেক্ট তৈরি হয়েছিল।
+/// Instead we create our own <see cref="Control"/> and create its handle <b>immediately</b>.
+/// WinForms parks the handle of a parentless Control in its parking window, and
+/// <c>BeginInvoke</c> work runs on the thread that created the handle. So "UI thread" here
+/// means exactly the thread this object was created on.
 ///
-/// ⚠️ তাই <see cref="UiDispatcher"/> (এবং <see cref="TrayIcon"/>) অবশ্যই সেই থ্রেডে
-/// তৈরি করতে হবে যেটা পরে <c>Application.Run()</c> ডাকবে।
+/// Careful: <see cref="UiDispatcher"/> (and <see cref="TrayIcon"/>) must be created on the
+/// thread that will later call <c>Application.Run()</c>.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class UiDispatcher : IDisposable
@@ -33,14 +33,14 @@ internal sealed class UiDispatcher : IDisposable
         _onError = onError;
         _marshaller = new Control();
 
-        // ⚠️ হ্যান্ডেল আগেভাগে বানিয়ে নেওয়া। না বানালে প্রথম BeginInvoke
-        //    InvalidOperationException ছুড়ত ("Invoke or BeginInvoke cannot be
-        //    called on a control until the window handle has been created"),
-        //    আর সেটা ঘটত প্রথম স্ট্যাটাস আপডেটে — অর্থাৎ ট্র্যাকিং থ্রেডে।
+        // Create the handle up front. Otherwise the first BeginInvoke would throw
+        // InvalidOperationException ("Invoke or BeginInvoke cannot be called on a control
+        // until the window handle has been created"), on the first status update, i.e. on
+        // the tracking thread.
         _ = _marshaller.Handle;
     }
 
-    /// <summary>মেনু ও ফন্টের মাপ ঠিক করতে লাগে।</summary>
+    /// <summary>Needed to size the menu and fonts.</summary>
     public int Dpi
     {
         get
@@ -51,12 +51,12 @@ internal sealed class UiDispatcher : IDisposable
     }
 
     /// <summary>
-    /// UI থ্রেডে কাজটা চালায়। ইতিমধ্যেই UI থ্রেডে থাকলে সরাসরি, নইলে সারিতে।
+    /// Runs the action on the UI thread: directly if already on it, otherwise queued.
     ///
-    /// ⚠️ কখনো ব্লক করে না — <c>Invoke</c> (সিঙ্ক্রোনাস) ইচ্ছাকৃতভাবে নেই। UI থ্রেড
-    /// যদি একটা মডাল ডায়ালগে আটকে থাকে আর ট্র্যাকিং থ্রেড তার জন্য অপেক্ষা করে,
-    /// তাহলে ঘণ্টা গোনা থেমে যায় — অর্থাৎ tray-র দোষে বেতনের হিসাব থামে।
-    /// ⚠️ কখনো এক্সসেপশনও ছোড়ে না (<see cref="oXeio.Core.Agent.IAgentStatusSink"/>-এর শর্ত)।
+    /// Careful: never blocks. There is deliberately no <c>Invoke</c> (synchronous). If the UI
+    /// thread were stuck in a modal dialog while the tracking thread waited for it, hour
+    /// counting would stop, i.e. the tray would halt payroll.
+    /// Careful: never throws either (a requirement of <see cref="oXeio.Core.Agent.IAgentStatusSink"/>).
     /// </summary>
     public void Post(Action action)
     {
@@ -76,11 +76,11 @@ internal sealed class UiDispatcher : IDisposable
         }
         catch (ObjectDisposedException)
         {
-            // বন্ধ হওয়ার মাঝপথে — আঁকার আর কিছু নেই
+            // Shutting down; nothing left to draw
         }
         catch (InvalidOperationException)
         {
-            // হ্যান্ডেল ইতিমধ্যেই ধ্বংস
+            // Handle already destroyed
         }
     }
 
@@ -92,10 +92,10 @@ internal sealed class UiDispatcher : IDisposable
         }
         catch (Exception ex)
         {
-            // ⚠️ UI থ্রেডে ছুটে যাওয়া এক্সসেপশন মানে পুরো প্রক্রিয়া বন্ধ, অর্থাৎ
-            //    ট্র্যাকিংও বন্ধ। তাই এখানে গিলে ফেলা হয় — কিন্তু নীরবে নয়,
-            //    কলার লগার দিলে সেখানে যায়।
-            try { _onError?.Invoke(ex); } catch { /* লগারও ভাঙলে কিছু করার নেই */ }
+            // An exception escaping on the UI thread kills the whole process, and tracking
+            // with it. So it is swallowed here, but not silently: it goes to the caller's
+            // logger if one was given.
+            try { _onError?.Invoke(ex); } catch { /* if the logger also fails, nothing more can be done */ }
         }
     }
 

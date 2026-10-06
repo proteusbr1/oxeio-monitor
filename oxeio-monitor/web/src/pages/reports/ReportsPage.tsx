@@ -17,16 +17,16 @@ import { MAX_REPORT_DAYS, rangeDays } from './shared';
 import { seesEveryone } from '../../api/auth';
 
 /**
- * F01 · F02 · F03 · F04 · F05 · F08 — রিপোর্ট।
+ * Reports.
  *
- * প্রবাহ: রেঞ্জ বাছুন (F08) → ধরন বাছুন → টেবিল → Excel (F05)।
+ * Flow: pick a range, pick a type, table, Excel.
  *
  * The payroll sheet lives on its own page now (pages/payroll), with the
  * rest of the month's pay.
  *
- * ⭐ রেঞ্জ, স্টাফ, groupBy — সব নিয়ন্ত্রণ এই পেজে থাকে, ট্যাবগুলোতে নয়।
- *    তাই ট্যাব বদলালে বাছাই করা তারিখটা হারায় না, আর ডাউনলোডের লিঙ্কটা
- *    ঠিক যা পর্দায় দেখা যাচ্ছে তারই — দুটো আলাদা হয়ে যাওয়ার পথ নেই।
+ * Important: range, staff and groupBy all live on this page, not in the tabs. So
+ *    switching tabs keeps the chosen dates, and the download link is always for
+ *    exactly what is on screen; the two cannot drift apart.
  */
 
 type TabId = 'attendance' | 'summary' | 'productivity';
@@ -37,19 +37,18 @@ const TABS: TabItem<TabId>[] = [
   { id: 'productivity', label: 'Apps & sites' },
 ];
 
-/** সার্ভারের ডিফল্টও ২৫ — এক রাখা হয়েছে যাতে পর্দা আর Excel এক কথা বলে */
+/** The server's default is also 25; kept equal so the screen and Excel agree */
 const TOP_LIMITS = [25, 50, 100, 200];
 
 export function ReportsPage() {
   const { user } = useAuth();
 
   /**
-   * ⭐ স্টাফের জন্য `/reports/*` **আর** `/employees` — দুটোই ৪০৩
-   *   (দুটোতেই ক্লাস-লেভেল `@Roles(owner, manager)`)। গার্ড না দিলে
-   *   ঠিকানা টাইপ করে আসা স্টাফ প্রতিবার দুটো নিশ্চিত-ব্যর্থ রিকোয়েস্ট
-   *   পাঠাত, আর পর্দায় সহকর্মীদের বাছার ড্রপডাউনসহ পুরো রিপোর্টের
-   *   কাঠামোটা দেখত — শুধু ভেতরের সংখ্যাগুলো ছাড়া। `MonthlyPage` ও
-   *   `SettingsPage` এই একই ছাঁচেই থামায়।
+   * Careful: for staff both `/reports/*` **and** `/employees` return 403 (both have a
+   *   class-level `@Roles(owner, manager)`). Without a guard, a staff member who typed
+   *   the URL would fire two requests that are certain to fail every time, and see the
+   *   whole report structure including the employee-picker dropdown, just without the
+   *   numbers. `MonthlyPage` and `SettingsPage` stop them the same way.
    */
   if (!seesEveryone(user?.role)) {
     return (
@@ -67,8 +66,8 @@ export function ReportsPage() {
 
 function ReportsBoard() {
   const [tab, setTab] = useState<TabId>('attendance');
-  // ⚠️ `new Date().toISOString().slice(0,10)` নয় — ঢাকায় রাত ১২টা–ভোর ৬টায়
-  //    ওটা আগের তারিখ দিত, আর রিপোর্ট এক দিন পিছিয়ে খুলত।
+  // Careful: not `new Date().toISOString().slice(0,10)`; between midnight and 6am in
+  //    Dhaka that gives the previous date and the report would open a day behind.
   const [range, setRange] = useState(() => thisMonthRange());
   const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [groupBy, setGroupBy] = useState<GroupBy>('month');
@@ -77,9 +76,9 @@ function ReportsBoard() {
   const download = useXlsxDownload();
 
   const days = rangeDays(range.from, range.to);
-  // ⚠️ সার্ভার ৩৭০ দিনের বেশি নেয় না। আগেই ধরে ফেলা হয় যাতে একটা
-  //    নিশ্চিত-ব্যর্থ রিকোয়েস্ট পাঠাতেই না হয় — বড় রেঞ্জে ওটা কয়েক
-  //    সেকেন্ড অপেক্ষার পর ৪০০ হতো।
+  // Careful: the server accepts at most 370 days. Catch it early so a request that is
+  //    sure to fail is never sent; for a large range it would wait several seconds
+  //    and then return 400.
   const tooLong = days > MAX_REPORT_DAYS;
 
   const startDownload = (): void => {
@@ -117,7 +116,7 @@ function ReportsBoard() {
         label="Report type"
         onChange={(next) => {
           setTab(next);
-          // আগের ট্যাবের ডাউনলোড-ভুলটা নতুন ট্যাবে ঝুলিয়ে রাখা যায় না
+          // The previous tab's download error must not linger on the new tab
           download.clear();
         }}
       />
@@ -134,8 +133,8 @@ function ReportsBoard() {
               onChange={setEmployeeId}
               allowAll
               allLabel="Everyone"
-              // ⚠️ চলে যাওয়া কর্মীর পুরোনো মাসও রিপোর্টে লাগে, তাই
-              //    নিষ্ক্রিয়দেরও তালিকায় রাখা হয়
+              // Careful: a departed employee's old months are needed in reports, so
+              //    inactive staff stay in the list
               includeInactive
             />
 
@@ -230,8 +229,8 @@ function SelectField({
 }
 
 /**
- * ⚠️ এটা "ভুল হয়েছে" নয়, তাই সলিড লাল নয় — শুধু একটা সীমা। রিকোয়েস্টটা
- *    পাঠানোই হয় না, তাই ব্যবহারকারীকে অপেক্ষাও করতে হয় না।
+ * Careful: this is not "something went wrong", so not solid red; just a limit. The
+ *    request is never sent, so the user does not have to wait either.
  */
 function RangeTooLong({ days }: { days: number }): ReactNode {
   return (

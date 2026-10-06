@@ -3,101 +3,108 @@ import { addDays, toIsoDate } from '../reports/reports.range';
 import type { AttendanceRow, SummaryRow } from '../reports/reports.types';
 
 /**
- * **R3** — সাপ্তাহিক সারাংশের সব হিসাব ও টেলিগ্রামের লেখা। খাঁটি ফাংশন, কোনো I/O নেই।
+ * **R3** — all calculations and wording of the weekly summary on Telegram.
+ * Pure functions, no I/O.
  *
- * ⭐ **এখানে কোনো নতুন সংজ্ঞা নেই** — `digest.math.ts`-এর মতোই। ঘণ্টা, টার্গেট,
- * ছুটি, কর্মদিবস সবকিছু আসে `ReportsService`-এর F01/F02 সারি থেকে। নিজে
- * `daily_summary` পড়ে সপ্তাহের টার্গেট বানালে ছুটির ক্যালেন্ডারের **চতুর্থ**
- * একটা বাস্তবায়ন দাঁড়াত, আর একদিন টেলিগ্রাম বলত ৩৮ ঘণ্টা টার্গেট, রিপোর্ট
- * বলত ৪০ — তখন দুটোর কোনোটাই আর বিশ্বাসযোগ্য থাকত না।
+ * **There is no new definition here** — as in `digest.math.ts`. Hours, target,
+ * leave and work days all come from `ReportsService`'s F01/F02 rows. Reading
+ * `daily_summary` directly to build the week's target would create a
+ * **fourth** implementation of the holiday calendar, and one day Telegram would
+ * say a target of 38 hours while the report said 40 — and neither would be
+ * trusted any more.
  *
- * ⚠️⚠️ **"রেকর্ড নেই" আর "শূন্য কাজ" এক জিনিস নয়।** এই ফাইলের সবচেয়ে জরুরি
- * নিয়ম। যে কর্মীর সারা সপ্তাহে একটাও পর্যবেক্ষণ নেই তাঁকে "০ ঘণ্টা কাজ
- * করেছেন" বলে র‍্যাঙ্কিংয়ে বসানো মানে অনুপস্থিত পর্যবেক্ষণকে ব্যর্থতা বলে
- * গোনা — এজেন্ট বন্ধ ছিল, নাকি PC বন্ধ ছিল, নাকি সত্যিই কাজ হয়নি, সেটা এই
- * ফাইল জানে না। তাই ওঁরা "পিছিয়ে" তালিকায় যান না, আলাদা "Not observed" ঘরে
- * যান, আর কারণটা বার্তার পাদটীকায় স্পষ্ট করে লেখা থাকে।
+ * Careful: **"no record" and "zero work" are not the same thing.** The most
+ * important rule in this file. Ranking an employee with not a single
+ * observation all week as "worked 0 hours" counts missing observation as
+ * failure — whether the agent was off, the PC was off, or no work was done,
+ * this file cannot know. So they do not go on the "behind" list; they go in a
+ * separate "Not observed" group, and the reason is spelled out in the
+ * message's footnote.
  *
- * ⚠️⚠️ **"সারি নেই" আর "সারি আছে কিন্তু ০ ঘণ্টা" — এ দুটোও আলাদা।** F01/F02
- * দুটোকেই এক করে "no activity" বলে (`reports.service.ts`-এ
- * `status: worked > 0 ? 'worked' : 'no_activity'`), কিন্তু পার্থক্যটা DB-তে
- * **আছে**: `refreshDate()` প্রতিদিন **প্রতিটি সক্রিয় কর্মীর** সারি লেখে,
- * সে কাজ করুক বা না করুক। তাই সারি থাকা = ওই দিনটা মাপা হয়েছে। দুটো এক
- * করে ফেললে ভুলটা **দুই দিকেই** যেত: এজেন্ট দিব্যি চলছে অথচ কেউ সারা
- * সপ্তাহে ০ ঘণ্টা — তাঁকেও "এজেন্ট বন্ধ ছিল" বলা হতো, আর সত্যিকারের
- * অনুপস্থিতি কোনোদিন "Behind" তালিকায় উঠত না। সেজন্যই `observed`
- * (`WeeklySource`) — সংখ্যা নয়, নিছক "ওই দিনটা আদৌ দেখা হয়েছিল কি না"।
+ * Careful: **"no row" and "a row with 0 hours" are also different.** F01/F02
+ * merge both into "no activity" (`status: worked > 0 ? 'worked' : 'no_activity'`
+ * in `reports.service.ts`), but the difference **exists** in the DB:
+ * `refreshDate()` writes a row for **every active employee** every day,
+ * whether or not they worked. So a row existing = that day was measured.
+ * Merged, the mistake would go **both ways**: someone whose agent runs fine
+ * but who worked 0 hours all week would also be told "agent was off", and real
+ * absence would never reach the "Behind" list. That is why `observed`
+ * (`WeeklySource`) is not a number but simply "was that day watched at all".
  *
- * ⚠️⚠️ **প্রত্যাশা গোনা শুরু হয় সার্ভার যেদিন থেকে আসলেই দেখেছে।** এই
- * ইনস্টলেশনে ট্র্যাকিং বসেছে ১৩ আগস্ট ২০২৬, আর ডিফল্ট শিডিউল শুক্রবার
- * সন্ধ্যা ৬টা — অর্থাৎ **প্রথম** বার্তার উইন্ডো ৮–১৪ আগস্ট, যার ৮–১২
- * কেউ দেখেনি। ওই দিনগুলোর টার্গেট প্রত্যাশায় ধরলে প্রথম বার্তাটাই নাম
- * ধরে ধরে বলত "৩২ ঘণ্টা পিছিয়ে" — এমন দিনের জন্য যখন মাপার যন্ত্রটাই
- * বসেনি, আর টেলিগ্রামের বার্তা একবার গেলে ফেরত নেওয়া যায় না। তাই যে দিন
- * দেখা হয়নি সেটা প্রত্যাশাতেও নেই, ঘাটতিতেও নেই।
+ * Careful: **the expectation starts counting from the day the server really
+ * began watching.** On this installation tracking began on 13 August 2026, and
+ * the default schedule is Friday 6 pm — so the **first** message's window was
+ * 8-14 August, of which 8-12 nobody watched. Counting those days' targets in
+ * the expectation would make the first message say, name by name, "32 hours
+ * behind" — for days when the measuring instrument was not even installed, and
+ * a Telegram message cannot be taken back once sent. So a day not watched is
+ * in neither the expectation nor the shortfall.
  *
- * ⭐ আর সমন্বয়টা **বার্তায় লেখা থাকে** (`counted from …`)। না লিখলে
- * সংখ্যাটা ঠিক হতো, কিন্তু কেন ছোট সেটা অদৃশ্য অনুমান হয়ে যেত — আর পাঠক
- * নিজের মাথায় পুরো সপ্তাহ ধরে হিসাব মেলাতে গিয়ে আবার সেই ভুলেই পৌঁছাতেন।
+ * The adjustment is **written in the message** (`counted from …`). Otherwise
+ * the number would be right but why it is smaller would be an invisible
+ * assumption — and the reader, reconciling the whole week in their head, would
+ * reach the same mistake again.
  *
- * ⭐ নিয়মটা নতুন নয় — মাসিক পাতায় `summary.math.ts`-এর `elapsedWindow()`
- * ঠিক এই কাজটাই করে: max(জানালার শুরু, `joinedOn`, ট্র্যাকিং-শুরু)। এখানে
- * সীমাটা **কর্মীপ্রতি**, কারণ `daily_summary`-র সারিও কর্মীপ্রতি লেখা হয়;
- * ফলে এই জানালা মাসিক পাতার চেয়ে কখনো **আগে** শুরু হয় না, কেবল সমান বা
- * পরে — দুই পাতা বিপরীত কথা বলার সুযোগ নেই (G88)।
+ * The rule is not new — on the monthly page `elapsedWindow()` in
+ * `summary.math.ts` does exactly this: max(window start, `joinedOn`, tracking
+ * start). Here the limit is **per employee**, because `daily_summary` rows are
+ * also written per employee; so this window never starts **earlier** than the
+ * monthly page's, only equal or later — the two pages cannot contradict each
+ * other (G88).
  *
- * ⚠️ **এই বার্তায় কখনো স্ক্রিনশট, অ্যাপের নাম বা ডোমেইন যায় না** — শুধু
- * ঘণ্টা ও নাম। টেলিগ্রামের বার্তা ওদের সার্ভারে জমে থাকে আর ফোনের লক
- * স্ক্রিনে ভেসে ওঠে; কারো ব্রাউজিং ওখানে পাঠানো মানে ড্যাশবোর্ডের role-এর
- * দেয়ালটা কার্যত তুলে দেওয়া। এই ফাইলের কোনো টাইপে ডোমেইন বা ফাইলের নামের
- * জায়গাই নেই — সেটা দুর্ঘটনা নয়।
+ * Careful: **no screenshot, app name or domain ever goes into this message** —
+ * only hours and names. Telegram messages are stored on its servers and float
+ * up on the phone lock screen; sending someone's browsing there would
+ * effectively remove the dashboard's role wall. No type in this file has room
+ * for a domain or a file name — that is not an accident.
  *
- * ⚠️ **টাকার কোনো কথা নেই** — বেতন owner-only ও audit করা (ADR-023)।
+ * Careful: **no money** — salary is owner-only and audited (ADR-023).
  */
 
-/** ঘণ্টা দুই দশমিকে — বার্তার সব সংখ্যা একই চেহারার */
+/** Hours to two decimals — every number in the message looks the same */
 function h(hours: number): string {
   return hours.toFixed(2);
 }
 
-/** দুই দশমিকে গোল করা (রিপোর্টের ঘণ্টাগুলো এমনিতেই দুই দশমিকে) */
+/** Round to two decimals (the report's hours are already two decimals) */
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-// ── উইন্ডো ও শিডিউল ─────────────────────────────────────────────────────────
+// ── Window and schedule ──────────────────────────────────────────────────────
 
 /**
- * সারাংশ কত দিনের।
+ * How many days the summary covers.
  *
- * ⭐ ইচ্ছাকৃতভাবে **"শেষ ৭ দিন"**, ক্যালেন্ডার-সপ্তাহ নয়। সপ্তাহের সীমানা
- * এই প্রকল্পে কর্মীপ্রতি আলাদা (`weekStartIsoDay()` — সাপ্তাহিক ছুটির পরের
- * দিন), তাই "গত সপ্তাহ" বলে একটাই তারিখজোড়া বেছে নিলে যাঁদের ছুটি অন্য
- * দিনে তাঁদের কর্মসপ্তাহ মাঝখান থেকে কেটে যেত। শেষ ৭ দিন সবার জন্য সমান
- * দৈর্ঘ্যের, আর বার্তার মাথায় তারিখ দুটো লেখাই থাকে — পাঠক ঠিক কী দেখছেন
- * তা নিয়ে ধোঁয়াশা থাকে না।
+ * Deliberately **"the last 7 days"**, not a calendar week. The week boundary in
+ * this project differs per employee (`weekStartIsoDay()` — the day after their
+ * weekly off day), so choosing one "last week" date pair would cut the work
+ * week in the middle for those whose off day is different. The last 7 days is
+ * the same length for everyone, and both dates are written at the top of the
+ * message — so there is no doubt about what the reader is looking at.
  */
 export const WEEKLY_WINDOW_DAYS = 7;
 
-/** ⚠️ ডিফল্ট শুক্রবার (ISO ৫) — বাংলাদেশে সাপ্তাহিক ছুটির দিন, সপ্তাহের শেষ */
+/** Careful: default Friday (ISO 5) — the weekly off day in Bangladesh, the end of the week */
 export const WEEKLY_DIGEST_DEFAULT_DAY = 5;
-/** সন্ধ্যা ৬টা (ঢাকা) — দৈনিক ডাইজেস্টের ৬:৩০-এর ঠিক আগে, যাতে দুটো একসাথে না আসে */
+/** 6 pm (Dhaka) — just before the daily digest's 6:30, so the two do not arrive together */
 export const WEEKLY_DIGEST_DEFAULT_HOUR = 18;
 
 export interface WeeklyWindow {
-  /** উইন্ডোর প্রথম দিন, YYYY-MM-DD (ঢাকা) */
+  /** First day of the window, YYYY-MM-DD (Dhaka) */
   from: string;
-  /** উইন্ডোর শেষ দিন = আজ */
+  /** Last day of the window = today */
   to: string;
   days: number;
 }
 
 /**
- * `now` ঢাকার যে দিনে পড়ে, সেই দিনসহ পেছনের ৭ দিন।
+ * The 7 days ending with the Dhaka day that `now` falls on.
  *
- * ⚠️ "আজ" মানে **ঢাকার** আজ। সার্ভার UTC-তে চলে; শুক্রবার সন্ধ্যা ৬টায়
- * `now` UTC-তে তখনো দুপুর, তাই তারিখটা মিলে যেত — কিন্তু কেউ রাত ১১টায়
- * হাতে চালালে UTC-তে তখন পরদিন, আর উইন্ডোটা পুরো একদিন সরে যেত।
+ * Careful: "today" means **Dhaka's** today. The server runs in UTC; at 6 pm
+ * Friday `now` is still afternoon in UTC, so the date would match — but if
+ * someone ran it by hand at 11 pm, it would already be the next day in UTC and
+ * the window would shift by a whole day.
  */
 export function weeklyWindow(now: Date): WeeklyWindow {
   const today = workDateOf(now);
@@ -109,37 +116,38 @@ export function weeklyWindow(now: Date): WeeklyWindow {
 }
 
 export interface WeeklySchedule {
-  /** ISO দিন — ১ = সোম … ৭ = রবি (`weekly_off_day` কলামের মতোই) */
+  /** ISO day — 1 = Monday … 7 = Sunday (same as the `weekly_off_day` column) */
   isoDay: number;
-  /** ০–২৩, ঢাকার ঘণ্টা */
+  /** 0-23, Dhaka hour */
   hour: number;
-  /** `@Cron`-এ যা বসবে — ৬ ঘরের ছক: সেকেন্ড মিনিট ঘণ্টা দিন মাস বার */
+  /** What goes into `@Cron` — six fields: second minute hour day month weekday */
   expression: string;
-  /** যে চলকগুলো পড়া যায়নি — জব চালুর সময় লগে ওঠে, নীরবে ডিফল্টে নামে না */
+  /** Variables that could not be read — logged at job start, not silently defaulted */
   ignored: string[];
 }
 
 function intIn(raw: string | undefined, min: number, max: number): number | null {
   const text = (raw ?? '').trim();
   if (text.length === 0) return null;
-  // ⚠️ `parseInt` নয় — "18abc" কে ১৮ ধরে নিত, আর টাইপোটা কোনোদিন ধরা পড়ত না
+  // Careful: not `parseInt` — it would take "18abc" as 18, and the typo would never be caught
   if (!/^\d+$/.test(text)) return null;
   const value = Number(text);
   return value >= min && value <= max ? value : null;
 }
 
 /**
- * `WEEKLY_DIGEST_DAY` / `WEEKLY_DIGEST_HOUR` → cron expression।
+ * `WEEKLY_DIGEST_DAY` / `WEEKLY_DIGEST_HOUR` → cron expression.
  *
- * ⚠️ **ISO দিন আর cron-এর বার এক নয়।** cron-এ রবিবার ০, কিন্তু ISO-তে ৭
- * (আর এই রিপোর `weekly_off_day` সহ সব জায়গায় ISO ব্যবহার করে)। `% 7` না
- * করলে `WEEKLY_DIGEST_DAY=7` cron-এ "৭" হয়ে যেত — node-cron ওটাকেও রবিবার
- * ধরে, কিন্তু নির্ভর করার মতো নয়; আর ভুলটা ধরা পড়ত কেবল সাত দিন পর, যখন
- * বার্তাটা আসত না।
+ * Careful: **an ISO day and cron's weekday are not the same.** In cron Sunday
+ * is 0, but in ISO it is 7 (and this repo uses ISO everywhere, including
+ * `weekly_off_day`). Without `% 7`, `WEEKLY_DIGEST_DAY=7` would become "7" in
+ * cron — node-cron treats that as Sunday too, but it cannot be relied on; and
+ * the mistake would be found only seven days later, when the message did not come.
  *
- * ⚠️ ভুল মান পেলে **ক্র্যাশ নয়, ডিফল্ট + `ignored`** — একটা টাইপোর দাম
- * "সার্ভার ওঠে না" হতে পারে না। কিন্তু চুপ করেও থাকা যায় না, নইলে মালিক
- * ভাবতেন সোমবার সেট করা আছে অথচ বার্তা আসত শুক্রবার।
+ * Careful: a bad value gives **a default + `ignored`, not a crash** — the
+ * price of a typo cannot be "the server will not start". But staying silent is
+ * not an option either, otherwise the owner would think Monday was set while
+ * the message came on Friday.
  */
 export function weeklyScheduleOf(
   dayRaw?: string,
@@ -168,61 +176,62 @@ export function weeklyScheduleOf(
   };
 }
 
-// ── কোথায় পাঠানো নিরাপদ ─────────────────────────────────────────────────────
+// ── Where it is safe to send ─────────────────────────────────────────────────
 
 /**
- * ⭐ **ব্যক্তিগত চ্যাটের id কি না** — টেলিগ্রামের নিজের নিয়মেই বোঝা যায়।
+ * **Whether this is a private chat id** — Telegram's own rules tell us.
  *
- * ব্যক্তিগত চ্যাটের id সবসময় **ধনাত্মক পূর্ণসংখ্যা** (ওটা user id-ই)।
- * গ্রুপ, সুপারগ্রুপ ও চ্যানেলের id **ঋণাত্মক** (`-100…`), আর `@name` কেবল
- * প্রকাশ্য চ্যানেল/সুপারগ্রুপেরই হয় — বট কোনো ব্যক্তিগত চ্যাটকে `@name`
- * দিয়ে ডাকতে পারে না। তাই "শুধু অঙ্ক" = "ব্যক্তিগত চ্যাট"।
+ * A private chat's id is always a **positive integer** (it is the user id
+ * itself). Group, supergroup and channel ids are **negative** (`-100…`), and
+ * `@name` exists only for public channels/supergroups — a bot cannot address
+ * a private chat by `@name`. So "digits only" = "private chat".
  *
- * ⚠️ উল্টো দিকে অজানা কিছু (`abc`, `+880…`) এখানে **ব্যক্তিগত নয়** ধরা
- *    হয়, কারণ প্রশ্নটা "এটা কি গ্রুপ?" নয় — "এটা যে গ্রুপ **নয়** তা কি
- *    আমরা জানি?"। জানি না মানে জানি না, আর তখন নাম-ধরে-র‍্যাঙ্কিং পাঠানোর
- *    ঝুঁকি নেওয়ার কোনো কারণ নেই (নিয়ম ২: "জানি না"-কে "শূন্য" বলা নিষেধ)।
+ * Careful: conversely, anything unknown (`abc`, `+880…`) is taken as **not
+ *    private** here, because the question is not "is this a group?" — it is
+ *    "do we know this is **not** a group?". Not knowing means not knowing, and
+ *    then there is no reason to risk sending a ranking by name (rule 2:
+ *    calling "don't know" by the name "zero" is forbidden).
  */
 export function isPrivateChatId(rawChatId: string): boolean {
   return /^\d+$/.test(rawChatId.trim());
 }
 
-/** `weeklyGateOf()`-এর সিদ্ধান্ত — পাঠানো হবে কি না, আর না হলে কেন */
+/** The decision of `weeklyGateOf()` — whether to send, and if not, why */
 export interface WeeklyGate {
   send: boolean;
-  /** ⚠️ `send === false` হলে **সবসময়** থাকে, নইলে `null` */
+  /** Careful: **always** present when `send === false`, otherwise `null` */
   blockedBecause: string | null;
 }
 
 /**
- * ⚠️ যে চলকটা লিখলে মালিক সজ্ঞানে গ্রুপেও পাঠাতে পারেন।
- * ⭐ `.env.example` **ও** `docker-compose.yml` — দুটোতেই আছে, একটাতে নয়।
+ * Careful: the variable that lets the owner knowingly send to a group too.
+ * It is in both `.env.example` **and** `docker-compose.yml` — not just one.
  */
 export const WEEKLY_ALLOW_GROUP_ENV = 'WEEKLY_DIGEST_ALLOW_GROUP';
 
 /**
- * ⭐⭐ **সাপ্তাহিক সারাংশ এই চ্যাটে যেতে পারে কি না।**
+ * **Whether the weekly summary may go to this chat.**
  *
- * ⚠️⚠️ চ্যাট আইডিটা **অ্যালার্টের সাথে ভাগ করা** (`TELEGRAM_CHAT_ID`)।
- * অ্যালার্টে যায় কেবল হোস্টনেম ও অ্যালার্টের ধরন — দলের গ্রুপে ওটা
- * তুলনায় নিরীহ, তাই অনেকেই ওখানে দলের গ্রুপ বসিয়ে রাখেন। কিন্তু সাপ্তাহিক
- * সারাংশ **নাম ধরে ধরে বলে কে পিছিয়ে**; একই চ্যাটে সেটা চলে গেলে প্রথম
- * শুক্রবারেই সাপ্তাহিক প্রকাশ্য অপমান, আর **টেলিগ্রামের বার্তা ফেরত নেওয়া
- * যায় না**। তিন জায়গায় "কর্মীদের গ্রুপে নয়" লেখা ছিল, কোথাও প্রহরী ছিল না
- * — এটাই সেই প্রহরী।
+ * Careful: the chat id is **shared with alerts** (`TELEGRAM_CHAT_ID`). Alerts
+ * carry only the hostname and alert type — fairly harmless in a team group, so
+ * many people put the team group there. But the weekly summary **names who is
+ * behind**; if it went to the same chat, on the very first Friday there would
+ * be a weekly public humiliation, and **a Telegram message cannot be taken
+ * back**. "Not the staff group" was written in three places and there was a
+ * guard nowhere — this is that guard.
  *
- * ⭐ **নীরব বাধা নয়, সচেতন সিদ্ধান্ত।** মালিক সত্যিই গ্রুপে চাইলে
- * `WEEKLY_DIGEST_ALLOW_GROUP=true` লিখে পারবেন; পথটা খোলা, শুধু দুর্ঘটনাটা
- * বন্ধ।
+ * **A conscious decision, not a silent block.** If the owner really wants a
+ * group, they can write `WEEKLY_DIGEST_ALLOW_GROUP=true`; the path is open,
+ * only the accident is closed.
  *
- * ⚠️ **অ্যালার্ট এই প্রহরীর আওতায় নয়** — এই ফাংশন কেবল সাপ্তাহিক সারাংশের
- * পথে বসে (`WeeklyDigestService`)। `TelegramChannel.runOnce()` আগের মতোই
- * চলে, কারণ সেখানে নাম যায় না।
+ * Careful: **alerts are not covered by this guard** — this function sits only
+ * on the weekly summary path (`WeeklyDigestService`). `TelegramChannel.runOnce()`
+ * runs as before, because no names go there.
  *
- * ⚠️ chat id **খালি** হলে এখানে কোনো সিদ্ধান্ত নেওয়া হয় না (`send: true`)।
- * খালি মানে টেলিগ্রাম আদৌ কনফিগার করা হয়নি, আর সেই কথাটা বলার একমাত্র
- * জায়গা `TelegramChannel` (`not_configured`)। এখানে আটকালে কারণটা লগে
- * ভুল লেখা হতো — "গ্রুপ মনে হচ্ছে", অথচ আসলে কিছুই বসানো হয়নি।
+ * Careful: when the chat id is **empty**, no decision is made here (`send:
+ * true`). Empty means Telegram is not configured at all, and the only place to
+ * say so is `TelegramChannel` (`not_configured`). Blocking here would write the
+ * wrong reason to the log — "looks like a group", when nothing was set.
  */
 export function weeklyGateOf(
   rawChatId: string | undefined,
@@ -230,11 +239,11 @@ export function weeklyGateOf(
 ): WeeklyGate {
   const chatId = (rawChatId ?? '').trim();
 
-  // ⚠️ কনফিগারই করা হয়নি — সিদ্ধান্তটা চ্যানেলের, এই ফাংশনের নয়
+  // Careful: not configured at all — the decision belongs to the channel, not this function
   if (chatId.length === 0) return { send: true, blockedBecause: null };
 
-  // ⭐ `alerts.mailer.ts`-এর `SMTP_SECURE` ঠিক এভাবেই পড়া হয় — একই ছাঁদ,
-  //    নইলে একই রিপোতে দুরকম "true" থাকত
+  // Careful: `SMTP_SECURE` in `alerts.mailer.ts` is read exactly this way — same
+  //    pattern, otherwise one repo would have two kinds of "true"
   if ((rawAllowGroup ?? '').trim().toLowerCase() === 'true') {
     return { send: true, blockedBecause: null };
   }
@@ -244,9 +253,9 @@ export function weeklyGateOf(
   return {
     send: false,
     /**
-     * ⚠️ লগ লাইনে **chat id লেখা হয় না** — ওটা হাতে পেলে (বট টোকেনসহ)
-     *    যে-কেউ ওই গ্রুপে পাঠাতে পারে, আর `TelegramChannel` ঠিক এই কারণেই
-     *    টোকেন ছেঁকে ফেলে। কী করতে হবে সেটা বলতে id-টা লাগেও না।
+     * Careful: **the chat id is not written** in the log line — anyone who gets
+     *    it (with the bot token) can send to that group, and that is exactly why
+     *    `TelegramChannel` filters the token out. It is not needed to say what to do anyway.
      */
     blockedBecause:
       'TELEGRAM_CHAT_ID is not a private chat id, so this could be a staff ' +
@@ -258,15 +267,16 @@ export function weeklyGateOf(
   };
 }
 
-// ── সপ্তাহের সারি ───────────────────────────────────────────────────────────
+// ── The week's rows ──────────────────────────────────────────────────────────
 
 /**
- * কর্মীর অবস্থা।
+ * An employee's standing.
  *
- * ⚠️ `no_records` কোনো ব্যর্থতা নয়, **অজ্ঞতা** — সার্ভার ওই কর্মীর একটা
- * দিনও দেখেনি। যিনি দেখা গেছেন অথচ কাজ করেননি তিনি এখানে আসেন **না**;
- * তিনি অঙ্ক অনুযায়ী `behind`, আর সেটাই সৎ। দুটো এক করে ফেলাই ছিল আগের
- * বাগ (ফাইলের মাথার নোট দেখুন)।
+ * Careful: `no_records` is not a failure, it is **ignorance** — the server did
+ * not see a single day of that employee. Someone who was seen yet did not work
+ * does **not** come here; they are `behind` by the numbers, and that is the
+ * honest answer. Merging the two was the earlier bug (see the note at the top
+ * of the file).
  */
 export type WeeklyStanding = 'on_track' | 'behind' | 'no_records' | 'off';
 
@@ -274,63 +284,69 @@ export interface WeeklyRow {
   employeeId: number;
   empCode: string;
   fullName: string;
-  /** উইন্ডোর মোট `credited` — কাজ + owner-এর সংশোধন */
+  /** The window's total `credited` — work plus the owner's corrections */
   creditedHours: number;
-  /** উইন্ডোর মোট টার্গেট, আজকের দিনটাসহ */
+  /** The window's total target, including today */
   targetHours: number;
   /**
-   * ⭐ **দেখা হয়েছে এমন দিনগুলোতে, গতকাল পর্যন্ত** যত ঘণ্টা হওয়ার কথা ছিল।
+   * **How many hours should have been done on observed days, up to
+   * yesterday.**
    *
-   * দুটো আলাদা কারণে দিন বাদ পড়ে, আর দুটোই ইচ্ছাকৃত —
+   * Days drop out for two separate reasons, both deliberate —
    *
-   * ১· **আজকের দিন।** দৈনিক ডাইজেস্টের ঠিক একই সিদ্ধান্ত, একই কারণে
-   *    (`digest.math.ts`-এর `expectedHours`): জব চলে সন্ধ্যা ৬টায়, দিনটা
-   *    তখনো শেষ হয়নি। আজকের পুরো টার্গেট প্রত্যাশায় ধরলে **প্রতি সপ্তাহে
-   *    প্রায় সবাই** "পিছিয়ে" তালিকায় থাকতেন, আর তালিকাটা দু-সপ্তাহেই পড়া
-   *    বন্ধ হয়ে যেত। হিসাবটা তাই উদার — আজকের কাজ পুরো গোনা হয়, দাবি নয়।
+   * 1. **Today.** Exactly the same decision as the daily digest, for the same
+   *    reason (`expectedHours` in `digest.math.ts`): the job runs at 6 pm and
+   *    the day is not over. Counting today's whole target in the expectation
+   *    would put **almost everyone on the "behind" list every week**, and the
+   *    list would stop being read within two weeks. So the calculation is
+   *    generous — today's work counts in full, the claim does not.
    *
-   * ২· ⚠️⚠️ **যে দিন সার্ভার দেখেইনি।** ট্র্যাকিং বসার আগের দিন, কিংবা
-   *    সার্ভার বন্ধ থাকা দিন — ওই দিনের `daily_summary` সারিই নেই। ওদের
-   *    টার্গেট প্রত্যাশায় ধরা মানে না-জানাকে ঘাটতি বলে গোনা, আর প্রথম
-   *    সাপ্তাহিক বার্তাটাই তখন নাম ধরে ধরে মিথ্যে বলত (ফাইলের মাথা দেখুন)।
+   * 2. Careful: **a day the server never watched.** A day before tracking was
+   *    installed, or a day the server was down — there is no `daily_summary`
+   *    row for it. Counting their targets in the expectation counts the
+   *    unknown as shortfall, and the very first weekly message would then lie
+   *    name by name (see the top of the file).
    */
   expectedHours: number;
-  /** `creditedHours − expectedHours`; ঋণাত্মক = পিছিয়ে */
+  /** `creditedHours − expectedHours`; negative = behind */
   paceHours: number;
-  /** উইন্ডোর ভেতরে কর্মদিবস কয়টি (যোগ/ছাড়ার তারিখ ও ছুটি বাদ দিয়ে) */
+  /** How many work days in the window (excluding join/leave dates and holidays) */
   workdays: number;
-  /** যতদিনে কাজ **রেকর্ড হয়েছে** */
+  /** On how many days work **was recorded** */
   daysWithWork: number;
   /**
-   * উইন্ডোর যতগুলো দিন তিনি কর্মরত ছিলেন (কর্মদিবস নয় — ছুটির দিনও গোনা)।
-   * ⭐ `observedDays`-এর হর; শুধু একটার সংখ্যা দেখালে ভগ্নাংশটা বানানো যেত না।
+   * How many days of the window they were employed (not work days — holidays
+   * count too). The denominator of `observedDays`; showing just one number
+   * would not let the fraction be built.
    */
   windowDays: number;
-  /** ওই দিনগুলোর কতটা সার্ভার আসলেই দেখেছে (`daily_summary` সারি আছে) */
+  /** How many of those days the server really watched (a `daily_summary` row exists) */
   observedDays: number;
-  /** `windowDays − observedDays` — এই দিনগুলো প্রত্যাশা থেকেও বাদ */
+  /** `windowDays − observedDays` — these days are also left out of the expectation */
   unobservedDays: number;
   /**
-   * প্রত্যাশা কোন দিন থেকে গোনা শুরু হলো — দেখা হয়েছে এমন **প্রথম** দিন
-   * (আজকের দিনটা বাদে)। `null` = গোনার মতো একটা দিনও নেই।
+   * The day the expectation started counting from — the **first** observed day
+   * (excluding today). `null` = there is not a single day to count.
    *
-   * ⭐ বার্তায় এটা ছাপা হয় যখন উইন্ডোর শুরুর চেয়ে পরে — নইলে ছোট
-   * `expectedHours` দেখে পাঠক ভাবতেন হিসাবে ভুল আছে।
+   * It is printed in the message when later than the window start — otherwise
+   * the reader, seeing the small `expectedHours`, would think the arithmetic was wrong.
    */
   countedFrom: string | null;
   /**
-   * ⚠️ সপ্তাহে অন্তত একটা পর্যবেক্ষণ আছে কি না।
+   * Careful: whether there is at least one observation in the week.
    *
-   * ⭐ প্রধান শর্ত `observedDays > 0` — অর্থাৎ ওই দিনের সারি লেখা হয়েছিল,
-   * ঘণ্টা শূন্য হোক বা না হোক। আগে শর্তটা ছিল "ঘণ্টা আছে কি না", ফলে
-   * এজেন্ট চালু থাকা অবস্থায় সত্যিই কাজ না করা কর্মীও "রেকর্ড নেই" ঘরে
-   * চলে যেতেন, আর প্রকৃত অনুপস্থিতি কোনোদিন কারো চোখে পড়ত না।
+   * The main condition is `observedDays > 0` — that is, the day's row was
+   * written, whether or not the hours are zero. The condition used to be "are
+   * there hours", so an employee with the agent running who really did not work
+   * would drop into the "no record" group, and real absence would never be
+   * noticed by anyone.
    *
-   * ⚠️ পাশের দুটো শর্ত (`daysWithWork`, `creditedHours`) রক্ষাকবচ, বাহুল্য
-   * নয়: owner হাতে সংশোধন বসালে (`adjustment_sec`) `worked_sec` শূন্য
-   * থাকে, আর `observed` তালিকাটা কোনো কারণে খালি এলে (কোয়েরি বদলে গেল,
-   * পুরোনো ডেটা migrate হলো) তখনো ঘণ্টা-থাকা কর্মীকে "দেখা হয়নি" বলা যাবে
-   * না — owner-এর নিজের লেখা সংখ্যাটাকেই অস্বীকার করা হতো।
+   * Careful: the two side conditions (`daysWithWork`, `creditedHours`) are a
+   * safeguard, not redundancy: when the owner enters a correction by hand
+   * (`adjustment_sec`), `worked_sec` stays zero, and if the `observed` list
+   * somehow came in empty (a query changed, old data was migrated), someone
+   * with hours still must not be called "not observed" — that would disown the
+   * owner's own written number.
    */
   recorded: boolean;
   standing: WeeklyStanding;
@@ -340,49 +356,50 @@ export interface Weekly {
   from: string;
   to: string;
   days: number;
-  /** এমপ কোড অনুযায়ী সাজানো — রিপোর্টের সাথে একই ক্রম */
+  /** Sorted by employee code — the same order as the report */
   rows: WeeklyRow[];
-  /** সবচেয়ে বেশি পিছিয়ে আগে */
+  /** Furthest behind first */
   behind: WeeklyRow[];
   onTrack: WeeklyRow[];
-  /** ⚠️ এঁদের নিয়ে আমরা কিছুই জানি না — "শূন্য ঘণ্টা" নয় */
+  /** Careful: we know nothing about these people — not "zero hours" */
   noRecords: WeeklyRow[];
-  /** পুরো উইন্ডোতে একটাও কর্মদিবস ছিল না (ঈদের ছুটি জাতীয়) */
+  /** There was not a single work day in the whole window (Eid holidays and the like) */
   off: WeeklyRow[];
   /**
-   * ⚠️ যাঁরা রিপোর্টেই ওঠেননি — `status=inactive` অথচ `left_on` খালি
-   * (`reports.service.ts`)। কবে থেকে ছিলেন না তা জানা নেই, তাই তাঁদের
-   * ঘণ্টা বা টার্গেট কিছুই বের করা যায় না।
+   * Careful: people who did not appear in the report at all — `status=inactive`
+   * with `left_on` empty (`reports.service.ts`). Since when they were absent is
+   * unknown, neither their hours nor their target can be worked out.
    *
-   * ⭐ নামগুলো বার্তায় **যায়**। রিপোর্ট ইচ্ছে করেই নাম ধরে জানায়
-   * ("চুপচাপ বাদ না দিয়ে"), কিন্তু সাপ্তাহিক বার্তা `meta` ফেলে দিত — ফলে
-   * ওঁরা টেলিগ্রামে অদৃশ্য হয়ে যেতেন, আর "N of M staff" পড়ে মালিক ভাবতেন
-   * দলটা এই M জনই। যে ভুল সংশোধন করার একমাত্র উপায় ছিল কারো হঠাৎ মনে পড়া।
+   * Their names **are sent** in the message. The report deliberately names them
+   * ("rather than dropping silently"), but the weekly message used to throw
+   * `meta` away — so they vanished on Telegram, and reading "N of M staff" the
+   * owner would think the team was just those M people. The only way to catch
+   * that mistake was for someone to happen to remember.
    */
   excludedEmployees: string[];
   totals: {
     employees: number;
-    /** যাঁদের ব্যাপারে অন্তত কিছু জানা আছে */
+    /** Those about whom at least something is known */
     withData: number;
-    /** ⚠️ "দলের মোট" নয় — **রেকর্ড হওয়া** মোট। তথ্য না থাকলে যোগ হয় না। */
+    /** Careful: not "the team's total" — the total **recorded**. Missing data adds nothing. */
     hoursRecorded: number;
-    /** যতজনের অন্তত একটা দিন দেখাই হয়নি — বার্তার সতর্কবাক্যটা এর উপরই বসে */
+    /** People with at least one day not observed — the message's warning sits on this */
     withGaps: number;
-    /** রিপোর্ট থেকে বাদ পড়া কর্মীর সংখ্যা */
+    /** Number of employees dropped from the report */
     excluded: number;
   };
 }
 
 /**
- * "ওই কর্মীর ওই দিনটা সার্ভার দেখেছিল" — `daily_summary`-তে সারি আছে।
+ * "The server watched that employee on that day" — a row exists in `daily_summary`.
  *
- * ⭐ ইচ্ছাকৃতভাবে **কোনো সংখ্যা নেই**, কেবল অস্তিত্ব। ঘণ্টা, টার্গেট,
- * কর্মদিবস সবই আগের মতোই F01/F02 থেকে আসে (ফাইলের মাথার নোট); এখানে যোগ
- * হচ্ছে শুধু সেই একটা তথ্য যেটা রিপোর্টের ধরনে প্রকাশ করার জায়গাই নেই।
+ * Deliberately **no number**, only existence. Hours, target and work days all
+ * still come from F01/F02 as before (the note at the top of the file); the one
+ * thing added here is the fact that the report's shape has no place to express.
  */
 export interface ObservedDay {
   employeeId: number;
-  /** YYYY-MM-DD (ঢাকা) */
+  /** YYYY-MM-DD (Dhaka) */
   date: string;
 }
 
@@ -391,61 +408,62 @@ export interface WeeklySource {
   to: string;
   days: number;
   /**
-   * F01, **পুরো উইন্ডোর** সারি — কর্মীপ্রতি প্রতিদিন একটা।
+   * F01, rows for the **whole window** — one per employee per day.
    *
-   * ⭐ দরকার পড়ে **দিনের টার্গেট** জানতে, আর সেটা দিনভিত্তিক ছাড়া হয় না:
-   * প্রত্যাশা থেকে বাদ যায় আজকের দিন **এবং** যে দিনগুলো দেখা হয়নি। F02
-   * পুরো সপ্তাহের একটাই টার্গেট দেয়, তা থেকে "১১ আগস্টের টার্গেট" আলাদা
-   * করার কোনো উপায় নেই।
+   * Needed to know **the day's target**, which cannot come except per day: what
+   * drops out of the expectation is today **and** the days not watched. F02
+   * gives one target for the whole week, and there is no way to separate
+   * "11 August's target" from it.
    *
-   * ⚠️ যোগদানের আগের বা ছেড়ে যাওয়ার পরের দিনের সারি এখানে **থাকেই না**
-   * (`reports.service.ts`-এর `employedOn`) — তাই `joinedOn` নিয়ে এই ফাইলের
-   * আলাদা কিছু করার নেই; ওই দিনগুলো এমনিতেই প্রত্যাশায় নেই।
+   * Careful: rows for days before joining or after leaving are **not here at
+   * all** (`employedOn` in `reports.service.ts`) — so this file has nothing
+   * extra to do about `joinedOn`; those days are not in the expectation anyway.
    *
-   * ⚠️ ঘণ্টা এখান থেকে **যোগ করা হয় না**, F02 থেকেই আসে। প্রতিদিনের
-   * দুই-দশমিকে-গোল করা মান সাত দিন যোগ করলে F02-র যোগফলের সাথে দু-এক
-   * শতাংশাংশ তফাত হতো, আর তখন টেলিগ্রাম ও রিপোর্ট পাতা একই সপ্তাহের জন্য
-   * দুটো আলাদা সংখ্যা বলত (G88)।
+   * Careful: hours are **not summed from here**, they come from F02. Adding up
+   * seven days of daily values rounded to two decimals would differ from F02's
+   * total by a hundredth or two, and then Telegram and the report page would
+   * give two different numbers for the same week (G88).
    */
   daily: readonly AttendanceRow[];
-  /** F02 `groupBy=week`, উইন্ডোর প্রথম দিন → আজ */
+  /** F02 `groupBy=week`, from the window's first day → today */
   week: readonly SummaryRow[];
-  /** কোন (কর্মী, দিন) জোড়া আদৌ দেখা হয়েছে */
+  /** Which (employee, day) pairs were watched at all */
   observed: readonly ObservedDay[];
-  /** F01/F02-র `meta.excludedEmployees` */
+  /** `meta.excludedEmployees` of F01/F02 */
   excludedEmployees: readonly string[];
 }
 
 /**
- * F01 + F02 + পর্যবেক্ষণ → সপ্তাহের সারি।
+ * F01 + F02 + observation → the week's rows.
  *
- * ⭐ তিনটে উৎসের কাজ তিন রকম, আর সেটা ইচ্ছাকৃত —
- *   · **F02** (`week`) দেয় ঘণ্টা, মোট টার্গেট, কর্মদিবস। বার্তায় যত সংখ্যা
- *     ছাপা হয় তার সবগুলোই এখান থেকে, তাই রিপোর্ট পাতা আর টেলিগ্রাম কখনো
- *     আলাদা কথা বলে না।
- *   · **F01** (`daily`) দেয় কেবল **দিনের টার্গেট** — প্রত্যাশা থেকে কোন
- *     দিনটা বাদ যাবে তা ঠিক করতে।
- *   · **`observed`** দেয় শুধু "ওই দিনটা আদৌ মাপা হয়েছিল কি না"।
+ * The three sources do three different jobs, and that is deliberate —
+ *   · **F02** (`week`) gives hours, total target and work days. Every number
+ *     printed in the message comes from here, so the report page and Telegram
+ *     never say different things.
+ *   · **F01** (`daily`) gives only **the day's target** — to decide which day
+ *     drops out of the expectation.
+ *   · **`observed`** gives only "was that day measured at all".
  *
- * ⚠️ ভিত্তি **সপ্তাহের সারাংশ সারি**, আজকের অ্যাটেনডেন্স নয় — দৈনিক
- * ডাইজেস্টের উল্টো। কারণ: যিনি বুধবার চাকরি ছেড়েছেন তাঁর শনি–মঙ্গলের
- * ঘণ্টা সপ্তাহের হিসাবে থাকা **উচিত**; আজকের সারি ধরলে তিনি উধাও হয়ে
- * যেতেন আর দলের মোট ঘণ্টা নীরবে কম দেখাত।
+ * Careful: the base is **the week's summary rows**, not today's attendance —
+ * the opposite of the daily digest. Reason: someone who left on Wednesday
+ * **should** have their Saturday-Tuesday hours in the week's figures; going by
+ * today's rows they would vanish and the team's total hours would silently look lower.
  *
- * ⚠️ ৭ দিনের উইন্ডো এক কর্মীর জন্য **দুটো** সপ্তাহ-বালতিতে ভাগ হতে পারে —
- * কারো সাপ্তাহিক ছুটি শুক্র, কারো শনি, আর `bucketOf()` সপ্তাহের শুরু ঠিক
- * করে ছুটির পরের দিন থেকে। তাই বালতিগুলো **যোগ** করা হয়, শেষেরটা নেওয়া
- * হয় না; নিলে যাঁদের সপ্তাহ মাঝখানে ভাগ হয়েছে তাঁদের অর্ধেক ঘণ্টা হারাত।
+ * Careful: a 7-day window can split into **two** week buckets for one employee
+ * — someone's weekly off day is Friday, someone else's Saturday, and
+ * `bucketOf()` starts the week on the day after the off day. So the buckets
+ * are **added**, and the last one is not taken; taking it would lose half the
+ * hours of those whose week is split in the middle.
  *
- * ⚠️ `shortfallHours` / `overtimeHours` যোগ করা হয় **না** — ওগুলো প্রতি
- * বালতিতে `max(0, …)`, আর ধনাত্মক সংখ্যা দুটো যোগ করলে ঘাটতি ও অতিরিক্ত
- * দুটোই একসাথে বাড়ত (এক বালতিতে +৫, আরেকটায় −৫ হলে ফল "৫ ঘাটতি ও ৫
- * অতিরিক্ত" — অর্থহীন)। তাই যোগফল থেকে নতুন করে হিসাব হয়।
+ * Careful: `shortfallHours` / `overtimeHours` are **not** added — each is
+ * `max(0, …)` per bucket, and adding two positive numbers would raise both
+ * shortfall and overtime at once (+5 in one bucket and −5 in another would
+ * give "5 short and 5 over" — meaningless). So they are recomputed from the sum.
  */
 export function buildWeekly(source: WeeklySource): Weekly {
   const coverage = coverageOf(source);
 
-  /** employeeId → জমতে থাকা যোগফল */
+  /** employeeId → the running total */
   const folded = new Map<
     number,
     {
@@ -483,21 +501,22 @@ export function buildWeekly(source: WeeklySource): Weekly {
     const seen = coverage.get(employeeId) ?? EMPTY_COVERAGE;
 
     /**
-     * ⚠️ **বিয়োগ, যোগ নয়।** মোট টার্গেট আসে F02 থেকে, আর তা থেকে বাদ যায়
-     * কেবল না-গোনা দিনগুলোর টার্গেট। দিনগুলো যোগ করে প্রত্যাশা বানালে
-     * প্রতিদিনের গোল করা মান জমে F02-র সংখ্যার সাথে মিলত না, আর "কত
-     * পিছিয়ে" দুই পর্দায় দুই রকম হতো।
+     * Careful: **subtract, do not add.** The total target comes from F02, and
+     * only the targets of the uncounted days are taken off it. Building the
+     * expectation by adding up days would accumulate each day's rounding and not
+     * match F02's number, and "how far behind" would differ between two screens.
      *
-     * ⚠️ `max(0, …)` — সব দিন বাদ পড়লে প্রত্যাশা ঋণাত্মক নয়, শূন্য। আর
-     * শূন্য প্রত্যাশায় কেউ পিছিয়ে থাকতে পারেন না, যেটাই চাই: যে সপ্তাহের
-     * একটা দিনও দেখা হয়নি সে সপ্তাহে কাউকে দোষ দেওয়ার ভিত্তি নেই।
+     * Careful: `max(0, …)` — if every day drops out, the expectation is zero,
+     * not negative. And with a zero expectation nobody can be behind, which is
+     * what we want: in a week none of whose days was watched there is no basis
+     * for blaming anyone.
      */
     const expectedHours =
       seen.windowDays > 0 && seen.countedFrom === null
-        ? // ⚠️ একটাও দিন গোনা যায়নি → প্রত্যাশা **ঠিক** শূন্য, "প্রায়" শূন্য
-          //    নয়। বিয়োগফলে দিনগুলোর গোল করা টার্গেট জমে ০.০২ জাতীয় একটা
-          //    উচ্ছিষ্ট থেকে যেত, আর প্রথম বার্তাতেই গোটা দল "০.০২ ঘণ্টা
-          //    পিছিয়ে" হয়ে বসত — সংখ্যাটা ছোট, কিন্তু বাক্যটা মিথ্যে।
+        ? // Careful: no day could be counted → the expectation is **exactly** zero,
+          //    not "nearly" zero. Subtraction would leave a remnant like 0.02 from
+          //    the rounded targets, and the very first message would put the whole
+          //    team "0.02 hours behind" — a small number, but a false sentence.
           0
         : Math.max(0, round2(targetHours - seen.uncountedTarget));
     const paceHours = round2(creditedHours - expectedHours);
@@ -529,7 +548,7 @@ export function buildWeekly(source: WeeklySource): Weekly {
     rows.filter((r) => r.standing === s);
 
   const behind = of('behind').sort(
-    // বেশি পিছিয়ে আগে; সমান হলে কোডের ক্রমে — একই সপ্তাহের দুটো রান একই বার্তা
+    // Furthest behind first; ties by code — so two runs in one week give the same message
     (a, b) => a.paceHours - b.paceHours || (a.empCode < b.empCode ? -1 : 1),
   );
 
@@ -542,16 +561,16 @@ export function buildWeekly(source: WeeklySource): Weekly {
     onTrack: of('on_track'),
     noRecords: of('no_records'),
     off: of('off'),
-    // ⚠️ নামের ক্রম রিপোর্টের মতোই রাখা হয় (`empCode asc`-এ সাজানো কর্মী
-    //    তালিকা থেকেই আসে) — একই সপ্তাহে দুবার চালালে বার্তা একই হয়
+    // Careful: names stay in the report's order (they come from the employee
+    //    list sorted by `empCode asc`) — running twice in one week gives the same message
     excludedEmployees: [...source.excludedEmployees],
     totals: {
       employees: rows.length,
       withData: rows.filter((r) => r.recorded).length,
-      // ⚠️ যোগ হয় সব সারির — যাঁদের রেকর্ড নেই তাঁরা ০ দেন, আর সেটা ঠিকই
-      //    আছে: আমরা তাঁদের **কোনো ঘণ্টা রেকর্ড করিনি**। বার্তায় পাশেই
-      //    "N of M staff have data" লেখা থাকে, তাই যোগফলটা সম্পূর্ণ বলে
-      //    ভুল হওয়ার সুযোগ নেই।
+      // Careful: the sum covers all rows — those with no record contribute 0, and
+      //    that is correct: we **recorded no hours** for them. The message states
+      //    "N of M staff have data" right beside it, so the total cannot be
+      //    mistaken for a complete one.
       hoursRecorded: round2(rows.reduce((sum, r) => sum + r.creditedHours, 0)),
       withGaps: rows.filter((r) => r.unobservedDays > 0).length,
       excluded: source.excludedEmployees.length,
@@ -559,22 +578,22 @@ export function buildWeekly(source: WeeklySource): Weekly {
   };
 }
 
-/** এক কর্মীর জন্য "কতটা দেখা হয়েছে" — `coverageOf()`-এর জমার ঘর */
+/** "How much was watched" for one employee — the accumulator of `coverageOf()` */
 interface Coverage {
-  /** উইন্ডোতে তাঁর কর্মকালে পড়া দিন (F01-এ যতগুলো সারি) */
+  /** Days of the window that fall within their employment (number of rows in F01) */
   windowDays: number;
-  /** তার কতগুলোর `daily_summary` সারি আছে */
+  /** How many of those have a `daily_summary` row */
   observedDays: number;
-  /** প্রত্যাশা থেকে যত ঘণ্টা টার্গেট বাদ যাবে (আজ + না-দেখা দিন) */
+  /** How many hours of target drop out of the expectation (today + unwatched days) */
   uncountedTarget: number;
   countedFrom: string | null;
 }
 
 /**
- * ⚠️ F01-এ সারিই না থাকলে (এমন হওয়ার কথা নয় — F02-তে সারি থাকলে F01-এও
- * থাকে) কিছুই বাদ যায় না, অর্থাৎ প্রত্যাশা = পুরো টার্গেট। ইচ্ছাকৃতভাবে
- * **আগের আচরণ**: নতুন তথ্যটা না পেলে হিসাব যেন নীরবে শিথিল হয়ে সবাইকে
- * "on track" বলে না দেয়।
+ * Careful: if there is no row in F01 at all (it should not happen — if F02 has
+ * a row, F01 has too), nothing drops out, i.e. expectation = the full target.
+ * Deliberately **the earlier behaviour**: without the new information the
+ * calculation must not silently loosen and call everyone "on track".
  */
 const EMPTY_COVERAGE: Coverage = {
   windowDays: 0,
@@ -584,16 +603,18 @@ const EMPTY_COVERAGE: Coverage = {
 };
 
 /**
- * ⭐⭐ দিনভিত্তিক পর্যবেক্ষণ → কর্মীপ্রতি জানালা।
+ * Day-by-day observation → a per-employee window.
  *
- * ⚠️ শুধু **শুরুর দিকের** না-দেখা দিন নয়, মাঝখানের ফাঁকও বাদ যায়। সার্ভার
- * বুধবার সারাদিন বন্ধ ছিল আর আগে-পরে চলেছে — ওই বুধবারটাও কেউ দেখেনি,
- * তাই তার ৮ ঘণ্টা টার্গেট চাওয়ার অধিকারও নেই। "শুরু থেকে গোনা" নিয়মটা
- * ওই কেসে ফাঁকটা নীরবে ঘাটতি বানিয়ে দিত।
+ * Careful: not only unwatched days at the **start** — gaps in the middle drop
+ * out too. If the server was down all of one Wednesday and ran before and
+ * after, nobody watched that Wednesday either, so there is no right to ask for
+ * its 8-hour target. A "count from the start" rule would silently turn that
+ * gap into a shortfall.
  *
- * ⚠️ আজকের দিনটা **দেখা হলেও** প্রত্যাশায় ধরা হয় না (দিন শেষ হয়নি), আর
- * `countedFrom`-এও ওঠে না — নইলে ট্র্যাকিং আজ শুরু হলে বার্তা বলত
- * "counted from আজ", অথচ আজকের কোনো ঘণ্টাই আসলে চাওয়া হচ্ছে না।
+ * Careful: today is **not counted in the expectation even if watched** (the
+ * day is not over), and does not go into `countedFrom` either — otherwise if
+ * tracking began today the message would say "counted from today", when none
+ * of today's hours is actually being asked for.
  */
 function coverageOf(source: WeeklySource): Map<number, Coverage> {
   const seen = new Set(
@@ -610,7 +631,7 @@ function coverageOf(source: WeeklySource): Map<number, Coverage> {
     if (observed) acc.observedDays += 1;
 
     if (observed && row.date !== source.to) {
-      // ⚠️ তুলনাটা স্ট্রিং-এ চলে কারণ YYYY-MM-DD-তে বর্ণানুক্রম = কালানুক্রম
+      // Careful: strings compare fine because in YYYY-MM-DD alphabetical order = time order
       if (acc.countedFrom === null || row.date < acc.countedFrom) {
         acc.countedFrom = row.date;
       }
@@ -625,17 +646,18 @@ function coverageOf(source: WeeklySource): Map<number, Coverage> {
 }
 
 /**
- * ⚠️ ক্রমটা জরুরি।
+ * Careful: the order matters.
  *
- * ১· **কর্মদিবসই ছিল না** (পুরো উইন্ডো ঈদের ছুটি + সাপ্তাহিক ছুটি) → `off`।
- *    এঁদের "রেকর্ড নেই" বললে ছুটির সপ্তাহে গোটা দলের নাম ওই ঘরে উঠত, আর
- *    মালিক ভাবতেন এজেন্ট সব মেশিনে মরে গেছে।
- * ২· **একটাও পর্যবেক্ষণ নেই** → `no_records`। এঁদের `paceHours` অঙ্কে
- *    ঋণাত্মক, কিন্তু ওই ঋণটা একটা **ধরে নেওয়া শূন্যের** উপর দাঁড়ানো —
- *    সেটাকে "পিছিয়ে" বলা মানে না-জানাকে ব্যর্থতা বলে গোনা।
- *    ⚠️ যাঁর সারি **আছে** অথচ ঘণ্টা ০, তিনি এখানে আসেন না — তাঁর ব্যাপারে
- *    আমরা জানি, আর জানা অনুপস্থিতি লুকিয়ে রাখলে তালিকাটার মানেই থাকে না।
- * ৩· বাকিটা সোজা অঙ্ক।
+ * 1. **There was no work day at all** (the whole window is Eid holidays +
+ *    weekly off days) → `off`. Calling these "no record" would put the whole
+ *    team's names in that group in a holiday week, and the owner would think
+ *    the agent had died on every machine.
+ * 2. **Not a single observation** → `no_records`. Their `paceHours` is
+ *    negative on paper, but that debt stands on an **assumed zero** — calling
+ *    it "behind" counts not-knowing as failure.
+ *    Careful: someone who **has** rows yet 0 hours does not come here — we know
+ *    about them, and hiding known absence would make the list meaningless.
+ * 3. The rest is plain arithmetic.
  */
 function standingOf(
   workdays: number,
@@ -648,48 +670,49 @@ function standingOf(
 }
 
 /**
- * ⚠️ তিন মিনিটের কম ঘাটতিকে "পিছিয়ে" বলা হয় না।
+ * Careful: a shortfall under three minutes is not called "behind".
  *
- * F02-র সপ্তাহ-টার্গেট আর F01-এর দিন-টার্গেট — দুটোই দুই দশমিকে গোল করা
- * (`secondsToHours`), আর প্রত্যাশা বের হয় একটা থেকে আরেকটা বিয়োগ করে।
- * দৈনিক টার্গেট পূর্ণ সংখ্যায় না মিললে (২০৮ ÷ ২৭ = ৭.৭০৩৭ঘ) সাত দিনের
- * গোল-করা জমে দুই-তিন মিনিট এদিক-ওদিক হয়। ওই কয়েক সেকেন্ডের জন্য কারো
- * নাম "Behind" তালিকায় ওঠা মানে সংখ্যাটা কাউকে অন্যায্যভাবে দোষ দেওয়া —
- * আর নাম ধরে ধরে পাঠানো বার্তা ফেরত নেওয়া যায় না।
+ * F02's week target and F01's day target are both rounded to two decimals
+ * (`secondsToHours`), and the expectation comes from subtracting one from the
+ * other. When the daily target is not a whole number (208 ÷ 27 = 7.7037h),
+ * seven days of rounding add up to two or three minutes either way. Putting
+ * someone's name on the "Behind" list for those few seconds would blame them
+ * unfairly — and a message sent by name cannot be taken back.
  *
- * ⭐ সহ্যসীমা কেবল **ঘরে ফেলার** সময়; ছাপা সংখ্যাটা (`paceHours`) কখনো
- * বদলায় না, তাই কিছু লুকোনোও হয় না।
+ * The tolerance applies only when **sorting into groups**; the printed number
+ * (`paceHours`) is never changed, so nothing is hidden.
  */
 const PACE_TOLERANCE_HOURS = 0.05;
 
-// ── টেলিগ্রামের বার্তা ───────────────────────────────────────────────────────
+// ── The Telegram message ─────────────────────────────────────────────────────
 
 /**
- * টেলিগ্রামের `sendMessage` একটাই বার্তায় এর বেশি নেয় না — বেশি হলে গোটা
- * কলটাই HTTP 400, অর্থাৎ **কিছুই পৌঁছায় না**।
+ * Telegram's `sendMessage` accepts no more than this in one message — over it
+ * the whole call is HTTP 400, i.e. **nothing arrives**.
  *
- * ⚠️ মাপটা UTF-16 code unit-এ, আর JS-এর `String.length` ঠিক সেটাই গোনে।
- * তাই `Buffer.byteLength()` ব্যবহার করা যাবে না: বাংলা অক্ষর UTF-8-এ ৩ বাইট,
- * ফলে বাইট ধরে হিসাব করলে বাংলা নামের দলে বার্তাটা তিন ভাগের এক ভাগেই
- * "সীমা ছাড়িয়েছে" ধরে নিয়ে অর্ধেক নাম কেটে দিত।
+ * Careful: the measure is in UTF-16 code units, and JS `String.length` counts
+ * exactly that. So `Buffer.byteLength()` must not be used: a Bengali letter is
+ * 3 bytes in UTF-8, so counting bytes would treat a team with Bengali names as
+ * "over the limit" at a third of the size and cut half the names.
  */
 export const TELEGRAM_TEXT_LIMIT = 4096;
 
-/** নামের জন্য — লম্বা নামে এক লাইন যেন পুরো পর্দা না নেয় */
+/** For names — so a long name does not take a whole line of the screen */
 const NAME_MAX = 40;
-/** ⚠️ ORG_NAME env থেকে আসে; কেউ উপন্যাস বসিয়ে দিলে বার্তার মাথাই সীমা খেয়ে ফেলত */
+/** Careful: ORG_NAME is from env; a novel there would eat the message's whole limit */
 const ORG_MAX = 60;
 
 /**
- * ⚠️ নাম থেকে newline ও control character ছেঁটে ফেলা হয়।
+ * Careful: newlines and control characters are trimmed out of names.
  *
- * নামগুলো admin-এর হাতে লেখা, তাই বাঁকা কিছু নেই বলে ধরে নেওয়া যায় না।
- * একটা `\n` বসলে ওই সারিটা দু-লাইন হয়ে যেত আর নিচের নামটা কার ঘণ্টা কার
- * সাথে সেটা এলোমেলো দেখাত — ছাঁটাইয়ের হিসাবও (প্রতি সারি এক লাইন) ভেঙে যেত।
+ * The names are typed by hand by an admin, so it cannot be assumed that
+ * nothing odd is in them. A single `\n` would make that row two lines and
+ * muddle whose hours belong to which name below — it would also break the
+ * trimming arithmetic (one line per row).
  *
- * ⭐ escape করার দরকার নেই, কারণ বার্তা **প্লেইন টেক্সট** হিসেবে যায়
- * (`telegram.channel.ts`-এ `parse_mode` নেই) — Markdown হলে নামের একটা `_`
- * গোটা বার্তাটা ৪০০ করে দিত।
+ * No escaping is needed, because the message goes as **plain text** (there is
+ * no `parse_mode` in `telegram.channel.ts`) — with Markdown, one `_` in a name
+ * would make the whole message a 400.
  */
 function name(raw: string): string {
   // eslint-disable-next-line no-control-regex
@@ -706,22 +729,23 @@ function days(row: WeeklyRow): string {
   return `${row.daysWithWork}/${row.workdays} days`;
 }
 
-/** `+8.00` / `-0.25` — চিহ্নটা আলাদা করে বসে, নইলে "+-0.25" লেখা হতো */
+/** `+8.00` / `-0.25` — the sign is placed separately, otherwise it would read "+-0.25" */
 function signed(hours: number): string {
   return hours < 0 ? `-${h(-hours)}` : `+${h(hours)}`;
 }
 
 /**
- * ⭐ প্রত্যাশার জানালা কোথায় ছোট হলো, সেটা **সারিতেই** লেখা।
+ * Where the expectation window got shorter, written **in the row itself**.
  *
- * ⚠️ না লিখলে সংখ্যাটা ঠিক থাকত, কিন্তু কারণটা অদৃশ্য: পাঠক দেখতেন
- * "১৬ ঘণ্টা, ২/৬ দিন, পিছিয়ে নেই" আর নিজের মাথায় পুরো সপ্তাহ ধরে হিসাব
- * মিলিয়ে ভাবতেন যন্ত্রটা ঢিলে দিচ্ছে — অথচ আসল কথা হলো বাকি দিনগুলো
- * কেউ দেখেইনি।
+ * Careful: without it the number would be right but the reason invisible: the
+ * reader would see "16 hours, 2/6 days, not behind" and, reconciling the whole
+ * week in their head, think the system was going easy — when the real point is
+ * that nobody watched the other days.
  *
- * দুটো আলাদা ছবি, তাই দুটো আলাদা বাক্য —
- * ১· জানালা পরে শুরু হয়েছে (ট্র্যাকিং সদ্য বসেছে) → কোন দিন থেকে গোনা হলো।
- * ২· শুরু ঠিকই আছে, মাঝখানে ফাঁক (সার্ভার একদিন বন্ধ ছিল) → কয় দিন।
+ * Two different pictures, so two different sentences —
+ * 1. The window started later (tracking just installed) → which day counting began on.
+ * 2. The start is fine, with a gap in the middle (the server was down one day)
+ *    → how many days.
  */
 function coverageNote(row: WeeklyRow, windowFrom: string): string {
   if (row.unobservedDays === 0) return '';
@@ -735,13 +759,13 @@ function coverageNote(row: WeeklyRow, windowFrom: string): string {
 }
 
 /**
- * ⚠️⚠️ "দেখা হয়েছে, কাজ হয়নি" — এই কথাটা **আলাদা শব্দে** বলা হয়।
+ * Careful: "observed, no work done" — this is said in **separate words**.
  *
- * `0.00h` লেখাটা নিজে দুটো সম্পূর্ণ আলাদা অর্থ বহন করতে পারে, আর সেটাই
- * ছিল বাগ: এজেন্ট চলছে অথচ কেউ সারা সপ্তাহে কিছু করেননি — সেটা একটা
- * **পর্যবেক্ষণ**, আর এজেন্ট বন্ধ থাকা মানে পর্যবেক্ষণের অভাব। প্রথমটা
- * পড়ে ব্যবস্থা নেওয়া যায়, দ্বিতীয়টা পড়ে কেবল এজেন্ট সারানো যায়। একই
- * শব্দে দুটো বললে মালিক ভুল কাজটা করতেন।
+ * The text `0.00h` can carry two completely different meanings, and that was
+ * the bug: the agent is running but nobody did anything all week — that is an
+ * **observation**; the agent being off is a lack of observation. From the first
+ * you can take action, from the second you can only fix the agent. Saying both
+ * in the same word, the owner would do the wrong thing.
  */
 function zeroWorkNote(row: WeeklyRow): string {
   return row.observedDays > 0 && row.creditedHours === 0
@@ -752,26 +776,27 @@ function zeroWorkNote(row: WeeklyRow): string {
 interface Section {
   heading: string;
   lines: string[];
-  /** যত বড় সংখ্যা, তত আগে ছাঁটা হয় */
+  /** The larger the number, the earlier it is trimmed */
   dropFirst: number;
 }
 
 export interface WeeklyMessage {
   text: string;
-  /** ছাঁটাইয়ের ফলে কতগুলো **নাম** বাদ পড়ল — সংখ্যা কখনো বাদ পড়ে না */
+  /** How many **names** were dropped by trimming — numbers are never dropped */
   hidden: number;
 }
 
 /**
- * পুরো টেলিগ্রাম বার্তা।
+ * The whole Telegram message.
  *
- * ⚠️ লেখাটা ইংরেজিতে — গোটা রিপোর দৈনিক ডাইজেস্টসহ (`digest.math.ts`) সব
- * বাইরে-যাওয়া লেখায় ইংরেজি ব্যবহার করে; মন্তব্য বাংলায়। দুটো মিশিয়ে
- * ফেললে একই মালিক দুই ভাষায় দুই রকম শব্দ পেতেন।
+ * Careful: the text is in English — the whole repo uses English in all
+ * outgoing text, including the daily digest (`digest.math.ts`). Mixing two
+ * languages would give the same owner different words in two languages.
  *
- * ⚠️ ছাঁটাই হলেও **প্রতিটি ঘরের শিরোনামে আসল সংখ্যাটা থেকে যায়**
- * (`Behind (12)`) — বাদ পড়ে কেবল নাম। "৪ জন পিছিয়ে" দেখিয়ে আসলে ১২ জন
- * থাকা মানে সংখ্যাটা মিথ্যে বলা, আর সেটাই এই প্রকল্পে সবচেয়ে বড় অপরাধ।
+ * Careful: even with trimming, **each group's heading keeps the real number**
+ * (`Behind (12)`) — only names are dropped. Showing "4 behind" when there are
+ * really 12 would be a lie in the number, and that is the biggest offence in
+ * this project.
  */
 export function weeklyMessage(
   weekly: Weekly,
@@ -788,11 +813,12 @@ export function weeklyMessage(
   ];
 
   /**
-   * রিপোর্ট থেকে বাদ পড়াদের ঘর — ⚠️ **সবসময়** বানানো হয়, "কেউ নেই" শাখাতেও।
+   * The group of people dropped from the report — Careful: it is **always**
+   * built, even in the "nobody" branch.
    *
-   * পুরো দল যদি inactive-অথচ-`left_on`-খালি হয়, তখন `totals.employees` ০,
-   * আর নিচের শাখাটা তখন "Nobody was on the payroll" বলে থেমে যেত — অর্থাৎ
-   * ঠিক যে অবস্থায় সমস্যাটা সবচেয়ে বড়, সেখানেই একটাও নাম যেত না।
+   * If the whole team were inactive-with-empty-`left_on`, `totals.employees`
+   * would be 0, and the branch below would stop at "Nobody was on the payroll"
+   * — so exactly where the problem is biggest, not one name would go out.
    */
   const excludedSection: Section | null =
     weekly.excludedEmployees.length === 0
@@ -800,8 +826,8 @@ export function weeklyMessage(
       : {
           heading: `Not in this report (${weekly.excludedEmployees.length})`,
           lines: weekly.excludedEmployees.map((n) => `  • ${name(n)}`),
-          // ⚠️ নাম কাটা পড়লেও শিরোনামের সংখ্যাটা থাকে — "কতজন হারিয়ে
-          //    গেছেন" সেটাই এখানে আসল খবর
+          // Careful: even if names get cut, the number in the heading stays —
+          //    "how many are missing" is the real news here
           dropFirst: 3,
         };
 
@@ -811,10 +837,10 @@ export function weeklyMessage(
     '    date (or reactivate them) and they come back.',
   ];
 
-  // ── কেউ নেই ──────────────────────────────────────────────────────────────
-  // ⚠️ "0.00h recorded · 0 of 0 staff" লেখা যেত, কিন্তু ওটা পড়ায় যেন দল
-  //    সারা সপ্তাহে কিছুই করেনি। কেউ কর্মরত না থাকা আর কেউ কাজ না করা
-  //    এক জিনিস নয়।
+  // ── Nobody ───────────────────────────────────────────────────────────────
+  // Careful: "0.00h recorded · 0 of 0 staff" could be written, but it would read
+  //    as if the team did nothing all week. Nobody being employed and nobody
+  //    working are not the same thing.
   if (totals.employees === 0) {
     return fit(
       [...head, 'Nobody was on the payroll in this window.'],
@@ -824,14 +850,16 @@ export function weeklyMessage(
     );
   }
 
-  // ── কারো কোনো রেকর্ড নেই ─────────────────────────────────────────────────
-  // ⚠️⚠️ এই শাখাটাই R3-এর মূল নিয়ম। পুরো সপ্তাহে ট্র্যাকিং বন্ধ থাকলে
-  //    (এজেন্ট আপডেট আটকে গেছে, সার্ভার নতুন বসেছে, ছুটির পর কেউ PC
-  //    খোলেনি) সবার ঘণ্টা শূন্য আসত — আর "দল ০.০০ ঘণ্টা কাজ করেছে" পড়ে
-  //    মালিক এমন সিদ্ধান্ত নিতে পারতেন যার ভিত্তি কেবল একটা মৃত এজেন্ট।
-  // ⚠️ "০ ঘণ্টা কাজ হয়েছে" নয় — "কিছুই দেখা হয়নি"। `withData` এখন সারির
-  //    অস্তিত্ব মাপে, ঘণ্টা নয়; তাই এই শাখায় পৌঁছানো মানে সপ্তাহজুড়ে
-  //    কারো একটা দিনেরও সারি লেখা হয়নি, অর্থাৎ মাপার যন্ত্রটাই চলেনি।
+  // ── Nobody has any record ────────────────────────────────────────────────
+  // Careful: this branch is R3's core rule. If tracking was off for the whole
+  //    week (agent update stuck, server newly installed, nobody opened a PC
+  //    after the holidays) everyone's hours would come out zero — and reading
+  //    "the team worked 0.00 hours" the owner could take a decision whose only
+  //    basis is a dead agent.
+  // Careful: not "0 hours of work" — "nothing was observed". `withData` now
+  //    measures the existence of rows, not hours; so reaching this branch means
+  //    not one row was written for anyone all week, i.e. the measuring
+  //    instrument did not run.
   const teamLine =
     totals.withData === 0
       ? `Team — nothing was observed for any of the ${totals.employees} staff. ` +
@@ -840,10 +868,10 @@ export function weeklyMessage(
         `${totals.withData} of ${totals.employees} staff have data`;
 
   /**
-   * ⭐ পুরো দলের জন্য একবার — কোনো দিন দেখা না হয়ে থাকলে সেটা বার্তার
-   * **মাথায়** লেখা থাকে, প্রতিটা সারির লেজে নয়। প্রথম সপ্তাহে (ট্র্যাকিং
-   * সদ্য বসেছে) এটাই গোটা বার্তার সবচেয়ে জরুরি বাক্য: সংখ্যাগুলো কেন
-   * ছোট, তার উত্তর।
+   * Once for the whole team — if any day was not observed, it is written at
+   * the **top** of the message, not at the tail of every row. In the first
+   * week (tracking just installed) this is the most important sentence in the
+   * whole message: the answer to why the numbers are small.
    */
   const gapLines =
     totals.withGaps === 0
@@ -865,7 +893,7 @@ export function weeklyMessage(
           zeroWorkNote(r) +
           coverageNote(r, weekly.from),
       ),
-      // ⚠️ সবার শেষে ছাঁটা হয় — এটাই একমাত্র ঘর যেটা পড়ে কিছু করার থাকে
+      // Careful: trimmed last of all — the only group where reading leads to action
       dropFirst: 0,
     },
     {
@@ -880,10 +908,10 @@ export function weeklyMessage(
       dropFirst: 2,
     },
     {
-      // ⚠️ শিরোনামে "No records" ছিল, আর ওই শব্দটা "০ ঘণ্টা রেকর্ড হয়েছে"
-      //    বলেও পড়া যেত — ঠিক যে দুটো জিনিস আলাদা করা এই ঘরের কাজ
+      // Careful: the heading used to say "No records", and that phrase could also read
+      //    as "0 hours recorded" — exactly the two things this group exists to separate
       heading: `Not observed (${weekly.noRecords.length})`,
-      // ⚠️ এখানে ঘণ্টা লেখা হয় না — লেখার মতো কিছু জানা নেই
+      // Careful: no hours are written here — nothing known is worth writing
       lines: weekly.noRecords.map((r) => `  • ${who(r)}`),
       dropFirst: 1,
     },
@@ -899,9 +927,10 @@ export function weeklyMessage(
   ].filter((s) => s.lines.length > 0);
 
   /**
-   * ⚠️ ব্যাখ্যাগুলো **শর্তসাপেক্ষ** — যে ঘরটা বার্তায় নেই তার নিয়ম পড়ানোর
-   * মানে হয় না, আর প্রতিটা অক্ষর ৪০৯৬-এর কোটা থেকেই কাটে। যেটা আছে তার
-   * ব্যাখ্যা কখনো বাদ যায় না, কারণ পাদটীকা ছাঁটাইয়ের বাইরে।
+   * Careful: the explanations are **conditional** — there is no point teaching
+   * the rule of a group that is not in the message, and every character comes
+   * out of the 4096 quota. The explanation for what is present is never
+   * dropped, because the footnote is outside trimming.
    */
   const tail = [
     '',
@@ -915,8 +944,8 @@ export function weeklyMessage(
     tail.push(
       '  • Days the server never saw are left out of the expected hours too.',
     );
-    // ⚠️ চিহ্নটার ব্যাখ্যা কেবল তখনই, যখন চিহ্নটা আসলেই বার্তায় আছে —
-    //    নইলে পাঠক এমন একটা লেখা খুঁজতেন যা কোথাও নেই
+    // Careful: the symbol is explained only when the symbol is actually in the
+    //    message — otherwise the reader would look for text that is nowhere
     if (
       weekly.rows.some(
         (r) => coverageNote(r, weekly.from).includes('counted from'),
@@ -939,12 +968,13 @@ export function weeklyMessage(
 }
 
 /**
- * সীমার মধ্যে বসানো — শেষ দিক থেকে নাম ছেঁটে, বদলে "… and N more"।
+ * Fit within the limit — trim names from the end, replacing them with "… and N more".
  *
- * ⚠️ প্রতিবার পুরো বার্তাটা আবার বানানো হয়, দৈর্ঘ্য আলাদা করে হিসাব করা
- * হয় না — কারণ "… and N more" লাইনটা যোগ হলে বার্তা এক ধাপে **লম্বাও**
- * হতে পারে, আর ধাপে ধাপে দৈর্ঘ্য যোগ-বিয়োগ করতে গিয়ে ওই কেসটা ভুল হওয়া
- * সহজ। জবটা সপ্তাহে একবার চলে; সরল ও নিশ্চিতভাবে ঠিক হওয়াটাই দামি।
+ * Careful: the whole message is rebuilt every time, with length not tracked
+ * separately — because adding the "… and N more" line can make the message
+ * **longer** in a step, and adding and subtracting lengths step by step makes
+ * that case easy to get wrong. The job runs once a week; being simple and
+ * certainly correct is what is valuable.
  */
 function fit(
   head: string[],
@@ -982,8 +1012,9 @@ function fit(
     0,
   );
 
-  // ⚠️ শেষ রক্ষাকবচ। সব নাম ছেঁটেও যদি না কুলোয় (শিরোনাম + পাদটীকা মিলেই
-  //    সীমা ছাড়িয়ে গেলে) কেটে দেওয়া ছাড়া উপায় নেই — নইলে টেলিগ্রাম গোটা
-  //    বার্তাটাই ৪০০ দিয়ে ফিরিয়ে দিত আর সপ্তাহের সারাংশ কোথাও পৌঁছাত না।
+  // Careful: the last safeguard. If trimming every name still does not fit (the
+  //    headings + footnote alone go over the limit), cutting is the only way —
+  //    otherwise Telegram would reject the whole message with a 400 and the
+  //    weekly summary would not arrive anywhere.
   return { text: text.length > limit ? text.slice(0, limit) : text, hidden };
 }

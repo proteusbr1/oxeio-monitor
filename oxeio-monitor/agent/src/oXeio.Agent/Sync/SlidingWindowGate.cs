@@ -3,26 +3,27 @@ using System.Diagnostics;
 namespace oXeio.Agent.Sync;
 
 /// <summary>
-/// ⭐ "এক মিনিটে সর্বোচ্চ N বার" — সার্ভারের রেট লিমিটে ধাক্কা খাওয়ার <b>আগেই</b>
-/// নিজেকে থামানো।
+/// "At most N per minute": stopping ourselves <b>before</b> we hit the server's rate limit.
 ///
-/// <b>কেন ৪২৯ খেয়ে শেখা চলবে না:</b> ৪২৯ Transient, অর্থাৎ ওই ব্যাচ ব্যাকঅফে
-/// যায় আর attempts বাড়ে। ৫০,০০০ সারির ব্যাকলগ ড্রেন করার সময় প্রতি মিনিটে
-/// কয়েকটা ৪২৯ মানে backoff বাড়তে বাড়তে ৫ মিনিটের সিলিং — তখন কিউ খালি হতে
-/// দিনের পর দিন লাগত। যে মেশিনটা সবচেয়ে পিছিয়ে, সে-ই সবচেয়ে ধীরে এগোত।
+/// <b>Why learning from a 429 is not acceptable:</b> 429 is Transient, so that batch goes
+/// into backoff and attempts increase. While draining a 50,000-row backlog, a few 429s per
+/// minute push backoff up to its 5 minute ceiling, and emptying the queue would take days.
+/// The machine that is furthest behind would be the slowest to catch up.
 ///
-/// <b>স্লাইডিং উইন্ডো কেন, ফিক্সড বাকেট নয়:</b> ফিক্সড বাকেটে মিনিটের শেষে ৫৫টা
-/// আর শুরুতে ৫৫টা পাঠানো যায় — সার্ভারের ঘড়িতে সেটা এক সেকেন্ডে ১১০, সোজা ৪২৯।
+/// <b>Why a sliding window, not fixed buckets:</b> with fixed buckets you can send 55 at the
+/// end of a minute and 55 at the start of the next; on the server's clock that is 110 in
+/// one second, a straight 429.
 ///
-/// ⚠️ ঘড়ি হিসেবে <see cref="Stopwatch"/> (monotonic), <c>DateTime</c> নয় —
-/// NTP সময় পিছিয়ে দিলে wall-clock হিসাব গেট খুলে দিত বা চিরকাল আটকে রাখত।
+/// Careful: the clock is <see cref="Stopwatch"/> (monotonic), not <c>DateTime</c>. If NTP
+/// set the time back, wall-clock accounting would either open the gate or hold it shut
+/// forever.
 /// </summary>
 internal sealed class SlidingWindowGate : IDisposable
 {
     private readonly int _permits;
     private readonly long _windowTicks;
 
-    /// <summary>শেষ উইন্ডোতে যতগুলো রিকোয়েস্ট গেছে তাদের timestamp। আকার সর্বোচ্চ <see cref="_permits"/>।</summary>
+    /// <summary>Timestamps of requests sent in the last window. Size is at most <see cref="_permits"/>.</summary>
     private readonly Queue<long> _stamps;
 
     private readonly SemaphoreSlim _mutex = new(1, 1);
@@ -30,8 +31,8 @@ internal sealed class SlidingWindowGate : IDisposable
 
     public SlidingWindowGate(int permits, TimeSpan window)
     {
-        // ⚠️ ০ বা ঋণাত্মক permit মানে গেট কখনো খুলবে না — সিঙ্ক চিরতরে বন্ধ।
-        //    কনফিগের ভুলে সেটা ঘটতে দেওয়া যায় না, তাই কমপক্ষে ১।
+        // Careful: 0 or negative permits would mean the gate never opens, so sync stops for
+        // good. A config mistake must not be able to cause that, hence at least 1.
         _permits = Math.Max(1, permits);
         _windowTicks = (long)(window.TotalSeconds * Stopwatch.Frequency);
         if (_windowTicks < 1) _windowTicks = Stopwatch.Frequency;
@@ -42,11 +43,11 @@ internal sealed class SlidingWindowGate : IDisposable
         new(permits, TimeSpan.FromMinutes(1));
 
     /// <summary>
-    /// জায়গা না পাওয়া পর্যন্ত অপেক্ষা করে, তারপর একটা permit খরচ করে ফেরে।
+    /// Waits until there is room, then spends one permit and returns.
     ///
-    /// ⚠️ কলার এটা রিকোয়েস্টের <b>টাইমআউট ঘড়ি শুরুর আগে</b> ডাকবে। টাইমআউটের
-    /// ভেতরে ডাকলে রেট লিমিটে অপেক্ষা করাটা "টাইমআউট" হিসেবে গণ্য হতো আর
-    /// রিকোয়েস্টটা পাঠানোর আগেই বাতিল হয়ে যেত।
+    /// Careful: the caller must call this <b>before starting the request's timeout clock</b>.
+    /// Called inside the timeout, waiting on the rate limit would count as a "timeout" and
+    /// the request would be cancelled before it was even sent.
     /// </summary>
     public async Task WaitAsync(CancellationToken ct)
     {
@@ -70,7 +71,7 @@ internal sealed class SlidingWindowGate : IDisposable
                     return;
                 }
 
-                // সবচেয়ে পুরোনোটা উইন্ডো থেকে বেরোলেই একটা জায়গা খালি হবে
+                // As soon as the oldest one leaves the window, a slot frees up
                 var freeAt = _stamps.Peek() + _windowTicks;
                 wait = TimeSpan.FromSeconds((double)(freeAt - now) / Stopwatch.Frequency);
             }
@@ -79,8 +80,8 @@ internal sealed class SlidingWindowGate : IDisposable
                 _mutex.Release();
             }
 
-            // ⚠️ নিচের সীমাটা না থাকলে গণনার সামান্য ভুলে এটা busy loop হয়ে
-            //    একটা কোর খেয়ে ফেলত — আর সেটা কেউ দেখত না, মেশিনটা শুধু গরম হতো।
+            // Careful: without the lower bound, a small miscalculation would turn this into a
+            // busy loop eating a core, and nobody would see it; the machine would just run hot.
             if (wait < TimeSpan.FromMilliseconds(25)) wait = TimeSpan.FromMilliseconds(25);
             if (wait > TimeSpan.FromMinutes(2)) wait = TimeSpan.FromMinutes(2);
 

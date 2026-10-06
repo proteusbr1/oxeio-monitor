@@ -19,26 +19,26 @@ import {
 } from './setup/harness';
 
 /**
- * ⭐⭐⭐ **দাবির পাশে মাপ** *(৯ সেপ্টেম্বর ২০২৬)* — টার্গেটের "শেষ"
- * চিহ্নটা কর্মীর **নিজের ক্লিক**, আর এতদিন তার পাশে কিছুই ছিল না।
+ * Measuring beside the claim (9 September 2026) — the target's "done" mark
+ * is the staff member's own click, and until now there was nothing next to it.
  *
- * ⚠️⚠️ **যে জিনিসটা এই ফাইলটা পাহারা দেয়, সেটা একটা বাগ নয় — একটা
- * ঝুঁকি।** "এই জব-নম্বরের ফাইলে কত সময় গেছে" প্রশ্নটার উত্তর ডাটাবেসেই
- * বের করতে হয়, তাই `DESIGN_ID` নিয়মটা **দুই ভাষায়** লেখা আছে —
- * TypeScript-এ আর SQL-এ। এই রেপোর সবচেয়ে চেনা ব্যর্থতা ঠিক এটাই:
- * এক জায়গায় বদলে অন্য জায়গায় না বদলানো।
+ * What this file guards is not a bug but a risk. The answer to "how much time
+ * went into the file for this job number" has to be computed in the database,
+ * so the `DESIGN_ID` rule is written in two languages, TypeScript and SQL.
+ * This repo's most familiar failure is exactly that: changing one place and
+ * not the other.
  *
- * ⭐ তাই নিচের প্রথম দুটো টেস্ট নকলটার দুটো ভাঙার পথ আটকায়:
- *   ক· দুটো নিয়ম একই তালিকায় **একই ফল** দেয় কি না
- *   খ· SQL-এর লেখাটা `migration.sql`-এর সূচকের সাথে **মেলে** কি না
- *      *(না মিললে কোনো এরর নেই — কেবল প্রতিটা পাতা ১.৫ সেকেন্ড)*
+ * So the first two tests below block the two ways the copy can break:
+ *   a. whether the two rules give the same result on the same list
+ *   b. whether the SQL text matches the index in `migration.sql`
+ *      (if not there is no error — every page just takes 1.5 seconds)
  */
 let h: Harness;
 let trace: FileTraceService;
 let targets: TargetsService;
 
 const HOUR_MS = 3600_000;
-/** ⚠️ ঢাকা UTC+৬ — লেবেল থেকে আসল মুহূর্তে যেতে এটুকু বাদ */
+/** Dhaka is UTC+6 — subtract this to go from the label to the real instant */
 const DHAKA_OFFSET_MS = 6 * HOUR_MS;
 
 const INDEX = 'app_usage_design_id_idx';
@@ -88,7 +88,7 @@ async function designer(code = 'OX-FT1'): Promise<{
   return { employeeId, deviceId: device.id };
 }
 
-/** একটা `app_usage` সারি — শিরোনামটা যেমন দেওয়া হয়েছে, হুবহু */
+/** An `app_usage` row — the title exactly as given */
 async function saw(
   who: { employeeId: number; deviceId: number },
   day: Date,
@@ -138,64 +138,63 @@ async function target(
 }
 
 /**
- * ⭐⭐ **মাঠ থেকে তোলা কঠিন শিরোনামগুলো** — প্রতিটার পাশে কেন সেটা
- * এখানে আছে।
+ * Hard titles taken from the field — each one has a comment saying why it is here.
  *
- * ⚠️ এই তালিকাটাই দুটো নিয়মের বিচারক, তাই এখানে সহজ কেস রাখা হয়নি:
- * প্রতিটা সারি কোনো না কোনো **সীমানা**।
+ * This list is the judge between the two rules, so no easy cases are kept:
+ * every row is some boundary.
  */
 const CORPUS: readonly string[] = [
-  // ⭐ আসল ধাঁচ — পাঁচ অঙ্কের পুরোনো কাজের নম্বর
+  // The real pattern — an old five-digit job number
   '37933-Woodcock Bird Vintage Illustration T-Shirt.ai @ 54 % (RGB/Preview)',
-  // ⚠️⚠️ সাত অঙ্ক, পাশাপাশি দুটো — সীমানা না থাকলে দুটোই `100004` হতো
+  // Seven digits, two side by side — without the boundary both would become `100004`
   '1000042-Bird.ai',
   '1000043-Cat.ai',
-  // ⚠️ আট অঙ্কের স্টক-আইডি — সীমানা-যাচাইয়ে বাদ পড়ে
+  // An eight-digit stock id — dropped by the boundary check
   '10163372_181.eps',
-  // ⚠️ এক অঙ্ক — "দুইয়ের কম নয়" নিয়মে বাদ
+  // One digit — dropped by the "not fewer than three" rule
   '4 [Converted].eps',
-  // ⚠️ দুই অঙ্কও বাদ
+  // Two digits are dropped too
   '12-Something.ai',
-  // ⭐ তিন অঙ্ক — ঠিক সীমানায়, তাই থাকে
+  // Three digits — exactly at the boundary, so it is kept
   '123-Small Job.ai',
-  // ⚠️ অঙ্ক দিয়ে শুরু নয়
+  // Does not start with a digit
   'Untitled-20* @ 66.67 % (RGB/Preview)',
   'Template.ai',
-  // ⚠️⚠️ **জানা মিথ্যা-ইতিবাচক** — বছরটাকে নম্বর ধরে নেয়। দুটো নিয়মকেই
-  //    একইভাবে ভুল করতে হবে, নইলে সংখ্যা দুটো আলাদা হয়ে যাবে।
+  // Known false positive — it takes the year as a number. Both rules must
+  // be wrong in the same way, otherwise the two counts would diverge.
   '2026 Calendar Design.ai',
-  // ⚠️ সামনে ফাঁকা — TS-এ `.trim()`, SQL-এ `btrim()`
+  // Leading blanks — `.trim()` in TS, `btrim()` in SQL
   '   1050968-Trim Me.ai',
-  // ⭐ সাত অঙ্কের পর আন্ডারস্কোর — সীমানা অঙ্ক নয়, তাই নম্বরটা টেকে
+  // Seven digits then an underscore — the boundary is not a digit, so the number is kept
   '1050918_OL5I.psd',
 ];
 
 /**
- * ⭐⭐ **কেবল একটা ভাঙা নিয়মই যে নম্বরগুলো বানাতে পারে।**
+ * Numbers that only a broken rule could produce.
  *
- * ⚠️ উপরের তালিকার কোনো শিরোনাম থেকেই এগুলো বেরোনোর কথা নয় —
- * বেরোলে বুঝতে হবে SQL-এর নিয়মটা সরে গেছে:
- *   · `100004`  — সীমানা-যাচাই না থাকলে `1000042` কেটে ছয় অঙ্ক
- *   · `1016337` — `10163372_181.eps` থেকে, `(?![0-9])` না থাকলে
- *   · `4` · `12` — "দুইয়ের কম নয়" নিয়মটা আলগা হলে
+ * No title in the list above should produce these — if one does, the SQL
+ * rule has drifted:
+ *   - `100004`  — cutting `1000042` to six digits when there is no boundary check
+ *   - `1016337` — from `10163372_181.eps`, without `(?![0-9])`
+ *   - `4`, `12` — if the "not fewer than three" rule is loosened
  */
 const WRONG_IDS: readonly number[] = [100004, 1016337, 105091, 4, 12];
 
-describe('ফাইলের চিহ্ন — SQL আর TypeScript একই নিয়ম', () => {
+describe('file mark — SQL and TypeScript use the same rule', () => {
   /**
-   * ⭐⭐⭐ **এই ফাইলের সবচেয়ে জরুরি টেস্ট।**
+   * The most important test in this file.
    *
-   * ⚠️⚠️ `DESIGN_ID` (TypeScript) আর `DESIGN_ID_SQL` (Postgres) — একটা
-   * বদলে অন্যটা না বদলালে ক্রেডিটের সংখ্যা আর ফাইলের চিহ্ন **নীরবে
-   * আলাদা** হয়ে যাবে। কোনো এরর উঠবে না; কেবল দুটো পর্দা দুটো কথা বলবে।
+   * `DESIGN_ID` (TypeScript) and `DESIGN_ID_SQL` (Postgres): change one and
+   * not the other and the credit count and the file mark silently diverge.
+   * No error is raised; two screens just say two different things.
    */
-  it('⭐⭐⭐ কঠিন শিরোনামের তালিকায় দুটো নিয়ম হুবহু এক ফল দেয়', async () => {
+  it('the two rules give exactly the same result on the hard-title list', async () => {
     const who = await designer();
     const day = today();
 
     for (const title of CORPUS) await saw(who, day, title, 60);
 
-    // ── TypeScript-এর উত্তর
+    // ── TypeScript's answer
     const fromTs = new Set<number>();
     for (const title of CORPUS) {
       const id = designIdOf('Illustrator.exe', title);
@@ -203,11 +202,11 @@ describe('ফাইলের চিহ্ন — SQL আর TypeScript একই
     }
 
     /**
-     * ── Postgres-এর উত্তর, **প্রোডাকশনের কোড দিয়েই**।
+     * ── Postgres's answer, using the production code itself.
      *
-     * ⚠️⚠️ জিজ্ঞেস করা হয় সঠিক নম্বরগুলো **আর** ভুল নিয়মে যেগুলো
-     * বেরোত — দুটো একসাথে। তাই দুদিকেই ধরা পড়ে: সঠিকটা হারালেও, আর
-     * ভুলটা এসে পড়লেও।
+     * Both the correct numbers and the ones the wrong rule would produce are
+     * asked for together, so it is caught in both directions: if a correct
+     * one is lost, and if a wrong one slips in.
      */
     const probe = [...new Set([...fromTs, ...WRONG_IDS])];
     const fromSql = new Set((await trace.secondsFor(probe)).keys());
@@ -216,25 +215,25 @@ describe('ফাইলের চিহ্ন — SQL আর TypeScript একই
       [...fromTs].sort((a, b) => a - b),
     );
 
-    // ⚠️ তালিকাটা সত্যিই কিছু ছেঁকেছে কি না — নইলে দুটো খালি সেট
-    //    মিলে গিয়ে টেস্টটা অকারণে সবুজ থাকত
+    // Check that the list really filtered something — otherwise two empty
+    // sets would match and the test would pass for no reason
     expect(fromTs.size).toBeGreaterThan(3);
     expect(fromTs.size).toBeLessThan(CORPUS.length);
   });
 
   /**
-   * ⭐⭐⭐ **সূচকটা সত্যিই ব্যবহার হচ্ছে কি না।**
+   * Whether the index is actually used.
    *
-   * ⚠️⚠️ কোয়েরির লেখা আর `migration.sql`-এর লেখা এক অক্ষর আলাদা হলেই
-   * Postgres সূচকটা **ব্যবহার করা বন্ধ করে দেয়** — চুপচাপ, কোনো এরর
-   * ছাড়া। মাঠে সেটার দাম ১.৪৭ সেকেন্ড প্রতি পাতা।
+   * If the query text differs from the `migration.sql` text by a single
+   * character, Postgres stops using the index, silently and with no error. In
+   * the field that cost 1.47 seconds per page.
    *
-   * ⚠️ `enable_seqscan = off` দরকার, কারণ টেস্টের টেবিল ছোট — Postgres
-   * তখন খরচের হিসাবে সিকোয়েন্স স্ক্যানই বাছত, আর টেস্টটা কিছুই প্রমাণ
-   * করত না। ⭐ বন্ধ করে দিলে প্রশ্নটা দাঁড়ায় স্রেফ *"সূচকটা এই
-   * এক্সপ্রেশনে খাটে কি না"* — আর সেটাই আমরা জানতে চাই।
+   * `enable_seqscan = off` is needed because the test table is small —
+   * Postgres would otherwise pick a sequential scan on cost and the test
+   * would prove nothing. With it off, the question becomes simply whether
+   * the index works for this expression, which is what we want to know.
    */
-  it('⭐⭐⭐ কোয়েরির লেখা সূচকের লেখার সাথে মেলে (EXPLAIN)', async () => {
+  it('the query text matches the index text (EXPLAIN)', async () => {
     const who = await designer();
     await saw(who, today(), '1000042-Bird.ai', 60);
 
@@ -242,10 +241,10 @@ describe('ফাইলের চিহ্ন — SQL আর TypeScript একই
       await tx.$executeRawUnsafe('SET LOCAL enable_seqscan = off');
 
       /**
-       * ⚠️⚠️ **কোয়েরিটা ধ্রুবক দুটো থেকেই বানানো হয়, হাতে লেখা হয় না।**
-       * হাতে লিখলে টেস্টটা নিজের লেখা যাচাই করত, কোডের লেখা নয় — আর
-       * তখন `DESIGN_ID_SQL` বদলে গেলেও এটা সবুজ থাকত। ⭐ সাবোতাজে ঠিক
-       * সেটাই ধরা পড়েছিল (৯ সেপ্টেম্বর)।
+       * The query is built from the two constants, not written by hand. If
+       * it were handwritten the test would verify its own text, not the
+       * code's, and would stay green even when `DESIGN_ID_SQL` changed.
+       * Sabotage testing caught exactly that (9 September).
        */
       const rows = await tx.$queryRawUnsafe<{ 'QUERY PLAN': string }[]>(
         `EXPLAIN SELECT sum(duration_sec) FROM app_usage
@@ -258,31 +257,31 @@ describe('ফাইলের চিহ্ন — SQL আর TypeScript একই
     expect(plan).toContain(INDEX);
 
     /**
-     * ⚠️⚠️ **সূচকের নাম দেখা যথেষ্ট নয় — `Index Cond` দেখতে হয়।**
+     * Seeing the index name is not enough — `Index Cond` must be checked.
      *
-     * সূচকটা **আংশিক** (`WHERE lower(process_name) IN …`), তাই
-     * এক্সপ্রেশনটা মিলুক বা না মিলুক Postgres ওটাকে স্রেফ একটা
-     * **সারি-ছাঁকনি** হিসেবে ব্যবহার করতে পারে — আর তখন প্ল্যানে নামটা
-     * থাকে, অথচ `substring(...)` হিপ থেকে আবার গোনা হয়।
+     * The index is partial (`WHERE lower(process_name) IN ...`), so whether
+     * or not the expression matches, Postgres can use it as just a row
+     * filter — the name then appears in the plan while `substring(...)` is
+     * still recomputed from the heap.
      *
-     * ⭐ এক্সপ্রেশনটা সত্যিই সূচকে বসেছে কি না, তার একমাত্র চিহ্ন
-     * `Index Cond` — না মিললে ওখানে `Filter` লেখা থাকে।
-     * ⚠️ প্রথমে এই টেস্টটা কেবল নামটা দেখত, আর সাবোতাজে **সবুজই থেকে
-     * গিয়েছিল** (৯ সেপ্টেম্বর) — অর্থাৎ দাবিটা ফাঁকা ছিল।
+     * The only sign that the expression really sits in the index is
+     * `Index Cond`; if it does not match, `Filter` appears there instead.
+     * At first this test only looked at the name and stayed green under
+     * sabotage (9 September) — the claim was vacuous.
      */
     expect(plan).toContain('Index Cond');
   });
 });
 
-describe('ফাইলের চিহ্ন — কত সময়', () => {
-  it('⭐ একই নম্বরের সব সারি যোগ হয়, একাধিক দিন জুড়েও', async () => {
+describe('file mark — how much time', () => {
+  it('all rows of the same number add up, across several days too', async () => {
     const who = await designer();
     const day = today();
 
     await saw(who, day, '1000042-Bird.ai', 300);
     await saw(who, day, '1000042-Bird.ai @ 200 %', 120);
     await saw(who, dayBefore(day, 1), '1000042-Bird.ai', 60);
-    // ⚠️ অন্য নম্বর — মিশে যাওয়া চলবে না
+    // A different number — must not mix in
     await saw(who, day, '1000043-Cat.ai', 999);
 
     const secs = await trace.secondsFor([1_000_042, 1_000_043]);
@@ -292,12 +291,12 @@ describe('ফাইলের চিহ্ন — কত সময়', () => {
   });
 
   /**
-   * ⭐⭐ **শ্বেততালিকাটা এখানেও খাটে** — ব্রাউজারের শিরোনাম গোনা হয় না।
+   * The allow-list applies here too — browser titles are not counted.
    *
-   * ⚠️⚠️ উল্টো হলে একদিন কারো ব্রাউজার-ট্যাবের নাম এই হিসাবে ঢুকে
-   * পড়ত, আর সেটা ঠিক সেই কনটেন্ট-পড়া যা README-তে "কখনোই নয়" বলা।
+   * Otherwise one day someone's browser tab name would enter this
+   * calculation, which is exactly the content reading the README says is "never" done.
    */
-  it('⭐⭐ ডিজাইন-অ্যাপ ছাড়া অন্য অ্যাপের শিরোনাম গোনা হয় না', async () => {
+  it('titles from apps other than design apps are not counted', async () => {
     const who = await designer();
     const day = today();
 
@@ -309,7 +308,7 @@ describe('ফাইলের চিহ্ন — কত সময়', () => {
     expect(secs.get(1_000_042)).toBe(300);
   });
 
-  it('⭐ কখনো না-দেখা নম্বর ম্যাপে থাকে না — শূন্য বসে না', async () => {
+  it('a number never seen is not in the map — zero is not set', async () => {
     const who = await designer();
     await saw(who, today(), '1000042-Bird.ai', 300);
 
@@ -319,29 +318,29 @@ describe('ফাইলের চিহ্ন — কত সময়', () => {
   });
 });
 
-describe('ফাইলের চিহ্ন — তালিকায় তিনটে অবস্থা', () => {
+describe('file mark — three states in the list', () => {
   /**
-   * ⭐⭐⭐ **তিনটে অবস্থা আলাদা থাকে** — আর মাঝেরটাই এই কাজের কারণ।
+   * The three states stay distinct — and the middle one is the reason for this work.
    */
-  it('⭐⭐⭐ মাপা · কখনো খোলা হয়নি · বলা যায় না — তিনটে আলাদা', async () => {
+  it('measured, never opened, cannot say — three distinct states', async () => {
     const who = await designer();
     const day = today();
 
     await saw(who, day, '1000042-Bird.ai', 420);
 
-    // ক· চিহ্ন আছে
+    // a. has a mark
     await target(who.employeeId, 1_000_042, 'B000000042', {
       assignedAt: atDhakaHour(day, 8),
       completedAt: atDhakaHour(day, 17),
     });
 
-    // খ· চিহ্ন নেই, অথচ জানার কথা ছিল
+    // b. no mark, though it should have been known
     await target(who.employeeId, 1_000_043, 'B000000043', {
       assignedAt: atDhakaHour(day, 8),
       completedAt: atDhakaHour(day, 17),
     });
 
-    // গ· শিরোনাম জমা শুরুর **আগে** শেষ হয়েছে — বলা যায় না
+    // c. finished before title collection began — cannot say
     const old = dayBefore(day, 5);
     await target(who.employeeId, 1_000_044, 'B000000044', {
       assignedAt: atDhakaHour(old, 8),
@@ -353,20 +352,20 @@ describe('ফাইলের চিহ্ন — তালিকায় তি
 
     expect(byJob.get(1_000_042)).toBe(420);
     expect(byJob.get(1_000_043)).toBe(0);
-    // ⚠️⚠️ এটাই আসল দাবি: **`0` নয়, `null`** — নইলে ২০২৫ সালের সারিগুলো
-    //    নীরবে "কখনো খোলা হয়নি" বলে দাঁড়াত, অর্থাৎ মিথ্যা অভিযোগ
+    // The real claim: `null`, not `0` — otherwise 2025's rows would silently
+    // stand as "never opened", which is a false accusation
     expect(byJob.get(1_000_044)).toBeNull();
 
     expect(page.traceSince).toBe(day.toISOString().slice(0, 10));
   });
 
   /**
-   * ⭐⭐⭐ **হাতে থাকা কাজে "no trace" বসে না।**
+   * No "no trace" on work still in hand.
    *
-   * ⚠️⚠️ প্রথম লেখায় বসত, আর সেটা ছিল একটা **অভিযোগ সেখানে যেখানে কোনো
-   * দাবিই করা হয়নি** — সকালে বরাদ্দ পাওয়া ৩০টা সারির প্রতিটার পাশে।
+   * The first version set it, which was an accusation where no claim had been
+   * made — next to every one of the 30 rows assigned in the morning.
    */
-  it('⭐⭐⭐ হাতে থাকা, এখনো খোলা হয়নি — `0` নয়, `null`', async () => {
+  it('in hand, not yet opened — `null`, not `0`', async () => {
     const who = await designer();
     const day = today();
 
@@ -381,8 +380,8 @@ describe('ফাইলের চিহ্ন — তালিকায় তি
     expect(page.rows[0].fileSec).toBeNull();
   });
 
-  /** ⭐ হাতে থাকা সারিতেও **মাপা** সময় দেখা যায় — ওটা খবর */
-  it('⭐ হাতে থাকা সারিতে সময় থাকলে সেটা দেখা যায়', async () => {
+  /** A row in hand can also show measured time — that is information */
+  it('a row in hand shows its time if it has any', async () => {
     const who = await designer();
     const day = today();
 
@@ -397,12 +396,12 @@ describe('ফাইলের চিহ্ন — তালিকায় তি
   });
 
   /**
-   * ⭐⭐ **একটাও ডিজাইন-শিরোনাম নেই, অথচ `app_usage` খালি নয়।**
+   * No design title at all, yet `app_usage` is not empty.
    *
-   * ⚠️ তখন `seenJobNumbers()` একটা **খালি তালিকা** ফেরত দেয়, আর সেটা
-   * `notIn: []` হয়ে Prisma-য় যায় — পথটা আলাদা, তাই আলাদা দাবি।
+   * `seenJobNumbers()` then returns an empty list, which goes to Prisma as
+   * `notIn: []` — a different path, so a different claim.
    */
-  it('⭐⭐ চেনা কোনো নম্বরই পর্দায় আসেনি — তবু তালিকা ভাঙে না', async () => {
+  it('no known number ever appeared on screen — the list still does not break', async () => {
     const who = await designer();
     const day = today();
 
@@ -417,7 +416,7 @@ describe('ফাইলের চিহ্ন — তালিকায় তি
     expect(page.rows.map((r) => r.jobNumber)).toEqual([1_000_043]);
   });
 
-  it('⭐ পুলে পড়ে থাকা সারির জব-নম্বরই নেই — চিহ্নও `null`', async () => {
+  it('a pool row has no job number — its mark is `null` too', async () => {
     const who = await designer();
     await saw(who, today(), '1000042-Bird.ai', 300);
 
@@ -433,11 +432,11 @@ describe('ফাইলের চিহ্ন — তালিকায় তি
   });
 });
 
-describe('ফাইলের চিহ্ন — "শেষ বলা, অথচ খোলা হয়নি" তালিকা', () => {
+describe('file mark — the "said done but never opened" list', () => {
   /**
-   * ⭐⭐⭐ **মালিকের চাওয়া তালিকাটা** *(৯ সেপ্টেম্বর: "kha banao")*।
+   * The list the owner asked for (9 September: "make list kha").
    */
-  it('⭐⭐⭐ চিহ্ন না থাকা সারিটাই আসে, চিহ্ন থাকাটা আসে না', async () => {
+  it('the row with no mark appears, the one with a mark does not', async () => {
     const who = await designer();
     const day = today();
 
@@ -459,12 +458,12 @@ describe('ফাইলের চিহ্ন — "শেষ বলা, অথচ
   });
 
   /**
-   * ⭐⭐ **শেষ না বলা সারি তালিকায় আসে না।**
+   * A row not said to be done does not appear in the list.
    *
-   * ⚠️ হাতে থাকা কাজের ফাইল এখনো খোলা না হওয়াটা স্বাভাবিক — ওটা
-   * প্রশ্নের বিষয়ই নয়। তালিকাটা কেবল **দাবি করা** কাজ নিয়ে।
+   * It is normal for the file of work in hand not to be opened yet — that is
+   * not the question. The list is only about claimed work.
    */
-  it('⭐⭐ হাতে থাকা (assigned) সারি তালিকায় আসে না', async () => {
+  it('a row in hand (assigned) does not appear in the list', async () => {
     const who = await designer();
     const day = today();
 
@@ -479,13 +478,13 @@ describe('ফাইলের চিহ্ন — "শেষ বলা, অথচ
   });
 
   /**
-   * ⭐⭐⭐ **সীমানাটাই তালিকাটাকে সৎ রাখে।**
+   * The boundary is what keeps the list honest.
    *
-   * ⚠️⚠️ শিরোনাম জমা শুরুর আগে শেষ হওয়া সারি এখানে এলে মাঠের ২৭ হাজার
-   * পুরোনো ইমপোর্ট করা সারি সবাই "প্রমাণ নেই" হয়ে দাঁড়াত — একটা তালিকা
-   * যেটা পড়ার অযোগ্য, আর তার চেয়েও খারাপ, একটা মিথ্যা অভিযোগ।
+   * If rows finished before title collection began came in here, the field's
+   * 27 thousand old imported rows would all become "no proof" — a list not
+   * worth reading and, worse, a false accusation.
    */
-  it('⭐⭐⭐ শিরোনাম জমা শুরুর আগের সারি তালিকায় আসে না', async () => {
+  it('rows from before title collection began do not appear in the list', async () => {
     const who = await designer();
     const day = today();
 
@@ -503,9 +502,9 @@ describe('ফাইলের চিহ্ন — "শেষ বলা, অথচ
   });
 
   /**
-   * ⭐⭐ **একটাও শিরোনাম জমা না থাকলে তালিকাটা খালি** — "সবাই দোষী" নয়।
+   * With no titles collected at all the list is empty — not "everyone is guilty".
    */
-  it('⭐⭐ `app_usage` পুরো খালি হলে কারো নামে কিছু বলা হয় না', async () => {
+  it('when `app_usage` is entirely empty nothing is said against anyone', async () => {
     const who = await designer();
     const day = today();
 
@@ -521,9 +520,9 @@ describe('ফাইলের চিহ্ন — "শেষ বলা, অথচ
   });
 
   /**
-   * ⭐⭐ **ডিজাইনার ধরে ছাঁকনি এখানেও খাটে** — একই তালিকা, একজনের।
+   * The per-designer filter applies here too — the same list, for one person.
    */
-  it('⭐⭐ কর্মী-ছাঁকনির সাথে একসাথে কাজ করে', async () => {
+  it('works together with the staff filter', async () => {
     const a = await designer('OX-FT1');
     const b = await designer('OX-FT2');
     const day = today();

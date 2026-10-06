@@ -19,19 +19,18 @@ using oXeio.Core.Tracking;
 namespace oXeio.Agent;
 
 /// <summary>
-/// পূর্ণ এজেন্ট — সব মডিউল এখানে জোড়া লাগে।
+/// The full agent: every module is wired together here.
 ///
-/// <b>থ্রেডের ভাগ:</b>
+/// <b>Thread split:</b>
 /// <list type="bullet">
-/// <item>UI থ্রেড — tray আইকন ও উইন্ডো মেসেজ (lock, power)। কখনো ব্লক করা হয় না।</item>
-/// <item>ট্র্যাকার থ্রেড — প্রতি সেকেন্ডে idle পড়া। ছোট, দ্রুত, কোনো I/O নেই।</item>
-/// <item>ব্যাকগ্রাউন্ড টাস্ক — ক্যাপচার, সিঙ্ক, heartbeat, অ্যাপ-ব্যবহার। ধীর কাজ শুধু এখানে।</item>
+/// <item>UI thread: tray icon and window messages (lock, power). Never blocked.</item>
+/// <item>Tracker thread: reads idle state every second. Small and fast, no I/O.</item>
+/// <item>Background tasks: capture, sync, heartbeat, app usage. Slow work lives only here.</item>
 /// </list>
 ///
-/// ⚠️ <b>ট্র্যাকিং কখনো নেটওয়ার্ক বা ডিস্কের জন্য থামে না।</b> সার্ভার বন্ধ
-/// থাকলে, ডিস্ক ভরে গেলে বা enrollment ব্যর্থ হলেও সেকেন্ডের হিসাব চলতেই
-/// থাকে — শুধু পাঠানো আটকে থাকে। উল্টোটা হলে একটা নেটওয়ার্ক সমস্যা সরাসরি
-/// কারো বেতন কমিয়ে দিত।
+/// Important: <b>tracking never stops for the network or the disk.</b> If the server is down, the
+/// disk is full or enrollment fails, the per-second counting keeps going and only uploading waits.
+/// The opposite would let a network problem directly cut someone's pay.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class AgentHost : IAsyncDisposable
@@ -40,116 +39,110 @@ internal sealed class AgentHost : IAsyncDisposable
     private static readonly TimeSpan SyncEvery = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// A05 — কিউয়ের ডিস্ক-বাজেট কত ঘন ঘন প্রয়োগ হবে।
+    /// How often the queue's disk budget is enforced.
     ///
-    /// ⚠️ প্রতি সিঙ্ক-চক্রে (৩০ সে.) নয়: জরিপটা পুরো টেবিল স্ক্যান করে,
-    /// আর কিউ বড় হলে সেটা অকারণে ডিস্ক ঘোরাত। ঘণ্টায় একবারই যথেষ্ট —
-    /// দিনে ~১৭০ MB জমে, আর ক্যাপ ২ GiB। ⭐ তবে লেখা ব্যর্থ হলে
-    /// অপেক্ষা করা হয় না (`LastWriteError`)।
+    /// Careful: not on every sync cycle (30 s). The survey does a full table scan, and with a large
+    /// queue that would spin the disk for nothing. Once an hour is enough: about 170 MB accumulates
+    /// per day and the cap is 2 GiB. The exception is a failed write, which does not wait
+    /// (`LastWriteError`).
     /// </summary>
     private static readonly TimeSpan BudgetSweepEvery = TimeSpan.FromHours(1);
     /// <summary>
-    /// heartbeat-এর ব্যবধান সার্ভারের কনফিগ থেকে (<c>heartbeatSec</c>), তবে
-    /// সীমার ভেতরে।
+    /// The heartbeat interval comes from the server config (<c>heartbeatSec</c>), clamped to a
+    /// range.
     ///
-    /// ⚠️ ছাদ-মেঝে দুটোই দরকার: কেউ ভুল করে ১ সেকেন্ড বসালে ১৫টা PC মিলে
-    /// দিনে ১৩ লক্ষ রিকোয়েস্ট পাঠাত, আর ১ দিন বসালে G01 ("এজেন্ট ১০ মিনিট
-    /// চুপ") প্রতিটা মেশিনের জন্য চিরকাল জ্বলে থাকত।
+    /// Careful: both a floor and a ceiling are needed. If someone set 1 second by mistake, 15 PCs
+    /// would send 1.3 million requests a day. If someone set 1 day, the "agent silent for 10
+    /// minutes" alert would stay lit forever for every machine.
     /// </summary>
     private static readonly TimeSpan HeartbeatMin = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan HeartbeatMax = TimeSpan.FromMinutes(5);
 
     /// <summary>
-    /// বন্ধ হওয়ার সময় <c>agent_stop</c> ডিস্কে লিখতে সর্বোচ্চ যতক্ষণ অপেক্ষা।
-    /// ⚠️ Windows-এর পুরো শাটডাউন বাজেট কয়েক সেকেন্ড, আর তার পরেও শেষ
-    /// drain-এর জন্য সময় রাখতে হয়।
+    /// Maximum time to wait for <c>agent_stop</c> to be written to disk during shutdown. Careful:
+    /// Windows' whole shutdown budget is a few seconds, and time must remain for the final drain.
     ///
-    /// ⚠️⚠️ <b>২ → ০.৫ সে.</b> <i>(৬ সেপ্টেম্বর ২০২৬, G161)</i>। এটা
-    /// <see cref="DisposeAsync"/>-এর <b>প্রথম</b> ধাপ, আর তিনটে ধাপ পরপর
-    /// চলে: ২ + ২ + ১.৫ = <b>৫.৫ সে.</b>, অথচ
-    /// <c>Program.ShutdownBudget</c> ৪। অর্থাৎ খারাপ দিনে শেষ full drain
-    /// <b>শুরুই হতো না</b> — ঠিক যে ফলটা ঠেকাতে ৪ সেপ্টেম্বর
-    /// <see cref="FinalDrainBudget"/> ৩ → ১.৫ করা হয়েছিল।
+    /// Important: lowered from 2 s to 0.5 s. This is the <b>first</b> step of
+    /// <see cref="DisposeAsync"/>, and the three steps run in sequence: 2 + 2 + 1.5 = <b>5.5 s</b>,
+    /// while <c>Program.ShutdownBudget</c> is 4. On a bad day the final full drain would <b>never
+    /// start</b>, which is exactly what lowering <see cref="FinalDrainBudget"/> from 3 to 1.5 was
+    /// meant to prevent.
     ///
-    /// ⭐ ০.৫ সে. অনুমান নয় — <see cref="EndSessionEnqueueWait"/> ঠিক
-    /// একই কাজের (একটা SQLite INSERT) জন্য এই সংখ্যাটাই ব্যবহার করে।
-    /// দুই শাটডাউন-পথ এখন একই কাজে একই বাজেট নেয়।
+    /// 0.5 s is not a guess: <see cref="EndSessionEnqueueWait"/> uses the same number for exactly
+    /// the same work (one SQLite INSERT), so both shutdown paths give the same job the same budget.
     ///
-    /// ⚠️ ছাদে পৌঁছালেও ইভেন্টটা হারায় না: <c>EnqueueAsync</c> ব্যাকগ্রাউন্ডে
-    /// চলতেই থাকে (<c>WaitAsync</c> কেবল <b>অপেক্ষা</b> ছাড়ে, কাজটা নয়),
-    /// আর নিচের দুটো drain-এর ৩ সেকেন্ডে সে ডিস্কে বসার যথেষ্ট সময় পায়।
+    /// Careful: hitting the ceiling does not lose the event. <c>EnqueueAsync</c> keeps running in
+    /// the background (<c>WaitAsync</c> only stops <b>waiting</b>, not the work), and the 3 seconds
+    /// of the two drains below give it enough time to reach the disk.
     /// </summary>
     internal static readonly TimeSpan StopEnqueueBudget = TimeSpan.FromMilliseconds(500);
 
     /// <summary>
-    /// বন্ধ হওয়ার আগে শেষ drain-এ সর্বোচ্চ যতক্ষণ।
-    /// ⚠️ <c>Program.ShutdownBudget</c>-এর (৪ সে.) ভেতরে থাকতে হবে — এর
-    /// চেয়ে বড় দিলে drain কখনো নিজে থামত না, বাইরে থেকে প্রসেস মারা পড়ত।
+    /// Maximum time for the final drain before shutdown.
+    /// Careful: this must stay within <c>Program.ShutdownBudget</c> (4 s). A larger value would
+    /// mean the drain never stops on its own and the process is killed from outside.
     /// </summary>
-    /// ⚠️⚠️ ৩ → ১.৫ সে. *(৪ সেপ্টেম্বর ২০২৬)*। A1-এ <see cref="GoodbyeBudget"/>
-    /// (২ সে.) যোগ হয়েছিল, কিন্তু এটা কমানো হয়নি — ফলে দুটো মিলে ৫ সে.,
-    /// অথচ <c>Program.ShutdownBudget</c> ৪। <c>Shutdown()</c> তাই ৪ সেকেন্ডে
-    /// হাল ছেড়ে দিত আর <b>শেষ full drain কখনো পুরো সময় পেত না</b> — মন্তব্যে
-    /// শর্তটা লেখা ছিল, পাহারা ছিল না। ⭐ এখন `ShutdownBudgetTests` ধরে।
+    /// Careful: lowered from 3 to 1.5 s. <see cref="GoodbyeBudget"/> (2 s) had been added without
+    /// reducing this, so the two summed to 5 s against a <c>Program.ShutdownBudget</c> of 4.
+    /// <c>Shutdown()</c> would give up after 4 seconds and <b>the final full drain never got its
+    /// whole time</b>. The condition was written in a comment but not enforced; now
+    /// `ShutdownBudgetTests` catches it.
     internal static readonly TimeSpan FinalDrainBudget = TimeSpan.FromMilliseconds(1500);
 
     /// <summary>
-    /// ⭐ শেষ full drain-এর <b>আগে</b> শুধু বিদায়ী ইভেন্ট পাঠানোর বাজেট (G136)।
+    /// Budget for sending only the goodbye events, <b>before</b> the final full drain.
     ///
-    /// full drain <see cref="Sync.SyncWorker.DrainOnceAsync"/> সবসময়
-    /// Segment→Event ক্রমে চলে, তাই সেগমেন্ট-ব্যাকলগ থাকলে goodbye ইভেন্টটা
-    /// ৩ সেকেন্ডের বাজেটে না পৌঁছে outbox-এ পড়ে থাকত। ছোট রাখা হয়েছে: ইভেন্ট
-    /// সারিগুলো ছোট, জীবন্ত লিংকে অর্ধ সেকেন্ডেই যায়; মরা লিংকে এইটুকুতেই থেমে
-    /// full drain-কে সময় ছাড়ে (মোট ছাদ <c>Program.ShutdownBudget</c> ৪ সে.)।
+    /// The full drain <see cref="Sync.SyncWorker.DrainOnceAsync"/> always runs Segment then Event,
+    /// so with a segment backlog the goodbye event could sit in the outbox without reaching the
+    /// 3-second budget. This is kept small: event rows are tiny and go in half a second on a live
+    /// link; on a dead link it stops after this short wait and leaves the time to the full drain
+    /// (total ceiling <c>Program.ShutdownBudget</c>, 4 s).
     /// </summary>
-    /// ⚠️⚠️ <b>২ → ১.৫ সে.</b> <i>(৬ সেপ্টেম্বর ২০২৬, G161)</i> — উপরের
-    /// <see cref="StopEnqueueBudget"/>-এর একই কারণে। ⭐ এখানেও সংখ্যাটা
-    /// ধার করা: <see cref="EndSessionSendBudget"/> ঠিক এই কাজটার
-    /// (একটা ছোট POST) জন্য ১.৫ সে.-ই নেয়, আর BDIX-এ পিং ৫ ms — তাই এটা
-    /// দরকারের চেয়ে এখনো শতগুণ বেশি।
+    /// Careful: lowered from 2 to 1.5 s, for the same reason as <see cref="StopEnqueueBudget"/>
+    /// above. The number is borrowed here too: <see cref="EndSessionSendBudget"/> uses 1.5 s for
+    /// exactly this job (one small POST), and with a 5 ms ping on BDIX it is still a hundred times
+    /// more than needed.
     internal static readonly TimeSpan GoodbyeBudget = TimeSpan.FromMilliseconds(1500);
 
     /// <summary>
-    /// ⭐⭐ <b>R29-B — <c>WM_ENDSESSION</c>-এই বিদায়ী ইভেন্ট পাঠানোর ছাদ।</b>
+    /// <b>Ceiling for sending the goodbye event inside <c>WM_ENDSESSION</c>.</b>
     ///
-    /// ⚠️⚠️ কেন দরকার হলো, মাঠে মাপা (৪ সেপ্টেম্বর ২০২৬): শেষ ৭ দিনে
-    /// <c>agent_stop</c> সার্ভারে পৌঁছেছে <b>গড়ে ৭৪০ মিনিট দেরিতে</b>
-    /// (সর্বোচ্চ ১১২৭)। ৪৮টারই <c>reason: shutdown</c> — অর্থাৎ ঘটনাটা ঠিক
-    /// সময়ে <b>ধরা পড়ে</b> ও কিউয়ে বসে; দেরিটা পুরোটাই <b>পাঠানোয়</b>।
-    /// দুপুরে বন্ধ হলে ১ মিনিটে যায় (PC আবার চালু হয়), সন্ধ্যায় বন্ধ হলে
-    /// পরদিন সকাল — কারণ পাঠানোর কাজটা হয় <b>পরের স্টার্টআপে</b>।
+    /// Why it was needed, measured in the field: over the last 7 days <c>agent_stop</c> reached the
+    /// server <b>on average 740 minutes late</b> (maximum 1127). All 48 had <c>reason:
+    /// shutdown</c>, so the event was <b>captured</b> on time and queued; the whole delay was in
+    /// <b>sending</b>. Shutting down at noon delivered it within a minute (the PC comes back on);
+    /// shutting down in the evening delivered it the next morning, because sending happened at the
+    /// <b>next startup</b>.
     ///
-    /// ⭐ A1 (০.৪.৭) <c>DisposeAsync</c>-এ অগ্রাধিকার-drain বসিয়েছিল, আর
-    /// সেটা দেরি ২৩৪১ → ৭৪০ মিনিটে নামিয়েছে। কিন্তু <c>DisposeAsync</c> চলে
-    /// কেবল <c>Application.Run()</c> ফিরলে — আর OS শাটডাউনে সেটা ফেরে না।
-    /// তাই রাতের কেসটা রয়ে গিয়েছিল।
+    /// A1 (0.4.7) added a priority drain to <c>DisposeAsync</c> and cut the delay from 2341 to 740
+    /// minutes. But <c>DisposeAsync</c> only runs when <c>Application.Run()</c> returns, and on an
+    /// OS shutdown it does not return. So the overnight case remained.
     ///
-    /// ⚠️⚠️ এখানে আগে লেখা ছিল <i>"পাঠানোর চেষ্টা করলে ডেস্কটপ আটকে যেত"</i>।
-    /// কথাটা তখন ঠিক ছিল — সার্ভার ছিল USA-তে, পিং ২৫০ ms। ২২ আগস্ট সার্ভার
-    /// BDIX-এ এসেছে, <b>পিং ৫ ms</b> (ADR-034), আর তাতে হিসাবটাই বদলে গেছে:
-    /// একটা ছোট POST এখন কয়েক ডজন মিলিসেকেন্ডের কাজ।
+    /// An earlier comment here said <i>"trying to send would freeze the desktop"</i>. That was true
+    /// when the server was in the USA with a 250 ms ping. Now the server is on BDIX with a <b>5 ms
+    /// ping</b> (ADR-034), which changes the arithmetic: one small POST takes a few dozen
+    /// milliseconds.
     ///
-    /// ⚠️ তবু <b>ছাদ</b> ছাড়া নয়। Windows-এর <c>WaitToKillAppTimeout</c>
-    /// ডিফল্ট ৫ সে.; আমরা তার অর্ধেকও নিই না, আর ব্যর্থ হলে ইভেন্টটা
-    /// outbox-এই থাকে — অর্থাৎ সবচেয়ে খারাপ ফল হলো <b>আজকের আচরণ</b>।
+    /// Still, never without a <b>ceiling</b>. Windows' <c>WaitToKillAppTimeout</c> defaults to 5 s;
+    /// we use less than half of it, and on failure the event stays in the outbox, so the worst case
+    /// is <b>today's behaviour</b>.
     /// </summary>
     internal static readonly TimeSpan EndSessionSendBudget = TimeSpan.FromMilliseconds(1500);
 
     /// <summary>
-    /// উপরের ছাদের ভেতরে — কিউয়ে লেখা শেষ হওয়ার জন্য যতটুকু।
-    /// ⚠️ <see cref="RaiseEvent"/> fire-and-forget, তাই না অপেক্ষা করলে
-    /// drain এমন একটা সারি খুঁজত যা তখনো SQLite-এ বসেনি।
+    /// Inside the ceiling above: how long to wait for the queue write to finish. Careful:
+    /// <see cref="RaiseEvent"/> is fire-and-forget, so without waiting the drain would look for a
+    /// row that has not yet landed in SQLite.
     /// </summary>
     internal static readonly TimeSpan EndSessionEnqueueWait = TimeSpan.FromMilliseconds(500);
 
     /// <summary>
-    /// ⭐ UI থ্রেড সব মিলিয়ে যতক্ষণ আটকাতে পারে — দুই ধাপের যোগফল।
+    /// The most the UI thread can be blocked in total: the sum of the two steps.
     ///
-    /// ⚠️⚠️ আলাদা ধ্রুবক রাখা হয়েছে **ইচ্ছাকৃতভাবে**। প্রথম খসড়ায় বাইরের
-    /// ছাদ ছিল কেবল <see cref="EndSessionSendBudget"/>, অথচ ভেতরের কাজ
-    /// দুই ধাপ মিলিয়ে তার চেয়ে বেশি নিতে পারত — অর্থাৎ লেখা শেষ হতে দেরি
-    /// হলে পাঠানোর জন্য প্রায় কোনো সময়ই থাকত না, আর ছাদটা তখন **অন্য
-    /// জিনিস মাপত** যা সে মাপছে বলে দাবি করে।
+    /// Careful: this is a separate constant on purpose. The first draft used only
+    /// <see cref="EndSessionSendBudget"/> as the outer ceiling, yet the inner work could take more
+    /// than that across its two steps. If the write ran late there would be almost no time left for
+    /// sending, and the ceiling would **measure something other than** what it claims to measure.
     /// </summary>
     internal static readonly TimeSpan EndSessionTotalBudget =
         EndSessionEnqueueWait + EndSessionSendBudget;
@@ -170,31 +163,31 @@ internal sealed class AgentHost : IAsyncDisposable
     private DeviceCredentials? _credentials;
     private TrayIcon? _tray;
     /// <summary>
-    /// ⚠️⚠️ <b>এই ঘরটা একাধিক থ্রেড ছোঁয়</b> <i>(G160, ৬ সেপ্টেম্বর ২০২৬)</i>।
-    /// ট্র্যাকার লেখে ও পড়ে, মেসেজ-পাম্প (<see cref="OnPower"/>) বদলায়,
-    /// থ্রেড পুল (<c>DisposeAsync</c>) বন্ধ করে।
+    /// Careful: <b>several threads touch this field</b>. The tracker reads and writes it, the
+    /// message pump (<see cref="OnPower"/>) replaces it, and the thread pool (<c>DisposeAsync</c>)
+    /// shuts it down.
     ///
-    /// ⭐ <b>দুই স্তরের পাহারা</b>, আর দুটোই দরকার:
+    /// <b>Two layers of protection</b>, and both are needed:
     /// <list type="bullet">
-    ///   <item><see cref="IdleStateMachine"/> <b>নিজের ভেতরটা</b> নিজে
-    ///     পাহারা দেয় — একই অবজেক্টে দুই থ্রেড ঢুকলে;</item>
-    ///   <item><see cref="_machineGate"/> <b>রেফারেন্সটা</b> পাহারা দেয় —
-    ///     <see cref="ApplyIdleThreshold"/> পুরোনো অবজেক্ট ফেলে নতুন বসায়,
-    ///     আর ওই ফাঁকে <c>OnPower</c> এলে সে <b>ফেলে দেওয়া</b> অবজেক্টে
-    ///     সেগমেন্ট লিখত — যেটা নতুনটার প্রথম সেগমেন্টের সাথে ওভারল্যাপ করত।
-    ///     ভেতরের তালা ওই ফাঁকটা কোনোভাবেই ধরতে পারে না।</item>
+    ///   <item><see cref="IdleStateMachine"/> protects <b>its own internals</b>, when two threads
+    ///   enter the same object;</item>
+    ///   <item><see cref="_machineGate"/> protects <b>the reference</b>.
+    ///   <see cref="ApplyIdleThreshold"/> discards the old object and installs a new one, and if
+    ///   <c>OnPower</c> arrived in that gap it would write a segment into the <b>discarded</b>
+    ///   object, overlapping the new one's first segment. The inner lock cannot catch that gap in
+    ///   any way.</item>
     /// </list>
     /// </summary>
     private volatile IdleStateMachine? _machine;
 
     /// <summary>
-    /// ⭐ <see cref="_machine"/> রেফারেন্স পড়া-বদলানোর তালা <i>(G160)</i>।
+    /// Lock for reading and replacing the <see cref="_machine"/> reference.
     ///
-    /// ⚠️⚠️ <b>এর ভেতরে কখনো <see cref="Record"/> ডাকা যাবে না</b> —
-    /// <c>Record</c> SQLite-এ লেখে, আর <c>OnPower</c> চলে মেসেজ-পাম্পে
-    /// যেখানে উইন্ডোজ ঘুমানোর আগে হাতে মোটে ~২ সেকেন্ড দেয়। তালার ভেতরে
-    /// ডিস্কে লিখলে ঠিক সেই স্টলটা হতো যেটা <c>MessageWindow</c>-র নিজের
-    /// মন্তব্যই বারণ করে। নিয়ম: <b>তালার ভেতরে বদলাও, বাইরে লেখো।</b>
+    /// Careful: <b>never call <see cref="Record"/> inside this lock.</b> <c>Record</c> writes to
+    /// SQLite, and <c>OnPower</c> runs on the message pump, where Windows gives only about 2
+    /// seconds before sleeping. Writing to disk under the lock would cause exactly the stall that
+    /// <c>MessageWindow</c>'s own comment forbids. Rule: <b>mutate inside the lock, write outside
+    /// it.</b>
     /// </summary>
     private readonly object _machineGate = new();
     private ScreenCaptureService? _capture;
@@ -203,19 +196,19 @@ internal sealed class AgentHost : IAsyncDisposable
     private UpdateStager? _updates;
     private CaptureWindow _window = CaptureWindow.Default;
 
-    /// <summary>tray-তে কয়টা ৫-মিনিটের ঘর দেখানো হবে — অর্থাৎ শেষ ~৩০ মিনিট।</summary>
+    /// <summary>How many 5-minute cells the tray shows: the last ~30 minutes.</summary>
     private const int BusyBlocks = 6;
 
     /// <summary>
-    /// ⚠️ ট্র্যাকিং লুপ লেখে, UI থ্রেড পড়ে — তাই তালা। <c>Queue</c> নিজে
-    /// থ্রেড-নিরাপদ নয়, আর এখানে দৌড় হলে জানালা আঁকতে গিয়ে ব্যতিক্রম উঠত।
+    /// Careful: the tracking loop writes and the UI thread reads, hence the lock. <c>Queue</c> is
+    /// not thread-safe, and a race here would throw while the window is being drawn.
     /// </summary>
     private readonly Queue<int> _recentBusy = new(BusyBlocks);
     private readonly object _busyGate = new();
 
     /// <summary>
-    /// এখন যে কনফিগে চলছে। ⚠️ শুরুতে <see cref="AgentConfig.Default"/> —
-    /// সার্ভারের কনফিগ আসার আগে ট্র্যাকিং থামানো যাবে না।
+    /// The config currently in effect. Careful: it starts as <see cref="AgentConfig.Default"/>,
+    /// because tracking must not wait for the server's config to arrive.
     /// </summary>
     private AgentConfig _config = AgentConfig.Default;
 
@@ -223,27 +216,27 @@ internal sealed class AgentHost : IAsyncDisposable
     private readonly WorkZoneMemory _zoneMemory;
 
     /// <summary>
-    /// সার্ভার থেকে আনা, কিন্তু এখনো প্রয়োগ হয়নি। heartbeat থ্রেড লেখে,
-    /// <see cref="TrackLoop"/> <c>Interlocked.Exchange</c> দিয়ে তুলে নেয়।
+    /// Fetched from the server but not yet applied. The heartbeat thread writes it and
+    /// <see cref="TrackLoop"/> picks it up with <c>Interlocked.Exchange</c>.
     /// </summary>
     private PendingConfig? _pendingConfig;
 
     /// <summary>The last good config on disk — <c>null</c> until <see cref="TryStart"/>.</summary>
     private AgentConfigFile? _configFile;
 
-    /// <summary>শেষ কবে বাজেট প্রয়োগ হয়েছে — শুধু সিঙ্ক লুপ ছোঁয়।</summary>
+    /// <summary>When the budget was last enforced. Only the sync loop touches it.</summary>
     private DateTimeOffset _lastBudgetSweep = DateTimeOffset.MinValue;
 
     private volatile bool _sessionSuspended;
     private long _activeTodaySec;
 
-    /// <summary>H06 — বাতিল হওয়ার কথা একবারই লগে যায়, প্রতি স্লটে নয়।</summary>
+    /// <summary>Revocation is logged once, not on every slot.</summary>
     private bool _revokeLogged;
 
-    /// <summary>H06 — বাতিলের পর ট্র্যাকিং একবার গুটিয়ে নেওয়া হয়েছে কি না।</summary>
+    /// <summary>Whether tracking has been wound down once after a revocation.</summary>
     private bool _trackingStoppedForRevoke;
 
-    /// <summary>শেষ তোলা ছবির থাম্বনেইল — জানালায় দেখানোর জন্য।</summary>
+    /// <summary>Thumbnail of the last captured image, shown in the window.</summary>
     private string? _latestShotThumb;
     private DateTimeOffset? _latestShotAt;
     private int _latestShotMonitors;
@@ -251,33 +244,33 @@ internal sealed class AgentHost : IAsyncDisposable
     private EmployeeProgress? _progress;
 
     /// <summary>
-    /// ⭐ আজকের গোনা সংখ্যাটা <b>কখন</b> মাপা হয়েছিল — জানালার চলন্ত ঘড়ির
-    /// anchor (<see cref="LiveDuration"/>)। সার্ভারের সংখ্যা এলে heartbeat-এর
-    /// মুহূর্ত, নইলে শেষ সেগমেন্ট গোনার মুহূর্ত। ⚠️ দুটো আলাদা রাখা হয়েছে,
-    /// কারণ <see cref="Snapshot"/> যেটা ব্যবহার করে anchor-ও ঠিক সেটারই হতে
-    /// হবে — মিলিয়ে ফেললে ঘড়ি ভুল জায়গা থেকে গুনত।
+    /// <b>When</b> today's counted figure was measured: the anchor for the window's running clock
+    /// (<see cref="LiveDuration"/>). It is the heartbeat moment when the server's figure has
+    /// arrived, otherwise the moment the last segment was counted. Careful: the two are kept
+    /// separate because the anchor must match whichever figure <see cref="Snapshot"/> uses. Merging
+    /// them would make the clock count from the wrong point.
     /// </summary>
     /// <summary>
-    /// ⭐ সার্ভারের হিসাব থেকে আমাদের নিজের হিসাব **কতটা এগিয়ে** — অর্থাৎ
-    /// এই এজেন্ট চালু হওয়ার আগের কাজটুকু (রিবুট, বা দিনের প্রথম ভাগ অন্য
-    /// সেশনে)। heartbeat-এ আমরা নিজের <c>ActiveSecToday</c> পাঠাই আর সার্ভার
-    /// তার মোট ফেরত দেয় — পার্থক্যটাই এই অফসেট।
+    /// How far the server's total is **ahead of our own count**: the work done before this agent
+    /// started (a reboot, or the first part of the day in another session). In each heartbeat we
+    /// send our own <c>ActiveSecToday</c> and the server returns its total; the difference is this
+    /// offset.
     ///
-    /// ⚠️⚠️ এটা না থাকলে রিবুটের পর জানালা হয় সার্ভারের **থেমে থাকা** সংখ্যা
-    /// দেখাত (সেকেন্ড নড়ত না), নয়তো নিজের শূন্য থেকে শুরু করা সংখ্যা —
-    /// অর্থাৎ সকালের কাজটুকু উধাও। অফসেট + নিজের চলন্ত হিসাব = দুটোই ঠিক।
+    /// Careful: without it, after a reboot the window would show either the server's **frozen**
+    /// figure (seconds would not tick) or our own count starting from zero, losing the morning's
+    /// work. Offset plus our own running count gives both correctly.
     /// </summary>
     private long _todayOffsetSec;
     private string? _configVersion;
     private MilestoneMemory? _milestone;
 
     /// <summary>
-    /// G02 — কোন "বিদায়ী" ইভেন্ট ইতিমধ্যে কিউতে গেছে।
+    /// Which goodbye events have already been queued.
     ///
-    /// ⚠️ ডিডুপটা বাধ্যতামূলক: একটা logoff-এ Windows <b>দুবার</b> খবর দেয় —
-    /// একবার <c>WM_WTSSESSION_CHANGE</c>-এ, আরেকবার <c>WM_ENDSESSION</c>-এ।
-    /// দুটোই পাঠালে সার্ভারে একই ঘটনার দুটো সারি বসত, আর <c>agent_events</c>
-    /// হলো ঘটনার লগ — সেখানে দুবার লেখা মানে ঘটনাটা দুবার ঘটেছে।
+    /// Careful: dedup is mandatory. On one logoff Windows reports <b>twice</b>, once via
+    /// <c>WM_WTSSESSION_CHANGE</c> and once via <c>WM_ENDSESSION</c>. Sending both would put two
+    /// rows for the same event on the server, and <c>agent_events</c> is an event log: writing
+    /// twice means the event happened twice.
     /// </summary>
     private readonly HashSet<string> _closingEventsSent = new(StringComparer.Ordinal);
 
@@ -299,9 +292,9 @@ internal sealed class AgentHost : IAsyncDisposable
     public TrayIcon? Tray => _tray;
 
     /// <summary>
-    /// UI থ্রেড থেকে ডাকতে হবে — tray আইকন এখানেই তৈরি হয়।
-    /// ⚠️ ব্যর্থ হলে <c>false</c>, ব্যতিক্রম নয়: চালু হতে না পারার কারণটা
-    /// স্টাফকে দেখাতে হবে, স্ট্যাক ট্রেস নয়।
+    /// Must be called from the UI thread, because the tray icon is created here. Careful: returns
+    /// <c>false</c> on failure, not an exception: the reason it could not start has to be shown to
+    /// the staff member, not a stack trace.
     /// </summary>
     public bool TryStart(nint messageWindowHandle, out string? error)
     {
@@ -320,9 +313,9 @@ internal sealed class AgentHost : IAsyncDisposable
             return false;
         }
 
-        // ⭐ লক আগে — অন্য কোনো এজেন্ট চললে এখানেই থেমে যেতে হবে।
-        //    দুটো এজেন্ট এক মেশিনে চললে একই ঘণ্টা দুবার গোনা হতো, আর
-        //    সার্ভারের দিক থেকে সেটা শুধু "খুব বেশি কাজ" দেখাত।
+        // Take the lock first: if another agent is running, we must stop right here. Two agents on
+        // one machine would count the same hour twice, and the server would only see "a lot of
+        // work".
         _beacon = LivenessBeacon.TryAcquire(AgentDataDirectory.Default);
         if (_beacon is null)
         {
@@ -332,31 +325,31 @@ internal sealed class AgentHost : IAsyncDisposable
 
         _beacon.Start();
 
-        // ── পরিচয় ও টোকেন ──────────────────────────────────────────────────
+        // ── Identity and token ───────────────────────────────────────────────
         var identity = MachineIdentity.Collect();
         var tokenStore = new DeviceTokenStore(log: _log.Info);
         _credentials = DeviceCredentials.Open(tokenStore, identity, _log.Info);
 
-        // ── সার্ভারের সাথে কথা ─────────────────────────────────────────────
+        // ── Talking to the server ────────────────────────────────────────────
         _sync = new HttpSyncClient(
             new SyncClientOptions
             {
                 BaseAddress = _settings.ApiRoot,
                 AgentVersion = _version,
-                // I01 — পিন বসানো থাকলে TLS যাচাই আমরাই করি
+                // If a pin is configured, we do the TLS verification ourselves
                 ServerPin = _settings.ServerPin,
             },
             log: _log);
         _credentials.ApplyTo(_sync);
         _credentials.Changed += c => c.ApplyTo(_sync);
 
-        // H04 — নতুন ভার্সন নামানো ও যাচাই। ⚠️ বসানো **হয় না** —
-        //    কারণ UpdateStage-এ লেখা (G58)。
-        // (কিউ খোলার পরে paths পাওয়া যাবে, তাই নিচে বসানো হয়)
+        // Download and verify the new version. Careful: it is **not** installed here, because that
+        // is written in UpdateStage. (The paths are only available after the queue is open, so
+        // installation happens below.)
 
-        // ── অফলাইন কিউ ─────────────────────────────────────────────────────
-        // ⚠️ কিউ খুলতে না পারলেও এজেন্ট চলে। সময় গোনা বন্ধ হয় না; শুধু
-        //    পাঠানো যায় না, আর সেটা tray-তে লাল হয়ে দেখা যায়।
+        // ── Offline queue ─────────────────────────────────────────────────────
+        // Careful: the agent runs even if the queue cannot be opened. Time counting does not stop;
+        // only sending is impossible, and that shows up red in the tray.
         try
         {
             _outbox = SqliteOutboxStore.Open(log: _log.Info);
@@ -386,7 +379,7 @@ internal sealed class AgentHost : IAsyncDisposable
             _log.Info("No saved config — starting on the defaults until the server answers");
         }
 
-        // ── ট্র্যাকিং ───────────────────────────────────────────────────────
+        // ── Tracking ─────────────────────────────────────────────────────────
         var lockState = LockStateProbe.Query();
         _machine = new IdleStateMachine(
             TimeSpan.FromSeconds(_config.IdleThresholdSec),
@@ -398,23 +391,23 @@ internal sealed class AgentHost : IAsyncDisposable
         _slots = new SlotScheduler(_config.SlotMinutes);
         _window = _config.ToCaptureWindow();
 
-        // D01–D04। ⚠️ কনফিগে বন্ধ থাকলে অবজেক্টটাই তৈরি হয় না — তাহলে
-        //    foreground উইন্ডোর নামও কখনো মেমোরিতে আসে না, শুধু "পাঠাচ্ছি না" নয়।
+        // Careful: if disabled in the config, the object is not created at all. That way the
+        // foreground window name never enters memory either, rather than just "not being sent".
         if (_config.AppTracking.Enabled)
         {
             _apps = new AppUsageService(
                 TimeSpan.FromSeconds(_config.AppTracking.MinDurationSec));
         }
 
-        // ── tray ────────────────────────────────────────────────────────────
-        // J03 — বেলুন কোন মাসে দেখানো হয়েছে তার স্মৃতি। ⚠️ এখানে একবারই তৈরি
-        //    হয়, কারণ UpdateOptions-এ নতুন অবজেক্ট দিলে ক্যাশ হারিয়ে যেত।
+        // ── tray ──────────────────────────────────────────────────────────────
+        // Remembers which month the balloon was shown for. Careful: created once here, because
+        // passing a new object to UpdateOptions would lose the cache.
         _milestone = new MilestoneMemory(AgentDataDirectory.Default);
 
         _tray = new TrayIcon(BuildTrayOptions());
         _tray.Publish(Snapshot());
 
-        _ = messageWindowHandle; // সেশন/পাওয়ার রেজিস্ট্রেশন Program-এ
+        _ = messageWindowHandle; // session/power registration happens in Program
 
         StartLoops();
         return true;
@@ -437,7 +430,7 @@ internal sealed class AgentHost : IAsyncDisposable
         OnError = ex => _log.Error("tray", ex),
     };
 
-    // ── লুপগুলো ─────────────────────────────────────────────────────────────
+    // ── Loops ────────────────────────────────────────────────────────────
 
     private void StartLoops()
     {
@@ -458,8 +451,8 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// প্রতি সেকেন্ডের হিসাব। ⚠️ এখানে কোনো I/O নেই — সেগমেন্ট বন্ধ হলে
-    /// শুধু কিউয়ে ফেলে দেওয়া হয়, লেখা হয় অন্য থ্রেডে।
+    /// The per-second counting. Careful: no I/O here. When a segment closes it is only put on the
+    /// queue, and the write happens on another thread.
     /// </summary>
     private void TrackLoop()
     {
@@ -474,40 +467,40 @@ internal sealed class AgentHost : IAsyncDisposable
                 {
                     Interlocked.Increment(ref _idleFailStreak);
 
-                    // ⚠️ ডিফল্ট বসানো হয় না — এই সেকেন্ডটা বাদ। ভুল সংখ্যা
-                    //    বসানোর চেয়ে একটা সেকেন্ড হারানো ভালো।
+                    // Careful: no default is substituted, so this second is dropped. Losing one
+                    // second is better than recording a wrong number.
                     Thread.Sleep(Tick);
                     continue;
                 }
 
                 Volatile.Write(ref _idleFailStreak, 0);
 
-                // ⭐ নতুন কনফিগ এখানেই প্রয়োগ হয়, heartbeat থ্রেডে নয়।
-                //    `_machine` ও `_apps` এই লুপের সম্পত্তি; অন্য থ্রেড থেকে
-                //    বদলালে ঠিক সেই সেকেন্ডে একটা Tick পুরোনো অবজেক্টে আর
-                //    পরেরটা নতুনটায় পড়ত, আর মাঝখানের সময়টা কোনো সেগমেন্টেই
-                //    ঢুকত না — অর্থাৎ কনফিগ বদলানোর দিনে সবার কিছু ঘণ্টা হারাত।
+                // New config is applied here, not on the heartbeat thread. `_machine` and `_apps`
+                // belong to this loop; changing them from another thread would send one Tick to the
+                // old object and the next to the new one in that very second, and the time in
+                // between would land in no segment. On the day the config changed, everyone would
+                // lose a few hours.
                 if (Interlocked.Exchange(ref _pendingConfig, null) is { } pending)
                 {
                     ApplyConfig(pending.Config, pending.Version, now);
                 }
 
-                // ⭐ H06 — ডিভাইস বাতিল হলে ট্র্যাকিংও থামে, শুধু আপলোড নয়।
-                //    আগে শুধু আপলোড থামত, তাই ছাঁটাই হওয়া কর্মীর PC-তে
-                //    সেগমেন্ট ও অ্যাপ-ব্যবহার জমতেই থাকত।
+                // If the device is revoked, tracking stops too, not just uploading. Earlier only
+                // uploads stopped, so on a dismissed employee's PC segments and app usage kept
+                // piling up.
                 //
-                // ⚠️⚠️ সাইন ইন না করা থাকলেও একই — গোনা শুরুর আগে জানা
-                //    দরকার ঘণ্টাগুলো **কার**। নইলে ইনস্টল করে রেখে যাওয়া
-                //    মেশিনে অ্যাডমিনের সময়টুকু আউটবক্সে জমত, আর স্টাফ সাইন
-                //    ইন করামাত্র সেটা তার খাতায় গিয়ে বসত (TrackingGate)।
+                // Careful: the same applies when not signed in. Before counting starts we need to
+                // know **whose** hours they are. Otherwise on a machine that was installed and
+                // left, the admin's time would pile up in the outbox and land on a staff member's
+                // record the moment they signed in (TrackingGate).
                 var gate = TrackingGate.Check(
                     _credentials?.IsEnrolled == true,
                     _credentials?.IsRevoked == true);
 
                 if (gate != TrackingGate.Verdict.Allowed)
                 {
-                    // ⚠️ শুধু revoke-এ খোলা সেগমেন্ট বন্ধ করার দরকার হয়।
-                    //    সাইন ইনের আগে খোলা সেগমেন্ট থাকতেই পারে না।
+                    // Careful: only a revoke needs to close the open segment. Before sign-in there
+                    // cannot be an open segment.
                     if (gate == TrackingGate.Verdict.Revoked) StopTrackingForRevoke(now);
 
                     Thread.Sleep(Tick);
@@ -519,7 +512,7 @@ internal sealed class AgentHost : IAsyncDisposable
 
                 if (gap.Detected)
                 {
-                    // ⚠️ G160 — বদল তালার ভেতরে, কিউয়ে পাঠানো বাইরে
+                    // Careful: the change happens inside the lock, the queue write outside it
                     IReadOnlyList<ActivitySegment> slept, woke;
                     lock (_machineGate)
                     {
@@ -531,11 +524,10 @@ internal sealed class AgentHost : IAsyncDisposable
                     Record(woke);
                 }
 
-                // ⭐ G46 — পর্দা জমে থাকলে ইনপুট টাইমারকে আর বিশ্বাস করা হয় না
+                // If the screen is frozen, the input timer is no longer trusted.
                 //
-                // ⚠️ ফিঙ্গারপ্রিন্ট মেলানোটা তালার **আগে** — ওটা পর্দা পড়ে,
-                //    আর তালার ভেতরে কোনো ভারী কাজ ঢোকানো মানেই মেসেজ-পাম্প
-                //    আটকে যাওয়ার ঝুঁকি (G160)।
+                // Careful: fingerprint matching happens **before** the lock: it reads the screen,
+                // and putting any heavy work inside the lock risks stalling the message pump.
                 var frozen = _screen.IsFrozen(now);
 
                 SegmentState before, after;
@@ -552,18 +544,19 @@ internal sealed class AgentHost : IAsyncDisposable
                 Record(ticked);
 
                 /**
-                 * ⭐⭐ অবস্থা বদলালে সার্ভারকে <b>সাথে সাথে</b> জানানো।
+                 * Tell the server <b>immediately</b> when the state changes.
                  *
-                 * ⚠️⚠️ এই তিনটে লাইন না থাকলে <see cref="HeartbeatUrgency"/>
-                 * থাকত, টেস্টও পাস করত, অথচ বোর্ডে কিছুই বদলাত না — এই
-                 * প্রকল্পের সবচেয়ে চেনা ভুল ("চুক্তি লেখা আছে, কলার লেখা
-                 * হয়নি")। তাই নিয়ম আর কলার একসাথে লেখা হলো।
+                 * Careful: without these three lines <see cref="HeartbeatUrgency"/> would exist and
+                 * its test would pass, yet nothing on the board would change. This is the project's
+                 * most familiar mistake ("the contract is written but the caller is not"), so the
+                 * rule and the caller were written together.
                  */
                 if (after != before) NudgeHeartbeat();
             }
             catch (Exception ex)
             {
-                // ⚠️ এই থ্রেড মরলে সময় গোনা চিরতরে বন্ধ — সবচেয়ে খারাপ ব্যর্থতা।
+                // Careful: if this thread dies, time counting stops for good. That is the worst
+                // failure.
                 _log.Error("Tracker tick failed — continuing", ex);
             }
 
@@ -572,21 +565,21 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /**
-     * স্ক্রিনশটের স্লট <b>আর</b> G46-এর ছাপ — দুটোই এই একটা লুপে।
+     * The screenshot slot <b>and</b> the screen fingerprint: both in this single loop.
      *
-     * ⚠️⚠️ <b>ছাপটা ট্র্যাকার থ্রেডে ছিল, আর সেটাই ভুল ছিল।</b> তাতে
-     * <see cref="_capture"/>-কে দুটো থ্রেড একসাথে ব্যবহার করত, অথচ ওটা
-     * শুরু থেকেই একক-থ্রেডের ধরে বানানো — ভেতরে DXGI-র COM অবজেক্ট, আর
-     * একই আউটপুট দুবার duplicate করা যায় না।
+     * Careful: <b>the fingerprint used to run on the tracker thread, and that was wrong.</b> Two
+     * threads then used <see cref="_capture"/> at once, although it was built from the start for a
+     * single thread: it holds DXGI COM objects inside, and the same output cannot be duplicated
+     * twice.
      *
-     * ⭐ তাই <b>মালিক একজনই</b>: এই লুপ। স্ক্রিনশটের স্লট আর ছাপের সময়,
-     * যেটা আগে আসে সেই পর্যন্ত ঘুম — অর্থাৎ ছাপ তবু স্ক্রিনশটের
-     * ছন্দ থেকে স্বাধীন, যেটা অচলাবস্থা এড়াতে দরকার ছিল।
+     * So there is <b>exactly one owner</b>: this loop. It sleeps until whichever comes first, the
+     * screenshot slot or the fingerprint time. The fingerprint is still independent of the
+     * screenshot rhythm, which was needed to avoid a deadlock.
      *
-     * ⚠️ দুটো ঘড়ি ইচ্ছাকৃতভাবে আলাদা: স্লট চলে বাস্তব ঘড়িতে (ওগুলো
-     * দিনের নির্দিষ্ট সময়ে বাঁধা), আর ছাপ চলে monotonic ঘড়িতে
-     * (<see cref="ScreenActivity"/>-ও তা-ই ব্যবহার করে)। মিশিয়ে ফেললে
-     * NTP সংশোধনে হিসাব এলোমেলো হতো।
+     * Careful: the two clocks are deliberately different. Slots run on the wall clock (they are
+     * tied to fixed times of day), and the fingerprint runs on the monotonic clock
+     * (<see cref="ScreenActivity"/> uses it too). Mixing them would let NTP corrections scramble
+     * the calculation.
      */
     private async Task CaptureLoopAsync(CancellationToken ct)
     {
@@ -605,10 +598,11 @@ internal sealed class AgentHost : IAsyncDisposable
                 catch (OperationCanceledException) { return; }
             }
 
-            // ⚠️ নিজেই দেখে নেয় সময় হয়েছে কি না, আর নিজেই ব্যর্থতা সামলায়
+            // Careful: it checks for itself whether it is time, and handles its own failures
             SampleScreen(_clock.Now);
 
-            // ⚠️ ছাপের জন্য জাগলে স্লটের সময় এখনো আসেনি — তখন স্ক্রিনশট নয়
+            // Careful: if we woke for the fingerprint, the slot time has not come yet, so no
+            // screenshot
             if (DateTimeOffset.UtcNow < next.FireAt) continue;
 
             try
@@ -626,24 +620,24 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /**
-     * ⭐⭐ <b>G46</b> — পর্দা সত্যিই বদলাচ্ছে কি না।
+     * <b>G46:</b> is the screen actually changing?
      *
-     * ⚠️⚠️ নমুনা আসে <see cref="SampleScreen"/> থেকে, <b>স্ক্রিনশটের স্লট
-     *    থেকে নয়</b> — আর এই আলাদা করাটাই এখানকার সবচেয়ে জরুরি সিদ্ধান্ত।
-     *    আগে ছাপ আসত স্লট থেকে, আর স্লট চলত কেবল ACTIVE অবস্থায়; ফলে
-     *    "জমেছে → IDLE → স্লট বন্ধ → নতুন ছাপ নেই → চিরকাল জমে আছে" —
-     *    কর্মী ফিরে এসে কাজ করলেও এজেন্ট স্থায়ীভাবে idle দেখাত।
+     * Careful: samples come from <see cref="SampleScreen"/>, <b>not from the screenshot slot</b>,
+     * and this separation is the most important decision here. The fingerprint used to come from
+     * the slot, and slots ran only in the ACTIVE state. So: "frozen, then IDLE, then slot stops,
+     * then no new fingerprint, then frozen forever". Even after the employee came back and worked,
+     * the agent showed idle permanently.
      *
-     * ⚠️ ক্যাপচার বন্ধ থাকলে (রাতে, § ৪.২-এর জানালার বাইরে, বা লক করা
-     *    পর্দায়) নমুনা আসে না, আর <see cref="ScreenActivity.StaleAfter"/>
-     *    পেরোলে সন্দেহটা নিজে থেকেই উঠে যায়। "জানি না"-কে অভিযোগ ধরা হয় না।
+     * Careful: when capture is off (at night, outside the window in section 4.2, or on a locked
+     * screen) no samples arrive, and once <see cref="ScreenActivity.StaleAfter"/> passes, the
+     * suspicion lifts by itself. "Unknown" is not treated as an accusation.
      */
     private readonly ScreenActivity _screen = new();
 
-    /// <summary>শেষ কবে ছাপ নেওয়ার চেষ্টা হয়েছিল — ব্যর্থ হলেও।</summary>
+    /// <summary>When a fingerprint was last attempted, even if it failed.</summary>
     private DateTimeOffset? _screenSampledAt;
 
-    /// <summary>ছাপ বানানো ব্যর্থ হওয়ার কথা একবারই লগে যায়।</summary>
+    /// <summary>A failed fingerprint is logged only once.</summary>
     private bool _screenSampleFailed;
 
     /// <summary>
@@ -663,41 +657,39 @@ internal sealed class AgentHost : IAsyncDisposable
     private int _screenshotFailStreak;
 
     /**
-     * ⭐⭐⭐ <b>G46 — পর্দার ছাপ নেওয়া।</b>
+     * <b>G46: taking the screen fingerprint.</b>
      *
-     * ⚠️⚠️ ডাকা হয় <b>ক্যাপচার লুপ থেকে</b>, ট্র্যাকার থ্রেড থেকে নয় —
-     * <see cref="_capture"/>-এর মালিক একজনই থাকতে হবে (দেখুন
-     * <see cref="CaptureLoopAsync"/>)।
+     * Careful: called <b>from the capture loop</b>, not from the tracker thread, because
+     * <see cref="_capture"/> must have exactly one owner (see <see cref="CaptureLoopAsync"/>).
      *
-     * ⭐ তবু এটা স্ক্রিনশটের <b>স্লট</b> থেকে স্বাধীন: স্লট চলে কেবল
-     * ACTIVE অবস্থায়, আর ছাপ চলে সবসময়। ওই পার্থক্যটাই অচলাবস্থা এড়ায় —
-     * বিস্তারিত <see cref="ScreenSampling"/>-এ।
+     * It is still independent of the screenshot <b>slot</b>: slots run only in the ACTIVE state,
+     * and the fingerprint always runs. That difference is what avoids the deadlock; details in
+     * <see cref="ScreenSampling"/>.
      *
-     * ⚠️ ব্যর্থ হলে চুপচাপ ফিরে আসা, কিন্তু <see cref="_screenSampledAt"/>
-     * তবু বসানো হয় — নইলে ক্যাপচার ভাঙা মেশিনে প্রতি সেকেন্ডে চেষ্টা চলত।
+     * Careful: on failure it returns quietly, but <see cref="_screenSampledAt"/> is still set.
+     * Otherwise a machine with broken capture would retry every second.
      */
-    /// <summary>পরের ছাপ কতক্ষণ পরে — ক্যাপচার লুপের ঘুম ঠিক করতে।</summary>
+    /// <summary>How long until the next fingerprint, used to set the capture loop's
+    /// sleep.</summary>
     private TimeSpan UntilNextScreenSample()
     {
         var now = _clock.Now;
 
         /**
-         * ⚠️⚠️⚠️ <b>এই শাখাটাই একটা ১০০% CPU লুপ আটকায়</b> (৬ সেপ্টেম্বর ২০২৬)।
+         * <b>This very branch prevents a 100% CPU loop.</b>
          *
-         * <see cref="SampleScreen"/> ছাপ না নিতে পারলে <see cref="_screenSampledAt"/>
-         * <c>null</c>-ই থেকে যায়। আগে সেই অবস্থায় এখান থেকে <c>Zero</c> ফিরত,
-         * অর্থাৎ <see cref="CaptureLoopAsync"/>-এর <c>wait</c> শূন্য হয়ে যেত,
-         * <c>Task.Delay</c> বাদ পড়ত, স্লটের সময় হয়নি বলে <c>continue</c> —
-         * আর লুপটা একটা কোর পুরো দখল করে ঘুরতে থাকত।
+         * If <see cref="SampleScreen"/> cannot take a fingerprint, <see cref="_screenSampledAt"/>
+         * stays <c>null</c>. This used to return <c>Zero</c> in that state, so
+         * <see cref="CaptureLoopAsync"/>'s <c>wait</c> became zero, <c>Task.Delay</c> was skipped,
+         * the slot time had not come so it hit <c>continue</c>, and the loop spun on one core.
          *
-         * ⚠️ ঘটনাটা কল্পনা নয়, তিনটে সত্যিকারের অবস্থায় ঘটত, আর তিনটেই
-         * <b>প্রথম সফল ছাপের আগে</b>:
-         *   ১· সদ্য বসানো PC, এখনো enroll হয়নি
-         *   ২· অফিস-সময়ের বাইরে এজেন্ট চালু হলে (০৭:০০–২৩:০০-র বাইরে)
-         *   ৩· পর্দা লক থাকা অবস্থায় চালু হলে
+         * It happened in three real situations, all <b>before the first successful fingerprint</b>:
+         *   1. A freshly installed PC that is not enrolled yet
+         *   2. The agent starting outside office hours (outside 07:00-23:00)
+         *   3. Starting while the screen is locked
          *
-         * ⭐ সমাধান: করার কিছু না থাকলে <b>স্বাভাবিক ব্যবধানটাই</b> ঘুমানো।
-         * দেরি সর্বোচ্চ এক ব্যবধান, আর CPU শূন্য।
+         * Fix: when there is nothing to do, sleep for <b>the normal interval</b>. The delay is at
+         * most one interval and CPU use is zero.
          */
         if (!CanSampleNow()) return ScreenSampling.Interval;
 
@@ -712,11 +704,11 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /**
-     * ছাপ নেওয়া এই মুহূর্তে আদৌ অনুমোদিত কি না।
+     * Whether taking a fingerprint is permitted right now at all.
      *
-     * ⚠️ শর্তগুলো <see cref="SampleScreen"/>-এর সাথে <b>হুবহু এক</b>, আর
-     * দুটোই <see cref="ScreenSampling.Allowed"/> ডাকে — আলাদা করে লিখলে
-     * একদিন একটা বদলাত আর অন্যটা নয়, আর তখন লুপটা আবার ঘুরতে শুরু করত।
+     * Careful: the conditions are <b>exactly the same</b> as in <see cref="SampleScreen"/>, and
+     * both call <see cref="ScreenSampling.Allowed"/>. Written separately, one would change someday
+     * and not the other, and the loop would start spinning again.
      */
     private bool CanSampleNow() =>
         _capture is not null
@@ -728,13 +720,13 @@ internal sealed class AgentHost : IAsyncDisposable
 
     private void SampleScreen(DateTimeOffset now)
     {
-        // ⚠️ শর্তটা <see cref="CanSampleNow"/>-এর সাথে এক জায়গায় রাখা —
-        //    দুই জায়গায় লিখলে একদিন একটা বদলাত আর অন্যটা নয়, আর তখন
-        //    ক্যাপচার-লুপ আবার ১০০% CPU-তে ঘুরত।
+        // Careful: this condition is kept in one place with <see cref="CanSampleNow"/>. Written in
+        // two places, one would change someday and not the other, and the capture loop would spin
+        // at 100% CPU again.
         if (!CanSampleNow()) return;
 
-        // ⚠️ উপরের শর্তেই ধরা পড়ে, কিন্তু কম্পাইলার সেটা দেখতে পায় না —
-        //    আর `_capture!` লিখলে ভবিষ্যতে সত্যিকারের null-ও চাপা পড়ত।
+        // Careful: the condition above already guarantees this, but the compiler cannot see it, and
+        // writing `_capture!` would also hide a real null in the future.
         if (_capture is null) return;
 
         if (!ScreenSampling.Due(now, _screenSampledAt, _screen.IsFrozen(now))) return;
@@ -744,13 +736,13 @@ internal sealed class AgentHost : IAsyncDisposable
         try
         {
             /**
-             * ⭐⭐ <b>প্রতিটা মনিটরের ছাপ</b> (৩১ আগস্ট ২০২৬)। আগে কেবল
-             * প্রথম পর্দার ছাপ নেওয়া হতো, আর দ্বিতীয় মনিটরে কাজ করা
-             * মানুষের গোনা দশ মিনিট পর থেমে যেত।
+             * <b>A fingerprint for every monitor.</b> Previously only the first screen was
+             * fingerprinted, so for someone working on a second monitor the count stopped after ten
+             * minutes.
              *
-             * ⚠️ যে পর্দার ছাপ বানানো গেল না সেটা বাদ — কিন্তু বাকিগুলো
-             * তবু যায়। একটাও না পেলে কিছুই জানানো হয় না, আর তখন
-             * <c>StaleAfter</c> নিয়মটা "জানি না" বলে সন্দেহ করা বন্ধ রাখে।
+             * Careful: a screen whose fingerprint could not be made is skipped, but the others are
+             * still sent. If none succeeds, nothing is reported, and then the <c>StaleAfter</c>
+             * rule treats it as "unknown" and holds off suspecting anything.
              */
             var frames = _capture.CaptureEach();
             if (frames.Count == 0) return;
@@ -772,11 +764,12 @@ internal sealed class AgentHost : IAsyncDisposable
         catch (Exception ex)
         {
             /**
-             * ⚠️ গোনা চালু রাখাই বড় কথা — ছাপ না পেলে StaleAfter সামলে নেবে।
+             * Careful: keeping counting alive is what matters; if no fingerprint arrives,
+             * StaleAfter takes care of it.
              *
-             * ⚠️⚠️ <b>একবারই লেখা হয়।</b> প্রতিবার লিখলে ভাঙা ক্যাপচারের
-             * মেশিনে লগ ফাইল মিনিটে একটা করে সারি নিয়ে ফুলে উঠত, আর
-             * H08-এর ঘূর্ণনে আসল ভুলগুলো মুছে যেত।
+             * Careful: <b>this is written only once.</b> Writing every time would make the log file
+             * on a machine with broken capture grow by one row per minute, and the rotation (H08)
+             * would push out the real errors.
              */
             _screenSampleFailing = true;
 
@@ -790,8 +783,8 @@ internal sealed class AgentHost : IAsyncDisposable
 
     private async Task CaptureSlotAsync(SlotScheduler.Slot slot, CancellationToken ct)
     {
-        // A04 · A04b · H06 — শর্তগুলো সব CaptureGate-এ, কারণ guard clause
-        // হিসেবে এখানে ছড়ানো থাকলে একটা অনুপস্থিত শর্তও কোনো টেস্ট ধরত না।
+        // All the conditions live in CaptureGate, because scattered here as guard clauses a missing
+        // condition would not be caught by any test.
         var verdict = CaptureGate.Check(
             _machine!.State,
             _credentials?.IsEnrolled == true,
@@ -802,8 +795,8 @@ internal sealed class AgentHost : IAsyncDisposable
 
         if (verdict != CaptureGate.Verdict.Allowed)
         {
-            // ⚠️ revoke হলে একবার জানানো হয় — নীরবে বন্ধ থাকা আর "কাজ
-            //    করছে কিন্তু কিছু পাঠাচ্ছে না", দুটো পর্দায় এক দেখাত।
+            // Careful: a revoke is reported once. Otherwise "silently stopped" and "working but
+            // sending nothing" would look the same on screen.
             if (verdict == CaptureGate.Verdict.Revoked && !_revokeLogged)
             {
                 _revokeLogged = true;
@@ -821,34 +814,34 @@ internal sealed class AgentHost : IAsyncDisposable
         if (results.Count == 0) Interlocked.Increment(ref _screenshotFailStreak);
         else Volatile.Write(ref _screenshotFailStreak, 0);
 
-        // A07 — ছবির সাথে ওই মুহূর্তের অ্যাপ ও উইন্ডো টাইটেল।
+        // The foreground app and window title at that moment, stored with the image.
         //
-        // ⚠️ লুপের **বাইরে**, ইচ্ছাকৃতভাবে: ছবি প্রতি মনিটরে একটা, কিন্তু
-        //    foreground উইন্ডো গোটা ডেস্কটপে একটাই। ভেতরে পড়লে দুই মনিটরের
-        //    দুই সারিতে দু-রকম নাম বসতে পারত (মাঝপথে উইন্ডো বদলালে), অথচ
-        //    ছবিগুলো একই মুহূর্তের।
+        // Careful: deliberately <b>outside</b> the loop. There is one image per monitor, but only
+        // one foreground window for the whole desktop. Inside the loop the rows of two monitors
+        // could get different names (if the window changed midway), although the images are of the
+        // same moment.
         //
-        // ⚠️ কনফিগে অ্যাপ ট্র্যাকিং বন্ধ থাকলে `_apps` তৈরিই হয় না, তাই
-        //    নামটাও বসে না — "পাঠাচ্ছি না" নয়, জানাই হয় না (উপরে § ট্র্যাকিং)।
+        // Careful: if app tracking is off in the config, `_apps` is never created, so no name is
+        // stored. It is "not known", not "not being sent" (see the tracking section above).
         var front = _apps?.Current;
 
-        // জানালায় দেখানোর জন্য শেষ ছবির থাম্বনেইল — সবচেয়ে বাঁ দিকের পর্দাটা
+        // Thumbnail of the last image, for the window: the leftmost screen
         string? showThumb = null;
         var showIndex = int.MaxValue;
 
         foreach (var r in results)
         {
-            // ⚠️ uuid আগে তৈরি — ফাইলের নাম আর সারির clientUuid এক হতে হবে,
-            //    নইলে ফাইল আর মেটাডেটা জোড়া হারিয়ে ফেলত।
+            // Careful: the uuid is created first. The file name and the row's clientUuid must
+            // match, otherwise the file and its metadata would lose each other.
             var uuid = Guid.NewGuid();
 
             var path = _outbox.Paths.NewScreenshotPath(slot.SlotStart, r.MonitorIndex, uuid);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             await File.WriteAllBytesAsync(path, r.Webp, ct);
 
-            // A06 — গ্রিডের জন্য ছোট ছবি। ⚠️ ব্যর্থ হলে চুপচাপ এগোনো:
-            //    থাম্বনেইল না থাকলে গ্যালারি ফুল ছবি দেখাবে, কিন্তু
-            //    থাম্বনেইলের জন্য আসল ছবিটা হারানো যাবে না।
+            // A small image for the grid. Careful: on failure, carry on quietly: without a
+            // thumbnail the gallery shows the full image, but the real image must not be lost over
+            // a thumbnail.
             var thumb = WebpEncoder.EncodeThumb(r.Webp);
             if (thumb is not null)
             {
@@ -887,27 +880,24 @@ internal sealed class AgentHost : IAsyncDisposable
         KeepLatestShot(showThumb, results.Count);
 
         /*
-         * H08 — ⭐ ক্যাপচারের **এক লাইন**, প্রতি স্লটে একটাই।
+         * H08: <b>one line</b> per capture, one per slot.
          *
-         * ⚠️ এই লাইনটার অভাবেই ১১ আগস্ট রাতে ঘণ্টাখানেক নষ্ট হয়েছিল: একটা
-         * স্লট বাদ গিয়েছিল, আর সেটা কেন — DXGI ব্যর্থ, নাকি জানালা বন্ধ,
-         * নাকি ওই মুহূর্তে idle — জানার কোনো উপায় ছিল না। শেষে সেগমেন্টের
-         * সময়ের সাথে মিলিয়ে অনুমান করতে হয়েছিল (§ ৩ঐ), আর প্রথম অনুমানটা
-         * ভুলও ছিল।
+         * Careful: the lack of this line wasted about an hour one night. A slot had been skipped,
+         * and there was no way to know why: DXGI failed, the window was closed, or the user was
+         * idle at that moment. It had to be guessed by comparing against segment times (section 3),
+         * and the first guess was wrong too.
          *
-         * ⚠️ স্লট প্রতি একটাই লাইন, মনিটর প্রতি নয় — দিনে ২৮৮ লাইন, তিন
-         * মনিটরে ৮৬৪ হতো। ৭ দিনের লগে ওটুকুই যথেষ্ট, আর তাতে বাকি লাইনগুলো
-         * চাপা পড়ে না।
+         * Careful: one line per slot, not per monitor: 288 lines a day, and 864 with three
+         * monitors. That is enough for a 7-day log, and the other lines do not get pushed out.
          */
         /**
-         * ⚠️⚠️ স্লটের সময়টা <b>ঢাকার</b> ঘড়িতে দেখানো হয়, UTC-তে নয়।
+         * Careful: the slot time is shown in <b>Dhaka</b> time, not UTC.
          *
-         * `slot.SlotStart` UTC (`SlotScheduler.FloorToSlot` অফসেট শূন্য দেয়),
-         * কিন্তু এই লাইনের **টাইমস্ট্যাম্প** লেখে `FileLog`, আর সেটা লোকাল
-         * সময়ে (`DateTimeOffset.Now`, +06:00)। দুটো এক জোনে না রাখলে লগে
-         * পাশাপাশি বসত "22:14 … slot 16:10" — একই ঘটনার দুই সময়, আর যিনি
-         * ইনসিডেন্টের সময় লগ পড়ছেন তাঁকে মাথায় ৬ ঘণ্টা যোগ করতে হতো।
-         * ঠিক এই বিভ্রান্তিটাই G137 তদন্তে ধরা পড়েছে (09 § ৩ফ)।
+         * `slot.SlotStart` is UTC (`SlotScheduler.FloorToSlot` gives a zero offset), but the
+         * **timestamp** of this line is written by `FileLog` in local time (`DateTimeOffset.Now`,
+         * +06:00). If the two were not in one zone, the log would show "22:14 ... slot 16:10" side
+         * by side: two times for one event, and whoever reads the log during an incident would have
+         * to add 6 hours in their head. This confusion was caught in the G137 investigation.
          */
         _log.Info(
             $"📸 slot {DhakaTime.LocalTimeOf(slot.SlotStart):HH\\:mm} · {results.Count} monitor(s)" +
@@ -915,15 +905,15 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// শেষ ছবিটা জানালায় দেখানোর জন্য <b>কপি</b> করে রাখা।
+    /// Keep a <b>copy</b> of the last image, to show in the window.
     ///
-    /// ⚠️⚠️ কিউয়ের ফাইলটার দিকে শুধু আঙুল তুলে রাখা যায় না — আপলোড সফল
-    /// হলে sync worker ছবি ও থাম্বনেইল দুটোই <b>মুছে ফেলে</b> (কয়েক সেকেন্ডের
-    /// মধ্যেই)। তখন জানালা খুললে ছবির জায়গায় ফাঁকা থাকত, আর সেটা "ছবি ওঠেনি"
-    /// বলে ভুল বার্তা দিত।
+    /// Careful: pointing at the file in the queue is not enough. When an upload succeeds, the sync
+    /// worker <b>deletes</b> both the image and the thumbnail (within a few seconds). Opening the
+    /// window then would show a blank where the image should be, wrongly saying "no image was
+    /// captured".
     ///
-    /// থাম্বনেইলটাই কপি হয় (৪–১১ KB), পুরো ছবি নয় — জানালায় ওটুকুই দেখানো হয়,
-    /// আর ১৫টা PC-তে রোজ ১৯২ বার পুরো ছবি কপি করার কোনো মানে নেই।
+    /// The thumbnail is what gets copied (4-11 KB), not the whole image: that is all the window
+    /// shows, and copying a full image 192 times a day on each of 15 PCs makes no sense.
     /// </summary>
     private void KeepLatestShot(string? thumbPath, int monitors)
     {
@@ -950,8 +940,8 @@ internal sealed class AgentHost : IAsyncDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // ⚠️ ছবি তোলা ও পাঠানোর চেয়ে দেখানোটা কম গুরুত্বপূর্ণ — এখানে
-            //    ব্যর্থ হলে চুপচাপ এগোনো, ক্যাপচার যেন না ভাঙে।
+            // Careful: showing the image matters less than capturing and sending it. If this fails,
+            // carry on quietly so capture does not break.
             _log.Warn($"Could not keep the last thumbnail for the window: {ex.Message}");
         }
     }
@@ -984,14 +974,14 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// কোন অ্যাপ/সাইটে কত সময় (D01–D04)।
+    /// Time spent per app or site (D01-D04).
     ///
-    /// ⚠️ <b>ট্র্যাকার থ্রেডে নয়, আলাদা লুপে।</b> address bar পড়তে UI Automation
-    /// লাগে, আর সেটা ব্যস্ত অ্যাপে ৪০০ মি.সে. পর্যন্ত আটকে থাকতে পারে
-    /// (<see cref="Apps.BrowserUrlReader"/>)। ওটা সেকেন্ড গোনার থ্রেডে বসালে
-    /// idle মাপার টিক পিছিয়ে যেত — আর সেকেন্ডের হিসাবই এই সিস্টেমের মূল কাজ।
+    /// Careful: <b>a separate loop, not the tracker thread.</b> Reading the address bar needs UI
+    /// Automation, which can block for up to 400 ms in a busy app
+    /// (<see cref="Apps.BrowserUrlReader"/>). Putting it on the second-counting thread would delay
+    /// the idle-measuring tick, and the per-second count is this system's core job.
     ///
-    /// এই লুপ ব্যর্থ হলে অ্যাপের হিসাব হারায়, সময়ের হিসাব নয়।
+    /// If this loop fails, app accounting is lost, not time accounting.
     /// </summary>
     private async Task AppUsageLoopAsync(CancellationToken ct)
     {
@@ -1001,14 +991,12 @@ internal sealed class AgentHost : IAsyncDisposable
         {
             try
             {
-                // ⚠️⚠️ এই গেটটা **আলাদা করে** লাগে। TrackLoop-এ বসানো গেট
-                //    এই লুপটাকে থামায় না — দুটো আলাদা থ্রেড, আর এই লুপ
-                //    নিজেই নিজের সারি কিউতে ফেলে।
+                // Careful: this gate is needed **separately**. The gate in TrackLoop does not stop
+                // this loop: they are two different threads, and this loop queues its own rows.
                 //
-                // ⭐ মাপতে গিয়েই ধরা পড়েছে: TrackLoop ও CaptureGate গেট
-                //    করার পরেও ৭ মিনিটে একটা সারি জমেছিল — `oXeio.Agent.exe`,
-                //    ৩০০ সেকেন্ড। অর্থাৎ সাইন-ইন জানালাটা কতক্ষণ খোলা ছিল,
-                //    সেটাই অ্যাপ-ব্যবহার হিসেবে জমা হচ্ছিল।
+                // Found by measurement: even after TrackLoop and CaptureGate were gated, a row
+                // piled up in 7 minutes: `oXeio.Agent.exe`, 300 seconds. That is, the time the
+                // sign-in window stayed open was being recorded as app usage.
                 if (TrackingGate.Allows(
                         _credentials?.IsEnrolled == true,
                         _credentials?.IsRevoked == true))
@@ -1028,11 +1016,9 @@ internal sealed class AgentHost : IAsyncDisposable
 
     private async Task SyncLoopAsync(CancellationToken ct)
     {
-        // A05 — চালু হওয়ার সাথে সাথেই একবার। ⚠️ এটাই সবচেয়ে জরুরি কলটা:
-        //    এজেন্ট বন্ধ থাকা অবস্থায় (বা ক্র্যাশের পর) কিউ যতটা বেড়েছে
-        //    সেটা এখানেই ধরা পড়ে, প্রথম আপলোডের আগে।
-        //    (`_lastBudgetSweep` তখনো MinValue, তাই OutboxSweep একে
-        //     Startup বলে চেনে।)
+        // Once, right at startup. Careful: this is the most important call. Any growth of the queue
+        // while the agent was off (or after a crash) is caught here, before the first upload.
+        // (`_lastBudgetSweep` is still MinValue, so OutboxSweep recognises this as Startup.)
         await MaybeEnforceOutboxBudgetAsync(ct);
 
         while (!ct.IsCancellationRequested)
@@ -1049,18 +1035,18 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// A05 — কিউয়ের ডিস্ক-বাজেট প্রয়োগ।
+    /// Enforce the queue's disk budget.
     ///
-    /// ⚠️⚠️ <see cref="SqliteOutboxStore.EnforceBudgetAsync"/>-এর ডকে চুক্তিটা
-    /// লেখাই ছিল — <i>"সিঙ্ক ওয়ার্কার শুধু এটাই ডাকবে (স্টার্টআপে একবার,
-    /// তারপর ঘণ্টায় একবার আর <c>LastWriteError</c> দেখা দিলেই সঙ্গে সঙ্গে)"</i>।
-    /// <b>কলারটা কোনোদিন লেখা হয়নি।</b> ফলে ২ GiB-র ক্যাপ, ৭ দিনের বয়সসীমা,
-    /// eviction-এর ক্রম — পুরো ব্যবস্থাটা তৈরি হয়ে অচল পড়ে ছিল, আর একটা
-    /// PC সপ্তাহখানেক অফলাইন থাকলে কিউ বাড়তেই থাকত।
+    /// Careful: the contract was already written in the doc of
+    /// <see cref="SqliteOutboxStore.EnforceBudgetAsync"/>: <i>"the sync worker is the only caller
+    /// (once at startup, then once an hour, and immediately whenever <c>LastWriteError</c>
+    /// appears)"</i>. <b>The caller was never written.</b> So the 2 GiB cap, the 7-day age limit
+    /// and the eviction order were all built and sat unused, and a PC that stayed offline for a
+    /// week would have kept growing its queue.
     ///
-    /// ⭐ <c>LastWriteError</c>-এ সাথে সাথে চালানোটা কেন: ওই সময়েই ডিস্ক
-    /// ভরে গেছে, অর্থাৎ ঠিক তখনই জায়গা খালি করা দরকার। ঘণ্টার অপেক্ষায়
-    /// থাকলে মাঝের সময়টুকুর ডেটা নীরবে হারাত।
+    /// Why run immediately on <c>LastWriteError</c>: at that moment the disk has just filled, so
+    /// that is exactly when space must be freed. Waiting for the hour would silently lose the data
+    /// from the time in between.
     /// </summary>
     private async Task MaybeEnforceOutboxBudgetAsync(CancellationToken ct)
     {
@@ -1092,10 +1078,10 @@ internal sealed class AgentHost : IAsyncDisposable
         {
             var plan = await _outbox.EnforceBudgetAsync(OutboxBudget.Default, _clock.Now, ct);
 
-            // ⚠️ কিছু বাদ পড়লে **সবসময়** লগে যায়। নীরবে ফেলে দিলে একটা
-            //    মেশিন মাসের পর মাস ডেটা হারাত আর রিপোর্টে শুধু "ওর ঘণ্টা
-            //    কম" দেখা যেত — সন্দেহটা পড়ত স্টাফের উপর, এজেন্টের উপর নয়।
-            //    (বিস্তারিত সারি ধরে DropLog-এ যায়।)
+            // Careful: anything dropped is <b>always</b> logged. If dropped silently, a machine
+            // could lose data for months and the report would only show "their hours are low",
+            // putting the suspicion on the staff member rather than the agent. (Row-level detail
+            // goes to DropLog.)
             if (!plan.IsEmpty)
             {
                 _log.Warn(
@@ -1104,23 +1090,21 @@ internal sealed class AgentHost : IAsyncDisposable
             }
 
             /**
-             * ⭐⭐⭐ <b>অনাথ ফাইল ঝাড়ু</b> (৬ সেপ্টেম্বর ২০২৬)।
+             * <b>Orphan file sweep.</b>
              *
-             * ⚠️⚠️ <see cref="SqliteOutboxStore.SweepOrphanFilesAsync"/> লেখা
-             * ছিল, তার নিজের টেস্টও ছিল — কিন্তু <b>কেউ ওটা কোনোদিন
-             * ডাকেনি</b>। এই রেপোর সবচেয়ে চেনা পাপ: চুক্তি লেখা আছে,
-             * কলার লেখা হয়নি (G141 · G144 · G146)।
+             * Careful: <see cref="SqliteOutboxStore.SweepOrphanFilesAsync"/> was written and had
+             * its own test, but <b>nobody ever called it</b>. This is the repo's most familiar sin:
+             * the contract is written, the caller is not (G141, G144, G146).
              *
-             * ⚠️ ফলটা নীরব: অনাথ <c>.webp</c> <b>কোনো বাজেটের হিসাবে ধরা
-             * পড়ে না</b> (বাজেট সারি ধরে গোনে, ফাইল ধরে নয়), তাই ফুটোটা
-             * মাসের পর মাস চলতে পারত আর ডিস্ক ভরে যাওয়ার আগে কেউ টের পেত না।
+             * Careful: the result is silent. An orphan <c>.webp</c> is <b>not counted in any
+             * budget</b> (the budget counts rows, not files), so the leak could go on for months
+             * and nobody would notice before the disk filled.
              *
-             * ⭐ এখানেই ডাকা হয়, কারণ এটা ইতিমধ্যেই ঘণ্টায় একবারের
-             * রক্ষণাবেক্ষণের পথ — আলাদা টাইমার বসালে সেটাও একদিন কেউ
-             * ডাকতে ভুলে যেত।
+             * It is called here because this is already the hourly maintenance path; a separate
+             * timer would be one more thing someone could forget to call.
              *
-             * ⚠️ এক ঘণ্টার grace রাখা হয় (ডিফল্ট): ক্যাপচার আগে ফাইল লেখে,
-             * তারপর Enqueue করে — ওই ফাঁকে ঝাড়ু দিলে সদ্য তোলা ছবিটাই মুছত।
+             * Careful: a one-hour grace period applies (the default). Capture writes the file
+             * first, then calls Enqueue; sweeping in that gap would delete the image just taken.
              */
             var orphans = await _outbox.SweepOrphanFilesAsync(_clock.Now, ct: ct);
             if (orphans > 0)
@@ -1130,41 +1114,41 @@ internal sealed class AgentHost : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            // ⚠️ ছাঁটাই ব্যর্থ হলে সিঙ্ক থামে না — ট্র্যাকিং তো নয়ই।
+            // Careful: if pruning fails, sync does not stop, and certainly not tracking.
             _log.Error("Could not enforce the outbox budget", ex);
         }
     }
 
     /**
-     * ⭐⭐ <b>অবস্থা বদলালে heartbeat জাগানোর ঘণ্টা।</b>
+     * <b>The bell that wakes the heartbeat when the state changes.</b>
      *
-     * ⚠️⚠️ মালিকের অভিযোগ থেকে: idle থেকে কাজ শুরু করলে বোর্ডে "Working"
-     * আসতে ১০–১৫ সেকেন্ড লাগত। বাগ ছিল না — এজেন্ট এক সেকেন্ডেই টের পায়,
-     * কিন্তু সার্ভার জানে কেবল heartbeat-এ, আর সেটা ১৫ সেকেন্ড পরপর।
+     * Careful: this came from the owner's complaint: after going from idle to working, the board
+     * took 10-15 seconds to show "Working". It was not a bug: the agent notices within a second,
+     * but the server only learns at a heartbeat, which comes every 15 seconds.
      *
-     * ⭐ ক্ষতিটা বিশ্বাসের: মালিক পর্দায় দেখেন "Idle", পাশে গিয়ে দেখেন
-     * তিনি টাইপ করছেন। দু-বার এমন হলে গোটা বোর্ডেই আর ভরসা থাকে না।
+     * The damage is to trust: the owner sees "Idle" on screen, walks over, and finds the person
+     * typing. After this happens twice, the whole board is no longer trusted.
      *
-     * ⚠️ কত ঘন ঘন জাগানো যাবে তার নিয়ম <see cref="HeartbeatUrgency"/>-এ,
-     * এখানে নয় — নইলে ওই সংখ্যাটা টেস্ট করা যেত না।
+     * Careful: the rule for how often it may wake lives in <see cref="HeartbeatUrgency"/>, not
+     * here, otherwise that number could not be tested.
      */
     private readonly SemaphoreSlim _stateChanged = new(0, 1);
 
-    /// <summary>শেষ heartbeat কখন গিয়েছিল — ব্যবধানের হিসাবের জন্য।</summary>
+    /// <summary>When the last heartbeat went out, for the interval calculation.</summary>
     private DateTimeOffset _lastBeatAt;
 
     /// <summary>
-    /// ট্র্যাকার থ্রেড থেকে ডাকা হয়, অবস্থা বদলালে।
+    /// Called from the tracker thread when the state changes.
     ///
-    /// ⚠️ সেমাফোরের ছাদ ১, তাই একাধিক বদল একসাথে জমে না — একটা জাগানোই
-    /// যথেষ্ট, আর ভরা থাকলে <c>Release</c> ছুড়ত।
+    /// Careful: the semaphore's ceiling is 1, so several changes do not pile up: one wake-up is
+    /// enough, and when it is full <c>Release</c> would throw.
     /// </summary>
     private void NudgeHeartbeat()
     {
         if (_stateChanged.CurrentCount == 0)
         {
             try { _stateChanged.Release(); }
-            catch (SemaphoreFullException) { /* অন্য থ্রেড আগেই জাগিয়েছে */ }
+            catch (SemaphoreFullException) { /* another thread already woke it */ }
         }
     }
 
@@ -1176,8 +1160,8 @@ internal sealed class AgentHost : IAsyncDisposable
             {
                 if (_credentials?.IsEnrolled == true && _sync is not null)
                 {
-                    // ⭐ ঠিক যে সংখ্যাটা পাঠানো হচ্ছে সেটাই ধরে রাখা — সার্ভারের
-                    //    উত্তরের সাথে মিলিয়ে অফসেট বের করতে ওটাই লাগবে।
+                    // Keep exactly the number being sent: it is needed to compute the offset
+                    // against the server's reply.
                     var sentTodaySec = (int)Math.Clamp(
                         Interlocked.Read(ref _activeTodaySec), 0, 86_400);
 
@@ -1198,22 +1182,21 @@ internal sealed class AgentHost : IAsyncDisposable
                         {
                             _progress = body.Progress;
 
-                            // ⭐ সার্ভার আমাদের চেয়ে যতটা এগিয়ে, ততটাই অফসেট।
-                            // ⚠️ ঋণাত্মক হলে ০ — সার্ভার **পিছিয়ে** থাকা
-                            //    স্বাভাবিক (কিউয়ে সেগমেন্ট পড়ে আছে), সেটা
-                            //    আমাদের হিসাব থেকে বাদ দেওয়ার কারণ নয়।
+                            // The offset is however far the server is ahead of us.
+                            // Careful: if negative, use 0. The server being **behind** is normal
+                            // (segments are sitting in the queue) and is no reason to subtract from
+                            // our own count.
                             Interlocked.Exchange(
                                 ref _todayOffsetSec,
                                 Math.Max(0, body.Progress.TodayActiveSec - sentTodaySec));
                         }
 
-                        // ⭐⚠️ **এখানেই কনফিগ বদলানো এতদিন নীরবে মরে ছিল।**
-                        //    আগে লাইনটা ছিল শুধু `_configVersion = body.ConfigVersion;` —
-                        //    অর্থাৎ এজেন্ট সার্ভারের ভার্সন নম্বরটা অন্ধভাবে মেনে
-                        //    নিত, কিন্তু কনফিগটা আনতই না। পরের heartbeat-এ ভার্সন
-                        //    মিলে যেত, তাই সার্ভার আর কোনোদিন `reload_config`
-                        //    চাইত না — আর ড্যাশবোর্ডের Settings-এ যা-ই বদলানো
-                        //    হোক, ১৫টা PC-র একটাও কিছু জানত না।
+                        // **This is where config changes were silently dead all along.** The line
+                        // used to be just `_configVersion = body.ConfigVersion;`, so the agent
+                        // blindly accepted the server's version number but never fetched the
+                        // config. At the next heartbeat the versions matched, so the server never
+                        // asked for `reload_config` again, and whatever was changed in the
+                        // dashboard's Settings, none of the 15 PCs ever knew.
                         if (NeedsConfig(body))
                         {
                             await ReloadConfigAsync(ct);
@@ -1235,11 +1218,11 @@ internal sealed class AgentHost : IAsyncDisposable
             _lastBeatAt = _clock.Now;
 
             /**
-             * ⭐ অবস্থা বদলালে ঘুম ভাঙে — কিন্তু <see cref="HeartbeatUrgency.MinGap"/>
-             * -এর চেয়ে ঘন ঘন নয়।
+             * Wakes on a state change, but not more often than
+             * <see cref="HeartbeatUrgency.MinGap"/>.
              *
-             * ⚠️ <c>WaitAsync</c> সংকেত পেলে সাথে সাথে ফেরে, নইলে সময়
-             * ফুরোলে। দুটোর কোনোটাই ব্যতিক্রম নয় — শুধু বাতিল হলে ছোড়ে।
+             * Careful: <c>WaitAsync</c> returns immediately on a signal, otherwise when the time
+             * runs out. Neither is an exception: it only throws when cancelled.
              */
             try
             {
@@ -1248,7 +1231,7 @@ internal sealed class AgentHost : IAsyncDisposable
 
                 if (await _stateChanged.WaitAsync(wait, ct))
                 {
-                    // জেগেছি অবস্থা বদলের সংকেতে — এখন কি পাঠানোর সময় হয়েছে?
+                    // woke on a state-change signal: is it time to send now?
                     var extra = HeartbeatUrgency.Next(
                         _clock.Now, _lastBeatAt, HeartbeatDelay(), stateChanged: true);
 
@@ -1260,42 +1243,39 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// ⚠️ ১ = জানালা খোলা আছে। <see cref="EnrollIfNeededAsync"/> (স্টার্টআপ)
-    /// আর tray-র "Sign in…" — দুটো আলাদা পথ, আর দুটোই একই সময়ে ডাকা যায়।
-    /// পাহারা না থাকলে দুটো সাইন-ইন জানালা পাশাপাশি খুলত, দুটোই ১২ ঘণ্টার
-    /// টাইমআউট নিয়ে বসে থাকত।
+    /// Careful: 1 = window is open. <see cref="EnrollIfNeededAsync"/> (startup) and the tray's
+    /// "Sign in..." are two separate paths, and both can be called at the same time. Without this
+    /// guard, two sign-in windows would open side by side, each sitting on a 12-hour timeout.
     /// </summary>
     private int _signInOpen;
 
     /// <summary>
-    /// tray-র "Sign in…" থেকে — জানালাটা <b>আবার</b> খোলা।
+    /// From the tray's "Sign in...": open the window <b>again</b>.
     ///
-    /// ⚠️⚠️ আগে জানালাটা আসত শুধু চালু হওয়ার সময়, একবার। বন্ধ করে দিলে
-    /// ফেরার একমাত্র পথ ছিল লগ-অফ করে আবার লগ-ইন — অথচ পর্দায় বড় করে
-    /// লেখা থাকত <i>"Sign in to start counting your hours"</i>। কাজটা
-    /// বলা হচ্ছিল, করার দরজা ছিল না।
+    /// Careful: the window used to appear only once, at startup. If it was closed, the only way
+    /// back was to log off and on again, while the screen said in large text <i>"Sign in to start
+    /// counting your hours"</i>. The task was announced but there was no door to do it.
     /// </summary>
     /// <summary>
-    /// ⚠️ ১ = নিশ্চিতকরণের জানালা খোলা। মেনু বারবার চাপলে একাধিক জানালা
-    /// খুলত, আর প্রতিটাই আলাদা করে কিউ সাফ করার চেষ্টা করত।
+    /// Careful: 1 = the confirmation window is open. Clicking the menu repeatedly would open
+    /// several windows, each trying to clear the queue separately.
     /// </summary>
     private int _signOutOpen;
 
     /// <summary>
-    /// tray-র "Sign out" থেকে — টোকেন মুছে মেশিনটাকে "কেউ সাইন ইন করেনি"
-    /// অবস্থায় ফিরিয়ে দেওয়া।
+    /// From the tray's "Sign out": delete the token and return the machine to the "nobody signed
+    /// in" state.
     ///
-    /// ⚠️⚠️ <b>ক্রমটাই এখানকার আসল সিদ্ধান্ত: আগে সাইন আউট, তারপর কিউ সাফ।</b>
-    /// উল্টো করলে দুটোর মাঝের মুহূর্তে ট্র্যাকিং লুপ তখনো চালু (স্টাফ তখনো
-    /// enrolled), তাই একটা নতুন সারি ঢুকে পড়তে পারত — আর সেটা সাইন আউটের
-    /// পরেও কিউতে থেকে যেত। পরের জন সাইন ইন করলে ওটা <b>তার</b> টোকেনে
-    /// চলে যেত। সাইন আউট আগে করলে <see cref="TrackingGate"/> সাথে সাথেই
-    /// নতুন সারি ঢোকা বন্ধ করে দেয়।
+    /// Careful: <b>the order is the real decision here: sign out first, then clear the queue.</b>
+    /// Reversed, in the moment between the two the tracking loop would still be running (the staff
+    /// member is still enrolled), so a new row could slip in and stay in the queue after sign-out.
+    /// When the next person signed in it would go out under <b>their</b> token. With sign-out
+    /// first, <see cref="TrackingGate"/> stops new rows immediately.
     ///
-    /// ⚠️ তবু নিখুঁত নয়: ঠিক ওই মুহূর্তে <b>ধার নেওয়া</b> (leased) সারি
-    /// থাকলে সেটা এই ঝাড়ুতে পড়ে না (<c>EvictAsync</c> ইচ্ছাকৃতভাবে leased
-    /// সারি ছোঁয় না)। জানালাটা ছোট, কিন্তু আছে — তাই সাফ করার পর গভীরতা
-    /// আবার মেপে অবশিষ্ট থাকলে লগে <b>জোরে</b> লেখা হয়, নীরবে নয়।
+    /// Careful: still not perfect. A <b>leased</b> row present at that exact moment is missed by
+    /// this sweep (<c>EvictAsync</c> deliberately does not touch leased rows). The window is small
+    /// but real, so after clearing, the depth is measured again and any remainder is logged
+    /// <b>loudly</b>, not silently.
     /// </summary>
     private async Task SignOutOnDemandAsync()
     {
@@ -1314,10 +1294,10 @@ internal sealed class AgentHost : IAsyncDisposable
         {
             var depth = await _outbox.GetDepthAsync(_stopping.Token);
 
-            // ⚠️ tray মেনু আঁকার সময়ও একই নিয়ম চলে, কিন্তু সেটা স্ট্যাটাসের
-            //    (একটু পুরোনো) সংখ্যা দিয়ে। ক্লিকের পর আসল সংখ্যা নিয়ে
-            //    **আবার** যাচাই — নইলে মেনু খোলা অবস্থায় revoke এসে গেলে
-            //    বাতিল ডিভাইসেও সাইন আউট চলত।
+            // Careful: the same rule applies when the tray menu is drawn, but with the status
+            // number (slightly stale). After the click, verify **again** with the real number,
+            // otherwise a revoke arriving while the menu is open would still allow sign-out on a
+            // revoked device.
             var verdict = SignOutGate.Check(
                 _credentials.IsEnrolled, _credentials.IsRevoked, depth.Total);
 
@@ -1342,8 +1322,8 @@ internal sealed class AgentHost : IAsyncDisposable
             var left = await _outbox.GetDepthAsync(_stopping.Token);
             if (left.Total > 0)
             {
-                // ⚠️ এটা নীরবে গিলে ফেলা যায় না — অবশিষ্ট সারি মানে পরের
-                //    জনের খাতায় ভুল ঘণ্টা বসার সম্ভাবনা।
+                // Careful: this cannot be swallowed silently: a remaining row means the next
+                // person's record may get wrong hours.
                 _log.Error(
                     $"⚠ {left.Total} item(s) were still leased and could not be discarded at sign-out. "
                     + "They may upload under the next person who signs in on this PC.");
@@ -1354,8 +1334,8 @@ internal sealed class AgentHost : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
-            // এজেন্ট বন্ধ হচ্ছে — সাইন আউট অসম্পূর্ণ থাকলেও ক্ষতি নেই,
-            // কারণ টোকেন মোছাই হয়নি।
+            // The agent is shutting down. An incomplete sign-out does no harm, because the token
+            // was never deleted.
         }
         catch (Exception ex)
         {
@@ -1368,12 +1348,12 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// ⚠️ UI থ্রেডে দেখাতেই হবে — <see cref="TrayIcon.Post"/> দিয়ে, ঠিক
-    /// সাইন-ইন জানালার মতো। ব্যাকগ্রাউন্ড থ্রেড থেকে MessageBox তুললে সেটা
-    /// tray-র মেসেজ লুপের বাইরে বসত আর অন্য জানালার পেছনে হারিয়ে যেতে পারত।
+    /// Careful: it must be shown on the UI thread, via <see cref="TrayIcon.Post"/>, just like the
+    /// sign-in window. A MessageBox raised from a background thread would sit outside the tray's
+    /// message loop and could get lost behind other windows.
     ///
-    /// ⭐ ডিফল্ট বোতাম <b>No</b> — এই জানালার "হ্যাঁ" তথ্য মুছে ফেলে, তাই
-    /// এন্টার চেপে দেওয়া ভুলটা সস্তা হওয়া উচিত নয়।
+    /// The default button is <b>No</b>: this window's "Yes" deletes data, so pressing Enter by
+    /// mistake should not be cheap.
     /// </summary>
     private static Task<bool> ConfirmSignOutAsync(TrayIcon tray, string message)
     {
@@ -1394,8 +1374,8 @@ internal sealed class AgentHost : IAsyncDisposable
             }
             catch (Exception)
             {
-                // ⚠️ জিজ্ঞাসাই করা গেল না — তখন "না" ধরা হয়। উল্টোটা ধরলে
-                //    একটা UI গোলযোগ চুপচাপ কারো তথ্য মুছে দিত।
+                // Careful: if the question could not even be asked, it counts as "No". The opposite
+                // would let a UI glitch silently delete someone's data.
                 completion.TrySetResult(false);
             }
         });
@@ -1404,9 +1384,9 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// কিউয়ের সব <b>অ-ধার-নেওয়া</b> সারি ফেলে দেয়। ফাইলসহ — <c>EvictAsync</c>
-    /// .webp-গুলোও মুছে দেয় আর drop-log-এ কারণ লিখে রাখে, তাই পরে
-    /// "কী হারাল" প্রশ্নের উত্তর থাকে।
+    /// Drops every <b>non-leased</b> row in the queue, files included: <c>EvictAsync</c> also
+    /// deletes the .webp files and writes the reason to the drop-log, so the question "what was
+    /// lost" can be answered later.
     /// </summary>
     private async Task<int> DiscardOutboxAsync()
     {
@@ -1420,26 +1400,26 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /**
-     * ⭐⭐ H04 — যাচাই হয়ে যাওয়া MSI-টা চালানো।
+     * <b>H04: run the verified MSI.</b>
      *
-     * ⚠️⚠️ <b>নীরবে নয়, আর নীরবে সম্ভবও নয়।</b> এজেন্ট চলে লগইন করা ইউজারের
-     * অধিকারে (installer-এ <c>Group=Users</c>), আর <c>msiexec</c> অ্যাডমিন
-     * চায় — তাই UAC জানালা উঠবেই। "ব্যাকগ্রাউন্ডে বসে যাবে" করতে হলে
-     * SYSTEM হিসেবে চলা একটা সার্ভিস লাগত, আর সেটা আলাদা ও বড় সিদ্ধান্ত।
+     * Careful: <b>not silent, and cannot be silent.</b> The agent runs with the logged-in user's
+     * rights (<c>Group=Users</c> in the installer), and <c>msiexec</c> needs admin, so the UAC
+     * window will always appear. "Install quietly in the background" would need a service running
+     * as SYSTEM, which is a separate and bigger decision.
      *
-     * ⭐ আর এই বাধ্যতামূলক ক্লিকটা খারাপ নয় — G58 বলে খারাপ MSI একবার চললে
-     * ফেরানোর পথ নেই। একজন মানুষের সম্মতি ওই ঝুঁকির শেষ বাঁধ।
+     * And this mandatory click is not a bad thing: per G58, once a bad MSI runs there is no way
+     * back. One person's consent is the last barrier against that risk.
      *
-     * ⚠️ <c>/qb</c> — নীরব (<c>/qn</c>) নয়। স্টাফ যেন দেখতে পান কিছু একটা
-     * ঘটছে; নীরবে চললে এজেন্ট কয়েক সেকেন্ড বন্ধ হয়ে যেত আর তিনি ভাবতেন
-     * কিছু ভেঙে গেছে।
+     * Careful: <c>/qb</c>, not silent (<c>/qn</c>). The staff member should see that something is
+     * happening; if it ran silently the agent would stop for a few seconds and they would think
+     * something broke.
      */
     private void InstallStagedUpdate()
     {
         var update = _updates?.Status;
 
-        // ⚠️ আবার যাচাই — মেনু আঁকার পর অবস্থা বদলে যেতে পারে (নতুন চেক
-        //    চলেছে, ফাইল মুছে গেছে)। tray-র শর্তের উপর ভরসা করা যাবে না।
+        // Careful: verify again. The state can change after the menu is drawn (a new check ran, the
+        // file was deleted). The tray's condition cannot be trusted.
         if (update is null || update.Stage != UpdateStage.Verified) return;
 
         var msi = update.MsiPath;
@@ -1453,8 +1433,8 @@ internal sealed class AgentHost : IAsyncDisposable
         {
             _log.Info($"Staff started the update to {update.Version}.");
 
-            // ⚠️ UseShellExecute = true — নইলে UAC-র elevation প্রম্পটই আসত না,
-            //    আর ইনস্টল নীরবে ব্যর্থ হতো।
+            // Careful: UseShellExecute = true, otherwise the UAC elevation prompt would never
+            // appear and the install would fail silently.
             Process.Start(new ProcessStartInfo
             {
                 FileName = "msiexec.exe",
@@ -1464,8 +1444,8 @@ internal sealed class AgentHost : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            // ⚠️ স্টাফ বাতিল করলেও এখানে আসে (UAC-তে "না")। সেটা ভুল নয়,
-            //    তাই Error নয় — শুধু লিখে রাখা।
+            // Careful: this is also reached when the staff member cancels (clicks "No" on UAC).
+            // That is not an error, so it is only logged, not an Error.
             _log.Warn($"The update did not start: {ex.Message}");
         }
     }
@@ -1485,9 +1465,8 @@ internal sealed class AgentHost : IAsyncDisposable
     {
         if (_credentials is null || _sync is null) return;
 
-        // ⚠️ ইতিমধ্যে সাইন ইন হয়ে থাকলে চুপচাপ ফিরে যাওয়া — মেনু আইটেমটা
-        //    তখন লুকানো থাকে, কিন্তু মেনু খোলা অবস্থায় স্টার্টআপের সাইন-ইন
-        //    সফল হলে ক্লিকটা তবু আসতে পারত।
+        // Careful: if already signed in, return quietly. The menu item is hidden then, but if the
+        // startup sign-in succeeds while the menu is open, the click could still arrive.
         if (!_credentials.NeedsEnrollment) return;
 
         if (Interlocked.CompareExchange(ref _signInOpen, 1, 0) != 0)
@@ -1518,8 +1497,8 @@ internal sealed class AgentHost : IAsyncDisposable
         if (_credentials is null || _sync is null) return;
         if (!_credentials.NeedsEnrollment) return;
 
-        // ⚠️ স্টার্টআপের পথটাও একই পাহারার নিচে — নইলে tray থেকে ক্লিক করা
-        //    জানালা আর এই জানালা একসাথে খুলতে পারত।
+        // Careful: the startup path is under the same guard, otherwise a window clicked from the
+        // tray and this one could open together.
         if (Interlocked.CompareExchange(ref _signInOpen, 1, 0) != 0) return;
 
         try { await EnrollCoreAsync(ct); }
@@ -1540,16 +1519,15 @@ internal sealed class AgentHost : IAsyncDisposable
         var monitors = MonitorEnumerator.Enumerate().Count;
 
         /**
-         * ⭐⭐ <b>দুটো পথ, আর ক্রমটাই মূল সিদ্ধান্ত।</b>
+         * <b>Two paths, and the order is the main decision.</b>
          *
-         * ইনস্টলের সময় কোড দেওয়া থাকলে (স্ক্রিপ্টেড রোলআউট, ১৫টা PC
-         * একসাথে) সেটাই আগে — তখন কারো কীবোর্ডে বসার সুযোগ নেই।
+         * If a code was supplied at install time (scripted rollout, 15 PCs at once), it comes
+         * first: nobody is at the keyboard then.
          *
-         * ⚠️ কোড না থাকলে আগে **শূন্যে চেঁচানো হতো**: "No enrolment code —
-         * this device has not been added to the server"। এজেন্ট চলত,
-         * ট্র্যাক করত, কিন্তু কিছুই পাঠাত না — আর কেউ টেরও পেত না, কারণ
-         * বার্তাটা যেত এমন এক লগে যা তখনো লেখাই হতো না (H08)। এখন সেই
-         * জায়গায় স্টাফকে সরাসরি জিজ্ঞেস করা হয়।
+         * Careful: with no code, it used to **shout into the void**: "No enrolment code - this
+         * device has not been added to the server". The agent ran and tracked but sent nothing, and
+         * nobody noticed, because the message went to a log that was not yet being written (H08).
+         * Now the staff member is asked directly instead.
          */
         if (!string.IsNullOrWhiteSpace(_settings.EnrollmentCode))
         {
@@ -1565,17 +1543,16 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// স্টাফকে জিজ্ঞেস করা — জানালাটা <see cref="SignInForm"/>।
+    /// Ask the staff member. The window is <see cref="SignInForm"/>.
     ///
-    /// ⚠️ <b>UI থ্রেডে</b> চালাতেই হয়। এই মেথডটা ডাকা হয় স্টার্টআপের
-    /// ব্যাকগ্রাউন্ড টাস্ক থেকে, আর ওখান থেকে সরাসরি <c>ShowDialog()</c>
-    /// করলে WinForms হয় ছুড়ত, নয় জানালাটা এমন এক থ্রেডে বসত যার নিজের
-    /// message loop নেই — অর্থাৎ জানালাটা দেখা যেত কিন্তু কোনো ক্লিকে
-    /// সাড়া দিত না।
+    /// Careful: it <b>must run on the UI thread</b>. This method is called from the startup
+    /// background task, and calling <c>ShowDialog()</c> directly from there would make WinForms
+    /// either throw or put the window on a thread with no message loop of its own: the window would
+    /// be visible but respond to no clicks.
     ///
-    /// ⚠️ জানালা বন্ধ করে দিলে (বা বাতিল হলে) এজেন্ট **চলতেই থাকে** —
-    /// শুধু enroll হয় না। পরের লগঅনে আবার জিজ্ঞেস করা হবে। ইনস্টলের দিন
-    /// কারো তাড়া থাকলে সে কাজ শুরু করতে পারবে, আর সেটাই ঠিক।
+    /// Careful: if the window is closed (or cancelled), the agent **keeps running**; it just does
+    /// not enroll. It asks again at the next logon. If someone is in a hurry on install day they
+    /// can start working, and that is correct.
     /// </summary>
     private async Task SignInAsync(EnrollmentClient enroller, int monitors, CancellationToken ct)
     {
@@ -1608,10 +1585,9 @@ internal sealed class AgentHost : IAsyncDisposable
         });
 
         /**
-         * ⚠️ <b>টাইমআউট আছে, আর সেটা থাকতেই হবে।</b> `Post()` কখনো ছোড়ে না
-         * আর কিছু ফেরতও দেয় না — হ্যান্ডেল ধ্বংস হয়ে গেলে সে চুপচাপ কাজটা
-         * ফেলে দেয়। তখন এই `await` **চিরকাল** ঝুলে থাকত, আর তার সাথে
-         * স্টার্টআপের টাস্কটাও।
+         * <b>A timeout exists, and it must.</b> `Post()` never throws and returns nothing: if the
+         * handle has been destroyed it quietly drops the work. This `await` would then hang
+         * **forever**, and the startup task with it.
          */
         EnrollmentResult? result;
         try
@@ -1622,13 +1598,13 @@ internal sealed class AgentHost : IAsyncDisposable
         }
         catch (TimeoutException)
         {
-            // জানালাটা সারাদিন খোলা পড়ে ছিল — কেউ বসেনি
+            // the window was left open all day; nobody sat down
             _log.Warn("The sign-in window was left open all day — this PC is still not enrolled");
             return;
         }
         catch (OperationCanceledException)
         {
-            // এজেন্ট বন্ধ হচ্ছে
+            // the agent is shutting down
             return;
         }
 
@@ -1641,7 +1617,7 @@ internal sealed class AgentHost : IAsyncDisposable
         PublishStatus();
     }
 
-    // ── কনফিগ (E09 · K07) ───────────────────────────────────────────────────
+    // ── Config (E09, K07) ────────────────────────────────────────────────
 
     private TimeSpan HeartbeatDelay()
     {
@@ -1652,26 +1628,27 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// নতুন করে কনফিগ আনতে হবে কি না।
+    /// Whether the config must be fetched again.
     ///
-    /// দুটো কারণেই — সার্ভার স্পষ্ট করে <c>reload_config</c> বললে, <b>অথবা</b>
-    /// ভার্সন না মিললে। ⚠️ দ্বিতীয়টা শুধু বেল্ট-অ্যান্ড-ব্রেসেস নয়: এজেন্ট
-    /// সদ্য চালু হলে <see cref="_configVersion"/> <c>null</c>, আর তখন সার্ভার
-    /// কোনো কমান্ড পাঠায় না (তার চোখে "কিছু বদলায়নি")। শুধু কমান্ডের উপর
-    /// নির্ভর করলে রিবুটের পর এজেন্ট চিরকাল ডিফল্ট কনফিগে চলত।
+    /// Two reasons: the server explicitly said <c>reload_config</c>, <b>or</b> the versions do not
+    /// match. Careful: the second is not just belt and braces. When the agent has just started,
+    /// <see cref="_configVersion"/> is <c>null</c>, and then the server sends no command (in its
+    /// view "nothing changed"). Relying on the command alone, after a reboot the agent would run on
+    /// the default config forever.
     /// </summary>
     private bool NeedsConfig(HeartbeatResponse body) =>
         body.Commands.Contains(AgentCommand.ReloadConfig) ||
         !string.Equals(_configVersion, body.ConfigVersion, StringComparison.Ordinal);
 
     /// <summary>
-    /// <c>GET /agent/config</c> — এনে <b>সারিতে রেখে দেওয়া</b>, সাথে সাথে প্রয়োগ নয়।
+    /// <c>GET /agent/config</c>: fetch it and <b>put it in the slot</b>, do not apply it
+    /// immediately.
     ///
-    /// ⚠️ প্রয়োগ করে <see cref="TrackLoop"/>, কারণ ট্র্যাকিংয়ের অবজেক্টগুলো
-    /// ওই থ্রেডের। এখান থেকে ছুঁলে সেকেন্ডের হিসাব দুই কনফিগে ভাগ হয়ে যেত।
+    /// Careful: <see cref="TrackLoop"/> applies it, because the tracking objects belong to that
+    /// thread. Touching them from here would split the per-second count across two configs.
     ///
-    /// ব্যর্থ হলে চুপচাপ পুরোনো কনফিগেই চলা — কনফিগ না পাওয়া মানে ঘণ্টা গোনা
-    /// থামা নয় (<see cref="AgentConfig.Default"/>-এর মন্তব্য দেখুন)।
+    /// On failure, carry on quietly with the old config. Not getting a config does not mean
+    /// counting stops (see the comment on <see cref="AgentConfig.Default"/>).
     /// </summary>
     private async Task ReloadConfigAsync(CancellationToken ct)
     {
@@ -1729,16 +1706,16 @@ internal sealed class AgentHost : IAsyncDisposable
         Sync = _worker?.Health ?? SyncHealth.Ok,
     };
 
-    /// <summary>এনে রাখা কনফিগ — <see cref="TrackLoop"/> তুলে নেয়।</summary>
+    /// <summary>The fetched config; <see cref="TrackLoop"/> picks it up.</summary>
     private sealed record PendingConfig(AgentConfig Config, string Version);
 
     /// <summary>
-    /// ⚠️ <b>শুধু <see cref="TrackLoop"/> থেকে ডাকা যাবে।</b>
+    /// Careful: <b>may only be called from <see cref="TrackLoop"/>.</b>
     ///
-    /// প্রতিটা বদল আলাদা করে দেখা হয়, কারণ কোনোটাই বিনামূল্যে নয়:
-    /// idle থ্রেশহোল্ড বদলাতে চলতি সেগমেন্ট বন্ধ করতে হয়, আর অ্যাপ ট্র্যাকিং
-    /// বন্ধ করতে খোলা রেকর্ড বন্ধ করতে হয়। যা বদলায়নি তাতে হাত না দেওয়াই
-    /// নিয়ম — নইলে সার্ভারে কনফিগ save করলেই সবার সেগমেন্ট অকারণে কাটা পড়ত।
+    /// Each change is examined separately, because none of them is free: changing the idle
+    /// threshold means closing the current segment, and turning app tracking off means closing the
+    /// open record. The rule is to leave anything unchanged alone, otherwise just saving the config
+    /// on the server would needlessly cut everyone's segments.
     /// </summary>
     private void ApplyConfig(AgentConfig cfg, string version, DateTimeOffset now)
     {
@@ -1750,16 +1727,16 @@ internal sealed class AgentHost : IAsyncDisposable
 
         var changes = new List<string>();
 
-        // ── ছবির সময়সীমা (A04b) — কেবল একটা রেফারেন্স বদল ─────────────────
+        // ── Image time window (A04b): just a reference swap ─────────────────
         if (change.CaptureWindow)
         {
             _window = cfg.ToCaptureWindow();
             changes.Add($"capture window {old.ScreenshotFrom}–{old.ScreenshotTo} → {cfg.ScreenshotFrom}–{cfg.ScreenshotTo}");
         }
 
-        // ── স্লট (A01) ────────────────────────────────────────────────────
-        // ⚠️ চলতি স্লটটা যেমন চলছে তেমনই শেষ হবে; নতুন মাপ পরের হিসাব থেকে।
-        //    মাঝপথে বদলালে ওই স্লটের ছবিটা হয় দুবার উঠত, নয় একবারও না।
+        // ── Slot (A01) ────────────────────────────────────────────────────
+        // Careful: the current slot finishes as it was; the new size applies from the next
+        // calculation. Changing midway would capture that slot's image twice, or not at all.
         if (change.Slots)
         {
             _slots = new SlotScheduler(cfg.SlotMinutes);
@@ -1784,8 +1761,8 @@ internal sealed class AgentHost : IAsyncDisposable
         ApplyAppTracking(cfg, old, change, now, changes);
         ApplyIdleThreshold(cfg, old, change, now, changes);
 
-        // ⭐ কী বদলাল সেটা লগে থাকা দরকার: কারো ঘণ্টা হঠাৎ অন্যরকম দেখালে
-        //    প্রথম প্রশ্নটাই হবে "কনফিগ বদলেছিল কি"।
+        // What changed must be in the log: if someone's hours suddenly look different, the first
+        // question will be "did the config change?".
         _log.Info(changes.Count == 0
             ? $"Config {version} — nothing changed"
             : $"Config {version} applied: {string.Join(" · ", changes)}");
@@ -1824,8 +1801,8 @@ internal sealed class AgentHost : IAsyncDisposable
         var wasOn = _apps is not null;
         var wantsOn = cfg.AppTracking.Enabled;
 
-        // ⚠️ বন্ধ করার সময় খোলা রেকর্ডটা বন্ধ করে কিউয়ে পাঠাতে হয়, নইলে
-        //    ওই সময়টুকু নীরবে হারাত।
+        // Careful: on shutdown the open record must be closed and queued, otherwise that time would
+        // be lost silently.
         if (wasOn && !wantsOn)
         {
             RecordApps(_apps!.CloseAll(now));
@@ -1852,16 +1829,14 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// ⚠️⚠️ সবচেয়ে সংবেদনশীল বদল — এখানেই ঘণ্টা হারানোর ঝুঁকি।
+    /// Careful: the most sensitive change; this is where hours can be lost.
     ///
-    /// থ্রেশহোল্ড <see cref="IdleStateMachine"/>-এর কনস্ট্রাক্টরে যায়, তাই
-    /// বদলাতে হলে নতুন অবজেক্ট। তার <b>আগে</b> চলতি সেগমেন্ট বন্ধ করে কিউয়ে
-    /// পাঠানো হয় — নইলে যে সময়টুকু পুরোনো মেশিনের ভেতরে খোলা ছিল সেটা
-    /// কোনো সেগমেন্টেই ঢুকত না, আর কেউ টেরও পেত না।
+    /// The threshold goes into the <see cref="IdleStateMachine"/> constructor, so changing it needs
+    /// a new object. <b>Before</b> that, the current segment is closed and queued; otherwise the
+    /// time that was open inside the old machine would land in no segment, and nobody would notice.
     ///
-    /// ⚠️ নতুন মেশিন শুরু হয় <b>পুরোনোটার শেষ স্টেট</b> নিয়ে। ডিফল্ট
-    /// <c>Active</c> ধরে নিলে লক করা পর্দার মানুষও এক টিকের জন্য "কাজ করছে"
-    /// হয়ে যেত।
+    /// Careful: the new machine starts with <b>the old one's last state</b>. If it assumed the
+    /// default <c>Active</c>, a person at a locked screen would count as "working" for one tick.
     /// </summary>
     private void ApplyIdleThreshold(
         AgentConfig cfg, AgentConfig old, ConfigChange change,
@@ -1870,11 +1845,10 @@ internal sealed class AgentHost : IAsyncDisposable
         if (!change.IdleThreshold || _machine is null) return;
 
         /**
-         * ⚠️⚠️ <b>বন্ধ করা আর বদলি — একই তালায়</b> (G160)। আগে দুটো আলাদা
-         * ছিল, আর ঠিক মাঝখানে <c>OnPower</c> এলে সে <b>ফেলে দেওয়া</b>
-         * মেশিনে সেগমেন্ট খুলত। ওটা কোনোদিন কিউয়ে যেত না, অথচ নতুন
-         * মেশিনের প্রথম সেগমেন্টও <c>now</c> থেকেই শুরু — অর্থাৎ একই
-         * সময়ের দুটো সারি।
+         * <b>Closing and replacing happen under the same lock</b> (G160). They used to be separate,
+         * and if <c>OnPower</c> arrived exactly in between, it opened a segment in the
+         * <b>discarded</b> machine. That never reached the queue, yet the new machine's first
+         * segment also starts at <c>now</c>, giving two rows for the same time.
          */
         IReadOnlyList<ActivitySegment> closed;
 
@@ -1892,17 +1866,17 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// H04 — ৬ ঘণ্টায় একবার নতুন ভার্সন খোঁজা।
+    /// H04: check for a new version once every 6 hours.
     ///
-    /// ⚠️ এই লুপ ব্যর্থ হলে আপডেট আসে না — সময়ের হিসাব বা সিঙ্ক কিছুই
-    /// থামে না। তাই এখানকার কোনো ব্যর্থতাই ট্র্যাকিং পর্যন্ত পৌঁছাতে পারবে না।
+    /// Careful: if this loop fails, updates do not arrive, but neither time counting nor sync
+    /// stops. No failure here may reach tracking.
     /// </summary>
     private async Task UpdateLoopAsync(CancellationToken ct)
     {
         if (_updates is null) return;
 
-        // ⚠️ চালু হওয়ার সাথে সাথেই নয় — enrollment ও প্রথম heartbeat আগে
-        //    হোক। টোকেন ছাড়া চেক করলে শুধু একটা ৪০১ পেতাম।
+        // Careful: not right at startup. Let enrollment and the first heartbeat happen first;
+        // checking without a token would only get a 401.
         try { await Task.Delay(TimeSpan.FromMinutes(2), ct); }
         catch (OperationCanceledException) { return; }
 
@@ -1926,7 +1900,7 @@ internal sealed class AgentHost : IAsyncDisposable
         PublishStatus();
     }
 
-    // ── অবস্থা ──────────────────────────────────────────────────────────────
+    // ── State ────────────────────────────────────────────────────────────
 
     private void Record(IReadOnlyList<ActivitySegment> closed)
     {
@@ -1934,7 +1908,7 @@ internal sealed class AgentHost : IAsyncDisposable
         {
             if (s.CountsAsWork)
             {
-                // ঢাকার মধ্যরাতে আজকের হিসাব শূন্য হয় (§ ২.১-ক)
+                // today's count resets at Dhaka midnight (section 2.1)
                 var date = DhakaTime.WorkDateOf(s.StartedAt);
                 if (date != _activeDate)
                 {
@@ -1955,14 +1929,14 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// H06 — বাতিলের পর ট্র্যাকিং গুটিয়ে নেওয়া। একবারই চলে।
+    /// H06: wind tracking down after a revocation. Runs once.
     ///
-    /// ⚠️ খোলা সেগমেন্টটা বন্ধ করা হয় কিন্তু **কিউতে পাঠানো হয় না** —
-    /// টোকেন ইতিমধ্যে মুছে গেছে (`DeviceCredentials.Revoke`), তাই ওই সারি
-    /// কোনোদিন সার্ভারে যেতে পারত না; শুধু আউটবক্স বড় করত।
+    /// Careful: the open segment is closed but **not queued**. The token is already deleted
+    /// (`DeviceCredentials.Revoke`), so that row could never reach the server; it would only grow
+    /// the outbox.
     ///
-    /// ⚠️ অ্যাপ ট্র্যাকিংও থামে — বাতিল ডিভাইসে "কে কোন সাইটে ছিল" জমা
-    /// করে রাখার কোনো ভিত্তি নেই।
+    /// Careful: app tracking stops too. On a revoked device there is no basis for storing "who was
+    /// on which site".
     /// </summary>
     private void StopTrackingForRevoke(DateTimeOffset now)
     {
@@ -1982,16 +1956,15 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// B13 — শেষ কয়েকটা ঘরে কত শতাংশ সময় হাত চলেছে, tray-তে দেখানোর জন্য।
+    /// B13: what percentage of time the hands were moving in the last few cells, for the tray.
     ///
-    /// ⭐ সংখ্যাটা নতুন করে মাপা হয় না — <see cref="ActivitySegment.InputScore"/>
-    /// আগে থেকেই আছে, আর সেগমেন্ট কাটা হয় সর্বোচ্চ ৫ মিনিটে (G53)। অর্থাৎ
-    /// "প্রতি ৫ মিনিটে কতটা ব্যস্ত" ইতিমধ্যেই হিসাব হয়ে সার্ভারে যাচ্ছে;
-    /// এতদিন শুধু দেখানো হতো না।
+    /// The number is not measured anew: <see cref="ActivitySegment.InputScore"/> already exists,
+    /// and segments are cut at most every 5 minutes (G53). So "how busy per 5 minutes" is already
+    /// computed and sent to the server; it just was not shown until now.
     ///
-    /// ⚠️ <c>locked</c> ঘর বাদ — পর্দা লক থাকলে "ব্যস্ততা ০%" বলাটা
-    /// বিভ্রান্তিকর, কারণ মানুষটা তখন কাজই করছিল না। <c>idle</c> ঘরে ০
-    /// বসে, কারণ সেটা সত্যিই "সামনে ছিল, হাত চলেনি"।
+    /// Careful: <c>locked</c> cells are left out. Saying "0% busy" for a locked screen would be
+    /// misleading, because the person was not working then. An <c>idle</c> cell gets 0, because
+    /// that really is "was at the desk, hands not moving".
     /// </summary>
     private void RememberBusy(ActivitySegment s)
     {
@@ -2015,23 +1988,21 @@ internal sealed class AgentHost : IAsyncDisposable
         }
     }
 
-    // ── ইভেন্ট (G02) ────────────────────────────────────────────────────────
+    // ── Events (G02) ─────────────────────────────────────────────────────
 
     /// <summary>
-    /// একটা <see cref="AgentEventRecord"/> <b>কিউয়ে</b> ফেলে — নেটওয়ার্কে নয়।
+    /// Puts an <see cref="AgentEventRecord"/> <b>on the queue</b>, not on the network.
     ///
-    /// ⭐⚠️ <b>এটাই এই মেথডের পুরো কারণ।</b> বিদায়ী ইভেন্টগুলো (logoff,
-    /// shutdown, agent_stop) ঠিক তখন তৈরি হয় যখন Windows-এর হাতে সব প্রসেস
-    /// মিলিয়ে ~২ সেকেন্ড বাকি। ওই মুহূর্তে একটা HTTP কল করলে সেটা DNS বা
-    /// TCP-তে ঝুলে যেতে পারত, Windows প্রসেসটা মেরে ফেলত, আর ইভেন্টটা
-    /// <b>হারাত</b> — অর্থাৎ যে ইভেন্টের জন্য পুরো ব্যবস্থা, সেটাই সবচেয়ে
-    /// বেশি হারাত। কিউয়ে ফেলা মানে এক ডজন মাইক্রোসেকেন্ডের SQLite ইনসার্ট;
-    /// পাঠানোর কাজটা DisposeAsync-এর শেষ drain বা পরের স্টার্টআপ করবে।
+    /// <b>That is the whole reason for this method.</b> Goodbye events (logoff, shutdown,
+    /// agent_stop) are created exactly when Windows has about 2 seconds left for all processes
+    /// combined. An HTTP call at that moment could hang on DNS or TCP, Windows would kill the
+    /// process, and the event would be <b>lost</b>: the event the whole system exists for would be
+    /// the one most likely to vanish. Queuing is a SQLite insert of a few dozen microseconds;
+    /// sending is done by DisposeAsync's final drain or the next startup.
     ///
-    /// ⚠️ <c>await</c> করা হয় না — কলার UI থ্রেড হতে পারে (WM_ENDSESSION)।
-    /// <see cref="SqliteOutboxStore.EnqueueAsync"/> ভেতরে
-    /// <c>ConfigureAwait(false)</c> ব্যবহার করে, তাই আসল লেখাটা থ্রেড-পুলে যায়
-    /// আর ডেস্কটপ আটকে থাকে না।
+    /// Careful: it is not <c>await</c>ed, because the caller may be the UI thread (WM_ENDSESSION).
+    /// <see cref="SqliteOutboxStore.EnqueueAsync"/> uses <c>ConfigureAwait(false)</c> inside, so
+    /// the real write goes to the thread pool and the desktop is not blocked.
     /// </summary>
     private Task RaiseEvent(string type, IReadOnlyDictionary<string, object?>? meta = null) =>
         RaiseEvent(new AgentEventRecord
@@ -2042,19 +2013,19 @@ internal sealed class AgentHost : IAsyncDisposable
             Meta = meta,
         });
 
-    /// <returns>ডিস্কে লেখা শেষ হওয়ার টাস্ক — বিদায়ের পথ এটার অপেক্ষা করে।</returns>
+    /// <returns>A task that completes when the disk write is done; the goodbye path waits on
+    /// it.</returns>
     private Task RaiseEvent(AgentEventRecord record)
     {
         if (_outbox is null) return Task.CompletedTask;
 
-        // ⚠️ সাইন ইনের আগে ইভেন্টও নয় — নিয়মটা "কিছুই যাবে না", আংশিক নয়।
-        //    এগুলো সবই বিদায়ী ইভেন্ট (agent_stop · logoff · shutdown), তাই
-        //    সাইন ইন না করা মেশিনে একটাই সারি জমত — কিন্তু সেটাও পরে কেউ
-        //    সাইন ইন করলে **তার** নামে চলে যেত।
+        // Careful: no events before sign-in either; the rule is "nothing goes out", not partial.
+        // These are all goodbye events (agent_stop, logoff, shutdown), so a machine that never
+        // signed in would pile up exactly one row, but it would go out under **someone's** name if
+        // they signed in later.
         //
-        // ⚠️ revoke হলেও বাদ: টোকেন মুছে গেছে, তাই সারিটা কোনোদিন সার্ভারে
-        //    যেতে পারত না — শুধু আউটবক্স বড় করত (StopTrackingForRevoke-এর
-        //    একই যুক্তি)।
+        // Careful: also dropped on revoke: the token is deleted, so the row could never reach the
+        // server and would only grow the outbox (same reasoning as StopTrackingForRevoke).
         if (!TrackingGate.Allows(
                 _credentials?.IsEnrolled == true,
                 _credentials?.IsRevoked == true))
@@ -2068,26 +2039,25 @@ internal sealed class AgentHost : IAsyncDisposable
             t => _log.Error($"Could not queue the event ({record.Type})", t.Exception),
             TaskContinuationOptions.OnlyOnFaulted);
 
-        // ⭐ R29-B — লেখাটা **ফেরত দেওয়া হয়**, যাতে বিদায়ের পথ জানতে পারে
-        //    সারিটা সত্যিই ডিস্কে বসেছে কি না।
+        // R29-B: the write is **returned**, so the goodbye path can know whether the row really
+        // reached the disk.
         //
-        // ⚠️ ব্যর্থতা এখানে গিলে ফেলা হয় (উপরের `ContinueWith` রিপোর্ট করে):
-        //    কলার এটাকে `WaitAsync`-এ ফেলে, আর ব্যর্থ টাস্ক সেখানে ছুড়ে
-        //    দিলে বিদায়ের মুহূর্তে অকারণ exception উঠত।
+        // Careful: failure is swallowed here (the `ContinueWith` above reports it). The caller puts
+        // this in `WaitAsync`, and if a failed task threw there, a needless exception would rise at
+        // the moment of goodbye.
         //
-        // ⚠️⚠️ কোনো **ক্ষেত্র-চেইন রাখা হয় না**, ইচ্ছাকৃত। প্রথম খসড়ায়
-        //    `_pendingEnqueue = Task.WhenAll(previous, …)` ছিল — দেখতে
-        //    নিরীহ, কিন্তু ওটা প্রতি ইভেন্টে চেইনটাকে লম্বা করত আর কোনো
-        //    টাস্কই কোনোদিন সংগ্রহযোগ্য হতো না। দিনে হাজারো ইভেন্টে সেটা
-        //    **স্মৃতি-ফাঁস**। বিদায়ের পথ কেবল **নিজের দুটো** লেখার
-        //    অপেক্ষা করে, আর সেগুলো সে হাতেই ধরে রাখতে পারে।
+        // Careful: **no field chain is kept**, on purpose. The first draft had `_pendingEnqueue =
+        // Task.WhenAll(previous, ...)`, which looks harmless, but it lengthened the chain with
+        // every event and no task could ever be collected. With thousands of events a day that is a
+        // **memory leak**. The goodbye path only waits for **its own two** writes, and it can hold
+        // those by hand.
         return queued.ContinueWith(static _ => { }, TaskScheduler.Default);
     }
 
     /// <summary>
-    /// <c>agent_stop</c>-এর দেহ। দুটো পথ থেকেই তৈরি হয় (WM_ENDSESSION ও
-    /// DisposeAsync), তাই এক জায়গায় — নইলে একদিন একটা পথে <c>reason</c> বসত
-    /// আর অন্যটায় বসত না, এবং সার্ভার ওই মেশিনটাকেই সন্দেহ করত।
+    /// The body of <c>agent_stop</c>. It is built from both paths (WM_ENDSESSION and DisposeAsync),
+    /// so it lives in one place; otherwise one day one path would set <c>reason</c> and the other
+    /// would not, and the server would suspect that machine.
     /// </summary>
     private AgentEventRecord BuildStopEvent() => new()
     {
@@ -2098,28 +2068,27 @@ internal sealed class AgentHost : IAsyncDisposable
         {
             ["agentVersion"] = _version,
 
-            // ⚠️ কেন বন্ধ হচ্ছে তার একমাত্র সূত্র। "unknown" মানে
-            //    logoff/shutdown কিছুই আসেনি — সার্ভার তখন এটাকেই সন্দেহজনক
-            //    ধরবে, এবং সেটাই কাম্য।
+            // Careful: the only clue to why it is stopping. "unknown" means neither logoff nor
+            // shutdown arrived; the server will then treat it as suspicious, which is the intent.
             ["reason"] = ClosingReason(),
         },
     };
 
     /// <summary>
-    /// বিদায়ী ইভেন্ট — জীবনে একবার করে।
+    /// A goodbye event: once in a lifetime.
     ///
-    /// ⚠️ <c>shutdown</c> বসে গেলে পরে আসা <c>logoff</c> চেপে দেওয়া হয়:
-    /// Windows বন্ধ হওয়ার সময় সেশনের logoff ব্রডকাস্টটাও আসে, কিন্তু ঘটনাটা
-    /// একটাই — PC বন্ধ হচ্ছে। দুটো সারি লিখলে লগ পড়ে মনে হতো স্টাফ আগে
-    /// লগঅফ করে তারপর কেউ PC বন্ধ করেছে।
+    /// Careful: once <c>shutdown</c> is recorded, a later <c>logoff</c> is suppressed. When Windows
+    /// shuts down, the session's logoff broadcast also arrives, but it is one event: the PC is
+    /// shutting down. Writing two rows would make the log read as if the staff member logged off
+    /// first and then someone shut down the PC.
     /// </summary>
-    /// <returns>সত্যিই কিউয়ে গেল কি না।</returns>
+    /// <returns>Whether it was actually queued.</returns>
     private bool RaiseClosingEvent(string type, IReadOnlyDictionary<string, object?>? meta = null) =>
         RaiseClosingEvent(type, out _, meta);
 
     /// <param name="queued">
-    /// ডিস্কে লেখা শেষ হওয়ার টাস্ক (R29-B)। ⚠️ ইভেন্টটা বাদ পড়লে
-    /// <see cref="Task.CompletedTask"/> — কলারকে তখন `null` সামলাতে হয় না।
+    /// The task for the disk write to finish (R29-B). Careful: if the event is dropped it is
+    /// <see cref="Task.CompletedTask"/>, so the caller does not have to handle `null`.
     /// </param>
     private bool RaiseClosingEvent(
         string type,
@@ -2134,7 +2103,7 @@ internal sealed class AgentHost : IAsyncDisposable
         return true;
     }
 
-    /// <summary>এই বিদায়ী ইভেন্টটা এই প্রথমবার? হ্যাঁ হলে চিহ্নিত করে রাখে।</summary>
+    /// <summary>Is this the first time for this goodbye event? If so, marks it.</summary>
     private bool TryMarkClosing(string type)
     {
         lock (_closingEventsSent)
@@ -2153,30 +2122,30 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// ⭐⭐ আজ এ পর্যন্ত কত কাজ — <b>এই সেকেন্ড পর্যন্ত</b>।
+    /// Work so far today, <b>up to this second</b>.
     ///
-    /// তিনটে অংশ: সার্ভার-অফসেট (এজেন্ট চালুর আগের কাজ) + আজকের বন্ধ হওয়া
-    /// সেগমেন্ট + <b>এখন যে সেগমেন্টটা চলছে সেটুকু</b>।
+    /// Three parts: the server offset (work before the agent started) + today's closed segments +
+    /// <b>whatever part of the current segment is running now</b>.
     ///
-    /// ⚠️⚠️ শেষ অংশটাই আগে বাদ পড়ত, আর সেটাই ছিল "সেকেন্ড নড়ে না"-র গোড়া:
-    /// <c>_activeTodaySec</c> বাড়ে কেবল সেগমেন্ট <b>বন্ধ</b> হলে, আর সেগমেন্ট
-    /// কাটা হয় সর্বোচ্চ ৫ মিনিটে (<c>IdleStateMachine.MaxSegmentLength</c>) —
-    /// অর্থাৎ সংখ্যাটা ৫ মিনিট থেমে থেকে এক লাফে ৫ মিনিট বাড়ত।
+    /// Careful: the last part used to be missing, and it was the root of "the seconds do not tick":
+    /// <c>_activeTodaySec</c> grows only when a segment is <b>closed</b>, and segments are cut at
+    /// most every 5 minutes (<c>IdleStateMachine.MaxSegmentLength</c>), so the number stayed still
+    /// for 5 minutes and then jumped by 5 minutes.
     ///
-    /// ⚠️ খোলা সেগমেন্টের হিসাব <b>এখানেই</b>, `_clock`-এ (monotonic) — জানালায়
-    /// নয়। জানালা বাস্তব ঘড়ি দেখে; দুই টাইমলাইন মেশানো ভুল হতো।
+    /// Careful: the open segment is computed <b>here</b>, on `_clock` (monotonic), not in the
+    /// window. The window reads the wall clock; mixing two timelines would be wrong.
     ///
-    /// ⚠️ শুধু ACTIVE অবস্থায় যোগ হয় — idle মানে গোনাই বন্ধ (§ ২.১-ক), আর
-    /// lock/suspend-ও তাই।
+    /// Careful: only added while ACTIVE; idle means counting has stopped (section 2.1), and so do
+    /// lock and suspend.
     /// </summary>
     private TimeSpan TodayWorked(EmployeeProgress? progress)
     {
         var counted = Interlocked.Read(ref _todayOffsetSec)
                       + Interlocked.Read(ref _activeTodaySec);
 
-        // ⚠️ G160 — স্টেট আর সময় **এক তালায়**। আলাদা পড়লে মাঝখানে
-        //    transition ঘটে যেতে পারত, আর তখন পুরোনো স্টেটের সাথে নতুন
-        //    `_openedAt` জোড়া লেগে আজকের হিসাব হঠাৎ কমে যেত।
+        // G160: state and time under **one lock**. Read separately, a transition could happen in
+        // between, pairing the old state with the new `_openedAt`, and today's total would suddenly
+        // drop.
         if (_machine is { } machine)
         {
             var (state, openedAt) = machine.Peek();
@@ -2188,8 +2157,8 @@ internal sealed class AgentHost : IAsyncDisposable
             }
         }
 
-        // ⚠️ সার্ভারের সংখ্যা কখনো আমাদের চেয়ে বেশি হলে সেটাই — সে একাধিক
-        //    ডিভাইসের যোগফল জানে, আমরা জানি না।
+        // Careful: if the server's number is ever higher than ours, use it; it knows the sum across
+        // multiple devices, we do not.
         if (progress?.TodayActiveSec is { } serverSec && serverSec > counted)
         {
             counted = serverSec;
@@ -2207,34 +2176,34 @@ internal sealed class AgentHost : IAsyncDisposable
         {
             State = _machine?.State ?? SegmentState.Idle,
 
-            // ⭐ H04 — tray-র "Install update" আইটেমটা এটার উপরেই দাঁড়ায়
+            // H04: the tray's "Install update" item depends on this
             Update = _updates?.Status ?? UpdateStatus.Idle,
 
-            // ⭐ আজকের হিসাব সার্ভারেরটাই — এজেন্টের নিজেরটা রিবুটে শূন্য হয়।
-            //    সার্ভার এখনো কিছু না বললে (একবারও heartbeat হয়নি) নিজেরটা।
+            // Today's count is the server's; the agent's own resets on reboot. If the server has
+            // not said anything yet (no heartbeat so far), use our own.
             ActiveToday = TodayWorked(progress),
 
-            // ⭐ উপরের সংখ্যাটা **এই মুহূর্তের** — জানালা এরপর থেকে নিজে
-            //    সেকেন্ড গোনে (LiveDuration)। ⚠️ ইচ্ছাকৃতভাবে বাস্তব ঘড়ি
-            //    (`UtcNow`), `_clock` নয়: জানালাও বাস্তব ঘড়িতেই মাপে, আর দুই
-            //    টাইমলাইন মেশালে পার্থক্যটা অর্থহীন হয়ে যেত।
+            // The number above is **as of this moment**; from here the window counts seconds itself
+            // (LiveDuration). Careful: deliberately the wall clock (`UtcNow`), not `_clock`: the
+            // window also measures on the wall clock, and mixing two timelines would make the
+            // difference meaningless.
             CountedAt = DateTimeOffset.UtcNow,
             ActiveThisMonth = TimeSpan.FromSeconds(progress?.MonthActiveSec ?? 0),
             MonthlyTargetHours = progress?.MonthlyTargetHours ?? 208,
 
-            // ⚠️ প্রথম heartbeat আসার আগে মাসের ঘরটা মিথ্যা শূন্য — সেটা
-            //    দেখানোর জায়গাকে জানিয়ে দিতে হয় (AgentStatus.MonthlyKnown)।
+            // Careful: before the first heartbeat the month cell is a false zero; the place that
+            // shows it must be told (AgentStatus.MonthlyKnown).
             MonthlyKnown = progress is not null,
 
-            // ⚠️ সার্ভার না পাঠালে null-ই থাকে, ০ নয় — "আমরা জানি না" আর
-            //    "ঠিক লক্ষ্যে আছে" এক জিনিস নয় (AgentStatus.Pace দেখুন)।
+            // Careful: if the server does not send it, it stays null, not 0: "we do not know" and
+            // "on target" are not the same thing (see AgentStatus.Pace).
             Pace = progress?.PaceSec is { } sec ? TimeSpan.FromSeconds(sec) : null,
 
-            // ⭐ G111 — উপরের ০ "ঠিক লক্ষ্যে" নাকি "এখনো দেখাই হয়নি"।
-            // ⚠️ `!= false` — সার্ভার না বললে (null) আগের মতোই আচরণ।
+            // G111: whether the 0 above means "on target" or "not looked at yet". Careful: `!=
+            // false`, so if the server says nothing (null) behaviour is as before.
             PaceObserved = progress?.Observed != false,
 
-            // ⚠️ এখানেও null মানে "সার্ভার বলেনি"; Zero মানে "আজ ছুটি"।
+            // Careful: here too, null means "the server did not say"; Zero means "day off today".
             DailyTarget = progress?.DailyTargetSec is { } day
                 ? TimeSpan.FromSeconds(day)
                 : null,
@@ -2257,14 +2226,15 @@ internal sealed class AgentHost : IAsyncDisposable
             HealthDetail = _worker?.HealthDetail,
             Paused = false,
 
-            // ⚠️ IsEnrolled, NeedsEnrollment-এর উল্টো নয়। ক্রেডেনশিয়াল ফাইল
-            //    থাকলেও পড়া না গেলে (নষ্ট, বা অন্য মেশিনের DPAPI) দুটোই
-            //    মিথ্যা — তখন "সাইন ইন হয়ে গেছে" বলাটা সরাসরি ভুল হতো।
+            // Careful: IsEnrolled is not the opposite of NeedsEnrollment. If the credentials file
+            // exists but cannot be read (corrupt, or DPAPI from another machine), both are false,
+            // and saying "already signed in" would then simply be wrong.
             Enrolled = _credentials?.IsEnrolled == true,
         };
     }
 
-    /// <summary>⚠️ কপি ফেরত যায়, ভেতরের কিউ নয় — নইলে UI থ্রেড আঁকার মাঝপথে তালিকা বদলে যেত।</summary>
+    /// <summary>Careful: a copy is returned, not the internal queue, so the list cannot change
+    /// under the UI thread mid-draw.</summary>
     private int[] SnapshotBusy()
     {
         lock (_busyGate) return [.. _recentBusy];
@@ -2272,15 +2242,15 @@ internal sealed class AgentHost : IAsyncDisposable
 
     private void PublishStatus() => _tray?.Publish(Snapshot());
 
-    // ── উইন্ডো মেসেজ (UI থ্রেড থেকে) ────────────────────────────────────────
+    // ── Window messages (from the UI thread) ─────────────────────────────
 
     /// <summary>
-    /// <c>WM_WTSSESSION_CHANGE</c>-এর কাঁচা কোড।
+    /// The raw code of <c>WM_WTSSESSION_CHANGE</c>.
     ///
-    /// ⚠️ ব্যাখ্যা করা <see cref="SessionChange"/> নয়, কোডটাই নেওয়া হয়:
-    /// ট্র্যাকিংয়ের দিক থেকে lock আর logoff একই (দুটোতেই suspend), কিন্তু
-    /// G02-র দিক থেকে সম্পূর্ণ আলাদা — একটা "সে ফিরে আসবে", আরেকটা "সে চলে
-    /// গেছে"। ব্যাখ্যাটা আগে করে ফেললে ওই পার্থক্যটা এখানে পৌঁছাতই না।
+    /// Careful: the code itself is taken, not the interpreted <see cref="SessionChange"/>. For
+    /// tracking, lock and logoff are the same (both suspend), but for G02 they are completely
+    /// different: one is "they will come back", the other "they have gone". Interpreting first
+    /// would stop that difference from reaching here.
     /// </summary>
     public void OnSessionChange(int wtsCode)
     {
@@ -2293,8 +2263,8 @@ internal sealed class AgentHost : IAsyncDisposable
         {
             RaiseClosingEvent(type, new Dictionary<string, object?>
             {
-                // ⚠️ শুধু কোড আর তার নাম — কোনো ইউজারনেম, হোস্টনেম বা
-                //    উইন্ডোর টেক্সট নয় (AgentEventRecord.Meta-র নিয়ম)।
+                // Careful: only the code and its name; no username, hostname or window text (the
+                // rule of AgentEventRecord.Meta).
                 ["source"] = "wts",
                 ["wtsCode"] = wtsCode,
             });
@@ -2302,9 +2272,8 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// <c>WM_ENDSESSION</c> — logoff নাকি PC বন্ধ, সেটা এখানেই জানা যায়।
-    /// <see cref="SessionMonitor.InterpretEndSession"/>-এ কেন PowerMonitor নয়
-    /// তার ব্যাখ্যা আছে।
+    /// <c>WM_ENDSESSION</c>: whether it is a logoff or a PC shutdown is known right here.
+    /// <see cref="SessionMonitor.InterpretEndSession"/> explains why not PowerMonitor.
     /// </summary>
     public void OnSessionEnd(string? eventType)
     {
@@ -2318,50 +2287,47 @@ internal sealed class AgentHost : IAsyncDisposable
             return;
         }
 
-        // ⭐⚠️ <b>agent_stop এখানেই বসানো হয়, DisposeAsync-এর ভরসায় নয়।</b>
-        //    WM_ENDSESSION মানে সেশন সত্যিই শেষ হচ্ছে — এর পর Windows প্রসেসটা
-        //    মেরে ফেলবে, আর <c>Application.Run()</c> আদৌ ফিরবে কি না সেটা
-        //    WinForms-এর অভ্যন্তরীণ আচরণের উপর নির্ভর করে। না ফিরলে
-        //    DisposeAsync চলতই না, আর তখন প্রতিটা স্বাভাবিক শাটডাউনে সার্ভার
-        //    পেত logoff/shutdown কিন্তু কোনো agent_stop নয় — অর্থাৎ ঠিক
-        //    উল্টো ফাঁক।
+        // <b>agent_stop is queued right here, not left to DisposeAsync.</b> WM_ENDSESSION means the
+        // session really is ending; after it Windows kills the process, and whether
+        // <c>Application.Run()</c> returns at all depends on WinForms internals. If it did not
+        // return, DisposeAsync would never run, and on every normal shutdown the server would get
+        // logoff/shutdown but no agent_stop: exactly the opposite gap.
         //
-        //    দুবার বসার ভয় নেই: DisposeAsync চললে TryMarkClosing তাকে থামিয়ে দেবে।
+        // There is no fear of queuing twice: if DisposeAsync runs, TryMarkClosing stops it.
         var stopQueued = TryMarkClosing(AgentEventTypes.AgentStop)
             ? RaiseEvent(BuildStopEvent())
             : Task.CompletedTask;
 
-        // ⭐⭐ R29-B — আর এখানেই **পাঠানোর** চেষ্টাটা।
+        // R29-B: and the attempt to **send** happens right here.
         TryFlushGoodbye(closingQueued, stopQueued);
     }
 
     /// <summary>
-    /// ⭐⭐ <b>R29-B — বিদায়ী ইভেন্ট এখনই পাঠানোর শেষ সুযোগ।</b>
+    /// <b>R29-B: the last chance to send the goodbye event now.</b>
     ///
-    /// <c>WM_ENDSESSION</c>-এর পর Windows প্রসেসটা মেরে ফেলে, আর
-    /// <c>Application.Run()</c> ফেরে কি না তার কোনো নিশ্চয়তা নেই — মাঠের
-    /// সংখ্যা বলছে OS শাটডাউনে ফেরে <b>না</b> (দেরি গড়ে ৭৪০ মিনিট, অর্থাৎ
-    /// পাঠানোটা হচ্ছে পরের স্টার্টআপে)। তাই <c>DisposeAsync</c>-এর
-    /// অগ্রাধিকার-drain-এর ভরসায় থাকা যায় না; এটাই শেষ জায়গা যেখানে
-    /// আমরা এখনো জীবিত।
+    /// After <c>WM_ENDSESSION</c> Windows kills the process, and there is no guarantee that
+    /// <c>Application.Run()</c> returns. Field numbers say it does <b>not</b> return on an OS
+    /// shutdown (the delay averages 740 minutes, meaning sending happens at the next startup). So
+    /// we cannot rely on <c>DisposeAsync</c>'s priority drain; this is the last place where we are
+    /// still alive.
     ///
-    /// ⚠️⚠️ <b>UI থ্রেড এখানে অপেক্ষা করে, আর সেটাই এই মেথডের একমাত্র ঝুঁকি।</b>
-    /// তিনটে জিনিস দিয়ে সেটা বাঁধা:
+    /// Careful: <b>the UI thread waits here, and that is this method's only risk.</b> It is bounded
+    /// in three ways:
     /// <list type="bullet">
-    /// <item>কাজটা <c>Task.Run</c>-এ, অর্থাৎ থ্রেড-পুলে — UI-র
-    /// <c>SynchronizationContext</c> ছাড়াই। ⚠️ সরাসরি <c>.Wait()</c> করলে
-    /// ক্লাসিক ডেডলক হতো: continuation UI থ্রেড চাইত, আর UI থ্রেড অপেক্ষায়।</item>
-    /// <item>মোট ছাদ <see cref="EndSessionSendBudget"/> — Windows-এর
-    /// <c>WaitToKillAppTimeout</c> (ডিফল্ট ৫ সে.) এর অর্ধেকেরও কম।</item>
-    /// <item>ব্যর্থ হলে কিছুই হারায় না — ইভেন্ট outbox-এ থাকে, পরের
-    /// স্টার্টআপ পাঠায়। <b>সবচেয়ে খারাপ ফল = আজকের আচরণ।</b></item>
+    /// <item>The work runs in <c>Task.Run</c>, on the thread pool, without the UI's
+    /// <c>SynchronizationContext</c>. Careful: calling <c>.Wait()</c> directly would be a classic
+    /// deadlock: the continuation would want the UI thread, and the UI thread is waiting.</item>
+    /// <item>The total ceiling is <see cref="EndSessionSendBudget"/>, less than half of Windows'
+    /// <c>WaitToKillAppTimeout</c> (default 5 s).</item>
+    /// <item>On failure nothing is lost: the event stays in the outbox and the next startup sends
+    /// it. <b>Worst case = today's behaviour.</b></item>
     /// </list>
     ///
-    /// ⚠️ <c>ShutdownBlockReasonCreate</c> ব্যবহার করা হয়নি, যদিও রোডম্যাপে
-    /// (R29-B) ওটাই লেখা ছিল। ওটা Windows-কে "দাঁড়াও" বলে — ব্যবহারকারী
-    /// "oXeio শাটডাউন আটকাচ্ছে" পর্দা দেখেন, আর ছেড়ে দিতে ভুল হলে ডেস্কটপ
-    /// ঝুলে যায়। ⭐ এখানে দরকার কেবল কয়েকশো মিলিসেকেন্ড, আর সেটা না চেয়েও
-    /// পাওয়া যায়; OS-স্তরের ব্লক নেওয়ার আগে সস্তা পথটা মেপে দেখাই সঠিক ক্রম।
+    /// Careful: <c>ShutdownBlockReasonCreate</c> is not used, although the roadmap (R29-B) said to.
+    /// It tells Windows "wait": the user sees an "oXeio is blocking shutdown" screen, and if it is
+    /// released wrongly the desktop hangs. Here only a few hundred milliseconds are needed, and
+    /// those are available without asking; trying the cheap path before taking an OS-level block is
+    /// the right order.
     /// </summary>
     private void TryFlushGoodbye(params Task[] queued)
     {
@@ -2370,20 +2336,20 @@ internal sealed class AgentHost : IAsyncDisposable
 
         var flush = Task.Run(async () =>
         {
-            // ধাপ ১ — এই মুহূর্তে বসানো সারিগুলো ডিস্কে পৌঁছাক
+            // Step 1: let the rows queued at this moment reach the disk
             try { await Task.WhenAll(queued).WaitAsync(EndSessionEnqueueWait); }
-            catch (Exception) { /* লেখা শেষ হয়নি — তবু পাঠানোর চেষ্টা করি */ }
+            catch (Exception) { /* the write did not finish; try sending anyway */ }
 
-            // ধাপ ২ — কেবল Event, সেগমেন্ট বা ছবি নয়
-            // ⚠️ `DrainOnceAsync` Segment→Event ক্রমে চলে, তাই ব্যাকলগ থাকলে
-            //    goodbye-টা কোনোদিন সময় পেত না। এখানে একটাই kind।
+            // Step 2: Event only, not segments or images.
+            // Careful: `DrainOnceAsync` runs Segment then Event, so with a backlog the goodbye
+            // would never get time. There is a single kind here.
             using var cts = new CancellationTokenSource(EndSessionSendBudget);
             await worker.DrainKindOnceAsync(OutboundKind.Event, cts.Token);
         });
 
-        // ⚠️ ব্যতিক্রম গিলে ফেলা হয় — বিদায়ের মুহূর্তে ছুড়ে দেওয়া exception
-        //    WndProc-এ গিয়ে প্রসেসটাকে নোংরাভাবে ফেলত, আর তখন `agent_stop`
-        //    outbox-এ বসেই থাকত। ঠিক যেটা ঠেকাতে এই কোড।
+        // Careful: exceptions are swallowed. An exception thrown at the moment of goodbye would
+        // reach WndProc and drop the process messily, leaving `agent_stop` sitting in the outbox:
+        // exactly what this code is meant to prevent.
         try
         {
             if (!flush.Wait(EndSessionTotalBudget))
@@ -2398,12 +2364,10 @@ internal sealed class AgentHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// <c>agent_stop</c>-এর সাথে যাওয়া কারণ — <c>shutdown</c>, <c>logoff</c>,
-    /// অথবা <c>unknown</c>।
+    /// The reason sent with <c>agent_stop</c>: <c>shutdown</c>, <c>logoff</c> or <c>unknown</c>.
     ///
-    /// ⚠️ <c>unknown</c> ঢাকার চেষ্টা করা হয় না। "কেউ প্রসেসটা মেরে দিয়েছে"
-    /// আর "PC বন্ধ হয়েছে" — এই পার্থক্যটাই G02-র পুরো বিষয়। সন্দেহ হলে
-    /// সন্দেহই লেখা থাকবে।
+    /// Careful: <c>unknown</c> is not covered up. "Someone killed the process" versus "the PC shut
+    /// down" is the entire point of G02. When in doubt, the doubt stays in the record.
     /// </summary>
     private string ClosingReason()
     {
@@ -2415,9 +2379,9 @@ internal sealed class AgentHost : IAsyncDisposable
             if (_closingEventsSent.Contains(AgentEventTypes.Logoff))
                 return AgentEventTypes.Logoff;
 
-            // ⭐ আপডেটের জন্য বন্ধ হওয়াটাও একটা **জানা** কারণ, "unknown" নয়।
-            //   ⚠️ কারণটা লেখা না থাকলে ইভেন্টের গায়ে চিরকাল "কে জানে কেন
-            //   বন্ধ হলো" বসে থাকত, অথচ আমরা ঠিকই জানতাম।
+            // Stopping for an update is also a **known** reason, not "unknown". Careful: without
+            // the reason, the event would forever say "who knows why it stopped", although we knew
+            // exactly.
             if (_closingEventsSent.Contains(AgentEventTypes.AgentUpdate))
                 return AgentEventTypes.AgentUpdate;
         }
@@ -2428,24 +2392,22 @@ internal sealed class AgentHost : IAsyncDisposable
     public void OnPower(PowerSignal? signal)
     {
         /**
-         * ⚠️⚠️ <b>এই মেথডটা UI (মেসেজ-পাম্প) থ্রেডে চলে</b>, ট্র্যাকার
-         * থ্রেডে নয় — <c>Program.OnMessage</c> সরাসরি ডাকে। এটাই ছিল
-         * G160-এর আসল রাস্তা: পর্দা ঘুমানোর মুহূর্তে এই থ্রেড আর ট্র্যাকার
-         * থ্রেড দুজনেই একই মেশিনে ঢুকত।
+         * Careful: <b>this method runs on the UI (message pump) thread</b>, not the tracker thread:
+         * <c>Program.OnMessage</c> calls it directly. This was the real path behind G160: at the
+         * moment the screen went to sleep, this thread and the tracker thread both entered the same
+         * machine.
          *
-         * ⚠️ <b>ইচ্ছাকৃতভাবে defer করা হয়নি।</b> <c>_pendingConfig</c>-এর
-         * মতো ফেলে রেখে ট্র্যাকারকে দিয়ে করানো এখানে ভুল হতো: আসল
-         * <c>PBT_APMSUSPEND</c>-এ PC ~২ সেকেন্ডেই ঘুমিয়ে যায়, ট্র্যাকার আর
-         * টিকই করে না — খোলা সেগমেন্টটা তখন জেগে ওঠার পরে বন্ধ হতো, আর
-         * ঘুমের পুরো সময়টা কাজ হিসেবে গোনা হতো। ঠিক <b>G3</b> বাগটা, যেটা
-         * ঠেকাতেই <see cref="IdleStateMachine.OnSuspend"/> লেখা হয়েছিল।
+         * Careful: <b>deliberately not deferred.</b> Leaving it like <c>_pendingConfig</c> for the
+         * tracker to do would be wrong here: on a real <c>PBT_APMSUSPEND</c> the PC sleeps within
+         * about 2 seconds and the tracker no longer ticks, so the open segment would be closed
+         * after waking and the whole sleep would count as work. That is exactly the <b>G3</b> bug
+         * that <see cref="IdleStateMachine.OnSuspend"/> was written to prevent.
          */
         IReadOnlyList<ActivitySegment>? closed = null;
 
         if (signal is PowerSignal.Suspend or PowerSignal.DisplayOff)
         {
-            // ঘুমাতে যাওয়ার আগে হাতে ~২ সেকেন্ড — শুধু সেগমেন্ট বন্ধ,
-            // কোনো নেটওয়ার্ক কল নয়।
+            // About 2 seconds are left before sleep: only close the segment, no network calls.
             lock (_machineGate) closed = _machine?.OnSuspend(_clock.Now);
             _sleep.Reset();
         }
@@ -2455,7 +2417,7 @@ internal sealed class AgentHost : IAsyncDisposable
             _sleep.Reset();
         }
 
-        // ⚠️ তালার **বাইরে** — এটা SQLite-এ লেখে (উপরের `_machineGate` দেখুন)
+        // Careful: **outside** the lock: this writes to SQLite (see `_machineGate` above)
         if (closed is not null) Record(closed);
     }
 
@@ -2463,32 +2425,29 @@ internal sealed class AgentHost : IAsyncDisposable
     {
         await _stopping.CancelAsync();
 
-        // ⚠️ G160 — `_stopping` বাতিল করা মানেই ট্র্যাকার থেমে গেছে নয়;
-        //    সে টোকেনটা দেখে কেবল `while`-এর মাথায়, তাই এই মুহূর্তে সে
-        //    টিকের মাঝপথে থাকতেই পারে।
+        // Careful: G160: cancelling `_stopping` does not mean the tracker has stopped; it checks
+        // the token only at the top of the `while`, so right now it can well be mid-tick.
         IReadOnlyList<ActivitySegment>? lastSegments;
         lock (_machineGate) lastSegments = _machine?.CloseAll(_clock.Now);
         if (lastSegments is not null) Record(lastSegments);
         if (_apps is not null) RecordApps(_apps.CloseAll(_clock.Now));
 
-        // ── G02: agent_stop ─────────────────────────────────────────────────
-        // ⭐ এটাই সার্ভারের tamper অ্যালার্টের একমাত্র ইনপুট। এর পাশে একটা
-        //    logoff/shutdown থাকলে সার্ভার বলে "স্বাভাবিক বন্ধ", না থাকলে
-        //    "হস্তক্ষেপ" (alerts.rules.ts)। তাই দুটোই পাঠানো জরুরি।
+        // ── G02: agent_stop ───────────────────────────────────────────────────
+        // This is the only input to the server's tamper alert. With a logoff/shutdown beside it the
+        // server says "normal stop", without one "interference" (alerts.rules.ts). So both must be
+        // sent.
         //
-        // ⚠️ এখানে await করা হচ্ছে, ইচ্ছাকৃতভাবে — নিচের শেষ drain-এ ইভেন্টটা
-        //    ধরা পড়তে হলে তার আগেই SQLite-এ বসতে হবে। fire-and-forget হলে
-        //    দৌড়ে হেরে গিয়ে ইভেন্টটা পরের স্টার্টআপ পর্যন্ত পড়ে থাকত — আর
-        //    আনইনস্টলের ক্ষেত্রে পরের স্টার্টআপ কখনো আসত না।
+        // Careful: it awaits here, on purpose: for the final drain below to catch the event, it
+        // must already be in SQLite. If fire-and-forget, it could lose the race and sit until the
+        // next startup, and in the uninstall case the next startup would never come.
         //
-        // ⚠️ তবু <b>নেটওয়ার্ক নয়</b> — শুধু ডিস্ক, আর তার উপরেও ছাদ আছে।
-        //    ছাদটা WaitAsync দিয়ে, EnqueueAsync-এর CancellationToken দিয়ে নয়:
-        //    SqliteOutboxStore ওই টোকেনটা ইচ্ছাকৃতভাবে উপেক্ষা করে (অর্ধেক লেখা
-        //    সারি তৈরি হওয়া ঠেকাতে), তাই ওটা দিলে "ছাদ আছে" ভেবে বসে থাকতাম
-        //    অথচ বাস্তবে কিছুই থামাত না।
-        // ⚠️ এই পথটা `RaiseEvent()`-কে **এড়িয়ে যায়** (সরাসরি EnqueueAsync,
-        //    কারণ এখানে একটা সময়-বাজেট মানতে হয়), তাই গেটটা এখানেও আলাদা
-        //    করে লাগে। ঠিক এভাবেই AppUsageLoop-টা প্রথমে বাদ পড়েছিল।
+        // Careful: still <b>not the network</b>, only the disk, and even that has a ceiling. The
+        // ceiling is via WaitAsync, not via EnqueueAsync's CancellationToken: SqliteOutboxStore
+        // deliberately ignores that token (to avoid half-written rows), so passing it would let us
+        // believe a ceiling existed when in reality nothing would stop. Careful: this path
+        // **bypasses** `RaiseEvent()` (it calls EnqueueAsync directly, because a time budget
+        // applies here), so the gate is needed here separately too. This is exactly how
+        // AppUsageLoop was missed at first.
         if (_outbox is not null
             && TrackingGate.Allows(
                 _credentials?.IsEnrolled == true,
@@ -2507,39 +2466,38 @@ internal sealed class AgentHost : IAsyncDisposable
             }
         }
 
-        // ── G136: বিদায়ী ইভেন্ট আগে ────────────────────────────────────────
-        // ⭐ shutdown/logoff + agent_stop **সবার আগে** পাঠানো।
+        // ── G136: goodbye events first ────────────────────────────────────────
+        // shutdown/logoff + agent_stop are sent **before everything else**.
         //
-        // ⚠️⚠️ নিচের full drain Segment→Event ক্রমে চলে (SyncWorker.Order)। যে
-        //    PC রাতে বন্ধ হয় তার শেষ ~৩০ সেকেন্ডের সেগমেন্ট তখনো কিউয়ে, আর
-        //    ৩ সেকেন্ডের বাজেট ওগুলোতেই ফুরিয়ে গেলে বিদায়ী ইভেন্টটা পড়ে থাকত।
-        //    পরদিন সার্ভার "শেষ খবরটা বিদায় ছিল না" ধরে মিথ্যা agent_down তুলত
-        //    (isExpectedSilence — alerts.rules.ts)। ওটাই ছিল সকালের বাসি-warning
-        //    দেয়ালের গোড়া।
+        // Careful: the full drain below runs Segment then Event (SyncWorker.Order). On a PC that
+        // shuts down at night, the last ~30 seconds of segments are still in the queue, and if the
+        // 3-second budget ran out on those, the goodbye event would stay behind. The next day the
+        // server would see "the last message was not a goodbye" and raise a false agent_down
+        // (isExpectedSilence in alerts.rules.ts). That was the root of the morning wall of stale
+        // warnings.
         //
-        // ⚠️ ব্যর্থ/timeout হলেও ইভেন্টটা outbox-এ **থাকেই** (নিচের full drain বা
-        //    পরের startup ধরে নেয়) — তাই এটা নিছক best-effort অগ্রাধিকার, কোনো
-        //    regression নেই। নেটওয়ার্ক এখানে নিরাপদ: DisposeAsync UI-থ্রেডে নয়,
-        //    Program.Shutdown এটাকে thread-pool-এ await করে।
+        // Careful: even on failure/timeout the event **stays** in the outbox (the full drain below
+        // or the next startup picks it up), so this is purely a best-effort priority with no
+        // regression. The network is safe here: DisposeAsync is not on the UI thread;
+        // Program.Shutdown awaits it on the thread pool.
         if (_worker is not null)
         {
             using var goodbye = new CancellationTokenSource(GoodbyeBudget);
             try { await _worker.DrainKindOnceAsync(OutboundKind.Event, goodbye.Token); }
-            catch (Exception) { /* বন্ধ হচ্ছে */ }
+            catch (Exception) { /* shutting down */ }
         }
 
-        // শেষ চেষ্টা — বন্ধ হওয়ার আগে বাকিটা (সেগমেন্ট, ছবি) পাঠিয়ে দেওয়া
+        // Last attempt: send the rest (segments, images) before shutting down.
         //
-        // ⚠️ ছাদটা আগে ১০ সেকেন্ড ছিল, কিন্তু সেটা কখনো পৌঁছাত না:
-        //    Program.Shutdown() পুরো DisposeAsync-কেই ৪ সেকেন্ডে থামিয়ে দেয়
-        //    (Windows-এর নিজের বাজেট আরও কম)। ১০ রাখলে drain বাতিলই হতো না —
-        //    প্রসেসটা মাঝপথে মারা যেত, HTTP কল অর্ধেক অবস্থায়। এখন সে
-        //    নিজেই আগে সরে যায়, ফলে সার্ভারের দিকে কাটা রিকোয়েস্ট পড়ে না।
+        // Careful: the ceiling used to be 10 seconds, but it was never reached: Program.Shutdown()
+        // stops the whole DisposeAsync after 4 seconds (Windows' own budget is even smaller). With
+        // 10, the drain would never be cancelled; the process would be killed midway, with an HTTP
+        // call half done. Now it steps aside first, so no cut-off request reaches the server.
         if (_worker is not null)
         {
             using var last = new CancellationTokenSource(FinalDrainBudget);
             try { await _worker.DrainOnceAsync(last.Token); }
-            catch (Exception) { /* বন্ধ হচ্ছে — আর কিছু করার নেই */ }
+            catch (Exception) { /* shutting down; nothing more to do */ }
         }
 
         _beacon?.Dispose();

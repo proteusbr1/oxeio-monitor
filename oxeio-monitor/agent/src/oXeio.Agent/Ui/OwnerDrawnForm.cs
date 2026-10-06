@@ -6,19 +6,18 @@ using System.Windows.Forms;
 namespace oXeio.Agent.Ui;
 
 /// <summary>
-/// tray-র ছোট জানালাগুলোর ভিত্তি — সম্পূর্ণ owner-drawn, কোনো চাইল্ড কন্ট্রোল নেই।
+/// The base of the tray's small windows: fully owner-drawn, with no child controls.
 ///
-/// কেন কোনো Label/Button নেই:
-///  ১) কোনো কন্ট্রোল না থাকা মানে কোনো ইনপুট নেই — জানালাটা গঠনগতভাবেই read-only,
-///     ভুল করেও কোথাও কিছু টাইপ করা বা চাপা যায় না (ADR-011d: স্টাফের চাপার মতো
-///     কিছু থাকবে না)।
-///  ২) লেখা মাপা ও আঁকা এক জায়গাতেই থাকে, ফলে DPI বদলালে সব একসাথে বদলায়।
+/// Why there is no Label/Button:
+///  1) With no controls there is no input: the window is read-only by construction, and
+///     nothing can be typed or pressed anywhere by mistake (ADR-011d: staff must have
+///     nothing to press).
 ///
-/// ⚠️ লেখা আঁকা হয় <see cref="TextRenderer"/> দিয়ে, <c>Graphics.DrawString</c> দিয়ে
-/// নয়। কারণ মাপা আর আঁকা একই ইঞ্জিনে হতে হবে: <c>MeasureText</c> GDI-র হিসাব দেয়,
-/// আর <c>DrawString</c> আঁকে GDI+ দিয়ে — দুটোর কার্নিং আলাদা, ফলে মাপা বাক্সের
-/// শেষ শব্দটা নীরবে কেটে যেত। বাকি WinForms কন্ট্রোলও GDI-তেই আঁকে, তাই
-/// জানালার লেখা সিস্টেমের সাথে মেলে।
+/// Careful: text is drawn with <see cref="TextRenderer"/>, not <c>Graphics.DrawString</c>.
+/// Measuring and drawing have to use the same engine: <c>MeasureText</c> gives GDI's result,
+/// while <c>DrawString</c> draws with GDI+, and their kerning differs, so the last word of a
+/// measured box would be silently clipped. Other WinForms controls also draw with GDI, so
+/// the window's text matches the system.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal abstract class OwnerDrawnForm : Form
@@ -42,31 +41,29 @@ internal abstract class OwnerDrawnForm : Form
         Text = title;
         FormBorderStyle = FormBorderStyle.FixedDialog;
 
-        // ⭐ মিনিমাইজ আছে — কাজ করতে করতে জানালাটা সরিয়ে রাখা যায়।
+        // Minimize is present: the window can be tucked away while working.
         //
-        // ⚠️ ম্যাক্সিমাইজ নেই: ভেতরের সব মাপ ৪০০px চওড়ার ধরে আঁকা
-        //    (owner-drawn, কোনো লেআউট ইঞ্জিন নেই), তাই বড় করলে লেখা বাঁ
-        //    কোণে জড়ো হয়ে বাকিটা ফাঁকা পড়ে থাকত।
+        // Careful: there is no maximize: everything inside is laid out for a 400px width
+        // (owner-drawn, no layout engine), so enlarging would crowd the text into the left
+        // corner and leave the rest empty.
         //
-        // ⚠️ তবু টাইটেল বারে বাটনটা **দেখা যাবে, ধূসর অবস্থায়** — এটা
-        //    Windows-এর আচরণ, আমাদের নয়: minimize বা maximize-এর একটা
-        //    থাকলে সে দুটোই আঁকে, অনুপস্থিতটা নিষ্ক্রিয় করে। স্টাইল-বিট
-        //    (`WS_MAXIMIZEBOX`) হাতে মুছেও লাভ হয় না — চেষ্টা করে দেখা হয়েছে।
-        //    সরাতে হলে গোটা টাইটেল বার নিজে আঁকতে হবে, যা এই জানালার জন্য
-        //    অসমানুপাতিক।
+        // Careful: even so, the button **will be visible on the title bar, greyed out**. That
+        // is Windows's behavior, not ours: if either minimize or maximize is present it draws
+        // both and disables the missing one. Removing the style bit (`WS_MAXIMIZEBOX`) by hand
+        // does not help either; we tried. To remove it we would have to draw the whole title
+        // bar ourselves, which is disproportionate for this window.
         MinimizeBox = true;
         MaximizeBox = false;
         ShowInTaskbar = true;
 
         /**
-         * ⭐⭐ <b>টাস্কবার ও টাইটেল বারের আইকন</b> — ব্র্যান্ডের লাল টাইল।
+         * <b>The taskbar and title bar icon</b>: the brand's red tile.
          *
-         * ⚠️⚠️ <b>দুটোই লাগে, আর ক্রমটা নয় — জোড়াটা।</b> আগে এখানে
-         * <c>ShowIcon = false</c> ছিল, আর তখন <c>Icon</c> বসালেও জানালার
-         * আইকন <b>শূন্যই থাকে</b> — মেপে দেখা হয়েছে: FixedDialog +
-         * ShowIcon=false + Icon বসানো অবস্থাতেও <c>WM_GETICON</c> তিনটে
-         * স্লটেই ০ ফেরত দেয়। অর্থাৎ শুধু <c>Icon</c> বসিয়ে "হয়ে গেছে"
-         * ভাবাটা একটা <b>নীরব</b> ভুল হতো।
+         * Careful: <b>both are needed; it is the pair that matters, not the order.</b> This
+         * used to have <c>ShowIcon = false</c>, and then even setting <c>Icon</c> leaves the
+         * window icon <b>empty</b>. We measured it: with FixedDialog + ShowIcon=false + Icon
+         * set, <c>WM_GETICON</c> still returns 0 for all three slots. So setting just
+         * <c>Icon</c> and thinking "done" would have been a <b>silent</b> mistake.
          */
         Icon = BrandIcon.Value;
         ShowIcon = true;
@@ -74,8 +71,8 @@ internal abstract class OwnerDrawnForm : Form
         KeyPreview = true;
         StartPosition = FormStartPosition.Manual;
 
-        // ⚠️ WinForms-এর নিজস্ব স্কেলিং বন্ধ। আমরা নিজেরাই DeviceDpi দেখে সব মাপি;
-        //    দুটো একসাথে চললে ১৫০% মনিটরে সব কিছু দুবার স্কেল হতো।
+        // Careful: WinForms's own scaling is off. We measure everything ourselves from
+        // DeviceDpi; if both ran together, everything would be scaled twice on a 150% monitor.
         AutoScaleMode = AutoScaleMode.None;
 
         BackColor = _theme.Surface;
@@ -92,7 +89,7 @@ internal abstract class OwnerDrawnForm : Form
 
     protected TrayFonts Fonts => _fonts;
 
-    /// <summary>৯৬ DPI-র মাপ → এই মনিটরের মাপ।</summary>
+    /// <summary>A size at 96 DPI to this monitor's size.</summary>
     protected int Scale(int value) => (int)Math.Round(value * DeviceDpi / 96.0);
 
     protected Font FontFor(TrayFontRole role) => _fonts.Get(role, DeviceDpi);
@@ -101,22 +98,22 @@ internal abstract class OwnerDrawnForm : Form
 
     protected Color Muted => _theme.Ink3;
 
-    // ── থাম্বনেইলের ক্যাশ ───────────────────────────────────────────────────
+    // ── thumbnail cache ─────────────────────────────────────────────────────
     private string? _thumbPath;
     private DateTime _thumbStamp;
     private Bitmap? _thumbImage;
 
     /// <summary>
-    /// ⭐ ডিকোড করা থাম্বনেইল — <b>একই ফাইলের জন্য একবারই</b>।
+    /// The decoded thumbnail, <b>only once per file</b>.
     ///
-    /// ⚠️⚠️ আগে প্রতিটা পেইন্টে ডিস্ক থেকে পড়ে WebP ডিকোড হতো। আঁকা হতো
-    /// কালেভদ্রে (স্ট্যাটাস বদলালে), তাই সেটা চোখে পড়ত না — কিন্তু
-    /// <see cref="TodayForm"/>-এ সেকেন্ডের ঘড়ি বসার পর আঁকা হয় <b>প্রতি
-    /// সেকেন্ডে</b>, আর তখন ওটা হতো প্রতি সেকেন্ডে একটা ফাইল-পড়া + ডিকোড।
+    /// Careful: it used to read from disk and decode the WebP on every paint. Painting was
+    /// rare (when the status changed), so it went unnoticed, but once the per-second clock was
+    /// added to <see cref="TodayForm"/> it paints <b>every second</b>, and that meant a file
+    /// read plus a decode every second.
     ///
-    /// ⭐ ফাইলের <b>লেখার সময়</b> মিলিয়ে দেখা হয়, শুধু নাম নয় — নতুন ছবি
-    /// এলে পথ একই থাকে (<c>last-shot.webp</c>), তাই নাম দেখে ক্যাশ করলে
-    /// জানালা চিরকাল প্রথম ছবিটাই দেখাত।
+    /// It compares the file's <b>write time</b>, not just the name: when a new image arrives
+    /// the path stays the same (<c>last-shot.webp</c>), so caching by name would make the
+    /// window show the first image forever.
     /// </summary>
     internal Bitmap? ThumbnailFor(string path)
     {
@@ -180,10 +177,10 @@ internal abstract class OwnerDrawnForm : Form
     }
 
     /// <summary>
-    /// যে মনিটরে মাউস আছে, তার কাজের এলাকার ডান-নিচে — অর্থাৎ tray-র পাশে।
+    /// The bottom-right of the work area of the monitor the mouse is on, i.e. next to the tray.
     ///
-    /// ⚠️ <c>WorkingArea</c> ব্যবহার করা হয়েছে, <c>Bounds</c> নয়: টাস্কবার উপরে বা
-    /// পাশে সরানো থাকলেও জানালাটা তার নিচে ঢুকে পড়ে না।
+    /// Careful: <c>WorkingArea</c> is used, not <c>Bounds</c>: even if the taskbar has been
+    /// moved to the top or side, the window does not slip under it.
     /// </summary>
     public void PositionNearTray()
     {
@@ -195,7 +192,7 @@ internal abstract class OwnerDrawnForm : Form
             var x = area.Right - Width - margin;
             var y = area.Bottom - Height - margin;
 
-            // একেবারে ছোট রেজল্যুশনে ঋণাত্মক হয়ে পর্দার বাইরে চলে যেত
+            // At a very small resolution it would go negative and end up off screen
             Location = new Point(Math.Max(area.Left, x), Math.Max(area.Top, y));
         }
         catch (Exception)
@@ -208,14 +205,14 @@ internal abstract class OwnerDrawnForm : Form
     {
         base.OnKeyDown(e);
 
-        // Esc = বন্ধ। কোনো বাটন নেই বলেই কি-বোর্ডের পথটা থাকা দরকার।
+        // Esc closes. Because there is no button, a keyboard route needs to exist.
         if (e.KeyCode == Keys.Escape) Close();
     }
 
     protected override void OnPaint(PaintEventArgs e)
     {
-        // ⚠️ OnPaint থেকে ছুটে যাওয়া এক্সসেপশন WinForms-এ পুরো প্রক্রিয়া নামিয়ে
-        //    দেয়। একটা জানালার আঁকার বাগে যেন ঘণ্টা গোনা না থামে।
+        // Careful: in WinForms an exception escaping OnPaint brings down the whole process.
+        // A drawing bug in one window must not stop the hours being counted.
         try
         {
             e.Graphics.Clear(BackColor);
@@ -236,15 +233,15 @@ internal abstract class OwnerDrawnForm : Form
     }
 
     /// <summary>
-    /// লেখা নিচে উপচে গেলে জানালাটা নিজেই একটু লম্বা হয়।
+    /// The window grows a little taller by itself if text overflows at the bottom.
     ///
-    /// কেন দরকার: লেখা কত জায়গা নেবে সেটা আগে থেকে গোনা যায় না — ফন্ট বদলালে,
-    /// DPI বদলালে, এমনকি Segoe UI না থাকলে ফলব্যাক ফন্টে মেট্রিক আলাদা হয়।
-    /// স্থির উচ্চতা দিলে কারো কারো মেশিনে শেষ লাইনটা নীরবে কেটে যেত, আর কেটে
-    /// যাওয়া লাইনটা প্রায়ই হয় "data saved locally" জাতীয় আশ্বাসের লাইন।
+    /// Why it is needed: how much room text will take cannot be counted in advance; it changes
+    /// with the font, the DPI, and even the fallback font's metrics if Segoe UI is missing.
+    /// With a fixed height the last line would be silently clipped on some machines, and the
+    /// clipped line is often the reassurance line like "data saved locally".
     ///
-    /// ⚠️ পেইন্টের ভেতরেই মাপ বদলাচ্ছি, তাই পুনঃপ্রবেশ ঠেকাতে পতাকা। বড় করা
-    /// একবারই লাগে: পরের পেইন্টে আর উপচায় না, তাই লুপ হয় না।
+    /// Careful: we change size inside paint, so a flag prevents re-entry. Growing is needed
+    /// only once: the next paint no longer overflows, so there is no loop.
     /// </summary>
     private void GrowIfClipped(int neededHeight)
     {
@@ -268,8 +265,8 @@ internal abstract class OwnerDrawnForm : Form
     protected abstract void PaintBody(TextStack stack);
 
     /// <summary>
-    /// উপর থেকে নিচে লাইন বসানোর ছোট সহায়ক — প্রতিটা লাইনের উচ্চতা মেপে
-    /// পরেরটার জায়গা ঠিক করে, তাই লম্বা লেখা দুই লাইনে ভেঙে গেলেও ওভারল্যাপ হয় না।
+    /// A small helper for stacking lines top to bottom: it measures each line's height and
+    /// places the next one accordingly, so there is no overlap even if long text wraps to two lines.
     /// </summary>
     protected sealed class TextStack
     {
@@ -286,7 +283,7 @@ internal abstract class OwnerDrawnForm : Form
             _y = bounds.Top;
         }
 
-        /// <summary>এ পর্যন্ত আঁকা লেখার নিচের প্রান্ত — জানালার উচ্চতা ঠিক করতে লাগে।</summary>
+        /// <summary>The bottom edge of the text drawn so far; needed to set the window height.</summary>
         public int Bottom => _y;
 
         public void Gap(int basePixels) => _y += _form.Scale(basePixels);
@@ -310,19 +307,19 @@ internal abstract class OwnerDrawnForm : Form
             _y += size.Height + _form.Scale(3);
         }
 
-        /// <summary>একই লাইনে বাঁয়ে লেবেল, ডানে মান।</summary>
+        /// <summary>On one line: label on the left, value on the right.</summary>
         public void Pair(string label, string value, TrayFontRole role = TrayFontRole.Body)
         {
             var font = _form.FontFor(role);
 
-            // ⚠️ নমুনাটায় ascender ও descender দুটোই থাকতে হবে ("Ag")। শুধু "A"
-            //    দিলে GDI descender-এর জায়গা বাদ দিয়ে উচ্চতা মাপত, আর "g"/"y"
-            //    থাকা মানগুলোর লেজ পরের লাইনের সাথে ঘষা খেত।
+            // Careful: the sample must contain both an ascender and a descender ("Ag"). With
+            // just "A", GDI would measure the height without room for the descender, and the
+            // tails of values containing "g"/"y" would rub against the next line.
             var height = TextRenderer.MeasureText(
                 _g, "Ag", font, new Size(_bounds.Width, int.MaxValue), TextFlags).Height;
 
-            // ⚠️ ঠিক অর্ধেক-অর্ধেক নয়। লেবেলগুলো ছোট ("Now", "Sync"), মানগুলো লম্বা
-            //    ("127:30 / 208 hours")। সমান ভাগ করলে ডান পাশের সংখ্যাটাই কেটে যেত।
+            // Careful: not an exact half and half. Labels are short ("Now", "Sync") and values
+            // long ("127:30 / 208 hours"); splitting evenly would clip the number on the right.
             var labelWidth = _bounds.Width * 2 / 5;
 
             TextRenderer.DrawText(
@@ -348,10 +345,9 @@ internal abstract class OwnerDrawnForm : Form
         }
 
         /// <summary>
-        /// অগ্রগতির বার। ⚠️ শুধু <b>আঁকাটা</b> ১-এ ক্ল্যাম্প করা হয় —
-        /// <see cref="oXeio.Core.Agent.AgentStatus.MonthlyProgress"/>-এর নিয়ম অনুযায়ী
-        /// লেখা শতাংশটা ক্ল্যাম্প করা হয় না, নইলে ২২০ ঘণ্টা কাজ করা মানুষের বাড়তি
-        /// কাজটা অদৃশ্য হয়ে যেত।
+        /// The progress bar. Careful: only <b>the drawing</b> is clamped to 1; per the rules of
+        /// <see cref="oXeio.Core.Agent.AgentStatus.MonthlyProgress"/> the written percentage is
+        /// not clamped, otherwise the extra work of someone who worked 220 hours would vanish.
         /// </summary>
         public void Bar(double ratio, Color fill, int baseHeight = 10)
         {
@@ -375,19 +371,19 @@ internal abstract class OwnerDrawnForm : Form
             _y += height + _form.Scale(6);
         }
 
-        // ── নতুন প্রিমিটিভ ──────────────────────────────────────────────────
+        // ── new primitives ──────────────────────────────────────────────────
 
         /// <summary>
-        /// হিরো সারি — বড় সংখ্যা, তার পাশে একক, আর ডানে অবস্থার চিপ।
+        /// The hero row: a big number, the unit beside it, and the state chip on the right.
         ///
-        /// ⭐ অবস্থাটা এখানে, কারণ জানালার একমাত্র <b>এটাই</b> মিনিটে মিনিটে
-        /// বদলায়। আগে এটা চার সারির তালিকার চতুর্থ সারি ছিল ("Now: Working"),
-        /// অর্থাৎ "Queued: 0"-র সমান ওজনে।
+        /// The state is here because <b>this</b> is the only thing in the window that changes
+        /// minute by minute. It used to be the fourth row of a four-row list ("Now: Working"),
+        /// i.e. the same weight as "Queued: 0".
         /// </summary>
         /// <param name="tail">
-        /// ⭐ সংখ্যার শেষ টুকরো, <b>অর্ধেক মাপে</b> আঁকা হয় — যেমন
-        /// <c>3:59:22</c>-এর <c>:22</c> (মালিকের চাওয়া, ১৮ আগস্ট)।
-        /// খালি হলে পুরোটাই হিরো মাপে।
+        /// The last piece of the number, drawn at <b>half size</b>, e.g. the <c>:22</c> of
+        /// <c>3:59:22</c> (the owner's request, 18 August).
+        /// If empty, the whole number is at hero size.
         /// </param>
         public void Hero(
             string figure, string? tail, string unit, string? chip, Color chipDot)
@@ -412,13 +408,13 @@ internal abstract class OwnerDrawnForm : Form
                     _g, tail, tailFont, new Size(_bounds.Width, int.MaxValue), TextFlags);
 
                 /**
-                 * ⚠️⚠️ **baseline মিলিয়ে বসানো হয়, উপর বা নিচ ধরে নয়।**
+                 * Careful: **placed by matching baselines, not by top or bottom.**
                  *
-                 * উপর ধরে বসালে ছোট অঙ্কটা মাথার সাথে ঝুলত; নিচ ধরে বসালে
-                 * descent-এর তফাতে (৪৪px-এর descent ২২px-এর দ্বিগুণ) ওটা
-                 * বড় অঙ্কের baseline-এর **নিচে** নেমে যেত — দুটোই দেখতে
-                 * ভাঙা লাগে। ⭐ দুই ফন্ট একই ফ্যামিলি ও style বলে ascent
-                 * মাপে সমানুপাতিক, তাই হিসাবটা নির্ভরযোগ্য।
+                 * Placed by the top, the small digits would hang from the head; placed by the
+                 * bottom, because of the descent difference (the descent at 44px is double that
+                 * at 22px) they would drop **below** the big digits' baseline. Both look
+                 * broken. Since the two fonts share a family and style, ascent is proportional
+                 * to size, so the calculation is reliable.
                  */
                 var tailY = _y + AscentPx(heroFont) - AscentPx(tailFont);
 
@@ -432,8 +428,8 @@ internal abstract class OwnerDrawnForm : Form
                 used += tailSize.Width;
             }
 
-            // ⚠️ একক বসে সংখ্যার baseline-এ, উপরে নয় — নইলে "hours today"
-            //    সংখ্যাটার মাথার সাথে ভাসত।
+            // Careful: the unit sits on the number's baseline, not at the top; otherwise "hours
+            // today" would float level with the head of the number.
             var unitSize = TextRenderer.MeasureText(
                 _g, unit, unitFont, new Size(_bounds.Width, int.MaxValue), TextFlags);
 
@@ -455,27 +451,27 @@ internal abstract class OwnerDrawnForm : Form
         }
 
         /// <summary>
-        /// লেখার উপরের প্রান্ত থেকে baseline কত পিক্সেল নিচে।
+        /// How many pixels below the top of the text the baseline is.
         ///
-        /// ⚠️ <see cref="TextFormatFlags.NoPadding"/> দিয়ে আঁকা হয় বলে glyph
-        /// সেলের মাথা ঠিক rect-এর মাথায় বসে — তাই ascent-ই সরাসরি দূরত্ব।
-        /// ⚠️ <c>font.Size</c> এখানে <b>পিক্সেলে</b> (ফন্ট তৈরি হয়
-        /// <see cref="GraphicsUnit.Pixel"/>-এ, <see cref="TrayFonts"/> দেখুন);
-        /// পয়েন্টে হলে এই হিসাব DPI-তে ভেঙে পড়ত।
+        /// Careful: because drawing uses <see cref="TextFormatFlags.NoPadding"/>, the glyph cell
+        /// sits exactly at the top of the rect, so the ascent is directly the distance.
+        /// Careful: <c>font.Size</c> here is in <b>pixels</b> (fonts are created in
+        /// <see cref="GraphicsUnit.Pixel"/>, see <see cref="TrayFonts"/>); if it were in
+        /// points this calculation would break with DPI.
         /// </summary>
         private static int AscentPx(Font font)
         {
             var family = font.FontFamily;
             var em = family.GetEmHeight(font.Style);
 
-            // ⚠️ em শূন্য হওয়ার কথা নয়, কিন্তু হলে ভাগটা NaN হয়ে লেখাটা
-            //    জানালার বাইরে চলে যেত — তার চেয়ে উপরে বসুক।
+            // em should never be zero, but if it were, the division would give NaN and the text
+            // would end up outside the window; better that it sits at the top instead.
             if (em <= 0) return 0;
 
             return (int)Math.Round(font.Size * family.GetCellAscent(font.Style) / em);
         }
 
-        /// <summary>ডান দিকে একটা পিল — ভেতরে রঙিন বিন্দু আর অবস্থার নাম।</summary>
+        /// <summary>A pill on the right: a coloured dot inside, and the state name.</summary>
         private void DrawChip(string text, Color dot, int top)
         {
             var font = _form.FontFor(TrayFontRole.Small);
@@ -516,22 +512,22 @@ internal abstract class OwnerDrawnForm : Form
         }
 
         /// <summary>
-        /// মাসের মিটার — ভরাটের সাথে "আজ পর্যন্ত যতটা হওয়ার কথা" দাগ।
+        /// The month meter: the fill, plus a mark for "how much should be done by today".
         ///
-        /// ⭐ দাগটাই এই জানালার সবচেয়ে বড় বদল। "৭৯:২০ hours behind" সংখ্যাটা
-        /// একা একটা অভিযোগ — কতটা পিছিয়ে, আর পোষাতে কতটা মাস বাকি, কোনোটাই
-        /// বলে না। দাগ থাকলে ফাঁকটা পড়ার <b>আগেই</b> দেখা যায়।
+        /// Important: the mark is the biggest change in this window. The figure "79:20 hours
+        /// behind" alone is just an accusation; it says neither how far behind nor how many months
+        /// it would take to make up. With the mark, the gap is visible <b>before</b> reading.
         ///
-        /// ⚠️ ভরাটের সর্বনিম্ন ৩px। ০:৩৯ / ২০৮ ঘণ্টা মানে ০.৩% — ৩৬০px-এ
-        /// ১.১px, যা GDI গোল করে <b>শূন্য</b> করে দিত। তখন "একটু কাজ হয়েছে"
-        /// আর "কিছুই হয়নি" হুবহু এক দেখাত। সত্যিকারের শূন্য অবশ্য শূন্যই।
+        /// Careful: the fill is at least 3px. 0:39 / 208 hours is 0.3%, which is 1.1px at 360px,
+        /// and GDI would round it to <b>zero</b>. Then "a little work done" and "nothing done"
+        /// would look identical. A true zero stays zero, of course.
         /// </summary>
         public void Meter(double ratio, double? expected, Color fill, int baseHeight = 10)
         {
             var height = _form.Scale(baseHeight);
             var radius = height / 2;
 
-            // দাগের লেবেলটা মিটারের উপরে বসে, তাই আগে জায়গা রাখা
+            // The mark's label sits above the meter, so reserve the space first
             var labelFont = _form.FontFor(TrayFontRole.Micro);
             var labelHeight = expected is null
                 ? 0
@@ -580,8 +576,8 @@ internal abstract class OwnerDrawnForm : Form
                 var capSize = TextRenderer.MeasureText(
                     _g, caption, labelFont, new Size(_bounds.Width, int.MaxValue), TextFlags);
 
-                // ⚠️ দুই প্রান্তে ক্ল্যাম্প — মাসের শুরুতে বা শেষে লেখাটা
-                //    জানালার বাইরে চলে যেত।
+                // Careful: clamped at both ends; at the start or end of the month the text
+                // would go outside the window.
                 var capX = Math.Min(
                     Math.Max(_bounds.Left, x - (capSize.Width / 2)),
                     _bounds.Right - capSize.Width);
@@ -595,7 +591,7 @@ internal abstract class OwnerDrawnForm : Form
             _y += height + _form.Scale(6);
         }
 
-        /// <summary>বাঁয়ে-ডানে দুটো ছোট লেখা — মিটারের নিচের লাইন।</summary>
+        /// <summary>Two small texts, left and right: the line under the meter.</summary>
         public void Legend(string left, string right, Color rightColor)
         {
             var font = _form.FontFor(TrayFontRole.Small);
@@ -618,10 +614,10 @@ internal abstract class OwnerDrawnForm : Form
         }
 
         /// <summary>
-        /// যন্ত্রের তিনটে তথ্য এক সারিতে — বড়-হাতের ছোট লেবেল, নিচে mono মান।
+        /// The machine's three facts in one row: small uppercase labels, mono values below.
         ///
-        /// ⭐ আগে এগুলো ছিল তিনটে আলাদা সারি, প্রতিটাই বাকি সব লাইনের সমান
-        /// ওজনে। এগুলো <b>পড়ার</b> জিনিস নয়, <b>দেখে নেওয়ার</b> জিনিস।
+        /// These used to be three separate rows, each with the same weight as every other line.
+        /// They are things to <b>glance at</b>, not to <b>read</b>.
         /// </summary>
         public void Readout((string Key, string Value, Color? Color)[] cells)
         {
@@ -660,10 +656,10 @@ internal abstract class OwnerDrawnForm : Form
         }
 
         /// <summary>
-        /// শুধু গোলমালের সময় — বাক্সে ঘেরা এক বাক্য।
+        /// Only when something is wrong: one sentence in a box.
         ///
-        /// ⚠️ লাল এই জানালায় <b>একমাত্র এখানেই</b>। "পিছিয়ে আছে" লাল নয়:
-        /// ওটা কর্মীর হিসাব, আর এটা সিস্টেমের ব্যর্থতা।
+        /// Careful: red appears <b>only here</b> in this window. "Behind" is not red: that is
+        /// the employee's tally, and this is a system failure.
         /// </summary>
         public void Alert(string text)
         {
@@ -700,14 +696,14 @@ internal abstract class OwnerDrawnForm : Form
         }
 
         /// <summary>
-        /// একটা টার্গেটের সারি — বাঁয়ে নাম, ডানে "কত / কত", নিচে বার।
+        /// One target row: name on the left, "how much / how much" on the right, the bar below.
         ///
-        /// ⭐ তিনটে টার্গেট (আজ · ৭ দিন · মাস) একই আকৃতিতে সাজানো, ইচ্ছাকৃতভাবে:
-        /// তিন রকম দেখালে চোখকে প্রতিবার নতুন করে পড়তে হতো, অথচ প্রশ্ন একটাই —
-        /// "কতটা হয়েছে"।
+        /// The three targets (today · 7 days · month) are laid out in the same shape, on
+        /// purpose: three different looks would make the eye read anew each time, yet the question
+        /// is always one: "how much is done".
         ///
-        /// <paramref name="ratio"/> <c>null</c> হলে বার আঁকাই হয় না — "জানি না"
-        /// অবস্থায় খালি বার দেখানো মানে "কিছুই করোনি" বলা।
+        /// If <paramref name="ratio"/> is <c>null</c> the bar is not drawn at all; in the
+        /// "don't know" state, showing an empty bar would be saying "you have done nothing".
         /// </summary>
         public void TargetRow(
             string label, string value, double? ratio, Color fill,
@@ -747,14 +743,14 @@ internal abstract class OwnerDrawnForm : Form
         }
 
         /// <summary>
-        /// শেষ কয়েকটা ৫-মিনিটের ঘরে কত শতাংশ সময় হাত চলেছে (B13)।
+        /// What percentage of the time the hands were active in the last few 5-minute cells (B13).
         ///
-        /// ⭐⚠️ এটা <b>কীস্ট্রোক গোনা নয়</b> — গুনলে সেটা কীলগিং হতো
-        /// (04-Features § L · G46)। প্রতিটা স্তম্ভ বলে "ওই ৫ মিনিটের কত ভাগ
-        /// সময়ে কি-বোর্ড বা মাউস নড়েছে", কী নড়েছে তা নয়।
+        /// Careful: this is <b>not keystroke counting</b>; counting would be keylogging
+        /// (04-Features § L · G46). Each bar says "for what share of that 5 minutes the keyboard
+        /// or mouse moved", not what moved.
         ///
-        /// ⚠️ শূন্য স্কোরেও ১px-এর একটা রেখা আঁকা হয় — নইলে "০% ব্যস্ত" আর
-        /// "এই ঘরের কোনো তথ্যই নেই" পর্দায় হুবহু এক দেখাত।
+        /// Careful: even a zero score gets a 1px line; otherwise "0% busy" and "no data for this
+        /// cell at all" would look identical on screen.
         /// </summary>
         public void BusyBlocks(IReadOnlyList<int> scores, int blocks, int baseHeight = 26)
         {
@@ -762,8 +758,8 @@ internal abstract class OwnerDrawnForm : Form
             var gap = _form.Scale(3);
             var width = (_bounds.Width - (gap * (blocks - 1))) / blocks;
 
-            // ⚠️ ডান দিকে সবচেয়ে নতুন — ঘর কম থাকলে বাঁ দিক ফাঁকা যায়,
-            //    নইলে সদ্য চালু হওয়া এজেন্টে স্তম্ভগুলো লাফিয়ে জায়গা বদলাত।
+            // Careful: newest on the right; with few cells the left side stays empty, otherwise
+            // in a freshly started agent the bars would jump around changing places.
             var missing = Math.Max(0, blocks - scores.Count);
 
             for (var i = 0; i < blocks; i++)
@@ -781,9 +777,9 @@ internal abstract class OwnerDrawnForm : Form
                 var score = Math.Clamp(scores[i - missing], 0, 100);
                 var filled = Math.Max(_form.Scale(1), (int)Math.Round(height * score / 100.0));
 
-                // ⭐ ভরাট সবুজ (Theme.Ok) — মালিকের চাওয়া (১৮ আগস্ট), টার্গেট-
-                //    বারগুলোর সাথে এক ভাষা। ⚠️ শূন্য স্কোরে ম্লান Ink3-এর ১px
-                //    রেখা থাকে, নইলে "০% ব্যস্ত" আর "তথ্যই নেই" এক দেখাত।
+                // Solid green (Theme.Ok): the owner's request (18 August), the same language as
+                // the target bars. Careful: a zero score gets a 1px line in dim Ink3, otherwise
+                // "0% busy" and "no data" would look the same.
                 using var brush = new SolidBrush(
                     score == 0 ? _form.Theme.Ink3 : _form.Theme.Ok);
 
@@ -795,22 +791,22 @@ internal abstract class OwnerDrawnForm : Form
         }
 
         /// <summary>
-        /// শেষ তোলা ছবিটা। ⚠️ থাম্বনেইল, পুরো ছবি নয় — জানালার কাজ "কী গেছে
-        /// তা দেখানো", ছবি বিশ্লেষণ নয়।
+        /// The last captured image. Careful: a thumbnail, not the full image; the window's
+        /// job is "show what went out", not image analysis.
         ///
-        /// ফাইল না থাকলে বা পড়া না গেলে <c>false</c> ফেরে আর কিছুই আঁকে না;
-        /// কলার তখন অন্য কিছু লিখতে পারে।
+        /// If the file is missing or cannot be read, returns <c>false</c> and draws nothing;
+        /// the caller can then write something else.
         /// </summary>
         public bool Thumbnail(string? path, int baseWidth)
         {
             if (string.IsNullOrEmpty(path) || !File.Exists(path)) return false;
 
-            // ⚠️⚠️ `Image.FromStream` এখানে চলে **না** — ছবিটা WebP, আর GDI+-এ
-            //    ওই কোডেক নেই। সে "Parameter is not valid" বলে, যেটা পড়ে মনে হয়
-            //    ফাইল নষ্ট। ডিকোড করে SkiaSharp (WebpImage), যেটা এমনিতেই আছে।
-            // ⚠️ `using` নয় — ছবিটা ফর্মের ক্যাশের, প্রতি পেইন্টে নতুন করে
-            //    ডিকোড হয় না (ThumbnailFor)। এখানে dispose করলে পরের পেইন্টে
-            //    ক্যাশে বসে থাকা ছবিটা ব্যবহারের অযোগ্য হয়ে যেত।
+            // Careful: `Image.FromStream` does **not** work here: the image is WebP, and GDI+
+            // has no such codec. It says "Parameter is not valid", which reads as if the file
+            // were corrupt. SkiaSharp (WebpImage) decodes it, and is there anyway.
+            // Careful: no `using`: the image belongs to the form's cache and is not decoded
+            // again on every paint (ThumbnailFor). Disposing here would leave the cached image
+            // unusable on the next paint.
             var image = _form.ThumbnailFor(path);
             if (image is null) return false;
 
@@ -833,8 +829,8 @@ internal abstract class OwnerDrawnForm : Form
             }
             catch (Exception e) when (e is IOException or ArgumentException or OutOfMemoryException)
             {
-                // GDI+ ভাঙা ছবিতে OutOfMemoryException ছোড়ে — সত্যিই মেমরি
-                // ফুরোয়নি, ওটা ওদের ঐতিহাসিক অদ্ভুততা
+                // GDI+ throws OutOfMemoryException on a broken image; memory has not really
+                // run out, that is just their historical quirk
                 return false;
             }
         }
@@ -843,9 +839,9 @@ internal abstract class OwnerDrawnForm : Form
             Rounded(box, box.Height / 2);
 
         /// <summary>
-        /// ⚠️ <c>Graphics.FillRoundedRectangle</c> .NET 8-এ নেই, তাই হাতে পথ।
-        /// ব্যাসার্ধ উচ্চতা/প্রস্থের অর্ধেকের বেশি হলে arc-গুলো একে অন্যের
-        /// ভেতরে ঢুকে আকৃতিটা উল্টে যেত, তাই আগেই ছেঁটে নেওয়া।
+        /// Careful: <c>Graphics.FillRoundedRectangle</c> does not exist in .NET 8, so the path
+        /// is built by hand. If the radius is more than half the height/width the arcs would
+        /// overlap and invert the shape, so it is clamped first.
         /// </summary>
         private static GraphicsPath Rounded(Rectangle box, int radius)
         {

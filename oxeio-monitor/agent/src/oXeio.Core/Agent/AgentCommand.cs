@@ -1,35 +1,35 @@
 namespace oXeio.Core.Agent;
 
 /// <summary>
-/// heartbeat-এর উত্তরে সার্ভার যা করতে বলতে পারে।
+/// What the server can ask the agent to do in reply to a heartbeat.
 ///
-/// ⚠️ এটা স্টাফের জন্য কোনো বাটন নয় — কমান্ড শুধু অ্যাডমিন ড্যাশবোর্ড থেকে আসে।
+/// Careful: this is not a button for staff. Commands only come from the admin dashboard.
 /// </summary>
 public enum AgentCommand
 {
-    /// <summary>কনফিগ ভার্সন মেলেনি — <c>GET /agent/config</c> করে নতুন করে নিন।</summary>
+    /// <summary>Config version mismatch: fetch it again with <c>GET /agent/config</c>.</summary>
     ReloadConfig,
 
-    /// <summary>স্লটের অপেক্ষা না করে এখনই একটা ছবি (ক্যাপচার উইন্ডোর ভেতরে হলে তবেই)।</summary>
+    /// <summary>Take a picture right now without waiting for the slot (only if inside the capture window).</summary>
     CaptureNow,
 
-    /// <summary>ট্র্যাকিং সাময়িক থামান। ⚠️ কিউ থামে না — জমা ডেটা আপলোড চলতেই থাকবে।</summary>
+    /// <summary>Pause tracking temporarily. Careful: the queue does not stop; stored data keeps uploading.</summary>
     PauseTracking,
 
-    /// <summary><c>GET /agent/update</c> দেখুন।</summary>
+    /// <summary>See <c>GET /agent/update</c>.</summary>
     UpdateAgent,
 
     /// <summary>
-    /// এই ডিভাইস বাতিল (H06)। ট্র্যাকিং স্থায়ীভাবে বন্ধ, tray-তে জানানো।
-    /// একই কথা ৪০৩-এর বডিতেও আসতে পারে — <see cref="SyncOutcome.Revoked"/> দেখুন।
+    /// This device is revoked. Tracking stops permanently and the tray says so.
+    /// The same signal can also arrive in a 403 body, see <see cref="SyncOutcome.Revoked"/>.
     /// </summary>
     Revoke,
 }
 
 /// <summary>
-/// তারে যায় snake_case স্ট্রিং হিসেবে। পাঁচটা মডিউল আলাদা আলাদা
-/// <c>switch</c> লিখলে একটাতে টাইপো থাকত আর সেই কমান্ডটা নীরবে হারাত —
-/// তাই ম্যাপিংটা একটাই জায়গায়।
+/// Goes over the wire as a snake_case string. If five modules each wrote their own
+/// <c>switch</c>, one would have a typo and silently drop that command, so the mapping
+/// lives in one place.
 /// </summary>
 public static class AgentCommands
 {
@@ -39,7 +39,7 @@ public static class AgentCommands
     public const string UpdateAgent = "update_agent";
     public const string Revoke = "revoke";
 
-    /// <summary>অচেনা কমান্ড হলে null — ভবিষ্যতের সার্ভার নতুন কমান্ড পাঠালে যেন এজেন্ট না ভাঙে।</summary>
+    /// <summary>Null for an unknown command, so the agent does not break when a future server sends a new one.</summary>
     public static AgentCommand? Parse(string? wire) => wire switch
     {
         ReloadConfig => AgentCommand.ReloadConfig,

@@ -34,37 +34,35 @@ export interface AgentVersionView {
   isMandatory: boolean;
   releaseNotes: string | null;
   releasedAt: string;
-  /** ⚠️ ফাইলটা সত্যিই ডিস্কে আছে তো? না থাকলে অফার করাই বিপজ্জনক */
+  /** Careful: is the file really on disk? Offering it when missing is dangerous */
   fileMissing: boolean;
   /** Published with the owner's signature (`<msi>.sig`) — see update-signature.ts */
   signed: boolean;
-  /** এই ভার্সনে কতগুলো ডিভাইস ইতিমধ্যে চলছে */
+  /** How many devices are already running this version */
   devicesOn: number;
   /**
-   * ⭐ বালতি নির্বিশেষে যে PC-টা আগে পায় — `null` মানে কেউ নয়
-   * *(১ সেপ্টেম্বর ২০২৬)*।
+   * The PC that gets it first, regardless of bucket — `null` means none.
    */
   pilotDeviceId: number | null;
-  /** ⭐ পর্দায় নাম দেখানোর জন্য — কর্মীর নাম, না থাকলে hostname */
+  /** For showing a name on screen — the employee's name, or the hostname if none */
   pilotLabel: string | null;
 }
 
 /**
- * **H04 · G59** — এজেন্টের নতুন ভার্সন বিলি করার পথ।
+ * **H04 · G59** — the route for rolling out new agent versions.
  *
- * ⚠️⚠️ <b>`agent_versions` টেবিলটা এতদিন শুধু পড়া হতো।</b> `update.service.ts`
- * সেখান থেকে সর্বশেষ ভার্সন খোঁজে, ধাপে ধাপে অফার করে, sha256 মিলিয়ে
- * দেয় — গোটা auto-update ব্যবস্থাটা তৈরি। কিন্তু **ওই টেবিলে সারি
- * বসানোর কোনো পথ কোথাও ছিল না**: কোনো endpoint নয়, কোনো UI নয়, seed-এও
- * নয়।
+ * Careful: <b>the `agent_versions` table used to be read only.</b>
+ * `update.service.ts` looks there for the latest version, offers it in
+ * stages, and supplies the sha256 for checking — the whole auto-update system
+ * was built. But **there was no way anywhere to put a row into that table**:
+ * no endpoint, no UI, not even the seed.
  *
- * ⭐ ফলটা আজ হাতে-কলমে দেখা গেল: MSI ০.২.০ বানানো হলো (H06, A05, H08 আর
- * কনফিগ লুপের ফিক্স নিয়ে), আর সেটা ১৫টা PC-তে পৌঁছানোর **একমাত্র উপায়
- * প্রতিটা মেশিনে হাতে গিয়ে বসানো**। H04-এর ধাপে ধাপে রোলআউট, canary,
- * `halted` দিয়ে থামানো — সবকিছু তৈরি হয়ে অচল পড়ে ছিল।
+ * The result showed in practice: MSI 0.2.0 was built, and the **only way to
+ * get it onto the 15 PCs was to install it by hand on every machine**. H04's
+ * staged rollout, canary, and stopping with `halted` — all built and idle.
  *
- * এটাই আজকের চতুর্থ "চুক্তি লেখা আছে, কলার লেখা হয়নি" — A05, কনফিগ
- * ফেচ, adjustments আর সই রেকর্ডের পর।
+ * This was the fourth "contract written, caller never written" — after A05,
+ * config fetch, adjustments and the signature record.
  */
 @Injectable()
 export class AgentVersionsService {
@@ -78,17 +76,17 @@ export class AgentVersionsService {
     private readonly settings: AppSettingsService,
     config: ConfigService,
   ) {
-    // ⚠️ `update.service.ts`-এর সাথে হুবহু একই হিসাব — দুই জায়গায় আলাদা
-    //    হলে এখানে বসানো পাথ ওখানে "ফাইল নেই" হয়ে যেত।
+    // Careful: exactly the same calculation as `update.service.ts` — if the two
+    // differed, a path stored here would read as "file missing" there.
     this.root = resolve(storageRoot(config));
   }
 
   /**
-   * ⭐ পাইলট PC-র নাম — কর্মীর নাম, না থাকলে hostname।
+   * The pilot PC's name — the employee's name, or the hostname if none.
    *
-   * ⚠️ সংখ্যাটা (`pilotDeviceId`) পর্দায় কারো কাজে আসে না; মালিক "কার PC"
-   * জানতে চান। ⭐ কর্মী সরিয়ে দিলেও hostname টেকে, তাই ঘরটা কখনো
-   * "ডিভাইস ৬" বলে হেঁয়ালি করে না।
+   * Careful: the number (`pilotDeviceId`) is no use to anyone on screen; the
+   * owner wants to know "whose PC". The hostname survives even if the employee
+   * is removed, so the cell never puzzles with "device 6".
    */
   private async pilotLabelOf(deviceId: number | null): Promise<string | null> {
     if (deviceId === null) return null;
@@ -139,15 +137,17 @@ export class AgentVersionsService {
   }
 
   /**
-   * নতুন ভার্সন বিলির জন্য নথিভুক্ত করা।
+   * Record a new version for rollout.
    *
-   * ⭐⭐ <b>sha256 হাতে দিতে হয় না — সার্ভার নিজে ফাইলটা পড়ে হিসাব করে।</b>
-   * চাইলে হাতে দেওয়া যায়, তখন **মিলিয়ে দেখা হয়** আর না মিললে ৪০০।
+   * <b>The sha256 does not have to be given — the server reads the file and
+   * computes it itself.</b> It can be supplied by hand, in which case it is
+   * **checked against that** and a mismatch gives 400.
    *
-   * ⚠️ কেন এটা এত জরুরি: এজেন্ট নামানোর পর sha256 মিলিয়ে দেখে, আর না
-   * মিললে MSI ফেলে দেয়। হাতে বসানো হ্যাশে একটা অক্ষর ভুল হলে ১৫টা PC
-   * ফাইলটা নামাত, বাতিল করত, আবার নামাত — চিরকাল। আর লগে কেবল
-   * "hash mismatch" লেখা থাকত, ভুলটা যে টাইপোতে সেটা কেউ ধরত না।
+   * Careful: why this matters: after downloading, the agent checks the sha256
+   * and discards the MSI on a mismatch. With one character wrong in a hand-entered
+   * hash, 15 PCs would download the file, discard it, and download again —
+   * forever. The log would say only "hash mismatch", and nobody would see that
+   * the cause was a typo.
    */
   async publish(
     actor: SessionUser,
@@ -178,9 +178,9 @@ export class AgentVersionsService {
     }
 
     /**
-     * ⚠️ নতুন ভার্সনটা পুরোনোর চেয়ে **নতুন হতেই হবে**। না হলে
-     * `update.service.ts` সেটাকে কখনো অফার করত না (`isNewer` মিথ্যা),
-     * আর owner ভাবতেন বিলি হয়ে গেছে — নীরব ব্যর্থতা।
+     * Careful: the new version **must be newer** than the old one. Otherwise
+     * `update.service.ts` would never offer it (`isNewer` false), and the owner
+     * would think it had been rolled out — a silent failure.
      */
     const signature = await this.signatureFor(file.abs);
 
@@ -193,17 +193,17 @@ export class AgentVersionsService {
       );
     }
 
-    // ⭐ ডিফল্ট `canary` — schema-র ডিফল্টও তাই। একবারে সবাইকে দেওয়া
-    //    সিদ্ধান্তটা আলাদা করে নিতে হয় (`stage` বদলে), আর সেটাই ঠিক:
-    //    খারাপ বিল্ড গেলে ফেরার পথ নেই (G69)।
+    // Default `canary` — the schema default too. Giving it to everyone at once
+    // has to be a separate decision (by changing `stage`), and that is right:
+    // if a bad build goes out there is no way back (G69).
     const stage = dto.rolloutStage ?? RolloutStage.canary;
 
     /**
-     * ⭐⭐⭐ **G168 — বালতি খালি হলে ভার্সনটা চিরকাল আটকে থাকত।**
+     * **G168 — an empty bucket used to leave the version stuck forever.**
      *
-     * ⚠️ সিদ্ধান্তটা **তৈরির আগেই** নেওয়া হয়, তাই সারিটা প্রথম থেকেই
-     * পাইলট নিয়ে জন্মায় — দু-ধাপে করলে মাঝখানে একটা heartbeat এসে
-     * অফার-বিহীন উত্তর পেয়ে যেত।
+     * Careful: the decision is taken **before creating**, so the row is born
+     * with its pilot from the start — done in two steps, a heartbeat could
+     * arrive in between and get an answer with no offer.
      */
     const autoPilot = await this.autoPilotFor(stage, dto.version, new Date());
 
@@ -226,8 +226,8 @@ export class AgentVersionsService {
       targetType: 'agent_version',
       targetId: row.version,
       ipAddress: ip,
-      // ⚠️ `autoPilot` অডিটেও যায় — একটা মেশিনকে গিনিপিগ বানানো একটা
-      //    সিদ্ধান্ত, আর নীরব সিদ্ধান্ত এই সিস্টেমে রাখা হয় না
+      // Careful: `autoPilot` goes into the audit too — making one machine the
+      // guinea pig is a decision, and silent decisions are not kept in this system
       meta: {
         sha256,
         signed: signature !== null,
@@ -266,12 +266,12 @@ export class AgentVersionsService {
   }
 
   /**
-   * রোলআউটের ধাপ বদলানো — `canary` → `partial` → `all`, অথবা `halted`।
+   * Change the rollout stage — `canary` → `partial` → `all`, or `halted`.
    *
-   * ⭐ **`halted`-ই একমাত্র জরুরি ব্রেক।** খারাপ আপডেট বেরিয়ে গেলে
-   * স্বয়ংক্রিয় rollback নেই (G69, ইচ্ছাকৃত) — যারা পেয়ে গেছে তাদের
-   * হাতে ঠিক করতে হবে। কিন্তু এখানে থামালে **বাকিরা অন্তত বেঁচে যায়**,
-   * আর সেটা সেকেন্ডের কাজ।
+   * **`halted` is the only emergency brake.** If a bad update goes out there is
+   * no automatic rollback (G69, deliberate) — those who already got it must be
+   * fixed by hand. But stopping here **spares the rest at least**, and it takes
+   * seconds.
    */
   async setStage(
     actor: SessionUser,
@@ -285,12 +285,12 @@ export class AgentVersionsService {
     if (!row) throw new NotFoundException('No such version');
 
     /**
-     * ⚠️⚠️ **হাতে ধাপ বদলালেও একই ফাঁদ** *(G168)*। মালিক `all` থেকে
-     * `canary`-তে নামালে বালতিটা আবার খালি হতে পারে, আর তখন ভার্সনটা
-     * ওখানেই আটকে যেত।
+     * Careful: **the same trap applies when the stage is changed by hand**
+     * (G168). If the owner moves from `all` down to `canary`, the bucket may
+     * be empty again, and the version would be stuck there.
      *
-     * ⭐ কেবল তখনই বসে যখন **পাইলট নেই আর মালিক নতুন কোনো পাইলটও দেননি** —
-     * তাঁর বাছাই কখনো বদলানো হয় না।
+     * An automatic pilot is set only when **there is no pilot and the owner
+     * gave no new pilot** — the owner's choice is never overridden.
      */
     const keepsPilot =
       dto.pilotDeviceId !== undefined
@@ -307,17 +307,17 @@ export class AgentVersionsService {
         rolloutStage: dto.rolloutStage,
         ...(autoPilot === null ? {} : { pilotDeviceId: autoPilot }),
         /**
-         * ⚠️⚠️ **হাতে বদলালেও ঘড়িটা রিসেট হয়** *(৬ সেপ্টেম্বর ২০২৬)*।
-         * নইলে মালিক canary → partial করার সাথে সাথেই জব পরের টিকে
-         * `all` করে দিত — কারণ প্রমাণ-দেওয়া মেশিনটা তো অনেক আগেই
-         * ছ-ঘণ্টা পার করে ফেলেছে। ধাপে ধাপে ছাড়ার মানেই থাকত না।
+         * Careful: **changing the stage by hand also resets the clock.**
+         * Otherwise right after the owner moved canary → partial, the job would
+         * make it `all` on its next tick — because the proving machine passed
+         * its six hours long ago. Staged release would mean nothing.
          */
         stageChangedAt: new Date(),
         ...(dto.isMandatory === undefined ? {} : { isMandatory: dto.isMandatory }),
         /**
-         * ⚠️⚠️ **`undefined` আর `null` এক নয়।** ঘরটা না পাঠালে যা ছিল তাই
-         * থাকে; `null` পাঠালে পাইলট তুলে নেওয়া হয়। ⭐ পার্থক্যটা না রাখলে
-         * শুধু ধাপ বদলাতে গেলেই পাইলট নীরবে মুছে যেত।
+         * Careful: **`undefined` and `null` are not the same.** If the field is
+         * not sent, what was there stays; sending `null` removes the pilot.
+         * Without this difference, merely changing the stage would silently wipe the pilot.
          */
         ...(dto.pilotDeviceId === undefined
           ? {}
@@ -331,8 +331,8 @@ export class AgentVersionsService {
       targetType: 'agent_version',
       targetId: version,
       ipAddress: ip,
-      // ⚠️ আগে ও পরে দুটোই — "কে কখন সবাইকে দিয়ে দিল" প্রশ্নের উত্তর
-      //    এই একটা সারিতেই থাকা দরকার
+      // Careful: both before and after — the answer to "who gave it to everyone,
+      // and when" should be in this one row
       meta: {
         from: row.rolloutStage,
         to: updated.rolloutStage,
@@ -366,20 +366,20 @@ export class AgentVersionsService {
   }
 
   /**
-   * ⚠️ পাথটা storage রুটের **ভেতরে** থাকতেই হবে — `update.service.ts`-এর
-   * `openMsi()`-ও ঠিক এই শর্তটাই দেখে। এখানে না দেখলে owner ভুল করে
-   * `C:\Windows\...` বসিয়ে দিতে পারতেন, আর সেটা ধরা পড়ত ডাউনলোডের সময়
-   * "File path is outside storage" দিয়ে — বিলি করার অনেক পরে।
+   * Careful: the path **must be inside** the storage root — `openMsi()` in
+   * `update.service.ts` checks exactly this too. Without checking here the
+   * owner could mistakenly enter `C:\Windows\...`, and it would be caught only
+   * at download time with "File path is outside storage" — long after publishing.
    */
   /**
-   * ⭐⭐⭐ **বালতি খালি হলে একজনকে বেছে নেওয়া** *(৭ সেপ্টেম্বর ২০২৬, G168)*।
+   * **Picking one device when the bucket is empty** (G168).
    *
-   * ⚠️⚠️ নিয়মটা এখানে নেই — `rollout.ts`-এর খাঁটি `pilotNeededFor()`-এ
-   * (এই ফাইলে কেবল সারি আনা আর লেখা)। ⭐ কারণ ওটাই এই মডিউলের ছাঁদ:
-   * সিদ্ধান্ত পরীক্ষা করা যায় ডাটাবেস ছাড়াই।
+   * Careful: the rule is not here — it is in the pure `pilotNeededFor()` in
+   * `rollout.ts` (this file only fetches rows and writes). That is this
+   * module's pattern: the decision can be tested without a database.
    *
-   * ⚠️ `null` ফেরা মানে **কিছু করার নেই** — হয় কেউ একজন এমনিতেই বালতিতে
-   * পড়েছে, নয় ধাপটা `halted`/`all`, নয় একটাও ডিভাইস নেই।
+   * Careful: returning `null` means **nothing to do** — either someone already
+   * fell into the bucket, or the stage is `halted`/`all`, or there is no device at all.
    */
   private async autoPilotFor(
     stage: RolloutStage,
@@ -387,7 +387,7 @@ export class AgentVersionsService {
     now: Date,
   ): Promise<number | null> {
     const devices = await this.prisma.device.findMany({
-      // ⚠️ `active` only — বাতিল করা PC আপডেট পায় না, তাই সে গিনিপিগও নয়
+      // Careful: `active` only — a revoked PC gets no updates, so it is no guinea pig either
       where: { status: 'active' },
       select: { id: true, machineGuid: true, lastSeenAt: true },
     });
@@ -413,9 +413,9 @@ export class AgentVersionsService {
   }
 
   /**
-   * ⚠️ পুরো ফাইলটা মেমরিতে পড়া হয় **না** — MSI ৬২ MB, আর
-   * `readFile()` দিয়ে করলে প্রতিটা publish-এ ওইটুকু RAM লাগত। স্ট্রিম
-   * করে হ্যাশ করলে ধ্রুবক মেমরিতেই হয়।
+   * Careful: the whole file is **not** read into memory — the MSI is 62 MB, and
+   * `readFile()` would need that much RAM on every publish. Hashing from a
+   * stream uses constant memory.
    */
   /**
    * The owner's signature for this MSI: `<msi>.sig` next to it, as OpenSSL

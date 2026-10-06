@@ -7,21 +7,21 @@ import { homePathFor } from '../api/auth';
 import { useFeatures } from '../features/FeaturesContext';
 
 /**
- * ৪০৪ — ঠিকানাটা নেই।
+ * 404: no such address.
  *
- * ⭐ owner ছাড়া কেউ `/settings` টাইপ করলে **এই পাতাটাই** আসে, "অনুমতি নেই"
- *    নয়। রুটটা তার জন্য `App.tsx`-এ বসানোই হয় না, তাই ম্যানেজার জানতেও
- *    পারে না যে সেটিংস বলে একটা পর্দা আছে। ৪০৩ বললে উল্টো নিশ্চিত করে
- *    দেওয়া হতো যে জিনিসটা আছে, শুধু তার নাগালের বাইরে।
+ * When anyone but the owner types `/settings`, they get this page, not "no
+ * permission". The route is not even registered for them in `App.tsx`, so a
+ * manager cannot tell that a Settings screen exists. A 403 would instead confirm
+ * that the thing exists and is merely out of reach.
  *
- * ⚠️ ফেরার লিঙ্কটা ভূমিকা বুঝে — স্টাফের জন্য `/` মানে লাইভ বোর্ড, আর ওটা
- *    তার জন্য ৪০৩। তাকে সেদিকে ঠেলে দেওয়ার মানে হয় না, তাই তার লেখাটাও
- *    আলাদা: "My screenshots"।
+ * Careful: the link back depends on the role. For staff, `/` means the live
+ * board, which is a 403 for them. Pushing them there makes no sense, so their
+ * label is different: "My screenshots".
  */
 /**
- * ⚠️ ফেরার পথের **নাম** — পথটা যেখানে নামায় সেটাই লিখতে হয়। আগে
- * শর্তটা দুবার লেখা ছিল (একবার পথের জন্য, একবার লেখার জন্য), আর
- * নতুন রোল এলে দুটো আলাদা দিকে গড়াত।
+ * Careful: the name of the way back must say where the path actually lands. The
+ * condition used to be written twice (once for the path, once for the text), and
+ * when a new role arrived the two drifted in different directions.
  */
 const HOME_WORD: Record<string, string> = {
   '/': 'Back to Live Board',
@@ -33,9 +33,9 @@ export function NotFoundPage() {
   const { user } = useAuth();
   const { features } = useFeatures();
   /**
-   * ⚠️ আগে লেখা ছিল `role === 'employee' ? '/screenshots' : '/'` — গবেষক
-   *    রোল এলে তিনি `/` (Live Board) পেতেন, আর সেটা তাঁর কাছে ৪০৩।
-   * ⭐ এখন সূত্রটা এক জায়গায়, App.tsx-এর অবতরণের সাথে মিলিয়ে।
+   * Careful: this used to read `role === 'employee' ? '/screenshots' : '/'`; with
+   * the researcher role, a researcher got `/` (the Live Board), which is a 403 for
+   * them. Now the rule is in one place, matching the landing logic in App.tsx.
    */
   const home = homePathFor(user?.role, features.designTargets);
 

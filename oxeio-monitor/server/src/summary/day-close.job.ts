@@ -9,7 +9,7 @@ import { previousWorkDate } from './summary.math';
 import { SummaryService } from './summary.service';
 
 export interface DayCloseResult {
-  /** যে কর্মদিবসটা ক্লোজ করা হলো */
+  /** The work date that was closed. */
   workDate: Date | null;
   sessionsClosed: number;
   employees: number;
@@ -17,21 +17,22 @@ export interface DayCloseResult {
 }
 
 /**
- * **K05** — দিন-ক্লোজ: খোলা পড়ে থাকা সেশন বন্ধ, ওই দিনের সারাংশ চূড়ান্ত,
- * মাসিক rollup হালনাগাদ।
+ * **Day close**: close sessions left open, finalise that day's summary,
+ * update the monthly rollup.
  *
- * ⭐ **সময় রাত ০০:১৫, আগের দিনের জন্য — ২৩:৩০ নয়।**
- * 04-Features-এর K05 সারিতে এখনো পুরোনো "রাত ১১:৩০" লেখা আছে, কিন্তু সেটা
- * G30-এর আগের সিদ্ধান্ত। শিফট তুলে দেওয়ার পর রাত ১১টার পর কাজ স্বাভাবিক
- * ঘটনা, তাই ২৩:৩০-এ "দিন চূড়ান্ত" করলে ঠিক যাঁরা রাতে কাজ করছেন তাঁদের
- * শেষ আধ ঘণ্টা প্রতিদিন হিসাবের বাইরে থেকে যেত।
- * উৎস: [07 § ২.১-ক ও § ৬.৪](../../../docs/07-Technical-Spec.md),
- * [08 G30](../../../docs/08-Gap-Analysis.md), [02 § দৈনিক ছক](../../../docs/02-Workflow.md)।
+ * **Runs at 00:15, for the previous day, not at 23:30.** The K05 row in
+ * 04-Features still says the old "11:30 pm", but that decision predates G30.
+ * Since shifts were abolished, work after 11 pm is normal, so finalising the
+ * day at 23:30 would leave out the last half hour of exactly the people who
+ * work at night, every day.
+ * Sources: [07 section 2.1-a and 6.4](../../../docs/07-Technical-Spec.md),
+ * [08 G30](../../../docs/08-Gap-Analysis.md),
+ * [02 daily layout](../../../docs/02-Workflow.md).
  *
- * ⚠️ "ক্লোজ" মানে ঘণ্টা **জমা করা নয়**। কাজের সময় আসে কেবল
- * `activity_segments` থেকে; সেশন বন্ধ করা নিছক হিসাবরক্ষা, যাতে
- * `ended_at` চিরকাল NULL পড়ে না থাকে (G24)। তাই এই জব না চললেও কারো
- * এক সেকেন্ড ঘণ্টাও হারায় না — শুধু সারাংশ পুরোনো থাকে।
+ * Careful: "close" does **not** mean accumulating hours. Work time comes
+ * only from `activity_segments`; closing sessions is bookkeeping so that
+ * `ended_at` is not NULL forever (G24). So even if this job does not run,
+ * nobody loses a second of hours; only the summary stays stale.
  */
 @Injectable()
 export class DayCloseJob {
@@ -43,7 +44,7 @@ export class DayCloseJob {
     private readonly summary: SummaryService,
   ) {}
 
-  /** ⚠️ `timeZone` ছাড়া এটা UTC-র ০০:১৫ = ঢাকার সকাল ৬:১৫-তে চলত। */
+  /** Careful: without `timeZone` this would run at 00:15 UTC = 6:15 am in Dhaka. */
   @Cron('0 15 0 * * *', {
     name: 'day-close',
     timeZone: JOB_TIMEZONE,
@@ -51,16 +52,16 @@ export class DayCloseJob {
     waitForCompletion: true,
   })
   async scheduled(): Promise<void> {
-    // ⚠️ দ্বিতীয় তালা — কারণ ব্যাখ্যা `summary-refresh.job.ts`-এ
+    // Careful: second lock; the reason is explained in `summary-refresh.job.ts`.
     if (!SCHEDULING_ENABLED) return;
     await this.runOnce();
   }
 
   /**
-   * `now`-এর **আগের** কর্মদিবসটা ক্লোজ করে।
+   * Closes the work day **before** `now`.
    *
-   * ⚠️ চলতি দিনটা ইচ্ছাকৃতভাবে ছোঁয়া হয় না — ০০:১৫-তে অনেকের PC তখনো
-   * চালু, তাঁদের সেশন এখন বন্ধ করলে টাইমলাইনে মাঝপথে কাটা পড়ত।
+   * Careful: the current day is deliberately left alone. At 00:15 many PCs
+   * are still on, and closing their sessions now would cut the timeline midway.
    */
   async runOnce(now: Date = new Date()): Promise<DayCloseResult> {
     const target = previousWorkDate(now);
@@ -85,15 +86,16 @@ export class DayCloseJob {
   }
 
   /**
-   * `target` বা তার আগের যেসব `work_session` খোলা পড়ে আছে (এজেন্ট ক্র্যাশ,
-   * PC-র প্লাগ খুলে যাওয়া, বা পুরোনো এজেন্ট) সেগুলো বন্ধ করে।
+   * Closes every `work_session` at or before `target` that is still open
+   * (agent crash, PC unplugged, or an old agent).
    *
-   * ⚠️ ⭐ `ended_at` বসে **সেশনের নিজের মধ্যরাতে**, `now`-তে নয়। এটাই
-   * এখানকার একমাত্র নীরব ফাঁদ: ১১ আগস্টের একটা সেশনকে ১২ আগস্ট ০০:১৫-তে
-   * "এখন" দিয়ে বন্ধ করলে সেশনটা পরের তারিখে ১৫ মিনিট গড়িয়ে যেত, আর
-   * টাইমলাইনে ১২ আগস্টের ভোরে এমন একটা সেশন দেখা যেত যা কখনো ছিল না।
-   * (একই যুক্তিতে `ingest.service.ts`-ও `nextLocalMidnight` ব্যবহার করে,
-   * আর কারণও এক — তাই `end_reason`-ও একই: `day_rollover`।)
+   * Careful: `ended_at` is set to **the session's own midnight**, not `now`.
+   * This is the one silent trap here: closing an 11 August session at 00:15
+   * on 12 August with "now" would push the session 15 minutes into the next
+   * date, and the timeline would show a session in the early hours of
+   * 12 August that never existed. (`ingest.service.ts` uses
+   * `nextLocalMidnight` for the same reason, so `end_reason` is the same too:
+   * `day_rollover`.)
    */
   private async closeStaleSessions(target: Date): Promise<number> {
     const open = await this.prisma.workSession.findMany({
@@ -103,7 +105,7 @@ export class DayCloseJob {
 
     if (open.length === 0) return 0;
 
-    // একই মধ্যরাতে পড়া সেশনগুলো একসাথে — প্রতি সারিতে আলাদা UPDATE নয়
+    // Sessions that fall on the same midnight go together, not one UPDATE per row.
     const byMidnight = new Map<number, bigint[]>();
     for (const s of open) {
       const at = nextLocalMidnight(s.startedAt).getTime();

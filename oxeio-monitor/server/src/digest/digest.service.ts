@@ -20,7 +20,7 @@ import {
 } from '../summary/design.rules';
 import { asPreBlock, telegramDigest } from './digest.telegram';
 
-/** লেটারহেড ও ইমেইলের শিরোনামে — `reports.service.ts`-এর সাথে একই env */
+/** In the letterhead and email title — the same env as `reports.service.ts` */
 const DEFAULT_ORG_NAME = 'oXeio Monitoring';
 
 export interface DigestResult {
@@ -32,18 +32,19 @@ export interface DigestResult {
 }
 
 /**
- * **F07** — দৈনিক ডাইজেস্ট ইমেইল (সন্ধ্যা ৬:৩০, ঢাকা)।
+ * **F07** — the daily digest email (6:30 pm, Dhaka).
  *
- * ⭐ সংখ্যাগুলো তৈরি হয় **`ReportsService` দিয়েই** — F01 (আজকের একদিন) আর
- * F02 (মাসের ১ তারিখ → আজ)। নিজে `daily_summary` পড়ে টার্গেট বের করলে
- * ছুটির ক্যালেন্ডার, সাপ্তাহিক ছুটি, যোগ/ছাড়ার তারিখ আর দৈনিক টার্গেটের
- * ভাগ — সবকটার একটা করে নতুন বাস্তবায়ন দাঁড়াত। তখন একদিন ইমেইল আর
- * রিপোর্ট দু-রকম ঘণ্টা বলত, আর মালিক দুটোর কোনোটাই আর বিশ্বাস করতেন না।
+ * The numbers are produced **through `ReportsService`** — F01 (one day,
+ * today) and F02 (1st of the month → today). Reading `daily_summary` directly
+ * to work out the target would create a new implementation of each of the
+ * holiday calendar, weekly off days, join/leave dates and the daily target
+ * split. Then one day the email and the report would give two different hours,
+ * and the owner would trust neither.
  *
- * ⚠️ এই ক্লাস **কখনো throw করে না বলে ধরে নেওয়া যাবে না** — `ReportsService`
- * active work policy না পেলে ৫০০ ছোড়ে। ডাইজেস্ট ব্যর্থ হলে সার্ভার নামা
- * চলবে না, তাই ব্যতিক্রম ধরা হয় `DigestJob`-এ (একটাই জায়গা, শিডিউলড
- * ডাক আর হাতে ডাক দুটোরই)।
+ * Careful: do **not assume this class never throws** — `ReportsService`
+ * throws a 500 if it finds no active work policy. A failing digest must not
+ * take the server down, so the exception is caught in `DigestJob` (the one
+ * place, for both scheduled and manual calls).
  */
 @Injectable()
 export class DigestService {
@@ -61,10 +62,10 @@ export class DigestService {
   ) {
     this.orgName = config.get<string>('ORG_NAME')?.trim() || DEFAULT_ORG_NAME;
 
-    // ⚠️ `ALERT_EMAIL_TO`-তে **ফেরত যাওয়া হয় না**। অ্যালার্ট আর ডাইজেস্ট
-    //    দুটো আলাদা জিনিস: অ্যালার্ট "কিছু ভেঙেছে", ডাইজেস্ট "কে কত ঘণ্টা"।
-    //    এক তালিকা ভাগ করলে যিনি শুধু সার্ভারের স্বাস্থ্য দেখেন তিনিও
-    //    রোজ সবার ঘণ্টা পেয়ে যেতেন।
+    // Careful: there is **no fallback** to `ALERT_EMAIL_TO`. Alerts and the
+    //    digest are different things: an alert says "something broke", the
+    //    digest says "who worked how many hours". With one shared list, someone
+    //    who only watches server health would get everyone's hours every day.
     this.explicitRecipients = (config.get<string>('DIGEST_EMAIL_TO') ?? '')
       .split(',')
       .map((s) => s.trim())
@@ -81,27 +82,27 @@ export class DigestService {
     const outcome = await this.mailer.send(recipients, subject, body);
 
     /**
-     * ⭐⭐ **টেলিগ্রামেও** — মালিকের চাওয়া: *"telegram e staff der daily
-     * kajer report cai, ke kaj korche ke kaj korche na."*
+     * **Telegram too** — the owner's request: a daily work report for staff on
+     * Telegram, showing who is working and who is not.
      *
-     * ⚠️ ইমেইলের **বিকল্প নয়, পাশাপাশি**। যেটা কনফিগ করা আছে সেটাই পায়;
-     * SMTP না থাকলেও (এখন যেমন) টেলিগ্রামে চলে যাবে।
+     * Careful: **alongside the email, not instead of it**. Whichever is
+     * configured gets it; even without SMTP (as now) it goes to Telegram.
      *
-     * ⚠️⚠️ **সাপ্তাহিকের গ্রুপ-প্রহরীটা এখানে নেই** — ইচ্ছাকৃত নয়,
-     * বরং এটাই সঠিক: `TelegramChannel.send()` নিজেই কনফিগ করা চ্যাটে
-     * পাঠায়, আর সেই চ্যাটটা মালিক নিজে বেছেছেন। সাপ্তাহিকে বাড়তি
-     * প্রহরীটা ছিল কারণ ওটা **অনেক বেশি বিস্তারিত** (প্রতিটা কর্মীর
-     * সপ্তাহভর ঘণ্টা); দৈনিকটা সংক্ষিপ্ত সারাংশ।
+     * Careful: **the weekly digest's group guard is not here** — this is
+     * correct, not an oversight: `TelegramChannel.send()` itself sends to the
+     * configured chat, and the owner chose that chat himself. The extra guard
+     * on the weekly one exists because it is **far more detailed** (each
+     * employee's hours for the whole week); the daily one is a short summary.
      */
     /**
-     * ⚠️⚠️ **টেলিগ্রামে ইমেইলের বডি আর যায় না** *(১৮ আগস্ট)*। আগে হুবহু
-     * ওটাই যেত — সব কর্মীর এক তালিকা + আট লাইনের "How to read these
-     * numbers"। ফোনে সেটা একটা ধূসর দেয়াল, আর মালিকের দুটো প্রশ্ন
-     * (*কে কত ঘণ্টা*, *কে টার্গেট ছুঁল*) ওর ভেতরে হারিয়ে যেত।
+     * Careful: **the email body no longer goes to Telegram.** It used to go
+     * verbatim — one list of all staff plus eight lines of "How to read these
+     * numbers". On a phone that is a grey wall, and the owner's two questions
+     * (*who worked how many hours*, *who reached the target*) got lost in it.
      *
-     * ⭐ ইমেইলটা **অপরিবর্তিত** — ওখানে বিস্তারিত ব্যাখ্যাটা ঠিক আছে।
-     * দুই মাধ্যমের দুই চেহারা, কিন্তু সংখ্যা একই `Digest` থেকে, তাই
-     * কোনোদিন দুটো আলাদা কথা বলবে না।
+     * The email is **unchanged** — the detailed explanation is fine there. Two
+     * media, two looks, but the numbers come from the same `Digest`, so the
+     * two never say different things.
      */
     const plain = telegramDigest(digest, this.orgName, {
       silentPcs: await this.silentPcsToday(now),
@@ -118,13 +119,13 @@ export class DigestService {
     }
 
     /**
-     * ⚠️ SMTP না থাকলে (বা পাঠানো না গেলে) **ক্র্যাশ নয়, লগ** — আর পুরো
-     * বডিটাই লগে যায়, শুধু "পাঠানো গেল না" নয়। ইমেইল বন্ধ থাকা অবস্থায়ও
-     * সংখ্যাগুলো যেন কোথাও থাকে; নইলে যেদিন SMTP ঠিক করা হবে সেদিন
-     * পেছনের দিনগুলো চিরতরে হারিয়ে যেত।
+     * Careful: if SMTP is missing (or sending fails) it is **a log, not a
+     * crash** — and the whole body goes to the log, not just "could not send".
+     * Even while email is off the numbers should be kept somewhere; otherwise
+     * on the day SMTP is fixed the earlier days would be lost for good.
      *
-     * ⚠️ লগে যাওয়াটা নিরাপদ, কারণ বডিতে কেবল নাম ও ঘণ্টা — কোনো ডোমেইন,
-     * অ্যাপের নাম বা স্ক্রিনশটের পথ নেই (`digest.math.ts` দেখুন)।
+     * Careful: logging is safe because the body has only names and hours — no
+     * domain, app name or screenshot path (see `digest.math.ts`).
      */
     if (outcome === 'sent') {
       this.logger.log(
@@ -148,13 +149,13 @@ export class DigestService {
   }
 
   /**
-   * আজ কর্মঘণ্টায় কতগুলো **আলাদা** PC চুপ ছিল।
+   * How many **distinct** PCs were silent during work hours today.
    *
-   * ⚠️⚠️ **আলাদা PC গোনা হয়, অ্যালার্ট নয়।** একটা মেশিন দিনে পাঁচবার
-   * চুপ হলে পাঁচটা সারি তৈরি হয় — সেগুলো গুনলে সংখ্যাটা আতঙ্কজনক
-   * দেখাত অথচ সমস্যা একটাই। `DISTINCT device_id`-ই এখানে সত্যি।
+   * Careful: **distinct PCs are counted, not alerts.** If one machine goes
+   * silent five times a day, five rows are created — counting them would look
+   * alarming while the problem is a single one. `DISTINCT device_id` is the truth here.
    *
-   * ⚠️ কখনো throw করে না — এই এক লাইনের জন্য পুরো রিপোর্ট আটকানো যাবে না।
+   * Careful: never throws — this one line must not hold up the whole report.
    */
   private async silentPcsToday(now: Date): Promise<number> {
     try {
@@ -179,13 +180,14 @@ export class DigestService {
   }
 
   /**
-   * ⭐ আজ কে কতগুলো ডিজাইন করেছেন — `empCode` ধরে *(২১ আগস্ট)*।
+   * How many designs each person made today — by `empCode`.
    *
-   * ⚠️⚠️ **কেবল `staff_type = 'designer'`**, আর কেবল টার্গেট চালু থাকলে।
-   * সবাইকে ধরলে গবেষকেরা রোজ "০/২৫" হয়ে তালিকায় উঠতেন — অভিযোগ, তথ্য নয়।
+   * Careful: **only `staff_type = 'designer'`**, and only when the target is
+   * on. Counting everyone would put researchers on the list daily as "0/25" —
+   * an accusation, not information.
    *
-   * ⚠️ কখনো throw করে না — ডিজাইনের সংখ্যা বাড়তি মাপ; ওটার জন্য গোটা
-   * দৈনিক রিপোর্ট আটকে যাওয়া চলবে না।
+   * Careful: never throws — the design count is an extra measure; it must not
+   * hold up the whole daily report.
    */
   private async designsToday(
     workDate: string,
@@ -197,10 +199,10 @@ export class DigestService {
 
     try {
       /**
-       * ⚠️⚠️ **সব সক্রিয় কর্মী**, শুধু ডিজাইনার নন *(২২ আগস্ট)* — কারণ
-       * ম্যানেজার নিজেও ডিজাইন করেন (তিন দিনে ৪৩টা)। ⭐ কে তালিকায় উঠবেন
-       * সেটা `designView()` ঠিক করে: টার্গেট থাকলে `24/25 ✅`, না থাকলে
-       * শুধু সংখ্যা, আর কিছু না করলে একেবারেই নয়।
+       * Careful: **all active employees**, not only designers — because the
+       * manager designs too (43 in three days). Who gets on the list is decided
+       * by `designView()`: with a target, `24/25 ✅`; without one, just the
+       * number; and nothing at all if they did nothing.
        */
       const staff = await this.prisma.employee.findMany({
         where: { status: 'active' },
@@ -215,16 +217,16 @@ export class DigestService {
       if (staff.length === 0) return out;
 
       /**
-       * ⭐⭐ **কেবল "শেষ" গোনা হয়** *(২৩ আগস্ট ২০২৬, মালিকের সিদ্ধান্ত)* —
-       * *"file khoila hole seta count koro na, only complete dile count koro"*।
+       * **Only "finished" is counted** *(the owner's decision)*: files that are
+       * merely opened must not count — only ones marked complete.
        *
-       * ⚠️⚠️ আগে এখানে `designCredit` গোনা হতো, অর্থাৎ কতগুলো ফাইল
-       * **খোলা** হয়েছে। মাঠে ধরা পড়ল ম্যানেজার (OX-01) "১৬" দেখাচ্ছেন,
-       * অথচ তিনি ১৯টা ফাইলে মোট **৪৪ মিনিট** দিয়ে সেগুলো খুলে দেখছিলেন।
-       * ⭐ খোলা-গণনা "যে বানায়" আর "যে দেখে" — দুজনকে আলাদা করতে পারে না।
+       * Careful: this used to count `designCredit`, i.e. how many files were
+       * **opened**. In the field the manager (OX-01) was showing "16" when he
+       * had opened 19 files for a total of just **44 minutes**. An opened-count
+       * cannot tell "the one who makes" from "the one who looks".
        *
-       * ⚠️ `completed_at` timestamptz, তাই ঢাকার দিনে ভাগ করতে raw কুয়েরি;
-       * Prisma-র `groupBy` তারিখ কাটতে পারে না।
+       * Careful: `completed_at` is a timestamptz, so a raw query splits by the
+       * Dhaka day; Prisma's `groupBy` cannot cut by date.
        */
       const rows = await this.prisma.$queryRaw<
         { employee_id: number; n: number }[]
@@ -255,11 +257,11 @@ export class DigestService {
     return out;
   }
 
-  /** ⭐ শুধু সংখ্যা — ইমেইল ছাড়াই টেস্ট বা ভবিষ্যতের কোনো প্রিভিউ ডাকতে পারে */
+  /** Just the numbers — tests or a future preview can call it without email */
   async collect(now: Date = new Date()): Promise<Digest> {
-    // ⚠️ "আজ" মানে **ঢাকার** আজ — সার্ভার UTC-তে চললে সন্ধ্যা ৬:৩০-এ
-    //    `new Date()`-এর তারিখ ঠিকই থাকত, কিন্তু ধরে নেওয়াটা ভুল হতো
-    //    এবং রাত ১১টার কোনো manual রানে একদিন পিছিয়ে যেত
+    // Careful: "today" means **Dhaka's** today — with the server in UTC, at 6:30 pm
+    //    the date of `new Date()` would still be right, but relying on it would be
+    //    wrong and a manual run at 11 pm would be a day behind
     const today = workDateOf(now);
     const workDate = toIsoDate(today);
     const monthFrom = toIsoDate(monthBoundsOf(today).first);
@@ -276,24 +278,26 @@ export class DigestService {
       today: today1.rows,
       month: month.rows,
       /**
-       * ⭐⭐ প্রত্যাশা F02-র **meta** থেকে, সারি থেকে নয়। সারিতে আছে
-       * "মাসের ১ তারিখ → আজ"-এর টার্গেট; meta-তে আছে ঠিক সেই জানালার
-       * হিসাব যেটা tray, Live Board আর Monthly পাতা ব্যবহার করে
-       * (ট্র্যাকিং শুরু → গতকাল)। এখানে সারি থেকে বিয়োগ করে বানালে
-       * ইমেইল আর ড্যাশবোর্ড একই কর্মীর নামে দু-রকম ঘাটতি বলত।
+       * The expectation comes from F02's **meta**, not from rows. The rows hold
+       * the target for "1st of the month → today"; the meta holds the
+       * calculation for exactly the window the tray, Live Board and Monthly
+       * page use (tracking start → yesterday). Building it here by subtracting
+       * from rows would make the email and the dashboard give two shortfalls
+       * for the same employee.
        */
       expectedHours: month.meta.expectedHours,
     });
   }
 
   /**
-   * কার কাছে যাবে — `DIGEST_EMAIL_TO` থাকলে সেটাই, নইলে সক্রিয় owner-রা।
+   * Who receives it — `DIGEST_EMAIL_TO` if set, otherwise the active owners.
    *
-   * ⚠️ ম্যানেজারদের **ডিফল্টে পাঠানো হয় না**, যদিও তাঁরা ড্যাশবোর্ডে এই
-   * সংখ্যাগুলো দেখতে পান (§ ৪.৩)। "দেখতে পারা" আর "রোজ ইনবক্সে পাওয়া"
-   * এক নয় — ইমেইল ফরওয়ার্ড হয় ও আর্কাইভে থেকে যায়, আর কাকে পাঠানো হবে
-   * সেটা প্রতিষ্ঠানের সিদ্ধান্ত। দরকার হলে `DIGEST_EMAIL_TO`-তে ঠিকানা
-   * বসানো যায়; নিজে থেকে তালিকা বাড়িয়ে দিলে সেটা নীরবে নীতি হয়ে যেত।
+   * Careful: managers are **not sent it by default**, although they can see
+   * these numbers on the dashboard (§ 4.3). "Can see" and "gets it in the inbox
+   * daily" are not the same — email is forwarded and stays in archives, and
+   * who is sent it is the organisation's decision. If needed, an address can
+   * be put in `DIGEST_EMAIL_TO`; widening the list on its own would silently
+   * become policy.
    */
   private async recipients(): Promise<string[]> {
     if (this.explicitRecipients.length > 0) return this.explicitRecipients;

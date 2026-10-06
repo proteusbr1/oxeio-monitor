@@ -2,16 +2,16 @@ import { api } from './client';
 import { qs } from './query';
 
 /**
- * F01 · F02 · F03 · F04 · F05 · F08 — রিপোর্ট, Excel এক্সপোর্ট ও পে-রোল।
+ * F01, F02, F03, F04, F05, F08: reports, Excel export and payroll.
  *
- * সার্ভারের উৎস: `server/src/reports/` ও `server/src/payroll/`।
+ * Server source: `server/src/reports/` and `server/src/payroll/`.
  *
- * ⚠️ `/reports/*` — owner + manager। `/payroll` — **owner-only**, আলাদা
- *    মডিউল। এই ফাইলে দুটো একসাথে আছে বলে ভুলে যাবেন না: পে-রোলের কিছুই
- *    ম্যানেজারকে **দেখানো যাবে না** (§ ৪.৩, ADR-023)।
+ * Careful: `/reports/*` is owner + manager. `/payroll` is owner-only and a separate
+ * module. Both live in this file, so do not forget: nothing from payroll may be
+ * shown to a manager (section 4.3, ADR-023).
  *
- * ⚠️ `from` ও `to` **বাধ্যতামূলক** (activity-র মতো ঐচ্ছিক নয়)। না দিলে ৪০০।
- *    ডিফল্ট রেঞ্জের জন্য `thisMonthRange()` আছে `lib/format.ts`-এ।
+ * Careful: `from` and `to` are required (unlike activity, where they are optional).
+ * Omitting them gives a 400. `thisMonthRange()` in `lib/format.ts` gives a default range.
  */
 
 export type ReportFormat = 'json' | 'xlsx';
@@ -22,100 +22,101 @@ export type DayStatus = 'worked' | 'no_activity';
 export interface ReportMeta {
   from: string;
   to: string;
-  /** যা চাওয়া হয়েছিল — `clampedToToday` হলে `to`-র চেয়ে পরে */
+  /** What was requested; later than `to` when `clampedToToday` is set. */
   requestedTo: string;
   /**
-   * ⭐ ভবিষ্যতের তারিখ চাইলে সার্ভার চুপচাপ আজ পর্যন্ত ছেঁটে দেয়, কিন্তু
-   * সেটা **জানিয়ে** দেয়। সত্যি হলে পেজে বলতে হবে — নইলে "১–৩১ আগস্ট"
-   * চেয়ে ১১ তারিখ পর্যন্ত ডেটা দেখে কেউ ভাবত সবাই পিছিয়ে আছে।
+   * If a future date is requested, the server quietly trims the range to today, but
+   * it says so. When that happens the page must say it too: otherwise someone who
+   * asked for "1-31 August" and sees data only up to the 11th would think everyone
+   * is behind.
    */
   clampedToToday: boolean;
   days: number;
   generatedAt: string;
-  /** ⭐ যাদের রাখা যায়নি — চুপচাপ বাদ না দিয়ে নাম ধরে জানানো হয় */
+  /** Employees that could not be included, listed by name instead of silently dropped. */
   excludedEmployees: string[];
 
   /**
-   * কর্মীপ্রতি **নীতিতে লেখা** মাসিক টার্গেট ঘণ্টা (`employeeId` → ঘণ্টা),
-   * অর্থাৎ "২৬ আদর্শ কর্মদিবসে যত ঘণ্টা" (২০৮)।
+   * Each employee's monthly target hours as written in the policy (`employeeId` to
+   * hours), i.e. "hours in 26 ideal workdays" (208).
    *
-   * ⚠️ এটা নিজে হিসাব করা যাবে না — আগে করা হতো, আর ভবিষ্যতের সরকারি
-   * ছুটি বাদ পড়ায় ২০৮-এর জায়গায় ২১৬ দেখাত।
+   * Careful: do not compute this yourself. It used to be computed on the client, and
+   * because future public holidays were missed it showed 216 instead of 208.
    *
-   * ⭐⭐ **অফিস-ডে × ৮ঘ** — শুক্রবার, সরকারি ছুটি আর তার নিজের ছুটি বাদ
-   * *(মালিকের নিয়ম, ২৩ আগস্ট ২০২৬)*। মাস ধরে নয়, **অফিস-ডে ধরে** গোনা,
-   * তাই আধা মাস চাইলে আধা মাসের সংখ্যাই আসে।
+   * Office days x 8h: Fridays, public holidays and the employee's own leave are
+   * excluded (the owner's rule). It is counted per office day, not per month, so
+   * asking for half a month returns the half-month number.
    *
-   * ⚠️⚠️ আগে এটা ছিল পলিসির **ফ্ল্যাট ২০৮** (G117) — অক্টোবরে অফিস-ডে ২৪,
-   * অর্থাৎ ১৯২ঘ; ফলে পাতাটা ১৬ ঘণ্টার ভুতুড়ে ঘাটতি দেখাত।
+   * Careful: this used to be the policy's flat 208 (G117). In October there are 24
+   * office days, i.e. 192h, so the page showed a phantom 16-hour shortfall.
    *
-   * ⚠️ **০ একটা বৈধ উত্তর** — "এই পরিসরে তাঁর কোনো অফিস-ডে নেই" (পুরো
-   * সময়টা ছুটিতে, বা একেবারে শেষে যোগ দিয়েছেন)। ব্যর্থতা নয়।
+   * Careful: 0 is a valid answer: "this employee has no office days in this range"
+   * (on leave the whole time, or joined right at the end). It is not a failure.
    */
   targetHoursInRange: Record<number, number>;
 
   /**
-   * ⭐⭐ কর্মীপ্রতি **এ পর্যন্ত কত ঘণ্টা হওয়ার কথা ছিল** (`employeeId` → ঘণ্টা)।
+   * Per employee, how many hours were expected up to now (`employeeId` to hours).
    *
-   * ⚠️⚠️ **এটাও নিজে হিসাব করা যাবে না, আর কারণটা এই পাতার সবচেয়ে বড় বাগ:**
-   * আগে Monthly পাতা দিনের সারিগুলোর `targetHours` যোগ করে নিজেই বানাত —
-   * মাসের ১ তারিখ থেকে আজ ধরে। কিন্তু ব্রাউজার দুটো জিনিস জানে না:
-   *   ১· **কর্মীকে কবে থেকে ট্র্যাক করা শুরু হয়েছে।** এই ইনস্টলেশনে
-   *      এজেন্ট বসেছে ১৩ আগস্ট ২০২৬; তার আগের দিনগুলো নীরবে "০ ঘণ্টা কাজ"
-   *      হয়ে যেত আর পাতাটা প্রত্যেককে ~৯৪ ঘণ্টা পিছিয়ে দেখাত।
-   *   ২· **আজকের দিনটা প্রত্যাশায় ধরা হয় না** — নইলে ভোরে সবাই "পিছিয়ে"
-   *      দেখাত আর সন্ধ্যায় সংখ্যাটা নিজে থেকেই ঠিক হয়ে যেত।
+   * Careful: do not compute this yourself either. The reason is the biggest bug this
+   * page had. The Monthly page used to build it by summing the day rows'
+   * `targetHours`, from the 1st of the month through today. But the browser does not
+   * know two things:
+   *   1. When tracking of the employee started. In this installation the agent was
+   *      installed on 13 August 2026; the days before that silently became "0 hours
+   *      worked" and the page showed everyone about 94 hours behind.
+   *   2. That today is not counted in the expectation; otherwise everyone would look
+   *      "behind" in the morning and the number would fix itself by evening.
    *
-   * ⭐ জানালাটা সার্ভারের `summary.math.ts` → `elapsedWindow()` ঠিক করে,
-   * আর tray, Live Board ও দৈনিক ইমেইলও ঠিক ওটাই ব্যবহার করে। ক্লায়েন্টে
-   * নিয়মটা আবার লিখলে সেটাই হতো পরের অমিলের জন্ম।
+   * The window is decided by `elapsedWindow()` in the server's `summary.math.ts`,
+   * and the tray, the Live Board and the daily email use exactly the same function.
+   * Writing the rule again on the client would breed the next mismatch.
    *
-   * ⚠️ `targetHoursInRange` পুরো পরিসরের; এটা তার মধ্যে **দেখা** অংশটুকুর।
+   * Careful: `targetHoursInRange` covers the whole range; this is the part of it
+   * that was observed.
    */
   expectedHours: Record<number, number>;
 
   /**
-   * ⭐⭐ **G108** — এই রিপোর্টের টার্গেট যে মাসগুলোর কর্মদিবসের উপর
-   * দাঁড়ানো, সেই মাসগুলোর **যেসব ছুটির তারিখ এখনো পাকা নয়**
-   * ('YYYY-MM-DD', সাজানো)।
+   * G108: the holiday dates, in the months whose workdays this report's target
+   * rests on, that are not final yet ('YYYY-MM-DD', sorted).
    *
-   * ⚠️⚠️ ঘরটা সার্ভার **অনেক আগে থেকেই পাঠাত**, কিন্তু এখানে declare করা
-   * ছিল না — তাই TypeScript-ও কিছু বলত না, আর পাতাটা জানতই না যে
-   * সংখ্যাগুলো একটা অনুমানের উপর দাঁড়িয়ে। ⭐ চুক্তির এই অর্ধেকটাই ছিল
-   * G108-এর গোড়া: *"লেখা আছে, কেউ পড়ে না"*।
+   * Careful: the server sent this field long ago but it was not declared here, so
+   * TypeScript said nothing and the page did not know the numbers rested on an
+   * estimate. This half of the contract was the root of G108: "written down, nobody
+   * reads it".
    *
-   * ⚠️ চান্দ্র তারিখ নড়লে ওই মাসের কর্মদিবস বদলায়, তার সাথে দৈনিক
-   * টার্গেটের হর, আর পে-রোলের `d ÷ D` — অর্থাৎ **টাকা**।
+   * Careful: when a lunar date moves, that month's workdays change, and with them the
+   * denominator of the daily target and payroll's `d / D`, i.e. money.
    *
-   * ⚠️ খালি তালিকা মানে "সব তারিখ পাকা" — "ছুটি নেই" নয়।
+   * Careful: an empty list means "all dates are final", not "no holidays".
    */
   approximateHolidayDates: string[];
 
   /**
-   * ⭐⭐ **G111** — কর্মীপ্রতি: তাঁর একটাও **শেষ হয়ে যাওয়া** কর্মদিবস
-   * এখনো দেখা হয়েছে কি না।
+   * G111: per employee, whether any finished workday has been observed yet.
    *
-   * ⚠️⚠️ `false` হলে `expectedHours` ০, তাই ঘাটতিও ০ — দেখতে হুবহু
-   * টার্গেট পূরণ করা মানুষের মতো। ⭐ পতাকাটা সার্ভার দেয়; এখানে
-   * `expectedHours === 0` দেখে অনুমান করবেন না, ওটা "সব দিন ছুটি ছিল"-ও
-   * হতে পারে, আর তখন কথাটা মিথ্যা হতো।
+   * Careful: when `false`, `expectedHours` is 0, so the shortfall is 0 too, which
+   * looks exactly like someone who met the target. The flag comes from the server;
+   * do not infer it from `expectedHours === 0` here, since that can also mean "every
+   * day was a day off", and then the statement would be false.
    */
   observed: Record<number, boolean>;
 
   /**
-   * ⭐⭐ **G110** — কর্মীপ্রতি কবে থেকে দেখা শুরু, `YYYY-MM-DD`।
+   * G110: per employee, the date observation started, `YYYY-MM-DD`.
    *
-   * ⚠️⚠️ **শুধু ঘর আঁকার জন্য।** এই তারিখ দিয়ে প্রত্যাশা গুনবেন না —
-   * প্রত্যাশা `expectedHours`-এ, আর একটাই জায়গায়। ক্লায়েন্টে আবার গুনতে
-   * গেলে "আজকের দিন বাদ" নিয়মটাও আবার লিখতে হয়, আর ঠিক সেভাবেই আগের
-   * বাগটা জন্মেছিল।
+   * Careful: only for drawing cells. Do not multiply expectations by this date: the
+   * expectation is in `expectedHours`, in one place. Counting it again on the client
+   * means rewriting the "exclude today" rule too, and that is exactly how the
+   * earlier bug was born.
    */
   trackedFrom: Record<number, string | null>;
 }
 
 /**
- * ⭐ এখানে "কে কখন বসল" নেই এবং কখনো থাকবে না — লেট ট্র্যাকিং এই পণ্যে
- * নেই (ADR-011)। রিপোর্ট শুধু বলে কত ঘণ্টা হয়েছে, কখন হয়েছে নয়।
+ * Who arrived when is not here and never will be: late tracking does not exist in
+ * this product (ADR-011). The report says how many hours were worked, not when.
  */
 export interface AttendanceRow {
   employeeId: number;
@@ -126,20 +127,20 @@ export interface AttendanceRow {
   dayType: DayType;
   status: DayStatus;
   /**
-   * ⭐⭐ **G130 (R2)** — ওই দিনটা তাঁর অনুমোদিত ছুটি ছিল কি না।
+   * G130 (R2): whether that day was an approved leave day for this person.
    *
-   * ⚠️⚠️ ছুটি সংখ্যায় আগেই পৌঁছেছে (টার্গেট ০, কোনো ঘাটতি নয়), কিন্তু
-   * সারিটা দেখতে হুবহু **শূন্য-ঘণ্টার একটা কর্মদিবসের** মতো। সংখ্যা
-   * মিথ্যা বলছিল না, কারণটাও বলছিল না।
+   * Careful: leave already reached the numbers (target 0, no shortfall), but the row
+   * looked exactly like a workday with zero hours. The numbers were not lying, but
+   * they did not give the reason either.
    *
-   * ⚠️ `dayType`-এর সাথে মেশানো নয়: `dayType` বলে দিনটা **অফিসের**
-   * ক্যালেন্ডারে কী, এটা বলে **ওই একজনের** কী।
+   * Careful: not to be mixed up with `dayType`: `dayType` says what the day is in
+   * the office calendar, this says what it is for that one person.
    */
   onLeave: boolean;
-  /** ⚠️ ঘণ্টা (দশমিক), সেকেন্ড নয় — `formatHoursAsDuration()` দিয়ে দেখান */
+  /** Careful: hours (decimal), not seconds. Show with `formatHoursAsDuration()`. */
   /**
-   * ⭐ ওই দিনে কতগুলো ডিজাইন **শেষ** হয়েছে (Complete বোতাম) — ০ হলে `null`।
-   * ⚠️ ফাইল **খোলা** গোনা হয় না (মালিকের সিদ্ধান্ত, ২৩ আগস্ট)।
+   * How many designs were finished that day (Complete button); `null` when 0.
+   * Careful: opened files are not counted (the owner's decision).
    */
   designsDone: number | null;
   workedHours: number;
@@ -147,9 +148,9 @@ export interface AttendanceRow {
   adjustmentHours: number;
   creditedHours: number;
   /**
-   * ওই দিনটার টার্গেট — কর্মদিবসে ২০৮ ÷ ২৬ = ৮ ঘণ্টা, ছুটিতে ০।
-   * ⚠️ হর পলিসির ধ্রুবক, ওই মাসের কর্মদিবস নয় — তাই সংখ্যাটা মাসভেদে
-   *    বদলায় না আর tray-র সাথে হুবহু মেলে।
+   * That day's target: 208 / 26 = 8 hours on a workday, 0 on a day off.
+   * Careful: the denominator is the policy constant, not that month's workdays, so
+   * the number does not vary by month and matches the tray exactly.
    */
   targetHours: number;
 }
@@ -163,12 +164,12 @@ export interface AttendanceReport {
     workedHours: number;
     creditedHours: number;
     /**
-     * ⚠️⚠️ **উপরের Target কলামের যোগফল** — "এ পর্যন্ত কত হওয়ার কথা ছিল"
-     * নয় (সেটা `meta.expectedHours`)। ট্র্যাকিং শুরুর আগের দিন ও আজকের
-     * অসমাপ্ত দিনও এতে আছে, কারণ ওই সারিগুলোও তালিকায় আছে। ফুটারে এটা
-     * কলামের নিচেই বসে বলে অন্য কোনো জানালায় নেওয়া যায়নি — মোট আর
-     * কলামের যোগফল আলাদা হলে সেটা আরও খারাপ হতো। **এটা দিয়ে ঘাটতি
-     * বোঝাবেন না।**
+     * Careful: the sum of the Target column above, not "how many hours were expected
+     * so far" (that is `meta.expectedHours`). Days before tracking started and the
+     * unfinished current day are included, because those rows are in the list too. It
+     * sits right under the column in the footer, so it could not use a different
+     * window: a total that differs from the column sum would be worse. Do not use it
+     * to infer a shortfall.
      */
     targetHours: number;
     daysWithWork: number;
@@ -179,9 +180,11 @@ export interface SummaryRow {
   employeeId: number;
   empCode: string;
   fullName: string;
-  /** মাসে `'YYYY-MM'`, সপ্তাহে সপ্তাহ-শুরুর তারিখ */
+  /** `'YYYY-MM'` for months, the week's start date for weeks. */
   bucket: string;
-  /** বালতির যতটুকু রেঞ্জে ও কর্মকালে পড়েছে — পুরো মাস/সপ্তাহ নয় */
+  /**
+   * The part of the bucket inside the range and the employment period, not the whole month/week.
+   */
   bucketStart: string;
   bucketEnd: string;
   workdays: number;
@@ -190,26 +193,27 @@ export interface SummaryRow {
   adjustmentHours: number;
   creditedHours: number;
   /**
-   * এই বালতির যে দিনগুলো রেঞ্জে ও কর্মকালে পড়েছে, তাদের টার্গেটের যোগফল।
-   * ⚠️ **প্রত্যাশা নয়** — ট্র্যাকিং শুরুর আগের দিন ও আজকের দিনও এতে আছে।
-   *    `targetHours − creditedHours` দিয়ে ঘাটতি বানাবেন না; সেটাই ছিল
-   *    আগের বাগ। নিচের `shortfallHours` ইতিমধ্যেই সঠিক জানালায় হিসাব করা।
+   * Sum of the targets of this bucket's days that fall in the range and the
+   * employment period.
+   * Careful: not the expectation; days before tracking started and today are
+   * included. Do not build a shortfall from `targetHours - creditedHours`; that was
+   * the earlier bug. `shortfallHours` below is already computed over the correct window.
    */
   targetHours: number;
   /**
-   * ⭐⭐ **max(0, প্রত্যাশা − গোনা ঘণ্টা)** — হর `meta.expectedHours`-এর
-   * সেই একই জানালা (ট্র্যাকিং শুরু … গতকাল), শুধু এই বালতিটুকুর জন্য কাটা।
+   * `max(0, expected - counted hours)`; the denominator is the same window as
+   * `meta.expectedHours` (tracking start through yesterday), cut down to this bucket.
    *
-   * ⚠️ টার্গেট ক্যালেন্ডারের তথ্য, ঘাটতি একজন মানুষ সম্পর্কে **রায়** —
-   *    রায় কেবল দেখা ও শেষ হওয়া দিনের উপর হতে পারে। তাই এই কলাম আর
-   *    Target কলাম বিয়োগ করে মিলবে না, আর সেটাই ঠিক।
+   * Careful: the target is calendar information, while a shortfall is a verdict about
+   * a person, and a verdict can only rest on days that were observed and finished.
+   * So this column will not match Target minus something, and that is correct.
    */
   shortfallHours: number;
   /**
-   * ⭐ **max(0, গোনা ঘণ্টা − targetHours)** — হর পুরো টার্গেট, প্রত্যাশা নয়।
-   * ⚠️ প্রত্যাশা ধরলে আজকের কাজ করা ঘণ্টা সবার নামে "অতিরিক্ত" হয়ে যেত,
-   *    অথচ মাসের টার্গেটই ছোঁয়া হয়নি। "এগিয়ে আছি" (pace) আর "বেশি কাজ
-   *    করেছি" (overtime) এক কথা নয়।
+   * `max(0, counted hours - targetHours)`; the denominator is the full target, not the expectation.
+   * Careful: using the expectation would make today's worked hours "overtime" for
+   * everyone while the monthly target has not even been reached. "Ahead" (pace) and
+   * "worked extra" (overtime) are not the same thing.
    */
   overtimeHours: number;
 }
@@ -217,7 +221,9 @@ export interface SummaryRow {
 export interface SummaryReport {
   meta: ReportMeta;
   groupBy: GroupBy;
-  /** ⚠️ O4 — OT-র টাকা এই সিস্টেম হিসাব করে না, শুধু ঘণ্টা। বাক্যটা দেখাতে হবে। */
+  /**
+   * Careful: O4: this system does not compute overtime pay, only hours. The sentence must be shown.
+   */
   overtimeNote: string;
   rows: SummaryRow[];
 }
@@ -229,7 +235,7 @@ export type UsageCategory =
   | 'uncategorized';
 
 export interface ProductivityItem {
-  /** ব্রাউজার হলে ডোমেইন, নইলে প্রসেসের নাম */
+  /** The domain for a browser, otherwise the process name. */
   key: string;
   kind: 'app' | 'site';
   category: UsageCategory;
@@ -247,11 +253,14 @@ export interface ProductivityEmployeeRow {
   unproductiveHours: number;
   uncategorizedHours: number;
   trackedHours: number;
-  /** ⚠️ হরে uncategorized সময়ও আছে — `daily_summary`-র সংখ্যার সাথে হুবহু মিলবে না */
+  /**
+   * Careful: the denominator includes uncategorized time, so it will not match
+   * `daily_summary` exactly.
+   */
   productiveSharePct: number;
 }
 
-/** F04। ⚠️ `activity.ts`-এর `DailyProductivityReport` (D07) আলাদা জিনিস। */
+/** F04. Careful: `DailyProductivityReport` in `activity.ts` (D07) is a different thing. */
 export interface ProductivityReport {
   meta: ReportMeta;
   totalTrackedHours: number;
@@ -261,10 +270,10 @@ export interface ProductivityReport {
 }
 
 export interface ReportQuery {
-  /** বাধ্যতামূলক, `YYYY-MM-DD` */
+  /** Required, `YYYY-MM-DD`. */
   from: string;
   to: string;
-  /** একজনের রিপোর্ট চাইলে */
+  /** When one person's report is wanted. */
   employeeId?: number;
 }
 
@@ -286,7 +295,7 @@ export function getSummaryReport(
   return api<SummaryReport>(`/reports/summary${qs({ ...query })}`, { signal });
 }
 
-/** F04 — `GET /api/v1/reports/productivity?from=&to=&limit=` (limit সর্বোচ্চ ২০০) */
+/** F04: `GET /api/v1/reports/productivity?from=&to=&limit=` (limit at most 200) */
 export function getProductivityReport(
   query: ReportQuery & { limit?: number },
   signal?: AbortSignal,
@@ -297,14 +306,15 @@ export function getProductivityReport(
 }
 
 /**
- * F05 — Excel ডাউনলোডের লিঙ্ক।
+ * F05: Excel download link.
  *
- * ⭐ `fetch` দিয়ে নয়, সাধারণ `<a href={...} download>` দিয়ে খুলুন। সার্ভার
- * `Content-Disposition: attachment` পাঠায়, cookie একই origin-এ নিজে থেকেই
- * যায়, আর ব্রাউজারের নিজস্ব ডাউনলোড UI-টাই সবচেয়ে পরিচিত।
+ * Open it with a plain `<a href={...} download>`, not with `fetch`. The server
+ * sends `Content-Disposition: attachment`, the cookie goes along on its own
+ * (same origin), and the browser's own download UI is the most familiar.
  *
- * ⚠️ পথে `/api/v1` প্রিফিক্সটা এখানে হাতে বসানো — `api()` ওটা নিজে যোগ করে,
- *    কিন্তু এই স্ট্রিংটা `api()`-তে যায় না, সরাসরি href-এ বসে।
+ * Careful: the `/api/v1` prefix is hand-written into the path here. `api()` adds
+ * it itself, but this string does not go through `api()`; it goes straight into
+ * the href.
  */
 export function reportXlsxUrl(
   kind: 'attendance' | 'summary' | 'productivity',
@@ -313,4 +323,4 @@ export function reportXlsxUrl(
   return `/api/v1/reports/${kind}${qs({ ...query, format: 'xlsx' })}`;
 }
 
-// ── F03 · পে-রোল (owner-only) ───────────────────────────────────────────────
+// ── F03 · Payroll (owner-only) ───────────────────────────────────────────────

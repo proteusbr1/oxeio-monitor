@@ -8,14 +8,14 @@ import {
 import { AdjustmentsService } from './adjustments.service';
 
 /**
- * **B14 · G35 · ADR-011e** — ঘণ্টা সংশোধন।
+ * **B14 · G35 · ADR-011e** - hours adjustments.
  *
- * ⚠️ `SummaryModule` ইমপোর্ট করা হয়েছে শুধু `SummaryService`-এর জন্য —
- * সংশোধনের পর ওই দিনের সারাংশ সাথে সাথে নতুন করে বসাতে। ওই মডিউলে
- * `ScheduleModule.forRoot()` আছে, কিন্তু Nest মডিউল singleton, তাই
- * ইমপোর্ট করলে সেটা দ্বিতীয়বার চলে না — আর ওটাই জরুরি, কারণ দুটো
- * explorer একই নামের cron দুবার রেজিস্টার করতে গিয়ে bootstrap-এই
- * ভেঙে পড়ত (`summary.module.ts`-এর সতর্কতা দেখুন)।
+ * Careful: `SummaryModule` is imported only for `SummaryService`, to recompute
+ * the day's summary right after an adjustment. That module contains
+ * `ScheduleModule.forRoot()`, but Nest modules are singletons, so importing it
+ * does not run it a second time. That matters: two explorers would register
+ * the same-named cron twice and crash at bootstrap (see the warning in
+ * `summary.module.ts`).
  */
 @Module({
   imports: [SummaryModule],

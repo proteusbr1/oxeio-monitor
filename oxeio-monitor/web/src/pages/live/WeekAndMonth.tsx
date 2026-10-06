@@ -5,28 +5,28 @@ import { formatDateShort, formatDuration, pctOf, weekdayOf } from '../../lib/for
 import { targetText } from './TodayRing';
 
 /**
- * E01 — বোর্ডের দুটো পেছন-ফিরে-দেখা কার্ড: **শেষ সাত দিন**, আর **চলতি মাস**।
+ * Two look-back cards for the board: **the last seven days**, and **the current month**.
  *
- * ⭐ উৎস `daily_summary` ও `monthly_summary` — বেতনের ভিত্তি যেগুলো, আর
- *    `summary-refresh` জব ওদের প্রতি ১৫ মিনিটে তাজা রাখে (K06)।
+ * Important: the sources are `daily_summary` and `monthly_summary`, the basis of pay,
+ *    which the `summary-refresh` job keeps fresh every 15 minutes.
  */
 
 /**
- * ⭐⭐ **সাত দিন — আর এখানকার একমাত্র সত্যিই কঠিন সিদ্ধান্ত।**
+ * **Seven days, and the one genuinely hard decision here.**
  *
- * ⚠️⚠️ যে দিনগুলোতে ট্র্যাকিং শুরুই হয়নি, সেগুলো **শূন্য বার নয়** — ডটেড
- *    রূপরেখা। শূন্য দেখালে চার্টটা দাবি করত "ওই দিন কেউ কাজ করেনি", অথচ
- *    সত্যিটা হলো **আমরা তখন দেখছিলামই না**। প্রথম সপ্তাহে ওই মিথ্যাটা
- *    গোটা দলকে অকারণে ব্যর্থ দেখাত।
+ * Careful: days when tracking had not started are **not zero bars**; they are a
+ *    dotted outline. Showing zero would make the chart claim "nobody worked that
+ *    day", when the truth is **we were not watching then**. In the first week that
+ *    falsehood would make the whole team look like a failure for no reason.
  *
- * ⭐ এটা এই অ্যাপেরই পুরোনো নিয়ম, নতুন কিছু নয়: `offline` (কর্মী চলে
- *    গেছেন) আর `agent_down` (এজেন্ট মরে গেছে) কখনো এক রঙে দেখানো হয় না।
- *    **"জানি না"-কে "নেই" বলে ফেললে ব্যবহারকারী ভুল কাজে চলে যান।**
+ * Important: this is an old rule of this app, nothing new: `offline` (the employee
+ *    left) and `agent_down` (the agent died) are never shown in one colour.
+ *    **Calling "I do not know" "none" sends the user to the wrong action.**
  */
 export function WeekBars({ days }: { days: TeamTrend['days'] }) {
   /**
-   * ⚠️ মাপকাঠিতে টার্গেটও ধরা হয় — নইলে হালকা একটা দিনের বার পুরো উঁচু
-   *    হয়ে বসত, আর দিনটা দেখতে দুর্দান্ত লাগত।
+   * Careful: the scale includes the target too; otherwise a light day's bar would
+   *    fill the full height and the day would look excellent.
    */
   const peak = days.reduce(
     (m, d) => Math.max(m, d.workedSec, d.targetSec),
@@ -34,27 +34,28 @@ export function WeekBars({ days }: { days: TeamTrend['days'] }) {
   );
 
   /**
-   * ⚠️⚠️ বেছে নেওয়া দিনটা — **ফোনে এটাই একমাত্র উপায়**।
+   * The chosen day: **on a phone this is the only way**.
    *
-   * আগে প্রতিটা বারের মান ছিল কেবল `title` টুলটিপে, আর বারগুলো ছিল `<div>`।
-   * ⚠️ ছোঁয়ার পর্দায় টুলটিপ **কখনো ওঠে না**, আর `<div>`-এ ট্যাপেরও কিছু নেই —
-   *    ফলে ফোনে কার্ডটা ছিল সাতটা **নামহীন বার**: আকৃতি বোঝা যেত, সংখ্যা নয়।
-   * ⭐ নকশাটা নতুন নয় — `DayPulse`-এ ঠিক এই জিনিসটাই আছে (স্থির readout
-   *    লাইন + পুরো কলামজোড়া hit-target), তাই এখানে সেটাই আনা হলো।
+   * Each bar's value used to be only in a `title` tooltip, and the bars were
+   * `<div>`s. Careful: tooltips **never appear** on touch screens, and a `<div>` has
+   *    nothing to tap, so on a phone the card was seven **unnamed bars**: the shape
+   *    was readable, the numbers were not.
+   * Important: the design is not new: `DayPulse` has exactly this (a fixed readout
+   *    line plus a hit-target spanning the whole column), so it is brought here.
    */
   const [pick, setPick] = useState<string | null>(null);
   const shown = days.find((d) => d.date === pick) ?? null;
 
-  // ⚠️ যোগফলে **কেবল দেখা দিনগুলো** — না-দেখা দিনকে ০ ধরে যোগ করলে
-  //    সংখ্যাটা "এই সপ্তাহে এতটুকুই হয়েছে" বলে মিথ্যা দাবি করত।
+  // Careful: the total counts **only the observed days**; adding an unobserved day as
+  //    0 would make the number falsely claim "this is all that was done this week".
   const seen = days.filter((d) => d.tracked);
   const seenSec = seen.reduce((s, d) => s + d.workedSec, 0);
 
   return (
     <div className="px-4 pt-1 pb-3">
       {/*
-        ⭐ একটা মান সরাসরি, বাকিগুলো ছুঁয়ে — `DayPulse`-এর একই নিয়ম। প্রতিটা
-           বারের গায়ে সংখ্যা বসালে সাতটা লেখা একটার উপর আরেকটা উঠে যেত।
+        One value directly, the rest by touch: the same rule as `DayPulse`. Putting a
+           number on every bar would make seven labels pile on top of each other.
       */}
       <div className="mb-2 flex items-end justify-between gap-3">
         <p className="text-xs text-ink-3">
@@ -79,8 +80,8 @@ export function WeekBars({ days }: { days: TeamTrend['days'] }) {
               <span className="num font-semibold text-ink">
                 {formatDuration(seenSec)}
               </span>
-              {/* ⚠️ কটা দিন গোনা হলো সেটা বলা হয় **কেবল** যখন সাতটার কম —
-                  নইলে প্রতিদিন একটা অপ্রয়োজনীয় সংখ্যা চোখে পড়ত। */}
+              {/* Careful: how many days were counted is shown **only** when under seven;
+                  otherwise a needless number would catch the eye every day. */}
               {seen.length < days.length && (
                 <span className="text-ink-3">
                   {' '}
@@ -107,11 +108,11 @@ export function WeekBars({ days }: { days: TeamTrend['days'] }) {
                 key={d.date}
                 type="button"
                 /*
-                 * ⚠️ hit-target পুরো কলামের উচ্চতা জুড়ে, শুধু বারটুকু নয় —
-                 *    ২% উঁচু বারে আঙুল তাক করা যেত না।
-                 * ⚠️ `onClick`-টা ফোনের জন্য বাধ্যতামূলক: Safari (iOS ও macOS)
-                 *    **বোতামে ট্যাপ করলে ফোকাস দেয় না**, তাই `onFocus`-এ
-                 *    ভরসা করলে ওখানে কিছুই হতো না।
+                 * Careful: the hit-target spans the full column height, not just the bar;
+                 *    a 2% bar could not be aimed at with a finger.
+                 * Careful: `onClick` is mandatory for phones: Safari (iOS and macOS)
+                 *    **does not focus a button on tap**, so relying on `onFocus` would
+                 *    do nothing there.
                  */
                 className="flex h-full flex-1 cursor-default items-end focus:outline-none"
                 onMouseEnter={() => setPick(d.date)}
@@ -130,22 +131,22 @@ export function WeekBars({ days }: { days: TeamTrend['days'] }) {
                   <span
                     className="w-full rounded-t-[4px] transition-[height,opacity] duration-500"
                     style={{
-                      // ⚠️ শূন্যেও ২px — নইলে "কাজ হয়নি" আর "দিনটাই নেই"
-                      //    দেখতে এক হতো।
+                      // Careful: 2px even at zero, or "no work" and "no such day"
+                      //    would look the same.
                       height: `max(2px, ${h}%)`,
                       backgroundColor: off
                         ? 'var(--color-line)'
                         : 'var(--color-ok)',
-                      // ⭐ বাছাই হলে বাকিগুলো ম্লান — উপরের সংখ্যাটা **কোন**
-                      //    বারের, সেটা তখন চোখেই দেখা যায়। ট্যাপে ওই যোগসূত্রটা
-                      //    না থাকলে সংখ্যাটা কোথা থেকে এলো বোঝা যেত না।
+                      // Important: when one is picked the rest are dimmed, so which bar
+                      //    the number above belongs to can be seen at a glance. Without
+                      //    that link on tap, where the number came from would be unclear.
                       opacity: pick === null || pick === d.date ? 1 : 0.45,
                     }}
                   />
                 ) : (
                   /*
-                    ⚠️ ভরাট নয়, **ফাঁপা রূপরেখা** — চোখে সাথে সাথেই আলাদা,
-                       আর উচ্চতাটা কোনো মান দাবি করে না।
+                    Careful: not filled, a **hollow outline**: instantly different to
+                       the eye, and the height claims no value.
                   */
                   <span
                     className="w-full rounded-t-[4px] border border-dashed border-line"
@@ -161,10 +162,10 @@ export function WeekBars({ days }: { days: TeamTrend['days'] }) {
         </div>
 
         {/*
-          ⭐ টার্গেট-রেখা — একটাই সরু কঠিন রেখা, ড্যাশ নয়। ড্যাশ করলে
-             ওটাকে "অনুমান" বা "সীমা" মনে হতো, অথচ এটা নির্দিষ্ট সংখ্যা।
-          ⚠️ দলের টার্গেট দিনভেদে বদলায় (কার ছুটি তার উপর), তাই একটাই
-             রেখা টানা যায় না — সবচেয়ে সাধারণ টার্গেটটাই দেখানো হয়।
+          Important: the target line is a single thin solid line, not dashed. A dash
+             would read as an "estimate" or "limit", when this is an exact number.
+          Careful: the team's target varies by day (depending on whose leave it is),
+             so one line cannot be drawn exactly; the most common target is shown.
         */}
         {peak > 0 && commonTarget(days) > 0 && (
           <div
@@ -186,32 +187,33 @@ export function WeekBars({ days }: { days: TeamTrend['days'] }) {
       </div>
 
       {/*
-        ⚠️⚠️ **লেজেন্ডটা তুলে দেওয়া হয়েছে** *(মকআপ ক-এ ওটা নেই, ১৫ আগস্ট)*।
+        Careful: **the legend was removed** (it is not in mockup A).
 
-        ⭐ হারানোর কিছু নেই: কার্ডের `hint`-এ ইতিমধ্যেই লেখা আছে
-        *"dashed = before tracking started"*, আর ছুটির দিনের ধূসর বার
-        নিজের `title`-এ কারণটা বলে। অর্থাৎ তিনটে লাইন **একই কথা দ্বিতীয়বার**
-        বলছিল, আর তার দাম দিচ্ছিল চার্টটা — সারির অন্য দুটো কার্ডের
-        সমান উচ্চতায় বসে বারগুলো চেপে গিয়ে প্রায় অপঠ্য হয়ে যাচ্ছিল।
+        Important: nothing is lost: the card's `hint` already says
+        *"dashed = before tracking started"*, and the grey bar for a day off gives its
+        reason in its own `title`. So the three lines were **saying the same thing a
+        second time**, and the chart paid for it: sitting at the same height as the
+        row's other two cards, the bars were squeezed almost unreadable.
 
-        ⚠️ রঙের ব্যাখ্যা মুছে ফেলা এই প্রকল্পে সাধারণত নিষিদ্ধ
-        (`StatusLegend`-এর নোট দেখুন) — কিন্তু ওই নিয়মটা **অবস্থার চার রঙের**,
-        যেগুলো অনুমান করা যায় না। এখানে ভরাট-বনাম-ডটেড পার্থক্যটা hint-এ
-        বাক্যে লেখা, রঙে নয়।
+        Careful: removing colour explanations is generally forbidden in this project
+        (see the `StatusLegend` note), but that rule is about **the four status
+        colours**, which cannot be guessed. Here the filled-vs-dotted difference is
+        stated in a sentence in the hint, not in colour.
       */}
     </div>
   );
 }
 
 /**
- * ⭐ চলতি মাস — **আর এখানে সংখ্যাটা যতটা জরুরি, তার ব্যাখ্যাটাও ততটাই।**
+ * The current month. **Here the explanation matters as much as the number.**
  *
- * ⚠️⚠️ pace আসে ট্র্যাকিং শুরুর দিন থেকে, মাসের ১ তারিখ থেকে নয়। কাঁচা
- *    হিসাবে আগস্টে দল **১০৪২ ঘণ্টা পিছিয়ে** দেখাত — সংখ্যাটা সত্য, গল্পটা
- *    মিথ্যা: ওই ঘাটতির পুরোটাই ১–১২ আগস্ট, যখন মনিটরিং ছিলই না।
+ * Careful: pace runs from the day tracking started, not from the 1st. On the raw
+ *    figures the team would have shown **1042 hours behind** in August: the number
+ *    is true, the story false: all of that shortfall was 1-12 August, when there
+ *    was no monitoring at all.
  *
- * ⭐ তাই তারিখটা কার্ডেই **লেখা থাকে** — সমন্বয়টা অদৃশ্য অনুমান হয়ে
- *    গেলে সেটা আরেক রকম মিথ্যা হতো।
+ * Important: so the date is **written on the card**; an adjustment that became an
+ *    invisible assumption would be another kind of falsehood.
  */
 export function MonthCard({ month }: { month: TeamTrend['month'] }) {
   const pct = pctOf(month.creditedSec, month.targetSec);
@@ -224,9 +226,9 @@ export function MonthCard({ month }: { month: TeamTrend['month'] }) {
           {formatDuration(month.creditedSec)}
         </span>
         {/*
-          ⚠️ `targetText`, সোজা `formatDuration` নয় — ২২৭২ ঘণ্টা পুরো
-             ঘণ্টায় পড়ে, তাই ওটা লিখত `2272h 0m`। ওই শূন্য মিনিটটা
-             প্রতিদিন চোখে লাগত অথচ কিছুই বলত না (TodayRing-এর নোট)।
+          Careful: `targetText`, not plain `formatDuration`: 2272 hours falls on a whole
+             hour, so that would write `2272h 0m`. A pointless zero minutes every day
+             (see the TodayRing note).
         */}
         <span className="text-xs text-ink-3">
           of <span className="num">{targetText(month.targetSec)}</span>
@@ -246,9 +248,9 @@ export function MonthCard({ month }: { month: TeamTrend['month'] }) {
           of the month&rsquo;s target
         </span>
         {/*
-          ⚠️ "পিছিয়ে" **লাল নয়**, আর সেটা ইচ্ছাকৃত। এই থিমে সলিড লাল মানে
-             "এখনই কিছু করুন" (এজেন্ট বন্ধ, ভুল) — মাসের মাঝপথে স্বাভাবিক
-             ওঠানামাকে লাল দেখালে দু-দিনেই লাল মানে "কিছু না" হয়ে যেত।
+          Careful: "behind" is **not red**, deliberately. In this theme solid red means
+             "act now" (agent off, error); showing normal mid-month ups and downs in red
+             would make red mean "nothing" within two days.
         */}
         <span className={ahead ? 'text-ok' : 'text-ink-2'}>
           <span className="num font-semibold">
@@ -261,8 +263,8 @@ export function MonthCard({ month }: { month: TeamTrend['month'] }) {
       {month.trackedFrom && (
         <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
           {/*
-            ⚠️ তারিখটায় `.num` নয় — tabular figures ওকে `13  Aug`-এর মতো
-               ঢিলে দেখাত। সমান-প্রস্থ অঙ্ক কেবল কলামে সাজানো সংখ্যার জন্য।
+            Careful: no `.num` on the date: tabular figures would make it look loose,
+               like `13  Aug`. Equal-width digits are only for numbers aligned in a column.
           */}
           Pace counts whole days from {formatDateShort(month.trackedFrom)}, when
           tracking started — the days before it, and today, are not counted
@@ -274,39 +276,40 @@ export function MonthCard({ month }: { month: TeamTrend['month'] }) {
 }
 
 /**
- * ⭐ **Top performers** — **আজীবন** সবচেয়ে বেশি ঘণ্টা যাঁদের।
+ * **Top performers**: the most hours **of all time**.
  *
- * ⚠️ মাপটা **সব মাস মিলিয়ে মোট ঘণ্টা**, মালিকের বাছা। ফলে যিনি আগে যোগ
- *    দিয়েছেন তিনি **স্থায়ীভাবে** উপরে থাকেন — নতুন কেউ যত ভালোই করুন,
- *    ধরতে পারবেন না। মাসিকে অন্তত প্রতি মাসে ক্রম নতুন করে শুরু হতো।
+ * Careful: the measure is **total hours across all months**, the owner's choice. So
+ *    whoever joined earlier stays **permanently** on top; no matter how well a
+ *    newcomer does, they cannot catch up. The monthly view at least restarted the
+ *    order every month.
  *
- * ⭐ তাই প্রতিটা নামের পাশে **আসল ঘণ্টাটা** লেখা থাকে, আর বারগুলো শীর্ষ
- *    জনের সাপেক্ষে আঁকা। সবাই কাছাকাছি থাকলে বারগুলোও প্রায় সমান হয় —
- *    অর্থাৎ "ক্রমটা অর্থবহ কি না" প্রশ্নের উত্তর সংখ্যাগুলোই দিয়ে দেয়,
- *    আলাদা কোনো সতর্কবার্তা ছাড়াই।
+ * Important: so **the real hours are written beside each name**, and the bars are
+ *    drawn relative to the top person. When everyone is close, the bars are nearly
+ *    equal too, so the numbers themselves answer "is the ranking meaningful",
+ *    with no separate warning.
  *
- * ⚠️ বার সবুজ নয়, নিরপেক্ষ `ink` — এটা টার্গেট ছোঁয়ার হিসাব নয়, নিছক
- *    তুলনা। সবুজ রাখলে "লক্ষ্য পূরণ" বলে ভুল হতো (ProgressBar-এর নিয়ম)।
+ * Careful: the bar is not green but neutral `ink`: this is not a target-reached
+ *    calculation, just a comparison. Green would wrongly say "goal met" (the
+ *    ProgressBar rule).
  */
 /**
- * ⭐⭐ **সবচেয়ে কম ঘণ্টা যাঁদের** *(মালিকের চাওয়া, ৩০ আগস্ট ২০২৬:
- * "sob theke kom kaj kora staff er name dekhaO last kiso din er upore
- * base kore")*।
+ * **Fewest hours.** The owner asked to see the names of the people who worked the
+ * least, based on the last several days.
  *
- * ⚠️⚠️ **প্রতিটা নামের নিচে "কত দিনে" লেখা থাকে, আর ওই লাইনটাই এই
- * কার্ডটাকে সৎ রাখে।** শুধু "৪ ঘণ্টা" দেখালে পাঠক ধরে নিতেন লোকটা কাজ
- * করেননি — অথচ তিনি হয়তো ছুটিতে ছিলেন, অসুস্থ ছিলেন, বা গত বুধবার যোগ
- * দিয়েছেন। ⭐ এই প্রকল্পের নিয়মটাই তাই: **যে সংখ্যা দুভাবে পড়া যায়, তার
- * পাশে ভুল পড়া ঠেকানোর কথাটা বসে** (`Stat`-এর `sub`)।
+ * Careful: **each name has "over how many days" beneath it, and that line is what
+ * keeps this card honest.** Showing just "4 hours" would lead readers to assume the
+ * person did not work, when they may have been on leave, ill, or joined last
+ * Wednesday. Important: this is the project's rule: **a number that can be read
+ * two ways gets, beside it, the words that prevent the misreading** (`Stat`'s `sub`).
  *
- * ⚠️⚠️ **এখানে কোনো বার নেই, আর সেটা ইচ্ছাকৃত।** `TopPerformers`-এ বার
- * মানে "শীর্ষজনের তুলনায় কতটা" — নিরীহ। কিন্তু কম-ঘণ্টার তালিকায় লম্বা
- * বার পড়া হতো "কত খারাপ" হিসেবে, আর সেটা একটা রায়। ⭐ কার্ডটার কাজ
- * প্রশ্ন তোলা ("এই পাঁচজনকে দেখুন"), রায় দেওয়া নয় — কারণটা তো পর্দায়
- * নেই, সেটা মানুষটার কাছে।
+ * Careful: **there is no bar here, deliberately.** In `TopPerformers` a bar means
+ * "how much compared with the top", which is harmless. But in a low-hours list a
+ * long bar would be read as "how bad", and that is a verdict. Important: the card's
+ * job is to raise a question ("look at these five"), not to pass judgement; the
+ * reason is not on the screen anyway, it is with the person.
  *
- * ⚠️ রঙও নিরপেক্ষ — লাল নয়। কম ঘণ্টা কোনো **অ্যালার্ট** নয়; ছুটি,
- * অসুস্থতা, নতুন যোগদান — সবই এখানে এসে পড়ে।
+ * Careful: the colour is neutral too, not red. Few hours is not an **alert**;
+ * leave, illness and new joiners all land here.
  */
 export function FewestHours({
   people,
@@ -334,9 +337,9 @@ export function FewestHours({
           <div className="min-w-0">
             <div className="truncate text-[13px] font-medium">{p.fullName}</div>
             {/*
-              ⚠️⚠️ শূন্য দিনের কথাটা আলাদা করে লেখা — "0 of 7 days counted"
-                 পড়তে গিয়ে চোখ শূন্যটা এড়িয়ে যায়, আর তখন লোকটাকে
-                 "কাজ করেননি" মনে হয়, "ছিলেনই না" নয়।
+              Careful: the zero-day case is spelled out separately: reading "0 of 7 days
+                 counted", the eye skips the zero, and then the person seems to "not
+                 have worked" instead of "not have been there".
             */}
             <div className="mt-0.5 text-[11.5px] text-ink-3">
               {p.daysCounted === 0
@@ -375,16 +378,17 @@ export function TopPerformers({ leaders }: { leaders: TeamTrend['leaders'] }) {
           <div className="min-w-0">
             <div className="truncate text-[13px] font-medium">{p.fullName}</div>
             {/*
-              ⭐ বারটা **সবুজ** (`ok`), সাদা (`ink`) নয় — বোর্ডের বাকি সব
-                 চার্টে "গোনা হওয়া ঘণ্টা" ইতিমধ্যেই এই রঙেই আঁকা হয়
-                 (দিনের ছন্দ, শেষ ৭ দিন)। এখানে সাদা থাকায় একই জিনিস একই
-                 পর্দায় দুই রঙে দেখাত।
+              Important: the bar is **green** (`ok`), not white (`ink`): every other
+                 chart on the board already draws "counted hours" in this colour (day
+                 rhythm, last 7 days). White here would show the same thing in two
+                 colours on one screen.
 
-              ⚠️ এটা "টার্গেট পূরণ" বোঝায় না — ওই মানেটা `TargetBars`-এর,
-                 যেখানে নিরপেক্ষ বার সবুজ **হয়ে যায়** টার্গেট ছুঁলে। এখানে
-                 বারটা কেবল **অনুপাত**: শীর্ষজনের তুলনায় কে কতটা। তাই
-                 লম্বাটা "ভালো" নয়, শুধু "বেশি" — আর সংখ্যাটা পাশেই লেখা
-                 থাকে বলে ক্রমটা কীসের উপর দাঁড়ানো তা পর্দাতেই দেখা যায়।
+              Careful: this does not mean "target met"; that meaning belongs to
+                 `TargetBars`, where a neutral bar **turns** green on reaching the
+                 target. Here the bar is only a **ratio**: how much each person has
+                 compared with the top. So long means not "good" but "more", and since
+                 the number is written beside it, what the ranking stands on is
+                 visible on screen.
             */}
             <div className="mt-1 h-1 overflow-hidden rounded-full bg-line">
               <div
@@ -405,10 +409,10 @@ export function TopPerformers({ leaders }: { leaders: TeamTrend['leaders'] }) {
 }
 
 /**
- * সবচেয়ে সাধারণ দৈনিক টার্গেট — রেখাটা এটার উপরেই বসে।
+ * The most common daily target; the line sits at this.
  *
- * ⚠️ গড় নেওয়া হয় না: ছুটির দিনের শূন্য টার্গেট গড়টাকে নিচে টেনে নামাত,
- *    আর রেখাটা এমন একটা উচ্চতায় বসত যেটা কোনো দিনেরই সত্যি নয়।
+ * Careful: no average is taken: a day off's zero target would drag the average down,
+ *    and the line would sit at a height that is true for no day.
  */
 function commonTarget(days: TeamTrend['days']): number {
   const counts = new Map<number, number>();

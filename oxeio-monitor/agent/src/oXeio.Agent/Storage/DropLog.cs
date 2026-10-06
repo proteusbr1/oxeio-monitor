@@ -4,26 +4,26 @@ using System.Text;
 namespace oXeio.Agent.Storage;
 
 /// <summary>
-/// ⭐ যেসব ডেটা কোনোদিন সার্ভারে পৌঁছাবে না, তার একমাত্র সাক্ষী।
+/// The only witness to data that will never reach the server.
 ///
-/// আউটবক্স থেকে ডেটা তিনভাবে চিরতরে যায়: সার্ভারের স্থায়ী প্রত্যাখ্যান
-/// (<c>AbandonAsync</c>), ডিস্কের বাজেট (<c>EvictAsync</c>), আর বয়স।
-/// <see cref="oXeio.Core.Agent.IOutboxStore.AbandonAsync"/>-এর ডকে বলা আছে —
-/// নীরবে মোছা চলবে না। কারণটা নিষ্ঠুর রকমের বাস্তব: একটা মেশিন ৪২২ পেয়ে মাসের
-/// পর মাস চুপচাপ ডেটা ফেলে দিতে পারে, আর রিপোর্টে শুধু "ওর ঘণ্টা কম" দেখা যাবে।
-/// কেউ তখন এজেন্টকে সন্দেহ করবে না, স্টাফকে করবে।
+/// Data leaves the outbox for good in three ways: permanent rejection by the server
+/// (<c>AbandonAsync</c>), the disk budget (<c>EvictAsync</c>), and age.
+/// The doc on <see cref="oXeio.Core.Agent.IOutboxStore.AbandonAsync"/> says silent deletion
+/// is not allowed. The reason is brutally practical: a machine that gets 422 could quietly
+/// discard data for months, and the report would only show "their hours are low".
+/// Nobody would suspect the agent; they would suspect the staff member.
 ///
-/// ⚠️ এটা সাধারণ লগার নয় আর হতেও চায় না। এজেন্টের আসল লগার যে-ই লিখুক, সে
-/// ক্র্যাশ করলে, বন্ধ থাকলে বা এখনো তৈরি না হলেও এই ফাইলটা লেখা হবে — কারণ
-/// "ডেটা মুছে ফেলেছি" কথাটা হারিয়ে গেলে সেটা ডেটা হারানোর চেয়েও খারাপ।
-/// তাই এর কোনো নির্ভরতা নেই আর এটা কখনো ব্যতিক্রম ছড়ায় না।
+/// Careful: this is not a normal logger and does not want to be. Whoever writes the agent's
+/// real logger, this file is still written if that logger crashes, is off or does not exist
+/// yet, because losing the fact "I deleted data" is worse than losing the data itself.
+/// So it has no dependencies and never lets an exception escape.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class DropLog
 {
     /// <summary>
-    /// ১ MiB ছাড়ালে একবার ঘোরানো হয়। ছোট রাখা ইচ্ছাকৃত — ডিস্ক ভরে যাওয়ার
-    /// কারণেই যদি ছাঁটাই চলতে থাকে, তখন লগ লিখে ডিস্ক আরও ভরানোটা হাস্যকর হতো।
+    /// Rotated once past 1 MiB. Kept small on purpose: if trimming is running because the
+    /// disk is full, filling the disk further with a log would be absurd.
     /// </summary>
     private const long MaxBytes = 1024 * 1024;
 
@@ -37,17 +37,17 @@ internal sealed class DropLog
         _rotated = _path + ".1";
     }
 
-    /// <summary>স্টার্টআপ লগে "ফেলে দেওয়া ডেটার হিসাব এখানে" বলে দেখানোর জন্য।</summary>
+    /// <summary>Shown in the startup log as "the record of dropped data is here".</summary>
     public string FilePath => _path;
 
     /// <summary>
-    /// এক লাইন লেখা। ⚠️ কখনো throw করে না — ড্রপ লগ লিখতে না পারা মানে
-    /// আপলোড থামানো নয়।
+    /// Writes one line. Careful: never throws; failing to write the drop log must not stop
+    /// uploads.
     /// </summary>
     public void Write(string line)
     {
-        // একই ফাইলে ট্র্যাকিং থ্রেড আর সিঙ্ক থ্রেড দুজনেই লিখতে পারে।
-        // lock ছাড়া দুটো append মিশে গিয়ে লাইন ভেঙে যেত।
+        // Both the tracking thread and the sync thread can write to the same file.
+        // Without the lock, two appends would interleave and break lines.
         lock (_gate)
         {
             try
@@ -62,13 +62,13 @@ internal sealed class DropLog
             }
             catch (Exception)
             {
-                // ইচ্ছাকৃতভাবে গিলে ফেলা। এখানে আর কিছু করার নেই — কনসোলে
-                // লিখতে গেলে সার্ভিস মোডে সেটাও কোথাও যায় না।
+                // Swallowed on purpose. Nothing else can be done here; writing to the
+                // console goes nowhere in service mode either.
             }
         }
     }
 
-    /// <summary>একাধিক লাইন এক ব্যাচে — প্রতিবার ফাইল খোলা এড়াতে।</summary>
+    /// <summary>Several lines in one batch, to avoid opening the file each time.</summary>
     public void WriteMany(IEnumerable<string> lines)
     {
         lock (_gate)
@@ -92,7 +92,7 @@ internal sealed class DropLog
     }
 
     /// <summary>
-    /// পুরোনোটা একটাই কপি রাখা হয় (.1)। ⚠️ লক ধরা অবস্থায় ডাকতে হবে।
+    /// Keeps exactly one old copy (.1). Careful: must be called while holding the lock.
     /// </summary>
     private void Rotate()
     {

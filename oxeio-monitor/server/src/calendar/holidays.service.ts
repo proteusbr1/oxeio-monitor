@@ -43,11 +43,11 @@ export interface HolidayView {
 }
 
 /**
- * ছুটির ক্যালেন্ডার (owner-only)।
+ * The holiday calendar (owner-only).
  *
- * ⚠️ এটা কোনো ব্লক নয় — ছুটির দিনে কেউ কাজ করলে তার ঘণ্টা পুরোপুরি গোনা
- * হয় (স্কিমার কমেন্ট দেখুন)। ছুটি শুধু দুই কাজে লাগে: হিটম্যাপে দিন
- * চিহ্নিত করা, আর pace-এর কর্মদিবস গোনা (§ ২.১-খ)।
+ * Careful: this is not a block: if someone works on a holiday their hours are
+ * counted in full (see the schema comment). A holiday is used for only two
+ * things: marking the day on the heatmap, and counting workdays for pace (§ 2.1(b)).
  */
 @Injectable()
 export class HolidaysService {
@@ -60,9 +60,9 @@ export class HolidaysService {
     const where: Prisma.HolidayWhereInput = {};
 
     if (query.year !== undefined) {
-      // ⚠️ `getFullYear()` দিয়ে ছাঁকা যায় না — SQL-এ যেতে হবে, তাই
-      //    বছরের সীমা দুটো UTC তারিখ হিসেবে বানানো। শেষটা **exclusive**,
-      //    নইলে ৩১ ডিসেম্বর বাদ পড়ত বা পরের ১ জানুয়ারি ঢুকে যেত।
+      // Careful: `getFullYear()` cannot be used to filter; this has to go into
+      // SQL, so the year's bounds are built as two UTC dates. The end is
+      // **exclusive**, otherwise 31 December would be dropped or the next 1 January let in.
       where.holidayDate = {
         gte: new Date(Date.UTC(query.year, 0, 1)),
         lt: new Date(Date.UTC(query.year + 1, 0, 1)),
@@ -109,7 +109,7 @@ export class HolidaysService {
    * A calendar from a file (CSV or ICS) — shown first (`dryRun`), then
    * imported.
    *
-   * ⚠️ Same rules as the seed (prisma/seed.ts, deploy/README.md § ২.১গ):
+   * Careful: same rules as the seed (prisma/seed.ts, deploy/README.md § 2.1c):
    *    · one holiday per date, and a date already in the table is never
    *      changed — a different name is only reported;
    *    · a date in the current or a past month changes that month's
@@ -197,15 +197,15 @@ export class HolidaysService {
   }
 
   /**
-   * ⭐ এখানে আসল `DELETE` আছে — পুরো মডিউলে এই একটাই।
+   * The real `DELETE` is here: the only one in the whole module.
    *
-   * কারণ `holidays`-এর দিকে কোনো FK তাকিয়ে নেই; সারিটা কারো ঘণ্টা বা
-   * স্ক্রিনশট ধরে রাখে না।
+   * No FK points at `holidays`; the row holds nobody's hours or screenshots.
    *
-   * ⚠️ তবু নিরীহ নয়: ছুটি মুছলে ওই মাসের `expected_workdays` বেড়ে যায়,
-   * ফলে পরের rollup-এ সবার **pace পিছিয়ে যায়** — কেউ কোনো কাজ না করেও।
-   * তাই মুছে ফেলা সারিটার তারিখ ও নাম audit meta-তে তুলে রাখা হয়, যাতে
-   * "গত মঙ্গলবার সবার pace হঠাৎ পড়ল কেন" প্রশ্নের উত্তর থাকে।
+   * Careful: still not harmless: deleting a holiday raises that month's
+   * `expected_workdays`, so at the next rollup everyone's **pace falls
+   * behind**, though nobody did anything. So the deleted row's date and name
+   * are kept in the audit meta, to answer "why did everyone's pace suddenly
+   * drop last Tuesday".
    */
   async remove(
     actor: SessionUser,
@@ -263,9 +263,9 @@ export class HolidaysService {
 }
 
 /**
- * ⚠️ `HolidayView` সরাসরি audit meta-তে দেওয়া যায় না — Prisma-র
- * `InputJsonValue` index signature চায়, আর interface-এ সেটা থাকে না।
- * তাই সমতল `Record`-এ নামিয়ে দেওয়া।
+ * Careful: `HolidayView` cannot be passed straight into the audit meta:
+ * Prisma's `InputJsonValue` wants an index signature, which an interface does
+ * not have. So it is flattened into a plain `Record`.
  */
 function toAuditMeta(view: HolidayView): Record<string, string | number> {
   return {
@@ -284,7 +284,7 @@ function toView(holiday: {
 }): HolidayView {
   return {
     id: holiday.id,
-    // `@db.Date` UTC-মধ্যরাত হিসেবে আসে, তাই ISO-র প্রথম দশ অক্ষরই তারিখ
+    // `@db.Date` comes as UTC midnight, so the first ten characters of the ISO string are the date
     holidayDate: holiday.holidayDate.toISOString().slice(0, 10),
     name: holiday.name,
     type: holiday.type,

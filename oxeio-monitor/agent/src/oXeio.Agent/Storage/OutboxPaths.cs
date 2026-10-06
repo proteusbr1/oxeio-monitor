@@ -3,32 +3,31 @@ using System.Runtime.Versioning;
 namespace oXeio.Agent.Storage;
 
 /// <summary>
-/// ⭐ এজেন্টের ডিস্কের সব পাথ ঠিক এখানেই — আর কোথাও ডিরেক্টরির নাম লেখা হবে না।
+/// Every path on the agent's disk lives here; no other place writes a directory name.
 ///
-/// এক জায়গায় রাখার কারণ শুধু পরিপাটি কোড নয়। আউটবক্সের সারি আর .webp ফাইল
-/// দুটো আলাদা মডিউল লেখে; দুজন দুরকম ফোল্ডার ধরে নিলে সারি বলবে ফাইল আছে
-/// আর ডিস্কে ফাইল থাকবে অন্য কোথাও — তখন আপলোড চিরকাল ব্যর্থ হবে আর অনাথ
-/// ফাইলগুলো কোনো বাজেটের হিসাবে ধরাই পড়বে না।
+/// This is not just about tidy code. The outbox rows and the .webp files are written by two
+/// different modules; if they assumed different folders, a row would say a file exists
+/// while the file sits somewhere else on disk. Uploads would then fail forever and the
+/// orphaned files would never be counted in any budget.
 ///
-/// <b>কেন %ProgramData%:</b> ইউজার প্রোফাইল মুছে দিলে বা রোমিং প্রোফাইল রিসেট
-/// করলেও এটা টিকে থাকে, আর মেশিনে একটাই কপি — অফিসের PC-তে IT নিয়মিত প্রোফাইল
-/// রিসেট করে, তখন %AppData%-তে রাখা এক সপ্তাহের কিউ নিঃশব্দে উবে যেত।
+/// <b>Why %ProgramData%:</b> it survives deleting a user profile or resetting a roaming
+/// profile, and there is one copy per machine. IT regularly resets profiles on office PCs,
+/// and a week of queue kept under %AppData% would silently evaporate.
 ///
-/// ⚠️ ACL-এর ফাঁদ: ইনস্টলার (elevated) যদি <c>C:\ProgramData\oXeio</c> বানায়,
-/// সাধারণ ইউজার সেখানে শুধু পড়তে পারবে — লিখতে পারবে না, কারণ ProgramData-র
-/// ডিফল্ট ACL-এ Users পায় read+execute, আর CREATOR OWNER-এর full control শুধু
-/// যে বানিয়েছে তার জন্য। ফল: এজেন্ট চালু হয় কিন্তু একটাও সারি লিখতে পারে না।
-/// তাই ইনস্টলারকে ওই ফোল্ডারে Users-কে Modify দিতেই হবে, আর এখানে
-/// <see cref="Resolve"/> সত্যিকারের একটা ফাইল লিখে যাচাই করে নেয় — না পারলে
-/// %LOCALAPPDATA%-তে নেমে আসে (কিউ প্রোফাইল-মোছায় হারাবে, কিন্তু এজেন্ট অন্তত
-/// ডেটা জমাতে থাকবে; "কিছুই না গোনার" চেয়ে ভালো)।
+/// Careful, ACL trap: if the (elevated) installer creates <c>C:\ProgramData\oXeio</c>, an
+/// ordinary user can only read there, not write, because in ProgramData's default ACL Users
+/// get read+execute and CREATOR OWNER's full control applies only to whoever created it.
+/// The result: the agent starts but cannot write a single row. So the installer must grant
+/// Users Modify on that folder, and <see cref="Resolve"/> here verifies by writing a real
+/// file. If that fails it falls back to %LOCALAPPDATA% (the queue is lost if the profile is
+/// deleted, but the agent at least keeps collecting data, which beats counting nothing).
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class OutboxPaths
 {
     public const string AppFolderName = "oXeio";
 
-    /// <summary>লেখার অনুমতি যাচাইয়ের ফাইল। থেকে গেলেও ক্ষতি নেই, তাই নাম স্থির।</summary>
+    /// <summary>Write-permission probe file. Harmless if left behind, so the name is fixed.</summary>
     private const string ProbeFileName = ".write-probe";
 
     private static OutboxPaths? _default;
@@ -49,27 +48,27 @@ internal sealed class OutboxPaths
 
     public string Root { get; }
 
-    /// <summary>%ProgramData% ব্যবহার করা যায়নি বলে %LOCALAPPDATA%-তে নামতে হয়েছে।</summary>
+    /// <summary>%ProgramData% could not be used, so we fell back to %LOCALAPPDATA%.</summary>
     public bool IsFallback { get; }
 
-    /// <summary>কেন এই রুট বেছে নেওয়া হলো — স্টার্টআপ লগে হুবহু লেখার জন্য।</summary>
+    /// <summary>Why this root was chosen; written verbatim to the startup log.</summary>
     public string ResolutionNote { get; }
 
     public string Database { get; }
 
-    /// <summary>WAL ফাইলগুলো SQLite নিজেই বানায়; এখানে শুধু ডায়াগনস্টিক ও ব্যাকআপ সরানোর জন্য।</summary>
+    /// <summary>SQLite creates the WAL files itself; here for diagnostics and backups only.</summary>
     public string DatabaseWal => Database + "-wal";
     public string DatabaseShm => Database + "-shm";
 
     public string QueueRoot { get; }
 
     /// <summary>
-    /// .webp বাইটগুলো এখানে, DB-র ভেতরে নয়।
+    /// The .webp bytes live here, not inside the DB.
     ///
-    /// ⚠️ ছবি BLOB হিসেবে সারিতে রাখলে ২০০ KB × দিনে ৮৬৪টা ছবি DB-কে দিনে ১৭০ MB
-    /// করে ফোলাত, আর প্রতিটা DELETE-এর পরে ওই পেজগুলো ফাইলের ভেতরে ফাঁকা পড়ে
-    /// থাকত — VACUUM ছাড়া ডিস্ক ফেরত আসে না, আর VACUUM-এর সময় পুরো DB লক হয়।
-    /// আলাদা ফাইল রাখলে মোছা মানেই সঙ্গে সঙ্গে জায়গা ফেরত।
+    /// Careful: storing screenshots as BLOBs in the queue (200 KB x 864 screenshots a day)
+    /// would grow the DB by 170 MB a day, and after every DELETE those pages would sit empty
+    /// inside the file; the disk space only comes back with VACUUM, which locks the whole DB.
+    /// With separate files, deleting a file frees the space immediately.
     /// </summary>
     public string ScreenshotQueue { get; }
 
@@ -77,16 +76,16 @@ internal sealed class OutboxPaths
     public string Updates { get; }
     public string State { get; }
 
-    /// <summary>প্রসেসে একবারই হিসাব হয় — প্রতিবার ডিস্ক প্রোব করা হয় না।</summary>
+    /// <summary>Computed once per process; the disk is not probed every time.</summary>
     public static OutboxPaths Default => _default ??= Resolve();
 
-    /// <summary>টেস্ট বা ভিন্ন রুট চাপিয়ে দেওয়ার জন্য (যাচাই ছাড়াই)।</summary>
+    /// <summary>For tests or forcing a different root (no verification).</summary>
     public static OutboxPaths ForRoot(string root) =>
         new(Path.GetFullPath(root), isFallback: false, resolutionNote: "explicit root");
 
     /// <summary>
-    /// রুট বাছাই। ⚠️ কখনো throw করে না — স্টার্টআপে পাথ ঠিক করতে গিয়ে প্রসেস মরলে
-    /// এজেন্ট চিরকাল ক্র্যাশ-লুপে থাকত আর কেউ টেরও পেত না।
+    /// Picks the root. Careful: never throws. If the process died while resolving paths at
+    /// startup, the agent would be in a crash loop forever and nobody would notice.
     /// </summary>
     public static OutboxPaths Resolve()
     {
@@ -108,17 +107,17 @@ internal sealed class OutboxPaths
                 }
             }
 
-            // দুটোই ব্যর্থ: তবু ProgramData-র পাথটাই ফেরত দিই, যাতে লগে আসল
-            // পাথ আর আসল কারণ দেখা যায়। স্টোর খুলতে গিয়ে পরিষ্কার এরর দেবে।
+            // Both failed: still return the ProgramData path, so the log shows the real path
+            // and the real reason. Opening the store will then give a clear error.
             return new OutboxPaths(root, isFallback: false, $"⚠️ nowhere is writable ({why})");
         }
 
-        // SpecialFolder খালি স্ট্রিং দিলে (অস্বাভাবিক, তবু) — অন্তত temp-এ চলুক
+        // SpecialFolder returned an empty string (unusual, but possible): at least run from temp
         var temp = Path.Combine(Path.GetTempPath(), AppFolderName);
         return new OutboxPaths(temp, isFallback: true, "⚠️ temp — SpecialFolder was not available");
     }
 
-    /// <summary>সব ফোল্ডার বানিয়ে নেওয়া। বারবার ডাকা নিরাপদ।</summary>
+    /// <summary>Creates all the folders. Safe to call repeatedly.</summary>
     public void EnsureCreated()
     {
         Directory.CreateDirectory(Root);
@@ -130,16 +129,16 @@ internal sealed class OutboxPaths
     }
 
     /// <summary>
-    /// একটা স্ক্রিনশটের গন্তব্য। ফোল্ডার তৈরি করেই দেয়।
+    /// Destination of one screenshot. Creates the folder as well.
     ///
-    /// তারিখ ধরে সাবফোল্ডার কেন: সাত দিনে ২৮৮ স্লট × ৩ মনিটর ≈ ৬,০০০ ফাইল।
-    /// এক ফোল্ডারে রাখলেও NTFS সামলাবে, কিন্তু অনাথ-ফাইল ঝাড়ু দিতে গিয়ে প্রতিবার
-    /// পুরো তালিকা পড়তে হতো; তারিখে ভাগ থাকলে পুরোনো দিনের ফোল্ডার খালি হলেই
-    /// পুরোটা একবারে সরিয়ে দেওয়া যায়।
+    /// Why a subfolder per date: 288 slots x 3 monitors over seven days is about 6,000 files.
+    /// NTFS would cope with one folder, but sweeping orphan files would have to read the whole
+    /// list every time; with a date split, once an old day's folder is empty the whole folder
+    /// can be removed at once.
     ///
-    /// ⚠️ ফোল্ডার/ফাইলের নাম UTC ধরে — লোকাল সময় নিলে ঘড়ি পেছালে বা DST-জাতীয়
-    /// লাফে একই নাম দুবার আসতে পারত। তার ওপরেও নামের ভেতরে
-    /// <paramref name="clientUuid"/> আছে, তাই সংঘর্ষ অসম্ভব।
+    /// Careful: folder/file names use UTC. With local time, a clock set back or a DST-style
+    /// jump could produce the same name twice. On top of that the name contains
+    /// <paramref name="clientUuid"/>, so a collision is impossible.
     /// </summary>
     public string NewScreenshotPath(DateTimeOffset slotStart, int monitorIndex, Guid clientUuid)
     {
@@ -152,22 +151,22 @@ internal sealed class OutboxPaths
     }
 
     /// <summary>
-    /// A06 — ওই ছবির ৩২০px থাম্বনেইল কোথায় থাকবে।
+    /// Where the 320px thumbnail of that screenshot lives.
     ///
-    /// ⭐ <b>নিয়মটার একমাত্র সংজ্ঞা এখানেই।</b> চারটে জায়গা এই পথটা জানে —
-    /// লেখা (AgentHost), পাঠানো (HttpSyncClient), মোছা (DeleteFiles), আর
-    /// অনাথ-ঝাড়ু (SweepOrphanFiles)। যেকোনো একটা আলাদা নিয়ম মানলে হয়
-    /// থাম্বনেইল কখনো যেত না, নয়তো ঝাড়ুদার সব থাম্বনেইল <b>মুছে দিত</b>।
+    /// <b>This is the only definition of the rule.</b> Four places know this path: writing
+    /// (AgentHost), sending (HttpSyncClient), deleting (DeleteFiles) and the orphan sweep
+    /// (SweepOrphanFiles). If any one followed a different rule, either the thumbnail would
+    /// never be sent or the sweeper would <b>delete</b> every thumbnail.
     ///
-    /// ⚠️ শেষটা <c>.webp</c>-ই রাখা হয়েছে যাতে ঝাড়ুদারের <c>*.webp</c>
-    /// প্যাটার্নে ধরা পড়ে — অনাথ ছবির থাম্বনেইলও যেন পড়ে না থাকে।
+    /// Careful: the ending stays <c>.webp</c> so that the sweeper's <c>*.webp</c> pattern
+    /// catches it; an orphaned screenshot's thumbnail must not be left behind either.
     /// </summary>
     public static string ThumbPathFor(string webpPath) =>
         Path.ChangeExtension(webpPath, null) + "-thumb.webp";
 
     /// <summary>
-    /// খালি হয়ে যাওয়া তারিখ-ফোল্ডার সরানো। ফেরত দেয় কতগুলো গেল।
-    /// ব্যর্থতা গিলে ফেলা হয় — ফোল্ডার সাফ করতে গিয়ে ট্র্যাকিং থামানোর মানে হয় না।
+    /// Removes date folders that have become empty. Returns how many were removed.
+    /// Failures are swallowed; stopping tracking over folder cleanup makes no sense.
     /// </summary>
     public int PruneEmptyScreenshotFolders()
     {
@@ -193,9 +192,9 @@ internal sealed class OutboxPaths
     }
 
     /// <summary>
-    /// ফোল্ডারটা সত্যিই লেখা যায় কি না — <c>Directory.CreateDirectory</c> সফল হওয়া
-    /// যথেষ্ট প্রমাণ নয়, কারণ ফোল্ডার আগে থেকেই থাকলে ওটা কিছু না করেই সফল হয়
-    /// যদিও আমাদের লেখার অনুমতি নেই। তাই সত্যিকারের একটা ফাইল লিখে দেখা হয়।
+    /// Whether the folder is really writable. <c>Directory.CreateDirectory</c> succeeding is
+    /// not enough proof: if the folder already exists it succeeds without doing anything even
+    /// when we have no write permission. So we write a real file and see.
     /// </summary>
     private static bool TryPrepare(string root, out string why)
     {
@@ -210,10 +209,10 @@ internal sealed class OutboxPaths
             why = "";
             return true;
         }
-        // ⚠️ সব ব্যতিক্রম ধরা হচ্ছে ইচ্ছাকৃতভাবে। এখানে SecurityException,
-        // PathTooLongException, ফিল্টার-ড্রাইভারের অদ্ভুত IOException — যেকোনো
-        // কিছুই আসতে পারে, আর স্টার্টআপে পাথ বাছতে গিয়ে প্রসেস মরলে মেশিনটা
-        // চিরকাল ক্র্যাশ-লুপে থাকত। উত্তর একটাই দরকার: "এখানে লেখা যায় কি না"।
+        // Careful: catching every exception is deliberate. SecurityException,
+        // PathTooLongException, odd IOExceptions from filter drivers, anything can come here,
+        // and if the process died while choosing the path at startup the machine would be
+        // in a crash loop forever. We only need one answer: "can we write here or not".
         catch (Exception ex)
         {
             why = $"{ex.GetType().Name}: {ex.Message}";

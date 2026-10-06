@@ -24,10 +24,10 @@ export function hashToken(token: string): string {
 }
 
 /**
- * এজেন্টের সব endpoint-এর দরজা।
+ * The gate for all agent endpoints.
  *
- * টোকেন সার্ভারে **plaintext-এ জমা থাকে না** — শুধু sha256 (I02)।
- * তাই ডাটাবেস ফাঁস হলেও কেউ এজেন্ট সেজে ডেটা পাঠাতে পারবে না।
+ * The token is **not stored in plaintext** on the server, only its sha256 (I02).
+ * So even a database leak does not let anyone impersonate an agent and send data.
  */
 @Injectable()
 export class DeviceAuthGuard implements CanActivate {
@@ -49,7 +49,7 @@ export class DeviceAuthGuard implements CanActivate {
     });
     if (!device) throw new UnauthorizedException('Device token is invalid');
 
-    // H06 — দূর থেকে revoke করলে এজেন্ট আর কিছু পাঠাতে পারবে না
+    // H06 - once revoked remotely, the agent can no longer send anything.
     if (device.status === 'revoked') {
       throw new ForbiddenException({
         message: 'This device has been revoked',
@@ -66,23 +66,22 @@ export class DeviceAuthGuard implements CanActivate {
     req.drift = drift;
 
     /**
-     * last_seen_at → "এজেন্ট ১০ মিনিট চুপ" অ্যালার্ট এর উপরেই দাঁড়ানো (G01)
+     * last_seen_at: the "agent silent for 10 minutes" alert depends on it (G01).
      *
-     * ⭐⭐⭐ **`last_drift_sec`-ও এখানেই** *(৭ সেপ্টেম্বর ২০২৬, G170)*।
+     * **`last_drift_sec` is written here too** (G170).
      *
-     * ⚠️⚠️ **যে বাগটা এটা সারায়:** ঘরটা লিখত কেবল `ClockDriftService.record()`,
-     * আর সে শুরুতেই `if (drift.level === 'none') return;` বলে ফিরে যায়।
-     * ফলে একবার বড় একটা মান বসলে সেটা **আর কোনোদিন মুছত না** — ঘড়ি ঠিক
-     * হয়ে যাওয়ার পরেও।
+     * Careful, the bug this fixes: the column was written only by
+     * `ClockDriftService.record()`, which returns immediately on
+     * `if (drift.level === 'none') return;`. So once a large value was stored it
+     * was **never cleared**, even after the clock was corrected.
      *
-     * ⚠️ মাঠে দেখা (৭ সেপ্টেম্বর): OX-13-এর ঘড়ি সকালে ১৫ ঘণ্টা পিছিয়ে
-     * ছিল, Windows কয়েক মিনিটে সেটা মিলিয়ে নেয় — কিন্তু ফ্লিট-তালিকা
-     * তারপরও **৫৪,২২৩ সেকেন্ড** দেখাচ্ছিল। পর্দার সংখ্যাটা সত্যি ছিল না,
-     * আর কোনো এররও ছিল না।
+     * Seen in the field: OX-13's clock was 15 hours behind in the morning and
+     * Windows corrected it within minutes, yet the fleet list kept showing
+     * **54,223 seconds**. The number on screen was false, and there was no error.
      *
-     * ⭐ **বাড়তি কোনো round-trip নেই** — এই UPDATE-টা এমনিতেই প্রতিটা
-     * রিকোয়েস্টে চলে। ⚠️ আর মানটা **বদলালে তবেই** SET-এ ঢোকে, ঠিক
-     * `lastState`/`agentVersion`-এর মতোই (G59-এর একই শিক্ষা)।
+     * **No extra round-trip**: this UPDATE runs on every request anyway.
+     * Careful: the value goes into the SET **only when it changes**, exactly like
+     * `lastState`/`agentVersion` (the same lesson as G59).
      */
     await this.prisma.device.update({
       where: { id: device.id },
@@ -94,7 +93,7 @@ export class DeviceAuthGuard implements CanActivate {
       },
     });
 
-    // drift থাকলে ডিভাইসে লিখে রাখা, বেশি হলে অ্যালার্ট (§ ২)
+    // Record drift on the device if present; raise an alert if it is large (§ 2).
     await this.clock.record(device.id, device.employeeId, drift);
 
     return true;

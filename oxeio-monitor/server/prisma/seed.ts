@@ -1,18 +1,20 @@
 /**
  * oXeio — seed data
  *
- *   1. Work policy   — মাসিক ২০৮ ঘণ্টা, শুক্র সাপ্তাহিক ছুটি, ছবি ০৭:০০–২৩:০০
- *   2. App categories — productive / neutral / unproductive রুল
- *   3. Holidays      — ২০২৬–২৭-এর সরকারি ছুটি (`holidays.data.ts`)
- *   4. Owner account — .env-এর SEED_OWNER_* থেকে
+ *   1. Work policy    — 208 hours a month, Friday weekly off, screenshots 07:00–23:00
+ *   2. App categories — productive / neutral / unproductive rules
+ *   3. Holidays       — public holidays for 2026–27 (`holidays.data.ts`)
+ *   4. Staff          — from `prisma/staff.local.json`
+ *   5. Owner account  — from SEED_OWNER_* in .env
  *
- * বারবার চালানো নিরাপদ — সব কিছু upsert।
+ * Safe to run repeatedly: everything is an upsert.
  *
- * ⚠️⚠️ **একটাই ব্যতিক্রম, আর সেটা টাকার:** ছুটি বসানো "নিরাপদ পুনরাবৃত্তি"
- *    নয়। চলতি বা অতীত মাসে একটা নতুন ছুটি বসলে ওই মাসের কর্মদিবস কমে,
- *    টার্গেট ও pace বদলায়, আর পে-রোলের `d ÷ D` ভগ্নাংশও বদলায়। তাই seed
- *    ওই মাসগুলোতে **নিজে থেকে কিছু বসায় না** — শুধু তারিখগুলো নাম ধরে ছাপে।
- *    বসাতে হলে `SEED_HOLIDAYS_PAST=true` (deploy/README.md § ২.১গ)।
+ * Careful: there is **one exception, and it involves money.** Inserting
+ * holidays is not a "safe repeat". A new holiday in the current or a past month
+ * reduces that month's workdays, changes targets and pace, and changes the
+ * payroll `d ÷ D` fraction. So the seed **does not insert anything** in those
+ * months by itself; it only prints the dates by name. To insert them, set
+ * `SEED_HOLIDAYS_PAST=true` (deploy/README.md section 2.1c).
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -49,7 +51,7 @@ async function seedWorkPolicy(): Promise<number> {
       name: 'Standard',
       monthlyTargetHours: SEED_POLICY.monthlyTargetHours, // default 208
       expectedWorkdays: SEED_POLICY.expectedWorkdays, // default 26
-      weeklyOffDays: SEED_POLICY.weeklyOffDays, // ISO: শুক্রবার ([5])। ⚠️ ব্লক নয় — শুক্রবারে কাজ করলেও গোনা হবে
+      weeklyOffDays: SEED_POLICY.weeklyOffDays, // ISO: Friday ([5]); not a block, Friday work still counts
       screenshotFrom: '07:00',
       screenshotTo: '23:00',
       idleThresholdSec: 60,
@@ -121,7 +123,7 @@ const RULES: Rule[] = [
   [MatchType.domain, 'behance.net', 'Behance', Productivity.productive],
   [MatchType.domain, 'unsplash.com', 'Unsplash', Productivity.productive],
 
-  // ── office ও ডকুমেন্ট ─────────────────────────────────────────
+  // ── office and documents ──────────────────────────────────────
   [MatchType.process, 'excel.exe', 'Microsoft Excel', Productivity.productive],
   [MatchType.process, 'winword.exe', 'Microsoft Word', Productivity.productive],
   [MatchType.process, 'powerpnt.exe', 'PowerPoint', Productivity.productive],
@@ -140,7 +142,7 @@ const RULES: Rule[] = [
   [MatchType.domain, 'asana.com', 'Asana', Productivity.productive],
   [MatchType.domain, 'clickup.com', 'ClickUp', Productivity.productive],
 
-  // ── communication (কাজের, কিন্তু মাপা কঠিন) ───────────────────
+  // ── communication (work, but hard to measure) ─────────────────
   [MatchType.process, 'ms-teams.exe', 'Microsoft Teams', Productivity.productive],
   [MatchType.process, 'teams.exe', 'Microsoft Teams', Productivity.productive],
   [MatchType.process, 'slack.exe', 'Slack', Productivity.productive],
@@ -210,13 +212,13 @@ async function seedAppCategories(): Promise<number> {
 
 // ── 3 · holidays ────────────────────────────────────────────────────────────
 //
-// ⚠️⚠️ আগে এখানে ছিল কেবল ৭টা **নির্দিষ্ট তারিখের** ছুটি; চান্দ্রগুলো
-//    (ঈদ, আশুরা, শবে বরাত, দুর্গাপূজা…) "অনুমান করা যাবে না" যুক্তিতে বাদ
-//    ছিল। কিন্তু বাদ দেওয়া মানে ওই দিনগুলো **কর্মদিবস** হিসেবে গোনা — অর্থাৎ
-//    চুপচাপ "ছুটি নেই" বলা, যা একটা সক্রিয় ভুল: প্রত্যেকের টার্গেট ও pace
-//    দুটোই বেশি দেখাত (roadmap R7 · open question O2)।
-//    এখন তালিকাটা `holidays.data.ts`-এ, আর আনুমানিক তারিখ **আনুমানিক বলেই**
-//    যায় — নামের শেষে "(সম্ভাব্য)"। কেন এভাবে, তা ওই ফাইলের মাথায় লেখা।
+// This used to hold only 7 **fixed-date** holidays; the lunar ones (Eid, Ashura,
+// Shab-e-Barat, Durga Puja…) were left out because they "can't be predicted".
+// But leaving them out counts those days as **workdays**, which quietly says
+// "no holiday" and is an active error: everyone's target and pace looked too
+// high. The list now lives in `holidays.data.ts`, and estimated dates are
+// stored **as estimates**, with a Bengali "probable" marker at the end of the
+// name. The reasoning is in the header of that file.
 
 /**
  * SEED_COUNTRY (default BD) — which list to write; `none` writes nothing
@@ -226,23 +228,24 @@ async function seedAppCategories(): Promise<number> {
 const HOLIDAY_SET: HolidaySet | null = resolveHolidaySet(process.env);
 
 /**
- * ⭐⭐ **চলতি ও অতীত মাসে ছুটি বসানোর স্পষ্ট সম্মতি।**
+ * Explicit consent to insert holidays in the current and past months.
  *
- * ⚠️⚠️ কেন একটা পতাকা লাগল: `npm run seed` দেখতে নিরীহ ("সব upsert, বারবার
- *    চালানো নিরাপদ"), কিন্তু চলতি মাসের মাঝপথে একটা নতুন ছুটি বসলে ওই মাসের
- *    কর্মদিবস D কমে যায় → `dailyTargetSec = মাসিক ÷ D` বাড়ে →
- *    `monthly_summary`-র `target_sec`·`expected_sec`·`pace_sec` তিনটেই নড়ে,
- *    আর G37-এর `d ÷ D` ভগ্নাংশ (`src/payroll/payroll.service.ts`) **সরাসরি
- *    টাকায়** গিয়ে পড়ে। অর্থাৎ একটা রুটিন কমান্ড নীরবে বেতন বদলে দিত।
+ * Why a flag is needed: `npm run seed` looks harmless ("all upserts, safe to
+ * repeat"), but a new holiday in the middle of the current month reduces that
+ * month's workdays D, which raises `dailyTargetSec = monthly ÷ D`, which moves
+ * `target_sec`, `expected_sec` and `pace_sec` in `monthly_summary`, and the
+ * payroll `d ÷ D` fraction (`src/payroll/payroll.service.ts`) feeds **straight
+ * into pay**. A routine command would silently change salaries.
  *
- * ⚠️ মিলানো হয় হুবহু `'true'`-র সাথে। `1`/`yes` লিখলে সম্মতি **ধরা হয় না**,
- *    আর তখন seed তারিখগুলো আবার নাম ধরে ছাপে — অর্থাৎ ভুলটা নীরব নয়, চোখে
- *    পড়ে। উল্টো দিকে "যেকোনো অ-খালি মান = হ্যাঁ" ধরলে একটা ফাঁকা-নয়-এমন
- *    টাইপো (`SEED_HOLIDAYS_PAST=false`) সম্মতি হয়ে যেত।
+ * Careful: the value is compared with exactly `'true'`. `1` or `yes` is **not**
+ * treated as consent, and the seed then lists the dates by name again, so the
+ * mistake is visible rather than silent. The opposite rule, "any non-empty
+ * value means yes", would turn a typo like `SEED_HOLIDAYS_PAST=false` into
+ * consent.
  */
 const ALLOW_PAST_HOLIDAYS = process.env.SEED_HOLIDAYS_PAST === 'true';
 
-/** `settings`-এর ওই একটামাত্র সারি: কোন কোন বছর একবার বসানো হয়ে গেছে */
+/** The single `settings` row recording which years have already been seeded. */
 interface HolidaySeedState {
   years?: number[];
 }
@@ -258,22 +261,24 @@ async function loadSeededYears(settingKey: string): Promise<number[]> {
 }
 
 /**
- * ছুটির ক্যালেন্ডার বসানো।
+ * Seeds the holiday calendar.
  *
- * ⭐⭐ **seed এখানে কিছু বদলায় না, মোছেও না — শুধু অনুপস্থিত সারি বসায়।**
- *    সরকার ঘোষণা দিলে মালিক Settings → Holidays-এ তারিখ/নাম ঠিক করবেন, আর
- *    পরের `db seed` সেটা ফিরিয়ে দেবে না। আগের কোড `update: { name }` করত —
- *    তাতে হাতে করা প্রতিটা সংশোধন পরের seed-এ মুছে যেত।
+ * Important: **the seed never changes or deletes anything here; it only
+ * inserts missing rows.** When the government announces a change, the owner
+ * fixes the date or name in Settings → Holidays, and the next `db seed` does
+ * not revert it. The old code did `update: { name }`, which wiped every manual
+ * correction on the next seed.
  *
- * ⭐⭐ **নোটগুলো প্রতিবারই ছাপে — ছুটি বসুক বা না বসুক।** আগে বছর বসে গেলে
- *    এখান থেকেই early-return হতো, তাই `unlisted`/`renamed` নোট প্রথম রানের
- *    পর **চিরতরে নীরব** হয়ে যেত। ⚠️ "না বলা সিদ্ধান্ত নয়, চেপে যাওয়া" —
- *    নিয়মটা seed নিজেই দ্বিতীয় রানে ভাঙছিল।
+ * Important: **the notes are printed on every run, whether or not anything was
+ * inserted.** It used to return early once a year was seeded, so the
+ * `unlisted`/`renamed` notes went silent for good after the first run. Saying
+ * nothing is not a decision, it is hiding the issue.
  *
- * ⭐⭐ **আর চলতি/অতীত মাসে seed নিজে থেকে কিছু বসায় না** — ওই মাসগুলোর
- *    সংখ্যা ইতিমধ্যে বেরিয়ে গেছে, তাই সেখানে ছুটি বসানো মানে পিছন ফিরে
- *    টার্গেট ও পে-রোল বদলানো। বসাতে হলে `SEED_HOLIDAYS_PAST=true`
- *    (`ALLOW_PAST_HOLIDAYS`-এর নোট)। নইলে তারিখগুলো **নাম ধরে ধরে** ছাপা হয়।
+ * Important: **the seed does not insert anything in the current or past months
+ * by itself.** Those months' figures are already out, so adding a holiday
+ * would change targets and payroll retroactively. To insert them, set
+ * `SEED_HOLIDAYS_PAST=true` (see the note on `ALLOW_PAST_HOLIDAYS`). Otherwise
+ * the dates are printed **by name**.
  */
 async function seedHolidays(): Promise<{
   summary: string;
@@ -291,20 +296,20 @@ async function seedHolidays(): Promise<{
 
   const problems = validateHolidays(entries);
   if (problems.length > 0) {
-    // ⚠️ থামানো হয়, কারণ ভুল তারিখ সরাসরি কর্মদিবসের হিসাবে ঢোকে
+    // Stop here: a wrong date goes straight into the workday count.
     throw new Error(`ছুটির তালিকায় ভুল:\n  - ${problems.join('\n  - ')}`);
   }
 
   const seeded = await loadSeededYears(settingKey);
   const years = yearsToSeed(allYears, seeded);
 
-  // ⚠️ DB **প্রতিবারই** পড়া হয়, বছর বাকি থাক বা না থাক — নইলে বলার মতো
-  //    কিছু আছে কি না সেটাই জানা যেত না।
+  // The DB is read on **every** run, whether or not a year is left to seed;
+  // otherwise we could not tell whether there is anything to report.
   const rows = await prisma.holiday.findMany({
     select: { holidayDate: true, name: true },
   });
 
-  // ⭐ পরিকল্পনা হয় **পুরো তালিকার** উপর; `years` শুধু ঠিক করে কী বসবে
+  // The plan covers the **whole list**; `years` only decides what gets inserted.
   const run = planHolidaySeedRun(
     entries,
     rows.map((row) => ({
@@ -312,31 +317,31 @@ async function seedHolidays(): Promise<{
       name: row.name,
     })),
     years,
-    // ⚠️ "আজ" ঢাকার তারিখ, মেশিনের স্থানীয় ঘড়ির নয় — `dhakaToday()`-র নোট
+    // "Today" is the Dhaka date, not the machine's local clock (see `dhakaToday()`).
     { today: dhakaToday(new Date()), allowPast: ALLOW_PAST_HOLIDAYS },
   );
 
   for (const entry of run.create) {
     await prisma.holiday.create({
       data: {
-        // ⚠️ `@db.Date` কলাম UTC-মধ্যরাত ধরে; স্থানীয় সময় দিলে ঢাকায় ছুটিটা
-        //    আগের দিনে গিয়ে পড়ত (`parse-staff.ts`-এ একই ফাঁদ)
+        // `@db.Date` columns use UTC midnight; local time would shift the
+        // holiday to the previous day in Dhaka (same trap as in `parse-staff.ts`).
         holidayDate: new Date(`${entry.date}T00:00:00.000Z`),
         name: holidayRowName(entry),
-        // ⚠️ পর্দার Type বাছাইয়ে শুধু public/optional/company আছে — নতুন কোনো
-        //    মান দিলে মালিক Edit → Save করলেই সেটা নিঃশব্দে বদলে যেত
+        // The screen's Type picker only offers public/optional/company; any
+        // other value would silently change when the owner hits Edit → Save.
         type: 'public',
       },
     });
   }
 
   /**
-   * ⭐⭐ যে বছরে সম্মতির অপেক্ষায় সারি রয়ে গেছে, সেটা "বসানো হয়ে গেছে" নয়
-   *    — নইলে `SEED_HOLIDAYS_PAST=true` পরের রানে আর কোনো কাজেই লাগত না
-   *    (`yearsSettled`-এর নোটে কারণ ও এর দামটাও লেখা)।
+   * A year that still has rows waiting for consent is not "done"; otherwise
+   * `SEED_HOLIDAYS_PAST=true` would do nothing on the next run (the reason and
+   * its cost are in the note on `yearsSettled`).
    *
-   * ⚠️ `settings` কেবল তখনই ছোঁয়া হয় যখন সত্যিই একটা বছর সম্পূর্ণ বসল —
-   *    নইলে প্রতিটা রান একই মান আবার লিখত, আর `updated_at` মিথ্যে বলত।
+   * `settings` is only touched when a year was really completed; otherwise
+   * every run would rewrite the same value and `updated_at` would be wrong.
    */
   const settledYears = yearsSettled(years, run.needsConsent);
   if (settledYears.length > 0) {
@@ -351,10 +356,10 @@ async function seedHolidays(): Promise<{
   }
 
   /**
-   * ⭐⭐ সারাংশে **প্রতিটা ভাগ আলাদা করে** বলা হয়। আগে শুধু "কতটা বসেছে"
-   *    ছাপা হতো; এখন যেগুলো **বসেনি** সেগুলোর সংখ্যাও থাকে, কারণ "০টি
-   *    বসেছে" পড়ে দুটো একেবারে আলাদা জিনিস বোঝা যেত — "সব আগে থেকেই ঠিক
-   *    ছিল" আর "১৮টা তারিখ আটকে আছে"।
+   * The summary reports **each bucket separately**. It used to print only how
+   * many were inserted; now it also counts the ones that were **not**, because
+   * "0 inserted" could mean two very different things: "everything was already
+   * correct" or "18 dates are held back".
    */
   const approx = run.create.filter((h) => h.approximate).length;
   const parts = [
@@ -368,9 +373,9 @@ async function seedHolidays(): Promise<{
     parts.push(`${run.heldBack.length}টি বন্ধ বছরে (তাই বসেনি)`);
   }
   /**
-   * ⚠️ তিনটে অবস্থা আলাদা করে বলা হয়। "কোনো বছর সম্পূর্ণ হয়নি" আর "সব
-   *    বছর আগেই সম্পূর্ণ" — দুটোই "নতুন কিছু বন্ধ হয়নি", কিন্তু প্রথমটা
-   *    মানে কিছু আটকে আছে, দ্বিতীয়টা মানে সব ঠিক আছে।
+   * Three states are reported separately. "No year completed" and "all years
+   * already completed" both mean nothing new was closed, but the first means
+   * something is held back and the second means everything is fine.
    */
   if (years.length === 0) {
     const done = [...seeded].sort((a, b) => a - b).join(', ');
@@ -382,45 +387,46 @@ async function seedHolidays(): Promise<{
   }
 
   /**
-   * ⚠️ পুরোনো/অচেনা সারি **মোছা হয় না**, শুধু দেখানো হয়। ২০২৪-এ ১৭ মার্চ ও
-   *    ১৫ আগস্ট সরকারি ছুটি থেকে বাদ পড়েছে, অথচ আগের seed ওগুলো বসিয়ে গেছে —
-   *    চলতি DB-তে ওরা এখনো কর্মদিবস কমিয়ে রাখছে। কোনটা ভুল আর কোনটা মালিকের
-   *    নিজের যোগ করা ছুটি, সেটা এখান থেকে বোঝার উপায় নেই — তাই সিদ্ধান্তটা
-   *    তাঁর, আমাদের নয়। ⭐ কিন্তু **না বলা**-টা সিদ্ধান্ত নয়, চেপে যাওয়া —
-   *    তাই `run.notes` প্রতিবারই ফেরে, `run.create` খালি হলেও।
+   * Old or unrecognised rows are **never deleted**, only reported. For
+   * example, 17 March and 15 August were dropped from the 2024 public holidays,
+   * yet an earlier seed inserted them, and in existing databases they still
+   * reduce the workdays. We cannot tell a wrong row from a holiday the owner
+   * added themselves, so the decision is theirs. But saying nothing is not a
+   * decision, it is hiding the issue, so `run.notes` is returned on every run,
+   * even when `run.create` is empty.
    */
   return {
     summary: parts.join(' · '),
-    // ⚠️ তালিকা সম্পর্কে **স্থায়ী** কথা — এই রান কী করল, তার সাথে গুলিয়ে নয়
+    // **Standing** facts about the list, kept apart from what this run did.
     standing: gazetteNotes(entries, pending),
     notes: run.notes,
   };
 }
 
-// ── 4 · কর্মী তালিকা ────────────────────────────────────────────────────────
+// ── 4 · staff list ──────────────────────────────────────────────────────────
 //
-// তালিকাটা `staff.local.json` থেকে আসে (gitignore করা) — নিচে দেখুন।
+// The list comes from `staff.local.json` (gitignored) — see below.
 //
-// ⚠️ `policySignedAt` ইচ্ছাকৃতভাবে ফাঁকা — কেউ এখনো monitoring policy-তে সই
-//    করেনি। রোলআউটের আগে এটা পূরণ হওয়া বাধ্যতামূলক শর্ত, তাই আগেভাগে ভরে
-//    রেখে শর্তটা অর্থহীন করে দেওয়া হয়নি।
+// `policySignedAt` is left empty on purpose: nobody has signed the monitoring
+// policy yet. Filling it in must be a precondition of the rollout, so it is not
+// pre-filled, which would make the condition meaningless.
 //
-// ⚠️ বেতন **শুধু owner** দেখতে পায় ([ADR-023](../../docs/05-Options-Decisions.md))।
-//    ঘাটতির টাকা বের করতে লাগে। ম্যানেজারের রিপোর্টেও এই কলাম যায় না।
+// Salary is visible to the **owner only** ([ADR-023](../../docs/05-Options-Decisions.md)).
+// It is needed to compute the shortfall amount. Manager reports do not include
+// this column either.
 
 /**
- * ⭐ **আসল কর্মী তালিকা রিপোতে থাকে না** — `prisma/staff.local.json`-এ,
- * আর সেটা gitignore করা।
+ * Important: **the real staff list is not in the repo.** It lives in
+ * `prisma/staff.local.json`, which is gitignored.
  *
- * ⚠️ কারণটা কোডের নয়, মানুষের: এই তালিকায় ১২ জনের **নাম ও বেতন** আছে,
- * আর ওটা তাঁদের তথ্য, আমাদের নয়। রিপো GitHub-এ গেলে — private হলেও —
- * সেটা তৃতীয় পক্ষের সার্ভারে চলে যায়, আর কাউকে collaborator করলে সে-ও
- * দেখে ফেলে। git-এর ইতিহাস থেকে কিছু মুছে ফেলাও কঠিন, তাই প্রথম থেকেই
- * বাইরে রাখা।
+ * The reason is about people, not code: the list holds the **names and
+ * salaries** of 12 people, and that is their data, not ours. Once a repo goes
+ * to GitHub, even a private one, it sits on a third party's servers and any
+ * collaborator can read it. Removing something from git history is also hard,
+ * so it stays out from the start.
  *
- * ফাইলটা না থাকলে seed `staff.example.json` দিয়ে চলে (নমুনা নাম, বেতন ০)
- * — অর্থাৎ নতুন কেউ রিপো ক্লোন করলে প্রকল্পটা চলে, কিন্তু কারো বেতন
- * জানা যায় না।
+ * If the file is missing, the seed runs with `staff.example.json` (sample
+ * names, salary 0), so a fresh clone still runs but reveals nobody's salary.
  */
 function loadStaff(): StaffRow[] {
   const local = join(__dirname, 'staff.local.json');
@@ -437,27 +443,27 @@ function loadStaff(): StaffRow[] {
   }
 
   /**
-   * ⚠️ `as Staff[]` **ছিল একটা মিথ্যে** — JSON-এ যা-ই থাকুক TypeScript
-   *    মেনে নিত। এখন সত্যিই যাচাই হয়, আর ভুল থাকলে কোন সারি ও কোন ঘর
-   *    সেটা বার্তাতেই বলা থাকে।
+   * The old `as Staff[]` cast was a lie: TypeScript accepted whatever the JSON
+   * held. The data is now really validated, and an error message names the row
+   * and the field.
    */
   return parseStaff(JSON.parse(readFileSync(file, 'utf8')));
 }
 
 /**
- * ⚠️⚠️ নমুনা তালিকা দিয়ে চলছি কি না — আর এই একটা bool-ই ১৪ আগস্টের
- *    আসল বাগটা ঠেকায়।
+ * Whether we are running from the sample list. This one boolean is what
+ * prevents the real production bug.
  *
- *    `staff.local.json` **gitignore করা**, তাই VPS-এ ওটা কোনোদিন থাকে না।
- *    ফলে সেখানে প্রতিবার seed চললেই `staff.example.json`-এর তিনজন নমুনা
- *    কর্মী (Example One/Two/Three, বেতন ০) তৈরি হতো — আর ওরা ঠিক এভাবেই
- *    প্রোডাকশনে ঢুকেছিল, দলের টার্গেটে ৬২৪ ঘণ্টা যোগ করে।
+ * `staff.local.json` is **gitignored**, so it never exists on the VPS. Every
+ * seed run there therefore created the three sample employees from
+ * `staff.example.json` (Example One/Two/Three, salary 0), which is exactly how
+ * they got into production, adding 624 hours to the team target.
  */
 let usingExample = false;
 
 const STAFF: StaffRow[] = loadStaff();
 
-/** designation থেকে বিভাগ — রিপোর্টে দল ধরে ভাগ করার জন্য (D09, E07)। */
+/** Department derived from designation, to group reports by team. */
 function departmentOf(designation: string): string {
   if (designation === 'Manager') return 'Management';
   if (designation === 'Designer') return 'Design';
@@ -467,18 +473,18 @@ function departmentOf(designation: string): string {
 
 async function seedEmployees(policyId: number): Promise<number> {
   /**
-   * ⭐⭐ **আসল কর্মী থাকলে নমুনা কর্মী আর বসানো হয় না।**
+   * Important: **sample staff are not inserted once real staff exist.**
    *
-   * ⚠️ নিয়মটা সরু করে লেখা: শুধু **নমুনা** তালিকার বেলায়, আর শুধু
-   *    ডাটাবেসে ইতিমধ্যে কেউ থাকলে। `staff.local.json` থাকলে seed আগের
-   *    মতোই সব বসায় — আসল তালিকা হালনাগাদ করার পথটা বন্ধ হয় না।
+   * The rule is narrow: it applies only to the **sample** list, and only when
+   * the database already has employees. With `staff.local.json` the seed
+   * inserts everything as before, so updating the real list still works.
    *
-   * ⭐ যুক্তিটা সহজ: চালু সিস্টেমে নমুনা মানুষ যোগ করার কোনো কারণ নেই।
-   *    ওরা কেবল দলের টার্গেট ফোলায়, বোর্ডে ভিড় করে, আর "পিছিয়ে" সংখ্যাটা
-   *    মিথ্যা বানায় — অথচ কারো এক মিনিটও কাজ নেই।
+   * The reasoning is simple: a live system has no reason to gain sample people.
+   * They only inflate the team target, crowd the board and make the "behind"
+   * figure wrong, while nobody has worked a minute for them.
    *
-   * ⚠️ নতুন ইনস্টলে (ডাটাবেস খালি) নমুনাগুলো আগের মতোই বসে, নইলে কেউ
-   *    রিপো ক্লোন করে প্রকল্পটা চালিয়েই দেখতে পারত না।
+   * On a fresh install (empty database) the samples are inserted as before;
+   * otherwise nobody could clone the repo and just try the project.
    */
   const already = await prisma.employee.count();
   if (!shouldSeedSampleStaff(usingExample, already)) {
@@ -495,17 +501,18 @@ async function seedEmployees(policyId: number): Promise<number> {
       department: departmentOf(rest.designation),
       policyId,
       /**
-       * ⚠️⚠️ তারিখ **না দিলে ঘরটা ছোঁয়া হয় না** (`undefined`), `null`
-       * বসানো হয় না। কেউ ড্যাশবোর্ডে হাতে তারিখ বসিয়ে থাকলে seed আবার
-       * চালালে সেটা মুছে যেত — আর তার সাথে G37-এর proration-ও, নীরবে।
+       * Careful: with **no date the column is left untouched** (`undefined`);
+       * `null` is never written. Otherwise a date someone set by hand in the
+       * dashboard would be wiped on the next seed, and payroll proration with
+       * it, silently.
        */
       ...(joinedOn ? { joinedOn } : {}),
     };
 
     await prisma.employee.upsert({
       where: { empCode },
-      // ⚠️ update-এ status নেই — কেউ ছেড়ে গেলে seed আবার চালালে তাকে
-      //    জীবিত করে তোলা হবে না।
+      // `update` has no status, so re-running the seed does not bring back
+      // someone who has left.
       update: common,
       create: { empCode, ...common },
     });
@@ -537,7 +544,7 @@ async function seedOwner(): Promise<string> {
       passwordHash,
       fullName,
       role: UserRole.owner,
-      // প্রথম লগইনেই বদলাতে হবে — seed পাসওয়ার্ড .env-এ প্লেইনটেক্সটে থাকে
+      // Must be changed at first login: the seed password sits in .env in plain text.
       mustChangePw: true,
     },
   });
@@ -563,7 +570,7 @@ async function main(): Promise<void> {
   console.log(
     '                   ⚠️ "(সম্ভাব্য)" লেখা তারিখগুলো চাঁদ/তিথি-নির্ভর — ঘোষণা এলে ঠিক করে নিন',
   );
-  // ⚠️ তালিকা সম্পর্কে স্থায়ী কথা আগে, তারপর এই রান কী করল
+  // Standing facts about the list first, then what this run did.
   for (const note of [...holidays.standing, ...holidays.notes]) {
     console.log(`                   ${note}`);
   }

@@ -4,7 +4,7 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
-    /** সার্ভার mustChangePassword ফ্ল্যাগ পাঠালে সেটা এখানে */
+    /** Set when the server sends the mustChangePassword flag. */
     readonly mustChangePassword = false,
   ) {
     super(message);
@@ -13,9 +13,9 @@ export class ApiError extends Error {
 }
 
 /**
- * CSRF টোকেন cookie থেকে পড়া হয় — সার্ভার ওটা ইচ্ছাকৃতভাবে httpOnly রাখে না,
- * কারণ double-submit-এর পুরো কৌশলটাই দাঁড়িয়ে আছে "ভিন্ন origin cookie পাঠাতে
- * পারলেও পড়তে পারে না" — এর উপর (ADR-016)।
+ * The CSRF token is read from the cookie. The server deliberately does not make it
+ * httpOnly: the double-submit technique relies on a different origin being able to
+ * send the cookie but not read it (ADR-016).
  */
 function csrfToken(): string | null {
   const match = document.cookie.match(/(?:^|;\s*)oxeio_csrf=([^;]+)/);
@@ -27,20 +27,19 @@ const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 interface RequestOptions {
   method?: string;
   body?: unknown;
-  /** 401-এ স্বয়ংক্রিয় লগআউট এড়াতে (যেমন লগইন কল নিজেই) */
+  /** Skip the automatic logout on 401 (e.g. for the login call itself). */
   silent401?: boolean;
   /**
-   * ⭐ পুরোনো রিকোয়েস্ট বাতিল করার জন্য (`useApi` এটাই ব্যবহার করে)।
+   * Used to cancel stale requests (`useApi` relies on it).
    *
-   * ⚠️ বাতিল হলে fetch একটা `AbortError` ছোড়ে — সেটা `ApiError` **নয়**।
-   *    কোথাও catch করে "ভুল হয়েছে" দেখানোর আগে `isAbortError()` দিয়ে
-   *    ছেঁকে নিতে হবে, নইলে তারিখ বদলানোর মতো নিরীহ কাজেও পর্দায়
-   *    এরর ভেসে উঠত।
+   * Careful: a cancelled fetch throws an `AbortError`, which is NOT an `ApiError`.
+   * Filter with `isAbortError()` before any catch that shows "something went
+   * wrong", otherwise harmless actions like changing the date would flash an error.
    */
   signal?: AbortSignal;
 }
 
-/** বাতিল হওয়া রিকোয়েস্ট — এটা কোনো ব্যর্থতা নয়, তাই আলাদা করে চেনা দরকার */
+/** A cancelled request is not a failure, so it needs to be recognised separately. */
 export function isAbortError(err: unknown): boolean {
   return err instanceof Error && err.name === 'AbortError';
 }
@@ -68,7 +67,7 @@ export async function api<T>(
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers,
-    // cookie পাঠানোর জন্য অপরিহার্য
+    // required so the cookie is sent
     credentials: 'include',
     body: body === undefined ? undefined : JSON.stringify(body),
     signal,
@@ -86,11 +85,11 @@ export async function api<T>(
     } | null;
 
     /**
-     * ⚠️ `p.message` **সার্ভারের** বার্তা, আর সার্ভার এখনো বাংলায় বলে —
-     *    তাই পর্দায় ওটা বাংলাতেই যাবে (`<ErrorBox>` দেখুন)। এখানে অনুবাদ
-     *    করা হয় না: টেবিল বানালে সার্ভারের নতুন বার্তাগুলো নীরবে
-     *    অনূদিত-না-হয়ে বেরোত, আর কেউ টেরও পেত না। নিচের fallback-টা
-     *    আমাদের নিজেদের লেখা, তাই সেটা ইংরেজি।
+     * Careful: `p.message` is the server's message, and the server still speaks
+     * Bengali, so it reaches the screen in Bengali (see `<ErrorBox>`). It is not
+     * translated here: a translation table would let new server messages slip
+     * through untranslated without anyone noticing. The fallback below is our own
+     * text, so it is in English.
      */
     const message = Array.isArray(p?.message)
       ? p.message.join(', ')

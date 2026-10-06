@@ -18,24 +18,24 @@ import { CreateLeaveDto } from './calendar.dto';
 import { LeaveService, type LeaveView } from './leave.service';
 
 /**
- * R2 — `/api/v1/leaves`।
+ * R2: `/api/v1/leaves`.
  *
- * ⚠️⚠️ **owner-only, আর সেটা ইচ্ছাকৃতভাবে পর্দার সাথে মিলিয়ে**: ছুটির
- * খাতা Settings-এ, আর গোটা Settings পাতাটাই owner-এর। এখানে manager
- * খুলে রাখলে API এমন একটা প্রবেশাধিকারের দাবি করত যেটা পৌঁছানোর কোনো
- * পথই নেই — অর্থাৎ একটা মিথ্যা দরজা।
+ * Careful: **owner-only, deliberately matching the screen**: the leave
+ * register is in Settings, and the whole Settings page is the owner's. If
+ * manager were allowed here, the API would claim an access that has no way
+ * of being reached: a false door.
  *
- * ⭐ ম্যানেজারকে দিতে হলে দুটোই একসাথে বদলাতে হবে (এই ডেকোরেটর আর
- * `SettingsPage`-এর গার্ড), নইলে আবার একটা পর্দাহীন অনুমতি জন্মাবে।
+ * To give it to managers, both must change together (this decorator and the
+ * `SettingsPage` guard), otherwise another permission with no screen is born.
  *
- * ⚠️ staff কখনোই নয়: নিজের ছুটি নিজে লেখা মানে নিজের টার্গেট নিজে কমানো।
+ * Careful: never staff: writing your own leave means lowering your own target.
  */
 @Roles(UserRole.owner)
 @Controller('leaves')
 export class LeaveController {
   constructor(private readonly leaves: LeaveService) {}
 
-  /** ⚠️ `?month=YYYY-MM` বাধ্যতামূলক — কেন, `LeaveService.list()`-এর নোটে */
+  /** Careful: `?month=YYYY-MM` is mandatory; see the note on `LeaveService.list()` for why */
   @Get()
   list(@Query('month') month: string): Promise<{ rows: LeaveView[] }> {
     return this.leaves.list(month);

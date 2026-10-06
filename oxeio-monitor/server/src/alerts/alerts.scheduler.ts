@@ -20,23 +20,23 @@ import { NoActivityCheck } from './no-activity.check';
 import { SyntheticInputCheck } from './synthetic-input.check';
 
 /**
- * অ্যালার্টের সব শিডিউলড চেক এখান থেকে চলে।
+ * All of the alert module's scheduled checks run from here.
  *
- * ⚠️ এখানে `@nestjs/schedule` ব্যবহার করা হয়নি — ইচ্ছাকৃতভাবে, যদিও rollup জব
- *    (`src/summary/`) সেটাই ব্যবহার করে। `ScheduleModule.forRoot()` একটা
- *    **গ্লোবাল** মডিউল আর তার explorer অ্যাপের **সব** provider স্ক্যান করে
- *    `@Cron` খুঁজতে। অর্থাৎ কে কোথায় forRoot বসাল তার ওপর আমার চেকগুলো
- *    চালু-বন্ধ হওয়া নির্ভর করত। অ্যালার্টের বেলায় ভুলটার দাম বেশি: না চললে
- *    কেউ কিছু জানে না, আর দুবার চললে সরাসরি দ্বিগুণ ইমেইল। সাধারণ
- *    `setInterval` কম চতুর, কিন্তু এখানে আচরণটা পুরোপুরি অনুমেয় —
- *    আর কোনো `@Cron` ডেকোরেটর না থাকায় বাইরের explorer এই ক্লাসে কিছুই পায় না।
+ * Careful: `@nestjs/schedule` is deliberately not used here, even though the
+ * rollup job (`src/summary/`) uses it. `ScheduleModule.forRoot()` is a
+ * **global** module and its explorer scans **all** providers of the app for
+ * `@Cron`. So whether my checks run would depend on who put `forRoot` where.
+ * For alerts the cost of getting that wrong is high: if they do not run nobody
+ * knows, and if they run twice the emails double. A plain `setInterval` is
+ * less clever, but the behavior here is fully predictable, and with no `@Cron`
+ * decorator an outside explorer finds nothing in this class.
  */
 @Injectable()
 export class AlertsScheduler implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(AlertsScheduler.name);
   private readonly bootedAt = new Date();
   private readonly timers: NodeJS.Timeout[] = [];
-  /** ⚠️ আগের দফা এখনো চললে পরেরটা বাদ — ধীর DB-তে টিক জমে যেত */
+  /** Careful: if the previous round is still running, the next is skipped (no pile-up) */
   private readonly running = new Set<string>();
 
   constructor(
@@ -50,22 +50,22 @@ export class AlertsScheduler implements OnApplicationBootstrap, OnModuleDestroy 
   ) {}
 
   onApplicationBootstrap(): void {
-    // ⚠️ টেস্টে কোনো টাইমার নয় — নইলে টেস্ট চলার মাঝপথে চেক চলে গিয়ে
-    //    অন্য এজেন্টের ফিক্সচারের ওপর অ্যালার্ট বসাত, আর ব্যর্থতাগুলো
-    //    এলোমেলোভাবে আসত। প্রতিটা চেকের `runOnce()` আছে — টেস্ট সেটাই ডাকবে।
+    // Careful: no timers in tests. Otherwise a check would fire mid-test, raise
+    // alerts on another agent's fixtures, and failures would show up at random.
+    // Every check has a `runOnce()`, which is what tests call.
     if (process.env.NODE_ENV === 'test') {
       this.logger.log('NODE_ENV=test — alert scheduler not started');
       return;
     }
 
     this.schedule('agent-down', AGENT_DOWN_TICK_MS, async (now) => {
-      // ⭐ ফিরে আসা এজেন্টের খোলা alert বন্ধ করা grace-এর **বাইরেও** চলে:
-      //    রিস্টার্টের পর যে এজেন্ট এরই মধ্যে হাজিরা দিয়েছে, তার বাসি
-      //    agent_down তখনই মুছে যাক। এটা কখনো মিথ্যা alert তোলে না — শুধু
-      //    বন্ধ করে — তাই grace-এ আটকানোর কারণ নেই।
+      // Closing the open alerts of returned agents also runs **outside** the
+      // grace: an agent that has already checked in after the restart should
+      // have its stale agent_down cleared right away. This never raises a
+      // false alert, it only closes, so there is no reason to hold it back in the grace.
       await this.agentDown.resolveReturned(now);
 
-      // ⭐ সার্ভার সবে উঠেছে — এখন সবাইকেই চুপ দেখাবে (কারণ আমরাই ছিলাম না)
+      // The server has just started: everyone looks silent (because we were not there)
       if (isWithinStartupGrace(this.bootedAt, now)) {
         this.logger.debug(
           `startup grace (${STARTUP_GRACE_MIN}m) — agent_down check not yet`,
@@ -85,8 +85,8 @@ export class AlertsScheduler implements OnApplicationBootstrap, OnModuleDestroy 
     this.schedule('device-overlap', OVERLAP_TICK_MS, (now) =>
       this.overlap.runOnce(now),
     );
-    // ⭐ G46 — নকল ইনপুট। সার্ভারে চলে, তাই যাঁকে নিয়ে সন্দেহ তাঁর
-    //    মেশিন থেকে এটা বন্ধ করা যায় না।
+    // Synthetic input. Runs on the server, so it cannot be switched off from
+    // the machine of the person under suspicion.
     this.schedule('synthetic-input', SYNTHETIC_INPUT_TICK_MS, (now) =>
       this.synthetic.runOnce(now),
     );
@@ -103,8 +103,8 @@ export class AlertsScheduler implements OnApplicationBootstrap, OnModuleDestroy 
   }
 
   /**
-   * হাতে চালানোর জন্য — সবগুলো চেক একবার।
-   * শিডিউলার বন্ধ থাকা অবস্থাতেও (যেমন টেস্টে) কাজ করে।
+   * For running by hand: every check once.
+   * Works even while the scheduler is off (e.g. in tests).
    */
   async runAllOnce(now = new Date()): Promise<number> {
     const counts = await Promise.all([
@@ -114,7 +114,7 @@ export class AlertsScheduler implements OnApplicationBootstrap, OnModuleDestroy 
       this.noActivity.runOnce(now),
       this.overlap.runOnce(now),
     ]);
-    // ⭐ ফিরে আসা এজেন্টের খোলা agent_down বন্ধ করা (raise-এর সংখ্যায় গোনা নয়)
+    // Close open agent_down alerts of returned agents (not counted in the raise count)
     await this.agentDown.resolveReturned(now);
     await this.dispatcher.runOnce(now);
     return counts.reduce((a, b) => a + b, 0);
@@ -129,18 +129,18 @@ export class AlertsScheduler implements OnApplicationBootstrap, OnModuleDestroy 
       void this.tick(name, task);
     }, everyMs);
 
-    // ⚠️ unref — টাইমার যেন প্রসেসকে বাঁচিয়ে না রাখে। নইলে shutdown hook
-    //    চললেও Node বসে থাকত এবং কন্টেইনার restart-এ দেরি হতো।
+    // unref: the timer must not keep the process alive. Otherwise Node would
+    // keep waiting even after the shutdown hook ran, delaying a container restart.
     timer.unref();
     this.timers.push(timer);
   }
 
   /**
-   * ⭐ প্রতিটা টিক try/catch-এ মোড়া।
+   * Every tick is wrapped in try/catch.
    *
-   * setInterval-এর কলব্যাক থেকে বেরিয়ে যাওয়া একটা rejected promise Node-এ
-   * unhandled rejection — আর সেটা পুরো সার্ভার নামিয়ে দেয়। ডাটাবেসে সাময়িক
-   * একটা টাইমআউটের দাম কখনোই "মনিটরিং বন্ধ" হতে পারে না।
+   * A rejected promise escaping a setInterval callback is an unhandled
+   * rejection in Node, and that takes the whole server down. A brief database
+   * timeout must never cost us "monitoring stopped".
    */
   private async tick(
     name: string,

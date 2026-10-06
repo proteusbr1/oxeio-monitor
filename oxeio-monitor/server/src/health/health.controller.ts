@@ -7,19 +7,20 @@ import { PrismaService } from '../prisma/prisma.service';
 export class HealthController {
   constructor(private readonly prisma: PrismaService) {}
 
-  /// Docker healthcheck · Live Board-এর "সার্ভার আছে তো?" · আর বাইরের
-  /// uptime নজরদারি (R4) — তিনটেই এখানে। লগইন ছাড়াই পৌঁছাতে হয়, তাই @Public।
+  /// Docker healthcheck, the Live Board's "is the server up?" check, and the
+  /// external uptime monitor (R4) all use this one endpoint. It must be reachable
+  /// without login, hence @Public.
   ///
-  /// ⚠️⚠️ **ডাটাবেস মরে গেলেও এটা HTTP ২০০ ফেরায়** — কেবল বডিতে
-  /// `status: 'degraded'` লেখে। দেখে ভুল মনে হয়, কিন্তু ৫০৩ করা যাবে না:
-  /// Docker-এর healthcheck এই একই পথ ধরে, আর ব্যর্থ healthcheck মানে
-  /// কনটেইনার রিস্টার্ট। ডাটাবেস ডাউন থাকলে API রিস্টার্ট করে কিছুই
-  /// সারে না — শুধু **রিস্টার্ট লুপ** তৈরি হয়, আর তাতে লগও হারায়।
+  /// Careful: **this returns HTTP 200 even when the database is down** and only
+  /// writes `status: 'degraded'` in the body. That looks wrong, but a 503 is not
+  /// allowed: Docker's healthcheck hits this same path, and a failed healthcheck
+  /// restarts the container. Restarting the API does not fix a down database; it
+  /// only creates a **restart loop** and loses the logs.
   ///
-  /// ⭐ তাই বাইরের নজরদারিকে **স্ট্যাটাস কোড নয়, শব্দ** দেখতে হবে:
-  /// UptimeRobot-এ "Keyword" মনিটর, keyword `"db":"up"`
-  /// (`deploy/README.md § R4`)। ⚠️ শুধু স্ট্যাটাস কোড দেখলে ডাটাবেস মরে
-  /// পড়ে থাকলেও সে চিরকাল "UP" দেখাত — ঠিক যে অন্ধ জায়গাটা R4 ঢাকার কথা।
+  /// So external monitoring must check the **keyword, not the status code**:
+  /// a "Keyword" monitor in UptimeRobot with keyword `"db":"up"`
+  /// (`deploy/README.md § R4`). Watching only the status code would show "UP"
+  /// forever even with the database dead, the blind spot R4 exists to cover.
   @Public()
   @Get()
   async check(): Promise<{
@@ -27,12 +28,12 @@ export class HealthController {
     db: 'up' | 'down';
     time: string;
     /**
-     * ⭐ কোন বিল্ড চলছে — ড্যাশবোর্ডের কোণার ব্যাজ এটা নিয়েই নিজেরটার
-     * সাথে মেলায়।
+     * Which build is running. The dashboard's corner badge compares this with
+     * its own build.
      *
-     * ⚠️⚠️ অর্ধেক ডিপ্লয় (নতুন ওয়েব, পুরোনো api) নইলে **সম্পূর্ণ নীরব**
-     * থাকত: পাতা নতুন দেখাত, অথচ API পুরোনো উত্তর দিত। "ফিক্সটা তো
-     * বসিয়েছি, কাজ করছে না কেন" — এই প্রশ্নের উত্তর খুঁজতে ঘণ্টা যেত।
+     * Careful: a half deploy (new web, old API) would otherwise be **completely
+     * silent**: the page looks new while the API gives old answers, and finding
+     * out "I shipped the fix, why doesn't it work?" would cost hours.
      */
     build: string;
     commit: string;
@@ -49,8 +50,8 @@ export class HealthController {
       status: db === 'up' ? 'ok' : 'degraded',
       db,
       time: new Date().toISOString(),
-      // ⚠️ ডিফল্ট `dev`/`local` — Docker ছাড়া (npm run start:dev) চালালে
-      //    চলকগুলো থাকে না, আর তখন মিথ্যে সংখ্যা দেখানোর চেয়ে "dev" ভালো।
+      // Careful: the defaults are `dev`/`local`. Without Docker (npm run
+      // start:dev) the variables are unset, and "dev" beats showing made-up values.
       build: process.env.APP_BUILD || 'dev',
       commit: process.env.APP_COMMIT || 'local',
     };

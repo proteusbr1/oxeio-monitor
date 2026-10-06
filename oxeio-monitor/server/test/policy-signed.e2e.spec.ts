@@ -13,18 +13,18 @@ import {
 } from './setup/harness';
 
 /**
- * ⭐ **রোলআউটের একমাত্র শর্ত** — "সই ছাড়া কারো PC-তে এজেন্ট বসবে না"
- * ([01 § রোলআউট](../../docs/01-Planning.md))।
+ * The only precondition of the rollout: "no agent goes on anyone's PC without
+ * a signature" ([01 section Rollout](../../docs/01-Planning.md)).
  *
- * ⚠️ এতদিন `policy_signed_at` কলামটা ছিল, API পড়ত, ওয়েবে টাইপ করা ছিল —
- * কিন্তু **বসানোর কোনো পথ ছিল না**। অর্থাৎ শর্তটা সিস্টেমে রেকর্ডই করা
- * যেত না। এই টেস্টগুলো সেই পথটার পাহারা।
+ * Careful: for a while the `policy_signed_at` column existed, the API read it
+ * and the web typed it, but there was no way to set it. So the precondition
+ * could not be recorded in the system at all. These tests guard that path.
  */
 let h: Harness;
 let employeeId: number;
 
 const today = (): string => {
-  // ঢাকার আজকের তারিখ (UTC+6, DST নেই)
+  // today's date in Dhaka (UTC+6, no DST)
   const dhaka = dhakaNoon();
   return dhaka.toISOString().slice(0, 10);
 };
@@ -51,8 +51,8 @@ beforeEach(async () => {
   employeeId = employee.id;
 });
 
-describe('সই রেকর্ড করা (রোলআউটের শর্ত)', () => {
-  it('তারিখ না দিলে আজকের তারিখ বসে', async () => {
+describe('recording a signature (rollout precondition)', () => {
+  it('today\'s date is used when none is given', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     const res = await s.http
@@ -66,10 +66,11 @@ describe('সই রেকর্ড করা (রোলআউটের শর�
   });
 
   /**
-   * ⚠️ কাগজ প্রায়ই আগে সই হয়, ড্যাশবোর্ডে বসানো হয় দু-দিন পরে। বসানোর
-   * দিনটাকে সইয়ের দিন ধরে নিলে রেকর্ডটা কাগজের সাথে মিলত না।
+   * The paper is often signed earlier and entered in the dashboard two days
+   * later. Treating the entry day as the signing day would make the record
+   * disagree with the paper.
    */
-  it('পুরোনো তারিখ দেওয়া যায়', async () => {
+  it('a past date can be given', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     const res = await s.http
@@ -82,9 +83,10 @@ describe('সই রেকর্ড করা (রোলআউটের শর�
   });
 
   /**
-   * ⭐ কাগজ সই হওয়ার **আগেই** রেকর্ড হয়ে গেলে গোটা শর্তটার মানেই থাকে না।
+   * If it could be recorded before the paper is signed, the whole
+   * precondition would mean nothing.
    */
-  it('ভবিষ্যতের তারিখ নাকচ', async () => {
+  it('a future date is rejected', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     const soon = dhakaNoon(3).toISOString().slice(0, 10);
@@ -97,7 +99,7 @@ describe('সই রেকর্ড করা (রোলআউটের শর�
     expect(res.status).toBe(400);
   });
 
-  it('ভুল ফরম্যাটের তারিখ নাকচ', async () => {
+  it('a badly formatted date is rejected', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     const res = await s.http
@@ -108,7 +110,7 @@ describe('সই রেকর্ড করা (রোলআউটের শর�
     expect(res.status).toBe(400);
   });
 
-  it('অচেনা কর্মীতে ৪০৪', async () => {
+  it('unknown employee gives 404', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     const res = await s.http
@@ -120,8 +122,8 @@ describe('সই রেকর্ড করা (রোলআউটের শর�
   });
 });
 
-describe('সই তুলে নেওয়া', () => {
-  it('DELETE-এ তারিখ শূন্য হয়, কর্মী থেকে যায়', async () => {
+describe('removing a signature', () => {
+  it('DELETE clears the date and the employee stays', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     await s.http
@@ -136,19 +138,19 @@ describe('সই তুলে নেওয়া', () => {
     expect(res.status).toBe(200);
     expect(res.body.policySignedAt).toBeNull();
 
-    // ⚠️ কর্মীর সারি অক্ষত — DELETE যেন কখনো কর্মী না মোছে
+    // The employee row is intact: DELETE must never delete the employee
     const row = await h.prisma.employee.findUnique({ where: { id: employeeId } });
     expect(row).not.toBeNull();
     expect(row?.empCode).toBe('OX-99');
   });
 });
 
-describe('অডিট ও অনুমতি', () => {
+describe('audit and permissions', () => {
   /**
-   * ⭐ `change_setting`-এ মিশে গেলে ছ-মাস পরে "ওর সই কি সত্যিই নেওয়া
-   * হয়েছিল" প্রশ্নের উত্তর আর খুঁজে পাওয়া যেত না।
+   * If this were folded into `change_setting`, six months later the question
+   * "was their signature really taken?" could no longer be answered.
    */
-  it('আলাদা audit action বসে, আগের মানসহ', async () => {
+  it('a separate audit action is written, with the previous value', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
     await s.http
@@ -174,17 +176,17 @@ describe('অডিট ও অনুমতি', () => {
     expect(actions).toContain('policy_signed');
     expect(actions).toContain('policy_signed_cleared');
 
-    // দ্বিতীয়বার বসানোয় আগেরটাও meta-তে থাকা চাই — সংশোধন নাকি ভুল, বোঝার জন্য
+    // On the second set, the earlier value must be in meta, to tell a correction from a mistake
     const second = rows.filter((r) => r.action === 'policy_signed')[1];
     expect(JSON.stringify(second.meta)).toContain('2026-08-03');
   });
 
   /**
-   * ⚠️ CSRF হেডারটা **দিতেই হবে** — না দিলে ৪০৩ আসত CSRF গার্ড থেকে, আর
-   * টেস্টটা পাস করত ভুল কারণে। তখন কেউ role guard সরিয়ে দিলেও এটা সবুজই
-   * থাকত।
+   * The CSRF header must be sent: without it the CSRF guard would answer 403
+   * and the test would pass for the wrong reason. Then even removing the role
+   * guard would leave it green.
    */
-  it('ম্যানেজার সই বসাতে পারে না (CSRF নয়, role guard)', async () => {
+  it('a manager cannot record a signature (the role guard, not CSRF)', async () => {
     const s = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
 
     const res = await s.http
@@ -195,10 +197,10 @@ describe('অডিট ও অনুমতি', () => {
     expect(res.status).toBe(403);
   });
 
-  it('লগইন ছাড়া বন্ধ', async () => {
-    // ⚠️ এখানে CSRF হেডার **নেই**, ইচ্ছাকৃতভাবে — সেশনই নেই, তাই টোকেনও
-    //    নেই। ৪০১ আসা চাই, ৪০৩ নয়: গার্ডের ক্রম ঠিক আছে কি না সেটাই দেখা
-    //    হচ্ছে (§ ৩.১-এর সেই সংশোধন)।
+  it('closed without login', async () => {
+    // No CSRF header here, on purpose: there is no session, so no token either.
+    // It must be 401, not 403: this checks that the guard order is right (the
+    // fix from section 3.1).
     const res = await h
       .http()
       .post(`/api/v1/employees/${employeeId}/policy-signed`)

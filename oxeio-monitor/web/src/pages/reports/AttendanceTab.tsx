@@ -15,12 +15,13 @@ import {
 } from './shared';
 
 /**
- * F01 — দৈনিক অ্যাটেনডেন্স রিপোর্ট: প্রতি কর্মী, প্রতি দিন এক সারি।
+ * Daily attendance report: one row per employee per day.
  *
- * ⭐⚠️ এখানে **"কে কখন বসল" নেই এবং কখনো থাকবে না** (ADR-011)। সার্ভার
- *    `first_activity_at` পাঠায়ই না, আর পাঠালেও বসানো যেত না — একটা "শুরুর
- *    সময়" কলাম বসিয়ে দিলে এই শিটটাই কার্যত লেট-রিপোর্ট হয়ে যেত, অথচ লেট
- *    ট্র্যাকিং এই পণ্যে নেই। রিপোর্ট শুধু বলে কত ঘণ্টা হয়েছে।
+ * Important: **there is no "who arrived when" here and never will be** (ADR-011).
+ *    The server does not send `first_activity_at`, and if it did we still would not
+ *    show it: a "start time" column would turn this sheet into a lateness report,
+ *    and lateness tracking is not part of this product. The report only says how
+ *    many hours were worked.
  */
 export function AttendanceTab({
   from,
@@ -33,8 +34,8 @@ export function AttendanceTab({
 }) {
   const { data, error, loading, reload } = useApi(
     (signal) =>
-      // ⚠️ `employeeId: null` পাঠানো যাবে না — `qs()` null বাদ দেয়, তাই
-      //    "সবাই" মানে প্যারামিটারটা একেবারেই না পাঠানো।
+      // Careful: `employeeId: null` must not be sent; `qs()` drops null, so "everyone"
+      //    means not sending the parameter at all.
       getAttendanceReport(
         { from, to, employeeId: employeeId ?? undefined },
         signal,
@@ -96,8 +97,8 @@ export function AttendanceTab({
       render: (row) => <Hours hours={row.workedHours} />,
     },
     {
-      // ⚠️ ধূসর — idle সময় **গোনা হয়নি**। কালোয় দেখালে মনে হতো এটাও
-      //    কাজের ঘণ্টার সাথে যোগ হয়েছে।
+      // Careful: grey, because idle time is **not counted**. In black it would look
+      //    as if it were added to the worked hours.
       key: 'idle',
       header: 'Idle',
       align: 'right',
@@ -110,7 +111,7 @@ export function AttendanceTab({
       render: (row) => <SignedHours hours={row.adjustmentHours} />,
     },
     {
-      // ⭐ এই কলামটাই আসল — worked + adjustment, টার্গেটের সাথে এটাই মেলে
+      // Important: this is the real column: worked + adjustment, the one that matches the target
       key: 'credited',
       header: 'Counted',
       align: 'right',
@@ -125,18 +126,17 @@ export function AttendanceTab({
       render: (row) => <Hours hours={row.targetHours} tone="muted" />,
     },
     /**
-     * ⭐⭐ **আজ কতগুলো ডিজাইন শেষ হয়েছে** *(২৩ আগস্ট ২০২৬)* —
-     * "kon designer daily koyta design korche seta kothay dekhote pab?"
+     * **Designs finished today**, per designer.
      *
-     * ⚠️⚠️ সংখ্যাটা Excel-এ আগে থেকেই ছিল, কিন্তু **পর্দায় ছিল না** —
-     * অর্থাৎ দেখতে হলে ফাইল নামাতে হতো।
+     * Careful: the number already existed in Excel but **not on screen**, so you had
+     * to download the file to see it.
      *
-     * ⚠️ এক সময় এখানে দুটো কলাম ছিল (Opened ও Finished)। **"খোলা"টা তুলে
-     * দেওয়া হয়েছে** *(মালিকের সিদ্ধান্ত, ২৩ আগস্ট)* — ওই গণনা "যে বানায়"
-     * আর "যে দেখে" দুজনকে আলাদা করতে পারত না।
+     * Careful: there used to be two columns (Opened and Finished). **"Opened" was
+     * removed** (owner's decision): that count could not tell "who makes" apart from
+     * "who views".
      *
-     * ⚠️ ০ হলে ঘর **খালি**, "০" নয় — ডিজাইন-বহির্ভূত কর্মীর সারিতে ০
-     * লেখা মানে "মেপে শূন্য পাওয়া গেছে", আর সেটা মিথ্যা হতো।
+     * Careful: the cell is **empty** at 0, not "0". A 0 in the row of a non-design
+     * employee would mean "measured and found zero", which would be false.
      */
     {
       key: 'designs',
@@ -146,7 +146,7 @@ export function AttendanceTab({
         row.designsDone === null ? (
           <span className="text-ink-3">—</span>
         ) : (
-          // ⭐ সবুজ — এটাই একমাত্র সংখ্যা যেটা "কাজ শেষ" বোঝায়
+          // Green: the only number that means "work finished"
           <span className="num font-medium text-ok">{row.designsDone}</span>
         ),
     },
@@ -167,11 +167,11 @@ export function AttendanceTab({
           value={<Hours hours={totals.creditedHours} />}
         />
         {/*
-          ⚠️⚠️ লেবেলে "days listed" — সংখ্যাটা নিচের Target কলামের যোগফল,
-          "এ পর্যন্ত কত হওয়ার কথা ছিল" নয়। এখানে ট্র্যাকিং শুরুর আগের দিন
-          আর আজকের অসমাপ্ত দিনও আছে, তাই এটাকে Total counted-এর পাশে রেখে
-          বিয়োগ করলে যে ঘাটতি বেরোয় সেটা মিথ্যে। প্রত্যাশা আসে
-          `meta.expectedHours` থেকে, আর সেটা Monthly পাতা দেখায়।
+          Careful: the label says "days listed": the number is the sum of the Target
+          column below, not "how much should have been done so far". It includes days
+          before tracking began and today's unfinished day, so subtracting it from
+          Total counted gives a false shortfall. Expected hours come from
+          `meta.expectedHours`, which the Monthly page shows.
         */}
         <Stat
           label="Total target · days listed"
@@ -185,8 +185,8 @@ export function AttendanceTab({
           <Table
             columns={columns}
             rows={shown}
-            // ⚠️ একজন কর্মীর একাধিক দিন আসে, তাই কী-তে দুটোই লাগে —
-            //    শুধু employeeId দিলে React সারিগুলো গুলিয়ে ফেলত।
+            // Careful: one employee has several days, so the key needs both; with only
+            //    employeeId React would mix up the rows.
             rowKey={(row) => `${row.employeeId}-${row.date}`}
             rowMuted={(row) => row.status === 'no_activity'}
             footer={

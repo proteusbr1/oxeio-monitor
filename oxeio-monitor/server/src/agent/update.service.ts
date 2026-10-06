@@ -34,16 +34,16 @@ export class UpdateService {
   }
 
   /**
-   * G34 — auto-update ফ্লো ([02-Workflow §8](../../docs/02-Workflow.md)) থাকলেও
-   * MSI নামানোর endpoint ছিল না।
+   * G34 - the auto-update flow ([02-Workflow §8](../../docs/02-Workflow.md))
+   * existed, but there was no endpoint to download the MSI.
    *
-   * `rollout_stage = halted` হলে কিছুই দেওয়া হয় না — খারাপ আপডেট গেলে
-   * ওখানেই থামিয়ে দেওয়া যায়।
+   * Nothing is offered when `rollout_stage = halted`, so a bad update can be
+   * stopped right there.
    */
   async offerFor(
     currentVersion: string,
     machineGuid?: string | null,
-    /** ⭐ কোন ডিভাইস জিজ্ঞেস করছে — পাইলট মেলানোর জন্য *(১ সেপ্টেম্বর ২০২৬)* */
+    /** Which device is asking; used to match the pilot device. */
     deviceId?: number | null,
   ): Promise<UpdateOffer | null> {
     const latest = await this.prisma.agentVersion.findFirst({
@@ -53,12 +53,12 @@ export class UpdateService {
 
     if (!latest || !isNewer(latest.version, currentVersion)) return null;
 
-    // H04 — ⭐ ধাপে ধাপে। machineGuid না জানলে **কিছুই দেওয়া হয় না**:
-    //    অজানা ডিভাইসকে আপডেট দেওয়ার চেয়ে না দেওয়া নিরাপদ, কারণ
-    //    canary-র পুরো মানেই "গুটিকয়েক মেশিনে আগে"।
+    // H04 - staged rollout. If machineGuid is unknown, **nothing is offered**:
+    // withholding an update from an unknown device is safer, because the whole
+    // point of a canary is "a handful of machines first".
     /**
-     * ⭐ পাইলট হলে বালতি এড়ানো যায়, কিন্তু `machineGuid` ছাড়া নয় —
-     * পরিচয়হীন কোনো কল যেন কখনো অফার না পায়।
+     * A pilot device skips the rollout bucket, but never without a
+     * `machineGuid`, so an anonymous call can never receive an offer.
      */
     const isPilot =
       latest.pilotDeviceId !== null &&
@@ -90,8 +90,8 @@ export class UpdateService {
     });
     if (!row) throw new NotFoundException('No such version');
 
-    // msi_path storage-এর ভেতরেই থাকতে হবে — বাইরের যেকোনো ফাইল
-    // নামিয়ে নেওয়ার সুযোগ (path traversal) বন্ধ
+    // msi_path must stay inside storage; this blocks downloading arbitrary
+    // files from outside (path traversal)
     const abs = isAbsolute(row.msiPath)
       ? resolve(row.msiPath)
       : resolve(this.root, row.msiPath);

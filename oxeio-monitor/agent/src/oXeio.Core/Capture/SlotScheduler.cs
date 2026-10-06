@@ -1,15 +1,15 @@
 namespace oXeio.Core.Capture;
 
 /// <summary>
-/// ⭐ র‍্যান্ডম স্ক্রিনশটের সময় ঠিক করে (A01)।
+/// Decides the random screenshot times (A01).
 ///
-/// প্রতি ৫ মিনিটের একটা "স্লট", আর স্লটের ভেতরে ছবি ওঠে <b>র‍্যান্ডম</b> সেকেন্ডে।
-/// ফলে ঘণ্টায় ১২টা ছবি নিয়মিতই আসে, কিন্তু <b>ঠিক কখন</b> আসবে তা কেউ আগে থেকে
-/// জানতে পারে না — এটাই পুরো ব্যবস্থার মূল কথা।
+/// Every 5 minutes is a "slot", and within the slot the picture is taken at a <b>random</b>
+/// second. So 12 pictures an hour arrive regularly, but nobody can know in advance
+/// <b>exactly when</b>: that is the core of the whole scheme.
 ///
 /// <code>
 /// [09:00–09:05] → 09:03:47      [09:15–09:20] → 09:19:55
-/// [09:05–09:10] → 09:06:12      [09:20–09:25] → ⏭ স্কিপ (idle ছিল)
+/// [09:05–09:10] → 09:06:12      [09:20–09:25] → skipped (was idle)
 /// </code>
 /// </summary>
 public sealed class SlotScheduler
@@ -27,7 +27,7 @@ public sealed class SlotScheduler
     public sealed record Slot(DateTimeOffset SlotStart, DateTimeOffset FireAt);
 
     /// <summary>
-    /// <paramref name="after"/>-এর পরের স্লট আর তার ভেতরে ছবি তোলার মুহূর্ত।
+    /// The slot after <paramref name="after"/> and the moment within it to take the picture.
     /// </summary>
     public Slot Next(DateTimeOffset after)
     {
@@ -36,7 +36,7 @@ public sealed class SlotScheduler
         return new Slot(slotStart, slotStart + TimeSpan.FromSeconds(offset));
     }
 
-    /// <summary>ওই মুহূর্তটা যে স্লটে পড়ে, তার শুরু।</summary>
+    /// <summary>The start of the slot that contains that moment.</summary>
     public DateTimeOffset FloorToSlot(DateTimeOffset t)
     {
         var ticks = t.UtcTicks - (t.UtcTicks % _slot.Ticks);

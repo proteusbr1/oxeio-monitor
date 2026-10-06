@@ -2,24 +2,24 @@ import { listEmployees, type EmployeeView } from '../api/staff';
 import { useApi } from '../api/useApi';
 
 /**
- * স্টাফ বাছাই — টাইমলাইন, স্ক্রিনশট, রিপোর্ট সব পেজেই লাগে।
+ * Staff picker: needed on the timeline, screenshot and report pages alike.
  *
- * ⭐ তালিকাটা নিজেই আনে (`GET /employees`), তাই পেজগুলোকে আলাদা করে
- * একটা কল লিখতে হয় না। `GET /employees` **owner + manager** দুজনেরই
- * খোলা — নামের তালিকা ছাড়া লাইভ ভিউ বা রিপোর্ট অর্থহীন।
+ * It fetches the list itself (`GET /employees`), so pages do not each have to
+ * write a separate call. `GET /employees` is open to both owner and manager:
+ * without the name list, the live view and reports would be meaningless.
  *
- * ⚠️ `role = employee` এখানে ৪০৩ পাবে। স্টাফের নিজের পর্দায় এই বাছাইটা
- *    **রাখবেন না** — সে তো একজনই, বাছার কিছু নেই, আর তালিকাটা দেখালে
- *    সহকর্মীদের নামও দেখা যেত।
+ * Careful: `role = employee` gets a 403 here. Do not put this picker on a staff
+ * member's own screen: there is only one person, nothing to pick, and showing the
+ * list would reveal colleagues' names.
  *
- * ⚠️ ডিফল্টে শুধু active কর্মী। চলে যাওয়া কারো পুরোনো দিন দেখতে হলে
- *    `includeInactive` — তখন নামের পাশে "(Inactive)" বসে, নইলে কেউ
- *    বুঝত না কেন তার আজকের ঘণ্টা শূন্য।
+ * Careful: by default only active staff. To see the old days of someone who has
+ * left, use `includeInactive`; "(Inactive)" then appears beside the name,
+ * otherwise nobody would understand why their hours today are zero.
  *
- * ⚠️ **"Inactive" ≠ "Idle"** — বাংলায় দুটোই "নিষ্ক্রিয়" ছিল, ইংরেজিতে নয়।
- *    এখানকারটা **চাকরির অবস্থা** (চলে গেছেন), আর `StatusDot`-এর "Idle"
- *    হলো এই মুহূর্তে কি-বোর্ড-মাউস চুপচাপ। দুটো গুলিয়ে ফেললে কর্মরত
- *    কাউকে "চলে গেছেন" পড়া যেত।
+ * Careful: "Inactive" is not "Idle". In Bengali both were the same word; in
+ * English they are not. This one is employment status (has left), while the
+ * "Idle" of `StatusDot` means keyboard and mouse are quiet right now. Mixing
+ * them up could make someone read a working person as "has left".
  */
 export function EmployeePicker({
   value,
@@ -30,11 +30,11 @@ export function EmployeePicker({
   includeInactive = false,
   className = '',
 }: {
-  /** `null` = কেউ বাছা হয়নি / সবাই */
+  /** `null` = nobody picked / everyone. */
   value: number | null;
   onChange: (employeeId: number | null) => void;
   label?: string;
-  /** "সবাই" বিকল্পটা থাকবে কি না */
+  /** Whether the "everyone" option is offered. */
   allowAll?: boolean;
   allLabel?: string;
   includeInactive?: boolean;
@@ -58,8 +58,8 @@ export function EmployeePicker({
         className="min-w-44 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-brand focus:ring-2 focus:ring-brand/25 disabled:opacity-60"
       >
         {/*
-          ⚠️ তিনটে অবস্থাই এখানে দেখাতে হয় — নইলে তালিকা খালি থাকলে
-             ফাঁকা ড্রপডাউন দেখে মনে হতো কন্ট্রোলটাই ভাঙা।
+          Careful: all three states must be shown here; otherwise, with an empty list,
+             a blank dropdown would look like the control itself is broken.
         */}
         {loading && <option value="">Loading…</option>}
         {error && <option value="">Couldn't load the list</option>}

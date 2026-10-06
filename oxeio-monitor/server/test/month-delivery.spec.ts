@@ -12,39 +12,39 @@ import {
 } from '../src/ops/ops.constants';
 
 /**
- * **R26 — মাস বন্ধ হলে হিসাবের ফাইল নিজে থেকে যায়।**
+ * **R26 — when a month is closed, the accounts file goes out by itself.**
  *
- * দুটো স্তর আলাদা করে পরীক্ষা করা হয়: খাঁটি নিয়ম (রেঞ্জ · ক্যাপশন · নাম),
- * আর টেলিগ্রামে ফাইল তোলার আসল অনুরোধটা (`fetch` স্টাব করে)।
+ * Two layers are tested separately: the pure rules (range, caption, name),
+ * and the real request that uploads the file to Telegram (with `fetch` stubbed).
  */
 
-describe('monthRange — মাসের প্রথম ও শেষ দিন', () => {
-  it('৩১ দিনের মাস', () => {
+describe('monthRange — first and last day of a month', () => {
+  it('a 31-day month', () => {
     expect(monthRange('2026-07')).toEqual({ from: '2026-07-01', to: '2026-07-31' });
   });
 
-  it('৩০ দিনের মাস', () => {
+  it('a 30-day month', () => {
     expect(monthRange('2026-09')).toEqual({ from: '2026-09-01', to: '2026-09-30' });
   });
 
-  /** ⚠️⚠️ ৩০/৩১ ধরে নিলে ফেব্রুয়ারিতে দু-দিনের ঘণ্টা নীরবে বাদ পড়ত */
-  it('ফেব্রুয়ারি — সাধারণ ও অধিবর্ষ', () => {
+  /** Assuming 30/31 would silently drop two days' hours in February */
+  it('February — ordinary and leap', () => {
     expect(monthRange('2026-02').to).toBe('2026-02-28');
     expect(monthRange('2028-02').to).toBe('2028-02-29');
   });
 
-  it('ডিসেম্বর বছর পেরোয় না', () => {
+  it('December does not cross the year', () => {
     expect(monthRange('2026-12')).toEqual({ from: '2026-12-01', to: '2026-12-31' });
   });
 
-  it('ভুল মাস নিলে থামে', () => {
+  it('stops on a wrong month', () => {
     expect(() => monthRange('2026-13')).toThrow(RangeError);
     expect(() => monthRange('2026-1')).toThrow(RangeError);
     expect(() => monthRange('not-a-month')).toThrow(RangeError);
   });
 });
 
-describe('monthCaption — টেলিগ্রামে যা লেখা যায়', () => {
+describe('monthCaption — what can be written on Telegram', () => {
   const caption = monthCaption({
     orgName: 'oXeio',
     yearMonth: '2026-07',
@@ -52,33 +52,33 @@ describe('monthCaption — টেলিগ্রামে যা লেখা �
     totalHours: 2416.7,
   });
 
-  it('মাস, লোকসংখ্যা আর মোট ঘণ্টা থাকে', () => {
+  it('has the month, head count and total hours', () => {
     expect(caption).toContain('2026-07');
     expect(caption).toContain('12 staff');
     expect(caption).toContain('2417 hours');
   });
 
   /**
-   * ⚠️⚠️ সবচেয়ে জরুরি পাহারা — ক্যাপশনে **কারো নাম নেই**। বার্তা
-   * টেলিগ্রামের সার্ভারে জমে থাকে; নাম-ধরে হিসাব থাকে সংযুক্ত ফাইলে।
+   * The most important guard — the caption has no one's name. The message
+   * stays on Telegram's servers; the per-name accounts are in the attached file.
    */
-  it('কোনো কর্মীর নাম যায় না', () => {
+  it('no staff name goes out', () => {
     const c = monthCaption({
       orgName: 'oXeio',
       yearMonth: '2026-07',
       people: 3,
       totalHours: 100,
     });
-    expect(c).not.toMatch(/[A-Z][a-z]+ [A-Z][a-z]+/); // "Rakib Hasan" ধাঁচ
+    expect(c).not.toMatch(/[A-Z][a-z]+ [A-Z][a-z]+/); // like "Rakib Hasan"
   });
 
-  it('ক্যাপশন টেলিগ্রামের সীমার ভেতরে', () => {
+  it('the caption is within Telegram\'s limit', () => {
     expect(caption.length).toBeLessThan(TELEGRAM_CAPTION_MAX);
   });
 });
 
 describe('monthReportName', () => {
-  it('তারিখসহ ASCII নাম', () => {
+  it('ASCII name with the date', () => {
     expect(monthReportName('2026-07', 'xlsx')).toBe(
       'oxeio-summary-2026-07-01_2026-07-31.xlsx',
     );
@@ -86,13 +86,13 @@ describe('monthReportName', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// TelegramChannel.sendDocument — আসল অনুরোধটা
+// TelegramChannel.sendDocument — the real request
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * ⚠️ এই স্যুটে আগে কেউ `fetch` স্টাব করেনি — চ্যানেলগুলো টেস্টে
- * `not_configured` হয়ে থেমে যেত বলে দরকার পড়েনি। ফাইল আপলোডের **আকৃতিটাই**
- * এখানে আসল জিনিস, তাই এখানে স্টাব করা হয়।
+ * Nobody stubbed `fetch` in this suite before — the channels stopped at
+ * `not_configured` in tests, so it was not needed. The shape of the file
+ * upload is the real thing here, so it is stubbed here.
  */
 function channelWith(settings: { botToken: string; chatId: string } | null) {
   const channel = Object.create(TelegramChannel.prototype) as TelegramChannel;
@@ -111,7 +111,7 @@ afterEach(() => {
 });
 
 describe('TelegramChannel.sendDocument', () => {
-  it('multipart হিসেবে যায়, আর ঠিক নাম-ক্যাপশন নিয়ে', async () => {
+  it('goes as multipart, with exactly the right name and caption', async () => {
     const fetchMock = vi.fn().mockResolvedValue(ok());
     vi.stubGlobal('fetch', fetchMock);
 
@@ -141,12 +141,12 @@ describe('TelegramChannel.sendDocument', () => {
   });
 
   /**
-   * ⚠️⚠️ **এটাই সবচেয়ে দামি টেস্ট।** হাতে `content-type` বসালে `fetch`-এর
-   * তৈরি করা `boundary` হারিয়ে যায় আর Telegram প্রতিবার ৪০০ দেয় — দেখতে
-   * লাগে টোকেনের সমস্যা। পাশের `send()`-এ হেডারটা আছে, তাই ভুলটা
-   * কপি-পেস্টে ফিরে আসা খুব সহজ।
+   * The most valuable test. Setting `content-type` by hand loses the
+   * `boundary` that `fetch` generates and Telegram answers 400 every time —
+   * which looks like a token problem. The neighbouring `send()` has the
+   * header, so the mistake is very easy to bring back by copy-paste.
    */
-  it('কোনো headers বসানো হয় না (boundary যেন না হারায়)', async () => {
+  it('no headers are set (so the boundary is not lost)', async () => {
     const fetchMock = vi.fn().mockResolvedValue(ok());
     vi.stubGlobal('fetch', fetchMock);
 
@@ -157,7 +157,7 @@ describe('TelegramChannel.sendDocument', () => {
     expect(init.headers).toBeUndefined();
   });
 
-  it('কনফিগার করা না থাকলে কিছুই পাঠানো হয় না', async () => {
+  it('nothing is sent when it is not configured', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
@@ -171,8 +171,8 @@ describe('TelegramChannel.sendDocument', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  /** ⚠️ আগে মাপা, তারপর পাঠানো — নইলে পুরো আপলোড খরচ করে তবে জানা যেত */
-  it('৫০ MB-র বেশি হলে চেষ্টাই করা হয় না', async () => {
+  /** Measure first, then send — otherwise the whole upload would be spent before finding out */
+  it('over 50 MB it is not even attempted', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
@@ -186,7 +186,7 @@ describe('TelegramChannel.sendDocument', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('লম্বা ক্যাপশন ছেঁটে দেওয়া হয়', async () => {
+  it('a long caption is truncated', async () => {
     const fetchMock = vi.fn().mockResolvedValue(ok());
     vi.stubGlobal('fetch', fetchMock);
 
@@ -201,8 +201,8 @@ describe('TelegramChannel.sendDocument', () => {
     expect(caption.length).toBe(TELEGRAM_CAPTION_MAX);
   });
 
-  /** ⚠️ খালি ক্যাপশন **পাঠানোই হয় না** — খালি স্ট্রিংয়ে Telegram ৪০০ দেয় */
-  it('ক্যাপশন না থাকলে ঘরটাই বসে না', async () => {
+  /** An empty caption is not sent at all — Telegram gives 400 on an empty string */
+  it('with no caption the field is not set', async () => {
     const fetchMock = vi.fn().mockResolvedValue(ok());
     vi.stubGlobal('fetch', fetchMock);
 
@@ -213,8 +213,8 @@ describe('TelegramChannel.sendDocument', () => {
     expect((init.body as FormData).get('caption')).toBeNull();
   });
 
-  /** ⚠️ উদ্ধৃতি/নিউলাইন multipart-এর হেডারই ভেঙে দিত */
-  it('ফাইলের নাম ছেঁকে নেওয়া হয়', async () => {
+  /** Quotes/newlines would break the multipart header itself */
+  it('the file name is sanitised', async () => {
     const fetchMock = vi.fn().mockResolvedValue(ok());
     vi.stubGlobal('fetch', fetchMock);
 
@@ -229,7 +229,7 @@ describe('TelegramChannel.sendDocument', () => {
     expect(file.name).toBe('2026.xlsx');
   });
 
-  it('সার্ভার না নিলে failed, কিন্তু throw নয়', async () => {
+  it('failed when the server rejects it, but no throw', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(new Response('nope', { status: 400 })),
@@ -241,7 +241,7 @@ describe('TelegramChannel.sendDocument', () => {
     ).toBe('failed');
   });
 
-  it('নেটওয়ার্ক ভাঙলেও throw নয়', async () => {
+  it('no throw even if the network breaks', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('boom')));
 
     const channel = channelWith({ botToken: 'TOKEN', chatId: '42' });

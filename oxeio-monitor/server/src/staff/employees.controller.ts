@@ -19,22 +19,22 @@ import { EmployeesService } from './employees.service';
 import type { EmployeeView } from './redact';
 
 /**
- * E10 — স্টাফ ম্যানেজমেন্টের **লেখার** দিক। পুরো ক্লাসটাই owner-only,
- * মেথড-লেভেলে নয় — পরে কেউ নতুন endpoint যোগ করলে সেটাও আপনাআপনি
- * owner-only থাকবে (স্পেক § ৪.৩)।
+ * Staff management, the **write** side. The whole class is owner-only, not
+ * per method, so any endpoint added later is automatically owner-only too
+ * (spec section 4.3).
  *
- * ⭐ **ব্যতিক্রম দুটো** — `create` ও `update`-এ ম্যানেজারও আছেন
- * *(১৫ আগস্ট)*। ⚠️ ওগুলোতে role **মেথডেই** শিথিল করা হয়েছে, ক্লাসে নয়:
- * তাহলে `deactivate` · `reactivate` · `policy-signed` · `agent/turn-on`
- * আগের মতোই owner-only থাকে, আর ভবিষ্যতের নতুন রুটও তাই থাকবে।
+ * Two exceptions: managers are allowed on `create` and `update`. Careful: the
+ * role is relaxed **on those methods**, not on the class, so `deactivate`,
+ * `reactivate`, `policy-signed` and `agent/turn-on` stay owner-only as before,
+ * and so will any future route.
  *
- * ⚠️ পড়ার রুট (`GET /employees`) এখানে **নেই** — সেগুলো
- * `employees-read.controller.ts`-এ, কারণ ম্যানেজারেরও তালিকা দেখা লাগে।
- * এই ফাইলে `@Get` লিখলে ম্যানেজার স্টাফের নামও দেখতে পেত না।
+ * Careful: the read routes (`GET /employees`) are **not** here. They live in
+ * `employees-read.controller.ts` because managers need the list too. An
+ * `@Get` in this file would stop managers from even seeing staff names.
  *
- * ⚠️ **কর্মী মোছার** কোনো `@Delete` নেই — ইচ্ছাকৃত, নিচে `deactivate` দেখুন।
- *    একমাত্র `DELETE` রুটটা `policy-signed`-এর, আর সেটা কর্মীর সারি নয়,
- *    শুধু একটা ভুল করে বসানো তারিখ তোলে।
+ * Careful: there is deliberately no `@Delete` for employees; see `deactivate`
+ * below. The only `DELETE` route is on `policy-signed`, and it does not remove
+ * an employee row, only clears a wrongly entered date.
  */
 @Roles(UserRole.owner)
 @Controller('employees')
@@ -44,14 +44,14 @@ export class EmployeesController {
   /**
    * `POST /api/v1/employees`
    *
-   * ⭐ **ম্যানেজারও পারেন** *(মালিকের সিদ্ধান্ত, ১৫ আগস্ট)* — নতুন কর্মী
-   * যোগ করা রোজকার কাজ, আর ওটার জন্য owner-কে ডাকতে হলে রোলআউটের দিন
-   * সবাই আটকে থাকত।
+   * Managers may do this too (owner's decision): adding a new employee is a
+   * daily task, and having to call the owner for it would block everyone on
+   * rollout day.
    *
-   * ⚠️ **বেতন তবু owner-এরই** — `EmployeesService` সেটা আলাদা করে আটকায়
-   * ([ADR-023](../../../docs/05-Options-Decisions.md))। এখানে role
-   * শিথিল করা আর ওখানে না আটকানো হলে ম্যানেজার এমন একটা ঘরে **লিখতে**
-   * পারতেন যেটা তিনি **পড়তেও** পারেন না — দুটোর চেয়েও খারাপ।
+   * Careful: salary is still owner-only. `EmployeesService` blocks it
+   * separately ([ADR-023](../../../docs/05-Options-Decisions.md)). If the
+   * role were relaxed here without that block, a manager could **write** a
+   * field that they cannot even **read**, which is worse than either option.
    */
   @Roles(UserRole.owner, UserRole.manager)
   @Post()
@@ -65,9 +65,9 @@ export class EmployeesController {
   }
 
   /**
-   * `PATCH /api/v1/employees/:id` — শুধু পাঠানো ফিল্ডগুলোই বদলায়।
+   * `PATCH /api/v1/employees/:id`: only the fields sent are changed.
    *
-   * ⭐ ম্যানেজারও পারেন; ⚠️ বেতন বাদে (উপরে `create`-এর নোট)।
+   * Managers may do this too, except salary (see the note on `create`).
    */
   @Roles(UserRole.owner, UserRole.manager)
   @Patch(':id')
@@ -83,9 +83,9 @@ export class EmployeesController {
   /**
    * `POST /api/v1/employees/:id/deactivate`
    *
-   * ⚠️ ডিলিটের বদলে এটাই। DELETE রাখা হয়নি যাতে ফ্রন্টএন্ডে ভুল করেও
-   * "মুছে ফেলা" বোতাম বসানোর সুযোগ না থাকে — সারিটা মুছলে ওই কর্মীর মাসের
-   * হিসাব, স্ক্রিনশট আর audit trail সব অনাথ হয়ে যেত।
+   * Careful: this is used instead of delete. There is no DELETE route so the
+   * frontend can never get a "remove" button by mistake. Deleting the row
+   * would orphan that employee's monthly totals, screenshots and audit trail.
    */
   @Post(':id/deactivate')
   @HttpCode(HttpStatus.OK)
@@ -110,10 +110,11 @@ export class EmployeesController {
   }
 
   /**
-   * ⭐ `POST /api/v1/employees/:id/agent/turn-on` — বন্ধ হয়ে যাওয়া এজেন্ট ফেরানো।
+   * `POST /api/v1/employees/:id/agent/turn-on`: bring back an agent that has
+   * been switched off.
    *
-   * ⚠️ কর্মী ধরে, ডিভাইস ধরে নয় — মালিক "ডিভাইস #৬১" নিয়ে ভাবেন না,
-   * ভাবেন "Belal-এর PC" নিয়ে।
+   * Careful: it works per employee, not per device. The owner thinks of
+   * "Belal's PC", not "device #61".
    */
   @Post(':id/agent/turn-on')
   @HttpCode(HttpStatus.OK)
@@ -126,13 +127,15 @@ export class EmployeesController {
   }
 
   /**
-   * ⭐ `POST /api/v1/employees/:id/policy-signed` — সই করা মনিটরিং পলিসি।
+   * `POST /api/v1/employees/:id/policy-signed`: record the signed monitoring
+   * policy.
    *
-   * বডি ঐচ্ছিক: `{ "signedOn": "2026-08-03" }`। না দিলে আজকের ঢাকার তারিখ।
+   * The body is optional: `{ "signedOn": "2026-08-03" }`. Without it, today's
+   * Dhaka date is used.
    *
-   * ⚠️ এটাই রোলআউটের একমাত্র শর্ত রেকর্ড করার জায়গা
-   * ([01 § রোলআউট](../../../docs/01-Planning.md))। এতদিন কলামটা ছিল, পড়াও
-   * হতো — শুধু বসানোর কোনো পথ ছিল না।
+   * Careful: this is the only place to record the one rollout precondition
+   * ([01 § Rollout](../../../docs/01-Planning.md)). The column existed and was
+   * read, but there was no way to set it.
    */
   @Post(':id/policy-signed')
   @HttpCode(HttpStatus.OK)
@@ -146,10 +149,11 @@ export class EmployeesController {
   }
 
   /**
-   * `DELETE /api/v1/employees/:id/policy-signed` — ভুল করে বসানো সই তোলা।
+   * `DELETE /api/v1/employees/:id/policy-signed`: undo a wrongly entered
+   * signature.
    *
-   * ⚠️ কর্মীর সারি মোছে না, শুধু তারিখটা শূন্য করে — আর ঘটনাটা audit-এ
-   * আলাদা action হয়ে বসে।
+   * Careful: it does not delete the employee row, only clears the date, and
+   * the event is recorded in the audit log as its own action.
    */
   @Delete(':id/policy-signed')
   @HttpCode(HttpStatus.OK)

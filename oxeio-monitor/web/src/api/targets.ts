@@ -1,8 +1,6 @@
 import { api } from './client';
 
-/**
- * **ডিজাইন-টার্গেট** *(২২ আগস্ট ২০২৬)* — গবেষকের জমা, ডিজাইনারের তালিকা।
- */
+/** Design targets: researchers submit them, designers get a list. */
 
 export type RejectReason =
   | 'not_amazon'
@@ -11,8 +9,8 @@ export type RejectReason =
   | 'duplicate_in_paste';
 
 /**
- * ⭐⭐ কারণগুলো **করণীয় বলে, দোষ নয়** — "কিছু একটা ভুল" লিখলে গবেষক
- * জানতেন না লাইনটা নিয়ে কী করতে হবে।
+ * Careful: the reasons say what to do, not who is to blame. With "something went
+ * wrong" the researcher would not know what to do about the line.
  */
 export const REJECT_TEXT: Record<RejectReason, string> = {
   short_link: 'Open the short link and paste the real URL',
@@ -29,11 +27,13 @@ export interface RejectedLine {
 
 export interface BulkResult {
   added: number;
-  /** ⚠️ ভুল নয়, কিন্তু লুকোনোও নয় — "৫০০ দিলাম, ৪৭৩ ঢুকল" রহস্য থাকা চলবে না */
+  /**
+   * Not an error, but not hidden either: "I submitted 500, 473 went in" must not be a mystery.
+   */
   alreadyKnown: number;
-  /** ⚠️ সর্বোচ্চ ২০০টা — আসল সংখ্যা `rejectedTotal`-এ */
+  /** Careful: at most 200; the real count is in `rejectedTotal`. */
   rejected: RejectedLine[];
-  /** ⭐ কতগুলো সত্যিই বাদ পড়েছে, তালিকা ছাঁটা হলেও */
+  /** How many were really dropped, even when the list is trimmed. */
   rejectedTotal: number;
   poolSize: number;
 }
@@ -43,61 +43,62 @@ export interface TargetStats {
   assigned: number;
   done: number;
   skipped: number;
-  /** ⭐ Amazon-এ পাতাটাই নেই — হাতে মুছে ফেলা *(২৯ আগস্ট)* */
+  /** The page does not exist on Amazon at all; deleted by hand. */
   deleted: number;
   perDesigner: number;
-  /** ⭐ Amazon-এ পাঠানো হয়েছে — `done`-এর উপরে, বদলে নয় */
+  /** Sent to Amazon; on top of `done`, not instead of it. */
   uploaded: number;
-  /** ⭐ বিক্রির জন্য উঠেছে */
+  /** Listed for sale. */
   live: number;
   /**
-   * ⭐⭐ **গবেষকের কিউ** *(২৪ আগস্ট ২০২৬)* — শেষ হয়েছে অথচ আপলোড হয়নি।
+   * The researcher's queue: finished but not yet uploaded.
    *
-   * ⚠️ ২৩ আগস্টের আগের সারিগুলো গোনা হয় না — ইমপোর্ট করা ২৭ হাজার
-   * পুরোনো কাজ অনেক আগেই Amazon-এ গেছে, তখন বোতামটাই ছিল না।
+   * Careful: rows from before 23 August are not counted. The 27 thousand old jobs
+   * that were imported went to Amazon long ago, when the button did not exist.
    */
   toUpload: number;
-  /** ⭐ আপলোড হয়েছে অথচ লাইভ হয়নি */
+  /** Uploaded but not yet live. */
   toLive: number;
   /**
-   * ⭐⭐ **বাদ গেছে অথচ মালিক/ম্যানেজার এখনো দেখেননি** *(৩১ আগস্ট ২০২৬)*।
+   * Skipped, but the owner/manager has not looked yet.
    *
-   * ⚠️ পুরোনো ৯৩টা `skipped` সারি এতে **নেই** — ওগুলোয় কোনো কারণ লেখা নেই,
-   * তাই দেখে নেওয়ার কিছুও নেই।
+   * Careful: the 93 old `skipped` rows are not included. They carry no reason, so
+   * there is nothing to review.
    */
   toReview: number;
   /**
-   * ⭐⭐ **বানান দেখা বাকি** *(ADR-038)* — সুমাইয়ার কিউ।
+   * Spelling check still pending (ADR-038): Sumaiya's queue.
    *
-   * ⚠️ যন্ত্র বানান পড়ে না; এটা কেবল *"কোনগুলো দেখা হয়নি"*-র হিসাব।
+   * Careful: a machine does not read spelling; this only counts "which have not been checked".
    */
   toCheck: number;
-  /** ⭐ ভুল পাওয়া গেছে, ঠিক হয়নি — বেলালের কিউ */
+  /** Mistakes found, not yet fixed: Belal's queue. */
   toFix: number;
 }
 
 export interface MyTarget {
   id: number;
   asin: string;
-  /** ⭐ সার্ভার ASIN থেকে বানিয়ে পাঠায় — ওয়েব জোড়া লাগায় না */
+  /** Built by the server from the ASIN; the web does not assemble it. */
   url: string;
   jobNumber: number | null;
   assignedAt: string | null;
   /**
-   * ⭐ ফাইলটা খোলা হয়েছে — "কাজ চলছে"।
+   * The file was opened: "work in progress".
    *
-   * ⚠️ এটা **শেষ হওয়া নয়**: এজেন্ট নম্বরটা দেখে ফাইল খোলার মুহূর্তে।
-   * শেষ হওয়া বলেন ডিজাইনার নিজে, Complete বোতামে।
+   * Careful: this is not completion. It is the moment the agent sees the number and
+   * the file being opened. Completion is declared by the designer, with the
+   * Complete button.
    */
   startedAt: string | null;
   /**
-   * ⭐⭐ **আজ শেষ করা হয়েছে** *(২৫ আগস্ট)*।
+   * Finished today.
    *
-   * ⚠️⚠️ `null` = এখনো হাতে আছে। এই একটা ঘরই ঠিক করে সারিটা কার্ডের
-   * কোন ভাগে বসবে — "হাতে আছে" নাকি "আজ শেষ করেছি"।
+   * Careful: `null` = still in hand. This one field decides which section of the
+   * card the row sits in: "in hand" or "finished today".
    *
-   * ⚠️ **আজকের** বাইরের কিছু সার্ভার পাঠায়ই না, তাই মান থাকা মানেই
-   * "এখনো ফেরানো যায়"।
+   * Careful: the server sends nothing outside today, so a value here always means
+   * "can still be reverted".
    */
   completedAt: string | null;
 }
@@ -119,28 +120,28 @@ export function myTargets(signal?: AbortSignal): Promise<MyTarget[]> {
 }
 
 /**
- * ⭐⭐ "শেষ করেছি" *(২৩ আগস্ট, মালিকের চাওয়া)*।
+ * "I finished it" (the owner's request).
  *
- * ⚠️ এটা ছাড়া উপায় নেই: সিস্টেম কেবল **শুরু** হওয়া দেখতে পায়
- * (ফাইল খোলা), শেষ হওয়া নয়।
+ * Careful: this is unavoidable. The system can only see the start (the file
+ * opening), not the finish.
  */
 export function completeTarget(id: number): Promise<{ ok: boolean }> {
   return api<{ ok: boolean }>(`/me/targets/${id}/done`, { method: 'POST' });
 }
 
 /**
- * ⭐⭐ **"ভুল করে Complete চেপে ফেলেছি"** *(২৫ আগস্ট)*।
+ * "I pressed Complete by mistake".
  *
- * ⚠️ সার্ভার তিনটে শর্ত দেখে — আজকের, নিজের, আর শেকলে এগোয়নি। শর্ত না
- * মিললে **কেন** মিলল না সেটা বার্তায় বলে দেয়, চুপ করে থাকে না।
+ * Careful: the server checks three conditions: today's, own, and not advanced
+ * along the chain. When a condition fails, the message says why instead of staying silent.
  */
 export function undoTarget(id: number): Promise<{ ok: boolean }> {
   return api<{ ok: boolean }>(`/me/targets/${id}/undone`, { method: 'POST' });
 }
 
 /**
- * ⚠️⚠️ `reason` এখন **বাধ্যতামূলক** *(৩১ আগস্ট)* — আগে ঐচ্ছিক ছিল, আর
- * পর্দা কোনোদিন পাঠায়ইনি; ফলে ৯৩টা skipped সারির একটাতেও কারণ ছিল না।
+ * Careful: `reason` is now required. It used to be optional and the screen never
+ * sent it, so not one of the 93 skipped rows had a reason.
  */
 export function skipTarget(
   id: number,
@@ -155,18 +156,20 @@ export function skipTarget(
 export type TargetStatus = 'pool' | 'assigned' | 'done' | 'skipped' | 'deleted';
 
 /**
- * ⭐⭐ **একটা টার্গেট কেন কাজের বাইরে গেল** *(মালিকের চাওয়া, ৩১ আগস্ট ২০২৬)*।
+ * Why a target left the work queue (the owner's request).
  *
- * ⚠️ ক্রমটাই পর্দার ক্রম, আর **`not_found` প্রথমে** — মাঠে ওটাই সবচেয়ে
- * বেশি ঘটে (Amazon-এ পাতাটাই নেই)। বেশি-ব্যবহৃতটা হাতের কাছে থাকে।
+ * Careful: this order is the screen's order, and `not_found` comes first because
+ * it happens most in the field (the page does not exist on Amazon). The most-used
+ * option stays within reach.
  */
 export const DROP_REASONS = ['not_found', 'copyright', 'events'] as const;
 
 export type DropReason = (typeof DROP_REASONS)[number];
 
 /**
- * ⚠️⚠️ **জমা হয় যন্ত্রের মান, দেখা যায় এই লেখা** — দুটো আলাদা রাখা হয়েছে
- * বলেই একদিন "Not Found"-কে "Page gone" বলা যাবে পুরোনো সারি না ছুঁয়ে।
+ * Careful: what is stored is the machine value, what is shown is this text. They
+ * are kept separate so that one day "Not Found" can be relabelled "Page gone"
+ * without touching old rows.
  */
 export const DROP_REASON_LABEL: Record<DropReason, string> = {
   not_found: 'Not Found',
@@ -174,7 +177,7 @@ export const DROP_REASON_LABEL: Record<DropReason, string> = {
   events: 'Events',
 };
 
-/** ⭐ মোছার ফল — কতগুলো গেল, আর শেষ হয়ে যাওয়া কতগুলো থেকে গেল */
+/** Result of a delete: how many went, and how many finished ones stayed. */
 export interface DeleteResult {
   deleted: number;
   keptDone: number;
@@ -186,7 +189,7 @@ export interface TargetRow {
   url: string;
   status: TargetStatus;
   jobNumber: number | null;
-  /** ⚠️ ছেড়ে যাওয়া কর্মীর সারিতে `null` — নামটা তখন `sourceNote`-এ */
+  /** Careful: `null` for a departed employee's row; the name is then in `sourceNote`. */
   assignedTo: { empCode: string; fullName: string } | null;
   assignedAt: string | null;
   startedAt: string | null;
@@ -194,57 +197,57 @@ export interface TargetRow {
   completedVia: string | null;
 
   /**
-   * ⭐⭐ **ওই জব-নম্বরের ফাইল ডিজাইন-অ্যাপে মোট কত সেকেন্ড ছিল**
-   * *(৯ সেপ্টেম্বর ২০২৬)*।
+   * Total seconds the file for that job number was open in the design app.
    *
-   * ⚠️⚠️ **তিনটে অবস্থা, দুটো নয়:**
-   * `> 0` মাপা হয়েছে · `0` **শেষ বলা হয়েছে, অথচ কখনো খোলা হয়নি** ·
-   * `null` বলার মতো কিছু নেই — হয় ওই সময়ের শিরোনাম জমা নেই
-   * (`TargetPage.traceSince`), নয় সারিটা এখনো শেষ বলা হয়নি।
+   * Careful: three states, not two:
+   * `> 0` measured; `0` marked finished but never opened; `null` nothing to say,
+   * either because window titles from that time are not stored
+   * (`TargetPage.traceSince`) or because the row has not been marked finished yet.
    *
-   * ⚠️ `0` আর `null` এক করে দেখানো যাবে না: একটা মাপ, অন্যটা অজ্ঞতা।
+   * Careful: `0` and `null` must not be shown the same way: one is a measurement,
+   * the other is ignorance.
    */
   fileSec: number | null;
 
   /**
-   * ⭐ কে "শেষ" বলেছেন *(২৩ আগস্ট)*।
+   * Who marked it "finished".
    *
-   * ⚠️ `assignedTo`-র সাথে গুলিয়ে ফেলা যাবে না — বরাদ্দ পাওয়া মানুষ আর
-   * শেষ বলা মানুষ এক না-ও হতে পারে (মালিক নিজেও চাপতে পারেন)।
+   * Careful: do not confuse it with `assignedTo`; the person assigned and the
+   * person who marked it finished may differ (the owner can press it too).
    */
   completedBy: { fullName: string; role: string } | null;
 
   /**
-   * ⭐⭐ **কে টার্গেটটা এনেছেন** *(২৫ আগস্ট ২০২৬)*।
+   * Who brought the target in.
    *
-   * ⚠️ `assignedTo`-র সাথে গুলিয়ে ফেলবেন না — ওটা **কর্মী** (যিনি
-   * ডিজাইন করবেন), এটা **ব্যবহারকারী** (যিনি লিঙ্কটা এনেছেন)।
+   * Careful: do not confuse it with `assignedTo`, which is the employee (who will
+   * design it); this is the user (who brought the link).
    *
-   * ⚠️ `| null` **নেই** — কলামটা `NOT NULL`, প্রতিটা সারির একজন উৎস
-   * আছে। মিথ্যা ঐচ্ছিকতা রাখলে পর্দায় অকারণ `?? '—'` বসাতে হতো।
+   * Careful: there is no `| null`: the column is `NOT NULL`, every row has a source.
+   * Pretending it is optional would force pointless `?? '—'` on the screen.
    */
   addedBy: { fullName: string; role: string };
-  /** ⭐ কবে এসেছে — একই ব্যাচের সারিগুলো এক মুহূর্তে বসে */
+  /** When it arrived; rows of the same batch land at the same moment. */
   addedAt: string;
-  /** ⭐ বানান দেখা হয়েছে — `null` = এখনো দেখা হয়নি (ADR-038) */
+  /** Spelling checked; `null` = not yet checked (ADR-038). */
   checkedAt: string | null;
-  /** ⭐ ভুল পাওয়া গেছে — `null` আর `checkedAt` বসানো = ঠিক ছিল */
+  /** Mistake found; `null` with `checkedAt` set = it was fine. */
   errorFoundAt: string | null;
-  /** ⭐ ভুলটা ঠিক করা হয়েছে */
+  /** The mistake has been fixed. */
   fixedAt: string | null;
   uploadedAt: string | null;
   liveAt: string | null;
-  /** ⚠️ **আমাদের নিজের** পণ্যের ASIN — উপরের `asin` নমুনার */
+  /** Careful: the ASIN of our own product, as opposed to the `asin` sample above. */
   liveAsin: string | null;
   /**
-   * ⭐ কেন বাদ গেল — `skipped` ও `deleted` সারিতে থাকে, বাকিতে `null`
-   * *(৩১ আগস্ট)*। ⚠️ পুরোনো সারিতে `null`, কারণ তখন কারণ চাওয়াই হতো না।
+   * Why it was dropped; present on `skipped` and `deleted` rows, `null` elsewhere.
+   * Careful: `null` on old rows, because reasons were not asked for back then.
    */
   dropReason: DropReason | null;
-  /** ⭐ কে-কবে দেখে নিয়েছেন — `null` মানে এখনো কিউতে *(৩১ আগস্ট)* */
+  /** Who looked at it and when; `null` means still in the queue. */
   reviewedAt: string | null;
   reviewedBy: { fullName: string; role: string } | null;
-  /** পুরোনো Excel-এর কাঁচা লেখা — `Hafiz-24-05-2026` */
+  /** The raw text from the old Excel sheet, e.g. `Hafiz-24-05-2026`. */
   sourceNote: string | null;
 }
 
@@ -255,40 +258,42 @@ export interface TargetPage {
   pages: number;
 
   /**
-   * ⭐⭐ **কোন দিন (`YYYY-MM-DD`) থেকে জানালার শিরোনাম জমা আছে** —
-   * `fileSec === null` কেন, তার উত্তর।
+   * The date (`YYYY-MM-DD`) from which window titles are stored; the answer to why
+   * `fileSec === null`.
    *
-   * ⚠️ সার্ভার এটা **ডেটা থেকে** বের করে, ধ্রুবক নয় — তাই পর্দায়
-   * তারিখটা হাতে লেখা যাবে না।
+   * Careful: the server derives this from the data; it is not a constant, so the
+   * date must not be hand-written on the screen.
    */
   traceSince: string | null;
 }
 
 /**
- * ⭐ পুরো তালিকা — মালিক · ম্যানেজার · গবেষক *(২৩ আগস্ট)*।
+ * The full list: owner, manager, researcher.
  *
- * ⚠️ পাতা ভাগ বাধ্যতামূলক: টেবিলে ৩৯ হাজারের বেশি সারি।
- * ⭐ `q`-তে **URL বা ASIN** দুটোই চলে — একটা লিঙ্ক পেস্ট করে দেখে নেওয়া
- * যায় ওটা আগে হয়ে গেছে কি না, আর কে করেছিল।
+ * Careful: pagination is required; the table has over 39 thousand rows.
+ * `q` accepts either a URL or an ASIN, so you can paste a link to see whether it
+ * was done before, and by whom.
  */
 export function listTargets(
   params: {
     status?: TargetStatus;
     q?: string;
     page?: number;
-    /** ⭐ কোন ডিজাইনারের — `employees.id` *(২৩ আগস্ট)* */
+    /** Which designer; `employees.id`. */
     staffId?: number;
     /**
-     * ⭐ কে এনেছেন — `users.id` *(২৫ আগস্ট)*।
-     * ⚠️ উপরেরটার সাথে **আলাদা id-র জগৎ** — `employees` বনাম `users`।
+     * Who brought it in; `users.id`.
+     * Careful: a separate id space from the one above: `employees` vs `users`.
      */
     addedById?: number;
-    /** ⭐ `YYYY-MM-DD` — শেষ কাজের তারিখ এই সীমার ভেতরে */
+    /** `YYYY-MM-DD`; the last-work date falls inside this range. */
     from?: string;
     to?: string;
-    /** ⭐ শেকলের কোন ধাপে আটকে — গবেষকের কিউ (২৪ আগস্ট) */
-    /** ⚠️ `to_review` যোগ হয়েছে ৩১ আগস্ট — বাদ-যাওয়া, অথচ কেউ দেখেননি */
-    /** ⚠️ `no_file` ধাপ নয়, প্রশ্ন — শেষ বলা, অথচ ফাইল খোলা হয়নি (৯ সেপ্টেম্বর) */
+    /** Which step of the chain it is stuck at: the researcher's queue. */
+    /** Careful: `to_review` is a later addition: dropped, yet nobody has looked. */
+    /**
+     * Careful: `no_file` is a question, not a step: marked finished, but the file was never opened.
+     */
     stage?:
       | 'to_check'
       | 'to_fix'
@@ -314,10 +319,10 @@ export function listTargets(
 }
 
 /**
- * ⭐ তালিকা সম্পাদনা *(২৩ আগস্ট)* — owner · manager · গবেষক।
+ * Edit the list: owner, manager, researcher.
  *
- * ⚠️ ASIN বদলানোর পথ **নেই** — ওটা সারিটার পরিচয়; বদলালে
- * ডুপ্লিকেট-প্রহরীর ভিত্তিই নড়ে যেত। কেবল **অবস্থা** বদলানো যায়।
+ * Careful: there is no way to change the ASIN. It is the row's identity, and
+ * changing it would shift the basis of the duplicate guard. Only the status can change.
  */
 export function updateTarget(id: number, status: TargetStatus): Promise<{ ok: boolean }> {
   return api<{ ok: boolean }>(`/design-targets/${id}`, {
@@ -327,25 +332,25 @@ export function updateTarget(id: number, status: TargetStatus): Promise<{ ok: bo
 }
 
 /**
- * ⭐⭐ **মুছে ফেলা — সারিটা থাকে, "Deleted" হয়ে** *(২৯ আগস্ট ২০২৬)*।
+ * Delete: the row stays, marked "Deleted".
  *
- * ⚠️⚠️ আগে এটা সত্যিকারের `DELETE` ছিল, আর তাতে `asin` UNIQUE প্রহরীও
- * উধাও হতো — মরা ASIN কাল আবার পুলে ঢুকে বণ্টনে চলে যেত।
+ * Careful: this used to be a real `DELETE`, which also removed the `asin` UNIQUE
+ * guard, so a dead ASIN could re-enter the pool tomorrow and get distributed again.
  */
 export function deleteTarget(
   id: number,
   reason: DropReason,
 ): Promise<DeleteResult> {
-  // ⚠️ কারণটা query-তে — বডিসহ DELETE অনেক প্রক্সি নীরবে ফেলে দেয়
+  // Careful: the reason goes in the query because many proxies silently drop a DELETE body
   return api<DeleteResult>(`/design-targets/${id}?reason=${reason}`, {
     method: 'DELETE',
   });
 }
 
 /**
- * ⭐⭐ **বেছে নেওয়া কয়েকটা একসাথে** *(মালিকের চাওয়া, ২৯ আগস্ট)*।
+ * Several selected rows at once (the owner's request).
  *
- * ⚠️ `POST`, `DELETE` নয় — বডিসহ `DELETE` অনেক প্রক্সি নীরবে ফেলে দেয়।
+ * Careful: `POST`, not `DELETE`; many proxies silently drop a body on `DELETE`.
  */
 export function deleteTargets(
   ids: number[],
@@ -358,9 +363,10 @@ export function deleteTargets(
 }
 
 /**
- * ⭐⭐ **"দেখে নিয়েছি"** — owner ও manager only *(৩১ আগস্ট ২০২৬)*।
+ * "I have looked": owner and manager only.
  *
- * ⚠️ সারির অবস্থা বদলায় না; এটা সিদ্ধান্ত নয়, স্বীকৃতি — "আমি দেখেছি"।
+ * Careful: the row's status does not change. It is an acknowledgement, not a
+ * decision: "I saw it".
  */
 export function markReviewed(id: number): Promise<{ ok: boolean }> {
   return api<{ ok: boolean }>(`/design-targets/${id}/reviewed`, {
@@ -368,17 +374,17 @@ export function markReviewed(id: number): Promise<{ ok: boolean }> {
   });
 }
 
-/** ⭐ "আপলোড হয়েছে" — owner · manager · গবেষক */
+/** "Uploaded": owner, manager, researcher. */
 export function markUploaded(id: number): Promise<{ ok: boolean }> {
   return api<{ ok: boolean }>(`/design-targets/${id}/uploaded`, { method: 'POST' });
 }
 
-/** ⭐ "Amazon-এ লাইভ" — নতুন পণ্যের ASIN ঐচ্ছিক */
+/** "Live on Amazon": the ASIN of the new product is optional. */
 /**
- * ⭐⭐ **"বানান দেখলাম"** — `ok: false` হলে সারিটা ঠিক-করার কিউতে যায়।
+ * "Spelling checked": when `ok: false`, the row goes to the fix queue.
  *
- * ⚠️ ডিজাইনের মালিকানা বদলায় না — কে দেখলেন, কে ঠিক করলেন, দুটোই
- * আলাদা ঘরে বসে।
+ * Careful: design ownership does not change; who checked and who fixed are
+ * recorded in separate fields.
  */
 export function markChecked(id: number, ok: boolean): Promise<{ ok: true }> {
   return api<{ ok: true }>(`/design-targets/${id}/checked`, {
@@ -387,7 +393,7 @@ export function markChecked(id: number, ok: boolean): Promise<{ ok: true }> {
   });
 }
 
-/** ⭐ **"ঠিক করেছি"** — ভুল পাওয়া ডিজাইন সারিয়ে দেওয়া হয়েছে */
+/** "Fixed": a design with a mistake has been corrected. */
 export function markFixed(id: number): Promise<{ ok: true }> {
   return api<{ ok: true }>(`/design-targets/${id}/fixed`, { method: 'POST' });
 }
@@ -399,7 +405,7 @@ export function markLive(id: number, liveAsin?: string): Promise<{ ok: boolean }
   });
 }
 
-/** ⭐ ছাঁকনির ড্রপডাউনের জন্য — যাঁদের নামে কোনো টার্গেট আছে */
+/** For the filter dropdown: people who have any targets under their name. */
 export interface TargetDesigner {
   id: number;
   empCode: string;
@@ -411,12 +417,12 @@ export function listTargetDesigners(signal?: AbortSignal): Promise<TargetDesigne
 }
 
 /**
- * ⭐⭐ **কে কতগুলো টার্গেট এনেছেন** *(২৫ আগস্ট ২০২৬)*।
+ * How many targets each person brought in.
  *
- * ⚠️ `TargetDesigner`-এর সাথে গুলিয়ে ফেলবেন না — ওখানে `id` মানে
- * `employees.id`, এখানে `users.id`। নামও আলাদা রাখা হয়েছে সেজন্যই।
+ * Careful: do not confuse it with `TargetDesigner`, where `id` means
+ * `employees.id`; here it is `users.id`. That is why the name differs.
  *
- * ⭐ `count` সঙ্গে আসে, তাই ড্রপডাউনেই উত্তরটা দেখা যায় — ছাঁকতে হয় না।
+ * `count` comes along, so the dropdown itself shows the answer; no filtering needed.
  */
 export interface TargetAdder {
   id: number;
@@ -426,10 +432,10 @@ export interface TargetAdder {
 }
 
 /**
- * ⭐ মালিক/ম্যানেজারের "শেষ ফিরিয়ে নাও" — **যেকোনো দিনের** *(২৫ আগস্ট)*।
+ * The owner's/manager's "undo finished", for any day.
  *
- * ⚠️ `updateTarget(id, 'assigned')` দিয়ে এটা করা যায় না: ওই পথ কেবল
- * `status` বদলায়, `completedAt` মোছে না — আর কিউগুলো ওটা ধরেই চলে।
+ * Careful: it cannot be done with `updateTarget(id, 'assigned')`. That path only
+ * changes `status` and does not clear `completedAt`, and the queues rely on it.
  */
 export function undoComplete(id: number): Promise<{ ok: boolean }> {
   return api<{ ok: boolean }>(`/design-targets/${id}/undone`, { method: 'POST' });

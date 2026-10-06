@@ -1,95 +1,96 @@
 /**
- * ঘণ্টার ঘাটতিকে টাকায় রূপান্তর — খাঁটি ফাংশন, কোনো I/O নেই।
+ * Converting a shortfall in hours into money: pure functions, no I/O.
  *
- * আলাদা ফাইলে রাখার কারণ: এটাই একমাত্র জায়গা যেখানে সিস্টেম **কারো বেতন
- * নিয়ে সিদ্ধান্ত** দেয়। ডাটাবেস বা HTTP-র সাথে মিশে থাকলে এটা নিরিবিলি
- * পরীক্ষা করা যেত না, অথচ ভুল হলে ফল সরাসরি মানুষের পকেটে পড়ে।
+ * Kept in a separate file because this is the only place where the system
+ * **decides about someone's pay**. Mixed in with the database or HTTP it could
+ * not be tested in isolation, yet a mistake lands directly in a person's pocket.
  */
 
-/** টাকার হিসাব কখনো binary float-এ নয় — সব হিসাব পয়সায় (integer)। */
+/** Money is never computed in binary float: all arithmetic is in paisa (integers). */
 export const PAISA_PER_TAKA = 100;
 
 export interface PayrollInput {
-  /** মাসিক বেতন, টাকায়। */
+  /** Monthly salary, in taka. */
   monthlySalary: number;
   /**
-   * ওই কর্মীর ওই মাসের টার্গেট — **তার কর্মদিবস × দৈনিক টার্গেট**
-   * (`prorate()` থেকে)। ⚠️ আর ফ্ল্যাট ২০৮ নয়।
+   * That employee's target for that month: **their work days × the daily
+   * target** (from `prorate()`). Not the flat 208 any more.
    */
   targetSec: number;
-  /** worked + adjustment — টার্গেটের সাথে এটাই মেলানো হয়। */
+  /** worked + adjustment; this is what is compared with the target. */
   creditedSec: number;
 
   /**
-   * ⭐⭐⭐ **টার্গেটের যতটুকু আমরা সত্যিই দেখেছি** *(৬ সেপ্টেম্বর ২০২৬,
-   * মালিকের সিদ্ধান্ত: "না-দেখা দিনের জন্য কর্তন হবে না")*।
+   * **How much of the target we actually observed** *(owner's decision: "no
+   * deduction for days that were not observed")*.
    *
-   * ⚠️⚠️ **যে বাগটা এটা সারায়:** ঘাটতি মাপা হতো পুরো `targetSec`-এর
-   * সাপেক্ষে, অথচ `creditedSec` আসে কেবল সেইসব দিন থেকে যেদিন সিস্টেম
-   * চলছিল। আগস্টে ট্র্যাকিং শুরু হয় ১৩–১৫ তারিখে, তাই মাসের প্রায়
-   * অর্ধেকটা নীরবে ঘাটতি হয়ে যেত — ১২ জনের কর্তন দাঁড়াত **৳৭৯,৭৮৮**,
-   * যার **৳৬১,২৮০** এমন দিনের জন্য যেগুলো কেউ কোনোদিন দেখেনি।
+   * The bug this fixes: the shortfall was measured against the whole
+   * `targetSec`, while `creditedSec` only comes from days the system was
+   * running. In August tracking started on the 13th to 15th, so nearly half the
+   * month silently became shortfall: the deduction for 12 people came to
+   * **৳79,788**, of which **৳61,280** was for days nobody ever observed.
    *
-   * ⚠️ **হার এতে বদলায় না।** ঘণ্টার হার এখনো `salary ÷ targetSec` —
-   * বেতনটা তো পুরো মাসের কাজের জন্যই। বদলায় কেবল **কতটুকুর হিসাব
-   * চাওয়া হচ্ছে**।
+   * The rate does not change. The hourly rate is still `salary ÷ targetSec`,
+   * since the salary is for the whole month's work. What changes is **how much
+   * of it is asked for**.
    *
-   * ⚠️⚠️ **ঐচ্ছিক করা হয়নি, ইচ্ছাকৃতভাবে** — `workdays`-এর মতোই।
-   * ডিফল্ট বসালে নতুন কোনো কলার চুপচাপ পুরোনো (ভুল) আচরণে ফিরে যেত,
-   * আর ভুলটা ধরা পড়ত কারো বেতনের কাগজে।
+   * Deliberately **not optional**, like `workdays`. With a default, a new
+   * caller would silently fall back to the old (wrong) behaviour, and the
+   * mistake would be found on someone's pay slip.
    */
   observedTargetSec: number;
 
   /**
-   * **G37 · ADR-025** — তার কর্মদিবস (d) ও মাসের কর্মদিবস (D)।
+   * **G37 · ADR-025**: their work days (d) and the month's work days (D).
    *
-   * ⚠️⚠️ **ঐচ্ছিক করা হয়নি, ইচ্ছাকৃতভাবে।** ডিফল্ট বসালে নতুন কোনো কলার
-   * চুপচাপ proration ছাড়াই বেতন হিসাব করত — অর্থাৎ ১৫ তারিখে যোগ দেওয়া
-   * কর্মী পুরো মাসের বেতন পেত, আর ভুলটা ধরা পড়ত মাস শেষে। `required`
-   * দিলে কম্পাইলারই পাহারা দেয়।
+   * Deliberately **not optional.** With a default, a new caller would
+   * silently compute pay without proration, so someone who joined on the 15th
+   * would get a full month's salary, noticed only at month end. Making it
+   * required lets the compiler stand guard.
    */
   workdays: number;
   monthWorkdays: number;
 }
 
 export interface PayrollLine {
-  /** ঘণ্টাপ্রতি হার, পয়সায়। */
+  /** Hourly rate, in paisa. */
   hourlyRatePaisa: number;
   shortfallSec: number;
   overtimeSec: number;
-  /** ঘাটতির জন্য কত টাকা কম, পয়সায়। ঘাটতি না থাকলে ০। */
+  /** How much less is paid for the shortfall, in paisa. 0 if there is no shortfall. */
   deductionPaisa: number;
-  /** বেতন − কর্তন, পয়সায়। */
+  /** Salary minus deduction, in paisa. */
   payablePaisa: number;
   /**
-   * ⚠️ অতিরিক্ত ঘণ্টার **টাকা হিসাব করা হয় না** — শুধু ঘণ্টাটা জানানো হয়।
-   * OT-র হার কত হবে (১×, ১.৫×, নাকি কিছুই না) সেটা ব্যবসায়িক সিদ্ধান্ত।
+   * The **money for extra hours is not calculated**; only the hours are reported.
+   * What the OT rate should be (1x, 1.5x, or nothing) is a business decision.
    *
-   * ⭐ **সিদ্ধান্তটা এসেছে ২৩ আগস্ট ২০২৬** — মালিক: আলাদা রেট **নেই**।
-   * অর্থাৎ ঘরটা চিরকাল ঘণ্টাই দেখাবে, আর সেটা এখন **অজানা নয়, জানা নিয়ম**।
+   * The owner has decided there is **no** separate rate. So this field will
+   * always show hours, and that is now **a known rule, not an unknown**.
    */
   overtimeNote: typeof PAYROLL_OVERTIME_NOTE;
 }
 
 /**
- * ⭐⭐ **O4 নিষ্পত্তি হয়েছে (২৩ আগস্ট ২০২৬)** — মালিকের উত্তর: ওভারটাইমের
- * **আলাদা রেট নেই**। তাই বাক্যটা আর "ঠিক হয়নি" বলে না, বলে "রেট নেই"।
+ * **O4 is settled**: the owner's answer is that overtime has
+ * **no separate rate**. So the sentence no longer says "not decided", it says
+ * "no rate".
  *
- * ⚠️⚠️ আগে এই একই বাক্য **তিন জায়গায় হাতে লেখা** ছিল। literal type থাকায়
- * কম্পাইলার অমিল ধরত ঠিকই, কিন্তু বদলাতে হলে তিনটেই খুঁজে বের করতে হতো —
- * আর ঠিক এভাবেই এই প্রকল্পে বারবার একটা বদলেছে, বাকিগুলো নয়।
- * ⭐ এখন একটাই উৎস, আর টাইপটাও সেখান থেকেই (`typeof`)।
+ * This same sentence used to be **hand-written in three places**. Thanks to the
+ * literal type the compiler did catch mismatches, but changing it meant finding
+ * all three, and that is exactly how in this project one would change and the
+ * others not. Now there is one source, and the type comes from it (`typeof`).
  *
- * ⚠️ রিপোর্টের `OVERTIME_NOTE` আলাদা বাক্য (ওখানে প্রসঙ্গ আলাদা), কিন্তু
- * **একই সিদ্ধান্ত** বলে — একটা বদলালে ওটাও দেখতে হবে।
+ * The report's `OVERTIME_NOTE` is a different sentence (different context
+ * there), but it states the **same decision**, so if one changes, check the other.
  */
 export const PAYROLL_OVERTIME_NOTE =
   'Not calculated — there is no separate overtime rate';
 
 /**
- * ⚠️ শূন্য বা ঋণাত্মক টার্গেটে ভাগ করা যায় না। এমনটা হওয়ার কথা নয়
- * (work policy-তে ২০৮ বসানো), কিন্তু হলে চুপচাপ Infinity বেরিয়ে গিয়ে
- * কারো বেতন থেকে অসীম টাকা কাটার হিসাব দাঁড়াত।
+ * Careful: you cannot divide by a zero or negative target. It should not happen
+ * (208 is set in the work policy), but if it did, a quiet Infinity would come
+ * out and work out as an infinite amount deducted from someone's salary.
  */
 export function computePayroll(input: PayrollInput): PayrollLine {
   const {
@@ -117,14 +118,14 @@ export function computePayroll(input: PayrollInput): PayrollLine {
   const basePaisa = Math.round(monthlySalary * PAISA_PER_TAKA);
 
   /**
-   * ⭐⭐ **প্রযোজ্য বেতন = মাসিক × d ÷ D** — G37-এর মূল লাইন।
+   * **Applicable salary = monthly × d ÷ D**: the core line of G37.
    *
-   * ⚠️ ভাগ ও গুণ **একসাথে**, আগে ভগ্নাংশ বের করে নয়। `salaryFraction()`
-   * আলাদা করে দেওয়া আছে বটে, কিন্তু টাকার হিসাবে সেটা ব্যবহার করা হয় না —
-   * দুবার round করলে কারো বেতনে কয়েক পয়সার হেরফের হতো।
+   * Careful: multiply and divide **together**, not by computing the fraction
+   * first. `salaryFraction()` is provided separately, but it is not used for
+   * money: rounding twice would make a few paisa of difference in someone's pay.
    *
-   * ⭐ D = ০ (পুরো মাস ছুটি) → পুরো বেতন (O9)। ঘাটতি তখন অসম্ভব, কারণ
-   * টার্গেটও ০।
+   * D = 0 (the whole month off) → full salary (O9). A shortfall is then
+   * impossible, since the target is 0 too.
    */
   const salaryPaisa =
     monthWorkdays <= 0
@@ -132,15 +133,15 @@ export function computePayroll(input: PayrollInput): PayrollLine {
       : Math.round((basePaisa * Math.min(workdays, monthWorkdays)) / monthWorkdays);
 
   /**
-   * ⚠️⚠️ **টার্গেট ০ — বৈধ, কিন্তু শুধু একটা কারণেই।**
+   * **Target 0 is valid, but for one reason only.**
    *
-   * কারো কোনো কর্মদিবসই না থাকলে (মাসের পরে যোগ দিয়েছে, বা পুরো মাস ছুটি)
-   * টার্গেট ০ হওয়াই ঠিক, আর তখন ঘাটতিও অসম্ভব।
+   * If someone has no work days at all (joined after the month, or the whole
+   * month off), a target of 0 is right, and a shortfall is impossible.
    *
-   * ⚠️ কিন্তু কর্মদিবস **থাকা সত্ত্বেও** টার্গেট ০ মানে পলিসিটাই ভুল
-   * বসানো — আর সেটা চুপচাপ মেনে নিলে ফল ভয়ংকর: ঘাটতি অসম্ভব, তাই কর্তনও
-   * শূন্য, অর্থাৎ **কেউ এক ঘণ্টা কাজ না করেই পুরো বেতন পেত**। তাই ওই
-   * অবস্থায় আগের মতোই ছোড়া হয়।
+   * But a target of 0 **despite having work days** means the policy was set
+   * wrongly, and quietly accepting it has a terrible result: a shortfall is
+   * impossible, so the deduction is zero too, i.e. **someone could work not one
+   * hour and get the full salary**. So in that state it throws, as before.
    */
   if (!Number.isFinite(targetSec) || targetSec <= 0) {
     if (workdays > 0) {
@@ -152,7 +153,7 @@ export function computePayroll(input: PayrollInput): PayrollLine {
       shortfallSec: 0,
       overtimeSec: Math.max(0, creditedSec),
       deductionPaisa: 0,
-      // ⚠️ কর্মদিবস ০ মানে d/D-ও ০, তাই এটা ০ — শুধু D = ০ হলে পুরো বেতন
+      // 0 work days means d/D is 0 too, so this is 0; only D = 0 gives the full salary
       payablePaisa: salaryPaisa,
       overtimeNote: PAYROLL_OVERTIME_NOTE,
     };
@@ -160,28 +161,27 @@ export function computePayroll(input: PayrollInput): PayrollLine {
 
   const targetHours = targetSec / 3600;
 
-  // ⚠️ হার আলাদা করে round করা হয় **না** কর্তনের হিসাবে — নিচে সরাসরি
-  //    salaryPaisa × ঘাটতি ÷ টার্গেট করা হয়। ১৩০০০ ÷ ২০৮ = ৬২.৫ টাকা,
-  //    কিন্তু ১০০০০ ÷ ২০৮ = ৪৮.০৭৬৯…। হারটা আগে round করলে ওই ভগ্নাংশ
-  //    প্রতি ঘণ্টায় গুণ হয়ে মাসের শেষে কয়েক টাকার ভুল দাঁড়াত।
+  // Careful: the rate is **not** rounded separately for the deduction; below it
+  // goes directly salaryPaisa × shortfall ÷ target. 13000 ÷ 208 = 62.5 taka,
+  // but 10000 ÷ 208 = 48.0769…. Rounding the rate first would multiply that
+  // fraction by every hour and end up a few taka off at month end.
   const hourlyRatePaisa = Math.round(salaryPaisa / targetHours);
 
   /**
-   * ⭐⭐⭐ **ঘাটতি মাপা হয় দেখা-অংশের সাপেক্ষে, পুরো টার্গেটের নয়**
-   * *(৬ সেপ্টেম্বর ২০২৬)*।
+   * **The shortfall is measured against the observed part, not the whole target.**
    *
-   * ⚠️ `Math.min` — দেখা-অংশ কখনো পুরো টার্গেট ছাড়াতে পারে না। ছাড়ালে
-   *    (গণনার কোনো ধারে) ঘাটতি বানিয়ে ফেলা হতো।
+   * Careful: `Math.min`: the observed part can never exceed the whole target.
+   * If it did (in some corner of the calculation) a shortfall would be invented.
    */
   const billableSec = Math.min(observedTargetSec, targetSec);
 
   const deficitSec = Math.max(0, billableSec - creditedSec);
 
   /**
-   * ⚠️⚠️ **অতিরিক্ত ঘণ্টা এখনো পুরো টার্গেটের সাপেক্ষেই** — আর সেটা
-   * ইচ্ছাকৃত। "ওভারটাইম" মানে মাসের প্রাপ্য কাজের **বেশি** করা;
-   * দেখা-অংশের সাপেক্ষে মাপলে অর্ধেক মাস ট্র্যাক না হওয়া কেউ কয়েক দিন
-   * কাজ করেই "ওভারটাইম" দেখাতেন।
+   * **Extra hours are still against the whole target**, on purpose. "Overtime"
+   * means doing **more** than the month's due work; measured against the
+   * observed part, someone whose tracking covered only half the month would
+   * show "overtime" after working just a few days.
    */
   const surplusSec = Math.max(0, creditedSec - targetSec);
 
@@ -193,14 +193,14 @@ export function computePayroll(input: PayrollInput): PayrollLine {
     shortfallSec: deficitSec,
     overtimeSec: surplusSec,
     deductionPaisa,
-    // কর্তন কখনো বেতনের বেশি হতে পারে না — কেউ পুরো মাস অনুপস্থিত থাকলে
-    // deficit = target, তখন কর্তন = পুরো বেতন, প্রদেয় = ০। ঋণাত্মক নয়।
+    // The deduction can never exceed the salary: if someone is absent the whole
+    // month, deficit = target, so deduction = full salary, payable = 0. Never negative.
     payablePaisa: Math.max(0, salaryPaisa - deductionPaisa),
     overtimeNote: PAYROLL_OVERTIME_NOTE,
   };
 }
 
-/** পয়সা → দেখানোর মতো টাকা (দুই দশমিক)। */
+/** Paisa → taka for display (two decimals). */
 export function paisaToTaka(paisa: number): string {
   const sign = paisa < 0 ? '-' : '';
   const abs = Math.abs(paisa);
@@ -208,41 +208,42 @@ export function paisaToTaka(paisa: number): string {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ⭐⭐ কোন মাসে কত বেতন ছিল — অতীত যাতে না নড়ে (২৩ আগস্ট ২০২৬)
+// What the salary was in each month, so the past does not move
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * এক টুকরো **পুরোনো** বেতন — "এই মাস পর্যন্ত এটাই ছিল"।
+ * A slice of an **old** salary: "this was it up to this month".
  *
- * ⚠️ সংখ্যাটা `string`, `number` নয় — Prisma-র `Decimal` স্ট্রিং হয়ে আসে,
- *    আর মাঝপথে `Number` করলে টাকার মান নীরবে গোল হতে পারত।
+ * Careful: the figure is a `string`, not a `number`. Prisma's `Decimal` arrives
+ * as a string, and converting to `Number` midway could silently round the amount.
  */
 export interface SalarySlice {
-  /** 'YYYY-MM' — এই মাস পর্যন্ত (অন্তর্ভুক্ত) */
+  /** 'YYYY-MM': up to and including this month */
   throughMonth: string;
   monthlySalary: string;
 }
 
 /**
- * ⭐⭐ **ওই মাসে যে বেতন সত্যিই চলছিল।**
+ * **The salary that was actually in force that month.**
  *
- * ⚠️⚠️ কেন দরকার: পে-রোল আগে `employees.monthly_salary` **লাইভ** পড়ত,
- * তাই কারো বেতন বাড়ালে **বন্ধ মাসের পে-রোলও বদলে যেত** — আর যে কাগজে
- * বেতন দেওয়া হয়েছিল তার সাথে আর মিলত না।
+ * Why it is needed: payroll used to read `employees.monthly_salary` **live**,
+ * so raising someone's salary **also changed the payroll of closed months**,
+ * which then no longer matched the paper they were paid on.
  *
- * নিয়মটা একটাই: **সবচেয়ে ছোট `throughMonth` যেটা ওই মাসের সমান বা বড়**।
+ * There is a single rule: **the smallest `throughMonth` that is equal to or
+ * greater than that month**.
  *
  * ```
- * চাওয়া হলো ২০২৬-০৭
- * সারি: [২০২৬-০৬ → ১২০০০]  [২০২৬-০৮ → ১৩০০০]
- *                            ↑ এটাই — জুলাই এর আওতায় পড়ে
+ * Requested: 2026-07
+ * Rows: [2026-06 → 12000]  [2026-08 → 13000]
+ *                            ↑ this one: July falls under it
  * ```
  *
- * ⚠️ কোনো সারি না মিললে **এখনকার বেতনই** ফেরত যায়। খালি টেবিল মানে
- * "বেতন কোনোদিন বদলায়নি", আর তখন এখনকার মানই সব মাসের জন্য সত্যি।
+ * If no row matches, **the current salary** is returned. An empty table means
+ * "the salary never changed", and then the current value is true for every month.
  *
- * ⚠️ `null` ফেরত মানে **বেতন বসানোই নেই** — শূন্য নয়, আর পর্দাতেও দুটো
- * আলাদা করে দেখানো হয় (`payroll.service.ts`-এর `monthlySalary`)।
+ * `null` means **no salary is set at all**: not zero, and the screen shows the
+ * two differently (`monthlySalary` in `payroll.service.ts`).
  */
 export function salaryForMonth(
   yearMonth: string,
@@ -260,16 +261,16 @@ export function salaryForMonth(
 }
 
 /**
- * বেতন বদলালে **পুরোনো মানটা কোন মাস পর্যন্ত চলেছিল**।
+ * When a salary changes, **up to which month the old value ran**.
  *
- * ⭐ সাধারণ নিয়ম: নতুন বেতন **চলতি মাস থেকে**, তাই পুরোনোটা চলেছিল
- * **আগের মাস পর্যন্ত**।
+ * The general rule: the new salary applies **from the current month**, so the
+ * old one ran **up to the previous month**.
  *
- * ⚠️⚠️ ব্যতিক্রম — **চলতি মাস আগেই বন্ধ হয়ে থাকলে**। তখন ওই মাসের বেতন
- * দেওয়া হয়ে গেছে, তাই নতুন সংখ্যাটা ওখানে বসানো যাবে না; পুরোনোটা
- * **চলতি মাস পর্যন্তই** চলেছিল ধরা হয়, আর নতুনটা পরের মাস থেকে।
- * এটা না রাখলে বন্ধ মাসের পে-রোল আবার নড়ত — ঠিক যে রোগ সারাতে এই
- * টেবিলটা বানানো।
+ * The exception: **if the current month is already closed.** Then that month's
+ * pay has already been paid, so the new figure cannot go there; the old one is
+ * taken to have run **through the current month**, and the new one from the
+ * next month. Without this, a closed month's payroll would move again, the very
+ * disease this table was built to cure.
  */
 export function supersededThrough(
   yearMonth: string,

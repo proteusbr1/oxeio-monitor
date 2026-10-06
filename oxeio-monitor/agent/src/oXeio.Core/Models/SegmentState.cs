@@ -1,13 +1,13 @@
 namespace oXeio.Core.Models;
 
 /// <summary>
-/// মাত্র তিনটি স্টেট — ADR-011d।
+/// Only three states (ADR-011d).
 ///
-/// ❌ BREAK / LUNCH নেই — লাঞ্চে গেলে ১ মিনিট পর এমনিতেই <see cref="Idle"/>
-/// ❌ MEETING নেই     — স্টাফের চাপার মতো কোনো বাটনই নেই
-/// ❌ OFF_SHIFT নেই   — সময়ের কোনো বাঁধন নেই, ২৪ ঘণ্টাই গোনা হয়
+/// There is no BREAK / LUNCH: someone who leaves for lunch becomes <see cref="Idle"/> after 1 minute anyway.
+/// There is no MEETING: staff have no button to press.
+/// There is no OFF_SHIFT: there is no time restriction, all 24 hours are counted.
 ///
-/// শুধু <see cref="Active"/> কাজ হিসেবে গোনা হয়।
+/// Only <see cref="Active"/> counts as work.
 /// </summary>
 public enum SegmentState
 {

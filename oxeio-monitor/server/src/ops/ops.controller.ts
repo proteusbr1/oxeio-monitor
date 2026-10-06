@@ -7,7 +7,7 @@ import { RetentionJob, type RetentionResult } from '../summary/retention.job';
 import { BackupJob } from './backup.job';
 import { OpsHealthService, type OpsHealth } from './ops.health.service';
 
-/** হাতে চালানো ব্যাকআপের উত্তর — ⚠️ কোনো পাথ বা পাসফ্রেজ নয় */
+/** Reply of a manually triggered backup. Careful: no paths or passphrases. */
 export interface ManualBackupResponse {
   ok: boolean;
   skipped: string | null;
@@ -20,18 +20,18 @@ export interface ManualBackupResponse {
 }
 
 /**
- * **K04** — `GET /api/v1/ops/health`।
+ * **K04** — `GET /api/v1/ops/health`.
  *
- * ⚠️ পুরো কন্ট্রোলারটাই owner-only, ক্লাস-লেভেলে — পরে কেউ নতুন endpoint
- *    যোগ করলে সেটাও আপনাআপনি owner-only থাকবে।
+ * The whole controller is owner-only, at class level, so any endpoint added
+ * later is owner-only automatically.
  *
- * ⭐ ম্যানেজারও এখানে ঢুকতে পারে না। উত্তরে ডিস্কের আকার, ব্যাকআপের
- * ইতিহাস, কতগুলো ডিভাইস চুপ — এগুলো device/audit ঘরানার তথ্য (স্পেক
- * § ৪.৩), আর একসাথে দেখলে এগুলো দিয়ে অফিসের অবকাঠামোর ছবি আঁকা যায়।
+ * Managers cannot enter here either. The reply has disk size, backup history
+ * and how many devices are silent: device/audit-type information (spec § 4.3)
+ * which, seen together, can be used to draw a picture of the office infrastructure.
  *
- * ⚠️ Docker healthcheck এখানে আসবে **না** — সেটার জন্য `/api/v1/health`
- *    (পাবলিক, `src/health/`)। এই দুটো গুলিয়ে ফেললে হয় কন্টেইনার
- *    চিরকাল unhealthy দেখাত (৪০৩), নয়তো এই তথ্যগুলো পাবলিক হয়ে যেত।
+ * The Docker healthcheck does **not** come here; it uses `/api/v1/health`
+ * (public, `src/health/`). Mixing the two up would either show the container
+ * as unhealthy forever (403) or make this information public.
  */
 @Roles(UserRole.owner)
 @Controller('ops')
@@ -50,14 +50,13 @@ export class OpsController {
   }
 
   /**
-   * `POST /api/v1/ops/backup/run` — এখনই একটা ব্যাকআপ।
+   * `POST /api/v1/ops/backup/run`: take a backup right now.
    *
-   * ⭐ থাকার কারণ: যে ব্যাকআপ কখনো পরীক্ষা করা হয়নি সেটা ব্যাকআপ নয়,
-   * অনুমান। রাত ২:৩০ পর্যন্ত অপেক্ষা না করে ইনস্টলের দিনই যাচাই করা
-   * যায় — pg_dump পাওয়া যাচ্ছে কি না, পাসফ্রেজ ঠিক আছে কি না,
-   * এক্সটার্নাল ড্রাইভটা লেখা যাচ্ছে কি না।
+   * It exists because a backup that was never tested is not a backup, it is a
+   * guess. Instead of waiting for 02:30, it can be verified on install day:
+   * is pg_dump found, is the passphrase right, is the external drive writable.
    *
-   * ⚠️ `RunLock` একই সময়ে দুটো ডাম্প ঠেকায় — বারবার চাপলেও।
+   * `RunLock` prevents two dumps at the same time, even if the button is pressed repeatedly.
    */
   @Post('backup/run')
   @HttpCode(HttpStatus.OK)
@@ -77,8 +76,8 @@ export class OpsController {
       copy: {
         configured: result.copy.configured,
         ok: result.copy.ok,
-        // ⚠️ `target` ইচ্ছাকৃতভাবে বাদ — সার্ভারের ফাইল-পথ ব্রাউজারে
-        //    পাঠানোর কোনো দরকার নেই।
+        // `target` is left out on purpose: there is no need to send the server's
+        // file path to the browser.
         error: result.copy.error,
       },
       rotated: result.rotated,
@@ -86,20 +85,20 @@ export class OpsController {
   }
 
   /**
-   * **K01** — `POST /api/v1/ops/retention/run`, এখনই ৯০ দিনের পুরোনো
-   * ছবি মোছা।
+   * **K01**: `POST /api/v1/ops/retention/run`, delete screenshots older than
+   * 90 days right now.
    *
-   * ⭐ **থাকার কারণ ব্যাকআপেরটার মতোই:** রাত ২টার cron তো আছে, কিন্তু
-   * যে জব কখনো চোখে দেখা হয়নি সেটা প্রতিশ্রুতি, ব্যবস্থা নয়। আর এই
-   * জবটার বেলায় ব্যাপারটা আরও গুরুতর — নীতিমালায় স্টাফকে লিখিতভাবে
-   * বলা আছে *"৯০ দিন পর ছবি নিজে থেকেই মুছে যাবে"*। ওটা না ঘটলে
-   * প্রতিশ্রুতিভঙ্গ, আর ধরা পড়ত কেবল ডিস্ক ভরে গেলে।
+   * **It exists for the same reason as the backup one:** the 02:00 cron is
+   * there, but a job nobody has ever seen run is a promise, not a mechanism. For
+   * this job it matters even more: the policy tells staff in writing that
+   * "screenshots delete themselves after 90 days". If that did not happen it
+   * would be a broken promise, noticed only when the disk fills up.
    *
-   * ⚠️ ৯০ দিনের পুরোনো ছবি না থাকলে কিছুই মোছে না — `marked: 0` ফেরে।
-   * সেটাই স্বাভাবিক, আর তাতেই জানা যায় জবটা চলতে পারে।
+   * With no screenshots older than 90 days nothing is deleted and `marked: 0`
+   * comes back. That is normal, and it shows the job can run.
    *
-   * ⚠️ `RunLock` একই সময়ে দুটো রান ঠেকায়; cron-এর সাথে সংঘাত হলে
-   * `skipped: true` ফেরে।
+   * `RunLock` prevents two runs at once; on a clash with the cron it returns
+   * `skipped: true`.
    */
   @Post('retention/run')
   @HttpCode(HttpStatus.OK)

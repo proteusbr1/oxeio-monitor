@@ -21,11 +21,11 @@ import {
 } from './work-policies.service';
 
 /**
- * `CRUD /api/v1/work-policies` — পুরোটাই owner-only (স্পেক § ৪.২, § ৪.৩)।
+ * `CRUD /api/v1/work-policies`: entirely owner-only (spec § 4.2, § 4.3).
  *
- * ⚠️ এই কনফিগ শুধু ড্যাশবোর্ডের জিনিস নয় — `AgentConfigService` এখান থেকেই
- * এজেন্টের config বানায়। এখানে একটা সংখ্যা বদলালে পরের config sync-এ
- * ১৫টা PC-র আচরণ বদলে যায়। তাই প্রতিটা বদল audit করা।
+ * Careful: this config is not just a dashboard matter: `AgentConfigService`
+ * builds the agent's config from here. Changing one number here changes the
+ * behavior of 15 PCs at the next config sync. So every change is audited.
  */
 @Roles(UserRole.owner)
 @Controller('work-policies')
@@ -62,7 +62,7 @@ export class WorkPoliciesController {
     return this.policies.update(actor, id, dto, ip);
   }
 
-  /** ⚠️ `@Delete` নেই — পলিসির দিকে employees আর পুরোনো মাসের হিসাব তাকিয়ে আছে */
+  /** Careful: no `@Delete`; employees and old months' calculations still point at the policy */
   @Post(':id/deactivate')
   @HttpCode(HttpStatus.OK)
   deactivate(
@@ -74,8 +74,8 @@ export class WorkPoliciesController {
   }
 
   /**
-   * ⭐ G85 — `deactivate`-এর জোড়া। এটা না থাকায় নিষ্ক্রিয় করা পলিসি
-   * চিরতরে নিষ্ক্রিয় থাকত, আর ফেরার একমাত্র পথ ছিল SQL।
+   * G85: the twin of `deactivate`. Without it a deactivated policy stayed
+   * deactivated for good, and the only way back was SQL.
    */
   @Post(':id/reactivate')
   @HttpCode(HttpStatus.OK)

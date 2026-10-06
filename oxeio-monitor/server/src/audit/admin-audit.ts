@@ -1,21 +1,21 @@
 /**
- * E10/E11-এর প্রতিটা পরিবর্তন `audit_log`-এ কীভাবে বসে, তার এক জায়গার নিয়ম।
+ * The single place that defines how each E10/E11 change is written to `audit_log`.
  *
- * ⚠️ `AuditService`-এর `AuditAction` একটা বদ্ধ union, আর সেখানে
- * `create_employee` বা `update_work_policy` ধরনের আলাদা action নেই।
- * ইচ্ছে করে সেটা এড়িয়ে যাওয়া হয়নি — `src/audit/**` এই কাজের সীমার বাইরে।
+ * Careful: `AuditService`'s `AuditAction` is a closed union with no separate
+ * actions such as `create_employee` or `update_work_policy`. That was not
+ * avoided on purpose; `src/audit/**` was outside the scope of this work.
  *
- * সৌভাগ্যক্রমে স্কিমা নিজেই পথটা দেখিয়ে দেয়: `audit_log.action`-এর কমেন্টে
- * owner-এর কনফিগ বদলের জন্য `change_setting` রাখা আছে, আর স্পেক § ৫-এ
- * "স্টাফ ও ডিভাইস ম্যানেজমেন্ট" Settings স্ক্রিনেরই অংশ। তাই বিস্তারিতটা
- * `targetType` + `meta.op`-এ যায়, action থাকে `change_setting`।
+ * Fortunately the schema itself shows the way: the `audit_log.action` comment
+ * reserves `change_setting` for owner config changes, and spec § 5 makes
+ * "staff and device management" part of the Settings screen. So the detail
+ * goes in `targetType` + `meta.op`, and the action stays `change_setting`.
  *
- * ⭐ এর ফলে ফিল্টার করার মতো একটা স্থিতিশীল শব্দভাণ্ডার দাঁড়ায় —
- * `?targetType=employee_salary` দিলে বেতন বদলের সব ঘটনা এক জায়গায় আসে।
+ * This gives a stable vocabulary to filter on: `?targetType=employee_salary`
+ * brings every salary change into one place.
  */
 export const ADMIN_TARGET = {
   employee: 'employee',
-  /** ⭐ বেতন বদল আলাদা targetType — সবচেয়ে সংবেদনশীল লেখা, আলাদা করে খোঁজা যায় */
+  /** Salary changes get their own targetType: the most sensitive write, searchable on its own */
   employeeSalary: 'employee_salary',
   device: 'device',
   workPolicy: 'work_policy',

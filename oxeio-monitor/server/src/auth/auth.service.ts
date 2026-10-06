@@ -19,15 +19,15 @@ import {
 } from './totp';
 import type { SessionUser } from './types';
 /**
- * ⚠️ পাহারার সূত্রটা **নিয়মের ফাইল থেকে ধার করা**, এখানে আবার লেখা নয় —
- * সার্ভারের গার্ড আর সেশনের পতাকা একই লাইনে বাঁধা থাকে।
+ * Careful: the guard formula is **borrowed from the rules file**, not written
+ * again here, so the server's guard and the session's flag are tied to the same line.
  */
 import { canUseTargets } from '../targets/targets.rules';
 
 /**
- * ⭐ লগইনের ফল তিন রকম হতে পারে, তাই discriminated union — একটা optional
- *    ফিল্ড দিয়ে বোঝালে কল করার জায়গায় "needsTotp true অথচ user-ও আছে"
- *    এমন অসম্ভব অবস্থাও টাইপ-বৈধ হতো।
+ * A login can end three ways, hence a discriminated union. Expressing it with
+ * an optional field would make an impossible state such as "needsTotp true
+ * and a user too" type-valid at the call site.
  */
 export type LoginOutcome =
   | { status: 'needs_totp' }
@@ -35,9 +35,9 @@ export type LoginOutcome =
       status: 'ok';
       user: Omit<SessionUser, 'issuedAt'>;
       mustChangePassword: boolean;
-      /** রিকভারি কোড দিয়ে ঢুকেছে — ইউজারকে জানানো দরকার */
+      /** Signed in with a recovery code; the user needs to be told */
       usedRecoveryCode: boolean;
-      /** 2FA চালু থাকলে আর কটা রিকভারি কোড বাকি; নইলে null */
+      /** How many recovery codes remain if 2FA is on; otherwise null */
       recoveryCodesLeft: number | null;
     };
 
@@ -49,24 +49,24 @@ export interface MeResult {
   employeeId: number | null;
   mustChangePassword: boolean;
   lastLoginAt: Date | null;
-  /** I06 — Security পর্দা এটা দেখেই অবস্থা বোঝায় */
+  /** I06: the Security screen uses this to show the state */
   twoFactorEnabled: boolean;
   /**
-   * ⭐⭐ **এই ব্যবহারকারী ডিজাইন-টার্গেট জমা দিতে পারেন কি না** *(২২ আগস্ট)*।
+   * **Whether this user may submit design targets.** (22 August)
    *
-   * ⚠️⚠️ **কেন একটা তৈরি উত্তর, কাঁচা `staffType` নয়।** নিয়মটা হলো
-   * "owner · manager · **অথবা** staffType = researcher" — সেটা পাঠালে
-   * ওয়েবকে ওই শর্তটা **আবার লিখতে** হতো, আর একদিন সার্ভার ও পর্দা
-   * দু-রকম বলত (কেউ মেনু দেখতেন কিন্তু ৪০৩ পেতেন, বা উল্টো)।
-   * ⭐ সার্ভার সিদ্ধান্তটা নেয়, ওয়েব কেবল মানে। শর্তটা
-   * `TargetsService.assertCanSubmit()`-এর হুবহু জোড়া।
+   * Careful: **why a ready-made answer and not the raw `staffType`.** The rule
+   * is "owner, manager, **or** staffType = researcher"; sending the raw value
+   * would force the web to **rewrite** that condition, and one day the server
+   * and the screen would disagree (someone would see the menu but get a 403,
+   * or the reverse). The server decides, the web only obeys. The condition is
+   * the exact twin of `TargetsService.assertCanSubmit()`.
    */
   canAddTargets: boolean;
   /**
-   * ⭐ **বানান যাচাই করতে পারেন কি না** (ADR-038, ২৫ আগস্ট ২০২৬)।
+   * **Whether this user can proofread spelling** (ADR-038).
    *
-   * ⚠️ `canAddTargets`-এর থেকে **আলাদা** — সব গবেষক টার্গেট জমা দিতে
-   * পারেন, কিন্তু বানান দেখেন কেবল যাঁকে মালিক টিক দিয়েছেন।
+   * Careful: **separate** from `canAddTargets`. Every researcher can submit
+   * targets, but only those the owner has ticked do spell checking.
    */
   canProofread: boolean;
 }
@@ -81,11 +81,11 @@ export class AuthService {
   ) {}
 
   /**
-   * ⭐ 2FA-র দ্বিতীয় ধাপে ইমেইল+পাসওয়ার্ড **আবার** পাঠাতে হয় — মাঝপথের
-   *    কোনো "half-logged-in" টোকেন নেই। সেরকম টোকেন মানেই আরেকটা জিনিস
-   *    যা চুরি হতে পারে, মেয়াদ শেষ হতে পারে, ভুল করে পুরো সেশনের ক্ষমতা
-   *    পেয়ে যেতে পারে। ব্রাউজার পাসওয়ার্ডটা ফর্মেই ধরে রাখে, তাই
-   *    ব্যবহারকারীর দিক থেকে পার্থক্য নেই।
+   * In the second step of 2FA the email + password must be sent **again**;
+   * there is no "half-logged-in" token in between. Such a token would be one
+   * more thing that can be stolen, can expire, or can by mistake carry the
+   * power of a full session. The browser keeps the password in the form, so
+   * the user sees no difference.
    */
   async login(
     email: string,
@@ -100,8 +100,8 @@ export class AuthService {
       where: { email: email.toLowerCase() },
     });
 
-    // ইউজার নেই আর পাসওয়ার্ড ভুল — দুটোতেই একই বার্তা, নইলে
-    // কোন ইমেইলগুলো আসল তা বাইরে থেকে বোঝা যেত (user enumeration)
+    // A missing user and a wrong password get the same message, otherwise
+    // outsiders could tell which emails are real (user enumeration)
     const ok =
       user !== null &&
       user.isActive &&
@@ -118,7 +118,7 @@ export class AuthService {
       throw new UnauthorizedException('Email or password is incorrect');
     }
 
-    // I06 — 2FA। খাম ভাঙা থাকলে `decodeEnvelope` ছোড়ে, অর্থাৎ fail-closed।
+    // I06: 2FA. A broken envelope makes `decodeEnvelope` throw, i.e. fail-closed.
     const env = decodeEnvelope(user.totpSecret);
     let usedRecoveryCode = false;
     let nextEnv: TotpEnvelope | null = null;
@@ -127,15 +127,15 @@ export class AuthService {
       const result = verifySecondFactor(env, { totp, recoveryCode });
 
       if (!result.ok && result.reason === 'missing') {
-        // ⚠️ এখানে `recordSuccess` **নয়** — পাসওয়ার্ড ঠিক হলেও লগইন এখনো
-        //    সম্পূর্ণ নয়, তাই ব্যর্থতার কাউন্টার মুছে ফেলা যাবে না।
-        //    ব্যর্থতাও নয়: কোড না দেওয়াটা আক্রমণ নয়, স্বাভাবিক প্রথম ধাপ।
+        // Careful: **not** `recordSuccess` here. Even with the right password
+        // the login is not complete yet, so the failure counter must not be cleared.
+        // Not a failure either: not sending a code is not an attack, it is the normal first step.
         return { status: 'needs_totp' };
       }
 
       if (!result.ok) {
-        // ⚠️ 2FA ধাপেও throttle — নইলে পাসওয়ার্ড জানা আক্রমণকারী ৬ অঙ্কের
-        //    ১০ লাখ সম্ভাবনা নির্বিঘ্নে চেষ্টা করে যেতে পারত।
+        // Careful: the throttle applies in the 2FA step too, otherwise an
+        // attacker who knows the password could try all 1 million 6-digit codes undisturbed.
         this.throttle.recordFailure(email, ip);
         await this.audit.record({
           userId: user.id,
@@ -156,9 +156,9 @@ export class AuthService {
 
     this.throttle.recordSuccess(email, ip);
 
-    // ⚠️ খরচ হওয়া কোড/counter আর `lastLoginAt` একই `UPDATE`-এ — আলাদা করলে
-    //    একটা ব্যর্থ হলে "লগইন হয়েছে কিন্তু কোড খরচ হয়নি" অবস্থা তৈরি হতো,
-    //    অর্থাৎ replay ঠেকানোই ভেঙে যেত।
+    // Careful: the consumed code/counter and `lastLoginAt` go in the same
+    // `UPDATE`. Split apart, one failing would create "logged in but the code
+    // was not consumed", which breaks replay protection.
     await this.prisma.user.update({
       where: { id: user.id },
       data: {
@@ -201,13 +201,13 @@ export class AuthService {
   async me(userId: number): Promise<MeResult> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      // ⚠️ কাজের ধরন লাগে `canAddTargets`-এর জন্য — গবেষক ঢোকেন
-      //    `employee` রোলে, তাই রোল দেখে বোঝার উপায় নেই
+      // Careful: the work type is needed for `canAddTargets`: researchers sign
+      // in with the `employee` role, so the role alone cannot tell
       /**
-       * ⚠️ আগে এখানে `include: { employee: ... }` ছিল — `canAddTargets`
-       * ও `canProofread` **অন্য টেবিল** থেকে পড়তে হতো। ২৫ আগস্ট
-       * `researcher` রোল আসার পর দুটোই ভূমিকা থেকেই বেরোয়, তাই
-       * জয়েনটা ⭐ **প্রতিটা `/auth/me` কল থেকে উধাও**।
+       * Careful: `include: { employee: ... }` used to be here, because
+       * `canAddTargets` and `canProofread` had to be read from **another
+       * table**. Since the `researcher` role arrived on 25 August, both come
+       * straight from the role, so the join is **gone from every `/auth/me` call**.
        */
     });
     if (!user || !user.isActive) {
@@ -224,11 +224,12 @@ export class AuthService {
       lastLoginAt: user.lastLoginAt,
       twoFactorEnabled: decodeEnvelope(user.totpSecret)?.enabled === true,
       /**
-       * ⚠️⚠️ দুটোর সূত্র **আজ এক**, তবু নাম দুটো — ইচ্ছাকৃত। পর্দায়
-       * এগুলো দুটো আলাদা জিনিস ঢাকে (মেনুর আইটেম বনাম সারির বোতাম),
-       * আর শর্তের নাম থাকলে ভবিষ্যতে একটা বদলাতে গিয়ে অন্যটা খুঁজে
-       * বেড়াতে হয় না। ⭐ সূত্রটা `canUseTargets`-এ **এক জায়গায়** লেখা,
-       * তাই নাম আলাদা হলেও দুটো কখনো নিঃশব্দে আলাদা হয়ে যাবে না।
+       * Careful: the formula for both is **the same today**, yet there are two
+       * names, deliberately. On screen they cover two different things (a menu
+       * item versus a row button), and keeping separate condition names means
+       * changing one later does not require hunting for the other. The formula
+       * is written **in one place** in `canUseTargets`, so even with separate
+       * names the two can never silently diverge.
        */
       canAddTargets: canUseTargets(user.role),
       canProofread: canUseTargets(user.role),
@@ -270,15 +271,15 @@ export class AuthService {
   }
 
   /**
-   * G33 — owner কারো পাসওয়ার্ড রিসেট করে।
-   * নতুন পাসওয়ার্ড **একবারই** ফেরত যায়; কোথাও plaintext-এ জমা হয় না।
-   * SMTP লাগে না, তাই Phase 1-এই কাজ করে।
+   * G33: the owner resets someone's password.
+   * The new password is returned **only once**; it is never stored in plaintext anywhere.
+   * No SMTP is needed, so it works in Phase 1.
    */
   async resetPassword(
     actorId: number,
     targetUserId: number,
     ip: string,
-    /** ⭐ মালিক নিজে বসালে বাধ্যতামূলক বদল নেই (২৩ আগস্ট) */
+    /** If the owner sets it themselves there is no forced change (23 August) */
     chosen?: string,
   ): Promise<{ email: string; tempPassword: string }> {
     const target = await this.prisma.user.findUnique({
@@ -287,21 +288,21 @@ export class AuthService {
     if (!target) throw new NotFoundException('User not found');
 
     /**
-     * ⚠️⚠️ **নিষ্ক্রিয় অ্যাকাউন্টে রিসেট আটকানো হয়, আর কারণটা বলা হয়।**
+     * **Reset is blocked on an inactive account, and the reason is stated.**
      *
-     * আগে এটা চুপচাপ সফল হতো — নতুন পাসওয়ার্ড পর্দায় দেখাত, অথচ
-     * `login()` পাসওয়ার্ডের সাথে `isActive`-ও মেলায়, তাই ওই পাসওয়ার্ড
-     * **কোনোদিন কাজ করত না**। আর লগইনের বার্তা ইচ্ছাকৃতভাবে সবসময় একই
-     * (*"Email or password is incorrect"* — user enumeration ঠেকাতে),
-     * তাই মালিকের কাছে ব্যাপারটা দাঁড়াত: রিসেট কাজ করছে, লগইন করছে না,
-     * আর কেন — জানার কোনো উপায় নেই।
+     * It used to succeed silently: the new password appeared on screen, but
+     * `login()` checks `isActive` along with the password, so that password
+     * **never worked**. And the login message is deliberately always the same
+     * ("Email or password is incorrect", to prevent user enumeration), so for
+     * the owner it came down to: the reset works, the login does not, and no
+     * way to learn why.
      *
-     * ⭐ এখানে বার্তাটা লুকানোর কিছু নেই: এই রুটে ঢুকতেই owner হতে হয়,
-     * অর্থাৎ তিনি এমনিতেই সব অ্যাকাউন্ট দেখতে পান।
+     * There is nothing to hide in this message: reaching this route requires
+     * being owner, who can see every account anyway.
      *
-     * ⚠️ নিজে থেকে সক্রিয় করে দেওয়া হয় **না**। পাসওয়ার্ড রিসেট করতে গিয়ে
-     * কেউ যেন ছেড়ে-যাওয়া কর্মীর অ্যাকাউন্ট অজান্তে খুলে না ফেলে —
-     * সক্রিয় করাটা আলাদা, সচেতন কাজ (Staff → Reactivate)।
+     * Careful: it is **not** activated automatically. Resetting a password
+     * must not accidentally reopen a departed employee's account; activating
+     * is a separate, conscious act (Staff -> Reactivate).
      */
     if (!target.isActive) {
       throw new ConflictException(
@@ -310,14 +311,14 @@ export class AuthService {
       );
     }
 
-    // ⚠️ একই নিয়ম রিসেটেও: মালিক বসালে বাধ্যতামূলক বদল নেই
+    // Careful: same rule on reset: no forced change if the owner sets it
     const tempPassword = chosen ?? this.passwords.generateTempPassword();
 
     await this.prisma.user.update({
       where: { id: targetUserId },
       data: {
         passwordHash: await this.passwords.hash(tempPassword),
-        // ⚠️ রিসেটেও একই — কখনো বাধ্যতামূলক নয় (উপরের নোট দেখুন)
+        // Careful: the same on reset, never forced (see the note above)
         mustChangePw: false,
         pwChangedAt: new Date(),
       },
@@ -336,32 +337,33 @@ export class AuthService {
   }
 
   /**
-   * স্টাফ ↔ ম্যানেজার — portal অ্যাকাউন্টের ভূমিকা বদলানো।
+   * Staff <-> manager: changing a portal account's role.
    *
-   * ⚠️⚠️ **কেন এটা দরকার হলো:** ভূমিকা বসত কেবল অ্যাকাউন্ট **খোলার
-   * সময়**, আর বদলানোর কোনো পথ ছিল না। কাউকে ম্যানেজার করতে হলে তাঁর
-   * অ্যাকাউন্ট মুছে নতুন করে খুলতে হতো — অর্থাৎ নতুন পাসওয়ার্ড, আর
-   * তাঁর সব `user_id`-নির্ভর ইতিহাস (audit log) ছিঁড়ে যেত।
+   * Careful: why it was needed: the role was set only when the account was
+   * **opened**, with no way to change it. To make someone a manager their
+   * account had to be deleted and reopened, meaning a new password, and all
+   * their `user_id`-linked history (audit log) would be severed.
    *
-   * ⚠️ `owner` এখান থেকে **দেওয়াও যায় না, কাড়াও যায় না**:
+   * Careful: `owner` can **neither be granted nor taken away** here:
    *
-   *   · দেওয়া যায় না — owner মানে বেতন, audit log আর সেটিংসের চাবি।
-   *     সেটা একটা ড্রপডাউনের এক ক্লিকে হাতবদল হওয়ার জিনিস নয় (ADR-011d,
-   *     আর ওয়েবের `PORTAL_ROLES`-এও owner নেই)।
-   *   · কাড়া যায় না — এই রুটে ঢুকতে owner হতে হয়, তাই নিজেকে বা শেষ
-   *     owner-কে নামিয়ে দিলে **কেউ আর ঢুকতেই পারত না**, আর ফেরার পথ
-   *     হতো সার্ভারে `recover-owner` স্ক্রিপ্ট।
+   *   - Cannot be granted: owner means the keys to payroll, the audit log and
+   *     settings. That must not change hands with one click on a dropdown
+   *     (ADR-011d, and the web's `PORTAL_ROLES` has no owner either).
+   *   - Cannot be taken away: reaching this route requires being owner, so
+   *     demoting yourself or the last owner would leave **nobody able to get
+   *     in**, and the way back would be the `recover-owner` script on the server.
    *
-   * ⭐ ভূমিকা বদলালে চলতি সেশনেও খাটে — `JwtAuthGuard` টোকেন নতুন করে
-   * দেওয়ার সময় ডাটাবেস থেকেই ভূমিকা পড়ে (৫ মিনিটের ভেতরে)।
+   * A role change also applies to a running session: when `JwtAuthGuard`
+   * re-issues the token it reads the role from the database (within 5 minutes).
    */
   async changeRole(
     actorId: number,
     targetUserId: number,
     /**
-     * ⚠️ `owner` তালিকার বাইরে — উপরের টীকা দেখুন। বাকিগুলো হাতে লেখা,
-     * `UserRole` ধার করা নয়: enum-এ কাল নতুন কিছু বসলে সেটা এখানে
-     * **নিজে থেকে ঢুকে পড়া উচিত নয়** (কন্ট্রোলারের `@IsIn`-এও একই তালিকা)।
+     * Careful: `owner` is outside the list; see the note above. The rest are
+     * written by hand, not borrowed from `UserRole`: if something new is added
+     * to the enum tomorrow it **should not slip in here by itself** (the
+     * controller's `@IsIn` has the same list).
      */
     role: 'employee' | 'researcher' | 'manager',
     ip: string,
@@ -378,8 +380,8 @@ export class AuthService {
       );
     }
 
-    // ⚠️ একই ভূমিকা হলে চুপচাপ ফেরা — audit log-এ "বদল" লেখা হবে না,
-    //    নইলে ইতিহাসে এমন ঘটনা জমত যেখানে আসলে কিছুই বদলায়নি।
+    // Careful: with the same role, return quietly. No "change" is written to
+    // the audit log, otherwise history would collect events where nothing changed.
     if (target.role === role) {
       return { id: target.id, email: target.email, role: target.role };
     }
@@ -396,8 +398,8 @@ export class AuthService {
       targetType: 'user',
       targetId: targetUserId,
       ipAddress: ip,
-      // ⚠️ আগেরটাও লেখা — "কে কখন ম্যানেজার হলো" প্রশ্নের উত্তর
-      //    দিতে হলে শুধু নতুন মানটা যথেষ্ট নয়
+      // Careful: the previous value is recorded too; to answer "who became a
+      // manager and when", the new value alone is not enough
       meta: { op: 'change_role', from: target.role, to: role },
     });
 
@@ -405,16 +407,16 @@ export class AuthService {
   }
 
   /**
-   * লগইনের ইমেইল বদলানো — অর্থাৎ স্টাফের "ইউজারনেম"।
+   * Changing the login email, i.e. the staff member's "username".
    *
-   * ⚠️⚠️ **কেন এটা দরকার হলো:** portal অ্যাকাউন্ট খোলার সময় ইমেইলটা হাতে
-   * টাইপ করতে হয়, আর ভুল হলে ওই অ্যাকাউন্ট চিরকাল ভুল ঠিকানায় আটকে থাকত —
-   * বদলানোর কোনো পথ ছিল না। ১৫ জনের জন্য একবার করে টাইপ করলে অন্তত একটা
-   * টাইপো হওয়াই স্বাভাবিক।
+   * Careful: why it was needed: the email has to be typed by hand when a
+   * portal account is created, and if it was wrong the account stayed stuck
+   * on the wrong address forever, with no way to change it. Typing it once
+   * for each of 15 people, at least one typo is normal.
    *
-   * ⚠️ পাসওয়ার্ড এখানে ছোঁয়া হয় **না** — সেটা `resetPassword()`। দুটো
-   * আলাদা রাখা ইচ্ছাকৃত: ইমেইলের বানান ঠিক করতে গিয়ে কারো পাসওয়ার্ড
-   * অকারণে বদলে যাওয়া উচিত নয়।
+   * Careful: the password is **not** touched here; that is `resetPassword()`.
+   * Keeping the two separate is deliberate: fixing an email's spelling should
+   * not needlessly change anyone's password.
    */
   async changeLoginEmail(
     actorId: number,
@@ -434,8 +436,8 @@ export class AuthService {
 
     if (target.email === next) return { id: target.id, email: target.email };
 
-    // ⚠️ আগে থেকে দেখা হয়, শুধু unique constraint-এর ভরসায় নয় — নইলে
-    //    পর্দায় যেত Prisma-র P2002, যেটা পড়ে কেউ বুঝত না কী ভুল হয়েছে।
+    // Careful: checked up front, not relying only on the unique constraint;
+    // otherwise Prisma's P2002 would reach the screen and nobody would understand what went wrong.
     const taken = await this.prisma.user.findUnique({ where: { email: next } });
     if (taken) {
       throw new ConflictException('Another account already uses that email');
@@ -452,23 +454,23 @@ export class AuthService {
       targetType: 'user',
       targetId: targetUserId,
       ipAddress: ip,
-      // ⭐ আগেরটাও লেখা থাকে — কে কার লগইন বদলেছে, সেটা পরে মেলানোর
-      //    একমাত্র উপায় এটাই
+      // The previous value is recorded too: the only way to reconcile later who changed whose login
       meta: { from: target.email, to: next },
     });
 
     return { id: updated.id, email: updated.email };
   }
 
-  /** স্টাফের self-view অ্যাকাউন্ট (J04/J05) — owner খোলে */
+  /** A staff self-view account (J04/J05), opened by the owner */
   /**
-   * ⭐⭐ **`chosen` দিলে সেটাই বসে, আর বদলানোর পর্দা আসে না**
-   * *(২৩ আগস্ট, মালিকের সিদ্ধান্ত)*।
+   * **If `chosen` is given, that is what gets set, and no change screen follows.**
+   * (23 August, the owner's decision)
    *
-   * ⚠️⚠️ না দিলে **আগের আচরণই অক্ষত** — এলোমেলো পাসওয়ার্ড + প্রথম
-   * লগইনে বাধ্যতামূলক বদল। ওই ধাপটার আসল উদ্দেশ্য ছিল "মালিকের জানা
-   * পাসওয়ার্ড চিরকাল না থাকা"; মালিক নিজে বসালে সেটা তিনি **জেনেবুঝে**
-   * ছাড়ছেন, কিন্তু ডিফল্টটা নিরাপদ থাকাই উচিত।
+   * Careful: if it is not given, **the earlier behavior stays intact**: a
+   * random password plus a forced change on first login. The real purpose of
+   * that step was "the owner not knowing the password forever"; when the owner
+   * sets it themselves they give that up **knowingly**, but the default
+   * should still stay safe.
    */
   async createPortalAccount(
     actorId: number,
@@ -491,7 +493,7 @@ export class AuthService {
       throw new BadRequestException('An account with this email already exists');
     }
 
-    // ⚠️ মালিক নিজে বসালে সেটাই; নইলে আগের মতো এলোমেলো
+    // Careful: the owner's own value if given; otherwise random as before
     const tempPassword = chosen ?? this.passwords.generateTempPassword();
 
     const created = await this.prisma.user.create({
@@ -502,18 +504,17 @@ export class AuthService {
         role,
         employeeId,
         /**
-         * ⚠️⚠️ **কখনো বাধ্যতামূলক নয়** *(২৩ আগস্ট, মালিকের সিদ্ধান্ত —
-         * দ্বিতীয়বার)*।
+         * Careful: **never forced.** (The owner's decision, made for the second time.)
          *
-         * প্রথমে ঘরটা খালি রাখলে পুরোনো আচরণ (বাধ্যতামূলক বদল) রেখে
-         * দেওয়া হয়েছিল, "নিরাপত্তার জাল ছিঁড়ব না" যুক্তিতে। ⚠️ কিন্তু
-         * মালিক পরদিনই আবার ওই দেয়ালে আটকালেন — Reset চেপে, ঘরটা খালি
-         * রেখে। **তিনি যা চেয়েছিলেন সেটাই করা হয়নি**, আর আধা-মানা
-         * সিদ্ধান্ত মানে অর্ধেক সময় পুরোনো আচরণই ফিরে আসা।
+         * At first, leaving the field empty kept the old behavior (forced
+         * change), on the argument "don't tear the safety net". But the next
+         * day the owner hit the same wall again, pressing Reset with the field
+         * empty. **What they asked for had not been done**, and a half-adopted
+         * decision means the old behavior returns half the time.
          *
-         * ⭐ পাসওয়ার্ড না দিলে এলোমেলো একটা বানানো হয় (মালিককে একবার
-         * দেখানো হয়) — কিন্তু বদলাতে **বলা হয় না**। কর্মী চাইলে
-         * Security পাতায় নিজেই বদলাবেন।
+         * If no password is given a random one is generated (shown to the
+         * owner once), but a change is **not demanded**. If the staff member
+         * wants, they will change it themselves on the Security page.
          */
         mustChangePw: false,
         pwChangedAt: new Date(),

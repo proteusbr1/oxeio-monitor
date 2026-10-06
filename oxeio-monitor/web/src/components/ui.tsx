@@ -11,28 +11,29 @@ import { ApiError } from '../api/client';
 import { Button } from './Page';
 
 /**
- * সেটিংস পর্দার নিজস্ব ছোট যন্ত্রপাতি — মোডাল, ফর্মের ঘর, নিশ্চিতকরণ,
- * আর "একবারই দেখা যাবে" গোপন কোডের বাক্স।
+ * Small tools specific to the Settings screen: modal, form fields, confirmation,
+ * and the "shown only once" secret-code box.
  *
- * ⭐ এগুলো ইচ্ছাকৃতভাবে `src/components/`-এ তোলা হয়নি: গোটা পণ্যে
- *    **লেখালেখির ফর্ম আছে কেবল এই এক পর্দায়** (স্টাফের জন্য কোনো বোতামই
- *    নেই — পণ্যের কঠিন নিয়ম)। সাধারণ ভাণ্ডারে রাখলে বাকি ছ-টা পেজ এমন
- *    কম্পোনেন্ট বয়ে বেড়াত যেগুলো তারা কোনোদিন ব্যবহার করবে না।
+ * They were deliberately not moved to `src/components/`: in the whole product,
+ * this is the only screen with write forms (staff get no buttons at all, a hard
+ * rule of the product). Putting them in the shared library would make the other
+ * six pages carry components they will never use.
  */
 
 const INPUT =
   'w-full rounded-md border border-line bg-surface px-3 py-2 text-[13.5px] text-ink outline-none placeholder:text-ink-3 focus:border-brand focus:ring-2 focus:ring-brand/25 disabled:opacity-60';
 
-// ── বার্তা ──────────────────────────────────────────────────────────────────
+// ── Messages ────────────────────────────────────────────────────────────────
 
 /**
- * ⚠️ সার্ভারের বার্তাগুলো **বাংলায় লেখা** (`dto.ts`, `*.service.ts`) — তাই
- *    সেগুলোই হুবহু দেখানো হয়, নিজের ভাষায় অনুবাদ করা হয় না। "বেতন
- *    '13000' ধাঁচে দিতে হবে" বার্তাটা "সেভ করা গেল না"-র চেয়ে হাজার গুণ
- *    কাজের, আর ওটাই মালিককে ভুলটা শুধরে দেয়।
+ * Careful: the server's messages are written in Bengali (`dto.ts`,
+ * `*.service.ts`), so they are shown verbatim, not translated into our own
+ * wording. A message like "salary must be given in the form '13000'" is a
+ * thousand times more useful than "could not save", and it is what lets the owner
+ * fix the mistake.
  *
- * ব্যতিক্রম ৪০৩: সার্ভারের Nest-জেনারেটেড বার্তাটা ইংরেজি ("Forbidden
- * resource"), তাই ওটুকু নিজেরাই লিখি।
+ * Exception: for 403, the server's Nest-generated message is in English
+ * ("Forbidden resource"), so we write that one ourselves.
  */
 export function messageOf(error: unknown): string {
   if (error instanceof ApiError) {
@@ -44,11 +45,11 @@ export function messageOf(error: unknown): string {
 }
 
 /**
- * ছোট বার্তার বাক্স।
+ * Small message box.
  *
- * ⭐ রঙের নিয়ম: `attention` (সলিড লাল লেখা + লাল ব্যাকগ্রাউন্ড) শুধু
- *    **ভুল বা বিপদের** জন্য। শর্ত বা ব্যাখ্যা `info` — সরু ধূসর, কারণ
- *    সব কিছু লাল করে দিলে লাল রঙের মানেই হারিয়ে যায়।
+ * Color rule: `attention` (solid red text + red background) only for errors or
+ * danger. Conditions or explanations use `info`, thin and grey, because if
+ * everything is red, red loses its meaning.
  */
 export function Notice({
   tone = 'info',
@@ -69,7 +70,7 @@ export function Notice({
   );
 }
 
-/** mutation ব্যর্থ হলে সার্ভারের বার্তাটাই দেখায়। `null` হলে কিছুই না। */
+/** Shows the server's message when a mutation fails. Nothing if `null`. */
 export function ServerError({ error }: { error: Error | null }) {
   if (!error) return null;
   return (
@@ -79,22 +80,22 @@ export function ServerError({ error }: { error: Error | null }) {
   );
 }
 
-// ── হুক ─────────────────────────────────────────────────────────────────────
+// ── Hooks ───────────────────────────────────────────────────────────────────
 
 export interface Mutation {
   busy: boolean;
   error: Error | null;
-  /** কাজটা চালায়, ব্যর্থ হলে `error`-এ সার্ভারের বার্তা রেখে দেয় */
+  /** Runs the action; on failure keeps the server's message in `error`. */
   run: (task: () => Promise<void>) => void;
   reset: () => void;
 }
 
 /**
- * লেখালেখির কাজের তিনটে অবস্থা এক জায়গায়: চলছে · ব্যর্থ · হয়ে গেছে।
+ * The three states of a write action in one place: running, failed, done.
  *
- * ⚠️ ব্যর্থ হলে মোডাল **বন্ধ হয় না** — ব্যবহারকারীর টাইপ করা সবকিছু
- *    ধরে রাখা হয়। বন্ধ করে দিলে "empCode-এ শুধু অক্ষর চলবে" বার্তা দেখে
- *    সে আবার গোটা ফর্মটা ভরত।
+ * Careful: on failure the modal does not close; everything the user typed is
+ * kept. If it closed, after seeing "empCode accepts letters only" they would have
+ * to fill in the whole form again.
  */
 export function useMutation(): Mutation {
   const [busy, setBusy] = useState(false);
@@ -113,8 +114,8 @@ export function useMutation(): Mutation {
     setError(null);
     void task().then(
       () => {
-        // সফল হলে বেশিরভাগ সময় মোডালটা বন্ধ হয়ে যায় (unmount) — তাই
-        // বেঁচে আছে কি না দেখে তবেই state ছোঁয়া
+        // On success the modal usually closes (unmounts), so touch state only after
+        // checking it is still alive
         if (aliveRef.current) setBusy(false);
       },
       (err: unknown) => {
@@ -131,11 +132,11 @@ export function useMutation(): Mutation {
 }
 
 /**
- * টাইপ থামার পর মান স্থির হলে তবেই ফেরত দেয়।
+ * Returns the value only once it has settled after typing stops.
  *
- * ⚠️ ছাড়া উপায় ছিল না: `useApi`-র deps-এ সরাসরি সার্চ বাক্সের মান দিলে
- *    প্রতিটা অক্ষরে একটা করে রিকোয়েস্ট যেত, আর deps বদলালে `data` শূন্য
- *    হয় বলে টেবিলটা প্রতি অক্ষরে ঝিকমিক করত।
+ * Careful: unavoidable. Passing the search box's value straight into `useApi`'s
+ * deps would send one request per character, and because `data` is cleared when
+ * deps change, the table would flicker on every character.
  */
 export function useDebounced<T>(value: T, delayMs = 350): T {
   const [settled, setSettled] = useState(value);
@@ -148,18 +149,19 @@ export function useDebounced<T>(value: T, delayMs = 350): T {
   return settled;
 }
 
-// ── মোডাল ───────────────────────────────────────────────────────────────────
+// ── Modal ───────────────────────────────────────────────────────────────────
 
 /**
- * মোডাল।
+ * Modal.
  *
- * ⚠️ `dismissible={false}` দিলে Escape বা বাইরে ক্লিকে বন্ধ হয় না —
- *    এনরোলমেন্ট কোডের মতো **একবারই দেখানো** জিনিসের জন্য। ওখানে ভুল করে
- *    Escape চাপলে কোডটা চিরতরে হারিয়ে যেত, আর নতুন কোড বানানো ছাড়া উপায়
- *    থাকত না।
+ * Careful: with `dismissible={false}`, Escape or an outside click does not close
+ * it. This is for things shown only once, like the enrollment code: pressing
+ * Escape by mistake there would lose the code forever, and the only way out would
+ * be generating a new one.
  *
- * ⚠️ E12 — ফোনে মোডালটা নিচ থেকে ওঠে (`items-end`) আর পুরো চওড়া হয়;
- *    মাঝখানে বসালে ছোট পর্দায় কি-বোর্ড উঠে এলে ফর্মের অর্ধেক ঢেকে যেত।
+ * Careful: E12: on a phone the modal rises from the bottom (`items-end`) and is
+ * full width; if centred, when the keyboard comes up on a small screen it would
+ * cover half the form.
  */
 export function Modal({
   title,
@@ -187,8 +189,8 @@ export function Modal({
     return () => document.removeEventListener('keydown', onKey);
   }, [dismissible, onClose]);
 
-  // পেছনের পাতাটা যেন স্ক্রল না করে — নইলে ফোনে মোডাল টানতে গিয়ে
-  // পেছনের তালিকাটাই সরে যায়
+  // Stop the page behind from scrolling; otherwise on a phone, dragging the
+  // modal moves the list behind it
   useEffect(() => {
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -241,7 +243,7 @@ export function Modal({
   );
 }
 
-// ── ফর্মের ঘর ───────────────────────────────────────────────────────────────
+// ── Form fields ─────────────────────────────────────────────────────────────
 
 function FieldShell({
   label,
@@ -299,26 +301,25 @@ export function TextField({
   hint?: ReactNode;
   placeholder?: string;
   /**
-   * ⚠️ `'month'` যোগ করা হয়েছে জামানতের শুরুর মাসের জন্য — প্রশ্নটা
-   *    "কোন মাস", তাই দিন চাওয়া মানে মালিককে এমন সিদ্ধান্ত নিতে বাধ্য
-   *    করা যেটার কোনো অর্থই নেই। ব্রাউজার নিজেই `YYYY-MM` দেয়, তাই
-   *    হাতে ধাঁচ মেলানোর ঝুঁকিও থাকে না।
+   * Careful: `'month'` was added for the deposit's start month. The question is
+   * "which month", so asking for a day would force the owner into a decision that
+   * has no meaning. The browser itself gives `YYYY-MM`, so there is no risk of
+   * matching the pattern by hand.
    */
   /**
-   * ⚠️ `password` — ব্রাউজার লেখাটা ঢেকে রাখে, আর সেটা এখানে **দরকার**:
-   * মালিক কর্মীর পাসওয়ার্ড বসানোর সময় পাশে কেউ দাঁড়িয়ে থাকতে পারেন
-   * (২৩ আগস্ট)।
+   * Careful: `password`: the browser hides the text, and that is needed here: when
+   * the owner sets a staff member's password, someone may be standing beside them.
    */
   type?: 'text' | 'email' | 'date' | 'number' | 'time' | 'month' | 'password';
   required?: boolean;
   disabled?: boolean;
-  /** প্যাটার্ন, কোড, সংখ্যা — সমান প্রস্থের অক্ষরে পড়া সহজ */
+  /** Pattern, code, number: easier to read in fixed-width characters. */
   mono?: boolean;
   min?: string | number;
   max?: string | number;
   step?: string | number;
   maxLength?: number;
-  /** মোডাল খুললে প্রথম ঘরেই কার্সার — একটা বাড়তি ক্লিক বাঁচে */
+  /** Put the cursor in the first field when the modal opens; saves an extra click. */
   autoFocus?: boolean;
 }) {
   const id = useId();
@@ -343,11 +344,11 @@ export function TextField({
 }
 
 /**
- * ⭐ **হ্যাঁ/না-র ঘর** — অধিকার বা সুইচের জন্য।
+ * A yes/no field, for rights or switches.
  *
- * ⚠️ `FieldShell` ব্যবহার করা হয়নি, ইচ্ছাকৃতভাবে। টিক-ঘরের লেখাটা
- * ঘরের **পাশে** বসে, উপরে নয় — উপরে বসালে লেখাটা কার, সেটা এক নজরে
- * বোঝা যায় না যখন পাশাপাশি দুটো টিক থাকে।
+ * Careful: `FieldShell` is deliberately not used. A checkbox's text sits beside
+ * the box, not above it; placed above, it is hard to tell at a glance whose text
+ * it is when two checkboxes sit side by side.
  */
 export function CheckboxField({
   label,
@@ -462,24 +463,24 @@ export function SelectField({
   );
 }
 
-/** ফর্মের ঘরগুলোর গ্রিড — E12: ফোনে এক কলাম, বড় পর্দায় দুই */
+/** Grid for form fields. E12: one column on a phone, two on a large screen. */
 export function FormGrid({ children }: { children: ReactNode }) {
   return <div className="grid gap-3.5 sm:grid-cols-2">{children}</div>;
 }
 
-/** পুরো চওড়া জুড়ে বসা ঘর (গ্রিডের ভেতরে) */
+/** A field spanning the full width (inside the grid). */
 export function FullWidth({ children }: { children: ReactNode }) {
   return <div className="sm:col-span-2">{children}</div>;
 }
 
-// ── টেবিলের ছোট বোতাম ও চিপ ─────────────────────────────────────────────────
+// ── Small table buttons and chips ───────────────────────────────────────────
 
 /**
- * টেবিলের সারিতে বসার মতো ছোট বোতাম।
+ * A small button suited to a table row.
  *
- * ⚠️ সলিড লাল নয়, শুধু লেখাটা লাল (`danger`) — সলিড লাল মানে "মনোযোগ
- *    দরকার", আর প্রতিটা সারিতে একটা করে সলিড লাল বোতাম থাকলে গোটা
- *    টেবিলটাই বিপদের মতো দেখাত।
+ * Careful: not solid red; only the text is red (`danger`). Solid red means "needs
+ * attention", and one solid red button in every row would make the whole table
+ * look like an emergency.
  */
 export function MiniButton({
   children,
@@ -495,13 +496,13 @@ export function MiniButton({
   title?: string;
 }) {
   /**
-   * ⭐ রং **করণীয় ধরে**, গুরুত্ব ধরে নয় *(২৩ আগস্ট, মালিকের চাওয়া)*:
-   * সবুজ = কাজ শেষ, লাল = বাদ/মুছে ফেলা।
+   * Color follows the action, not the importance (the owner's request): green =
+   * work finished, red = drop/delete.
    *
-   * ⚠️ কেবল **বর্ডার ও লেখা** রঙিন, ভরাট নয় — টার্গেটের তালিকায় এক
-   * সারিতে চারটে বোতাম বসে, আর সবগুলো ভরাট হলে চোখ কোথায় যাবে বোঝাই
-   * যেত না। ⚠️ রঙই একমাত্র সংকেত নয়: লেখাটাও ("Complete"/"Skip") নিজেই
-   * বলে দেয়, তাই বর্ণান্ধ কারো কাছে কিছু হারায় না।
+   * Careful: only the border and text are colored, not filled: in the targets list
+   * four buttons sit on one row, and if all were filled it would be unclear where
+   * to look. Careful: color is not the only signal: the text itself ("Complete" /
+   * "Skip") says it too, so nothing is lost for someone colour-blind.
    */
   const style =
     tone === 'danger'
@@ -517,9 +518,9 @@ export function MiniButton({
       disabled={disabled}
       title={title}
       /*
-       * ⚠️ `tap` এখানে সবচেয়ে জরুরি — এই বোতামগুলো ছিল সবচেয়ে ছোট (~২৮px)
-       *    আর `RowActions`-এ পাশাপাশি বসে, অর্থাৎ ভুল বোতামে চাপ পড়ার
-       *    সম্ভাবনাও সবচেয়ে বেশি। সেটিংসে ভুল চাপ মানে ভুল কাজ হয়ে যাওয়া।
+       * Careful: `tap` matters most here: these buttons were the smallest (about 28px)
+       * and sit side by side in `RowActions`, so the chance of pressing the wrong one
+       * is the highest. A wrong press in Settings means a wrong action is carried out.
        */
       className={`tap rounded-md border bg-surface px-2 py-1 text-[12px] whitespace-nowrap transition focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-50 ${style}`}
     >
@@ -528,14 +529,14 @@ export function MiniButton({
   );
 }
 
-/** সারির কাজগুলো একসাথে — ফোনে নিচে নেমে যায় */
+/** A row's actions together; on a phone they drop below. */
 export function RowActions({ children }: { children: ReactNode }) {
   return <div className="flex flex-wrap justify-end gap-1.5">{children}</div>;
 }
 
 /**
- * অবস্থার চিপ। ⭐ সলিড লাল **শুধু** সত্যিকারের সমস্যায় (বাতিল ডিভাইস) —
- * নিষ্ক্রিয় কর্মী সমস্যা নয়, সেটা ধূসর।
+ * Status chip. Careful: solid red only for a real problem (a revoked device); an
+ * inactive employee is not a problem, so it is grey.
  */
 export function Chip({
   children,
@@ -545,10 +546,10 @@ export function Chip({
   tone?: 'counted' | 'muted' | 'attention' | 'pending';
 }) {
   /**
-   * ⚠️ `pending` আম্বার, `attention` লাল — পার্থক্যটা ইচ্ছাকৃত।
-   * লাল মানে "কিছু ভেঙেছে"; আম্বার মানে "একটা কাজ বাকি"। সই না নেওয়া
-   * কোনো ব্যর্থতা নয়, কিন্তু রোলআউটের আগে সেটা চোখে পড়া দরকার —
-   * ট্রে জানালায় "পিছিয়ে আছে"-র জন্যও একই যুক্তিতে আম্বার।
+   * Careful: `pending` is amber and `attention` is red; the difference is
+   * intentional. Red means "something is broken"; amber means "a task is left". A
+   * missing signature is no failure, but it should be noticed before rollout; the
+   * same reasoning gives amber for "behind" in the tray window.
    */
   const style =
     tone === 'attention'
@@ -568,7 +569,7 @@ export function Chip({
   );
 }
 
-/** সরানো যায় এমন ফিল্টার চিপ — audit log-এ "ইউজার: রিমা ✕" */
+/** A removable filter chip, e.g. "User: Rima x" in the audit log. */
 export function FilterChip({
   children,
   onClear,
@@ -591,14 +592,14 @@ export function FilterChip({
   );
 }
 
-// ── নিশ্চিতকরণ ──────────────────────────────────────────────────────────────
+// ── Confirmation ────────────────────────────────────────────────────────────
 
 /**
- * বিপজ্জনক কাজের আগে নিশ্চিত করা।
+ * Confirmation before a dangerous action.
  *
- * ⭐ `withReason` দিলে কারণ লেখা **বাধ্যতামূলক** (সার্ভারও ৩ অক্ষর চায়) —
- *    দূর থেকে কারো মেশিন থামিয়ে দেওয়া বা কাউকে নিষ্ক্রিয় করা এমন কাজ
- *    যার ব্যাখ্যা ছয় মাস পরেও লাগতে পারে, আর তখন কারো মনে থাকবে না।
+ * With `withReason`, a reason is required (the server also wants 3 characters):
+ * stopping someone's machine remotely or deactivating someone is an action whose
+ * explanation may be needed even six months later, when nobody will remember.
  */
 export function ConfirmDialog({
   title,
@@ -617,14 +618,14 @@ export function ConfirmDialog({
 }: {
   title: ReactNode;
   intro?: ReactNode;
-  /** যা ঘটবে তার স্পষ্ট পরিণাম — লুকোনো যাবে না */
+  /** The plain consequence of what will happen; it must not be hidden. */
   warning?: ReactNode;
   confirmLabel: string;
   tone?: 'danger' | 'primary';
   withReason?: boolean;
   reasonLabel?: string;
   reasonHint?: ReactNode;
-  /** অতিরিক্ত ঘর — যেমন "শেষ কর্মদিবস" তারিখ */
+  /** Extra fields, e.g. a "last workday" date. */
   extra?: ReactNode;
   busy: boolean;
   error: Error | null;
@@ -675,16 +676,17 @@ export function ConfirmDialog({
   );
 }
 
-// ── একবারই দেখা যাবে ────────────────────────────────────────────────────────
+// ── Shown only once ─────────────────────────────────────────────────────────
 
 /**
- * ⭐⚠️ এনরোলমেন্ট কোড ও অস্থায়ী পাসওয়ার্ড — সার্ভারে শুধু hash জমা থাকে,
- * তাই **এই একটিবারই** দেখা যাবে।
+ * Enrollment code and temporary password: the server stores only a hash, so they
+ * can be seen this one time only.
  *
- * তাই তিনটে রক্ষাকবচ একসাথে:
- *   ১· মোডালটা `dismissible={false}` — Escape বা বাইরে ক্লিকে বন্ধ হয় না
- *   ২· বন্ধ করার বোতামটা ততক্ষণ নিষ্ক্রিয় যতক্ষণ না "সংরক্ষণ করেছি" টিক পড়ে
- *   ৩· কোডটা বড় করে, সমান-প্রস্থ অক্ষরে — টুকে নিতে গিয়ে যেন ভুল না হয়
+ * So three safeguards together:
+ *   1. The modal is `dismissible={false}`: Escape or an outside click does not close it
+ *   2. The close button stays disabled until the "I have saved it" box is ticked
+ *   3. The code is shown large, in fixed-width characters, so copying it by hand
+ *      does not go wrong
  */
 export function SecretModal({
   title,
@@ -697,7 +699,7 @@ export function SecretModal({
   title: ReactNode;
   label: string;
   secret: string;
-  /** কবে পর্যন্ত চলবে, কার জন্য — কোডের নিচে ছোট করে */
+  /** Until when it is valid and for whom; small, under the code. */
   note?: ReactNode;
   meta?: ReactNode;
   onClose: () => void;
@@ -706,9 +708,9 @@ export function SecretModal({
   const [copyState, setCopyState] = useState<'idle' | 'ok' | 'failed'>('idle');
 
   const copy = (): void => {
-    // ⚠️ `navigator.clipboard` শুধু নিরাপদ origin-এ থাকে (HTTPS বা
-    //    localhost)। http-এ চালালে এটা `undefined` — তখন বোতামটা নীরবে
-    //    কিছুই করত না, আর ব্যবহারকারী ভাবত কপি হয়ে গেছে।
+    // Careful: `navigator.clipboard` exists only on secure origins (HTTPS or
+    // localhost). Over http it is `undefined`; the button would then silently do
+    // nothing and the user would think the copy had happened.
     const clipboard = navigator.clipboard as Clipboard | undefined;
     if (!clipboard) {
       setCopyState('failed');
@@ -718,8 +720,8 @@ export function SecretModal({
     void clipboard.writeText(secret).then(
       () => {
         setCopyState('ok');
-        // কপি হয়ে গেলে টিকটাও বসিয়ে দেওয়া — তবু বোতামটা এক ধাপ দূরেই
-        // থাকে, যাতে "বন্ধ" চাপার আগে চোখ একবার কোডটায় পড়ে
+        // When copied, the tick is set too; still, the button stays one step away, so
+        // the eye falls on the code once before pressing "close"
         setSaved(true);
       },
       () => setCopyState('failed'),
@@ -778,11 +780,11 @@ export function SecretModal({
   );
 }
 
-// ── ছোট সাহায্যকারী ─────────────────────────────────────────────────────────
+// ── Small helpers ───────────────────────────────────────────────────────────
 
 /**
- * ফাঁকা ইনপুট বাক্স → `undefined` (POST-এ "ফিল্ডটা পাঠিয়ো না")।
- * ⚠️ `''` পাঠালে `@IsEmail`/`@Matches` ভেঙে ৪০০ হতো।
+ * Empty input box to `undefined` (in a POST: "do not send the field").
+ * Careful: sending `''` would break `@IsEmail`/`@Matches` and give a 400.
  */
 export function orUndefined(value: string): string | undefined {
   const trimmed = value.trim();
@@ -790,8 +792,8 @@ export function orUndefined(value: string): string | undefined {
 }
 
 /**
- * ফাঁকা ইনপুট বাক্স → `null` (PATCH-এ "মানটা মুছে দাও")।
- * ⚠️ সার্ভার `undefined` (হাত দিও না) আর `null` (মুছে দাও) আলাদা করে।
+ * Empty input box to `null` (in a PATCH: "delete the value").
+ * Careful: the server tells `undefined` (leave it) from `null` (delete it).
  */
 export function orNull(value: string): string | null {
   const trimmed = value.trim();

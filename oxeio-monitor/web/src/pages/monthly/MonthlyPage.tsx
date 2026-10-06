@@ -22,28 +22,27 @@ import { HeatGrid } from './HeatGrid';
 import { buildMonthGrid, type GridSort } from './heatmap';
 
 /**
- * E07 — মাসিক অগ্রগতি (`/monthly`)।
+ * Monthly progress (`/monthly`).
  *
- * ⭐ এটাই মালিকের সবচেয়ে বেশি দেখা পর্দা, আর এর একটাই প্রশ্ন:
- *   **মাস শেষ হওয়ার আগেই কার ঘাটতি হচ্ছে?** তাই পাতাটা উত্তরটাকেই উপরে
- *   রাখে — সবচেয়ে পিছিয়ে থাকা মানুষটা প্রথম সারিতে, আর "পিছিয়ে আছেন"
- *   সংখ্যাটা টাইলের সারিতে। হিটম্যাপটা ব্যাখ্যা, উত্তর নয়।
+ * Important: this is the owner's most-viewed screen, and it has one question:
+ *   **who is falling short before the month ends?** So the page puts the answer on
+ *   top: the furthest-behind person in the first row, and the "behind" count in the
+ *   tile row. The heatmap is the explanation, not the answer.
  *
- * ⚠️ **ডেটা `GET /reports/attendance` থেকে, এবং ওটা আজ পর্যন্ত ছেঁটে দেয়**
- *   (`meta.clampedToToday`)। ফলে "এ পর্যন্ত হওয়ার কথা" আর "মাসের টার্গেট"
- *   দুটো আলাদা সংখ্যা, আর দুটোই দেখাতে হয়। শুধু ২০৮ দেখালে ১১ তারিখে
- *   সবাইকে ভয়ংকর পিছিয়ে মনে হতো; শুধু "এ পর্যন্ত" দেখালে মাসটা কোথায়
- *   যাচ্ছে বোঝা যেত না।
+ * Careful: **the data comes from `GET /reports/attendance`, which trims to today**
+ *   (`meta.clampedToToday`). So "expected by now" and "month target" are two different
+ *   numbers, and both must be shown. Only showing 208 would make everyone look
+ *   terribly behind on the 11th; only "so far" would hide where the month is heading.
  *
- * ⚠️ রিপোর্ট owner + manager দুজনেরই (§ ৪.৩), তাই এখানে owner-only কিছু
- *   নেই — টাকার কোনো ফিল্ডও এই endpoint-এ নেই। স্টাফ ঢুকলে ৪০৩ পেত, তাই
- *   তাকে রিকোয়েস্টটা করতেই দেওয়া হয় না (নিচে দেখুন)।
+ * Careful: reports are open to both owner and manager, so nothing here is
+ *   owner-only, and there is no money field in this endpoint. Staff would get a 403,
+ *   so they are never allowed to make the request (see below).
  */
 export function MonthlyPage() {
   const { user } = useAuth();
 
-  // ⭐ স্টাফের জন্য এই পর্দাটা সহকর্মীদের তালিকা — ৪০৩ ধরার আগেই থামানো
-  //   ভালো, নইলে প্রতিবার ঢুকলে সার্ভারে একটা অর্থহীন কল যেত।
+  // Important: for staff this screen is the colleagues' list; better to stop before
+  //   catching the 403, or every visit would make a pointless server call.
   if (!seesEveryone(user?.role)) {
     return (
       <Page title="Monthly">
@@ -67,20 +66,20 @@ function MonthlyBoard() {
   const from = `${month}-01`;
   const to = monthEndOf(from);
 
-  // ⚠️ পুরো মাস চাওয়া হয়, ছাঁটাইটা সার্ভারের কাজ। নিজে থেকে `to = আজ`
-  //    বসালে `meta.clampedToToday` কখনো সত্যি হতো না, আর "৩১ তারিখ পর্যন্ত
-  //    চেয়েছিলাম, পেলাম ১১ পর্যন্ত" কথাটা বলার সুযোগই থাকত না।
+  // Careful: the whole month is requested; trimming is the server's job. Setting
+  //    `to = today` ourselves would mean `meta.clampedToToday` is never true, and we
+  //    could never say "asked up to the 31st, got up to the 11th".
   const { data, error, loading, reload } = useApi(
     (signal) => getAttendanceReport({ from, to }, signal),
     [from, to],
   );
 
   /**
-   * ⚠️ ক্যালেন্ডারের মাসটা `month` state থেকে নয়, **`data.meta.from` থেকে**।
-   *    মাস বদলানোর পর `useApi` নতুন ডেটা আনা শুরু করার আগে এক ফ্রেমের জন্য
-   *    পুরোনো রেসপন্স হাতে থাকে; state ধরে নিলে ওই ফ্রেমে সেপ্টেম্বরের
-   *    ক্যালেন্ডারে আগস্টের সারি বসত — সব ঘর ফাঁকা, যেন ডেটা হারিয়ে গেছে।
-   *    গ্রিড সবসময় তার নিজের ডেটার মাসই আঁকে।
+   * Careful: the calendar month comes **from `data.meta.from`**, not from the
+   *    `month` state. After the month changes, `useApi` still holds the old response
+   *    for one frame before it starts fetching; going by state would put August's
+   *    rows in September's calendar for that frame: all cells empty, as if data
+   *    were lost. The grid always draws the month of its own data.
    */
   const grid = useMemo(
     () => (data ? buildMonthGrid(data, monthKeyOf(data.meta.from), sort) : null),
@@ -91,14 +90,14 @@ function MonthlyBoard() {
     <>
       <MonthPicker value={month} onChange={setMonth} max={monthKeyOf(today)} />
       {/*
-        F05 — ⚠️ আগে এখানে সাধারণ `<a href download>` ছিল, আর সেটা দুটো
-        কারণে বদলানো হয়েছে:
-          ১· **৪০৩/৪০০ এলে ব্রাউজার নীরবে একটা JSON ফাইল `.xlsx` নামে
-             সেভ করত।** কেউ Excel-এ খুলে "ফাইলটা নষ্ট" দেখত, অথচ আসল
-             ঘটনা ছিল "অনুমতি নেই"।
-          ২· রিপোর্ট পেজে ঠিক এই কাজটাই fetch দিয়ে হয় — একই বোতাম দুই
-             পাতায় দুই রকম আচরণ করলে কোনটা সত্যি বোঝার উপায় থাকত না।
-        এখন দুজনেই `useXlsxDownload()` — URL এখনো `reportXlsxUrl()`-ই বানায়।
+        F05: this used to be a plain `<a href download>`, changed for two reasons:
+          1. **On a 403/400 the browser silently saved a JSON file named `.xlsx`.**
+             Someone opening it in Excel saw "file is corrupt", when the real
+             event was "not permitted".
+          2. The reports page does exactly this with fetch; the same button
+             behaving differently on two pages would leave no way to tell which is
+             true.
+        Now both use `useXlsxDownload()`; the URL is still built by `reportXlsxUrl()`.
       */}
       <Button
         onClick={() =>
@@ -119,16 +118,16 @@ function MonthlyBoard() {
     <Page
       title="Monthly"
       subtitle={
-        // ⚠️ মাসের নামও ডেটার `meta` থেকে — পর্দার প্রতিটা সংখ্যা যেন একই
-        //    রেসপন্সের কথা বলে (উপরের `grid`-এর নোট দেখুন)
+        // Careful: the month name also comes from the data's `meta`, so every number on
+        //    the screen speaks for the same response (see the `grid` note above)
         data
           ? `${formatMonth(monthKeyOf(data.meta.from))} · counted from ${formatDate(data.meta.from)} to ${formatDate(data.meta.to)}`
           : formatMonth(month)
       }
       actions={actions}
     >
-      {/* ⚠️ ডাউনলোডের ভুলটা দেখানোই এই বদলের পুরো কারণ — লুকিয়ে ফেললে
-             আগের `<a>`-এর নীরব ব্যর্থতাই ফিরে আসত */}
+      {/* Careful: showing the download error is the whole reason for this change;
+             hiding it would bring back the old `<a>`'s silent failure */}
       {download.error && (
         <div className="mb-3">
           <ErrorNote>{download.error}</ErrorNote>
@@ -158,8 +157,8 @@ function MonthlyBoard() {
               tone="muted"
             />
             {/*
-              ⚠️ এক পর্দায় একটাই লাল টাইল — এটাই সেটা। বাকি সব ধূসর/কালো,
-                 নইলে লাল রঙের মানেই হারিয়ে যেত।
+              Careful: only one red tile per screen, and this is it. Everything else is
+                 grey/black, or red would lose its meaning.
             */}
             <Stat
               label="Behind"
@@ -181,10 +180,10 @@ function MonthlyBoard() {
           <div>
             <SectionHead
               title="Staff × date"
-              // ⚠️ "darker" লেখা যাবে না — র‍্যাম্পটা `--color-ink`-এর উপর
-              //    অস্বচ্ছতা, আর `ink` লাইট থিমে কালো, ডার্কে সাদা। অর্থাৎ
-              //    ডার্কে ঘণ্টা বাড়লে ঘর **উজ্জ্বল** হয়, গাঢ় নয় — লেখাটা
-              //    ঠিক উল্টো বলত। থিম-নিরপেক্ষ শব্দই একমাত্র নিরাপদ।
+              // Careful: do not write "darker": the ramp is opacity over `--color-ink`,
+              //    and `ink` is black in the light theme, white in dark. So in dark,
+              //    more hours make the cell **brighter**, not darker, and the text
+              //    would say the opposite. Theme-neutral wording is the only safe one.
               hint="The stronger a cell, the more hours were counted that day"
               actions={
                 <SortToggle value={sort} onChange={setSort} />
@@ -196,8 +195,8 @@ function MonthlyBoard() {
             </Card>
 
             {/*
-              ⭐ মকআপের বাক্যটা — এটাই পুরো নিয়মের সারাংশ (§ ২.১-খ)।
-              ⚠️ সংখ্যা ইংরেজি অঙ্কে (10, 6), বাংলা অঙ্কে নয়।
+              The mockup's sentence: it summarises the whole rule.
+              Careful: numbers use English digits (10, 6).
             */}
             <p className="mt-3 text-xs text-ink-3">
               <b className="font-semibold text-ink-2">Hours</b> are counted, not
@@ -221,9 +220,9 @@ function MonthlyBoard() {
 }
 
 /**
- * ⚠️ তিনটে বাক্যই **লুকোনো যাবে না** — তিনটেই "সংখ্যাটা যা দেখাচ্ছে তার
- *    চেয়ে কম নিশ্চিত" বলে। না বললে ছেঁটে দেওয়া রেঞ্জ দেখে সবাইকে পিছিয়ে
- *    থাকা মনে হতো, আর বাদ পড়া কর্মীরা নীরবে অদৃশ্য থাকতেন।
+ * Careful: **none of the three sentences may be hidden**: all three say "the number
+ *    is less certain than it looks". Without them a trimmed range would make
+ *    everyone look behind, and excluded employees would stay silently invisible.
  */
 function Notices({
   clamped,
@@ -282,9 +281,9 @@ function Notices({
 }
 
 /**
- * সাজানোর ক্রম।
- * ⚠️ সরু আউটলাইন লাল = ব্র্যান্ড (বাছাই করা ট্যাব), সলিড লাল নয় — এটা ভুল
- *    নয়, শুধু একটা পছন্দ।
+ * Sort order.
+ * Careful: a thin red outline = brand (the selected tab), not solid red; it is not an
+ *    error, only a choice.
  */
 function SortToggle({
   value,

@@ -1,35 +1,35 @@
 namespace oXeio.Core.Capture;
 
 /// <summary>
-/// GPU টেক্সচার থেকে পাওয়া পিক্সেল সারিগুলো টানটান বাফারে নামানো।
+/// Copies pixel rows from a GPU texture into a tightly packed buffer.
 ///
-/// <b>কেন এটা আলাদা ক্লাস, আর কেন Core-এ:</b> GPU যখন টেক্সচার map করে দেয়, প্রতি
-/// সারির দৈর্ঘ্য (<i>RowPitch</i>) প্রায় কখনোই <c>width × 4</c> হয় না — ড্রাইভার
-/// নিজের সুবিধামতো ২৫৬ বা ৫১২ বাইটে সাজায়। ১৯২০ চওড়া ছবির RowPitch ৭৬৮০ না হয়ে
-/// ৭৯৩৬ হতে পারে। ওই বাড়তি ২৫৬ বাইট আবর্জনা।
+/// <b>Why this is a separate class, and why in Core:</b> when the GPU maps a texture, the
+/// length of each row (<i>RowPitch</i>) is almost never <c>width x 4</c>; the driver aligns it
+/// to 256 or 512 bytes as it likes. For an image 1920 wide the RowPitch may be 7936 rather
+/// than 7680. Those extra 256 bytes are garbage.
 ///
-/// সেটা খেয়াল না করে টানা কপি করলে ছবি <b>ক্র্যাশ করে না</b> — প্রতিটা সারি একটু
-/// করে সরে গিয়ে তেরছা হয়ে যায়। আর কালোও হয় না, তাই
-/// <see cref="FrameQuality"/>-ও ধরতে পারবে না। মাসের পর মাস তেরছা ছবি জমবে।
+/// Copying straight through without noticing does <b>not crash</b>: each row shifts a little
+/// further and the picture comes out slanted. It is not black either, so
+/// <see cref="FrameQuality"/> cannot catch it. Slanted pictures would pile up for months.
 ///
-/// এখানে Win32-এর কিছু নেই — শুধু বাইট সরানো। তাই Core-এ, আর তাই সাধারণ
-/// ইউনিট টেস্টে পুরোটা যাচাই করা যায়।
+/// There is nothing Win32 here, only moving bytes. So it lives in Core, and all of it can be
+/// verified in ordinary unit tests.
 /// </summary>
 public static class PixelCopy
 {
     public const int BytesPerPixel = 4;
 
     /// <summary>
-    /// <paramref name="source"/>-এর প্রতিটি সারি থেকে শুধু কাজের অংশটুকু নিয়ে
-    /// টানটান (stride = width × 4) বাফার বানায়।
+    /// Takes only the useful part of each row of <paramref name="source"/> and builds a tightly
+    /// packed buffer (stride = width x 4).
     /// </summary>
-    /// <param name="source">map করা টেক্সচারের কাঁচা বাইট।</param>
-    /// <param name="sourceRowPitch">উৎসে প্রতি সারিতে কত বাইট — <b>width × 4-এর সমান ধরে নেওয়া যাবে না</b>।</param>
-    /// <param name="width">যত পিক্সেল আসলে দরকার (ContentSize, টেক্সচারের প্রস্থ নয়)।</param>
-    /// <param name="height">যত সারি আসলে দরকার।</param>
-    /// <returns>টানটান BGRA বাফার, top-down।</returns>
-    /// <exception cref="ArgumentOutOfRangeException">মাপ অসম্ভব হলে।</exception>
-    /// <exception cref="ArgumentException">উৎসে চাওয়া সারিগুলো ধরে না।</exception>
+    /// <param name="source">The raw bytes of the mapped texture.</param>
+    /// <param name="sourceRowPitch">Bytes per row in the source: <b>must not be assumed equal to width x 4</b>.</param>
+    /// <param name="width">The pixels actually needed (ContentSize, not the texture's width).</param>
+    /// <param name="height">The rows actually needed.</param>
+    /// <returns>A tightly packed BGRA buffer, top-down.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">If the size is impossible.</exception>
+    /// <exception cref="ArgumentException">The source does not hold the requested rows.</exception>
     public static byte[] ToTightBuffer(
         ReadOnlySpan<byte> source, int sourceRowPitch, int width, int height)
     {
@@ -37,9 +37,9 @@ public static class PixelCopy
 
         var destStride = width * BytesPerPixel;
 
-        // ⚠️ শেষ সারিতে pitch-এর পুরোটা থাকার নিশ্চয়তা নেই — ড্রাইভার শেষ সারির
-        //    padding বাদ দিয়েও বাফার দিতে পারে। তাই শেষ সারির জন্য destStride,
-        //    আগেরগুলোর জন্য pitch ধরে হিসাব।
+        // The last row is not guaranteed to hold the whole pitch: a driver may give a buffer
+        // without the last row's padding. So the last row is counted with destStride, and the
+        // earlier ones with the pitch.
         var needed = ((long)(height - 1) * sourceRowPitch) + destStride;
         if (source.Length < needed)
         {
@@ -60,15 +60,16 @@ public static class PixelCopy
     }
 
     /// <summary>
-    /// ফ্রেম পুল যে মাপ দিয়েছে আর ফ্রেমে আসলে যতটুকু কনটেন্ট আছে — দুটো মেলে না।
+    /// The size the frame pool gave and the content actually in the frame do not match.
     ///
-    /// WGC-র ফ্রেম পুল মাপ বদলাতে দেরি করে: মনিটরের রেজোলিউশন বদলালে বা
-    /// ডিসপ্লে খুলে-লাগালে পুল কিছুক্ষণ <b>পুরোনো, বড়</b> টেক্সচারই দিতে থাকে আর
-    /// আসল ছবিটা তার এক কোণে বসে। বাকিটা অনির্ধারিত ডেটা — আগের ফ্রেমের অবশিষ্ট,
-    /// বা নিছক আবর্জনা।
+    /// WGC's frame pool is slow to change size: when the monitor resolution changes or a
+    /// display is unplugged and replugged, the pool keeps handing out the <b>old, larger</b>
+    /// texture for a while, with the real picture in one corner. The rest is undefined data:
+    /// leftovers of the previous frame, or plain garbage.
     ///
-    /// তাই সবসময় ছোটটাই নেওয়া হয়। বড়টা নিলে ছবির ডান পাশে আর নিচে আগের ফ্রেমের
-    /// টুকরো জুড়ে যেত — যা দেখতে অনেকটা সত্যিকারের স্ক্রিনশটের মতোই।
+    /// So the smaller one is always taken. Taking the larger would attach pieces of the
+    /// previous frame to the right and bottom of the picture, which looks much like a genuine
+    /// screenshot.
     /// </summary>
     public static (int Width, int Height) ContentBounds(
         int textureWidth, int textureHeight, int contentWidth, int contentHeight)
@@ -80,17 +81,17 @@ public static class PixelCopy
     }
 
     /// <summary>
-    /// ঘোরানো ডিসপ্লের ছবি সোজা করা।
+    /// Straightens the picture of a rotated display.
     ///
-    /// <b>কেন দরকার:</b> মনিটর portrait-এ ঘোরালে GPU ছবিটা প্যানেলের নিজস্ব
-    /// (landscape) দিকেই স্ক্যান করে, ভেতরের ছবিটা ঘুরিয়ে দিয়ে। ডেস্কটপ
-    /// ডুপ্লিকেশন ওই স্ক্যান-আউট সারফেসটাই দেয় — অর্থাৎ কাত হয়ে থাকা ছবি।
+    /// <b>Why needed:</b> when a monitor is rotated to portrait, the GPU still scans out in
+    /// the panel's own (landscape) orientation, with the image rotated inside. Desktop
+    /// duplication hands out that scan-out surface, i.e. a sideways picture.
     ///
-    /// এটা না থাকলে ঘোরানো মনিটর GDI-তে নেমে যেত, আর তখন ওই পর্দায় ভিডিও
-    /// চললে ছবি কালো আসত — অথচ ভিডিওর জন্যই তো DXGI নেওয়া।
+    /// Without this, a rotated monitor would fall back to GDI, and video playing on that screen
+    /// would come out black, although DXGI was chosen precisely for video.
     /// </summary>
-    /// <param name="bgra">টানটান BGRA, top-down।</param>
-    /// <param name="quarterTurnsClockwise">০–৩। ০ হলে উৎসই ফেরত আসে।</param>
+    /// <param name="bgra">Tightly packed BGRA, top-down.</param>
+    /// <param name="quarterTurnsClockwise">0 to 3. For 0 the source itself is returned.</param>
     public static (byte[] Pixels, int Width, int Height) RotateClockwise(
         byte[] bgra, int width, int height, int quarterTurnsClockwise)
     {
@@ -131,11 +132,11 @@ public static class PixelCopy
     }
 
     /// <summary>
-    /// <c>DXGI_MODE_ROTATION</c> → কত পাক ঘোরাতে হবে।
+    /// <c>DXGI_MODE_ROTATION</c> → how many turns to rotate.
     ///
-    /// ⚠️ ১৮০ ডিগ্রি নিয়ে কোনো সন্দেহ নেই, কিন্তু <b>৯০ আর ২৭০ কোনটা কোন দিকে
-    /// সেটা আসল ঘোরানো মনিটরে যাচাই করা হয়নি</b>। উল্টো হলে ছবি উল্টো দিকে
-    /// কাত হবে — তবে সেটা চোখে পড়বেই, কালো ছবির মতো লুকিয়ে থাকবে না।
+    /// There is no doubt about 180 degrees, but <b>which of 90 and 270 goes which way has not
+    /// been verified on a real rotated monitor</b>. If reversed, the picture will lean the
+    /// wrong way, but that will be noticed; it will not hide like a black picture.
     /// </summary>
     public static int TurnsForRotation(uint dxgiModeRotation) => dxgiModeRotation switch
     {

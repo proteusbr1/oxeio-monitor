@@ -12,8 +12,8 @@ import {
 } from 'class-validator';
 
 /**
- * ⚠️ গ্লোবাল ValidationPipe `whitelist + forbidNonWhitelisted` — এখানে নেই
- * এমন ফিল্ড পাঠালে ৪০০, চুপচাপ বাদ নয়।
+ * Careful: the global ValidationPipe is `whitelist + forbidNonWhitelisted` — a
+ * field not listed here gives 400, it is not silently dropped.
  */
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -21,11 +21,11 @@ const YEAR_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 export class UpdateDepositPolicyDto {
   /**
-   * ⭐ **পয়সায়**, টাকায় নয় — ৫০০ টাকা = ৫০০০০।
+   * **In paisa**, not taka — 500 taka = 50000.
    *
-   * ⚠️ বেতনের মতো স্ট্রিং-দশমিক নয়, কারণ কিস্তির অঙ্কে ভগ্নাংশ পয়সা
-   * আসার কোনো কারণ নেই; integer রাখলে round করার প্রশ্নই ওঠে না।
-   * পর্দা টাকার ঘরটা দেখায় আর ১০০ দিয়ে গুণ করে পাঠায়।
+   * Careful: not a decimal string like salary, because an instalment has no
+   * reason to include fractional paisa; with an integer, rounding never comes
+   * up. The screen shows the taka field and multiplies by 100 before sending.
    */
   @IsOptional()
   @IsInt()
@@ -33,14 +33,14 @@ export class UpdateDepositPolicyDto {
   @Max(100_000_00)
   amountPaisa?: number;
 
-  /** '2026-08' — কোন মাস থেকে কাটা শুরু */
+  /** '2026-08' — the month deductions start */
   @IsOptional()
   @Matches(YEAR_MONTH, { message: 'startYearMonth must be in YYYY-MM format' })
   startYearMonth?: string;
 
   /**
-   * ⚠️ ০ দেওয়া যায় — মানে "নোটিশ লাগে না"। সেটা অদ্ভুত শোনালেও বৈধ, আর
-   * আটকে দিলে নিয়ম শিথিল করতে চাইলে কোড বদলাতে হতো।
+   * Careful: 0 is allowed — it means "no notice needed". It may sound odd but
+   * it is valid, and blocking it would mean changing code to relax the rule.
    */
   @IsOptional()
   @IsInt()
@@ -48,7 +48,7 @@ export class UpdateDepositPolicyDto {
   @Max(365)
   noticeDays?: number;
 
-  /** ⚠️ `false` মানে নতুন কিস্তি বসা বন্ধ — পুরোনো জমা অটুট থাকে */
+  /** Careful: `false` stops new instalments being posted — existing deposits stay intact */
   @IsOptional()
   @IsBoolean()
   active?: boolean;
@@ -56,20 +56,20 @@ export class UpdateDepositPolicyDto {
 
 export class SettleDepositDto {
   /**
-   * ⚠️ মাত্র দুটো মান, আর ডাটাবেসেও CHECK দিয়ে বাঁধা। টাইপো হলে পর্দা
-   * কিছুই দেখাত না, আর "ফেরত দেওয়া হয়েছে কি না" প্রশ্নের উত্তর নীরবে
-   * হারাত।
+   * Careful: only two values, and also bound by a CHECK in the database. With a
+   * typo the screen would show nothing, and the answer to "was it refunded or
+   * not" would be silently lost.
    */
   @IsIn(['refunded', 'forfeited'])
   outcome!: 'refunded' | 'forfeited';
 
   /**
-   * কবে জানিয়েছিলেন, আর শেষ কর্মদিবস কবে।
+   * When notice was given, and the last working day.
    *
-   * ⚠️ দুটোই **ঐচ্ছিক** — পুরোনো কারো ক্ষেত্রে তারিখ মনে না-ও থাকতে পারে,
-   * আর বাধ্যতামূলক করলে মালিক বাধ্য হয়ে একটা মনগড়া তারিখ বসাতেন। না
-   * দিলে সিস্টেম নোটিশের দিন গোনে না, আর সারিতে `null` থেকে যায় —
-   * "জানা নেই" আর "শূন্য দিন" এক জিনিস নয়।
+   * Careful: both are **optional** — for someone from long ago the dates may
+   * not be remembered, and making them mandatory would force the owner to
+   * invent one. If omitted, the system does not count notice days, and the row
+   * keeps `null` — "unknown" and "zero days" are not the same thing.
    */
   @IsOptional()
   @Matches(DATE_ONLY, { message: 'noticeGivenOn must be in YYYY-MM-DD format' })
@@ -86,10 +86,11 @@ export class SettleDepositDto {
 }
 
 /**
- * ⭐ এই কর্মীর জামানত কোন মাস থেকে কাটা শুরু।
+ * From which month this employee's deposit deductions start.
  *
- * ⚠️ `null` **বৈধ ও অর্থবহ** — মানে "নিয়মের সাধারণ শুরুর মাসেই ফিরে যাও"।
- * তাই `@IsOptional()` নয়, নইলে ঘরটা খালি করে দেওয়ার কোনো পথ থাকত না।
+ * Careful: `null` is **valid and meaningful** — it means "go back to the
+ * policy's general start month". So not `@IsOptional()`, otherwise there
+ * would be no way to clear the field.
  */
 export class SetDepositStartDto {
   @ValidateIf((_, value) => value !== null)
@@ -98,26 +99,28 @@ export class SetDepositStartDto {
 }
 
 /**
- * ⭐⭐ **বসে যাওয়া একটা কিস্তির অঙ্ক সংশোধন** *(৫ সেপ্টেম্বর ২০২৬)*।
+ * **Correcting the amount of an instalment already posted.**
  *
- * ⚠️ এটা নিয়ম বদলানো নয়, **ভুল সংশোধন** — তাই `reason` বাধ্যতামূলক।
+ * Careful: this is not changing the rule, it is a **correction of a mistake**
+ * — so `reason` is mandatory.
  */
 export class CorrectInstalmentDto {
   @Matches(YEAR_MONTH, { message: 'yearMonth must be YYYY-MM' })
   yearMonth!: string;
 
   /**
-   * ⚠️⚠️ `@Min(1)` — শূন্য বসানোর কোনো পথ নেই, আর সেটাই নকশা। মকুব মানে
-   * ওই মাসে কিস্তি **নেই**, ৳০-এর কিস্তি **আছে**; দুটো এক করে ফেললে
-   * "কত মাস জমা হয়েছে" প্রশ্নের উত্তরই নষ্ট হয় — মাঠে ঠিক সেটাই ঘটেছিল।
-   * শুরুর দিকের মাস বাদ দিতে `PATCH :id/start` আছে।
+   * Careful: `@Min(1)` — there is no way to enter zero, and that is by design.
+   * A waiver means there is **no** instalment that month, not an instalment of
+   * 0 taka; merging the two ruins the answer to "how many months have been
+   * paid" — which is exactly what happened in the field. To skip early months,
+   * use `PATCH :id/start`.
    */
   @IsInt()
   @Min(1)
   @Max(100_000_00)
   amountPaisa!: number;
 
-  /** ⚠️ ছ-মাস পরে "ওই মাসে এর অঙ্ক আলাদা কেন" প্রশ্নের একমাত্র উত্তর */
+  /** Careful: the only answer, six months later, to "why is that month's amount different" */
   @IsString()
   @MaxLength(300)
   reason!: string;

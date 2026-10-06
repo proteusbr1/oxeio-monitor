@@ -5,12 +5,12 @@ using oXeio.Core.Models;
 namespace oXeio.Agent.Tests;
 
 /// <summary>
-/// J03 — মাসের লক্ষ্য পূরণের বেলুন।
+/// J03: the balloon when the monthly target is reached.
 ///
-/// ⭐ এখানকার একমাত্র সত্যিকারের ঝুঁকি হলো <b>বারবার দেখানো</b>। প্রতি
-/// heartbeat-এ বেলুন উঠলে স্টাফ Windows-এর সেটিংস থেকে oXeio-র নোটিফিকেশন
-/// চিরতরে বন্ধ করে দিত — আর তখন সিঙ্ক ব্যর্থ বা ডিভাইস revoke হওয়ার বার্তাও
-/// আর কোনোদিন পৌঁছাত না। তাই টেস্টের ভার এদিকেই।
+/// The only real risk here is <b>showing it repeatedly</b>. If a balloon popped up on
+/// every heartbeat, staff would turn off oXeio notifications in Windows settings for
+/// good, and then sync failures and device-revoked messages would never reach them
+/// either. So the tests concentrate on this.
 /// </summary>
 public class MonthlyMilestoneTests
 {
@@ -39,7 +39,7 @@ public class MonthlyMilestoneTests
         Assert.Equal("2026-08", key);
     }
 
-    /// <summary>⭐ এই টেস্টটাই ফিচারটার একমাত্র শক্ত প্রতিশ্রুতি।</summary>
+    /// <summary>This test is the feature's only hard promise.</summary>
     [Fact]
     public void একই_মাসে_দ্বিতীয়বার_নয() =>
         Assert.False(MonthlyMilestone.ShouldCelebrate(Status(300), August, "2026-08", out _));
@@ -58,32 +58,35 @@ public class MonthlyMilestoneTests
         Assert.False(MonthlyMilestone.ShouldCelebrate(Status(207.9), August, null, out _));
 
     /// <summary>
-    /// ⚠️ সার্ভার একবারও অগ্রগতি না বললে মাসের হিসাব শূন্য
-    /// (<see cref="AgentStatus.Starting"/>)। ওই অবস্থায় বেলুন উঠলে চালু
-    /// হওয়ার প্রতিটা মুহূর্তে একটা ভুয়া অভিনন্দন যেত।
+    /// Careful: if the server has never reported progress, the month total is zero
+    /// (<see cref="AgentStatus.Starting"/>). A balloon in that state would send a bogus
+    /// congratulation at every moment of startup.
     /// </summary>
     [Fact]
     public void শুরুর_অবস্থায়_বেলুন_নয() =>
         Assert.False(MonthlyMilestone.ShouldCelebrate(AgentStatus.Starting, August, null, out _));
 
     /// <summary>
-    /// ⚠️ সংখ্যাটা সার্ভার থেকে না এলে অভিনন্দনও নয় — এমনকি ঘরটায় বড় মান
-    /// বসে থাকলেও। "জানি না" কখনো "লক্ষ্য পূর্ণ" হতে পারবে না।
+    /// Careful: if the number did not come from the server there is no congratulation,
+    /// even if the field holds a large value. "I don't know" can never become "target met".
     /// </summary>
     [Fact]
     public void সার্ভার_না_বললে_বেলুন_নয() =>
         Assert.False(MonthlyMilestone.ShouldCelebrate(
             Status(250, known: false), August, null, out _));
 
-    /// <summary>টার্গেট ০ হলে "পূর্ণ হয়েছে" বলার কিছু নেই — নইলে শূন্য ঘণ্টাতেই অভিনন্দন যেত।</summary>
+    /// <summary>
+    /// With a target of 0 there is nothing to call "met"; otherwise zero hours would earn a
+    /// congratulation.
+    /// </summary>
     [Fact]
     public void টার্গেট_শূন্য_হলে_বেলুন_নয() =>
         Assert.False(MonthlyMilestone.ShouldCelebrate(Status(0, target: 0), August, null, out _));
 
     /// <summary>
-    /// ঢাকার মাস, UTC-র নয়। ১ সেপ্টেম্বর রাত ২টা (ঢাকা) = ৩১ আগস্ট রাত ৮টা UTC;
-    /// UTC ধরলে সেপ্টেম্বরের বেলুনটা আগস্টের নামে জমা পড়ত আর সেপ্টেম্বরে
-    /// আবার দেখানো হতো।
+    /// The Dhaka month, not UTC. 1 September 02:00 (Dhaka) is 31 August 20:00 UTC; with
+    /// UTC the September balloon would be filed under August and shown again in
+    /// September.
     /// </summary>
     [Fact]
     public void মাসের_চাবি_ঢাকার_ক্যালেন্ডারে()
@@ -93,7 +96,7 @@ public class MonthlyMilestoneTests
         Assert.Equal("2026-09", MonthlyMilestone.MonthKeyOf(justAfterMidnight));
     }
 
-    /// <summary>বেলুনের লেখায় টার্গেটের সংখ্যাটা আছে, আর কোনো নির্দেশ নেই।</summary>
+    /// <summary>The balloon text contains the target number, and no instruction.</summary>
     [Fact]
     public void বেলুনের_লেখা_শুধু_খবর()
     {
@@ -103,11 +106,11 @@ public class MonthlyMilestoneTests
         Assert.DoesNotContain("rest", text, StringComparison.OrdinalIgnoreCase);
     }
 
-    // ── ডিস্কের স্মৃতি ───────────────────────────────────────────────────────
+    // ── memory on disk ──────────────────────────────────────────────────────
 
     /// <summary>
-    /// ⚠️ রিস্টার্টেই ভুলে গেলে "মাসে একবার" কার্যত "দিনে একবার" হতো —
-    /// অফিসের PC রোজ রাতে বন্ধ হয়।
+    /// Careful: if it forgot on every restart, "once a month" would effectively be
+    /// "once a day", since office PCs are switched off every night.
     /// </summary>
     [Fact]
     public void স্মৃতি_রিস্টার্টের_পরেও_থাকে()
@@ -119,7 +122,7 @@ public class MonthlyMilestoneTests
         {
             new MilestoneMemory(dir).Remember("2026-08");
 
-            // নতুন ইনস্ট্যান্স = নতুন প্রসেস
+            // a new instance = a new process
             Assert.Equal("2026-08", new MilestoneMemory(dir).LastCelebrated());
         }
         finally
@@ -129,9 +132,9 @@ public class MonthlyMilestoneTests
     }
 
     /// <summary>
-    /// ফোল্ডারটাই নেই — পড়া ব্যর্থ, কিন্তু ছোড়া যাবে না। এটা tray-র রেন্ডার
-    /// পথে ডাকা হয়, আর সেখানে একটা এক্সসেপশন মানে UI থ্রেড মরে যাওয়া,
-    /// অর্থাৎ ঘণ্টা গোনা বন্ধ।
+    /// The folder does not exist at all: the read fails, but it must not throw. This is
+    /// called on the tray render path, where an exception would kill the UI thread,
+    /// which means hour counting stops.
     /// </summary>
     [Fact]
     public void পড়া_না_গেলেও_ছোড়ে_না()

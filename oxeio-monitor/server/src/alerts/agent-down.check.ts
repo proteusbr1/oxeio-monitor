@@ -13,14 +13,15 @@ import {
 } from './alerts.rules';
 import { AlertsService, type RaiseInput } from './alerts.service';
 
-/** ⚠️ কত পুরোনো বিদায়ী ইভেন্ট পর্যন্ত দেখা হবে — কুয়েরিটা ছোট রাখার জন্য */
+/** How far back to look for clean stop events; keeps the query small. */
 const STOP_LOOKBACK_DAYS = 7;
 
 /**
- * G01 — কোনো এজেন্ট ১০ মিনিট ধরে চুপ (স্পেক § ৬.৪, প্রতি ৫ মিনিটে)।
+ * G01 - an agent silent for 10 minutes (spec § 6.4, every 5 minutes).
  *
- * ⚠️ "চুপ" মানেই "সমস্যা" নয়। PC বন্ধ করে বাড়ি যাওয়াও চুপ। পার্থক্যটা
- *    alerts.rules.ts-এর `isExpectedSilence()` করে — বিস্তারিত কারণ ওখানে।
+ * Careful: "silent" does not always mean "a problem". Someone shutting down
+ *    their PC and going home is silent too. The difference is made by
+ *    `isExpectedSilence()` in alerts.rules.ts; the details are there.
  */
 @Injectable()
 export class AgentDownCheck {
@@ -37,7 +38,7 @@ export class AgentDownCheck {
     const [devices, holiday, fallbackPolicy, leaves] = await Promise.all([
       this.prisma.device.findMany({
         where: {
-          // ⚠️ revoke করা ডিভাইস বাদ — ওগুলোর চুপ থাকাটাই তো উদ্দেশ্য
+          // Revoked devices are excluded; their silence is the whole point.
           status: 'active',
           lastSeenAt: { not: null, lt: silenceFloor },
         },
@@ -65,21 +66,21 @@ export class AgentDownCheck {
         select: { name: true },
       }),
       /**
-       * ⚠️ যে ডিভাইস কোনো কর্মীর সাথে বাঁধা নয় (employeeId null) তার জন্য
-       *    ফলব্যাক — নইলে ওই ডিভাইসগুলো অফিস-সময়ের নিয়মের বাইরে থেকে
-       *    যেত, আর রাতেও অ্যালার্ট দিত।
+       * Careful: a fallback for devices not bound to any employee (employeeId
+       *    null); otherwise they would stay outside the office-hours rule and
+       *    raise alerts at night too.
        */
       this.prisma.workPolicy.findFirst({
         where: { isActive: true },
         select: { officeFrom: true, officeTo: true, weeklyOffDays: true },
       }),
       /**
-       * ⭐⭐⭐ **আজ কে ছুটিতে** *(৬ সেপ্টেম্বর ২০২৬, G157)*।
+       * **Who is on leave today** (G157).
        *
-       * ⚠️⚠️ এই কোয়েরিটা **এক মাস ধরে অনুপস্থিত ছিল**। ছুটির খাতা এসেছে
-       * R2/G130-তে, কিন্তু কোনো অ্যালার্ট-পরীক্ষা কোনোদিন `leaves` পড়েনি —
-       * তাই মালিকের অনুমোদন করা ছুটির দিনেও *"এজেন্ট চুপ"* খবর যেত।
-       * মাঠে: ৩টা ছুটির দিনে ১১টা মিথ্যা অ্যালার্ট, তার ৮টা এই ঘরানার।
+       * Careful: this query was **missing for a month**. The leave register
+       * arrived with R2/G130, but no alert check ever read `leaves`, so "agent
+       * silent" notices went out even on days the owner had approved leave.
+       * In the field: 11 false alerts over 3 leave days, 8 of them of this kind.
        */
       this.prisma.leave.findMany({
         where: { leaveDate: workDateOf(now) },
@@ -90,21 +91,23 @@ export class AgentDownCheck {
     if (devices.length === 0) return 0;
 
     /**
-     * ⭐⭐ **অফিস বন্ধ থাকলে চুপ** *(২২ আগস্ট ২০২৬, মালিকের সিদ্ধান্ত)*।
+     * **Silence is expected when the office is closed.**
      *
-     * ⚠️ ছাঁকাটা এখানে, `agentDownCandidates()`-এর ভেতরে নয় — ওই ফাংশনের
-     *    প্রশ্ন "এই নীরবতার ব্যাখ্যা আছে কি?", আর এটার প্রশ্ন "এই মুহূর্তে
-     *    প্রশ্নটাই কি অর্থপূর্ণ?"। দুটো আলাদা, তাই আলাদাই থাকল।
+     * Careful: the filter is here, not inside `agentDownCandidates()`. That
+     *    function asks "is there an explanation for this silence?", while this
+     *    asks "does the question even make sense right now?". They are
+     *    different, so they stay separate.
      *
-     * ⚠️⚠️ ডিভাইস **সরানো হয় না, শুধু অ্যালার্ট তোলা হয় না** — `lastSeenAt`
-     *    আগের মতোই লেখা থাকে, তাই সকালে অফিস খুললে যে PC তখনো চুপ, তার
-     *    জন্য অ্যালার্ট ঠিকই উঠবে।
+     * Careful: devices are **not removed, only the alert is not raised**.
+     *    `lastSeenAt` is stored as before, so when the office opens in the
+     *    morning, a PC that is still silent will get its alert.
      */
     /**
-     * ⚠️⚠️ **ছুটিতে থাকা কর্মীর PC চুপ থাকাই স্বাভাবিক** — ছাঁকনিটা এখানে,
-     * `isAgentWatchOpen()`-এ নয়। ⭐ ওই ফাংশনটা **অফিসের** প্রশ্নের উত্তর দেয়
-     * (*"এখন কি কাজের সময়?"*), আর ছুটি **একজনের** ব্যাপার। দুটো এক জায়গায়
-     * মিশিয়ে ফেললে একজনের ছুটি গোটা দলের পাহারা বন্ধ করে দিতে পারত।
+     * Careful: **a PC of someone on leave is naturally silent**, and the filter
+     * is here, not in `isAgentWatchOpen()`. That function answers the **office's**
+     * question ("is it working time now?"), whereas leave concerns **one
+     * person**. Mixing the two would let one person's leave switch off the
+     * watch for the whole team.
      */
     const onLeave = new Set(leaves.map((l) => l.employeeId));
 
@@ -173,15 +176,16 @@ export class AgentDownCheck {
   }
 
   /**
-   * ⭐ ফিরে আসা এজেন্ট — খোলা agent_down alert নিজে বন্ধ করা।
+   * A returning agent: close its open agent_down alert automatically.
    *
-   * `runOnce`-এর **আয়না**: ওটা চুপ ডিভাইসে alert **তোলে**, এটা আবার-কথা-বলা
-   * ডিভাইসের খোলা alert **বন্ধ** করে (`recoveredAlertIds`)। ফলে সকালে মালিক
-   * শুধু এখন-সত্যিই-down PC দেখেন — রাতে বন্ধ হয়ে আবার চালু হওয়া বারোটা বাসি
-   * warning নয়।
+   * The **mirror** of `runOnce`: that **raises** an alert on a silent device,
+   * this **closes** the open alert of a device that speaks again
+   * (`recoveredAlertIds`). So in the morning the owner sees only the PCs that
+   * are really down now, not a dozen stale warnings from PCs that went off at
+   * night and came back.
    *
-   * ⚠️ ingest hot path (device-auth.guard) ছোঁয়া হয় না — একই `lastSeenAt`
-   *    কলাম, একই শিডিউলার, প্রতি-রিকোয়েস্টে বাড়তি কোনো খরচ নেই।
+   * Careful: the ingest hot path (device-auth.guard) is not touched: same
+   *    `lastSeenAt` column, same scheduler, no extra cost per request.
    */
   async resolveReturned(now = new Date()): Promise<number> {
     const open = await this.prisma.alert.findMany({
@@ -210,11 +214,11 @@ export class AgentDownCheck {
   }
 
   /**
-   * প্রতিটা ডিভাইসের **সর্বশেষ বিদায়ী ইভেন্ট**।
+   * The **latest clean stop event** of each device.
    *
-   * ⚠️ `groupBy` ব্যবহার করা হয়েছে, `findMany + distinct` নয় — Prisma-র
-   *    `distinct` সব সারি টেনে এনে মেমোরিতে ছাঁকে, আর ইভেন্ট টেবিল দ্রুত
-   *    বড় হয়। এখানে কাজটা ডাটাবেসেই `MAX(occurred_at)` দিয়ে হয়।
+   * Careful: `groupBy` is used, not `findMany + distinct`. Prisma's `distinct`
+   *    pulls every row and filters in memory, and the events table grows fast.
+   *    Here the work is done in the database with `MAX(occurred_at)`.
    */
   private async lastCleanStops(
     deviceIds: number[],

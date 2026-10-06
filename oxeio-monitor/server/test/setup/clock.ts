@@ -1,44 +1,43 @@
 /**
- * ⭐⭐ **G140 — টেস্টের ঘড়ি।**
+ * The test clock.
  *
- * ⚠️⚠️ তারিখ-নির্ভর টেস্ট এই রিপোতে **তিনবার** ভেঙেছে, তিনটে আলাদা ফাইলে:
- * G62 (dedupe, ঢাকার মধ্যরাতের পর) · `adjustments.e2e` (pace, রোজ বাড়া
- * সংখ্যা, মালিকের ইনবক্স ভরত) · `agent-recovery.e2e` (অফিস-সময়ের বাইরে,
- * CI চলেছিল রাত ১১:১৯-এ)। প্রতিবারই সময় ইনজেক্ট করার ব্যবস্থা কোডে
- * **ছিলই** (`runOnce(now)`, `todayWindow()`) — শুধু টেস্ট সেটা ব্যবহার না
- * করে আসল ঘড়ি নিয়েছিল। তিনবার একই ভুল মানে ওটা আর দুর্ঘটনা নয়, **ছাঁদ**।
+ * Careful: date-dependent tests broke three times in this repo, in three
+ * different files: the dedupe test (after Dhaka midnight), `adjustments.e2e`
+ * (pace, a number that grows daily, the owner inbox filling up) and
+ * `agent-recovery.e2e` (outside office hours, CI ran at 23:19). Each time the
+ * code already had a way to inject the time (`runOnce(now)`, `todayWindow()`);
+ * the test just used the real clock instead. Three times is a pattern, not an
+ * accident.
  *
- * ⚠️ ফাইলটা `harness.ts`-এর **বাইরে**, আর সেটাই এখানকার একমাত্র নকশা-
- * সিদ্ধান্ত: হারনেস গোটা Nest অ্যাপ ও একটা Postgres সংযোগ তোলে, তাই
- * খাঁটি-ফাংশনের স্পেক (`summary.math` · `admin-enrollment-code`) ওটা
- * import করতে পারে না। ⭐ হেল্পার আলাদা রাখায় **দুই জাতের স্পেকেই** একই
- * ঘড়ি, আর নিয়মটাও সবখানে এক।
+ * This file lives outside `harness.ts` on purpose: the harness boots the whole
+ * Nest app and a Postgres connection, so pure-function specs (`summary.math`,
+ * `admin-enrollment-code`) cannot import it. Keeping the helpers separate lets
+ * both kinds of spec share the same clock and the same rule.
  */
 import { DHAKA_OFFSET_MIN, workDateOf } from '../../src/agent/util/dhaka-time';
 
 /**
- * ফিক্সচারের জন্য একটা **নিরাপদ মুহূর্ত** — আজকের ঢাকা-দিনের **দুপুর ১২টা**।
+ * A safe moment for fixtures: 12:00 noon of today's Dhaka day.
  *
- * ⭐⭐ কেন দুপুর, আর কেন এটাই পুরো নিয়মটার হৃদয়:
+ * Why noon, and why this is the heart of the rule:
  *
- * সার্ভার লাইভ `new Date()` ব্যবহার করে, তাই ফিক্সচারকে **আজকের দিনেই**
- * থাকতে হয় — একটা স্থির অতীত তারিখ বসালে ফিক্সচার আর সার্ভারের "আজ"
- * আলাদা হয়ে যেত। কিন্তু আসল ঘড়ি নিলে মুহূর্তটা মধ্যরাতের **যেকোনো পাশে**
- * পড়তে পারে, আর তখনই বোমাটা ফাটে।
+ * The server uses the live `new Date()`, so fixtures must be on today's date;
+ * a fixed past date would make the fixture's "today" differ from the server's.
+ * But with the real clock the moment can land on either side of midnight, and
+ * that is where the bomb goes off.
  *
- * ⭐ দুপুর ১২টা দুই সীমানা থেকেই **১২ ঘণ্টা দূরে** — একই ক্যালেন্ডার দিন,
- * অথচ কোনো `workDateOf()`, `todayWindow()` বা অফিস-সময়ের শর্ত তার নিচে
- * নড়ে না।
+ * Noon is 12 hours from both boundaries: same calendar day, and no
+ * `workDateOf()`, `todayWindow()` or office-hours condition moves below it.
  *
- * ⚠️ যা এটা ঢাকে না, আর সেটা লিখে রাখা দরকার: সুইট ঠিক ২৩:৫৯-এ চললে আর
- * মাঝপথে দিন ঘুরে গেলে এখনো একটা সরু ফাঁক থাকে। আগে জানালাটা ছিল **দিনে
- * ছ-ঘণ্টা** (ঢাকা UTC+৬, তাই UTC-ভিত্তিক ফিক্সচার ০০:০০–০৬:০০ ভাঙত);
- * এখন এক মিনিটের কম। শূন্য নয় — কিন্তু আর "রোজ রাতে CI লাল" নয়।
+ * What this does not cover: if the suite runs at exactly 23:59 and the day
+ * rolls over midway, a narrow gap remains. The window used to be six hours a
+ * day (Dhaka is UTC+6, so UTC-based fixtures broke between 00:00 and 06:00);
+ * now it is under a minute. Not zero, but no longer "CI is red every night".
  *
- * @param dayOffset আজ থেকে কত দিন সরে (ঋণাত্মক = অতীত)
+ * @param dayOffset how many days from today (negative = past)
  */
 export function dhakaNoon(dayOffset = 0): Date {
-  // `workDateOf` ঢাকার দিনটাকে UTC-মধ্যরাত হিসেবে ফেরায়; +৬ঘ = ঢাকার ১২:০০
+  // `workDateOf` returns the Dhaka day as UTC midnight; adding 6h gives 12:00 Dhaka
   const day = workDateOf(new Date());
   // (12h − offset) instead of a hardcoded 6h, so it is local noon in any WORK_TIMEZONE
   return new Date(
@@ -49,39 +48,38 @@ export function dhakaNoon(dayOffset = 0): Date {
 }
 
 /**
- * ঢাকার **আজকের তারিখ**, `'YYYY-MM-DD'`।
+ * Today's date in Dhaka, as `'YYYY-MM-DD'`.
  *
- * ⚠️ আগে এই সূত্রটা চারটে স্পেকে **হাতে চারবার** লেখা ছিল
- * (`new Date(Date.now() + 6 * 3600_000).toISOString().slice(0, 10)`) — আর
- * একই সূত্র চারবার লেখা মানে একদিন একটা বদলাবে আর বাকিগুলো নয়। ⭐ G62-তে
- * ঠিক এই সূত্রটাই UTC ধরে লেখা হয়ে ভেঙেছিল।
+ * This formula used to be written by hand in four specs
+ * (`new Date(Date.now() + 6 * 3600_000).toISOString().slice(0, 10)`), and
+ * four copies means one gets changed and the rest do not. In the dedupe test
+ * this exact formula was written assuming UTC and broke.
  *
- * ⚠️ নামটা `prisma/holidays.data.ts`-এর `dhakaToday(now)`-এর সাথে
- * ইচ্ছাকৃতভাবে **আলাদা** — ওটা প্রোডাকশনের ফাংশন, আর্গুমেন্ট নেয়, আর
- * দুটোকে এক নামে রাখলে import দেখে বোঝা যেত না কোনটা কার।
+ * The name deliberately differs from `dhakaToday(now)` in
+ * `prisma/holidays.data.ts`: that one is a production function and takes an
+ * argument, and with the same name the import would not show which is which.
  */
 export function dhakaTodayIso(): string {
   return workDateOf(new Date()).toISOString().slice(0, 10);
 }
 
 /**
- * ⚠️⚠️ **আসল ঘড়ি — শেষ উপায়।** ব্যবহার করুন কেবল তখনই, যখন দাবিটা
- * সার্ভারের **নিজের লাইভ ঘড়ির** সাথে মেলানো হচ্ছে, তাই পিন করা মুহূর্ত
- * বসালে টেস্টটাই মিথ্যা হতো:
+ * The real clock, as a last resort. Use it only when the assertion is compared
+ * with the server's own live clock, so a pinned moment would make the test lie:
  *
- * - `X-Client-Time` ও ইভেন্টের `occurredAt` — সার্ভার এগুলো নিজের ঘড়ির
- *   সাথে মিলিয়ে **clock-drift সংশোধন** করে (02-Workflow § ২)। দুপুর
- *   বসালে ভোরে চালানো টেস্টে ৯ ঘণ্টার drift ধরা পড়ত, টাইমস্ট্যাম্প
- *   সংশোধন হয়ে যেত, আর অ্যালার্টও উঠত।
- * - JWT-র `iat` — টোকেনের বয়স সার্ভার লাইভ ঘড়িতে মাপে।
- * - "সারিটা কি এইমাত্র লেখা হলো" ধরনের **সহনশীল** তুলনা (৬০ সে.-এর ছাড়)।
+ * - `X-Client-Time` and an event's `occurredAt`: the server compares these with
+ *   its own clock to correct clock drift (02-Workflow section 2). Noon would
+ *   show a 9-hour drift in a test run in the morning, the timestamp would be
+ *   corrected, and an alert would be raised.
+ * - The JWT `iat`: the server measures token age on the live clock.
+ * - Tolerant "was the row just written" comparisons (60-second allowance).
  *
- * ⭐ নামটা আছে যাতে ব্যবহারগুলো **গোনা ও খোঁজা যায়**। লেখার দিন এটা
- * ব্যবহার হয় **তিন** ফাইলে (`agent.e2e` · `session-freshness.e2e` ·
- * `adjustments.e2e`)। সংখ্যাটা বাড়তে থাকলে সেটা নিজেই একটা সংকেত: কেউ
- * নিয়মটা মানছেন না, ফাঁকি দিচ্ছেন।
+ * The name exists so uses can be counted and searched. At the time of writing
+ * it is used in three files (`agent.e2e`, `session-freshness.e2e`,
+ * `adjustments.e2e`). If that number keeps growing, it is a signal that
+ * someone is not following the rule.
  *
- * ⚠️ ফিক্সচারের তারিখ বানাতে **কখনো নয়** — তার জন্য `dhakaNoon()`।
+ * Never use it to build fixture dates; use `dhakaNoon()` for that.
  */
 export function realNow(): Date {
   return new Date();

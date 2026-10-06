@@ -10,37 +10,37 @@ import { WeeklyDigestJob } from './weekly.job';
 import { WeeklyDigestService } from './weekly.service';
 
 /**
- * **F07** — দৈনিক ডাইজেস্ট ইমেইল, **R3** — সাপ্তাহিক সারাংশ টেলিগ্রামে।
+ * **F07** — the daily digest email, **R3** — the weekly summary on Telegram.
  *
- * ⚠️ `AlertMailer` এখানে **provider হিসেবে বসানো**, `AlertsModule` import
- * করে নয় — কারণ `AlertsModule` কেবল `AlertsService` export করে, মেইলারটা
- * নয়। SMTP-র কোড নকল করা হয়নি (সেটাই আসল নিয়ম): একই ক্লাস, শুধু আলাদা
- * ইনস্ট্যান্স। মেইলার transport **অলস** ভাবে বানায় আর দিনে একবারই
- * ব্যবহৃত হয়, তাই দ্বিতীয় ইনস্ট্যান্সের দাম কার্যত শূন্য।
+ * Careful: `AlertMailer` is **placed here as a provider**, not by importing
+ * `AlertsModule` — because `AlertsModule` exports only `AlertsService`, not the
+ * mailer. The SMTP code is not copied (that is the real rule): same class,
+ * just a separate instance. The mailer builds its transport **lazily** and is
+ * used once a day, so a second instance costs practically nothing.
  *
- * ⭐ ভালো হতো `AlertsModule`-এ এক লাইনে `exports: [AlertsService, AlertMailer]`
- * লেখা আর এখানে সেটা import করা — তখন SMTP কানেকশনও একটাই থাকত। ওই
- * ফাইলটা অন্য কারো, তাই বদলানো হয়নি; করলে এখানকার `providers` থেকে
- * `AlertMailer` মুছে `imports`-এ `AlertsModule` বসালেই হবে।
+ * It would be better to write `exports: [AlertsService, AlertMailer]` in one
+ * line in `AlertsModule` and import that here — then there would be one SMTP
+ * connection too. That file belongs to someone else, so it was not changed; if
+ * done, remove `AlertMailer` from `providers` here and put `AlertsModule` in `imports`.
  *
- * ⚠️ `ScheduleModule.forRoot()` এখানে **নেই** — `SummaryModule` ওটা global
- * করে রেখেছে। দ্বিতীয় একটা forRoot বসালে দুটো explorer একই `@Cron` দুবার
- * রেজিস্টার করত (bootstrap ভেঙে পড়ত, আর তার আগে ইমেইল দিনে দুবার যেত)।
+ * Careful: `ScheduleModule.forRoot()` is **not** here — `SummaryModule` made it
+ * global. A second forRoot would make two explorers register the same `@Cron`
+ * twice (bootstrap would crash, and before that the email went out twice a day).
  *
- * ⚠️ `TelegramChannel`ও একইভাবে provider হিসেবে বসানো (R3-এর জন্য) — ওটা
- * `OpsModule`-এর provider, কিন্তু ওই মডিউল সেটা export করে না, আর
- * `ops.module.ts` এই কাজের আওতার বাইরে। ক্লাসটা নকল করা হয়নি: একই ক্লাস,
- * শুধু আলাদা ইনস্ট্যান্স, আর তার দাম কার্যত শূন্য (দুটো স্ট্রিং + একটা
- * খালি Map)।
- * ⚠️⚠️ এই ইনস্ট্যান্সে শুধু `send()` ডাকা হয়, **`runOnce()` কখনো নয়** —
- * ওটা অ্যালার্টের sweep, আর দ্বিতীয় একটা sweep চললে প্রতিটা অ্যালার্ট
- * টেলিগ্রামে দুবার যেত। ⭐ `OpsModule` একদিন `TelegramChannel` export করলে
- * এখানকার `providers` থেকে সেটা মুছে `imports`-এ `OpsModule` বসালেই হবে —
- * তবে ⚠️ তখন খেয়াল রাখতে হবে বৃত্ত তৈরি না হয়।
+ * Careful: `TelegramChannel` is likewise placed as a provider (for R3) — it is
+ * a provider of `OpsModule`, but that module does not export it, and
+ * `ops.module.ts` is outside the scope of this work. The class is not copied:
+ * same class, just a separate instance, costing practically nothing (two
+ * strings and an empty Map).
+ * Careful: only `send()` is called on this instance, **never `runOnce()`** —
+ * that is the alert sweep, and a second sweep would send every alert to
+ * Telegram twice. If `OpsModule` ever exports `TelegramChannel`, remove it
+ * from `providers` here and put `OpsModule` in `imports` — but then take care
+ * that no cycle is created.
  */
 @Module({
-  // ⚠️ `DashboardModule` এখানে ছিল কেবল ঘণ্টার স্ন্যাপশটের জন্য; সেটা
-  //    তুলে দেওয়ায় নির্ভরতাটাও গেল (১৮ আগস্ট)
+  // Careful: `DashboardModule` was here only for the hourly snapshot; when that
+  // was removed the dependency went too
   imports: [ReportsModule],
   providers: [
     DigestService,
@@ -50,25 +50,24 @@ import { WeeklyDigestService } from './weekly.service';
     WeeklyDigestJob,
     TelegramChannel,
     /**
-     * ⚠️⚠️ **ঘণ্টার স্ন্যাপশট (`SnapshotService`/`SnapshotJob`) তুলে দেওয়া
-     * হয়েছে** *(১৮ আগস্ট ২০২৬, মালিকের সিদ্ধান্ত — ADR-029 বাতিল)*।
+     * Careful: **the hourly snapshot (`SnapshotService`/`SnapshotJob`) was
+     * removed** *(the owner's decision — ADR-029 cancelled)*.
      *
-     * ওটা এসেছিল রিয়েল-টাইম idle অ্যালার্টের **বিকল্প** হিসেবে: দিনে
-     * ৬০–১৮০টা বার্তার বদলে ঘণ্টায় একটা। কিন্তু মাঠে দাঁড়াল দিনে ১১টা
-     * স্ন্যাপশট + ৩৯টা `agent_down` = ~৫০টা বার্তা, আর তার নিচে চাপা
-     * পড়ল সেই জিনিসটাই যেটা মালিক আসলে চেয়েছিলেন — দৈনিক রিপোর্ট।
-     * ⭐ মালিকের কথায়: *"ami ei type er alart gula chaina. ami chai
-     * deily report type er."*
+     * It came as an **alternative** to real-time idle alerts: one message an
+     * hour instead of 60-180 a day. But in the field it became 11 snapshots +
+     * 39 `agent_down` = ~50 messages a day, and under them was buried the one
+     * thing the owner actually wanted — the daily report. The owner's words:
+     * he does not want this type of alert, he wants a daily report.
      *
-     * ⚠️ **ফিরিয়ে আনার আগে ভাবুন:** "এখন কে কাজ করছে" প্রশ্নের উত্তর
-     * Live Board-এ **সবসময়** আছে; ঠেলে পাঠানোর দরকার ছিল না।
+     * Careful: **think before bringing it back:** the answer to "who is
+     * working right now" is **always** on the Live Board; it did not need to
+     * be pushed.
      */
-    // ⭐ Teams — টেলিগ্রামের পাশাপাশি, বিকল্প নয়
+    // Teams — alongside Telegram, not instead of it
     TeamsChannel,
   ],
-  // টেস্ট বা ভবিষ্যতের কোনো admin endpoint যেন `runOnce()` ইচ্ছে করে
-  // ডাকতে পারে — সন্ধ্যা ৬:৩০ (বা শুক্রবার) পর্যন্ত অপেক্ষা করে SMTP বা
-  // টেলিগ্রাম যাচাই করা যায় না
+  // So that tests or a future admin endpoint can call `runOnce()` on purpose —
+  // you cannot verify SMTP or Telegram by waiting until 6:30 pm (or Friday)
   exports: [DigestService, DigestJob, WeeklyDigestService, WeeklyDigestJob],
 })
 export class DigestModule {}

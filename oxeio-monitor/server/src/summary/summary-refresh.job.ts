@@ -7,23 +7,25 @@ import { type DrainResult, SummaryService } from './summary.service';
 export interface SummaryRefreshResult {
   workDate: Date | null;
   employees: number;
-  /** আগের রান তখনো চলছিল বলে এই ডাক ফিরে গেছে */
+  /** The call returned because the previous run was still going. */
   skipped: boolean;
   ms: number;
   /**
-   * ⭐ দেরিতে আসা কতগুলো পুরোনো দিন এই টিকে গোনা হলো *(৬ সেপ্টেম্বর ২০২৬)*।
-   * ⚠️ `skipped` হলে `null` — কিছুই চলেনি।
+   * How many late-arriving old days were recomputed in this tick.
+   * Careful: `null` when `skipped`; nothing ran.
    */
   drained: DrainResult | null;
 }
 
 /**
- * **K06** — প্রতি ১৫ মিনিটে আজকের `daily_summary` (ও চলতি মাসের rollup)।
+ * **Summary refresh**: every 15 minutes, today's `daily_summary` (and the
+ * current month's rollup).
  *
- * কেন rollup আদৌ লাগে: Live Board, হিটম্যাপ আর pace কার্ড প্রতিবার
- * `activity_segments` থেকে হিসাব করলে ১৫ জনের মাসের লাখখানেক সারিতে বারবার
- * merge চালাতে হতো। ১৫ মিনিটের পুরোনো সংখ্যা এখানে যথেষ্ট — কারণ "এখন কে
- * অনলাইনে" প্রশ্নের উত্তর আসে heartbeat থেকে, rollup থেকে নয়।
+ * Why a rollup at all: the Live Board, heatmap and pace cards would
+ * otherwise have to merge `activity_segments` every time, over about a
+ * hundred thousand rows a month for 15 people. A 15-minute-old number is
+ * fine here, because "who is online right now" is answered from the
+ * heartbeat, not from the rollup.
  */
 @Injectable()
 export class SummaryRefreshJob {
@@ -33,28 +35,29 @@ export class SummaryRefreshJob {
   constructor(private readonly summary: SummaryService) {}
 
   /**
-   * ⚠️ ⭐ `:০০/:১৫/:৩০/:৪৫` নয়, **`:০৫/:২০/:৩৫/:৫০`** — ব্যবধান ঠিক ১৫
-   * মিনিটই, শুধু পাঁচ মিনিট সরানো। কারণ দিন-ক্লোজ (K05) চলে ঠিক ০০:১৫-তে;
-   * একই মুহূর্তে দুটো জব একই `monthly_summary` সারিতে upsert করলে K06
-   * গতকালের সারাংশ লেখা **শেষ হওয়ার আগে** পড়া মাসিক যোগফল পরে লিখে দিত।
-   * upsert নিজে atomic, তাই ডেটা নষ্ট হতো না — কিন্তু মাসিক সংখ্যাটা
-   * পরের টিক পর্যন্ত ১৫ মিনিট পুরোনো থেকে যেত। পাঁচ মিনিট সরিয়ে দিলে
-   * সংঘর্ষটাই আর ঘটে না।
+   * Careful: **`:05/:20/:35/:50`**, not `:00/:15/:30/:45`. The interval is
+   * still exactly 15 minutes, just shifted by five. Day close runs at exactly
+   * 00:15; if two jobs upserted the same `monthly_summary` row at the same
+   * moment, this job could later overwrite it with a monthly total read
+   * **before** yesterday's summary finished writing. The upsert itself is
+   * atomic, so no data would be corrupted, but the monthly number would stay
+   * 15 minutes stale until the next tick. Shifting by five minutes means the
+   * collision never happens.
    *
-   * ⚠️ `disabled` + নিচের `if` — দুটো তালা, আর দুটোই দরকার।
+   * Careful: `disabled` plus the `if` below are two locks, and both are needed.
    *
-   * `SummaryModule` টেস্টে `ScheduleModule.forRoot()` ইমপোর্টই করে না, তাই
-   * ডেকোরেটরটা তখন নিছক মেটাডেটা। কিন্তু K02/K04 বানাতে গিয়ে কেউ যদি
-   * `app.module.ts`-এ `ScheduleModule.forRoot()` বসায়, তার explorer
-   * অ্যাপের **সব** provider স্ক্যান করে — আমার এই মেথডও তখন হঠাৎ চালু হয়ে
-   * যেত। তাই ডেকোরেটরের বাইরে আরেকটা তালা।
+   * In tests `SummaryModule` does not import `ScheduleModule.forRoot()`, so
+   * the decorator is just metadata. But if someone building K02/K04 adds
+   * `ScheduleModule.forRoot()` to `app.module.ts`, its explorer scans
+   * **every** provider in the app, and this method would suddenly go live.
+   * Hence a second lock outside the decorator.
    */
   @Cron('0 5,20,35,50 * * * *', {
     name: 'summary-refresh',
     timeZone: JOB_TIMEZONE,
     disabled: !SCHEDULING_ENABLED,
-    // আগের রান শেষ না হলে পরের টিক পুরোপুরি বাদ — জমে গিয়ে ডাটাবেসে
-    // একই আপডেট একাধিকবার চলার কোনো মানে নেই
+    // If the previous run has not finished, skip the next tick entirely; there is no point
+    // piling up and running the same update on the database several times.
     waitForCompletion: true,
   })
   async scheduled(): Promise<void> {
@@ -62,16 +65,17 @@ export class SummaryRefreshJob {
     await this.runOnce();
   }
 
-  /** টেস্ট (বা ভবিষ্যতে কোনো admin endpoint) ইচ্ছে করে ডাকতে পারে। */
+  /** Tests (or a future admin endpoint) can call this deliberately. */
   async runOnce(now: Date = new Date()): Promise<SummaryRefreshResult> {
     const startedAt = Date.now();
 
     /**
-     * ⚠️⚠️ **দুটো কাজ একই তালার ভেতরে** — আজকের দিন, তারপর দেরিতে আসা
-     * পুরোনো দিনগুলো। আলাদা তালা দিলে দুটো একসাথে চলতে পারত, আর তখন
-     * একই `monthly_summary` সারিতে দুজনে upsert করত।
+     * Careful: **both jobs go inside the same lock**: today first, then the
+     * late-arriving old days. With separate locks they could run at once and
+     * both upsert the same `monthly_summary` row.
      *
-     * ⭐ ক্রমটাও ইচ্ছাকৃত: আজকেরটা আগে, কারণ পর্দায় সেটাই সবাই দেখছেন।
+     * The order is deliberate too: today first, since that is what everyone
+     * is looking at on screen.
      */
     const result = await this.lock.run(async () => {
       const today = await this.summary.refreshToday(now);
@@ -89,8 +93,8 @@ export class SummaryRefreshJob {
     this.logger.log(
       `summary refresh: ${today.workDate.toISOString().slice(0, 10)} · ` +
         `${today.employees} staff · ${ms}ms` +
-        // ⚠️ পুরোনো দিন গোনা হলে **সবসময়** লগে ওঠে — নীরবে ইতিহাস
-        //    বদলানো ঠিক সেই জিনিস যেটা পরে কেউ ব্যাখ্যা করতে পারত না
+        // Careful: counting old days is **always** logged. Silently changing
+        // history is exactly what nobody could explain later.
         (drained.refreshed > 0 || drained.closed > 0 || drained.pending > 0
           ? ` · late days: ${drained.refreshed} recomputed` +
             (drained.closed > 0 ? `, ${drained.closed} in a closed month` : '') +

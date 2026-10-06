@@ -19,7 +19,7 @@ import {
   type UsageGroup,
 } from '../src/activity/activity.math';
 
-/** seed-এর নিয়মগুলোর ছোট নমুনা — id-গুলো মনগড়া, কিন্তু ধরনগুলো আসল। */
+/** A small sample of the seed's rules: the ids are made up, but the kinds are real. */
 const META = new Map<number, CategoryMeta>([
   [1, { displayName: 'Visual Studio Code', category: 'productive', matchType: 'process' }],
   [2, { displayName: 'Google Chrome', category: 'neutral', matchType: 'process' }],
@@ -32,10 +32,10 @@ const H = 3600;
 
 const day = (text: string): Date => parseWorkDate(text);
 
-// ── স্কোর (D07) ──────────────────────────────────────────────────────────────
+// ── Score (D07) ──────────────────────────────────────────────────────────────
 
-describe('productivity স্কোর — অচেনা সময় হরে ঢোকে না', () => {
-  it('স্কোর হয় productive ÷ (জানা সব), অচেনা বাদ দিয়ে', () => {
+describe('productivity score: unknown time stays out of the denominator', () => {
+  it('score is productive / (everything known), leaving out unknown', () => {
     const b = emptyBuckets();
     addSeconds(b, 'productive', 3 * H);
     addSeconds(b, 'neutral', 1 * H);
@@ -44,24 +44,24 @@ describe('productivity স্কোর — অচেনা সময় হর�
 
     const score = scoreOf(b);
 
-    // ⭐ ৯৬ ঘণ্টা অচেনা থাকা সত্ত্বেও হর ৪ ঘণ্টাই — null মানে "জানি না",
-    //    সেটা কারো বিপক্ষেও যায় না, পক্ষেও না
+    // Even with 96 hours unknown, the denominator is just 4 hours: null means
+    // "don't know", which counts neither for nor against anyone
     expect(score.categorizedSec).toBe(4 * H);
     expect(score.scorePct).toBe(75);
   });
 
-  it('অচেনা সময়কে neutral ধরলে যে ভুলটা হতো, সেটা হয় না', () => {
+  it('avoids the mistake that would come from treating unknown time as neutral', () => {
     const b = emptyBuckets();
     addSeconds(b, 'productive', 1 * H);
     addSeconds(b, null, 9 * H);
 
-    // এখন: ১০০%, পাশে "৯০% সময় অচেনা"
-    // ভুল ভাবে neutral ধরলে: ১০% — সম্পূর্ণ অন্য গল্প, অথচ একই ডেটা
+    // Now: 100%, with "90% of time unknown" beside it
+    // Wrongly treated as neutral: 10%, a completely different story from the same data
     expect(scoreOf(b).scorePct).toBe(100);
     expect(scoreOf(b).unknownPct).toBe(90);
   });
 
-  it('স্কোরের পাশে সবসময় "কত শতাংশ অচেনা" থাকে', () => {
+  it('"what percent is unknown" always sits beside the score', () => {
     const b = emptyBuckets();
     addSeconds(b, 'productive', 1 * H);
     addSeconds(b, null, 99 * H);
@@ -72,11 +72,11 @@ describe('productivity স্কোর — অচেনা সময় হর�
   });
 
   /**
-   * ⭐ সবচেয়ে দরকারি টেস্ট। শূন্য দিয়ে ভাগ করলে NaN, আর `?? 0` দিয়ে ঢাকলে
-   * "০% productive" — যেটা বলত লোকটা সারাদিন অকাজ করেছে। সত্যিটা হলো
-   * বলার মতো কোনো তথ্যই নেই।
+   * The most useful test. Dividing by zero gives NaN, and covering it with
+   * `?? 0` gives "0% productive", which would say the person did nothing all
+   * day. The truth is that there is no information to report.
    */
-  it('জানা সময় শূন্য হলে স্কোর null, শূন্য নয়', () => {
+  it('when known time is zero the score is null, not zero', () => {
     expect(scoreOf(emptyBuckets()).scorePct).toBeNull();
 
     const allUnknown = emptyBuckets();
@@ -88,7 +88,7 @@ describe('productivity স্কোর — অচেনা সময় হর�
     expect(score.totalSec).toBe(8 * H);
   });
 
-  it('একেবারে খালি দিনে কোনো সংখ্যা NaN হয় না', () => {
+  it('no number is NaN on a completely empty day', () => {
     const score = scoreOf(emptyBuckets());
 
     expect(score.totalSec).toBe(0);
@@ -97,7 +97,7 @@ describe('productivity স্কোর — অচেনা সময় হর�
     expect(Number.isNaN(score.unknownPct)).toBe(false);
   });
 
-  it('শতাংশ দুই দশমিকে থামে', () => {
+  it('percentages stop at two decimals', () => {
     const b = emptyBuckets();
     addSeconds(b, 'productive', 1);
     addSeconds(b, 'neutral', 2);
@@ -105,13 +105,13 @@ describe('productivity স্কোর — অচেনা সময় হর�
     expect(scoreOf(b).scorePct).toBe(33.33);
   });
 
-  it('ঋণাত্মক সময় চুপচাপ মেনে নেওয়া হয় না', () => {
+  it('negative time is not silently accepted', () => {
     expect(() => addSeconds(emptyBuckets(), 'productive', -1)).toThrow(RangeError);
     expect(() => addSeconds(emptyBuckets(), null, Number.NaN)).toThrow(RangeError);
   });
 });
 
-describe('দিনভিত্তিক ভাঁজ (D07)', () => {
+describe('per-day fold (D07)', () => {
   const groups: DailyGroup[] = [
     { employeeId: 7, workDate: day('2026-08-02'), categoryId: 1, seconds: 2 * H },
     { employeeId: 7, workDate: day('2026-08-02'), categoryId: 4, seconds: 2 * H },
@@ -120,7 +120,7 @@ describe('দিনভিত্তিক ভাঁজ (D07)', () => {
     { employeeId: 9, workDate: day('2026-08-01'), categoryId: 5, seconds: 3 * H },
   ];
 
-  it('দিনগুলো তারিখের ক্রমে আসে, উল্টোভাবে ঢোকালেও', () => {
+  it('days come in date order, even when inserted in reverse', () => {
     const folded = foldDailyScores(groups, META);
     expect(folded.get(7)!.days.map((d) => d.workDate)).toEqual([
       '2026-08-01',
@@ -128,29 +128,29 @@ describe('দিনভিত্তিক ভাঁজ (D07)', () => {
     ]);
   });
 
-  it('প্রতিটি দিনের স্কোর আলাদা, আর মোটটা সব দিনের যোগফলের উপর', () => {
+  it('each day has its own score, and the total is over the sum of all days', () => {
     const folded = foldDailyScores(groups, META)!;
     const seven = folded.get(7)!;
 
-    expect(seven.days[0].scorePct).toBe(100); // ৬ ঘণ্টা VS Code, ১ ঘণ্টা অচেনা
+    expect(seven.days[0].scorePct).toBe(100); // 6 hours VS Code, 1 hour unknown
     expect(seven.days[0].unknownPct).toBe(round(1 / 7));
-    expect(seven.days[1].scorePct).toBe(50); // ২ ঘণ্টা কোড, ২ ঘণ্টা YouTube
+    expect(seven.days[1].scorePct).toBe(50); // 2 hours code, 2 hours YouTube
 
-    // মোট: ৮ ঘণ্টা productive, ২ ঘণ্টা unproductive → ৮০%
+    // Total: 8 hours productive, 2 hours unproductive, so 80%
     expect(seven.total.scorePct).toBe(80);
     expect(seven.total.unknownSec).toBe(1 * H);
   });
 
-  it('যেসব দিনে কোনো সারি নেই সেগুলোর জন্য শূন্য সারি বানানো হয় না', () => {
-    // ১ ও ২ আগস্টের সারি আছে, ৩ আগস্টের নেই — তাই দুটোই দিন
+  it('no zero row is made for days that have no rows', () => {
+    // There are rows for 1 and 2 August, none for 3 August, so there are two days
     expect(foldDailyScores(groups, META).get(7)!.days).toHaveLength(2);
   });
 
-  it('কোনো সারি না থাকলে ম্যাপে ওই কর্মী থাকেন না (সার্ভিস তখন শূন্য স্কোর বসায়)', () => {
+  it('with no rows the employee is absent from the map (the service then sets a zero score)', () => {
     expect(foldDailyScores([], META).size).toBe(0);
   });
 
-  it('ম্যাপে না থাকা categoryId "অচেনা" হয়, ক্র্যাশ নয়', () => {
+  it('a categoryId not in the map becomes "unknown", not a crash', () => {
     const folded = foldDailyScores(
       [{ employeeId: 1, workDate: day('2026-08-01'), categoryId: 999, seconds: H }],
       META,
@@ -161,27 +161,27 @@ describe('দিনভিত্তিক ভাঁজ (D07)', () => {
   });
 });
 
-// ── টপ ১০ (D08) ─────────────────────────────────────────────────────────────
+// ── Top 10 (D08) ─────────────────────────────────────────────────────────────
 
-describe('normalize — একই জিনিস একটাই সারি', () => {
-  it('প্রসেসের নাম ছোট হাতের হয়', () => {
+describe('normalize: the same thing is one row', () => {
+  it('process names are lowercased', () => {
     expect(normalizeProcess('  Chrome.EXE ')).toBe('chrome.exe');
   });
 
-  it('ডোমেইনের www. ছাঁটা হয়', () => {
+  it('the www. of a domain is trimmed', () => {
     expect(normalizeDomain('WWW.YouTube.com')).toBe('youtube.com');
     expect(normalizeDomain('youtube.com.')).toBe('youtube.com');
   });
 
-  /** ⚠️ `www.com` একটা আসল ডোমেইন — অন্ধভাবে ছাঁটলে ওটা `com` হয়ে যেত */
-  it('www. ছাঁটার পর কিছুই না থাকলে ছাঁটা হয় না', () => {
+  /** `www.com` is a real domain: trimming blindly would turn it into `com` */
+  it('nothing is trimmed if nothing would be left after www.', () => {
     expect(normalizeDomain('www.com')).toBe('www.com');
     expect(normalizeDomain('wwwx.com')).toBe('wwwx.com');
   });
 });
 
-describe('টপ অ্যাপ ও সাইট (D08)', () => {
-  it('বড় থেকে ছোট সাজানো, আর সমান হলে ফল প্রতিবার এক', () => {
+describe('top apps and sites (D08)', () => {
+  it('sorted largest to smallest, and ties give the same result every time', () => {
     const groups: UsageGroup[] = [
       { key: 'b.exe', categoryId: 1, seconds: 100, records: 1 },
       { key: 'a.exe', categoryId: 1, seconds: 100, records: 1 },
@@ -195,7 +195,7 @@ describe('টপ অ্যাপ ও সাইট (D08)', () => {
     expect(again).toEqual(first);
   });
 
-  it('বড়-ছোট হাতের ভিন্নতা এক সারিতে মেশে', () => {
+  it('case variants merge into one row', () => {
     const report = foldUsage(
       [
         { key: 'Code.exe', categoryId: 1, seconds: 2 * H, records: 3 },
@@ -211,12 +211,12 @@ describe('টপ অ্যাপ ও সাইট (D08)', () => {
   });
 
   /**
-   * ⭐ এটাই D08-এর সবচেয়ে নীরব ফাঁদ। `chrome.exe`-এর সারিগুলোর ক্যাটাগরি
-   * আসে **ডোমেইন** রুল থেকে (youtube.com, github.com)। রুলের display_name
-   * অ্যাপের নাম হিসেবে বসিয়ে দিলে তালিকায় লেখা থাকত "YouTube — ৫ ঘণ্টা",
-   * অথচ সেটা আসলে গোটা ব্রাউজারের সময়।
+   * This is the quietest trap in D08. The category of `chrome.exe` rows comes
+   * from the domain rule (youtube.com, github.com). If the rule's display_name
+   * were used as the app name, the list would say "YouTube, 5 hours", when it
+   * is really the whole browser's time.
    */
-  it('ব্রাউজারের সময় ডোমেইন রুলের নামে দেখানো হয় না', () => {
+  it('browser time is not shown under a domain rule\'s name', () => {
     const report = foldUsage(
       [
         { key: 'chrome.exe', categoryId: 4, seconds: 3 * H, records: 10 }, // YouTube
@@ -228,11 +228,11 @@ describe('টপ অ্যাপ ও সাইট (D08)', () => {
 
     expect(report.rows[0].label).toBe('chrome.exe');
     expect(report.rows[0].mixed).toBe(true);
-    expect(report.rows[0].category).toBe('unproductive'); // ৩ ঘণ্টা > ২ ঘণ্টা
+    expect(report.rows[0].category).toBe('unproductive'); // 3 hours > 2 hours
     expect(report.rows[0].buckets.productiveSec).toBe(2 * H);
   });
 
-  it('একটামাত্র process রুলে পড়লে সুন্দর নামটাই আসে', () => {
+  it('when it falls under a single process rule, the friendly name is used', () => {
     const report = foldUsage(
       [{ key: 'code.exe', categoryId: 1, seconds: H, records: 1 }],
       META,
@@ -243,7 +243,7 @@ describe('টপ অ্যাপ ও সাইট (D08)', () => {
     expect(report.rows[0].mixed).toBe(false);
   });
 
-  it('সাইটের তালিকায় ডোমেইন রুলের নাম আসে', () => {
+  it('the site list shows the domain rule\'s name', () => {
     const report = foldUsage(
       [{ key: 'www.youtube.com', categoryId: 4, seconds: H, records: 1 }],
       META,
@@ -255,10 +255,11 @@ describe('টপ অ্যাপ ও সাইট (D08)', () => {
   });
 
   /**
-   * ⭐ শতাংশের হর **মোট** সময়, দেখানো ১০টার যোগফল নয়। নইলে শতাংশগুলো
-   * সবসময় ১০০-তে মিলে যেত আর ৩০০টা সাইটের লেজটা অদৃশ্য হতো।
+   * The percentage denominator is the total time, not the sum of the 10
+   * shown. Otherwise the percentages would always add to 100 and the tail of
+   * 300 sites would be invisible.
    */
-  it('sharePct-এর হর মোট সময়, টপ তালিকার যোগফল নয়', () => {
+  it('the sharePct denominator is the total time, not the sum of the top list', () => {
     const groups: UsageGroup[] = Array.from({ length: 20 }, (_, i) => ({
       key: `app${String(i).padStart(2, '0')}.exe`,
       categoryId: 1,
@@ -271,13 +272,13 @@ describe('টপ অ্যাপ ও সাইট (D08)', () => {
     expect(report.totalSec).toBe(2000);
     expect(report.distinctKeys).toBe(20);
     expect(report.otherSec).toBe(1000);
-    expect(report.rows[0].sharePct).toBe(5); // ১০০ ÷ ২০০০, ১০০ ÷ ১০০০ নয়
+    expect(report.rows[0].sharePct).toBe(5); // 100 / 2000, not 100 / 1000
 
     const shown = report.rows.reduce((sum, r) => sum + r.sharePct, 0);
-    expect(shown).toBe(50); // ⭐ ১০০ নয় — বাকি অর্ধেক তালিকার বাইরে
+    expect(shown).toBe(50); // not 100: the other half is outside the list
   });
 
-  it('খালি রেঞ্জে সব শূন্য, কোনো ভাগ NaN হয় না', () => {
+  it('on an empty range everything is zero, and no share is NaN', () => {
     const report = foldUsage([], META, 'app');
 
     expect(report.rows).toEqual([]);
@@ -286,7 +287,7 @@ describe('টপ অ্যাপ ও সাইট (D08)', () => {
     expect(report.distinctKeys).toBe(0);
   });
 
-  it('সব সারি অচেনা হলে ক্যাটাগরি null, তবু তালিকাটা আসে', () => {
+  it('when every row is unknown the category is null, yet the list still comes', () => {
     const report = foldUsage(
       [{ key: 'unknown.exe', categoryId: null, seconds: 5 * H, records: 4 }],
       META,
@@ -299,7 +300,7 @@ describe('টপ অ্যাপ ও সাইট (D08)', () => {
     expect(report.rows[0].buckets.unknownSec).toBe(5 * H);
   });
 
-  it('খালি কী বাদ পড়ে, কিন্তু ফাঁকা সারি তৈরি করে না', () => {
+  it('an empty key is dropped, but does not create a blank row', () => {
     const report = foldUsage(
       [
         { key: '   ', categoryId: null, seconds: H, records: 1 },
@@ -312,7 +313,7 @@ describe('টপ অ্যাপ ও সাইট (D08)', () => {
     expect(report.distinctKeys).toBe(1);
   });
 
-  it('limit শূন্য বা ঋণাত্মক হলেও ভাঙে না', () => {
+  it('does not break when limit is zero or negative', () => {
     const report = foldUsage(
       [{ key: 'code.exe', categoryId: 1, seconds: H, records: 1 }],
       META,
@@ -321,13 +322,13 @@ describe('টপ অ্যাপ ও সাইট (D08)', () => {
     );
 
     expect(report.rows).toEqual([]);
-    expect(report.otherSec).toBe(H); // সবটাই তালিকার বাইরে
+    expect(report.otherSec).toBe(H); // all of it is outside the list
   });
 });
 
-// ── টিম সারাংশ (D09) ────────────────────────────────────────────────────────
+// ── Team summary (D09) ───────────────────────────────────────────────────────
 
-describe('টিম-ভিত্তিক সাইট সারাংশ (D09)', () => {
+describe('team-based site summary (D09)', () => {
   const groups: TeamGroup[] = [
     { domain: 'youtube.com', employeeId: 1, categoryId: 4, seconds: 5 * H },
     { domain: 'www.youtube.com', employeeId: 2, categoryId: 4, seconds: 1 * H },
@@ -336,7 +337,7 @@ describe('টিম-ভিত্তিক সাইট সারাংশ (D09)'
     { domain: 'github.com', employeeId: 3, categoryId: 3, seconds: 2 * H },
   ];
 
-  it('একই সাইট এক সারিতে আসে, www. থাকুক বা না থাকুক', () => {
+  it('the same site is one row, with or without www.', () => {
     const report = foldTeamSites(groups, META);
     const youtube = report.rows.find((r) => r.domain === 'youtube.com')!;
 
@@ -345,11 +346,11 @@ describe('টিম-ভিত্তিক সাইট সারাংশ (D09)'
   });
 
   /**
-   * ⭐ D09-এর আসল বিপদ: একজনের অভ্যাসকে "টিমের" বলে চালিয়ে দেওয়া।
-   * ৬ ঘণ্টার ৫ ঘণ্টাই একজনের — `employees` আর `topEmployeeSec` না থাকলে
-   * মালিক ভাবতেন গোটা টিম YouTube-এ পড়ে আছে।
+   * The real danger of D09: passing off one person's habit as "the team's".
+   * If 5 of 6 hours belong to one person, without `employees` and
+   * `topEmployeeSec` the owner would think the whole team is stuck on YouTube.
    */
-  it('কোন কর্মীর কত অংশ সেটা দেখা যায়', () => {
+  it('shows how much of it is which employee\'s', () => {
     const report = foldTeamSites(groups, META);
     const youtube = report.rows.find((r) => r.domain === 'youtube.com')!;
 
@@ -358,10 +359,10 @@ describe('টিম-ভিত্তিক সাইট সারাংশ (D09)'
 
     const github = report.rows.find((r) => r.domain === 'github.com')!;
     expect(github.employees).toBe(3);
-    expect(github.topEmployeeSec).toBe(2 * H); // সমান ভাগ — একজনের নয়
+    expect(github.topEmployeeSec).toBe(2 * H); // an equal share, not one person's
   });
 
-  it('সমান সময় হলেও topEmployeeId প্রতিবার একই আসে', () => {
+  it('topEmployeeId is the same every time even on equal time', () => {
     const tied: TeamGroup[] = [
       { domain: 'a.com', employeeId: 9, categoryId: 3, seconds: H },
       { domain: 'a.com', employeeId: 4, categoryId: 3, seconds: H },
@@ -371,17 +372,17 @@ describe('টিম-ভিত্তিক সাইট সারাংশ (D09)'
     expect(foldTeamSites([...tied].reverse(), META).rows[0].topEmployeeId).toBe(4);
   });
 
-  it('সময় অনুযায়ী সাজানো, আর শতাংশের হর মোট সময়', () => {
+  it('sorted by time, and the percentage denominator is the total time', () => {
     const report = foldTeamSites(groups, META, 1);
 
-    expect(report.rows[0].domain).toBe('github.com'); // ৬ ঘণ্টা
+    expect(report.rows[0].domain).toBe('github.com'); // 6 hours
     expect(report.totalSec).toBe(12 * H);
     expect(report.rows[0].sharePct).toBe(50);
     expect(report.otherSec).toBe(6 * H);
     expect(report.distinctDomains).toBe(2);
   });
 
-  it('খালি রেঞ্জে সব শূন্য', () => {
+  it('on an empty range everything is zero', () => {
     const report = foldTeamSites([], META);
     expect(report.rows).toEqual([]);
     expect(report.totalSec).toBe(0);
@@ -389,10 +390,10 @@ describe('টিম-ভিত্তিক সাইট সারাংশ (D09)'
   });
 });
 
-// ── রুলের প্যাটার্ন (D06) ────────────────────────────────────────────────────
+// ── Rule patterns (D06) ──────────────────────────────────────────────────────
 
-describe('প্যাটার্ন যাচাই — নীরবে বাদ পড়া রুল ঠেকানো', () => {
-  it('ভালো প্যাটার্নে কোনো আপত্তি নেই', () => {
+describe('pattern validation: stopping rules that would be silently dropped', () => {
+  it('a good pattern raises no objection', () => {
     expect(patternProblem('process', 'code.exe')).toBeNull();
     expect(patternProblem('process', 'docker desktop.exe')).toBeNull();
     expect(patternProblem('domain', 'mail.google.com')).toBeNull();
@@ -400,70 +401,70 @@ describe('প্যাটার্ন যাচাই — নীরবে বা
     expect(patternProblem('title_regex', '^Jira\\b')).toBeNull();
   });
 
-  it('খালি প্যাটার্ন নাকচ — compile() ওটা নীরবে ফেলে দিত', () => {
+  it('an empty pattern is rejected: compile() would silently drop it', () => {
     expect(patternProblem('domain', '   ')).not.toBeNull();
   });
 
-  /** ⚠️ `app_usage`-এ ফুল URL কখনো জমা হয় না, তাই এমন রুল কোনোদিন মিলত না */
-  it('ডোমেইনের জায়গায় পুরো URL নাকচ', () => {
+  /** A full URL is never stored in `app_usage`, so such a rule would never match */
+  it('a full URL in place of a domain is rejected', () => {
     expect(patternProblem('domain', 'https://youtube.com/watch')).not.toBeNull();
     expect(patternProblem('domain', 'youtube.com/feed')).not.toBeNull();
     expect(patternProblem('domain', 'ভিডিও দেখা')).not.toBeNull();
     expect(patternProblem('domain', 'youtube')).not.toBeNull();
   });
 
-  it('প্রসেসের জায়গায় পুরো পাথ নাকচ', () => {
+  it('a full path in place of a process is rejected', () => {
     expect(patternProblem('process', 'C:\\Program Files\\code.exe')).not.toBeNull();
   });
 
-  /** ⚠️ ভুল regex `compile()` চুপচাপ ফেলে দেয় — মালিক কোনোদিন জানতেন না */
-  it('ভাঙা regex নাকচ', () => {
+  /** A bad regex is silently dropped by `compile()`: the owner would never know */
+  it('a broken regex is rejected', () => {
     expect(patternProblem('title_regex', '([unclosed')).not.toBeNull();
   });
 
-  it('অতিরিক্ত লম্বা regex নাকচ — ওটা ইভেন্ট লুপ আটকে দিতে পারে', () => {
+  it('an overlong regex is rejected: it could block the event loop', () => {
     expect(patternProblem('title_regex', 'a'.repeat(201))).not.toBeNull();
     expect(patternProblem('title_regex', 'a'.repeat(200))).toBeNull();
   });
 });
 
-// ── তারিখ ও রেঞ্জ ────────────────────────────────────────────────────────────
+// ── Dates and ranges ─────────────────────────────────────────────────────────
 
-describe('work_date পড়া ও লেখা', () => {
+describe('reading and writing work_date', () => {
   /**
-   * ⚠️ `work_date` একটা `@db.Date` — ঢাকার তারিখ, UTC-midnight হিসেবে জমা।
-   * এখানে আবার টাইমজোন প্রয়োগ করলে প্রতিটা তারিখ একদিন সরে যেত, আর
-   * সেটা কেবল কিছু সার্ভারে ধরা পড়ত।
+   * `work_date` is a `@db.Date`: the Dhaka date, stored as UTC midnight.
+   * Applying a timezone again here would shift every date by a day, and that
+   * would show only on some servers.
    */
-  it('তারিখ UTC ধরে লেখা হয়, সার্ভারের টাইমজোন ধরে নয়', () => {
+  it('dates are written as UTC, not by the server\'s timezone', () => {
     expect(toDateKey(new Date(Date.UTC(2026, 7, 9)))).toBe('2026-08-09');
     expect(toDateKey(parseWorkDate('2026-01-01'))).toBe('2026-01-01');
     expect(toDateKey(parseWorkDate('2026-12-31'))).toBe('2026-12-31');
   });
 
-  it('ভুল ফরম্যাট নাকচ', () => {
+  it('a wrong format is rejected', () => {
     expect(() => parseWorkDate('2026-8-9')).toThrow(RangeError);
     expect(() => parseWorkDate('09-08-2026')).toThrow(RangeError);
     expect(() => parseWorkDate('')).toThrow(RangeError);
   });
 
-  /** ⚠️ `Date.UTC(2026, 1, 31)` চুপচাপ ৩ মার্চ হয়ে যায় — ফিরে মিলিয়ে দেখা হয় */
-  it('অস্তিত্বহীন তারিখ চুপচাপ গড়িয়ে যায় না', () => {
+  /** `Date.UTC(2026, 1, 31)` silently becomes 3 March: it is checked back */
+  it('a non-existent date does not silently roll over', () => {
     expect(() => parseWorkDate('2026-02-31')).toThrow(RangeError);
     expect(() => parseWorkDate('2026-13-01')).toThrow(RangeError);
     expect(() => parseWorkDate('2026-00-10')).toThrow(RangeError);
   });
 
-  it('অধিবর্ষের ২৯ ফেব্রুয়ারি বৈধ, সাধারণ বছরে নয়', () => {
+  it('29 February of a leap year is valid, but not in an ordinary year', () => {
     expect(toDateKey(parseWorkDate('2028-02-29'))).toBe('2028-02-29');
     expect(() => parseWorkDate('2026-02-29')).toThrow(RangeError);
   });
 });
 
-describe('রেঞ্জ ঠিক করা', () => {
+describe('resolving the range', () => {
   const today = parseWorkDate('2026-08-11');
 
-  it('কিছু না দিলে চলতি মাসের ১ তারিখ থেকে আজ', () => {
+  it('with nothing given, from the 1st of the current month to today', () => {
     const range = resolveRange(undefined, undefined, today);
 
     expect(toDateKey(range.from)).toBe('2026-08-01');
@@ -471,33 +472,33 @@ describe('রেঞ্জ ঠিক করা', () => {
     expect(range.days).toBe(11);
   });
 
-  it('একই দিন দিলে রেঞ্জ এক দিনের — শূন্য দিনের নয়', () => {
+  it('given the same day, the range is one day, not zero', () => {
     expect(resolveRange('2026-08-11', '2026-08-11', today).days).toBe(1);
   });
 
-  it('উল্টো রেঞ্জ নাকচ — নইলে চুপচাপ খালি রিপোর্ট আসত', () => {
+  it('a reversed range is rejected, or an empty report would silently come back', () => {
     expect(() => resolveRange('2026-08-11', '2026-08-01', today)).toThrow(RangeError);
   });
 
-  it('অতি লম্বা রেঞ্জ নাকচ — একটা টাইপো পুরো টেবিল স্ক্যান করাত', () => {
+  it('a very long range is rejected: one typo would scan the whole table', () => {
     expect(() => resolveRange('2000-01-01', '2026-08-11', today)).toThrow(RangeError);
   });
 
-  it('শুধু from দিলে to হয় আজ', () => {
+  it('given only from, to is today', () => {
     const range = resolveRange('2026-08-05', undefined, today);
     expect(toDateKey(range.to)).toBe('2026-08-11');
     expect(range.days).toBe(7);
   });
 
-  it('খালি স্ট্রিং "দেওয়া হয়নি" হিসেবেই ধরা হয়', () => {
-    // query string-এ `?from=&to=` লিখলে express খালি স্ট্রিং দেয়
+  it('an empty string is treated as "not given"', () => {
+    // writing `?from=&to=` in the query string makes express give an empty string
     const range = resolveRange('', '', today);
     expect(toDateKey(range.from)).toBe('2026-08-01');
     expect(toDateKey(range.to)).toBe('2026-08-11');
   });
 });
 
-/** টেস্টে শতাংশ মেলানোর জন্য — গোলাকার করার নিয়ম কোডের সাথেই এক */
+/** For matching percentages in tests: the rounding rule is the same as in the code */
 function round(fraction: number): number {
   return Math.round(fraction * 100 * 100) / 100;
 }

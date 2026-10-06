@@ -13,7 +13,7 @@ public class AgentHeartbeatTests
         WrittenAtUtc = new DateTimeOffset(2026, 8, 10, 9, 14, 3, TimeSpan.Zero),
     };
 
-    // ── লেখা ↔ পড়া ──────────────────────────────────────────────────────────
+    // ── write <-> read ──────────────────────────────────────────────────────
 
     [Fact]
     public void লেখা_আর_পড়া_একই_মান_ফেরায়()
@@ -31,8 +31,8 @@ public class AgentHeartbeatTests
     }
 
     /// <summary>
-    /// এক লাইনে পুরোটা — এজেন্ট temp ফাইলে লিখে rename করে, তাই লাইনটা
-    /// ছোট আর একবারে লেখা হওয়া দরকার।
+    /// The whole thing on one line: the agent writes a temp file and renames it, so
+    /// the line must be short and written in one go.
     /// </summary>
     [Fact]
     public void এক_লাইনেই_লেখা_হয়()
@@ -43,19 +43,19 @@ public class AgentHeartbeatTests
         Assert.DoesNotContain('\r', text);
     }
 
-    // ── ভাঙা ইনপুট ──────────────────────────────────────────────────────────
+    // ── malformed input ─────────────────────────────────────────────────────
 
     /// <summary>
-    /// অর্ধেক লেখা ফাইল (এজেন্ট লেখার মাঝপথে মরেছে) যেন "০ ms বয়সী হার্টবিট"
-    /// হিসেবে না পড়া হয় — তাহলে মৃত এজেন্টকে চিরকাল সুস্থ ভাবা হতো।
+    /// A half-written file (the agent died mid-write) must not be read as a "heartbeat
+    /// 0 ms old"; that would make a dead agent look healthy forever.
     /// </summary>
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    [InlineData("v=1 pid=4242")]                       // unbiased নেই
-    [InlineData("pid=4242 unbiased=5000")]             // v নেই
-    [InlineData("v=1 pid=0 unbiased=5000")]            // pid অসম্ভব
+    [InlineData("v=1 pid=4242")]                       // no unbiased
+    [InlineData("pid=4242 unbiased=5000")]             // no v
+    [InlineData("v=1 pid=0 unbiased=5000")]            // pid impossible
     [InlineData("v=1 pid=-3 unbiased=5000")]
     [InlineData("v=1 pid=4242 unbiased=-1")]
     [InlineData("v=1 pid=abc unbiased=5000")]
@@ -67,9 +67,9 @@ public class AgentHeartbeatTests
     }
 
     /// <summary>
-    /// ⚠️ এজেন্ট আপডেট হয়ে নতুন ক্ষেত্র যোগ করলে পুরোনো watchdog যেন parse-এ
-    /// ব্যর্থ হয়ে গোটা বহরকে রিস্টার্ট-লুপে না ফেলে। আপডেটের মুহূর্তটাই
-    /// সবচেয়ে নাজুক।
+    /// Careful: if the agent is updated and adds a new field, an old watchdog must not
+    /// fail to parse and throw the whole fleet into a restart loop. The moment of an
+    /// update is the most fragile one.
     /// </summary>
     [Fact]
     public void অচেনা_ক্ষেত্র_উপেক্ষা_করা_হয়()
@@ -92,7 +92,7 @@ public class AgentHeartbeatTests
         Assert.Equal(DateTimeOffset.MinValue, read.WrittenAtUtc);
     }
 
-    // ── বয়স ─────────────────────────────────────────────────────────────────
+    // ── age ─────────────────────────────────────────────────────────────────
 
     [Fact]
     public void বয়স_unbiased_ঘড়ির_বিয়োগ()
@@ -103,10 +103,10 @@ public class AgentHeartbeatTests
     }
 
     /// <summary>
-    /// রিবুটের পর হার্টবিট ফাইলটা ডিস্কে থেকে যায় কিন্তু unbiased কাউন্টার শূন্য
-    /// থেকে শুরু হয় — তখন ফাইলের মান "ভবিষ্যতে"। ওটাকে তাজা ধরলে watchdog
-    /// মৃত এজেন্টকে সুস্থ ভেবে কোনোদিন চালু করত না, অর্থাৎ রিবুটের পর কারো
-    /// সময় গোনাই হতো না।
+    /// After a reboot the heartbeat file stays on disk but the unbiased counter starts
+    /// from zero, so the file's value is "in the future". If that were treated as fresh,
+    /// the watchdog would think a dead agent was healthy and never start it, so after a
+    /// reboot nobody's time would be counted.
     /// </summary>
     [Fact]
     public void আগের_বুটের_হার্টবিটের_বয়স_দেওয়া_হয়_না()
@@ -121,8 +121,8 @@ public class AgentHeartbeatTests
     }
 
     /// <summary>
-    /// ⚠️ ব্যবধানের ঠিক দ্বিগুণ-তিনগুণ রাখলে AV স্ক্যান বা একটা লম্বা GC pause-এ
-    /// সুস্থ এজেন্ট মারা পড়ত। ৮ গুণ ব্যবধান ইচ্ছাকৃত।
+    /// Careful: with a threshold of just two or three times the interval, an AV scan or
+    /// a long GC pause would get a healthy agent killed. The 8x interval is deliberate.
     /// </summary>
     [Fact]
     public void বাসি_হওয়ার_সীমা_ব্যবধানের_অনেক_গুণ()

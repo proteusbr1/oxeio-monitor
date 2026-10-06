@@ -7,11 +7,11 @@ using oXeio.Core.Agent;
 namespace oXeio.Agent.Platform;
 
 /// <summary>
-/// lock / unlock / logon / logoff / RDP সংযোগ-বিচ্ছেদ।
+/// lock / unlock / logon / logoff / RDP disconnect.
 ///
-/// ⚠️ শুধু Win+L ধরলে হবে না। fast user switching আর RDP disconnect —
-/// শেয়ার করা বা দূরের PC ছেড়ে যাওয়ার সবচেয়ে সাধারণ দুটো উপায় — কোনোটাতেই
-/// SESSION_LOCK আসে না। ওগুলো আলাদা করে ধরতে হয়, নইলে ঘড়ি চলতেই থাকে।
+/// Careful: catching only Win+L is not enough. Fast user switching and RDP disconnect, the two most
+/// common ways of walking away from a shared or remote PC, never produce SESSION_LOCK. They must be
+/// caught separately, otherwise the clock keeps running.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class SessionMonitor : IDisposable
@@ -19,7 +19,7 @@ internal sealed class SessionMonitor : IDisposable
     private readonly nint _hwnd;
     private bool _registered;
 
-    /// <summary>যেসব ইভেন্টে ট্র্যাকিং থামবে।</summary>
+    /// <summary>The events on which tracking stops.</summary>
     private static readonly HashSet<int> Suspending =
     [
         Win32.WTS_SESSION_LOCK,
@@ -29,7 +29,7 @@ internal sealed class SessionMonitor : IDisposable
         Win32.WTS_REMOTE_DISCONNECT,
     ];
 
-    /// <summary>যেসব ইভেন্টে আবার চালু হবে।</summary>
+    /// <summary>The events on which it starts again.</summary>
     private static readonly HashSet<int> Resuming =
     [
         Win32.WTS_SESSION_UNLOCK,
@@ -40,7 +40,7 @@ internal sealed class SessionMonitor : IDisposable
 
     public SessionMonitor(nint hwnd) => _hwnd = hwnd;
 
-    /// <summary>রেজিস্ট্রেশন ব্যর্থ হলে কী ঘটল তা ফেরত দেয় — চুপ করে থাকে না।</summary>
+    /// <summary>Returns what happened if registration fails: it does not stay silent.</summary>
     public (bool Ok, int Error) TryRegister()
     {
         if (Wtsapi32.WTSRegisterSessionNotification(_hwnd, Win32.NOTIFY_FOR_THIS_SESSION))
@@ -58,18 +58,18 @@ internal sealed class SessionMonitor : IDisposable
         : null;
 
     /// <summary>
-    /// G02 — এই সেশন-বার্তাটা কি "স্টাফ চলে যাচ্ছে" বোঝায়? বোঝালে যে ইভেন্ট
-    /// টাইপ পাঠাতে হবে, নইলে <c>null</c>।
+    /// G02: does this session message mean "the staff member is leaving"? If so, the event type to
+    /// send, otherwise <c>null</c>.
     ///
-    /// ⚠️ <b>lock এখানে নেই, ইচ্ছাকৃতভাবে।</b> লক করা মানে চলে যাওয়া নয় — টানা
-    /// আট ঘণ্টায় একজন ডজনখানেক বার লক করে। ওগুলো ইভেন্ট হিসেবে পাঠালে
-    /// <c>agent_events</c> দিনে হাজারখানেক সারিতে ভরে যেত, অথচ ঘণ্টার হিসাবে
-    /// লক আগে থেকেই <see cref="oXeio.Core.Models.SegmentState.Locked"/> সেগমেন্ট
-    /// হয়ে যায় — অর্থাৎ তথ্যটা দুবার জমা হতো।
+    /// Careful: <b>lock is not here, deliberately.</b> Locking does not mean leaving: in eight
+    /// straight hours one person locks a dozen times. Sending those as events would fill
+    /// <c>agent_events</c> with about a thousand rows a day, while for the hours calculation a lock
+    /// already becomes a <see cref="oXeio.Core.Models.SegmentState.Locked"/> segment, so the
+    /// information would be stored twice.
     ///
-    /// ⚠️ <c>WTS_SESSION_TERMINATE</c>-ও logoff। সেশনটা বাইরে থেকে (অ্যাডমিন,
-    /// টাইমআউট) শেষ করে দেওয়া হয়েছে; স্টাফের দিক থেকে ফলটা একই, আর ইভেন্টটা
-    /// না পাঠালে সার্ভার ওই <c>agent_stop</c>-কে হস্তক্ষেপ ধরত।
+    /// Careful: <c>WTS_SESSION_TERMINATE</c> is also a logoff. The session was ended from outside
+    /// (admin, timeout); from the staff member's side the result is the same, and without sending
+    /// the event the server would treat that <c>agent_stop</c> as interference.
     /// </summary>
     public static string? ClosingEventType(int wtsCode) => wtsCode switch
     {
@@ -78,54 +78,50 @@ internal sealed class SessionMonitor : IDisposable
     };
 
     /// <summary>
-    /// <c>WM_ENDSESSION</c> → <c>logoff</c> / <c>shutdown</c> / কিছুই না।
+    /// <c>WM_ENDSESSION</c> to <c>logoff</c> / <c>shutdown</c> / nothing.
     ///
-    /// ⭐⚠️ <b>শাটডাউনের খবর PowerMonitor-এ আসে না — খুঁজে দেখা হয়েছে।</b>
-    /// <c>WM_POWERBROADCAST</c>-এর সব রূপ (<c>PBT_APMSUSPEND</c>,
-    /// <c>PBT_APMRESUME*</c>, ডিসপ্লে) ঘুম ও জাগরণের কথা বলে; Windows বন্ধ বা
-    /// রিস্টার্ট হওয়ার সময় ওগুলোর একটাও আসে না। শাটডাউন আসে <b>শুধু</b>
-    /// <c>WM_QUERYENDSESSION</c>/<c>WM_ENDSESSION</c> হয়ে, আর ওটা সেশনের বার্তা —
-    /// সেজন্যই ব্যাখ্যাটা এখানে, পাওয়ারে নয়। PowerMonitor-এ বসালে কোডটা
-    /// কম্পাইল হতো, চলত, এবং <c>shutdown</c> ইভেন্ট কোনোদিন যেত না।
+    /// <b>Shutdown news does not arrive in PowerMonitor; this was checked.</b> All forms of
+    /// <c>WM_POWERBROADCAST</c> (<c>PBT_APMSUSPEND</c>, <c>PBT_APMRESUME*</c>, display) speak of
+    /// sleep and wake; when Windows shuts down or restarts, none of them arrives. Shutdown comes
+    /// <b>only</b> as <c>WM_QUERYENDSESSION</c>/<c>WM_ENDSESSION</c>, and that is a session
+    /// message, which is why the interpretation is here and not in the power code. Putting it in
+    /// PowerMonitor would compile and run, and the <c>shutdown</c> event would never go out.
     ///
-    /// ⚠️ WTS-এর logoff আর এখানকার logoff — দুটোই আসে। একটাই পাঠানো হয়;
-    /// ডিডুপটা <c>AgentHost</c>-এ (<c>RaiseClosingEvent</c>)।
+    /// Careful: both WTS's logoff and the logoff here arrive. Only one is sent; the dedup is in
+    /// <c>AgentHost</c> (<c>RaiseClosingEvent</c>).
     /// </summary>
-    /// <param name="wParam">০ হলে সেশন আসলে শেষ হচ্ছে না (কেউ "না" বলেছে)।</param>
-    /// <param name="lParam">ENDSESSION_* বিটমাস্ক।</param>
+    /// <param name="wParam">0 means the session is not actually ending (someone said "no").</param>
+    /// <param name="lParam">The ENDSESSION_* bitmask.</param>
     public static string? InterpretEndSession(nint wParam, nint lParam)
     {
-        // wParam == FALSE মানে WM_QUERYENDSESSION-এ কেউ বাধা দিয়েছে, সেশন
-        // চলবে। এখানে ইভেন্ট পাঠালে "PC বন্ধ হয়েছে" মিথ্যা রেকর্ড হয়ে থাকত।
+        // wParam == FALSE means someone blocked it in WM_QUERYENDSESSION and the session will go
+        // on. Sending an event here would leave a false "PC shut down" record.
         if (wParam == 0) return null;
 
-        // ⚠️ ৬৪-বিটে lParam sign-extend হতে পারে; নিচের ৩২ বিটই আসল মান।
+        // Careful: on 64-bit lParam may be sign-extended; the low 32 bits are the real value.
         var flags = unchecked((uint)(long)lParam);
 
         if ((flags & Win32.ENDSESSION_LOGOFF) != 0) return AgentEventTypes.Logoff;
 
         /*
-         * ⚠️ শুধু CLOSEAPP মানে Restart Manager আমাদেরই বন্ধ করাচ্ছে (সাধারণত
-         *    আপডেট ইনস্টল করতে) — PC বন্ধ হচ্ছে না। এটাকে `shutdown` বলা
-         *    যায় না: বললে প্রতিটা এজেন্ট-আপডেট একটা ভুয়া "PC বন্ধ" রেকর্ড
-         *    রেখে যেত।
+         * Careful: CLOSEAPP alone means Restart Manager is closing us (usually to install an
+         * update), not that the PC is shutting down. It cannot be called `shutdown`: every agent
+         * update would otherwise leave a fake "PC shut down" record.
          *
-         * ⚠️⚠️ **কিন্তু আগে এখানে `null` ফিরত, আর সেটাই ছিল একটা নীরব বাগ।**
-         *    `null` মানে কোনো closing ইভেন্টই যায় না, অথচ `agent_stop` ঠিকই
-         *    যায় — আর সার্ভারের G02 একটা সঙ্গীহীন `agent_stop`-কে
-         *    **হস্তক্ষেপ** ধরে (`alerts.rules.ts` → `isTamperStop`)। ফলে
-         *    প্রতিটা আপডেট একটা মিথ্যা `agent_killed` অ্যালার্ট তুলত।
-         *    ⭐ হাতে একটা-দুটো PC আপডেট করলে চোখে পড়ত না; রোলআউট নিজে
-         *    থেকে এগোতে শুরু করলে একসাথে ১২টা — আর তার পরেই কেউ আর
-         *    অ্যালার্ট পড়ত না।
+         * Careful: **but this used to return `null`, and that was a silent bug.** `null` means no
+         * closing event goes out, yet `agent_stop` does, and the server's G02 treats an
+         * `agent_stop` with no companion as **interference** (`alerts.rules.ts`, `isTamperStop`).
+         * So every update raised a false `agent_killed` alert. Updating one or two PCs by hand went
+         * unnoticed; once the rollout started on its own, 12 at a time, and after that nobody read
+         * alerts any more.
          *
-         * ⭐ এখন নিজের একটা নাম আছে (`agent_update`) — সত্যি কথাটাই বলা
-         *    হয়, আর সার্ভার সেটাকে `agent_stop`-এর বৈধ সঙ্গী ধরে।
+         * It now has a name of its own (`agent_update`): it tells the truth, and the server treats
+         * it as a valid companion of `agent_stop`.
          */
         if ((flags & Win32.ENDSESSION_CLOSEAPP) != 0)
             return AgentEventTypes.AgentUpdate;
 
-        // বাকি সব (0, ENDSESSION_CRITICAL) = PC বন্ধ বা রিস্টার্ট হচ্ছে
+        // everything else (0, ENDSESSION_CRITICAL) = the PC is shutting down or restarting
         return AgentEventTypes.Shutdown;
     }
 
