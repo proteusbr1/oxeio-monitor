@@ -83,8 +83,35 @@ internal sealed partial class AgentHost
             ? $"/i \"{msi}\" /qb"
             : $"/i \"{msi}\" /qb UPDATEKEY=\"{UpdateSignature.OneLine(updatePublicKey)}\"";
 
+    /// <summary>Released to run an update check before the 6-hourly round is due</summary>
+    private readonly SemaphoreSlim _updateCheckNow = new(0, 1);
+
+    /// <summary>The last time a heartbeat's <c>update_agent</c> woke the check</summary>
+    private DateTimeOffset _lastUpdateWake = DateTimeOffset.MinValue;
+
     /// <summary>
-    /// H04: check for a new version once every 6 hours.
+    /// At most one early check per <see cref="UpdateWakeEvery"/>: the server repeats
+    /// <c>update_agent</c> on every heartbeat (30 s) until the PC runs the new build, and while
+    /// the staff member has not yet clicked "Install update" a check every 30 s would be noise.
+    /// </summary>
+    internal static readonly TimeSpan UpdateWakeEvery = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// The heartbeat brought <c>update_agent</c>: run the update check now. Before this, the
+    /// command was parsed and then ignored, so a published build reached a PC only at its next
+    /// 6-hourly check — up to six hours after publishing.
+    /// </summary>
+    private void WakeUpdateCheck()
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (now - _lastUpdateWake < UpdateWakeEvery) return;
+        _lastUpdateWake = now;
+        if (_updateCheckNow.CurrentCount == 0) _updateCheckNow.Release();
+    }
+
+    /// <summary>
+    /// H04: check for a new version once every 6 hours — or sooner when the server says one is
+    /// waiting (<see cref="WakeUpdateCheck"/>).
     ///
     /// Careful: if this loop fails, updates do not arrive, but neither time counting nor sync
     /// stops. No failure here may reach tracking.
@@ -106,7 +133,8 @@ internal sealed partial class AgentHost
                 PublishStatus();
             }
 
-            try { await Task.Delay(UpdateStager.CheckEvery, ct); }
+            // whichever comes first: the 6-hourly round or the server's "an update is waiting"
+            try { await _updateCheckNow.WaitAsync(UpdateStager.CheckEvery, ct); }
             catch (OperationCanceledException) { return; }
         }
     }

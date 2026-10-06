@@ -163,6 +163,16 @@ export class AgentVersionsService {
       );
     }
 
+    // build.ps1 names every MSI after its version (oXeioAgent-0.5.0.msi). A number typed on
+    // screen that differs from the file's would loop for ever: the PC installs the file, reports
+    // the file's version, and is offered the typed one again.
+    const named = versionInFileName(dto.msiPath);
+    if (named !== null && named !== dto.version) {
+      throw new BadRequestException(
+        `The file is version ${named} (by its name) but the version given is ${dto.version}. Use ${named}, or the MSI built for ${dto.version}.`,
+      );
+    }
+
     const file = await this.statMsi(dto.msiPath);
     if (file === null) {
       throw new BadRequestException(
@@ -465,4 +475,10 @@ export class AgentVersionsService {
       stream.on('end', () => ok(hash.digest('hex')));
     });
   }
+}
+
+/** `updates/oXeioAgent-0.5.0.msi` → `0.5.0`; `null` when the name carries no version */
+export function versionInFileName(msiPath: string): string | null {
+  const name = msiPath.split(/[\\/]/).pop() ?? '';
+  return /(?<![\d.])(\d+\.\d+\.\d+)(?!\.?\d)/.exec(name)?.[1] ?? null;
 }

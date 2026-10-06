@@ -101,8 +101,12 @@
       0.5.0 (fork, 6 Oct 2026): daylight-saving time zones (the server's table of
       offset changes, `zoneTransitions`) and work policies with no hours target
       (the tray shows hours only instead of hanging on "Loading…").
+
+      0.5.1 (fork, 6 Oct 2026): a published update reaches the PC within about a minute
+      (the heartbeat's `update_agent` now wakes the update check; before, it was parsed and
+      ignored, so a build arrived only at the next 6-hourly check).
     -->
-    <Version>0.5.0</Version>
+    <Version>0.5.1</Version>
 
     <!--
       AssemblyVersion keeps only three numbers (no SemVer pre-release part): the Windows

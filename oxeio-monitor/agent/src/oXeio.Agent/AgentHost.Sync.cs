@@ -209,6 +209,10 @@ internal sealed partial class AgentHost
                             await ReloadConfigAsync(ct);
                         }
 
+                        // The server offers a newer build: check now instead of at the next
+                        // 6-hourly round (it sends this on every heartbeat while the offer stands)
+                        if (body.Commands.Contains(AgentCommand.UpdateAgent)) WakeUpdateCheck();
+
                         PublishStatus();
                     }
                     else if (result.Outcome == SyncOutcome.Revoked)

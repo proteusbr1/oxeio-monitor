@@ -127,6 +127,7 @@
   "The deposit rule has not been set up — run the database migrations.": "La regla del depósito de garantía no está configurada — ejecuta las migraciones de la base de datos.",
   "The email \"{{email}}\" is already registered to someone else": "El correo electrónico \"{{email}}\" ya está registrado a nombre de otra persona",
   "The end date cannot be before the start date": "La fecha de fin no puede ser anterior a la fecha de inicio",
+  "The file is version {{named}} (by its name) but the version given is {{version}}. Use {{named}}, or the MSI built for {{version}}.": "Por su nombre, el archivo es la versión {{named}}, pero la versión indicada es {{version}}. Usa {{named}}, o el MSI generado para la {{version}}.",
   "The instalment must be more than zero — to skip the early months use the start month instead": "La cuota debe ser mayor que cero — para saltar los primeros meses, usa el mes de inicio",
   "The key is not a public key (PEM, or its base64 body on one line)": "La clave no es una clave pública (PEM, o su cuerpo en base64 en una sola línea)",
   "The key works, but it is restricted to the bucket “{{bound}}”, not “{{bucket}}”.": "La clave funciona, pero está restringida al bucket “{{bound}}”, no a “{{bucket}}”.",

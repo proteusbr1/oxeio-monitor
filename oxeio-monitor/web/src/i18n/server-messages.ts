@@ -41,6 +41,7 @@ export const SERVER_MESSAGE_PATTERNS: readonly string[] = [
   'The deposit of {{code}} is already settled ({{outcome}}).',
   'Version {{version}} is already published. Publish a new version number instead — agents compare versions, so re-publishing the same number would never reach anyone.',
   'No MSI at "{{path}}" (looked under the storage root). Copy the built file there first.',
+  'The file is version {{named}} (by its name) but the version given is {{version}}. Use {{named}}, or the MSI built for {{version}}.',
   '{{version}} is not newer than the current {{latest}}, so no agent would ever be offered it.',
   '{{path}}.sig is not a signature — make it with: openssl dgst -sha256 -sign <key.pem> -out <msi>.sig <msi>',
   '{{code}} is inactive — activate the staff member first',

@@ -457,3 +457,27 @@ describe('G168: a pilot is set automatically at publish time', () => {
     }
   });
 });
+
+describe('the version typed must match the file', () => {
+  it('reads the version from the MSI name', async () => {
+    const { versionInFileName } = await import('../src/devices/agent-versions.service');
+    expect(versionInFileName('updates/oXeioAgent-0.5.0.msi')).toBe('0.5.0');
+    expect(versionInFileName('updates\\oXeioAgent-0.5.1-nopreview.msi')).toBe('0.5.1');
+    expect(versionInFileName('updates/agent.msi')).toBeNull();
+    expect(versionInFileName('updates/oXeioAgent-10.20.300.msi')).toBe('10.20.300');
+  });
+});
+
+describe('POST /agent-versions: a typo in the version is caught', () => {
+  it('refuses 0.5.5 for oXeioAgent-0.5.0.msi, accepts 0.5.0', async () => {
+    const dir = `updates/${randomUUID()}`;
+    const rel = `${dir}/oXeioAgent-0.5.0.msi`;
+    await putMsi(rel);
+
+    const wrong = await publish({ version: '0.5.5', msiPath: rel });
+    expect(wrong.status).toBe(400);
+    expect(String(wrong.body.message)).toMatch(/version 0\.5\.0 .* given is 0\.5\.5/);
+
+    expect((await publish({ version: '0.5.0', msiPath: rel })).status).toBe(201);
+  });
+});
