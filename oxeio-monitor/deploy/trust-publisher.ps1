@@ -1,50 +1,50 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-    oXeio-র কোড-সাইনিং সার্টটা এই PC-তে বিশ্বাসযোগ্য করে তোলে (ADR-014)।
+    Makes oXeio's code-signing certificate trusted on this PC (ADR-014).
 
 .DESCRIPTION
     ┌──────────────────────────────────────────────────────────────────┐
-    │ এটা প্রতিটা স্টাফের PC-তে একবার চালাতে হয়, অ্যাডমিন হিসেবে।       │
-    │ আগে `-WhatIf` দিয়ে চালিয়ে দেখুন — তখন কিচ্ছু বদলায় না।           │
+    │ Run this once on every staff PC, as administrator.               │
+    │ Run it with `-WhatIf` first - then nothing is changed.           │
     └──────────────────────────────────────────────────────────────────┘
 
-    ⚠️⚠️ **সার্টটা দুই জায়গায় বসাতে হয়, এক জায়গায় নয়** — আর এটাই এই
-    স্ক্রিপ্টের একমাত্র জটিল সিদ্ধান্ত:
+    Careful: **the certificate has to go in two places, not one** - and this is
+    the script's only tricky decision:
 
-      Trusted Root          "এই সার্টটা আসল"     — নইলে চেইন ভাঙা থাকে
-      Trusted Publishers    "এর সই মানে ঠিক আছে" — নইলে ডায়ালগ আসে
+      Trusted Root          "this certificate is genuine"  - otherwise the chain is broken
+      Trusted Publishers    "its signature is fine"        - otherwise a dialog appears
 
-    ⭐ কেনা সার্টে প্রথমটা লাগে না, কারণ তার ইস্যুকারী (DigiCert ইত্যাদি)
-    Windows-এ আগে থেকেই বসানো। ⚠️ কিন্তু self-signed সার্ট **নিজেই নিজের
-    ইস্যুকারী** — Root-এ না বসালে Windows বলবে "signature is invalid" বা
-    "certificate not trusted", আর Trusted Publishers-এ থাকা সত্ত্বেও
-    ডায়ালগটা আসতেই থাকবে। শুধু Publishers-এ বসিয়ে "কাজ হলো না কেন"
-    খুঁজতে গিয়ে অনেক সময় নষ্ট হয়।
+    A purchased certificate does not need the first, because its issuer
+    (DigiCert etc.) is already installed in Windows. Careful: but a self-signed
+    certificate **is its own issuer** - if it is not placed in Root, Windows will
+    say "signature is invalid" or "certificate not trusted", and the dialog will
+    keep appearing even though it is in Trusted Publishers. Much time is wasted
+    putting it only in Publishers and hunting for "why it did not work".
 
-    ⚠️ **LocalMachine, CurrentUser নয়** — এজেন্ট বসে সব ইউজারের জন্য, আর
-    MSI চলে অ্যাডমিনের অ্যাকাউন্টে। CurrentUser-এ বসালে যিনি বসিয়েছেন
-    শুধু তাঁর অ্যাকাউন্টেই কাজ হতো।
+    Careful: **LocalMachine, not CurrentUser** - the agent is installed for all
+    users, and the MSI runs under the admin's account. Installed in CurrentUser,
+    it would work only in the account of whoever installed it.
 
-    ⚠️ এই স্ক্রিপ্ট এজেন্ট **ইনস্টল করে না**, MSI চালায় না। শুধু সার্ট
-    বসায়, আর কী বসাচ্ছে সেটা আগে দেখিয়ে নেয়।
+    Careful: this script does **not install** the agent and does not run the
+    MSI. It only installs the certificate, and shows first what it is installing.
 
 .PARAMETER CerPath
-    সার্ট ফাইল। না দিলে এই স্ক্রিপ্টের পাশে `certs\oxeio-code.cer`।
+    The certificate file. If omitted, `certs\oxeio-code.cer` next to this script.
 
 .PARAMETER Remove
-    উল্টো কাজ — দুই স্টোর থেকেই সার্টটা তুলে নেয় (এজেন্ট সরানোর দিন)।
+    The reverse - removes the certificate from both stores (on the day the agent is removed).
 
 .EXAMPLE
-    # আগে দেখে নেওয়া — কিছুই বদলায় না, অ্যাডমিনও লাগে না
+    # Look first - nothing changes, and no admin is needed either
     powershell -ExecutionPolicy Bypass -File deploy\trust-publisher.ps1 -WhatIf
 
 .EXAMPLE
-    # সত্যিই বসানো (অ্যাডমিন হিসেবে)
+    # Really install (as administrator)
     powershell -ExecutionPolicy Bypass -File deploy\trust-publisher.ps1
 
 .EXAMPLE
-    # এজেন্ট সরানোর দিন
+    # On the day the agent is removed
     powershell -ExecutionPolicy Bypass -File deploy\trust-publisher.ps1 -Remove
 #>
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
@@ -70,13 +70,13 @@ if (-not (Test-Path $CerPath)) {
 
 $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 $CerPath
 
-# ⚠️ দুটো স্টোরই লাগে — উপরের ডকে কেন লেখা আছে
+# Careful: both stores are needed - the doc above says why
 $stores = @(
     @{ Name = 'Root';             Label = 'Trusted Root  ("সার্টটা আসল")' },
     @{ Name = 'TrustedPublisher'; Label = 'Trusted Publishers ("সই মানে ঠিক আছে")' }
 )
 
-# ── ১· কী করতে যাচ্ছি — সবসময় ছাপা হয়, -WhatIf-এও ──────────────────────
+# ── 1. What we are about to do - always printed, with -WhatIf too ───────
 
 Write-Host ''
 Write-Host '── সার্টিফিকেট ──────────────────────────────' -ForegroundColor Cyan
@@ -103,8 +103,8 @@ foreach ($s in $stores) {
 }
 Write-Host ''
 
-# ⚠️ -WhatIf-এ অ্যাডমিন চাওয়া হয় না, ইচ্ছাকৃতভাবে (defender-exclusions.ps1-এর
-#    একই যুক্তি): "আগে দেখে নিন" বলার পর দেখতেই অ্যাডমিন লাগলে কেউ দেখত না।
+# Careful: -WhatIf does not ask for admin, deliberately (same reasoning as in
+#    defender-exclusions.ps1): after saying "look first", if looking needed admin, nobody would look.
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
     ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
@@ -117,7 +117,7 @@ PowerShell-টা "Run as administrator" দিয়ে খুলে আবা�
 "@
 }
 
-# ── ২· কাজ ──────────────────────────────────────────────────────────────
+# ── 2. Do it ────────────────────────────────────────────────────────────
 
 Write-Host '── কাজ চলছে ─────────────────────────────────' -ForegroundColor Cyan
 
@@ -138,17 +138,17 @@ foreach ($s in $stores) {
         continue
     }
 
-    # ⭐ বারবার চালানো নিরাপদ — আগে থেকে থাকলে কিছুই করা হয় না। রোলআউটে
-    #    একই PC-তে দুবার চালিয়ে ফেলা খুব সাধারণ ঘটনা।
+    # Safe to run repeatedly - if it is already there, nothing is done. Running
+    #    it twice on the same PC during a rollout is very common.
     if ($found) {
         Write-Host "   $($s.Name)  — আগে থেকেই আছে"
         continue
     }
 
     if ($PSCmdlet.ShouldProcess($s.Name, 'সার্ট বসানো')) {
-        # ⚠️ Import-Certificate ব্যবহার করা হয়নি — ওটা PKI মডিউলের, আর
-        #    কিছু Windows সংস্করণে ওই মডিউল থাকে না। X509Store .NET-এরই
-        #    অংশ, তাই সব মেশিনে চলে।
+        # Careful: Import-Certificate is not used - it belongs to the PKI module,
+        #    and some Windows versions lack that module. X509Store is part of .NET
+        #    itself, so it works on every machine.
         $store = New-Object System.Security.Cryptography.X509Certificates.X509Store(
             $s.Name, 'LocalMachine')
         try {
@@ -167,7 +167,7 @@ if ($WhatIfPreference) {
     return
 }
 
-# ── ৩· যাচাই ────────────────────────────────────────────────────────────
+# ── 3. Verification ─────────────────────────────────────────────────────
 
 Write-Host ''
 Write-Host '── যাচাই ────────────────────────────────────' -ForegroundColor Cyan

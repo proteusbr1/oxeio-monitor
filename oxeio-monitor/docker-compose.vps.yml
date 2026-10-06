@@ -1,69 +1,69 @@
-# ⭐⭐ VPS-এর জন্য override — বেস `docker-compose.yml`-এ হাত দিতে হয় না।
+# Override for the VPS - the base `docker-compose.yml` does not need to be touched.
 #
-#   চালানো:
+#   Run:
 #       docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d
 #
-#   ⚠️ প্রতিবার **দুটো `-f`-ই** দিতে হবে। একটা ভুলে গেলে compose বেস
-#      ফাইলটাই ধরবে, অর্থাৎ Caddy আবার `:8080`-এ ফিরে যাবে আর ৪৪৩ বন্ধ
-#      হয়ে যাবে — ⚠️ ১৫টা এজেন্ট তখন চুপচাপ কিউ জমাতে থাকবে।
-#      ⭐ এড়াতে `.env`-এ লিখে রাখুন:
+#   Careful: **both `-f` flags** are needed every time. If one is forgotten,
+#      compose uses the base file alone, so Caddy goes back to `:8080` and 443
+#      is closed - and the 15 agents silently keep queuing data.
+#      To avoid this, put this in `.env`:
 #          COMPOSE_FILE=docker-compose.yml:docker-compose.vps.yml
-#      তাহলে খালি `docker compose up -d` দিলেই দুটোই ধরা হয়।
+#      Then a plain `docker compose up -d` picks up both.
 #
-# ⚠️ এই ফাইলটা **কোনো গোপন মান রাখে না** — সব `.env` থেকে আসে।
+# Careful: this file **holds no secrets** - everything comes from `.env`.
 
 services:
   web:
     environment:
-      # ⭐ এই একটা মান বসানোর ফলেই Caddy আর `:8080`-এ নয়, ডোমেইনে শোনে,
-      #    আর Let's Encrypt থেকে সার্ট নিয়ে নিজেই নবায়ন করে।
+      # This one value makes Caddy listen on the domain instead of `:8080`,
+      # and obtain and renew the certificate from Let's Encrypt by itself.
       #
-      # ⚠️ `.env`-এ `PUBLIC_HOST=monitor.oxeio.com` বসান। এখানে হার্ডকোড
-      #    করা হয়নি ইচ্ছাকৃতভাবে — ডোমেইন বদলালে একটা জায়গায় বদলাবে।
+      # Careful: set `PUBLIC_HOST=monitor.oxeio.com` in `.env`. It is deliberately
+      #    not hardcoded here, so a domain change touches only one place.
       CADDY_SITE: ${PUBLIC_HOST:?PUBLIC_HOST সেট নেই — .env-এ ডোমেইনটা বসান}
       TZ: Asia/Dhaka
 
-    # ⚠️⚠️ ৮০ **আর** ৪৪৩, দুটোই লাগে।
+    # Careful: both 80 **and** 443 are needed.
     #
-    #    ৪৪৩ আসল ট্রাফিকের জন্য, আর ৮০ Let's Encrypt-এর HTTP-01 যাচাইয়ের
-    #    জন্য — ওটা বন্ধ থাকলে সার্ট ইস্যুই হবে না, আর Caddy লগে বারবার
-    #    চেষ্টা করে ব্যর্থ হতে থাকবে। ⭐ Caddy ৮০-তে আসা বাকি সব ট্রাফিক
-    #    নিজেই ৪৪৩-এ পাঠায়, তাই আলাদা কিছু করতে হয় না।
+    #    443 is for the real traffic, and 80 is for Let's Encrypt's HTTP-01
+    #    validation - with it closed no certificate is issued, and Caddy keeps
+    #    retrying and failing in the log. Caddy redirects all other traffic
+    #    arriving on 80 to 443 itself, so nothing else is needed.
     #
-    # ⚠️⚠️ `!override` — এটা **বাধ্যতামূলক**, বাদ দিলে নীরবে ভুল হয়।
-    #    compose ডিফল্টে পোর্টের তালিকা **যোগ** করে, বদলায় না। তাই
-    #    `!override` ছাড়া বেসের `8080:8080`-ও থেকে যেত, অথচ Caddy তখন
-    #    ডোমেইন-মোডে ৮০/৪৪৩ ধরে — ৮০৮০-এ ভেতরে কিছুই শোনে না। ফল:
-    #    VPS-এ একটা মৃত পোর্ট বাইরের জন্য খোলা, আর `docker compose ps`
-    #    দেখে মনে হতো সব ঠিক আছে।
+    # Careful: `!override` is **mandatory**; omitting it fails silently.
+    #    By default compose **appends** to a ports list instead of replacing it.
+    #    Without `!override` the base `8080:8080` would remain, while in domain
+    #    mode Caddy listens on 80/443 - nothing listens on 8080 inside. Result:
+    #    a dead port open to the outside on the VPS, and `docker compose ps`
+    #    would look fine.
     ports: !override
       - '80:80'
       - '443:443'
 
-    # ⚠️⚠️ **ঠিক উপরের ফাঁদটাই, এক স্তর গভীরে — আর প্রথমবার বাদ পড়েছিল।**
+    # Careful: **the same trap as above, one level deeper - and it was missed at first.**
     #
-    #    বেসের healthcheck ধাক্কা দেয় `127.0.0.1:8080`-এ, কিন্তু ডোমেইন-মোডে
-    #    Caddy সেখানে শোনেই না (উপরে `netstat`: `:::80` ও `:::443`)। ফলে
-    #    কনটেইনার **শুরু থেকে চিরকাল `unhealthy`** — ১৩ আগস্ট মেপে দেখা গেল
-    #    `FailingStreak: 1077`, অথচ সাইট বাইরে থেকে দিব্যি ২০০ দিচ্ছিল।
+    #    The base healthcheck hits `127.0.0.1:8080`, but in domain mode Caddy
+    #    does not listen there (see `netstat` above: `:::80` and `:::443`). So the
+    #    container was **`unhealthy` from the start, forever** - measured
+    #    `FailingStreak: 1077` while the site was serving 200 from outside.
     #
-    # ⚠️ ক্ষতিটা "একটা লাল লেখা" নয়। `docker compose ps` তখন স্বাস্থ্যের
-    #    সংকেত হিসেবে **অকেজো** হয়ে যায়, আর সবচেয়ে খারাপ: `depends_on`
-    #    দিয়ে কেউ কোনোদিন `service_healthy` শর্ত বসালে সেটা কখনোই পূরণ হতো না।
+    # Careful: the harm is not "a red label". `docker compose ps` becomes
+    #    **useless** as a health signal, and worst of all, a `service_healthy`
+    #    condition added to `depends_on` later could never be met.
     #
-    # ⭐ চিরকাল-লাল একটা অ্যালার্ম মানুষকে অ্যালার্ম উপেক্ষা করতে শেখায় —
-    #    সেটাই আসল বিপদ, কারণ পরের বার লালটা সত্যি হলেও কেউ তাকাবে না।
+    # An alarm that is always red teaches people to ignore alarms - that is
+    #    the real danger, because next time the red is real nobody will look.
     #
-    # ⚠️ `!override` **বাধ্যতামূলক** — `test` একটা তালিকা, আর compose তালিকা
-    #    **যোগ** করে। ছাড়া দিলে কমান্ডটা হতো
-    #    `wget … :8080/ CMD wget … :2019/` — অর্থহীন, আর তবু নীরবে ব্যর্থ।
+    # Careful: `!override` is **mandatory** - `test` is a list, and compose
+    #    **appends** to lists. Without it the command would be
+    #    `wget ... :8080/ CMD wget ... :2019/` - meaningless, and still failing silently.
     #
-    # ⭐ Caddy-র admin API (`127.0.0.1:2019`, ডিফল্টেই চালু) বেছে নেওয়া হয়েছে:
-    #    সে প্রমাণ করে প্রসেস জীবিত **ও কনফিগ লোড হয়েছে**, আর তার জন্য
-    #    বাইরের DNS বা TLS কিছুই লাগে না।
-    #    ⚠️ পোর্ট ৮০-তে ধাক্কা দেওয়া চলত না: ডোমেইন-মোডে সে ৩০১ দিয়ে
-    #    HTTPS-এ পাঠায়, আর ইমেজের **BusyBox** wget-এ `--max-redirect` নেই,
-    #    তাই সে ওটাকে ব্যর্থতা ধরে (মেপে দেখা: exit 1)।
+    # Chosen: Caddy's admin API (`127.0.0.1:2019`, enabled by default).
+    #    It proves the process is alive **and the config is loaded**, and needs
+    #    neither external DNS nor TLS.
+    #    Hitting port 80 would not work: in domain mode it answers 301 and
+    #    redirects to HTTPS, and the image's **BusyBox** wget has no
+    #    `--max-redirect`, so it counts that as a failure (measured: exit 1).
     healthcheck: !override
       test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:2019/config/']
       interval: 30s
@@ -71,18 +71,19 @@ services:
       retries: 5
 
     volumes:
-      # ⚠️⚠️ **এটা বাদ দেওয়া যাবে না।** Caddy সার্ট ও অ্যাকাউন্টের কী
-      #    রাখে `/data`-তে। volume না দিলে প্রতিবার কনটেইনার নতুন করে
-      #    বানালে সার্ট হারিয়ে যায় আর Let's Encrypt-এর কাছে **আবার**
-      #    চাওয়া হয় — আর ওদের হার-সীমা সপ্তাহে ৫টা। কয়েকবার রিস্টার্টেই
-      #    সীমা পেরিয়ে গিয়ে এক সপ্তাহ সার্টহীন বসে থাকতে হতো।
+      # Careful: **do not remove this.** Caddy keeps certificates and account
+      #    keys in `/data`. Without a volume, every container rebuild loses the
+      #    certificates and asks Let's Encrypt **again** - and their rate limit
+      #    is 5 per week. A few restarts would exceed it and leave the site
+      #    without a certificate for a week.
       - caddy-data:/data
       - caddy-config:/config
 
   api:
     environment:
-      # ⚠️ ড্যাশবোর্ড ও API একই origin (Caddy), তাই CORS আসলে লাগে না।
-      #    তবু বসানো — অন্য কোনো ক্লায়েন্ট যোগ হলে এখান থেকেই শুরু।
+      # Careful: the dashboard and API share one origin (Caddy), so CORS is not
+      #    really needed. It is set anyway - the starting point if another
+      #    client is added.
       CORS_ORIGIN: https://${PUBLIC_HOST}
 
 volumes:

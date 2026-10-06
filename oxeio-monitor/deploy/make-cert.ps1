@@ -1,56 +1,58 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-    oXeio API-র জন্য self-signed TLS সার্টিফিকেট বানায় (I01)।
+    Creates a self-signed TLS certificate for the oXeio API.
 
 .DESCRIPTION
-    অফিসের LAN-এ কোনো পাবলিক ডোমেইন নেই, তাই Let's Encrypt চলে না। এই
-    স্ক্রিপ্ট একটা self-signed সার্টিফিকেট আর তার প্রাইভেট কী বানায় —
-    Node সরাসরি যেটা পড়তে পারে (TLS_CERT / TLS_KEY)।
+    The office LAN has no public domain, so Let's Encrypt cannot be used. This
+    script creates a self-signed certificate and its private key - in a form
+    Node can read directly (TLS_CERT / TLS_KEY).
 
-    বেরোয় চারটে ফাইল:
+    Four files are produced:
 
-      oxeio-cert.pem   সার্টিফিকেট (PEM)      → TLS_CERT
-      oxeio-key.pem    প্রাইভেট কী (PKCS#8)   → TLS_KEY   ⚠️ গোপন
-      oxeio.pfx        দুটো একসাথে            → Windows-এ ইমপোর্ট করার জন্য,
-                                                আর -ReuseKey-র জন্য ⚠️ গোপন
-      oxeio-pin.txt    SPKI পিন + তথ্য        → এজেন্টে বসানোর মান
+      oxeio-cert.pem   certificate (PEM)        -> TLS_CERT
+      oxeio-key.pem    private key (PKCS#8)     -> TLS_KEY   SECRET
+      oxeio.pfx        both together            -> for importing into Windows,
+                                                   and for -ReuseKey   SECRET
+      oxeio-pin.txt    SPKI pin + details       -> the value to put on the agent
 
-    ⚠️ এই স্ক্রিপ্ট **কিছু ইনস্টল করে না** — সার্টিফিকেট স্টোরে ঢোকায় না,
-       সার্ভার রিস্টার্ট করে না, কোনো সেটিং বদলায় না। শুধু ফাইল লেখে।
-       বাকি ধাপগুলো README.md-তে, হাতে করার জন্য।
+    Note: this script **installs nothing** - it does not put anything in the
+       certificate store, does not restart the server, does not change any
+       setting. It only writes files. The remaining steps are in README.md, to
+       be done by hand.
 
 .PARAMETER Hostname
-    সার্টিফিকেটের প্রধান নাম (CN ও প্রথম SAN)। না দিলে এই মেশিনের নাম।
+    The certificate's main name (CN and first SAN). Defaults to this machine's name.
 
 .PARAMETER IpAddress
-    SAN-এ যাওয়া IP। না দিলে মেশিনের সব LAN IPv4 নিজে খুঁজে নেয়।
+    IP addresses to go into the SAN. If omitted, it finds all of the machine's LAN IPv4 addresses itself.
 
 .PARAMETER AlsoDns
-    বাড়তি DNS নাম (alias, FQDN)।
+    Extra DNS names (aliases, FQDN).
 
 .PARAMETER Days
-    মেয়াদ। ডিফল্ট ৮২৫ দিন — কারণ README § ৭ দেখুন।
+    Validity. Default 825 days - for the reason see README § 7.
 
 .PARAMETER ReuseKey
-    আগের oxeio.pfx থেকে **একই প্রাইভেট কী** নিয়ে নতুন সার্টিফিকেট বানায়।
-    ⭐ নবায়নের সময় এটাই ব্যবহার করতে হবে — কী এক থাকলে SPKI পিনও এক
-    থাকে, অর্থাৎ ১৫টা PC-র একটাতেও হাত দিতে হয় না।
+    Builds the new certificate from the **same private key** as the previous
+    oxeio.pfx.
+    Use this for renewals - with the same key the SPKI pin stays the same too,
+    so none of the 15 PCs needs touching.
 
 .PARAMETER Force
-    বিদ্যমান ফাইল ঢেকে দেওয়ার অনুমতি। ⚠️ নতুন কী মানে নতুন পিন।
+    Permission to overwrite existing files. Careful: a new key means a new pin.
 
 .EXAMPLE
-    # প্রথমবার — নাম আর IP নিজে খুঁজে নেবে
+    # First time - it finds the name and IP itself
     powershell -ExecutionPolicy Bypass -File deploy\make-cert.ps1
 
 .EXAMPLE
-    # স্পষ্ট করে বলে দেওয়া (সুপারিশ করা হয়)
+    # Stated explicitly (recommended)
     powershell -ExecutionPolicy Bypass -File deploy\make-cert.ps1 `
         -Hostname oxeio.office.local -IpAddress 192.168.0.10
 
 .EXAMPLE
-    # নবায়ন — এজেন্টে কিছু বদলাতে হবে না
+    # Renewal - nothing has to change on the agents
     powershell -ExecutionPolicy Bypass -File deploy\make-cert.ps1 -ReuseKey
 #>
 [CmdletBinding()]
@@ -68,20 +70,21 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # ══════════════════════════════════════════════════════════════════════════
-#  DER এনকোডার
+#  DER encoder
 #
-#  ⚠️ হাতে লিখতে হচ্ছে, কারণ Windows PowerShell 5.1 চলে .NET Framework-এ,
-#     আর সেখানে `RSA.ExportPkcs8PrivateKey()` **নেই** (ওটা .NET Core 3.0+)।
-#     এই মেশিনে pwsh 7 বসানো নেই, আর শুধু সার্ট বানানোর জন্য মালিককে
-#     PowerShell 7 বসাতে বলা মানে রোলআউটের আগেই একটা বাড়তি ধাপ।
+#  Careful: it has to be written by hand, because Windows PowerShell 5.1 runs
+#     on .NET Framework, which **lacks** `RSA.ExportPkcs8PrivateKey()` (that is
+#     .NET Core 3.0+). This machine does not have pwsh 7, and asking the owner
+#     to install PowerShell 7 just to make a certificate would be an extra step
+#     before rollout.
 #
-#  ⭐ যতটা সম্ভব কম নিজে লেখা হয়েছে: **পাবলিক** কী-র কঠিন অংশটা .NET-এর
-#     নিজের এনকোডার থেকে নেওয়া হয় ($cert.PublicKey.EncodedKeyValue), তাই
-#     এখানে শুধু মোড়কটুকু লিখতে হয়। প্রাইভেট কী-তে উপায় নেই — ৯টা
-#     INTEGER নিজে এনকোড করতে হয়।
+#  As little as possible is written by hand: the hard part of the **public**
+#     key is taken from .NET's own encoder ($cert.PublicKey.EncodedKeyValue),
+#     so only the wrapper has to be written here. For the private key there is
+#     no way around it - the 9 INTEGERs must be encoded by hand.
 # ══════════════════════════════════════════════════════════════════════════
 class Der {
-    # DER-এর দৈর্ঘ্য: ১২৮-এর কম হলে এক বাইট, নইলে "কয় বাইট" + বাইটগুলো।
+    # DER length: one byte if under 128, otherwise "how many bytes" + the bytes.
     static [byte[]] Length([int]$n) {
         if ($n -lt 0x80) { return [byte[]]@([byte]$n) }
         $tmp = New-Object 'System.Collections.Generic.List[byte]'
@@ -101,10 +104,10 @@ class Der {
         return $out.ToArray()
     }
 
-    # ⚠️ DER-এর INTEGER **সাইনড**। RSA-র সংখ্যাগুলো সবসময় ধনাত্মক, কিন্তু
-    #    সবচেয়ে বাঁয়ের বিট ১ হলে DER সেটাকে ঋণাত্মক ধরে নেয় — তাই সামনে
-    #    একটা 0x00 বসাতে হয়। এটা বাদ পড়লে কী-টা দেখতে ঠিকই লাগত, অথচ
-    #    OpenSSL/Node "bad decrypt"-জাতীয় দুর্বোধ্য ভুল দিত।
+    # Careful: a DER INTEGER is **signed**. RSA numbers are always positive, but
+    #    if the leftmost bit is 1, DER reads it as negative - so a leading
+    #    0x00 must be added. Without it the key would look fine, yet
+    #    OpenSSL/Node would give a cryptic error like "bad decrypt".
     static [byte[]] Integer([byte[]]$unsigned) {
         $i = 0
         while ($i -lt ($unsigned.Length - 1) -and $unsigned[$i] -eq 0) { $i++ }
@@ -114,15 +117,16 @@ class Der {
         return [Der]::Tlv(0x02, $body.ToArray())
     }
 
-    # ⚠️ নাম `Seq`, `Sequence` নয়। `sequence` Windows PowerShell 5.1-এর একটা
-    #    সংরক্ষিত workflow কীওয়ার্ড, আর ক্লাসের মেথডের নাম হিসেবে দিলে পুরো
-    #    ফাইলটাই পার্স হয় না — ভুল বার্তা আসে "Missing statement body after
-    #    keyword 'Sequence'", যেটা পড়ে আসল কারণ বোঝার উপায় নেই।
+    # Careful: the name is `Seq`, not `Sequence`. `sequence` is a reserved
+    #    workflow keyword in Windows PowerShell 5.1, and as a class method name
+    #    the whole file fails to parse - with the misleading message "Missing
+    #    statement body after keyword 'Sequence'", from which the real cause
+    #    cannot be guessed.
     static [byte[]] Seq([byte[]]$content) { return [Der]::Tlv(0x30, $content) }
 
     static [byte[]] OctetString([byte[]]$content) { return [Der]::Tlv(0x04, $content) }
 
-    # BIT STRING-এর প্রথম বাইট = "শেষে কয়টা বিট অব্যবহৃত"। কী-র ক্ষেত্রে সবসময় ০।
+    # BIT STRING's first byte = "how many bits are unused at the end". For a key it is always 0.
     static [byte[]] BitString([byte[]]$content) {
         $body = New-Object 'System.Collections.Generic.List[byte]'
         $body.Add([byte]0)
@@ -137,8 +141,8 @@ class Der {
     }
 }
 
-# AlgorithmIdentifier { rsaEncryption (1.2.840.113549.1.1.1), NULL } — ধ্রুবক।
-# RSA-র জন্য এটা কখনো বদলায় না, তাই এনকোড না করে সরাসরি বাইটেই লেখা।
+# AlgorithmIdentifier { rsaEncryption (1.2.840.113549.1.1.1), NULL } - a constant.
+# For RSA it never changes, so it is written directly as bytes instead of encoded.
 $RsaAlgId = [byte[]]@(
     0x30, 0x0D, 0x06, 0x09, 0x2A, 0x86, 0x48, 0x86,
     0xF7, 0x0D, 0x01, 0x01, 0x01, 0x05, 0x00
@@ -158,8 +162,8 @@ function ConvertTo-Pem {
     return $sb.ToString()
 }
 
-# RSAParameters → PKCS#8 (`BEGIN PRIVATE KEY`)।
-# PKCS#1-ও Node পড়তে পারত, কিন্তু PKCS#8-ই আজকের সব টুলের সাধারণ ভাষা।
+# RSAParameters -> PKCS#8 (`BEGIN PRIVATE KEY`).
+# Node could read PKCS#1 too, but PKCS#8 is the common language of all of today's tools.
 function ConvertTo-Pkcs8 {
     param([Parameter(Mandatory)][System.Security.Cryptography.RSAParameters]$P)
 
@@ -182,8 +186,8 @@ function ConvertTo-Pkcs8 {
     )))
 }
 
-# ⭐ SPKI = পিনের ভিত্তি। সার্টিফিকেটের নয়, **কী-র** পরিচয় — তাই কী এক
-#    রাখলে নবায়নের পরেও পিন এক থাকে।
+# SPKI = the basis of the pin. It identifies the **key**, not the certificate -
+#    so keeping the key the same keeps the pin the same even after renewal.
 function Get-SpkiBytes {
     param([Parameter(Mandatory)][System.Security.Cryptography.X509Certificates.X509Certificate2]$Cert)
 
@@ -209,13 +213,14 @@ function Get-Sha256Hex {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
-#  ১· কোন নাম, কোন IP
+#  1. Which names, which IPs
 # ══════════════════════════════════════════════════════════════════════════
 
-# ⚠️ `powershell -File` **অ্যারে বোঝে না** — `-IpAddress 10.0.0.1,10.0.0.2`
-#    পুরোটা একটাই স্ট্রিং হয়ে ঢোকে, আর তখন "বৈধ IP নয়" বলে থেমে যেত।
-#    README-তে `-File`-ই বলা আছে (সেটাই সবচেয়ে সহজ), তাই স্ক্রিপ্টই কমা
-#    ভেঙে নেয়। বিকল্প ছিল মালিককে `-Command` আর উদ্ধৃতির প্যাঁচ শেখানো।
+# Careful: `powershell -File` **does not understand arrays** - `-IpAddress
+#    10.0.0.1,10.0.0.2` arrives as a single string, and it would stop with "not
+#    a valid IP". The README says to use `-File` (the simplest), so the script
+#    splits the commas itself. The alternative was to teach the owner `-Command`
+#    and its quoting tangles.
 function Split-List {
     param([string[]]$Values)
     $out = @()
@@ -237,10 +242,10 @@ if (-not $Hostname) { $Hostname = $env:COMPUTERNAME.ToLowerInvariant() }
 if (-not $IpAddress -or $IpAddress.Count -eq 0) {
     $found = @()
     try {
-        # ⚠️ APIPA (169.254.x) আর loopback বাদ — ওগুলো SAN-এ থাকার মানে নেই।
-        #    ভার্চুয়াল অ্যাডাপ্টারের (Docker/WSL/Hyper-V) IP **বাদ দেওয়া হয় না**:
-        #    বাড়তি একটা SAN ক্ষতি করে না, কিন্তু আসলটা বাদ পড়লে ব্রাউজার
-        #    সংযোগই করতে পারবে না। তাই বেশি রাখা, কম নয়।
+        # Careful: APIPA (169.254.x) and loopback are excluded - no point having them in the SAN.
+        #    IPs of virtual adapters (Docker/WSL/Hyper-V) are **not excluded**:
+        #    an extra SAN does no harm, but if the real one were left out the
+        #    browser could not connect at all. So keep more, not fewer.
         $found = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
             Where-Object { $_.IPAddress -notmatch '^(127\.|169\.254\.)' } |
             Select-Object -ExpandProperty IPAddress -Unique)
@@ -257,15 +262,15 @@ if (-not $IpAddress -or $IpAddress.Count -eq 0) {
 $dnsNames = @($Hostname)
 foreach ($d in $AlsoDns) { if ($d -and $dnsNames -notcontains $d) { $dnsNames += $d } }
 
-# ⚠️ FQDN নিজে যোগ করা হয় — অনেক সময় ব্রাউজারে ছোট নাম আর এজেন্টে পুরো
-#    নাম ব্যবহার হয়, আর একটা বাদ পড়লে শুধু সেই একটাই ভাঙে।
+# Careful: the FQDN is added by us - often the browser uses the short name and
+#    the agent the full name, and if one is missing only that one breaks.
 try {
     $fqdn = [System.Net.Dns]::GetHostEntry($env:COMPUTERNAME).HostName
     if ($fqdn -and $dnsNames -notcontains $fqdn) { $dnsNames += $fqdn }
 }
 catch { Write-Verbose "FQDN পাওয়া গেল না — সমস্যা নেই" }
 
-# localhost — সার্ভারের মেশিন থেকে নিজেই smoke-test করার জন্য
+# localhost - for smoke-testing from the server machine itself
 if ($dnsNames -notcontains 'localhost') { $dnsNames += 'localhost' }
 $ipList = @($IpAddress) + @('127.0.0.1') | Select-Object -Unique
 
@@ -275,7 +280,7 @@ if ($ipList.Count -le 1) {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
-#  ২· ফাইলের জায়গা, আর ঢেকে দেওয়ার পাহারা
+#  2. Where the files go, and the guard against overwriting
 # ══════════════════════════════════════════════════════════════════════════
 
 if (-not $OutDir) { $OutDir = Join-Path $PSScriptRoot 'certs' }
@@ -293,10 +298,10 @@ if ($ReuseKey) {
     }
 }
 elseif ((Test-Path $keyPath) -and -not $Force) {
-    # ⚠️ এই পাহারাটা এই স্ক্রিপ্টের সবচেয়ে দরকারি অংশ।
-    #    নতুন কী = নতুন পিন = ১৫টা PC-র এজেন্ট সংযোগ করা বন্ধ করে দেবে,
-    #    আর সেটা টের পাওয়া যাবে অনেক পরে (এজেন্ট চুপচাপ কিউ জমাতে থাকে)।
-    #    নবায়ন করতে চাইলে -ReuseKey; সত্যিই কী বদলাতে চাইলে -Force।
+    # Careful: this guard is the most useful part of the script.
+    #    A new key = a new pin = the agents on 15 PCs stop connecting, and that
+    #    would be noticed much later (agents quietly keep queuing).
+    #    To renew use -ReuseKey; if you really want a new key, use -Force.
     throw @"
 $keyPath ইতিমধ্যেই আছে।
 
@@ -306,7 +311,7 @@ $keyPath ইতিমধ্যেই আছে।
 }
 
 # ══════════════════════════════════════════════════════════════════════════
-#  ৩· কী ও সার্টিফিকেট
+#  3. Key and certificate
 # ══════════════════════════════════════════════════════════════════════════
 
 Write-Host ''
@@ -316,37 +321,38 @@ $rsa = $null
 $oldPfx = $null
 try {
     if ($ReuseKey) {
-        # ⚠️ বাইটগুলো `[System.IO.File]::ReadAllBytes` দিয়ে পড়া হয়, আলাদা
-        #    `[byte[]]` চলকে। `Get-Content -Encoding Byte` ব্যবহার করা হয়নি
-        #    দু'টো কারণে: (১) ওই প্যারামিটার PowerShell 7-এ নেই (সেখানে
-        #    `-AsByteStream`), (২) ফলটা `object[]` হয়ে আসে, আর তখন
-        #    X509Certificate2-এর কনস্ট্রাক্টর `(string path, ...)` ওভারলোডটা
-        #    বেছে নিয়ে অ্যারেটাকে "System.Byte[]" স্ট্রিং বানিয়ে ফেলে —
-        #    ভুল বার্তা আসে "The system cannot find the file specified",
-        #    অর্থাৎ মনে হয় pfx ফাইলটাই নেই, অথচ সে দিব্যি জায়গামতো আছে।
+        # Careful: the bytes are read with `[System.IO.File]::ReadAllBytes`, into a
+        #    separate `[byte[]]` variable. `Get-Content -Encoding Byte` was not used
+        #    for two reasons: (1) that parameter does not exist in PowerShell 7
+        #    (there it is `-AsByteStream`), (2) the result comes back as `object[]`,
+        #    and then the X509Certificate2 constructor picks the `(string path, ...)`
+        #    overload and turns the array into the string "System.Byte[]" -
+        #    giving the message "The system cannot find the file specified", so
+        #    it seems the pfx file is missing, while it is right where it should be.
         [byte[]]$pfxBytes = [System.IO.File]::ReadAllBytes($pfxPath)
 
-        # ⚠️ Exportable, কিন্তু PersistKeySet **নয়** — নইলে কী-টা Windows-এর
-        #    CNG স্টোরে থেকে যেত আর কেউ কোনোদিন মুছত না।
+        # Careful: Exportable, but **not** PersistKeySet - otherwise the key would
+        #    stay in Windows' CNG store and nobody would ever delete it.
         $oldPfx = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(
             $pfxBytes,
             '',
             [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable)
 
-        # ⚠️⚠️ কী-টা এখানে **কপি করা হয় না**, সরাসরি ব্যবহার হয়।
+        # Careful: the key is **not copied** here, it is used directly.
         #
-        # স্বাভাবিক মনে হতো `$rsa.ImportParameters($old.ExportParameters($true))`
-        # দিয়ে একটা নিজের কপি বানানো। কিন্তু সেটা চলে না: PFX থেকে ফেরত আসা
-        # কী একটা CNG কী, আর `Exportable` ফ্ল্যাগ তাকে দেয় শুধু
-        # `AllowExport` (মানে **এনক্রিপ্টেড** রপ্তানি, যেমন আবার PFX-এ) —
-        # `AllowPlaintextExport` নয়। তাই `ExportParameters($true)` ছুড়ে বসে
-        # "The requested operation is not supported", আর বার্তাটা পড়ে মনে
-        # হয় pfx ফাইলটাই নষ্ট।
+        # The obvious approach would be to make our own copy with
+        # `$rsa.ImportParameters($old.ExportParameters($true))`. But that does
+        # not work: the key returned from a PFX is a CNG key, and the `Exportable`
+        # flag gives it only `AllowExport` (an **encrypted** export, e.g. into
+        # a PFX again) - not `AllowPlaintextExport`. So `ExportParameters($true)`
+        # throws "The requested operation is not supported", and reading the
+        # message you would think the pfx file itself is corrupt.
         #
-        # ⭐ দরকারও নেই। নতুন সার্টিফিকেট বানাতে কী-টাকে শুধু **সই করতে**
-        #    হয় — সেটা CNG কী দিব্যি পারে। আর প্রাইভেট কী-র PEM ফাইলটা
-        #    নবায়নে **ছোঁয়াই হয় না**: কী তো একই, ফাইলটাও একই থাকে।
-        #    ফলে নবায়নের সময় গোপন ফাইলটা নতুন করে লেখার ঝুঁকিই থাকে না।
+        # It is not needed anyway. To create a new certificate the key only has
+        #    to **sign** - a CNG key can do that fine. And the private key's PEM
+        #    file is **not touched at all** on renewal: the key is the same, so
+        #    the file stays the same. So on renewal there is no risk of
+        #    rewriting the secret file.
         $rsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($oldPfx)
         if (-not $rsa) { throw "$pfxPath-এ প্রাইভেট কী নেই।" }
 
@@ -378,7 +384,7 @@ try {
     }
     $req.CertificateExtensions.Add($san.Build())
 
-    # CA নয় — এই সার্ট দিয়ে অন্য সার্ট সই করা যাবে না
+    # Not a CA - other certificates cannot be signed with this one
     $req.CertificateExtensions.Add((New-Object System.Security.Cryptography.X509Certificates.X509BasicConstraintsExtension(
                 $false, $false, 0, $true)))
 
@@ -386,8 +392,8 @@ try {
         ([System.Security.Cryptography.X509Certificates.X509KeyUsageFlags]::DigitalSignature -bor
                     [System.Security.Cryptography.X509Certificates.X509KeyUsageFlags]::KeyEncipherment), $true)))
 
-    # EKU serverAuth. ⚠️ না থাকলে Windows/Chrome সার্টটাকে সার্ভারের জন্য
-    #    অবৈধ ধরে, আর ভুল বার্তাটা এতটাই দুর্বোধ্য যে কারণ খুঁজতে দিন যায়।
+    # EKU serverAuth. Careful: without it Windows/Chrome treat the certificate as
+    #    invalid for a server, and the error message is so cryptic that finding the cause takes days.
     $ekus = New-Object System.Security.Cryptography.OidCollection
     [void]$ekus.Add((New-Object System.Security.Cryptography.Oid('1.3.6.1.5.5.7.3.1', 'Server Authentication')))
     $req.CertificateExtensions.Add((New-Object System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension(
@@ -396,36 +402,36 @@ try {
     $req.CertificateExtensions.Add((New-Object System.Security.Cryptography.X509Certificates.X509SubjectKeyIdentifierExtension(
                 $req.PublicKey, $false)))
 
-    # ⚠️ ৫ মিনিট পিছিয়ে শুরু — অফিসের PC-র ঘড়ি সার্ভারের সাথে হুবহু মেলে না।
-    #    এটা না থাকলে সার্ট বানানোর পরের কয়েক মিনিট কিছু মেশিনে
-    #    "not yet valid" আসত, আর কেউ বুঝত না কেন।
+    # Careful: start 5 minutes in the past - an office PC's clock does not match
+    #    the server's exactly. Without this, for a few minutes after creation some
+    #    machines would say "not yet valid", and nobody would know why.
     $notBefore = [DateTimeOffset]::UtcNow.AddMinutes(-5)
     $notAfter = $notBefore.AddDays($Days)
 
     $cert = $req.CreateSelfSigned($notBefore, $notAfter)
 
     # ══════════════════════════════════════════════════════════════════════
-    #  ৪· ফাইলে লেখা
+    #  4. Writing the files
     # ══════════════════════════════════════════════════════════════════════
 
     $certPem = ConvertTo-Pem -Label 'CERTIFICATE' -Bytes $cert.RawData
     $spki = Get-SpkiBytes -Cert $cert
     $pin = Get-Sha256Base64 -Bytes $spki
 
-    # ⚠️ BOM ছাড়া UTF-8, বাধ্যতামূলক। `Set-Content -Encoding utf8` 5.1-এ BOM
-    #    বসায়, আর BOM থাকলে Node PEM-টা পড়তে পারে না — ভুল বার্তা হয়
-    #    "error:0909006C:PEM routines:get_name:no start line", যেটা পড়ে
-    #    কারো পক্ষে বোঝা সম্ভব নয় যে দোষটা তিনটে অদৃশ্য বাইটের।
+    # Careful: UTF-8 without BOM, mandatory. `Set-Content -Encoding utf8` adds a
+    #    BOM in 5.1, and with a BOM Node cannot read the PEM - the message is
+    #    "error:0909006C:PEM routines:get_name:no start line", from which nobody
+    #    can tell that the fault is three invisible bytes.
     #
-    # ⚠️ অথচ **এই স্ক্রিপ্ট ফাইলটা নিজে** UTF-8 BOM **সহ** থাকতে হয় —
-    #    উল্টো নিয়ম। Windows PowerShell 5.1 BOM ছাড়া ফাইলকে ANSI ধরে, আর
-    #    তখন নিচের বাংলা লেখাগুলো ভেঙে গিয়ে স্ক্রিপ্টই পার্স হয় না।
+    # Careful: yet **this script file itself** must have a UTF-8 BOM - the
+    #    opposite rule. Windows PowerShell 5.1 treats a file without a BOM as
+    #    ANSI, and then the Bengali text below breaks and the script does not even parse.
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($certPath, $certPem, $utf8NoBom)
 
-    # ⭐ নবায়নে প্রাইভেট কী-র ফাইল **ছোঁয়া হয় না** (উপরের ব্যাখ্যা দেখুন)।
-    #    কী একই, তাই ফাইলও একই — আর গোপন ফাইলটা অকারণে নতুন করে লিখলে
-    #    শুধু নষ্ট হওয়ার সুযোগ তৈরি হতো।
+    # On renewal the private key file is **not touched** (see the explanation above).
+    #    The key is the same, so the file is too - and rewriting the secret file
+    #    for no reason would only create a chance of damaging it.
     if (-not $ReuseKey) {
         $keyPem = ConvertTo-Pem -Label 'PRIVATE KEY' -Bytes (ConvertTo-Pkcs8 -P $rsa.ExportParameters($true))
         [System.IO.File]::WriteAllText($keyPath, $keyPem, $utf8NoBom)
@@ -456,23 +462,23 @@ IP  (SAN):  $($ipList -join ', ')
 "@
     [System.IO.File]::WriteAllText($pinPath, $pinText, $utf8NoBom)
 
-    # ── প্রাইভেট কী-র ACL ─────────────────────────────────────────────────
-    # ⚠️ ব্যর্থ হলে throw করা হয় না — সার্ট বানানো হয়ে গেছে, সেটা ফেলে দেওয়ার
-    #    মানে হয় না। কিন্তু সতর্কবার্তা যেন চোখ এড়ায় না।
+    # ── ACL of the private key ────────────────────────────────────────────
+    # Careful: no throw on failure - the certificate has been created, and
+    #    discarding it would make no sense. But the warning must not escape notice.
     foreach ($secret in @($keyPath, $pfxPath)) {
         try {
-            # ⚠️ `Get-Acl` + `Set-Acl` **নয়**, একদম নতুন FileSecurity।
+            # Careful: **not** `Get-Acl` + `Set-Acl`, but a brand-new FileSecurity.
             #
-            # Get-Acl যা ফেরায় তাতে DACL ছাড়াও owner/group/SACL-এর ঘর থাকে,
-            # আর Set-Acl সেগুলোও লিখতে যায় — তখন প্রশাসক-অধিকার ছাড়া চললে
-            # "The process does not possess the 'SeSecurityPrivilege'
-            # privilege" এসে অনুমতি বসানোই ব্যর্থ হয়। খালি অবজেক্টে শুধু
-            # DACL-টাই বদলানো থাকে, তাই শুধু সেটাই লেখা হয় — সাধারণ
-            # ইউজার হিসেবেও কাজ করে।
+            # What Get-Acl returns carries owner/group/SACL fields besides the
+            # DACL, and Set-Acl tries to write those too - then without admin
+            # rights "The process does not possess the 'SeSecurityPrivilege'
+            # privilege" arrives and setting the permission fails. An empty
+            # object has only the DACL to change, so only that is written - it
+            # works as an ordinary user too.
             $acl = New-Object System.Security.AccessControl.FileSecurity
 
-            # উত্তরাধিকার বন্ধ — নইলে ফোল্ডার থেকে "Users: Read" নেমে আসত,
-            # আর প্রাইভেট কী অফিসের যেকোনো অ্যাকাউন্ট পড়ে ফেলতে পারত।
+            # Inheritance off - otherwise "Users: Read" would flow down from the
+            # folder, and any account in the office could read the private key.
             $acl.SetAccessRuleProtection($true, $false)
             foreach ($who in @('NT AUTHORITY\SYSTEM', 'BUILTIN\Administrators', "$env:USERDOMAIN\$env:USERNAME")) {
                 $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
@@ -487,7 +493,7 @@ IP  (SAN):  $($ipList -join ', ')
     }
 
     # ══════════════════════════════════════════════════════════════════════
-    #  ৫· কী হলো, এখন কী করতে হবে
+    #  5. What happened, what to do now
     # ══════════════════════════════════════════════════════════════════════
 
     Write-Host ''

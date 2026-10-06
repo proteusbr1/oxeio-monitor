@@ -6,10 +6,10 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main, develop]
-  # ইনস্টলার হাতে বানানোর জন্য — নিচের installer job দেখুন
+  # For building the installer by hand - see the installer job below
   workflow_dispatch:
 
-# একই ব্রাঞ্চে নতুন push এলে আগের রান বাতিল — অকারণে runner আটকে থাকে না
+# A new push to the same branch cancels the earlier run, so runners are not held up needlessly
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -24,8 +24,8 @@ jobs:
         working-directory: oxeio-monitor/server
 
     services:
-      # লোকালে docker compose যেটা দেয়, CI-তে সেটাই service container হিসেবে।
-      # টেস্ট নিজেই `oxeio_test` ডাটাবেস বানিয়ে নেয় (test/setup/global-setup.ts)
+      # The same Postgres that docker compose provides locally, as a service container.
+      # The tests create the `oxeio_test` database themselves (test/setup/global-setup.ts)
       postgres:
         image: postgres:16-alpine
         env:
@@ -42,8 +42,8 @@ jobs:
           --health-retries 10
 
     env:
-      # সার্ভারের TZ ঢাকাতেই রাখা জরুরি — মধ্যরাত-স্প্লিট ও work_date
-      # এর উপরেই দাঁড়ানো (07-Technical-Spec § ২.১-ক)
+      # Keep the server TZ on Dhaka: the midnight split and work_date both
+      # depend on it (07-Technical-Spec § 2.1a)
       TZ: Asia/Dhaka
       DATABASE_URL: postgresql://oxeio:ci-password@localhost:5432/oxeio?schema=public
       JWT_SECRET: ci-only-secret-at-least-32-characters-long
@@ -61,8 +61,8 @@ jobs:
       - name: Install
         run: npm ci
 
-      # npm 11-এর script-approval গেট থাকা সত্ত্বেও prisma-র engine নামা
-      # নিশ্চিত করতে আলাদা করে generate চালানো হয়
+      # Run generate separately so the prisma engine is downloaded even with
+      # npm 11's script-approval gate
       - name: Prisma generate
         run: npx prisma generate
 
@@ -72,8 +72,8 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      # `npm test` স্থানীয়ভাবে ../.env পড়ে; CI-তে env উপরে দেওয়া আছে,
-      # তাই vitest সরাসরি চালানো হয়
+      # Locally `npm test` reads ../.env; in CI the env is set above,
+      # so vitest is run directly
       - name: Test
         run: npx vitest run
 
@@ -103,15 +103,16 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      # `npm run build` নিজেই `tsc -b` চালায়, তাই আলাদা typecheck ধাপ লাগে না
+      # `npm run build` already runs `tsc -b`, so no separate typecheck step is needed
       - name: Build
         run: npm run build
 
   agent-core:
     name: agent core — build · test (linux)
-    # ⚠️ পুরো solution নয়, শুধু Core আর তার টেস্ট।
-    # oXeio.Agent টার্গেট করে net8.0-windows10.0.17763.0 — সেটা Linux-এ বিল্ডই হয় না।
-    # নিয়মগুলো Core-এ রাখার পুরো লাভটা এখানেই: প্রতি PR-এ সস্তা runner-এ যাচাই হয়।
+    # Note: only Core and its tests, not the whole solution.
+    # oXeio.Agent targets net8.0-windows10.0.17763.0, which cannot build on Linux.
+    # That is the whole point of keeping the rules in Core: they get verified on
+    # a cheap runner on every PR.
     runs-on: ubuntu-latest
 
     defaults:
@@ -133,12 +134,12 @@ jobs:
 
   agent-windows:
     name: agent full — build + test (windows)
-    # Win32 স্তর শুধু Windows runner-এ বিল্ড হয়।
+    # The Win32 layer only builds on a Windows runner.
     #
-    # ⚠️ এখানকার টেস্টগুলো **আসল ডেস্কটপ ছোঁয় না** — ক্যাপচার, tray বা DPAPI
-    #    হেডলেস runner-এ যাচাই করা যায় না। যেগুলো চলে সেগুলো নকল store ও নকল
-    #    সার্ভার দিয়ে সিঙ্ক লুপের সিদ্ধান্তগুলো পরীক্ষা করে — অর্থাৎ ঠিক সেই
-    #    জায়গাটা যেখানে ভুল হলে ডেটা নীরবে মুছে যায়।
+    # Note: these tests **do not touch the real desktop**; capture, tray and DPAPI
+    #    cannot be verified on a headless runner. The ones that do run use a fake
+    #    store and a fake server to test the sync loop's decisions - exactly the
+    #    place where a mistake would silently delete data.
     runs-on: windows-latest
 
     defaults:
@@ -160,9 +161,9 @@ jobs:
 
   installer:
     name: MSI — শুধু ট্যাগে বা হাতে চালালে
-    # ⚠️ প্রতিটা push-এ চালানো হয় না। self-contained publish ~২০০ MB আর
-    #    cab কম্প্রেশনে কয়েক মিনিট লাগে; রোজকার CI-তে ওটা নিছক অপচয়।
-    #    রিলিজের আগে (ট্যাগ) বা হাতে চালিয়ে যাচাই করা হয়।
+    # Note: not run on every push. The self-contained publish is ~200 MB and
+    #    cab compression takes several minutes; in everyday CI that is plain waste.
+    #    It is verified before a release (tag) or by running it by hand.
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
 
@@ -197,6 +198,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Dockerfile ভাঙলে যেন রোলআউটের দিনে নয়, এখনই ধরা পড়ে
+      # So a broken Dockerfile is caught now, not on rollout day
       - name: Build API image
         run: docker build -t oxeio-api:ci ./oxeio-monitor/server

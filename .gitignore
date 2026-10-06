@@ -1,14 +1,14 @@
-# রেপো-রুটের রক্ষাকবচ।
-# oxeio-monitor/.gitignore-এ বিস্তারিত নিয়ম আছে; এখানে `**/` দিয়ে সব স্তরে
-# ধরা হচ্ছে, যাতে ভবিষ্যতে agent/ বা web/ যোগ হলেও ফাঁক না থাকে।
+# Safety net at the repo root.
+# Detailed rules live in oxeio-monitor/.gitignore; the `**/` here matches at every
+# level, so adding agent/ or web/ later leaves no gap.
 
-# ── কখনোই কমিট হবে না ─────────────────────────────
+# ── Never committed ───────────────────────────────
 **/.env
 **/.env.local
 **/.env.*.local
 !**/.env.example
 
-# ── তৈরি হওয়া জিনিস ───────────────────────────────
+# ── Generated files ───────────────────────────────
 **/node_modules/
 **/dist/
 **/build/
@@ -17,42 +17,42 @@
 **/.tmp-test-storage/
 *.log
 
-# TypeScript-এর incremental বিল্ড ক্যাশ
+# TypeScript incremental build cache
 *.tsbuildinfo
 
 # .NET (agent, Phase 2)
 **/bin/
 **/obj/
 
-# ── OS ও এডিটর ────────────────────────────────────
+# ── OS and editor ─────────────────────────────────
 Thumbs.db
 desktop.ini
 .DS_Store
 .vscode/
 .idea/
 
-# ⚠️ আসল কর্মী তালিকা — নাম ও বেতন। কখনো কমিট হবে না।
-#    seed এটা না পেলে staff.example.json দিয়ে চলে।
+# Careful: the real staff list - names and salaries. Never committed.
+#    The seed falls back to staff.example.json when this file is missing.
 **/staff.local.json
 # a deployment's own holiday calendar, imported with prisma/import-holidays.ts
 **/holidays.local.*
 
-# ⚠️⚠️ .env-এর যেকোনো ব্যাকআপ/কপিও — ১৩ আগস্ট এমন একটা ফাইল
-# (.env.bak-before-trial) ভুল করে কমিট হয়ে গিয়েছিল, কারণ উপরের
-# `**/.env` প্যাটার্নে `.env.bak-*` পড়ে না।
+# Careful: any backup/copy of .env too. A file like this (.env.bak-before-trial)
+# was once committed by mistake, because the `**/.env` pattern above does not
+# match `.env.bak-*`.
 **/.env.bak*
 **/.env.backup*
 **/.env.old*
 **/.env.save*
 **/*.env.bak*
 
-# Syncthing-এর অস্থায়ী ফাইল — দুবার ভুল করে কমিট হয়ে গেছে
+# Temporary Syncthing files - committed by mistake twice
 ~syncthing~*
 
-# ⭐ Claude Code-এর মেশিন-নির্দিষ্ট অনুমতি-তালিকা।
+# Claude Code's machine-specific permission list.
 #
-# ⚠️ `settings.json` (ভাগ করা) কমিট হয়, `settings.local.json` হয় না —
-#    ওটা "এই মেশিনে এই কমান্ডগুলো চালাতে দাও" মনে রাখে, অর্থাৎ অন্য কারো
-#    কাজে আসে না। ⚠️ রেপো পাবলিক, তাই স্থানীয় পথ ও হোস্টনেম বাইরে
-#    পাঠানোর কোনো কারণ নেই।
+# Careful: `settings.json` (shared) is committed, `settings.local.json` is not.
+#    The latter remembers "allow these commands on this machine", so it is of
+#    no use to anyone else. The repo is public, so there is no reason to
+#    publish local paths and hostnames.
 .claude/settings.local.json

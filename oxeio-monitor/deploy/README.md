@@ -5,91 +5,91 @@
 > by a verified Git bundle when a remote push is unavailable; never reset an ahead
 > VPS checkout to an older remote branch. See [audit fixes](../../docs/audits/2026-09-26-fix-tracker.md).
 
-# oXeio — রোলআউট নির্দেশিকা
+# oXeio — Rollout guide
 
-অফিসের ১৫টা Windows PC-তে oXeio বসানোর ধাপে ধাপে নির্দেশ।
-এই ফোল্ডারের স্ক্রিপ্টগুলো মালিকের মেশিনে চলে — **কোনোটাই নিজে থেকে
-কিছু ইনস্টল করে না**, প্রতিটাই আগে দেখায় কী করতে যাচ্ছে।
+Step-by-step instructions for installing oXeio on the office's 15 Windows PCs.
+The scripts in this folder run on the owner's machine — **none of them installs
+anything by itself**; each one first shows what it is about to do.
 
 ---
 
-## ০· শুরুর আগে — সম্মতি
+## 0· Before you start — consent
 
-> ✅ **oXeio-তে সম্মতি নেওয়া হয় জয়েন করার সময়েই** *(মালিকের নিষ্পত্তি,
-> ১৫ আগস্ট ২০২৬)* — মনিটরিং সহ অফিসের শর্তগুলো মেনেই প্রত্যেকে যোগ দেন।
-> তাই রোলআউটের আগে আলাদা করে সই নেওয়ার কোনো ধাপ নেই, আর এটাই এখানকার
-> নিয়ম।
+> **In oXeio, consent is taken at joining time** *(the owner's decision)* —
+> everyone joins on the office's terms, monitoring included. So there is no
+> separate signing step before the rollout, and that is the rule here.
 >
-> ⚠️ `policy_signed_at` ঘরটা **কোথাও কিছু আটকায় না** — enrollment বা
-> ট্র্যাকিং ওটা দেখে থামে না, কোনোদিন থামেনি। ঘরটা কাগজের তারিখ রাখার
-> জায়গা; এই ব্যবস্থায় আলাদা কাগজ নেই বলে ফাঁকা থাকে, আর সেটা কোনো
-> অসম্পূর্ণতা নয়।
+> Careful: the `policy_signed_at` field **blocks nothing** — enrollment and
+> tracking never stop on it, and never have. The field is a place to record a
+> paper date; since this setup has no separate paper, it stays empty, and that
+> is not an incompleteness.
 
-⚠️ **অন্য কেউ এই সিস্টেম বসালে** — টেমপ্লেটটা রিপোতে আছে
+Careful: **if someone else installs this system** — the template is in the repo
 ([`docs/monitoring-policy-template.md`](../../docs/monitoring-policy-template.md))
-আর ওটা আপনার কাজে লাগবে। অনেক দেশে কর্মীকে লিখিত জানানো বা তার সম্মতি
-নেওয়া **আইনত বাধ্যতামূলক**; নিজের এলাকার নিয়ম নিজে যাচাই করে নিন।
-সফটওয়্যার এটা আপনার হয়ে করতে পারে না।
+and it will be useful to you. In many countries informing employees in writing,
+or obtaining their consent, is **a legal requirement**; check the rules for
+your own area yourself. Software cannot do this for you.
 
-যে নীতিটা যেভাবেই হোক বদলায় না:
+The principle that does not change either way:
 
-- oXeio-র নকশার মূল কথাই হলো **গোপন নজরদারি নয়** — tray আইকন সবসময়
-  দৃশ্যমান, আর স্টাফ নিজের হিসাব নিজে দেখতে পায় (`/me`)। কে কী দেখছে
-  সেটা লুকানো হয় না, তা সম্মতি যখনই নেওয়া হোক।
+- The core of oXeio's design is **no covert surveillance** — the tray icon is
+  always visible, and staff can see their own figures themselves (`/me`). Who is
+  looking at what is not hidden, whenever consent is taken.
 
-চেকলিস্ট:
+Checklist:
 
-- [ ] টেমপ্লেটের ফাঁকা ঘরগুলো (`__________`) পূরণ করা হয়েছে
-- [ ] আইনজীবী দেখেছেন
-- [ ] ১৫ জনের সই করা কপি ফাইলে আছে
-- [ ] প্রত্যেকে জানেন কোথায় নিজের ডেটা দেখতে পাবেন (staff portal)
+- [ ] The blank fields of the template (`__________`) are filled in
+- [ ] A lawyer has reviewed it
+- [ ] The signed copies of all 15 people are on file
+- [ ] Everyone knows where to see their own data (the staff portal)
 
 ---
 
-## ১· যা যা লাগবে
+## 1· What you need
 
-⭐ **দুই ধাপ** ([ADR-026](../../docs/05-Options-Decisions.md)): আগে ২–৩ দিন
-অফিসের PC-তে, তারপর VPS-এ। নিচের তালিকাটা অফিসের PC-র; VPS-এর মাপ ও
-প্ল্যান বাছার শর্ত ADR-026-এ।
+**Two stages** ([ADR-026](../../docs/05-Options-Decisions.md)): first 2–3 days
+on the office PC, then on the VPS. The list below is for the office PC; the VPS
+sizing and the conditions for choosing a plan are in ADR-026.
 
-| জিনিস | কেন |
+| Item | Why |
 |---|---|
-| একটা সার্ভার-PC, সারাক্ষণ চালু | API + ডেটাবেস এখানে চলবে |
-| **স্থির (static) LAN IP** | বদলে গেলে ১৫টা এজেন্ট সার্ভার খুঁজে পাবে না |
-| Docker Desktop | `docker-compose.yml` দিয়ে সব ওঠে |
-| Windows PowerShell 5.1 | Windows-এর সাথেই আসে; এই স্ক্রিপ্টগুলো ওতেই চলে |
-| অ্যাডমিন অধিকার | ফায়ারওয়াল, AV ছাড়, MSI ইনস্টল |
+| A server PC, always on | The API + database run here |
+| **A static LAN IP** | If it changes, the 15 agents cannot find the server |
+| Docker Desktop | Everything comes up from `docker-compose.yml` |
+| Windows PowerShell 5.1 | Ships with Windows; these scripts run on it |
+| Admin rights | Firewall, AV exclusion, MSI install |
 
-> ⚠️ সার্ভারের IP **অবশ্যই** স্থির করে নিন (রাউটারে DHCP reservation বা
-> মেশিনে static IP)। সার্টিফিকেটে IP লেখা থাকে, আর এজেন্টের কনফিগেও
-> ঠিকানা লেখা থাকে — DHCP-তে IP বদলালে সব ভেঙে পড়বে, আর ভাঙাটা
-> **নীরব**: এজেন্টরা চুপচাপ কিউ জমাতে থাকবে, কেউ টের পাবে না।
+> Careful: you **must** make the server's IP static (a DHCP reservation on the
+> router, or a static IP on the machine). The certificate carries the IP, and
+> the agent's config carries the address too — if DHCP changes the IP,
+> everything breaks, and the breakage is **silent**: the agents quietly keep
+> queuing and nobody notices.
 
 ---
 
-## ২ক· VPS-এ — **এক কমান্ডে** ⭐
+## 2a· On the VPS — **one command**
 
 ```bash
 cd /opt/oxeio && git pull && bash oxeio-monitor/deploy/vps-setup.sh hub.oxeio.com
 ```
 
-Docker · ফায়ারওয়াল (২২·৮০·৪৪৩) · গোপন মান তৈরি · DNS যাচাই · মাইগ্রেশন
-ও seed · স্ট্যাক — সব। শেষে owner লগইন **একবার** ছাপে।
+Docker · firewall (22·80·443) · generating secrets · DNS check · migration and
+seed · the stack — everything. At the end it prints the owner login **once**.
 
-⭐ **বারবার চালানো নিরাপদ।** ভুল হলে ঠিক করে আবার একই লাইন; `.env`
-একবার তৈরি হলে আর ছোঁয়া হয় না।
+**Safe to run repeatedly.** If something goes wrong, fix it and run the same
+line again; once `.env` has been created it is never touched again.
 
-### প্রথমবার — দুটো জিনিস আগে
+### First time — two things beforehand
 
-**১· DNS** — যেখানে ডোমেইনের DNS আছে, সেখানে একটা `A` রেকর্ড
-(`hub` → VPS-এর IP)। ⚠️ nameserver বদলানোর দরকার নেই। ⭐ সাবডোমেইন,
-apex নয় — apex-এ হাত দিলে কোম্পানির মূল সাইট ভেঙে যেত।
+**1· DNS** — where the domain's DNS lives, add one `A` record
+(`hub` → the VPS's IP). Careful: there is no need to change the nameservers. Use
+a subdomain, not the apex — touching the apex could break the company's main site.
 
-ছড়িয়েছে কি না: `nslookup hub.oxeio.com 8.8.8.8`
-⚠️ `8.8.8.8` অংশটা বাদ দেবেন না — ISP-র resolver-এ পুরোনো বা "নাম নেই"
-উত্তর ক্যাশ থাকতে পারে।
+To check that it has propagated: `nslookup hub.oxeio.com 8.8.8.8`
+Careful: do not drop the `8.8.8.8` part — your ISP's resolver may have an old or
+"no such name" answer cached.
 
-**২· রিপো private, তাই deploy key** — বেনামে clone হয় না:
+**2· The repo is private, so a deploy key** — it cannot be cloned anonymously:
 
 ```bash
 ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -C "oxeio-vps" <<< y
@@ -97,263 +97,271 @@ ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
 cat ~/.ssh/id_ed25519.pub
 ```
 
-লাইনটা GitHub → রিপো → Settings → **Deploy keys** → Add।
-⚠️ **"Allow write access" টিক দেবেন না** — পড়ার অনুমতিই যথেষ্ট।
+Add that line at GitHub → the repo → Settings → **Deploy keys** → Add.
+Careful: **do not tick "Allow write access"** — read access is enough.
 
-তারপর:
+Then:
 ```bash
 git clone git@github.com:ownCoder/oxeio-monitor.git /opt/oxeio
 ```
 
-⚠️ **রিপো public করে দেবেন না** — git ইতিহাসে একটা `.env` ব্যাকআপ আছে
-(পুরোনো পাসওয়ার্ড ও টোকেন সহ, [09 § ৩শ](../../docs/09-Build-Log.md))।
+Careful: **do not make the repo public** — the git history contains a `.env`
+backup (with old passwords and tokens, [09 § ৩শ](../../docs/09-Build-Log.md)).
 
-⚠️ পাথে `oxeio-monitor/` অংশটা বাদ দেবেন না — রিপোর রুটে স্ক্রিপ্টটা নেই,
-ওটা এক ধাপ ভেতরে।
+Careful: do not drop the `oxeio-monitor/` part of the path — the script is not
+at the repo root, it is one level inside.
 
 ---
 
-## ২· সার্ভার তোলা *(হাতে, ধাপে ধাপে)*
+## 2· Bringing the server up *(by hand, step by step)*
 
 ```powershell
 cd "C:\...\oXeio Office\oxeio-monitor"
 
-# .env বানিয়ে নিন
+# Create the .env
 Copy-Item .env.example .env
 notepad .env
 ```
 
-`.env`-এ অবশ্যই বদলাতে হবে:
+These must be changed in `.env`:
 
-| চলক | কী দেবেন |
+| Variable | What to set |
 |---|---|
-| `POSTGRES_PASSWORD` | লম্বা এলোমেলো স্ট্রিং |
+| `POSTGRES_PASSWORD` | A long random string |
 | `JWT_SECRET` | `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"` |
-| `SEED_OWNER_PASSWORD` | প্রথম লগইনের পর বদলাবেন |
-| `SMTP_*` · `ALERT_EMAIL_TO` | ⚠️ খালি রাখলে **অ্যালার্ট কারো কাছে পৌঁছাবে না** — তৈরি হবে, ডাটাবেসে বসবে, ব্যস |
-| `BACKUP_PASSPHRASE` | ⚠️ খালি রাখলে **কোনো ব্যাকআপই নেওয়া হবে না** (ইচ্ছাকৃত — এনক্রিপশন ছাড়া ডাম্প রাখার চেয়ে না রাখা নিরাপদ) |
-| `CORS_ORIGIN` | শুধু অন্য origin-এর ক্লায়েন্টের জন্য। নিচের `web` সার্ভিস ব্যবহার করলে দরকার নেই |
+| `SEED_OWNER_PASSWORD` | Change it after the first login |
+| `SMTP_*` · `ALERT_EMAIL_TO` | Careful: if left empty, **alerts reach nobody** — they are created and stored in the database, and that is all |
+| `BACKUP_PASSPHRASE` | Careful: if left empty, **no backup is taken at all** (deliberate — not keeping a dump is safer than keeping one unencrypted) |
+| `CORS_ORIGIN` | Only for a client on another origin. Not needed if you use the `web` service below |
 
-> ⚠️ `.env.example`-এ **প্রতিটা** চলক আছে, যেগুলো খালি রাখা যায় সেগুলোসহ।
-> ইমেইল বা ব্যাকআপ বন্ধ থাকলে কোথাও ভুল দেখায় না — চুপচাপ বন্ধ থাকে।
-> তাই যেটা ব্যবহার করবেন না, সেটাও একবার চোখে দেখে যান।
+> Careful: `.env.example` has **every** variable, including the ones that can be
+> left empty. When email or backup is off, nothing shows an error — it is just
+> silently off. So glance over the ones you will not use as well.
 
-### ২.১· স্কিমা ও প্রথম ডেটা — **এই ধাপটা বাদ দেওয়া যাবে না**
+### 2.1· Schema and first data — **this step cannot be skipped**
 
 ```powershell
 docker compose --profile setup run --rm migrate
 ```
 
-⚠️⚠️ **এটা আগে চালাতে হবে, `up -d`-এর আগে বা পরে — কিন্তু চালাতেই হবে।**
-আগে এই ধাপটা রানবুকে ছিল না, ফলে ধাপে ধাপে মেনে চললে ডাটাবেসে **একটাও
-টেবিল বসত না**, আর API উঠে প্রতিটা রিকোয়েস্টে ভাঙত।
+**This must be run, before or after `up -d` — but it must be run.** This step
+used to be missing from the runbook, so following it step by step left the
+database with **not a single table**, and the API came up and failed on every request.
 
-⭐ কনটেইনার নিজে এটা করতে পারে না, ইচ্ছাকৃতভাবে: প্রোডাকশন ইমেজে
-prisma CLI বা `tsx` নেই (ছোট রাখার জন্য)। তাই আলাদা একটা one-shot
-সার্ভিস, যেটা `up -d`-তে চলে না — মাইগ্রেশন সচেতন একটা ধাপ, প্রতি
-রিস্টার্টে নিজে থেকে চলার জিনিস নয়।
+The container cannot do this itself, deliberately: the production image has no
+prisma CLI or `tsx` (to keep it small). So it is a separate one-shot service
+that does not run on `up -d` — a migration is a conscious step, not something
+to run by itself on every restart.
 
-⭐ **বারবার চালানো নিরাপদ** — `migrate deploy` বাকি থাকলে তবেই প্রয়োগ
-করে, আর seed পুরোটাই upsert।
+**Safe to run repeatedly** — `migrate deploy` applies only what is pending, and
+the seed is entirely upserts.
 
-> ⚠️⚠️ **একটাই ব্যতিক্রম, আর সেটা টাকার:** seed **ছুটির ক্যালেন্ডারও**
-> বসায়, আর একটা নতুন ছুটি ওই মাসের কর্মদিবস কমিয়ে টার্গেট ও পে-রোলের
-> ভগ্নাংশ বদলে দেয়। তাই seed চলতি ও অতীত মাসে নিজে থেকে কিছু বসায় না —
-> **কখন চালাবেন, কী নড়বে, আর তারপর কী করতে হবে: § ২.১গ।**
+> **One exception, and it concerns money:** the seed **also loads the holiday
+> calendar**, and a new holiday reduces that month's working days, changing the
+> target and the payroll fractions. So the seed does not apply anything to the
+> current or past months by itself —
+> **when to run it, what will move, and what to do afterwards: § 2.1c.**
 
-> ⚠️ কর্মীদের আসল নাম ও বেতন `server/prisma/staff.local.json`-এ
-> ([09 § ৩ঊ](../../docs/09-Build-Log.md))। ফাইলটা ইমেজে **বেক করা হয় না** —
-> চালানোর সময় mount হয়, তাই ইমেজের কোনো লেয়ারে কারো বেতন থাকে না।
+> Careful: the staff's real names and salaries are in
+> `server/prisma/staff.local.json` ([09 § ৩ঊ](../../docs/09-Build-Log.md)). The
+> file is **not baked into the image** — it is mounted at run time, so no image
+> layer ever contains anyone's salary.
 
-#### আসল কর্মী তালিকা সার্ভারে পাঠানো
+#### Sending the real staff list to the server
 
-ফাইলটা রিপোতে নেই, তাই `git pull` দিয়ে যায় না — **আলাদা করে পাঠাতে হয়**।
-তবে `prisma/` হোস্ট থেকে mount করা, তাই ইমেজ রিবিল্ড লাগে না:
+The file is not in the repo, so `git pull` does not carry it — **it has to be
+sent separately**. But `prisma/` is mounted from the host, so no image rebuild is needed:
 
 ```powershell
 scp "C:\...\oxeio-monitor\server\prisma\staff.local.json" `
     root@SERVER:/opt/oxeio/oxeio-monitor/server/prisma/
 ```
 
-তারপর সার্ভারে seed আবার চালান — পুরোটাই upsert, তাই নিরাপদ:
+Then run the seed again on the server — it is entirely upserts, so it is safe:
 
 ```bash
 cd /opt/oxeio/oxeio-monitor && docker compose --profile setup run --rm migrate
 ```
 
-**সারির ধাঁচ** — চার ঘর বাধ্যতামূলক, পঞ্চমটা ঐচ্ছিক:
+**Row format** — four fields are required, the fifth is optional:
 
 ```json
 [
-  ["OX-01", "নাম", "পদবি", 25000, "2026-01-05"],
-  ["OX-02", "নাম", "পদবি", 18000]
+  ["OX-01", "Name", "Title", 25000, "2026-01-05"],
+  ["OX-02", "Name", "Title", 18000]
 ]
 ```
 
-⚠️⚠️ **পঞ্চম ঘরটা — যোগদানের তারিখ — বাদ দেবেন না।** ওটা ছাড়া G37-এর
-proration **চুপচাপ সবাইকে পুরো-মাস ধরে নেয়**: মাসের মাঝখানে যোগ দেওয়া
-কেউ পুরো মাসের টার্গেট পান, আর মাস শেষে অন্যায্য কর্তন দেখেন — কোনো এরর
-ছাড়াই ([09 § ৩ষ](../../docs/09-Build-Log.md))।
+Careful: **do not leave out the fifth field — the joining date.** Without it
+the proration **silently treats everyone as a full month**: someone who joined
+mid-month gets the full month's target, and sees an unfair deduction at month
+end — with no error at all ([09 § ৩ষ](../../docs/09-Build-Log.md)).
 
-⭐ তারিখ **না দিলে ঘরটা ছোঁয়াই হয় না**, তাই কেউ ড্যাশবোর্ডে হাতে বসিয়ে
-থাকলে seed আবার চালালেও সেটা টেকে।
+If the date is **not given, the field is not touched at all**, so if someone
+set it by hand in the dashboard, it survives re-running the seed.
 
-⚠️ ফাইলে ভুল থাকলে seed **থেমে যায়**, সারিটা চুপচাপ বাদ দেয় না — বার্তায়
-সারি নম্বর ও কর্মীর কোড দুটোই থাকে।
+Careful: if the file has a mistake the seed **stops**, it does not silently
+skip the row — the message carries both the row number and the staff code.
 
-⭐ **পাঠানোর আগে নিজের মেশিনেই যাচাই করুন** — ডাটাবেস ছাড়াই চলে, কিছু
-লেখে না:
+**Check on your own machine before sending** — it needs no database and writes nothing:
 
 ```powershell
 cd oxeio-monitor\server
 npm run check:staff
 ```
 
-১২ জনের নাম-বেতন-তারিখ ছকে দেখাবে, আর কার তারিখ নেই সেটাও গুনে বলবে।
-নইলে একটা কমার ভুল ধরা পড়ত `scp` → কনটেইনার → ডকার-লগ ঘুরে এসে।
+It shows the 12 people's names, salaries and dates in a table, and also counts
+whose date is missing. Otherwise a single comma mistake would only be caught
+after going through `scp` → container → docker log.
 
-### ২.১ক· ⭐ পরে হালনাগাদ করা (নতুন কোড এলে)
+### 2.1a· Updating later (when new code arrives)
 
-প্রথমবারের পর প্রতিবার এই এক কমান্ড — আর কিছু মনে রাখতে হয় না:
+After the first time, this one command every time — nothing else to remember:
 
 ```bash
 bash /opt/oxeio/oxeio-monitor/deploy/vps-update.sh
 ```
 
-git pull → দরকার হলে migration → রিবিল্ড → API সাড়া দিচ্ছে কি না।
-⭐ **বারবার চালানো নিরাপদ** — নতুন কিছু না থাকলে প্রায় কিছুই করে না।
+git pull → migration if needed → rebuild → is the API responding.
+**Safe to run repeatedly** — with nothing new it does almost nothing.
 
-⚠️⚠️ **হালনাগাদের সময় `--profile setup run --rm migrate` চালাবেন না।**
-ওই সার্ভিসের কমান্ড `migrate deploy && tsx prisma/seed.ts` — অর্থাৎ
-seed-ও চলে, আর seed কর্মীদের **নাম, বেতন ও যোগদানের তারিখ upsert করে**।
-ড্যাশবোর্ডে হাতে বসানো তথ্য তখন ফাইলের পুরোনো মান দিয়ে **নীরবে** চাপা
-পড়ত — সরাসরি বেতনের হিসাবে। `vps-update.sh` তাই কমান্ডটা override করে
-শুধু `migrate deploy` ডাকে।
+**Do not run `--profile setup run --rm migrate` during an update.** That
+service's command is `migrate deploy && tsx prisma/seed.ts` — so the seed runs
+too, and the seed **upserts the staff's names, salaries and joining dates**.
+Data entered by hand in the dashboard would then be **silently** overwritten
+with the file's old values — straight into the payroll figures. So
+`vps-update.sh` overrides the command and calls only `migrate deploy`.
 
-⚠️ `--build` বাদ দেবেন না। শুধু `up -d` দিলে পুরোনো ইমেজই চলবে — কোড
-এসেছে, অথচ কিছুই বদলায়নি, আর কারণটা বোঝা কঠিন। স্ক্রিপ্টটা এটা নিজেই
-সামলায়।
+Do not leave out `--build`. With only `up -d` the old image keeps running — the
+code has arrived, yet nothing has changed, and the cause is hard to see. The
+script handles this itself.
 
-### ২.১খ· ⭐ VPS শক্ত করা — fail2ban ও নিরাপত্তা আপডেট (R6)
+### 2.1b· Hardening the VPS — fail2ban and security updates
 
-**কখন:** স্ট্যাক একবার দাঁড়িয়ে যাওয়ার পর, একবার। তারপর আর মনে রাখার
-দরকার নেই — তবে চাইলে যেকোনো সময় আবার চালানো যায়।
+**When:** once, after the stack is up. After that there is nothing to remember —
+though it can be run again at any time.
 
 ```bash
 bash /opt/oxeio/oxeio-monitor/deploy/vps-harden.sh
 ```
 
-**কী করে:** fail2ban বসিয়ে SSH-এর জেল চালু করে · শুধু-security স্বয়ংক্রিয়
-আপডেট চালু করে · আর শেষে **চলতি অবস্থা পড়ে** মিলিয়ে দেখায় (কনফিগ ফাইল
-নয় — iptables-এর সত্যিকারের নিয়ম, sshd সত্যিই কোন পোর্টে শুনছে, টাইমার
-সত্যিই চলছে কি না)।
-⭐ **বারবার চালানো নিরাপদ** — কিছু না বদলালে সার্ভিস restart-ও করে না।
+**What it does:** installs fail2ban and enables the SSH jail · enables
+security-only automatic updates · and at the end **reads the live state** to
+verify (not the config files — the real iptables rules, which ports sshd is
+really listening on, whether the timers are really running).
+**Safe to run repeatedly** — it does not even restart the service if nothing changed.
 
-⚠️⚠️ **জেলে পোর্ট `22,2222` — দুটোই, স্পষ্ট করে লেখা।** fail2ban-এর ডিফল্ট
-`sshd` জেলে থাকে `port = ssh`, আর `ssh` মানে `/etc/services` অনুযায়ী
-**কেবল ২২**। এই সার্ভারে sshd ২২২২-এও শোনে (§ ১২.৪গ), তাই ডিফল্টে ছেড়ে
-দিলে হার্ডেনিংটা **নীরবে অর্ধেক** হতো: ২২-এ ব্রুট-ফোর্স থামত, ২২২২-এ যত
-খুশি চেষ্টা চলত — অথচ `fail2ban-client status sshd` দিব্যি "সক্রিয়"
-দেখাত। ⭐ তাই স্ক্রিপ্টটা শেষে `iptables -S INPUT | grep f2b-sshd` পড়ে
-**দুটো পোর্টই সত্যিই পাহারায় আছে কি না** দেখিয়ে দেয়।
+**The jail covers ports `22,2222` — both, written explicitly.** fail2ban's
+default `sshd` jail says `port = ssh`, and `ssh` means **only 22** according to
+`/etc/services`. On this server sshd also listens on 2222 (§ 12.4c), so left at
+the default the hardening would be **silently half done**: brute force stopped on
+22, any number of tries allowed on 2222 — yet `fail2ban-client status sshd`
+would happily show "active". So at the end the script reads
+`iptables -S INPUT | grep f2b-sshd` and shows whether **both ports are really guarded**.
 
-⚠️ **Docker-এর প্রকাশিত পোর্ট এই জেলের বাইরে।** ৮০/৪৪৩-এর প্যাকেট DNAT
-হয়ে Caddy কনটেইনারে যায়, অর্থাৎ `INPUT` নয়, `FORWARD`/`DOCKER` চেইন দিয়ে —
-আর fail2ban (ও ufw) ব্যান বসায় `INPUT`-এ। ফলে **ওয়েব-স্তরের** ব্রুট-ফোর্স
-এটা ঠেকাবে না, আর ব্যর্থতাটা নীরব: জেল "সক্রিয়" দেখাবে, ব্যানের সংখ্যাও
-বাড়বে। লগইন রুটের rate limit তাই **Caddy-তে** বসাতে হবে — সেটা R6-র বাকি
-অর্ধেক, এখনো বাকি।
+**Docker's published ports are outside this jail.** Packets for 80/443 are
+DNAT-ed to the Caddy container, i.e. they go through the `FORWARD`/`DOCKER`
+chain, not `INPUT` — and fail2ban (and ufw) place bans in `INPUT`. So this will
+not stop brute force at the **web layer**, and the failure is silent: the jail
+shows "active" and the ban count even grows. The login route's rate limit
+therefore has to be set up **in Caddy** — that is the other half of this
+hardening work, still to do.
 
-⚠️ স্বয়ংক্রিয় আপডেট **শুধু security**, আর **রিবুট কখনো নিজে থেকে নয়**।
-কার্নেল আপডেটের পর রিবুট দরকার হলে `cat /var/run/reboot-required` জানিয়ে
-দেবে — সময়টা মালিক বেছে নেবেন। অফিস-সময়ে হঠাৎ রিবুট মানে এজেন্টদের
-আপলোড আটকে থাকা, আর কেউ বুঝবে না কেন ছবি আসছে না।
+Automatic updates are **security only**, and **never reboot by themselves**. If
+a reboot is needed after a kernel update, `cat /var/run/reboot-required` will
+say so — the owner picks the time. A sudden reboot in office hours means the
+agents' uploads stall, and nobody would understand why screenshots are not arriving.
 
-#### ⚠️⚠️ নিজেকে লক-আউট না করা
+#### Not locking yourself out
 
-- স্ক্রিপ্টটা **sshd-তে হাত দেয় না** — পোর্ট বদলায় না, পাসওয়ার্ড-লগইন বন্ধ
-  করে না, ufw-র নিয়ম মোছে না। ইচ্ছাকৃত: "শক্ত করা"-র নামে নিজের দরজা বন্ধ
-  করে ফেলাটা এখানে একবার প্রায় ঘটেছে (§ ১২.৪)।
-- ব্যান **স্থায়ী নয়** — `bantime = 1h`, `maxretry = 5`। ⚠️ `bantime = -1`
-  (চিরকাল) কখনো বসাবেন না; নিজের IP একবার আটকে গেলে ফেরার পথ কেবল ওয়েব
-  কনসোল, আর সেটা ঠিক তখনই খুঁজতে হয় যখন হাতে সময় নেই।
-- চালানোর **আগে** SSH কী বসিয়ে নিন (§ ১২.৫) — কী দিয়ে ঢুকলে ভুল পাসওয়ার্ড
-  টাইপ করে নিজেকে ব্যান করার সুযোগই থাকে না।
-- ব্যান খেয়ে ফেললে — ওয়েব কনসোল দিয়ে ঢুকে:
+- The script **does not touch sshd** — it does not change the port, does not
+  disable password login, does not delete ufw rules. Deliberate: locking your
+  own door in the name of "hardening" has nearly happened here once (§ 12.4).
+- Bans are **not permanent** — `bantime = 1h`, `maxretry = 5`. Never set
+  `bantime = -1` (forever); once your own IP is locked out the only way back is
+  the web console, and you have to hunt for it at exactly the moment you have no time.
+- **Before** running it, set up an SSH key (§ 12.5) — logging in with a key
+  removes any chance of banning yourself by typing a wrong password.
+- If you do get banned — log in through the web console:
   ```bash
-  fail2ban-client status sshd            # কারা ব্যান আছে
+  fail2ban-client status sshd            # who is banned
   fail2ban-client set sshd unbanip 1.2.3.4
   ```
-- অফিসের **স্থির** IP থাকলে সেটা আগেই ছাড় দিয়ে রাখুন:
+- If the office has a **static** IP, exempt it beforehand:
   ```bash
   OXEIO_IGNOREIP="103.x.x.x" bash /opt/oxeio/oxeio-monitor/deploy/vps-harden.sh
   ```
-  ⚠️ ডায়নামিক IP-তে এটা দেবেন না — কাল ওই IP অন্য কারো হবে, আর তখন
-  ছাড়টা তাকেই দেওয়া হবে।
-- sshd-র পোর্ট কখনো বদলালে জেলটাও বদলাতে হবে:
+  Do not do this with a dynamic IP — tomorrow that IP belongs to someone else,
+  and the exemption would go to them.
+- If sshd's port ever changes, the jail must change too:
   `OXEIO_SSH_PORTS=22,2222,2022 bash …/vps-harden.sh`
-  ⭐ ভুলে গেলেও স্ক্রিপ্ট ধরিয়ে দেয় — sshd কোন পোর্টে শুনছে সেটা পড়ে
-  জেলের সাথে মিলিয়ে দেখে, আর না মিললে বলে দেয়।
+  Even if you forget, the script catches it — it reads which ports sshd is
+  listening on, compares with the jail, and says so when they do not match.
 
-⚠️ যা যাচাই করা **গেল না**, স্ক্রিপ্ট সেটা "ঠিক আছে" বলে চালিয়ে দেয় না —
-"যাচাই করা গেল না" বলে, আর হাতে দেখার কমান্ডটা দেয়। জানা-না-যাওয়া আর
-ব্যর্থতা এক নয়।
+What **could not** be verified, the script does not wave through as "fine" — it
+says "could not verify" and gives the command to check by hand. Not being able
+to find out is not the same as a failure.
 
-### ২.১গ· ⚠️⚠️ ছুটির ক্যালেন্ডার — seed চালালে **টাকা নড়তে পারে**
+### 2.1c· Holiday calendar — running the seed **can move money**
 
-`npm run seed` (বা `--profile setup run --rm migrate`) ছুটির তালিকাও বসায়
-(`server/prisma/holidays.data.ts` — ২০২৬–২৭)। ⭐ তালিকাটা দরকারি: ছাড়া
-ঈদ-আশুরা-পূজার দিনগুলো **কর্মদিবস** হিসেবে গোনা হয়, আর প্রত্যেকের টার্গেট
-ও pace বেশি দেখায়। ⚠️ কিন্তু ছুটি বসানো নিরীহ কাজ নয়।
+`npm run seed` (or `--profile setup run --rm migrate`) also loads the holiday
+list (`server/prisma/holidays.data.ts` — 2026–27). The list is needed: without
+it Eid, Ashura and Puja days are counted as **working days**, and everyone's
+target and pace look too high. But adding holidays is not a harmless act.
 
-**একটা ছুটি বসলে কী কী নড়ে** — চেইনটা ছোট, আর শেষ ধাপটা টাকার:
+**What moves when a holiday is added** — the chain is short, and the last step is money:
 
-| ধাপ | কী হয় |
+| Step | What happens |
 |---|---|
-| ১ | ওই মাসের কর্মদিবস **D** কমে (যেমন ২৬ → ২৪) |
-| ২ | `dailyTargetSec = মাসিক টার্গেট ÷ D` বাড়ে (৮.০০ঘ → ৮.৬৭ঘ) |
-| ৩ | `monthly_summary`-র `target_sec` · `expected_sec` · `pace_sec` — তিনটেই বদলায় |
-| ৪ | G37-এর `d ÷ D` ভগ্নাংশ বদলায় → **পে-রোলের কর্তন বদলায়** |
+| 1 | That month's working days **D** go down (e.g. 26 → 24) |
+| 2 | `dailyTargetSec = monthly target ÷ D` goes up (8.00h → 8.67h) |
+| 3 | `monthly_summary`'s `target_sec` · `expected_sec` · `pace_sec` — all three change |
+| 4 | The proration fraction `d ÷ D` changes → **the payroll deduction changes** |
 
-⚠️⚠️ **মাসের মাঝপথে এটা পিছন ফিরেও কাজ করে** — গত দিনগুলোর `pace` আর
-`target` নতুন D দিয়ে আবার হিসাব হয়। মাস বন্ধ করার ব্যবস্থা (payroll lock,
-roadmap **R1**) **এখনো নেই**, তাই ক্যালেন্ডারই একমাত্র পাহারা।
+**In the middle of a month this works backwards too** — the `pace` and `target`
+of past days are recomputed with the new D. There is **not yet** a way to close
+a month (payroll lock), so the calendar is the only guard.
 
-#### ⭐ তাই seed চলতি ও অতীত মাসে নিজে থেকে কিছু বসায় না
+#### The seed therefore does not apply anything to current or past months by itself
 
-ভবিষ্যতের মাস নিরাপদ — ওই মাসগুলোর কোনো `monthly_summary` সারিই এখনো নেই,
-তাই বসানোর সময় কারো কোনো সংখ্যা নড়ে না। ওগুলো seed চুপচাপ বসিয়ে দেয়।
+Future months are safe — those months have no `monthly_summary` rows yet, so
+adding them moves nobody's figures. The seed adds those quietly.
 
-চলতি বা অতীত মাসের তারিখ **আটকে যায়**, আর seed সেগুলো **নাম ধরে ধরে**
-ছাপে:
+Dates in the current or a past month are **held back**, and the seed prints
+them **by name**:
 
 ```
 ⚠️⚠️ বসানো হয়নি: 2026-08-26 — "ঈদে মিলাদুন্নবী (সা.) (সম্ভাব্য)" (2026-08 মাসের হিসাব ইতিমধ্যে চলে গেছে)
 ⚠️⚠️ উপরের 18টি তারিখ বসালে ওই মাসগুলোর কর্মদিবস কমবে — target_sec · … (সরাসরি টাকা)।
 ```
 
-⭐ **চুপ করে বাদ দেওয়া হয় না** — "বসানো হয়নি" আর "বসানোর দরকার নেই" এক
-কথা নয়, আর পার্থক্যটা মালিকের জানা দরকার।
+(The seed output is in Bengali. In English: "not applied: <date> — <holiday name>
+(that month's figures are already settled)" and "applying the 18 dates above
+would reduce those months' working days — target_sec · … (directly money)".)
 
-#### ⭐ কখন চালাবেন
+**It is not skipped silently** — "not applied" and "no need to apply" are not
+the same thing, and the owner needs to know the difference.
 
-⚠️ **seed তারিখ দেখে না, মাস দেখে** — "আজকের পরের তারিখ" বলে ছাড় নেই।
-২৬ আগস্টের ছুটিও ১৪ আগস্টে আটকে যায়, কারণ কর্মদিবস **D** গোটা মাসের হিসাব,
-আর সেটা বদলালে ওই মাসের **গত** দিনগুলোর `pace`-ও বদলে যায়।
+#### When to run it
 
-| কখন | কী হয় |
+**The seed looks at the month, not the date** — there is no allowance for
+"dates after today". A holiday on 26 August is held back on 14 August too,
+because the working-day count **D** is for the whole month, and changing it
+also changes the `pace` of that month's **past** days.
+
+| When | What happens |
 |---|---|
-| যেকোনো দিন — **শুধু ভবিষ্যতের মাসের জন্য** | ⭐ সবসময় নিরাপদ, কোনো পতাকা লাগে না। ভবিষ্যতের মাসের ছুটি চুপচাপ বসে যায় |
-| ⭐ **মাসের ১ তারিখে, কাজ শুরুর আগে** | চলতি মাসেরটাও বসাতে হলে **এটাই একমাত্র সহনীয় সময়** — ওই মাসে এখনো কারো এক সেকেন্ডও জমা হয়নি, তাই D বদলালেও কারো হিসাব বিগড়ায় না। ⚠️ তবু নিচের পতাকাটা লাগবে, কারণ মাসটা "চলতি" |
-| মাসের মাঝখানে | ⚠️ চালানো যায়, কিন্তু চলতি মাসের কিছু বসবে না — আটকে যাওয়া তারিখগুলো নাম ধরে ছাপা হবে |
-| ⛔ মাস শেষের কাছাকাছি, পে-রোল বানানোর ঠিক আগে | সবচেয়ে খারাপ সময় — পতাকা দিয়ে চালালে সংখ্যা বদলাবে ঠিক তখন, যখন কেউ ওগুলো দেখে টাকা দিচ্ছে |
+| Any day — **for future months only** | Always safe, no flag needed. Holidays for future months are added quietly |
+| **On the 1st of the month, before work starts** | If the current month's must go in too, **this is the only tolerable time** — nobody has accumulated a single second yet that month, so changing D spoils nobody's figures. You still need the flag below, because the month counts as "current" |
+| Mid-month | It can be run, but nothing for the current month is applied — the held-back dates are printed by name |
+| Near month end, just before building payroll | The worst time — running with the flag changes the numbers at exactly the moment someone is reading them to pay money |
 
-⚠️ নতুন কোড এলে `vps-update.sh` চালান — **ওটা seed চালায় না**, তাই
-ছুটির তালিকা নিয়ে ভাবতে হয় না (§ ২.১ক)।
+When new code arrives, run `vps-update.sh` — **it does not run the seed**, so
+there is no need to think about the holiday list (§ 2.1a).
 
-#### ⚠️⚠️ অতীতের তারিখগুলো সত্যিই বসাতে হলে
+#### If you really must apply past dates
 
-আটকে যাওয়া তারিখগুলো সচেতনভাবে বসাতে চাইলে **একবারের** জন্য:
+To apply the held-back dates deliberately, **once**:
 
 ```bash
 cd /opt/oxeio/oxeio-monitor
@@ -361,63 +369,68 @@ docker compose --profile setup run --rm \
     -e SEED_HOLIDAYS_PAST=true migrate
 ```
 
-⚠️ হুবহু `true` লিখতে হবে। `1`, `yes`, `TRUE` — কোনোটাই সম্মতি ধরা হয় না,
-আর তখন seed তারিখগুলো আবার ছেপে দেবে। **ভুলটা নীরব নয়, চোখে পড়ে** —
-ইচ্ছাকৃত, কারণ উল্টোটা করলে `SEED_HOLIDAYS_PAST=false` লেখাও "হ্যাঁ" হয়ে
-যেত।
+It must be written exactly `true`. `1`, `yes`, `TRUE` — none counts as consent,
+and the seed will print the dates again. **The mistake is not silent, it is
+visible** — deliberately, because otherwise even writing `SEED_HOLIDAYS_PAST=false`
+would count as "yes".
 
-⭐ ছোট কয়েকটা তারিখ হলে **Settings → Holidays**-এ হাতে যোগ করাই ভালো —
-তাতে প্রতিটা সিদ্ধান্ত আলাদা করে নেওয়া হয়, আর কোনটা বসল সেটা চোখে দেখা যায়।
+For just a few dates it is better to add them by hand in **Settings → Holidays**
+— that way each decision is made separately, and you can see which one went in.
 
-#### ⚠️⚠️ বসানোর পর — summary কী নিজে থেকে মিলবে?
+#### After applying — will the summaries catch up by themselves?
 
-**অর্ধেক।** এই দুটো আলাদা, আর গুলিয়ে ফেলা যাবে না:
+**Half.** The two cases are different, and must not be mixed up:
 
-| মাস | কী হয় |
+| Month | What happens |
 |---|---|
-| **চলতি মাস** | ⭐ নিজে থেকেই মেলে। `summary-refresh` জব প্রতি ১৫ মিনিটে চলে (`0 5,20,35,50 * * * *`) আর চলতি মাসের rollup নতুন করে লেখে |
-| **অতীত মাস** | ⚠️⚠️ **নিজে থেকে মেলে না, আর মেলানোর কোনো কমান্ড বা endpoint আজ নেই** |
+| **Current month** | Catches up by itself. The `summary-refresh` job runs every 15 minutes (`0 5,20,35,50 * * * *`) and rewrites the current month's rollup |
+| **Past month** | **Does not catch up by itself, and today there is no command or endpoint to make it** |
 
-⚠️⚠️ অতীত মাসের `monthly_summary` সারিগুলো পুরোনো D নিয়েই বসে থাকবে —
-অর্থাৎ `holidays` টেবিল আর সংখ্যাগুলো **দ্বিমত নিয়ে** থাকবে, আর কোথাও
-কোনো ভুল দেখাবে না। তারপর একদিন ওই মাসের কোনো time-adjustment অনুমোদন
-হলে (`server/src/adjustments/adjustments.service.ts` → `refreshDate()`)
-মাসটা হঠাৎ নতুন D নিয়ে আবার হিসাব হবে, আর সংখ্যা **লাফ দেবে** — কেউ
-বুঝবে না কেন।
+The `monthly_summary` rows of past months will stay with the old D — so the
+`holidays` table and the figures will **disagree**, and nothing will show an
+error anywhere. Then one day, when a time-adjustment for that month is approved
+(`server/src/adjustments/adjustments.service.ts` → `refreshDate()`), the month
+will suddenly be recomputed with the new D, and the figures will **jump** —
+nobody will understand why.
 
-⭐ **তাই সুপারিশ: অতীত মাসের ছুটি একেবারেই বসাবেন না**, যদি না ওই মাসের
-পে-রোল আবার হিসাব করার ইচ্ছে থাকে। R1 (মাস বন্ধ করা) এলে এই প্রশ্নটা
-আপনাআপনি মিটে যাবে।
+**So the recommendation: do not apply past months' holidays at all**, unless you
+intend to recompute that month's payroll. Once month-closing arrives this
+question settles itself.
 
-#### ⚠️ ২০২৭-এর তারিখগুলো এখনো **প্রজ্ঞাপনহীন**
+#### The 2027 dates are still **ungazetted**
 
-seed প্রতিবার এটা মনে করিয়ে দেয়:
+The seed reminds you of this every time:
 
 ```
 ⚠️ 2027-এর 15টি তারিখ জ্যোতির্গণনার হিসাব — প্রজ্ঞাপন এখনো বেরোয়নি …
    নভেম্বর ২০২৬-এ প্রজ্ঞাপনের সাথে মিলিয়ে prisma/holidays.data.ts হালনাগাদ করুন।
 ```
 
-⚠️ ওই ১৫টা তারিখ **আজ থেকেই** ২০২৭-এর ওই মাসগুলোর কর্মদিবস ও টার্গেট ঠিক
-করছে — অর্থাৎ ভবিষ্যতের টার্গেট একটা অনুমানের উপর দাঁড়ানো। ⭐ তবু ওগুলো
-তালিকায় রাখা হয়েছে, কারণ "ছুটি নেই" বলাটা "ছুটি সম্ভবত আছে" বলার চেয়ে
-বেশি ভুল — আর নামের শেষে `(সম্ভাব্য)` লেখা থাকে বলে পর্দায় চোখেও পড়ে।
+(In English: "15 dates of 2027 are astronomical estimates — the gazette has not
+been published yet … in November 2026, check against the gazette and update
+prisma/holidays.data.ts.")
 
-**নভেম্বর ২০২৬-এ করণীয়:** প্রজ্ঞাপন বেরোলে তারিখ মিলিয়ে
-`server/prisma/holidays.data.ts` ঠিক করুন, তারপর ওই ফাইলের
-`PENDING_GAZETTES` থেকে `2027` সরিয়ে দিন — নইলে সতর্কবার্তাটা মিথ্যে হয়ে
-বাজতেই থাকত, আর কিছুদিন পর কেউ আর ওটা পড়ত না।
+Those 15 dates **already** set the working days and targets of those 2027
+months — so future targets rest on a guess. They are kept in the list anyway,
+because saying "no holiday" is more wrong than saying "probably a holiday" — and
+the name ends in `(সম্ভাব্য)` ("probable"), so it is visible on screen too.
 
-#### ⚠️ ২০২৬-০৩-১৭ — একটা সারি হাতে ঠিক করতে হবে
+**To do in November 2026:** when the gazette is out, correct the dates in
+`server/prisma/holidays.data.ts`, then remove `2027` from that file's
+`PENDING_GAZETTES` — otherwise the warning would keep sounding falsely, and
+after a while nobody would read it.
 
-পুরোনো seed ওই তারিখে `জাতির পিতার জন্মদিন` বসিয়ে গেছে (দিবসটা ২০২৪-এ
-সরকারি ছুটির তালিকা থেকে বাদ পড়েছে); নতুন তালিকায় ওই তারিখে
-`শবে কদর (সম্ভাব্য)`। ⭐ seed তারিখে মিল পেলে **নাম বদলায় না** —
-ইচ্ছাকৃত, নইলে মালিকের হাতে করা প্রতিটা সংশোধন পরের seed-এ মুছে যেত।
+#### 2026-03-17 — one row must be fixed by hand
 
-⚠️⚠️ ফল: ওই সারিটা **কোনোদিনই** `(সম্ভাব্য)` চিহ্ন পাবে না, অর্থাৎ
-তারিখটা যে চাঁদ-নির্ভর সেটা পর্দায় কোথাও দেখা যাবে না। seed প্রতিবার
-এটা নাম ধরে বলে:
+The old seed put `জাতির পিতার জন্মদিন` ("Father of the Nation's birthday") on
+that date (the day was dropped from the government's holiday list in 2024); the
+new list has `শবে কদর (সম্ভাব্য)` ("Shab-e-Qadr (probable)") on it. The seed
+**does not rename** a row when the date matches — deliberate, otherwise every
+correction the owner made by hand would be wiped on the next seed.
+
+Result: that row will **never** get the `(সম্ভাব্য)` ("probable") marker, i.e.
+nowhere on screen will it show that the date depends on the moon. The seed says
+this by name every time:
 
 ```
 ⚠️ একই তারিখ, আলাদা নাম: 2026-03-17 — DB-তে "জাতির পিতার জন্মদিন",
@@ -425,11 +438,16 @@ seed প্রতিবার এটা মনে করিয়ে দেয�
    "(সম্ভাব্য)" চিহ্ন পাবে না; ঠিক করতে Settings → Holidays
 ```
 
-**করণীয়:** Settings → Holidays → ১৭ মার্চ ২০২৬-এর সারিটা → নাম বদলে
-`শবে কদর (সম্ভাব্য)` করুন। ⚠️ শুধু নাম — **তারিখ বা সারিটা মুছবেন না**,
-নইলে মার্চের কর্মদিবস বদলে যাবে (উপরের চেইন)।
+(In English: "same date, different name: 2026-03-17 — the DB has "Father of the
+Nation's birthday", the list has "Shab-e-Qadr (probable)" — the seed does not
+rename, so the row will never get the "(probable)" marker; to fix, use
+Settings → Holidays".)
 
-### ২.১ঘ· Outside Bangladesh
+**To do:** Settings → Holidays → the 17 March 2026 row → change the name to
+`শবে কদর (সম্ভাব্য)`. Only the name — **do not delete the date or the row**,
+otherwise March's working days change (the chain above).
+
+### 2.1d· Outside Bangladesh
 
 The seed writes Bangladesh's holidays and a 208 h / 26 day / Friday-off
 policy unless told otherwise. Set these in `.env` **before the first seed**
@@ -445,50 +463,50 @@ SEED_POLICY_WEEKLY_OFF=7         # ISO day (Mon = 1 … Sun = 7) or "none"
 Then import your own calendar from an official CSV (`date,name,type`) or
 ICS file. It goes through the same rule as the seed: dates in the current or
 a past month are listed and left out unless you pass `--allow-past` (read
-§ ২.১গ first — they change targets and salary).
+§ 2.1c first — they change targets and salary).
 
 ```bash
 docker compose --profile setup run --rm migrate \
   npx tsx prisma/import-holidays.ts prisma/holidays.local.csv --dry-run
 ```
 
-### ২.২· স্ট্যাক চালু
+### 2.2· Starting the stack
 
 ```powershell
 docker compose up -d
-docker compose ps          # তিনটেই healthy হওয়া চাই
+docker compose ps          # all three must be healthy
 ```
 
-তিনটে সার্ভিস: `postgres` · `api` · **`web`** (ড্যাশবোর্ড, ডিফল্ট পোর্ট
-`8080` — বদলাতে `.env`-এ `WEB_PORT`)।
+Three services: `postgres` · `api` · **`web`** (the dashboard, default port
+`8080` — to change it set `WEB_PORT` in `.env`).
 
-⭐ **ড্যাশবোর্ড ও API একই origin-এ** — Caddy `/api/*` কে api কনটেইনারে
-পাঠায়, বাকি সব পাতা নিজে দেয়। ফলে সেশন cookie (`SameSite=Strict`) কাজ
-করে আর CORS-এর প্রশ্নই ওঠে না।
+**The dashboard and API are on the same origin** — Caddy sends `/api/*` to the
+api container and serves all the pages itself. So the session cookie
+(`SameSite=Strict`) works and the CORS question never arises.
 
-> ⚠️ আগে `web` বলে কোনো সার্ভিসই ছিল না — ড্যাশবোর্ড চালানোর একমাত্র পথ
-> ছিল হাতে `npm run dev` চালিয়ে রাখা। সার্ভার PC রিবুট হলে কেউ টার্মিনাল
-> খুলে ওটা আবার না চালানো পর্যন্ত মালিক কোনো পাতা দেখতে পেতেন না।
+> Careful: there used to be no `web` service at all — the only way to run the
+> dashboard was to keep `npm run dev` running by hand. After the server PC
+> rebooted, the owner could see no page until someone opened a terminal and ran it again.
 
-> ⚠️ `docker compose ps` এখন সত্যিই কিছু বলে: api-তে healthcheck বসানো
-> হয়েছে (`/api/v1/health` + `db: up`)। আগে কোনো healthcheck ছিল না, তাই
-> ভেতরে অ্যাপ ক্র্যাশ-লুপে থাকলেও কলামে "running" লেখা থাকত।
+> Careful: `docker compose ps` now really says something: a healthcheck has
+> been added to the api (`/api/v1/health` + `db: up`). Before, there was no
+> healthcheck, so the column said "running" even while the app sat in a crash loop inside.
 
 ---
 
-## ৩· TLS — **VPS হলে এখান থেকে, § ৩–৪ নয়**
+## 3· TLS — **on a VPS start here, not at § 3a–4**
 
-⭐ ADR-026 অনুযায়ী সিস্টেম **VPS-এ** চলবে, অর্থাৎ একটা আসল ডোমেইন আছে —
-তাই self-signed সার্টের দরকার নেই। **Let's Encrypt** বিনামূল্যে, আর
-ব্রাউজারে কোনো সতর্কতা আসে না, কোনো PC-তে সার্ট বসাতেও হয় না।
+Under ADR-026 the system will run **on a VPS**, i.e. there is a real domain —
+so a self-signed certificate is not needed. **Let's Encrypt** is free, the
+browser shows no warning, and no certificate has to be installed on any PC.
 
-⚠️ নিচের **§ ৩ক ও § ৪** (self-signed) তখনই লাগবে যদি সার্ভার অফিসের LAN-এ
-ফেরত আসে বা ডেভে পরীক্ষা করেন।
+Careful: **§ 3a and § 4** below (self-signed) are needed only if the server
+moves back to the office LAN or you test in dev.
 
-### ৩.১· Caddy-ই সার্ট নিয়ে নেবে
+### 3.1· Caddy fetches the certificate itself
 
-`web` সার্ভিসের Caddy স্বয়ংক্রিয়ভাবে Let's Encrypt থেকে সার্ট নেয় ও নবায়ন
-করে — `Caddyfile`-এ ডোমেইনটা লিখে দিলেই হলো, আলাদা certbot লাগে না।
+The `web` service's Caddy automatically obtains and renews the certificate from
+Let's Encrypt — just write the domain in the `Caddyfile`; no separate certbot is needed.
 
 ```
 oxeio.example.com {
@@ -498,40 +516,40 @@ oxeio.example.com {
 }
 ```
 
-⚠️ **আগে DNS বসান** — ডোমেইনের `A` রেকর্ড VPS-এর IP-তে না দেখালে
-Let's Encrypt যাচাই করতেই পারবে না, আর Caddy বারবার চেষ্টা করে ব্যর্থ হবে।
+**Set up DNS first** — if the domain's `A` record does not point at the VPS's
+IP, Let's Encrypt cannot validate, and Caddy will keep retrying and failing.
 
-⭐ **ফোনে ইনস্টল (PWA) কেবল HTTPS-এ কাজ করে।** ড্যাশবোর্ডটা ফোনের
-হোমস্ক্রিনে বসানো যায় (`web/public/manifest.webmanifest` + `sw.js`), কিন্তু
-ব্রাউজার সার্ভিস ওয়ার্কার চালায় শুধু **HTTPS** বা `localhost`-এ। প্রোডাকশনে
-`hub.oxeio.com` HTTPS-এ আছে, তাই সেখানে ঠিকঠাক কাজ করে। ⚠️ প্লেইন
-`http://<IP>:8080`-এ (অফিসের LAN, § ৩ক-এর আগে) "হোমস্ক্রিনে যোগ করুন"
-আসবেই না — অ্যাপটা তখনো পুরোপুরি চলে, শুধু ইনস্টল করা যায় না।
+**Installing on a phone (PWA) works only on HTTPS.** The dashboard can be added
+to the phone's home screen (`web/public/manifest.webmanifest` + `sw.js`), but
+browsers run service workers only on **HTTPS** or `localhost`. In production
+`hub.oxeio.com` is on HTTPS, so it works properly there. Careful: on plain
+`http://<IP>:8080` (the office LAN, before § 3a) "Add to home screen" will never
+appear — the app still works fully, it just cannot be installed.
 
-### ⚠️⚠️ ৩.২· পিনিং ও নবায়ন — তিন মাস পর সব বন্ধ হওয়ার ফাঁদ
+### 3.2· Pinning and renewal — the trap where everything stops after three months
 
-I01-এর `SERVERPIN` **SPKI**-র হ্যাশ ধরে। Let's Encrypt সার্ট **৯০ দিনে**
-নবায়ন হয়, আর ডিফল্টে প্রতিবার **নতুন কী** বানানো হয় — নতুন কী মানে নতুন
-SPKI, অর্থাৎ **১৫টা এজেন্ট একসাথে সংযোগ হারাবে**, ঠিক তিন মাস পর, কোনো
-পূর্বাভাস ছাড়াই।
+The agent's `SERVERPIN` goes by the hash of the **SPKI**. Let's Encrypt
+certificates are renewed every **90 days**, and by default a **new key** is
+generated each time — a new key means a new SPKI, so **all 15 agents lose their
+connection at once**, exactly three months later, with no warning.
 
-⭐ **সবচেয়ে সহজ ও নিরাপদ পথ: `SERVERPIN` একেবারেই দেবেন না।**
+**The simplest and safest way: do not set `SERVERPIN` at all.**
 
-পিনিং মূলত **self-signed** সার্টের জন্য দরকার ছিল — ওখানে "Windows যা
-মানে তাই" দুর্বল, কারণ Trusted Root-এ সার্ট বসাতে পারলেই MITM সম্ভব।
-পাবলিক CA-র সার্টে সেই দুর্বলতা নেই। `SERVERPIN` না দিলে পিনিং এমনিতেই
-বন্ধ থাকে, আর এজেন্ট লগে স্পষ্ট করে সেটা লিখে জানায়।
+Pinning was mainly needed for **self-signed** certificates — there "whatever
+Windows trusts" is weak, because anyone who can place a certificate in Trusted
+Root can mount a MITM. A public-CA certificate has no such weakness. Without
+`SERVERPIN`, pinning is simply off, and the agent says so plainly in its log.
 
-⚠️ তবু পিনিং চাইলে **দুটোই** করুন:
+Careful: if you still want pinning, do **both** of these:
 
-1. Caddy-র বদলে certbot ব্যবহার করে `certbot renew --reuse-key` — কী এক
-   থাকে, তাই SPKI-ও এক, পিন বদলাতে হয় না
-2. নবায়নের **আগে** দুটো পিন বসিয়ে রাখুন (`SERVERPIN` কমা দিয়ে দুটো মান
-   নেয় — ঠিক এই কারণেই নেয়)
+1. Use certbot instead of Caddy, with `certbot renew --reuse-key` — the key
+   stays the same, so the SPKI does too, and the pin need not change
+2. Install two pins **before** renewal (`SERVERPIN` takes two comma-separated
+   values — for exactly this reason)
 
 ---
 
-## ৩খ· Behind a reverse proxy *(Traefik, Nginx, Cloudflare, Coolify …)*
+## 3b· Behind a reverse proxy *(Traefik, Nginx, Cloudflare, Coolify …)*
 
 The shipped setup assumes the `web` container (Caddy) is the edge: it holds
 the certificate and the address it sees is the visitor's. Put another proxy
@@ -564,50 +582,51 @@ CADDY_TRUSTED_PROXIES=172.16.0.0/12    # the proxy's address(es), CIDR, space-se
 Check: log in from two different networks, then Settings → Audit — the two
 rows must show two different addresses, neither of them the proxy's.
 
-## ৩ক· সার্টিফিকেট বানানো *(শুধু LAN / self-signed হলে)*
+## 3a· Making the certificate *(only for a LAN / self-signed setup)*
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File deploy\make-cert.ps1 `
     -Hostname oxeio.office.local -IpAddress 192.168.0.10
 ```
 
-নাম আর IP না দিলে স্ক্রিপ্ট নিজেই মেশিনের নাম ও সব LAN IPv4 খুঁজে নেয়।
+If you give no name and IP, the script finds the machine's name and all its LAN
+IPv4 addresses itself.
 
-> ⚠️ শেষে ছাপা তালিকাটা **মিলিয়ে দেখুন**। এজেন্ট বা ব্রাউজার যে ঠিকানা
-> ব্যবহার করবে সেটা SAN-এ না থাকলে ব্রাউজার সংযোগই করবে না। তাই
-> হোস্টনেম **আর** LAN IP — দুটোই রাখা হয়, একটা নয়।
+> Careful: **check the list** printed at the end. If the address the agent or
+> browser will use is not in the SAN, the browser will not connect at all. So
+> both the hostname **and** the LAN IP are included, not just one.
 
-তৈরি হয় `deploy\certs\`-এ:
+It is created in `deploy\certs\`:
 
-| ফাইল | কী |
+| File | What |
 |---|---|
-| `oxeio-cert.pem` | সার্টিফিকেট → `TLS_CERT` |
-| `oxeio-key.pem` | প্রাইভেট কী → `TLS_KEY` — ⚠️ **গোপন** |
-| `oxeio.pfx` | দুটো একসাথে — Windows-এ ইমপোর্ট ও নবায়নের জন্য — ⚠️ **গোপন** |
-| `oxeio-pin.txt` | SPKI পিন — এজেন্টে বসবে (§ ৬) |
+| `oxeio-cert.pem` | Certificate → `TLS_CERT` |
+| `oxeio-key.pem` | Private key → `TLS_KEY` — **secret** |
+| `oxeio.pfx` | Both together — for importing into Windows and for renewal — **secret** |
+| `oxeio-pin.txt` | SPKI pin — goes on the agent (§ 6) |
 
-> ⚠️ `deploy\certs\` **git-এ যায় না** (`.gitignore` দেখুন)। প্রাইভেট কী
-> কখনো কমিট করবেন না, ইমেইলেও পাঠাবেন না। SPKI পিনটা অবশ্য গোপন নয় —
-> ওটা পাবলিক কী-র হ্যাশ, নির্ভয়ে পাঠানো যায়।
+> Careful: `deploy\certs\` **does not go into git** (see `.gitignore`). Never
+> commit the private key, and never send it by email. The SPKI pin, however, is
+> not secret — it is the hash of the public key and can safely be sent.
 
-### ৩.১ ব্রাউজারের জন্য — Trusted Root-এ বসানো
+### 3.1 For the browser — installing in Trusted Root
 
-ড্যাশবোর্ড খুললে ব্রাউজার self-signed সার্ট নিয়ে সতর্কতা দেখাবে।
-যে যে PC থেকে ড্যাশবোর্ড দেখা হবে, সেগুলোয় একবার (অ্যাডমিন হিসেবে):
+When the dashboard is opened, the browser will warn about the self-signed
+certificate. On every PC from which the dashboard will be viewed, once (as admin):
 
 ```powershell
 Import-Certificate -FilePath deploy\certs\oxeio-cert.pem `
     -CertStoreLocation Cert:\LocalMachine\Root
 ```
 
-> ⚠️ শুধু `oxeio-cert.pem` — **`oxeio.pfx` নয়**। pfx-এ প্রাইভেট কী আছে,
-> সেটা অন্য মেশিনে নেওয়ার কোনো কারণ নেই।
+> Careful: only `oxeio-cert.pem` — **not `oxeio.pfx`**. The pfx contains the
+> private key, and there is no reason to take it to another machine.
 
 ---
 
-## ৪· সার্ভারে TLS চালু করা
+## 4· Turning on TLS on the server
 
-`docker-compose.yml`-এ `api` সার্ভিসে যোগ করুন:
+In `docker-compose.yml`, add to the `api` service:
 
 ```yaml
   api:
@@ -616,67 +635,68 @@ Import-Certificate -FilePath deploy\certs\oxeio-cert.pem `
       TLS_KEY: /certs/oxeio-key.pem
       CORS_ORIGIN: https://oxeio.office.local
     ports:
-      - "443:3000"          # আগে ছিল "3000:3000"
+      - "443:3000"          # was "3000:3000"
     volumes:
       - ./deploy/certs:/certs:ro
 ```
 
-⚠️ **সাথে `web/Caddyfile`-এর `transport` ব্লকটাও খুলতে হবে** — নইলে Caddy
-api-তে প্লেইন HTTP পাঠাবে, আর ওই পোর্টে তখন আর প্লেইন HTTP নেই। ফল:
-ড্যাশবোর্ডের প্রতিটা রিকোয়েস্ট ৫০২, অথচ api-র লগে কোনো ভুল নেই।
-⭐ ঠিক এই ফাঁদেই ডেভ proxy একবার পড়েছিল ([09 § ৩এ](../../docs/09-Build-Log.md)-র বাগ ৪)।
+Careful: **the `transport` block in `web/Caddyfile` must also be uncommented** —
+otherwise Caddy will send plain HTTP to the api, and that port no longer speaks
+plain HTTP. The result: every dashboard request gets a 502, while the api's log
+shows no error. The dev proxy fell into exactly this trap once (bug 4 in
+[09 § ৩এ](../../docs/09-Build-Log.md)).
 
-তারপর `docker compose up -d --build`।
+Then `docker compose up -d --build`.
 
-কীভাবে কাজ করে (`server/src/main.ts`):
+How it works (`server/src/main.ts`):
 
-| অবস্থা | ফল |
+| State | Result |
 |---|---|
-| `TLS_CERT` ও `TLS_KEY` — দুটোই নেই | HTTP (ডেভেলপমেন্ট, আগের মতোই) |
-| দুটোই আছে | HTTPS |
-| একটা আছে, আরেকটা নেই | **সার্ভার উঠবেই না** |
+| Neither `TLS_CERT` nor `TLS_KEY` | HTTP (development, as before) |
+| Both present | HTTPS |
+| One present, the other missing | **The server will not start at all** |
 
-> ⭐ তৃতীয় অবস্থাটা ইচ্ছাকৃতভাবে মারাত্মক। "যা পেয়েছি তাই দিয়ে চালাই"
-> করলে একটা টাইপো (`TLS_KEY` বনাম `TLS_KEYFILE`) সার্ভারকে নীরবে HTTP-তে
-> নামিয়ে দিত — সব কাজ করত, ড্যাশবোর্ড খুলত, আর এজেন্টগুলো তাদের **ডিভাইস
-> টোকেন প্লেইনটেক্সটে** LAN-এ পাঠাতে থাকত। মাসের পর মাস কেউ টের পেত না।
+> The third state is deliberately fatal. With a "run on whatever I got" policy,
+> one typo (`TLS_KEY` vs `TLS_KEYFILE`) would silently drop the server to HTTP —
+> everything would work, the dashboard would open, and the agents would keep
+> sending their **device tokens in plaintext** over the LAN. For months nobody would notice.
 
-যাচাই:
+To verify:
 
 ```powershell
-docker compose logs api --tail 20     # "oXeio API https://0.0.0.0:3000" দেখা চাই
+docker compose logs api --tail 20     # should show "oXeio API https://0.0.0.0:3000"
 curl.exe https://oxeio.office.local/api/v1/health --cacert deploy\certs\oxeio-cert.pem
 ```
 
-`{"status":"ok","db":"up",...}` এলে সার্ভার তৈরি।
+If `{"status":"ok","db":"up",...}` comes back, the server is ready.
 
 ---
 
-## ৫· ফায়ারওয়াল
+## 5· Firewall
 
-### ⚠️⚠️ VPS-এ — API এখন পাবলিক ইন্টারনেটে
+### On a VPS — the API is now on the public internet
 
-অফিসের LAN-এ যা যথেষ্ট ছিল, VPS-এ তা নয়। **শুধু দুটো পোর্ট খোলা রাখুন:**
+What was enough on the office LAN is not enough on a VPS. **Keep only two ports open:**
 
-| পোর্ট | কেন |
+| Port | Why |
 |---|---|
-| `443` | এজেন্ট ও ড্যাশবোর্ড — এটাই একমাত্র দরকারি |
-| `22` | SSH · ⚠️ **কী দিয়ে, পাসওয়ার্ডে নয়** (`PasswordAuthentication no`) |
+| `443` | Agents and the dashboard — the only one that is needed |
+| `22` | SSH · **with a key, not a password** (`PasswordAuthentication no`) |
 
-⚠️ **`5432` কখনো খুলবেন না।** Postgres শুধু Docker নেটওয়ার্কের ভেতরে
-থাকবে। খোলা Postgres ইন্টারনেটে মিনিটের মধ্যে স্ক্যান হয়ে যায়, আর ভেতরে
-১৫ জনের বেতন ও কাজের পুরো ইতিহাস।
+**Never open `5432`.** Postgres stays only inside the Docker network. An open
+Postgres on the internet gets scanned within minutes, and inside it are 15
+people's salaries and their whole work history.
 
-⭐ এজেন্টের ব্রুট-ফোর্স ঠেকানো (I11), 2FA (I06) আর `audit_log` — তিনটেই
-আগে থেকেই আছে, তাই লগইনের দরজাটা LAN-এর মতোই শক্ত। ⚠️ কিন্তু এখন সেটা
-সারা পৃথিবীর নাগালে, তাই `SEED_OWNER_PASSWORD` **অবশ্যই** বদলান আর
-owner অ্যাকাউন্টে 2FA চালু করুন — এটা আর ঐচ্ছিক নয়।
+The agent brute-force protection, 2FA and the `audit_log` — all three are
+already in place, so the login door is as strong as on the LAN. Careful: but it
+is now within reach of the whole world, so you **must** change
+`SEED_OWNER_PASSWORD` and turn on 2FA on the owner account — this is no longer optional.
 
-⚠️ ডিস্কের ৮০%/৯৫% অ্যালার্ট (G03) VPS-এ সত্যিই কাজে লাগবে — ৮০ GB ডিস্কে
-৯০ দিনের ছবি ~২২ GB, কিন্তু retention জব ব্যর্থ হলে জমতেই থাকবে, আর
-ডিস্ক ভরলে Postgres লেখা বন্ধ করে দেয়।
+Careful: the disk 80%/95% alerts will really matter on a VPS — on an 80 GB disk
+90 days of screenshots is ~22 GB, but if the retention job fails they will keep
+piling up, and when the disk fills Postgres stops writing.
 
-### অফিসের LAN হলে
+### On the office LAN
 
 
 
@@ -687,17 +707,17 @@ New-NetFirewallRule -DisplayName "oXeio API (HTTPS)" `
     -Profile Domain,Private -Action Allow
 ```
 
-> ⚠️ `-Profile Public` **দেবেন না**, আর `-RemoteAddress` দিয়ে অফিসের
-> সাবনেটেই সীমাবদ্ধ রাখুন। ল্যাপটপ কখনো ক্যাফের Wi-Fi-তে গেলে Windows
-> সেই নেটওয়ার্ককে Public ধরে — Public-এ পোর্ট খোলা থাকলে সেখানকার যে
-> কেউ সার্ভারে হাত দিতে পারত।
+> Careful: **do not pass `-Profile Public`**, and keep it restricted to the
+> office subnet with `-RemoteAddress`. When a laptop goes onto a café's Wi-Fi,
+> Windows treats that network as Public — with the port open on Public, anyone
+> there could reach the server.
 >
-> ⚠️ ডেটাবেসের পোর্ট (5432) খুলবেন না। `docker-compose.yml`-এ ওটা
-> ইচ্ছাকৃতভাবে `127.0.0.1`-এ বাঁধা।
+> Careful: do not open the database port (5432). In `docker-compose.yml` it is
+> deliberately bound to `127.0.0.1`.
 
 ---
 
-## ৫ক· Screenshots in an S3-compatible bucket *(optional)*
+## 5a· Screenshots in an S3-compatible bucket *(optional)*
 
 By default screenshots and thumbnails are files under `STORAGE_HOST_PATH`.
 With `STORAGE_DRIVER=s3` they go to a bucket instead — Backblaze B2, MinIO,
@@ -731,84 +751,86 @@ their paths, and the gallery looks for them in the bucket. Copy the
 `screenshots/` folder to the bucket first (same paths, under `S3_PREFIX` if
 set), e.g. `rclone copy .data/storage/screenshots b2:oxeio-screenshots/screenshots`.
 
-## ৬· ⭐ এজেন্টে সার্টিফিকেট পিনিং
+## 6· Pinning the certificate on the agent
 
-এই অংশটা এই ডকের সবচেয়ে গুরুত্বপূর্ণ।
+This is the most important part of this document.
 
-### ৬.১ কেন পিনিং ছাড়া উপায় নেই
+### 6.1 Why there is no way around pinning
 
-সার্টিফিকেটটা self-signed। অর্থাৎ এজেন্টের `HttpClient` স্বাভাবিক
-নিয়মে TLS যাচাই করতে গেলে **ব্যর্থ হবে** — চেইনের মাথায় কোনো পরিচিত CA
-নেই। তখন হাতে থাকে তিনটে পথ:
+The certificate is self-signed. So when the agent's `HttpClient` tries to
+verify TLS the normal way it **will fail** — there is no known CA at the head of
+the chain. That leaves three paths:
 
-| পথ | ফল |
+| Path | Result |
 |---|---|
-| যাচাই বন্ধ করে দেওয়া | ⛔ **কখনো নয়** — নিচে দেখুন |
-| প্রতিটা PC-র Trusted Root-এ সার্ট বসানো | চলে, কিন্তু নবায়নে আবার ১৫টা PC |
-| **পিনিং** | ⭐ এটাই |
+| Turn verification off | **Never** — see below |
+| Install the certificate in every PC's Trusted Root | Works, but at renewal it means 15 PCs again |
+| **Pinning** | This is it |
 
-"যাচাই বন্ধ" কেন মারাত্মক: এজেন্ট প্রতিটা রিকোয়েস্টে তার **ডিভাইস টোকেন**
-পাঠায় (`Authorization: Bearer …`)। যাচাই বন্ধ থাকলে LAN-এ যে কেউ
-(ARP spoof, দুষ্ট Wi-Fi রাউটার, বা শুধু DNS-এ হাত) মাঝখানে বসে নিজের
-সার্ট দেখিয়ে দিতে পারে — এজেন্ট খুশি মনে টোকেনটা তার হাতে তুলে দেবে।
-সেই টোকেন দিয়ে সে ভুয়া কাজের ঘণ্টা ঢোকাতে পারে, বা স্ক্রিনশট আপলোড
-পড়তে পারে। **অর্থাৎ TLS থেকেও কোনো লাভ থাকে না।**
+Why "verification off" is dangerous: the agent sends its **device token** with
+every request (`Authorization: Bearer …`). With verification off, anyone on the
+LAN (ARP spoofing, a rogue Wi-Fi router, or just tampering with DNS) can sit in
+the middle and present their own certificate — the agent will happily hand over
+the token. With that token they can inject fake work hours, or read screenshot
+uploads. **That is, TLS would give no benefit at all.**
 
-পিনিং মানে: এজেন্ট আগে থেকেই জানে সার্ভারের **পাবলিক কী** কোনটা, আর
-অন্য কারো সার্ট দেখলে সরাসরি সংযোগ কেটে দেয়।
+Pinning means: the agent knows in advance which **public key** the server has,
+and cuts the connection straight away if it sees anyone else's certificate.
 
-### ৬.২ পিনটা কী
+### 6.2 What the pin is
 
-`make-cert.ps1` যেটা ছাপে — পাবলিক কী-র (SPKI) SHA-256, base64-এ:
+What `make-cert.ps1` prints — the SHA-256 of the public key (SPKI), in base64:
 
 ```
 1+iBMimAAGEKtj350WUD1nVmSpLSqXw6/KrjLD/ILo4=
 ```
 
-> ⭐ **সার্টিফিকেটের** হ্যাশ নয়, **কী-র** হ্যাশ। এটাই মূল সিদ্ধান্ত:
-> সার্টিফিকেট নবায়ন করলে সার্টের হ্যাশ বদলায়, কিন্তু কী একই রাখলে SPKI
-> হ্যাশ **বদলায় না**। ফলে নবায়নের দিন ১৫টা PC-র একটাতেও হাত দিতে হয় না
-> (§ ৭)। সার্টের thumbprint পিন করলে প্রতি নবায়নে পুরো ফ্লিট অচল হয়ে যেত।
+> It is the hash of the **key**, not of the **certificate**. This is the central
+> decision: when the certificate is renewed the certificate's hash changes, but
+> if the key is kept the same the SPKI hash **does not change**. So on renewal
+> day none of the 15 PCs needs touching (§ 7). Pinning the certificate's
+> thumbprint would take the whole fleet down at every renewal.
 
-### ৬.৩ পিনটা এজেন্টে পৌঁছাবে কীভাবে
+### 6.3 How the pin reaches the agent
 
-`SERVERURL`-এর মতোই — MSI-র প্রপার্টি হয়ে রেজিস্ট্রিতে:
+Like `SERVERURL` — as an MSI property, into the registry:
 
 ```
 HKLM\SOFTWARE\oXeio\Agent\ServerPin  (REG_SZ)
 ```
 
-MSI-তে একটা `SERVERPIN` প্রপার্টি লাগবে (`agent/installer/Package.wxs`-এ
-`SERVERURL`-এর ঠিক পাশে), আর `AgentSettings`-এ একটা `ServerPin` ফিল্ড।
+The MSI needs a `SERVERPIN` property (right beside `SERVERURL` in
+`agent/installer/Package.wxs`), and `AgentSettings` needs a `ServerPin` field.
 
-> 🔴 **এখনো কোনোটাই তৈরি হয়নি — ১১ আগস্ট যাচাই করে দেখা।** `Package.wxs`-এ
-> `SERVERPIN` প্রপার্টি নেই, `AgentSettings`-এ `ServerPin` ফিল্ড নেই, আর
-> এজেন্টের কোথাও সার্ট যাচাইয়ের কোড নেই। `make-cert.ps1` পিনটা ছাপে বটে,
-> কিন্তু সেটা **এই ভবিষ্যৎ ফিচারের জন্য** — আজ ওই মানটার কোনো ব্যবহারকারী
-> নেই। ⚠️ অর্থাৎ এই মুহূর্তে এজেন্ট সার্ভারের সার্ট যাচাই করে **Windows-এর
-> নিজের trust store দিয়ে**, পিন দিয়ে নয় — self-signed সার্ট ব্যবহার করলে
-> সেটা আগে trust store-এ বসাতে হবে (§ ৪)।
+> **None of this had been built yet — checked and found so at the time.** There
+> was no `SERVERPIN` property in `Package.wxs`, no `ServerPin` field in
+> `AgentSettings`, and no certificate-verification code anywhere in the agent.
+> `make-cert.ps1` does print the pin, but that is **for this future feature** —
+> then, that value had no consumer. So at that point the agent verified the
+> server's certificate **with Windows' own trust store**, not with a pin — if
+> you use a self-signed certificate it first has to be installed in the trust
+> store (§ 4). (The code has since been written — see the note under § 6.4.)
 
-> ⚠️⚠️ পিনটা **কখনো সার্ভার থেকে নামিয়ে আনা যাবে না**। মাঝখানে বসা
-> আক্রমণকারী তখন নিজের পিনটাই পাঠিয়ে দিত, আর পুরো ব্যবস্থাটা অর্থহীন
-> হয়ে যেত। পিন আসবে ইনস্টলের সময়, হাতে দেওয়া মান হিসেবে — ওটাই
-> বিশ্বাসের ভিত্তি (trust anchor)।
+> **The pin must never be downloaded from the server.** An attacker in the
+> middle would then simply send their own pin, and the whole scheme would be
+> meaningless. The pin arrives at install time, as a value given by hand — that
+> is the trust anchor.
 
-> ⭐ **একাধিক পিন রাখার ব্যবস্থা রাখুন** — কমা দিয়ে আলাদা করা তালিকা।
-> কোনোদিন যদি প্রাইভেট কী বদলাতেই হয় (§ ৭.২), তখন আগে দুটো পিন
-> (পুরোনো + নতুন) বিলি করা যায়, তারপর সার্ট বদলানো যায়, তারপর পুরোনোটা
-> ফেলে দেওয়া যায় — কোনো মুহূর্তেই ফ্লিট অচল হয় না। একটামাত্র পিন
-> সমর্থন করলে কী বদলানোর দিন সব এজেন্ট একসাথে বন্ধ হয়ে যেত।
+> **Provide for more than one pin** — a comma-separated list. If the private
+> key ever has to change (§ 7.2), you can first distribute two pins (old +
+> new), then change the certificate, then drop the old one — the fleet is never
+> down at any moment. If only a single pin were supported, on the day the key
+> changed all agents would stop at once.
 
-### ৬.৪ কোডে কোথায় বসবে
+### 6.4 Where it goes in the code
 
-`agent/src/oXeio.Agent/Sync/HttpSyncClient.cs`-এর `SocketsHttpHandler`-এ
-`SslOptions` যোগ করতে হবে। কাঠামোটা এরকম:
+`SslOptions` has to be added to the `SocketsHttpHandler` in
+`agent/src/oXeio.Agent/Sync/HttpSyncClient.cs`. The structure is like this:
 
 ```csharp
 var inner = new SocketsHttpHandler
 {
-    // … আগের সব সেটিং অপরিবর্তিত …
+    // … all earlier settings unchanged …
 
     SslOptions = new SslClientAuthenticationOptions
     {
@@ -820,7 +842,7 @@ var inner = new SocketsHttpHandler
             var spki = c.PublicKey.ExportSubjectPublicKeyInfo();
             var hash = SHA256.HashData(spki);
 
-            // pins = রেজিস্ট্রি থেকে পড়া, কমা দিয়ে ভাগ করা তালিকা
+            // pins = comma-separated list read from the registry
             return pins.Any(p => CryptographicOperations.FixedTimeEquals(
                 hash, Convert.FromBase64String(p)));
         },
@@ -828,144 +850,148 @@ var inner = new SocketsHttpHandler
 };
 ```
 
-মনে রাখার মতো কয়েকটা জিনিস:
+A few things to keep in mind:
 
-- ⚠️ এই callback বসানোর মানে **.NET-এর নিজের সব যাচাই বন্ধ হয়ে যাওয়া** —
-  হোস্টনেম মেলানো, চেইন, মেয়াদ, সব। যা যা দরকার, এখানে নিজে করতে হবে।
-  এটা না বুঝে `return true` লিখে ফেলা সবচেয়ে সহজ ভুল, আর তাতে § ৬.১-এর
-  পুরো বিপদটা ফিরে আসে।
-- ⚠️ পিন **না থাকলে** কী হবে সেটা ঠিক করে রাখুন। সুপারিশ: `https://`
-  হলে পিন বাধ্যতামূলক, আর পিন ছাড়া কনফিগ পেলে এজেন্ট সংযোগ না করে
-  tray-তে স্পষ্ট ভুল দেখাক। "পিন নেই মানে যাচাই বাদ" — এই ডিফল্টটাই
-  একদিন নীরবে সবার নিরাপত্তা কেড়ে নিত।
-- ⚠️ `AgentSettings.IsUsable` এখন `http://`-ও মেনে নেয়। প্রোডাকশনে পিন
-  থাকলে `http` **বাতিল** করা উচিত — নইলে কেউ ভুল করে `http://` লিখলে
-  পিনিং থাকা সত্ত্বেও টোকেন খোলা অবস্থায় যেত।
-- `FixedTimeEquals` এখানে নিরাপত্তার জন্য অপরিহার্য নয় (পিন গোপন নয়),
-  কিন্তু অভ্যাস হিসেবে ভালো — আর খরচও নেই।
+- Installing this callback means **all of .NET's own verification is turned
+  off** — hostname matching, chain, expiry, everything. Whatever is needed has
+  to be done here yourself. Writing `return true` without understanding this is
+  the easiest mistake, and it brings back the whole danger of § 6.1.
+- Decide in advance what happens **when there is no pin**. Recommendation: for
+  `https://` the pin is mandatory, and if the agent gets a config without a pin
+  it should not connect and should show a clear error in the tray. "No pin
+  means skip verification" — that default would one day silently take away
+  everyone's security.
+- `AgentSettings.IsUsable` currently accepts `http://` as well. In production
+  with a pin, `http` should be **rejected** — otherwise if someone mistakenly
+  writes `http://`, the token would travel in the open despite pinning.
+- `FixedTimeEquals` is not essential for security here (the pin is not secret),
+  but it is a good habit — and costs nothing.
 
-> ✅ **এই কোডটা এখন লেখা হয়ে গেছে** *(১২ আগস্ট)* — উপরের নকশাটা
-> `Sync/HttpSyncClient.cs`-এ বসেছে, কিন্তু সিদ্ধান্তটুকু সরানো হয়েছে
-> `Core/Agent/CertificatePin.cs`-এ। কারণ TLS হ্যান্ডলারের ভেতরে বসে
-> থাকলে ওটা যাচাই করতে সত্যিকারের সার্ট, সত্যিকারের MITM আর একটা টেস্ট
-> সার্ভার লাগত; খাঁটি ফাংশন হিসেবে **১৫টা ইউনিট টেস্ট** দিয়ে ধরা যায় —
-> তার মধ্যে সবচেয়ে জরুরিটা: *"পিন মিলেছে, কিন্তু চেইন ভাঙা → প্রত্যাখ্যান"*।
+> **This code has now been written** — the design above went into
+> `Sync/HttpSyncClient.cs`, but the decision itself was moved into
+> `Core/Agent/CertificatePin.cs`. Sitting inside the TLS handler, verifying it
+> would need a real certificate, a real MITM and a test server; as a pure
+> function it is covered by **15 unit tests** — the most important being:
+> *"pin matches, but the chain is broken → rejected"*.
 
-### ৬.৫ মেয়াদ শেষ হলে এজেন্ট কী করবে
+### 6.5 What the agent does when the certificate expires
 
-⭐ সুপারিশ: **এজেন্ট মেয়াদ যাচাই করবে না** — শুধু পিন মেলাবে।
+Recommendation: **the agent does not check expiry** — it only matches the pin.
 
-কারণ: পিনটাই এখানে বিশ্বাসের ভিত্তি, আর মেয়াদ তার সাথে বাড়তি কিছু যোগ
-করে না (কী ফাঁস হলে মেয়াদ শেষ হওয়ার অপেক্ষা করে লাভ নেই — কী বদলাতে
-হবে, § ৭.২)। উল্টো দিকে মেয়াদ যাচাই করলে একটা ভুলে যাওয়া তারিখে
-**১৫টা PC একসাথে ডেটা পাঠানো বন্ধ করে দিত**, আর সেটা টের পাওয়া যেত অনেক
-দেরিতে — কারণ এজেন্ট চুপচাপ কিউ জমাতে থাকে, ভেঙে পড়ে না।
+The reason: the pin is the trust anchor here, and expiry adds nothing to it
+(if the key leaks there is no point waiting for expiry — the key has to be
+changed, § 7.2). On the other hand, checking expiry would make **15 PCs stop
+sending data at once** on a forgotten date, and it would be noticed very late —
+because the agent quietly keeps queuing, it does not fall over.
 
-তবে ⚠️ মেয়াদ **ব্রাউজারের জন্য ঠিকই দরকারি** — ড্যাশবোর্ড খুলতে গিয়ে
-সতর্কতা আসবে। সেটাই বাস্তবে নবায়নের তাগিদ দেবে।
+But expiry **is still needed for the browser** — opening the dashboard will
+show a warning. That will in practice be the nudge to renew.
 
 ---
 
-## ৭· সার্ট মেয়াদ ও নবায়ন
+## 7· Certificate validity and renewal
 
-ডিফল্ট মেয়াদ **৮২৫ দিন** (~২ বছর ৩ মাস)।
+The default validity is **825 days** (~2 years 3 months).
 
-> কেন ৩৯৮ দিন নয়: ব্রাউজারের ৩৯৮-দিনের সীমা প্রযোজ্য হয় পাবলিক CA-র
-> চেইনে; নিজে Trusted Root-এ বসানো সার্টে নয়। আর প্রতি বছর নবায়ন মানে
-> প্রতি বছর ভুলে যাওয়ার একটা সুযোগ।
+> Why not 398 days: the browsers' 398-day limit applies to chains from public
+> CAs, not to a certificate you place in Trusted Root yourself. And renewing
+> every year means a chance to forget every year.
 
-### ৭.১ নিয়মিত নবায়ন — কেউ টেরও পাবে না
+### 7.1 Regular renewal — nobody will even notice
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File deploy\make-cert.ps1 -ReuseKey
 docker compose restart api
 ```
 
-`-ReuseKey` আগের প্রাইভেট কী-ই ব্যবহার করে, তাই:
+`-ReuseKey` uses the same private key as before, so:
 
-- SPKI পিন **অপরিবর্তিত** → এজেন্টে কিচ্ছু বদলাতে হবে না
-- `oxeio-key.pem` ফাইলটা **ছোঁয়াই হয় না**
-- শুধু সার্ট, pfx আর pin.txt নতুন হয়
+- The SPKI pin is **unchanged** → nothing has to change on the agents
+- The `oxeio-key.pem` file is **not touched at all**
+- Only the certificate, pfx and pin.txt are new
 
-তারপর ব্রাউজারের PC-গুলোয় § ৩.১ আবার একবার (নতুন সার্ট Trusted Root-এ)।
+Then, on the browser PCs, § 3.1 once more (the new certificate into Trusted Root).
 
-> ⚠️ **ক্যালেন্ডারে দাগ দিন — মেয়াদ শেষের ৬০ দিন আগে।** তারিখটা
-> `deploy\certs\oxeio-pin.txt`-এ লেখা আছে।
+> **Mark the calendar — 60 days before expiry.** The date is written in
+> `deploy\certs\oxeio-pin.txt`.
 
-### ৭.২ কী বদলাতে হলে (কী ফাঁস হলে)
+### 7.2 When the key has to change (if the key leaks)
 
-এটাই একমাত্র অবস্থা যেখানে ১৫টা PC-তে হাত দিতে হয়। ক্রমটা গুরুত্বপূর্ণ:
+This is the only situation where the 15 PCs have to be touched. The order matters:
 
-1. নতুন কী+সার্ট: `make-cert.ps1 -Force` → নতুন পিন
-2. এজেন্টগুলোয় **দুটো পিন** বিলি করুন (পুরোনো,নতুন) — রেজিস্ট্রিতে
-3. সব এজেন্ট নতুন পিন পেয়েছে নিশ্চিত হন
-4. তবেই সার্ভারে নতুন সার্ট চালু করুন
-5. কয়েক দিন পর পুরোনো পিনটা তালিকা থেকে ফেলে দিন
+1. New key + certificate: `make-cert.ps1 -Force` → a new pin
+2. Distribute **two pins** (old, new) to the agents — in the registry
+3. Confirm that all agents have received the new pin
+4. Only then put the new certificate into service on the server
+5. After a few days, drop the old pin from the list
 
-> ⚠️ ২ আর ৪ উল্টে গেলে ফ্লিট অচল হয়ে যাবে।
+> If 2 and 4 are swapped, the fleet will go down.
 
 ---
 
-## ৮· MSI বিলি — ⭐ সবচেয়ে সহজ পথ
+## 8· Delivering the MSI — the simplest path
 
-### ৮.১· MSI বানানো (একবার, সার্ভার PC-তে)
+### 8.1· Building the MSI (once, on the server PC)
 
 ```powershell
 powershell -File agent\installer\build.ps1
 ```
 
-### ৮.১ক· সই করা *(ঐচ্ছিক নয় — ডায়ালগ এড়াতে দরকার)*
+### 8.1a· Signing *(not optional — needed to avoid the dialog)*
 
 ```powershell
-# একবার, সার্ভার-PC-তে — thumbprint ছাপবে
+# Once, on the server PC — prints the thumbprint
 powershell -ExecutionPolicy Bypass -File deploy\make-code-cert.ps1
 
-# তারপর প্রতিটা বিল্ডে
+# Then on every build
 powershell -File agent\installer\build.ps1 -SignWith <thumbprint>
 ```
 
-⚠️⚠️ **আর প্রতিটা স্টাফ-PC-তে একবার** (অ্যাডমিন হিসেবে), নইলে সই থাকবে
-ঠিকই কিন্তু Windows চিনবে না:
+**And once on every staff PC** (as admin), otherwise the signature will be
+there but Windows will not recognise it:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File deploy	rust-publisher.ps1
 ```
 
-⚠️ স্ক্রিপ্টটা সার্টটা **দুই** স্টোরে বসায় — Trusted **Root** ও Trusted
-**Publishers**। কেনা সার্টে প্রথমটা লাগে না, কিন্তু self-signed সার্ট
-নিজেই নিজের ইস্যুকারী, তাই Root ছাড়া চেইন ভাঙা থাকে আর ডায়ালগটা আসতেই
-থাকে ([ADR-014](../../docs/05-Options-Decisions.md))।
+The script installs the certificate in **two** stores — Trusted **Root** and
+Trusted **Publishers**. A purchased certificate does not need the first, but a
+self-signed certificate is its own issuer, so without Root the chain stays
+broken and the dialog keeps appearing ([ADR-014](../../docs/05-Options-Decisions.md)).
 
-⚠️⚠️ `deploy\certs\oxeio-code.pfx` **হারালে একই পরিচয়ে আর সই করা যাবে
-না** — ১৫টা PC-তে আবার গিয়ে নতুন `.cer` বসাতে হবে। ব্যাকআপ রাখুন।
+If `deploy\certs\oxeio-code.pfx` is **lost, nothing can be signed with the same
+identity again** — you would have to go to the 15 PCs again to install a new
+`.cer`. Keep a backup.
 
-⭐ `-SignWith` না দিলে বিল্ড আগের মতোই চলে, শুধু ইনস্টলে "Unknown
-publisher" আসে। বিল্ডের শেষে লেখা থাকে সই হয়েছে কি না।
+Without `-SignWith` the build works as before, only the install shows
+"Unknown publisher". The end of the build says whether it was signed.
 
 ---
 
-⭐ **ঠিকানাটা MSI-র ভেতরেই বসে যায়** — তখন প্রতিটা PC-তে শুধু
-**ডাবল-ক্লিক**। ১৫টা মেশিনে লম্বা কমান্ড টাইপ করার দরকার নেই, আর একটা
-টাইপোর জন্য একটা মেশিন নীরবে অচল থাকার ঝুঁকিও নেই।
+**The address is baked into the MSI itself** — then on each PC it is just a
+**double-click**. There is no need to type a long command on 15 machines, and
+no risk of one machine sitting dead silently because of a typo.
 
-⚠️ ডিফল্ট ঠিকানা `https://oxeio.office.local`; অন্য কিছু হলে
-`-ServerUrl "https://…"`। ঠিকানা **ছাড়া** MSI চাইলে সেটা এখন স্পষ্ট করে
-চাইতে হয় — `-NoServerUrl`, আর তখন প্রতিটা মেশিনে `msiexec /qn
-SERVERURL=…` লাগবে। ⚠️⚠️ আগে এটাই ছিল ডিফল্ট, আর `-ServerUrl` দিতে ভুলে
-গেলে বিল্ড নীরবে এমন MSI বানাত যেটা ডাবল-ক্লিকে *"This MSI was built
-without a server address"* বলে আটকে যেত — ০.৩.২-এ ঠিক তাই হয়েছিল
-([09 § ৩ন](../../docs/09-Build-Log.md))।
+The default address is `https://oxeio.office.local`; for anything else use
+`-ServerUrl "https://…"`. To get an MSI **without** an address you now have to
+ask explicitly — `-NoServerUrl`, and then every machine needs `msiexec /qn
+SERVERURL=…`. Careful: this used to be the default, and if you forgot to pass
+`-ServerUrl` the build silently produced an MSI that, on double-click, stopped
+with *"This MSI was built without a server address"* — exactly that happened
+with 0.3.2 ([09 § ৩ন](../../docs/09-Build-Log.md)).
 
-⚠️ `-ServerUrl`-এ `/api/v1` **লিখবেন না** আর শেষে স্ল্যাশও নয় — এজেন্ট
-নিজে জুড়ে নেয়। স্ক্রিপ্ট আকৃতিটা যাচাই করে, ভুল হলে বিল্ডই থেমে যায়।
+Careful: **do not write `/api/v1`** in `-ServerUrl`, and no trailing slash
+either — the agent appends it itself. The script checks the shape, and the
+build stops if it is wrong.
 
-⚠️ `pwsh` (PowerShell 7) লাগে **না** — স্টক Windows PowerShell 5.1-এই চলে।
-(তার জন্যই ফাইলটায় UTF-8 BOM দরকার, নিচের § স্ক্রিপ্ট সম্পর্কে দেখুন।)
+`pwsh` (PowerShell 7) is **not** needed — it runs on stock Windows PowerShell
+5.1. (That is why the file needs a UTF-8 BOM; see "About the scripts" below.)
 
-⚠️ `-Version` দেওয়ারও দরকার নেই — সংখ্যাটা `agent/Directory.Build.props`
-থেকে আসে। হাতে দিলে MSI এক ভার্সন বসাত আর এজেন্ট heartbeat-এ আরেকটা বলত।
+There is also no need to pass `-Version` — the number comes from
+`agent/Directory.Build.props`. If given by hand, the MSI would install one
+version and the agent's heartbeat would report another.
 
-### ৮.১খ· Signed agent updates *(recommended)*
+### 8.1b· Signed agent updates *(recommended)*
 
 Agents check a downloaded update against the sha256 the server reports —
 which catches a broken download, but not a server that has been taken over:
@@ -1004,45 +1030,45 @@ missing or wrong, instead of letting every PC download and discard it.
 - A refused update shows in the agent log as `Update … refused — …`, and the
   file is deleted.
 
-### ৮.২· প্রতিটা PC-তে
+### 8.2· On each PC
 
-**অ্যাডমিন হিসেবে** MSI-তে ডাবল-ক্লিক। ব্যস।
+Double-click the MSI **as admin**. That is all.
 
-⚠️ ফাইলের নামে ভার্সন থাকে — `oXeioAgent-0.3.4.msi`। `bin/`-এ পুরোনো
-বিল্ডগুলোও থেকে যায়, তাই **কোনটা বিলি করছেন সেটা নামেই দেখা যায়**।
-১২ আগস্ট একই নামে তিনটে আলাদা বাইনারি বেরিয়ে গিয়েছিল, আর কোনটা কোনটা
-বলার উপায় ছিল না ([09 § ৩থ](../../docs/09-Build-Log.md))।
+Careful: the version is in the file name — `oXeioAgent-0.3.4.msi`. Old builds
+also stay in `bin/`, so **you can tell by the name which one you are
+distributing**. Once, three different binaries went out under the same name,
+and there was no way to say which was which ([09 § ৩থ](../../docs/09-Build-Log.md)).
 
-⚠️ অ্যাডমিন লাগে কারণ ফাইল যায় `Program Files`-এ, কনফিগ যায় `HKLM`-এ,
-আর একটা লগঅন Scheduled Task বসে।
+Careful: admin is needed because the files go into `Program Files`, the config
+goes into `HKLM`, and a logon Scheduled Task is installed.
 
-তারপর **স্টাফ নিজে** একটা জানালা দেখবে:
+Then **the staff member themselves** will see a window:
 
 > **Sign in to start tracking**
 > https://oxeio.office.local
 > Work email · Password
 
-সে নিজের ইমেইল-পাসওয়ার্ড দেবে (যেটা দিয়ে সে ড্যাশবোর্ডেও ঢোকে), আর
-ডিভাইসটা **তারই নামে** যোগ হয়ে যাবে।
+They enter their own email and password (the same ones they use for the
+dashboard), and the device is added **in their own name**.
 
-⭐ **কেন এই পথটা enrollment কোডের চেয়ে ভালো:** কোডের ব্যবস্থায় প্রতিটা
-PC-র জন্য আলাদা কোড বানাতে হতো, ২৪ ঘণ্টার মধ্যে ব্যবহার করাতে হতো, আর
-**কোন কোড কোন মেশিনে** সেটা হাতে মেলাতে হতো। ভুল মিললে কোনো এরর আসত না —
-একজনের ঘণ্টা আরেকজনের নামে জমা হতো, আর ধরা পড়ত মাস শেষে। এখন যে কীবোর্ডে
-বসে **সে নিজেই প্রমাণ করে সে কে**।
+**Why this path is better than the enrollment code:** with codes, a separate
+code had to be created for each PC, used within 24 hours, and **which code
+went to which machine** had to be matched by hand. A wrong match raised no
+error — one person's hours would accumulate under another's name, and be
+caught only at month end. Now **the person at the keyboard proves for themselves who they are**.
 
-⚠️ **স্টাফের পোর্টাল অ্যাকাউন্ট আগে বানিয়ে রাখতে হবে** — ড্যাশবোর্ড →
-Settings → Staff → ওই কর্মী → "Portal account"। অস্থায়ী পাসওয়ার্ডটা
-একবারই দেখা যায়; সেটা তাকে দিয়ে দিন। (অ্যাকাউন্টটা এমনিতেও লাগে — ওটা
-দিয়েই সে নিজের ঘণ্টা দেখে, `/me`।)
+Careful: **the staff member's portal account must be created beforehand** —
+dashboard → Settings → Staff → that staff member → "Portal account". The
+temporary password is shown only once; hand it to them. (The account is needed
+anyway — it is what they use to see their own hours, `/me`.)
 
-⚠️ জানালাটা বন্ধ করে দিলে এজেন্ট চলতেই থাকে, শুধু কিছু পাঠায় না —
-পরের লগঅনে আবার জিজ্ঞেস করবে। ⚠️ owner বা manager-এর অ্যাকাউন্ট দিয়ে
-সাইন ইন করা যাবে না; বার্তাটা তখন সেটাই বলে।
+Careful: if the window is closed the agent keeps running, it just sends
+nothing — it will ask again at the next logon. Also, you cannot sign in with an
+owner or manager account; the message says exactly that.
 
-### ৮.৩· স্ক্রিপ্টেড রোলআউট (কেউ কীবোর্ডে বসবে না)
+### 8.3· Scripted rollout (nobody sits at a keyboard)
 
-কোডের পথটা রয়েই গেছে — রাতের বেলা দূর থেকে ১৫টা PC-তে বসাতে হলে:
+The code path is still there — for installing on 15 PCs remotely at night:
 
 ```powershell
 msiexec /i oXeioAgent-0.3.4.msi /qn `
@@ -1052,211 +1078,213 @@ msiexec /i oXeioAgent-0.3.4.msi /qn `
     POLICYURL="https://oxeio.office.local/policy"
 ```
 
-⚠️ কমান্ড লাইনের `SERVERURL=` MSI-তে বেক করা মানকে **ছাপিয়ে যায়** —
-একটা MSI দিয়ে দুটো সার্ভারেও কাজ চলে।
+Careful: `SERVERURL=` on the command line **overrides** the value baked into
+the MSI — so one MSI can serve two servers.
 
-✅ **`SERVERPIN` এখন কাজ করে** *(১২ আগস্ট)* — সার্ট বসানোর পর পিনটা
-যোগ করুন:
+**`SERVERPIN` works now** — after installing the certificate, add the pin:
 
 ```powershell
 msiexec /i oXeioAgent-0.3.4.msi /qn `
-    SERVERPIN="<make-cert.ps1 যে base64 মানটা ছাপে>"
+    SERVERPIN="<the base64 value make-cert.ps1 prints>"
 ```
 
-> ⚠️ এখানে আগে লেখা ছিল *"পিনিং এখনো তৈরি হয়নি"* — সেটা আর সত্যি নয়।
-> `Package.wxs` এখন পাঁচটা প্রপার্টি চেনে, আর এজেন্ট
-> `CertificatePin` দিয়ে সত্যিই মিলিয়ে দেখে।
+> Careful: this used to say *"pinning has not been built yet"* — that is no
+> longer true. `Package.wxs` now knows five properties, and the agent really
+> verifies with `CertificatePin`.
 >
-> ⚠️ **পিন না দিলে পিনিং বন্ধ থাকে** — তখন শুধু Windows-এর নিজের যাচাই,
-> আর স্ব-স্বাক্ষরিত সার্টে সেটা শোনার চেয়ে দুর্বল। এজেন্ট লগে
-> (`logs\agent.log`) সেটা স্পষ্ট করে বলে। § ৬.৪-এর সুপারিশ ছিল পিন
-> **বাধ্যতামূলক** করার; সেটা করা হয়নি, কারণ তাতে পাইলটের মেশিনগুলো
-> (যেখানে সার্টই বসানো হয়নি) সংযোগই করতে পারত না। প্রোডাকশনে পিন দেওয়া
-> রোলআউট-চেকলিস্টের অংশ।
+> Careful: **without a pin, pinning is off** — then only Windows' own
+> verification applies, and for a self-signed certificate that is weaker than it
+> sounds. The agent says so plainly in its log (`logs\agent.log`). The
+> recommendation in § 6.4 was to make the pin **mandatory**; that was not done,
+> because the pilot machines (where the certificate was never installed) would
+> then not be able to connect at all. Providing the pin in production is part of
+> the rollout checklist.
 
-> ⚠️ প্রতিটা PC-র জন্য **আলাদা** `ENROLLCODE` লাগে — কোড একবার-ব্যবহার্য।
-
----
-
-## ৯· Enrollment কোড *(শুধু স্ক্রিপ্টেড রোলআউটে লাগে)*
-
-⚠️ সাধারণ ইনস্টলে এটা **লাগে না** — § ৮.২ দেখুন। এই অংশটা কেবল § ৮.৩-এর
-জন্য।
-
-ড্যাশবোর্ডে **owner** হিসেবে লগইন → ডিভাইস → "নতুন কোড"
-(`POST /api/v1/devices/enrollment-code`)।
-
-- ১২ অক্ষর, চোখে-গোলানো অক্ষর বাদ দেওয়া (`0`/`O`, `I`/`L` নেই)
-- **২৪ ঘণ্টা** পর মেয়াদ শেষ
-- **একবারই** ব্যবহার করা যায়
-
-> ⚠️ ১৫টা কোড আগে থেকে বানিয়ে রাখবেন না — আজ বানিয়ে পরশু বসাতে গেলে
-> সব মেয়াদোত্তীর্ণ পাবেন। যে দিন যে PC-তে বসাবেন, সেদিন সেটার কোড নিন।
+> Careful: **each PC needs a different** `ENROLLCODE` — a code is single-use.
 
 ---
 
-## ১০· অ্যান্টিভাইরাসে ছাড় (H09)
+## 9· Enrollment code *(needed only for the scripted rollout)*
 
-প্রতিটা স্টাফ-PC-তে, **এজেন্ট বসানোর পর**:
+Careful: for an ordinary install this is **not needed** — see § 8.2. This
+section exists only for § 8.3.
+
+In the dashboard log in as **owner** → Devices → "New code"
+(`POST /api/v1/devices/enrollment-code`).
+
+- 12 characters, with look-alike characters left out (no `0`/`O`, `I`/`L`)
+- Expires after **24 hours**
+- Can be used **only once**
+
+> Careful: do not create 15 codes in advance — made today and used the day
+> after tomorrow, you will find them all expired. Take a PC's code on the day
+> you install that PC.
+
+---
+
+## 10· Antivirus exclusion
+
+On every staff PC, **after installing the agent**:
 
 ```powershell
-# ১· আগে দেখে নিন — কিচ্ছু বদলাবে না
+# 1. Look first — nothing will change
 powershell -ExecutionPolicy Bypass -File deploy\defender-exclusions.ps1 -WhatIf
 
-# ২· তারপর সত্যিই (অ্যাডমিন হিসেবে)
+# 2. Then for real (as admin)
 powershell -ExecutionPolicy Bypass -File deploy\defender-exclusions.ps1
 ```
 
-রোলআউট স্ক্রিপ্ট থেকে প্রশ্ন ছাড়া চালাতে `-Force`।
+To run it from a rollout script without prompts, use `-Force`.
 
-> ⚠️ `-Confirm:$false` **কাজ করবে না** — `powershell -File` তার পরের সব
-> যুক্তিকে স্ট্রিং ধরে, তাই `$false` আক্ষরিক `"$false"` হয়ে যায়।
-> সেজন্যই আলাদা `-Force` সুইচ।
+> Careful: `-Confirm:$false` **will not work** — `powershell -File` treats every
+> argument after it as a string, so `$false` becomes the literal `"$false"`.
+> That is why there is a separate `-Force` switch.
 
-ডিফল্টে বসে: `oXeio.Agent.exe`, `oXeio.Watchdog.exe` (প্রসেস) আর
-`C:\Program Files\oXeio` (ফোল্ডার)।
+By default it adds: `oXeio.Agent.exe`, `oXeio.Watchdog.exe` (processes) and
+`C:\Program Files\oXeio` (a folder).
 
-> ⭐ `%ProgramData%\oXeio` ইচ্ছাকৃতভাবে **বাদ**। ওই ফোল্ডারে সাধারণ
-> ইউজারের লেখার অধিকার আছে (এজেন্টকে স্টাফের অ্যাকাউন্টে চলতে হয়), তাই
-> ওটাকে ছাড় দিলে অফিসের যে কেউ ওখানে একটা .exe রেখে দিলে Defender সেটা
-> আর দেখত না — কার্যত একটা "ভাইরাস লুকানোর জায়গা"। প্রসেস-ছাড় দুটো
-> এমনিতেই এজেন্টের নিজের লেখা ফাইলগুলো স্ক্যানের বাইরে রাখে, তাই
-> দরকারও পড়ে না। সত্যিই ধীরগতি দেখলে তবেই `-IncludeDataFolder`।
+> `%ProgramData%\oXeio` is deliberately **left out**. Ordinary users have write
+> access to that folder (the agent has to run under the staff member's account),
+> so if it were excluded, anyone in the office could drop an .exe there and
+> Defender would no longer see it — effectively a "place to hide a virus". The
+> two process exclusions already keep the agent's own files out of scanning, so
+> it is not needed anyway. Use `-IncludeDataFolder` only if you really see slowness.
 
-> ⚠️ অন্য অ্যান্টিভাইরাস (Kaspersky, Avast, …) চললে Defender নিষ্ক্রিয়
-> থাকে — স্ক্রিপ্ট সেটা ধরে ফেলে আর পরিষ্কার বার্তা দেয়। তখন ওই AV-র
-> নিজের কনসোল থেকে একই ফোল্ডার ও প্রসেসগুলো ছাড়ের তালিকায় দিতে হবে।
+> Careful: if another antivirus (Kaspersky, Avast, …) is running, Defender is
+> inactive — the script detects this and gives a clear message. Then the same
+> folder and processes must be added to the exclusion list from that AV's own console.
 
-আনইনস্টলের পর: `-Remove`।
-
----
-
-## ১১· প্রথম দিনে যা যা দেখে নিতে হবে
-
-### সকালে (এজেন্ট বসানোর পরপর)
-
-- [ ] প্রতিটা PC-র system tray-তে oXeio আইকন **দেখা যাচ্ছে**
-      (গোপন ইনস্টল নয় — আইকন না দেখালে সেটা বাগ, ফিচার নয়)
-- [ ] ড্যাশবোর্ডের Live Board-এ **১৫টা মেশিনই** আছে
-- [ ] কারো "enrollment ব্যর্থ" দেখাচ্ছে না
-- [ ] tray → "আমার আজকের হিসাব" স্টাফ নিজে খুলতে পারছেন
-
-### দুপুরে
-
-- [ ] কাজের ঘণ্টা বাড়ছে, আটকে নেই
-- [ ] স্ক্রিনশট আসছে
-- [ ] app usage-এ **শুধু ডোমেইন** দেখাচ্ছে, পুরো URL নয়
-      (⚠️ পুরো URL দেখলে সাথে সাথে থামুন — এটা পণ্যের কঠিন নিয়ম ভাঙে)
-
-### বিকেলে / পরদিন সকালে
-
-- [ ] `%ProgramData%\oXeio` ফুলে উঠছে না (আউটবক্স জমছে না মানে আপলোড হচ্ছে)
-- [ ] রাত ১১টার পর আর স্ক্রিনশট আসেনি, কিন্তু **সময় গোনা চলেছে**
-      (০৭:০০–২৩:০০ শুধু স্ক্রিনশটের সীমা, ঘণ্টার নয়)
-- [ ] সকাল ৭টার আগে কোনো স্ক্রিনশট নেই
-- [ ] `docker compose logs api` — বারবার একই ভুল নেই
-
-### সপ্তাহ শেষে
-
-- [ ] মাসিক ২০৮ ঘণ্টার অগ্রগতি যুক্তিসঙ্গত দেখাচ্ছে
-- [ ] ব্যাকআপ চলছে
-- [ ] সই করা পলিসিগুলো ফাইলে গোছানো আছে
+After an uninstall: `-Remove`.
 
 ---
 
-## ১২· সমস্যা হলে
+## 11· What to check on the first day
 
-| উপসর্গ | সম্ভাব্য কারণ |
+### Morning (right after installing the agents)
+
+- [ ] The oXeio icon is **visible** in every PC's system tray
+      (this is not a covert install — if the icon is not shown, that is a bug, not a feature)
+- [ ] **All 15 machines** are on the dashboard's Live Board
+- [ ] Nobody shows "enrollment failed"
+- [ ] Staff can open tray → "Today's hours" themselves
+
+### Noon
+
+- [ ] Work hours are increasing, not stuck
+- [ ] Screenshots are arriving
+- [ ] App usage shows **only the domain**, not the full URL
+      (stop immediately if you see a full URL — it breaks a hard rule of the product)
+
+### Afternoon / next morning
+
+- [ ] `%ProgramData%\oXeio` is not growing (an outbox that is not piling up
+      means uploads are happening)
+- [ ] No screenshots arrived after 11 pm, but **time counting continued**
+      (07:00–23:00 is only the screenshot window, not the hours window)
+- [ ] There are no screenshots before 7 am
+- [ ] `docker compose logs api` — no error repeating over and over
+
+### End of the week
+
+- [ ] The progress towards the monthly 208 hours looks reasonable
+- [ ] Backups are running
+- [ ] The signed policies are filed in order
+
+---
+
+## 12· When something goes wrong
+
+| Symptom | Likely cause |
 |---|---|
-| এজেন্ট সংযোগ করছে না, tray লাল | পিন মিলছে না (§ ৭.২-এর ক্রম উল্টেছে?), বা ফায়ারওয়াল |
-| ব্রাউজারে সার্ট সতর্কতা | § ৩.১ করা হয়নি, বা সার্টের মেয়াদ শেষ |
-| `curl` বলে hostname mismatch | যে নামে ডাকছেন সেটা SAN-এ নেই — `-Hostname`/`-IpAddress` দিয়ে সার্ট আবার বানান |
-| সার্ভার ওঠে না, "TLS আংশিকভাবে কনফিগার করা" | `TLS_CERT` বা `TLS_KEY`-র একটা বাদ পড়েছে |
-| সার্ভার ওঠে না, "পড়া যায়নি" | কনটেইনারে `/certs` mount হয়নি, বা পথ ভুল |
-| Live Board-এ মেশিন "অফলাইন" অথচ চালু | ঘড়ির সময় মিলছে না, বা আউটবক্স ড্রেন হচ্ছে |
-| ⭐ **গ্যালারিতে সারি আছে কিন্তু সব ছবি ভাঙা** | storage ফোল্ডারে কনটেইনার লিখতে পারছে না — নিচে § ১২.২ |
-| ⭐ **স্টাফ ঢুকতে পারছেন না, রিসেটও কাজ করছে না** | কর্মী একবার নিষ্ক্রিয় হয়েছিলেন — লগইন ফেরেনি, নিচে § ১২.৩ |
-| ⭐ **`ssh: Connection timed out`** | সার্ভার সম্ভবত দিব্যি চলছে — শুধু ২২ পোর্টের পথ বন্ধ, নিচে § ১২.৪। ⚠️ ১৩ আগস্ট এটাই ঘটেছে, আর দোষ ছিল **ISP-র**, সার্ভারের নয় (§ ১২.৪ক) |
+| Agent not connecting, tray red | The pin does not match (was the order in § 7.2 reversed?), or the firewall |
+| Certificate warning in the browser | § 3.1 was not done, or the certificate has expired |
+| `curl` says hostname mismatch | The name you are calling is not in the SAN — recreate the certificate with `-Hostname`/`-IpAddress` |
+| Server will not start, "TLS is only half configured" | One of `TLS_CERT` or `TLS_KEY` is missing |
+| Server will not start, "Could not read" | `/certs` is not mounted in the container, or the path is wrong |
+| A machine shows "offline" on the Live Board although it is on | The clock is out of sync, or the outbox is draining |
+| **The gallery has rows but every image is broken** | The container cannot write to the storage folder — see § 12.2 below |
+| **A staff member cannot log in, and a reset does not work either** | The staff member was once deactivated — the login never came back, see § 12.3 below |
+| **`ssh: Connection timed out`** | The server is probably running fine — only the route to port 22 is blocked, see § 12.4 below. Careful: this is exactly what happened once, and the fault was the **ISP's**, not the server's (§ 12.4a) |
 
-লগ:
+Logs:
 
 ```powershell
 docker compose logs api --tail 100
-Get-Content "$env:ProgramData\oXeio\logs\agent.log" -Tail 50   # এজেন্টের PC-তে
+Get-Content "$env:ProgramData\oXeio\logs\agent.log" -Tail 50   # on the agent's PC
 ```
 
-⚠️ পাথটা `logs\` সাবফোল্ডারে — এখানে আগে `oXeio\agent.log` লেখা ছিল, আর
-সেই ফাইলটা **কোনোদিন লেখাই হতো না** (H08)। এজেন্টের PC-তে ওই ফোল্ডারে
-তিনটে জিনিস পাওয়া যাবে:
+Careful: the path is in the `logs\` subfolder — it used to say `oXeio\agent.log`
+here, and that file was **never written**. On the agent's PC that folder holds
+three things:
 
-| ফাইল | কী |
+| File | What |
 |---|---|
-| `agent.log` | ⭐ আজকের সব কিছু — চালু হওয়া, প্রতি স্লটের ক্যাপচার, সিঙ্কের ভুল |
-| `agent-YYYY-MM-DD.log` | আগের দিনগুলো (৭ দিন, সব মিলিয়ে ৫০ MB) |
-| `outbox-drops.log` | কিউ থেকে যা চিরতরে ফেলে দেওয়া হলো |
+| `agent.log` | Everything from today — startup, each slot's capture, sync errors |
+| `agent-YYYY-MM-DD.log` | Earlier days (7 days, 50 MB in total) |
+| `outbox-drops.log` | What was dropped from the queue for good |
 
-### ১২.২· ⭐⭐ সারি আছে, ছবি নেই (G81)
+### 12.2· Rows exist, images do not
 
-উপসর্গ: গ্যালারিতে *"10 this day"*, কিন্তু প্রতিটাই ভাঙা আইকন; Live
-Board-এ *"Link expired — refresh"*।
+Symptom: the gallery says *"10 this day"*, but every one is a broken icon; the
+Live Board says *"Link expired — refresh"*.
 
-⚠️⚠️ **সারি আর ফাইল আলাদা জায়গায় লেখা হয়** — DB আগে, ডিস্ক পরে। ডিস্কে
-লেখা ব্যর্থ হলে সারিটা থেকে যায়, আর এজেন্ট রিট্রাই করলে DB বলে
-"duplicate", সার্ভার **সফল** ফেরত দেয়, এজেন্ট ছবিটা মুছে ফেলে। কোথাও
-কোনো অ্যালার্ট ওঠে না ([09 § ৩স](../../docs/09-Build-Log.md))।
+**The row and the file are written in different places** — DB first, disk
+second. If the disk write fails the row stays, and when the agent retries the
+DB says "duplicate", the server returns **success**, and the agent deletes the
+image. No alert is raised anywhere ([09 § ৩স](../../docs/09-Build-Log.md)).
 
-কারণ প্রায় সবসময় একটাই: হোস্টের `.data/storage` ফোল্ডারটা **root**-এর,
-অথচ কনটেইনার চলে `node` (uid 1000) হয়ে। ⚠️ Dockerfile-এর
-`chown -R node:node /data/storage` এখানে **কাজে আসে না** — bind mount
-ইমেজের ফোল্ডারটা মালিকানাসহ ঢেকে দেয়।
+The cause is almost always one thing: the host's `.data/storage` folder belongs
+to **root**, while the container runs as `node` (uid 1000). Careful: the
+Dockerfile's `chown -R node:node /data/storage` does **not help** here — a bind
+mount covers the image's folder, ownership included.
 
-এক কমান্ডে নিশ্চিত হওয়া:
+To confirm in one command:
 
 ```bash
 docker compose exec -T api sh -c 'id; ls -ld /data/storage; touch /data/storage/.probe && echo OK || echo DENIED'
 ```
 
-সমাধান:
+The fix:
 
 ```bash
 chown -R 1000:1000 .data/storage && docker compose restart api
 ```
 
-⚠️ **আগের ভাঙা ছবিগুলো ফিরবে না** — ওগুলো কখনো ডিস্কে লেখাই হয়নি। ঠিক
-হয়েছে কি না বুঝবেন পরের ক্যাপচার স্লটে নতুন ছবি এলে।
+Careful: **the earlier broken images will not come back** — they were never
+written to disk. You will know it is fixed when a new image arrives in the next capture slot.
 
-### ১২.৩· ⭐⭐ স্টাফ ঢুকতে পারছেন না, যদিও পাসওয়ার্ড রিসেট "সফল" (G84)
+### 12.3· A staff member cannot log in although the password reset "succeeded"
 
-উপসর্গ: Staff পর্দায় কর্মী **Active**, "Reset password" নতুন পাসওয়ার্ড
-দেয়, অথচ লগইনে সবসময় *"Email or password is incorrect"*।
+Symptom: on the Staff screen the staff member is **Active**, "Reset password"
+gives a new password, yet login always says *"Email or password is incorrect"*.
 
-⚠️⚠️ কর্মীকে কখনো **নিষ্ক্রিয় করে আবার সক্রিয়** করা হয়েছিল কি না মনে
-করে দেখুন। নিষ্ক্রিয় করা `users.is_active = false` বসাত, কিন্তু আবার
-সক্রিয় করা সেটা ফেরাত না ([09 § ৩ঢ়](../../docs/09-Build-Log.md))।
+Think back whether the staff member was ever **deactivated and then
+reactivated**. Deactivating set `users.is_active = false`, but reactivating did
+not restore it ([09 § ৩ঢ়](../../docs/09-Build-Log.md)).
 
-কে কে এই অবস্থায় আছেন — কর্মী সক্রিয়, অথচ লগইন বন্ধ:
+To find who is in this state — staff active, yet login disabled:
 
 ```bash
 docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "select u.email, e.emp_code, e.full_name from users u join employees e on e.id = u.employee_id where u.is_active = false and e.status = '"'"'active'"'"'"'
 ```
 
-⚠️ **নতুন কোড পুরোনো সারি সারায় না** — সে কেবল পরের বার থেকে ঠিক রাখে।
-আর UI দিয়েও সারানো যায় না: কর্মী এখন `active`, তাই "Reactivate" ৪০৯
-দেবে। একবার হাতে ঠিক করতে হয়:
+Careful: **the new code does not repair old rows** — it only keeps things right
+from now on. And the UI cannot repair it either: the staff member is now
+`active`, so "Reactivate" returns 409. It has to be fixed by hand, once:
 
 ```bash
 docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "update users set is_active = true where employee_id in (select id from employees where status = '"'"'active'"'"') and is_active = false"'
 ```
 
-⭐ এরপর আর **Reset password** লাগবে না — পুরোনো পাসওয়ার্ডই কাজ করবে।
-মনে না থাকলে তখন রিসেট করুন।
+After that **Reset password** is no longer needed — the old password will work.
+If it is not remembered, reset it then.
 
-### ১২.১· ⭐ owner ঢুকতে পারছেন না (পাসওয়ার্ড বা ফোন হারিয়েছে)
+### 12.1· Owner cannot log in (lost password or phone)
 
-⚠️ এই সিস্টেমে **"পাসওয়ার্ড ভুলে গেছি" বলে কোনো ইমেইল-লিংক নেই**, আর সেটা
-ইচ্ছাকৃত — অফিসের ভেতরের সার্ভার, বাইরের কোনো মেইল-নির্ভরতা রাখা হয়নি।
-তাই একমাত্র owner পাসওয়ার্ড বা 2FA-র ফোনটা হারালে ফেরার পথ একটাই:
-সার্ভারের শেল।
+Careful: this system has **no "forgot password" email link**, and that is
+deliberate — it is a server inside the office, with no outside mail dependency.
+So if the only owner loses the password or the 2FA phone, there is exactly one
+way back: the server's shell.
 
 ```powershell
 docker compose exec api node dist/scripts/recover-owner.js --list
@@ -1266,15 +1294,15 @@ docker compose exec api node dist/scripts/recover-owner.js --list
 docker compose exec api node dist/scripts/recover-owner.js --confirm
 ```
 
-- `--confirm` **ছাড়া কিছুই বদলায় না** — ভুল করে চালানো যায় না
-- একাধিক owner থাকলে `--email owner@office.local` দিয়ে বলতে হয়
-- নতুন পাসওয়ার্ড **বানিয়ে দেওয়া হয়** আর একবারই পর্দায় দেখানো হয়
-- 2FA চালু থাকলে সেটাও সরে যায় — ঢুকে আবার চালু করে নিন
-- প্রথম লগইনেই নতুন পাসওয়ার্ড চাওয়া হবে
-- ⚠️ কাজটা `audit_log`-এ `reset_password · via: cli` হিসেবে লেখা থাকে
+- **Nothing changes without `--confirm`** — it cannot be run by mistake
+- If there are several owners, say which with `--email owner@office.local`
+- A new password is **generated** and shown on screen only once
+- If 2FA was on it is removed too — log in and turn it on again
+- The new password will be demanded at the first login
+- Careful: the action is recorded in `audit_log` as `reset_password · via: cli`
 
-⚠️ একটাও owner অ্যাকাউন্ট না থাকলে (ডাটাবেস ফেরানোর পর, বা কেউ ভুল করে
-মুছে ফেললে) নতুন একটা বানানো যায়:
+Careful: if there is not a single owner account (after restoring the database,
+or if someone deleted it by mistake) a new one can be created:
 
 ```powershell
 docker compose exec api node dist/scripts/recover-owner.js --confirm --email owner@office.local
@@ -1282,125 +1310,129 @@ docker compose exec api node dist/scripts/recover-owner.js --confirm --email own
 
 ---
 
-### ১২.৪· ⭐⭐ `ssh: connect to host … port 22: Connection timed out`
+### 12.4· `ssh: connect to host … port 22: Connection timed out`
 
-⚠️⚠️ **প্রথমেই আতঙ্কিত হবেন না — সার্ভার বন্ধ হওয়া আর SSH না পাওয়া এক
-জিনিস নয়।** এক কমান্ডেই তফাতটা দেখা যায় (Windows PowerShell):
+**Do not panic first — the server being down and SSH being unreachable are not
+the same thing.** One command shows the difference (Windows PowerShell):
 
 ```powershell
 foreach ($p in 22,80,443) { $r = Test-NetConnection <VPS_IP> -Port $p -WarningAction SilentlyContinue; "{0,-4} {1}" -f $p, $r.TcpTestSucceeded }
 ```
 
-⭐ **৮০/৪৪৩ খোলা কিন্তু ২২ বন্ধ** মানে মেশিনটা জীবিত, ওয়েব সার্ভার সাড়া
-দিচ্ছে, স্টাফের ঘণ্টা ও স্ক্রিনশট জমা হচ্ছে — শুধু আপনি ঢুকতে পারছেন না।
-তিনটেই বন্ধ হলে তবেই মেশিন বা নেটওয়ার্ক পুরো ডাউন।
+**80/443 open but 22 closed** means the machine is alive, the web server is
+responding, and staff hours and screenshots are being collected — only you
+cannot get in. Only when all three are closed is the machine or network
+completely down.
 
-**তারপর: দোষ কার — আপনার নেটওয়ার্কের, না সার্ভারের?**
+**Then: whose fault is it — your network's, or the server's?**
 
 ```powershell
 Test-NetConnection github.com -Port 22
 ```
 
-সম্পূর্ণ ভিন্ন একটা হোস্ট, যার ২২ পোর্ট সবসময় খোলা:
+A completely different host, whose port 22 is always open:
 
-| ফল | মানে | করণীয় |
+| Result | Meaning | What to do |
 |---|---|---|
-| `False` | **আপনার নেটওয়ার্ক/ISP** বাইরের ২২ আটকাচ্ছে | নিচের § ১২.৪ক — এটাই আসলে ঘটেছে |
-| `True` | বাধাটা **সার্ভারে** — ufw বা sshd | ওয়েব কনসোল লাগবে, § ১২.৪খ |
+| `False` | **Your network/ISP** is blocking outbound 22 | § 12.4a below — this is what actually happened |
+| `True` | The blockage is **on the server** — ufw or sshd | You need the web console, § 12.4b |
 
-#### ⭐⭐ ১২.৪ক· ISP-ই আটকাচ্ছে — যেভাবে **প্রমাণ** করবেন
+#### 12.4a· The ISP is blocking it — how to **prove** it
 
-উপরের টেস্ট `False` দিলে সন্দেহটা প্রায় নিশ্চিত, কিন্তু পুরো প্রমাণটা আসে
-**সার্ভারের অন্য পোর্টে ধাক্কা দিয়ে** — যেটা কেউ সাধারণত করে না:
+If the test above gives `False` the suspicion is almost certain, but the full
+proof comes from **knocking on the server's other ports** — which nobody usually does:
 
-⚠️⚠️ **এখানে `Test-NetConnection` ব্যবহার করবেন না।** সে `TcpTestSucceeded`
-দিয়ে শুধু হ্যাঁ/না বলে — **timeout আর refused দুটোকেই `False`** দেখায়, অথচ
-পুরো নির্ণয়টাই ওই তফাতের উপর দাঁড়ানো। কাঁচা `TcpClient` লাগে:
+**Do not use `Test-NetConnection` here.** It says only yes/no through
+`TcpTestSucceeded` — it shows **both timeout and refused as `False`**, yet the
+whole diagnosis rests on exactly that difference. You need a raw `TcpClient`
+(the labels it prints are in Banglish: `timeout` = "silently vanished",
+`refused` = "reached the server"):
 
 ```powershell
 foreach ($p in 21,22,25,2222,3306,9999) { $c = New-Object Net.Sockets.TcpClient; $t = $c.BeginConnect('<VPS_IP>', $p, $null, $null); if (-not $t.AsyncWaitHandle.WaitOne(5000)) { $r = 'timeout   <- nirobe gayeb' } else { try { $c.EndConnect($t); $r = 'OPEN' } catch { $r = 'refused   <- server porjonto pouchheche' } }; $c.Close(); "{0,-6} {1}" -f $p, $r }
 ```
 
-ম্যাক বা লিনাক্স থেকে একই জিনিস:
+The same thing from a Mac or Linux:
 
 ```bash
 for p in 21 22 25 2222 3306 9999; do printf "%-6s " "$p"; nc -z -v -G 5 <VPS_IP> "$p" 2>&1 | tail -1 | sed 's/.*: //'; done
 ```
 
-⭐⭐ **তার আগে একটা লাইন পড়ুন, যেটা বিনা খরচে অর্ধেক উত্তর দেয়** — অন্য
-কোনো মেশিন থেকে (বা কনসোল দিয়ে) ঢুকতে পারলে SSH নিজেই ছাপে:
+**Read one line first, which gives half the answer for free** — if you can get
+in from another machine (or through the console), SSH itself prints:
 
 ```
 Last login: Thu Aug 13 07:59:53 2026 from 103.61.240.151
 ```
 
-⚠️ ওই IP আপনার **এখনকার** IP-র সাথে মেলান (`curl ifconfig.me`)। ১৩ আগস্ট
-মেলেনি, আর তাতেই পুরো ব্যাপারটা বোঝা গেছে:
+Compare that IP with your **current** IP (`curl ifconfig.me`). Once they did
+not match, and that is what made the whole thing clear:
 
-| কোথা থেকে | ISP | পোর্ট ২২ |
+| From where | ISP | Port 22 |
 |---|---|---|
-| **অফিস** | HelloTech (AS138640) | ✅ খোলা |
-| **বাসা** | AmberIT (AS23956) | 🚫 আটকানো |
+| **Office** | HelloTech (AS138640) | open |
+| **Home** | AmberIT (AS23956) | blocked |
 
-> **"আগে কাজ করত" শুনে ধরে নেবেন না যে পরিবেশটা এক ছিল।** অফিস আর বাসার
-> ইন্টারনেট আলাদা প্রতিষ্ঠানের — একটায় ২২ খোলা, অন্যটায় বন্ধ। প্রথম
-> প্রশ্নটা তাই "কী বদলাল" নয়, **"তখন কোথায় ছিলেন"**।
+> **Do not assume from "it used to work" that the environment was the same.**
+> The office and home internet belong to different companies — one has 22 open,
+> the other closed. So the first question is not "what changed" but **"where were you then"**.
 
-⭐ পার্থক্যটা **timeout বনাম refused**-এ, খোলা-বন্ধতে নয়। ১৩ আগস্ট মেপে
-যা পাওয়া গেছে:
+The difference is in **timeout versus refused**, not open versus closed. What
+was measured in the field:
 
-| পোর্ট | ফল | মানে |
+| Port | Result | Meaning |
 |---|---|---|
-| ২১ · ২২২২ · ৩৩০৬ · ৮০৮০ · ৯৯৯৯ · ২২২২২ | **Connection refused** | ⭐ প্যাকেট সার্ভার পর্যন্ত **পৌঁছেছে**, সার্ভার RST দিয়ে "না" বলেছে |
-| **২২** · **২৫** | **timeout** | 🚫 নীরবে গায়েব — সার্ভার পর্যন্ত পৌঁছায়ইনি |
+| 21 · 2222 · 3306 · 8080 · 9999 · 22222 | **Connection refused** | The packet **reached** the server, and the server said "no" with an RST |
+| **22** · **25** | **timeout** | Vanished silently — it never reached the server |
 
-⭐⭐ **এলোমেলো দশটা পোর্ট পৌঁছাচ্ছে, শুধু ২২ আর ২৫ পৌঁছাচ্ছে না** —
-এর একটাই ব্যাখ্যা: বাধাটা সার্ভারের **আগে**। আর **২২ + ২৫ জোড়াটা ISP
-ফিল্টারের স্বাক্ষর** (২৫ স্প্যাম ঠেকাতে, ২২ "নিরাপত্তার" নামে)।
+**Ten random ports get through, only 22 and 25 do not** — there is one
+explanation: the blockage is **before** the server. And **the 22 + 25 pair is
+the signature of an ISP filter** (25 to stop spam, 22 in the name of "security").
 
-> **সার্ভার নিজে থেকে একটা পোর্টে RST দিলে সে সজাগ।** তাই "সব বন্ধ" আর
-> "শুধু দুটো বন্ধ" এক নয় — দ্বিতীয়টা সবসময় পথের দোষ, গন্তব্যের নয়।
+> **If the server sends an RST on a port by itself, it is awake.** So "all
+> closed" and "only two closed" are not the same — the second is always the
+> path's fault, not the destination's.
 
-⚠️ এতে **ufw-র অবস্থাও** ফাঁস হয়ে যায়: ufw চালু থাকলে ৩৩০৬ বা ৯৯৯৯
-নীরবে DROP হতো, অর্থাৎ timeout দেখাত। refused দেখানোর মানে **হোস্টে
-ফায়ারওয়াল চলছে না** — ঢোকার পর § ১২.৪গ দেখুন।
+This also **gives away ufw's state**: with ufw on, 3306 or 9999 would be
+silently DROPped, i.e. show timeout. Showing refused means **no firewall is
+running on the host** — see § 12.4c after getting in.
 
-**তিনটে পথ, যেটা আগে পারেন:**
+**Three ways in, whichever you can do first:**
 
-| | পথ | কখন |
+| | Way | When |
 |---|---|---|
-| ১ ⭐ | **VPN চালিয়ে নিন** — Cloudflare WARP (1.1.1.1 অ্যাপ), ফ্রি | সাথে সাথে। টানেলের ভেতর ISP পোর্ট নম্বরই দেখে না |
-| ২ | ফোনের **হটস্পট** | মোবাইল ডেটা থাকলে |
-| ৩ | হোস্টিং প্যানেলের **ওয়েব কনসোল** | উপরের দুটোই না পারলে |
+| 1 | **Turn on a VPN** — Cloudflare WARP (the 1.1.1.1 app), free | Immediately. Inside the tunnel the ISP does not even see the port number |
+| 2 | The phone's **hotspot** | If you have mobile data |
+| 3 | The hosting panel's **web console** | If neither of the above works |
 
-#### ১২.৪খ· ওয়েব কনসোল — ঠিক কোথায়, ধাপে ধাপে
+#### 12.4b· The web console — exactly where, step by step
 
-⚠️ **প্রোভাইডার IT Nut Hosting**, IOFlood নয় — IOFlood (AS53755, Phoenix)
-কেবল উপরের ডেটাসেন্টার, IP রেঞ্জটা তাদের। ⭐ `whois`/`ipinfo` দেখে
-প্রোভাইডার ঠিক করতে গেলে এই ভুলটা হয়: **যার কাছ থেকে কেনা আর যার
-ডেটাসেন্টারে বসানো — দুটো আলাদা।** টিকিট কাটতে হবে প্রথমটার কাছে।
+**The provider is IT Nut Hosting**, not IOFlood — IOFlood (AS53755, Phoenix) is
+only the datacenter above, and the IP range is theirs. Deciding the provider
+from `whois`/`ipinfo` makes this mistake: **who you bought from and whose
+datacenter it sits in are two different things.** The ticket has to go to the first.
 
-পথটা:
+The path:
 
 ```
-<হোস্টিং প্যানেল>  →  Services → Manage Product
+<hosting panel>  →  Services → Manage Product
                           →  Actions → Enduser Panel      (Virtualizor)
-<Virtualizor প্যানেল>:4083  →  Settings → VNC → Launch VNC
+<Virtualizor panel>:4083  →  Settings → VNC → Launch VNC
 ```
 
-⭐ **VNC পোর্ট নয়, HTTPS-এর ভেতরে** — তাই ISP ২২ আটকে রাখলেও কনসোল খোলে।
-⚠️ ওটা একটা **popup উইন্ডোতে** খোলে; Chrome ব্লক করলে অ্যাড্রেস বারের ডান
-পাশের আইকন থেকে allow করতে হয়।
+**VNC is not a port, it is inside HTTPS** — so the console opens even when the
+ISP blocks 22. It opens in a **popup window**; if Chrome blocks it, allow it
+from the icon at the right of the address bar.
 
-⚠️ পথে **Reboot · Stop · Poweroff · Reinstall OS · Rescue Mode** বোতামগুলোও
-থাকে। কনসোলে যেতে ওগুলোর একটাও লাগে না — ভুল করে চাপলে সার্ভার বন্ধ হয়ে
-স্টাফের ঘণ্টা জমা হওয়াও থেমে যাবে।
+Careful: on the way there are also **Reboot · Stop · Poweroff · Reinstall OS ·
+Rescue Mode** buttons. None of them is needed to reach the console — if pressed
+by mistake the server goes down and staff hours stop accumulating too.
 
-⭐ প্যানেলে **Firewall → Firewall Plans** দেখে নিন। *"No Firewall Plans"*
-মানে প্রোভাইডারের দিকে কিছু আটকানো নেই — তখন বাধাটা নিশ্চিতভাবেই ISP-র
-বা হোস্টের ভেতরের।
+Check the panel's **Firewall → Firewall Plans**. *"No Firewall Plans"* means
+nothing is blocked on the provider's side — then the blockage is certainly in
+the ISP's or inside the host.
 
-ঢুকে কারণ দেখা (⚠️ পাইপ ছাড়া — কারণ § ১২.৪ঘ):
+Once in, look for the cause (without pipes — see § 12.4d for why):
 
 ```bash
 systemctl status ssh --no-pager
@@ -1410,30 +1442,31 @@ systemctl status ssh --no-pager
 ss -tln
 ```
 
-#### ⭐⭐ ১২.৪গ· ঢুকেই স্থায়ী ব্যবস্থা — বিকল্প পোর্ট *(✅ মাঠে প্রমাণিত ১৩ আগস্ট)*
+#### 12.4c· Once in, the permanent fix — an alternative port *(proven in the field)*
 
-ISP-কে বদলানো যায় না, কিন্তু **দরজাটা সরানো যায়**। ২২২২-এ প্যাকেট
-এমনিতেই সার্ভার পর্যন্ত পৌঁছাচ্ছে (উপরের টেবিল), তাই sshd ওখানে শুনলেই
-অফিস থেকে VPN ছাড়াই ঢোকা যায়।
+You cannot change the ISP, but **you can move the door**. Packets to 2222
+already reach the server (see the table above), so if sshd listens there you can
+get in from the office without a VPN.
 
-### ⚠️⚠️ কিন্তু Ubuntu 22.10+ এ `sshd_config` একা যথেষ্ট নয়
+### But on Ubuntu 22.10+ `sshd_config` alone is not enough
 
 ```bash
 systemctl is-enabled ssh.socket
 ```
 
-`enabled` এলে SSH চলছে **systemd socket activation** দিয়ে — অর্থাৎ কোন
-পোর্টে শোনা হবে সেটা ঠিক করে `ssh.socket`, **`sshd_config` নয়**।
+If it says `enabled`, SSH is running through **systemd socket activation** — so
+which port it listens on is decided by `ssh.socket`, **not `sshd_config`**.
 
-⭐⭐ এটাই এই কাজের সবচেয়ে নীরব ফাঁদ: `Port 2222` লাইনটা ফাইলে বসত,
-`sshd -t` চুপ থাকত, `systemctl restart ssh` সবুজ বলত — আর ২২২২-এ **কিছুই
-শুনত না**। কোথাও একটা এররও উঠত না।
+This is the quietest trap in this job: the `Port 2222` line would go into the
+file, `sshd -t` would stay silent, `systemctl restart ssh` would say green — and
+**nothing would listen** on 2222. Not a single error would appear anywhere.
 
-> **কনফিগ ফাইলে লেখা আর কার্যকর হওয়া এক জিনিস নয়।** যে ফাইলটা এতদিন
-> সিদ্ধান্ত নিত, ডিস্ট্রো একদিন তার উপরে আরেকটা স্তর বসিয়ে দিতে পারে —
-> আর পুরোনো অভ্যাসে লেখা কমান্ড তখন সফল দেখায়, কাজ করে না।
+> **Written in a config file and actually in effect are not the same thing.**
+> The file that decided things until now can one day get another layer put on
+> top of it by the distro — and a command written from old habit then looks
+> successful and does not work.
 
-তাই socket বন্ধ করে classic sshd-তে ফেরা:
+So turn off the socket and go back to classic sshd:
 
 ```bash
 cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
@@ -1451,8 +1484,8 @@ echo Port 2222 >> /etc/ssh/sshd_config
 sshd -t
 ```
 
-⭐ **এই লাইনটা কিছু না বললে ভালো** — নীরবতা মানে কনফিগ ঠিক। কিছু বললে
-থামুন, `cp /etc/ssh/sshd_config.bak /etc/ssh/sshd_config` দিয়ে ফিরুন।
+**It is good if this line says nothing** — silence means the config is fine. If
+it says anything, stop and go back with `cp /etc/ssh/sshd_config.bak /etc/ssh/sshd_config`.
 
 ```bash
 systemctl disable --now ssh.socket
@@ -1470,261 +1503,264 @@ systemctl restart ssh
 ss -tln
 ```
 
-⚠️ **`Port 22` লাইনটাও রাখুন।** `sshd_config`-এ একটাও `Port` না থাকলে
-ডিফল্ট ২২, কিন্তু একটা লিখলেই ডিফল্টটা চলে যায় — শুধু `Port 2222` লিখলে
-২২ বন্ধ হয়ে যেত, আর অন্য নেটওয়ার্কে গিয়ে অভ্যাসবশত `ssh root@…` লিখলে
-কাজ করত না।
+**Keep the `Port 22` line too.** With no `Port` at all in `sshd_config` the
+default is 22, but as soon as you write one the default goes away — writing
+only `Port 2222` would close 22, and typing `ssh root@…` from habit on another
+network would not work.
 
-**যা দেখতে চাই** — ১৩ আগস্ট ঠিক এটাই এসেছে:
+**What we want to see** — exactly this came back in the field:
 
 ```
-LISTEN 0 128  0.0.0.0:22      ← পুরোনো দরজা, খোলা রইল
-LISTEN 0 128  0.0.0.0:2222    ← নতুন দরজা
-LISTEN 0 4096 127.0.0.1:5432  ← postgres, শুধু ভেতরে (§ ৩শ ফাঁদ ২)
-LISTEN 0 4096 127.0.0.1:3000  ← api, শুধু ভেতরে
+LISTEN 0 128  0.0.0.0:22      ← the old door, left open
+LISTEN 0 128  0.0.0.0:2222    ← the new door
+LISTEN 0 4096 127.0.0.1:5432  ← postgres, inside only (§ ৩শ trap 2)
+LISTEN 0 4096 127.0.0.1:3000  ← api, inside only
 LISTEN 0 4096 0.0.0.0:80 · :443 ← Caddy
 ```
 
-⭐ শেষ তিন সারিও **আলাদা করে দেখে নিন** — `5432` বা `3000` যদি
-`0.0.0.0`-তে থাকত, ডাটাবেস ও API পুরো ইন্টারনেটে খোলা থাকত।
+**Check the last three rows separately too** — if `5432` or `3000` were on
+`0.0.0.0`, the database and API would be open to the whole internet.
 
-তারপর অফিস থেকে:
+Then from the office:
 
 ```bash
 ssh -p 2222 root@<VPS_IP>
 ```
 
-⭐ **বাইরে থেকে মিলিয়ে দেখার এক লাইন** (ম্যাক/লিনাক্স) — banner এলে
-বুঝবেন সত্যিই sshd সাড়া দিচ্ছে, শুধু পোর্ট খোলা নয়:
+**One line to confirm from outside** (Mac/Linux) — if a banner comes back you
+know sshd is really answering, not just that the port is open:
 
 ```bash
 nc -w 6 <VPS_IP> 2222
 ```
 
-**আর ফায়ারওয়ালটা।** ⚠️ ১৩ আগস্ট দেখা গেছে `ufw` **ইনস্টলই ছিল না**
-(`Command 'ufw' not found`) — তাই `ufw status` চালিয়ে "নিষ্ক্রিয়" দেখার
-অপেক্ষা করবেন না, সরাসরি বসান:
+**And the firewall.** Careful: it was found that `ufw` was **not even
+installed** (`Command 'ufw' not found`) — so do not wait to run `ufw status`
+and see "inactive", install it directly:
 
 ```bash
 apt-get install -y ufw && ufw allow 22/tcp && ufw allow 2222/tcp && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable && ufw status verbose
 ```
 
-⚠️⚠️ **`2222` খোলার আগে `ufw enable` চালাবেন না।** ক্রম উল্টে গেলে যে
-দরজাটা এইমাত্র বানালেন সেটাই বন্ধ হয়ে যাবে, আর ২২ তো ISP আটকেই রেখেছে —
-তখন ফেরার পথ কেবল ওয়েব কনসোল। উপরের লাইনে `enable` **সবার শেষে**,
-ইচ্ছাকৃতভাবে।
+**Do not run `ufw enable` before opening `2222`.** If the order is reversed
+the door you have just built will be closed, and 22 is already blocked by the
+ISP — then the only way back is the web console. In the line above `enable` is
+**last**, deliberately.
 
-⭐ এই ধাপটা **SSH-এ বসে করুন, VNC-তে নয়** — ২২২২ চালু হয়ে গেলে টার্মিনালে
-কপি-পেস্ট কাজ করে, আর নিচের § ১২.৪ঘ-এর ঝামেলাটাও এড়ানো যায়।
+Do this step **while logged in over SSH, not VNC** — once 2222 is working,
+copy-paste works in the terminal, and the trouble in § 12.4d below is avoided too.
 
-#### ⚠️ ১২.৪ঘ· VNC কনসোলে `>` আর `|` টাইপ করা যায় না
+#### 12.4d· `>` and `|` cannot be typed in the VNC console
 
-noVNC-তে **অক্ষরে shift কাজ করে** (`ABC` ঠিক বসে), কিন্তু **চিহ্নে করে না**:
-`>` হয়ে যায় `.`, `|` হয়ে যায় `\`। Ctrl-ও পৌঁছায় না — `Ctrl+C` একটা খালি
-`c` টাইপ করে, তাই `nano`/`vi` থেকে বেরোনোও যায় না।
+In noVNC **shift works on letters** (`ABC` comes out right), but **not on
+symbols**: `>` becomes `.`, `|` becomes `\`. Ctrl does not get through either —
+`Ctrl+C` types a plain `c`, so you cannot even leave `nano`/`vi`.
 
-⚠️ সবচেয়ে বিপজ্জনক রূপটা নীরব: `echo Port 2222 >> file` বসে যায়
-`echo Port 2222 . file` হয়ে — শেল **কোনো এরর দেয় না**, শুধু লেখাটা ছাপে,
-আর ফাইলে কিছুই যোগ হয় না।
+The most dangerous form is silent: `echo Port 2222 >> file` becomes
+`echo Port 2222 . file` — the shell gives **no error**, just prints the text,
+and nothing is added to the file.
 
-⭐ যা টাইপ করা **যায়**: অক্ষর · সংখ্যা · `- = / . , ; ' \ [ ]`
-⭐ redirect ছাড়া লাইন যোগ করার পথ — `sed`-এর লাইন-নম্বর, একটাও শিফটেড
-চিহ্ন লাগে না:
+What **can** be typed: letters · digits · `- = / . , ; ' \ [ ]`
+A way to add a line without a redirect — `sed` with a line number, needing not
+one shifted symbol:
 
 ```bash
 sed -i -e '1iPort 2222' /etc/ssh/sshd_config
 ```
 
-⚠️ এটা কেবল **যন্ত্রচালিত** কীস্ট্রোকে ঘটে (ব্রাউজার অটোমেশন)। আসল
-কীবোর্ডে হাতে টাইপ করলে noVNC ঠিকই পড়ে — ১৩ আগস্ট মালিকের হাতে `>>`
-নির্ভুল বসেছে।
+This happens only with **machine-driven** keystrokes (browser automation). Typed
+by hand on a real keyboard, noVNC reads it fine — the owner's hand-typed `>>`
+went in correctly.
 
-### ১২.৫· ⭐ পাসওয়ার্ড ছাড়া ঢোকা (SSH কী)
+### 12.5· Logging in without a password (an SSH key)
 
-⚠️ root পাসওয়ার্ড বারবার টাইপ করা বা কাউকে পাঠানো — দুটোই এড়ানো যায়।
-একবার কী বসিয়ে নিলে পাসওয়ার্ড আর কোথাও লাগে না:
+Typing the root password again and again, or sending it to someone — both can
+be avoided. Once a key is installed, the password is needed nowhere:
 
 ```powershell
 ssh-keygen -t ed25519 -C "oxeio-admin" -f "$env:USERPROFILE\.ssh\oxeio"
 ```
 
-পাবলিক অংশটা (`oxeio.pub`) সার্ভারে বসান — ওয়েব কনসোল দিয়েও করা যায়:
+Install the public part (`oxeio.pub`) on the server — this can also be done
+through the web console:
 
 ```bash
 mkdir -p ~/.ssh && chmod 700 ~/.ssh && nano ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys
 ```
 
-তারপর:
+Then:
 
 ```powershell
 ssh -i "$env:USERPROFILE\.ssh\oxeio" root@<VPS_IP>
 ```
 
-⚠️⚠️ **কী কাজ করছে সেটা নিশ্চিত হওয়ার আগে পাসওয়ার্ড-লগইন বন্ধ করবেন না।**
-`PasswordAuthentication no` বসিয়ে কী-টা যদি ভুল থাকে, তবে ফেরার একমাত্র
-পথ থাকবে ওয়েব কনসোল — আর সেটা তখনই খুঁজতে হবে যখন হাতে সময় নেই।
+**Do not turn off password login before you have confirmed that the key
+works.** If you set `PasswordAuthentication no` and the key is wrong, the only
+way back is the web console — and you will have to hunt for it at exactly the
+moment you have no time.
 
-⚠️ চ্যাটে, ইমেইলে বা মেসেঞ্জারে কখনো root পাসওয়ার্ড পাঠাবেন না। পাঠিয়ে
-ফেললে **সাথে সাথে `passwd` দিয়ে বদলান** — ওই বার্তা মুছে ফেললেও কপি
-কোথায় কোথায় রয়ে গেছে তা আর জানা যায় না।
+Never send the root password in chat, email or a messenger. If you already
+have, **change it at once with `passwd`** — even if you delete that message you
+cannot know where copies have ended up.
 
 ---
 
 ---
 
-## R4 · বাইরের uptime নজরদারি
+## R4 · External uptime monitoring
 
-⚠️⚠️ **কেন এটা কোডে করা যায় না:** সার্ভার নিজে মরে গেলে নিজের অ্যালার্ট
-পাঠাতে পারে না। ভেতরের সব অ্যালার্ট ব্যবস্থার এই অন্ধ জায়গাটা কেবল
-বাইরের চোখেই ঢাকে — আর তাই এটাই একমাত্র কাজ যেটা এই রিপোর বাইরে থাকে।
+**Why this cannot be done in code:** if the server itself dies it cannot send
+its own alert. This blind spot in all the internal alerting can be covered only
+by an outside eye — and so this is the one job that lives outside this repo.
 
-### ⭐⭐ যে ভুলটা এখানে সবচেয়ে সহজ
+### The mistake that is easiest to make here
 
-`/api/v1/health` **ডাটাবেস মরে গেলেও HTTP ২০০ ফেরায়** — কেবল বডিতে
-`"status":"degraded"` লেখে:
+`/api/v1/health` **returns HTTP 200 even when the database is dead** — it only
+writes `"status":"degraded"` in the body:
 
 ```json
 {"status":"ok","db":"up","time":"…","build":"233","commit":"f93e0d1"}
 ```
 
-⚠️ কোডটা ইচ্ছাকৃত: একই পথ Docker-এর healthcheck ব্যবহার করে, আর ৫০৩
-দিলে ডাটাবেস সমস্যায় কনটেইনার রিস্টার্ট লুপে পড়ত — যা কিছুই সারায় না,
-শুধু লগ হারায়।
+This is deliberate: the same route is used by Docker's healthcheck, and if it
+returned 503 a database problem would put the container in a restart loop —
+which fixes nothing and only loses the logs.
 
-⚠️⚠️ **ফল:** নজরদারিটা যদি কেবল **স্ট্যাটাস কোড** দেখে, তাহলে ডাটাবেস
-মরে পড়ে থাকলেও সে চিরকাল "UP" দেখাবে। অর্থাৎ মনিটরটাই তখন সবচেয়ে বড়
-মিথ্যা — যে জিনিস ধরার জন্য বসানো, ঠিক সেটাই সে ধরবে না।
+**The consequence:** if the monitor looks only at the **status code**, it will
+show "UP" forever even with the database lying dead. The monitor itself would
+then be the biggest lie — it will not catch exactly what it was installed to catch.
 
-⭐ **তাই মনিটরের ধরন "Keyword", "HTTP(s)" নয়।**
+**So the monitor type is "Keyword", not "HTTP(s)".**
 
-### ধাপ — ~১০ মিনিট, ফ্রি টিয়ার
+### Steps — ~10 minutes, free tier
 
-1. **uptimerobot.com**-এ একটা ফ্রি অ্যাকাউন্ট (৫০টা মনিটর, ৫ মিনিট অন্তর)।
-   ⚠️ এটা মালিকের নিজের অ্যাকাউন্ট — সাইন আপ তাঁকেই করতে হবে।
+1. A free account at **uptimerobot.com** (50 monitors, every 5 minutes).
+   This is the owner's own account — the owner has to sign up.
 
 2. **Add New Monitor:**
 
-   | ঘর | মান |
+   | Field | Value |
    |---|---|
-   | Monitor Type | **Keyword** *(HTTP(s) নয় — উপরের কারণটা পড়ুন)* |
+   | Monitor Type | **Keyword** *(not HTTP(s) — read the reason above)* |
    | Friendly Name | `oXeio — API` |
    | URL | `https://hub.oxeio.com/api/v1/health` |
    | Keyword Type | **Exists** |
    | Keyword | `"db":"up"` |
-   | Interval | ৫ মিনিট |
+   | Interval | 5 minutes |
 
-   ⭐ `"db":"up"` বাছা হয়েছে, `"status":"ok"` নয় — দুটোই কাজ করত, কিন্তু
-   প্রথমটা **কী ভাঙল** সেটাও বলে দেয়।
+   `"db":"up"` was chosen over `"status":"ok"` — both would work, but the
+   first also tells you **what broke**.
 
-3. **Alert Contact — টেলিগ্রাম:** Settings → Alert Contacts → Add →
-   Telegram → বটটা যোগ করে chat id দিন। ⭐ অ্যাপের অ্যালার্ট যেখানে যায়
-   সেই একই চ্যাটে রাখুন — দুটো আলাদা জায়গায় হলে একটা কেউ দেখে না।
+3. **Alert Contact — Telegram:** Settings → Alert Contacts → Add →
+   Telegram → add the bot and give the chat id. Keep it in the same chat the
+   app's alerts go to — if they are in two different places, nobody looks at one of them.
 
-4. **যাচাই:** মনিটর বসানোর পর VPS-এ এক মিনিটের জন্য
-   `docker compose stop postgres` চালিয়ে দেখুন টেলিগ্রামে খবর আসে কি না,
-   তারপর `start`। ⚠️ **এই ধাপটা বাদ দেবেন না** — যে অ্যালার্ট কখনো
-   বাজিয়ে দেখা হয়নি, সেটা অ্যালার্ট নয়। এই প্রকল্পে ঠিক এই শিক্ষাটাই
-   ব্যাকআপ নিয়ে একবার হয়েছে।
+4. **Verify:** after setting up the monitor, run `docker compose stop postgres`
+   on the VPS for a minute and see whether the news arrives on Telegram, then
+   `start`. **Do not skip this step** — an alert that has never been
+   triggered on purpose is not an alert. This project learned exactly this
+   lesson once with backups.
 
-### দ্বিতীয় একটা মনিটর — ওয়েব
+### A second monitor — the web
 
-| ঘর | মান |
+| Field | Value |
 |---|---|
 | Monitor Type | HTTP(s) |
 | URL | `https://hub.oxeio.com/` |
 
-⭐ আলাদা রাখা হয় কারণ Caddy বেঁচে থেকে API মরতে পারে (আর উল্টোটাও) —
-একটা মনিটরে দুটোর তফাত ধরা পড়ত না।
+It is kept separate because Caddy can stay alive while the API dies (and the
+other way round) — one monitor would not catch the difference between the two.
 
 
-## R5 · অফসাইট ব্যাকআপ (G39)
+## R5 · Offsite backup
 
-রাতের ডাম্প (K02) এনক্রিপটেড হয়ে `.data/backups`-এ বসে — কিন্তু **সবই এক
-মেশিনে**। ⚠️ ওই ডিস্ক মরলে বা VPS হারালে ব্যাকআপও সাথেই যায়, অর্থাৎ
-ব্যাকআপ **থাকা** আর ব্যাকআপ **কাজে লাগা** এক নয়। `deploy/offsite-backup.sh`
-সেই ফাঁকটা বন্ধ করে।
+The nightly dump is written encrypted to `.data/backups` — but **all on one
+machine**. If that disk dies or the VPS is lost, the backup goes with it, i.e.
+**having** a backup and being able to **use** a backup are not the same.
+`deploy/offsite-backup.sh` closes that gap.
 
-⭐⭐ **ফাইলগুলো আগে থেকেই এনক্রিপটেড** (`BACKUP_PASSPHRASE`, `openssl enc`)।
-তাই Drive/S3 যেখানেই তুলুন, প্রোভাইডার ঘণ্টা, বেতন বা স্ক্রিনশটের কিছুই
-পড়তে পারে না — "ডেটা দেশের বাইরে যাবে না" নীতির সাথে সাংঘর্ষিক নয়।
+**The files are already encrypted** (`BACKUP_PASSPHRASE`, `openssl enc`). So
+wherever you upload them (Drive/S3), the provider can read nothing of the
+hours, salaries or screenshots — this does not conflict with a "data must not
+leave the country" policy.
 
-⚠️⚠️ **কিন্তু পাসফ্রেজ হারালে ব্যাকআপও হারাল।** ওটা VPS-এর বাইরে আলাদা
-করে রাখা মালিকের কাজ — পাসওয়ার্ড ম্যানেজারে, বা কাগজে। এই স্ক্রিপ্ট
-সেটা করতে পারে না, আর করার চেষ্টাও করে না।
+**But if the passphrase is lost, the backup is lost too.** Keeping it
+separately, off the VPS, is the owner's job — in a password manager, or on
+paper. This script cannot do that, and does not try to.
 
-### ⭐ কোন গন্তব্য — সুপারিশ *(১৮ আগস্ট)*
+### Which destination — recommendation
 
-| | খরচ | সেটআপ | মন্তব্য |
+| | Cost | Setup | Comment |
 |---|---|---|---|
-| **Backblaze B2** | ১০ GB ফ্রি | API key, ব্রাউজার-OAuth **নেই** | ⭐ **সুপারিশ** |
-| Google Drive | ১৫ GB ফ্রি | ব্রাউজারে OAuth | হেডলেস সার্ভারে টোকেন আনা ঝামেলার (নিচে) |
-| দ্বিতীয় VPS / NAS | সার্ভারের দাম | SSH কী | সম্পূর্ণ নিজের হাতে, কিন্তু আরেকটা মেশিন দেখভাল |
+| **Backblaze B2** | 10 GB free | API key, **no** browser OAuth | **Recommended** |
+| Google Drive | 15 GB free | OAuth in a browser | Getting the token onto a headless server is a hassle (below) |
+| A second VPS / NAS | The server's price | SSH key | Fully in your own hands, but one more machine to look after |
 
-⭐ **আকার নিয়ে ভাবার কিছু নেই** — ৮টা ডাম্প = ১২ MB; বছরে বড়জোর কয়েকশো MB।
-যেকোনো ফ্রি টিয়ারেই বহু বছর চলে।
+**Size is nothing to worry about** — 8 dumps = 12 MB; at most a few hundred MB
+a year. Any free tier lasts many years.
 
-⚠️⚠️ **যেখানেই রাখুন, `BACKUP_PASSPHRASE` সার্ভারের বাইরে আলাদা করে রাখুন**
-(পাসওয়ার্ড ম্যানেজারে)। ফাইলগুলো AES-256-এ এনক্রিপটেড — পাসফ্রেজ হারালে
-ব্যাকআপও হারাল, ক্লাউডে থাকুক বা ঘরের PC-তে।
+**Wherever you keep it, keep `BACKUP_PASSPHRASE` separately, off the server**
+(in a password manager). The files are encrypted with AES-256 — if the
+passphrase is lost the backup is lost, whether it is in the cloud or on a home PC.
 
-#### B2 — ধাপে ধাপে *(আপনার ~৫ মিনিট)*
+#### B2 — step by step *(~5 minutes of your time)*
 
-১· backblaze.com-এ অ্যাকাউন্ট → **B2 Cloud Storage** → *Create a Bucket*
-   → নাম `oxeio-backups`, **Private**।
-২· *Application Keys* → **Add a New Application Key** → শুধু ওই bucket-এ
-   Read & Write। ⚠️ `keyID` ও `applicationKey` **একবারই দেখায়** — সাথে
-   সাথে পাসওয়ার্ড ম্যানেজারে রাখুন।
-৩· VPS-এ:
+1. An account at backblaze.com → **B2 Cloud Storage** → *Create a Bucket*
+   → name `oxeio-backups`, **Private**.
+2. *Application Keys* → **Add a New Application Key** → Read & Write on that
+   bucket only. The `keyID` and `applicationKey` are **shown only once** —
+   put them in the password manager straight away.
+3. On the VPS:
 
 ```bash
 rclone config
-# n → নাম: b2 → storage: b2 → account: <keyID> → key: <applicationKey>
+# n → name: b2 → storage: b2 → account: <keyID> → key: <applicationKey>
 # hard_delete: false → q
-rclone lsd b2:oxeio-backups        # কিছু না বললেই ঠিক আছে
+rclone lsd b2:oxeio-backups        # no output means all is well
 ```
 
-⭐ **কোনো ব্রাউজার লাগে না** — এটাই B2-কে হেডলেস সার্ভারে Drive-এর চেয়ে
-সহজ করে। ⚠️ কী-দুটো আপনার নিজের, তাই এই ধাপটা আপনারই; কেউ যেন চ্যাটে বা
-ইমেইলে ওগুলো না পাঠায়।
+**No browser is needed** — that is what makes B2 simpler than Drive on a
+headless server. The two keys are your own, so this step is yours; nobody
+should send them in chat or email.
 
-৪· তারপর নিচের ধাপ ২ — `RCLONE_REMOTE=b2:oxeio-backups`।
+4. Then step 2 below — `RCLONE_REMOTE=b2:oxeio-backups`.
 
-### ধাপ ১ — rclone বসানো ও রিমোট বাঁধা *(এক-বারের কাজ, ~১০ মিনিট)*
+### Step 1 — install rclone and bind the remote *(one-off, ~10 minutes)*
 
 ```bash
 curl https://rclone.org/install.sh | sudo bash
 rclone config
 ```
 
-⚠️ `rclone config` **ইন্টারঅ্যাকটিভ**, আর Google/Dropbox-এর ক্ষেত্রে
-ব্রাউজারে লগইন লাগে — এটা মালিকের নিজের অ্যাকাউন্ট, তাই তাঁকেই করতে হবে।
+`rclone config` is **interactive**, and for Google/Dropbox it needs a browser
+login — this is the owner's own account, so the owner has to do it.
 
-ধাপগুলো: `n` (new remote) → নাম দিন `gdrive` → স্টোরেজ বাছুন (Google
-Drive হলে `drive`) → client id/secret **ফাঁকা রাখুন** → scope `1`
-(full access) → `y` অটো কনফিগ → ব্রাউজারে লগইন → `q`।
+The steps: `n` (new remote) → name it `gdrive` → choose the storage (`drive`
+for Google Drive) → **leave client id/secret blank** → scope `1`
+(full access) → `y` for auto config → log in in the browser → `q`.
 
-⭐ হেডলেস সার্ভারে ব্রাউজার নেই, তাই `rclone authorize` নিজের ল্যাপটপে
-চালিয়ে টোকেনটা পেস্ট করতে হবে — `rclone config` নিজেই ধাপগুলো বলে দেয়।
+A headless server has no browser, so run `rclone authorize` on your own laptop
+and paste the token — `rclone config` itself explains the steps.
 
-যাচাই:
+To verify:
 
 ```bash
 rclone lsd gdrive:
 ```
 
-### ধাপ ২ — চালিয়ে দেখা
+### Step 2 — try it
 
 ```bash
 cd /opt/oxeio
 RCLONE_REMOTE=gdrive:oxeio-backups bash oxeio-monitor/deploy/offsite-backup.sh
 ```
 
-⭐ স্ক্রিপ্টটা **থামে** যদি rclone না থাকে, রিমোট সেট না থাকে, রিমোটে
-পৌঁছানো না যায়, বা **ফোল্ডারে একটাও ডাম্প না থাকে**। ⚠️ শেষেরটা আলাদা
-করে দেখা হয়, কারণ খালি ফোল্ডার পেয়ে "সফল" বলে বেরিয়ে যাওয়াটাই এই
-প্রকল্পের সবচেয়ে চেনা নীরব ব্যর্থতা (G129, G133)।
+The script **stops** if rclone is missing, no remote is set, the remote cannot
+be reached, or **the folder contains no dump at all**. The last one is checked
+separately, because exiting with "success" on an empty folder is the best-known
+silent failure of this project.
 
-### ধাপ ৩ — সাপ্তাহিক করা
+### Step 3 — make it weekly
 
 ```bash
 cat >/etc/systemd/system/oxeio-offsite.service <<'EOF'
@@ -1745,8 +1781,8 @@ Description=oXeio — offsite backup, weekly
 
 [Timer]
 OnCalendar=Sat 04:00
-# ⚠️⚠️ এটা UTC — সার্ভারের টাইমজোন Etc/UTC, আর ইউনিটে Timezone= নেই।
-#    ঢাকায় তাই **শনিবার সকাল ১০টা**। খুঁজতে গেলে ওই সময়েই দেখুন।
+# Careful: this is UTC - the server's timezone is Etc/UTC, and the unit has no Timezone=.
+#    So in Dhaka it is **Saturday 10 am**. Look at that time when searching.
 Persistent=true
 
 [Install]
@@ -1759,44 +1795,44 @@ systemctl daemon-reload && systemctl enable --now oxeio-offsite.timer
 systemctl list-timers oxeio-offsite.timer
 ```
 
-⭐ রিমোটের নামটা `/etc/oxeio-offsite.env`-এ, unit ফাইলে নয় — বদলাতে হলে
-`daemon-reload` লাগে না, আর গোপন কিছু হলে unit ফাইলে (যা সবাই পড়তে পারে)
-বসে না। ⚠️ `EnvironmentFile=-` -এর হাইফেনটা ইচ্ছাকৃত: ফাইল না থাকলেও
-সার্ভিস চালু হয়, আর তখন স্ক্রিপ্ট নিজেই পরিষ্কার করে বলে কী নেই।
+The remote's name is in `/etc/oxeio-offsite.env`, not in the unit file — changing
+it needs no `daemon-reload`, and anything secret does not end up in the unit file
+(which anyone can read). The hyphen in `EnvironmentFile=-` is deliberate: the
+service starts even if the file is missing, and then the script itself says
+clearly what is missing.
 
-**⚠️⚠️ ১৫ আগস্ট ২০২৬-এর অবস্থা:** টাইমারটা VPS-এ **বসানো ও চালু**
-(পরের রান ২২ আগস্ট ০৪:০০)। স্ক্রিপ্টের গোটা পথ একটা স্থানীয় ফোল্ডারকে
-রিমোট ধরে মাঠে চালিয়ে যাচাই করা হয়েছে — ৩টে ফাইল গেছে, ছাঁটাই চলেছে,
-টেলিগ্রামে খবর গেছে। ⏳ **বাকি কেবল `rclone config`** — ওটা মালিকের
-নিজের Google অ্যাকাউন্টের লগইন, তাই তাঁকেই করতে হবে। ততক্ষণ পর্যন্ত
-টাইমার প্রতি শনিবার চলবে আর **পরিষ্কার করে ব্যর্থ হবে**
-("RCLONE_REMOTE সেট করা নেই"), নীরবে নয়।
+**Status as last checked:** the timer is **installed and enabled** on the VPS
+(next run Saturday 04:00). The script's whole path was verified in the field by
+treating a local folder as the remote — 3 files went, pruning ran, and the news
+reached Telegram. **Only `rclone config` remains** — it is a login to the
+owner's own Google account, so the owner has to do it. Until then the timer
+runs every Saturday and **fails cleanly** ("RCLONE_REMOTE is not set"), not silently.
 
-⭐ `Persistent=true` — সার্ভার ওই সময় বন্ধ থাকলে চালু হওয়ার পর জবটা
-চালায়। নইলে একটা রিবুট মানে একটা সপ্তাহ নীরবে বাদ।
+`Persistent=true` — if the server is off at that time, the job runs after it
+comes up. Otherwise one reboot would mean one week silently skipped.
 
-⚠️ শনিবার ভোর ৪টা: রাতের ডাম্প (০২:৩০) হয়ে যাওয়ার পর, আর অফিস শুরুর আগে।
+Saturday 4 am: after the nightly dump (02:30) is done, and before office hours begin.
 
-### যা এখনো এই স্ক্রিপ্টে **নেই**
+### What this script does **not** have yet
 
-- ⚠️ **রিস্টোর মহড়া।** তোলা হয়েছে মানে ফেরানো যাবে — এই দুটো এক নয়, আর
-  এই প্রকল্প নিজেই একবার সেটা মাঠে শিখেছে। ত্রৈমাসিক মহড়াটা এখনো হাতে
-  (§ ১০ দেখুন)।
-- ⚠️ **স্ক্রিনশটের ফাইল যায় না** — কেবল ডাটাবেস ডাম্প। ছবিগুলো
-  `.data/storage`-এ, আর ওগুলো ৯০ দিনে এমনিতেই মুছে যায়; অফসাইটে তোলা
-  মানে ওই মেয়াদটাকেই অকেজো করা।
+- **A restore drill.** Having uploaded does not mean it can be restored — the
+  two are not the same, and this project itself learned that once in the field.
+  The quarterly drill is still by hand (see § 10).
+- **Screenshot files are not sent** — only the database dump. The images are in
+  `.data/storage`, and they are deleted after 90 days anyway; sending them
+  offsite would defeat that retention period.
 
 
-## স্ক্রিপ্ট সম্পর্কে দুটো কথা
+## About the scripts
 
-- **তিনটে** `.ps1` ফাইলই (`make-cert` · `defender-exclusions` ·
-  `agent/installer/build`) **UTF-8 BOM সহ** সংরক্ষিত। ⚠️ BOM মুছে ফেলবেন
-  না — Windows PowerShell 5.1 BOM ছাড়া ফাইলকে ANSI ধরে, আর তখন ভেতরের
-  বাংলা লেখাগুলো ভেঙে গিয়ে স্ক্রিপ্ট পার্সই হয় না।
-  ⚠️⚠️ `build.ps1`-এ BOM-টা **প্রথম দিন থেকে ছিল না**, আর ধরা পড়েনি কারণ
-  আগের MSI-টা `pwsh` (PowerShell 7) দিয়ে বানানো হয়েছিল — সে BOM ছাড়াই
-  UTF-8 ধরে নেয়। ১২ আগস্ট MSI বানাতে গিয়ে স্ক্রিপ্টটা তিনটে
-  `Unexpected token` দিয়ে থেমে যায়। অর্থাৎ যে মেশিনে PowerShell 7 নেই
-  (যেমন অফিসের সার্ভার PC), সেখানে **MSI বানানোই যেত না**।
-- অথচ `certs\*.pem` লেখা হয় **BOM ছাড়া** — উল্টো নিয়ম। BOM থাকলে Node
-  PEM পড়তে পারে না।
+- **All three** `.ps1` files (`make-cert` · `defender-exclusions` ·
+  `agent/installer/build`) are stored **with a UTF-8 BOM**. Do not remove the
+  BOM — Windows PowerShell 5.1 treats a file without a BOM as ANSI, and then
+  the Bengali text inside breaks and the script does not even parse.
+  `build.ps1` **did not have the BOM from the first day**, and it went
+  unnoticed because the previous MSI had been built with `pwsh` (PowerShell 7) —
+  which assumes UTF-8 even without a BOM. When an MSI was built, the script
+  stopped with three `Unexpected token` errors. So on a machine without
+  PowerShell 7 (such as the office server PC) **the MSI could not be built at all**.
+- Yet `certs\*.pem` is written **without a BOM** — the opposite rule. With a
+  BOM, Node cannot read the PEM.

@@ -25,8 +25,8 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
-      # ⭐ ওয়েবের সাথে **একই** ভার্সন — `/health` এটা ফেরত দেয়, আর
-      #    ড্যাশবোর্ড দুটো মিলিয়ে দেখে (অর্ধেক ডিপ্লয় ধরার একমাত্র উপায়)।
+      # Must be the **same** version as the web image - `/health` returns it, and
+      # the dashboard compares the two (the only way to catch a half-finished deploy).
       args:
         APP_BUILD: ${APP_BUILD:-}
         APP_COMMIT: ${APP_COMMIT:-}
@@ -43,20 +43,20 @@ services:
       WORK_TIMEZONE: ${WORK_TIMEZONE:-Asia/Dhaka}
       DATABASE_URL: postgresql://${POSTGRES_USER:-oxeio}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-oxeio}?schema=public
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
-      # ⚠️ চলক দুটো এখানে **স্পষ্ট করে** পাস করতে হয়। compose হোস্টের
-      #    পরিবেশ কনটেইনারে নিজে থেকে নেয় না, তাই লাইন দুটো না থাকলে
-      #    `.env`-এ যা-ই লেখা হোক সার্ভার ডিফল্টই ব্যবহার করত — আর
-      #    "সেটিং কাজ করছে না" বোঝার কোনো উপায় থাকত না।
+      # Careful: these variables must be passed **explicitly** here. Compose does not
+      #    forward the host environment into the container by itself, so without
+      #    these lines the server would use its defaults whatever `.env` says - and
+      #    there would be no way to tell that "the setting is not working".
       LOGIN_MAX_FAILS: ${LOGIN_MAX_FAILS:-10}
       LOGIN_LOCK_MINUTES: ${LOGIN_LOCK_MINUTES:-2}
-      # ⚠️ G116 — IP-প্রতি সীমা। জোড়া-কাউন্টার এক IP থেকে বহু ইমেইল ধরত না
+      # Per-IP limit. The paired counter did not catch many emails from one IP
       LOGIN_IP_MAX_FAILS: ${LOGIN_IP_MAX_FAILS:-50}
       # ISO 4217, two-decimal currencies only (see .env.example)
       CURRENCY: ${CURRENCY:-BDT}
       PORT: 3000
       STORAGE_ROOT: /data/storage
       # screenshots in an S3-compatible bucket instead of STORAGE_ROOT
-      # (deploy/README.md § ৫ক) — empty = local disk, as before
+      # (deploy/README.md § 5a) - empty = local disk, as before
       STORAGE_DRIVER: ${STORAGE_DRIVER:-}
       S3_BUCKET: ${S3_BUCKET:-}
       S3_ENDPOINT: ${S3_ENDPOINT:-}
@@ -65,143 +65,150 @@ services:
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
       S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-}
       S3_PREFIX: ${S3_PREFIX:-}
-      # ⚠️ ড্যাশবোর্ড `web` সার্ভিস দিয়ে চললে এটা কার্যত অব্যবহৃত — Caddy
-      #    API ও পাতা **একই origin**-এ দেয়, তাই ব্রাউজার cross-origin
-      #    রিকোয়েস্টই করে না (web/Caddyfile দেখুন)।
+      # Careful: effectively unused when the dashboard runs through the `web`
+      #    service - Caddy serves the API and the pages from the **same origin**,
+      #    so the browser never makes a cross-origin request (see web/Caddyfile).
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
       # owner's update public key — empty = unsigned updates allowed, as before
       AGENT_UPDATE_PUBLIC_KEY: ${AGENT_UPDATE_PUBLIC_KEY:-}
       # e.g. pt-BR — empty = the dashboard's own date and number formats
       DISPLAY_LOCALE: ${DISPLAY_LOCALE:-}
 
-      # ⚠️ না দিলে JWT_SECRET থেকেই আলাদা চাবি বানানো হয় (label মিশিয়ে),
-      #    তাই খালি রাখা নিরাপদ। আলাদা দিলে স্ক্রিনশটের লিঙ্ক আর সেশন
-      #    সম্পূর্ণ আলাদা চাবিতে চলে।
+      # Careful: if unset, a separate key is derived from JWT_SECRET (mixed with
+      #    a label), so leaving it empty is safe. If set, screenshot links and
+      #    sessions use completely separate keys.
       SCREENSHOT_URL_SECRET: ${SCREENSHOT_URL_SECRET:-}
 
-      # ── G05/G07 · ইমেইল ────────────────────────────────────────────────
-      # ⚠️⚠️ **এই ছ-টা লাইন আগে এখানে ছিল না** — ফলে ডকের ধাপ মেনে চললে
-      #    সার্ভার উঠত ইমেইল সম্পূর্ণ বন্ধ অবস্থায়। অ্যালার্ট তৈরি হতো,
-      #    ডাটাবেসে বসত, কিন্তু কারো কাছে **পৌঁছাত না** — আর সেটা কোথাও
-      #    ভুল হিসেবেও দেখাত না, কারণ "SMTP নেই" মানে চ্যানেল চুপচাপ বন্ধ।
+      # ── Email ───────────────────────────────────────────────────────────
+      # Careful: **these six lines used to be missing** - so following the docs
+      #    step by step, the server started with email completely off. Alerts were
+      #    created and stored in the database but **never reached** anyone - and
+      #    nothing showed it as wrong, because "no SMTP" means the channel is
+      #    silently disabled.
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
-      # খালি হলে সক্রিয় owner-দের ইমেইলে যায়
+      # If empty, goes to the active owners' email addresses
       ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
 
-      # ── K02/K03/G39 · রাতের ব্যাকআপ ────────────────────────────────────
-      # ⚠️ BACKUP_PASSPHRASE না দিলে ব্যাকআপ **চলবেই না** — ইচ্ছাকৃত।
-      #    এনক্রিপশন ছাড়া বেতন ও স্ক্রিনশটের ডাটাবেস ডিস্কে ফেলে রাখার
-      #    চেয়ে ব্যাকআপ বন্ধ থাকা নিরাপদ। বুটে logger.error, আর রোজ
-      #    একটা G04 অ্যালার্ট — নীরবে বন্ধ থাকে না।
-      # ⚠️ `:?` দিয়ে বাধ্যতামূলক করা হয়নি, কারণ তাতে ডেভ মেশিনে
-      #    কনটেইনারই উঠত না।
+      # ── Nightly backup ──────────────────────────────────────────────────
+      # Careful: without BACKUP_PASSPHRASE the backup **will not run** - on purpose.
+      #    Having the backup off is safer than leaving a salary and screenshot
+      #    database on disk unencrypted. It logs logger.error at boot, plus a
+      #    daily alert - it never stays off silently.
+      # Careful: not made mandatory with `:?`, because the container
+      #    would then not start on dev machines.
       BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
       # `external` = backed up by another tool; empty = oXeio's own nightly backup
       BACKUP_MODE: ${BACKUP_MODE:-}
-      # Postgres এই compose-এ কনটেইনারে, হোস্টে pg_dump নাও থাকতে পারে —
-      # তাই ডাম্প কন্টেইনারের ভেতর থেকেই নেওয়া হয়।
+      # In this compose Postgres runs in a container and the host may not have
+      # pg_dump - so the dump is taken from inside the container.
       BACKUP_DOCKER_CONTAINER: ${BACKUP_DOCKER_CONTAINER:-}
       BACKUP_COPY_TO: ${BACKUP_COPY_TO:-}
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-30}
-      # বাকি চারটেও পাস করা হয় — নইলে .env-এ বসিয়ে কেউ ভাবতেন কাজ হচ্ছে
+      # The other four are passed too - otherwise someone could set them in .env and think it works
       BACKUP_DIR: ${BACKUP_DIR:-}
       BACKUP_PG_DUMP: ${BACKUP_PG_DUMP:-}
       BACKUP_DOCKER_BIN: ${BACKUP_DOCKER_BIN:-}
       BACKUP_DOCKER_DB_HOST: ${BACKUP_DOCKER_DB_HOST:-}
 
-      # ── F06/F07 · রিপোর্ট ও ডাইজেস্ট ───────────────────────────────────
+      # ── Reports and digest ──────────────────────────────────────────────
       ORG_NAME: ${ORG_NAME:-oXeio Monitoring}
-      # খালি হলে সক্রিয় owner-দের ইমেইলে যায় (ALERT_EMAIL_TO-তে নয়)
+      # If empty, goes to the active owners' email addresses (not to ALERT_EMAIL_TO)
       DIGEST_EMAIL_TO: ${DIGEST_EMAIL_TO:-}
-      # ⚠️ Teams — ফ্রি/ব্যক্তিগত অ্যাকাউন্টে webhook পাওয়া যায় না
-      #    (Workflows কেবল work/school-এ), তাই সাধারণত খালিই থাকে।
+      # Careful: Teams - free/personal accounts get no webhook
+      #    (Workflows only on work/school), so this is usually left empty.
       TEAMS_WEBHOOK_URL: ${TEAMS_WEBHOOK_URL:-}
 
-      # ── G08 · টেলিগ্রাম অ্যালার্ট (দুটোই না থাকলে চুপচাপ বন্ধ) ──────────
+      # ── Telegram alerts (silently off unless both are set) ──────────────
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      # ⚠️⚠️ owner-এর চ্যাট, কর্মীদের গ্রুপ নয় — R3-এর সাপ্তাহিক সারাংশও
-      #    এই একই চ্যাটে যায় আর সেখানে নাম ধরে "কে পিছিয়ে" লেখা থাকে।
-      # ⭐ ব্যক্তিগত চ্যাটের id নিছক ধনাত্মক সংখ্যা; গ্রুপ/চ্যানেলেরটা
-      #    ঋণাত্মক (`-100…`)। ধনাত্মক সংখ্যা না হলে সাপ্তাহিক সারাংশ
-      #    **পাঠানোই হয় না** (নিচের WEEKLY_DIGEST_ALLOW_GROUP দেখুন)।
-      #    অ্যালার্ট তাতে আটকায় না — ওতে কারো নাম যায় না।
+      # Careful: the owner's chat, not the staff group - the weekly summary also
+      #    goes to this same chat and names who is "falling behind".
+      # A personal chat id is a plain positive number; a group/channel id is
+      #    negative (`-100...`). Unless it is a positive number the weekly summary
+      #    is **not sent at all** (see WEEKLY_DIGEST_ALLOW_GROUP below).
+      #    Alerts are not blocked by this - they carry nobody's name.
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
 
-      # ── R3 · সাপ্তাহিক সারাংশ টেলিগ্রামে ───────────────────────────────
-      # ⚠️ লাইন দুটো এখানে **স্পষ্ট করে** পাস করতে হয়। compose হোস্টের
-      #    পরিবেশ কনটেইনারে নিজে থেকে নেয় না, তাই না থাকলে `.env`-এ
-      #    WEEKLY_DIGEST_DAY=1 লিখে কেউ সোমবার অপেক্ষা করতেন, অথচ বার্তা
-      #    আসত শুক্রবার — আর "সেটিং কাজ করছে না" বোঝার উপায় থাকত না।
-      # দিন: ১=সোম … ৫=শুক্র … ৭=রবি। ঘণ্টা: ০–২৩ (ঢাকা)।
+      # ── Weekly summary on Telegram ──────────────────────────────────────
+      # Careful: these two lines must be passed **explicitly** here. Compose does
+      #    not forward the host environment into the container by itself, so
+      #    without them someone setting WEEKLY_DIGEST_DAY=1 in `.env` would wait
+      #    for Monday while the message arrived on Friday - and there would be no
+      #    way to tell that "the setting is not working".
+      # Day: 1=Mon ... 5=Fri ... 7=Sun. Hour: 0-23 (Dhaka).
       WEEKLY_DIGEST_DAY: ${WEEKLY_DIGEST_DAY:-5}
       WEEKLY_DIGEST_HOUR: ${WEEKLY_DIGEST_HOUR:-18}
-      # ⚠️⚠️ ডিফল্ট খালি, অর্থাৎ প্রহরী **চালু**: chat id ব্যক্তিগত না হলে
-      #    সাপ্তাহিক সারাংশ যায় না, আর লগে কারণ ও করণীয় লেখা থাকে।
-      #    `true` লিখলে গ্রুপেও যাবে — সচেতন সিদ্ধান্ত, নীরব দুর্ঘটনা নয়।
-      # ⚠️ আটকালেও কিছু হারায় না — পুরো বার্তাটা লগে লেখা হয়।
+      # Careful: the default is empty, i.e. the guard is **on**: if the chat id is
+      #    not personal, the weekly summary is not sent, and the log states the
+      #    reason and what to do.
+      #    Setting `true` lets it go to groups too - a conscious decision, not a
+      #    silent accident.
+      # Careful: nothing is lost when blocked - the whole message is written to the log.
       WEEKLY_DIGEST_ALLOW_GROUP: ${WEEKLY_DIGEST_ALLOW_GROUP:-}
 
-      # ── I01 · HTTPS/TLS ────────────────────────────────────────────────
-      # ⚠️ চালু করতে তিনটে জিনিস **একসাথে** লাগে, নইলে কিছুই কাজ করবে না:
-      #    ১· নিচের দুটো লাইন খোলা  ২· ports → "443:3000"
-      #    ৩· volumes-এ ./deploy/certs:/certs:ro
-      #    আর CORS_ORIGIN https:// দিয়ে শুরু হতে হবে।
-      # ⭐ একটা দিয়ে আরেকটা না দিলে সার্ভার **উঠবেই না** — নীরবে HTTP-তে
-      #    নেমে গেলে একটা টাইপো এজেন্টের ডিভাইস টোকেন মাসের পর মাস
-      #    প্লেইনটেক্সটে LAN-এ পাঠাত, আর বাইরে থেকে সব ঠিক দেখাত।
-      # সার্ট বানানো: deploy/make-cert.ps1 (বিস্তারিত deploy/README.md § ৬)
+      # ── HTTPS/TLS ───────────────────────────────────────────────────────
+      # Careful: three things are needed **together** to enable it, otherwise
+      #    nothing works:
+      #    1. the two lines below uncommented  2. ports -> "443:3000"
+      #    3. ./deploy/certs:/certs:ro in volumes
+      #    and CORS_ORIGIN must start with https://.
+      # Setting one without the other makes the server **refuse to start** - if
+      #    it silently fell back to HTTP, one typo would send the agents' device
+      #    tokens in plaintext over the LAN for months while everything looked
+      #    fine from outside.
+      # Making the cert: deploy/make-cert.ps1 (details in deploy/README.md § 6)
       # TLS_CERT: /certs/oxeio-cert.pem
       # TLS_KEY: /certs/oxeio-key.pem
-    # ⚠️⚠️ **`127.0.0.1:` অংশটা সরাবেন না।**
+    # Careful: **do not remove the `127.0.0.1:` part.**
     #
-    #    এটা ছাড়া `3000:3000` মানে API **পৃথিবীর সবার জন্য খোলা** — VPS-এ
-    #    সেটা Caddy-কে (আর তার TLS-কে) পুরোপুরি পাশ কাটিয়ে যায়, অর্থাৎ
-    #    ডিভাইস টোকেন ও স্ক্রিনশট প্লেইন HTTP-তে ইন্টারনেটে চলে যেত।
-    #    ⚠️ আর ফাঁদটা নীরব: ব্রাউজারে সব ঠিকই দেখাত, কারণ ড্যাশবোর্ড
-    #    Caddy দিয়েই যায়।
+    #    Without it `3000:3000` means the API is **open to the whole world** - on
+    #    the VPS that bypasses Caddy (and its TLS) completely, so device tokens
+    #    and screenshots would travel over plain HTTP on the internet.
+    #    The trap is also silent: the browser would look fine, because the
+    #    dashboard goes through Caddy.
     #
-    # ⭐ Caddy api-তে পৌঁছায় **docker নেটওয়ার্কের ভেতর দিয়ে** (`api:3000`),
-    #    প্রকাশিত পোর্ট দিয়ে নয় — তাই এতে কিছুই ভাঙে না। পোর্টটা রাখা
-    #    হয়েছে শুধু হোস্ট থেকে সরাসরি দেখার জন্য (curl, ডিবাগ)।
+    # Caddy reaches the api **through the docker network** (`api:3000`), not
+    #    through the published port - so this breaks nothing. The port is kept
+    #    only for looking at it directly from the host (curl, debugging).
     ports:
       - "127.0.0.1:3000:3000"
     volumes:
       - ${STORAGE_HOST_PATH:-./.data/storage}:/data/storage
-      # ⭐⭐ রাতের ব্যাকআপের ঘর (K02)।
+      # The nightly backup's home.
       #
-      # ⚠️⚠️ এটা না থাকায় `BACKUP_DIR`-এর ডিফল্ট (`/data/backups`) ছিল
-      #    কনটেইনারের **নিজের স্তরে** — অর্থাৎ ব্যাকআপ লেখা গেলেও প্রতি
-      #    ডিপ্লয়ে মুছে যেত, আর ঠিক যে দিন দরকার হতো সেদিন কিছুই থাকত না।
-      #    ⭐ ব্যর্থতাটা দ্বিগুণ নীরব হতো: ফাইল তৈরি হচ্ছে দেখে সবাই
-      #    নিশ্চিন্ত থাকত।
+      # Careful: without this, the default `BACKUP_DIR` (`/data/backups`) lived in
+      #    the container's **own layer** - so a backup could be written but was
+      #    wiped on every deploy, and on the very day it was needed nothing would
+      #    be there. The failure would also be doubly silent: files were being
+      #    created, so everyone felt safe.
       - ${BACKUP_HOST_PATH:-./.data/backups}:/data/backups
-      # TLS চালু করলে:
+      # When enabling TLS:
       # - ./deploy/certs:/certs:ro
-      # ⚠️ BACKUP_DOCKER_CONTAINER ব্যবহার করলে api কনটেইনারকে হোস্টের
-      #    docker daemon-এ পৌঁছাতে হবে (নিচের সকেটটা খুলতে হবে)।
-      #    ⚠️ এটা কার্যত হোস্টে root-সমান ক্ষমতা — শুধু তখনই খুলুন যখন
-      #    বিকল্প নেই। বিকল্প আছে: হোস্টে postgresql-client বসিয়ে
-      #    BACKUP_PG_DUMP ব্যবহার করা, অথবা ব্যাকআপ হোস্ট থেকে চালানো।
+      # Careful: to use BACKUP_DOCKER_CONTAINER the api container must reach the
+      #    host's docker daemon (the socket below must be opened).
+      #    This is effectively root-equivalent on the host - open it only when
+      #    there is no alternative. There is one: install postgresql-client on
+      #    the host and use BACKUP_PG_DUMP, or run the backup from the host.
       # - /var/run/docker.sock:/var/run/docker.sock
 
-    # ⚠️ রানবুক বলে "দুটোই healthy হওয়া চাই", অথচ এখানে কোনো healthcheck
-    #    ছিল না — `docker compose ps` শুধু "running" দেখাত, আর ভেতরে অ্যাপ
-    #    ক্র্যাশ-লুপে থাকলেও সেটা running-ই।
-    # ⚠️ scheme TLS_CERT দেখে বাছা হয় (সার্ভার TLS পেলে ওই পোর্টে আর প্লেইন
-    #    HTTP থাকে না)। self-signed সার্ট বলে যাচাই বাদ — কলটা loopback-এ,
-    #    কনটেইনারের ভেতর থেকে নিজের কাছেই।
+    # Careful: the runbook says "both must be healthy", yet there used to be no
+    #    healthcheck here - `docker compose ps` showed only "running", and an
+    #    app stuck in a crash loop inside is still "running".
+    # Careful: the scheme is chosen from TLS_CERT (when the server has TLS, that
+    #    port no longer speaks plain HTTP). Verification is skipped because the
+    #    cert is self-signed - the call is on loopback, from inside the
+    #    container to itself.
     healthcheck:
       test:
         - CMD
         - node
         - -e
-        # ⚠️ টেমপ্লেট লিটারেল (`${...}`) ব্যবহার করা যাবে না — docker compose
-        #    নিজেই ওটাকে তার চলক ভেবে বসে আর ফাইলটাই অবৈধ হয়ে যায়।
+        # Careful: template literals (`${...}`) cannot be used - docker compose
+        #    takes them for its own variables and the file becomes invalid.
         - |
           const s = process.env.TLS_CERT ? 'https' : 'http';
           const p = process.env.PORT || 3000;
@@ -215,15 +222,15 @@ services:
       retries: 5
       start_period: 20s
 
-  # ── ড্যাশবোর্ড ──────────────────────────────────────────────────────────
-  # ⭐ এটাই সেই সার্ভিস যেটা এতদিন ছিল না। ওয়েব ও API একই origin-এ
-  #    (web/Caddyfile), তাই cookie ও CORS দুটো সমস্যাই আর নেই।
+  # ── Dashboard ───────────────────────────────────────────────────────────
+  # This is the service that was missing until now. Web and API share one origin
+  #    (web/Caddyfile), so neither the cookie nor the CORS problem exists any more.
   web:
     build:
       context: ./web
       dockerfile: Dockerfile
-      # ⭐ `deploy/vps-update.sh` git থেকে ভরে দেয়। খালি থাকলে ইমেজের
-      #    ডিফল্ট (`dev`/`local`) বসে — বিল্ড থামে না, শুধু সৎ থাকে।
+      # `deploy/vps-update.sh` fills these from git. If empty, the image's
+      #    defaults (`dev`/`local`) apply - the build does not stop, it just stays honest.
       args:
         APP_BUILD: ${APP_BUILD:-}
         APP_COMMIT: ${APP_COMMIT:-}
@@ -236,15 +243,15 @@ services:
     environment:
       TZ: Asia/Dhaka
       # behind another proxy only — empty = Caddy is the edge, as before
-      # (deploy/README.md § ৩খ)
+      # (deploy/README.md § 3b)
       CADDY_TRUSTED_PROXIES: ${CADDY_TRUSTED_PROXIES:-}
       CADDY_CLIENT_IP_HEADERS: ${CADDY_CLIENT_IP_HEADERS:-}
-    # ⚠️ VPS-এ `WEB_PORT` কাজে লাগে না — ওখানে Caddy নিজেই ৮০ ও ৪৪৩ ধরে
-    #    (Let's Encrypt-এর যাচাই ৮০-তে হয়)। তখন এই দুটো লাইন হবে:
+    # Careful: `WEB_PORT` is not used on the VPS - there Caddy itself takes 80 and
+    #    443 (Let's Encrypt validation happens on 80). The two lines then become:
     #        - "80:80"
     #        - "443:443"
-    #    আর `web/Caddyfile`-এ `:8080`-এর বদলে ডোমেইনটা বসবে।
-    #    বিস্তারিত deploy/README § ৩।
+    #    and `web/Caddyfile` gets the domain in place of `:8080`.
+    #    Details in deploy/README § 3.
     ports:
       - "${WEB_PORT:-8080}:8080"
     healthcheck:
@@ -253,14 +260,15 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── একবারের কাজ: স্কিমা ও seed ─────────────────────────────────────────
-  # ⚠️⚠️ **এটা ছাড়া `docker compose up -d` করলে ডাটাবেসে একটাও টেবিল বসে না।**
-  #    রানবুকে ধাপটাই ছিল না, আর api-র runtime ইমেজে prisma CLI বা tsx
-  #    নেই (Dockerfile § runtime), তাই কনটেইনার নিজে চালাতেও পারত না।
+  # ── One-off job: schema and seed ────────────────────────────────────────
+  # Careful: **without this, `docker compose up -d` leaves the database with no tables.**
+  #    The runbook did not have this step, and the api runtime image has neither
+  #    the prisma CLI nor tsx (Dockerfile § runtime), so the container could not
+  #    run it itself either.
   #
-  # ⭐ `target: build` — ওই স্তরে সোর্স ও পূর্ণ node_modules দুটোই আছে।
-  # ⭐ profile দেওয়া, তাই `up -d`-তে চলে না। ইচ্ছাকৃত: মাইগ্রেশন হলো
-  #    সচেতন একটা ধাপ, প্রতিবার রিস্টার্টে নিজে থেকে চলার জিনিস নয়।
+  # `target: build` - that stage has both the source and the full node_modules.
+  # A profile is set, so it does not run on `up -d`. Deliberate: a migration is
+  #    a conscious step, not something to run by itself on every restart.
   #
   #     docker compose --profile setup run --rm migrate
   #
@@ -288,12 +296,12 @@ services:
       SEED_POLICY_WORKDAYS: ${SEED_POLICY_WORKDAYS:-}
       SEED_POLICY_WEEKLY_OFF: ${SEED_POLICY_WEEKLY_OFF:-}
     volumes:
-      # ⚠️ prisma/ হোস্ট থেকে mount করা হয়, ইমেজে বেক করা নয় — কারণ
-      #    `staff.local.json`-এ কর্মীদের **নাম ও বেতন** থাকে। ইমেজে ঢুকলে
-      #    সেটা প্রতিটা লেয়ার-কপির সাথে ছড়াত ([09 § ৩ঊ](../docs/09-Build-Log.md))।
+      # Careful: prisma/ is mounted from the host, not baked into the image -
+      #    `staff.local.json` holds the staff's **names and salaries**. In the
+      #    image it would spread with every layer copy ([09 § ৩ঊ](../docs/09-Build-Log.md)).
       - ./server/prisma:/app/prisma:ro
-    # ⚠️ `npm run seed` নয় — ওটা `dotenv -e ../.env` দিয়ে মোড়া, আর
-    #    কনটেইনারে ওই ফাইল নেই। চলক compose থেকেই আসছে।
+    # Careful: not `npm run seed` - it is wrapped in `dotenv -e ../.env`, and
+    #    the container has no such file. The variables come from compose.
     command: >
       sh -c "npx prisma migrate deploy && npx tsx prisma/seed.ts"
 

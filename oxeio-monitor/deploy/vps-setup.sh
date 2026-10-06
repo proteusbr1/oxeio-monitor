@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 #
-# oXeio — VPS প্রথমবার দাঁড় করানো (ADR-026)
+# oXeio - first-time VPS setup (ADR-026)
 #
-# চালানো (VPS-এ root হিসেবে):
+# Run (as root on the VPS):
 #     bash /opt/oxeio/oxeio-monitor/deploy/vps-setup.sh hub.oxeio.com
 #
-# ⚠️ পাথে `oxeio-monitor/` অংশটা বাদ দেবেন না — রিপোর রুটে এই
-#    স্ক্রিপ্টটা নেই, ওটা এক ধাপ ভেতরে।
+# Careful: do not drop the `oxeio-monitor/` part of the path - this script is
+#    not at the repo root, it is one level inside.
 #
-# ⭐ যা করে: Docker · ফায়ারওয়াল · গোপন মান তৈরি · DNS যাচাই · স্ট্যাক তোলা।
-# ⭐ **বারবার চালানো নিরাপদ** — যা আগে হয়ে গেছে তাতে হাত দেয় না, আর
-#    `.env` একবার তৈরি হলে সেটা আর ছোঁয় না (গোপন মান বদলে যেত)।
+# What it does: Docker - firewall - generating secrets - DNS check - starting the stack.
+# **Safe to run repeatedly** - it does not touch what is already done, and once
+#    `.env` exists it never touches it again (the secrets would change).
 #
-# ⚠️ এই স্ক্রিপ্ট কোনো গোপন মান ছাপে না, একটা ছাড়া: প্রথমবার তৈরি হওয়া
-#    owner পাসওয়ার্ড — সেটা একবারই দেখা যায়।
+# Careful: this script prints no secret values, except one: the owner password
+#    generated on the first run - it is shown only once.
 
 set -euo pipefail
 
@@ -29,7 +29,7 @@ warn(){ printf '   \033[33m⚠️  %s\033[0m\n' "$*"; }
 [ -n "$PUBLIC_HOST" ] || die "ডোমেইন দিন:  bash deploy/vps-setup.sh hub.oxeio.com"
 [ "$(id -u)" -eq 0 ] || die "root হিসেবে চালান (sudo -i)"
 
-# ── ১· Docker ────────────────────────────────────────────────────────────
+# ── 1. Docker ────────────────────────────────────────────────────────────
 say "১· Docker"
 if command -v docker >/dev/null 2>&1; then
   ok "আগে থেকেই আছে — $(docker --version | cut -d, -f1)"
@@ -39,61 +39,61 @@ else
 fi
 docker compose version >/dev/null 2>&1 || die "docker compose প্লাগইন নেই"
 
-# ── ২· ফায়ারওয়াল ────────────────────────────────────────────────────────
+# ── 2. Firewall ──────────────────────────────────────────────────────────
 say "২· ফায়ারওয়াল"
 
-# ⚠️⚠️ আগে এখানে লেখা ছিল: ufw না থাকলে শুধু একটা সতর্কবার্তা ছাপা হবে।
-#    ১৩ আগস্ট বাইরে থেকে পোর্ট স্ক্যান করে দেখা গেল VPS-এ **কোনো
-#    ফায়ারওয়ালই চলছে না** — ৩৩০৬, ৮০৮০, ৯৯৯৯ সবেতেই সাথে সাথে RST,
-#    অথচ ufw চালু থাকলে ওগুলো নীরবে DROP হতো।
-#    ⭐ অর্থাৎ এই `else` শাখাটাই চলেছিল, আর সতর্কবার্তাটা লগের ভিড়ে
-#    হারিয়ে গেছে। একটা warn কেউ পড়ে না; স্ক্রিপ্টের কাজ **করা**, বলা নয়।
+# Careful: this used to say: if ufw is missing, just print a warning.
+#    A port scan from outside showed the VPS had **no firewall running at all** -
+#    3306, 8080, 9999 all answered with an immediate RST, whereas with ufw
+#    active they would have been silently DROPped.
+#    So this very `else` branch had run, and the warning got lost in the log
+#    noise. Nobody reads a warn; the script's job is to **do**, not to tell.
 if ! command -v ufw >/dev/null 2>&1; then
   apt-get update -qq >/dev/null 2>&1 || true
   apt-get install -y -qq ufw >/dev/null 2>&1 || true
 fi
 
 if command -v ufw >/dev/null 2>&1; then
-  # ⚠️⚠️ SSH আগে — উল্টো করলে `ufw enable` চলার মুহূর্তে নিজের সংযোগটাই
-  #    কেটে যায়, আর তখন VPS-এ ঢোকার আর কোনো পথ থাকে না (কনসোল ছাড়া)।
+  # Careful: SSH first - the other way round, your own connection is cut the
+  #    moment `ufw enable` runs, and then there is no way into the VPS (except the console).
   ufw allow 22/tcp  >/dev/null
-  # ⭐ ২২২২ — বিকল্প SSH দরজা। অনেক ISP (যেমন AmberIT, বাংলাদেশ) বাইরের
-  #    ২২ পোর্ট নীরবে আটকায়, আর তখন সার্ভার দিব্যি চললেও ঢোকা যায় না।
-  #    ⚠️ এখানে খোলা রাখা মানে দরজাটা **তৈরি** নয় — sshd-কে ওখানে শুনতে
-  #    বলতে হয় (deploy/README § ১২.৪গ)। আগেভাগে খুলে রাখা হয় যাতে
-  #    দরকারের দিন ufw বাধা না হয়, কারণ সেদিন হাতে সময় থাকে না।
+  # 2222 - the alternative SSH door. Many ISPs (e.g. AmberIT, Bangladesh) silently
+  #    block outbound port 22, and then the server runs fine but cannot be reached.
+  #    Careful: opening it here does not **create** the door - sshd has to be told
+  #    to listen there (deploy/README § 12.4c). It is opened ahead of time so ufw
+  #    is no obstacle on the day it is needed, because that day there is no time.
   ufw allow 2222/tcp >/dev/null
   ufw allow 80/tcp  >/dev/null
   ufw allow 443/tcp >/dev/null
   ufw --force enable >/dev/null
   ok "২২ · ২২২২ · ৮০ · ৪৪৩ খোলা"
-  # ⚠️ ৫৪৩২ ও ৩০০০ ইচ্ছাকৃতভাবে বন্ধ — compose ওগুলো 127.0.0.1-এ বাঁধে,
-  #    বাইরে থেকে নাগাল পাওয়ার কোনো কারণ নেই।
+  # Careful: 5432 and 3000 are deliberately closed - compose binds them to
+  #    127.0.0.1, so there is no reason to reach them from outside.
 else
-  # ⚠️ ইনস্টলও করা গেল না — এটা আর চুপচাপ পার হতে দেওয়া যায় না।
+  # Careful: it could not even be installed - this can no longer be allowed to pass quietly.
   warn "ufw বসানো গেল না — প্রোভাইডারের ফায়ারওয়ালে ২২/২২২২/৮০/৪৪৩ খুলে"
   warn "বাকি সব বন্ধ করুন, নইলে হোস্ট সম্পূর্ণ অরক্ষিত থাকবে"
 fi
 
-# ⭐ যা বসল তা **মিলিয়ে দেখা** — "চালানো হয়েছে" আর "চালু আছে" এক নয়।
+# **Verify** what was installed - "was run" and "is running" are not the same.
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi '^Status: active'; then
   ok "ফায়ারওয়াল সক্রিয়"
 else
-  # ⚠️ ব্যাকটিক নয়, উদ্ধৃতি — ডাবল-কোটের ভেতরে ব্যাকটিক মানে কমান্ড চলে যাওয়া।
+  # Careful: a quote, not a backtick - a backtick inside double quotes runs a command.
   warn '⚠️ ফায়ারওয়াল সক্রিয় নয় — "ufw status verbose" দিয়ে দেখুন'
 fi
 
-# ── ৩· কোড ───────────────────────────────────────────────────────────────
+# ── 3. Code ──────────────────────────────────────────────────────────────
 say "৩· কোড"
 
-# ⚠️⚠️ `GIT_TERMINAL_PROMPT=0` — এটা না থাকলে **স্ক্রিপ্টটা ঝুলে যায়**।
+# Careful: `GIT_TERMINAL_PROMPT=0` - without it **the script hangs**.
 #
-#    রিপো private, তাই HTTPS দিয়ে clone করতে গেলে git চুপচাপ
-#    `Username for 'https://github.com':` লিখে বসে থাকে — আর স্ক্রিপ্টের
-#    ভেতরে সেটা দেখতে অদ্ভুত লাগে, মনে হয় কিছু একটা আটকে গেছে।
-#    ⭐ ১৩ আগস্ট ঠিক এটাই ঘটেছে মালিকের প্রথম চেষ্টায়।
+#    The repo is private, so cloning over HTTPS makes git silently sit at
+#    `Username for 'https://github.com':` - and inside a script that looks
+#    odd, as if something is stuck.
+#    This is exactly what happened on the owner's first attempt.
 #
-#    এখন ঝোলার বদলে সাথে সাথেই ব্যর্থ হয়, আর নিচে কী করতে হবে লেখা থাকে।
+#    Now it fails immediately instead of hanging, and what to do is printed below.
 export GIT_TERMINAL_PROMPT=0
 
 clone_help() {
@@ -127,13 +127,13 @@ else
   ok "ক্লোন হলো → $DIR"
 fi
 
-# ⚠️⚠️ compose ফাইলগুলো রিপোর **রুটে নয়**, `oxeio-monitor/`-এর ভেতরে।
+# Careful: the compose files are **not at the repo root**, they are inside `oxeio-monitor/`.
 #
-#    ⭐ ১৩ আগস্ট এখানেই আটকেছিল: clone সফল হয়েছে, কিন্তু স্ক্রিপ্ট রুটে
-#    `cd` করে `docker compose` ডেকেছে — আর ওখানে docker-compose.yml নেই।
-#    (আর চালানোর কমান্ডেও পাথটা ভুল দেওয়া হয়েছিল।)
+#    This is where it got stuck once: the clone succeeded, but the script did
+#    `cd` to the root and called `docker compose` - and there is no
+#    docker-compose.yml there. (The run command also had the wrong path.)
 #
-#    দুটো বিন্যাসেই চলে, তাই রিপোর গঠন বদলালেও ভাঙবে না।
+#    Both layouts work, so a change in the repo structure will not break it.
 COMPOSE_DIR="$DIR/oxeio-monitor"
 [ -f "$COMPOSE_DIR/docker-compose.yml" ] || COMPOSE_DIR="$DIR"
 [ -f "$COMPOSE_DIR/docker-compose.yml" ]   || die "docker-compose.yml পাওয়া গেল না ($DIR-এর ভেতরে খোঁজা হয়েছে)"
@@ -141,14 +141,15 @@ COMPOSE_DIR="$DIR/oxeio-monitor"
 cd "$COMPOSE_DIR"
 ok "compose ফোল্ডার → $COMPOSE_DIR"
 
-# ── ৪· DNS — **তোলার আগেই** ──────────────────────────────────────────────
+# ── 4. DNS - **before bringing the stack up** ────────────────────────────
 #
-# ⚠️⚠️ এই ধাপটা সবচেয়ে জরুরি, আর এটাই সবচেয়ে বেশি বাদ পড়ে।
+# Careful: this step is the most important, and the one most often skipped.
 #
-#    DNS না ছড়ানো অবস্থায় স্ট্যাক তুললে Caddy Let's Encrypt-এর কাছে সার্ট
-#    চাইবে, যাচাই ব্যর্থ হবে, আর বারবার চেষ্টা করতে থাকবে। ⚠️ LE-র ব্যর্থ
-#    চেষ্টারও সীমা আছে (ঘণ্টায় ৫টা) — সীমা পেরোলে ডোমেইনটা **এক ঘণ্টা
-#    আটকে যায়**, আর তখন DNS ঠিক করেও সাথে সাথে সার্ট পাওয়া যায় না।
+#    If the stack is brought up before DNS has propagated, Caddy asks Let's
+#    Encrypt for a certificate, validation fails, and it keeps retrying.
+#    Careful: LE also limits failed attempts (5 per hour) - past the limit the
+#    domain is **locked out for an hour**, and even after fixing DNS you cannot
+#    get a certificate right away.
 say "৪· DNS যাচাই"
 resolved="$(getent hosts "$PUBLIC_HOST" 2>/dev/null | awk '{print $1}' | head -1 || true)"
 myip="$(curl -fsS --max-time 10 https://api.ipify.org 2>/dev/null || true)"
@@ -161,7 +162,7 @@ if [ -n "$myip" ] && [ "$resolved" != "$myip" ]; then
 fi
 [ -n "$myip" ] && ok "এই সার্ভারের IP-র সাথে মিলেছে"
 
-# ── ৫· .env ──────────────────────────────────────────────────────────────
+# ── 5. .env ──────────────────────────────────────────────────────────────
 say "৫· .env"
 OWNER_PW=""
 if [ -f .env ]; then
@@ -169,8 +170,8 @@ if [ -f .env ]; then
 else
   cp .env.example .env
 
-  # ⭐ গোপন মান এখানেই তৈরি — হাতে বসানোর সুযোগই থাকে না, তাই দুর্বল
-  #    পাসওয়ার্ড বা কপি-পেস্ট করা পুরোনো মান ঢোকার পথ বন্ধ।
+  # Secrets are generated right here - there is no chance to type them by hand,
+  #    so no way for a weak password or a stale copy-pasted value to get in.
   gen() { openssl rand -base64 "$1" | tr -d '\n=+/' | cut -c1-"$2"; }
   PG_PW="$(gen 48 32)"
   JWT="$(gen 64 48)"
@@ -179,7 +180,7 @@ else
   OWNER_PW="$(gen 24 16)"
 
   set_env() {
-    # ⚠️ `|` ডিলিমিটার — base64-এ `/` থাকতে পারে, `sed s/…/…/` ভেঙে যেত
+    # Careful: `|` as the delimiter - base64 can contain `/`, which would break `sed s/.../.../`
     sed -i "s|^$1=.*|$1=$2|" .env
   }
   set_env POSTGRES_PASSWORD "$PG_PW"
@@ -189,8 +190,8 @@ else
   set_env SEED_OWNER_PASSWORD "$OWNER_PW"
   set_env CORS_ORIGIN "https://$PUBLIC_HOST"
 
-  # ⚠️ DATABASE_URL-এ পাসওয়ার্ডটা আবার বসাতে হয় — নইলে .env.example-এর
-  #    নমুনা পাসওয়ার্ড থেকে যেত আর api ডাটাবেসে ঢুকতেই পারত না।
+  # Careful: the password must be set again in DATABASE_URL - otherwise the sample
+  #    password from .env.example would remain and the api could not log in to the database.
   pg_user="$(grep -E '^POSTGRES_USER=' .env | cut -d= -f2-)"
   pg_db="$(grep -E '^POSTGRES_DB=' .env | cut -d= -f2-)"
   set_env DATABASE_URL "postgresql://$pg_user:$PG_PW@postgres:5432/$pg_db?schema=public"
@@ -206,7 +207,7 @@ else
   ok "তৈরি — সব গোপন মান নতুন করে বানানো"
 fi
 
-# ── ৬· স্ট্যাক ───────────────────────────────────────────────────────────
+# ── 6. Stack ─────────────────────────────────────────────────────────────
 say "৬· স্কিমা ও seed"
 docker compose --profile setup run --rm migrate
 ok "মাইগ্রেশন ও seed হয়ে গেছে"
@@ -215,7 +216,7 @@ say "৭· স্ট্যাক তোলা"
 docker compose up -d
 ok "উঠছে — Caddy এখন Let's Encrypt থেকে সার্ট নেবে"
 
-# ── ৮· ফল ────────────────────────────────────────────────────────────────
+# ── 8. Result ────────────────────────────────────────────────────────────
 printf '\n\033[32m✅ হয়ে গেছে\033[0m\n\n'
 echo "   ড্যাশবোর্ড : https://$PUBLIC_HOST"
 owner_email="$(grep -E '^SEED_OWNER_EMAIL=' .env | cut -d= -f2-)"
@@ -227,13 +228,13 @@ if [ -n "$OWNER_PW" ]; then
   echo "      $OWNER_PW"
   echo "   (প্রথম লগইনেই বদলাতে বলবে — সেটা ঠিক আচরণ)"
 else
-  # ⚠️⚠️ `.env` আগে থেকে থাকলে নতুন পাসওয়ার্ড বানানো হয় না, তাই ছাপারও
-  #    কিছু নেই — আর তখন মালিক একটা **চলন্ত সিস্টেম** পান যাতে ঢোকার
-  #    উপায় জানা নেই। ⭐ ১৩ আগস্ট ঠিক তাই হয়েছে: আগের চেষ্টায় .env তৈরি
-  #    হয়ে গিয়েছিল, পরের চেষ্টা সফল হলো, কিন্তু লগইনটা ছাপল না।
+  # Careful: if `.env` already existed, no new password is generated, so there
+  #    is nothing to print - and the owner then gets a **running system** with no
+  #    known way to log in. This is exactly what happened once: an earlier attempt
+  #    had created .env, the next attempt succeeded, but did not print the login.
   #
-  #    পাসওয়ার্ডটা এখানে ছাপা হয় **না** ইচ্ছাকৃতভাবে — লগ, স্ক্রিনশট বা
-  #    টার্মিনালের scrollback-এ থেকে যেত। বদলে কোথায় আছে সেটা বলা হয়।
+  #    The password is deliberately **not** printed here - it would stay in logs,
+  #    screenshots or terminal scrollback. Instead it says where to find it.
   printf '
    [33mowner লগইন: %s[0m
 ' "$owner_email"

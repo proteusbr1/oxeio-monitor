@@ -1,59 +1,61 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-    oXeio-র exe ও MSI-তে সই করার জন্য একটা self-signed কোড-সাইনিং
-    সার্টিফিকেট বানায় (ADR-014)।
+    Creates a self-signed code-signing certificate for signing oXeio's exe and
+    MSI (ADR-014).
 
 .DESCRIPTION
-    ⭐ কেন কেনা সার্ট লাগছে না — ADR-014-এ তিনটে কারণ: MSI ব্রাউজার দিয়ে
-    নামে না তাই SmartScreen জ্বলে না · auto-update পথেও নয় · AV-র আসল
-    উত্তর exclusion, সই নয়। ১৫টা মেশিনের জন্য নিজে সই করাই যথেষ্ট, আর
-    খরচ শূন্য।
+    Why no purchased certificate is needed - three reasons in ADR-014: the MSI
+    is not downloaded through a browser so SmartScreen does not fire - nor does
+    the auto-update path - and the real answer to the AV is an exclusion, not a
+    signature. For 15 machines signing it ourselves is enough, at zero cost.
 
-    বেরোয় তিনটে জিনিস:
+    Three things come out:
 
-      oxeio-code.cer   পাবলিক সার্ট       → ১৫টা PC-তে বিলি (trust-publisher.ps1)
-      oxeio-code.pfx   কী সহ ব্যাকআপ      → ⚠️ গোপন, আর ⚠️⚠️ হারালে সর্বনাশ
-      thumbprint       ৪০ অক্ষরের আঙুলছাপ → build.ps1 -SignWith <এটা>
+      oxeio-code.cer   public certificate   -> distribute to the 15 PCs (trust-publisher.ps1)
+      oxeio-code.pfx   backup with the key  -> SECRET, and losing it is a disaster
+      thumbprint       40-character print   -> build.ps1 -SignWith <this>
 
-    ⚠️⚠️ **pfx হারালে একই পরিচয়ে আর কোনোদিন সই করা যাবে না।** নতুন সার্ট
-    মানে নতুন পরিচয়, অর্থাৎ ১৫টা PC-র প্রতিটাতে আবার গিয়ে নতুন `.cer`
-    বসাতে হবে। ফাইলটা যেখানেই রাখুন, ব্যাকআপ রাখুন।
+    Careful: **if the pfx is lost, nothing can ever be signed with the same
+    identity again.** A new certificate means a new identity, i.e. going to each
+    of the 15 PCs again to install the new `.cer`. Wherever you keep the file,
+    keep a backup.
 
-    ⚠️ এই স্ক্রিপ্ট সার্টটা **এই ইউজারের** সার্ট-স্টোরে (`Cert:\CurrentUser\My`)
-    বসায়, কারণ সই করতে প্রাইভেট কী ওখানেই লাগে। অ্যাডমিন অধিকার লাগে না,
-    আর অন্য কোনো মেশিনে বা স্টোরে কিছুই বদলায় না।
+    Note: this script puts the certificate in **this user's** certificate store
+    (`Cert:\CurrentUser\My`), because the private key is needed there for
+    signing. No admin rights are needed, and nothing changes on any other
+    machine or store.
 
-    ⚠️ এটা TLS সার্ট **নয়**। ওটা `make-cert.ps1` — দুটোর কাজ আলাদা, আর
-    একটা দিয়ে অন্যটা চলে না (EKU আলাদা)।
+    Note: this is **not** the TLS certificate. That one is `make-cert.ps1` - the
+    two do different jobs, and one cannot stand in for the other (different EKU).
 
 .PARAMETER Subject
-    সার্টে যে নামটা লেখা থাকবে — ইনস্টলের সময় "Publisher" হিসেবে এটাই
-    দেখা যাবে। ডিফল্ট "oXeio"।
+    The name written in the certificate - this is what shows as the "Publisher"
+    at install time. Default "oXeio".
 
 .PARAMETER Years
-    মেয়াদ। ডিফল্ট ৫ বছর।
+    Validity. Default 5 years.
 
-    ⚠️ TLS সার্টের ৮২৫ দিনের সীমাটা এখানে খাটে না — ওটা ব্রাউজারের নিয়ম।
-    কোড সাইনিংয়ে লম্বা মেয়াদই সুবিধা, কারণ মেয়াদ শেষ হলে ১৫টা PC-তে
-    আবার যেতে হয়।
+    Note: the TLS certificate's 825-day limit does not apply here - that is a
+    browser rule. For code signing a long validity is the advantage, because
+    when it expires you have to go to the 15 PCs again.
 
 .PARAMETER OutDir
-    কোথায় ফাইল লেখা হবে। ডিফল্ট এই স্ক্রিপ্টের পাশে `certs\`।
+    Where the files are written. Default `certs\` next to this script.
 
 .PARAMETER Force
-    বিদ্যমান ফাইল ঢেকে দেওয়ার অনুমতি।
+    Permission to overwrite existing files.
 
-    ⚠️⚠️ নতুন সার্ট = নতুন পরিচয়। আগেরটা দিয়ে সই করা MSI-গুলো তখনো
-    বৈধ থাকবে, কিন্তু নতুন সইগুলো ১৫টা PC-র কেউ চিনবে না যতক্ষণ না নতুন
-    `.cer` বিলি করা হয়।
+    Careful: a new certificate = a new identity. MSIs signed with the old one
+    stay valid, but none of the 15 PCs will recognise the new signatures until
+    the new `.cer` is distributed.
 
 .EXAMPLE
-    # প্রথমবার
+    # First time
     powershell -ExecutionPolicy Bypass -File deploy\make-code-cert.ps1
 
 .EXAMPLE
-    # আগে দেখে নেওয়া — কিছুই বদলায় না
+    # Look first - nothing changes
     powershell -ExecutionPolicy Bypass -File deploy\make-code-cert.ps1 -WhatIf
 #>
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
@@ -73,7 +75,7 @@ $cerPath = Join-Path $OutDir 'oxeio-code.cer'
 $pfxPath = Join-Path $OutDir 'oxeio-code.pfx'
 $infoPath = Join-Path $OutDir 'oxeio-code.txt'
 
-# ── ১· কী করতে যাচ্ছি — সবসময় ছাপা হয়, -WhatIf-এও ──────────────────────
+# ── 1. What we are about to do - always printed, with -WhatIf too ───────
 
 Write-Host ''
 Write-Host '── কোড-সাইনিং সার্টিফিকেট ───────────────────' -ForegroundColor Cyan
@@ -98,7 +100,7 @@ $($existing -join "`n")
 "@
 }
 
-# ── ২· বানানো ───────────────────────────────────────────────────────────
+# ── 2. Create ───────────────────────────────────────────────────────────
 
 if (-not $PSCmdlet.ShouldProcess("CN=$Subject", 'কোড-সাইনিং সার্টিফিকেট বানানো')) {
     Write-Host '   (-WhatIf — কিছুই বদলানো হয়নি)' -ForegroundColor Yellow
@@ -106,15 +108,16 @@ if (-not $PSCmdlet.ShouldProcess("CN=$Subject", 'কোড-সাইনিং �
     return
 }
 
-# ⚠️⚠️ পাসওয়ার্ডটা **সার্ট বানানোর আগে** চাওয়া হয়, পরে নয়।
+# Careful: the password is asked for **before the certificate is created**, not after.
 #
-#    আগে উল্টো ছিল: সার্ট তৈরি → তারপর প্রম্পট। কেউ ওখানে Ctrl+C চাপলে
-#    (বা প্রম্পট ব্যর্থ হলে) স্টোরে একটা **অনাথ সার্ট** পড়ে থাকত, অথচ
-#    .cer/.pfx কিছুই লেখা হতো না। ⚠️ আর উপরের পাহারাটা **ফাইল** দেখে,
-#    সার্ট নয় — তাই আবার চালালে চুপচাপ দ্বিতীয় একটা সার্ট বানাত, আর
-#    কোনটা দিয়ে সই করা হয়েছে সেটা বলার উপায় থাকত না।
+#    It used to be the other way round: create the certificate, then prompt. If
+#    someone pressed Ctrl+C there (or the prompt failed), an **orphan
+#    certificate** was left in the store while no .cer/.pfx was written.
+#    Careful: and the guard above looks at the **files**, not the certificate -
+#    so running again would quietly create a second certificate, with no way to
+#    tell which one was used for signing.
 #
-#    এখন থামলে কিছুই তৈরি হয় না।
+#    Now if it stops, nothing is created.
 Write-Host '   ⚠️ .pfx ব্যাকআপের জন্য একটা পাসওয়ার্ড দিন (মনে রাখুন —' -ForegroundColor Yellow
 Write-Host '      এটা ছাড়া ব্যাকআপ থেকে সার্ট ফেরানো যাবে না):' -ForegroundColor Yellow
 $pfxPassword = Read-Host '   পাসওয়ার্ড' -AsSecureString
@@ -127,15 +130,15 @@ if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir -Forc
 
 Write-Host '── কাজ চলছে ─────────────────────────────────' -ForegroundColor Cyan
 
-# ⚠️ -Type CodeSigningCert ইচ্ছাকৃত। এটা EKU 1.3.6.1.5.5.7.3.3 বসায়, আর
-#    ওটা ছাড়া Set-AuthenticodeSignature সার্টটা **নেবেই না** — বার্তাটা
-#    হয় "Cannot sign code. The specified certificate is not suitable",
-#    যেটা পড়ে কারণ বোঝা কঠিন।
+# Careful: -Type CodeSigningCert is deliberate. It sets EKU 1.3.6.1.5.5.7.3.3,
+#    and without it Set-AuthenticodeSignature **will not accept** the
+#    certificate - the message is "Cannot sign code. The specified certificate is
+#    not suitable", from which the cause is hard to see.
 #
-# ⚠️ -KeyExportPolicy Exportable না দিলে .pfx বানানো যেত না, অর্থাৎ
-#    ব্যাকআপও নেওয়া যেত না — আর মেশিন বদলালে পরিচয়টাই হারিয়ে যেত।
-# ⚠️ এখান থেকে নিচে ব্যর্থ হলে সার্টটা স্টোর থেকে তুলে নেওয়া হয় — অর্ধেক
-#    হওয়া অবস্থা রেখে যাওয়ার চেয়ে কিছুই না রাখা পরিষ্কার।
+# Careful: without -KeyExportPolicy Exportable the .pfx could not be made, so
+#    no backup could be taken either - and changing machines would lose the identity.
+# Careful: if anything fails from here on, the certificate is removed from the
+#    store - leaving nothing is cleaner than leaving a half-done state.
 $cert = New-SelfSignedCertificate `
     -Type CodeSigningCert `
     -Subject "CN=$Subject" `
@@ -148,13 +151,13 @@ $cert = New-SelfSignedCertificate `
 
 Write-Host "   সার্ট তৈরি — thumbprint $($cert.Thumbprint)"
 
-# পাবলিক অংশ — এটাই ১৫টা PC-তে যাবে, এতে প্রাইভেট কী নেই
+# The public part - this is what goes to the 15 PCs, and it has no private key
 [IO.File]::WriteAllBytes($cerPath, $cert.Export('Cert'))
 Write-Host "   $cerPath"
 
-# ⚠️ pfx-এ প্রাইভেট কী আছে, তাই পাসওয়ার্ড ছাড়া লেখা যাবে না।
-#    পাসওয়ার্ডটা টাইপ করতে হয় — কমান্ড লাইনে দেওয়া হয় না ইচ্ছাকৃতভাবে,
-#    নইলে সেটা PowerShell-এর হিস্ট্রি ফাইলে থেকে যেত।
+# Careful: the pfx contains the private key, so it cannot be written without a password.
+#    The password has to be typed - deliberately not given on the command line,
+#    otherwise it would stay in PowerShell's history file.
 Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $pfxPassword -Force | Out-Null
 Write-Host "   $pfxPath  ⚠️ গোপন"
 
@@ -178,7 +181,7 @@ Thumbprint  : $($cert.Thumbprint)
 
 Write-Host "   $infoPath"
 
-# ── ৩· পরের ধাপ ─────────────────────────────────────────────────────────
+# ── 3. Next steps ───────────────────────────────────────────────────────
 
 Write-Host ''
 Write-Host '✅ তৈরি' -ForegroundColor Green

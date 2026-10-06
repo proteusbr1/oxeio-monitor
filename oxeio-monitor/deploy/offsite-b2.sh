@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
 #
-# R5 · G39 — **Backblaze B2 রিমোট এক কমান্ডে বাঁধা**।
+# Bind a Backblaze B2 remote with a single command.
 #
-# ⭐ কেন এই স্ক্রিপ্ট: `rclone config` ইন্টারঅ্যাকটিভ — n, নাম, স্টোরেজের
-#    নম্বর, account, key, hard_delete, q … ছ-সাতটা ধাপ, আর একটা ভুল চাপলে
-#    আবার গোড়া থেকে। এখানে সবটা এক লাইনে, আর শেষে **সত্যিই কাজ করছে কি না**
-#    মিলিয়েও দেখা হয়।
+# Why this script: `rclone config` is interactive - n, name, storage number,
+#    account, key, hard_delete, q ... six or seven steps, and one wrong key press
+#    means starting over. Here it is all one line, and at the end it also checks
+#    that the remote **really works**.
 #
-# ⚠️⚠️ **কী দুটো কখনো আর্গুমেন্টে দেবেন না** (`bash offsite-b2.sh KEYID KEY`) —
-#    আর্গুমেন্ট `ps`-এ দেখা যায়, আর bash history-তে থেকে যায়। স্ক্রিপ্ট
-#    নিজেই জিজ্ঞেস করবে, আর টাইপ করার সময় পর্দায় কিছু দেখাবে না।
+# Careful: **never pass the two keys as arguments** (`bash offsite-b2.sh KEYID KEY`) -
+#    arguments are visible in `ps` and stay in bash history. The script asks for
+#    them itself, and shows nothing on screen while you type.
 #
-# ⚠️ কী কখনো লগে, echo-তে বা টেলিগ্রামে যায় না — নিচে কোথাও `set -x` নেই,
-#    আর `rclone config create`-এর আউটপুটও চাপা দেওয়া।
+# Careful: the keys never go to a log, echo or Telegram - there is no `set -x`
+#    below, and the output of `rclone config create` is suppressed too.
 #
-# চালানো (VPS-এ root হিসেবে):
+# Run (as root on the VPS):
 #     bash /opt/oxeio/oxeio-monitor/deploy/offsite-b2.sh
 #
-# ⭐ বারবার চালানো নিরাপদ — রিমোট আগে থেকে **কাজ করলে** শুধু যাচাই করে এগোয়,
-#    আর কাজ না করলে কী দুটো আবার চায়।
+# Safe to run repeatedly - if the remote **already works** it only verifies and
+#    moves on; if it does not, it asks for the two keys again.
 
 set -euo pipefail
 
@@ -39,22 +39,22 @@ command -v rclone >/dev/null 2>&1 || die \
 
 has_remote() { rclone listremotes 2>/dev/null | grep -qx "${REMOTE_NAME}:"; }
 
-# ⚠️⚠️ **আগে bucket, তারপর অ্যাকাউন্ট** — ক্রমটা জরুরি। একটা key যদি শুধু
-#    একটা bucket-এ সীমাবদ্ধ থাকে (আর সেটাই সুপারিশ), তাহলে সে **সব bucket
-#    তালিকা করার অনুমতি পায় না**। শুধু `rclone lsd b2:` দিয়ে পরীক্ষা করলে
-#    নিখুঁত key-ও ফেল করত — ১৮ আগস্ট ঠিক সেটাই হয়েছে, আর ভুলটা ছিল
-#    পরীক্ষায়, key-তে নয়।
+# Careful: **bucket first, then account** - the order matters. If a key is
+#    restricted to a single bucket (as recommended), it **is not allowed to list
+#    all buckets**. Testing only with `rclone lsd b2:` made even a perfect key
+#    fail - exactly that happened once, and the mistake was in the test, not in
+#    the key.
 works() {
   rclone lsd "${REMOTE_NAME}:${BUCKET}" >/dev/null 2>&1 \
     || rclone lsd "${REMOTE_NAME}:" >/dev/null 2>&1
 }
 
-# ── ০· আগের রিমোট কি সত্যিই কাজ করে ────────────────────────────────────────
+# ── 0. Does the existing remote really work ────────────────────────────────
 #
-# ⚠️⚠️ আগে শুধু "রিমোট আছে কি না" দেখা হতো, আর থাকলে ধরে নেওয়া হতো ঠিকই
-#    আছে। ভুল key দিয়ে একবার বাঁধা হয়ে গেলে সেটা **আর কোনোদিন বদলানোই
-#    যেত না** — স্ক্রিপ্ট প্রতিবার "আগে থেকেই আছে" বলে এগিয়ে যেত আর একই
-#    জায়গায় ব্যর্থ হতো। (১৮ আগস্ট, মাঠে ঘটেছে।)
+# Careful: this used to check only whether a remote exists, and assumed it was
+#    fine if so. Once a remote was bound with a wrong key it **could never be
+#    changed again** - the script kept saying "already exists" and failing at the
+#    same place every time. (Happened in the field.)
 if has_remote && works; then
   say "রিমোট '${REMOTE_NAME}' আগে থেকেই আছে আর কাজ করছে"
 elif has_remote; then
@@ -64,27 +64,29 @@ elif has_remote; then
   rclone config delete "${REMOTE_NAME}" >/dev/null 2>&1 || true
 fi
 
-# ── ১· দরকার হলে নতুন করে বাঁধা ─────────────────────────────────────────────
+# ── 1. Bind anew if needed ─────────────────────────────────────────────────
 if ! has_remote; then
   printf '\n   Backblaze-এর Application Key দুটো লাগবে।\n'
   printf '   %s(backblaze.com → B2 → Application Keys → Add a New Application Key)%s\n\n' "$c_dim" "$c_off"
 
-  # ⚠️ `read -s` — টাইপ করার সময় পর্দায় কিছু দেখায় না, তাই কাঁধের উপর
-  #    দিয়ে কেউ পড়তে পারে না, আর স্ক্রিন-শেয়ারেও যায় না।
+  # Careful: `read -s` shows nothing on screen while typing, so nobody can read
+  #    over a shoulder, and it does not show up in screen sharing.
   read -rp '   keyID          : ' B2_ID
   read -rsp '   applicationKey : ' B2_KEY; echo
 
   [ -n "${B2_ID}" ] && [ -n "${B2_KEY}" ] || die 'দুটোই লাগবে — কিছু বসানো হয়নি'
 
-  # ⭐⭐ **কী নয়, কেবল দৈর্ঘ্য** — B2-র keyID ২৫ আর applicationKey ৩১ অক্ষর।
-  #    ⚠️ লুকানো প্রম্পটে পেস্ট আংশিক হলে (cmd.exe-তে এটা হয়) কিছুই বোঝা
-  #    যেত না, আর ভুলটা ধরা পড়ত অনেক পরে — একটা রহস্যময় 401 হয়ে।
+  # Note: **length only, never the key** - B2's keyID is 25 characters and the
+  #    applicationKey 31.
+  #    Careful: if a paste into a hidden prompt is partial (this happens in
+  #    cmd.exe), nothing would show it, and the mistake would surface much later
+  #    as a mysterious 401.
   printf '   %sপাওয়া গেল: keyID %d অক্ষর (আশা ২৫), applicationKey %d অক্ষর (আশা ৩১)%s\n' \
     "$c_dim" "${#B2_ID}" "${#B2_KEY}" "$c_off"
   [ "${#B2_ID}" -eq 25 ] || warn 'keyID-র দৈর্ঘ্য অস্বাভাবিক — পুরোটা কপি হয়েছে তো?'
   [ "${#B2_KEY}" -eq 31 ] || warn 'applicationKey-র দৈর্ঘ্য অস্বাভাবিক — পুরোটা কপি হয়েছে তো?'
 
-  # ⚠️ আউটপুট চাপা: rclone সফল হলে গোটা কনফিগটা ছাপে, আর তাতে key-ও থাকে।
+  # Careful: output suppressed - on success rclone prints the whole config, key included.
   rclone config create "$REMOTE_NAME" b2 \
       account="$B2_ID" key="$B2_KEY" hard_delete=false >/dev/null 2>&1 \
     || die 'rclone config create ব্যর্থ'
@@ -93,11 +95,12 @@ if ! has_remote; then
   say "রিমোট '${REMOTE_NAME}' বাঁধা হলো"
 fi
 
-# ── ২· সত্যিই পৌঁছানো যায় কি না ─────────────────────────────────────────────
+# ── 2. Can it really be reached ────────────────────────────────────────────
 #
-# ⚠️⚠️ এই ধাপটা বাদ দেওয়া যাবে না। ভুল key দিয়েও `config create` **সফল**
-#    হয় — সে কেবল ফাইলে লিখে রাখে, যাচাই করে না। ওখানে থেমে গেলে সব ঠিক
-#    মনে হতো, আর ভুলটা ধরা পড়ত শনিবার রাতে, টাইমার ব্যর্থ হওয়ার পর।
+# Careful: this step must not be skipped. `config create` **succeeds** even with
+#    a wrong key - it only writes the file and does not verify. Stopping there
+#    would look fine, and the mistake would surface on Saturday night, after
+#    the timer fails.
 if rclone lsd "${REMOTE_NAME}:${BUCKET}" >/dev/null 2>&1; then
   say "B2-তে পৌঁছানো যাচ্ছে (bucket '${BUCKET}')"
 elif rclone lsd "${REMOTE_NAME}:" >/dev/null 2>&1; then
@@ -108,7 +111,7 @@ else
   die "B2 কী-জোড়া মানছে না। ⚠️ '401 bad_auth_token' সাধারণত মানে applicationKey ভুল বা অসম্পূর্ণ — ওটা একবারই দেখানো হয়, তাই হাতে না থাকলে নতুন key বানিয়ে আবার চালান"
 fi
 
-# ── ৩· bucket ───────────────────────────────────────────────────────────────
+# ── 3. bucket ──────────────────────────────────────────────────────────────
 if rclone lsd "${REMOTE_NAME}:${BUCKET}" >/dev/null 2>&1; then
   say "bucket '${BUCKET}' পাওয়া গেল"
 else
@@ -118,10 +121,10 @@ else
   say "bucket '${BUCKET}' বানানো হলো"
 fi
 
-# ── ৪· টাইমার যেটা পড়ে ─────────────────────────────────────────────────────
+# ── 4. What the timer reads ────────────────────────────────────────────────
 #
-# ⚠️ `oxeio-offsite.service`-এ `EnvironmentFile=-/etc/oxeio-offsite.env`,
-#    তাই RCLONE_REMOTE এখানেই বসাতে হয় — অ্যাপের `.env`-এ নয়।
+# Careful: `oxeio-offsite.service` has `EnvironmentFile=-/etc/oxeio-offsite.env`,
+#    so RCLONE_REMOTE must be set here - not in the app's `.env`.
 if grep -q '^RCLONE_REMOTE=' "$ENV_FILE" 2>/dev/null; then
   sed -i "s|^RCLONE_REMOTE=.*|RCLONE_REMOTE=${REMOTE_NAME}:${BUCKET}|" "$ENV_FILE"
 else
@@ -130,11 +133,11 @@ fi
 chmod 600 "$ENV_FILE"
 say "${ENV_FILE}: RCLONE_REMOTE=${REMOTE_NAME}:${BUCKET}"
 
-# ── ৫· এখনই একবার তুলে দেখা ─────────────────────────────────────────────────
+# ── 5. Do one upload right now ─────────────────────────────────────────────
 #
-# ⭐ শনিবারের অপেক্ষা করা হয় না। "কনফিগ করেছি" আর "ব্যাকআপ সত্যিই অফসাইটে
-#    আছে" এক কথা নয়, আর পার্থক্যটা টের পাওয়ার সবচেয়ে খারাপ সময় হলো
-#    যেদিন সার্ভার হারিয়ে যায়।
+# We do not wait for Saturday. "I configured it" and "the backup is really
+#    offsite" are not the same thing, and the worst time to learn the
+#    difference is the day the server is lost.
 printf '\n%s── প্রথম আপলোড%s\n' "$c_dim" "$c_off"
 set -a; . "$ENV_FILE"; set +a
 bash "$(dirname "$0")/offsite-backup.sh"

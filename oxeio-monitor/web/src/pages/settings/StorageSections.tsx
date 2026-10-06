@@ -227,7 +227,7 @@ export function ScreenshotStorageCard() {
             {current.running.location}). Copy the{' '}
             <span className="num">screenshots/</span> folder there first, with
             the same paths, or the gallery will not find older days
-            (deploy/README.md § ৫ক).
+            (deploy/README.md § 5a).
           </Notice>
         )}
         {SOURCE_NOTE[current.source] && (

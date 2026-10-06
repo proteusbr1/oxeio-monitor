@@ -98,7 +98,7 @@
 			# trusted proxies this is {remote_host}, as Caddy sent before.
 			header_up X-Forwarded-For {client_ip}
 
-			# Careful: if you turn on TLS in the API (deploy/README § ৬), uncomment this
+			# Careful: if you turn on TLS in the API (deploy/README § 6), uncomment this
 			#    block, otherwise Caddy will send plain HTTP and every request dies.
 			#    The certificate is self-signed, so verification is skipped; the
 			#    connection stays inside the host.

@@ -1,75 +1,74 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-    oXeio এজেন্টের জন্য Microsoft Defender-এ ছাড় (exclusion) বসায় (H09)।
+    Adds Microsoft Defender exclusions for the oXeio agent.
 
 .DESCRIPTION
-    এজেন্ট সারাদিন ধরে ছোট ছোট ফাইল লেখে — প্রতি ৫ মিনিটে .webp স্ক্রিনশট,
-    আর SQLite আউটবক্সে অবিরাম INSERT। Defender-এর real-time scanning প্রতিটা
-    লেখায় ঢুকে পড়ে, ফলে CPU খরচ হয় আর মাঝে মাঝে ফাইল লক হয়ে এজেন্টের
-    লেখা ব্যর্থ হয়।
+    The agent writes small files all day - a .webp screenshot every 5 minutes,
+    and constant INSERTs into the SQLite outbox. Defender's real-time scanning
+    steps in on every write, which costs CPU and occasionally locks a file so
+    that the agent's write fails.
 
     ┌──────────────────────────────────────────────────────────────────────┐
-    │ ⚠️  এটা একটা নিরাপত্তা-সিদ্ধান্ত, নিছক পারফরম্যান্স টিউনিং নয়।       │
+    │ Warning: this is a security decision, not mere performance tuning.   │
     │                                                                      │
-    │ অ্যান্টিভাইরাসে ছাড় দেওয়া মানে ওই জায়গাটুকু আর পাহারায় থাকে না।   │
-    │ না বুঝে চালাবেন না। স্ক্রিপ্ট কী করবে সেটা আগে ছেপে দেখায়, আর       │
-    │ প্রতিটা ধাপে অনুমতি চায়।                                            │
+    │ Excluding something from the antivirus means that spot is no longer  │
+    │ guarded. Do not run it blindly. The script first prints what it will │
+    │ do, and asks for confirmation at every step.                         │
     │                                                                      │
-    │ আগে `-WhatIf` দিয়ে চালিয়ে দেখুন — তখন কিচ্ছু বদলায় না।             │
+    │ Run it with `-WhatIf` first - then nothing is changed.               │
     └──────────────────────────────────────────────────────────────────────┘
 
-    ⭐ ডিফল্টে **প্রসেস-ভিত্তিক** ছাড় দেওয়া হয়, ফোল্ডার-ভিত্তিক নয় (দুটো
-       ছাড়া)। কারণটা নিচে `-IncludeDataFolder`-এ লেখা আছে — এটাই এই
-       স্ক্রিপ্টের সবচেয়ে গুরুত্বপূর্ণ সিদ্ধান্ত।
+    By default **process-based** exclusions are added, not folder-based (apart from
+       the install folder). The reason is written under `-IncludeDataFolder` below -
+       this is the most important decision in this script.
 
-    ডিফল্টে যা বসে:
-      · প্রসেস  oXeio.Agent.exe
-      · প্রসেস  oXeio.Watchdog.exe
-      · ফোল্ডার  C:\Program Files\oXeio   (শুধু অ্যাডমিন লিখতে পারে)
+    What is added by default:
+      - process  oXeio.Agent.exe
+      - process  oXeio.Watchdog.exe
+      - folder   C:\Program Files\oXeio   (only an admin can write there)
 
 .PARAMETER IncludeDataFolder
-    %ProgramData%\oXeio-কেও ছাড়ের তালিকায় তোলে।
+    Also adds %ProgramData%\oXeio to the exclusion list.
 
-    ⚠️⚠️ ডিফল্টে **বন্ধ**, আর সেটা ইচ্ছাকৃত। ওই ফোল্ডারে সাধারণ ইউজারের
-    "Modify" অধিকার আছে (এজেন্টকে স্টাফের অ্যাকাউন্টে চলতে হয়, তাই দিতেই
-    হয়েছে — `AgentDataDirectory.cs` দেখুন)। ফোল্ডারটা Defender থেকে বাদ
-    দিলে অফিসের যেকোনো ইউজার ওখানে একটা .exe রেখে দিতে পারে, আর Defender
-    সেটা আর দেখবেই না। অর্থাৎ ছাড়টা কার্যত একটা "ভাইরাস লুকানোর জায়গা"
-    বানিয়ে দেয়।
+    **Off** by default, deliberately. Ordinary users have "Modify" rights on that
+    folder (the agent has to run under the staff member's account, so it had to
+    be granted - see `AgentDataDirectory.cs`). If the folder is excluded from
+    Defender, any user in the office can drop an .exe there and Defender will
+    never look at it. So the exclusion effectively creates a "place to hide a virus".
 
-    দরকারও সাধারণত পড়ে না: উপরের প্রসেস-ছাড় দুটো এজেন্টের **নিজের লেখা
-    ফাইলগুলো** এমনিতেই স্ক্যানের বাইরে রাখে। তাই আগে ছাড়াই চালান; সত্যিই
-    ধীরগতি দেখলে তবেই এটা দিন।
+    It is also usually not needed: the two process exclusions above already keep
+    the **files the agent writes itself** out of scanning. So run without it
+    first; add it only if you really see slowness.
 
 .PARAMETER Remove
-    ছাড়গুলো তুলে দেয় (আনইনস্টলের পরে, বা ভুল করে বসিয়ে ফেললে)।
+    Removes the exclusions (after an uninstall, or if they were added by mistake).
 
 .PARAMETER Force
-    প্রতিটা ধাপে "হ্যাঁ/না" জিজ্ঞেস করা বন্ধ করে — রোলআউট স্ক্রিপ্ট থেকে
-    চালানোর জন্য। কী কী বসছে সেটা তবু ছাপা হয়।
+    Stops asking yes/no at every step - for running from a rollout script. What
+    is being added is still printed.
 
-    ⚠️ `-WhatIf` তবু জেতে: `-Force -WhatIf` দিলে কিছুই বদলায় না।
+    `-WhatIf` still wins: with `-Force -WhatIf` nothing changes.
 
 .EXAMPLE
-    # ১· আগে দেখে নিন — কিচ্ছু বদলাবে না
+    # 1. Look first - nothing will change
     powershell -ExecutionPolicy Bypass -File deploy\defender-exclusions.ps1 -WhatIf
 
 .EXAMPLE
-    # ২· সত্যিই বসানো (অ্যাডমিন হিসেবে) — প্রতিটা ধাপে অনুমতি চাইবে
+    # 2. Really apply it (as admin) - asks for confirmation at every step
     powershell -ExecutionPolicy Bypass -File deploy\defender-exclusions.ps1
 
 .EXAMPLE
-    # ৩· রোলআউট স্ক্রিপ্ট থেকে, প্রশ্ন ছাড়া — জেনেবুঝে
+    # 3. From a rollout script, without questions - knowingly
     #
-    # ⚠️ এখানে `-Confirm:$false` **চলবে না**। `powershell -File` তার পরের
-    #    সব যুক্তিকে নিছক স্ট্রিং ধরে, তাই `$false` আক্ষরিক "$false" হয়ে
-    #    যায় আর PowerShell বলে "Cannot convert 'System.String' to
-    #    ... SwitchParameter"। সেজন্যই আলাদা `-Force` সুইচ রাখা হয়েছে।
+    # `-Confirm:$false` **will not work** here. `powershell -File` treats every
+    #    argument after it as a plain string, so `$false` becomes the literal
+    #    "$false" and PowerShell says "Cannot convert 'System.String' to
+    #    ... SwitchParameter". That is why a separate `-Force` switch exists.
     powershell -ExecutionPolicy Bypass -File deploy\defender-exclusions.ps1 -Force
 
 .EXAMPLE
-    # ৪· তুলে দেওয়া
+    # 4. Remove
     powershell -ExecutionPolicy Bypass -File deploy\defender-exclusions.ps1 -Remove
 #>
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
@@ -83,22 +82,23 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# ⚠️ `ConfirmImpact = 'High'` থাকায় ডিফল্টে প্রতিটা ধাপে অনুমতি চাওয়া হয় —
-#    ইচ্ছাকৃত, যাতে কেউ না বুঝে চালিয়ে না দেয়। রোলআউট স্ক্রিপ্টে সেটা
-#    আটকে যেত, তাই `-Force`।
+# Careful: with `ConfirmImpact = 'High'` it asks for confirmation at every step
+#    by default - deliberate, so nobody runs it without understanding. That
+#    would hang a rollout script, hence `-Force`.
 #
-#    ⭐ `$WhatIfPreference` এখানে ছোঁয়া হয় না, তাই `-Force -WhatIf` দিলেও
-#       -WhatIf-ই জেতে — "দেখে নেওয়া" কখনো "করে ফেলা" হয়ে যায় না।
+#    `$WhatIfPreference` is not touched here, so even with `-Force -WhatIf`
+#       -WhatIf wins - "look first" never turns into "just do it".
 if ($Force) { $ConfirmPreference = 'None' }
 
 # ══════════════════════════════════════════════════════════════════════════
-#  ১· কোন ফোল্ডার, কোন প্রসেস
+#  1. Which folder, which process
 # ══════════════════════════════════════════════════════════════════════════
 
-# ⚠️ রেজিস্ট্রি ৬৪-বিট ভিউতে **জোর করে** খোলা হয়, ঠিক যেভাবে
-#    `AgentSettings.cs` করে। কেউ ৩২-বিট PowerShell থেকে চালালে Windows
-#    নীরবে WOW6432Node-এ পাঠাত, যেখানে MSI কিছু লেখেইনি — তখন স্ক্রিপ্ট
-#    ডিফল্ট পথে নেমে যেত আর অন্য ড্রাইভে বসানো এজেন্টের ছাড় ভুল জায়গায় বসত।
+# Careful: the registry is **forced** open in the 64-bit view, exactly as
+#    `AgentSettings.cs` does. Run from 32-bit PowerShell, Windows would
+#    silently redirect to WOW6432Node, where the MSI wrote nothing - the script
+#    would fall back to the default path and the exclusion for an agent
+#    installed on another drive would land in the wrong place.
 function Get-AgentInstallDir {
     try {
         $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey('LocalMachine', 'Registry64')
@@ -130,10 +130,11 @@ else { $installSource = '-InstallDir দিয়ে দেওয়া' }
 
 if (-not $DataDir) { $DataDir = Join-Path $env:ProgramData 'oXeio' }
 
-# ⚠️ শেষের '\' ছেঁটে ফেলা হয়। MSI `InstallDir` লেখে `[INSTALLFOLDER]` দিয়ে,
-#    আর Windows Installer-এর ফোল্ডার-প্রপার্টি **সবসময় '\' দিয়ে শেষ হয়**।
-#    Defender সেই পথটা আলাদা স্ট্রিং হিসেবে রাখে, ফলে তালিকায় একই ফোল্ডার
-#    দুবার ঢুকত (একবার '\' সহ, একবার ছাড়া) আর -Remove কোনোদিন সবটা মুছত না।
+# Careful: the trailing '\' is trimmed. The MSI writes `InstallDir` via
+#    `[INSTALLFOLDER]`, and Windows Installer folder properties **always end
+#    with '\'**. Defender stores that path as a separate string, so the same
+#    folder would appear twice in the list (once with '\', once without) and
+#    -Remove would never clear everything.
 $InstallDir = $InstallDir.TrimEnd('\')
 $DataDir = $DataDir.TrimEnd('\')
 
@@ -143,7 +144,7 @@ if ($IncludeDataFolder) { $pathExclusions += $DataDir }
 $processExclusions = @('oXeio.Agent.exe', 'oXeio.Watchdog.exe')
 
 # ══════════════════════════════════════════════════════════════════════════
-#  ২· কী করতে যাচ্ছি — সবসময় ছাপা হয়, -WhatIf-এও
+#  2. What we are about to do - always printed, with -WhatIf too
 # ══════════════════════════════════════════════════════════════════════════
 
 $action = if ($Remove) { 'তুলে নেওয়া হবে' } else { 'যোগ করা হবে' }
@@ -179,7 +180,7 @@ if (-not $Remove) {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
-#  ৩· Defender আদৌ আছে তো?
+#  3. Is Defender even there?
 # ══════════════════════════════════════════════════════════════════════════
 
 function Write-NoDefenderHelp {
@@ -196,17 +197,17 @@ function Write-NoDefenderHelp {
     Write-Host ''
 }
 
-# ⚠️ শুধু cmdlet-টা **আছে** কি না দেখলে হয় না।
+# Careful: it is not enough to check whether the cmdlet **exists**.
 #
-#    Defender-এর মডিউল Windows-এর সাথেই আসে, তাই `Get-Command
-#    Add-MpPreference` প্রায় সব মেশিনেই সফল হয় — এমনকি যেখানে Defender
-#    সার্ভিসটাই বন্ধ। তৃতীয় পক্ষের AV বসানো থাকলে ঠিক সেটাই হয়, আর তখন
-#    আসল কলটা `0x800106ba` দিয়ে ছুড়ে বসে। `$ErrorActionPreference='Stop'`
-#    থাকায় স্ক্রিপ্টটা তখন ওই দুর্বোধ্য HRESULT দেখিয়ে মরে যেত — অফিসের
-#    ১৫টা PC-র মধ্যে যেগুলোয় অন্য AV আছে, ঠিক সেগুলোতেই।
+#    Defender's module ships with Windows, so `Get-Command
+#    Add-MpPreference` succeeds on nearly every machine - even where the Defender
+#    service itself is off. That is exactly what happens when a third-party AV is
+#    installed, and then the real call blows up with `0x800106ba`. With
+#    `$ErrorActionPreference='Stop'` the script would die showing that cryptic
+#    HRESULT - on exactly those of the office's 15 PCs that have another AV.
 #
-#    তাই আসল কলটাই চেষ্টা করে দেখা হয়, আর ব্যর্থ হলে পরিষ্কার বাংলায়
-#    বলে দেওয়া হয় কী করতে হবে।
+#    So the real call is attempted, and when it fails the script says clearly
+#    (in Bengali) what to do.
 if (-not (Get-Command -Name Add-MpPreference -ErrorAction SilentlyContinue)) {
     Write-NoDefenderHelp -Detail 'Defender-এর PowerShell মডিউলই নেই।'
     return
@@ -219,9 +220,9 @@ catch {
     return
 }
 
-# ⚠️ তৃতীয় পক্ষের AV থাকলে Defender "passive mode"-এও চলতে পারে — তখন
-#    ছাড় বসানো যায় ঠিকই, কিন্তু আসল স্ক্যানটা করছে অন্য কেউ, অর্থাৎ
-#    স্ক্রিপ্ট "সফল" বলত অথচ ধীরগতির সমস্যা মিটত না।
+# Careful: with a third-party AV, Defender can also run in "passive mode" - the
+#    exclusion can still be added, but someone else is doing the real scanning,
+#    so the script would say "success" while the slowness problem stayed.
 try {
     $status = Get-MpComputerStatus
     if ($status -and -not $status.RealTimeProtectionEnabled) {
@@ -233,11 +234,11 @@ try {
 catch { Write-Verbose "Get-MpComputerStatus পাওয়া গেল না: $($_.Exception.Message)" }
 
 # ══════════════════════════════════════════════════════════════════════════
-#  ৪· অ্যাডমিন লাগবে — কিন্তু শুধু সত্যিই বদলানোর সময়
+#  4. Admin is required - but only when something is really being changed
 # ══════════════════════════════════════════════════════════════════════════
 
-# ⚠️ -WhatIf-এ অ্যাডমিন চাওয়া হয় না, ইচ্ছাকৃতভাবে। "আগে দেখে নিন" বলার
-#    পর যদি সেটাই elevation ছাড়া চলত না, কেউ আর দেখেই নিত না।
+# Careful: -WhatIf does not ask for admin, deliberately. After saying "look
+#    first", if that did not work without elevation, nobody would look.
 $isAdmin = ([Security.Principal.WindowsPrincipal] `
         [Security.Principal.WindowsIdentity]::GetCurrent()
 ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -247,16 +248,16 @@ if (-not $isAdmin -and -not $WhatIfPreference) {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
-#  ৫· বসানো / তোলা
+#  5. Add / remove
 # ══════════════════════════════════════════════════════════════════════════
 
 $currentPaths = @($current.ExclusionPath)
 $currentProcesses = @($current.ExclusionProcess)
 
-# ⚠️ Add-MpPreference / Remove-MpPreference নিজেরা -WhatIf ঠিকমতো সামলায় না
-#    (CDXML-জেনারেটেড কমান্ড)। তাই সিদ্ধান্তটা এখানে `ShouldProcess` দিয়ে
-#    নিজে নেওয়া হয় আর "হ্যাঁ" না পেলে কমান্ডটা ডাকাই হয় না — এতে -WhatIf
-#    আর -Confirm দুটোই নিশ্চিতভাবে কাজ করে।
+# Careful: Add-MpPreference / Remove-MpPreference do not handle -WhatIf properly
+#    themselves (CDXML-generated commands). So the decision is taken here with
+#    `ShouldProcess`, and without a "yes" the command is never called - so both
+#    -WhatIf and -Confirm are guaranteed to work.
 function Set-Exclusion {
     param(
         [ValidateSet('Path', 'Process')][string]$Kind,
@@ -301,7 +302,7 @@ foreach ($p in $processExclusions) {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
-#  ৬· এখন তালিকায় কী আছে
+#  6. What is in the list now
 # ══════════════════════════════════════════════════════════════════════════
 
 if ($WhatIfPreference) {

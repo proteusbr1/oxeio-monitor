@@ -1,63 +1,65 @@
 ﻿<#
-    R5 · G39 — ব্যাকআপ **অফিসের PC-তে টেনে আনা**।
+    Backup **pull to the office PC**.
 
-    ⭐⭐ কেন এই দ্বিতীয় পথটা: `offsite-backup.sh` (rclone) সবচেয়ে ভালো,
-    কিন্তু তার জন্য একটা ক্লাউড অ্যাকাউন্ট ও তার ক্রেডেনশিয়াল লাগে। এই
-    স্ক্রিপ্টের জন্য **নতুন কিছুই লাগে না** — যে SSH কী দিয়ে আপনি এমনিতেই
-    সার্ভারে ঢোকেন, সেটাই যথেষ্ট। তাই "কপি একটাই মেশিনে" ঝুঁকিটা আজই কাটে,
-    ক্লাউড ঠিক করার জন্য অপেক্ষা না করে।
+    Why this second path: `offsite-backup.sh` (rclone) is best, but it needs a
+    cloud account and its credentials. This script needs **nothing new** - the
+    SSH key you already use to log in to the server is enough. So the "only one
+    copy, on one machine" risk is removed today, without waiting for the cloud
+    to be sorted out.
 
-    ⚠️⚠️ **এটা rclone-এর বিকল্প নয়, পরিপূরক।** ঘরের PC আর সার্ভার একই
-    শহরে; আগুন-বন্যা-চুরিতে দুটোই যেতে পারে। ক্লাউড রিমোট বসানোর পরও এটা
-    চালু রাখা যায় — দুই জায়গায় কপি থাকা কখনো খারাপ নয়।
+    Careful: **this complements rclone, it does not replace it.** The office PC
+    and the server are in the same city; fire, flood or theft could take both.
+    It can be kept running even after a cloud remote is set up - having copies in
+    two places is never bad.
 
-    ⭐ ফাইলগুলো **আগে থেকেই এনক্রিপটেড** (AES-256-CBC)। তাই ল্যাপটপ
-    হারালেও কারো ঘণ্টা/বেতন/স্ক্রিনশট পড়া যায় না।
-    ⚠️ কিন্তু এর মানে **পাসফ্রেজ হারালে ব্যাকআপও হারাল** — `BACKUP_PASSPHRASE`
-    সার্ভারের বাইরে আলাদা করে রাখা আপনার কাজ, আর সেটা এই স্ক্রিপ্টের বাইরে।
+    The files are **already encrypted** (AES-256-CBC). So even if the laptop is
+    lost, nobody's hours/salaries/screenshots can be read.
+    Careful: but it also means **if the passphrase is lost, the backup is lost
+    too** - keeping `BACKUP_PASSPHRASE` separately, off the server, is your job,
+    outside this script.
 
-    চালানো:
+    Run:
         powershell -ExecutionPolicy Bypass -File deploy\pull-backups.ps1
 
-    রোজ নিজে থেকে চালাতে — **বসানো আছে** (২২ আগস্ট ২০২৬):
-        কাজের নাম : "oXeio backup pull"
-        সময়       : রোজ রাত ৯:৩০
-        লগ        : %USERPROFILE%\oXeio-backups\pull-log.txt
+    To run it by itself every day - **already set up**:
+        task name : "oXeio backup pull"
+        time      : every day at 9:30 pm
+        log       : %USERPROFILE%\oXeio-backups\pull-log.txt
 
-    ⚠️⚠️ কাজটা `-File` দিয়ে বসানো হয়নি, `-Command` + try/catch দিয়ে।
-       কারণ এই স্ক্রিপ্টে `$ErrorActionPreference = 'Stop'`, তাই ssh
-       ব্যর্থ হলে ভুলটা **terminating** হয়ে যায় আর `*>>` রিডাইরেক্ট
-       ডিঙিয়ে বেরিয়ে পড়ে — লগে তখন শুধু "শুরু হয়েছিল" লেখা থাকত,
-       কেন থামল তা নয়। মেপে দেখা হয়েছে ভুল IP দিয়ে চালিয়ে।
+    Careful: the task is set up with `-Command` + try/catch, not with `-File`.
+       The reason: this script has `$ErrorActionPreference = 'Stop'`, so when
+       ssh fails the error becomes **terminating** and jumps out past the `*>>`
+       redirect - the log would then say only "started", not why it stopped.
+       Measured by running it with a wrong IP.
 
-    ⭐ ঠিক আচরণ যাচাই করতে:
+    To verify the behaviour is right:
         Get-ScheduledTaskInfo 'oXeio backup pull' |
-            Select LastRunTime, LastTaskResult   # ০ = সফল
+            Select LastRunTime, LastTaskResult   # 0 = success
 
-    ⚠️ PC রাত ৯:৩০-এ বন্ধ থাকলে কাজটা হারায় না — `StartWhenAvailable`
-       বসানো, তাই পরেরবার চালু হলেই চলবে।
+    Careful: if the PC is off at 9:30 pm the run is not lost - `StartWhenAvailable`
+       is set, so it runs the next time the PC is on.
 #>
 
 [CmdletBinding()]
 param(
-    # ⚠️ ডিফল্টগুলো এই সার্ভারের — অন্য কোথাও চালালে প্যারামিটারে দিন
+    # Careful: the defaults are for this server - pass parameters if running elsewhere
     #
-    # ⚠️⚠️ ২২ আগস্ট ২০২৬-এ সার্ভার বদলেছে (USA → BDIX, ADR-034),
-    #    তাই এই লাইনটা হাতে বদলাতে হয়েছে। ⭐ মনে রাখার কারণ: স্ক্রিপ্টটা
-    #    ভুল ঠিকানায় গেলে **কোনো শব্দ করে না** — শুধু রোজকার তৃতীয় কপিটা
-    #    আসা বন্ধ হয়ে যায়। পরের বার সার্ভার বদলালে এটাও বদলান।
+    # Careful: the server was changed (USA -> BDIX, ADR-034), so this line had
+    #    to be edited by hand. Worth remembering: if the script goes to a wrong
+    #    address it **makes no noise** - the daily third copy simply stops
+    #    arriving. Change this again the next time the server changes.
     [string]$ServerHost = '165.101.189.253',
     [int]$Port = 2222,
     [string]$User = 'root',
     [string]$KeyPath = "$HOME\.ssh\oxeio",
     [string]$RemoteDir = '/opt/oxeio/oxeio-monitor/.data/backups',
 
-    # ⭐ ডিফল্টে ব্যবহারকারীর নিজের ফোল্ডারে — Documents নয়, কারণ ওটা
-    #    প্রায়ই OneDrive-এ সিঙ্ক হয়, আর ব্যাকআপ নিজে থেকে ক্লাউডে যাওয়া
-    #    একটা সচেতন সিদ্ধান্ত হওয়া উচিত, দুর্ঘটনা নয়।
+    # By default in the user's own folder - not Documents, because that is often
+    #    synced to OneDrive, and a backup going to the cloud on its own should be
+    #    a conscious decision, not an accident.
     [string]$LocalDir = "$HOME\oXeio-backups",
 
-    # স্থানীয় কপি কত সপ্তাহ রাখা হবে (০ = কিছুই ছাঁটা হবে না)
+    # How many weeks of local copies to keep (0 = prune nothing)
     [int]$KeepWeeks = 8
 )
 
@@ -69,7 +71,7 @@ function Die  { param($m) Write-Host "`n[x] $m`n" -ForegroundColor Red; exit 1 }
 
 Write-Host "`n-- R5 - backup pull --" -ForegroundColor Cyan
 
-# ── ১· যা ছাড়া চলবে না ──────────────────────────────────────────────────────
+# ── 1. What it cannot run without ───────────────────────────────────────────
 if (-not (Get-Command ssh -ErrorAction SilentlyContinue)) {
     Die 'ssh পাওয়া গেল না (Windows-এ OpenSSH ক্লায়েন্ট চালু করুন)'
 }
@@ -83,10 +85,10 @@ if (-not (Test-Path $LocalDir)) {
 $ssh = @('-i', $KeyPath, '-p', "$Port", '-o', 'ConnectTimeout=20',
          '-o', 'BatchMode=yes', "$User@$ServerHost")
 
-# ── ২· সার্ভারে কী কী আছে ───────────────────────────────────────────────────
+# ── 2. What is on the server ────────────────────────────────────────────────
 #
-# ⚠️ `ls` নয়, `find -printf` — নামের মধ্যে ফাঁকা থাকলে `ls`-এর আউটপুট
-#    ভেঙে যেত। এখানে নাম নিরাপদ, তবু অভ্যাসটা ঠিক রাখা।
+# Careful: `find -printf`, not `ls` - `ls` output would break if a name contained
+#    spaces. The names are safe here, but keep the habit right.
 $remoteList = & ssh @ssh "find '$RemoteDir' -maxdepth 1 -type f -printf '%f\n' | sort" 2>&1
 if ($LASTEXITCODE -ne 0) { Die "সার্ভারে পৌঁছানো গেল না — $remoteList" }
 
@@ -96,10 +98,10 @@ if ($remote.Count -eq 0) { Die "সার্ভারে একটাও ব্�
 $dumps = @($remote | Where-Object { $_ -like '*.dump.enc' })
 Say "সার্ভারে $($dumps.Count) টা ডাম্প, মোট $($remote.Count) টা ফাইল"
 
-# ── ৩· শুধু যেগুলো এখানে নেই ─────────────────────────────────────────────────
+# ── 3. Only what is not here yet ────────────────────────────────────────────
 #
-# ⭐ বারবার চালানো নিরাপদ — যা আছে তা আবার নামানো হয় না, তাই দিনে
-#    কয়েকবার চালালেও খরচ প্রায় শূন্য।
+# Safe to run repeatedly - what is already here is not downloaded again, so
+#    running it several times a day costs almost nothing.
 $missing = @($remote | Where-Object { -not (Test-Path (Join-Path $LocalDir $_)) })
 
 if ($missing.Count -eq 0) {
@@ -107,7 +109,7 @@ if ($missing.Count -eq 0) {
 } else {
     Write-Host "   নামানো হচ্ছে: $($missing.Count) টা ফাইল" -ForegroundColor DarkGray
     foreach ($f in $missing) {
-        # ⚠️ scp-র রিমোট পথ কোট করা — নইলে ফাঁকা থাকা পাথে ভাঙত
+        # Careful: the remote path for scp is quoted - otherwise a path with spaces would break
         & scp -i $KeyPath -P $Port -o ConnectTimeout=20 -o BatchMode=yes `
               "${User}@${ServerHost}:${RemoteDir}/${f}" (Join-Path $LocalDir $f) | Out-Null
         if ($LASTEXITCODE -ne 0) { Die "নামানো ব্যর্থ: $f" }
@@ -115,27 +117,27 @@ if ($missing.Count -eq 0) {
     Say "$($missing.Count) টা নতুন ফাইল নামানো হয়েছে"
 }
 
-# ── ৪· ⭐⭐ যাচাই — যে ব্যাকআপ পরীক্ষা করা হয়নি, সেটা ব্যাকআপ নয়, অনুমান ─────
+# ── 4. Verification - a backup that has not been tested is not a backup, it is a guess
 #
-# ⚠️⚠️ এই ধাপটাই এই স্ক্রিপ্টের আসল কারণ। ফাইল নেমেছে মানে ফাইল **অক্ষত**
-#    নয় — অর্ধেক নামা ডাম্প ডিস্কে দিব্যি বসে থাকে, আর ঠিক যেদিন দরকার
-#    সেদিন খুলতে গিয়ে ধরা পড়ে। প্রতিটা ডাম্পের পাশে সার্ভারের দেওয়া
-#    `.sha256` আছে — মিলিয়ে দেখা হয় এখানেই।
+# Careful: this step is the real reason for this script. A file having been
+#    downloaded does not mean it is **intact** - a half-downloaded dump sits on
+#    the disk just fine, and is discovered only on the very day it is needed.
+#    Next to every dump is a `.sha256` from the server - it is compared here.
 $verified = 0; $bad = @()
 foreach ($d in $dumps) {
     $local = Join-Path $LocalDir $d
     $sumFile = Join-Path $LocalDir "$d.sha256"
     if (-not (Test-Path $local) -or -not (Test-Path $sumFile)) { continue }
 
-    # ধাঁচ: "<hash>  <filename>"
+    # Format: "<hash>  <filename>"
     $expected = ((Get-Content $sumFile -First 1) -split '\s+')[0]
     $actual = (Get-FileHash $local -Algorithm SHA256).Hash.ToLower()
 
     if ($expected -eq $actual) { $verified++ }
     else {
         $bad += $d
-        # ⭐ নষ্ট কপি **মুছে দেওয়া হয়** — নইলে পরের রানে "আছে" দেখে
-        #    আবার নামানো হতো না, আর ভাঙা ফাইলটাই চিরকাল থেকে যেত।
+        # A corrupt copy is **deleted** - otherwise the next run would see it
+        #    "present" and not download it again, and the broken file would stay forever.
         Remove-Item $local -Force
     }
 }
@@ -146,12 +148,12 @@ if ($bad.Count -gt 0) {
 }
 Say "$verified টা ডাম্পের হ্যাশ মিলেছে"
 
-# ── ৫· পুরোনো স্থানীয় কপি ছাঁটা ─────────────────────────────────────────────
+# ── 5. Prune old local copies ───────────────────────────────────────────────
 #
-# ⚠️ ছাঁটাই কেবল **এখানে**, সার্ভারে নয় — আর কখনো "সার্ভারে নেই বলে
-#    এখানেও মুছি" নিয়মে নয়। সার্ভারের ডিস্ক মুছে গেলে ওই নিয়ম ঠিক সেই
-#    মুহূর্তে শেষ কপিটাও মুছে দিত (`offsite-backup.sh`-এর copy-vs-sync
-#    সিদ্ধান্তের একই যুক্তি)।
+# Careful: pruning happens only **here**, not on the server - and never by the
+#    rule "delete here too because it is gone from the server". If the server's
+#    disk were wiped, that rule would delete the last copy at that very moment
+#    (the same reasoning as the copy-vs-sync decision in `offsite-backup.sh`).
 if ($KeepWeeks -gt 0) {
     $cutoff = (Get-Date).AddDays(-7 * $KeepWeeks)
     $old = @(Get-ChildItem $LocalDir -File |
@@ -162,7 +164,7 @@ if ($KeepWeeks -gt 0) {
     }
 }
 
-# ── ৬· ফল ───────────────────────────────────────────────────────────────────
+# ── 6. Result ───────────────────────────────────────────────────────────────
 $localDumps = @(Get-ChildItem $LocalDir -Filter '*.dump.enc' -File)
 $size = [math]::Round((($localDumps | Measure-Object Length -Sum).Sum / 1MB), 1)
 $newest = $localDumps | Sort-Object Name | Select-Object -Last 1
@@ -173,6 +175,6 @@ if ($newest) { Write-Host "     সবশেষ: $($newest.Name)" -ForegroundCol
 Write-Host "     ঘর: $LocalDir" -ForegroundColor DarkGray
 Write-Host ''
 
-# ⚠️ হ্যাশ না মিললে exit code শূন্য নয় — scheduled task-এ ব্যর্থতাটা
-#    যেন চোখে পড়ে, নইলে "রোজ চলছে" দেখেই সবাই নিশ্চিন্ত থাকত।
+# Careful: a hash mismatch gives a non-zero exit code - so the failure is
+#    noticed in the scheduled task, otherwise everyone would feel safe seeing "runs daily".
 if ($bad.Count -gt 0) { exit 2 }

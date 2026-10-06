@@ -1,49 +1,51 @@
 #!/usr/bin/env bash
 #
-# oXeio — VPS শক্ত করা (roadmap R6)
+# oXeio - VPS hardening
 #
-# চালানো (VPS-এ root হিসেবে):
+# Run (as root on the VPS):
 #     bash /opt/oxeio/oxeio-monitor/deploy/vps-harden.sh
 #
-# ⚠️ পাথে `oxeio-monitor/` অংশটা বাদ দেবেন না — রিপোর রুটে এই স্ক্রিপ্টটা
-#    নেই, ওটা এক ধাপ ভেতরে।
+# Careful: do not drop the `oxeio-monitor/` part of the path - this script is
+#    not at the repo root, it is one level inside.
 #
-# ⭐ যা করে: fail2ban (SSH — ২২ **ও ২২২২**) · শুধু-নিরাপত্তার স্বয়ংক্রিয়
-#    আপডেট · আর শেষে **সত্যিই চালু আছে কি না** মিলিয়ে দেখা।
-# ⭐ **বারবার চালানো নিরাপদ** — একই ফাইল একই বিষয়বস্তু দিয়ে লেখে, আর কিছু
-#    না বদলালে সার্ভিস restart-ও করে না (restart-এর মুহূর্তে জেল ফাঁকা থাকে)।
+# What it does: fail2ban (SSH - 22 **and 2222**) - security-only automatic
+#    updates - and at the end a check that they are **really running**.
+# **Safe to run repeatedly** - it writes the same files with the same content,
+#    and does not restart the service when nothing changed (the jail is empty
+#    at the moment of a restart).
 #
-# ⚠️⚠️ এই স্ক্রিপ্ট sshd-তে **হাত দেয় না** — পোর্ট বদলায় না, পাসওয়ার্ড-লগইন
-#    বন্ধ করে না, ফায়ারওয়ালের নিয়ম মোছে না। ইচ্ছাকৃতভাবে: "শক্ত করা"-র
-#    নামে নিজের দরজা বন্ধ করে ফেলাটা এই প্রকল্পে একবার প্রায় ঘটেছে
-#    (README § ১২.৪ — ২২ পোর্ট বন্ধ, ফেরার পথ কেবল ওয়েব কনসোল)।
+# Careful: this script **does not touch** sshd - it does not change the port,
+#    does not disable password login, does not delete firewall rules. Deliberate:
+#    locking your own door in the name of "hardening" has nearly happened in
+#    this project once (README § 12.4 - port 22 closed, the only way back was
+#    the web console).
 #
-# ⚠️ এই স্ক্রিপ্ট কোনো গোপন মান ছাপে না।
+# Careful: this script prints no secret values.
 
 set -euo pipefail
 
-# ⭐ পোর্টগুলো চলক — sshd-র দরজা বদলালে স্ক্রিপ্ট এডিট না করেই দেওয়া যায়:
+# The ports are a variable - if sshd's door changes, pass them without editing the script:
 #     OXEIO_SSH_PORTS=22,2222,2022 bash deploy/vps-harden.sh
 SSH_PORTS="${OXEIO_SSH_PORTS:-22,2222}"
 
-# ⭐ নিজের স্থির IP থাকলে এখানে দিলে সে কখনো ব্যান খাবে না।
-#    ⚠️ ডায়নামিক IP-তে এটা দেওয়ার মানে নেই — কাল অন্য কারো IP হবে।
+# Put your own static IP here and it will never be banned.
+#    Careful: pointless with a dynamic IP - tomorrow it belongs to someone else.
 IGNORE_EXTRA="${OXEIO_IGNOREIP:-}"
 
-# ⚠️ ১ ঘণ্টা, চিরকাল নয় — কারণ নিচে জেল-ফাইলে লেখা আছে।
+# Careful: 1 hour, not forever - the reason is written in the jail file below.
 BANTIME="${OXEIO_BANTIME:-1h}"
 
-# ⭐ কেন `jail.d/*.local`, সরাসরি `/etc/fail2ban/jail.local` নয়:
-#    fail2ban ফাইলগুলো এই ক্রমে পড়ে — jail.conf → jail.d/*.conf →
-#    jail.local → **jail.d/*.local**। অর্থাৎ এই ফাইলটাই শেষ কথা, তাই
-#    ডিস্ট্রোর ডিফল্ট বা কারো হাতে লেখা jail.local-কে এটা ছাপিয়ে যায় —
-#    অথচ সেই ফাইলগুলোর একটাও আমরা মুছি না।
+# Why `jail.d/*.local` and not `/etc/fail2ban/jail.local` directly:
+#    fail2ban reads files in this order - jail.conf -> jail.d/*.conf ->
+#    jail.local -> **jail.d/*.local**. So this file has the last word and
+#    overrides the distro defaults or anyone's hand-written jail.local -
+#    while we delete none of those files.
 JAIL_FILE=/etc/fail2ban/jail.d/oxeio-sshd.local
 
-# ⚠️ ৫২ নম্বর — ডিস্ট্রোর `50unattended-upgrades`-এর **পরে** পড়া হবে, তাই
-#    আমাদের মানগুলোই টিকে থাকে। ডিস্ট্রোর ফাইলটা ছোঁয়া হয় না, নইলে
-#    পরের প্যাকেজ-আপগ্রেডে dpkg "conffile বদলে গেছে" বলে প্রশ্ন করত —
-#    আর স্বয়ংক্রিয় আপগ্রেডের মাঝপথে প্রশ্ন মানে সেটা চিরকাল আটকে থাকা।
+# Careful: number 52 - read **after** the distro's `50unattended-upgrades`, so
+#    our values win. The distro file is left alone, otherwise the next package
+#    upgrade would make dpkg ask "conffile has changed" - and a question in the
+#    middle of an automatic upgrade means it hangs forever.
 APT_FILE=/etc/apt/apt.conf.d/52oxeio-unattended-upgrades
 APT_PERIODIC=/etc/apt/apt.conf.d/20auto-upgrades
 
@@ -55,19 +57,20 @@ warn(){ printf '   \033[33m⚠️  %s\033[0m\n' "$*"; }
 [ "$(id -u)" -eq 0 ] || die "root হিসেবে চালান (sudo -i)"
 command -v apt-get >/dev/null 2>&1 || die "apt-get নেই — এই স্ক্রিপ্টটা Debian/Ubuntu-র জন্য লেখা"
 
-# ⚠️ এটা না থাকলে apt মাঝপথে "কোন সংস্করণ রাখব?" বলে **ঝুলে যায়**, আর
-#    স্ক্রিপ্টের ভেতরে সেই প্রশ্নটা দেখতে পাওয়াই যায় না।
-#    (vps-setup.sh-এ git-এর সাথে ঠিক এই ভুলটাই একবার হয়েছিল।)
+# Careful: without this apt **hangs** midway asking "which version to keep?",
+#    and inside a script that question is not even visible.
+#    (The same mistake once happened with git in vps-setup.sh.)
 export DEBIAN_FRONTEND=noninteractive
 
 TMPDIR_OX="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_OX"' EXIT
 
-# ⭐ ফাইল বদলেছে কি না **আগে** দেখে তারপর লেখা — এতেই "বারবার চালানো
-#    নিরাপদ" কথাটা সত্যি হয়। না দেখলে প্রতিবার mtime বদলাত, প্রতিবার
-#    সার্ভিস restart হতো, আর restart-এর কয়েক সেকেন্ড জেল ফাঁকা থাকত।
+# Check **first** whether the file changed, then write - this is what makes "safe
+#    to run repeatedly" true. Otherwise the mtime would change every time, the
+#    service would restart every time, and the jail would be empty for a few
+#    seconds at each restart.
 CHANGED_JAIL=0
-install_if_changed() {  # $1 = নতুন বিষয়বস্তুর temp ফাইল, $2 = গন্তব্য
+install_if_changed() {  # $1 = temp file with the new content, $2 = destination
   if [ -f "$2" ] && cmp -s "$1" "$2"; then
     return 1
   fi
@@ -75,7 +78,7 @@ install_if_changed() {  # $1 = নতুন বিষয়বস্তুর te
   return 0
 }
 
-# ── ১· প্যাকেজ ───────────────────────────────────────────────────────────
+# ── 1. Packages ───────────────────────────────────────────────────────────
 say "১· প্যাকেজ"
 
 need=()
@@ -95,23 +98,24 @@ else
   ok "fail2ban ও unattended-upgrades আগে থেকেই আছে"
 fi
 
-# ⚠️ fail2ban-এর systemd backend পাইথনের `systemd` মডিউল ছাড়া চলে না, আর
-#    ওটা কেবল Recommends — `--no-install-recommends` দিয়ে বসানো হোস্টে
-#    থাকে না। না থাকলে জেল **চালুই হয় না**, অথচ প্যাকেজ ঠিকই বসে থাকে।
-#    তাই আগে বসানোর চেষ্টা, তারপর নিচে সত্যিই আছে কি না দেখে backend বাছা।
+# Careful: fail2ban's systemd backend does not work without Python's `systemd`
+#    module, and that is only a Recommends - a host installed with
+#    `--no-install-recommends` lacks it. Without it the jail **never starts**
+#    even though the package is installed. So try to install it first, then
+#    below choose the backend by checking whether it is really there.
 if ! python3 -c 'import systemd.journal' >/dev/null 2>&1; then
   apt-get install -y -qq python3-systemd >/dev/null 2>&1 || true
 fi
 
-# ── ২· লগ কোথায় — backend বাছা ───────────────────────────────────────────
+# ── 2. Where the log is - choosing the backend ────────────────────────────
 say "২· sshd-র লগ কোথায়"
 
-# ⚠️⚠️ এই ধাপটা বাদ দিলে জেলটা "enabled" দেখাত অথচ **কিছুই পড়ত না**।
-#    দুটো বাস্তবতা আছে, আর কোনটা সত্যি সেটা হোস্টভেদে বদলায়:
-#      · rsyslog আছে  → /var/log/auth.log-এ sshd-র ব্যর্থ লগইন লেখা হয়
-#      · rsyslog নেই   → লগ শুধু journald-এ (Debian 12+ এ ডিফল্টই তাই)
-#    ⭐ journald সব সময়ই থাকে, তাই সেটাই প্রথম পছন্দ — কিন্তু কেবল তখনই
-#    যখন পাইথনের systemd মডিউলটা সত্যিই আছে, নইলে জেল দাঁড়াবে না।
+# Careful: skipping this step would make the jail look "enabled" while it
+#    **reads nothing**. There are two realities, and which one holds varies by host:
+#      - rsyslog present -> sshd's failed logins are written to /var/log/auth.log
+#      - rsyslog absent  -> the log is only in journald (the default on Debian 12+)
+#    journald is always there, so it is the first choice - but only when Python's
+#    systemd module is really present, otherwise the jail will not come up.
 F2B_LOGPATH=""
 if python3 -c 'import systemd.journal' >/dev/null 2>&1; then
   F2B_BACKEND="systemd"
@@ -121,37 +125,37 @@ elif [ -s /var/log/auth.log ]; then
   F2B_LOGPATH="/var/log/auth.log"
   ok "/var/log/auth.log (backend = auto)"
 else
-  # ⚠️ দুটোর একটাও নিশ্চিত করা গেল না। এটা "লগ নেই" নয়, "জানি না" —
-  #    তাই systemd ধরে এগোনো হয়, আর § ৬-এর যাচাই সত্যিটা বলে দেবে।
+  # Careful: neither could be confirmed. This is not "no log", it is "don't know" -
+  #    so we go on assuming systemd, and the check in § 6 will tell the truth.
   F2B_BACKEND="systemd"
   warn "auth.log নেই, python3-systemd-ও পাওয়া গেল না — systemd ধরে এগোনো হচ্ছে"
   warn "§ ৬-এর যাচাইয়ে জেল না দাঁড়ালে এখানেই কারণ"
 fi
 
-# ── ৩· জেল ───────────────────────────────────────────────────────────────
+# ── 3. Jail ───────────────────────────────────────────────────────────────
 say "৩· SSH জেল"
 
 IGNOREIP="127.0.0.1/8 ::1"
-# ⚠️ `[ … ] && …` নয়, `if` — খালি IGNORE_EXTRA-তে `&&` মিথ্যা ফেরত দিত, আর
-#    `set -e`-র নিচে সেটাই স্ক্রিপ্ট থামিয়ে দিত।
+# Careful: `if`, not `[ ... ] && ...` - with an empty IGNORE_EXTRA the `&&`
+#    would return false, and under `set -e` that would stop the script.
 if [ -n "$IGNORE_EXTRA" ]; then
   IGNOREIP="$IGNOREIP $IGNORE_EXTRA"
 fi
 
 mkdir -p "$(dirname "$JAIL_FILE")"
 
-# ⚠️⚠️ নিচের ফাইলে বাংলা কেবল `#` কমেন্ট লাইনে — **কোনো মানে (value) নয়**।
-#    এই নিয়মটা বাধ্যতামূলক, কারণ jail ফাইলটা পড়ে fail2ban, পাইথনের
-#    configparser দিয়ে, আর encoding না দিলে সেটা locale-নির্ভর। তিনটে
-#    সম্ভাবনা হাতে যাচাই করা হয়েছে:
-#      · utf-8   → ঠিক পড়ে
-#      · latin-1 → বাংলা অক্ষরগুলো আবোল-তাবোল হয়, তবু `port`/`backend`
-#                  ঠিকই আসে — কারণ ওগুলোর লাইন খাঁটি ASCII
-#      · ascii   → UnicodeDecodeError, অর্থাৎ **জোরে** ব্যর্থ
-#    ⭐ অর্থাৎ "নীরবে ভুল কনফিগ" বলে কোনো পথ নেই, আর জোরে ব্যর্থ হলে § ৪-এর
-#    `fail2ban-client -t` সেটা restart-এর **আগেই** ধরে ফেলে।
-#    ⚠️ কিন্তু বাংলা যদি কোনো মানে ঢোকে (যেমন কমেন্টে নয়, `action`-এ),
-#    তখন latin-1 শাখাটা নীরবে ভুল মান দিত — তাই ঢোকাবেন না।
+# Careful: in the file below, Bengali appears only on `#` comment lines - **never
+#    in a value**. This rule is mandatory, because the jail file is read by
+#    fail2ban, through Python's configparser, and without an explicit encoding
+#    that depends on the locale. Three cases were checked by hand:
+#      - utf-8   -> reads fine
+#      - latin-1 -> the Bengali characters come out garbled, yet `port`/`backend`
+#                   still come through - their lines are pure ASCII
+#      - ascii   -> UnicodeDecodeError, i.e. it fails **loudly**
+#    So there is no path to a "silently wrong config", and a loud failure is
+#    caught by `fail2ban-client -t` in § 4 **before** the restart.
+#    Careful: but if Bengali ever enters a value (not a comment, say in
+#    `action`), the latin-1 case would silently produce a wrong value - so don't.
 
 {
   cat <<EOF
@@ -195,45 +199,46 @@ else
   ok "আগের মতোই আছে → $JAIL_FILE  (পোর্ট $SSH_PORTS)"
 fi
 
-# ── ৩ক· ⚠️⚠️ Docker যেটা এই জেলের নাগালের বাইরে রাখে ─────────────────────
+# ── 3a. What Docker keeps out of this jail's reach ───────────────────────
 #
-#    fail2ban ব্যান বসায় iptables-এর **INPUT** চেইনে (ufw-ও ওখানেই কাজ
-#    করে)। হোস্টে চলা sshd-র প্যাকেট INPUT দিয়েই যায় — তাই SSH জেল
-#    সত্যিই কাজ করে, আর § ৬ক-এ সেটা চলতি নিয়ম পড়ে মিলিয়ে দেখা হয়।
+#    fail2ban places bans in iptables' **INPUT** chain (ufw works there too).
+#    Packets for sshd running on the host go through INPUT - so the SSH jail
+#    really works, and § 6a checks it against the live rules.
 #
-#    ⚠️ কিন্তু Docker-এর **প্রকাশিত পোর্টে** (এখানে ৮০ ও ৪৪৩ — Caddy)
-#    প্যাকেট DNAT হয়ে কনটেইনারে যায়, অর্থাৎ INPUT নয়, **FORWARD/DOCKER**
-#    চেইন দিয়ে। ফলে সেখানে fail2ban-এর ব্যান (এমনকি `ufw deny`-ও)
-#    প্যাকেটটা কখনো দেখেই না — এটা "Docker ufw-কে ফাঁকি দেয়" নামে
-#    পরিচিত সমস্যা, আর এর ফল **নীরব**: জেল "সক্রিয়" দেখায়, ব্যানের
-#    সংখ্যাও বাড়ে, তবু আক্রমণকারী দিব্যি ঢুকতে থাকে।
+#    Careful: but on Docker's **published ports** (here 80 and 443 - Caddy)
+#    packets are DNAT-ed to the container, i.e. they go through the
+#    **FORWARD/DOCKER** chain, not INPUT. So fail2ban's ban (even `ufw deny`)
+#    never sees the packet there - this is the known "Docker bypasses ufw"
+#    problem, and its effect is **silent**: the jail shows "active", the ban
+#    count grows, yet the attacker keeps getting in.
 #
-#    ⭐ তাই এই স্ক্রিপ্ট ইচ্ছাকৃতভাবে **শুধু SSH জেল** বসায়, আর যা পারে
-#    না সেটা দাবিও করে না। লগইন রুটের rate limit তাই ওয়েব-স্তরে —
-#    Caddy-তে — বসাতে হবে; সেটাই R6-র বাকি অর্ধেক।
-#    (DOCKER-USER চেইনে নিয়ম বসিয়ে ঠেকানো যায়, কিন্তু তখন ব্যানের
-#    দায়িত্ব দুই জায়গায় ভাগ হয়ে যেত — সেটা আলাদা সিদ্ধান্ত, আলাদা ADR।)
+#    So this script deliberately installs **only the SSH jail**, and does not
+#    claim what it cannot do. The login route's rate limit therefore has to go
+#    at the web layer - in Caddy; that is the other half of the VPS hardening.
+#    (It could be stopped with rules in the DOCKER-USER chain, but then the
+#    responsibility for bans would be split across two places - a separate
+#    decision, a separate ADR.)
 
-# ── ৪· চালু করা ──────────────────────────────────────────────────────────
+# ── 4. Start ──────────────────────────────────────────────────────────────
 say "৪· fail2ban চালু"
 
-# ⭐ restart-এর আগে কনফিগ পরীক্ষা — ভুল কনফিগে fail2ban **উঠতেই পারে না**,
-#    আর তখন আগের যে জেলটা চলছিল সেটাও চলে যেত। আগে দেখে নিলে খারাপ কনফিগে
-#    আমরা কিছুই ভাঙি না।
+# Check the config before the restart - with a bad config fail2ban **cannot
+#    start**, and the jail that was running would be lost too. Checking first
+#    means a bad config breaks nothing.
 if f2b_test="$(fail2ban-client -t 2>&1)"; then
   ok "কনফিগ পরীক্ষা পাশ"
 else
   case "$f2b_test" in
     *"no such option"*|*"Usage:"*|*"unrecognized"*)
-      # ⚠️ এই fail2ban-এ `-t` নেই — এটা "কনফিগ খারাপ" নয়, "যাচাই করা গেল
-      #    না"। দুটোকে এক করে ফেললে ভালো কনফিগেও স্ক্রিপ্ট থেমে যেত।
+      # Careful: this fail2ban has no `-t` - that is not "bad config", it is
+      #    "could not verify". Conflating the two would stop the script even on a good config.
       warn "এই সংস্করণে 'fail2ban-client -t' নেই — কনফিগ যাচাই করা গেল না"
       ;;
     *)
       printf '%s\n' "$f2b_test" | sed 's/^/     /' >&2
-      # ⚠️ বার্তাটা যেন বাড়িয়ে না বলে: জেল-ফাইলটা এই মুহূর্তে **লেখা হয়ে
-      #    গেছে** ($JAIL_FILE)। যা হয়নি তা হলো restart — অর্থাৎ চলতি
-      #    fail2ban আগের কনফিগেই আছে, আর sshd-তে হাত পড়েনি।
+      # Careful: the message must not overstate: the jail file has **already been
+      #    written** ($JAIL_FILE). What has not happened is the restart - so the
+      #    running fail2ban still has its old config, and sshd was not touched.
       die "fail2ban কনফিগে ভুল — উপরের বার্তা দেখুন। restart করা হয়নি, চলতি fail2ban ও SSH অপরিবর্তিত। ঠিক করে আবার চালান, বা $JAIL_FILE মুছে দিন।"
       ;;
   esac
@@ -251,7 +256,7 @@ else
   ok "সার্ভিস আগে থেকেই চলছে, কনফিগও অপরিবর্তিত — restart করা হয়নি"
 fi
 
-# ── ৫· স্বয়ংক্রিয় নিরাপত্তা আপডেট ────────────────────────────────────────
+# ── 5. Automatic security updates ─────────────────────────────────────────
 say "৫· স্বয়ংক্রিয় নিরাপত্তা আপডেট"
 
 cat > "$TMPDIR_OX/apt-periodic" <<'CONF'
@@ -306,17 +311,17 @@ else
   ok "আগের মতোই আছে → $APT_FILE  (শুধু security)"
 fi
 
-# ⚠️ Docker নিজে এই তালিকার বাইরে — docker-ce আসে Docker-এর নিজস্ব
-#    রিপো থেকে, যেটা Allowed-Origins-এ নেই। অর্থাৎ স্ট্যাক চালানো
-#    কনটেইনার-ইঞ্জিনটা রাতারাতি নিজে থেকে বদলাবে না। ইচ্ছাকৃত।
+# Careful: Docker itself is outside this list - docker-ce comes from Docker's own
+#    repo, which is not in Allowed-Origins. So the container engine running the
+#    stack will not change overnight by itself. Deliberate.
 systemctl enable --now unattended-upgrades >/dev/null 2>&1 || true
 
-# ── ৬· যাচাই ─────────────────────────────────────────────────────────────
+# ── 6. Verification ──────────────────────────────────────────────────────
 #
-# ⭐ "চালানো হয়েছে" আর "চালু আছে" এক নয় — vps-setup.sh-এ ফায়ারওয়াল নিয়ে
-#    এই শিক্ষাটা আগেই লেখা আছে (১৩ আগস্ট: স্ক্রিপ্ট warn ছেপেছিল, কেউ
-#    পড়েনি, আর VPS-এ কোনো ফায়ারওয়ালই চলছিল না)। তাই নিচে কনফিগ ফাইল নয়,
-#    **চলতি অবস্থা** পড়া হয়।
+# "Was run" and "is running" are not the same - this lesson is already written
+#    in vps-setup.sh for the firewall (the script printed a warning, nobody read
+#    it, and no firewall was running on the VPS). So below it is the
+#    **live state** that is read, not the config files.
 say '৬· যাচাই — "চালানো হয়েছে" আর "চালু আছে" এক নয়'
 
 FAIL=0
@@ -328,18 +333,18 @@ else
   die "fail2ban চলছে না — উপরের লগ দেখুন (systemctl status fail2ban)"
 fi
 
-# ⚠️ restart-এর পরে fail2ban-এর সকেট তৈরি হতে কয়েক সেকেন্ড লাগে। সাথে সাথেই
-#    `fail2ban-client` ডাকলে "Failed to access socket path" আসত, আর তখন আমরা
-#    একটা **সুস্থ** জেলকেও "দাঁড়ায়নি" বলে ফেলতাম — আর সেই ভুল বার্তা পড়ে
-#    কেউ কনফিগ ঘাঁটতে বসতেন। vps-update.sh-এ API-র স্বাস্থ্য পরীক্ষায় ঠিক
-#    এই অপেক্ষাটাই আছে, একই কারণে।
+# Careful: after a restart it takes a few seconds for fail2ban's socket to
+#    appear. Calling `fail2ban-client` immediately gives "Failed to access socket
+#    path", and we would call even a **healthy** jail "not up" - and someone
+#    would go digging in the config over that false message. The API health
+#    check in vps-update.sh has exactly this wait, for the same reason.
 for _ in $(seq 1 15); do
   if fail2ban-client ping >/dev/null 2>&1; then break; fi
   sleep 1
 done
 
-# ⭐ জেলটা সত্যিই দাঁড়িয়েছে কি না — সার্ভিস চলা আর জেল দাঁড়ানো আলাদা কথা।
-#    backend ভুল হলে সার্ভিস দিব্যি চলে, শুধু জেলটাই থাকে না।
+# Whether the jail really came up - the service running and the jail standing
+#    are different things. With a wrong backend the service runs fine, only the jail is missing.
 if jail_status="$(fail2ban-client status sshd 2>&1)"; then
   printf '%s\n' "$jail_status" | sed 's/^/     /'
   ok "sshd জেল দাঁড়িয়েছে"
@@ -348,21 +353,21 @@ else
   die "sshd জেল দাঁড়ায়নি — উপরের বার্তা দেখুন (journalctl -u fail2ban -n 40)"
 fi
 
-# ── ৬ক· পোর্টগুলো সত্যিই পাহারায় আছে কি না ───────────────────────────────
+# ── 6a. Are the ports really guarded ──────────────────────────────────────
 #
-# ⚠️⚠️ এটাই এই স্ক্রিপ্টের সবচেয়ে জরুরি যাচাই। কনফিগে `port = 22,2222`
-#    লেখা থাকা আর ফায়ারওয়ালে সত্যিই দুটো পোর্ট পাহারায় থাকা এক কথা নয় —
-#    আর দ্বিতীয়টা না হলে ব্যর্থতাটা সম্পূর্ণ নীরব।
-# ⚠️⚠️ **দুটো ব্যাকএন্ড, দুটো সম্পূর্ণ আলাদা নাম ও ফরম্যাট** — আর প্রথম
-#    আসল রানেই (Ubuntu 24.04, ১৫ আগস্ট) দেখা গেল এখানে ধরা পড়ে না:
+# Careful: this is the script's most important check. `port = 22,2222` being
+#    written in the config is not the same as both ports really being guarded in
+#    the firewall - and if the second is not true, the failure is completely silent.
+# Careful: **two backends, two completely different names and formats** - and
+#    the first real run (Ubuntu 24.04) showed this was not being caught here:
 #
-#      iptables  → চেইনের নাম `f2b-sshd`,   পোর্ট `--dports 22,2222`
-#      nftables  → চেইনের নাম `f2b-chain`,  সেট `addr-set-sshd`,
-#                  পোর্ট `tcp dport { 22, 2222 }`
+#      iptables  -> chain name `f2b-sshd`,   ports `--dports 22,2222`
+#      nftables  -> chain name `f2b-chain`,  set `addr-set-sshd`,
+#                   ports `tcp dport { 22, 2222 }`
 #
-#    আধুনিক Ubuntu-তে fail2ban ডিফল্টে **nftables** বেছে নেয়, তাই শুধু
-#    `f2b-sshd` খুঁজলে কিছুই মিলত না আর স্ক্রিপ্ট "যাচাই করা গেল না" বলে
-#    থেমে যেত — অথচ জেল দিব্যি কাজ করছিল (ছ-টা IP ব্যানও হয়ে গিয়েছিল)।
+#    Modern Ubuntu's fail2ban picks **nftables** by default, so searching only
+#    for `f2b-sshd` found nothing and the script stopped with "could not
+#    verify" - while the jail was working fine (six IPs had even been banned).
 rule_ports=""
 
 if command -v iptables >/dev/null 2>&1; then
@@ -372,17 +377,17 @@ if command -v iptables >/dev/null 2>&1; then
   fi
 fi
 
-# ⚠️ `addr-set-sshd` ধরে খোঁজা, `f2b-chain` নয় — চেইনটা সব জেলের জন্য
-#    একটাই, কিন্তু সেটটা জেল-নির্দিষ্ট। তাই অন্য কোনো জেল থাকলেও এটা
-#    ঠিক sshd-র সারিটাই তোলে।
+# Careful: search by `addr-set-sshd`, not `f2b-chain` - the chain is one for all
+#    jails, but the set is jail-specific. So even with other jails present this
+#    picks up exactly the sshd row.
 if [ -z "$rule_ports" ] && command -v nft >/dev/null 2>&1; then
   f2b_rule="$(nft list ruleset 2>/dev/null | grep -F 'addr-set-sshd' | grep -F 'dport' | head -1 || true)"
   if [ -n "$f2b_rule" ]; then
-    # `tcp dport { 22, 2222 } …` → `22,2222`  (ফাঁকা জায়গা ফেলে দিয়ে)
+    # `tcp dport { 22, 2222 } ...` -> `22,2222`  (dropping the whitespace)
     rule_ports="$(printf '%s\n' "$f2b_rule" \
       | sed -n 's/.*dport[[:space:]]*{\([^}]*\)}.*/\1/p' \
       | tr -d '[:space:]' | head -1)"
-    # ⚠️ একটামাত্র পোর্ট হলে nft বন্ধনী ছাড়াই লেখে — `tcp dport 2222`
+    # Careful: with a single port nft writes it without braces - `tcp dport 2222`
     if [ -z "$rule_ports" ]; then
       rule_ports="$(printf '%s\n' "$f2b_rule" \
         | sed -n 's/.*dport[[:space:]]*\([0-9]\{1,5\}\).*/\1/p' | head -1)"
@@ -391,8 +396,8 @@ if [ -z "$rule_ports" ] && command -v nft >/dev/null 2>&1; then
 fi
 
 if [ -z "$rule_ports" ]; then
-  # ⚠️ "যাচাই করা গেল না" — "কাজ করছে না" নয়। দুটোকে এক করে দেখানো
-  #    এই প্রকল্পে নিষিদ্ধ; অনুপস্থিত পর্যবেক্ষণ ব্যর্থতা নয়।
+  # Careful: "could not verify" - not "not working". Showing the two as one is
+  #    forbidden in this project; a missing observation is not a failure.
   warn "চলতি ফায়ারওয়াল নিয়মে পোর্টের তালিকা পড়া গেল না — এর মানে জেল কাজ"
   warn "করছে না তা নয়, মানে যাচাই করা গেল না। হাতে দেখুন:"
   warn "    iptables -S INPUT | grep f2b-sshd"
@@ -413,10 +418,10 @@ else
   fi
 fi
 
-# ── ৬খ· sshd আসলে কোন কোন পোর্টে শুনছে ───────────────────────────────────
+# ── 6b. Which ports sshd is actually listening on ─────────────────────────
 #
-# ⭐ জেলে কী লেখা আছে সেটা আমরা ঠিক করি; sshd কোথায় শোনে সেটা করি না।
-#    দুটো না মিললে একটা দরজা অরক্ষিত থেকে যায় — তাই মিলিয়ে দেখা হয়।
+# We decide what is written in the jail; we do not decide where sshd listens.
+#    If the two do not match, a door stays unguarded - so they are compared.
 ssh_listen=""
 if command -v ss >/dev/null 2>&1; then
   ssh_listen="$(ss -H -ltnp 2>/dev/null | awk '/sshd/ { n = split($4, a, ":"); print a[n] }' \
@@ -424,7 +429,7 @@ if command -v ss >/dev/null 2>&1; then
 fi
 
 if [ -z "$ssh_listen" ]; then
-  # ⚠️ আবারও: জানা গেল না ≠ কিছু নেই।
+  # Careful: again: not known != nothing there.
   warn "sshd কোন পোর্টে শুনছে জানা গেল না (ss পাওয়া যায়নি?) — 'ss -ltnp | grep sshd'"
 else
   ok "sshd শুনছে: $ssh_listen"
@@ -441,15 +446,15 @@ else
     warn "    যোগ করুন:  OXEIO_SSH_PORTS=$SSH_PORTS$(printf '%s' "$uncovered" | tr ' ' ',') bash $0"
     FAIL=1
   fi
-  # ⚠️ উল্টো দিকটা ব্যর্থতা নয়: জেলে ২২২২ আছে অথচ sshd এখনো ওখানে শোনে
-  #    না — এটা ক্ষতিকর নয়, বরং আগেভাগে প্রস্তুত থাকা (vps-setup.sh-এ
-  #    ufw-তে ২২২২ আগেভাগে খুলে রাখার মতোই)।
+  # Careful: the opposite direction is not a failure: 2222 in the jail while
+  #    sshd does not yet listen there is harmless, rather being ready ahead of
+  #    time (like opening 2222 in ufw in advance in vps-setup.sh).
 fi
 
-# ── ৬গ· স্বয়ংক্রিয় আপডেট সত্যিই চালু কি না ───────────────────────────────
+# ── 6c. Are automatic updates really on ───────────────────────────────────
 uu_on="$(apt-config dump APT::Periodic::Unattended-Upgrade 2>/dev/null | head -1 || true)"
-# ⭐ শুধু মানটা — গোটা লাইনে চাবিটাই দুবার আসত ('X = X "0";'), আর পড়তে গিয়ে
-#    কোনটা চাওয়া হয়েছিল আর কোনটা পাওয়া গেল তা আলাদা করা যেত না।
+# Only the value - in the whole line the key itself appears twice ('X = X "0";'),
+#    and reading it you could not tell what was wanted and what was found.
 uu_val="$(printf '%s' "$uu_on" | sed -n 's/.*"\([^"]*\)".*/\1/p')"
 case "$uu_val" in
   1) ok "unattended-upgrade চালু (APT::Periodic::Unattended-Upgrade = 1)" ;;
@@ -462,7 +467,7 @@ if [ -z "$origins" ]; then
   warn "Allowed-Origins পড়া গেল না — 'apt-config dump Unattended-Upgrade' দেখুন"
 else
   printf '%s\n' "$origins" | sed 's/^/     /'
-  # ⚠️ `-updates` বা `-proposed` ঢুকে পড়লে এটা আর "শুধু security" নয়।
+  # Careful: if `-updates` or `-proposed` slip in, it is no longer "security only".
   if printf '%s' "$origins" | grep -qE '\-(updates|proposed|backports)'; then
     warn "security-র বাইরের origin ঢুকেছে — 50unattended-upgrades দেখুন"
     FAIL=1
@@ -471,7 +476,7 @@ else
   fi
 fi
 
-# ⭐ টাইমার — কনফিগ নিখুঁত হলেও টাইমার বন্ধ থাকলে **কোনোদিন কিছুই চলবে না**।
+# The timers - even with a perfect config, if the timer is off **nothing will ever run**.
 for t in apt-daily.timer apt-daily-upgrade.timer; do
   if systemctl is-active --quiet "$t"; then
     ok "$t চলছে"
@@ -482,7 +487,7 @@ for t in apt-daily.timer apt-daily-upgrade.timer; do
   fi
 done
 
-# ── ৭· ফল ────────────────────────────────────────────────────────────────
+# ── 7. Result ─────────────────────────────────────────────────────────────
 if [ "$FAIL" -eq 0 ]; then
   printf '\n\033[32m✅ শক্ত করা হয়ে গেছে\033[0m\n\n'
 else
@@ -498,9 +503,10 @@ printf '   \033[33m   DNAT হয়ে FORWARD/DOCKER চেইন দিয়
 printf '   \033[32m   ✓ ওই দিকটা Caddy-তেই সামলানো — লগইনে ৩০/মিনিট প্রতি IP\033[0m\n'
 printf '   \033[32m     (web/Caddyfile-এর rate_limit · G116)। এই জেল শুধু SSH-এর।\033[0m\n\n'
 
-# ⚠️ FAIL হলেও exit 0 — ইচ্ছাকৃত। যা বসেছে তা বসেই আছে, আর অসম্পূর্ণ
-#    যাচাইকে ব্যর্থতা বলে ধরলে কেউ স্ক্রিপ্টটা আবার চালাতে ভয় পেতেন।
-#    যা জানা যায়নি তা উপরে স্পষ্ট লেখা আছে — সেটাই আসল ফল।
-#    ⚠️ লাইনটা স্পষ্ট করে লেখা: শেষ printf-এর ফলাফল দিয়ে exit code ঠিক
-#    হলে ভবিষ্যতে কেউ একটা লাইন যোগ করলেই নীরবে বদলে যেত।
+# Careful: exit 0 even on FAIL - deliberate. What was installed stays installed,
+#    and treating an incomplete verification as failure would make people afraid
+#    to run the script again. What could not be determined is stated clearly
+#    above - that is the real result.
+#    Careful: the line is explicit: if the exit code came from the last
+#    printf's result, adding one line in future would silently change it.
 exit 0

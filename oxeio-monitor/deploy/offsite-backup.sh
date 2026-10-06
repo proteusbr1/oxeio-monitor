@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
 #
-# R5 · G39 — রাতের ব্যাকআপ **অফসাইটে** পাঠানো।
+# Upload the nightly backups **offsite**.
 #
-# ⭐ যা করে: `.data/backups`-এর নতুন ডাম্পগুলো `rclone` দিয়ে একটা দূরের
-#    রিমোটে তোলে, পুরোনো কপি ছাঁটে, আর ফল টেলিগ্রামে জানায়।
+# What it does: copies the new dumps from `.data/backups` to a remote with
+#    `rclone`, prunes old copies, and reports the result on Telegram.
 #
-# ⚠️⚠️ **কেন এটা দরকার, আর কেন K02 যথেষ্ট নয়:** রাতের ডাম্প আছে,
-#    এনক্রিপটেড আছে, কিন্তু **সবই এক মেশিনে**। ওই ডিস্ক মরলে বা VPS
-#    হারালে ব্যাকআপও সাথেই যায় — অর্থাৎ ব্যাকআপ থাকা আর ব্যাকআপ **কাজে
-#    লাগা** এক নয়।
+# Careful: **why this is needed, and why the nightly backup alone is not enough:**
+#    the nightly dump exists and is encrypted, but **all on one machine**. If
+#    that disk dies or the VPS is lost, the backup goes with it - having a
+#    backup and being able to **use** a backup are not the same.
 #
-# ⭐⭐ **ফাইলগুলো আগে থেকেই এনক্রিপটেড** (`BACKUP_PASSPHRASE`, openssl enc)।
-#    তাই Drive/S3 যেখানেই তুলুন, প্রোভাইডার কর্মীদের ঘণ্টা, বেতন বা
-#    স্ক্রিনশটের কিছুই পড়তে পারে না — "ডেটা দেশের বাইরে যাবে না" নীতির
-#    সাথে এটা সাংঘর্ষিক নয়।
-#    ⚠️ কিন্তু এর মানে **পাসফ্রেজ হারালে ব্যাকআপও হারাল**। ওটা VPS-এর
-#    বাইরে আলাদা করে রাখা মালিকের কাজ, আর সেটা এই স্ক্রিপ্টের বাইরে।
+# **The files are already encrypted** (`BACKUP_PASSPHRASE`, openssl enc).
+#    So wherever you upload them (Drive/S3), the provider can read nothing of
+#    the staff's hours, salaries or screenshots - this does not conflict with a
+#    "data must not leave the country" policy.
+#    Careful: but it also means **if the passphrase is lost, the backup is lost
+#    too**. Keeping it separately, off the VPS, is the owner's job, outside this script.
 #
-# ⚠️ **বারবার চালানো নিরাপদ** — `rclone copy` কেবল অনুপস্থিত ফাইল তোলে।
+# Careful: **safe to run repeatedly** - `rclone copy` only uploads missing files.
 #
-# চালানো:  bash deploy/offsite-backup.sh
-# সেটআপ:   deploy/README.md § R5
+# Run:    bash deploy/offsite-backup.sh
+# Setup:  deploy/README.md § R5
 set -euo pipefail
 
 COMPOSE_DIR="${COMPOSE_DIR:-/opt/oxeio/oxeio-monitor}"
@@ -33,12 +33,13 @@ say()  { printf '   %s✓%s %s\n' "$c_ok" "$c_off" "$1"; }
 warn() { printf '   %s⚠%s %s\n' "$c_warn" "$c_off" "$1"; }
 die()  { printf '\n%s❌ %s%s\n' "$c_err" "$1" "$c_off" >&2; notify "❌ Offsite backup failed — $1"; exit 1; }
 
-# ── টেলিগ্রাম ────────────────────────────────────────────────────────────────
+# ── Telegram ─────────────────────────────────────────────────────────────────
 #
-# ⚠️ টোকেন ও chat id পড়া হয় অ্যাপের নিজের `.env` থেকে — দ্বিতীয় জায়গায়
-#    লিখলে একদিন একটা বদলে অন্যটা থেকে যেত, আর ব্যর্থতার খবরটাই হারাত।
-# ⚠️ কনফিগ না থাকলে স্ক্রিপ্ট **থামে না**, শুধু চুপ থাকে: খবর না পাঠাতে
-#    পারা কোনো কারণ নয় ব্যাকআপ না তোলার।
+# Careful: the token and chat id are read from the app's own `.env` - writing
+#    them in a second place would one day leave one changed and the other
+#    stale, and the failure report itself would be lost.
+# Careful: with no config the script does **not stop**, it just stays quiet:
+#    being unable to send the news is no reason to skip the backup.
 notify() {
   local text="$1" token chat
   [[ -f "$COMPOSE_DIR/.env" ]] || return 0
@@ -52,17 +53,18 @@ notify() {
 
 printf '\n%s── R5 · অফসাইট ব্যাকআপ%s\n' "$c_dim" "$c_off"
 
-# ── ০· পর্দায় বসানো কনফিগ (R5, ১৮ আগস্ট) ─────────────────────────────────
+# ── 0. Config set on screen ───────────────────────────────────────────────
 #
-# ⭐⭐ B2-র কী এখন **ডাটাবেসে** বসে (Settings → Backup), তাই VPS-এ SSH করে
-#    `rclone config` চালানোর দরকার নেই। ⚠️ পুরোনো পথও অটুট: `RCLONE_REMOTE`
-#    আগে থেকে সেট থাকলে ডাটাবেস ছোঁয়াই হয় না।
+# The B2 key now lives **in the database** (Settings -> Backup), so there is no
+#    need to SSH into the VPS and run `rclone config`. Careful: the old path
+#    still works: if `RCLONE_REMOTE` is already set, the database is not touched.
 #
-# ⭐ কনফিগ ফাইল লেখা হয় না — rclone নিজেই `RCLONE_CONFIG_<নাম>_<ঘর>` চলক
-#    পড়ে। ⚠️ ফলে key কখনো ডিস্কে বসে না, শুধু এই প্রসেসের পরিবেশে থাকে।
+# No config file is written - rclone itself reads `RCLONE_CONFIG_<NAME>_<FIELD>`
+#    variables. Careful: so the key never lands on disk, it exists only in
+#    this process's environment.
 if [[ -z "${REMOTE}" ]] && command -v docker >/dev/null 2>&1; then
-  # ⚠️ ডাটাবেসের নাম/ইউজার হোস্টের পরিবেশে থাকে না — compose-এর `.env`-এ
-  #    থাকে, ঠিক যেমন টেলিগ্রামের টোকেন (`notify()` একই কাজ করে)।
+  # Careful: the database name/user are not in the host's environment - they are
+  #    in compose's `.env`, just like the Telegram token (`notify()` does the same).
   pg_user=$(grep -E '^POSTGRES_USER=' "$COMPOSE_DIR/.env" 2>/dev/null | cut -d= -f2- || true)
   pg_db=$(grep -E '^POSTGRES_DB=' "$COMPOSE_DIR/.env" 2>/dev/null | cut -d= -f2- || true)
 
@@ -81,7 +83,7 @@ if [[ -z "${REMOTE}" ]] && command -v docker >/dev/null 2>&1; then
   fi
 fi
 
-# ── ১· যা ছাড়া চলবে না ───────────────────────────────────────────────────────
+# ── 1. What it cannot run without ─────────────────────────────────────────────
 command -v rclone >/dev/null 2>&1 || die \
   'rclone নেই। বসান: curl https://rclone.org/install.sh | sudo bash'
 
@@ -90,28 +92,30 @@ command -v rclone >/dev/null 2>&1 || die \
 
 [[ -d "$BACKUP_DIR" ]] || die "ব্যাকআপ ফোল্ডার নেই: $BACKUP_DIR"
 
-# ⚠️⚠️ **ফোল্ডার আছে আর ফোল্ডারে ডাম্প আছে — দুটো আলাদা।** খালি ফোল্ডার
-#    পেয়ে "সফল" বলে বেরিয়ে গেলে স্ক্রিপ্টটা রোজ সবুজ দেখাত, অথচ অফসাইটে
-#    কিছুই যেত না। এটাই এই প্রকল্পের সবচেয়ে চেনা নীরব ব্যর্থতা (G129, G133)।
+# Careful: **the folder existing and the folder containing dumps are two
+#    different things.** Exiting with "success" on an empty folder would make the
+#    script look green every day while nothing went offsite. This is the best-known
+#    silent failure in this project.
 count=$(find "$BACKUP_DIR" -maxdepth 1 -name '*.dump.enc' -type f | wc -l)
 [[ "$count" -gt 0 ]] || die \
   "$BACKUP_DIR-এ একটাও ডাম্প নেই — রাতের ব্যাকআপ (K02) কি চলছে?"
 say "$count টা ডাম্প পাওয়া গেল"
 
-# ── ২· রিমোট সত্যিই পৌঁছানো যায় কি না ────────────────────────────────────────
+# ── 2. Can the remote really be reached ────────────────────────────────────────
 #
-# ⚠️ আগে যাচাই করা হয়, কারণ `rclone copy` ভুল রিমোটেও **সফল** দেখাতে পারে
-#    (নতুন ফোল্ডার বানিয়ে ফেলে)। "পৌঁছেছি" আর "ঠিক জায়গায় পৌঁছেছি" এক নয়।
+# Careful: verify first, because `rclone copy` can look **successful** even
+#    against a wrong remote (it creates a new folder). "Reached" and "reached the right place" differ.
 rclone lsd "$REMOTE" >/dev/null 2>&1 || rclone mkdir "$REMOTE" >/dev/null 2>&1 || die \
   "রিমোটে পৌঁছানো যাচ্ছে না: $REMOTE (rclone config দিয়ে যাচাই করুন)"
 say "রিমোট পৌঁছানো যাচ্ছে — $REMOTE"
 
-# ── ৩· তোলা ──────────────────────────────────────────────────────────────────
+# ── 3. Upload ──────────────────────────────────────────────────────────────────
 #
-# ⭐ `copy`, `sync` **নয়** — এটাই এখানকার সবচেয়ে জরুরি সিদ্ধান্ত।
-# ⚠️⚠️ `sync` রিমোটকে উৎসের হুবহু নকল বানায়, অর্থাৎ **সার্ভারের ডিস্ক মুছে
-#    গেলে পরের রানেই অফসাইট কপিও মুছে যেত** — ঠিক সেই মুহূর্তে, যখন ওটাই
-#    একমাত্র বাকি কপি। ছাঁটাই নিচে আলাদা করে, বয়স ধরে।
+# `copy`, **not** `sync` - this is the most important decision here.
+# Careful: `sync` makes the remote an exact mirror of the source, so **if the
+#    server's disk were wiped, the next run would delete the offsite copy too** -
+#    at the very moment it is the only copy left. Pruning is done separately
+#    below, by age.
 before=$(rclone size "$REMOTE" --json 2>/dev/null | grep -o '"count":[0-9]*' | cut -d: -f2 || echo 0)
 
 rclone copy "$BACKUP_DIR" "$REMOTE" \
@@ -122,15 +126,15 @@ rclone copy "$BACKUP_DIR" "$REMOTE" \
 after=$(rclone size "$REMOTE" --json 2>/dev/null | grep -o '"count":[0-9]*' | cut -d: -f2 || echo 0)
 say "রিমোটে ফাইল: $before → $after"
 
-# ── ৪· পুরোনো কপি ছাঁটা ──────────────────────────────────────────────────────
+# ── 4. Prune old copies ────────────────────────────────────────────────────────
 #
-# ⚠️ ছাঁটাই **রিমোটের বয়স ধরে**, স্থানীয় ফোল্ডারের সাথে মিলিয়ে নয় — উপরের
-#    `sync`-এর ফাঁদটাই এখানে ফিরে আসত।
+# Careful: pruning is **by the remote's age**, not by comparing with the local
+#    folder - the `sync` trap above would come back here.
 age_days=$(( KEEP_WEEKS * 7 ))
 rclone delete "$REMOTE" --min-age "${age_days}d" --include '*.dump.enc*' 2>/dev/null || true
 say "$KEEP_WEEKS সপ্তাহের পুরোনো কপি ছাঁটা হলো"
 
-# ── ৫· খবর ───────────────────────────────────────────────────────────────────
+# ── 5. Report ─────────────────────────────────────────────────────────────────
 newest=$(find "$BACKUP_DIR" -maxdepth 1 -name '*.dump.enc' -type f -printf '%f\n' \
   | sort | tail -1)
 size=$(du -sh "$BACKUP_DIR" | cut -f1)
