@@ -234,6 +234,12 @@ item); routes are in `App.tsx`.
 Build options are fixed in the MSI: `build.ps1 -ServerUrl … -UpdatePublicKey …
 -HideLatestShot`.
 
+Updates: the owner publishes on Settings → Agent updates, or whoever runs the
+server publishes from the command line
+(`node dist/scripts/publish-agent-version.js`, deploy/README.md › "Publishing
+from the server's command line"). Agents from 0.5.1 react to the heartbeat's
+`update_agent` within about a minute; staff confirm the install from the tray.
+
 ## Tests
 
 | Where | Command | Needs |

@@ -833,7 +833,31 @@ active, the script says so; add the same exclusions in that product's console.
 4. Start with the stage **A few PCs first**, then move to **About half** and
    **Everyone**; **Stopped** halts a bad release.
 
-The agents download the update, check its SHA-256, and install it.
+The agents download the update, check its SHA-256, and show **Install update**
+in the tray; staff click it (Windows asks for administrator rights). Agents
+from 0.5.1 on look for it within about a minute of publishing; older ones at
+their next 6-hourly check (restarting the agent makes it check two minutes
+later). The version typed must match the one in the file name — the server
+refuses `0.5.5` for `oXeioAgent-0.5.0.msi`.
+
+#### Publishing from the server's command line
+
+Whoever runs the server can publish without the owner's dashboard session —
+same checks as the dashboard, the SHA-256 is required, and the audit log shows
+`via: system:cli` instead of a person:
+
+```bash
+# inside the API container; --dry-run checks everything and writes nothing
+node dist/scripts/publish-agent-version.js --version <version> \
+  --msi updates/oXeioAgent-<version>.msi --sha256 <sha256sum of the file> \
+  --stage all --dry-run
+# then the same without --dry-run
+```
+
+`--stage`: `canary` (A few PCs first, the default), `partial` (About half),
+`all` (Everyone), `halted` (Stopped). `--notes "…"` adds release notes. Exit
+codes: 0 published (or a clean dry run), 2 bad arguments, 3 refused by a check
+(the reason is printed), 1 anything else.
 
 #### Signed agent updates
 

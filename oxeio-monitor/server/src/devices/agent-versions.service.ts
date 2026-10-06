@@ -150,10 +150,90 @@ export class AgentVersionsService {
    * the cause was a typo.
    */
   async publish(
-    actor: SessionUser,
+    actor: SessionUser | PublishActor,
     dto: PublishVersionDto,
-    ip: string,
+    ip: string | null,
   ): Promise<AgentVersionView> {
+    const { file, sha256, signature, stage, autoPilot } = await this.plan(dto);
+
+    const row = await this.prisma.agentVersion.create({
+      data: {
+        version: dto.version,
+        msiPath: dto.msiPath,
+        sha256,
+        signature,
+        releaseNotes: dto.releaseNotes ?? null,
+        rolloutStage: stage,
+        isMandatory: dto.isMandatory ?? false,
+        pilotDeviceId: autoPilot,
+      },
+    });
+
+    // a person on the dashboard, or the server's command line (no user: `via` says who)
+    const person = 'userId' in actor;
+    await this.audit.record({
+      userId: person ? actor.userId : null,
+      action: 'publish_agent_version',
+      targetType: 'agent_version',
+      targetId: row.version,
+      ipAddress: ip,
+      // Careful: `autoPilot` goes into the audit too — making one machine the
+      // guinea pig is a decision, and silent decisions are not kept in this system
+      meta: {
+        sha256,
+        signed: signature !== null,
+        stage: row.rolloutStage,
+        sizeBytes: file.size,
+        autoPilotDeviceId: autoPilot,
+        ...(person ? {} : { via: actor.via }),
+      },
+    });
+    this.logger.warn(
+      `agent ${row.version} published · ${row.rolloutStage} · ${file.size} bytes`,
+    );
+
+    if (autoPilot !== null) {
+      this.logger.warn(
+        `agent ${row.version}: no device fell in the ${row.rolloutStage} bucket, ` +
+          `so device #${autoPilot} was picked as pilot — otherwise the rollout ` +
+          'could never gather proof and would stay at this stage forever (G168)',
+      );
+    }
+
+    return {
+      version: row.version,
+      sha256: row.sha256,
+      sizeBytes: file.size,
+      rolloutStage: row.rolloutStage,
+      isMandatory: row.isMandatory,
+      releaseNotes: row.releaseNotes,
+      releasedAt: row.releasedAt.toISOString(),
+      fileMissing: false,
+      signed: signature !== null,
+      devicesOn: 0,
+      pilotDeviceId: row.pilotDeviceId,
+      pilotLabel: await this.pilotLabelOf(row.pilotDeviceId),
+    };
+  }
+
+  /**
+   * Every check `publish()` makes, without writing anything — what the
+   * command line's `--dry-run` shows.
+   */
+  async preview(dto: PublishVersionDto): Promise<PublishPlanView> {
+    const { file, sha256, signature, stage, autoPilot } = await this.plan(dto);
+    return {
+      version: dto.version,
+      msiPath: dto.msiPath,
+      sha256,
+      sizeBytes: file.size,
+      signed: signature !== null,
+      rolloutStage: stage,
+      autoPilotDeviceId: autoPilot,
+    };
+  }
+
+  private async plan(dto: PublishVersionDto) {
     const existing = await this.prisma.agentVersion.findUnique({
       where: { version: dto.version },
     });
@@ -217,63 +297,9 @@ export class AgentVersionsService {
      */
     const autoPilot = await this.autoPilotFor(stage, dto.version, new Date());
 
-    const row = await this.prisma.agentVersion.create({
-      data: {
-        version: dto.version,
-        msiPath: dto.msiPath,
-        sha256,
-        signature,
-        releaseNotes: dto.releaseNotes ?? null,
-        rolloutStage: stage,
-        isMandatory: dto.isMandatory ?? false,
-        pilotDeviceId: autoPilot,
-      },
-    });
-
-    await this.audit.record({
-      userId: actor.userId,
-      action: 'publish_agent_version',
-      targetType: 'agent_version',
-      targetId: row.version,
-      ipAddress: ip,
-      // Careful: `autoPilot` goes into the audit too — making one machine the
-      // guinea pig is a decision, and silent decisions are not kept in this system
-      meta: {
-        sha256,
-        signed: signature !== null,
-        stage: row.rolloutStage,
-        sizeBytes: file.size,
-        autoPilotDeviceId: autoPilot,
-      },
-    });
-
-    this.logger.warn(
-      `agent ${row.version} published · ${row.rolloutStage} · ${file.size} bytes`,
-    );
-
-    if (autoPilot !== null) {
-      this.logger.warn(
-        `agent ${row.version}: no device fell in the ${row.rolloutStage} bucket, ` +
-          `so device #${autoPilot} was picked as pilot — otherwise the rollout ` +
-          'could never gather proof and would stay at this stage forever (G168)',
-      );
-    }
-
-    return {
-      version: row.version,
-      sha256: row.sha256,
-      sizeBytes: file.size,
-      rolloutStage: row.rolloutStage,
-      isMandatory: row.isMandatory,
-      releaseNotes: row.releaseNotes,
-      releasedAt: row.releasedAt.toISOString(),
-      fileMissing: false,
-      signed: signature !== null,
-      devicesOn: 0,
-      pilotDeviceId: row.pilotDeviceId,
-      pilotLabel: await this.pilotLabelOf(row.pilotDeviceId),
-    };
+    return { file, sha256, signature, stage, autoPilot };
   }
+
 
   /**
    * Change the rollout stage — `canary` → `partial` → `all`, or `halted`.
@@ -481,4 +507,21 @@ export class AgentVersionsService {
 export function versionInFileName(msiPath: string): string | null {
   const name = msiPath.split(/[\\/]/).pop() ?? '';
   return /(?<![\d.])(\d+\.\d+\.\d+)(?!\.?\d)/.exec(name)?.[1] ?? null;
+}
+
+/** Who publishes when it is not a person on the dashboard */
+export interface PublishActor {
+  /** e.g. `system:cli` — written to the audit log */
+  via: string;
+}
+
+/** What `--dry-run` shows: everything checked, nothing written */
+export interface PublishPlanView {
+  version: string;
+  msiPath: string;
+  sha256: string;
+  sizeBytes: number;
+  signed: boolean;
+  rolloutStage: RolloutStage;
+  autoPilotDeviceId: number | null;
 }

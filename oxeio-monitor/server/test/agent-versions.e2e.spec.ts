@@ -481,3 +481,54 @@ describe('POST /agent-versions: a typo in the version is caught', () => {
     expect((await publish({ version: '0.5.0', msiPath: rel })).status).toBe(201);
   });
 });
+
+describe('publishing from the command line (src/scripts/publish-agent-version.ts)', () => {
+  const run = async (args: string[]) => {
+    const { runPublish } = await import('../src/devices/publish-cli');
+    const { AgentVersionsService } = await import('../src/devices/agent-versions.service');
+    const lines: string[] = [];
+    const code = await runPublish(h.app.get(AgentVersionsService), args, (l) => lines.push(l));
+    return { code, out: lines.join('\n') };
+  };
+
+  it('needs the version, the file and its sha256', async () => {
+    expect((await run(['--version', '0.5.1', '--msi', 'updates/x.msi'])).code).toBe(2);
+    expect((await run(['--msi', 'updates/x.msi', '--sha256', SHA])).code).toBe(2);
+    const bad = await run(['--version', '0.5.1', '--msi', 'updates/x.msi', '--sha256', SHA, '--stage', 'nobody']);
+    expect(bad.code).toBe(2);
+    expect(bad.out).toMatch(/Unknown --stage/);
+  });
+
+  it('dry run checks everything and writes nothing', async () => {
+    const rel = `updates/${randomUUID()}/oXeioAgent-0.5.1.msi`;
+    await putMsi(rel);
+    const res = await run(['--version', '0.5.1', '--msi', rel, '--sha256', SHA, '--stage', 'all', '--dry-run']);
+    expect(res).toMatchObject({ code: 0 });
+    expect(res.out).toMatch(/dry run — would publish 0\.5\.1 · all/);
+    expect(await h.prisma.agentVersion.count()).toBe(0);
+  });
+
+  it('publishes with the same checks as the dashboard, audited as the command line', async () => {
+    const rel = `updates/${randomUUID()}/oXeioAgent-0.5.1.msi`;
+    await putMsi(rel);
+
+    const wrongHash = await run(['--version', '0.5.1', '--msi', rel, '--sha256', 'a'.repeat(64)]);
+    expect(wrongHash.code).toBe(3);
+    expect(wrongHash.out).toMatch(/does not match the file/);
+
+    const typo = await run(['--version', '0.5.5', '--msi', rel, '--sha256', SHA]);
+    expect(typo.code).toBe(3);
+
+    const ok = await run(['--version', '0.5.1', '--msi', rel, '--sha256', SHA, '--stage', 'all', '--notes', 'faster updates']);
+    expect(ok.code).toBe(0);
+    expect(ok.out).toMatch(/^published 0\.5\.1 · all/);
+
+    const row = await h.prisma.agentVersion.findUniqueOrThrow({ where: { version: '0.5.1' } });
+    expect(row).toMatchObject({ rolloutStage: 'all', releaseNotes: 'faster updates' });
+    const audit = await h.prisma.auditLog.findFirstOrThrow({ where: { action: 'publish_agent_version' } });
+    expect(audit.userId).toBeNull();
+    expect(audit.meta).toMatchObject({ via: 'system:cli', stage: 'all' });
+
+    expect((await run(['--version', '0.5.1', '--msi', rel, '--sha256', SHA])).code).toBe(3);
+  });
+});
