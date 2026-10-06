@@ -20,7 +20,7 @@ RUN xcaddy build \
 
 FROM caddy:2-alpine AS runtime
 COPY --from=caddy-build /usr/bin/caddy /usr/bin/caddy
-ENV TZ=Asia/Dhaka
+ENV TZ=UTC
 RUN apk add --no-cache tzdata
 COPY --from=build /app/dist /srv
 COPY coolify/Caddyfile /etc/caddy/Caddyfile

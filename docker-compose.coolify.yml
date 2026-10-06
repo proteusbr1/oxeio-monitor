@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-      TZ: Asia/Dhaka
+      TZ: UTC
     volumes:
       - oxeio-pgdata:/var/lib/postgresql/data
     networks:
@@ -99,7 +99,7 @@ services:
       api:
         condition: service_healthy
     environment:
-      TZ: Asia/Dhaka
+      TZ: UTC
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
       interval: 30s
