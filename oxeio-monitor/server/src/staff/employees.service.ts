@@ -73,6 +73,8 @@ const EMPLOYEE_SELECT = {
   dailyDesignTarget: true,
   policyId: true,
   monthlySalary: true,
+  payBasis: true,
+  hourlyRate: true,
   joinedOn: true,
   leftOn: true,
   status: true,
@@ -214,7 +216,7 @@ export class EmployeesService {
     dto: CreateEmployeeDto,
     ip: string,
   ): Promise<EmployeeView> {
-    this.assertMaySetSalary(actor, dto.monthlySalary);
+    this.assertMaySetPay(actor, dto);
     await this.assertPolicyExists(dto.policyId);
 
     const row = await this.createWithGeneratedCode(dto);
@@ -228,8 +230,8 @@ export class EmployeesService {
       meta: { op: 'create', empCode: row.empCode, fullName: row.fullName },
     });
 
-    if (dto.monthlySalary !== undefined) {
-      await this.recordSalaryChange(actor, ip, row.id, null, dto.monthlySalary);
+    if (dto.monthlySalary !== undefined || dto.hourlyRate !== undefined || dto.payBasis !== undefined) {
+      await this.recordPayChange(actor, ip, row.id, null, termsOf(row));
     }
 
     return toEmployeeView(row, actor.role);
@@ -241,11 +243,11 @@ export class EmployeesService {
     dto: UpdateEmployeeDto,
     ip: string,
   ): Promise<EmployeeView> {
-    this.assertMaySetSalary(actor, dto.monthlySalary);
+    this.assertMaySetPay(actor, dto);
 
     const before = await this.prisma.employee.findUnique({
       where: { id },
-      select: { id: true, empCode: true, monthlySalary: true },
+      select: { id: true, empCode: true, monthlySalary: true, payBasis: true, hourlyRate: true },
     });
     if (!before) throw new NotFoundException('Staff member not found');
 
@@ -264,6 +266,8 @@ export class EmployeesService {
     // Careful: `null` is a valid value too (removing the type), hence `!== undefined`.
     if (dto.staffType !== undefined) data.staffType = dto.staffType;
     if (dto.monthlySalary !== undefined) data.monthlySalary = dto.monthlySalary;
+    if (dto.payBasis !== undefined) data.payBasis = dto.payBasis;
+    if (dto.hourlyRate !== undefined) data.hourlyRate = dto.hourlyRate;
     // Careful: `null` is valid too: "clear their own number and fall back to the policy".
     if (dto.dailyDesignTarget !== undefined) {
       data.dailyDesignTarget = dto.dailyDesignTarget;
@@ -295,7 +299,8 @@ export class EmployeesService {
     // column name. Passing the key straight would write `policy` into the audit
     // log, which would not match the API's `policyId`.
     const changed = Object.keys(data)
-      .filter((k) => k !== 'monthlySalary')
+      // pay changes get their own audit rows (recordPayChange)
+      .filter((k) => !PAY_FIELDS.has(k))
       .map((k) => (k === 'policy' ? 'policyId' : k));
     if (changed.length > 0) {
       await this.audit.record({
@@ -308,14 +313,8 @@ export class EmployeesService {
       });
     }
 
-    if (dto.monthlySalary !== undefined) {
-      await this.recordSalaryChange(
-        actor,
-        ip,
-        id,
-        before.monthlySalary === null ? null : before.monthlySalary.toFixed(2),
-        dto.monthlySalary,
-      );
+    if (dto.monthlySalary !== undefined || dto.hourlyRate !== undefined || dto.payBasis !== undefined) {
+      await this.recordPayChange(actor, ip, id, termsOf(before), termsOf(row));
     }
 
     return toEmployeeView(row, actor.role);
@@ -586,16 +585,23 @@ export class EmployeesService {
    * Careful: no row is written when `from === null`: there was no salary
    * before, so there is no "old value" (a new employee).
    */
-  private async recordSalaryChange(
+  /**
+   * A change of pay terms (basis, salary, hourly rate): the old terms are kept
+   * as history up to last month (or this one, if it is closed), so a month
+   * already paid is never recomputed with the new terms.
+   */
+  private async recordPayChange(
     actor: SessionUser,
     ip: string,
     employeeId: number,
-    from: string | null,
-    to: string | null,
+    before: PayTerms | null,
+    after: PayTerms,
   ): Promise<void> {
-    if (from === to) return;
+    if (before !== null && sameTerms(before, after)) return;
+    const from = before;
+    const to = after;
 
-    if (from !== null) {
+    if (from !== null && (from.monthlySalary !== null || from.hourlyRate !== null)) {
       const yearMonth = workDateOf(new Date()).toISOString().slice(0, 7);
       const closed = await this.prisma.monthClosure.findUnique({
         where: { yearMonth },
@@ -615,7 +621,9 @@ export class EmployeesService {
         create: {
           employeeId,
           throughMonth: supersededThrough(yearMonth, closed !== null),
-          monthlySalary: from,
+          payBasis: from.payBasis,
+          monthlySalary: from.monthlySalary,
+          hourlyRate: from.hourlyRate,
           changedById: actor.userId,
         },
       });
@@ -629,7 +637,7 @@ export class EmployeesService {
       ipAddress: ip,
       // The audit log is itself owner-only, so storing the real amount here is
       // safe, and without "from X to Y" half the audit would lose its meaning.
-      meta: { op: 'update_salary', from, to },
+      meta: { op: 'update_salary', from: from === null ? null : { ...from }, to: { ...to } },
     });
   }
 
@@ -783,6 +791,8 @@ export class EmployeesService {
       policyId: dto.policyId ?? null,
       // The string goes straight into Decimal; no float on the way.
       monthlySalary: dto.monthlySalary ?? null,
+      payBasis: dto.payBasis ?? 'monthly',
+      hourlyRate: dto.hourlyRate ?? null,
       joinedOn: dto.joinedOn
         ? this.calendarDate(dto.joinedOn, 'joinedOn')
         : null,
@@ -830,11 +840,13 @@ export class EmployeesService {
    * normal (they are not touching it), but sending `null` means "clear the
    * salary", which is also touching salary, so it is equally forbidden.
    */
-  private assertMaySetSalary(
+  private assertMaySetPay(
     actor: SessionUser,
-    monthlySalary: string | null | undefined,
+    dto: { monthlySalary?: string | null; payBasis?: string; hourlyRate?: string | null },
   ): void {
-    if (monthlySalary === undefined || canSeeSalary(actor.role)) return;
+    const touchesPay =
+      dto.monthlySalary !== undefined || dto.payBasis !== undefined || dto.hourlyRate !== undefined;
+    if (!touchesPay || canSeeSalary(actor.role)) return;
 
     throw new ForbiddenException(
       'Only the owner can set or clear salary. Save the rest without the salary field.',
@@ -865,4 +877,29 @@ export class EmployeesService {
     }
     return err;
   }
+}
+
+/** The fields that make up someone's pay — owner-only, with their own audit rows */
+const PAY_FIELDS = new Set(['monthlySalary', 'payBasis', 'hourlyRate']);
+
+interface PayTerms {
+  payBasis: 'monthly' | 'hourly' | 'none';
+  monthlySalary: string | null;
+  hourlyRate: string | null;
+}
+
+function termsOf(row: {
+  payBasis: 'monthly' | 'hourly' | 'none';
+  monthlySalary: { toFixed(d: number): string } | null;
+  hourlyRate: { toFixed(d: number): string } | null;
+}): PayTerms {
+  return {
+    payBasis: row.payBasis,
+    monthlySalary: row.monthlySalary === null ? null : row.monthlySalary.toFixed(2),
+    hourlyRate: row.hourlyRate === null ? null : row.hourlyRate.toFixed(2),
+  };
+}
+
+function sameTerms(a: PayTerms, b: PayTerms): boolean {
+  return a.payBasis === b.payBasis && a.monthlySalary === b.monthlySalary && a.hourlyRate === b.hourlyRate;
 }

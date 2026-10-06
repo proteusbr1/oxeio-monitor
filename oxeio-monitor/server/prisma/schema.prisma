@@ -156,11 +156,46 @@ enum RolloutStage {
 // ══════════════════════════ reference / config ══════════════════════════
 
 /// Careful: this replaces a shifts table. There is no shift window, lunch window or fixed arrival time.
+/// How a work policy states the hours it expects (see src/calendar/work-regime.ts).
+/// Every basis becomes "hours per workday"; the month's target is that times
+/// the workdays in it (minus leave).
+enum TargetBasis {
+  /// monthlyTargetHours ÷ expectedWorkdays per workday (the original model)
+  month
+  /// weeklyTargetHours ÷ working days in the week
+  week
+  /// dailyTargetHours per workday — e.g. a fixed 09:00–18:00 schedule with a 1 h break
+  day
+  /// no target: hours are recorded and shown, nobody is ahead or behind
+  none
+}
+
+/// How a person is paid (payroll)
+enum PayBasis {
+  /// a monthly salary, prorated to the days employed; missing hours deducted if the policy says so
+  monthly
+  /// an hourly rate × hours counted (paid leave included)
+  hourly
+  /// not paid through oXeio — hours only
+  none
+}
+
 model WorkPolicy {
   id                 Int     @id @default(autoincrement())
   name               String
   /// The only target
+  targetBasis        TargetBasis @default(month) @map("target_basis")
   monthlyTargetHours Decimal @default(208) @map("monthly_target_hours") @db.Decimal(6, 2)
+  /// basis = week: hours per week (e.g. 40)
+  weeklyTargetHours  Decimal? @map("weekly_target_hours") @db.Decimal(5, 2)
+  /// basis = day: hours per workday (e.g. 8)
+  dailyTargetHours   Decimal? @map("daily_target_hours") @db.Decimal(4, 2)
+  /// break taken out of a fixed schedule (basis = day with office hours set); informational
+  breakMinutes       Int?     @map("break_minutes")
+  /// overtime (hours above the month's target) is paid at this multiple of the hourly rate; null = not paid
+  overtimeMultiplier Decimal? @map("overtime_multiplier") @db.Decimal(4, 2)
+  /// monthly salaries: missing hours are deducted from pay (the original rule)
+  deductShortfall    Boolean  @default(true) @map("deduct_shortfall")
   /// Fallback only: the real count comes from the calendar, § 2.1-b
   expectedWorkdays   Int     @default(26) @map("expected_workdays")
   /// Careful: this is not a block: hours worked on a day off are still counted in full.
@@ -244,7 +279,10 @@ model Employee {
   /// Monthly salary: **only the owner can see it** ([ADR-023](../../docs/05-Options-Decisions.md)).
   /// Needed to work out the money for a shortfall: (salary / monthly target hours) x shortfall hours.
   /// Careful: Decimal, not Float: money is never kept in a binary float.
+  payBasis       PayBasis       @default(monthly) @map("pay_basis")
   monthlySalary  Decimal?       @map("monthly_salary") @db.Decimal(12, 2)
+  /// payBasis = hourly: the rate per hour, in the configured currency
+  hourlyRate     Decimal?       @map("hourly_rate") @db.Decimal(12, 2)
   /// Old salaries, so past payroll does not move (see the SalaryPeriod doc)
   salaryPeriods  SalaryPeriod[]
   joinedOn       DateTime?      @map("joined_on") @db.Date
@@ -1005,7 +1043,9 @@ model SalaryPeriod {
    *    open-ended range after the last row, and it would collide with the current salary.
    */
   throughMonth  String   @map("through_month") @db.Char(7)
-  monthlySalary Decimal  @map("monthly_salary") @db.Decimal(12, 2)
+  payBasis      PayBasis @default(monthly) @map("pay_basis")
+  monthlySalary Decimal? @map("monthly_salary") @db.Decimal(12, 2)
+  hourlyRate    Decimal? @map("hourly_rate") @db.Decimal(12, 2)
   /// Who changed it and why: the audit has a row, but on the payroll screen this is closer to hand
   note          String?
   changedById   Int?     @map("changed_by_id")

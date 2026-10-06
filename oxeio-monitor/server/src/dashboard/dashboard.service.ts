@@ -10,6 +10,7 @@ import {
   nextLocalMidnight,
   workDateOf,
 } from '../agent/util/work-time';
+import { REGIME_SELECT, targetSpreadOf } from '../calendar/work-regime';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   decideLiveStatus,
@@ -34,8 +35,6 @@ import { isObserved } from '../summary/summary.math';
 import { designTargetOf } from '../summary/design.rules';
 import { trackedFromBy } from '../summary/tracking-start';
 
-const HOUR = 3600;
-
 /**
  * How far back to look for a segment when working out the fallback state.
  *
@@ -49,16 +48,7 @@ const LIVE_STATE_LOOKBACK_SEC = 900;
 /** Used when the employee has no active device — avoids a new array per card */
 const NO_DEVICES: readonly DeviceReport[] = [];
 
-/** Careful: default monthly target when there is no policy (§ 2.1b, 208 hours) */
-const DEFAULT_TARGET_HOURS = 208;
-
-/**
- * Careful: the **denominator** of the daily target when there is no policy —
- * keep it equal to the same-named constant in `summary.service.ts`. If the two
- * differed, this card and `monthly_summary` would again show two numbers,
- * exactly the problem fixed below.
- */
-const DEFAULT_POLICY_WORKDAYS = 26;
+// the target when someone has no policy lives in one place: work-regime.ts › DEFAULT_SPREAD
 
 export interface LiveCard {
   employeeId: number;
@@ -459,9 +449,7 @@ export class DashboardService {
           // it we would have to divide by calendar work days here, and that was
           // the real cause of the gap between the tray and this card.
           select: {
-            monthlyTargetHours: true,
-            weeklyOffDays: true,
-            expectedWorkdays: true,
+            ...REGIME_SELECT,
             // The designer's daily target — shown next to the hours
             dailyDesignTarget: true,
           },
@@ -626,9 +614,8 @@ export class DashboardService {
 
     const cards = employees.map((e): LiveCard => {
       const own = byEmployee.get(e.id) ?? NO_DEVICES;
-      const targetHours = Number(
-        e.policy?.monthlyTargetHours ?? DEFAULT_TARGET_HOURS,
-      );
+      // per month, per week, per day or none — as seconds over workdays
+      const spread = targetSpreadOf(e.policy);
 
       // Careful: when the policy differs, so do the weekly off days, so work
       // days are counted per employee — one number for everyone cannot be assumed.
@@ -656,8 +643,8 @@ export class DashboardService {
         leftOn: e.leftOn,
         weeklyOffDays: rule.weeklyOffDays,
         holidays,
-        monthlyTargetSec: targetHours * HOUR,
-        policyWorkdays: e.policy?.expectedWorkdays ?? DEFAULT_POLICY_WORKDAYS,
+        monthlyTargetSec: spread.periodTargetSec,
+        policyWorkdays: spread.periodWorkdays,
         leaveDates: leaveBy.get(e.id),
       });
 

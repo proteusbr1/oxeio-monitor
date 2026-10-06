@@ -14,15 +14,25 @@ import type { CreateWorkPolicyDto, UpdateWorkPolicyDto } from './calendar.dto';
 import {
   captureWindowProblem,
   DEFAULT_CAPTURE_WINDOW,
+  regimeData,
+  type RegimeInput,
 } from './work-policy.rules';
 import { normaliseOffDays } from '../summary/weekly-off';
 
 export interface WorkPolicyView {
   id: number;
   name: string;
-  /** The only target. Not money, so it goes as a number. */
+  /** how the hours target is stated: month | week | day | none (work-regime.ts) */
+  targetBasis: 'month' | 'week' | 'day' | 'none';
+  /** Not money, so it goes as a number. */
   monthlyTargetHours: number;
   expectedWorkdays: number;
+  weeklyTargetHours: number | null;
+  dailyTargetHours: number | null;
+  breakMinutes: number | null;
+  /** overtime paid at this multiple; null = not paid */
+  overtimeMultiplier: number | null;
+  deductShortfall: boolean;
   weeklyOffDays: readonly number[];
   screenshotFrom: string | null;
   screenshotTo: string | null;
@@ -84,10 +94,12 @@ export class WorkPoliciesService {
       dto.screenshotFrom ?? DEFAULT_CAPTURE_WINDOW.screenshotFrom;
     const screenshotTo = dto.screenshotTo ?? DEFAULT_CAPTURE_WINDOW.screenshotTo;
     this.assertWindow(screenshotFrom, screenshotTo);
+    const regime = this.checkedRegime(dto);
 
     const row = await this.prisma.workPolicy.create({
       data: {
         name: dto.name,
+        ...regime,
         ...(dto.monthlyTargetHours === undefined
           ? {}
           : { monthlyTargetHours: dto.monthlyTargetHours }),
@@ -159,10 +171,13 @@ export class WorkPoliciesService {
     const officeTo = dto.officeTo ?? before.officeTo;
     if (officeFrom && officeTo) this.assertWindow(officeFrom, officeTo);
 
+    const regime = this.checkedRegime(dto, before);
+
     const row = await this.prisma.workPolicy.update({
       where: { id },
       data: {
         ...(dto.name === undefined ? {} : { name: dto.name }),
+        ...regime,
         ...(dto.monthlyTargetHours === undefined
           ? {}
           : { monthlyTargetHours: dto.monthlyTargetHours }),
@@ -319,6 +334,18 @@ export class WorkPoliciesService {
     return toView(row, before._count.employees);
   }
 
+  /** The regime fields, checked (a weekly target needs its weekly hours…) */
+  private checkedRegime(
+    dto: RegimeInput,
+    before?: Parameters<typeof regimeData>[1],
+  ): RegimeInput {
+    try {
+      return regimeData(dto, before);
+    } catch (err) {
+      throw new BadRequestException(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   private assertWindow(from: string, to: string): void {
     const problem = captureWindowProblem(from, to);
     if (problem) throw new BadRequestException(problem);
@@ -332,8 +359,14 @@ function toView(policy: WorkPolicy, employeeCount: number): WorkPolicyView {
     // Decimal -> number. Careful: this could not be done for money, but hours
     // are not money, and `AgentConfigService` sends the agent exactly this way;
     // if the two differed, the dashboard and the agent would show different numbers.
+    targetBasis: policy.targetBasis,
     monthlyTargetHours: Number(policy.monthlyTargetHours),
     expectedWorkdays: policy.expectedWorkdays,
+    weeklyTargetHours: policy.weeklyTargetHours === null ? null : Number(policy.weeklyTargetHours),
+    dailyTargetHours: policy.dailyTargetHours === null ? null : Number(policy.dailyTargetHours),
+    breakMinutes: policy.breakMinutes,
+    overtimeMultiplier: policy.overtimeMultiplier === null ? null : Number(policy.overtimeMultiplier),
+    deductShortfall: policy.deductShortfall,
     weeklyOffDays: policy.weeklyOffDays,
     screenshotFrom: policy.screenshotFrom,
     screenshotTo: policy.screenshotTo,

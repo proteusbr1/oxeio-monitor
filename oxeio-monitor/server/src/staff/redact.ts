@@ -48,6 +48,8 @@ export interface EmployeeRow {
   dailyDesignTarget: number | null;
   policyId: number | null;
   monthlySalary: Decimalish | null;
+  payBasis: 'monthly' | 'hourly' | 'none';
+  hourlyRate: Decimalish | null;
   joinedOn: Date | null;
   leftOn: Date | null;
   status: EmployeeStatus;
@@ -132,6 +134,9 @@ export interface EmployeeBaseView {
 export interface OwnerEmployeeView extends EmployeeBaseView {
   /** Whole currency units, two decimals. `null` when not set, not zero (see payroll). */
   monthlySalary: string | null;
+  /** how they are paid — pay is the owner's alone, so this is too */
+  payBasis: 'monthly' | 'hourly' | 'none';
+  hourlyRate: string | null;
 }
 
 export type EmployeeView = EmployeeBaseView | OwnerEmployeeView;
@@ -206,6 +211,8 @@ export function toEmployeeView(row: EmployeeRow, role: UserRole): EmployeeView {
     // Decimal -> string. Careful: never go through `Number(...)`. Money must
     // never come back as a binary float; 13000.10 must not become 13000.0999...
     monthlySalary: row.monthlySalary === null ? null : row.monthlySalary.toFixed(2),
+    payBasis: row.payBasis,
+    hourlyRate: row.hourlyRate === null ? null : row.hourlyRate.toFixed(2),
   };
 }
 

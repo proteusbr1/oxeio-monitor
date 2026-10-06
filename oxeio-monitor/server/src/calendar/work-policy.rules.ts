@@ -62,3 +62,43 @@ export const DEFAULT_CAPTURE_WINDOW = {
   screenshotFrom: CAPTURE_EARLIEST,
   screenshotTo: CAPTURE_LATEST,
 } as const;
+
+/** The regime fields a policy form sends (see work-regime.ts) */
+export interface RegimeInput {
+  targetBasis?: 'month' | 'week' | 'day' | 'none';
+  weeklyTargetHours?: number | null;
+  dailyTargetHours?: number | null;
+  breakMinutes?: number | null;
+  overtimeMultiplier?: number | null;
+  deductShortfall?: boolean;
+}
+
+/**
+ * The regime part of a policy save, checked: the basis needs its hours (a
+ * weekly target without weekly hours would quietly mean "no target").
+ * `before` is the stored policy on an update, so a partial save is checked
+ * against what it will become.
+ */
+export function regimeData(
+  input: RegimeInput,
+  before?: {
+    targetBasis: string;
+    weeklyTargetHours: { toString(): string } | null;
+    dailyTargetHours: { toString(): string } | null;
+  },
+): RegimeInput {
+  const basis = input.targetBasis ?? (before?.targetBasis as RegimeInput['targetBasis']) ?? 'month';
+  const weekly = input.weeklyTargetHours !== undefined ? input.weeklyTargetHours : before?.weeklyTargetHours ?? null;
+  const daily = input.dailyTargetHours !== undefined ? input.dailyTargetHours : before?.dailyTargetHours ?? null;
+  if (basis === 'week' && (weekly === null || Number(weekly.toString()) <= 0)) {
+    throw new Error('A weekly target needs the hours per week (e.g. 40)');
+  }
+  if (basis === 'day' && (daily === null || Number(daily.toString()) <= 0)) {
+    throw new Error('A daily target needs the hours per day (e.g. 8)');
+  }
+  const out: RegimeInput = {};
+  for (const key of ['targetBasis', 'weeklyTargetHours', 'dailyTargetHours', 'breakMinutes', 'overtimeMultiplier', 'deductShortfall'] as const) {
+    if (input[key] !== undefined) (out as Record<string, unknown>)[key] = input[key];
+  }
+  return out;
+}

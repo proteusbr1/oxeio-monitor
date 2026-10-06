@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { SegmentState, type Prisma } from '@prisma/client';
 
 import { workDateOf } from '../agent/util/work-time';
+import { REGIME_SELECT, targetSpreadOf } from '../calendar/work-regime';
 import { PrismaService } from '../prisma/prisma.service';
 import { TargetsService } from '../targets/targets.service';
 import { designFirstSeenInDay, keepKnownLongIds, KNOWN_JOB_FROM } from './design.rules';
@@ -10,7 +11,6 @@ import { prorate } from './proration';
 import {
   elapsedWorkdays,
   observedWorkdays,
-  hoursToSec,
   isWorkday,
   monthBounds,
   rollupMonth,
@@ -18,15 +18,7 @@ import {
   type Span,
 } from './summary.math';
 
-/** Spec default when there is no work policy (07 section 1). */
-const DEFAULT_TARGET_HOURS = 208;
-
-/**
- * Careful: 26 when there is no policy, because 208 / 26 = 8 hours, the spec's
- * daily target. If the two defaults drifted apart, the daily target would
- * silently become another number.
- */
-const DEFAULT_POLICY_WORKDAYS = 26;
+// the target when someone has no policy lives in one place: work-regime.ts › DEFAULT_SPREAD
 
 interface EmployeePolicy {
   id: number;
@@ -618,6 +610,7 @@ export class SummaryService {
         workedSec: sum(rows.map((r) => r.workedSec)),
         adjustmentSec: sum(rows.map((r) => r.adjustmentSec)),
         targetSec: p.targetSec,
+        noTarget: e.targetSec === 0,
         expectedWorkdays: p.employeeWorkdays,
         monthWorkdays: p.monthWorkdays,
         /**
@@ -727,27 +720,23 @@ export class SummaryService {
         id: true,
         joinedOn: true,
         leftOn: true,
-        policy: {
-          select: {
-            monthlyTargetHours: true,
-            weeklyOffDays: true,
-            expectedWorkdays: true,
-          },
-        },
+        policy: { select: REGIME_SELECT },
       },
       orderBy: { id: 'asc' },
     });
 
-    return rows.map((r) => ({
+    return rows.map((r) => {
+      // per month, per week, per day or none — as seconds over workdays
+      const spread = targetSpreadOf(r.policy);
+      return {
       id: r.id,
-      targetSec: hoursToSec(
-        Number(r.policy?.monthlyTargetHours ?? DEFAULT_TARGET_HOURS),
-      ),
-      policyWorkdays: r.policy?.expectedWorkdays ?? DEFAULT_POLICY_WORKDAYS,
+      targetSec: spread.periodTargetSec,
+      policyWorkdays: spread.periodWorkdays,
       weeklyOffDays: r.policy?.weeklyOffDays ?? [],
       joinedOn: r.joinedOn,
       leftOn: r.leftOn,
-    }));
+      };
+    });
   }
 }
 

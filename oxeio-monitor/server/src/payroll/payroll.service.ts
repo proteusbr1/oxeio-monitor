@@ -4,9 +4,10 @@ import { EmployeeStatus } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { DepositsService } from '../deposits/deposits.service';
 import { FeaturesService } from '../features/features.service';
+import { dailyTargetSecOf, hasTarget, REGIME_SELECT } from '../calendar/work-regime';
 import { PrismaService } from '../prisma/prisma.service';
 import { proratedExpectedSec } from '../summary/summary.math';
-import { computePayroll, paisaToTaka, salaryForMonth } from './payroll.math';
+import { computePayroll, paisaToTaka, payTermsForMonth } from './payroll.math';
 
 // G108: **one** definition of uncertainty, shared with the reports
 import { approximateHolidayDates } from '../reports/reports.range';
@@ -71,6 +72,10 @@ export interface PayrollRow {
    * refund could not be explained when they leave.
    */
   netPayable: string | null;
+  /** how this person is paid that month: monthly | hourly | none */
+  payBasis: 'monthly' | 'hourly' | 'none';
+  /** money for overtime (only when the policy pays it); null when not computed */
+  overtimePay: string | null;
 }
 
 export interface PayrollSheet {
@@ -180,7 +185,11 @@ export class PayrollService {
         empCode: true,
         fullName: true,
         staffType: true,
+        payBasis: true,
         monthlySalary: true,
+        hourlyRate: true,
+        // the regime: how the target is stated, overtime and shortfall rules
+        policy: { select: { ...REGIME_SELECT, deductShortfall: true, overtimeMultiplier: true } },
         /**
          * Old salary slices: `salaryForMonth()` picks that month's real number
          * from these.
@@ -190,7 +199,7 @@ export class PayrollService {
          */
         salaryPeriods: {
           where: { throughMonth: { gte: yearMonth } },
-          select: { throughMonth: true, monthlySalary: true },
+          select: { throughMonth: true, payBasis: true, monthlySalary: true, hourlyRate: true },
         },
       },
       orderBy: { empCode: 'asc' },
@@ -230,14 +239,22 @@ export class PayrollService {
        * hours). With an empty history `salaryForMonth()` returns the current
        * value, so nothing changes for those whose salary never changed.
        */
-      const salaryThatMonth = salaryForMonth(
+      const terms = payTermsForMonth(
         yearMonth,
-        e.monthlySalary === null ? null : String(e.monthlySalary),
+        {
+          payBasis: e.payBasis,
+          monthlySalary: e.monthlySalary === null ? null : String(e.monthlySalary),
+          hourlyRate: e.hourlyRate === null ? null : String(e.hourlyRate),
+        },
         e.salaryPeriods.map((s) => ({
           throughMonth: s.throughMonth,
-          monthlySalary: String(s.monthlySalary),
+          payBasis: s.payBasis,
+          monthlySalary: s.monthlySalary === null ? null : String(s.monthlySalary),
+          hourlyRate: s.hourlyRate === null ? null : String(s.hourlyRate),
         })),
       );
+      const salaryThatMonth = terms.monthlySalary;
+      const noTarget = !hasTarget(e.policy);
 
       /**
        * **How much of the target we really observed** (owner's decision: "no
@@ -290,15 +307,24 @@ export class PayrollService {
         overtimeHours: hours(Math.max(0, summary.creditedSec - summary.targetSec)),
       };
 
-      if (salaryThatMonth === null) {
+      const amountMissing =
+        terms.payBasis === 'monthly'
+          ? salaryThatMonth === null
+          : terms.payBasis === 'hourly'
+            ? terms.hourlyRate === null
+            : false;
+      // 'none': not paid through oXeio — hours only, no amounts
+      if (amountMissing || terms.payBasis === 'none') {
         // Not treated as zero. "No salary set" is not "salary is zero", and
         // taking the first for the second would quietly put a wrong number on the sheet.
-        missingSalary.push(e.fullName);
+        if (amountMissing) missingSalary.push(e.fullName);
         rows.push({
           ...base,
+          payBasis: terms.payBasis,
           monthlySalary: null,
-          hourlyRate: null,
+          hourlyRate: terms.hourlyRate === null ? null : Number(terms.hourlyRate).toFixed(2),
           deduction: null,
+          overtimePay: null,
           payable: null,
           // The instalment is still shown: whether the money was due does not
           // depend on whether a salary is set. But the net cannot be computed,
@@ -311,7 +337,7 @@ export class PayrollService {
 
       const line = computePayroll({
         // That month's salary, not the current one (see the note above)
-        monthlySalary: Number(salaryThatMonth),
+        monthlySalary: Number(salaryThatMonth ?? 0),
         targetSec: summary.targetSec,
         creditedSec: summary.creditedSec,
         // The deduction is only against observed days (see the note above)
@@ -321,6 +347,17 @@ export class PayrollService {
         // calculations from two different times.
         workdays: summary.expectedWorkdays,
         monthWorkdays: summary.monthWorkdays,
+        // the regime: how they are paid, and the policy's overtime/shortfall rules
+        payBasis: terms.payBasis,
+        hourlyRate: terms.hourlyRate === null ? undefined : Number(terms.hourlyRate),
+        deductShortfall: e.policy?.deductShortfall ?? true,
+        overtimeMultiplier:
+          e.policy?.overtimeMultiplier === null || e.policy?.overtimeMultiplier === undefined
+            ? null
+            : Number(e.policy.overtimeMultiplier),
+        noTarget,
+        // leave is paid: for an hourly rate, the leave days' hours
+        paidLeaveSec: summary.leaveWorkdays * dailyTargetSecOf(e.policy),
       });
 
       const depositPaisa = depositOf.get(e.id) ?? null;
@@ -340,9 +377,11 @@ export class PayrollService {
         ...base,
         // Not `Number(...).toFixed(2)` on a number: the string came from Decimal,
         // and going through a number midway could silently round the amount
-        monthlySalary: Number(salaryThatMonth).toFixed(2),
+        payBasis: line.payBasis,
+        monthlySalary: salaryThatMonth === null ? null : Number(salaryThatMonth).toFixed(2),
         hourlyRate: paisaToTaka(line.hourlyRatePaisa),
         deduction: paisaToTaka(line.deductionPaisa),
+        overtimePay: paisaToTaka(line.overtimePayPaisa),
         payable: paisaToTaka(line.payablePaisa),
         securityDeposit: takaOrNull(depositPaisa),
         netPayable: paisaToTaka(

@@ -728,6 +728,8 @@ export interface MonthInput {
   observedWorkdays: number;
   /** Days on which worked_sec > 0. */
   daysWithWork: number;
+  /** the policy has no hours target (basis 'none'): target 0 is expected, pace stays 0 */
+  noTarget?: boolean;
 }
 
 export interface MonthNumbers {
@@ -809,7 +811,9 @@ export function rollupMonth(input: MonthInput): MonthNumbers {
    * caught: after removing leave, if days remain the target cannot be 0.
    */
   const billableWorkdays = Math.max(0, expectedWorkdays - leaveWorkdays);
-  if (targetSec === 0 && billableWorkdays > 0) {
+  // a policy with no target (work-regime.ts, basis 'none') is the one
+  // legitimate zero: hours are recorded, nobody is ahead or behind
+  if (targetSec === 0 && billableWorkdays > 0 && !input.noTarget) {
     throw new RangeError('Monthly target cannot be zero when there are workdays');
   }
 
@@ -838,7 +842,7 @@ export function rollupMonth(input: MonthInput): MonthNumbers {
     creditedSec,
     targetSec,
     expectedSec,
-    paceSec: creditedSec - expectedSec,
+    paceSec: input.noTarget ? 0 : creditedSec - expectedSec,
     expectedWorkdays,
     monthWorkdays,
     leaveWorkdays,
@@ -847,8 +851,8 @@ export function rollupMonth(input: MonthInput): MonthNumbers {
     daysWithWork,
     // Careful: division by zero; if someone never worked a day all month, this would be Infinity.
     avgDailySec: daysWithWork > 0 ? Math.round(workedSec / daysWithWork) : 0,
-    overtimeSec: Math.max(0, creditedSec - targetSec),
-    shortfallSec: Math.max(0, targetSec - creditedSec),
+    overtimeSec: input.noTarget ? 0 : Math.max(0, creditedSec - targetSec),
+    shortfallSec: input.noTarget ? 0 : Math.max(0, targetSec - creditedSec),
     /**
      * Careful: with a target of 0, `creditedSec >= 0` is always true, so
      * someone who was not even there that month would show "target met" and

@@ -19,6 +19,7 @@ import {
 } from '../activity/activity.math';
 import { WORK_TIMEZONE, workDateOf } from '../agent/util/work-time';
 import { AuditService } from '../audit/audit.service';
+import { REGIME_SELECT, targetSpreadOf } from '../calendar/work-regime';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   countLeaveWorkdays,
@@ -82,7 +83,6 @@ import {
 } from './reports.types';
 import { isOffWeekday } from '../summary/weekly-off';
 
-const HOUR = 3600;
 const DEFAULT_TOP = 25;
 
 /**
@@ -769,11 +769,7 @@ export class ReportsService {
             // Without fetching it, the calendar-counted work days would creep in
             // here again, which was exactly the source of the two numbers in
             // the report and the tray.
-            select: {
-              monthlyTargetHours: true,
-              expectedWorkdays: true,
-              weeklyOffDays: true,
-            },
+            select: REGIME_SELECT,
           },
         },
         orderBy: { empCode: 'asc' },
@@ -781,11 +777,7 @@ export class ReportsService {
       this.prisma.workPolicy.findFirst({
         where: { isActive: true },
         orderBy: { id: 'asc' },
-        select: {
-          monthlyTargetHours: true,
-          expectedWorkdays: true,
-          weeklyOffDays: true,
-        },
+        select: REGIME_SELECT,
       }),
     ]);
 
@@ -810,7 +802,9 @@ export class ReportsService {
         );
       }
 
-      const monthlyTargetSec = Number(policy.monthlyTargetHours) * HOUR;
+      // per month, per week, per day or none — as seconds over workdays
+      const spread = targetSpreadOf(policy);
+      const monthlyTargetSec = spread.periodTargetSec;
 
       employees.push({
         id: e.id,
@@ -823,8 +817,8 @@ export class ReportsService {
         monthlyTargetSec,
         weeklyOffDays: policy.weeklyOffDays,
         dailyTargetSec: dailyTargetSec(
-          monthlyTargetSec,
-          policy.expectedWorkdays,
+          spread.periodTargetSec,
+          spread.periodWorkdays,
         ),
       });
     }

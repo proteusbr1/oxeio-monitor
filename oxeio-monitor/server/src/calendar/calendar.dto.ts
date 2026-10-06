@@ -30,6 +30,31 @@ export class CreateWorkPolicyDto {
   @IsOptional() @IsInt() @Min(1) @Max(31)
   expectedWorkdays?: number;
 
+  // ── the work regime (calendar/work-regime.ts) ──
+  @IsOptional() @IsIn(['month', 'week', 'day', 'none'])
+  targetBasis?: 'month' | 'week' | 'day' | 'none';
+
+  /** basis = week: hours per week */
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(1) @Max(168)
+  weeklyTargetHours?: number | null;
+
+  /** basis = day: hours per workday */
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.5) @Max(24)
+  dailyTargetHours?: number | null;
+
+  /** a fixed schedule's break, in minutes (informational) */
+  @IsOptional() @IsInt() @Min(0) @Max(480)
+  breakMinutes?: number | null;
+
+  /** overtime paid at this multiple of the hourly rate; null = not paid */
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(1) @Max(5)
+  overtimeMultiplier?: number | null;
+
+  /** monthly salaries: deduct missing hours */
+  @IsOptional() @IsBoolean()
+  deductShortfall?: boolean;
+
+
   /**
    * ISO weekday: Mon = 1 ... Sun = 7, Fri = 5.
    * Careful: this is not a block; if someone works on an off day the hours are counted in full.
@@ -86,6 +111,31 @@ export class UpdateWorkPolicyDto {
 
   @IsOptional() @IsInt() @Min(1) @Max(31)
   expectedWorkdays?: number;
+
+  // ── the work regime (calendar/work-regime.ts) ──
+  @IsOptional() @IsIn(['month', 'week', 'day', 'none'])
+  targetBasis?: 'month' | 'week' | 'day' | 'none';
+
+  /** basis = week: hours per week */
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(1) @Max(168)
+  weeklyTargetHours?: number | null;
+
+  /** basis = day: hours per workday */
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.5) @Max(24)
+  dailyTargetHours?: number | null;
+
+  /** a fixed schedule's break, in minutes (informational) */
+  @IsOptional() @IsInt() @Min(0) @Max(480)
+  breakMinutes?: number | null;
+
+  /** overtime paid at this multiple of the hourly rate; null = not paid */
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(1) @Max(5)
+  overtimeMultiplier?: number | null;
+
+  /** monthly salaries: deduct missing hours */
+  @IsOptional() @IsBoolean()
+  deductShortfall?: boolean;
+
 
   // ISO days (Fri = 5), unique; at most 6, so a week keeps at least one workday
   @IsOptional() @IsArray() @ArrayMaxSize(6) @ArrayUnique()

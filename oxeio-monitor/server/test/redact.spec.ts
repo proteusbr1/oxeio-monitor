@@ -27,6 +27,8 @@ function row(overrides: Partial<EmployeeRow> = {}): EmployeeRow {
     dailyDesignTarget: null,
     policyId: 1,
     monthlySalary: 13000,
+    payBasis: 'monthly',
+    hourlyRate: null,
     joinedOn: new Date('2025-03-01T00:00:00.000Z'),
     leftOn: null,
     status: 'active',

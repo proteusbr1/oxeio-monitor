@@ -53,6 +53,13 @@ export class CreateEmployeeDto {
   @IsOptional() @Matches(TAKA, { message: TAKA_MSG })
   monthlySalary?: string;
 
+  /** how they are paid: a monthly salary, an hourly rate, or not through oXeio */
+  @IsOptional() @IsIn(['monthly', 'hourly', 'none'])
+  payBasis?: 'monthly' | 'hourly' | 'none';
+
+  @IsOptional() @Matches(TAKA, { message: 'hourlyRate must be a string such as "25" or "25.50"' })
+  hourlyRate?: string;
+
   @IsOptional() @Matches(DATE_ONLY, { message: 'joinedOn must be in YYYY-MM-DD format' })
   joinedOn?: string;
 
@@ -108,6 +115,12 @@ export class UpdateEmployeeDto {
   /** A change writes a separate audit row (targetType = `employee_salary`). */
   @IsOptional() @Matches(TAKA, { message: TAKA_MSG })
   monthlySalary?: string | null;
+
+  @IsOptional() @IsIn(['monthly', 'hourly', 'none'])
+  payBasis?: 'monthly' | 'hourly' | 'none';
+
+  @IsOptional() @Matches(TAKA, { message: 'hourlyRate must be a string such as "25" or "25.50"' })
+  hourlyRate?: string | null;
 
   @IsOptional() @Matches(DATE_ONLY)
   joinedOn?: string | null;

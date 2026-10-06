@@ -8,6 +8,7 @@ import {
   isObserved,
   unionSec,
 } from '../summary/summary.math';
+import { REGIME_SELECT, targetSpreadOf } from '../calendar/work-regime';
 import { PrismaService } from '../prisma/prisma.service';
 import { trackedFromBy } from '../summary/tracking-start';
 import { paceSecOf } from './progress.math';
@@ -230,13 +231,7 @@ export class ProgressService {
             leftOn: true,
             // Careful: `weeklyOffDay` is a column of the **work policy**, not of the
             //    employee; the weekly off day is part of policy, not a personal attribute.
-            policy: {
-              select: {
-                monthlyTargetHours: true,
-                weeklyOffDays: true,
-                expectedWorkdays: true,
-              },
-            },
+            policy: { select: REGIME_SELECT },
           },
         }),
         /**
@@ -304,11 +299,9 @@ export class ProgressService {
     // G162 - computed in one place, used in two (pace and the bottom row of My data).
     const monthCreditedSec = monthActiveSec + (adjustmentRow._sum.deltaSec ?? 0);
     const week7ActiveSec = (week7PastRow._sum.workedSec ?? 0) + todayActiveSec;
-    const monthlyTargetHours = Number(
-      // The spec default if there is no policy; passing zero would show infinite
-      // progress when the agent divides.
-      employee?.policy?.monthlyTargetHours ?? 208,
-    );
+    // per month, per week, per day or none — as seconds over workdays
+    // (no policy: the original 208 h over 26 days)
+    const spread = targetSpreadOf(employee?.policy);
 
     const holidays = new Set(holidayRows.map((h) => h.holidayDate.getTime()));
     const off = employee?.policy?.weeklyOffDays ?? [];
@@ -330,8 +323,8 @@ export class ProgressService {
       leftOn: employee?.leftOn ?? null,
       weeklyOffDays: off,
       holidays,
-      monthlyTargetSec: monthlyTargetHours * 3600,
-      policyWorkdays: employee?.policy?.expectedWorkdays ?? 26,
+      monthlyTargetSec: spread.periodTargetSec,
+      policyWorkdays: spread.periodWorkdays,
       leaveDates,
     });
 
