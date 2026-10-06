@@ -11,7 +11,7 @@ import { FeaturesService } from '../../src/features/features.service';
 import { AppSettingsService } from '../../src/settings/app-settings.service';
 import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.setup';
-import { DHAKA_OFFSET_MIN, workDateOf } from '../../src/agent/util/dhaka-time';
+import { LOCAL_OFFSET_MIN, workDateOf } from '../../src/agent/util/work-time';
 import { PrismaService } from '../../src/prisma/prisma.service';
 
 export const OWNER_EMAIL = 'owner@test.local';
@@ -299,10 +299,10 @@ export function todayWindow(seconds: number): {
   // 1 second margin: if endedAt ended up just after "now", the server would
   // see a future timestamp
   const endedAt = new Date(Date.now() - 1_000);
-  const dhakaMidnight = workDateOf(endedAt).getTime() - DHAKA_OFFSET_MIN * 60_000;
+  const workMidnight = workDateOf(endedAt).getTime() - LOCAL_OFFSET_MIN * 60_000;
 
   const startedAt = new Date(
-    Math.max(endedAt.getTime() - seconds * 1_000, dhakaMidnight + 1_000),
+    Math.max(endedAt.getTime() - seconds * 1_000, workMidnight + 1_000),
   );
 
   return {
@@ -318,7 +318,7 @@ export function todayWindow(seconds: number): {
 // import the harness (it boots the whole Nest app and Postgres), yet the clock
 // rule must be the same for both kinds of spec. Writing it here again would
 // give two definitions, and one day one of them would change.
-export { dhakaNoon, dhakaTodayIso, realNow } from './clock';
+export { workNoon, workTodayIso, realNow } from './clock';
 
 /**
  * A unique piece to put in emails and employee codes.

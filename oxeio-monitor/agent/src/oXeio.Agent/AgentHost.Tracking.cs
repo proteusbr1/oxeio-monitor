@@ -183,7 +183,7 @@ internal sealed partial class AgentHost
             if (s.CountsAsWork)
             {
                 // today's count resets at Dhaka midnight (section 2.1)
-                var date = DhakaTime.WorkDateOf(s.StartedAt);
+                var date = WorkTime.WorkDateOf(s.StartedAt);
                 if (date != _activeDate)
                 {
                     _activeDate = date;

@@ -2,11 +2,11 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { workDateOf } from '../src/agent/util/dhaka-time';
+import { workDateOf } from '../src/agent/util/work-time';
 import {
   createEmployeeWithCode,
   createHarness,
-  dhakaNoon,
+  workNoon,
   loginReady,
   OWNER_EMAIL,
   OWNER_PASSWORD,
@@ -72,7 +72,7 @@ async function shot(
   minutesAgo: number,
   monitorIndex = 0,
 ): Promise<void> {
-  const when = new Date(dhakaNoon().getTime() - minutesAgo * MINUTE);
+  const when = new Date(workNoon().getTime() - minutesAgo * MINUTE);
   const uuid = randomUUID();
 
   await h.prisma.screenshot.create({
@@ -132,7 +132,7 @@ describe('the newest screenshot per employee for today', () => {
     const res = await latest();
 
     expect(res.items).toHaveLength(1);
-    const expected = new Date(dhakaNoon().getTime() - 5 * MINUTE).toISOString();
+    const expected = new Date(workNoon().getTime() - 5 * MINUTE).toISOString();
     expect(res.items[0].capturedAt).toBe(expected);
   });
 
@@ -155,7 +155,7 @@ describe('the newest screenshot per employee for today', () => {
     const who = await staffWithDevice('OX-D2');
     await shot(who, 5);
     await h.prisma.screenshot.updateMany({
-      data: { deletedAt: dhakaNoon() },
+      data: { deletedAt: workNoon() },
     });
 
     expect((await latest()).items).toHaveLength(0);

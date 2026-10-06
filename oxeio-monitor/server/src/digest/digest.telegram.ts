@@ -1,4 +1,4 @@
-import { WORK_TIMEZONE_LABEL } from '../agent/util/dhaka-time';
+import { WORK_TIMEZONE_LABEL } from '../agent/util/work-time';
 import type { DesignView } from '../summary/design.rules';
 import type { Digest, DigestRow } from './digest.math';
 

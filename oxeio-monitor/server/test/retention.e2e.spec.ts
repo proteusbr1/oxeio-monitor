@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { workDateOf } from '../src/agent/util/dhaka-time';
+import { workDateOf } from '../src/agent/util/work-time';
 import { RetentionJob } from '../src/summary/retention.job';
 import {
   createEmployeeWithCode,
@@ -17,7 +17,7 @@ import {
   OWNER_PASSWORD,
   resetDatabase,
   type Harness,
-  dhakaNoon,
+  workNoon,
 } from './setup/harness';
 
 /**
@@ -61,7 +61,7 @@ async function makeShot(opts: {
    * It was caught exactly that way: by running at 00:30. Run in the daytime,
    * it would have stayed green forever.
    */
-  const when = dhakaNoon(-opts.daysAgo);
+  const when = workNoon(-opts.daysAgo);
   const day = workDateOf(when).toISOString().slice(0, 10);
   const uuid = randomUUID();
 
@@ -176,7 +176,7 @@ describe('retention job: the body really runs', () => {
   it('finishes what an earlier incomplete run left (no file = success)', async () => {
     const half = await makeShot({
       daysAgo: 120,
-      deletedAt: dhakaNoon(),
+      deletedAt: workNoon(),
       writeFiles: false,
     });
 

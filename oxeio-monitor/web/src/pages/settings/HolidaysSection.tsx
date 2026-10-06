@@ -6,7 +6,7 @@ import { Card } from '../../components/Card';
 import { Button } from '../../components/Page';
 import { Empty, ErrorBox, Loading } from '../../components/States';
 import { Table, type Column } from '../../components/Table';
-import { formatDate, todayInDhaka, weekdayOf } from '../../lib/format';
+import { formatDate, todayInWorkZone, weekdayOf } from '../../lib/format';
 import {
   Chip,
   ConfirmDialog,
@@ -44,7 +44,7 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 export function HolidaysSection() {
-  const thisYear = Number(todayInDhaka().slice(0, 4));
+  const thisYear = Number(todayInWorkZone().slice(0, 4));
   const [year, setYear] = useState(thisYear);
 
   const holidays = useApi((signal) => listHolidays(year, signal), [year]);

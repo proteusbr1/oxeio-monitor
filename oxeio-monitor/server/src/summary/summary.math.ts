@@ -14,7 +14,7 @@ import { resolve, sep } from 'node:path';
 
 import type { DayType, SegmentState } from '@prisma/client';
 
-import { dhakaPathParts, workDateOf } from '../agent/util/dhaka-time';
+import { workPathParts, workDateOf } from '../agent/util/work-time';
 import { isOffWeekday } from './weekly-off';
 
 const MS_PER_DAY = 86_400_000;
@@ -207,8 +207,8 @@ export function summarizeDay(input: DayInput): DayNumbers {
     // gave. The clamp is at month level; see `rollupMonth()` for why.
     creditedSec: workedSec + input.adjustmentSec,
 
-    earliestHour: firstActivityAt === null ? null : dhakaHourOf(firstActivityAt),
-    latestHour: lastActivityAt === null ? null : dhakaHourOf(lastActivityAt),
+    earliestHour: firstActivityAt === null ? null : workHourOf(firstActivityAt),
+    latestHour: lastActivityAt === null ? null : workHourOf(lastActivityAt),
 
     productiveSec,
     unproductiveSec,
@@ -267,11 +267,11 @@ export function dayTypeOf(workedSec: number, isOffDay: boolean): DayType {
  * The Dhaka hour (0-23).
  *
  * Careful: `+6 hours` is not added here; the offset logic must live in one
- * place (`agent/util/dhaka-time.ts`). It has no helper that returns the
+ * place (`agent/util/work-time.ts`). It has no helper that returns the
  * hour, so the hour is cut from the `HHMMSS` of `dhakaPathParts()`.
  */
-export function dhakaHourOf(instant: Date): number {
-  return Number(dhakaPathParts(instant).hhmmss.slice(0, 2));
+export function workHourOf(instant: Date): number {
+  return Number(workPathParts(instant).hhmmss.slice(0, 2));
 }
 
 // =============== workdays and pace: spec 2.1-b (K05/K06) ===============

@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 
 import { ProgressService, type EmployeeProgress } from '../agent/progress.service';
-import { workDateOf } from '../agent/util/dhaka-time';
+import { workDateOf } from '../agent/util/work-time';
 import {
   designTargetOf,
   designView,

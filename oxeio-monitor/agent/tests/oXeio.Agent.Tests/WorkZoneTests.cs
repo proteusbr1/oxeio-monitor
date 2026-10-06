@@ -7,7 +7,7 @@ namespace oXeio.Agent.Tests;
 
 /// <summary>
 /// The work-day zone, from the wire to the disk. These tests change the
-/// process-wide offset in <see cref="DhakaTime"/>, so they run on their own
+/// process-wide offset in <see cref="WorkTime"/>, so they run on their own
 /// (see the collection), never next to tests that count Dhaka days.
 /// </summary>
 [CollectionDefinition(Name, DisableParallelization = true)]
@@ -22,11 +22,11 @@ public sealed class WorkZoneTests : IDisposable
     private readonly string _dir =
         Path.Combine(Path.GetTempPath(), "oxeio-zone-" + Guid.NewGuid().ToString("N"));
 
-    public WorkZoneTests() => DhakaTime.Reset();
+    public WorkZoneTests() => WorkTime.Reset();
 
     public void Dispose()
     {
-        DhakaTime.Reset();
+        WorkTime.Reset();
         try { Directory.Delete(_dir, recursive: true); } catch (IOException) { }
     }
 
@@ -72,19 +72,19 @@ public sealed class WorkZoneTests : IDisposable
     [Fact]
     public void The_last_zone_survives_a_restart()
     {
-        DhakaTime.TrySet("America/Sao_Paulo", -180);
+        WorkTime.TrySet("America/Sao_Paulo", -180);
         new WorkZoneMemory(_dir).Remember();
 
-        DhakaTime.Reset();
+        WorkTime.Reset();
         Assert.True(new WorkZoneMemory(_dir).TryRestore());
-        Assert.Equal(TimeSpan.FromHours(-3), DhakaTime.Offset);
+        Assert.Equal(TimeSpan.FromHours(-3), WorkTime.Offset);
     }
 
     [Fact]
-    public void First_boot_has_nothing_to_restore_and_stays_on_Dhaka()
+    public void First_boot_has_nothing_to_restore_and_stays_on_the_default_zone()
     {
         Assert.False(new WorkZoneMemory(_dir).TryRestore());
-        Assert.Equal(TimeSpan.FromHours(6), DhakaTime.Offset);
+        Assert.Equal(TimeSpan.FromHours(6), WorkTime.Offset);
     }
 
     [Fact]
@@ -94,6 +94,6 @@ public sealed class WorkZoneTests : IDisposable
         File.WriteAllText(Path.Combine(_dir, "work-zone.txt"), "garbage");
 
         Assert.False(new WorkZoneMemory(_dir).TryRestore());
-        Assert.Equal(TimeSpan.FromHours(6), DhakaTime.Offset);
+        Assert.Equal(TimeSpan.FromHours(6), WorkTime.Offset);
     }
 }

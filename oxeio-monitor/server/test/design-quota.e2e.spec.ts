@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { localMidnightOf, nextLocalMidnight } from '../src/agent/util/dhaka-time';
+import { localMidnightOf, nextLocalMidnight } from '../src/agent/util/work-time';
 import {
   MAX_ISSUED_PER_DAY,
   POOL_PER_DESIGNER,
@@ -9,7 +9,7 @@ import { TargetsService } from '../src/targets/targets.service';
 import {
   createEmployeeWithCode,
   createHarness,
-  dhakaNoon,
+  workNoon,
   resetDatabase,
   type Harness,
 } from './setup/harness';
@@ -143,7 +143,7 @@ describe('daily limit — cannot finish more than 25', () => {
    * it were deleted or went back to the pool, real work done would be lost.
    */
   it('once 25 are done the 26th is blocked, and the row stays in the hand', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const emp = await person('OX-Q1', 'designer', TARGET);
 
     await alreadyDone(emp, TARGET, now);
@@ -157,7 +157,7 @@ describe('daily limit — cannot finish more than 25', () => {
   });
 
   it('serializes concurrent completions when only one daily slot remains', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const emp = await person('OX-Q-RACE', 'designer', TARGET);
     const owner = await h.prisma.user.findFirstOrThrow();
     await alreadyDone(emp, TARGET - 1, now);
@@ -174,7 +174,7 @@ describe('daily limit — cannot finish more than 25', () => {
   });
 
   it('at 24, the 25th goes through', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const emp = await person('OX-Q2', 'designer', TARGET);
 
     await alreadyDone(emp, TARGET - 1, now);
@@ -190,7 +190,7 @@ describe('daily limit — cannot finish more than 25', () => {
    * would silently block their work, and no screen would say so.
    */
   it('someone with no target has no limit either', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const emp = await person('OX-Q3', 'manager');
 
     await alreadyDone(emp, 40, now);
@@ -201,7 +201,7 @@ describe('daily limit — cannot finish more than 25', () => {
 
   /** A target of 0 means "target off", not a penalty — no limit applies either */
   it('with a target of 0 there is no limit', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const emp = await person('OX-Q4', 'designer', 0);
 
     await alreadyDone(emp, 40, now);
@@ -219,7 +219,7 @@ describe('daily limit — cannot finish more than 25', () => {
    * claim is that nothing is blocked today.
    */
   it('yesterday\'s "done" does not count toward today\'s limit', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const yesterday = new Date(localMidnightOf(now).getTime() - 12 * 3600_000);
     const emp = await person('OX-Q5', 'designer', TARGET);
 
@@ -238,7 +238,7 @@ describe('daily limit — cannot finish more than 25', () => {
    * work done at 11 PM would fall on the next day.
    */
   it('work at 11 PM Dhaka time falls within today\'s limit', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const lateTonight = new Date(nextLocalMidnight(now).getTime() - 3600_000);
     const emp = await person('OX-Q6', 'designer', TARGET);
 
@@ -257,7 +257,7 @@ describe('daily limit — cannot finish more than 25', () => {
    * recorded anyway in `completed_by_id`.
    */
   it('the limit does not apply on the owner\'s `update()` path', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const emp = await person('OX-Q7', 'designer', TARGET);
     const owner = await h.prisma.user.findFirstOrThrow();
 
@@ -279,7 +279,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
    * 10 done, nothing left in hand -> 18 for the remaining 15, at a 30:25 ratio.
    */
   it('finishing the last target refills the hand', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const emp = await person('OX-Q8', 'designer', TARGET);
 
     await pool(50);
@@ -294,7 +294,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
 
   /** Skipping also empties the hand — "complete + skip" in the owner's words */
   it('skipping the last target also refills the hand', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const emp = await person('OX-Q9', 'designer', TARGET);
 
     await pool(50);
@@ -310,7 +310,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
    * the normal state: on 7 and 8 September everyone had 17-29 in hand.
    */
   it('no top-up when the hand is full', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const emp = await person('OX-QA', 'designer', TARGET);
 
     await pool(50);
@@ -330,7 +330,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
    * that can never be touched today.
    */
   it('after reaching 25, nothing more is given even when the hand is empty', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const emp = await person('OX-QB', 'designer', TARGET);
 
     await pool(50);
@@ -344,7 +344,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
 
   /** The manager has no target — the morning distribution is enough for them */
   it('someone with no target gets no top-up either', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const emp = await person('OX-QC', 'manager');
 
     await pool(50);
@@ -362,7 +362,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
    * pool ran out nobody could mark their work as done.
    */
   it('the pool is empty — the work is still completed', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const emp = await person('OX-QD', 'designer', TARGET);
 
     const [last] = await inHand(emp, 1, now);
@@ -382,7 +382,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
    * in those six hours.
    */
   it('the count for today is still right at 3 AM Dhaka time', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const at3am = new Date(localMidnightOf(now).getTime() + 3 * 3600_000);
     const emp = await person('OX-QF', 'designer', TARGET);
 
@@ -399,7 +399,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
    * must not let the pool be mined without limit.
    */
   it('once 60 have been issued, there is no more top-up', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const emp = await person('OX-QG', 'designer', TARGET);
 
     await pool(50);
@@ -425,7 +425,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
    * tick is needed separately.
    */
   it('with an empty hand, the hourly tick is the only hope', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const emp = await person('OX-QH', 'designer', TARGET);
 
     await pool(50);
@@ -438,7 +438,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
 
   /** The tick is idempotent — with a full hand a second run changes nothing */
   it('however often the tick runs, the hand never exceeds 30', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const emp = await person('OX-QI', 'designer', TARGET);
 
     await pool(80);
@@ -451,7 +451,7 @@ describe('top-up — keeping enough work in hand to reach the target', () => {
 
   /** Only as many as the pool has — the rest are not silently created */
   it('with a short pool, only as many as exist', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     const emp = await person('OX-QE', 'designer', TARGET);
 
     await pool(4);

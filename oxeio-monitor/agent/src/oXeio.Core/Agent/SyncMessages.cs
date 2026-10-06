@@ -108,7 +108,7 @@ public sealed record HeartbeatRequest
 
     /// <summary>
     /// ACTIVE seconds so far on today's Dhaka calendar. Outside 0 to 86400 the server returns 400.
-    /// Resets to zero at midnight (Dhaka's, not UTC's); see <see cref="oXeio.Core.Time.DhakaTime"/>.
+    /// Resets to zero at midnight (Dhaka's, not UTC's); see <see cref="oXeio.Core.Time.WorkTime"/>.
     /// </summary>
     public required int ActiveSecToday { get; init; }
 

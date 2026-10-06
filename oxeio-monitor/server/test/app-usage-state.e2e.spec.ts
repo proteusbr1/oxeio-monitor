@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { workDateOf } from '../src/agent/util/dhaka-time';
+import { workDateOf } from '../src/agent/util/work-time';
 import { ActivityService } from '../src/activity/activity.service';
 import {
   createEmployeeWithCode,
@@ -13,7 +13,7 @@ import {
   todayWindow,
   type EnrolledDevice,
   type Harness,
-  dhakaNoon,
+  workNoon,
 } from './setup/harness';
 
 /**
@@ -131,7 +131,7 @@ describe('POST /agent/app-usage: segment state', () => {
      * though the code had no bug. Ingest itself picks the day with
      * `workDateOf()`, so the test should use the same.
      */
-    const day = workDateOf(dhakaNoon()).toISOString().slice(0, 10);
+    const day = workDateOf(workNoon()).toISOString().slice(0, 10);
     const top = await h.app
       .get(ActivityService)
       .top({ from: day, to: day, limit: 10 });

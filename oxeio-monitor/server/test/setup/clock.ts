@@ -14,7 +14,7 @@
  * `admin-enrollment-code`) cannot import it. Keeping the helpers separate lets
  * both kinds of spec share the same clock and the same rule.
  */
-import { DHAKA_OFFSET_MIN, workDateOf } from '../../src/agent/util/dhaka-time';
+import { LOCAL_OFFSET_MIN, workDateOf } from '../../src/agent/util/work-time';
 
 /**
  * A safe moment for fixtures: 12:00 noon of today's Dhaka day.
@@ -36,14 +36,14 @@ import { DHAKA_OFFSET_MIN, workDateOf } from '../../src/agent/util/dhaka-time';
  *
  * @param dayOffset how many days from today (negative = past)
  */
-export function dhakaNoon(dayOffset = 0): Date {
+export function workNoon(dayOffset = 0): Date {
   // `workDateOf` returns the Dhaka day as UTC midnight; adding 6h gives 12:00 Dhaka
   const day = workDateOf(new Date());
   // (12h − offset) instead of a hardcoded 6h, so it is local noon in any WORK_TIMEZONE
   return new Date(
     day.getTime() +
       dayOffset * 86_400_000 +
-      (12 * 60 - DHAKA_OFFSET_MIN) * 60_000,
+      (12 * 60 - LOCAL_OFFSET_MIN) * 60_000,
   );
 }
 
@@ -59,7 +59,7 @@ export function dhakaNoon(dayOffset = 0): Date {
  * `prisma/holidays.data.ts`: that one is a production function and takes an
  * argument, and with the same name the import would not show which is which.
  */
-export function dhakaTodayIso(): string {
+export function workTodayIso(): string {
   return workDateOf(new Date()).toISOString().slice(0, 10);
 }
 

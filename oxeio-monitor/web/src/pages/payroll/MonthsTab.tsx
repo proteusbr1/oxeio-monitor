@@ -194,7 +194,7 @@ export function MonthsTab() {
 
 /** The current month in Dhaka, as `YYYY-MM` */
 function currentMonth(): string {
-  return dhakaNow().slice(0, 7);
+  return workNow().slice(0, 7);
 }
 
 /**
@@ -204,7 +204,7 @@ function currentMonth(): string {
  *    timezone opening the screen near midnight would see the list a month off.
  */
 function lastMonths(n: number): string[] {
-  const [y, m] = dhakaNow().slice(0, 7).split('-').map(Number);
+  const [y, m] = workNow().slice(0, 7).split('-').map(Number);
   const out: string[] = [];
   for (let i = 0; i < n; i++) {
     const d = new Date(Date.UTC(y, m - 1 - i, 1));
@@ -214,7 +214,7 @@ function lastMonths(n: number): string[] {
 }
 
 /** Careful: Dhaka is UTC+6; this keeps the same day as the server */
-function dhakaNow(): string {
+function workNow(): string {
   return new Date(Date.now() + workOffsetMs()).toISOString();
 }
 

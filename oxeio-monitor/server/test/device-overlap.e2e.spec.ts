@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { DeviceOverlapCheck } from '../src/alerts/device-overlap.check';
-import { workDateOf } from '../src/agent/util/dhaka-time';
+import { workDateOf } from '../src/agent/util/work-time';
 import { createHarness, resetDatabase, type Harness,
-  dhakaNoon,
+  workNoon,
   realNow,
 } from './setup/harness';
 
@@ -38,7 +38,7 @@ let deviceB: number;
  * app clock and the database clock are the same — that is the only valid
  * reason for `realNow()`.
  */
-const workDate = workDateOf(dhakaNoon());
+const workDate = workDateOf(workNoon());
 
 /** An instant within that work day (hour + minute on the Dhaka clock) */
 const at = (hour: number, minute = 0): Date =>

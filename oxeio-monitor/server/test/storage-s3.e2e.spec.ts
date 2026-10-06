@@ -84,7 +84,7 @@ describe.skipIf(!ENDPOINT)('screenshots in an S3 bucket', () => {
       .catch(() => false);
 
   it('upload → bucket → signed link → retention deletes from the bucket', async () => {
-    const now = harness.dhakaNoon();
+    const now = harness.workNoon();
     const res = await h
       .http()
       .post('/api/v1/agent/screenshots')
@@ -118,7 +118,7 @@ describe.skipIf(!ENDPOINT)('screenshots in an S3 bucket', () => {
       harness.OWNER_EMAIL,
       harness.OWNER_PASSWORD,
     );
-    const date = harness.dhakaTodayIso();
+    const date = harness.workTodayIso();
     const page = await owner.http
       .get(`/api/v1/screenshots?employeeId=${device.employeeId}&date=${date}`)
       .expect(200);

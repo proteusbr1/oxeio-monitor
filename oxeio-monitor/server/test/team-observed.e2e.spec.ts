@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { workDateOf } from '../src/agent/util/dhaka-time';
+import { workDateOf } from '../src/agent/util/work-time';
 import { DashboardService } from '../src/dashboard/dashboard.service';
 import { SummaryService } from '../src/summary/summary.service';
 import {
   createHarness,
-  dhakaNoon,
+  workNoon,
   resetDatabase,
   type Harness,
 } from './setup/harness';
@@ -61,7 +61,7 @@ beforeEach(async () => {
 });
 
 /** Today's working day in Dhaka — all fixtures are relative to it */
-const today = () => workDateOf(dhakaNoon());
+const today = () => workDateOf(workNoon());
 
 async function makeEmployee(empCode: string): Promise<number> {
   const policy = await h.prisma.workPolicy.findFirst();
@@ -109,7 +109,7 @@ async function seeSessions(employeeId: number): Promise<void> {
   });
 }
 
-const rollup = () => summary.refreshDate(today(), dhakaNoon());
+const rollup = () => summary.refreshDate(today(), workNoon());
 
 describe("G111 — the board's card says how many people the total covers", () => {
   it('everyone has been seen — nobody is outside', async () => {
@@ -196,7 +196,7 @@ describe("G111 — the board's card says how many people the total covers", () =
  */
 describe('G130 — the card says they are on leave today', () => {
   const cardFor = async (empCode: string) => {
-    const board = await dashboard.live(dhakaNoon());
+    const board = await dashboard.live(workNoon());
     return board.cards.find((c) => c.empCode === empCode)!;
   };
 

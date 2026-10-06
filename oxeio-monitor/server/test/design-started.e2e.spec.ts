@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { workDateOf } from '../src/agent/util/dhaka-time';
+import { workDateOf } from '../src/agent/util/work-time';
 import { SummaryService } from '../src/summary/summary.service';
 import {
   createEmployeeWithCode,
   createHarness,
-  dhakaNoon,
+  workNoon,
   resetDatabase,
   type Harness,
 } from './setup/harness';
@@ -37,7 +37,7 @@ let summary: SummaryService;
 
 const HOUR_MS = 3600_000;
 /** Dhaka is UTC+6 — subtract this to go from the label to the real instant */
-const DHAKA_OFFSET_MS = 6 * HOUR_MS;
+const WORK_OFFSET_MS = 6 * HOUR_MS;
 
 const JOB = 1_000_042;
 
@@ -54,7 +54,7 @@ beforeEach(async () => {
   await resetDatabase(h.prisma, h.app);
 });
 
-const today = () => workDateOf(dhakaNoon());
+const today = () => workDateOf(workNoon());
 
 /**
  * The real instant of a given hour on that Dhaka day.
@@ -63,8 +63,8 @@ const today = () => workDateOf(dhakaNoon());
  * Dhaka midnight starts 6 hours before the label. Mixing up the two is what
  * caused G163.
  */
-const atDhakaHour = (dayLabel: Date, hour: number): Date =>
-  new Date(dayLabel.getTime() - DHAKA_OFFSET_MS + hour * HOUR_MS);
+const atWorkHour = (dayLabel: Date, hour: number): Date =>
+  new Date(dayLabel.getTime() - WORK_OFFSET_MS + hour * HOUR_MS);
 
 async function designerWithDevice(): Promise<{
   employeeId: number;
@@ -141,12 +141,12 @@ describe('G163 — "work started" is set at the real instant', () => {
   it('the instant the file was first opened is what gets set', async () => {
     const who = await designerWithDevice();
     const day = today();
-    const openedAt = atDhakaHour(day, 11);
+    const openedAt = atWorkHour(day, 11);
 
-    await assignedTarget(who.employeeId, atDhakaHour(day, 8));
+    await assignedTarget(who.employeeId, atWorkHour(day, 8));
     await sawFile(who, day, openedAt);
 
-    await summary.refreshDate(day, dhakaNoon());
+    await summary.refreshDate(day, workNoon());
 
     const after = await targetRow();
     expect(after.startedAt?.toISOString()).toBe(openedAt.toISOString());
@@ -161,12 +161,12 @@ describe('G163 — "work started" is set at the real instant', () => {
   it('"started" is never before "assigned"', async () => {
     const who = await designerWithDevice();
     const day = today();
-    const assignedAt = atDhakaHour(day, 8);
+    const assignedAt = atWorkHour(day, 8);
 
     await assignedTarget(who.employeeId, assignedAt);
-    await sawFile(who, day, atDhakaHour(day, 9.5));
+    await sawFile(who, day, atWorkHour(day, 9.5));
 
-    await summary.refreshDate(day, dhakaNoon());
+    await summary.refreshDate(day, workNoon());
 
     const after = await targetRow();
     expect(after.startedAt).not.toBeNull();
@@ -182,10 +182,10 @@ describe('G163 — "work started" is set at the real instant', () => {
     const who = await designerWithDevice();
     const day = today();
 
-    await assignedTarget(who.employeeId, atDhakaHour(day, 8));
-    await sawFile(who, day, atDhakaHour(day, 14));
+    await assignedTarget(who.employeeId, atWorkHour(day, 8));
+    await sawFile(who, day, atWorkHour(day, 14));
 
-    await summary.refreshDate(day, dhakaNoon());
+    await summary.refreshDate(day, workNoon());
 
     const after = await targetRow();
     expect(after.startedAt?.getTime()).not.toBe(day.getTime());
@@ -198,15 +198,15 @@ describe('G163 — "work started" is set at the real instant', () => {
   it('opened many times in a day, it is the first instant', async () => {
     const who = await designerWithDevice();
     const day = today();
-    const first = atDhakaHour(day, 10);
+    const first = atWorkHour(day, 10);
 
-    await assignedTarget(who.employeeId, atDhakaHour(day, 8));
+    await assignedTarget(who.employeeId, atWorkHour(day, 8));
     // Deliberately inserted in reverse order — "keep the last" would turn this red
-    await sawFile(who, day, atDhakaHour(day, 16));
+    await sawFile(who, day, atWorkHour(day, 16));
     await sawFile(who, day, first);
-    await sawFile(who, day, atDhakaHour(day, 13));
+    await sawFile(who, day, atWorkHour(day, 13));
 
-    await summary.refreshDate(day, dhakaNoon());
+    await summary.refreshDate(day, workNoon());
 
     expect((await targetRow()).startedAt?.toISOString()).toBe(first.toISOString());
   });
@@ -222,13 +222,13 @@ describe('G163 — "work started" is set at the real instant', () => {
   it('recalculating yesterday today still gives yesterday\'s time', async () => {
     const who = await designerWithDevice();
     const yesterday = new Date(today().getTime() - 24 * HOUR_MS);
-    const openedAt = atDhakaHour(yesterday, 15);
+    const openedAt = atWorkHour(yesterday, 15);
 
-    await assignedTarget(who.employeeId, atDhakaHour(yesterday, 8));
+    await assignedTarget(who.employeeId, atWorkHour(yesterday, 8));
     await sawFile(who, yesterday, openedAt);
 
     // `now` is today's — exactly how `drainDirty()` calls it
-    await summary.refreshDate(yesterday, dhakaNoon());
+    await summary.refreshDate(yesterday, workNoon());
 
     const after = await targetRow();
     expect(after.startedAt?.toISOString()).toBe(openedAt.toISOString());
@@ -239,14 +239,14 @@ describe('G163 — "work started" is set at the real instant', () => {
   it('recalculating again does not move the mark', async () => {
     const who = await designerWithDevice();
     const day = today();
-    const openedAt = atDhakaHour(day, 10);
+    const openedAt = atWorkHour(day, 10);
 
-    await assignedTarget(who.employeeId, atDhakaHour(day, 8));
+    await assignedTarget(who.employeeId, atWorkHour(day, 8));
     await sawFile(who, day, openedAt);
 
-    await summary.refreshDate(day, dhakaNoon());
-    await sawFile(who, day, atDhakaHour(day, 9));
-    await summary.refreshDate(day, dhakaNoon());
+    await summary.refreshDate(day, workNoon());
+    await sawFile(who, day, atWorkHour(day, 9));
+    await summary.refreshDate(day, workNoon());
 
     expect((await targetRow()).startedAt?.toISOString()).toBe(openedAt.toISOString());
   });

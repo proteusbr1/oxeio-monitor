@@ -303,13 +303,13 @@ public sealed class IdleStateMachine
     /// <summary>When an open segment crosses midnight it is cut there and reopened.</summary>
     private void SplitAtMidnights(List<ActivitySegment> closed, DateTimeOffset now)
     {
-        var boundary = DhakaTime.NextLocalMidnight(_openedAt);
+        var boundary = WorkTime.NextLocalMidnight(_openedAt);
         while (boundary <= now)
         {
             EmitSegment(closed, _state, _openedAt, boundary);
             _openedAt = boundary;
             ResetScore();
-            boundary = DhakaTime.NextLocalMidnight(_openedAt);
+            boundary = WorkTime.NextLocalMidnight(_openedAt);
         }
     }
 
@@ -330,7 +330,7 @@ public sealed class IdleStateMachine
 
         while (cursor < to)
         {
-            var boundary = DhakaTime.NextLocalMidnight(cursor);
+            var boundary = WorkTime.NextLocalMidnight(cursor);
             var end = boundary < to ? boundary : to;
 
             closed.Add(new ActivitySegment

@@ -89,7 +89,7 @@ public class MonthlyMilestoneTests
     /// September.
     /// </summary>
     [Fact]
-    public void The_month_key_uses_the_Dhaka_calendar()
+    public void The_month_key_uses_the_work_zone_calendar()
     {
         var justAfterMidnight = new DateTimeOffset(2026, 9, 1, 2, 0, 0, TimeSpan.FromHours(6));
 

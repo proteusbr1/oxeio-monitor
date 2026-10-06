@@ -22,9 +22,9 @@ import {
  *
  * This is the first real job of this test file: **catching timezone mistakes**.
  */
-const DHAKA_OFFSET_MS = 6 * 3_600_000;
+const WORK_OFFSET_MS = 6 * 3_600_000;
 const DAY = new Date('2026-08-13T00:00:00.000Z');
-const DAY_START_MS = DAY.getTime() - DHAKA_OFFSET_MS;
+const DAY_START_MS = DAY.getTime() - WORK_OFFSET_MS;
 
 /** Starts at `hour` in Dhaka, lasting `mins` minutes */
 function seg(employeeId: number, hour: number, mins: number, atMin = 0) {

@@ -6,7 +6,7 @@ import {
   HOLIDAY_YEARS,
   PENDING_GAZETTES,
   baseName,
-  dhakaToday,
+  workToday,
   gazetteNotes,
   hasApproxSuffix,
   holidayRowName,
@@ -287,9 +287,9 @@ describe('holidayRowName and baseName', () => {
  * goes straight into money. So everything stands on the answer to one
  * question: "has the month already passed?"
  */
-describe('dhakaToday', () => {
+describe('workToday', () => {
   it('converts the UTC clock to the Dhaka date', () => {
-    expect(dhakaToday(new Date('2026-08-14T05:00:00.000Z'))).toBe('2026-08-14');
+    expect(workToday(new Date('2026-08-14T05:00:00.000Z'))).toBe('2026-08-14');
   });
 
   /**
@@ -299,12 +299,18 @@ describe('dhakaToday', () => {
    * disturb that month's payroll.
    */
   it('early morning in Dhaka is the previous day in UTC — still the Dhaka date is returned', () => {
-    expect(dhakaToday(new Date('2026-08-31T20:00:00.000Z'))).toBe('2026-09-01');
+    expect(workToday(new Date('2026-08-31T20:00:00.000Z'))).toBe('2026-09-01');
   });
 
   it('just before and after Dhaka midnight', () => {
-    expect(dhakaToday(new Date('2026-08-14T17:59:59.000Z'))).toBe('2026-08-14');
-    expect(dhakaToday(new Date('2026-08-14T18:00:00.000Z'))).toBe('2026-08-15');
+    expect(workToday(new Date('2026-08-14T17:59:59.000Z'))).toBe('2026-08-14');
+    expect(workToday(new Date('2026-08-14T18:00:00.000Z'))).toBe('2026-08-15');
+  });
+
+  it('follows the work time zone, not a fixed +6', () => {
+    // 01:30 UTC on the 1st is still the 31st in São Paulo (UTC-3)
+    expect(workToday(new Date('2026-09-01T01:30:00.000Z'), 'America/Sao_Paulo')).toBe('2026-08-31');
+    expect(workToday(new Date('2026-09-01T03:00:00.000Z'), 'America/Sao_Paulo')).toBe('2026-09-01');
   });
 });
 

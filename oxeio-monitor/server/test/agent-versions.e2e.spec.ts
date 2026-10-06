@@ -8,7 +8,7 @@ import { isOfferedTo } from '../src/agent/rollout';
 import { UpdateService } from '../src/agent/update.service';
 import {
   createHarness,
-  dhakaNoon,
+  workNoon,
   loginReady,
   MANAGER_EMAIL,
   MANAGER_PASSWORD,
@@ -310,7 +310,7 @@ describe('G168: a pilot is set automatically at publish time', () => {
         tokenHash: randomUUID(),
         status,
         // G140: not `new Date()` in a spec; the harness clock
-        lastSeenAt: dhakaNoon(),
+        lastSeenAt: workNoon(),
       },
     });
     return { id: d.id, machineGuid };

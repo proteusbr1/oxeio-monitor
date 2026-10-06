@@ -3,9 +3,9 @@ import { ConfigService } from '@nestjs/config';
 
 import {
   WORK_TIMEZONE,
-  dhakaClock,
+  workClock,
   workDateOf,
-} from '../agent/util/dhaka-time';
+} from '../agent/util/work-time';
 import { AlertMailer, type SendOutcome } from '../alerts/alerts.mailer';
 import { TelegramChannel } from '../alerts/telegram.channel';
 import { FeaturesService } from '../features/features.service';
@@ -106,7 +106,7 @@ export class DigestService {
      */
     const plain = telegramDigest(digest, this.orgName, {
       silentPcs: await this.silentPcsToday(now),
-      atTime: dhakaClock(now),
+      atTime: workClock(now),
       designs: await this.designsToday(digest.workDate),
     });
 

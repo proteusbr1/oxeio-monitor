@@ -21,7 +21,7 @@ const SP_OFFSET_MS = -3 * HOUR_MS;
 
 let h: Harness;
 let mod: {
-  time: typeof import('../src/agent/util/dhaka-time');
+  time: typeof import('../src/agent/util/work-time');
   harness: typeof import('./setup/harness');
   targets: typeof import('../src/targets/targets.service');
   dashboard: typeof import('../src/dashboard/dashboard.service');
@@ -33,7 +33,7 @@ beforeAll(async () => {
   vi.stubEnv('WORK_TIMEZONE', 'America/Sao_Paulo');
   vi.resetModules();
   mod = {
-    time: await import('../src/agent/util/dhaka-time'),
+    time: await import('../src/agent/util/work-time'),
     harness: await import('./setup/harness'),
     targets: await import('../src/targets/targets.service'),
     dashboard: await import('../src/dashboard/dashboard.service'),
@@ -113,7 +113,7 @@ describe('WORK_TIMEZONE=America/Sao_Paulo, whole app', () => {
 
   it('the 7-day trend puts 23:30 and 00:30 local on their own days', async () => {
     await h.prisma.designTarget.deleteMany();
-    const today = mod.time.workDateOf(mod.harness.dhakaNoon());
+    const today = mod.time.workDateOf(mod.harness.workNoon());
     const yesterday = new Date(today.getTime() - 86_400_000);
 
     await designDone(atLocalHour(yesterday, 23.5));

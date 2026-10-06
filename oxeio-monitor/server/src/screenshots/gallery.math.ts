@@ -15,7 +15,7 @@ export const GALLERY_PAGE_SIZE = 60;
 /**
  * `YYYY-MM-DD` -> **UTC midnight** of that date. The `screenshots.work_date`
  * column is `@db.Date` and Prisma expects exactly this (see workDateOf in
- * agent/util/dhaka-time.ts).
+ * agent/util/work-time.ts).
  *
  * Careful: a regex check alone would accept `2026-02-30`, and `Date.UTC`
  * would silently turn it into 2 March. The user would ask for February and

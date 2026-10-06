@@ -17,7 +17,7 @@ import {
   type UsageGroup,
   type UsageTally,
 } from '../activity/activity.math';
-import { WORK_TIMEZONE, workDateOf } from '../agent/util/dhaka-time';
+import { WORK_TIMEZONE, workDateOf } from '../agent/util/work-time';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {

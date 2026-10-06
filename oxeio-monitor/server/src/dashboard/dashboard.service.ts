@@ -6,10 +6,10 @@ import {
 import type { SegmentState } from '@prisma/client';
 
 import {
-  DHAKA_OFFSET_MIN,
+  LOCAL_OFFSET_MIN,
   nextLocalMidnight,
   workDateOf,
-} from '../agent/util/dhaka-time';
+} from '../agent/util/work-time';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   decideLiveStatus,
@@ -180,7 +180,7 @@ export interface HourlyBucket {
  * **label → instant**: `workDateOf()` returns the Dhaka day as UTC midnight,
  * and the real Dhaka midnight is this many milliseconds earlier.
  */
-const DHAKA_OFFSET_MS = DHAKA_OFFSET_MIN * 60_000;
+const WORK_OFFSET_MS = LOCAL_OFFSET_MIN * 60_000;
 
 export interface TrendDay {
   /** Work day in Dhaka, `YYYY-MM-DD` */
@@ -891,8 +891,8 @@ export class DashboardService {
       this.prisma.designTarget.findMany({
         where: {
           completedAt: {
-            gte: new Date(first.getTime() - DHAKA_OFFSET_MS),
-            lt: new Date(today.getTime() + 86_400_000 - DHAKA_OFFSET_MS),
+            gte: new Date(first.getTime() - WORK_OFFSET_MS),
+            lt: new Date(today.getTime() + 86_400_000 - WORK_OFFSET_MS),
           },
         },
         select: { completedAt: true },

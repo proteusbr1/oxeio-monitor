@@ -1,4 +1,4 @@
-import { WORK_TIMEZONE_LABEL } from '../agent/util/dhaka-time';
+import { WORK_TIMEZONE_LABEL } from '../agent/util/work-time';
 import type { AttendanceRow, SummaryRow } from '../reports/reports.types';
 
 /**

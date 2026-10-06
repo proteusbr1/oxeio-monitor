@@ -4,7 +4,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Device } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
-import { LOCAL_OFFSET_MIN, WORK_TIMEZONE } from './util/dhaka-time';
+import { LOCAL_OFFSET_MIN, WORK_TIMEZONE } from './util/work-time';
 
 export interface AgentConfig {
   idleThresholdSec: number;

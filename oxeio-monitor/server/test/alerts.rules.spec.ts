@@ -9,8 +9,8 @@ import {
 import {
   agentDownCandidates,
   dedupeKey,
-  dhakaHourOf,
-  dhakaIsoWeekday,
+  workHourOf,
+  workIsoWeekday,
   diskUsedPct,
   diskVerdict,
   humanBytes,
@@ -42,7 +42,7 @@ const MIN = 60_000;
 const HOUR = 60 * MIN;
 
 /** Builds a specific instant in Dhaka: UTC+6, no DST */
-function dhaka(iso: string): Date {
+function work(iso: string): Date {
   return new Date(`${iso}+06:00`);
 }
 
@@ -248,11 +248,11 @@ describe('suppressFlood: filtering one round\'s candidates', () => {
 describe('Dhaka time', () => {
   it('local hour, not UTC', () => {
     // 20:30 Dhaka = 14:30 UTC
-    expect(dhakaHourOf(new Date('2026-08-11T14:30:00Z'))).toBe(20);
+    expect(workHourOf(new Date('2026-08-11T14:30:00Z'))).toBe(20);
   });
 
   it('the hour right after midnight is 0', () => {
-    expect(dhakaHourOf(dhaka('2026-08-11T00:05:00'))).toBe(0);
+    expect(workHourOf(work('2026-08-11T00:05:00'))).toBe(0);
   });
 
   /**
@@ -261,14 +261,14 @@ describe('Dhaka time', () => {
    * show only on Sunday, so both are checked.
    */
   it('ISO day: Monday 1 ... Sunday 7', () => {
-    expect(dhakaIsoWeekday(dhaka('2026-08-11T12:00:00'))).toBe(2); // Tuesday
-    expect(dhakaIsoWeekday(dhaka('2026-08-14T12:00:00'))).toBe(5); // Friday
-    expect(dhakaIsoWeekday(dhaka('2026-08-16T12:00:00'))).toBe(7); // Sunday
+    expect(workIsoWeekday(work('2026-08-11T12:00:00'))).toBe(2); // Tuesday
+    expect(workIsoWeekday(work('2026-08-14T12:00:00'))).toBe(5); // Friday
+    expect(workIsoWeekday(work('2026-08-16T12:00:00'))).toBe(7); // Sunday
   });
 
   it('the Dhaka day is counted even when UTC is on the previous day', () => {
     // 05:00 Friday in Dhaka = 23:00 Thursday in UTC
-    expect(dhakaIsoWeekday(new Date('2026-08-13T23:00:00Z'))).toBe(5);
+    expect(workIsoWeekday(new Date('2026-08-13T23:00:00Z'))).toBe(5);
   });
 });
 
@@ -285,7 +285,7 @@ describe('agent_down is quiet outside office hours', () => {
   const OFFICE = { officeFrom: '09:00', officeTo: '18:00' };
   const open = (iso: string, extra = {}) =>
     isOfficeOpen({
-      now: dhaka(iso),
+      now: work(iso),
       ...OFFICE,
       weeklyOffDays: [5],
       isHoliday: false,
@@ -369,7 +369,7 @@ describe('grace after opening: the time when everyone is present', () => {
   const OFFICE = { officeFrom: '09:00', officeTo: '18:00' };
   const watch = (iso: string, extra = {}) =>
     isAgentWatchOpen({
-      now: dhaka(iso),
+      now: work(iso),
       ...OFFICE,
       weeklyOffDays: [5],
       isHoliday: false,
@@ -378,7 +378,7 @@ describe('grace after opening: the time when everyone is present', () => {
 
   /** Exactly 9:00: the office is open, but nobody is expected to be present yet */
   it('at 9:00 the office is open, yet the watch does not start', () => {
-    expect(isOfficeOpen({ now: dhaka('2026-08-24T09:00:00'), ...OFFICE,
+    expect(isOfficeOpen({ now: work('2026-08-24T09:00:00'), ...OFFICE,
       weeklyOffDays: [5], isHoliday: false })).toBe(true);
     expect(watch('2026-08-24T09:00:00')).toBe(false);
   });
@@ -415,7 +415,7 @@ describe('grace after opening: the time when everyone is present', () => {
   it('with grace 0, the watch starts the moment the office opens', () => {
     expect(
       isAgentWatchOpen(
-        { now: dhaka('2026-08-24T09:00:00'), ...OFFICE, weeklyOffDays: [5], isHoliday: false },
+        { now: work('2026-08-24T09:00:00'), ...OFFICE, weeklyOffDays: [5], isHoliday: false },
         0,
       ),
     ).toBe(true);
@@ -725,7 +725,7 @@ describe('G06: when "nobody worked today" is declared', () => {
     expect(shouldFlagNoActivity(input({ onLeave: false }))).toBe(true);
   });
 
-  const evening = dhaka('2026-08-11T19:00:00'); // Tuesday 7 pm
+  const evening = work('2026-08-11T19:00:00'); // Tuesday 7 pm
 
   const input = (over: Partial<NoActivityInput> = {}): NoActivityInput => ({
     workedSegments: 0,
@@ -752,12 +752,12 @@ describe('G06: when "nobody worked today" is declared', () => {
    * alerts.
    */
   it('quiet on the weekly day off', () => {
-    const friday = dhaka('2026-08-14T19:00:00');
+    const friday = work('2026-08-14T19:00:00');
     expect(shouldFlagNoActivity(input({ now: friday }))).toBe(false);
   });
 
   it('an alert on Friday too if the policy has no weekly day off', () => {
-    const friday = dhaka('2026-08-14T19:00:00');
+    const friday = work('2026-08-14T19:00:00');
     expect(
       shouldFlagNoActivity(input({ now: friday, weeklyOffDays: [] })),
     ).toBe(true);
@@ -772,15 +772,15 @@ describe('G06: when "nobody worked today" is declared', () => {
    * working" in the new day's count, i.e. twelve alerts every night.
    */
   it('in the morning or at midnight the question is not even asked', () => {
-    expect(shouldFlagNoActivity(input({ now: dhaka('2026-08-11T09:00:00') }))).toBe(false);
-    expect(shouldFlagNoActivity(input({ now: dhaka('2026-08-11T00:30:00') }))).toBe(false);
-    expect(shouldFlagNoActivity(input({ now: dhaka('2026-08-11T22:30:00') }))).toBe(false);
+    expect(shouldFlagNoActivity(input({ now: work('2026-08-11T09:00:00') }))).toBe(false);
+    expect(shouldFlagNoActivity(input({ now: work('2026-08-11T00:30:00') }))).toBe(false);
+    expect(shouldFlagNoActivity(input({ now: work('2026-08-11T22:30:00') }))).toBe(false);
   });
 
   it('window boundaries: 18:00 inside, 22:00 outside', () => {
-    expect(isNoActivityWindow(dhaka('2026-08-11T18:00:00'))).toBe(true);
-    expect(isNoActivityWindow(dhaka('2026-08-11T21:59:00'))).toBe(true);
-    expect(isNoActivityWindow(dhaka('2026-08-11T22:00:00'))).toBe(false);
+    expect(isNoActivityWindow(work('2026-08-11T18:00:00'))).toBe(true);
+    expect(isNoActivityWindow(work('2026-08-11T21:59:00'))).toBe(true);
+    expect(isNoActivityWindow(work('2026-08-11T22:00:00'))).toBe(false);
   });
 
   /**

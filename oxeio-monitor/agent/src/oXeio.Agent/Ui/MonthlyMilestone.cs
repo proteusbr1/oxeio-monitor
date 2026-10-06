@@ -34,7 +34,7 @@ internal static class MonthlyMilestone
     /// </summary>
     public static string MonthKeyOf(DateTimeOffset now)
     {
-        var date = DhakaTime.WorkDateOf(now);
+        var date = WorkTime.WorkDateOf(now);
         return date.Year.ToString("0000", CultureInfo.InvariantCulture) + "-" +
                date.Month.ToString("00", CultureInfo.InvariantCulture);
     }

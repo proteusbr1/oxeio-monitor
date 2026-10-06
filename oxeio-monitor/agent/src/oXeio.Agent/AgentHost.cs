@@ -284,9 +284,9 @@ internal sealed partial class AgentHost : IAsyncDisposable
         // must keep counting in the zone the server last sent, not in Dhaka
         _zoneMemory = new WorkZoneMemory(AgentDataDirectory.Default);
         if (_zoneMemory.TryRestore())
-            _log.Info($"Work-day zone restored: {DhakaTime.ToMemoryLine()}");
+            _log.Info($"Work-day zone restored: {WorkTime.ToMemoryLine()}");
 
-        _activeDate = DhakaTime.WorkDateOf(DateTimeOffset.UtcNow);
+        _activeDate = WorkTime.WorkDateOf(DateTimeOffset.UtcNow);
     }
 
     public TrayIcon? Tray => _tray;

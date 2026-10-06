@@ -271,7 +271,7 @@ const NAV: NavItem[] = [
  * Careful: no seconds: a number changing every second draws the eye, yet the
  * board refreshes every 30 seconds, so the clock would look fresher than the data.
  */
-function dhakaStamp(): string {
+function workStamp(): string {
   const d = new Date(Date.now() + workOffsetMs());
   const iso = d.toISOString();
   // through lib/format, so DISPLAY_LOCALE reaches the top bar too
@@ -362,7 +362,7 @@ export function Layout() {
         <header className="studio-topbar">
           <div><span className="text-ink-2">Workspace / </span><span>{currentPage}</span></div>
           <div className="studio-topbar-actions">
-            <span className="studio-topbar-time text-ink-2">{workTimeZoneLabel()} · {dhakaStamp()}</span>
+            <span className="studio-topbar-time text-ink-2">{workTimeZoneLabel()} · {workStamp()}</span>
             <ThemeToggle />
             <button type="button" onClick={() => void signOut()} className="tap px-3 py-1.5 text-xs">Sign out</button>
           </div>

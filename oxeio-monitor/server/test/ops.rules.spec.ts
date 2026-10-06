@@ -29,7 +29,7 @@ const HOUR = 3_600_000;
 const DAY = 86_400_000;
 
 /** A fixed moment in Dhaka: UTC+6, no DST */
-function dhaka(iso: string): Date {
+function work(iso: string): Date {
   return new Date(`${iso}+06:00`);
 }
 
@@ -51,13 +51,13 @@ describe('backup names', () => {
   });
 
   it('two runs on the same day get different names (hour and minute included)', () => {
-    const a = backupFileName(dhaka('2026-08-11T02:30:00'));
-    const b = backupFileName(dhaka('2026-08-11T14:05:00'));
+    const a = backupFileName(work('2026-08-11T02:30:00'));
+    const b = backupFileName(work('2026-08-11T14:05:00'));
     expect(a).not.toBe(b);
   });
 
   it('name -> time -> name round-trips to the same value', () => {
-    const at = dhaka('2026-08-11T02:30:00');
+    const at = work('2026-08-11T02:30:00');
     const name = backupFileName(at);
     expect(parseBackupName(name)?.getTime()).toBe(at.getTime());
   });
@@ -87,7 +87,7 @@ describe('backup names', () => {
   });
 
   it('the list is ordered newest to oldest', () => {
-    const now = dhaka('2026-08-11T02:30:00');
+    const now = work('2026-08-11T02:30:00');
     const names = [nightlyName(now, 5), nightlyName(now, 0), nightlyName(now, 2)];
     expect(listBackups(names).map((f) => f.name)).toEqual([
       nightlyName(now, 0),
@@ -102,7 +102,7 @@ describe('backup names', () => {
 // ════════════════════════════════════════════════════════════════════════════
 
 describe('rotating old backups', () => {
-  const now = dhaka('2026-08-11T03:00:00');
+  const now = work('2026-08-11T03:00:00');
 
   it('those older than 30 days go, newer ones stay', () => {
     const names = [0, 5, 29, 31, 60].map((d) => nightlyName(now, d));
@@ -198,7 +198,7 @@ const okState = (now: Date): BackupState => ({
 });
 
 describe('backup alerts', () => {
-  const now = dhaka('2026-08-11T09:00:00');
+  const now = work('2026-08-11T09:00:00');
 
   it('says nothing on success', () => {
     expect(backupVerdict(okState(now), now)).toBeNull();
@@ -404,7 +404,7 @@ describe('health verdict', () => {
 // ════════════════════════════════════════════════════════════════════════════
 
 describe('Telegram message', () => {
-  const now = dhaka('2026-08-11T10:20:00');
+  const now = work('2026-08-11T10:20:00');
 
   it('type label, hostname and how long ago: nothing more', () => {
     const line = telegramLine(

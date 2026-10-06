@@ -35,13 +35,6 @@ export { fixedOffsetMinutes } from './fixed-offset';
 
 /** Minutes east of UTC for `WORK_TIMEZONE` — refuses to start on a DST zone */
 export const LOCAL_OFFSET_MIN = fixedOffsetMinutesOf(WORK_TIMEZONE);
-
-/**
- * The old name, kept so the many callers stay untouched. With the default
- * zone it is still 360; with another zone it is that zone's offset.
- */
-export const DHAKA_OFFSET_MIN = LOCAL_OFFSET_MIN;
-
 /** The offset as an ISO-8601 suffix: `+06:00`, `-03:00`, `+00:00` */
 export const LOCAL_OFFSET_ISO = ((): string => {
   const abs = Math.abs(LOCAL_OFFSET_MIN);
@@ -58,7 +51,7 @@ export const WORK_TIMEZONE_LABEL = (
 ).replace(/_/g, ' ');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const OFFSET_MS = DHAKA_OFFSET_MIN * 60 * 1000;
+const OFFSET_MS = LOCAL_OFFSET_MIN * 60 * 1000;
 
 /**
  * Which date an instant falls on in Dhaka time.
@@ -100,7 +93,7 @@ export function nextLocalMidnight(instant: Date): Date {
  * would show 2 am Dhaka time as 8 pm here. Retention and day-close both depend
  * on this number, so a mistake would run the jobs at the wrong time.
  */
-export function dhakaHourOf(instant: Date): number {
+export function workHourOf(instant: Date): number {
   return new Date(instant.getTime() + OFFSET_MS).getUTCHours();
 }
 
@@ -113,7 +106,7 @@ export function dhakaHourOf(instant: Date): number {
  * The daily report prints this so readers know **which moment** the numbers
  * are from; many people are still at work as of 6:30 pm.
  */
-export function dhakaClock(instant: Date): string {
+export function workClock(instant: Date): string {
   const local = new Date(instant.getTime() + OFFSET_MS);
   const hh = String(local.getUTCHours()).padStart(2, '0');
   const mm = String(local.getUTCMinutes()).padStart(2, '0');
@@ -126,7 +119,7 @@ export function sameWorkDate(a: Date, b: Date): boolean {
 }
 
 /** For building file paths: YYYY/MM/DD by the Dhaka date. */
-export function dhakaPathParts(instant: Date): {
+export function workPathParts(instant: Date): {
   year: string;
   month: string;
   day: string;

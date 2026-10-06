@@ -2,14 +2,14 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { workDateOf } from '../src/agent/util/dhaka-time';
+import { workDateOf } from '../src/agent/util/work-time';
 import { SyntheticInputCheck } from '../src/alerts/synthetic-input.check';
 import {
   createHarness,
   resetDatabase,
   uniqueSuffix,
   type Harness,
-  dhakaNoon,
+  workNoon,
   realNow,
 } from './setup/harness';
 
@@ -40,7 +40,7 @@ let deviceId: number;
  * broke. If the app clock and the database clock differ, a pinned moment cannot
  * be used — that is the only valid reason for `realNow()`.
  */
-const workDate = workDateOf(dhakaNoon());
+const workDate = workDateOf(workNoon());
 
 /** A moment inside that working day (on the Dhaka clock) */
 const at = (hour: number, minute = 0): Date =>

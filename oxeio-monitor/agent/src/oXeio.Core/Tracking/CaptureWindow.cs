@@ -30,7 +30,7 @@ public sealed class CaptureWindow
     {
         if (_from is null || _to is null) return true;
 
-        var now = DhakaTime.LocalTimeOf(instant);
+        var now = WorkTime.LocalTimeOf(instant);
 
         // A window that crosses midnight, like 23:00 → 07:00, must work too
         return _from <= _to

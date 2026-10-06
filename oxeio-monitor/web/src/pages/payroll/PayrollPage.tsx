@@ -11,7 +11,7 @@ import { Page } from '../../components/Page';
 import { ErrorBox } from '../../components/States';
 import { Tabs } from '../../components/Tabs';
 import { useFeatures } from '../../features/FeaturesContext';
-import { formatDate, formatMonth, todayInDhaka } from '../../lib/format';
+import { formatDate, formatMonth, todayInWorkZone } from '../../lib/format';
 import { DepositsTab } from './DepositsTab';
 import { LeaveTab } from './LeaveTab';
 import { MonthsTab } from './MonthsTab';
@@ -35,7 +35,7 @@ export function PayrollPage() {
   const { features } = useFeatures();
   const [params, setParams] = useSearchParams();
 
-  const thisMonth = todayInDhaka().slice(0, 7);
+  const thisMonth = todayInWorkZone().slice(0, 7);
   const month = /^\d{4}-\d{2}$/.test(params.get('month') ?? '')
     ? (params.get('month') as string)
     : thisMonth;

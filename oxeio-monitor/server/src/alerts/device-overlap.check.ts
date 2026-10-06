@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 
-import { workDateOf } from '../agent/util/dhaka-time';
+import { workDateOf } from '../agent/util/work-time';
 import { PrismaService } from '../prisma/prisma.service';
 import { overlapSec, unionSec, type Span } from '../summary/summary.math';
 import { shouldFlagOverlap } from './alerts.rules';

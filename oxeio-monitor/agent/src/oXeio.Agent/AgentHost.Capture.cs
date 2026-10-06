@@ -357,7 +357,7 @@ internal sealed partial class AgentHost
          * to add 6 hours in their head. This confusion was caught in the G137 investigation.
          */
         _log.Info(
-            $"📸 slot {DhakaTime.LocalTimeOf(slot.SlotStart):HH\\:mm} · {results.Count} monitor(s)" +
+            $"📸 slot {WorkTime.LocalTimeOf(slot.SlotStart):HH\\:mm} · {results.Count} monitor(s)" +
             (front is null ? "" : $" · {front.ProcessName}"));
     }
 

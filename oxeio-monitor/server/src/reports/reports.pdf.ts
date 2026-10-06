@@ -1,7 +1,7 @@
 import PDFDocument from 'pdfkit';
 
 import {
-  dhakaStamp,
+  workStamp,
   MAX_PDF_ROWS,
   truncateToWidth,
   truncationNote,
@@ -195,7 +195,7 @@ function letterhead(
     .fillColor('#444444')
     .text(
       `Period: ${head.rangeFrom} to ${head.rangeTo}   |   ` +
-        `Generated: ${dhakaStamp(new Date(head.generatedAt))}   |   ` +
+        `Generated: ${workStamp(new Date(head.generatedAt))}   |   ` +
         `Rows: ${totalRows}`,
       { width: CONTENT_WIDTH },
     );

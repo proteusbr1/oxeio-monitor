@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import type { Prisma } from '@prisma/client';
 
-import { nextLocalMidnight } from '../agent/util/dhaka-time';
+import { nextLocalMidnight } from '../agent/util/work-time';
 import { PrismaService } from '../prisma/prisma.service';
 import { JOB_TIMEZONE, RunLock, SCHEDULING_ENABLED } from './scheduling';
 import { previousWorkDate } from './summary.math';

@@ -14,8 +14,8 @@ import {
   OWNER_PASSWORD,
   resetDatabase,
   todayWindow,
-  dhakaNoon,
-  dhakaTodayIso,
+  workNoon,
+  workTodayIso,
   realNow,
   type Harness,
 } from './setup/harness';
@@ -32,7 +32,7 @@ let h: Harness;
 let employeeId: number;
 
 /** Today's date in Dhaka: not UTC (G62, section 3d), and taken from the harness (G140) */
-const todayDhaka = (): string => dhakaTodayIso();
+const todayInWorkZone = (): string => workTodayIso();
 
 beforeAll(async () => {
   h = await createHarness();
@@ -57,7 +57,7 @@ beforeEach(async () => {
 });
 
 const body = (over: Record<string, unknown> = {}) => ({
-  workDate: todayDhaka(),
+  workDate: todayInWorkZone(),
   deltaSec: 7200,
   cause: 'agent_down',
   reason: 'Agent was down all morning after the power cut',
@@ -107,9 +107,9 @@ describe('giving hours back', () => {
      * changes is `creditedSec`: exactly 3600. This is the real picture too: a
      * real employee always has earlier days of tracking.
      */
-    const dhakaNow = dhakaNoon();
+    const workNow = workNoon();
     const monthStart = new Date(
-      Date.UTC(dhakaNow.getUTCFullYear(), dhakaNow.getUTCMonth(), 1),
+      Date.UTC(workNow.getUTCFullYear(), workNow.getUTCMonth(), 1),
     );
     await h.prisma.dailySummary.create({
       data: { employeeId, workDate: monthStart, workedSec: 0 },
@@ -203,7 +203,7 @@ describe('what is not accepted', () => {
 
   it('a future day gives 400', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
-    const later = dhakaNoon(3).toISOString().slice(0, 10);
+    const later = workNoon(3).toISOString().slice(0, 10);
 
     const res = await s.http
       .post(`/api/v1/employees/${employeeId}/time-adjustments`)
@@ -416,7 +416,7 @@ describe('adjustment for an inactive employee', () => {
     await h.prisma.employee.update({
       where: { id: employeeId },
       // Not `new Date()`: a fixture's instant always comes from the harness clock (G140)
-      data: { status: 'inactive', leftOn: dhakaNoon() },
+      data: { status: 'inactive', leftOn: workNoon() },
     });
 
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);

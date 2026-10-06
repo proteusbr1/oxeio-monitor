@@ -209,8 +209,8 @@ public class IdleStateMachineTests
 
         Assert.All(closed, s =>
             Assert.Equal(
-                oXeio.Core.Time.DhakaTime.WorkDateOf(s.StartedAt),
-                oXeio.Core.Time.DhakaTime.WorkDateOf(s.EndedAt.AddTicks(-1))));
+                oXeio.Core.Time.WorkTime.WorkDateOf(s.StartedAt),
+                oXeio.Core.Time.WorkTime.WorkDateOf(s.EndedAt.AddTicks(-1))));
     }
 
     [Fact]

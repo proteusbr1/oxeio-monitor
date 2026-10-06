@@ -11,7 +11,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { trackedFromBy } from '../summary/tracking-start';
 import { paceSecOf } from './progress.math';
-import { workDateOf } from './util/dhaka-time';
+import { workDateOf } from './util/work-time';
 
 /**
  * Careful: `work_date` is always the UTC midnight of a `@db.Date`, so adding or

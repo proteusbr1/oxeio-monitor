@@ -1,4 +1,4 @@
-import { WORK_TIMEZONE, dhakaPathParts } from '../agent/util/dhaka-time';
+import { WORK_TIMEZONE, workPathParts } from '../agent/util/work-time';
 
 /**
  * F06: the pure calculation of which text can **be printed at all** in a PDF.
@@ -182,8 +182,8 @@ export function truncateToWidth(
  * same code would then print Dhaka time on one machine and UTC on another,
  * with "(Asia/Dhaka)" written beside both.
  */
-export function dhakaStamp(instant: Date): string {
-  const { year, month, day, hhmmss } = dhakaPathParts(instant);
+export function workStamp(instant: Date): string {
+  const { year, month, day, hhmmss } = workPathParts(instant);
   return `${year}-${month}-${day} ${hhmmss.slice(0, 2)}:${hhmmss.slice(2, 4)} (${WORK_TIMEZONE})`;
 }
 

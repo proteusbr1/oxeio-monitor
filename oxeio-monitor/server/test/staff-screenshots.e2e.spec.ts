@@ -2,11 +2,11 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { workDateOf } from '../src/agent/util/dhaka-time';
+import { workDateOf } from '../src/agent/util/work-time';
 import { formatWorkDate } from '../src/screenshots/gallery.math';
 import {
   createHarness,
-  dhakaNoon,
+  workNoon,
   hashPassword,
   loginReady,
   MANAGER_EMAIL,
@@ -49,7 +49,7 @@ async function person(code: string, role: 'employee' | 'researcher' | null) {
       status: 'active',
     },
   });
-  const when = dhakaNoon();
+  const when = workNoon();
   const uuid = randomUUID();
   await h.prisma.screenshot.create({
     data: {
@@ -96,7 +96,7 @@ const setStaffScreenshots = (on: boolean) =>
 beforeEach(async () => {
   await resetDatabase(h.prisma, h.app);
   owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
-  today = formatWorkDate(workDateOf(dhakaNoon()));
+  today = formatWorkDate(workDateOf(workNoon()));
 });
 
 describe('a researcher sees only their own pictures', () => {

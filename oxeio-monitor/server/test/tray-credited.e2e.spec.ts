@@ -3,11 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { ProgressService } from '../src/agent/progress.service';
-import { workDateOf } from '../src/agent/util/dhaka-time';
+import { workDateOf } from '../src/agent/util/work-time';
 import { SummaryService } from '../src/summary/summary.service';
 import {
   createHarness,
-  dhakaNoon,
+  workNoon,
   OWNER_EMAIL,
   resetDatabase,
   type Harness,
@@ -58,7 +58,7 @@ beforeEach(async () => {
   await resetDatabase(h.prisma, h.app);
 });
 
-const today = () => workDateOf(dhakaNoon());
+const today = () => workDateOf(workNoon());
 
 async function makeEmployee(empCode: string): Promise<number> {
   const policy = await h.prisma.workPolicy.findFirst();
@@ -135,7 +135,7 @@ async function addSegment(opts: {
 }
 
 const trayOf = (employeeId: number) =>
-  progress.forEmployee(employeeId, dhakaNoon());
+  progress.forEmployee(employeeId, workNoon());
 
 describe('G112 — work on two devices at the same time is counted once', () => {
   /**
@@ -190,8 +190,8 @@ describe('G112 — finished days come from the rollup', () => {
     await addSegment({ employeeId: id, deviceId: a, workDate: before, hour: 10, hours: 6 });
     await addSegment({ employeeId: id, deviceId: a, workDate: yesterday, hour: 10, hours: 5 });
 
-    await summary.refreshDate(before, dhakaNoon());
-    await summary.refreshDate(yesterday, dhakaNoon());
+    await summary.refreshDate(before, workNoon());
+    await summary.refreshDate(yesterday, workNoon());
 
     const rows = await h.prisma.dailySummary.findMany({
       where: { employeeId: id, workDate: { lt: today() } },
@@ -227,7 +227,7 @@ describe('G112 — finished days come from the rollup', () => {
       });
 
     // the rollup wrote today's row too
-    await summary.refreshDate(day, dhakaNoon());
+    await summary.refreshDate(day, workNoon());
 
     const tray = await trayOf(id);
 
@@ -244,7 +244,7 @@ describe('G112 — finished days come from the rollup', () => {
 
     await addSegment({ employeeId: id, deviceId: a, workDate: yesterday, hour: 10, hours: 7 });
     await addSegment({ employeeId: id, deviceId: a, workDate: day, hour: 10, hours: 2 });
-    await summary.refreshDate(yesterday, dhakaNoon());
+    await summary.refreshDate(yesterday, workNoon());
 
     const tray = await trayOf(id);
 
@@ -350,7 +350,7 @@ describe("G162 — the month's credited number comes from the server", () => {
     await addSegment({ employeeId: id, deviceId: a, workDate: day, hour: 10, hours: 4 });
     await adjust(id, day, 3 * HOUR);
     await h.prisma.timeAdjustment.updateMany({
-      data: { revokedAt: dhakaNoon(), revokeReason: 'G162 test' },
+      data: { revokedAt: workNoon(), revokeReason: 'G162 test' },
     });
 
     expect((await trayOf(id)).monthCreditedSec).toBe(4 * HOUR);
@@ -427,7 +427,7 @@ describe("G162 — the month's credited number comes from the server", () => {
       hour: 10,
       hours: 3,
     });
-    await summary.refreshDate(firstOfMonth, dhakaNoon());
+    await summary.refreshDate(firstOfMonth, workNoon());
     await addSegment({ employeeId: id, deviceId: a, workDate: day, hour: 10, hours: 1 });
 
     expect((await trayOf(id)).monthCreditedSec).toBe(4 * HOUR);

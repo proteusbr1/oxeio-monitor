@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
-import { workDateOf } from '../agent/util/dhaka-time';
+import { workDateOf } from '../agent/util/work-time';
 import { AuditService } from '../audit/audit.service';
 import type { SessionUser } from '../auth/types';
 import { supersededThrough } from '../payroll/payroll.math';

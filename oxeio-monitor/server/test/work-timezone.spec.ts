@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 /**
  * WORK_TIMEZONE — the work-day zone is configurable, Asia/Dhaka by default.
  *
- * The offset is read from `process.env` when `dhaka-time.ts` is imported
+ * The offset is read from `process.env` when `work-time.ts` is imported
  * (the `@Cron` options need it before Nest exists), so each case here
  * re-imports the modules under a stubbed env instead of calling a setter.
  *
@@ -21,7 +21,7 @@ async function load(timeZone?: string) {
   else vi.stubEnv('WORK_TIMEZONE', timeZone);
 
   return {
-    time: await import('../src/agent/util/dhaka-time'),
+    time: await import('../src/agent/util/work-time'),
     alerts: await import('../src/alerts/alerts.rules'),
     summary: await import('../src/summary/summary.math'),
     ops: await import('../src/ops/ops.rules'),
@@ -79,7 +79,7 @@ describe('default (WORK_TIMEZONE unset) — unchanged', () => {
     const { time, scheduling } = await load();
     expect(time.WORK_TIMEZONE).toBe('Asia/Dhaka');
     expect(time.LOCAL_OFFSET_MIN).toBe(360);
-    expect(time.DHAKA_OFFSET_MIN).toBe(360);
+    expect(time.LOCAL_OFFSET_MIN).toBe(360);
     expect(time.LOCAL_OFFSET_ISO).toBe('+06:00');
     expect(time.WORK_TIMEZONE_LABEL).toBe('Dhaka');
     expect(scheduling.JOB_TIMEZONE).toBe('Asia/Dhaka');
@@ -96,7 +96,7 @@ describe('default (WORK_TIMEZONE unset) — unchanged', () => {
 
   it('human-facing text still says Dhaka', async () => {
     const { pdf } = await load();
-    expect(pdf.dhakaStamp(at('2026-08-11T12:30:00Z'))).toBe(
+    expect(pdf.workStamp(at('2026-08-11T12:30:00Z'))).toBe(
       '2026-08-11 18:30 (Asia/Dhaka)',
     );
   });
@@ -145,7 +145,7 @@ describe('America/Sao_Paulo (UTC−3)', () => {
     expect(time.localMidnightOf(at('2027-01-01T01:00:00Z')).toISOString()).toBe(
       '2026-12-31T03:00:00.000Z',
     );
-    expect(time.dhakaPathParts(at('2027-01-01T02:59:58Z'))).toEqual({
+    expect(time.workPathParts(at('2027-01-01T02:59:58Z'))).toEqual({
       year: '2026',
       month: '12',
       day: '31',
@@ -156,19 +156,19 @@ describe('America/Sao_Paulo (UTC−3)', () => {
   it('hours and clocks are local', async () => {
     const { time, summary, alerts } = await load(SP);
     const t = at('2026-08-11T10:05:00Z'); // 07:05 local
-    expect(time.dhakaHourOf(t)).toBe(7);
-    expect(summary.dhakaHourOf(t)).toBe(7);
-    expect(alerts.dhakaHourOf(t)).toBe(7);
-    expect(alerts.dhakaMinuteOfDay(t)).toBe(7 * 60 + 5);
-    expect(time.dhakaClock(at('2026-08-11T21:30:00Z'))).toBe('18:30');
+    expect(time.workHourOf(t)).toBe(7);
+    expect(summary.workHourOf(t)).toBe(7);
+    expect(alerts.workHourOf(t)).toBe(7);
+    expect(alerts.workMinuteOfDay(t)).toBe(7 * 60 + 5);
+    expect(time.workClock(at('2026-08-11T21:30:00Z'))).toBe('18:30');
     // just after local midnight: hour 0, not 21 of the day before
-    expect(time.dhakaHourOf(at('2026-08-11T03:10:00Z'))).toBe(0);
+    expect(time.workHourOf(at('2026-08-11T03:10:00Z'))).toBe(0);
   });
 
   it('the weekly off day is the local weekday', async () => {
     const { alerts } = await load(SP);
     // Fri 14 Aug 2026, 22:00 local = Sat 01:00 UTC
-    expect(alerts.dhakaIsoWeekday(at('2026-08-15T01:00:00Z'))).toBe(5);
+    expect(alerts.workIsoWeekday(at('2026-08-15T01:00:00Z'))).toBe(5);
     const input = {
       officeFrom: '09:00',
       officeTo: '18:00',
@@ -205,7 +205,7 @@ describe('America/Sao_Paulo (UTC−3)', () => {
 
   it('report stamps and the digest name the configured zone', async () => {
     const { pdf, digest } = await load(SP);
-    expect(pdf.dhakaStamp(at('2026-08-11T21:30:00Z'))).toBe(
+    expect(pdf.workStamp(at('2026-08-11T21:30:00Z'))).toBe(
       '2026-08-11 18:30 (America/Sao_Paulo)',
     );
     const body = digest.digestBody(

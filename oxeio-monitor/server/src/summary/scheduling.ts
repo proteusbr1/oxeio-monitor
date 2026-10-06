@@ -7,7 +7,7 @@
  * DI container exists. No injected service can be reached there.
  */
 
-import { WORK_TIMEZONE } from '../agent/util/dhaka-time';
+import { WORK_TIMEZONE } from '../agent/util/work-time';
 
 /**
  * The scheduler is completely off in tests.

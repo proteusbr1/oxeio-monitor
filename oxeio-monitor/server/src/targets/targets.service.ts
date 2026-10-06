@@ -13,7 +13,7 @@ import {
   localMidnightOf,
   nextLocalMidnight,
   workDateOf,
-} from '../agent/util/dhaka-time';
+} from '../agent/util/work-time';
 import { AuditService } from '../audit/audit.service';
 import type { SessionUser } from '../auth/types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -45,10 +45,10 @@ import {
  * clicking it shows 90, nobody will trust any number again, and this project
  * has had bugs precisely because the same formula was written in two places.
  */
-const dhakaStart = (day: string): Date =>
+const workStart = (day: string): Date =>
   new Date(`${day}T00:00:00${LOCAL_OFFSET_ISO}`);
 const nextDay = (day: string): Date =>
-  new Date(dhakaStart(day).getTime() + 86_400_000);
+  new Date(workStart(day).getTime() + 86_400_000);
 
 /**
  * The later of two `'YYYY-MM-DD'` strings.
@@ -599,7 +599,7 @@ export class TargetsService {
           { status: DesignTargetStatus.assigned },
           {
             status: DesignTargetStatus.done,
-            completedAt: { gte: dhakaStart(workDateStr(new Date())) },
+            completedAt: { gte: workStart(workDateStr(new Date())) },
           },
         ],
       },
@@ -722,7 +722,7 @@ export class TargetsService {
         id,
         assignedToId: employeeId,
         status: DesignTargetStatus.done,
-        completedAt: { gte: dhakaStart(workDateStr(now)) },
+        completedAt: { gte: workStart(workDateStr(now)) },
         // A row that moved along the chain cannot be undone: once someone has
         // checked the spelling or sent it to Amazon, it is no longer "pressed by mistake"
         checkedAt: null,
@@ -1221,7 +1221,7 @@ export class TargetsService {
     const activity =
       query.from || query.to
         ? {
-            ...(query.from ? { gte: dhakaStart(query.from) } : {}),
+            ...(query.from ? { gte: workStart(query.from) } : {}),
             ...(query.to ? { lt: nextDay(query.to) } : {}),
           }
         : undefined;
@@ -1244,7 +1244,7 @@ export class TargetsService {
      * ever trimmed, the boundary moves by itself and nobody has to remember.
      */
     const traceSince = await this.trace.since();
-    const since = traceSince === null ? null : dhakaStart(traceSince);
+    const since = traceSince === null ? null : workStart(traceSince);
 
     /**
      * Only for this one step. Because the question is asked from
@@ -1254,7 +1254,7 @@ export class TargetsService {
     const noFileFrom =
       traceSince === null
         ? null
-        : dhakaStart(laterDay(UPLOAD_QUEUE_FROM, traceSince));
+        : workStart(laterDay(UPLOAD_QUEUE_FROM, traceSince));
 
     const unseenJobs =
       query.stage === 'no_file' && noFileFrom !== null
@@ -1287,14 +1287,14 @@ export class TargetsService {
             }
         : query.stage === 'to_check'
         ? {
-            completedAt: { not: null, gte: dhakaStart(UPLOAD_QUEUE_FROM) },
+            completedAt: { not: null, gte: workStart(UPLOAD_QUEUE_FROM) },
             checkedAt: null,
           }
         : query.stage === 'to_fix'
           ? { errorFoundAt: { not: null }, fixedAt: null }
           : query.stage === 'to_upload'
             ? {
-                completedAt: { not: null, gte: dhakaStart(UPLOAD_QUEUE_FROM) },
+                completedAt: { not: null, gte: workStart(UPLOAD_QUEUE_FROM) },
                 uploadedAt: null,
                 /**
                  * Careful: rows where a mistake was found but not yet fixed are
@@ -1676,7 +1676,7 @@ export class TargetsService {
        */
       this.prisma.designTarget.count({
         where: {
-          completedAt: { not: null, gte: dhakaStart(UPLOAD_QUEUE_FROM) },
+          completedAt: { not: null, gte: workStart(UPLOAD_QUEUE_FROM) },
           checkedAt: null,
         },
       }),
@@ -1685,7 +1685,7 @@ export class TargetsService {
       }),
       this.prisma.designTarget.count({
         where: {
-          completedAt: { not: null, gte: dhakaStart(UPLOAD_QUEUE_FROM) },
+          completedAt: { not: null, gte: workStart(UPLOAD_QUEUE_FROM) },
           uploadedAt: null,
           // Rows with a mistake found but not fixed are excluded: twin of `list()`
           NOT: { errorFoundAt: { not: null }, fixedAt: null },

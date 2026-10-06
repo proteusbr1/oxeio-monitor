@@ -186,12 +186,12 @@ public sealed class AppUsageTracker(
         }
 
         // Split at midnight too: one record cannot span two work_dates
-        var midnight = DhakaTime.NextLocalMidnight(_openedAt);
+        var midnight = WorkTime.NextLocalMidnight(_openedAt);
         while (midnight <= now)
         {
             Emit(closed, _openedAt, midnight);
             _openedAt = midnight;
-            midnight = DhakaTime.NextLocalMidnight(_openedAt);
+            midnight = WorkTime.NextLocalMidnight(_openedAt);
         }
     }
 

@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 
-import { LOCAL_OFFSET_MIN, WORK_TIMEZONE } from '../agent/util/dhaka-time';
+import { LOCAL_OFFSET_MIN, WORK_TIMEZONE } from '../agent/util/work-time';
 import { type CurrencyInfo } from '../payroll/currency';
 import { AppSettingsService } from '../settings/app-settings.service';
 import { IDLE_WARN_BEFORE_SEC, SESSION_TTL_MIN } from './auth.constants';

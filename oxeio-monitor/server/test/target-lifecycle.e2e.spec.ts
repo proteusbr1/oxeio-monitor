@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { TargetsService } from '../src/targets/targets.service';
-import { createHarness, resetDatabase, dhakaNoon, type Harness } from './setup/harness';
+import { createHarness, resetDatabase, workNoon, type Harness } from './setup/harness';
 let h: Harness;
 let service: TargetsService;
 beforeAll(async () => { h = await createHarness(); service = h.app.get(TargetsService); });
@@ -8,7 +8,7 @@ afterAll(async () => { await h.close(); });
 beforeEach(async () => { await resetDatabase(h.prisma, h.app); });
 async function target(status: 'done' | 'assigned' = 'done') {
   const owner = await h.prisma.user.findFirstOrThrow();
-  const old = new Date(dhakaNoon().getTime() - 2 * 86400000);
+  const old = new Date(workNoon().getTime() - 2 * 86400000);
   const row = await h.prisma.designTarget.create({ data: {
     asin: 'B012345678', addedById: owner.id, status,
     completedAt: status === 'done' ? old : null,
@@ -20,11 +20,11 @@ async function target(status: 'done' | 'assigned' = 'done') {
 describe('A03–A05 target lifecycle regressions', () => {
   it('repeated Done preserves the completion date and attribution', async () => {
     const { row, owner, old } = await target();
-    await expect(service.update(row.id, 'done', dhakaNoon(), owner.id)).resolves.toEqual({ ok: true });
+    await expect(service.update(row.id, 'done', workNoon(), owner.id)).resolves.toEqual({ ok: true });
     const after = await h.prisma.designTarget.findUniqueOrThrow({ where: { id: row.id } });
     expect(after.completedAt).toEqual(old);
     expect(after.completedById).toBe(row.completedById);
-    expect(await service.update(999999, 'done', dhakaNoon(), owner.id)).toEqual({ ok: false });
+    expect(await service.update(999999, 'done', workNoon(), owner.id)).toEqual({ ok: false });
   });
   it('returning to the pool clears every dependent production stage', async () => {
     const { row, owner, old } = await target();
@@ -32,7 +32,7 @@ describe('A03–A05 target lifecycle regressions', () => {
       checkedAt: old, checkedById: owner.id, errorFoundAt: old,
       fixedAt: old, fixedById: owner.id, uploadedAt: old, liveAt: old, liveAsin: 'B987654321',
     } });
-    await service.update(row.id, 'pool', dhakaNoon(), owner.id);
+    await service.update(row.id, 'pool', workNoon(), owner.id);
     const after = await h.prisma.designTarget.findUniqueOrThrow({ where: { id: row.id } });
     expect(after.status).toBe('pool');
     for (const key of ['assignedToId', 'assignedAt', 'startedAt', 'completedAt', 'completedById', 'completedVia', 'checkedAt', 'checkedById', 'errorFoundAt', 'fixedAt', 'fixedById', 'uploadedAt', 'liveAt', 'liveAsin'] as const) {
@@ -46,7 +46,7 @@ describe('A03–A05 target lifecycle regressions', () => {
     const locked = new Promise<void>((r) => { ready = r; });
     const gate = new Promise<void>((r) => { release = r; });
     const completion = h.prisma.$transaction(async (tx) => {
-      await tx.designTarget.update({ where: { id: row.id }, data: { status: 'done', completedAt: dhakaNoon() } });
+      await tx.designTarget.update({ where: { id: row.id }, data: { status: 'done', completedAt: workNoon() } });
       ready();
       await gate;
     }, { timeout: 15000 });

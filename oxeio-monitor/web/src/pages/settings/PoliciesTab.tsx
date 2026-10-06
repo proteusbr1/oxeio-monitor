@@ -11,7 +11,7 @@ import {
   formatDuration,
   formatHours,
   formatMonth,
-  todayInDhaka,
+  todayInWorkZone,
 } from '../../lib/format';
 import { HolidaysSection } from './HolidaysSection';
 import { targetPreview } from './policy.math';
@@ -362,7 +362,7 @@ function PolicyForm({
       on ? [...prev, day].sort((a, b) => a - b) : prev.filter((d) => d !== day),
     );
 
-  const thisMonth = todayInDhaka().slice(0, 7);
+  const thisMonth = todayInWorkZone().slice(0, 7);
   const preview = targetPreview({
     yearMonth: thisMonth,
     monthlyTargetHours: Number(form.monthlyTargetHours),

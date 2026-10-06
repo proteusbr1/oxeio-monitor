@@ -10,7 +10,7 @@ import {
   resetDatabase,
   type Harness,
   type Session,
-  dhakaNoon,
+  workNoon,
 } from './setup/harness';
 
 /**
@@ -35,7 +35,7 @@ afterAll(async () => {
 });
 
 /** The current Dhaka month — the tests' expectations match it */
-const thisMonth = dhakaNoon().toISOString().slice(0, 7);
+const thisMonth = workNoon().toISOString().slice(0, 7);
 
 /** '2026-09' → '2026-08' */
 function prevMonth(ym: string): string {

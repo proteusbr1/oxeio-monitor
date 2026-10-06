@@ -11,7 +11,7 @@ import { Card } from '../../components/Card';
 import { Button } from '../../components/Page';
 import { Empty, ErrorBox, Loading } from '../../components/States';
 import { PersonCell, Table, type Column } from '../../components/Table';
-import { currencySymbol, formatDate, formatTaka, todayInDhaka } from '../../lib/format';
+import { currencySymbol, formatDate, formatTaka, todayInWorkZone } from '../../lib/format';
 import {
   Chip,
   ConfirmDialog,
@@ -836,7 +836,7 @@ function EmployeeForm({
             type="date"
             value={form.joinedOn}
             onChange={set('joinedOn')}
-            max={todayInDhaka()}
+            max={todayInWorkZone()}
           />
           <SelectField
             label="Work policy"
@@ -887,7 +887,7 @@ function DeactivateDialog({
   onDone: () => void;
 }) {
   const { busy, error, run } = useMutation();
-  const [leftOn, setLeftOn] = useState(todayInDhaka());
+  const [leftOn, setLeftOn] = useState(todayInWorkZone());
 
   return (
     <ConfirmDialog
@@ -903,7 +903,7 @@ function DeactivateDialog({
             type="date"
             value={leftOn}
             onChange={setLeftOn}
-            max={todayInDhaka()}
+            max={todayInWorkZone()}
             hint="Defaults to today — the month is counted only up to this date"
           />
         </div>

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { workDateOf } from '../src/agent/util/dhaka-time';
+import { workDateOf } from '../src/agent/util/work-time';
 import {
   DESIGN_APPS_SQL,
   DESIGN_ID_SQL_EXPR,
@@ -13,7 +13,7 @@ import { TargetsService } from '../src/targets/targets.service';
 import {
   createEmployeeWithCode,
   createHarness,
-  dhakaNoon,
+  workNoon,
   resetDatabase,
   type Harness,
 } from './setup/harness';
@@ -39,7 +39,7 @@ let targets: TargetsService;
 
 const HOUR_MS = 3600_000;
 /** Dhaka is UTC+6 — subtract this to go from the label to the real instant */
-const DHAKA_OFFSET_MS = 6 * HOUR_MS;
+const WORK_OFFSET_MS = 6 * HOUR_MS;
 
 const INDEX = 'app_usage_design_id_idx';
 
@@ -57,11 +57,11 @@ beforeEach(async () => {
   await resetDatabase(h.prisma, h.app);
 });
 
-const today = () => workDateOf(dhakaNoon());
+const today = () => workDateOf(workNoon());
 const dayBefore = (label: Date, days: number): Date =>
   new Date(label.getTime() - days * 86_400_000);
-const atDhakaHour = (dayLabel: Date, hour: number): Date =>
-  new Date(dayLabel.getTime() - DHAKA_OFFSET_MS + hour * HOUR_MS);
+const atWorkHour = (dayLabel: Date, hour: number): Date =>
+  new Date(dayLabel.getTime() - WORK_OFFSET_MS + hour * HOUR_MS);
 
 async function designer(code = 'OX-FT1'): Promise<{
   employeeId: number;
@@ -96,7 +96,7 @@ async function saw(
   seconds: number,
   process = 'Illustrator.exe',
 ): Promise<void> {
-  const startedAt = atDhakaHour(day, 11);
+  const startedAt = atWorkHour(day, 11);
 
   await h.prisma.appUsage.create({
     data: {
@@ -330,21 +330,21 @@ describe('file mark — three states in the list', () => {
 
     // a. has a mark
     await target(who.employeeId, 1_000_042, 'B000000042', {
-      assignedAt: atDhakaHour(day, 8),
-      completedAt: atDhakaHour(day, 17),
+      assignedAt: atWorkHour(day, 8),
+      completedAt: atWorkHour(day, 17),
     });
 
     // b. no mark, though it should have been known
     await target(who.employeeId, 1_000_043, 'B000000043', {
-      assignedAt: atDhakaHour(day, 8),
-      completedAt: atDhakaHour(day, 17),
+      assignedAt: atWorkHour(day, 8),
+      completedAt: atWorkHour(day, 17),
     });
 
     // c. finished before title collection began — cannot say
     const old = dayBefore(day, 5);
     await target(who.employeeId, 1_000_044, 'B000000044', {
-      assignedAt: atDhakaHour(old, 8),
-      completedAt: atDhakaHour(old, 17),
+      assignedAt: atWorkHour(old, 8),
+      completedAt: atWorkHour(old, 17),
     });
 
     const page = await targets.list({});
@@ -371,7 +371,7 @@ describe('file mark — three states in the list', () => {
 
     await saw(who, day, '1000042-Bird.ai', 60);
     await target(who.employeeId, 1_000_043, 'B000000043', {
-      assignedAt: atDhakaHour(day, 8),
+      assignedAt: atWorkHour(day, 8),
     });
 
     const page = await targets.list({ status: 'assigned' });
@@ -387,7 +387,7 @@ describe('file mark — three states in the list', () => {
 
     await saw(who, day, '1000043-Cat.ai', 240);
     await target(who.employeeId, 1_000_043, 'B000000043', {
-      assignedAt: atDhakaHour(day, 8),
+      assignedAt: atWorkHour(day, 8),
     });
 
     const page = await targets.list({ status: 'assigned' });
@@ -407,8 +407,8 @@ describe('file mark — three states in the list', () => {
 
     await saw(who, day, 'Untitled-20* @ 66.67 %', 300);
     await target(who.employeeId, 1_000_043, 'B000000043', {
-      assignedAt: atDhakaHour(day, 8),
-      completedAt: atDhakaHour(day, 17),
+      assignedAt: atWorkHour(day, 8),
+      completedAt: atWorkHour(day, 17),
     });
 
     const page = await targets.list({ stage: 'no_file' });
@@ -443,12 +443,12 @@ describe('file mark — the "said done but never opened" list', () => {
     await saw(who, day, '1000042-Bird.ai', 420);
 
     await target(who.employeeId, 1_000_042, 'B000000042', {
-      assignedAt: atDhakaHour(day, 8),
-      completedAt: atDhakaHour(day, 17),
+      assignedAt: atWorkHour(day, 8),
+      completedAt: atWorkHour(day, 17),
     });
     await target(who.employeeId, 1_000_043, 'B000000043', {
-      assignedAt: atDhakaHour(day, 8),
-      completedAt: atDhakaHour(day, 17),
+      assignedAt: atWorkHour(day, 8),
+      completedAt: atWorkHour(day, 17),
     });
 
     const page = await targets.list({ stage: 'no_file' });
@@ -469,7 +469,7 @@ describe('file mark — the "said done but never opened" list', () => {
 
     await saw(who, day, '1000042-Bird.ai', 60);
     await target(who.employeeId, 1_000_043, 'B000000043', {
-      assignedAt: atDhakaHour(day, 8),
+      assignedAt: atWorkHour(day, 8),
     });
 
     const page = await targets.list({ stage: 'no_file' });
@@ -492,8 +492,8 @@ describe('file mark — the "said done but never opened" list', () => {
 
     const old = dayBefore(day, 5);
     await target(who.employeeId, 1_000_055, 'B000000055', {
-      assignedAt: atDhakaHour(old, 8),
-      completedAt: atDhakaHour(old, 17),
+      assignedAt: atWorkHour(old, 8),
+      completedAt: atWorkHour(old, 17),
     });
 
     const page = await targets.list({ stage: 'no_file' });
@@ -509,8 +509,8 @@ describe('file mark — the "said done but never opened" list', () => {
     const day = today();
 
     await target(who.employeeId, 1_000_043, 'B000000043', {
-      assignedAt: atDhakaHour(day, 8),
-      completedAt: atDhakaHour(day, 17),
+      assignedAt: atWorkHour(day, 8),
+      completedAt: atWorkHour(day, 17),
     });
 
     const page = await targets.list({ stage: 'no_file' });
@@ -530,12 +530,12 @@ describe('file mark — the "said done but never opened" list', () => {
     await saw(a, day, '1000042-Bird.ai', 60);
 
     await target(a.employeeId, 1_000_043, 'B000000043', {
-      assignedAt: atDhakaHour(day, 8),
-      completedAt: atDhakaHour(day, 17),
+      assignedAt: atWorkHour(day, 8),
+      completedAt: atWorkHour(day, 17),
     });
     await target(b.employeeId, 1_000_044, 'B000000044', {
-      assignedAt: atDhakaHour(day, 8),
-      completedAt: atDhakaHour(day, 17),
+      assignedAt: atWorkHour(day, 8),
+      completedAt: atWorkHour(day, 17),
     });
 
     const page = await targets.list({

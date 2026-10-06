@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { dhakaNoon, dhakaTodayIso } from './setup/clock';
-import { workDateOf } from '../src/agent/util/dhaka-time';
+import { workNoon, workTodayIso } from './setup/clock';
+import { workDateOf } from '../src/agent/util/work-time';
 
 /**
  * Guards the helper that every fixture now stands on.
@@ -15,13 +15,13 @@ import { workDateOf } from '../src/agent/util/dhaka-time';
  * These tests remove the coincidence: the assertions do not depend on the
  * time, so they give the same answer whenever they run.
  */
-describe('dhakaNoon — a safe instant for fixtures', () => {
+describe('workNoon — a safe instant for fixtures', () => {
   it('Dhaka noon is 06:00 UTC', () => {
-    expect(dhakaNoon().toISOString().slice(11)).toBe('06:00:00.000Z');
+    expect(workNoon().toISOString().slice(11)).toBe('06:00:00.000Z');
   });
 
   it('falls on the current Dhaka day, same as the server "today"', () => {
-    expect(workDateOf(dhakaNoon()).getTime()).toBe(
+    expect(workDateOf(workNoon()).getTime()).toBe(
       workDateOf(new Date()).getTime(),
     );
   });
@@ -33,7 +33,7 @@ describe('dhakaNoon — a safe instant for fixtures', () => {
    * and the time-of-day flakiness would come back.
    */
   it('at least 11 hours away from both Dhaka midnights', () => {
-    const noon = dhakaNoon();
+    const noon = workNoon();
     /**
      * Careful: `workDateOf()` returns the Dhaka day as a UTC-midnight label
      * (`2026-09-05T00:00:00Z` = the Dhaka day of 5 September). The real Dhaka
@@ -51,15 +51,15 @@ describe('dhakaNoon — a safe instant for fixtures', () => {
 
   it('dayOffset moves by exactly 24 hours and stays at noon', () => {
     for (const d of [-3, -1, 1, 3]) {
-      expect(dhakaNoon(d).getTime() - dhakaNoon().getTime()).toBe(
+      expect(workNoon(d).getTime() - workNoon().getTime()).toBe(
         d * 86_400_000,
       );
-      expect(dhakaNoon(d).toISOString().slice(11)).toBe('06:00:00.000Z');
+      expect(workNoon(d).toISOString().slice(11)).toBe('06:00:00.000Z');
     }
   });
 
-  it('dhakaTodayIso() reports exactly that day', () => {
-    expect(dhakaTodayIso()).toBe(dhakaNoon().toISOString().slice(0, 10));
+  it('workTodayIso() reports exactly that day', () => {
+    expect(workTodayIso()).toBe(workNoon().toISOString().slice(0, 10));
   });
 
   /**
@@ -69,9 +69,9 @@ describe('dhakaNoon — a safe instant for fixtures', () => {
    */
   it('Dhaka date, not the UTC date', () => {
     const utcDate = new Date().toISOString().slice(0, 10);
-    const dhakaDate = dhakaTodayIso();
+    const workDate = workTodayIso();
     const hourUtc = new Date().getUTCHours();
-    if (hourUtc >= 18) expect(dhakaDate).not.toBe(utcDate);
-    else expect(dhakaDate).toBe(utcDate);
+    if (hourUtc >= 18) expect(workDate).not.toBe(utcDate);
+    else expect(workDate).toBe(utcDate);
   });
 });

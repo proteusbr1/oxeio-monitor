@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { UserRole } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { workDateOf } from '../src/agent/util/dhaka-time';
+import { workDateOf } from '../src/agent/util/work-time';
 import {
   createHarness,
   hashPassword,
@@ -14,7 +14,7 @@ import {
   OWNER_PASSWORD,
   resetDatabase,
   type Harness,
-  dhakaNoon,
+  workNoon,
 } from './setup/harness';
 
 /**
@@ -32,7 +32,7 @@ let deviceId: number;
 const STAFF_EMAIL = 'rakib@test.local';
 const STAFF_PASSWORD = 'staff-password-123';
 
-const now = dhakaNoon();
+const now = workNoon();
 const workDate = workDateOf(now);
 const MS_PER_DAY = 86_400_000;
 

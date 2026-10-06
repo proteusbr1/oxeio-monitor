@@ -24,7 +24,7 @@ import { MatchType, PrismaClient, Productivity, UserRole } from '@prisma/client'
 
 import { resolveHolidaySet, type HolidaySet } from './holiday-sets';
 import {
-  dhakaToday,
+  workToday,
   gazetteNotes,
   holidayRowName,
   planHolidaySeedRun,
@@ -318,7 +318,7 @@ async function seedHolidays(): Promise<{
     })),
     years,
     // "Today" is the Dhaka date, not the machine's local clock (see `dhakaToday()`).
-    { today: dhakaToday(new Date()), allowPast: ALLOW_PAST_HOLIDAYS },
+    { today: workToday(new Date()), allowPast: ALLOW_PAST_HOLIDAYS },
   );
 
   for (const entry of run.create) {

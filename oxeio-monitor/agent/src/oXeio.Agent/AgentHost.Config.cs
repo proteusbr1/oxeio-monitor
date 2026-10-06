@@ -179,17 +179,17 @@ internal sealed partial class AgentHost
     {
         if (cfg.UtcOffsetMinutes is not { } minutes) return;
 
-        var before = DhakaTime.ToMemoryLine();
-        if (!DhakaTime.TrySet(cfg.Timezone, minutes))
+        var before = WorkTime.ToMemoryLine();
+        if (!WorkTime.TrySet(cfg.Timezone, minutes))
         {
             _log.Warn($"Ignoring work-day zone {cfg.Timezone} ({minutes} min) — out of range");
             return;
         }
 
-        if (DhakaTime.ToMemoryLine() == before) return;
+        if (WorkTime.ToMemoryLine() == before) return;
 
         _zoneMemory.Remember();
-        changes.Add($"work-day zone {before} → {DhakaTime.ToMemoryLine()}");
+        changes.Add($"work-day zone {before} → {WorkTime.ToMemoryLine()}");
     }
 
     private void ApplyAppTracking(

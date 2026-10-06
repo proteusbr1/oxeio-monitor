@@ -14,7 +14,7 @@ namespace oXeio.Core.Time;
 /// (<c>utcOffsetMinutes</c>). <see cref="TrySet"/> applies it; until then, and
 /// on a server that does not send it, the offset stays UTC+06:00.
 /// </summary>
-public static class DhakaTime
+public static class WorkTime
 {
     /// <summary>Asia/Dhaka — what the agent uses before any config arrives.</summary>
     public static readonly TimeSpan DefaultOffset = TimeSpan.FromHours(6);

@@ -9,10 +9,10 @@
  */
 
 import {
-  dhakaPathParts,
+  workPathParts,
   localMidnightOf,
   workDateOf,
-} from '../agent/util/dhaka-time';
+} from '../agent/util/work-time';
 import {
   AGENT_SILENCE_MIN,
   OFFICE_OPEN_GRACE_MIN,
@@ -106,7 +106,7 @@ export function alertFloor(
   const rolling = throttleFloor(now, windowHours);
   if (!DAY_SCOPED_TYPES.has(type)) return rolling;
 
-  // `localMidnightOf` gives the real instant, not a label (see dhaka-time.ts)
+  // `localMidnightOf` gives the real instant, not a label (see work-time.ts)
   const dayStart = localMidnightOf(now);
   return dayStart.getTime() < rolling.getTime() ? dayStart : rolling;
 }
@@ -183,12 +183,12 @@ export function suppressFlood<T extends AlertKey>(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// 2. Dhaka time. Offsets are never computed by hand; everything comes from dhaka-time.ts
+// 2. Dhaka time. Offsets are never computed by hand; everything comes from work-time.ts
 // ════════════════════════════════════════════════════════════════════════════
 
 /** Local hour in Dhaka, 0-23 */
-export function dhakaHourOf(instant: Date): number {
-  return Number(dhakaPathParts(instant).hhmmss.slice(0, 2));
+export function workHourOf(instant: Date): number {
+  return Number(workPathParts(instant).hhmmss.slice(0, 2));
 }
 
 /**
@@ -199,14 +199,14 @@ export function dhakaHourOf(instant: Date): number {
  * the weekly off day would shift by one, and the mistake would only show on
  * the off day itself.
  */
-export function dhakaIsoWeekday(instant: Date): number {
+export function workIsoWeekday(instant: Date): number {
   const day = workDateOf(instant).getUTCDay();
   return day === 0 ? 7 : day;
 }
 
 /** Minute of the day in Dhaka local time (0-1439) */
-export function dhakaMinuteOfDay(instant: Date): number {
-  const hhmmss = dhakaPathParts(instant).hhmmss;
+export function workMinuteOfDay(instant: Date): number {
+  const hhmmss = workPathParts(instant).hhmmss;
   return Number(hhmmss.slice(0, 2)) * 60 + Number(hhmmss.slice(2, 4));
 }
 
@@ -250,7 +250,7 @@ export function isOfficeOpen(input: OfficeHoursInput): boolean {
   const { now, officeFrom, officeTo, weeklyOffDays, isHoliday } = input;
 
   if (isHoliday) return false;
-  if (isOffWeekday(dhakaIsoWeekday(now), weeklyOffDays)) {
+  if (isOffWeekday(workIsoWeekday(now), weeklyOffDays)) {
     return false;
   }
 
@@ -258,7 +258,7 @@ export function isOfficeOpen(input: OfficeHoursInput): boolean {
   const to = parseHhmm(officeTo);
   if (from === null || to === null || to <= from) return true;
 
-  const minute = dhakaMinuteOfDay(now);
+  const minute = workMinuteOfDay(now);
   return minute >= from && minute < to;
 }
 
@@ -288,7 +288,7 @@ export function isAgentWatchOpen(
   // there is no "after opening" moment and therefore no grace either.
   if (from === null) return true;
 
-  return dhakaMinuteOfDay(input.now) >= from + graceMin;
+  return workMinuteOfDay(input.now) >= from + graceMin;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -558,7 +558,7 @@ export function isNoActivityWindow(
   fromHour = NO_ACTIVITY_FROM_HOUR,
   toHour = NO_ACTIVITY_TO_HOUR,
 ): boolean {
-  const hour = dhakaHourOf(now);
+  const hour = workHourOf(now);
   return hour >= fromHour && hour < toHour;
 }
 
@@ -613,7 +613,7 @@ export function shouldFlagNoActivity(input: NoActivityInput): boolean {
    * the owner's inbox got news about something they had approved themselves.
    */
   if (onLeave) return false;
-  if (isOffWeekday(dhakaIsoWeekday(now), weeklyOffDays)) {
+  if (isOffWeekday(workIsoWeekday(now), weeklyOffDays)) {
     return false;
   }
 

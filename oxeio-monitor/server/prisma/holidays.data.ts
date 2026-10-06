@@ -1,3 +1,5 @@
+import { fixedOffsetMinutes } from '../src/agent/util/fixed-offset';
+
 /**
  * Bangladesh public holidays 2026–27: the list and its validation.
  * Pure functions, no I/O (same as `parse-staff.ts`, for the same reason:
@@ -669,14 +671,16 @@ export function monthKey(date: string): string {
  * `migrate` service does set `TZ=Asia/Dhaka`, but `npm run seed` may run on the
  * owner's laptop in any time zone, and "today" would then differ per machine.
  *
- * Bangladesh is UTC+6 and had DST only once, in 2009, cancelled the same year.
- * Adding 6 hours is therefore enough and `Intl` is not needed (the dhaka-time
- * helper in `src/` cannot be imported from `prisma/`; see the note at the top
- * of the file).
+ * The day is cut in the work time zone (`WORK_TIMEZONE`, default Asia/Dhaka) —
+ * the same rule the server uses. Zones are fixed-offset (the server refuses
+ * daylight saving), so adding the offset is enough.
  */
-export function dhakaToday(now: Date): string {
-  const DHAKA_OFFSET_MS = 6 * 60 * 60 * 1000;
-  return new Date(now.getTime() + DHAKA_OFFSET_MS).toISOString().slice(0, 10);
+export function workToday(
+  now: Date,
+  timeZone = process.env.WORK_TIMEZONE?.trim() || 'Asia/Dhaka',
+): string {
+  const offsetMs = fixedOffsetMinutes(timeZone) * 60_000;
+  return new Date(now.getTime() + offsetMs).toISOString().slice(0, 10);
 }
 
 /**

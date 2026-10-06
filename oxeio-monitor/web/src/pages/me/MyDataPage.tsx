@@ -17,7 +17,7 @@ import {
   formatDateShort,
   formatSignedDuration,
   shiftWorkDate,
-  todayInDhaka,
+  todayInWorkZone,
   weekdayOf,
 } from '../../lib/format';
 import { Adjustments } from '../staff/Adjustments';
@@ -43,7 +43,7 @@ import { Adjustments } from '../staff/Adjustments';
 export function MyDataPage() {
   const { user } = useAuth();
   const { features } = useFeatures();
-  const today = todayInDhaka();
+  const today = todayInWorkZone();
 
   /**
    * Careful: an owner's and a manager's `users.employee_id` is normally null; they

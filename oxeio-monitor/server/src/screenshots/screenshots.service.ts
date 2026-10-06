@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
 
-import { workDateOf } from '../agent/util/dhaka-time';
+import { workDateOf } from '../agent/util/work-time';
 import { AuditService } from '../audit/audit.service';
 import { FeaturesService } from '../features/features.service';
 import { PrismaService } from '../prisma/prisma.service';

@@ -100,7 +100,7 @@ internal sealed class TodayForm : OwnerDrawnForm
                 : options.EmployeeName!;
 
         stack.Line(who, TrayFontRole.Small, Theme.Ink2);
-        stack.Line(UiText.WorkDate(now) + " · " + DhakaTime.Label, TrayFontRole.Small, Muted);
+        stack.Line(UiText.WorkDate(now) + " · " + WorkTime.Label, TrayFontRole.Small, Muted);
         stack.Gap(6);
 
         // The state sits next to the number: it is the only thing in the window that changes

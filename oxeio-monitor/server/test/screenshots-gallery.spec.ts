@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { workDateOf } from '../src/agent/util/dhaka-time';
+import { workDateOf } from '../src/agent/util/work-time';
 import {
   formatWorkDate,
   GALLERY_PAGE_SIZE,

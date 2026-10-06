@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { workDateOf } from '../src/agent/util/dhaka-time';
+import { workDateOf } from '../src/agent/util/work-time';
 import { DashboardService } from '../src/dashboard/dashboard.service';
 import {
   createHarness,
-  dhakaNoon,
+  workNoon,
   resetDatabase,
   type Harness,
 } from './setup/harness';
@@ -29,7 +29,7 @@ let dashboard: DashboardService;
 
 const HOUR_MS = 3600_000;
 /** Dhaka is UTC+6 — subtract this to go from the label (`workDateOf`) to the real moment */
-const DHAKA_OFFSET_MS = 6 * HOUR_MS;
+const WORK_OFFSET_MS = 6 * HOUR_MS;
 
 beforeAll(async () => {
   h = await createHarness();
@@ -45,7 +45,7 @@ beforeEach(async () => {
 });
 
 /** Today's working day in Dhaka — as a label (UTC midnight) */
-const today = () => workDateOf(dhakaNoon());
+const today = () => workDateOf(workNoon());
 
 /**
  * The **real moment** of a given hour inside one Dhaka day.
@@ -55,8 +55,8 @@ const today = () => workDateOf(dhakaNoon());
  * hours before the label**. Getting this wrong would silently shift every
  * boundary test the wrong way, and they would stay green.
  */
-function atDhakaHour(dayLabel: Date, hour: number): Date {
-  return new Date(dayLabel.getTime() - DHAKA_OFFSET_MS + hour * HOUR_MS);
+function atWorkHour(dayLabel: Date, hour: number): Date {
+  return new Date(dayLabel.getTime() - WORK_OFFSET_MS + hour * HOUR_MS);
 }
 
 let asinCounter = 0;
@@ -79,8 +79,8 @@ const daysOf = async () => (await dashboard.teamTrend()).days;
 
 describe('seven-day strip — how many designs were finished', () => {
   it("a design finished today goes into today's slot", async () => {
-    await finishedAt(atDhakaHour(today(), 11));
-    await finishedAt(atDhakaHour(today(), 15));
+    await finishedAt(atWorkHour(today(), 11));
+    await finishedAt(atWorkHour(today(), 15));
 
     const days = await daysOf();
     const todayRow = days.at(-1)!;
@@ -90,9 +90,9 @@ describe('seven-day strip — how many designs were finished', () => {
 
   it('each day in its own slot — they do not mix', async () => {
     const t = today();
-    await finishedAt(atDhakaHour(new Date(t.getTime() - 2 * 86_400_000), 12));
-    await finishedAt(atDhakaHour(new Date(t.getTime() - 1 * 86_400_000), 12));
-    await finishedAt(atDhakaHour(new Date(t.getTime() - 1 * 86_400_000), 16));
+    await finishedAt(atWorkHour(new Date(t.getTime() - 2 * 86_400_000), 12));
+    await finishedAt(atWorkHour(new Date(t.getTime() - 1 * 86_400_000), 12));
+    await finishedAt(atWorkHour(new Date(t.getTime() - 1 * 86_400_000), 16));
 
     const days = await daysOf();
 
@@ -118,9 +118,9 @@ describe('seven-day strip — how many designs were finished', () => {
     const yesterday = new Date(t.getTime() - 86_400_000);
 
     // Yesterday's Dhaka 11:30 p.m. → yesterday's slot
-    await finishedAt(atDhakaHour(yesterday, 23.5));
+    await finishedAt(atWorkHour(yesterday, 23.5));
     // Today's Dhaka 12:30 a.m. → today's slot
-    await finishedAt(atDhakaHour(t, 0.5));
+    await finishedAt(atWorkHour(t, 0.5));
 
     const days = await daysOf();
 
@@ -134,7 +134,7 @@ describe('seven-day strip — how many designs were finished', () => {
    */
   it('a design finished outside the seven days does not appear on the strip', async () => {
     const t = today();
-    await finishedAt(atDhakaHour(new Date(t.getTime() - 20 * 86_400_000), 12));
+    await finishedAt(atWorkHour(new Date(t.getTime() - 20 * 86_400_000), 12));
 
     const days = await daysOf();
 
@@ -150,7 +150,7 @@ describe('seven-day strip — how many designs were finished', () => {
   it('a target lying in the pool is not "finished"', async () => {
     await finishedAt(null);
     await finishedAt(null);
-    await finishedAt(atDhakaHour(today(), 12));
+    await finishedAt(atWorkHour(today(), 12));
 
     const days = await daysOf();
 

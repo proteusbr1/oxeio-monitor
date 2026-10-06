@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 
-import { workDateOf } from '../agent/util/dhaka-time';
+import { workDateOf } from '../agent/util/work-time';
 import { parseCalendarDate } from '../calendar/calendar-date';
 import { AuditService } from '../audit/audit.service';
 import type { SessionUser } from '../auth/types';

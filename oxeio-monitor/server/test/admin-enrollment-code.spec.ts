@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { dhakaNoon } from './setup/clock';
+import { workNoon } from './setup/clock';
 
 import { describe, expect, it } from 'vitest';
 
@@ -156,7 +156,7 @@ describe('enrollment code: expiry', () => {
   });
 
   it('expiry is always in the future', () => {
-    const now = dhakaNoon();
+    const now = workNoon();
 
     expect(enrollmentCodeExpiry(now).getTime()).toBeGreaterThan(now.getTime());
   });

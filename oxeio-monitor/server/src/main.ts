@@ -76,7 +76,7 @@ function loadTlsOptions(): { key: Buffer; cert: Buffer } | undefined {
  * The work-day zone saved on Settings → Region, applied before anything
  * reads WORK_TIMEZONE.
  *
- * ⚠️ It has to happen here, before the app is imported: `dhaka-time.ts` and
+ * ⚠️ It has to happen here, before the app is imported: `work-time.ts` and
  *    the `@Cron({ timeZone })` options read the zone the moment they are
  *    loaded. That is also why a new zone needs a restart.
  * ⚠️ Never stops the start: no database yet, no saved zone, or a saved zone

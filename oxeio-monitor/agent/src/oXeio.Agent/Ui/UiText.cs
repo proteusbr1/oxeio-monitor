@@ -123,7 +123,7 @@ internal static class UiText
     /// </summary>
     public static string Clock(DateTimeOffset instant)
     {
-        var local = DhakaTime.LocalTimeOf(instant);
+        var local = WorkTime.LocalTimeOf(instant);
         return local.Hour.ToString("00", CultureInfo.InvariantCulture) + ":" +
                local.Minute.ToString("00", CultureInfo.InvariantCulture);
     }
@@ -131,7 +131,7 @@ internal static class UiText
     /// <summary>The Dhaka date, e.g. <c>9 August 2026</c>.</summary>
     public static string WorkDate(DateTimeOffset instant)
     {
-        var date = DhakaTime.WorkDateOf(instant);
+        var date = WorkTime.WorkDateOf(instant);
         var month = Months[date.Month - 1];
         return $"{Number(date.Day)} {month} {Number(date.Year)}";
     }

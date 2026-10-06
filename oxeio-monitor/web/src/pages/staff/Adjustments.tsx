@@ -16,7 +16,7 @@ import { Empty, ErrorBox, Loading } from '../../components/States';
 import {
   formatDate,
   formatSignedDuration,
-  todayInDhaka,
+  todayInWorkZone,
 } from '../../lib/format';
 import {
   Chip,
@@ -217,7 +217,7 @@ function AddDialog({
 }) {
   const { busy, error, run } = useMutation();
 
-  const [workDate, setWorkDate] = useState(todayInDhaka());
+  const [workDate, setWorkDate] = useState(todayInWorkZone());
   const [sign, setSign] = useState<'plus' | 'minus'>('plus');
   const [hours, setHours] = useState('2');
   const [minutes, setMinutes] = useState('0');
@@ -274,7 +274,7 @@ function AddDialog({
             type="date"
             value={workDate}
             onChange={setWorkDate}
-            max={todayInDhaka()}
+            max={todayInWorkZone()}
           />
 
           <SelectField

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 
-import { WORK_TIMEZONE } from '../agent/util/dhaka-time';
+import { WORK_TIMEZONE } from '../agent/util/work-time';
 import {
   ERROR_REPORTING_SETTING_KEY,
   resolveErrorReporting,

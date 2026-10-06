@@ -9,7 +9,7 @@ import {
   OWNER_PASSWORD,
   resetDatabase,
   type Harness,
-  dhakaNoon,
+  workNoon,
 } from './setup/harness';
 
 /**
@@ -25,8 +25,8 @@ let employeeId: number;
 
 const today = (): string => {
   // today's date in Dhaka (UTC+6, no DST)
-  const dhaka = dhakaNoon();
-  return dhaka.toISOString().slice(0, 10);
+  const work = workNoon();
+  return work.toISOString().slice(0, 10);
 };
 
 beforeAll(async () => {
@@ -89,7 +89,7 @@ describe('recording a signature (rollout precondition)', () => {
   it('a future date is rejected', async () => {
     const s = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
 
-    const soon = dhakaNoon(3).toISOString().slice(0, 10);
+    const soon = workNoon(3).toISOString().slice(0, 10);
 
     const res = await s.http
       .post(`/api/v1/employees/${employeeId}/policy-signed`)

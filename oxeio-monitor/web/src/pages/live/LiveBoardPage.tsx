@@ -10,7 +10,7 @@ import { Card } from '../../components/Card';
 import { Button, Page } from '../../components/Page';
 import { Empty, ErrorBox, Loading } from '../../components/States';
 import { Tabs } from '../../components/Tabs';
-import { dhakaHourNow, formatDate, formatDateShort, formatDuration, formatTime, weekdayOf, workTimeZone, workTimeZoneLabel } from '../../lib/format';
+import { workHourNow, formatDate, formatDateShort, formatDuration, formatTime, weekdayOf, workTimeZone, workTimeZoneLabel } from '../../lib/format';
 import { DayPulse } from './DayPulse';
 import { TopApps } from './TopApps';
 import { StatusStrip } from './TeamBars';
@@ -73,7 +73,7 @@ export function LiveBoardPage() {
       {isOwner && <StudioStat label="Open alerts" value={alerts.data?.openCount ?? '—'} tone={alerts.data?.openCount ? 'warning' : undefined} note={<Link to="/alerts" className="underline underline-offset-4">{alerts.error ? 'Refresh failed · view alerts ↗' : alerts.data?.rows[0]?.title ?? 'View alerts ↗'}</Link>} />}
     </div>
     <div className="studio-overview">
-      <Card title="Shape of the Day" hint={`Team hours by hour · ${workTimeZoneLabel()} time`} padded={false}><DataPanel result={pulse}>{pulse.data && <DayPulse hours={pulse.data.hours} currentHour={dhakaHourNow()} />}</DataPanel></Card>
+      <Card title="Shape of the Day" hint={`Team hours by hour · ${workTimeZoneLabel()} time`} padded={false}><DataPanel result={pulse}>{pulse.data && <DayPulse hours={pulse.data.hours} currentHour={workHourNow()} />}</DataPanel></Card>
       <Card title="Team Right Now" hint="Agent status at the last refresh" padded={false}>
         <StatusStrip cards={cards} />
         <p className="studio-connection-note">Offline describes the agent connection, not whether someone worked.</p>

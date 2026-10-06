@@ -13,7 +13,7 @@ import {
   todayWindow,
   type EnrolledDevice,
   type Harness,
-  dhakaNoon,
+  workNoon,
   realNow,
 } from './setup/harness';
 
@@ -256,7 +256,7 @@ describe('heartbeat', () => {
      * landed on yesterday's slot, the server saw today as a working day, and
      * the target came out 28,800 instead of 0. Caught at exactly 00:22.
      */
-    const workDate = dhakaNoon();
+    const workDate = workNoon();
     workDate.setUTCHours(0, 0, 0, 0);
 
     await h.prisma.holiday.create({

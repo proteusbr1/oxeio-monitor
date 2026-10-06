@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SegmentState, type Prisma } from '@prisma/client';
 
-import { workDateOf } from '../agent/util/dhaka-time';
+import { workDateOf } from '../agent/util/work-time';
 import { PrismaService } from '../prisma/prisma.service';
 import { TargetsService } from '../targets/targets.service';
 import { designFirstSeenInDay, keepKnownLongIds, KNOWN_JOB_FROM } from './design.rules';

@@ -2,13 +2,13 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { workDateOf } from '../src/agent/util/dhaka-time';
+import { workDateOf } from '../src/agent/util/work-time';
 import { SummaryRefreshJob } from '../src/summary/summary-refresh.job';
 import { SummaryService } from '../src/summary/summary.service';
 import {
   createEmployeeWithCode,
   createHarness,
-  dhakaNoon,
+  workNoon,
   enrollDevice,
   iso,
   realNow,
@@ -70,7 +70,7 @@ beforeEach(async () => {
  * days ago, exactly the way the offline outbox replays later.
  */
 async function upload(dayOffset: number, seconds: number): Promise<void> {
-  const startedAt = dhakaNoon(dayOffset);
+  const startedAt = workNoon(dayOffset);
   const endedAt = new Date(startedAt.getTime() + seconds * 1_000);
 
   await asAgent(h.http().post('/api/v1/agent/segments'), device.token)
@@ -88,7 +88,7 @@ async function upload(dayOffset: number, seconds: number): Promise<void> {
     .expect(200);
 }
 
-const dayOf = (offset: number) => workDateOf(dhakaNoon(offset));
+const dayOf = (offset: number) => workDateOf(workNoon(offset));
 
 const dirtyDates = async () =>
   (
@@ -171,7 +171,7 @@ describe('late-arriving day: draining', () => {
     // no job touches that day, so nothing exists yet
     expect(await workedOn(-3)).toBeNull();
 
-    const result = await summary.drainDirty(dhakaNoon());
+    const result = await summary.drainDirty(workNoon());
 
     expect(result.refreshed).toBe(1);
     expect(result.pending).toBe(0);
@@ -182,7 +182,7 @@ describe('late-arriving day: draining', () => {
   /** If the marker stayed after the drain, the same day would be counted again on every tick */
   it('the marker is removed after the drain', async () => {
     await upload(-2, 600);
-    await summary.drainDirty(dhakaNoon());
+    await summary.drainDirty(workNoon());
 
     expect(await dirtyDates()).toEqual([]);
   });
@@ -196,11 +196,11 @@ describe('late-arriving day: draining', () => {
     await upload(-3, 600);
     await upload(-4, 600);
 
-    const first = await summary.drainDirty(dhakaNoon(), 2);
+    const first = await summary.drainDirty(workNoon(), 2);
     expect(first.refreshed).toBe(2);
     expect(first.pending).toBe(1);
 
-    const second = await summary.drainDirty(dhakaNoon(), 2);
+    const second = await summary.drainDirty(workNoon(), 2);
     expect(second.refreshed).toBe(1);
     expect(second.pending).toBe(0);
   });
@@ -210,7 +210,7 @@ describe('late-arriving day: draining', () => {
     await upload(-5, 600);
     await upload(-2, 600);
 
-    await summary.drainDirty(dhakaNoon(), 1);
+    await summary.drainDirty(workNoon(), 1);
 
     // the one marked first is the one that was counted
     expect(await workedOn(-5)).toBe(600);
@@ -232,7 +232,7 @@ describe('late-arriving day: draining', () => {
       data: { yearMonth, closedBy: 'test' },
     });
 
-    const result = await summary.drainDirty(dhakaNoon());
+    const result = await summary.drainDirty(workNoon());
 
     expect(result.closed).toBe(1);
     expect(result.refreshed).toBe(0);
@@ -241,7 +241,7 @@ describe('late-arriving day: draining', () => {
   });
 
   it('draining is harmless when nothing is marked', async () => {
-    const result = await summary.drainDirty(dhakaNoon());
+    const result = await summary.drainDirty(workNoon());
 
     expect(result).toEqual({ refreshed: 0, closed: 0, pending: 0 });
   });
@@ -257,7 +257,7 @@ describe('K06: draining from the job', () => {
     await upload(-3, 1_800);
 
     const job = h.app.get(SummaryRefreshJob);
-    const result = await job.runOnce(dhakaNoon());
+    const result = await job.runOnce(workNoon());
 
     expect(result.skipped).toBe(false);
     expect(result.drained?.refreshed).toBe(1);
@@ -267,7 +267,7 @@ describe('K06: draining from the job', () => {
   /** Today is counted in the same tick too: the drain does not displace it */
   it('today is counted in the same tick too', async () => {
     const seconds = 600;
-    const startedAt = new Date(dhakaNoon().getTime() - HOUR_MS);
+    const startedAt = new Date(workNoon().getTime() - HOUR_MS);
     const endedAt = new Date(startedAt.getTime() + seconds * 1_000);
 
     await asAgent(h.http().post('/api/v1/agent/segments'), device.token)
@@ -285,7 +285,7 @@ describe('K06: draining from the job', () => {
       .expect(200);
 
     const job = h.app.get(SummaryRefreshJob);
-    await job.runOnce(dhakaNoon());
+    await job.runOnce(workNoon());
 
     expect(await workedOn(0)).toBe(seconds);
   });

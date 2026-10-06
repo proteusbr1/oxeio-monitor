@@ -15,7 +15,7 @@ import {
   formatMonth,
   monthEndOf,
   monthKeyOf,
-  todayInDhaka,
+  todayInWorkZone,
 } from '../../lib/format';
 import { seesEveryone } from '../../api/auth';
 import { HeatGrid } from './HeatGrid';
@@ -58,7 +58,7 @@ export function MonthlyPage() {
 }
 
 function MonthlyBoard() {
-  const today = todayInDhaka();
+  const today = todayInWorkZone();
   const [month, setMonth] = useState(() => monthKeyOf(today));
   const [sort, setSort] = useState<GridSort>('pace');
   const download = useXlsxDownload();

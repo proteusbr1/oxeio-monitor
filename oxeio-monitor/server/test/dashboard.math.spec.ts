@@ -20,7 +20,7 @@ import {
 const WORK_DATE = new Date(Date.UTC(2026, 7, 10));
 
 /** `HH:MM` on that Dhaka day as a UTC instant (Dhaka = UTC+6, no DST) */
-function dhaka(hh: number, mm = 0, ss = 0): Date {
+function work(hh: number, mm = 0, ss = 0): Date {
   return new Date(Date.UTC(2026, 7, 10, hh - 6, mm, ss));
 }
 
@@ -321,7 +321,7 @@ describe('latestHeartbeat — the card\'s "last seen"', () => {
 describe('spreadIntoHourBuckets — hour buckets', () => {
   it('a segment inside one hour goes entirely into that hour', () => {
     const buckets = spreadIntoHourBuckets(
-      [{ startedAt: dhaka(10, 10), endedAt: dhaka(10, 40), durationSec: 1800 }],
+      [{ startedAt: work(10, 10), endedAt: work(10, 40), durationSec: 1800 }],
       WORK_DATE,
     );
 
@@ -339,7 +339,7 @@ describe('spreadIntoHourBuckets — hour buckets', () => {
    */
   it('a segment spread over three hours is split proportionally', () => {
     const buckets = spreadIntoHourBuckets(
-      [{ startedAt: dhaka(10, 45), endedAt: dhaka(12, 15), durationSec: 5400 }],
+      [{ startedAt: work(10, 45), endedAt: work(12, 15), durationSec: 5400 }],
       WORK_DATE,
     );
 
@@ -351,7 +351,7 @@ describe('spreadIntoHourBuckets — hour buckets', () => {
 
   it('ending exactly on an hour boundary puts nothing in the next bucket', () => {
     const buckets = spreadIntoHourBuckets(
-      [{ startedAt: dhaka(9, 0), endedAt: dhaka(10, 0), durationSec: 3600 }],
+      [{ startedAt: work(9, 0), endedAt: work(10, 0), durationSec: 3600 }],
       WORK_DATE,
     );
 
@@ -369,8 +369,8 @@ describe('spreadIntoHourBuckets — hour buckets', () => {
     const buckets = spreadIntoHourBuckets(
       [
         {
-          startedAt: dhaka(8, 17, 13),
-          endedAt: dhaka(13, 42, 47),
+          startedAt: work(8, 17, 13),
+          endedAt: work(13, 42, 47),
           durationSec: 19_534,
         },
       ],
@@ -389,7 +389,7 @@ describe('spreadIntoHourBuckets — hour buckets', () => {
    */
   it('when durationSec differs from the wall-clock span, the total is still durationSec', () => {
     const buckets = spreadIntoHourBuckets(
-      [{ startedAt: dhaka(10, 0), endedAt: dhaka(12, 0), durationSec: 3600 }],
+      [{ startedAt: work(10, 0), endedAt: work(12, 0), durationSec: 3600 }],
       WORK_DATE,
     );
 
@@ -401,8 +401,8 @@ describe('spreadIntoHourBuckets — hour buckets', () => {
   it('several segments add up in the same bucket', () => {
     const buckets = spreadIntoHourBuckets(
       [
-        { startedAt: dhaka(14, 0), endedAt: dhaka(14, 20), durationSec: 1200 },
-        { startedAt: dhaka(14, 30), endedAt: dhaka(14, 45), durationSec: 900 },
+        { startedAt: work(14, 0), endedAt: work(14, 20), durationSec: 1200 },
+        { startedAt: work(14, 30), endedAt: work(14, 45), durationSec: 900 },
       ],
       WORK_DATE,
     );
@@ -414,8 +414,8 @@ describe('spreadIntoHourBuckets — hour buckets', () => {
   it('the first and last hours of the day land in the right place', () => {
     const buckets = spreadIntoHourBuckets(
       [
-        { startedAt: dhaka(0, 0), endedAt: dhaka(0, 30), durationSec: 1800 },
-        { startedAt: dhaka(23, 30), endedAt: dhaka(24, 0), durationSec: 1800 },
+        { startedAt: work(0, 0), endedAt: work(0, 30), durationSec: 1800 },
+        { startedAt: work(23, 30), endedAt: work(24, 0), durationSec: 1800 },
       ],
       WORK_DATE,
     );
@@ -426,7 +426,7 @@ describe('spreadIntoHourBuckets — hour buckets', () => {
 
   it('if the wall clock goes backwards, everything lands in the start hour and no time is lost', () => {
     const buckets = spreadIntoHourBuckets(
-      [{ startedAt: dhaka(15, 10), endedAt: dhaka(15, 5), durationSec: 300 }],
+      [{ startedAt: work(15, 10), endedAt: work(15, 5), durationSec: 300 }],
       WORK_DATE,
     );
 
@@ -451,7 +451,7 @@ describe('spreadIntoHourBuckets — hour buckets', () => {
 
   it('when durationSec is zero the buckets stay untouched', () => {
     const buckets = spreadIntoHourBuckets(
-      [{ startedAt: dhaka(11, 0), endedAt: dhaka(11, 0), durationSec: 0 }],
+      [{ startedAt: work(11, 0), endedAt: work(11, 0), durationSec: 0 }],
       WORK_DATE,
     );
 

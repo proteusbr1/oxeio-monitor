@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { workDateOf } from '../src/agent/util/dhaka-time';
+import { workDateOf } from '../src/agent/util/work-time';
 import { TargetsService } from '../src/targets/targets.service';
 import { JOB_NUMBER_START } from '../src/targets/targets.rules';
 import {
@@ -14,7 +14,7 @@ import {
   resetDatabase,
   type Harness,
   type Session,
-  dhakaNoon,
+  workNoon,
 } from './setup/harness';
 
 /**
@@ -315,7 +315,7 @@ describe('detecting "work started" from the file name', () => {
     await targets.distribute();
 
     const row = await h.prisma.designTarget.findFirstOrThrow();
-    const seenAt = new Date(dhakaNoon().getTime() + 37 * 60_000);
+    const seenAt = new Date(workNoon().getTime() + 37 * 60_000);
     const closed = await targets.markStartedByJobNumbers(
       designer.id,
       new Map([[String(row.jobNumber), seenAt]]),
@@ -355,7 +355,7 @@ describe('detecting "work started" from the file name', () => {
     //    the one trying to close it
     const closed = await targets.markStartedByJobNumbers(
       other.id,
-      new Map([[String(row.jobNumber), dhakaNoon()]]),
+      new Map([[String(row.jobNumber), workNoon()]]),
     );
 
     expect(closed).toBe(0);
@@ -374,7 +374,7 @@ describe('return to the pool at day end', () => {
     }).expect(201);
   }
 
-  const TODAY = dhakaNoon();
+  const TODAY = workNoon();
   /** New lines — writing them directly gets the escaping wrong */
   const BR = String.fromCharCode(10);
 
@@ -522,10 +522,10 @@ describe('started targets', () => {
     // Started yesterday, nobody opened the file today
     await h.prisma.designTarget.update({
       where: { id: one.id },
-      data: { startedAt: dhakaNoon(-1) },
+      data: { startedAt: workNoon(-1) },
     });
 
-    await targets.returnUnworked(workDateOf(dhakaNoon()));
+    await targets.returnUnworked(workDateOf(workNoon()));
 
     const after = await h.prisma.designTarget.findUniqueOrThrow({
       where: { id: one.id },
@@ -754,7 +754,7 @@ describe("researcher's queue — waiting for upload and live", () => {
     const row = await h.prisma.designTarget.findUniqueOrThrow({
       where: { asin: ASIN_OF(1) },
     });
-    await targetsOf().markUploaded(row.id, dhakaNoon());
+    await targetsOf().markUploaded(row.id, workNoon());
 
     const [stats, toUpload, toLive] = await Promise.all([
       targetsOf().stats(),
@@ -774,7 +774,7 @@ describe("researcher's queue — waiting for upload and live", () => {
     const row = await h.prisma.designTarget.findUniqueOrThrow({
       where: { asin: ASIN_OF(1) },
     });
-    await targetsOf().markUploaded(row.id, dhakaNoon());
+    await targetsOf().markUploaded(row.id, workNoon());
 
     expect((await targetsOf().list({ stage: 'to_upload' })).total).toBe(0);
     expect((await targetsOf().list({ stage: 'to_live' })).total).toBe(1);
@@ -840,7 +840,7 @@ describe('spell-check — checked, mistake found, fixed', () => {
   it('when the spelling is right it leaves the queue and does not go to the fix queue', async () => {
     const id = await finished(1);
 
-    await svc().markChecked(id, true, actorId, dhakaNoon());
+    await svc().markChecked(id, true, actorId, workNoon());
 
     const stats = await svc().stats();
     expect(stats.toCheck).toBe(0);
@@ -858,7 +858,7 @@ describe('spell-check — checked, mistake found, fixed', () => {
     const id = await finished(1);
     await finished(2);
 
-    await svc().markChecked(id, false, actorId, dhakaNoon());
+    await svc().markChecked(id, false, actorId, workNoon());
 
     const [stats, toFix, toUpload] = await Promise.all([
       svc().stats(),
@@ -876,10 +876,10 @@ describe('spell-check — checked, mistake found, fixed', () => {
 
   it('after being fixed it returns to the upload queue', async () => {
     const id = await finished(1);
-    await svc().markChecked(id, false, actorId, dhakaNoon());
+    await svc().markChecked(id, false, actorId, workNoon());
     expect((await svc().stats()).toUpload).toBe(0);
 
-    await svc().markFixed(id, actorId, dhakaNoon());
+    await svc().markFixed(id, actorId, workNoon());
 
     const stats = await svc().stats();
     expect(stats.toFix).toBe(0);
@@ -900,8 +900,8 @@ describe('spell-check — checked, mistake found, fixed', () => {
       data: { assignedToId: designer.id },
     });
 
-    await svc().markChecked(id, false, actorId, dhakaNoon());
-    await svc().markFixed(id, actorId, dhakaNoon());
+    await svc().markChecked(id, false, actorId, workNoon());
+    await svc().markFixed(id, actorId, workNoon());
 
     const row = await h.prisma.designTarget.findUniqueOrThrow({ where: { id } });
     expect(row.assignedToId).toBe(designer.id);
@@ -925,15 +925,15 @@ describe('spell-check — checked, mistake found, fixed', () => {
       where: { asin: ASIN_OF(1) },
     });
     await expect(
-      svc().markChecked(row.id, true, actorId, dhakaNoon()),
+      svc().markChecked(row.id, true, actorId, workNoon()),
     ).rejects.toThrow();
   });
 
   it('"fixed" cannot be said when there is no mistake', async () => {
     const id = await finished(1);
-    await svc().markChecked(id, true, actorId, dhakaNoon());
+    await svc().markChecked(id, true, actorId, workNoon());
 
-    await expect(svc().markFixed(id, actorId, dhakaNoon())).rejects.toThrow();
+    await expect(svc().markFixed(id, actorId, workNoon())).rejects.toThrow();
   });
 });
 
@@ -1159,7 +1159,7 @@ describe('undoing Complete', () => {
       data: {
         status: 'assigned',
         assignedToId: designer.id,
-        assignedAt: dhakaNoon(),
+        assignedAt: workNoon(),
       },
     });
 
@@ -1234,7 +1234,7 @@ describe('undoing Complete', () => {
     await post(session, `/api/v1/me/targets/${id}/done`, {}).expect(201);
     await h.prisma.designTarget.update({
       where: { id },
-      data: { completedAt: dhakaNoon(-3) },
+      data: { completedAt: workNoon(-3) },
     });
 
     await post(session, `/api/v1/me/targets/${id}/undone`, {}).expect(409);
@@ -1246,7 +1246,7 @@ describe('undoing Complete', () => {
     await post(session, `/api/v1/me/targets/${id}/done`, {}).expect(201);
     await h.prisma.designTarget.update({
       where: { id },
-      data: { completedAt: dhakaNoon(-3) },
+      data: { completedAt: workNoon(-3) },
     });
 
     await post(owner, `/api/v1/design-targets/${id}/undone`, {}).expect(201);
@@ -1394,7 +1394,7 @@ describe('allocation — the manager gets it too', () => {
       await h.prisma.designTarget.count({ where: { assignedToId: manager.id } }),
     ).toBe(30);
 
-    await svc().returnUnworked(workDateOf(dhakaNoon()));
+    await svc().returnUnworked(workDateOf(workNoon()));
 
     expect(
       await h.prisma.designTarget.count({ where: { assignedToId: manager.id } }),
@@ -1415,10 +1415,10 @@ describe('allocation — the manager gets it too', () => {
     });
     await h.prisma.designTarget.update({
       where: { id: one.id },
-      data: { startedAt: dhakaNoon() },
+      data: { startedAt: workNoon() },
     });
 
-    await svc().returnUnworked(workDateOf(dhakaNoon()));
+    await svc().returnUnworked(workDateOf(workNoon()));
 
     const still = await h.prisma.designTarget.findUniqueOrThrow({
       where: { id: one.id },
@@ -1517,7 +1517,7 @@ describe('deleting dead ASINs', () => {
 
     await h.prisma.designTarget.update({
       where: { id: first },
-      data: { status: 'done', completedAt: dhakaNoon(), completedVia: 'manual' },
+      data: { status: 'done', completedAt: workNoon(), completedVia: 'manual' },
     });
 
     const res = await post(owner, '/api/v1/design-targets/delete', {

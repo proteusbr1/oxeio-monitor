@@ -12,7 +12,7 @@ import {
   reportFilename,
 } from '../src/reports/reports.download';
 import {
-  dhakaStamp,
+  workStamp,
   EMPTY_CELL,
   hoursText,
   personLabel,
@@ -204,7 +204,7 @@ describe('truncateToWidth: text must not spill out of the cell', () => {
   });
 });
 
-describe('hoursText and dhakaStamp', () => {
+describe('hoursText and workStamp', () => {
   it('hours always have two decimals, so decimal points line up in a column', () => {
     expect(hoursText(7)).toBe('7.00');
     expect(hoursText(7.5)).toBe('7.50');
@@ -218,14 +218,14 @@ describe('hoursText and dhakaStamp', () => {
 
   it('creation time is in the Dhaka clock, not the server timezone', () => {
     // 12:34 UTC = 18:34 in Dhaka
-    expect(dhakaStamp(new Date('2026-08-11T12:34:56.000Z'))).toBe(
+    expect(workStamp(new Date('2026-08-11T12:34:56.000Z'))).toBe(
       '2026-08-11 18:34 (Asia/Dhaka)',
     );
   });
 
   it('around the UTC date change the Dhaka date is a day ahead', () => {
     // 20:00 UTC on 11 August = 02:00 on 12 August in Dhaka
-    expect(dhakaStamp(new Date('2026-08-11T20:00:00.000Z'))).toBe(
+    expect(workStamp(new Date('2026-08-11T20:00:00.000Z'))).toBe(
       '2026-08-12 02:00 (Asia/Dhaka)',
     );
   });

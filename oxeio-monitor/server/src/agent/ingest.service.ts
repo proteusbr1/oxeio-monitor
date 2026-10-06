@@ -9,7 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ClockDriftService, type Drift } from './clock-drift.service';
 import type { AppUsageDto, EventDto, SegmentDto } from './dto';
 import { deriveUuid } from './util/derive-uuid';
-import { nextLocalMidnight, workDateOf } from './util/dhaka-time';
+import { nextLocalMidnight, workDateOf } from './util/work-time';
 
 export interface IngestResult {
   accepted: number;

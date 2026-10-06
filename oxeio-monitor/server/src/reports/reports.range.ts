@@ -1,4 +1,4 @@
-import { workDateOf } from '../agent/util/dhaka-time';
+import { workDateOf } from '../agent/util/work-time';
 import { isOffWeekday } from '../summary/weekly-off';
 
 /**
@@ -11,7 +11,7 @@ import { isOffWeekday } from '../summary/weekly-off';
  * not be tested in isolation, yet in the end people trust the printed report.
  *
  * All dates here run as **UTC-midnight Dates**, just as Prisma's `@db.Date`
- * columns (`work_date`, `holiday_date`) return them and `dhaka-time.workDateOf()`
+ * columns (`work_date`, `holiday_date`) return them and `work-time.workDateOf()`
  * builds them. So comparisons match directly, with no timezone conversion.
  */
 
@@ -189,7 +189,7 @@ export function parseReportRange(
     );
   }
 
-  // Today's date in Dhaka, through dhaka-time rather than computing the offset ourselves
+  // Today's date in Dhaka, through work-time rather than computing the offset ourselves
   const today = workDateOf(opts.now ?? new Date());
 
   if (from.getTime() > today.getTime()) {

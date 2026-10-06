@@ -8,7 +8,7 @@ import { EmployeePicker } from '../../components/EmployeePicker';
 import { Button, Page } from '../../components/Page';
 import { Empty, ErrorBox, Loading } from '../../components/States';
 import { useAuth } from '../../auth/AuthContext';
-import { formatCount, formatDate, todayInDhaka } from '../../lib/format';
+import { formatCount, formatDate, todayInWorkZone } from '../../lib/format';
 import { Lightbox } from './Lightbox';
 import { ShotGrid } from './ShotGrid';
 import { useFreshUrls } from './useFreshUrls';
@@ -40,7 +40,7 @@ export function GalleryPage() {
    */
   const isEmployee = !seesEveryone(user?.role);
 
-  const [date, setDate] = useState(() => todayInDhaka());
+  const [date, setDate] = useState(() => todayInWorkZone());
   const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   /** `null` = lightbox closed */

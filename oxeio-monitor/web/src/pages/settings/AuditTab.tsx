@@ -13,7 +13,7 @@ import {
   formatDateTime,
   formatTime,
   monthStartOf,
-  todayInDhaka,
+  todayInWorkZone,
   workDateOf,
   workOffsetIso,
 } from '../../lib/format';
@@ -92,7 +92,7 @@ function dayEnd(date: string): string {
 }
 
 export function AuditTab() {
-  const today = todayInDhaka();
+  const today = todayInWorkZone();
   const [range, setRange] = useState({ from: monthStartOf(today), to: today });
   const [action, setAction] = useState('');
   const [user, setUser] = useState<{ id: number; name: string } | null>(null);

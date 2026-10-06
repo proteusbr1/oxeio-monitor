@@ -661,7 +661,7 @@ export interface WorkDateRange {
  *
  * Careful: **no timezone conversion.** The column is already the Dhaka date, stored
  * as a UTC midnight (that is exactly what `workDateOf` in
- * [dhaka-time.ts](../agent/util/dhaka-time.ts) sets). Adding +6 hours again here, or
+ * [work-time.ts](../agent/util/work-time.ts) sets). Adding +6 hours again here, or
  * using `toLocaleDateString`, would shift every date by a day depending on the
  * server's timezone, and that would show up only on some machines.
  */

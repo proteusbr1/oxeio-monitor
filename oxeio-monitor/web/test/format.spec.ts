@@ -20,7 +20,7 @@ import {
   shiftMonth,
   shiftWorkDate,
   thisMonthRange,
-  todayInDhaka,
+  todayInWorkZone,
   weekdayOf,
   workDateOf,
 } from '../src/lib/format';
@@ -37,7 +37,7 @@ import {
 
 // ── Dhaka dates ─────────────────────────────────────────────────────────────
 
-describe('todayInDhaka — the browser timezone is not assumed', () => {
+describe('todayInWorkZone — the browser timezone is not assumed', () => {
   /**
    * The most important test in this file. Between midnight and 6 am in Dhaka,
    * UTC is still on the **previous day**. Writing `toISOString().slice(0,10)`
@@ -47,11 +47,11 @@ describe('todayInDhaka — the browser timezone is not assumed', () => {
   it('2 am in Dhaka = new day, even though it is still the previous day in UTC', () => {
     const utc = new Date('2026-08-11T20:00:00Z'); // 2 am on 12 August in Dhaka
     expect(utc.toISOString().slice(0, 10)).toBe('2026-08-11');
-    expect(todayInDhaka(utc)).toBe('2026-08-12');
+    expect(todayInWorkZone(utc)).toBe('2026-08-12');
   });
 
   it('11:59 pm in Dhaka is still the same day', () =>
-    expect(todayInDhaka(new Date('2026-08-12T17:59:00Z'))).toBe('2026-08-12'));
+    expect(todayInWorkZone(new Date('2026-08-12T17:59:00Z'))).toBe('2026-08-12'));
 
   it('workDateOf takes both an ISO string and a Date', () => {
     expect(workDateOf('2026-08-11T20:30:00Z')).toBe('2026-08-12');

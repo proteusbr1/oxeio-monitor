@@ -10,7 +10,7 @@
  * and disk, and testable.
  */
 
-import { DHAKA_OFFSET_MIN } from '../agent/util/dhaka-time';
+import { LOCAL_OFFSET_MIN } from '../agent/util/work-time';
 import {
   BACKUP_CRITICAL_DAYS,
   BACKUP_EXT,
@@ -27,7 +27,7 @@ import {
 const MINUTE_MS = 60_000;
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
-const OFFSET_MS = DHAKA_OFFSET_MIN * MINUTE_MS;
+const OFFSET_MS = LOCAL_OFFSET_MIN * MINUTE_MS;
 
 // ════════════════════════════════════════════════════════════════════════════
 // 1. Backup names: the name is the only metadata

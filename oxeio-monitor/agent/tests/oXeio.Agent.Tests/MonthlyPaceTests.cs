@@ -12,7 +12,7 @@ namespace oXeio.Agent.Tests;
 public class MonthlyPaceTests
 {
     /// <summary>A moment in Dhaka time.</summary>
-    private static DateTimeOffset Dhaka(int year, int month, int day, int hour = 12) =>
+    private static DateTimeOffset AtWorkZone(int year, int month, int day, int hour = 12) =>
         new(year, month, day, hour, 0, 0, TimeSpan.FromHours(6));
 
     // ── counting workdays ───────────────────────────────────────────────────
@@ -53,7 +53,7 @@ public class MonthlyPaceTests
     public void Reaching_the_target_at_month_end_gives_zero_pace()
     {
         var pace = MonthlyPace.Estimate(
-            TimeSpan.FromHours(208), 208, Dhaka(2026, 8, 31));
+            TimeSpan.FromHours(208), 208, AtWorkZone(2026, 8, 31));
 
         Assert.NotNull(pace);
         Assert.Equal(0, pace!.Value.TotalHours, precision: 6);
@@ -62,7 +62,7 @@ public class MonthlyPaceTests
     [Fact]
     public void Working_more_than_expected_is_ahead()
     {
-        var pace = MonthlyPace.Estimate(TimeSpan.FromHours(208), 208, Dhaka(2026, 8, 20));
+        var pace = MonthlyPace.Estimate(TimeSpan.FromHours(208), 208, AtWorkZone(2026, 8, 20));
 
         Assert.NotNull(pace);
         Assert.True(pace!.Value > TimeSpan.Zero);
@@ -71,7 +71,7 @@ public class MonthlyPaceTests
     [Fact]
     public void Working_less_than_expected_is_behind()
     {
-        var pace = MonthlyPace.Estimate(TimeSpan.FromHours(10), 208, Dhaka(2026, 8, 20));
+        var pace = MonthlyPace.Estimate(TimeSpan.FromHours(10), 208, AtWorkZone(2026, 8, 20));
 
         Assert.NotNull(pace);
         Assert.True(pace!.Value < TimeSpan.Zero);
@@ -84,9 +84,9 @@ public class MonthlyPaceTests
     /// "208 hours behind".
     /// </summary>
     [Fact]
-    public void The_month_is_counted_in_the_Dhaka_calendar()
+    public void The_month_is_counted_in_the_work_zone_calendar()
     {
-        var firstMorning = Dhaka(2026, 9, 1, hour: 3);
+        var firstMorning = AtWorkZone(2026, 9, 1, hour: 3);
 
         var pace = MonthlyPace.Estimate(TimeSpan.Zero, 208, firstMorning);
 
@@ -106,7 +106,7 @@ public class MonthlyPaceTests
     [InlineData(-5d)]
     [InlineData(double.NaN)]
     public void No_target_means_no_pace(double target) =>
-        Assert.Null(MonthlyPace.Estimate(TimeSpan.FromHours(10), target, Dhaka(2026, 8, 10)));
+        Assert.Null(MonthlyPace.Estimate(TimeSpan.FromHours(10), target, AtWorkZone(2026, 8, 10)));
 
     // ══════════════ G111: "not observed yet" comes first ══════════════
 

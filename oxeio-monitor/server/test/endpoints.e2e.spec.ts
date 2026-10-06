@@ -12,8 +12,8 @@ import {
   OWNER_PASSWORD,
   resetDatabase,
   type Harness,
-  dhakaNoon,
-  dhakaTodayIso,
+  workNoon,
+  workTodayIso,
 } from './setup/harness';
 
 /**
@@ -58,7 +58,7 @@ beforeEach(async () => {
   ({ deviceId } = await enrollDevice(h, code));
 });
 
-const TODAY = dhakaTodayIso();
+const TODAY = workTodayIso();
 const MONTH = TODAY.slice(0, 7);
 
 /** Both owner and manager can read these (section 4.3) */
@@ -246,7 +246,7 @@ describe('a full URL or window title never appears in a report', () => {
    * stored. If it came back in the activity report, "who opened which file" would leak.
    */
   it('the activity report has no windowTitle', async () => {
-    const now = dhakaNoon();
+    const now = workNoon();
     await h.prisma.appUsage.create({
       data: {
         employeeId,

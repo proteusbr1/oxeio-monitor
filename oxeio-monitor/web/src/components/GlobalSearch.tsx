@@ -8,7 +8,7 @@ import {
   formatDate,
   isValidWorkDate,
   shiftWorkDate,
-  todayInDhaka,
+  todayInWorkZone,
   weekdayOf,
 } from '../lib/format';
 import { seesEveryone } from '../api/auth';
@@ -232,7 +232,7 @@ function SearchBox() {
 
   // Careful: counted afresh on every render, not in `useMemo`: if a tab stays
   // open all night, "today" changes at midnight and a memo would never know
-  const today = todayInDhaka();
+  const today = todayInWorkZone();
   const parsed = useMemo(() => parseSearchQuery(query, today), [query, today]);
 
   const rows = data?.rows;

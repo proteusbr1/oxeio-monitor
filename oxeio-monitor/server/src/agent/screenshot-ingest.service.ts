@@ -26,7 +26,7 @@ import {
 } from './agent.constants';
 import { ClockDriftService, type Drift } from './clock-drift.service';
 import type { ScreenshotMetaDto } from './dto';
-import { dhakaPathParts, workDateOf } from './util/dhaka-time';
+import { workPathParts, workDateOf } from './util/work-time';
 
 export interface ScreenshotResult {
   accepted: number;
@@ -116,7 +116,7 @@ export class ScreenshotIngestService implements OnModuleInit {
 
     // D:\oXeio\storage\screenshots\YYYY\MM\DD\emp-003\093147_m0.webp
     // Folders by date, so the 90-day retention is just deleting folders (ADR-006).
-    const { year, month, day, hhmmss } = dhakaPathParts(capturedAt);
+    const { year, month, day, hhmmss } = workPathParts(capturedAt);
     const emp = `emp-${String(device.employeeId).padStart(3, '0')}`;
     const relPath = join(
       'screenshots',

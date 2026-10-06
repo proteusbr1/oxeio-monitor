@@ -8,11 +8,11 @@
  */
 import type { SegmentState } from '@prisma/client';
 
-import { DHAKA_OFFSET_MIN } from '../agent/util/dhaka-time';
+import { LOCAL_OFFSET_MIN } from '../agent/util/work-time';
 
 const MS = 1000;
 const HOUR_MS = 3600 * MS;
-const OFFSET_MS = DHAKA_OFFSET_MIN * 60 * MS;
+const OFFSET_MS = LOCAL_OFFSET_MIN * 60 * MS;
 
 export const HOURS_PER_DAY = 24;
 

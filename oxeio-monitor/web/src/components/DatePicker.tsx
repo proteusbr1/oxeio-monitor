@@ -1,4 +1,4 @@
-import { shiftWorkDate, todayInDhaka } from '../lib/format';
+import { shiftWorkDate, todayInWorkZone } from '../lib/format';
 
 /**
  * Date picking: a single day, and a from-to range.
@@ -15,7 +15,7 @@ export function DatePicker({
   value,
   onChange,
   label = 'Date',
-  max = todayInDhaka(),
+  max = todayInWorkZone(),
   min,
   /** Previous/next day with the arrows; very useful on the timeline page. */
   withArrows = false,
@@ -85,7 +85,7 @@ export function DateRange({
   from,
   to,
   onChange,
-  max = todayInDhaka(),
+  max = todayInWorkZone(),
 }: {
   from: string;
   to: string;
@@ -121,7 +121,7 @@ export function MonthPicker({
   value,
   onChange,
   label = 'Month',
-  max = todayInDhaka().slice(0, 7),
+  max = todayInWorkZone().slice(0, 7),
 }: {
   value: string;
   onChange: (month: string) => void;

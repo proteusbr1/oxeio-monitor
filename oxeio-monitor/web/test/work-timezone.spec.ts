@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
-  dhakaHourNow,
+  workHourNow,
   formatDateTime,
   formatTime,
   setWorkTimeZone,
   thisMonthRange,
-  todayInDhaka,
+  todayInWorkZone,
   workDateOf,
   workOffsetIso,
   workOffsetMs,
@@ -23,10 +23,10 @@ import {
  *     midnight, across month and year boundaries.
  */
 
-const DHAKA = { timeZone: 'Asia/Dhaka', utcOffsetMinutes: 360 };
+const WORK_ZONE = { timeZone: 'Asia/Dhaka', utcOffsetMinutes: 360 };
 const SAO_PAULO = { timeZone: 'America/Sao_Paulo', utcOffsetMinutes: -180 };
 
-afterEach(() => setWorkTimeZone(DHAKA));
+afterEach(() => setWorkTimeZone(WORK_ZONE));
 
 describe('default — Asia/Dhaka, as before', () => {
   it('is Dhaka, +6 h', () => {
@@ -37,8 +37,8 @@ describe('default — Asia/Dhaka, as before', () => {
   });
 
   it('the day still turns at 18:00 UTC', () => {
-    expect(todayInDhaka(new Date('2026-08-11T17:59:00Z'))).toBe('2026-08-11');
-    expect(todayInDhaka(new Date('2026-08-11T18:00:00Z'))).toBe('2026-08-12');
+    expect(todayInWorkZone(new Date('2026-08-11T17:59:00Z'))).toBe('2026-08-11');
+    expect(todayInWorkZone(new Date('2026-08-11T18:00:00Z'))).toBe('2026-08-12');
     expect(formatTime('2026-08-11T12:30:00Z')).toBe('18:30');
   });
 });
@@ -54,8 +54,8 @@ describe('America/Sao_Paulo (UTC−3)', () => {
 
   it('the day turns at 00:00 local = 03:00 UTC', () => {
     setWorkTimeZone(SAO_PAULO);
-    expect(todayInDhaka(new Date('2026-08-11T02:59:00Z'))).toBe('2026-08-10');
-    expect(todayInDhaka(new Date('2026-08-11T03:00:00Z'))).toBe('2026-08-11');
+    expect(todayInWorkZone(new Date('2026-08-11T02:59:00Z'))).toBe('2026-08-10');
+    expect(todayInWorkZone(new Date('2026-08-11T03:00:00Z'))).toBe('2026-08-11');
     // 15:00 local — where the Dhaka offset used to turn the day
     expect(workDateOf('2026-08-11T18:00:00Z')).toBe('2026-08-11');
   });
@@ -63,8 +63,8 @@ describe('America/Sao_Paulo (UTC−3)', () => {
   it('clocks and hours are local', () => {
     setWorkTimeZone(SAO_PAULO);
     expect(formatTime('2026-08-11T21:30:00Z')).toBe('18:30');
-    expect(dhakaHourNow(new Date('2026-08-11T10:05:00Z'))).toBe(7);
-    expect(dhakaHourNow(new Date('2026-08-11T03:10:00Z'))).toBe(0);
+    expect(workHourNow(new Date('2026-08-11T10:05:00Z'))).toBe(7);
+    expect(workHourNow(new Date('2026-08-11T03:10:00Z'))).toBe(0);
     expect(formatDateTime('2026-08-12T02:30:00Z')).toBe(
       '11 August 2026, 23:30',
     );

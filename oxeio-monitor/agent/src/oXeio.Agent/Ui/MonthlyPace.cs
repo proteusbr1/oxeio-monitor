@@ -48,7 +48,7 @@ internal static class MonthlyPace
         if (targetHours <= 0 || double.IsNaN(targetHours) || double.IsInfinity(targetHours))
             return null;
 
-        var today = DhakaTime.WorkDateOf(now);
+        var today = WorkTime.WorkDateOf(now);
 
         var total = WorkdaysInMonth(today.Year, today.Month);
         if (total <= 0) return null;

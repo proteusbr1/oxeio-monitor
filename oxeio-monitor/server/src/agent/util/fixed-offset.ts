@@ -1,7 +1,7 @@
 /**
  * Minutes east of UTC for a time zone without DST — no side effects.
  *
- * Kept apart from dhaka-time.ts on purpose: that module reads WORK_TIMEZONE
+ * Kept apart from work-time.ts on purpose: that module reads WORK_TIMEZONE
  * the moment it is imported, and main.ts has to check the zone saved on
  * Settings → Region *before* that happens.
  */

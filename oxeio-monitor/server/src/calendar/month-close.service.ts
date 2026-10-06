@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
-import { workDateOf } from '../agent/util/dhaka-time';
+import { workDateOf } from '../agent/util/work-time';
 import { AuditService } from '../audit/audit.service';
 import type { SessionUser } from '../auth/types';
 import { PrismaService } from '../prisma/prisma.service';

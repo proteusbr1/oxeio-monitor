@@ -14,9 +14,9 @@
 
 /**
  * Asia/Dhaka = UTC+06:00, no DST; exactly the same constant as the server's
- * `dhaka-time.ts`. With two numbers in two places, one would eventually change.
+ * `work-time.ts`. With two numbers in two places, one would eventually change.
  */
-let DHAKA_OFFSET_MS = 6 * 60 * 60 * 1000;
+let WORK_OFFSET_MS = 6 * 60 * 60 * 1000;
 
 /**
  * The work-day zone, which the server may run on something other than
@@ -40,7 +40,7 @@ export function setWorkTimeZone(zone: {
     timeZone: zone.timeZone,
     utcOffsetMinutes: zone.utcOffsetMinutes,
   };
-  DHAKA_OFFSET_MS = zone.utcOffsetMinutes * 60 * 1000;
+  WORK_OFFSET_MS = zone.utcOffsetMinutes * 60 * 1000;
 }
 
 /** IANA name of the work-day zone — `Asia/Dhaka` by default */
@@ -58,7 +58,7 @@ export function workTimeZoneLabel(): string {
 
 /** Offset of the work-day zone in ms (Dhaka = 6 h) — for the few callers that cut days by hand */
 export function workOffsetMs(): number {
-  return DHAKA_OFFSET_MS;
+  return WORK_OFFSET_MS;
 }
 
 /** The offset as an ISO-8601 suffix: `+06:00`, `-03:00` */
@@ -193,8 +193,8 @@ function localeDate(
  * In the other direction, in a browser in Bangkok `toLocaleDateString()` would run
  * a day ahead. So the offset is stated explicitly here.
  */
-export function todayInDhaka(now: Date = new Date()): string {
-  return isoDateOf(new Date(now.getTime() + DHAKA_OFFSET_MS));
+export function todayInWorkZone(now: Date = new Date()): string {
+  return isoDateOf(new Date(now.getTime() + WORK_OFFSET_MS));
 }
 
 /**
@@ -205,14 +205,14 @@ export function todayInDhaka(now: Date = new Date()): string {
  * column, and a hard-to-spot error: the chart would be right, only the mark moved.
  * The offset is explicit here, as in `todayInDhaka`.
  */
-export function dhakaHourNow(now: Date = new Date()): number {
-  return new Date(now.getTime() + DHAKA_OFFSET_MS).getUTCHours();
+export function workHourNow(now: Date = new Date()): number {
+  return new Date(now.getTime() + WORK_OFFSET_MS).getUTCHours();
 }
 
 /** Which Dhaka workday an instant falls in: `YYYY-MM-DD`. */
 export function workDateOf(instant: Date | string): string {
   const date = typeof instant === 'string' ? new Date(instant) : instant;
-  return isoDateOf(new Date(date.getTime() + DHAKA_OFFSET_MS));
+  return isoDateOf(new Date(date.getTime() + WORK_OFFSET_MS));
 }
 
 /** `YYYY-MM-DD` from the UTC parts; no local getter. */
@@ -290,7 +290,7 @@ export function thisMonthRange(now: Date = new Date()): {
   from: string;
   to: string;
 } {
-  const today = todayInDhaka(now);
+  const today = todayInWorkZone(now);
   return { from: monthStartOf(today), to: today };
 }
 
@@ -367,7 +367,7 @@ export function formatMonth(monthKey: string): string {
  */
 export function formatTime(iso: string | null): string {
   if (!iso) return '—';
-  const shifted = new Date(new Date(iso).getTime() + DHAKA_OFFSET_MS);
+  const shifted = new Date(new Date(iso).getTime() + WORK_OFFSET_MS);
   if (Number.isNaN(shifted.getTime())) return '—';
   return `${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`;
 }

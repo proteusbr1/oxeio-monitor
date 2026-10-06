@@ -23,7 +23,7 @@ public sealed record ActivitySegment
     /// <summary>0 to 100: how active the person was in this slice. Not keylogging (B13).</summary>
     public int? InputScore { get; init; }
 
-    public DateOnly WorkDate => DhakaTime.WorkDateOf(StartedAt);
+    public DateOnly WorkDate => WorkTime.WorkDateOf(StartedAt);
 
     /// <summary>Only <see cref="SegmentState.Active"/> is added to the hours calculation.</summary>
     public bool CountsAsWork => State == SegmentState.Active;

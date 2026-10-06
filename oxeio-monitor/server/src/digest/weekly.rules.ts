@@ -1,4 +1,4 @@
-import { WORK_TIMEZONE_LABEL, workDateOf } from '../agent/util/dhaka-time';
+import { WORK_TIMEZONE_LABEL, workDateOf } from '../agent/util/work-time';
 import { addDays, toIsoDate } from '../reports/reports.range';
 import type { AttendanceRow, SummaryRow } from '../reports/reports.types';
 

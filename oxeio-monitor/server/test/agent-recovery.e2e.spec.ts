@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { workDateOf } from '../src/agent/util/dhaka-time';
+import { workDateOf } from '../src/agent/util/work-time';
 import { AgentDownCheck } from '../src/alerts/agent-down.check';
 import { AlertsService } from '../src/alerts/alerts.service';
 import {

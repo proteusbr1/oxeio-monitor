@@ -1,7 +1,7 @@
 /**
  * 'YYYY-MM-DD' -> a `Date` fit to store in a `@db.Date` column.
  *
- * Careful: `src/agent/util/dhaka-time.ts` is deliberately **not** used here.
+ * Careful: `src/agent/util/work-time.ts` is deliberately **not** used here.
  * That file converts an *instant* to a Dhaka date (for example which workday a
  * segment falls on). But a joining date or a holiday date is not an instant:
  * it is a plain calendar date that a person wrote by hand. Applying a

@@ -28,7 +28,7 @@ public sealed record AgentConfig
     /// <inheritdoc cref="ScreenshotFrom"/>
     public string? ScreenshotTo { get; init; }
 
-    /// <summary>Always <c>"Asia/Dhaka"</c> in v1, see <see cref="oXeio.Core.Time.DhakaTime"/>.</summary>
+    /// <summary>Always <c>"Asia/Dhaka"</c> in v1, see <see cref="oXeio.Core.Time.WorkTime"/>.</summary>
     public required string Timezone { get; init; }
 
     /// <summary>

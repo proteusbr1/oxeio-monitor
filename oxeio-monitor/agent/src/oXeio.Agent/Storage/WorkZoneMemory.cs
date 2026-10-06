@@ -41,7 +41,7 @@ internal sealed class WorkZoneMemory
             if (!File.Exists(_path)) return false;
 
             var line = File.ReadAllText(_path, Encoding.UTF8).Trim();
-            return line.Length <= MaxLineLength && DhakaTime.TryRestore(line);
+            return line.Length <= MaxLineLength && WorkTime.TryRestore(line);
         }
         catch (Exception)
         {
@@ -49,13 +49,13 @@ internal sealed class WorkZoneMemory
         }
     }
 
-    /// <summary>Keeps the zone currently in <see cref="DhakaTime"/>.</summary>
+    /// <summary>Keeps the zone currently in <see cref="WorkTime"/>.</summary>
     public void Remember()
     {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            File.WriteAllText(_path, DhakaTime.ToMemoryLine(), Encoding.UTF8);
+            File.WriteAllText(_path, WorkTime.ToMemoryLine(), Encoding.UTF8);
         }
         catch (Exception)
         {

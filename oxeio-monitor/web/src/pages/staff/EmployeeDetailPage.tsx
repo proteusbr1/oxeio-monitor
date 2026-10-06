@@ -9,7 +9,7 @@ import { Empty, ErrorBox, Loading } from '../../components/States';
 import {
   formatDate,
   isValidWorkDate,
-  todayInDhaka,
+  todayInWorkZone,
   weekdayOf,
 } from '../../lib/format';
 import { Adjustments } from './Adjustments';
@@ -52,7 +52,7 @@ export function EmployeeDetailPage() {
   const employeeId = Number(id);
   const validId = Number.isInteger(employeeId) && employeeId > 0;
 
-  const today = todayInDhaka();
+  const today = todayInWorkZone();
   const raw = params.get('date');
   // Careful: whatever the URL says, an invalid or future date is never sent to
   // the server. Quietly falling back to today beats showing a 400.

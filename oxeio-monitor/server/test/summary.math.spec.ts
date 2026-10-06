@@ -1,12 +1,12 @@
 import { resolve, sep } from 'node:path';
-import { dhakaNoon } from './setup/clock';
+import { workNoon } from './setup/clock';
 
 import { describe, expect, it } from 'vitest';
 
 import { RunLock } from '../src/summary/scheduling';
 import {
   countWorkdays,
-  dhakaHourOf,
+  workHourOf,
   hoursToSec,
   isInsideRoot,
   isWorkday,
@@ -27,7 +27,7 @@ const TARGET = 208 * 3600;
 const HOUR = 3600;
 
 /** Write Dhaka time, get a UTC instant — makes the tests easier to read */
-function dhaka(iso: string): Date {
+function work(iso: string): Date {
   return new Date(`${iso}+06:00`);
 }
 
@@ -36,8 +36,8 @@ function seg(
   from: string,
   to: string,
 ): DaySegment {
-  const startedAt = dhaka(from);
-  const endedAt = dhaka(to);
+  const startedAt = work(from);
+  const endedAt = work(to);
   return {
     state,
     startedAt,
@@ -57,8 +57,8 @@ describe('mergeSpans / unionSec — one person, two devices (§ 2.1-c)', () => {
   it('separate spans are added', () => {
     expect(
       unionSec([
-        { startedAt: dhaka('2026-08-11T09:00:00'), endedAt: dhaka('2026-08-11T10:00:00') },
-        { startedAt: dhaka('2026-08-11T11:00:00'), endedAt: dhaka('2026-08-11T12:00:00') },
+        { startedAt: work('2026-08-11T09:00:00'), endedAt: work('2026-08-11T10:00:00') },
+        { startedAt: work('2026-08-11T11:00:00'), endedAt: work('2026-08-11T12:00:00') },
       ]),
     ).toBe(2 * HOUR);
   });
@@ -69,8 +69,8 @@ describe('mergeSpans / unionSec — one person, two devices (§ 2.1-c)', () => {
    */
   it('with two devices running at the same time, the time counts only once', () => {
     const spans = [
-      { startedAt: dhaka('2026-08-11T09:00:00'), endedAt: dhaka('2026-08-11T11:00:00') },
-      { startedAt: dhaka('2026-08-11T10:00:00'), endedAt: dhaka('2026-08-11T12:00:00') },
+      { startedAt: work('2026-08-11T09:00:00'), endedAt: work('2026-08-11T11:00:00') },
+      { startedAt: work('2026-08-11T10:00:00'), endedAt: work('2026-08-11T12:00:00') },
     ];
 
     expect(unionSec(spans)).toBe(3 * HOUR);
@@ -85,28 +85,28 @@ describe('mergeSpans / unionSec — one person, two devices (§ 2.1-c)', () => {
   it('a span that falls entirely inside another still counts once', () => {
     expect(
       unionSec([
-        { startedAt: dhaka('2026-08-11T09:00:00'), endedAt: dhaka('2026-08-11T17:00:00') },
-        { startedAt: dhaka('2026-08-11T10:00:00'), endedAt: dhaka('2026-08-11T11:00:00') },
+        { startedAt: work('2026-08-11T09:00:00'), endedAt: work('2026-08-11T17:00:00') },
+        { startedAt: work('2026-08-11T10:00:00'), endedAt: work('2026-08-11T11:00:00') },
       ]),
     ).toBe(8 * HOUR);
   });
 
   it('two adjoining spans merge into one', () => {
     const merged = mergeSpans([
-      { startedAt: dhaka('2026-08-11T09:00:00'), endedAt: dhaka('2026-08-11T10:00:00') },
-      { startedAt: dhaka('2026-08-11T10:00:00'), endedAt: dhaka('2026-08-11T11:00:00') },
+      { startedAt: work('2026-08-11T09:00:00'), endedAt: work('2026-08-11T10:00:00') },
+      { startedAt: work('2026-08-11T10:00:00'), endedAt: work('2026-08-11T11:00:00') },
     ]);
 
     expect(merged).toHaveLength(1);
-    expect(merged[0].endedAt).toEqual(dhaka('2026-08-11T11:00:00'));
+    expect(merged[0].endedAt).toEqual(work('2026-08-11T11:00:00'));
   });
 
   it('works even when they arrive in random order', () => {
     expect(
       unionSec([
-        { startedAt: dhaka('2026-08-11T14:00:00'), endedAt: dhaka('2026-08-11T15:00:00') },
-        { startedAt: dhaka('2026-08-11T09:00:00'), endedAt: dhaka('2026-08-11T11:00:00') },
-        { startedAt: dhaka('2026-08-11T10:30:00'), endedAt: dhaka('2026-08-11T12:00:00') },
+        { startedAt: work('2026-08-11T14:00:00'), endedAt: work('2026-08-11T15:00:00') },
+        { startedAt: work('2026-08-11T09:00:00'), endedAt: work('2026-08-11T11:00:00') },
+        { startedAt: work('2026-08-11T10:30:00'), endedAt: work('2026-08-11T12:00:00') },
       ]),
     ).toBe(4 * HOUR);
   });
@@ -114,8 +114,8 @@ describe('mergeSpans / unionSec — one person, two devices (§ 2.1-c)', () => {
   it('zero-length or reversed spans are dropped', () => {
     expect(
       unionSec([
-        { startedAt: dhaka('2026-08-11T09:00:00'), endedAt: dhaka('2026-08-11T09:00:00') },
-        { startedAt: dhaka('2026-08-11T12:00:00'), endedAt: dhaka('2026-08-11T11:00:00') },
+        { startedAt: work('2026-08-11T09:00:00'), endedAt: work('2026-08-11T09:00:00') },
+        { startedAt: work('2026-08-11T12:00:00'), endedAt: work('2026-08-11T11:00:00') },
       ]),
     ).toBe(0);
   });
@@ -123,17 +123,17 @@ describe('mergeSpans / unionSec — one person, two devices (§ 2.1-c)', () => {
   /** The input is Prisma rows — if they were mutated, the caller would silently get wrong data */
   it('does not mutate the input objects', () => {
     const first = {
-      startedAt: dhaka('2026-08-11T09:00:00'),
-      endedAt: dhaka('2026-08-11T11:00:00'),
+      startedAt: work('2026-08-11T09:00:00'),
+      endedAt: work('2026-08-11T11:00:00'),
     };
     const spans = [
       first,
-      { startedAt: dhaka('2026-08-11T10:00:00'), endedAt: dhaka('2026-08-11T12:00:00') },
+      { startedAt: work('2026-08-11T10:00:00'), endedAt: work('2026-08-11T12:00:00') },
     ];
 
     mergeSpans(spans);
 
-    expect(first.endedAt).toEqual(dhaka('2026-08-11T11:00:00'));
+    expect(first.endedAt).toEqual(work('2026-08-11T11:00:00'));
   });
 });
 
@@ -220,8 +220,8 @@ describe('summarizeDay — one day summary (K06)', () => {
       ],
     });
 
-    expect(n.firstActivityAt).toEqual(dhaka('2026-08-11T07:15:00'));
-    expect(n.lastActivityAt).toEqual(dhaka('2026-08-11T23:00:00'));
+    expect(n.firstActivityAt).toEqual(work('2026-08-11T07:15:00'));
+    expect(n.lastActivityAt).toEqual(work('2026-08-11T23:00:00'));
     expect(n.earliestHour).toBe(7);
     expect(n.latestHour).toBe(23);
   });
@@ -337,25 +337,25 @@ describe('monthBounds and previousWorkDate', () => {
    * still the evening of the **previous day** — computing in UTC would close the wrong day.
    */
   it('running at 00:15 Dhaka closes the previous day', () => {
-    expect(previousWorkDate(dhaka('2026-08-12T00:15:00'))).toEqual(day('2026-08-11'));
+    expect(previousWorkDate(work('2026-08-12T00:15:00'))).toEqual(day('2026-08-11'));
   });
 
   it('running on the 1st of the month gives the last day of the previous month', () => {
-    expect(previousWorkDate(dhaka('2026-09-01T00:15:00'))).toEqual(day('2026-08-31'));
+    expect(previousWorkDate(work('2026-09-01T00:15:00'))).toEqual(day('2026-08-31'));
     // And then the monthly rollup goes to the previous month — otherwise the
     //    hours of 31 August would count in no month at all
-    expect(monthBounds(previousWorkDate(dhaka('2026-09-01T00:15:00'))).yearMonth).toBe('2026-08');
+    expect(monthBounds(previousWorkDate(work('2026-09-01T00:15:00'))).yearMonth).toBe('2026-08');
   });
 
   it('calling at any time of day gives the same previous day', () => {
-    expect(previousWorkDate(dhaka('2026-08-12T23:59:00'))).toEqual(day('2026-08-11'));
+    expect(previousWorkDate(work('2026-08-12T23:59:00'))).toEqual(day('2026-08-11'));
   });
 });
 
-describe('dhakaHourOf', () => {
+describe('workHourOf', () => {
   it('gives the Dhaka hour, not the UTC one', () => {
-    expect(dhakaHourOf(new Date('2026-08-11T18:15:00Z'))).toBe(0); // 00:15 on the 12th in Dhaka
-    expect(dhakaHourOf(new Date('2026-08-11T01:00:00Z'))).toBe(7);
+    expect(workHourOf(new Date('2026-08-11T18:15:00Z'))).toBe(0); // 00:15 on the 12th in Dhaka
+    expect(workHourOf(new Date('2026-08-11T01:00:00Z'))).toBe(7);
   });
 });
 
@@ -474,12 +474,12 @@ describe('rollupMonth — monthly target and pace', () => {
 
 describe('retentionCutoff — the most dangerous number in K01', () => {
   it('gives the date 90 days ago', () => {
-    expect(retentionCutoff(dhaka('2026-08-11T02:00:00'), 90)).toEqual(day('2026-05-13'));
+    expect(retentionCutoff(work('2026-08-11T02:00:00'), 90)).toEqual(day('2026-05-13'));
   });
 
   /** A picture exactly 90 days old **stays** — those before it are cut */
   it('the boundary day is spared', () => {
-    const cutoff = retentionCutoff(dhaka('2026-08-11T02:00:00'), 90);
+    const cutoff = retentionCutoff(work('2026-08-11T02:00:00'), 90);
 
     expect(day('2026-05-13') < cutoff).toBe(false); // stays
     expect(day('2026-05-12') < cutoff).toBe(true); // goes
@@ -487,7 +487,7 @@ describe('retentionCutoff — the most dangerous number in K01', () => {
 
   it('is computed on the Dhaka date, not UTC', () => {
     // 2 a.m. on the 12th in Dhaka = 8 p.m. on the 11th in UTC
-    expect(retentionCutoff(dhaka('2026-08-12T02:00:00'), 90)).toEqual(day('2026-05-14'));
+    expect(retentionCutoff(work('2026-08-12T02:00:00'), 90)).toEqual(day('2026-05-14'));
   });
 
   /**
@@ -496,9 +496,9 @@ describe('retentionCutoff — the most dangerous number in K01', () => {
    * pictures — both files and rows.
    */
   it('stops at zero or negative days', () => {
-    expect(() => retentionCutoff(dhakaNoon(), 0)).toThrow(RangeError);
-    expect(() => retentionCutoff(dhakaNoon(), -1)).toThrow(RangeError);
-    expect(() => retentionCutoff(dhakaNoon(), Number.NaN)).toThrow(RangeError);
+    expect(() => retentionCutoff(workNoon(), 0)).toThrow(RangeError);
+    expect(() => retentionCutoff(workNoon(), -1)).toThrow(RangeError);
+    expect(() => retentionCutoff(workNoon(), Number.NaN)).toThrow(RangeError);
   });
 });
 

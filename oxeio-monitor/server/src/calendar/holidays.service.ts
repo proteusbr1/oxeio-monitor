@@ -9,7 +9,7 @@ import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import type { SessionUser } from '../auth/types';
 import { PrismaService } from '../prisma/prisma.service';
-import { workDateOf } from '../agent/util/dhaka-time';
+import { workDateOf } from '../agent/util/work-time';
 import { ADMIN_TARGET } from '../audit/admin-audit';
 import { parseHolidayFile } from './holiday-import';
 import { parseCalendarDate } from './calendar-date';

@@ -24,7 +24,7 @@ import { Card } from '../../components/Card';
 import { Page } from '../../components/Page';
 import { ErrorBox, Loading } from '../../components/States';
 import { Table, type Column } from '../../components/Table';
-import { formatCount, formatDate, formatDateTime, formatDuration, todayInDhaka } from '../../lib/format';
+import { formatCount, formatDate, formatDateTime, formatDuration, todayInWorkZone } from '../../lib/format';
 import {
   Chip,
   MiniButton,
@@ -80,9 +80,9 @@ export function AllTargetsPage() {
  * to check whether it was already done, and by whom.
  */
 /** Today's date in Dhaka, `YYYY-MM-DD` */
-function dhakaToday(): string {
+function workToday(): string {
   // Careful: `toISOString()` gives UTC; in Dhaka before 6 am it would show yesterday
-  return todayInDhaka();
+  return todayInWorkZone();
 }
 
 /**
@@ -207,7 +207,7 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
    * matching, not remembered. If remembered, the dropdown would still say
    * "today" after the owner changes the dates by hand.
    */
-  const today = dhakaToday();
+  const today = workToday();
   const statusValue = dropdownValueOf(filter, from, to, today);
 
   const rows = data.data?.rows ?? [];
@@ -350,8 +350,8 @@ export function TargetList({ lockedStage }: { lockedStage?: Stage } = {}) {
               const v = e.target.value;
               if (v === 'done_today') {
                 setFilter('done');
-                setFrom(dhakaToday());
-                setTo(dhakaToday());
+                setFrom(workToday());
+                setTo(workToday());
                 return;
               }
               setFilter(v as FilterKey);

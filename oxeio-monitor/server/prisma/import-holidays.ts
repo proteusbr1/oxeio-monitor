@@ -24,7 +24,7 @@ import { PrismaClient } from '@prisma/client';
 // ⚠️ from src/: this script runs in the `migrate` container, which has the source
 import { parseHolidayFile } from '../src/calendar/holiday-import';
 import {
-  dhakaToday,
+  workToday,
   holidayRowName,
   planHolidaySeedRun,
   yearOf,
@@ -71,7 +71,7 @@ async function main(): Promise<void> {
       })),
       // every year in the file is open — unlike the seed, a file is imported on purpose
       [...new Set(entries.map((e) => yearOf(e.date)))],
-      { today: dhakaToday(new Date()), allowPast },
+      { today: workToday(new Date()), allowPast },
     );
 
     for (const note of run.notes) console.log(`   ${note}`);
