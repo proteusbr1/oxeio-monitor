@@ -1,5 +1,6 @@
 import { api } from './client';
 
+import type { UserPreferences } from './account';
 import type { Role } from './staff';
 export type { Role };
 
@@ -11,6 +12,9 @@ export interface Me {
   employeeId: number | null;
   mustChangePassword: boolean;
   lastLoginAt: string | null;
+  twoFactorEnabled: boolean;
+  /** Their own choices, saved on the account (Account page) */
+  preferences: UserPreferences;
   /**
    * Whether the user may submit design targets.
    *

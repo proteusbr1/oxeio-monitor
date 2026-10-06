@@ -22,7 +22,7 @@ import { TargetsPage } from './pages/targets/TargetsPage';
 import { MyDataPage } from './pages/me/MyDataPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
-import { SecurityPage } from './pages/account/SecurityPage';
+import { AccountPage } from './pages/account/AccountPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
 import { homePathFor, seesEveryone } from './api/auth';
 import { FeaturesProvider, useFeatures } from './features/FeaturesContext';
@@ -212,7 +212,9 @@ function Router() {
           account is not a privilege; staff can protect their own account too.
           (It opens no new way to watch them — the page is only about their own login.)
         */}
-        <Route path="security" element={<SecurityPage />} />
+        <Route path="account" element={<AccountPage />} />
+        {/* the Security page became a part of Account */}
+        <Route path="security" element={<Navigate to="/account" replace />} />
 
         {/*
           If not owner, the route **does not exist** — same as Settings. An alert

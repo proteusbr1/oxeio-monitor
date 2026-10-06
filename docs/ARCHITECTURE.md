@@ -93,6 +93,18 @@ month's workdays — by `server/src/calendar/work-regime.ts`
 formula. A `none` policy sets `noTarget`: screens and the tray show hours
 only, and a target of 0 does not read as a day off.
 
+## Account page
+
+Every signed-in person has **Account** (`/account`; the old `/security`
+redirects there; the name in the sidebar's foot links to it): their profile,
+password, 2FA, theme, recent sign-ins and "Sign out other devices". Server:
+`server/src/auth/account.*` — no id in any route, it always acts on the
+session's user. Staff accounts take their name from the staff record; only
+accounts without one rename themselves. The theme is saved on the user
+(`users.preferences`) and applied at sign-in. Signing out other devices (and a
+new password) sets `users.sessions_revoked_at`; older tokens end at their
+next refresh, at most 5 minutes later (`JwtAuthGuard`).
+
 ## Roles
 
 `owner` (everything), `manager` (team, reports, screenshots — no money, no

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 
 /**
  * Light/dark switch.
@@ -17,7 +17,9 @@ import { useCallback, useEffect, useState } from 'react';
  * CSS draw another, and the `dark:` classes would not match the tokens.
  */
 
-export type Theme = 'light' | 'dark';
+import type { Theme } from '../api/account';
+
+export type { Theme };
 
 const STORAGE_KEY = 'oxeio.theme';
 
@@ -74,18 +76,54 @@ export interface ThemeState {
   /** The theme currently in effect. */
   theme: Theme;
   toggle: () => void;
+  set: (theme: Theme) => void;
 }
 
 /**
- * Careful: at present the only user is `ThemeToggle` itself. If a second caller
- * appeared there would be two separate `useState`s and toggling one would not
- * inform the other; then this must move to context (the stamped DOM is the truth,
- * not state).
+ * One store for every caller (the header button and the Account page), so
+ * switching in one place moves the other. The stamped `<html data-theme>` is
+ * the truth; listeners are told when it changes.
  */
+const listeners = new Set<() => void>();
+
+function current(): Theme {
+  if (typeof document === 'undefined') return DEFAULT_THEME;
+  const stamped = document.documentElement.dataset.theme;
+  return stamped === 'light' || stamped === 'dark' ? stamped : DEFAULT_THEME;
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+/** Who else hears about a choice made here — the account, so it follows the person */
+let onChoose: ((theme: Theme) => void) | null = null;
+
+/** AuthContext sets this while someone is signed in, and clears it on sign-out */
+export function setThemeSaver(saver: ((theme: Theme) => void) | null): void {
+  onChoose = saver;
+}
+
+/**
+ * Applies a theme without telling the account — used at sign-in to bring in
+ * the theme saved there. Also remembered in this browser.
+ */
+export function applyTheme(theme: Theme): void {
+  writePreference(theme);
+  if (current() === theme) return;
+  stamp(theme);
+  listeners.forEach((l) => l());
+}
+
+/** The person chose: apply it here and save it to their account */
+function choose(theme: Theme): void {
+  applyTheme(theme);
+  onChoose?.(theme);
+}
+
 export function useTheme(): ThemeState {
-  const [theme, setTheme] = useState<Theme>(
-    () => readPreference() ?? DEFAULT_THEME,
-  );
+  const theme = useSyncExternalStore(subscribe, current, () => DEFAULT_THEME);
 
   /**
    * Careful: when the theme changes in another tab, this tab changes too. Without
@@ -97,25 +135,20 @@ export function useTheme(): ThemeState {
   useEffect(() => {
     const onStorage = (e: StorageEvent): void => {
       if (e.key !== null && e.key !== STORAGE_KEY) return;
-      setTheme(readPreference() ?? DEFAULT_THEME);
+      const next = readPreference() ?? DEFAULT_THEME;
+      if (next !== current()) {
+        stamp(next);
+        listeners.forEach((l) => l());
+      }
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  useEffect(() => {
-    stamp(theme);
-  }, [theme]);
+  const toggle = useCallback(() => choose(current() === 'dark' ? 'light' : 'dark'), []);
+  const set = useCallback((next: Theme) => choose(next), []);
 
-  const toggle = useCallback(() => {
-    setTheme((prev) => {
-      const next: Theme = prev === 'dark' ? 'light' : 'dark';
-      writePreference(next);
-      return next;
-    });
-  }, []);
-
-  return { theme, toggle };
+  return { theme, toggle, set };
 }
 
 /**

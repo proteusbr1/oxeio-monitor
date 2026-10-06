@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 
+import { AccountController } from './account.controller';
+import { AccountService } from './account.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { CsrfGuard } from './guards/csrf.guard';
@@ -26,9 +28,10 @@ import { TwoFactorService } from './two-factor.service';
  * victim is logged in anyway.
  */
 @Module({
-  controllers: [AuthController],
+  controllers: [AuthController, AccountController],
   providers: [
     AuthService,
+    AccountService,
     PasswordService,
     TokenService,
     TwoFactorService,

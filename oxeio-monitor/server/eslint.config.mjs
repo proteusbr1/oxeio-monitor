@@ -54,7 +54,7 @@ export default tseslint.config(
      * way to inject time and the test just did not use it. The rule rested on someone
      * remembering, and after three times that is no longer an accident.
      *
-     * Use the harness's two doors instead: `dhakaNoon()` (a fixture moment 12 hours
+     * Use the harness's two doors instead: `workNoon()` (a fixture moment 12 hours
      * from both day boundaries) and `uniqueSuffix()` (for unique names, no clock).
      *
      * Careful: `test/setup/**` is deliberately exempt: it is the only place where the
@@ -67,7 +67,7 @@ export default tseslint.config(
      * their job.
      *
      * Careful: `test/clock.spec.ts` is the rule's own guard. The whole claim of that
-     *    file is "`dhakaNoon()` lands in the right place relative to the real clock",
+     *    file is "`workNoon()` lands in the right place relative to the real clock",
      *    and proving it requires comparing against the real clock. Without the
      *    exemption one of two things would happen: the rule suppressed inline, or the
      *    guard never written, and both are bad.
@@ -79,13 +79,13 @@ export default tseslint.config(
         {
           selector: "NewExpression[callee.name='Date'][arguments.length=0]",
           message:
-            'স্পেকে `new Date()` নয় (G140) — ফিক্সচারের মুহূর্তের জন্য হারনেসের `dhakaNoon()` নিন। মধ্যরাতের দুই পাশে পড়ে গিয়ে টেস্ট এই রিপোতে তিনবার ভেঙেছে।',
+            'No `new Date()` in specs (G140) — take the fixture moment from the harness: `workNoon()`. Tests in this repo broke three times by landing on either side of midnight.',
         },
         {
           selector:
             "CallExpression[callee.object.name='Date'][callee.property.name='now']",
           message:
-            'স্পেকে `Date.now()` নয় (G140) — সময়ের জন্য `dhakaNoon()`, আর অনন্য নামের জন্য `uniqueSuffix()` (হারনেস)।',
+            'No `Date.now()` in specs (G140) — use `workNoon()` for time, or `realNow()` when the real clock is the point, and `uniqueSuffix()` for unique names (harness).',
         },
       ],
     },

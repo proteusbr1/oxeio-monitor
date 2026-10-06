@@ -10,7 +10,9 @@ import {
 
 import * as authApi from '../api/auth';
 import type { Me } from '../api/auth';
+import { updateAccount } from '../api/account';
 import { setUnauthorizedHandler } from '../api/client';
+import { applyTheme, setThemeSaver } from '../components/ThemeToggle';
 import { loadSession } from './session';
 import { IdleWarning } from './IdleWarning';
 import { login as loginRequest, type LoginCredentials } from './twoFactorApi';
@@ -73,6 +75,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setLoading(false);
   }, []);
+
+  /**
+   * The theme follows the person: the one saved on their account is applied
+   * at sign-in, and a switch made while signed in is saved back to it.
+   */
+  const savedTheme = user?.preferences?.theme;
+  const signedIn = user !== null;
+  useEffect(() => {
+    if (!signedIn) {
+      setThemeSaver(null);
+      return;
+    }
+    if (savedTheme) applyTheme(savedTheme);
+    setThemeSaver((theme) => {
+      updateAccount({ theme }).catch(() => {
+        // not saved on the account: it still applies in this browser
+      });
+    });
+  }, [signedIn, savedTheme]);
 
   useEffect(() => {
     // When a session ends on any request (30 minutes of inactivity, I09),

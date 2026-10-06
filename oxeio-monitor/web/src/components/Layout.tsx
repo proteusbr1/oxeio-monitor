@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 
 import { listAlerts } from '../api/alerts';
 import { seesEveryone, type Role } from '../api/auth';
@@ -243,16 +243,16 @@ const NAV: NavItem[] = [
   // Managers get in too: Staff, Categories, Policies & holidays are their three
   // tabs; `SettingsPage` itself hides the rest by looking at the role.
   /**
-   * I06: all three roles, not owner-only. This is not a tracking screen but the
-   * 2FA setting for one's own account. Making it owner-only would mean a manager's
+   * I06: every role, not owner-only. This is not a tracking screen but one's own
+   * account: profile, password, 2FA, look, devices. Making it owner-only would mean a manager's
    * account, which holds everyone's data, would never get 2FA.
    *
    * Careful: deliberately last, even after Settings: it is not a daily screen, it is
    * a place opened once or twice a year.
    */
   {
-    to: '/security',
-    label: 'Security',
+    to: '/account',
+    label: 'Account',
     roles: ['owner', 'manager', 'researcher', 'employee'],
   },
   { to: '/settings', label: 'Settings', roles: ['owner', 'manager'] },
@@ -353,10 +353,10 @@ export function Layout() {
             </div>
           ))}
         </nav>
-        <div className="studio-user">
+        <Link to="/account" className="studio-user" title="Your account">
           <span className="studio-avatar" aria-hidden>{initials}</span>
           <div className="min-w-0 text-xs"><div>{user?.fullName}</div><div className="mt-1 text-ink-2">{user ? ROLE_LABEL[user.role] : ''}</div></div>
-        </div>
+        </Link>
       </aside>
       <div className="studio-workspace">
         <header className="studio-topbar">

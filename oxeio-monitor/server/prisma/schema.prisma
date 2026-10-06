@@ -341,6 +341,10 @@ model User {
   mustChangePw Boolean   @default(true) @map("must_change_pw")
   pwChangedAt  DateTime? @map("pw_changed_at") @db.Timestamptz(3)
   lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(3)
+  /// "Sign out other devices": a session issued before this second ends at its next refresh
+  sessionsRevokedAt DateTime? @map("sessions_revoked_at") @db.Timestamptz(3)
+  /// The person's own choices (theme; language later) — see account/preferences.ts
+  preferences  Json      @default("{}")
   /// Design targets this user marked as "finished"
   completedTargets DesignTarget[] @relation("designTargetCompletedBy")
   /// Checked the spelling (ADR-038): usually a researcher

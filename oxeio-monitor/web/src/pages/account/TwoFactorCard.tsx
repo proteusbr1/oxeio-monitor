@@ -9,20 +9,18 @@ import {
   twoFactorStatus,
   type TwoFactorSetup,
 } from '../../auth/twoFactorApi';
-import { useAuth } from '../../auth/AuthContext';
 import { Card } from '../../components/Card';
 import { ErrorBox, Loading } from '../../components/States';
-import { Button, Page, SectionHead } from '../../components/Page';
+import { Button } from '../../components/Page';
 import { Modal, Notice, ServerError, useMutation } from '../../components/ui';
 import { RecoveryCodesModal } from './RecoveryCodesModal';
 
 /**
  * I06: 2FA for one's own account: one's own, nobody else's. Every endpoint works
  * on the session's user, so there is no need to make it owner-only; managers and
- * staff can harden their own accounts too.
+ * staff can harden their own accounts too. Lives on the Account page.
  */
-export function SecurityPage() {
-  const { user } = useAuth();
+export function TwoFactorCard() {
   const { data, error, loading, reload } = useApi(
     (signal) => twoFactorStatus(signal),
     [],
@@ -41,19 +39,15 @@ export function SecurityPage() {
   if (!data) return null;
 
   return (
-    <Page
-      title="Security"
-      subtitle={`${user?.email ?? ''} — two-factor authentication and sessions`}
-    >
-      <Card>
-        <SectionHead
-          title="Two-Factor Authentication (2FA)"
-          hint={
-            data.enabled
-              ? `On · ${data.recoveryCodesLeft} recovery codes left`
-              : 'Off'
-          }
-        />
+    <>
+      <Card
+        title="Two-factor authentication (2FA)"
+        hint={
+          data.enabled
+            ? `On · ${data.recoveryCodesLeft} recovery codes left`
+            : 'Off'
+        }
+      >
 
         {data.enabled ? (
           <div className="space-y-3">
@@ -151,7 +145,7 @@ export function SecurityPage() {
           }}
         />
       )}
-    </Page>
+    </>
   );
 }
 

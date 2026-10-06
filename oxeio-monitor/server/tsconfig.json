@@ -27,6 +27,6 @@
     }
   },
   "include": ["src/**/*", "prisma/**/*", "test/**/*"],
-  "comment": "vitest.config.ts বাদ — ওটা import.meta ব্যবহার করে, আর এখানে module=commonjs",
+  "comment": "vitest.config.ts is left out — it uses import.meta, and module is commonjs here",
   "exclude": ["node_modules", "dist", "vitest.config.ts"]
 }

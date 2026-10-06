@@ -14,6 +14,7 @@ import { LOCAL_OFFSET_MIN, WORK_TIMEZONE } from '../agent/util/work-time';
 import { type CurrencyInfo } from '../payroll/currency';
 import { AppSettingsService } from '../settings/app-settings.service';
 import { IDLE_WARN_BEFORE_SEC, SESSION_TTL_MIN } from './auth.constants';
+import { AccountService } from './account.service';
 import { AuthService, type MeResult } from './auth.service';
 import { AllowWhileMustChangePw, CurrentUser, Public } from './decorators';
 import {
@@ -60,6 +61,7 @@ export class AuthController {
     private readonly twoFactor: TwoFactorService,
     // currency and date format, as saved on Settings → Region (or the .env)
     private readonly settings: AppSettingsService,
+    private readonly accounts: AccountService,
   ) {}
 
   @Public()
@@ -166,6 +168,8 @@ export class AuthController {
       dto.newPassword,
       ip,
     );
+    // a new password ends the sessions on other devices (this one is re-issued below)
+    await this.accounts.revokeSessions(user.userId, null, null);
     // The token carries mustChangePw; without issuing a new one the user
     // would stay stuck even after changing the password
     await this.tokens.issue(res, { ...user, mustChangePw: false });

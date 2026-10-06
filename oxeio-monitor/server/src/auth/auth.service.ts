@@ -11,6 +11,7 @@ import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginThrottleService } from './login-throttle.service';
 import { PasswordService } from './password.service';
+import { preferencesOf, type UserPreferences } from './preferences';
 import {
   decodeEnvelope,
   encodeEnvelope,
@@ -51,6 +52,8 @@ export interface MeResult {
   lastLoginAt: Date | null;
   /** I06: the Security screen uses this to show the state */
   twoFactorEnabled: boolean;
+  /** their own choices (theme), applied by the dashboard at sign-in */
+  preferences: UserPreferences;
   /**
    * **Whether this user may submit design targets.** (22 August)
    *
@@ -223,6 +226,7 @@ export class AuthService {
       mustChangePassword: user.mustChangePw,
       lastLoginAt: user.lastLoginAt,
       twoFactorEnabled: decodeEnvelope(user.totpSecret)?.enabled === true,
+      preferences: preferencesOf(user.preferences),
       /**
        * Careful: the formula for both is **the same today**, yet there are two
        * names, deliberately. On screen they cover two different things (a menu

@@ -124,6 +124,9 @@ export type AuditAction =
   /** Signing in with a recovery code: rare and sensitive, hence a separate action */
   | '2fa_recovery_used'
   | '2fa_failed'
+  /** The account page: own name or look changed, other devices signed out */
+  | 'update_profile'
+  | 'sign_out_other_sessions'
   /** K02: `POST /ops/backup/run`, a manual backup (the nightly cron is not audited) */
   | 'backup_run'
   /**

@@ -73,6 +73,7 @@ export class JwtAuthGuard implements CanActivate {
           employeeId: true,
           mustChangePw: true,
           isActive: true,
+          sessionsRevokedAt: true,
         },
       });
 
@@ -85,7 +86,13 @@ export class JwtAuthGuard implements CanActivate {
         throw new UnauthorizedException('This account is no longer active');
       }
 
-      const updated = { ...user, ...fresh, userId: user.userId };
+      // "Sign out other devices" or a new password: a token from before the cut ends here
+      if (fresh.sessionsRevokedAt && user.issuedAt * 1000 < fresh.sessionsRevokedAt.getTime()) {
+        throw new UnauthorizedException('You were signed out — please sign in again');
+      }
+
+      const { sessionsRevokedAt: _cut, ...claims } = fresh;
+      const updated = { ...user, ...claims, userId: user.userId };
 
       // Careful: the new role applies on this very request; otherwise the change
       // would take effect one request late, which is a gap when a role is reduced.
