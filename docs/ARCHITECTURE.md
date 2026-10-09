@@ -124,6 +124,8 @@ month's workdays — by `server/src/calendar/work-regime.ts`
 formula. A `none` policy sets `noTarget`: screens and the tray show hours
 only, and a target of 0 does not read as a day off.
 
+**What counts as worked time** is also the policy's: `hoursMeasure` is `active` (keyboard/mouse time, the original measure) or `presence` (the day's active stretches joined across pauses up to `presenceGapMin`, default 15). The day roll-up stores both (`worked_sec`, `presence_sec`); `credited_sec` is the policy's measure plus adjustments, so everything that reads credited time follows. Changing the measure queues last month and this month for recount (`summary/recount.ts`); closed months stay.
+
 ## Time zone
 
 The work day is counted in one IANA zone (setup wizard, then Settings →
