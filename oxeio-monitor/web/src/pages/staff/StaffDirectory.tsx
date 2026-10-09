@@ -1209,7 +1209,11 @@ function PortalAccountForm({
             value={role}
             onChange={(value) => setRole(value as AssignableRole)}
             options={PORTAL_ROLES.map((r) => ({ ...r, label: t(r.label) }))}
-            hint={t('A staff screen has no buttons — they can only look at their own hours')}
+            hint={
+              role === 'finance'
+                ? t('Finance sees only the hours statement and marks hours as posted')
+                : t('A staff screen has no buttons — they can only look at their own hours')
+            }
           />
         )}
 

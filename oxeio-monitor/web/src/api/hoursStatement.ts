@@ -23,6 +23,7 @@ export interface PeriodSummary {
   snapshotAt: string | null;
   deliveryStatus: DeliveryStatus | null;
   sentAt: string | null;
+  /** the mail server's answer — owners only; `null` for finance */
   deliveryError: string | null;
 }
 
@@ -32,7 +33,7 @@ export interface StatementLine {
   employeeId: number;
   empCode: string;
   fullName: string;
-  /** the part of the period this person was paid by the hour */
+  /** the part of the period this person was employed and paid by the hour */
   fromDate: string;
   toDate: string;
   measuredSec: number;

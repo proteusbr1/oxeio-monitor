@@ -66,13 +66,13 @@ describe('hours statement formatting', () => {
     expect(pickPeriod([open], null)?.id).toBe(3);
     expect(pickPeriod([], null)).toBeNull();
   });
-  it('resend is offered once the email could not go, never on the open period', () => {
+  it('resend is offered for every frozen period (a sent email can be lost too), never on the open one', () => {
     expect(canResend(period({ deliveryStatus: 'failed' }))).toBe(true);
     expect(canResend(period({ deliveryStatus: 'no_recipients' }))).toBe(true);
     expect(canResend(period({ deliveryStatus: 'not_configured' }))).toBe(true);
     expect(canResend(period({ deliveryStatus: 'no_staff' }))).toBe(true);
-    expect(canResend(period({ deliveryStatus: 'sent' }))).toBe(false);
-    expect(canResend(period({ deliveryStatus: 'pending' }))).toBe(false);
+    expect(canResend(period({ deliveryStatus: 'sent' }))).toBe(true);
+    expect(canResend(period({ deliveryStatus: 'pending' }))).toBe(true);
     expect(canResend(period({ open: true, deliveryStatus: null }))).toBe(false);
   });
   it('the delivery line names the problem', () => {
@@ -85,6 +85,10 @@ describe('hours statement formatting', () => {
       text: 'Failed: timeout',
       problem: true,
     });
+    // finance gets no server detail: only that it failed
+    expect(
+      deliveryLine(period({ deliveryStatus: 'failed', deliveryError: null })),
+    ).toEqual({ text: 'The email could not be sent', problem: true });
     expect(
       deliveryLine(period({ deliveryStatus: 'not_configured' }))?.problem,
     ).toBe(true);

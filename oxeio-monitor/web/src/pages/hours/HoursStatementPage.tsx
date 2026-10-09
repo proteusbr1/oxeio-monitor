@@ -260,9 +260,7 @@ function PeriodView({
                   reloadAll();
                 })
               }
-              title={t(
-                'Send the stored statement again — after fixing the email settings',
-              )}
+              title={t('Email the stored statement again')}
             >
               {resend.busy ? t('Sending…') : t('Resend')}
             </Button>

@@ -40,6 +40,9 @@ const ACTIONS: { value: string; label: string }[] = [
   { value: 'view_screenshot', label: 'Screenshot viewed' },
   { value: 'payroll_view', label: 'Salary viewed' },
   { value: 'change_setting', label: 'Setting changed' },
+  { value: 'hours_statement_posted', label: 'Hours marked as posted' },
+  { value: 'hours_statement_unposted', label: 'Posted mark undone' },
+  { value: 'hours_statement_resent', label: 'Hours statement resent' },
   /**
    * **Un-finishing a finished task.**
    *

@@ -1,4 +1,4 @@
-import type { DeliveryStatus, PeriodSummary } from '../../api/hoursStatement';
+import type { PeriodSummary } from '../../api/hoursStatement';
 import { translate } from '../../i18n';
 import {
   formatDateMedium,
@@ -59,20 +59,12 @@ export function pickPeriod(
   );
 }
 
-/** The delivery statuses after which the owner may send the statement again */
-const RESENDABLE: ReadonlySet<DeliveryStatus> = new Set<DeliveryStatus>([
-  'failed',
-  'no_recipients',
-  'not_configured',
-  'no_staff',
-]);
-
+/**
+ * The owner may send any frozen statement again: after fixing the email
+ * settings, or because a sent one was lost. The open period has nothing to send.
+ */
 export function canResend(period: PeriodSummary): boolean {
-  return (
-    !period.open &&
-    period.deliveryStatus !== null &&
-    RESENDABLE.has(period.deliveryStatus)
-  );
+  return !period.open;
 }
 
 /** One line under the picker: how the email went. `null` for the open period. */
@@ -98,10 +90,12 @@ export function deliveryLine(
         problem: true,
       };
     case 'failed':
+      // the server's detail reaches the owner only; finance gets `null`
       return {
-        text: translate('Failed: {{error}}', {
-          error: period.deliveryError ?? translate('unknown error'),
-        }),
+        text:
+          period.deliveryError === null
+            ? translate('The email could not be sent')
+            : translate('Failed: {{error}}', { error: period.deliveryError }),
         problem: true,
       };
     case 'no_staff':
