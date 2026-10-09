@@ -39,6 +39,7 @@ import {
 } from './app-settings.rules';
 import { WORK_TIMEZONE } from '../agent/util/work-time';
 import { TELEGRAM_SETTING_KEY } from '../alerts/telegram.settings';
+import { RECIPIENTS_SETTING_KEY } from '../mail/recipients.rules';
 import { SMTP_SETTING_KEY } from '../mail/smtp.settings';
 import { ErrorReporter } from '../error-reporting/error-reporter.service';
 import { ERROR_REPORTING_SETTING_KEY } from '../error-reporting/error-reporting.rules';
@@ -426,6 +427,7 @@ const ENV_SUBJECTS: Record<string, string[]> = {
   offsite: [OFFSITE_SETTING_KEY],
   notifications: [TELEGRAM_SETTING_KEY],
   smtp: [SMTP_SETTING_KEY],
+  recipients: [RECIPIENTS_SETTING_KEY],
   errorReporting: [ERROR_REPORTING_SETTING_KEY],
   updateKey: [UPDATE_KEY_SETTING_KEY],
 };

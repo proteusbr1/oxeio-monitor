@@ -7,7 +7,7 @@ import {
 } from '../alerts/telegram.channel';
 import { TeamsChannel } from '../alerts/teams.channel';
 import { Mailer } from '../mail/mailer';
-import { digestRecipients } from './digest.recipients';
+import { MailRecipients } from '../mail/recipients.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { parseWorkDate, toIsoDate } from '../reports/reports.range';
 import { ReportsService } from '../reports/reports.service';
@@ -109,7 +109,6 @@ export class WeeklyDigestService {
    * another variable, this guard would silently guard the wrong chat.
    */
   private readonly gate: WeeklyGate;
-  private readonly digestEmailTo: string | undefined;
 
   constructor(
     private readonly reports: ReportsService,
@@ -117,12 +116,12 @@ export class WeeklyDigestService {
     private readonly telegram: TelegramChannel,
     private readonly teams: TeamsChannel,
     private readonly mailer: Mailer,
+    private readonly recipientsOf: MailRecipients,
     config: ConfigService,
     // the company name saved by the setup wizard / Settings wins over ORG_NAME
     @Optional() private readonly settings?: AppSettingsService,
   ) {
     this.orgName = config.get<string>('ORG_NAME')?.trim() || DEFAULT_ORG_NAME;
-    this.digestEmailTo = config.get<string>('DIGEST_EMAIL_TO');
     this.gate = weeklyGateOf(
       config.get<string>('TELEGRAM_CHAT_ID'),
       config.get<string>(WEEKLY_ALLOW_GROUP_ENV),
@@ -144,15 +143,7 @@ export class WeeklyDigestService {
   private async sendByEmail(text: string): Promise<'sent' | 'not_configured' | 'failed'> {
     if (!(await this.mailer.isConfigured())) return 'not_configured';
 
-    const owners = await this.prisma.user.findMany({
-      where: { role: 'owner', isActive: true },
-      select: { email: true },
-    });
-
-    const to = digestRecipients({
-      explicit: this.digestEmailTo,
-      owners: owners.map((o) => o.email),
-    });
+    const to = await this.recipientsOf.for('weeklyDigest');
 
     // No address: return quietly. `Mailer` will log it once anyway; there
     // is no point writing it twice.

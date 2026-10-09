@@ -3,6 +3,8 @@ import type { ConfigService } from '@nestjs/config';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Mailer, SendOutcome } from '../src/mail/mailer';
+import type { MailRecipients } from '../src/mail/recipients.service';
+import type { MailKind } from '../src/mail/recipients.rules';
 import { DigestJob } from '../src/digest/digest.job';
 import type { FeaturesService } from '../src/features/features.service';
 import { DigestService } from '../src/digest/digest.service';
@@ -115,18 +117,21 @@ function makeService(
   over: {
     outcome?: SendOutcome;
     env?: Record<string, string>;
-    owners?: { email: string }[];
+    /** What `MailRecipients.for()` answers */
+    recipients?: string[];
     reports?: Partial<ReportsService>;
   } = {},
-): { service: DigestService; sent: Sent[]; calls: { from: string; to: string }[] } {
+): {
+  service: DigestService;
+  sent: Sent[];
+  calls: { from: string; to: string }[];
+  asked: MailKind[];
+} {
   const sent: Sent[] = [];
+  const asked: MailKind[] = [];
   const calls: { from: string; to: string }[] = [];
 
   const prisma = {
-    user: {
-      findMany: () =>
-        Promise.resolve(over.owners ?? [{ email: 'owner@example.com' }]),
-    },
     // "How many PCs were silent today" — for the one Telegram line (18 August)
     alert: { findMany: () => Promise.resolve([]) },
     /**
@@ -173,11 +178,23 @@ function makeService(
   } as unknown as TelegramChannel;
 
   return {
-    service: new DigestService(prisma, reports, mailer, telegram, config, {
-      isOn: async () => true,
-    } as unknown as FeaturesService),
+    service: new DigestService(
+      prisma,
+      reports,
+      mailer,
+      telegram,
+      config,
+      { isOn: async () => true } as unknown as FeaturesService,
+      {
+        for: async (kind: MailKind) => {
+          asked.push(kind);
+          return over.recipients ?? ['owner@x.test'];
+        },
+      } as unknown as MailRecipients,
+    ),
     sent,
     calls,
+    asked,
   };
 }
 
@@ -206,36 +223,17 @@ describe('DigestService — which range is requested', () => {
 });
 
 describe('DigestService — who it goes to', () => {
-  it('by default to the active owners\' emails', async () => {
-    const { service, sent } = makeService({
-      owners: [{ email: 'a@x.com' }, { email: 'b@x.com' }],
+  it('to whatever MailRecipients answers for the daily digest', async () => {
+    const { service, sent, asked } = makeService({
+      recipients: ['a@x.com', 'b@x.com'],
     });
 
     const result = await service.runOnce(AT_6_30_PM);
 
+    expect(asked).toEqual(['dailyDigest']);
     expect(sent[0].to).toEqual(['a@x.com', 'b@x.com']);
     expect(result.recipients).toBe(2);
     expect(result.outcome).toBe('sent');
-  });
-
-  it('DIGEST_EMAIL_TO when set — split on commas, blanks dropped', async () => {
-    const { service, sent } = makeService({
-      env: { DIGEST_EMAIL_TO: ' ops@x.com , , hr@x.com ' },
-    });
-
-    await service.runOnce(AT_6_30_PM);
-    expect(sent[0].to).toEqual(['ops@x.com', 'hr@x.com']);
-  });
-
-  it('ALERT_EMAIL_TO is not used — alerts and digest are separate lists', () => {
-    const { service, sent } = makeService({
-      env: { ALERT_EMAIL_TO: 'sysadmin@x.com' },
-      owners: [{ email: 'owner@x.com' }],
-    });
-
-    return service.runOnce(AT_6_30_PM).then(() => {
-      expect(sent[0].to).toEqual(['owner@x.com']);
-    });
   });
 });
 

@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import type { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -9,6 +8,7 @@ import {
   MAX_EMAIL_ATTEMPTS,
 } from './alerts.constants';
 import { Mailer } from '../mail/mailer';
+import { MailRecipients } from '../mail/recipients.service';
 import { severityLabel } from './alerts.rules';
 
 const PENDING_SELECT = {
@@ -41,7 +41,6 @@ type PendingAlert = Prisma.AlertGetPayload<{ select: typeof PENDING_SELECT }>;
 @Injectable()
 export class AlertDispatcher {
   private readonly logger = new Logger(AlertDispatcher.name);
-  private readonly explicitRecipients: string[];
   /**
    * Deliberately in-memory. After a server restart the count starts over, which
    * is the right behavior: restarts are usually done to fix the config.
@@ -51,13 +50,8 @@ export class AlertDispatcher {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailer: Mailer,
-    config: ConfigService,
-  ) {
-    this.explicitRecipients = (config.get<string>('ALERT_EMAIL_TO') ?? '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
+    private readonly recipientsOf: MailRecipients,
+  ) {}
 
   /** Returns how many alerts were settled (sent or given up on) */
   async runOnce(now = new Date()): Promise<number> {
@@ -152,20 +146,15 @@ export class AlertDispatcher {
   }
 
   /**
-   * Who receives it: `ALERT_EMAIL_TO` if set, otherwise the active owners' emails.
+   * Who receives it: the list saved on screen, else the old environment
+   * variable, else the active owners' emails (see `mail/recipients.rules.ts`).
    *
    * Careful: managers are not emailed. Alerts carry hostnames and staff names,
    * and this list is the same data as the owner-only endpoint; emailing it must
    * not become a way around the role wall.
    */
-  private async recipients(): Promise<string[]> {
-    if (this.explicitRecipients.length > 0) return this.explicitRecipients;
-
-    const owners = await this.prisma.user.findMany({
-      where: { role: 'owner', isActive: true },
-      select: { email: true },
-    });
-    return owners.map((o) => o.email);
+  private recipients(): Promise<string[]> {
+    return this.recipientsOf.for('alerts');
   }
 }
 

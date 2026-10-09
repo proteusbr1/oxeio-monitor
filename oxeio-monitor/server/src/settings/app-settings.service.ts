@@ -7,6 +7,7 @@ import {
   resolveErrorReporting,
   type ErrorReportingSaved,
 } from '../error-reporting/error-reporting.rules';
+import { RECIPIENTS_SETTING_KEY, type RecipientsSaved } from '../mail/recipients.rules';
 import { resolveSmtp, SMTP_SETTING_KEY, type ResolvedSmtp, type SmtpSaved } from '../mail/smtp.settings';
 import { OFFSITE_SETTING_KEY, resolveOffsite, type OffsiteSettings } from '../ops/offsite.settings';
 import { PrismaService } from '../prisma/prisma.service';
@@ -79,6 +80,11 @@ export class AppSettingsService {
 
   async smtpSaved(): Promise<SmtpSaved | null> {
     return this.read<SmtpSaved>(SMTP_SETTING_KEY);
+  }
+
+  /** Saved recipient lists per kind of email (Settings → Notifications) */
+  async recipients(): Promise<RecipientsSaved | null> {
+    return this.read<RecipientsSaved>(RECIPIENTS_SETTING_KEY);
   }
 
   async updateKey() {

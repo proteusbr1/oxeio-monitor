@@ -1,6 +1,8 @@
 import { Global, Module } from '@nestjs/common';
 
 import { Mailer } from './mailer';
+import { MailRecipientsController } from './recipients.controller';
+import { MailRecipients } from './recipients.service';
 import { SmtpSettingsController } from './smtp.controller';
 
 /**
@@ -9,8 +11,8 @@ import { SmtpSettingsController } from './smtp.controller';
  */
 @Global()
 @Module({
-  controllers: [SmtpSettingsController],
-  providers: [Mailer],
-  exports: [Mailer],
+  controllers: [SmtpSettingsController, MailRecipientsController],
+  providers: [Mailer, MailRecipients],
+  exports: [Mailer, MailRecipients],
 })
 export class MailModule {}

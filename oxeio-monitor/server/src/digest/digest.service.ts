@@ -7,6 +7,7 @@ import {
   workDateOf,
 } from '../agent/util/work-time';
 import { Mailer, type SendOutcome } from '../mail/mailer';
+import { MailRecipients } from '../mail/recipients.service';
 import { TelegramChannel } from '../alerts/telegram.channel';
 import { FeaturesService } from '../features/features.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -51,7 +52,6 @@ export class DigestService {
   private async organizationName(): Promise<string> {
     return this.settings ? (await this.settings.organization()).name : this.orgName;
   }
-  private readonly explicitRecipients: string[];
 
   constructor(
     private readonly prisma: PrismaService,
@@ -60,19 +60,11 @@ export class DigestService {
     private readonly telegram: TelegramChannel,
     config: ConfigService,
     private readonly features: FeaturesService,
+    private readonly recipientsOf: MailRecipients,
     // the company name saved by the setup wizard / Settings wins over ORG_NAME
     @Optional() private readonly settings?: AppSettingsService,
   ) {
     this.orgName = config.get<string>('ORG_NAME')?.trim() || DEFAULT_ORG_NAME;
-
-    // Careful: there is **no fallback** to `ALERT_EMAIL_TO`. Alerts and the
-    //    digest are different things: an alert says "something broke", the
-    //    digest says "who worked how many hours". With one shared list, someone
-    //    who only watches server health would get everyone's hours every day.
-    this.explicitRecipients = (config.get<string>('DIGEST_EMAIL_TO') ?? '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
   }
 
   async runOnce(now: Date = new Date()): Promise<DigestResult> {
@@ -289,23 +281,18 @@ export class DigestService {
   }
 
   /**
-   * Who receives it — `DIGEST_EMAIL_TO` if set, otherwise the active owners.
+   * Who receives it — the list saved on screen, else the old environment
+   * variable, else the active owners (see `mail/recipients.rules.ts`; alerts
+   * never share it).
    *
    * Careful: managers are **not sent it by default**, although they can see
    * these numbers on the dashboard (§ 4.3). "Can see" and "gets it in the inbox
    * daily" are not the same — email is forwarded and stays in archives, and
    * who is sent it is the organisation's decision. If needed, an address can
-   * be put in `DIGEST_EMAIL_TO`; widening the list on its own would silently
+   * be added to the list; widening the list on its own would silently
    * become policy.
    */
-  private async recipients(): Promise<string[]> {
-    if (this.explicitRecipients.length > 0) return this.explicitRecipients;
-
-    const owners = await this.prisma.user.findMany({
-      where: { role: 'owner', isActive: true },
-      select: { email: true },
-    });
-
-    return owners.map((o) => o.email);
+  private recipients(): Promise<string[]> {
+    return this.recipientsOf.for('dailyDigest');
   }
 }

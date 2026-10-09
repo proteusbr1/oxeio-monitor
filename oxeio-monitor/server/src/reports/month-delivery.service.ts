@@ -3,8 +3,7 @@ import { ConfigService } from '@nestjs/config';
 
 import { Mailer } from '../mail/mailer';
 import { TelegramChannel } from '../alerts/telegram.channel';
-import { digestRecipients } from '../digest/digest.recipients';
-import { PrismaService } from '../prisma/prisma.service';
+import { MailRecipients } from '../mail/recipients.service';
 import { XLSX_MIME } from './reports.download';
 import {
   monthCaption,
@@ -44,19 +43,17 @@ export class MonthDeliveryService {
   private async organizationName(): Promise<string> {
     return this.settings ? (await this.settings.organization()).name : this.orgName;
   }
-  private readonly digestEmailTo: string | undefined;
 
   constructor(
-    private readonly prisma: PrismaService,
     private readonly reports: ReportsService,
     private readonly telegram: TelegramChannel,
     private readonly mailer: Mailer,
+    private readonly recipients: MailRecipients,
     config: ConfigService,
     // the company name saved by the setup wizard / Settings wins over ORG_NAME
     @Optional() private readonly settings?: AppSettingsService,
   ) {
     this.orgName = config.get<string>('ORG_NAME')?.trim() || 'oXeio Monitoring';
-    this.digestEmailTo = config.get<string>('DIGEST_EMAIL_TO')?.trim();
   }
 
   /**
@@ -131,7 +128,7 @@ export class MonthDeliveryService {
   }
 
   /**
-   * Recipients are chosen with `digestRecipients()`: **managers are excluded**.
+   * Recipients come from `MailRecipients` (`monthClosed`): **managers are excluded**.
    * This file has every employee's name and hours, the same as an owner-only
    * screen; sending it by email must not sidestep the role wall.
    */
@@ -143,15 +140,7 @@ export class MonthDeliveryService {
   ): Promise<'sent' | 'not_configured' | 'failed'> {
     if (!(await this.mailer.isConfigured())) return 'not_configured';
 
-    const owners = await this.prisma.user.findMany({
-      where: { role: 'owner', isActive: true },
-      select: { email: true },
-    });
-
-    const to = digestRecipients({
-      explicit: this.digestEmailTo,
-      owners: owners.map((o) => o.email),
-    });
+    const to = await this.recipients.for('monthClosed');
     if (to.length === 0) return 'not_configured';
 
     return this.mailer.send(

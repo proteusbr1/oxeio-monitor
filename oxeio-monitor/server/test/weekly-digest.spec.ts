@@ -1,4 +1,5 @@
 import type { Mailer } from '../src/mail/mailer';
+import type { MailRecipients } from '../src/mail/recipients.service';
 import { TeamsChannel } from '../src/alerts/teams.channel';
 import type { ConfigService } from '@nestjs/config';
 import { describe, expect, it } from 'vitest';
@@ -1081,7 +1082,7 @@ function makeService(
   /**
    * SMTP is assumed not configured — the tests in this file are about
    *    Telegram behaviour. The rule for choosing email recipients is pinned
-   *    separately in `digest-recipients.spec.ts`, where it is the only question.
+   *    separately in `recipients.rules.spec.ts`, where it is the only question.
    */
   const mailer = {
     isConfigured: async () => false,
@@ -1092,8 +1093,12 @@ function makeService(
     get: (key: string) => over.env?.[key],
   } as unknown as ConfigService;
 
+  const recipients = {
+    for: async () => ['owner@x.test'],
+  } as unknown as MailRecipients;
+
   return {
-    service: new WeeklyDigestService(reports, prisma, telegram, teams, mailer, config),
+    service: new WeeklyDigestService(reports, prisma, telegram, teams, mailer, recipients, config),
     sent,
     calls,
     observedQueries,
