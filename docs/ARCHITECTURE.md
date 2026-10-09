@@ -180,34 +180,53 @@ next refresh, at most 5 minutes later (`JwtAuthGuard`).
 ## Hours statement
 
 Module `hoursStatement` (`server/src/hours-statement/`). It tells whoever does
-the pay how many whole hours each hourly person is owed for a pay period, and
-carries the leftover minutes into the next one. **No money appears anywhere**
-— not on the screen, in the email or in the spreadsheet; staff are chosen by
-their pay basis only.
+the pay how many whole minutes (shown as hours and minutes) each hourly person
+is owed for a pay period, and carries the leftover seconds into the next one.
+**No money appears anywhere** — not on the screen, in the email or in the
+spreadsheet; staff are chosen by their pay basis only.
 
 - **Periods** (`pay-period.rules.ts`). A period runs from the day after the
   previous period's end through the next cutoff. The cutoff is a day 1–28 or
   the end of the month (Settings → Hours statement, key `payPeriod`, with the
   send time). The newest row is the *open* period and is the anchor of the
   next one; the first run never backfills. A cutoff change moves only the open
-  period's end.
+  period's end — except before any period was frozen: then the open period
+  becomes the one holding today under the new cutoff (start and end), so the
+  first period is never stated with the default cutoff's start. **Set the
+  cutoff right after deploy, before the first period ends.** Saving the same
+  cutoff (only the send time) leaves the open period alone.
 - **The job** (`hours-statement.job.ts`) runs at minute 10 of every hour and
   decides by the clock: a period is due on the day after its end at the send
   time, or on any later day. It freezes the period once (a guarded
   transaction), delivers it, and opens the next. Frozen periods that are
-  pending or failed are retried, up to 24 attempts, then an alert is raised.
-  Delivery is at-least-once: a duplicate email is possible after a database
-  error, a missing one is not. `no_recipients`, `not_configured` and
-  `no_staff` are not retried automatically — the owner resends from the screen.
-- **Who is in** (`statement.rules.ts`): people paid hourly in any month the
-  period touches, active or left on or after the period start, with the range
-  cut at joining and leaving.
+  pending or failed are retried every hour, up to 24 attempts; the alert
+  `statement_delivery_failed` is raised when the 24th attempt fails. A freeze
+  that throws is logged and tried again next hour without stopping the
+  retries; a period still not frozen 3 hours after its send moment raises the
+  same alert type ("The hours statement could not be prepared").
+- **Delivery guarantee.** At-least-once: a duplicate email is possible after a
+  database error. An email stays unsent only when the 24 attempts are used,
+  or the outcome is `no_recipients`, `not_configured` or `no_staff` (never
+  retried automatically). The owner resends those — or any other frozen
+  statement — from the screen; each resend is audited. The mail server's raw
+  error is shown to owners only.
+- **Who is in** (`statement.rules.ts`): active people, or those who left on or
+  after the period start. A person's line covers only the days of the period
+  that fall in months they were paid by the hour (a basis change takes effect
+  from a month), cut at joining and leaving.
 - **Ledger** (`ledger.rules.ts`). Carry-in = the real credited time now over the
   person's earlier frozen lines − posted minutes × 60. To post =
-  `floor((measured + carry) / 60)` hours; the rest carries on.
+  `floor((measured + carry) / 60)` whole minutes, measured and carry in
+  seconds; the leftover seconds carry on. A leaver's leftover carry is never
+  settled: there is no next line for it to land on.
+- **Frozen periods stay put.** Policy-driven recounts (a measure, schedule or
+  gap change, a person moved to another policy) start the day after the
+  latest frozen period (`summary/recount.ts › policyRecountDates`), so stated
+  hours are not re-credited. Leave and holiday corrections still recount
+  their own days; a change there shows up as next period's carry-over.
 - **Posted marks.** The finance person marks a line as posted once it is
   entered. A mark can be undone until the next snapshot is taken; after that
-  the answer is 409.
+  the answer is 409. Both are audited with the note and the previous mark.
 - **Recipients.** Active `finance` logins plus extra addresses saved under
   Settings → Notifications (mail kind `hoursStatement`). There is no
   environment fallback and owners are never added by default.
@@ -219,10 +238,11 @@ their pay basis only.
 ## Roles
 
 `owner` (everything), `manager` (team, reports, screenshots — no money, no
-system settings), `researcher` (adds design targets; own data only),
-`employee` (own data only), `finance` (the hours statement only — refused on every
-route that does not name it; shell routes carry `@EveryRole()`). Roles are checked on the server (`@Roles(...)`
-and per-service scope rules); the dashboard only hides what a role cannot use.
+system settings), `coordinator` (adds and checks tasks; own data otherwise),
+`employee` (own data only), `finance` (the hours statement only — refused on
+every route that does not name it; shell routes carry `@EveryRole()`). Roles
+are checked on the server (`@Roles(...)` and per-service scope rules); the
+dashboard only hides what a role cannot use.
 
 ## API — `oxeio-monitor/server/src`
 

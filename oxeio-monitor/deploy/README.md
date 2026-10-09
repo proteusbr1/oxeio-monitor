@@ -170,7 +170,20 @@ and the card sends a test email. Any SMTP provider works. For Amazon SES:
 
 Who receives each kind of email (alerts, daily and weekly summaries, month
 closed) is set on the card below it; `ALERT_EMAIL_TO` and `DIGEST_EMAIL_TO` are
-the fallbacks, and with neither, the active owners.
+the fallbacks, and with neither, the active owners. The hours statement goes
+only to active Finance logins and the addresses saved for it there — no
+fallback.
+
+**Links in emails.** `PUBLIC_URL` (the address people open the dashboard at)
+puts a link to the Hours statement screen in the statement email. Without it
+the server falls back to `CORS_ORIGIN` — the dashboard origin the API accepts
+browser requests from, also in `.env` — and with neither the email has no
+link. Domain mode (§ 4.1) sets both for you.
+
+**Hours statement.** If you turn the module on (Settings → Modules), set the
+cutoff day on Settings → Hours statement right after deploy, before the first
+pay period ends: until a period is frozen, a new cutoff re-anchors the open
+period on today; afterwards it only moves the open period's end.
 
 **Create the data folders** owned by uid 1000 (the api runs as `node`). If
 Docker creates them, they belong to root and every screenshot and backup write
@@ -238,9 +251,6 @@ docker compose logs api | grep setup
 Without `PUBLIC_URL` the line starts with `<this server>`: put your own
 address in front of `/setup?token=…`. To choose the token yourself instead of
 reading the log, set `SETUP_TOKEN` in `.env` (the VPS script does this).
-
-`PUBLIC_URL` also puts a link to the Hours statement screen in the statement
-email. Without it (and without `CORS_ORIGIN`) the email has no link.
 
 The token exists so that a stranger who finds a fresh install cannot claim
 it. Every other page shows the wizard until it is done, and the link stops
