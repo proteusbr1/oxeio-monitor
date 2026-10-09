@@ -125,16 +125,20 @@ function makeService(
     reports?: Partial<ReportsService>;
     /** What `ScheduleService.breachesOn()` answers */
     breaches?: DigestBreach[];
+    /** `ScheduleService.breachesOn()` fails */
+    breachesFail?: boolean;
   } = {},
 ): {
   service: DigestService;
   sent: Sent[];
   calls: { from: string; to: string }[];
   asked: MailKind[];
+  telegramPlain: string[];
 } {
   const sent: Sent[] = [];
   const asked: MailKind[] = [];
   const calls: { from: string; to: string }[] = [];
+  const telegramPlain: string[] = [];
 
   const prisma = {
     // "How many PCs were silent today" — for the one Telegram line (18 August)
@@ -179,7 +183,10 @@ function makeService(
     send: () => Promise.resolve('not_configured' as const),
     // The daily report now goes through `sendHtml()` (monospace) — if it were
     // missing from the stub, the whole `runOnce()` would throw
-    sendHtml: () => Promise.resolve('not_configured' as const),
+    sendHtml: (_html: string, plain: string) => {
+      telegramPlain.push(plain);
+      return Promise.resolve('not_configured' as const);
+    },
   } as unknown as TelegramChannel;
 
   return {
@@ -197,12 +204,16 @@ function makeService(
         },
       } as unknown as MailRecipients,
       {
-        breachesOn: async () => over.breaches ?? [],
+        breachesOn: async () => {
+          if (over.breachesFail) throw new Error('db down');
+          return over.breaches ?? [];
+        },
       } as unknown as ScheduleService,
     ),
     sent,
     calls,
     asked,
+    telegramPlain,
   };
 }
 
@@ -249,11 +260,55 @@ describe('DigestService — the schedule block', () => {
     expect(sent[0].body).toContain('Schedule today\n• Ana — late 12 min');
   });
 
-  it('nobody broke the schedule: no block', async () => {
-    const { service, sent } = makeService();
+  it('nobody broke the schedule: no block, no Telegram line', async () => {
+    const { service, sent, telegramPlain } = makeService();
     await service.runOnce(AT_6_30_PM);
 
     expect(sent[0].body).not.toContain('Schedule today');
+    expect(telegramPlain[0]).not.toContain('Schedule today');
+  });
+
+  it('Telegram gets only a count — no names', async () => {
+    const row = (fullName: string): DigestBreach => ({
+      fullName,
+      breaches: ['late'],
+      lateMin: 12,
+      earlyLeaveMin: 0,
+      breakMin: 60,
+      requiredBreakMin: 60,
+    });
+    const many = makeService({ breaches: [row('Ana'), row('Bo'), row('Cy')] });
+    await many.service.runOnce(AT_6_30_PM);
+    expect(many.telegramPlain[0]).toContain(
+      'Schedule today: 3 people outside their schedule — details in the email and on the Schedule screen.',
+    );
+    expect(many.telegramPlain[0]).not.toMatch(/Ana|Bo\b|Cy/);
+    expect(many.sent[0].body).toContain('• Bo — late 12 min');
+
+    const one = makeService({ breaches: [row('Ana')] });
+    await one.service.runOnce(AT_6_30_PM);
+    expect(one.telegramPlain[0]).toContain(
+      'Schedule today: 1 person outside their schedule',
+    );
+  });
+
+  it('a failing schedule read costs neither the email nor Telegram', async () => {
+    const { service, sent, telegramPlain } = makeService({ breachesFail: true });
+    const warn = vi
+      .spyOn(
+        (service as unknown as { logger: { warn: (m: string) => void } }).logger,
+        'warn',
+      )
+      .mockImplementation(() => undefined);
+
+    await expect(service.runOnce(AT_6_30_PM)).resolves.toMatchObject({
+      outcome: 'sent',
+    });
+    expect(sent).toHaveLength(1);
+    expect(sent[0].body).not.toContain('Schedule today');
+    expect(telegramPlain).toHaveLength(1);
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
   });
 });
 

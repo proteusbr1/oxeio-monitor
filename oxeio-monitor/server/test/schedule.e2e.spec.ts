@@ -5,6 +5,7 @@ import {
   createEmployeeWithCode,
   createHarness,
   enrollDevice,
+  hashPassword,
   loginReady,
   OWNER_EMAIL,
   OWNER_PASSWORD,
@@ -252,6 +253,38 @@ describe('schedule endpoints', () => {
     expect(res.body.days).toHaveLength(1);
     expect(res.body.totals).toMatchObject({ late: 1, breakShort: 1 });
     expect(res.body.requiredBreakMin).toBe(60);
+  });
+
+  it('an unknown employee, even one beyond the id range, is a 404', async () => {
+    await owner.http
+      .get('/api/v1/schedule?employeeId=999999&month=2026-10')
+      .expect(404);
+    await owner.http
+      .get('/api/v1/schedule?employeeId=99999999999&month=2026-10')
+      .expect(404);
+  });
+
+  it('a coordinator is refused with a 403', async () => {
+    const { employeeId } = await createEmployeeWithCode(h.prisma);
+    await h.prisma.user.create({
+      data: {
+        email: 'sched-coord@test.local',
+        fullName: 'Coordinator',
+        passwordHash: await hashPassword('staff-password-123'),
+        role: 'coordinator',
+        employeeId,
+        mustChangePw: false,
+      },
+    });
+    const session = await loginReady(
+      h,
+      'sched-coord@test.local',
+      'staff-password-123',
+    );
+    await session.http.get('/api/v1/schedule/people').expect(403);
+    await session.http
+      .get(`/api/v1/schedule?employeeId=${employeeId}&month=2026-10`)
+      .expect(403);
   });
 
   it('a bad month is a 400', async () => {

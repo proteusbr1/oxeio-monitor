@@ -13,7 +13,7 @@ import { FeaturesService } from '../features/features.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { monthBoundsOf, toIsoDate } from '../reports/reports.range';
 import { ReportsService } from '../reports/reports.service';
-import { scheduleDigestLines } from '../schedule/schedule.digest';
+import { scheduleDigestLines, type DigestBreach } from '../schedule/schedule.digest';
 import { ScheduleService } from '../schedule/schedule.service';
 import { buildDigest, digestBody, digestSubject, type Digest } from './digest.math';
 import { taskTargetOf, taskView, type TaskView } from '../summary/task-start.rules';
@@ -22,6 +22,16 @@ import { AppSettingsService } from '../settings/app-settings.service';
 
 /** In the letterhead and email title — the same env as `reports.export.service.ts` */
 const DEFAULT_ORG_NAME = 'oXeio Monitoring';
+
+/**
+ * The Telegram chat gets a count only — names stay in the email and on the
+ * Schedule screen (the chat is wider than the people who may see who is late).
+ */
+function scheduleCount(n: number): string {
+  if (n === 0) return '';
+  const who = n === 1 ? '1 person' : `${n} people`;
+  return `\n\nSchedule today: ${who} outside their schedule — details in the email and on the Schedule screen.`;
+}
 
 export interface DigestResult {
   workDate: string;
@@ -75,15 +85,15 @@ export class DigestService {
     const recipients = await this.recipients();
 
     const subject = digestSubject(digest);
-    // Who broke the schedule today — a block of its own, after the hours
-    const scheduleLines = scheduleDigestLines(
-      await this.schedule.breachesOn(new Date(digest.workDate)),
-    );
+    // Who broke the schedule today — the email names them, after the hours
+    const breaches = await this.scheduleToday(digest.workDate);
+    const scheduleLines = scheduleDigestLines(breaches);
     const scheduleBlock =
       scheduleLines.length > 0
         ? `\n\nSchedule today\n${scheduleLines.join('\n')}`
         : '';
-    const body = digestBody(digest, await this.organizationName()) + scheduleBlock;
+    const body =
+      digestBody(digest, await this.organizationName()) + scheduleBlock;
 
     const outcome = await this.mailer.send(recipients, subject, body);
 
@@ -115,7 +125,7 @@ export class DigestService {
         silentPcs: await this.silentPcsToday(now),
         atTime: workClock(now),
         tasks: await this.tasksToday(digest.workDate),
-      }) + scheduleBlock;
+      }) + scheduleCount(breaches.length);
 
     const telegramOutcome = await this.telegram.sendHtml(asPreBlock(plain), plain);
 
@@ -153,6 +163,23 @@ export class DigestService {
       recipients: recipients.length,
       outcome,
     };
+  }
+
+  /**
+   * Who broke their schedule on this work day.
+   *
+   * Careful: never throws — the schedule block is an extra; a database error
+   * here must not cost the whole daily report (email and Telegram).
+   */
+  private async scheduleToday(workDate: string): Promise<DigestBreach[]> {
+    try {
+      return await this.schedule.breachesOn(new Date(workDate));
+    } catch (err) {
+      this.logger.warn(
+        `Could not read the schedule breaches: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return [];
+    }
   }
 
   /**
