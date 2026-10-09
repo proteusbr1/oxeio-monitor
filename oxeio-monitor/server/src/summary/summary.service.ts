@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { SegmentState, type Prisma } from '@prisma/client';
+import { SegmentState, type HoursMeasure, type Prisma } from '@prisma/client';
 
 import { workDateOf } from '../agent/util/work-time';
-import { REGIME_SELECT, targetSpreadOf } from '../calendar/work-regime';
+import { MEASURE_SELECT, measureOf, REGIME_SELECT, targetSpreadOf } from '../calendar/work-regime';
 import { PrismaService } from '../prisma/prisma.service';
 import { TasksSettingsService } from '../tasks/tasks-settings.service';
 import { TasksPersonService } from '../tasks/tasks.person.service';
@@ -32,6 +32,9 @@ interface EmployeePolicy {
   /** G37: `null` = has been there from before / still there. */
   joinedOn: Date | null;
   leftOn: Date | null;
+  /** what this person's policy credits: active time or presence */
+  measure: HoursMeasure;
+  presenceGapSec: number;
 }
 
 /**
@@ -296,6 +299,8 @@ export class SummaryService {
         productiveSpans: productiveBy.get(e.id) ?? [],
         unproductiveSpans: unproductiveBy.get(e.id) ?? [],
         isOffDay: !isWorkday(workDate, e.weeklyOffDays, holidays),
+        measure: e.measure,
+        presenceGapSec: e.presenceGapSec,
       });
 
       // Careful: not put inside `summarizeDay`; that is a pure calculation of
@@ -714,7 +719,7 @@ export class SummaryService {
         id: true,
         joinedOn: true,
         leftOn: true,
-        policy: { select: REGIME_SELECT },
+        policy: { select: { ...REGIME_SELECT, ...MEASURE_SELECT } },
       },
       orderBy: { id: 'asc' },
     });
@@ -729,6 +734,7 @@ export class SummaryService {
       weeklyOffDays: r.policy?.weeklyOffDays ?? [],
       joinedOn: r.joinedOn,
       leftOn: r.leftOn,
+      ...measureOf(r.policy),
       };
     });
   }

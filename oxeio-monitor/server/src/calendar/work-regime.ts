@@ -1,4 +1,6 @@
-import type { TargetBasis } from '@prisma/client';
+import type { HoursMeasure, TargetBasis } from '@prisma/client';
+
+import { DEFAULT_PRESENCE_GAP_SEC } from '../summary/summary.math';
 
 /**
  * A work policy's hours target, whatever way it is stated.
@@ -76,3 +78,16 @@ export const REGIME_SELECT = {
   dailyTargetHours: true,
   weeklyOffDays: true,
 } as const;
+
+/** The fields a query must select for measureOf() */
+export const MEASURE_SELECT = { hoursMeasure: true, presenceGapMin: true } as const;
+
+/** How a policy counts hours; no policy = active time, the original measure */
+export function measureOf(
+  policy: { hoursMeasure?: HoursMeasure | null; presenceGapMin?: number | null } | null | undefined,
+): { measure: HoursMeasure; presenceGapSec: number } {
+  return {
+    measure: policy?.hoursMeasure ?? 'active',
+    presenceGapSec: policy?.presenceGapMin ? policy.presenceGapMin * 60 : DEFAULT_PRESENCE_GAP_SEC,
+  };
+}
