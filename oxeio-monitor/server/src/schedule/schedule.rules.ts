@@ -131,8 +131,12 @@ export function checkDay(input: {
   };
 }
 
+/**
+ * A month's breaches by kind, and its balance. The running day is left out
+ * of the balance: its minutes are still coming (its row says "in progress").
+ */
 export function monthTotals(
-  days: readonly Pick<ScheduleDay, 'breaches' | 'balanceMin'>[],
+  days: readonly Pick<ScheduleDay, 'breaches' | 'balanceMin' | 'final'>[],
 ) {
   const count = (b: Breach) =>
     days.filter((d) => d.breaches.includes(b)).length;
@@ -142,6 +146,9 @@ export function monthTotals(
     breakShort: count('break_short'),
     breakMissing: count('break_missing'),
     noShow: count('no_show'),
-    balanceMin: days.reduce((total, d) => total + d.balanceMin, 0),
+    balanceMin: days.reduce(
+      (total, d) => (d.final ? total + d.balanceMin : total),
+      0,
+    ),
   };
 }

@@ -124,7 +124,14 @@ export class ScheduleService {
       select: {
         id: true,
         fullName: true,
-        policy: { select: { breakMinutes: true, scheduleEnforced: true } },
+        policy: {
+          select: {
+            breakMinutes: true,
+            scheduleEnforced: true,
+            officeFrom: true,
+            officeTo: true,
+          },
+        },
       },
     });
     if (!employee) return null;
@@ -144,20 +151,26 @@ export class ScheduleService {
       breaches: r.breaches as Breach[],
       final: r.final,
     }));
+    const enforced = employee.policy?.scheduleEnforced === true;
     return {
       employee: { id: employee.id, fullName: employee.fullName },
       days,
       totals: monthTotals(days),
-      requiredBreakMin: employee.policy?.scheduleEnforced
-        ? (employee.policy.breakMinutes ?? 0)
-        : null,
+      // the schedule as it stands now ('HH:MM'); null when none is checked
+      requiredBreakMin: enforced ? (employee.policy?.breakMinutes ?? 0) : null,
+      officeFrom: enforced ? (employee.policy?.officeFrom ?? null) : null,
+      officeTo: enforced ? (employee.policy?.officeTo ?? null) : null,
     };
   }
 
   /** Breaches recorded for a day, for the 18:30 summary */
   async breachesOn(workDate: Date): Promise<DigestBreach[]> {
     const rows = await this.prisma.scheduleDay.findMany({
-      where: { workDate, NOT: { breaches: { isEmpty: true } } },
+      where: {
+        workDate,
+        NOT: { breaches: { isEmpty: true } },
+        employee: { status: 'active' },
+      },
       select: {
         breaches: true,
         lateMin: true,

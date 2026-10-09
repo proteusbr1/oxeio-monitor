@@ -214,4 +214,23 @@ describe('monthTotals', () => {
       balanceMin: -12 + 60 - 480,
     });
   });
+
+  it('the running day stays out of the balance (its row says "in progress")', () => {
+    const done = checkDay({
+      blocks: [block('08:00', '17:00')],
+      policy,
+      nowMin: DAY_OVER,
+    });
+    const running = checkDay({
+      blocks: [block('08:20', '10:00')],
+      policy,
+      nowMin: m('10:00'),
+    });
+    expect(running.final).toBe(false);
+    expect(running.balanceMin).toBeLessThan(0);
+    expect(monthTotals([done, running])).toMatchObject({
+      late: 1,
+      balanceMin: 60,
+    });
+  });
 });

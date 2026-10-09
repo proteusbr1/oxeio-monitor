@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { ScheduleService } from '../src/schedule/schedule.service';
 import { SummaryService } from '../src/summary/summary.service';
 import {
   createEmployeeWithCode,
@@ -285,6 +286,8 @@ describe('schedule endpoints', () => {
     expect(res.body.days).toHaveLength(1);
     expect(res.body.totals).toMatchObject({ late: 1, breakShort: 1 });
     expect(res.body.requiredBreakMin).toBe(60);
+    // the scheduled day, for the screen's header
+    expect(res.body).toMatchObject({ officeFrom: '08:00', officeTo: '17:00' });
   });
 
   it('an unknown employee, even one beyond the id range, is a 404', async () => {
@@ -500,5 +503,21 @@ describe('inputs that change after the day was counted', () => {
       .send({ reason: 'moved away' })
       .expect((res) => expect(res.status).toBeLessThan(300));
     expect(await h.prisma.summaryDirty.count()).toBe(0);
+  });
+});
+
+describe('the daily summary block', () => {
+  it('leaves out people who are no longer active', async () => {
+    await enforce(true);
+    const employeeId = await dayWith([['08:20', '17:00']]);
+    await h.app.get(SummaryService).refreshDate(workDate, DAY_OVER);
+    const schedule = h.app.get(ScheduleService);
+    expect(await schedule.breachesOn(workDate)).toHaveLength(1);
+
+    await h.prisma.employee.update({
+      where: { id: employeeId },
+      data: { status: 'inactive' },
+    });
+    expect(await schedule.breachesOn(workDate)).toEqual([]);
   });
 });
