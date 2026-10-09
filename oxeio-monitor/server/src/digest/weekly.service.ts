@@ -6,7 +6,7 @@ import {
   type TelegramOutcome,
 } from '../alerts/telegram.channel';
 import { TeamsChannel } from '../alerts/teams.channel';
-import { AlertMailer } from '../alerts/alerts.mailer';
+import { Mailer } from '../mail/mailer';
 import { digestRecipients } from './digest.recipients';
 import { PrismaService } from '../prisma/prisma.service';
 import { parseWorkDate, toIsoDate } from '../reports/reports.range';
@@ -116,7 +116,7 @@ export class WeeklyDigestService {
     private readonly prisma: PrismaService,
     private readonly telegram: TelegramChannel,
     private readonly teams: TeamsChannel,
-    private readonly mailer: AlertMailer,
+    private readonly mailer: Mailer,
     config: ConfigService,
     // the company name saved by the setup wizard / Settings wins over ORG_NAME
     @Optional() private readonly settings?: AppSettingsService,
@@ -138,11 +138,11 @@ export class WeeklyDigestService {
   }
 
   /**
-   * Never throws; `AlertMailer.send()` does not either. The weekly job rests on
+   * Never throws; `Mailer.send()` does not either. The weekly job rests on
    * this, and SMTP being down does not mean losing the figures.
    */
   private async sendByEmail(text: string): Promise<'sent' | 'not_configured' | 'failed'> {
-    if (!this.mailer.configured) return 'not_configured';
+    if (!(await this.mailer.isConfigured())) return 'not_configured';
 
     const owners = await this.prisma.user.findMany({
       where: { role: 'owner', isActive: true },
@@ -154,7 +154,7 @@ export class WeeklyDigestService {
       owners: owners.map((o) => o.email),
     });
 
-    // No address: return quietly. `AlertMailer` will log it once anyway; there
+    // No address: return quietly. `Mailer` will log it once anyway; there
     // is no point writing it twice.
     if (to.length === 0) return 'not_configured';
 

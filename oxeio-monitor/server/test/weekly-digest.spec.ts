@@ -1,4 +1,4 @@
-import { AlertMailer } from '../src/alerts/alerts.mailer';
+import type { Mailer } from '../src/mail/mailer';
 import { TeamsChannel } from '../src/alerts/teams.channel';
 import type { ConfigService } from '@nestjs/config';
 import { describe, expect, it } from 'vitest';
@@ -1084,9 +1084,9 @@ function makeService(
    *    separately in `digest-recipients.spec.ts`, where it is the only question.
    */
   const mailer = {
-    configured: false,
+    isConfigured: async () => false,
     send: () => Promise.resolve('not_configured' as const),
-  } as unknown as AlertMailer;
+  } as unknown as Mailer;
 
   const config = {
     get: (key: string) => over.env?.[key],

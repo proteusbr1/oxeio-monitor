@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 
-import { AlertMailer } from '../alerts/alerts.mailer';
 import { TelegramChannel } from '../alerts/telegram.channel';
 import { TeamsChannel } from '../alerts/teams.channel';
 import { ReportsModule } from '../reports/reports.module';
@@ -11,17 +10,6 @@ import { WeeklyDigestService } from './weekly.service';
 
 /**
  * **F07** — the daily digest email, **R3** — the weekly summary on Telegram.
- *
- * Careful: `AlertMailer` is **placed here as a provider**, not by importing
- * `AlertsModule` — because `AlertsModule` exports only `AlertsService`, not the
- * mailer. The SMTP code is not copied (that is the real rule): same class,
- * just a separate instance. The mailer builds its transport **lazily** and is
- * used once a day, so a second instance costs practically nothing.
- *
- * It would be better to write `exports: [AlertsService, AlertMailer]` in one
- * line in `AlertsModule` and import that here — then there would be one SMTP
- * connection too. That file belongs to someone else, so it was not changed; if
- * done, remove `AlertMailer` from `providers` here and put `AlertsModule` in `imports`.
  *
  * Careful: `ScheduleModule.forRoot()` is **not** here — `SummaryModule` made it
  * global. A second forRoot would make two explorers register the same `@Cron`
@@ -45,7 +33,6 @@ import { WeeklyDigestService } from './weekly.service';
   providers: [
     DigestService,
     DigestJob,
-    AlertMailer,
     WeeklyDigestService,
     WeeklyDigestJob,
     TelegramChannel,

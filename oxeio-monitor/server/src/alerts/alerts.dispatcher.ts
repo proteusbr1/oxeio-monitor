@@ -8,7 +8,7 @@ import {
   DISPATCH_MAX_AGE_HOURS,
   MAX_EMAIL_ATTEMPTS,
 } from './alerts.constants';
-import { AlertMailer } from './alerts.mailer';
+import { Mailer } from '../mail/mailer';
 import { severityLabel } from './alerts.rules';
 
 const PENDING_SELECT = {
@@ -50,7 +50,7 @@ export class AlertDispatcher {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly mailer: AlertMailer,
+    private readonly mailer: Mailer,
     config: ConfigService,
   ) {
     this.explicitRecipients = (config.get<string>('ALERT_EMAIL_TO') ?? '')
@@ -75,7 +75,7 @@ export class AlertDispatcher {
 
     if (pending.length === 0) return 0;
 
-    if (!this.mailer.configured) {
+    if (!(await this.mailer.isConfigured())) {
       return this.markLogged(pending);
     }
 

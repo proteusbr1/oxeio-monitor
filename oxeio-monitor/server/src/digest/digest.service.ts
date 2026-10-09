@@ -6,7 +6,7 @@ import {
   workClock,
   workDateOf,
 } from '../agent/util/work-time';
-import { AlertMailer, type SendOutcome } from '../alerts/alerts.mailer';
+import { Mailer, type SendOutcome } from '../mail/mailer';
 import { TelegramChannel } from '../alerts/telegram.channel';
 import { FeaturesService } from '../features/features.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -56,7 +56,7 @@ export class DigestService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly reports: ReportsService,
-    private readonly mailer: AlertMailer,
+    private readonly mailer: Mailer,
     private readonly telegram: TelegramChannel,
     config: ConfigService,
     private readonly features: FeaturesService,

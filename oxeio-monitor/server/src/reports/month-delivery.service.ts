@@ -1,7 +1,7 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { AlertMailer } from '../alerts/alerts.mailer';
+import { Mailer } from '../mail/mailer';
 import { TelegramChannel } from '../alerts/telegram.channel';
 import { digestRecipients } from '../digest/digest.recipients';
 import { PrismaService } from '../prisma/prisma.service';
@@ -50,7 +50,7 @@ export class MonthDeliveryService {
     private readonly prisma: PrismaService,
     private readonly reports: ReportsService,
     private readonly telegram: TelegramChannel,
-    private readonly mailer: AlertMailer,
+    private readonly mailer: Mailer,
     config: ConfigService,
     // the company name saved by the setup wizard / Settings wins over ORG_NAME
     @Optional() private readonly settings?: AppSettingsService,
@@ -141,7 +141,7 @@ export class MonthDeliveryService {
     bytes: Buffer,
     filename: string,
   ): Promise<'sent' | 'not_configured' | 'failed'> {
-    if (!this.mailer.configured) return 'not_configured';
+    if (!(await this.mailer.isConfigured())) return 'not_configured';
 
     const owners = await this.prisma.user.findMany({
       where: { role: 'owner', isActive: true },

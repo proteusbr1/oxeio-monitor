@@ -2,7 +2,7 @@ import { TelegramChannel } from '../src/alerts/telegram.channel';
 import type { ConfigService } from '@nestjs/config';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { AlertMailer, SendOutcome } from '../src/alerts/alerts.mailer';
+import type { Mailer, SendOutcome } from '../src/mail/mailer';
 import { DigestJob } from '../src/digest/digest.job';
 import type { FeaturesService } from '../src/features/features.service';
 import { DigestService } from '../src/digest/digest.service';
@@ -155,7 +155,7 @@ function makeService(
       sent.push({ to, subject, body });
       return Promise.resolve(over.outcome ?? 'sent');
     },
-  } as unknown as AlertMailer;
+  } as unknown as Mailer;
 
   const config = {
     get: (key: string) => over.env?.[key],

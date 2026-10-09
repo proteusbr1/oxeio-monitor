@@ -17,6 +17,7 @@ import { DevicesModule } from './devices/devices.module';
 import { ErrorReportingModule } from './error-reporting/error-reporting.module';
 import { FeaturesModule } from './features/features.module';
 import { PrivacyModule } from './privacy/privacy.module';
+import { MailModule } from './mail/mail.module';
 import { MeModule } from './me/me.module';
 import { OpsModule } from './ops/ops.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -62,6 +63,8 @@ import { StaffModule } from './staff/staff.module';
     StorageModule,
     // settings the owner edits on screen (region, backup mode, update key)
     SettingsModule,
+    // email for every module; global, reads SMTP from the settings
+    MailModule,
     ErrorReportingModule,
     AuditModule,
     AuthModule,

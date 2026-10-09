@@ -242,7 +242,7 @@ export function weeklyGateOf(
   // Careful: not configured at all — the decision belongs to the channel, not this function
   if (chatId.length === 0) return { send: true, blockedBecause: null };
 
-  // Careful: `SMTP_SECURE` in `alerts.mailer.ts` is read exactly this way — same
+  // Careful: `SMTP_SECURE` in `mail/smtp.settings.ts` is read exactly this way — same
   //    pattern, otherwise one repo would have two kinds of "true"
   if ((rawAllowGroup ?? '').trim().toLowerCase() === 'true') {
     return { send: true, blockedBecause: null };

@@ -202,9 +202,3 @@ export const DISPATCH_BATCH = 20;
 
 /** After this many failed attempts we give up, write `email_failed` and set it aside */
 export const MAX_EMAIL_ATTEMPTS = 3;
-
-/**
- * SMTP timeout, so one hung mail server cannot block the whole sweep.
- * nodemailer's default is very long, so it is set explicitly.
- */
-export const SMTP_TIMEOUT_MS = 10_000;

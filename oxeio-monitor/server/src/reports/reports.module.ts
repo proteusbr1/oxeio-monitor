@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 
-import { AlertMailer } from '../alerts/alerts.mailer';
 import { TelegramChannel } from '../alerts/telegram.channel';
 import { MonthDeliveryService } from './month-delivery.service';
 import { ReportsController } from './reports.controller';
@@ -30,13 +29,6 @@ import { ReportsSummaryService } from './reports.summary.service';
  */
 @Module({
   controllers: [ReportsController],
-  /**
-   * `AlertMailer` and `TelegramChannel` are **provided again** here, not by
-   * importing `AlertsModule`, because `AlertsModule` does not export them (only
-   * `AlertsService`). `DigestModule` took exactly this path earlier, and the
-   * comment there gives the reason. Both are stateless transports (they read
-   * settings on every call), so a second instance shares no state.
-   */
   providers: [
     ReportsService,
     ReportsContextService,
@@ -45,7 +37,12 @@ import { ReportsSummaryService } from './reports.summary.service';
     ReportsSummaryService,
     ReportsProductivityService,
     MonthDeliveryService,
-    AlertMailer,
+    /**
+     * `TelegramChannel` is **provided again** here, not by importing
+     * `AlertsModule`, because `AlertsModule` does not export it (only
+     * `AlertsService`). It is a stateless transport (it reads settings on every
+     * call), so a second instance shares no state.
+     */
     TelegramChannel,
   ],
   /**

@@ -192,7 +192,8 @@ and per-service scope rules); the dashboard only hides what a role cannot use.
 | `devices/` | the owner's side of the PCs: enrolment codes, revoke/restore, agent builds and rollout stages |
 | `me/` | "My data" for the signed-in person |
 | `auth/` | login, sessions (JWT cookie + CSRF), 2FA, role guard |
-| `alerts/` | alert rules (agent down, tamper, no activity, disk, backup), dispatch to email / Telegram / Teams |
+| `alerts/` | alert rules (agent down, tamper, no activity, disk, backup), dispatch to email (through `mail/`) / Telegram / Teams |
+| `mail/` | sending email for every module (SMTP from Settings → Notifications or the .env), recipients per kind of email, email text in the company language |
 | `digest/` | daily and weekly summaries |
 | `ops/` | the server's own backup, offsite copy, health |
 | `settings/` | dashboard-editable settings (see above) |
