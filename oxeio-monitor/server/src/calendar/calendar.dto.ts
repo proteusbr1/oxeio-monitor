@@ -55,6 +55,14 @@ export class CreateWorkPolicyDto {
   @IsOptional() @IsBoolean()
   deductShortfall?: boolean;
 
+  /** what counts as worked time: 'active' input or 'presence' */
+  @IsOptional() @IsIn(['active', 'presence'])
+  hoursMeasure?: 'active' | 'presence';
+
+  /** presence: the longest pause, in minutes, still counted as work */
+  @IsOptional() @IsInt() @Min(1) @Max(120)
+  presenceGapMin?: number;
+
 
   /**
    * ISO weekday: Mon = 1 ... Sun = 7, Fri = 5.
@@ -136,6 +144,14 @@ export class UpdateWorkPolicyDto {
   /** monthly salaries: deduct missing hours */
   @IsOptional() @IsBoolean()
   deductShortfall?: boolean;
+
+  /** what counts as worked time: 'active' input or 'presence' */
+  @IsOptional() @IsIn(['active', 'presence'])
+  hoursMeasure?: 'active' | 'presence';
+
+  /** presence: the longest pause, in minutes, still counted as work */
+  @IsOptional() @IsInt() @Min(1) @Max(120)
+  presenceGapMin?: number;
 
 
   // ISO days (Fri = 5), unique; at most 6, so a week keeps at least one workday

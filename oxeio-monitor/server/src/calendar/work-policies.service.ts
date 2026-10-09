@@ -17,6 +17,8 @@ import {
   regimeData,
   type RegimeInput,
 } from './work-policy.rules';
+import { workDateOf } from '../agent/util/work-time';
+import { datesToRecount } from '../summary/recount';
 import { normaliseOffDays } from '../summary/weekly-off';
 
 export interface WorkPolicyView {
@@ -33,6 +35,10 @@ export interface WorkPolicyView {
   /** overtime paid at this multiple; null = not paid */
   overtimeMultiplier: number | null;
   deductShortfall: boolean;
+  /** what counts as worked time: active input or presence (work-regime.ts) */
+  hoursMeasure: 'active' | 'presence';
+  /** presence: the longest pause, in minutes, still counted as work */
+  presenceGapMin: number;
   weeklyOffDays: readonly number[];
   screenshotFrom: string | null;
   screenshotTo: string | null;
@@ -98,6 +104,8 @@ export class WorkPoliciesService {
       data: {
         name: dto.name,
         ...regime,
+        ...(dto.hoursMeasure === undefined ? {} : { hoursMeasure: dto.hoursMeasure }),
+        ...(dto.presenceGapMin === undefined ? {} : { presenceGapMin: dto.presenceGapMin }),
         ...(dto.monthlyTargetHours === undefined
           ? {}
           : { monthlyTargetHours: dto.monthlyTargetHours }),
@@ -173,6 +181,8 @@ export class WorkPoliciesService {
       data: {
         ...(dto.name === undefined ? {} : { name: dto.name }),
         ...regime,
+        ...(dto.hoursMeasure === undefined ? {} : { hoursMeasure: dto.hoursMeasure }),
+        ...(dto.presenceGapMin === undefined ? {} : { presenceGapMin: dto.presenceGapMin }),
         ...(dto.monthlyTargetHours === undefined
           ? {}
           : { monthlyTargetHours: dto.monthlyTargetHours }),
@@ -199,6 +209,17 @@ export class WorkPoliciesService {
       },
       include: { _count: { select: { employees: true } } },
     });
+
+    const measureChanged =
+      (dto.hoursMeasure !== undefined && dto.hoursMeasure !== before.hoursMeasure) ||
+      (dto.presenceGapMin !== undefined && dto.presenceGapMin !== before.presenceGapMin);
+    if (measureChanged) {
+      // credited time changes for everyone on this policy: count the open months again
+      await this.prisma.summaryDirty.createMany({
+        data: datesToRecount(workDateOf(new Date())).map((workDate) => ({ workDate })),
+        skipDuplicates: true,
+      });
+    }
 
     await this.audit.record({
       userId: actor.userId,
@@ -362,6 +383,8 @@ function toView(policy: WorkPolicy, employeeCount: number): WorkPolicyView {
     breakMinutes: policy.breakMinutes,
     overtimeMultiplier: policy.overtimeMultiplier === null ? null : Number(policy.overtimeMultiplier),
     deductShortfall: policy.deductShortfall,
+    hoursMeasure: policy.hoursMeasure,
+    presenceGapMin: policy.presenceGapMin,
     weeklyOffDays: policy.weeklyOffDays,
     screenshotFrom: policy.screenshotFrom,
     screenshotTo: policy.screenshotTo,
