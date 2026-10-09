@@ -16,11 +16,12 @@ The agent records activity and screenshots and sends them to the API; the
 dashboard reads everything through the API (`/api/v1/...`). The API is the
 only thing that talks to the database.
 
-## Production (pericialmed)
+## Production
 
-- Branch **`pericialmed`** is production: every push deploys through Coolify
+- Branch **`main`** is production: every push deploys through Coolify
   (`docker-compose.coolify.yml`, `coolify/` — owned by the infra side, do not
-  edit or delete). `main` mirrors it.
+  edit or delete), and CI runs on every push to it. Until 2026-10-09 the
+  deploy branch was `pericialmed`; it is kept frozen at that day's release.
 - `GET /api/v1/health` reports the deployed `commit`.
 - Screenshots live in a Backblaze B2 bucket; the database is backed up by
   Databasus (`BACKUP_MODE=external`).
