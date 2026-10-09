@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 
 import { Mailer } from './mailer';
+import { SmtpSettingsController } from './smtp.controller';
 
 /**
  * Email for every module. Global, like settings and features, so alerts,
@@ -8,6 +9,7 @@ import { Mailer } from './mailer';
  */
 @Global()
 @Module({
+  controllers: [SmtpSettingsController],
   providers: [Mailer],
   exports: [Mailer],
 })
