@@ -124,7 +124,9 @@ month's workdays — by `server/src/calendar/work-regime.ts`
 formula. A `none` policy sets `noTarget`: screens and the tray show hours
 only, and a target of 0 does not read as a day off.
 
-**What counts as worked time** is also the policy's: `hoursMeasure` is `active` (keyboard/mouse time, the original measure) or `presence` (the day's active stretches joined across pauses up to `presenceGapMin`, default 15). The day roll-up stores both (`worked_sec`, `presence_sec`); `credited_sec` is the policy's measure plus adjustments, so everything that reads credited time follows. Changing the measure queues last month and this month for recount (`summary/recount.ts`); closed months stay.
+**What counts as worked time** is also the policy's: `hoursMeasure` is `active` (keyboard/mouse time, the original measure) or `presence` (the day's active stretches joined across pauses up to `presenceGapMin`, default 15). The day roll-up stores both (`worked_sec`, `presence_sec`); `credited_sec` is the policy's measure plus adjustments, so everything that reads credited time follows. Changing the measure queues last month and this month for recount (`summary/recount.ts`); closed months stay. So does changing `presenceGapMin` on a presence policy, and moving a person to a policy that counts differently (another measure, or presence with another gap).
+
+Screens read finished days from the stored rows and count only today live, so a later policy change never rewrites a past day it has not recounted. The Live Board, My data's day list and the month roll-up count by the measure; the tray's pace and its month credited do too, but the tray's today and 7-day bars stay active time — the agent grows them locally between server updates, and it only sees active input. The attendance report (xlsx and PDF) shows presence beside active time for everyone.
 
 ## Time zone
 

@@ -52,6 +52,12 @@ describe('presenceSpans — active stretches joined across short pauses', () => 
     expect(blocks).toEqual([span('08:00', '12:00')]);
   });
 
+  it('a single stretch: presence is that stretch', () => {
+    expect(presenceSpans([span('08:00', '09:30')], 15 * MIN)).toEqual([
+      span('08:00', '09:30'),
+    ]);
+  });
+
   it('unordered input, no input', () => {
     expect(
       presenceSpans([span('13:00', '14:00'), span('08:00', '09:00')], 15 * MIN),
