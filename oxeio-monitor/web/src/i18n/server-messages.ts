@@ -61,6 +61,7 @@ export const SERVER_MESSAGE_PATTERNS: readonly string[] = [
   'At most 500 tasks can be added at once — this paste has {{lines}} lines.',
   '{{month}} was closed on {{date}} by {{by}}. Payroll for that month is already fixed — reopen it first if this correction is genuinely needed.',
   'This Windows account is already registered to {{who}}. Sign in to your own Windows account on this PC, or ask the owner to revoke it first (Settings → Devices).',
+  'The break must be longer than the longest pause that still counts as work ({{minutes}} min)',
   "The capture window start must be in 'HH:MM' format — got \"{{value}}\"",
   "The capture window end must be in 'HH:MM' format — got \"{{value}}\"",
   'The public holiday calendar answered HTTP {{status}}.',

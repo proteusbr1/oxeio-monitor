@@ -463,7 +463,7 @@ function PolicyForm({
         officeTo: form.officeTo,
         idleThresholdSec: Number(form.idleThresholdSec),
         slotMinutes: Number(form.slotMinutes),
-        ...measureBody(measure, gapMin, policy?.presenceGapMin),
+        ...measureBody(measure, gapMin, policy?.presenceGapMin, schedule.scheduleEnforced),
         scheduleEnforced: schedule.scheduleEnforced,
         breakWindowFrom: schedule.breakWindowFrom || null,
         breakWindowTo: schedule.breakWindowTo || null,
@@ -688,7 +688,13 @@ function PolicyForm({
               )}
             </FullWidth>
           )}
-          <PolicyMeasureFields measure={measure} gapMin={gapMin} onMeasure={setMeasure} onGapMin={setGapMin} />
+          <PolicyMeasureFields
+            measure={measure}
+            gapMin={gapMin}
+            onMeasure={setMeasure}
+            onGapMin={setGapMin}
+            scheduleChecked={schedule.scheduleEnforced}
+          />
           <TextField
             label={basis === 'day' ? t('Working hours from') : t('Office opens')}
             type="time"
@@ -702,7 +708,10 @@ function PolicyForm({
             value={form.officeTo}
             onChange={set('officeTo')}
             mono
-            hint={t('Outside these hours — and on the weekly off day and holidays — a quiet PC raises no alert. Hours worked outside them still count in full.')}
+            hint={
+              t('Outside these hours — and on the weekly off day and holidays — a quiet PC raises no alert. Hours worked outside them still count in full.') +
+              (schedule.scheduleEnforced ? ` ${t('With the schedule check on, these are also the hours checked every workday.')}` : '')
+            }
           />
           <PolicyScheduleFields
             state={schedule}

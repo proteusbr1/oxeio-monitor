@@ -20,6 +20,7 @@ import {
 } from './work-policy.rules';
 import { workDateOf } from '../agent/util/work-time';
 import { datesToRecount } from '../summary/recount';
+import { DEFAULT_PRESENCE_GAP_SEC } from '../summary/summary.math';
 import { normaliseOffDays } from '../summary/weekly-off';
 
 export interface WorkPolicyView {
@@ -116,7 +117,10 @@ export class WorkPoliciesService {
       toleranceMarkMin: dto.toleranceMarkMin ?? 0,
       toleranceDayMin: dto.toleranceDayMin ?? 0,
     };
-    const scheduleError = scheduleProblem(schedule);
+    const scheduleError = scheduleProblem({
+      ...schedule,
+      presenceGapMin: dto.presenceGapMin ?? DEFAULT_PRESENCE_GAP_SEC / 60,
+    });
     if (scheduleError) throw new BadRequestException(scheduleError);
 
     const row = await this.prisma.workPolicy.create({
@@ -211,7 +215,10 @@ export class WorkPoliciesService {
       toleranceMarkMin: dto.toleranceMarkMin ?? before.toleranceMarkMin,
       toleranceDayMin: dto.toleranceDayMin ?? before.toleranceDayMin,
     };
-    const scheduleError = scheduleProblem(schedule);
+    const scheduleError = scheduleProblem({
+      ...schedule,
+      presenceGapMin: dto.presenceGapMin ?? before.presenceGapMin,
+    });
     if (scheduleError) throw new BadRequestException(scheduleError);
 
     const row = await this.prisma.workPolicy.update({

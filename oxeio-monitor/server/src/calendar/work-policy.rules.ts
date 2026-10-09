@@ -111,6 +111,8 @@ export interface ScheduleInput {
   breakWindowTo: string | null;
   toleranceMarkMin: number;
   toleranceDayMin: number;
+  /** the longest pause still counted as presence: the check merges blocks by it */
+  presenceGapMin: number;
 }
 
 /** `null` if the schedule can be saved, otherwise why not (checked as it will be stored) */
@@ -125,6 +127,11 @@ export function scheduleProblem(s: ScheduleInput): string | null {
   if (start === null || end === null) return 'A checked schedule needs the working hours (from and until)';
   if (start >= end) return 'The working hours must start before they end';
   if ((s.breakMinutes ?? 0) >= end - start) return 'The break must be shorter than the working day';
+  // a pause up to the gap is merged into one presence block, so such a break
+  // would never be seen and every day would read "no break"
+  if ((s.breakMinutes ?? 0) > 0 && (s.breakMinutes ?? 0) <= s.presenceGapMin) {
+    return `The break must be longer than the longest pause that still counts as work (${s.presenceGapMin} min)`;
+  }
 
   if ((s.breakWindowFrom === null) !== (s.breakWindowTo === null)) {
     return 'Give both ends of the break window, or neither';

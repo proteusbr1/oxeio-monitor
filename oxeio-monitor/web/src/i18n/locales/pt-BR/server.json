@@ -123,6 +123,7 @@
   "The SMTP port must be a number from 1 to 65535": "A porta SMTP deve ser um número de 1 a 65535",
   "The `file` part is missing": "Falta a parte `file`",
   "The `meta` part is missing": "Falta a parte `meta`",
+  "The break must be longer than the longest pause that still counts as work ({{minutes}} min)": "O intervalo deve ser maior que a pausa mais longa que ainda conta como trabalho ({{minutes}} min)",
   "The break must be shorter than the working day": "O intervalo deve ser menor que a jornada de trabalho",
   "The break window must be in 'HH:MM' format": "A janela do intervalo deve estar no formato 'HH:MM'",
   "The break window must be inside the working hours": "A janela do intervalo deve estar dentro do horário de trabalho",

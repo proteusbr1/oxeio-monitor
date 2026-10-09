@@ -72,6 +72,7 @@ describe('scheduleProblem', () => {
     breakWindowTo: '14:00',
     toleranceMarkMin: 5,
     toleranceDayMin: 10,
+    presenceGapMin: 15,
   };
   it('a complete schedule is fine; off needs nothing', () => {
     expect(scheduleProblem(ok)).toBeNull();
@@ -89,5 +90,16 @@ describe('scheduleProblem', () => {
     expect(scheduleProblem({ ...ok, breakMinutes: 540 })).toMatch(/shorter/);
     expect(scheduleProblem({ ...ok, toleranceMarkMin: 61 })).toMatch(/0 and 60/);
     expect(scheduleProblem({ ...ok, toleranceDayMin: -1 })).toMatch(/0 and 60/);
+  });
+  // a pause up to the gap is merged into presence, so such a break is never seen
+  it('a required break must be longer than the presence gap', () => {
+    expect(scheduleProblem({ ...ok, breakMinutes: 15 })).toBe(
+      'The break must be longer than the longest pause that still counts as work (15 min)',
+    );
+    expect(scheduleProblem({ ...ok, breakMinutes: 10, presenceGapMin: 30 })).toMatch(/\(30 min\)/);
+    expect(scheduleProblem({ ...ok, breakMinutes: 16 })).toBeNull();
+    // no break required, or no schedule checked: the gap does not matter
+    expect(scheduleProblem({ ...ok, breakMinutes: 0, breakWindowFrom: null, breakWindowTo: null })).toBeNull();
+    expect(scheduleProblem({ ...ok, scheduleEnforced: false, breakMinutes: 10 })).toBeNull();
   });
 });

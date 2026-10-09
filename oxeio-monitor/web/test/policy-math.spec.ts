@@ -105,4 +105,11 @@ describe('measureBody', () => {
       presenceGapMin: 15,
     });
   });
+
+  it('active with the schedule checked sends the gap typed in the form (it is shown then)', () => {
+    expect(measureBody('active', '10', 25, true)).toEqual({
+      hoursMeasure: 'active',
+      presenceGapMin: 10,
+    });
+  });
 });

@@ -35,6 +35,9 @@ describe('translateServerMessage', () => {
     expect(translateServerMessage('2026-08 is closed — reopen the month first')).toBe(
       '2026-08 está fechado — reabra o mês primeiro',
     );
+    expect(
+      translateServerMessage('The break must be longer than the longest pause that still counts as work (15 min)'),
+    ).toBe('O intervalo deve ser maior que a pausa mais longa que ainda conta como trabalho (15 min)');
   });
 
   it('uses the plural form for a count', async () => {

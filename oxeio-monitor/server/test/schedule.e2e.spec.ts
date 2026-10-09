@@ -147,6 +147,38 @@ describe('schedule days from the roll-up', () => {
     expect(res.status).toBe(400);
     expect(JSON.stringify(res.body)).toMatch(/both ends/);
   });
+
+  it('a break no longer than the presence gap is refused, on update and on create', async () => {
+    const policy = await h.prisma.workPolicy.findFirstOrThrow();
+    const schedule = {
+      scheduleEnforced: true,
+      officeFrom: '08:00',
+      officeTo: '17:00',
+      breakMinutes: 20,
+    };
+    const res = await owner.http
+      .patch(`/api/v1/work-policies/${policy.id}`)
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ ...schedule, presenceGapMin: 20 });
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toMatch(
+      /longest pause that still counts as work \(20 min\)/,
+    );
+
+    // the stored gap (15 by default) counts when the save does not send one
+    await owner.http
+      .patch(`/api/v1/work-policies/${policy.id}`)
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ ...schedule, breakMinutes: 15 })
+      .expect(400);
+
+    const created = await owner.http
+      .post('/api/v1/work-policies')
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ name: 'Gap', ...schedule, breakMinutes: 30, presenceGapMin: 30 });
+    expect(created.status).toBe(400);
+    expect(JSON.stringify(created.body)).toMatch(/\(30 min\)/);
+  });
 });
 
 describe('what queues a recount', () => {
