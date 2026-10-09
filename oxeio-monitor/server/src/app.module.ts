@@ -12,6 +12,7 @@ import { CalendarModule } from './calendar/calendar.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DigestModule } from './digest/digest.module';
 import { HealthModule } from './health/health.module';
+import { HoursStatementModule } from './hours-statement/hours-statement.module';
 import { DepositsModule } from './deposits/deposits.module';
 import { DevicesModule } from './devices/devices.module';
 import { ErrorReportingModule } from './error-reporting/error-reporting.module';
@@ -96,6 +97,8 @@ import { StaffModule } from './staff/staff.module';
     MeModule,
     OpsModule,
     DigestModule,
+    // pay periods and the hours statement; its `@Cron` also needs SummaryModule's forRoot() above
+    HoursStatementModule,
     HealthModule,
   ],
 })

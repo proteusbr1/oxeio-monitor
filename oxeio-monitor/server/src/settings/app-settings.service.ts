@@ -7,6 +7,7 @@ import {
   resolveErrorReporting,
   type ErrorReportingSaved,
 } from '../error-reporting/error-reporting.rules';
+import { PAY_PERIOD_SETTING_KEY, resolvePayPeriod, type PayPeriodConfig } from '../hours-statement/pay-period.rules';
 import { RECIPIENTS_SETTING_KEY, type RecipientsSaved } from '../mail/recipients.rules';
 import { resolveSmtp, SMTP_SETTING_KEY, type ResolvedSmtp, type SmtpSaved } from '../mail/smtp.settings';
 import { OFFSITE_SETTING_KEY, resolveOffsite, type OffsiteSettings } from '../ops/offsite.settings';
@@ -85,6 +86,11 @@ export class AppSettingsService {
   /** Saved recipient lists per kind of email (Settings → Notifications) */
   async recipients(): Promise<RecipientsSaved | null> {
     return this.read<RecipientsSaved>(RECIPIENTS_SETTING_KEY);
+  }
+
+  /** Cutoff day and send time of the hours statement (Settings → Hours statement) */
+  async payPeriod(): Promise<PayPeriodConfig> {
+    return resolvePayPeriod(await this.read<Partial<PayPeriodConfig>>(PAY_PERIOD_SETTING_KEY));
   }
 
   async updateKey() {
