@@ -158,6 +158,20 @@ created; changing it later does not change the database's password.
 The time zone, currency, date format and company name are set in the setup
 wizard, not here (`WORK_TIMEZONE`, `CURRENCY` and `DISPLAY_LOCALE` stay empty).
 
+**Email (SMTP).** The mail server can be set on Settings → Notifications ›
+Email (SMTP) instead of the `.env`; a value saved there wins over `SMTP_*`,
+and the card sends a test email. Any SMTP provider works. For Amazon SES:
+
+- use the region's SMTP endpoint, `email-smtp.<region>.amazonaws.com`, port 587;
+- use SMTP credentials generated in the SES console, not IAM access keys;
+- send from a verified domain with DKIM, SPF and DMARC set up;
+- ask AWS to move the account out of the SES sandbox, or only verified
+  addresses can receive mail.
+
+Who receives each kind of email (alerts, daily and weekly summaries, month
+closed) is set on the card below it; `ALERT_EMAIL_TO` and `DIGEST_EMAIL_TO` are
+the fallbacks, and with neither, the active owners.
+
 **Create the data folders** owned by uid 1000 (the api runs as `node`). If
 Docker creates them, they belong to root and every screenshot and backup write
 fails:

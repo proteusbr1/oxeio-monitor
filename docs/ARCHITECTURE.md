@@ -51,6 +51,8 @@ built-in default. The screen shows where each value comes from.
 | Settings → Company & region | `region` | `WORK_TIMEZONE`, `CURRENCY`, `DISPLAY_LOCALE` |
 | Settings → Storage & backup | `storage`, `ops.backup`, `ops.offsite` | `STORAGE_DRIVER`, `S3_*`, `BACKUP_MODE`, `B2_*` |
 | Settings → Notifications | `telegram` | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
+| Settings → Notifications › Email (SMTP) | `smtp` | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` |
+| Settings → Notifications › Who receives each email | `mail.recipients` | `ALERT_EMAIL_TO` (alerts), `DIGEST_EMAIL_TO` (summaries, month closed) |
 | Settings → Error reporting | `errorReporting` | `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_BROWSER`, `SENTRY_LOG_ERRORS` |
 | Settings → Agent updates | `agent.updateKey` | `AGENT_UPDATE_PUBLIC_KEY` |
 | Settings → Modules | `features` | — (screen only) |
@@ -151,7 +153,9 @@ and weekday names unless a display locale asks for numeric dates.
 Server error messages are written in English and translated on the
 dashboard by `web/src/i18n/server-messages.ts` (exact keys plus patterns in
 `locales/<lang>/server.json`) — when a server message changes, update its
-key there too. Emails, Telegram, PDF and Excel output are still English.
+key there too. Email text written through `mail/mail-text.ts` follows the
+company language; the older emails, Telegram, PDF and Excel output are still
+English.
 
 ## Account page
 
