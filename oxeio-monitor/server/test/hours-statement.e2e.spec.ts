@@ -27,6 +27,7 @@ import {
   OWNER_PASSWORD,
   resetDatabase,
   type Harness,
+  type Session,
 } from './setup/harness';
 
 /**
@@ -34,6 +35,7 @@ import {
  * local(…) builds the instant of a local wall-clock time.
  */
 let h: Harness;
+let owner: Session;
 let employeeId: number;
 let sent: ({ to: readonly string[] } & MailMessage)[];
 
@@ -50,7 +52,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await resetDatabase(h.prisma, h.app);
   // the owner's first sign-in (password change done), as on a live install
-  await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
+  owner = await loginReady(h, OWNER_EMAIL, OWNER_PASSWORD);
   await h.app
     .get(AppSettingsService)
     .replace('payPeriod', { cutoffDay: 25, sendTime: '07:00' }, 1);
@@ -416,35 +418,194 @@ describe('the hours statement cycle', () => {
     expect(sent).toHaveLength(1);
   });
 
-  // needs Task 7's endpoints: switch back to `it` there
-  it.todo(
-    'posted can be undone until the next snapshot, then it is locked',
-    async () => {
-      const job = h.app.get(HoursStatementJob);
-      await job.tick(local('2026-09-10T06:00'));
-      await credited('2026-09-01', 36_000);
-      await job.tick(local('2026-09-26T07:10'));
-      const line = await h.prisma.payPeriodLine.findFirstOrThrow();
+  it('posted can be undone until the next snapshot, then it is locked', async () => {
+    const job = h.app.get(HoursStatementJob);
+    await job.tick(local('2026-09-10T06:00'));
+    await credited('2026-09-01', 36_000);
+    await job.tick(local('2026-09-26T07:10'));
+    const line = await h.prisma.payPeriodLine.findFirstOrThrow();
 
-      const fin = await loginReady(h, 'fin@test.local', 'fin-password-123');
-      const post = (body: object) =>
-        fin.http
-          .post(`/api/v1/hours-statement/lines/${line.id}/posted`)
-          .set('X-CSRF-Token', fin.csrf)
-          .send(body);
-      await post({ postedMin: 590, note: 'rounded by hand' }).expect(201);
-      await fin.http
-        .delete(`/api/v1/hours-statement/lines/${line.id}/posted`)
+    const fin = await loginReady(h, 'fin@test.local', 'fin-password-123');
+    const post = (body: object) =>
+      fin.http
+        .post(`/api/v1/hours-statement/lines/${line.id}/posted`)
         .set('X-CSRF-Token', fin.csrf)
-        .expect(200);
-      await post({ postedMin: 590 }).expect(201);
+        .send(body);
+    await post({ postedMin: 590, note: 'rounded by hand' }).expect(201);
+    await fin.http
+      .delete(`/api/v1/hours-statement/lines/${line.id}/posted`)
+      .set('X-CSRF-Token', fin.csrf)
+      .expect(200);
+    await post({ postedMin: 590 }).expect(201);
 
-      await job.tick(local('2026-10-26T07:10'));
-      await post({}).expect(409);
-      const next = await h.prisma.payPeriodLine.findFirstOrThrow({
-        where: { NOT: { id: line.id } },
-      });
-      expect(next.carryInSec).toBe(600); // 36 000 s worked − 590 min posted
-    },
-  );
+    await job.tick(local('2026-10-26T07:10'));
+    await post({}).expect(409);
+    const next = await h.prisma.payPeriodLine.findFirstOrThrow({
+      where: { NOT: { id: line.id } },
+    });
+    expect(next.carryInSec).toBe(600); // 36 000 s worked − 590 min posted
+  });
+});
+
+describe('hours statement endpoints', () => {
+  it('finance lists periods and sees live numbers for the open one; no money in the answer', async () => {
+    const job = h.app.get(HoursStatementJob);
+    await job.tick(local('2026-09-10T06:00'));
+    await credited('2026-09-01', 3_600);
+
+    const fin = await loginReady(h, 'fin@test.local', 'fin-password-123');
+    const list = await fin.http
+      .get('/api/v1/hours-statement/periods')
+      .expect(200);
+    expect(list.body[0]).toMatchObject({
+      start: '2026-08-26',
+      end: '2026-09-25',
+      open: true,
+    });
+
+    const view = await fin.http
+      .get(`/api/v1/hours-statement/periods/${list.body[0].id}`)
+      .expect(200);
+    expect(view.body.lines[0]).toMatchObject({
+      id: null,
+      measuredSec: 3_600,
+      toPostMin: 60,
+    });
+    expect(JSON.stringify(view.body)).not.toMatch(
+      /hourlyRate|monthlySalary|salary/i,
+    );
+
+    const days = await fin.http
+      .get(
+        `/api/v1/hours-statement/periods/${list.body[0].id}/people/${employeeId}`,
+      )
+      .expect(200);
+    expect(days.body).toHaveLength(1);
+    expect(days.body[0]).toMatchObject({
+      date: '2026-09-01',
+      creditedHours: 1,
+    });
+  });
+
+  it('a frozen period answers its stored lines; a negative posted value is kept', async () => {
+    const job = h.app.get(HoursStatementJob);
+    await job.tick(local('2026-09-10T06:00'));
+    await credited('2026-09-01', 3_600);
+    await job.tick(local('2026-09-26T07:10'));
+    const period = await h.prisma.payPeriod.findFirstOrThrow({
+      where: { snapshotAt: { not: null } },
+    });
+    const line = await h.prisma.payPeriodLine.findFirstOrThrow();
+
+    const fin = await loginReady(h, 'fin@test.local', 'fin-password-123');
+    const post = (body: object) =>
+      fin.http
+        .post(`/api/v1/hours-statement/lines/${line.id}/posted`)
+        .set('X-CSRF-Token', fin.csrf)
+        .send(body);
+    await post({ postedMin: 1.5 }).expect(400);
+    await post({ postedMin: -30, note: 'overpaid before' }).expect(201);
+
+    const view = await fin.http
+      .get(`/api/v1/hours-statement/periods/${period.id}`)
+      .expect(200);
+    expect(view.body.locked).toBe(false);
+    expect(view.body.lines[0]).toMatchObject({
+      id: line.id,
+      postedMin: -30,
+      postedBy: 'Fin',
+      note: 'overpaid before',
+    });
+    const days = await fin.http
+      .get(`/api/v1/hours-statement/periods/${period.id}/people/${employeeId}`)
+      .expect(200);
+    // the freeze refreshes the last day too, so an empty row may sit beside the credited one
+    expect(days.body).toContainEqual(
+      expect.objectContaining({ date: '2026-09-01', creditedHours: 1 }),
+    );
+  });
+
+  it('resend is owner only', async () => {
+    const job = h.app.get(HoursStatementJob);
+    await job.tick(local('2026-09-10T06:00'));
+    await credited('2026-09-01', 3_600);
+    await job.tick(local('2026-09-26T07:10'));
+    const period = await h.prisma.payPeriod.findFirstOrThrow({
+      where: { snapshotAt: { not: null } },
+    });
+
+    const fin = await loginReady(h, 'fin@test.local', 'fin-password-123');
+    await fin.http
+      .post(`/api/v1/hours-statement/periods/${period.id}/resend`)
+      .set('X-CSRF-Token', fin.csrf)
+      .expect(403);
+    const res = await owner.http
+      .post(`/api/v1/hours-statement/periods/${period.id}/resend`)
+      .set('X-CSRF-Token', owner.csrf)
+      .expect(201);
+    expect(res.body.status).toBe('sent');
+    expect(sent).toHaveLength(2);
+  });
+
+  it('resend sends the stored statement after recipients were fixed, and refuses an open period', async () => {
+    await h.prisma.user.update({
+      where: { email: 'fin@test.local' },
+      data: { isActive: false },
+    });
+    const job = h.app.get(HoursStatementJob);
+    await job.tick(local('2026-09-10T06:00'));
+    await credited('2026-09-01', 3_600);
+    const openPeriod = await h.prisma.payPeriod.findFirstOrThrow();
+    await owner.http
+      .post(`/api/v1/hours-statement/periods/${openPeriod.id}/resend`)
+      .set('X-CSRF-Token', owner.csrf)
+      .expect(404);
+
+    await job.tick(local('2026-09-26T07:10'));
+    expect(sent).toHaveLength(0);
+    expect(
+      await h.prisma.payPeriod.findUniqueOrThrow({
+        where: { id: openPeriod.id },
+      }),
+    ).toMatchObject({ deliveryStatus: 'no_recipients' });
+
+    await h.prisma.user.update({
+      where: { email: 'fin@test.local' },
+      data: { isActive: true },
+    });
+    const res = await owner.http
+      .post(`/api/v1/hours-statement/periods/${openPeriod.id}/resend`)
+      .set('X-CSRF-Token', owner.csrf)
+      .expect(201);
+    expect(res.body.status).toBe('sent');
+    expect(sent).toHaveLength(1);
+  });
+
+  it('changing the cutoff stretches the open period', async () => {
+    await h.app.get(HoursStatementJob).tick(local('2026-10-09T10:00'));
+    const res = await owner.http
+      .put('/api/v1/settings/pay-period')
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ cutoffDay: 'end', sendTime: '07:00' })
+      .expect(200);
+    expect(res.body.open).toEqual({ start: '2026-09-26', end: '2026-09-30' });
+
+    await owner.http
+      .put('/api/v1/settings/pay-period')
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ cutoffDay: 31, sendTime: '07:00' })
+      .expect(400);
+    const fin = await loginReady(h, 'fin@test.local', 'fin-password-123');
+    await fin.http.get('/api/v1/settings/pay-period').expect(403);
+  });
+
+  it('the file downloads', async () => {
+    await h.app.get(HoursStatementJob).tick(local('2026-09-10T06:00'));
+    await credited('2026-09-01', 3_600);
+    const period = await h.prisma.payPeriod.findFirstOrThrow();
+    const res = await owner.http
+      .get(`/api/v1/hours-statement/periods/${period.id}/file`)
+      .expect(200);
+    expect(res.headers['content-type']).toContain('spreadsheetml');
+  });
 });
