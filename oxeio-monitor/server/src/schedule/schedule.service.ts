@@ -1,9 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 
+import { workDateOf } from '../agent/util/work-time';
 import { PrismaService } from '../prisma/prisma.service';
-import { presenceSpans, type Span } from '../summary/summary.math';
-import { minuteOfWorkDay } from './schedule-policy';
+import { isWorkday, presenceSpans, type Span } from '../summary/summary.math';
+import {
+  minuteOfWorkDay,
+  SCHEDULE_SELECT,
+  schedulePolicyOf,
+} from './schedule-policy';
 import type { DigestBreach } from './schedule.digest';
 import {
   checkDay,
@@ -12,6 +17,27 @@ import {
   type Breach,
   type SchedulePolicy,
 } from './schedule.rules';
+
+/** One person on the Live Board's "Schedule today" card */
+export interface TodayPerson {
+  employeeId: number;
+  fullName: string;
+  startMin: number;
+  endMin: number;
+  requiredBreakMin: number;
+  breakFromMin: number;
+  breakToMin: number;
+  /** false on a day off, a holiday, recorded leave or outside employment */
+  checkedToday: boolean;
+  arrivedMin: number | null;
+  leftMin: number | null;
+  breakStartMin: number | null;
+  breakMin: number;
+  lateMin: number;
+  earlyLeaveMin: number;
+  breaches: Breach[];
+  final: boolean;
+}
 
 export interface ScheduleDayInput {
   employeeId: number;
@@ -112,6 +138,82 @@ export class ScheduleService {
       select: { id: true, fullName: true },
       orderBy: { fullName: 'asc' },
     });
+  }
+
+  /**
+   * Today's check for everyone on a schedule, as the last roll-up left it —
+   * the Live Board's card. The day counts as checked by the same rules the
+   * roll-up uses (summary.service › refreshDate, writeDay); a stored row
+   * always does, since rows exist only for checked days.
+   */
+  async today(now: Date = new Date()): Promise<{
+    workDate: string;
+    nowMin: number;
+    people: TodayPerson[];
+  }> {
+    const workDate = workDateOf(now);
+    const employees = await this.prisma.employee.findMany({
+      where: { status: 'active', policy: { scheduleEnforced: true } },
+      select: {
+        id: true,
+        fullName: true,
+        joinedOn: true,
+        leftOn: true,
+        policy: { select: { weeklyOffDays: true, ...SCHEDULE_SELECT } },
+      },
+      orderBy: { fullName: 'asc' },
+    });
+    const scheduled = employees.flatMap((e) => {
+      const schedule = schedulePolicyOf(e.policy);
+      return schedule ? [{ ...e, schedule }] : [];
+    });
+    const ids = scheduled.map((e) => e.id);
+    const [rows, leave, holiday] = await Promise.all([
+      this.prisma.scheduleDay.findMany({
+        where: { workDate, employeeId: { in: ids } },
+      }),
+      this.prisma.leave.findMany({
+        where: { leaveDate: workDate, employeeId: { in: ids } },
+        select: { employeeId: true },
+      }),
+      this.prisma.holiday.findUnique({ where: { holidayDate: workDate } }),
+    ]);
+    const rowBy = new Map(rows.map((r) => [r.employeeId, r]));
+    const onLeave = new Set(leave.map((l) => l.employeeId));
+    const holidays = new Set(holiday ? [workDate.getTime()] : []);
+
+    const people = scheduled.map((e): TodayPerson => {
+      const row = rowBy.get(e.id);
+      const checkedToday =
+        row !== undefined ||
+        (isWorkday(workDate, e.policy?.weeklyOffDays ?? [], holidays) &&
+          (e.joinedOn === null || e.joinedOn <= workDate) &&
+          (e.leftOn === null || e.leftOn >= workDate) &&
+          !onLeave.has(e.id));
+      return {
+        employeeId: e.id,
+        fullName: e.fullName,
+        startMin: e.schedule.startMin,
+        endMin: e.schedule.endMin,
+        requiredBreakMin: e.schedule.breakMin,
+        breakFromMin: e.schedule.breakFromMin,
+        breakToMin: e.schedule.breakToMin,
+        checkedToday,
+        arrivedMin: row?.arrivedMin ?? null,
+        leftMin: row?.leftMin ?? null,
+        breakStartMin: row?.breakStartMin ?? null,
+        breakMin: row?.breakMin ?? 0,
+        lateMin: row?.lateMin ?? 0,
+        earlyLeaveMin: row?.earlyLeaveMin ?? 0,
+        breaches: (row?.breaches ?? []) as Breach[],
+        final: row?.final ?? false,
+      };
+    });
+    return {
+      workDate: workDate.toISOString().slice(0, 10),
+      nowMin: minuteOfWorkDay(now, workDate),
+      people,
+    };
   }
 
   async month(employeeId: number, yearMonth: string) {

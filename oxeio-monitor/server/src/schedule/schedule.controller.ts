@@ -25,6 +25,12 @@ export class ScheduleController {
     return this.schedule.people();
   }
 
+  /** Everyone on a schedule, today — the Live Board's card */
+  @Get('today')
+  today() {
+    return this.schedule.today();
+  }
+
   @Get()
   async month(
     @Query('employeeId', ParseIntPipe) employeeId: number,

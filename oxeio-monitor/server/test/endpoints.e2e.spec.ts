@@ -76,6 +76,7 @@ const SHARED_READS = (id: number): string[] => [
   // change both; the write side is in `staff-setup.e2e.spec.ts`.
   '/api/v1/categories',
   '/api/v1/holidays',
+  '/api/v1/schedule/today',
 ];
 
 /** Owner only (section 4.3) */

@@ -8,11 +8,14 @@ import {
   enrollDevice,
   hashPassword,
   loginReady,
+  MANAGER_EMAIL,
+  MANAGER_PASSWORD,
   OWNER_EMAIL,
   OWNER_PASSWORD,
   resetDatabase,
   type Harness,
   type Session,
+  workTodayIso,
 } from './setup/harness';
 
 /** Zone Etc/GMT-6: local 08:00 on 2026-10-05 is 02:00Z. */
@@ -519,5 +522,163 @@ describe('the daily summary block', () => {
       data: { status: 'inactive' },
     });
     expect(await schedule.breachesOn(workDate)).toEqual([]);
+  });
+});
+
+describe("today's schedule for the Live Board", () => {
+  const today = new Date(`${workTodayIso()}T00:00:00.000Z`);
+
+  async function staff(role: 'coordinator' | 'employee' | 'finance') {
+    const { employeeId } = await createEmployeeWithCode(h.prisma, `T-${role}`);
+    const email = `today-${role}@test.local`;
+    await h.prisma.user.create({
+      data: {
+        email,
+        fullName: role,
+        passwordHash: await hashPassword('staff-password-123'),
+        role,
+        employeeId,
+        mustChangePw: false,
+      },
+    });
+    return loginReady(h, email, 'staff-password-123');
+  }
+
+  it("lists people on a checked schedule with today's row, sorted by name", async () => {
+    await enforce(true);
+    const { employeeId: zoe } = await createEmployeeWithCode(h.prisma, 'T-1');
+    await h.prisma.employee.update({
+      where: { id: zoe },
+      data: { fullName: 'Zoe Row' },
+    });
+    const { employeeId: ann } = await createEmployeeWithCode(h.prisma, 'T-2');
+    await h.prisma.employee.update({
+      where: { id: ann },
+      data: { fullName: 'Ann Norow' },
+    });
+    await h.prisma.scheduleDay.create({
+      data: {
+        employeeId: zoe,
+        workDate: today,
+        arrivedMin: 492,
+        leftMin: 700,
+        breakStartMin: 690,
+        breakMin: 10,
+        lateMin: 12,
+        breaches: ['late'],
+      },
+    });
+    // someone on a policy that checks nothing stays off the list
+    const { id: _id, ...base } = await h.prisma.workPolicy.findFirstOrThrow();
+    const free = await h.prisma.workPolicy.create({
+      data: { ...base, name: 'Free', scheduleEnforced: false },
+    });
+    const { employeeId: other } = await createEmployeeWithCode(h.prisma, 'T-3');
+    await h.prisma.employee.update({
+      where: { id: other },
+      data: { policyId: free.id },
+    });
+
+    const res = await owner.http.get('/api/v1/schedule/today').expect(200);
+    expect(res.body.workDate).toBe(workTodayIso());
+    expect(res.body.nowMin).toBeGreaterThanOrEqual(0);
+    expect(res.body.nowMin).toBeLessThanOrEqual(1440);
+    expect(
+      res.body.people.map((p: { fullName: string }) => p.fullName),
+    ).toEqual(['Ann Norow', 'Zoe Row']);
+    expect(res.body.people[1]).toEqual({
+      employeeId: zoe,
+      fullName: 'Zoe Row',
+      startMin: 480,
+      endMin: 1020,
+      requiredBreakMin: 60,
+      breakFromMin: 660,
+      breakToMin: 840,
+      checkedToday: true,
+      arrivedMin: 492,
+      leftMin: 700,
+      breakStartMin: 690,
+      breakMin: 10,
+      lateMin: 12,
+      earlyLeaveMin: 0,
+      breaches: ['late'],
+      final: false,
+    });
+    // no row yet: empty day fields
+    expect(res.body.people[0]).toMatchObject({
+      employeeId: ann,
+      arrivedMin: null,
+      leftMin: null,
+      breakStartMin: null,
+      breakMin: 0,
+      breaches: [],
+      final: false,
+    });
+  });
+
+  it('nothing enforced: an empty list', async () => {
+    await createEmployeeWithCode(h.prisma);
+    const res = await owner.http.get('/api/v1/schedule/today').expect(200);
+    expect(res.body.people).toEqual([]);
+  });
+
+  it('a day off, a holiday, leave or a day outside employment is not checked', async () => {
+    await enforce(true);
+    const schedule = h.app.get(ScheduleService);
+    const { employeeId } = await createEmployeeWithCode(h.prisma);
+    const at = (iso: string) => new Date(`${iso}T06:00:00.000Z`); // 12:00 local
+
+    // 2026-10-05 is a Monday: a workday
+    const monday = await schedule.today(at('2026-10-05'));
+    expect(monday).toMatchObject({ workDate: '2026-10-05', nowMin: 720 });
+    expect(monday.people[0].checkedToday).toBe(true);
+    // Friday is the policy's weekly day off
+    expect(
+      (await schedule.today(at('2026-10-09'))).people[0].checkedToday,
+    ).toBe(false);
+
+    await h.prisma.leave.create({
+      data: { employeeId, leaveDate: workDate, createdBy: OWNER_EMAIL },
+    });
+    expect(
+      (await schedule.today(at('2026-10-05'))).people[0].checkedToday,
+    ).toBe(false);
+
+    await h.prisma.holiday.create({
+      data: { holidayDate: new Date('2026-10-06T00:00:00Z'), name: 'Holiday' },
+    });
+    expect(
+      (await schedule.today(at('2026-10-06'))).people[0].checkedToday,
+    ).toBe(false);
+
+    // before the first day (joined 2026-01-05)
+    expect(
+      (await schedule.today(at('2025-12-01'))).people[0].checkedToday,
+    ).toBe(false);
+  });
+
+  it('a stored row makes the day a checked one', async () => {
+    await enforce(true);
+    const { employeeId } = await createEmployeeWithCode(h.prisma);
+    const friday = new Date('2026-10-09T00:00:00.000Z');
+    await h.prisma.scheduleDay.create({
+      data: { employeeId, workDate: friday, arrivedMin: 470 },
+    });
+    const view = await h.app
+      .get(ScheduleService)
+      .today(new Date('2026-10-09T06:00:00.000Z'));
+    expect(view.people[0]).toMatchObject({
+      checkedToday: true,
+      arrivedMin: 470,
+    });
+  });
+
+  it('a manager may read it; employee, coordinator and finance get a 403', async () => {
+    const manager = await loginReady(h, MANAGER_EMAIL, MANAGER_PASSWORD);
+    await manager.http.get('/api/v1/schedule/today').expect(200);
+    for (const role of ['employee', 'coordinator', 'finance'] as const) {
+      const session = await staff(role);
+      await session.http.get('/api/v1/schedule/today').expect(403);
+    }
   });
 });
