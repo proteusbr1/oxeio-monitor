@@ -17,6 +17,35 @@ The finance employee must see those hours on screen and receive an email
 with everything needed to post them. Posting stays manual; automating it is
 out of scope.
 
+## 1a. Generic by design
+
+The product is meant for any company, in any country. This company's needs
+are met through **settings**, never through code written for it:
+
+- Nothing in code, comments, screen text, emails or tests names this
+  company, its payroll system, its country or its labour law. "The payroll
+  system", "the cutoff day", "tolerance" — never a product or a statute.
+- Every new behaviour is **off or neutral by default**, so an existing or
+  new install behaves exactly as before until someone switches it on:
+  measure = active time, schedule not enforced, tolerances 0, cutoff = end
+  of month (the calendar month), no extra recipients.
+- Every number this company needs is a setting with a range wide enough for
+  other companies: gap threshold 1–120 min, tolerances 0–60 min, cutoff day
+  1–28 or end of month, send time any HH:MM, break window any times inside
+  the day.
+- Hours are shown as whole hours plus minutes ("173 h 25 min"), with the
+  units translated per language, never a format tied to one payroll
+  product.
+- Email transport is plain SMTP; Amazon SES is one provider among many and
+  is only named in the deployment notes.
+- The hours statement is a module on Settings → Modules (`hoursStatement`),
+  so companies that do not need it can hide it; it is on by default and
+  sends nothing while there are no recipients and no hourly staff.
+- Screen and email text is in English, Brazilian Portuguese and Spanish
+  from the start, following the dashboard's existing language rules.
+
+The values this company uses are listed once, under Rollout (§ 10).
+
 ## 2. Decisions taken
 
 | Question | Decision |
@@ -27,14 +56,14 @@ out of scope.
 | When the statement goes out | The day after the cutoff, 07:00 in the company time zone (26th, 07:00). Configurable time. |
 | Late corrections | Changes to days already sent flow into the next statement as a carry-over. |
 | Break rule | At least one continuous pause of N minutes that **starts inside a time window** (e.g. 11:00–14:00). |
-| Tolerance | Brazilian labour-law style: up to 5 minutes per clock mark, at most 10 minutes a day, ignored. Both numbers configurable. |
+| Tolerance | Two settings: minutes ignored per clock mark, and at most this many a day. Default 0 / 0 (generic); this company uses 5 / 10. |
 | Time outside the schedule (salaried) | Shown as a daily and monthly balance (extra or short), for information only; pay does not change. |
 | Hourly staff and schedules | Hourly staff have free hours; compliance is a policy setting, so anyone on a policy with an enforced schedule is checked. |
 | Leave and holidays in the statement | "Hours to post" is worked time only; leave and holiday days are listed separately. |
 | Finance employee's access | A new role, `finance`: sees only the hours statement of hourly staff, with history and the spreadsheet; marks lines as posted. No pay rates, salaries, screenshots, apps or settings. |
 | After the email | Finance marks each line "Posted", optionally with the value actually posted and a note. The next carry-over starts from the posted value. |
 | Breaches of the schedule | Shown on a new Schedule screen and in a block of the existing daily summary (18:30). No new real-time alert. |
-| Email transport | Amazon SES through its SMTP endpoint. SMTP becomes editable on Settings → Notifications, with a test email. |
+| Email transport | Any SMTP server (this company uses Amazon SES's SMTP endpoint). SMTP becomes editable on Settings → Notifications, with a test email. |
 
 ## 3. Approach
 
@@ -115,7 +144,7 @@ detail.
 uses: start and end of the day (the existing office-hours fields, whose
 meaning widens from "when alerts care" to "the expected schedule"), break
 minutes (existing field), break window start and end (new), tolerance per
-mark (default 5) and per day (default 10). Validation: end after start; the
+mark and per day (both default 0, range 0–60). Validation: end after start; the
 window inside the day; break shorter than the day.
 
 **Rule, per workday** (pure function, input = the day's presence blocks and
@@ -205,11 +234,11 @@ configured: the snapshot is taken and the screen says the email was not
 sent. The owner can resend a period from the screen; a resend sends the
 stored snapshot again and never takes a new one.
 
-**The email** (company language; Portuguese in production).
+**The email** (in the company's default language).
 
 - Subject: company name, the period's dates, "hours to post".
 - Body (plain text and simple HTML): one line per person with hours to
-  post as "H h MM min", the carry-in it includes, leave and holiday days;
+  post in hours and minutes, the carry-in it includes, leave and holiday days;
   warnings: workdays with no data at all, negative results; a link to the
   screen.
 - Attachment: a spreadsheet with a summary sheet and a day-by-day sheet per
@@ -236,7 +265,7 @@ line posted is written to the audit log.
 
 ## 8. Out of scope
 
-- Posting into Agilize (manual by decision).
+- Posting into the outside payroll system (manual by decision).
 - Per-weekday schedules (different hours on different days).
 - Real-time alerts for schedule breaches.
 - Translating the existing English emails, Telegram, PDF and Excel output.
@@ -261,9 +290,13 @@ line posted is written to the audit log.
 
 - One additive migration per delivery; every new field defaults to today's
   behaviour, so deploying changes nothing until switched on.
-- After deploy, in production: switch the relevant policies to presence,
-  enforce the schedule on the fixed-schedule policy, set the cutoff to 25,
-  create the finance login, set up SMTP (SES) and send a test email.
+- After deploy, this company's settings (all on screen, none in code):
+  - hourly and fixed-schedule policies: measure = presence, gap 15 min;
+  - fixed-schedule policy: schedule enforced, office hours and break as
+    contracted, break window (e.g. 11:00–14:00), tolerance 5 per mark and
+    10 per day;
+  - hours statement: cutoff day 25, send time 07:00;
+  - a finance login; SMTP set to Amazon SES; a test email sent.
 - Infra side: only the SES SMTP credentials, if they go in the environment
   instead of on screen; the sending domain verified in SES (DKIM, SPF,
   DMARC) and the account out of the SES sandbox.
