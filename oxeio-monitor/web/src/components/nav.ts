@@ -212,6 +212,17 @@ export const NAV: NavItem[] = [
    */
   { to: '/payroll', label: 'Payroll', roles: ['owner'] },
   /**
+   * The hours statement: what to post for hourly staff each pay period
+   * (finance's only screen). Hours only, never money — so not under Payroll,
+   * and finance never needs the payroll module.
+   */
+  {
+    to: '/hours',
+    label: 'Hours statement',
+    roles: ['owner', 'finance'],
+    feature: 'hoursStatement',
+  },
+  /**
    * Careful: owner-only. Alerts contain hostnames, employee names and device state
    * together (section 4.3). Managers are not even shown the badge.
    */
@@ -230,7 +241,8 @@ export const NAV: NavItem[] = [
   {
     to: '/account',
     label: 'Account',
-    roles: ['owner', 'manager', 'coordinator', 'employee'],
+    // finance too: the server opens the account endpoints to every role (2FA included)
+    roles: ['owner', 'manager', 'coordinator', 'employee', 'finance'],
   },
   { to: '/settings', label: 'Settings', roles: ['owner', 'manager'] },
 ];

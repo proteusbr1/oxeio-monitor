@@ -985,6 +985,7 @@ const ASSIGNABLE_OF: Record<Role, AssignableRole> = {
   manager: 'manager',
   coordinator: 'coordinator',
   employee: 'employee',
+  finance: 'finance',
 };
 
 const PORTAL_ROLES: { value: AssignableRole; label: string }[] = [
@@ -1000,6 +1001,7 @@ const PORTAL_ROLES: { value: AssignableRole; label: string }[] = [
     label: 'Coordinator — adds and checks tasks; sees only their own data otherwise',
   },
   { value: 'manager', label: "Manager — everyone's Live Board and reports" },
+  { value: 'finance', label: 'Finance — the hours statement only; nothing else' },
 ];
 
 /**

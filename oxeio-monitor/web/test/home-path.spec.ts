@@ -15,4 +15,9 @@ describe('homePathFor — where each role lands', () => {
     expect(homePathFor('owner', false)).toBe('/');
     expect(homePathFor('employee', false)).toBe('/me');
   });
+
+  it('finance lands on the hours statement', () => {
+    expect(homePathFor('finance')).toBe('/hours');
+    expect(homePathFor('finance', false)).toBe('/hours');
+  });
 });

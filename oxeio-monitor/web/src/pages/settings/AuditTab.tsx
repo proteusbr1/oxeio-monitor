@@ -89,6 +89,7 @@ const ROLE_LABEL: Record<Role, string> = {
   manager: 'Manager',
   coordinator: 'Coordinator',
   employee: 'Staff member',
+  finance: 'Finance',
 };
 
 const PAGE_SIZE = 50;

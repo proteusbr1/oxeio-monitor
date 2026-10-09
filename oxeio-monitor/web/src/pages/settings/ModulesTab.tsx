@@ -150,6 +150,22 @@ const MODULES: ModuleInfo[] = [
     offWarning: () =>
       translate('The daily hand-out stops too: tasks already handed out stay with their assignee until the module is back on.'),
   },
+  /**
+   * Not nested under Payroll: finance gets hours, never pay, so the
+   * statement must work with the payroll module off.
+   */
+  {
+    key: 'hoursStatement',
+    title: 'Hours statement',
+    what: 'Pay periods with a cutoff day; the hours of hourly staff emailed to finance and shown to the finance role.',
+    hides: [
+      'The Hours statement page, for the owner and finance',
+      'Settings › Hours statement',
+    ],
+    holds: () => null,
+    offWarning: () =>
+      translate('While it is off no period is frozen or emailed; statements already frozen stay saved. Turned back on, the periods that ended meanwhile are frozen and emailed at the next hourly run.'),
+  },
 ];
 
 const TITLE = Object.fromEntries(MODULES.map((m) => [m.key, m.title])) as Record<

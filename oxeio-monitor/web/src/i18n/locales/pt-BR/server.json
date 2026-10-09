@@ -302,5 +302,11 @@
   "{{property}} must not be greater than {{max}}": "{{property}} não pode ser maior que {{max}}",
   "{{property}} must not be less than {{min}}": "{{property}} não pode ser menor que {{min}}",
   "{{property}} should not be empty": "{{property}} não pode ficar vazio",
-  "{{version}} is not newer than the current {{latest}}, so no agent would ever be offered it.": "{{version}} não é mais nova que a atual {{latest}}, então nenhum agente a receberia."
+  "{{version}} is not newer than the current {{latest}}, so no agent would ever be offered it.": "{{version}} não é mais nova que a atual {{latest}}, então nenhum agente a receberia.",
+  "The cutoff day must be from 1 to 28, or the end of the month": "O dia de corte deve ser de 1 a 28, ou o fim do mês",
+  "The send time must be in 'HH:MM' format": "O horário de envio deve estar no formato 'HH:MM'",
+  "This period is closed: a later statement already used it": "Este período está fechado: um fechamento posterior já o usou",
+  "This period is still open — there is nothing to send yet": "Este período ainda está aberto — ainda não há nada para enviar",
+  "Pay period not found": "Período de pagamento não encontrado",
+  "Line not found": "Linha não encontrada"
 }

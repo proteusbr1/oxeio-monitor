@@ -10,6 +10,7 @@ import { getSetupStatus } from './api/setup';
 import { useApi } from './api/useApi';
 import { WorklogPage } from './pages/worklog/WorklogPage';
 import { SchedulePage } from './pages/schedule/SchedulePage';
+import { HoursStatementPage } from './pages/hours/HoursStatementPage';
 import { ChangePasswordPage } from './pages/account/ChangePasswordPage';
 import { EmployeeDetailPage } from './pages/staff/EmployeeDetailPage';
 import { StaffPage } from './pages/staff/StaffPage';
@@ -123,6 +124,13 @@ function Router() {
    * would change and not the other two — which is exactly what happened in G134.
    */
   const mayOpenWorklog = isOwner || user.role === 'manager';
+
+  /**
+   * The hours statement — owner and finance, as the nav and the server's
+   * `@Roles(owner, finance)`. Finance is not `seesEveryone`, so the index
+   * route sends them to `homePathFor`'s `/hours`.
+   */
+  const mayOpenHours = isOwner || user.role === 'finance';
 
   /**
    * **A coordinator lands on the Task pool after login.**
@@ -247,6 +255,9 @@ function Router() {
         {mayOpenWorklog && <Route path="worklog" element={<WorklogPage />} />}
         {mayOpenWorklog && <Route path="schedule" element={<SchedulePage />} />}
         {isOwner && <Route path="payroll" element={<PayrollPage />} />}
+        {mayOpenHours && features.hoursStatement && (
+          <Route path="hours" element={<HoursStatementPage />} />
+        )}
         {/* deposits are a tab of the Payroll page now */}
         {isOwner && features.deposits && (
           <Route path="deposits" element={<Navigate to="/payroll?tab=deposits" replace />} />

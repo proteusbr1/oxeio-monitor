@@ -28,8 +28,11 @@ export type EmployeeStatus = 'active' | 'inactive';
  *
  * `coordinator` adds and checks tasks but otherwise sees only their own data,
  * like `employee`.
+ *
+ * `finance` sees the hours statement and their own account, nothing else —
+ * no staff row of their own, no team screens.
  */
-export type Role = 'owner' | 'manager' | 'coordinator' | 'employee';
+export type Role = 'owner' | 'manager' | 'coordinator' | 'employee' | 'finance';
 /**
  * The roles that can be assigned from the dropdown; `owner` is deliberately left out.
  *

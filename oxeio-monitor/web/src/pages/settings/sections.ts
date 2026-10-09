@@ -72,6 +72,14 @@ const SECTIONS: { title: string; tabs: TabDef[] }[] = [
         subtitle: 'Which apps show that a task was started',
         feature: 'tasks',
       },
+      /** The pay period behind the hours statement — owner only, like the screen's resend */
+      {
+        id: 'hours',
+        label: 'Hours statement',
+        manager: false,
+        subtitle: 'Pay period cutoff and when the statement is sent',
+        feature: 'hoursStatement',
+      },
     ],
   },
   {

@@ -17,6 +17,7 @@ import { PoliciesTab } from './PoliciesTab';
 import { PrivacyTab } from './PrivacyTab';
 import { TasksTab } from './TasksTab';
 import { OrganizationCard } from './OrganizationCard';
+import { PayPeriodTab } from './PayPeriodTab';
 import { RegionTab } from './RegionTab';
 import { settingsSections } from './sections';
 
@@ -131,6 +132,7 @@ export function SettingsPage() {
           {active.id === 'modules' && <ModulesTab />}
           {active.id === 'privacy' && <PrivacyTab />}
           {active.id === 'tasks' && <TasksTab />}
+          {active.id === 'hours' && <PayPeriodTab />}
           {active.id === 'notifications' && <NotificationsTab />}
           {active.id === 'errors' && <ErrorReportingTab />}
           {active.id === 'region' && (

@@ -137,5 +137,7 @@ export function homePathFor(
   tasks = true,
 ): string {
   if (seesEveryone(role)) return '/';
+  // finance has one screen; `/me` would answer 403
+  if (role === 'finance') return '/hours';
   return role === 'coordinator' && tasks ? '/tasks/all' : '/me';
 }

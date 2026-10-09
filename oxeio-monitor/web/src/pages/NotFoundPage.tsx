@@ -28,6 +28,7 @@ const HOME_WORD: Record<string, string> = {
   '/': 'Back to Live Board',
   '/tasks/all': 'Back to the Task pool',
   '/me': 'My data',
+  '/hours': 'Back to the hours statement',
 };
 
 export function NotFoundPage() {

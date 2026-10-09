@@ -261,9 +261,16 @@ export function RecipientsCard() {
             onChange={(value) =>
               setText((prev) => ({ ...prev, [k.kind]: value }))
             }
-            hint={t('Now going to: {{list}}', {
-              list: k.effective.join(', ') || t('nobody'),
-            })}
+            hint={
+              <>
+                {/* not the general rule above: finance logins are always on this list */}
+                {k.kind === 'hoursStatement' &&
+                  `${t('Finance logins always receive it; add extra addresses here.')} `}
+                {t('Now going to: {{list}}', {
+                  list: k.effective.join(', ') || t('nobody'),
+                })}
+              </>
+            }
           />
         ))}
         <ServerError error={save.error} />

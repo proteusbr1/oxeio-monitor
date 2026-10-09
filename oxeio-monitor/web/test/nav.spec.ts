@@ -82,3 +82,15 @@ describe('navFor — Schedule', () => {
     expect(paths(user({ role: 'employee' }))).not.toContain('/schedule');
   });
 });
+
+describe('navFor — finance', () => {
+  /** the server opens the hours statement and their own account to finance, nothing else */
+  it('finance sees the hours statement and their account, nothing else', () => {
+    expect(paths(user({ role: 'finance' }))).toEqual(['/hours', '/account']);
+  });
+  it('the owner sees it too; the module switch hides it', () => {
+    expect(paths(user())).toContain('/hours');
+    expect(paths(user({ role: 'manager' }))).not.toContain('/hours');
+    expect(paths(user(), off({ hoursStatement: false }))).not.toContain('/hours');
+  });
+});

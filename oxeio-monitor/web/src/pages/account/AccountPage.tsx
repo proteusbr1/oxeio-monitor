@@ -38,6 +38,7 @@ const ROLE_LABEL: Record<AccountView['role'], string> = {
   manager: 'Manager',
   coordinator: 'Coordinator',
   employee: 'Staff member',
+  finance: 'Finance',
 };
 
 /** must match MIN_PASSWORD_LENGTH on the server */
