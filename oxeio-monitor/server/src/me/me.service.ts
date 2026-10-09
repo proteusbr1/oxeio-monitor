@@ -9,7 +9,13 @@ import { parseWorkDate, toIsoDate } from '../reports/reports.range';
 import { FeaturesService } from '../features/features.service';
 import { PrivacyService } from '../privacy/privacy.service';
 import { MEASURE_SELECT, measureOf } from '../calendar/work-regime';
-import { isWorkday, presenceSpans, unionSec } from '../summary/summary.math';
+import {
+  isWorkday,
+  presenceSpans,
+  unionSec,
+  type HoursMeasure,
+  type Span,
+} from '../summary/summary.math';
 import type { SessionUser } from '../auth/types';
 
 /** The top section of the employee's own page */
@@ -44,12 +50,19 @@ export interface MySummary {
    * `null` means "this measure does not apply to you", not zero.
    */
   tasks: TaskView | null;
+  /**
+   * What their policy counts as worked time, so the page can say so: active
+   * input, or presence (first to last use, minus pauses over `presenceGapMin`)
+   */
+  hoursMeasure: HoursMeasure;
+  /** presence: the longest pause, in minutes, still counted as work */
+  presenceGapMin: number;
 }
 
 /** One day's row in the employee's own list */
 export interface MyDay {
   workDate: string;
-  /** Seconds counted that day (sum of ACTIVE) */
+  /** Active seconds that day: the stored row for a finished day, live for today */
   workedSec: number;
   /** The owner's correction, ± */
   adjustmentSec: number;
@@ -133,7 +146,9 @@ export class MeService {
           policySignedAt: true,
           receivesTasks: true,
           dailyTaskTarget: true,
-          policy: { select: { dailyTaskTarget: true, screenshotsEnabled: true } },
+          policy: {
+            select: { dailyTaskTarget: true, screenshotsEnabled: true, ...MEASURE_SELECT },
+          },
         },
       }),
       this.progress.forEmployee(employeeId, now),
@@ -151,6 +166,8 @@ export class MeService {
           })
         : Promise.resolve(0),
     ]);
+
+    const { measure, presenceGapSec } = measureOf(employee.policy);
 
     return {
       employee: {
@@ -177,6 +194,8 @@ export class MeService {
             taskTargetOf(employee.dailyTaskTarget, employee.policy?.dailyTaskTarget),
           )
         : null,
+      hoursMeasure: measure,
+      presenceGapMin: presenceGapSec / 60,
     };
   }
 
@@ -222,11 +241,12 @@ export class MeService {
         ? new Date(last.getTime() - (MY_DAYS_MAX - 1) * MS_PER_DAY)
         : start;
 
-    const [segments, adjustments, employee, holidayRows] = await Promise.all([
+    const [segments, stored, adjustments, employee, holidayRows] = await Promise.all([
       /**
        * Raw `activity_segments`, not `daily_summary`, for the same reason
        * `ProgressService` does it: the rollup runs every 15 minutes, and a staff
        * member checking today's hours and seeing "0" would assume data was lost.
+       * Only for today, and for a past day the rollup has not counted yet.
        */
       this.prisma.activitySegment.groupBy({
         by: ['workDate'],
@@ -236,6 +256,16 @@ export class MeService {
           workDate: { gte: first, lte: last },
         },
         _sum: { durationSec: true },
+      }),
+      /**
+       * Finished days as counted: the stored row says what that day credited
+       * under the policy of the time. Recomputing them from today's policy would
+       * rewrite closed months on this page, while payroll keeps the stored figure.
+       * `lt: today`, like the tray: today is live.
+       */
+      this.prisma.dailySummary.findMany({
+        where: { employeeId, workDate: { gte: first, lt: today } },
+        select: { workDate: true, workedSec: true, creditedSec: true, adjustmentSec: true },
       }),
       // `revokedAt: null`: a revoked adjustment does not give hours back
       this.prisma.timeAdjustment.groupBy({
@@ -264,7 +294,8 @@ export class MeService {
     /**
      * Credited counts time by the policy's measure. Under presence the day's
      * stretches are joined across short pauses, so it needs the spans, not just the
-     * sum; with active time `workedBy` is already the answer.
+     * sum; with active time `workedBy` is already the answer. Only the days with no
+     * stored row are counted live (today, or a day the rollup has not reached).
      */
     const { measure, presenceGapSec } = measureOf(employee?.policy);
     const measuredBy = new Map(workedBy);
@@ -273,19 +304,29 @@ export class MeService {
         where: {
           employeeId,
           countsAsWork: true,
-          workDate: { gte: first, lte: last },
+          // stored days are taken as stored (below), so their spans are not needed
+          workDate: { gte: first, lte: last, notIn: stored.map((r) => r.workDate) },
         },
         select: { workDate: true, startedAt: true, endedAt: true },
       });
-      const byDay = new Map<number, { startedAt: Date; endedAt: Date }[]>();
+      const byDay = new Map<number, Span[]>();
       for (const sp of spans) {
         const key = sp.workDate.getTime();
-        byDay.set(key, [...(byDay.get(key) ?? []), sp]);
+        const list = byDay.get(key);
+        if (list) list.push(sp);
+        else byDay.set(key, [sp]);
       }
       measuredBy.clear();
       for (const [key, list] of byDay) {
         measuredBy.set(key, unionSec(presenceSpans(list, presenceGapSec)));
       }
+    }
+
+    // a stored row wins: worked as counted, and the measured part of credited
+    for (const row of stored) {
+      const key = row.workDate.getTime();
+      workedBy.set(key, row.workedSec);
+      measuredBy.set(key, row.creditedSec - row.adjustmentSec);
     }
     const adjustBy = new Map(
       adjustments.map((a) => [a.workDate.getTime(), a._sum.deltaSec ?? 0]),

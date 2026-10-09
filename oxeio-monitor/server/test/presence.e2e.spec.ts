@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { ProgressService } from '../src/agent/progress.service';
+import { DashboardLiveService } from '../src/dashboard/dashboard.live.service';
 import { ReportsService } from '../src/reports/reports.service';
 import { MeService } from '../src/me/me.service';
 import { SummaryService } from '../src/summary/summary.service';
@@ -25,6 +26,60 @@ afterAll(async () => {
 beforeEach(async () => {
   await resetDatabase(h.prisma, h.app);
 });
+
+/** Active stretches for one person on one day, on their enrolled device */
+async function addStretches(
+  employeeId: number,
+  workDate: Date,
+  stretches: [string, string][],
+) {
+  const device = await h.prisma.device.findFirstOrThrow({
+    where: { employeeId },
+  });
+  const session = await h.prisma.workSession.create({
+    data: {
+      employeeId,
+      deviceId: device.id,
+      workDate,
+      startedAt: new Date(stretches[0][0]),
+    },
+  });
+  for (const [from, to] of stretches) {
+    const startedAt = new Date(from);
+    const endedAt = new Date(to);
+    await h.prisma.activitySegment.create({
+      data: {
+        sessionId: session.id,
+        employeeId,
+        deviceId: device.id,
+        clientUuid: crypto.randomUUID(),
+        workDate,
+        state: 'active',
+        startedAt,
+        endedAt,
+        durationSec: (endedAt.getTime() - startedAt.getTime()) / 1000,
+        countsAsWork: true,
+      },
+    });
+  }
+}
+
+const staffActor = (employeeId: number) => ({
+  userId: 0,
+  email: '',
+  role: 'employee' as const,
+  employeeId,
+  mustChangePw: false,
+  issuedAt: 0,
+});
+
+/** 6 October (the day after the stored day): 1h, a 10-minute pause, 30 min */
+const TODAY = new Date('2026-10-06T00:00:00.000Z');
+const NOW = new Date('2026-10-06T06:00:00Z');
+const TODAY_STRETCHES: [string, string][] = [
+  ['2026-10-06T02:00:00Z', '2026-10-06T03:00:00Z'],
+  ['2026-10-06T03:10:00Z', '2026-10-06T03:40:00Z'],
+];
 
 async function personWithDay(measure: 'active' | 'presence') {
   const policy = await h.prisma.workPolicy.findFirstOrThrow();
@@ -175,5 +230,64 @@ describe('attendance shows presence beside active time', () => {
     const row = report.rows.find((r) => r.status === 'worked');
     expect(row?.workedHours).toBe(3);
     expect(row?.presenceHours).toBeCloseTo(3.17, 2);
+  });
+});
+
+describe('the Live Board counts by the measure', () => {
+  it('presence policy: today and the month follow presence', async () => {
+    const day = await personWithDay('presence');
+    await addStretches(day.employeeId, TODAY, TODAY_STRETCHES);
+    const board = await h.app.get(DashboardLiveService).live(NOW);
+    const card = board.cards.find((c) => c.employeeId === day.employeeId);
+    // today: 08:00–09:40 joined across the 10-minute pause
+    expect(card?.todayWorkedSec).toBe(6000);
+    // the stored day's presence (11400) plus today's
+    expect(card?.monthWorkedSec).toBe(11400 + 6000);
+  });
+
+  it('active policy: the same numbers as before (active time)', async () => {
+    const day = await personWithDay('active');
+    await addStretches(day.employeeId, TODAY, TODAY_STRETCHES);
+    const board = await h.app.get(DashboardLiveService).live(NOW);
+    const card = board.cards.find((c) => c.employeeId === day.employeeId);
+    expect(card?.todayWorkedSec).toBe(5400);
+    expect(card?.monthWorkedSec).toBe(10800 + 5400);
+  });
+});
+
+describe('My data keeps past days as stored', () => {
+  it('a measure change without a recount leaves past days alone; today is live', async () => {
+    const day = await personWithDay('presence');
+    await addStretches(day.employeeId, TODAY, TODAY_STRETCHES);
+    await h.prisma.workPolicy.updateMany({ data: { hoursMeasure: 'active' } });
+    const [today, past] = await h.app
+      .get(MeService)
+      .days(staffActor(day.employeeId), '2026-10-05', '2026-10-06', NOW);
+    // the stored row: presence was credited when it was counted
+    expect(past.workDate).toBe('2026-10-05');
+    expect(past.workedSec).toBe(10800);
+    expect(past.creditedSec).toBe(11400);
+    // today follows the current policy (now active time)
+    expect(today.workedSec).toBe(5400);
+    expect(today.creditedSec).toBe(5400);
+  });
+
+  it('presence today is counted live', async () => {
+    const day = await personWithDay('presence');
+    await addStretches(day.employeeId, TODAY, TODAY_STRETCHES);
+    const [today] = await h.app
+      .get(MeService)
+      .days(staffActor(day.employeeId), '2026-10-06', '2026-10-06', NOW);
+    expect(today.workedSec).toBe(5400);
+    expect(today.creditedSec).toBe(6000);
+  });
+
+  it('the summary names the measure and the gap', async () => {
+    const day = await personWithDay('presence');
+    const summary = await h.app
+      .get(MeService)
+      .summary(staffActor(day.employeeId), NOW);
+    expect(summary.hoursMeasure).toBe('presence');
+    expect(summary.presenceGapMin).toBe(15);
   });
 });

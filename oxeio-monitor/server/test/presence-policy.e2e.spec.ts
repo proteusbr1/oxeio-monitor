@@ -162,3 +162,44 @@ describe('switching the measure back', () => {
     expect(asActive.creditedSec).toBe(asActive.workedSec);
   });
 });
+
+describe('moving a person to another policy', () => {
+  /** A second policy, copied from the seeded one, with its own measure */
+  async function secondPolicy(
+    hoursMeasure: 'active' | 'presence',
+    presenceGapMin = 15,
+  ) {
+    const { id: _id, ...base } = await h.prisma.workPolicy.findFirstOrThrow({
+      orderBy: { id: 'asc' },
+    });
+    return h.prisma.workPolicy.create({
+      data: { ...base, name: 'Second', hoursMeasure, presenceGapMin },
+    });
+  }
+
+  it('to a policy with another measure queues the open months', async () => {
+    const { employeeId } = await createEmployeeWithCode(h.prisma);
+    const presence = await secondPolicy('presence');
+    await patch(`/employees/${employeeId}`, { policyId: presence.id }).expect(
+      200,
+    );
+    expect(await h.prisma.summaryDirty.count()).toBeGreaterThanOrEqual(28);
+  });
+
+  it('between two presence policies with different gaps queues the open months', async () => {
+    const { employeeId } = await createEmployeeWithCode(h.prisma);
+    await h.prisma.workPolicy.updateMany({
+      data: { hoursMeasure: 'presence', presenceGapMin: 15 },
+    });
+    const wider = await secondPolicy('presence', 30);
+    await patch(`/employees/${employeeId}`, { policyId: wider.id }).expect(200);
+    expect(await h.prisma.summaryDirty.count()).toBeGreaterThanOrEqual(28);
+  });
+
+  it('between two active policies queues nothing', async () => {
+    const { employeeId } = await createEmployeeWithCode(h.prisma);
+    const other = await secondPolicy('active', 30);
+    await patch(`/employees/${employeeId}`, { policyId: other.id }).expect(200);
+    expect(await h.prisma.summaryDirty.count()).toBe(0);
+  });
+});

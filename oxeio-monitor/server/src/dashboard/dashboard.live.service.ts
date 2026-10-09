@@ -6,7 +6,12 @@ import {
   nextLocalMidnight,
   workDateOf,
 } from '../agent/util/work-time';
-import { REGIME_SELECT, targetSpreadOf } from '../calendar/work-regime';
+import {
+  MEASURE_SELECT,
+  measureOf,
+  REGIME_SELECT,
+  targetSpreadOf,
+} from '../calendar/work-regime';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   decideLiveStatus,
@@ -21,6 +26,7 @@ import type { LiveBoard, LiveCard } from './dashboard.types';
 
 import { isWorkday, monthBoundsOf } from '../reports/reports.range';
 import { prorate } from '../summary/proration';
+import { presenceSpans, unionSec, type Span } from '../summary/summary.math';
 import { taskTargetOf } from '../summary/task-start.rules';
 
 /**
@@ -85,6 +91,13 @@ export class DashboardLiveService {
    *
    *    The real fix is a daily rollup job (daily_summary.worked_sec) — when it
    *    arrives, **both places must change together**, not separately.
+   *
+   * Careful: that sum is **active time**. Someone whose policy counts presence
+   * is drawn against the same target as the tray's pace, so their card counts
+   * by the measure too: finished days from `daily_summary` (credited minus its
+   * adjustment, the day's measured time) and today live, presence joined across
+   * pauses — the split `progress.service.ts` uses. An all-active office keeps
+   * the sums above, unchanged.
    */
   async live(now: Date = new Date()): Promise<LiveBoard> {
     const today = workDateOf(now);
@@ -113,6 +126,7 @@ export class DashboardLiveService {
           // the real cause of the gap between the tray and this card.
           select: {
             ...REGIME_SELECT,
+            ...MEASURE_SELECT,
             // Tasks per day — shown next to the hours
             dailyTaskTarget: true,
           },
@@ -154,8 +168,24 @@ export class DashboardLiveService {
       set.add(l.leaveDate.getTime());
     }
 
-    const [devices, todaySums, startedToday, finishedToday, monthSums, recentSegments] =
-      await Promise.all([
+    /**
+     * Presence people need their spans and their stored days; nobody else does,
+     * so an all-active office runs no extra query.
+     */
+    const presenceIds = employees
+      .filter((e) => measureOf(e.policy).measure === 'presence')
+      .map((e) => e.id);
+
+    const [
+      devices,
+      todaySums,
+      startedToday,
+      finishedToday,
+      monthSums,
+      recentSegments,
+      presenceToday,
+      presencePastDays,
+    ] = await Promise.all([
       // Careful: revoked devices are excluded — their lastSeenAt stays old
       // forever, so even an employee whose PC was replaced would show red.
       //
@@ -244,6 +274,27 @@ export class DashboardLiveService {
         select: { employeeId: true, state: true, endedAt: true },
         orderBy: { endedAt: 'desc' },
       }),
+      presenceIds.length === 0
+        ? Promise.resolve([])
+        : this.prisma.activitySegment.findMany({
+            where: {
+              employeeId: { in: presenceIds },
+              countsAsWork: true,
+              workDate: today,
+            },
+            select: { employeeId: true, startedAt: true, endedAt: true },
+          }),
+      // `lt: today`: today comes live from the spans above, never twice
+      presenceIds.length === 0
+        ? Promise.resolve([])
+        : this.prisma.dailySummary.groupBy({
+            by: ['employeeId'],
+            where: {
+              employeeId: { in: presenceIds },
+              workDate: { gte: monthStart, lt: today },
+            },
+            _sum: { creditedSec: true, adjustmentSec: true },
+          }),
     ]);
 
     const byEmployee = new Map<number, DeviceReport[]>();
@@ -263,6 +314,29 @@ export class DashboardLiveService {
         .map((d) => [d.assignedToId as number, d._count._all]),
     );
     const monthSec = sumByEmployee(monthSums);
+
+    // presence: today's stretches joined across pauses, plus the finished days
+    const spansBy = new Map<number, Span[]>();
+    for (const sp of presenceToday) {
+      const list = spansBy.get(sp.employeeId);
+      if (list) list.push(sp);
+      else spansBy.set(sp.employeeId, [sp]);
+    }
+    const pastMeasuredBy = new Map(
+      presencePastDays.map((r) => [
+        r.employeeId,
+        (r._sum.creditedSec ?? 0) - (r._sum.adjustmentSec ?? 0),
+      ]),
+    );
+    for (const e of employees) {
+      const { measure, presenceGapSec } = measureOf(e.policy);
+      if (measure !== 'presence') continue;
+      const todayPresence = unionSec(
+        presenceSpans(spansBy.get(e.id) ?? [], presenceGapSec),
+      );
+      todaySec.set(e.id, todayPresence);
+      monthSec.set(e.id, (pastMeasuredBy.get(e.id) ?? 0) + todayPresence);
+    }
 
     // Careful: `orderBy endedAt desc` + "keep the first" — so each employee keeps
     // their most recent segment. Written in the opposite order, the oldest would

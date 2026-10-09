@@ -48,7 +48,7 @@ export interface LiveCard {
    */
   taskTargetPerDay: number;
   status: LiveStatus;
-  /** Seconds counted for today in the work zone. */
+  /** Seconds counted for today in the work zone, by the policy's measure (active time or presence). */
   todayWorkedSec: number;
 
   /**
@@ -109,7 +109,7 @@ export interface LiveCard {
 
   /**
    * Careful: the monthly figure is now secondary (shown small below), but it is
-   * the basis of pay.
+   * the basis of pay. By the policy's measure, like `todayWorkedSec`.
    */
   monthWorkedSec: number;
   monthTargetSec: number;
@@ -310,8 +310,9 @@ export interface HourlyChart {
  *
  * `usePolling(getLiveBoard, 30_000, [])` refreshes every 30 seconds.
  *
- * Careful: `todayWorkedSec` and `monthWorkedSec` are sums, not a UNION. If someone
- * runs two PCs at once, that time counts twice. This is intentional (the agent's
+ * Careful: `todayWorkedSec` and `monthWorkedSec` are sums, not a UNION, for active
+ * time (a presence policy counts presence instead). If someone runs two PCs at
+ * once, active time counts twice. This is intentional (the agent's
  * tray shows the same number), and an overlap over 15 minutes raises a
  * `device_overlap` alert. This endpoint returns no `caveat` field.
  */

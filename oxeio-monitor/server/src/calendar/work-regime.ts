@@ -91,3 +91,19 @@ export function measureOf(
     presenceGapSec: policy?.presenceGapMin ? policy.presenceGapMin * 60 : DEFAULT_PRESENCE_GAP_SEC,
   };
 }
+
+/**
+ * Whether two policies count the same hours: the same measure, and under
+ * presence the same gap (the gap means nothing under active time)
+ */
+export function sameMeasure(
+  a: Parameters<typeof measureOf>[0],
+  b: Parameters<typeof measureOf>[0],
+): boolean {
+  const x = measureOf(a);
+  const y = measureOf(b);
+  return (
+    x.measure === y.measure &&
+    (x.measure === 'active' || x.presenceGapSec === y.presenceGapSec)
+  );
+}

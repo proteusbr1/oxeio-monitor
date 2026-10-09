@@ -32,7 +32,10 @@ export interface LiveCard {
   /** Careful: 0 means the target is off; the screen then shows no target. Counts only while `receivesTasks`. */
   taskTargetPerDay: number;
   status: LiveStatus;
-  /** Seconds counted for today's date in the work zone */
+  /**
+   * Seconds counted for today's date in the work zone, by the policy's
+   * measure: active time (a sum), or presence when the policy counts presence
+   */
   todayWorkedSec: number;
   /**
    * One work day's target — the Live Board ring is now measured against **this**.
@@ -74,7 +77,11 @@ export interface LiveCard {
    */
   onLeaveToday: boolean;
 
-  /** The month's numbers — secondary now, but payroll is based on this */
+  /**
+   * The month's numbers — secondary now, but payroll is based on this. By the
+   * policy's measure, without adjustments: active time (a sum), or for presence
+   * the finished days' measured time plus today's presence
+   */
   monthWorkedSec: number;
   monthTargetSec: number;
   /** their policy has no hours target (basis 'none'): hours shown, never ahead or behind */

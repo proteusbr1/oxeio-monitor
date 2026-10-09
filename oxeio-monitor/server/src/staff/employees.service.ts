@@ -16,6 +16,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { nextEmployeeCode } from './next-code';
 import { ADMIN_TARGET } from '../audit/admin-audit';
 import { parseCalendarDate } from '../calendar/calendar-date';
+import { MEASURE_SELECT, sameMeasure } from '../calendar/work-regime';
+import { datesToRecount } from '../summary/recount';
 import type { CreateEmployeeDto, DeactivateEmployeeDto, EmployeeListQueryDto, UpdateEmployeeDto } from './staff.dto';
 import {
   canSeeSalary,
@@ -247,7 +249,14 @@ export class EmployeesService {
 
     const before = await this.prisma.employee.findUnique({
       where: { id },
-      select: { id: true, empCode: true, monthlySalary: true, payBasis: true, hourlyRate: true },
+      select: {
+        id: true,
+        empCode: true,
+        monthlySalary: true,
+        payBasis: true,
+        hourlyRate: true,
+        policy: { select: MEASURE_SELECT },
+      },
     });
     if (!before) throw new NotFoundException('Staff member not found');
 
@@ -317,6 +326,24 @@ export class EmployeesService {
 
     if (dto.monthlySalary !== undefined || dto.hourlyRate !== undefined || dto.payBasis !== undefined) {
       await this.recordPayChange(actor, ip, id, termsOf(before), termsOf(row));
+    }
+
+    if (dto.policyId !== undefined) {
+      const after =
+        dto.policyId === null
+          ? null
+          : await this.prisma.workPolicy.findUnique({
+              where: { id: dto.policyId },
+              select: MEASURE_SELECT,
+            });
+      // another measure (or presence gap) credits their days differently:
+      // count the open months again, as a measure change on a policy does
+      if (!sameMeasure(before.policy, after)) {
+        await this.prisma.summaryDirty.createMany({
+          data: datesToRecount(workDateOf(new Date())).map((workDate) => ({ workDate })),
+          skipDuplicates: true,
+        });
+      }
     }
 
     return toEmployeeView(row, actor.role);

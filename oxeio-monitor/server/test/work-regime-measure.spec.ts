@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { measureOf } from '../src/calendar/work-regime';
+import { measureOf, sameMeasure } from '../src/calendar/work-regime';
 
 describe('measureOf — how a policy counts hours', () => {
   it('no policy: active time, 15-minute gap', () => {
@@ -27,6 +27,31 @@ describe('measureOf — how a policy counts hours', () => {
         measure: 'presence',
         presenceGapSec: 1200,
       },
+    );
+  });
+});
+
+describe('sameMeasure — whether two policies count the same hours', () => {
+  const active = { hoursMeasure: 'active' as const, presenceGapMin: 15 };
+  const presence = { hoursMeasure: 'presence' as const, presenceGapMin: 15 };
+
+  it('active and active, whatever the gap', () => {
+    expect(sameMeasure(active, { ...active, presenceGapMin: 30 })).toBe(true);
+  });
+
+  it('no policy counts active time', () => {
+    expect(sameMeasure(null, active)).toBe(true);
+    expect(sameMeasure(null, presence)).toBe(false);
+  });
+
+  it('active and presence differ', () => {
+    expect(sameMeasure(active, presence)).toBe(false);
+  });
+
+  it('presence and presence: the gap decides', () => {
+    expect(sameMeasure(presence, { ...presence })).toBe(true);
+    expect(sameMeasure(presence, { ...presence, presenceGapMin: 30 })).toBe(
+      false,
     );
   });
 });
