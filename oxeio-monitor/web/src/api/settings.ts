@@ -243,10 +243,8 @@ export function getSmtpSettings(signal?: AbortSignal): Promise<SmtpView> {
 export function saveSmtpSettings(body: SmtpInput): Promise<SmtpView> {
   return api<SmtpView>('/settings/smtp', { method: 'PATCH', body });
 }
-export function testSmtp(
-  to?: string,
-): Promise<{ outcome: 'sent' | 'not_configured' | 'failed'; error?: string; to: string }> {
-  return api('/settings/smtp/test', { method: 'POST', body: to ? { to } : {} });
+export function testSmtp(): Promise<{ outcome: 'sent' | 'not_configured' | 'failed'; error?: string; to: string }> {
+  return api('/settings/smtp/test', { method: 'POST', body: {} });
 }
 
 export type MailKind = 'alerts' | 'dailyDigest' | 'weeklyDigest' | 'monthClosed';

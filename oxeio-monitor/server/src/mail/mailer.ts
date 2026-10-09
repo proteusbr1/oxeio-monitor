@@ -73,8 +73,9 @@ export class Mailer implements OnModuleDestroy {
   private readonly logger = new Logger(Mailer.name);
   private transporter: MailSender | null = null;
   private transporterKey = '';
-  /** no point logging the same complaint every minute */
-  private warnedMissing = false;
+  /** no point logging the same complaint every minute — one latch per complaint */
+  private warnedNoSmtp = false;
+  private warnedNoRecipients = false;
 
   /** nodemailer in production; tests put a fake here */
   createTransport: TransportFactory = nodemailerTransport;
@@ -82,7 +83,11 @@ export class Mailer implements OnModuleDestroy {
   constructor(private readonly settings: AppSettingsService) {}
 
   async isConfigured(): Promise<boolean> {
-    return (await this.settings.smtp()).config !== null;
+    try {
+      return (await this.settings.smtp()).config !== null;
+    } catch {
+      return false;
+    }
   }
 
   async send(
@@ -100,20 +105,25 @@ export class Mailer implements OnModuleDestroy {
     to: readonly string[],
     message: MailMessage,
   ): Promise<SendResult> {
-    const { config } = await this.settings.smtp();
-    if (!config || to.length === 0) {
-      if (!this.warnedMissing) {
-        this.warnedMissing = true;
-        this.logger.warn(
-          config
-            ? 'An email had no recipients'
-            : 'No SMTP configured — emails are not being sent',
-        );
-      }
-      return { outcome: 'not_configured' };
-    }
-
     try {
+      const { config } = await this.settings.smtp();
+      if (!config) {
+        if (!this.warnedNoSmtp) {
+          this.warnedNoSmtp = true;
+          this.logger.warn(
+            'No SMTP configured — emails are not being sent. Set it on Settings → Notifications or SMTP_HOST in the .env',
+          );
+        }
+        return { outcome: 'not_configured' };
+      }
+      if (to.length === 0) {
+        if (!this.warnedNoRecipients) {
+          this.warnedNoRecipients = true;
+          this.logger.warn('An email had no recipients');
+        }
+        return { outcome: 'not_configured' };
+      }
+
       await this.transportFor(config).sendMail({
         from: config.from,
         to: to.join(', '),

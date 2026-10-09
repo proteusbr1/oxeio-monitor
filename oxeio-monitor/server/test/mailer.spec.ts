@@ -92,6 +92,20 @@ describe('Mailer', () => {
     expect(h.built.map((c) => c.host)).toEqual(['one.test', 'two.test']);
   });
 
+  it('a settings read that fails is a value too, never an exception', async () => {
+    const settings = {
+      smtp: async () => {
+        throw new Error('database is down');
+      },
+    } as unknown as AppSettingsService;
+    const mailer = new Mailer(settings);
+    expect(await mailer.isConfigured()).toBe(false);
+    expect(
+      await mailer.deliver(['a@x.test'], { subject: 's', text: 'b' }),
+    ).toEqual({ outcome: 'failed', error: 'database is down' });
+    expect(await mailer.send(['a@x.test'], 's', 'b')).toBe('failed');
+  });
+
   it('a server error is a value with its text, never an exception', async () => {
     const h = harness({ host: 'smtp.test', port: 587 });
     h.failWith(new Error('535 Authentication Credentials Invalid'));

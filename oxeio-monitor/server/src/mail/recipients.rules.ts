@@ -67,7 +67,13 @@ export interface RecipientsInput {
 }
 
 export function recipientsFor(input: RecipientsInput): string[] {
-  const saved = cleanAddresses(input.saved?.[input.kind] ?? []);
+  // the stored JSON could hold anything: only a list of strings counts
+  const stored: unknown = input.saved?.[input.kind];
+  const saved = cleanAddresses(
+    Array.isArray(stored)
+      ? stored.filter((e): e is string => typeof e === 'string')
+      : [],
+  );
   if (saved.length > 0) return saved;
 
   const fromEnv = splitList(input.env[ENV_FALLBACK[input.kind]]);

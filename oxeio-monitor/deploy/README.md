@@ -150,7 +150,7 @@ explanation, including the ones you can leave empty. Before the first start:
 | `POSTGRES_PASSWORD` | a long random string (`openssl rand -base64 32`) |
 | `JWT_SECRET` | at least 32 characters (`openssl rand -base64 48`); the server refuses to start otherwise |
 | `BACKUP_PASSPHRASE` | a long random string. **Empty = no backups at all** (§ 9). Keep a copy off the server |
-| `SMTP_*` | optional, but with `SMTP_HOST` empty, email alerts and digests reach nobody — they are stored and nothing more |
+| `SMTP_*` | optional, but with `SMTP_HOST` empty and nothing saved on Settings → Notifications, email alerts and digests reach nobody — they are stored and nothing more |
 
 `POSTGRES_PASSWORD` is applied only when the database volume is first
 created; changing it later does not change the database's password.

@@ -61,6 +61,7 @@
   "Fill in the key ID and the secret (application key).": "Completa el ID de la clave y el secreto (application key).",
   "Give only the file name in a process pattern, not the full path (for example code.exe)": "Indica solo el nombre del archivo en un patrón de proceso, no la ruta completa (por ejemplo code.exe)",
   "Give the SMTP server host": "Indica el servidor SMTP",
+  "Type the SMTP password": "Escriba la contraseña del SMTP",
   "Give the domain only, not the full URL (for example youtube.com)": "Indica solo el dominio, no la URL completa (por ejemplo youtube.com)",
   "Holiday not found": "No se encontró el feriado",
   "Image file not found": "No se encontró el archivo de imagen",

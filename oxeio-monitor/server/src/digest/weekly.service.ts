@@ -190,7 +190,7 @@ export class WeeklyDigestService {
      * because alerts go that way.
      *
      * The recipient is **not** a manager: the summary has every employee's name
-     * and hours, the same as an owner-only screen (`digest.recipients.ts`).
+     * and hours, the same as an owner-only screen (`mail/recipients.rules.ts`).
      */
     const emailOutcome = await this.sendByEmail(message.text);
 

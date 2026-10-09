@@ -145,6 +145,16 @@ export function smtpSaveProblem(input: SmtpInput): string | null {
   return null;
 }
 
+/**
+ * `null` if the merged row can be stored. A user with no password anywhere
+ * would override a working .env with a login that fails on every email.
+ * (A relay without a user is fine.)
+ */
+export function smtpMergedProblem(merged: SmtpSaved): string | null {
+  if (merged.user?.trim() && !merged.pass) return 'Type the SMTP password';
+  return null;
+}
+
 /** The row to store: trimmed, with the old password kept when none was typed */
 export function mergeSmtpSave(
   previous: SmtpSaved | null,

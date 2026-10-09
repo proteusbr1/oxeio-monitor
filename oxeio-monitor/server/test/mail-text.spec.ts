@@ -20,6 +20,19 @@ describe('mailText', () => {
     expect(mailText('en', 'smtpTest.subject')).toBe('{org} — test email');
   });
 
+  it('only the given variables count, not what every object inherits', () => {
+    const en = MAIL_CATALOG.en as Record<string, string>;
+    const original = en['smtpTest.subject'];
+    en['smtpTest.subject'] = '{toString} {org}';
+    try {
+      expect(mailText('en', 'smtpTest.subject', { org: 'Acme' })).toBe(
+        '{toString} Acme',
+      );
+    } finally {
+      en['smtpTest.subject'] = original;
+    }
+  });
+
   it('every language has every key, none empty', () => {
     const keys = Object.keys(MAIL_CATALOG.en).sort();
     for (const lang of LANGUAGES) {
@@ -41,5 +54,9 @@ describe('hoursAndMinutes', () => {
 
   it('a negative amount keeps its sign', () => {
     expect(hoursAndMinutes(-75, 'en')).toBe('−1 h 15 min');
+  });
+
+  it('a fraction that truncates to zero has no sign', () => {
+    expect(hoursAndMinutes(-0.5, 'en')).toBe('0 h 00 min');
   });
 });

@@ -10,7 +10,6 @@ import {
 import { UserRole } from '@prisma/client';
 import {
   IsBoolean,
-  IsEmail,
   IsInt,
   IsOptional,
   IsString,
@@ -27,6 +26,7 @@ import { mailText } from './mail-text';
 import { Mailer, type SendResult } from './mailer';
 import {
   mergeSmtpSave,
+  smtpMergedProblem,
   SMTP_SETTING_KEY,
   smtpSaveProblem,
   smtpView,
@@ -65,12 +65,6 @@ class SaveSmtpDto {
   from?: string;
 }
 
-class TestSmtpDto {
-  @IsOptional()
-  @IsEmail()
-  to?: string;
-}
-
 /**
  * SMTP from the screen, owner only: who receives everyone's figures is not a
  * manager's decision. The password goes in, never out.
@@ -99,6 +93,8 @@ export class SmtpSettingsController {
     if (problem) throw new BadRequestException(problem);
 
     const next = mergeSmtpSave(await this.settings.smtpSaved(), dto);
+    const mergedProblem = smtpMergedProblem(next);
+    if (mergedProblem) throw new BadRequestException(mergedProblem);
     await this.settings.replace(SMTP_SETTING_KEY, { ...next }, actor.userId);
 
     await this.audit.record({
@@ -119,13 +115,12 @@ export class SmtpSettingsController {
     return this.read();
   }
 
-  /** Sends one email now and says what the server answered */
+  /** Sends one email now, to the signed-in owner, and says what the server answered */
   @Post('test')
   async test(
     @CurrentUser() actor: SessionUser,
-    @Body() dto: TestSmtpDto,
   ): Promise<SendResult & { to: string }> {
-    const to = dto.to?.trim() || actor.email;
+    const to = actor.email;
     const lang = (await this.settings.region()).language.value;
     const org = (await this.settings.organization()).name;
 

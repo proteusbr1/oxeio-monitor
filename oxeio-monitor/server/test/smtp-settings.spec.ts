@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   mergeSmtpSave,
+  smtpMergedProblem,
   resolveSmtp,
   smtpSaveProblem,
   smtpView,
@@ -117,6 +118,26 @@ describe('smtpSaveProblem', () => {
     );
     expect(
       smtpSaveProblem({ host: 'h', port: 587, from: 'Team <t@example.com>' }),
+    ).toBeNull();
+  });
+});
+
+describe('smtpMergedProblem', () => {
+  it('a user without any password is refused (it would break every email)', () => {
+    expect(
+      smtpMergedProblem({ host: 'h', port: 587, user: 'u', pass: '' }),
+    ).toBe('Type the SMTP password');
+    expect(smtpMergedProblem({ host: 'h', port: 587, user: 'u' })).toBe(
+      'Type the SMTP password',
+    );
+  });
+
+  it('a relay without a user, or a user with a password, is fine', () => {
+    expect(
+      smtpMergedProblem({ host: 'h', port: 587, user: '', pass: '' }),
+    ).toBeNull();
+    expect(
+      smtpMergedProblem({ host: 'h', port: 587, user: 'u', pass: 'p' }),
     ).toBeNull();
   });
 });

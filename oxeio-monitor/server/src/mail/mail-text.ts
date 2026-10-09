@@ -43,14 +43,15 @@ export function mailText(
   vars: Record<string, string | number> = {},
 ): string {
   return MAIL_CATALOG[lang][key].replace(/\{(\w+)\}/g, (whole, name: string) =>
-    name in vars ? String(vars[name]) : whole,
+    Object.hasOwn(vars, name) ? String(vars[name]) : whole,
   );
 }
 
 /** `173 h 25 min` — whole hours and two-digit minutes, as payroll forms ask */
 export function hoursAndMinutes(totalMinutes: number, lang: Language): string {
-  const sign = totalMinutes < 0 ? '−' : '';
-  const abs = Math.abs(Math.trunc(totalMinutes));
+  const whole = Math.trunc(totalMinutes);
+  const sign = whole < 0 ? '−' : '';
+  const abs = Math.abs(whole);
   const hours = Math.floor(abs / 60);
   const minutes = String(abs % 60).padStart(2, '0');
   return `${sign}${hours} ${mailText(lang, 'unit.hours')} ${minutes} ${mailText(lang, 'unit.minutes')}`;

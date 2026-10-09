@@ -31,11 +31,11 @@ beforeEach(async () => {
 
 const patch = (s: Session, body: object) =>
   s.http.patch('/api/v1/settings/smtp').set('X-CSRF-Token', s.csrf).send(body);
-const testMail = (s: Session, body: object = {}) =>
+const testMail = (s: Session) =>
   s.http
     .post('/api/v1/settings/smtp/test')
     .set('X-CSRF-Token', s.csrf)
-    .send(body);
+    .send({});
 
 describe('SMTP on screen', () => {
   it('starts off; a save applies and never returns the password', async () => {
@@ -96,6 +96,20 @@ describe('SMTP on screen', () => {
     expect(JSON.stringify(res.body)).toMatch(/port/);
   });
 
+  it('a user without a password is refused on an install that only has the .env', async () => {
+    process.env.SMTP_HOST = 'env.example.test';
+    const res = await patch(owner, {
+      host: 'a.test',
+      port: 587,
+      user: 'u',
+      pass: '',
+    }).expect(400);
+    expect(JSON.stringify(res.body)).toMatch(/SMTP password/);
+    expect(
+      await h.prisma.setting.findUnique({ where: { key: 'smtp' } }),
+    ).toBeNull();
+  });
+
   it('"Use the .env value" forgets the screen', async () => {
     process.env.SMTP_HOST = 'env.example.test';
     await patch(owner, { host: 'a.test', port: 587 }).expect(200);
@@ -118,11 +132,9 @@ describe('SMTP on screen', () => {
 
   it('test email: an unreachable server answers with its error text, not a 500', async () => {
     await patch(owner, { host: '127.0.0.1', port: 1 }).expect(200);
-    const res = await testMail(owner, { to: 'someone@example.test' }).expect(
-      201,
-    );
+    const res = await testMail(owner).expect(201);
     expect(res.body.outcome).toBe('failed');
-    expect(res.body.to).toBe('someone@example.test');
+    expect(res.body.to).toBe(OWNER_EMAIL);
     expect(typeof res.body.error).toBe('string');
   });
 

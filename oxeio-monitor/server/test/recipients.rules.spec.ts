@@ -4,6 +4,7 @@ import {
   cleanAddresses,
   recipientsFor,
   recipientsSaveProblem,
+  type RecipientsSaved,
   splitList,
 } from '../src/mail/recipients.rules';
 
@@ -82,6 +83,22 @@ describe('recipientsFor — saved list › env › owners', () => {
         owners,
       }),
     ).toEqual(owners);
+  });
+});
+
+describe('recipientsFor — a damaged stored value', () => {
+  const base = { kind: 'alerts' as const, env: {}, owners };
+
+  it('a saved value that is not a list is ignored, never iterated', () => {
+    const saved = { alerts: 'abc@x.test' } as unknown as RecipientsSaved;
+    expect(recipientsFor({ ...base, saved })).toEqual(owners);
+  });
+
+  it('entries that are not strings are ignored', () => {
+    const saved = {
+      alerts: [1, null, { a: 1 }, ' ok@x.test '],
+    } as unknown as RecipientsSaved;
+    expect(recipientsFor({ ...base, saved })).toEqual(['ok@x.test']);
   });
 });
 
