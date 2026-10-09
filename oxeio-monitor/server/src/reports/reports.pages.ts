@@ -118,6 +118,8 @@ export interface AttendanceLine {
   dayType: string;
   status: string;
   worked: string;
+  /** presence (first to last use, minus long pauses), beside worked as in the xlsx */
+  presence: string;
   adjust: string;
   credited: string;
   target: string;
@@ -142,7 +144,7 @@ export function attendanceLines(
     /**
      * **G130**: a leave day is printed on paper as "On leave".
      *
-     * There is no room to add a column in the PDF (A4 already has nine), so the
+     * There is no room to add a column in the PDF (A4 already has eleven), so the
      * information goes **in the Day type cell**. Leave is an event on a work
      * day, but the reader's question is "what was that day for them", and for
      * them that day was leave.
@@ -157,6 +159,7 @@ export function attendanceLines(
     dayType: r.onLeave ? 'On leave' : DAY_TYPE_EN[r.dayType],
     status: DAY_STATUS_EN[r.status],
     worked: hoursText(r.workedHours),
+    presence: hoursText(r.presenceHours),
     adjust: hoursText(r.adjustmentHours),
     credited: hoursText(r.creditedHours),
     target: hoursText(r.targetHours),
@@ -213,16 +216,17 @@ export function attendancePdf(
   const { lines, lossy } = attendanceLines(report);
 
   const columns: PdfColumn<AttendanceLine>[] = [
-    { header: 'Emp code', width: 60, value: (r) => r.empCode },
-    { header: 'Name', width: 170, value: (r) => r.name },
-    { header: 'Department', width: 100, value: (r) => r.department },
-    { header: 'Date', width: 62, value: (r) => r.date },
-    { header: 'Day type', width: 70, value: (r) => r.dayType },
-    { header: 'Status', width: 68, value: (r) => r.status },
-    right('Worked (h)', 60, (r) => r.worked),
-    right('Adjust (h)', 62, (r) => r.adjust),
+    { header: 'Emp code', width: 58, value: (r) => r.empCode },
+    { header: 'Name', width: 140, value: (r) => r.name },
+    { header: 'Department', width: 90, value: (r) => r.department },
+    { header: 'Date', width: 60, value: (r) => r.date },
+    { header: 'Day type', width: 66, value: (r) => r.dayType },
+    { header: 'Status', width: 62, value: (r) => r.status },
+    right('Worked (h)', 56, (r) => r.worked),
+    right('Presence (h)', 62, (r) => r.presence),
+    right('Adjust (h)', 56, (r) => r.adjust),
     right('Credited (h)', 62, (r) => r.credited),
-    right('Target (h)', 56, (r) => r.target),
+    right('Target (h)', 58, (r) => r.target),
   ];
 
   return buildPdf({

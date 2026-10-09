@@ -261,6 +261,14 @@ describe('attendanceLines: report to print lines', () => {
     });
   });
 
+  it('presence is printed beside worked, as in the xlsx', () => {
+    const report = attendance();
+    report.rows[0].presenceHours = 8.25;
+
+    const { lines } = attendanceLines(report);
+    expect(lines[0]).toMatchObject({ worked: '7.50', presence: '8.25' });
+  });
+
   it('a non-Latin name sets lossy, otherwise the footnote would never appear', () => {
     const report = attendance();
     report.rows[0].fullName = '山田太郎';
