@@ -263,7 +263,9 @@ export class WorkPoliciesService {
     // (while it checks nothing, before and after, there are no rows to rewrite)
     const scheduleChanged =
       (before.scheduleEnforced || schedule.scheduleEnforced) &&
-      (Object.keys(schedule) as (keyof typeof schedule)[]).some((k) => schedule[k] !== before[k]);
+      ((Object.keys(schedule) as (keyof typeof schedule)[]).some((k) => schedule[k] !== before[k]) ||
+        // the check reads presence blocks (merged by the gap) whatever the measure
+        (dto.presenceGapMin !== undefined && dto.presenceGapMin !== before.presenceGapMin));
     if (measureChanged || scheduleChanged) {
       // credited time or the schedule check changes for everyone on this policy: count the open months again
       await this.prisma.summaryDirty.createMany({

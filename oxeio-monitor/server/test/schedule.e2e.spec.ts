@@ -148,6 +148,38 @@ describe('schedule days from the roll-up', () => {
   });
 });
 
+describe('what queues a recount', () => {
+  const patchPolicy = async (body: object) => {
+    const policy = await h.prisma.workPolicy.findFirstOrThrow();
+    const res = await owner.http
+      .patch(`/api/v1/work-policies/${policy.id}`)
+      .set('X-CSRF-Token', owner.csrf)
+      .send(body);
+    expect(res.status).toBe(200);
+  };
+
+  it('re-sending the same schedule queues nothing', async () => {
+    await enforce(true);
+    await h.prisma.summaryDirty.deleteMany();
+    await enforce(true);
+    expect(await h.prisma.summaryDirty.count()).toBe(0);
+  });
+
+  it('switching enforcement off queues the recount', async () => {
+    await enforce(true);
+    await h.prisma.summaryDirty.deleteMany();
+    await enforce(false);
+    expect(await h.prisma.summaryDirty.count()).toBeGreaterThanOrEqual(28);
+  });
+
+  it('a gap-only change on an active policy with an enforced schedule queues the recount', async () => {
+    await enforce(true);
+    await h.prisma.summaryDirty.deleteMany();
+    await patchPolicy({ presenceGapMin: 30 });
+    expect(await h.prisma.summaryDirty.count()).toBeGreaterThanOrEqual(28);
+  });
+});
+
 describe('moving a person to another policy', () => {
   async function secondPolicy(scheduleEnforced: boolean) {
     const { id: _id, ...base } = await h.prisma.workPolicy.findFirstOrThrow({
@@ -181,5 +213,23 @@ describe('moving a person to another policy', () => {
     const unchecked = await secondPolicy(false);
     await move(employeeId, unchecked.id).expect(200);
     expect(await h.prisma.summaryDirty.count()).toBe(0);
+  });
+
+  it('between two checked schedules that differ only in the gap queues the open months', async () => {
+    const first = await secondPolicy(true);
+    const { employeeId } = await createEmployeeWithCode(h.prisma);
+    await h.prisma.employee.update({
+      where: { id: employeeId },
+      data: { policyId: first.id },
+    });
+    const wider = await h.prisma.workPolicy.create({
+      data: {
+        ...(({ id: _i, ...b }) => b)(first),
+        name: 'Third',
+        presenceGapMin: first.presenceGapMin + 15,
+      },
+    });
+    await move(employeeId, wider.id).expect(200);
+    expect(await h.prisma.summaryDirty.count()).toBeGreaterThanOrEqual(28);
   });
 });

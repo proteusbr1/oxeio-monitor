@@ -3,6 +3,7 @@ import {
   startOfWorkDate,
   workWallOf,
 } from '../agent/util/work-time';
+import { measureOf } from '../calendar/work-regime';
 import { hhmmToMinutes } from '../calendar/work-policy.rules';
 import { MINUTES_PER_DAY, type SchedulePolicy } from './schedule.rules';
 
@@ -51,14 +52,19 @@ export function schedulePolicyOf(
   };
 }
 
-/** Whether two policies check the same schedule (none and none count as the same) */
+/**
+ * Whether two policies check the same schedule (none and none count as the
+ * same). The check reads presence blocks merged by the presence gap, so with a
+ * schedule on both sides a different gap is a different check.
+ */
 export function sameSchedule(
-  a: ScheduleRow | null | undefined,
-  b: ScheduleRow | null | undefined,
+  a: (ScheduleRow & { presenceGapMin?: number | null }) | null | undefined,
+  b: (ScheduleRow & { presenceGapMin?: number | null }) | null | undefined,
 ): boolean {
   const x = schedulePolicyOf(a);
   const y = schedulePolicyOf(b);
   if (x === null || y === null) return x === y;
+  if (measureOf(a).presenceGapSec !== measureOf(b).presenceGapSec) return false;
   return (Object.keys(x) as (keyof SchedulePolicy)[]).every(
     (k) => x[k] === y[k],
   );
