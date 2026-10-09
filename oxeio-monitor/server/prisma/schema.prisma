@@ -160,6 +160,14 @@ enum PayBasis {
   none
 }
 
+/// How a work policy counts hours (src/summary/summary.math.ts)
+enum HoursMeasure {
+  /// keyboard/mouse time only (the original measure)
+  active
+  /// first to last use of the computer, minus pauses longer than presence_gap_min
+  presence
+}
+
 model WorkPolicy {
   id                 Int     @id @default(autoincrement())
   name               String
@@ -176,6 +184,10 @@ model WorkPolicy {
   overtimeMultiplier Decimal? @map("overtime_multiplier") @db.Decimal(4, 2)
   /// monthly salaries: missing hours are deducted from pay (the original rule)
   deductShortfall    Boolean  @default(true) @map("deduct_shortfall")
+  /// what counts as worked time: active input, or presence (see HoursMeasure)
+  hoursMeasure       HoursMeasure @default(active) @map("hours_measure")
+  /// presence: the longest pause, in minutes, that still counts as work
+  presenceGapMin     Int      @default(15) @map("presence_gap_min")
   /// Fallback only: the real count comes from the calendar, § 2.1-b
   expectedWorkdays   Int     @default(22) @map("expected_workdays")
   /// Careful: this is not a block: hours worked on a day off are still counted in full.
@@ -945,6 +957,9 @@ model DailySummary {
   idleSec         Int       @default(0) @map("idle_sec")
   /// The UNION of actual ACTIVE time (§ 2.1-c): this number is never edited
   workedSec       Int       @default(0) @map("worked_sec")
+  /// Presence: active stretches joined across pauses up to the policy's gap. Stored for every
+  /// policy; it is what `credited_sec` counts only when the policy's measure is `presence`
+  presenceSec     Int       @default(0) @map("presence_sec")
   /// The owner's correction, +/- (§ 2.1-e)
   adjustmentSec   Int       @default(0) @map("adjustment_sec")
   /// worked + adjustment: this is what goes into the monthly target

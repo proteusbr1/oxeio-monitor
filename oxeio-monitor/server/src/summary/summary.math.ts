@@ -78,6 +78,34 @@ export function unionSec(spans: readonly Span[]): number {
   return Math.round(ms / 1000);
 }
 
+/** How a policy counts hours: keyboard/mouse time, or presence (see presenceSpans) */
+export type HoursMeasure = 'active' | 'presence';
+
+/** The policy default for the longest pause that still counts as work */
+export const DEFAULT_PRESENCE_GAP_SEC = 15 * 60;
+
+/**
+ * **Presence**: the day's active stretches, unioned (two devices count once),
+ * then joined wherever the pause between two of them is at most `gapSec`.
+ *
+ * A short read, a call or a coffee keeps the block going; a longer pause
+ * (lunch, a meeting away from the desk) ends it. The blocks are what a
+ * schedule check reads as arrival, breaks and leaving.
+ */
+export function presenceSpans(active: readonly Span[], gapSec: number): Span[] {
+  const merged = mergeSpans(active);
+  const out: Span[] = [];
+  for (const s of merged) {
+    const last = out[out.length - 1];
+    if (last && s.startedAt.getTime() - last.endedAt.getTime() <= gapSec * 1000) {
+      if (s.endedAt > last.endedAt) out[out.length - 1] = { startedAt: last.startedAt, endedAt: s.endedAt };
+    } else {
+      out.push({ startedAt: s.startedAt, endedAt: s.endedAt });
+    }
+  }
+  return out;
+}
+
 /** All of one device's ACTIVE spans for that day. */
 export interface DeviceSpans {
   deviceId: number;
@@ -141,6 +169,10 @@ export interface DayInput {
   unproductiveSpans: readonly Span[];
   /** Is that date a weekly off day or a calendar holiday? */
   isOffDay: boolean;
+  /** The policy's measure; absent = 'active' (the original behaviour) */
+  measure?: HoursMeasure;
+  /** The longest pause that still counts as presence, in seconds */
+  presenceGapSec?: number;
 }
 
 export interface DayNumbers {
@@ -149,6 +181,7 @@ export interface DayNumbers {
   activeSec: number;
   idleSec: number;
   workedSec: number;
+  presenceSec: number;
   adjustmentSec: number;
   creditedSec: number;
   earliestHour: number | null;
@@ -187,6 +220,8 @@ export function summarizeDay(input: DayInput): DayNumbers {
   );
 
   const workedSec = unionSec(active);
+  const presenceSec = unionSec(presenceSpans(active, input.presenceGapSec ?? DEFAULT_PRESENCE_GAP_SEC));
+  const measuredSec = (input.measure ?? 'active') === 'presence' ? presenceSec : workedSec;
 
   const firstActivityAt = active.length > 0 ? earliestStart(active) : null;
   const lastActivityAt = active.length > 0 ? latestEnd(active) : null;
@@ -200,12 +235,13 @@ export function summarizeDay(input: DayInput): DayNumbers {
     activeSec,
     idleSec,
     workedSec,
+    presenceSec,
     adjustmentSec: input.adjustmentSec,
 
     // Careful: **not** clamped at 0 here. If the owner deducts more than the
     // time worked, the day will show negative, which is the instruction they
     // gave. The clamp is at month level; see `rollupMonth()` for why.
-    creditedSec: workedSec + input.adjustmentSec,
+    creditedSec: measuredSec + input.adjustmentSec,
 
     earliestHour: firstActivityAt === null ? null : workHourOf(firstActivityAt),
     latestHour: lastActivityAt === null ? null : workHourOf(lastActivityAt),
