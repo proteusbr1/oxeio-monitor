@@ -59,3 +59,13 @@ export function targetPreview(input: {
     mismatch: workdays !== expectedWorkdays,
   };
 }
+
+/** The policy card's one-line answer to "what counts as worked time" (an English key) */
+export function measureSummary(
+  measure: 'active' | 'presence',
+  gapMin: number,
+): string {
+  return measure === 'presence'
+    ? `Presence (pauses up to ${gapMin} min count)`
+    : 'Active time';
+}

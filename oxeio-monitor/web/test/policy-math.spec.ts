@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  measureSummary,
   targetPreview,
   workdaysInMonth,
 } from '../src/pages/settings/policy.math';
@@ -70,5 +71,14 @@ describe('targetPreview', () => {
         offDays: [],
       }),
     ).toBeNull();
+  });
+});
+
+describe('measureSummary', () => {
+  it('names the measure the way the card shows it', () => {
+    expect(measureSummary('active', 15)).toBe('Active time');
+    expect(measureSummary('presence', 15)).toBe(
+      'Presence (pauses up to 15 min count)',
+    );
   });
 });

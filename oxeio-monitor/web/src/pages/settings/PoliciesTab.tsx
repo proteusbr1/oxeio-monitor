@@ -18,6 +18,7 @@ import {
 import { useT } from '../../i18n';
 import { HolidaysSection } from './HolidaysSection';
 import { targetPreview } from './policy.math';
+import { PolicyMeasureFields } from './PolicyMeasureFields';
 import {
   CheckboxField,
   Chip,
@@ -97,6 +98,11 @@ function WorkPoliciesSection() {
           <div className="truncate font-medium text-ink">{policy.name}</div>
           <div className="num truncate text-[11px] text-ink-3">
             {policy.timezone}
+          </div>
+          <div className="truncate text-[11px] text-ink-3">
+            {policy.hoursMeasure === 'presence'
+              ? t('Presence (pauses up to {{n}} min count)', { n: policy.presenceGapMin })
+              : t('Active time')}
           </div>
         </div>
       ),
@@ -390,6 +396,8 @@ function PolicyForm({
   });
   const [basis, setBasis] = useState<TargetBasis>(policy?.targetBasis ?? 'month');
   const [deductShortfall, setDeductShortfall] = useState(policy?.deductShortfall !== false);
+  const [measure, setMeasure] = useState<'active' | 'presence'>(policy?.hoursMeasure ?? 'active');
+  const [gapMin, setGapMin] = useState(String(policy?.presenceGapMin ?? 15));
   const { features } = useFeatures();
   const t = useT();
 
@@ -444,6 +452,8 @@ function PolicyForm({
         officeTo: form.officeTo,
         idleThresholdSec: Number(form.idleThresholdSec),
         slotMinutes: Number(form.slotMinutes),
+        hoursMeasure: measure,
+        presenceGapMin: Number(gapMin),
       };
 
       if (policy) {
@@ -660,6 +670,7 @@ function PolicyForm({
               )}
             </FullWidth>
           )}
+          <PolicyMeasureFields measure={measure} gapMin={gapMin} onMeasure={setMeasure} onGapMin={setGapMin} />
           <TextField
             label={basis === 'day' ? t('Working hours from') : t('Office opens')}
             type="time"

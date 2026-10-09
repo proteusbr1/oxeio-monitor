@@ -41,6 +41,10 @@ export interface WorkPolicyView {
   officeTo: string | null;
   idleThresholdSec: number;
   slotMinutes: number;
+  /** what counts as worked time: keyboard/mouse in use, or first-to-last use minus long pauses */
+  hoursMeasure: 'active' | 'presence';
+  /** with `presence`: the longest pause (minutes) that still counts */
+  presenceGapMin: number;
   timezone: string;
   isActive: boolean;
   /** Check this before deactivating: if anyone is still assigned, the server refuses. */
@@ -67,6 +71,8 @@ export type WorkPolicyBody = Partial<{
   officeTo: string;
   idleThresholdSec: number;
   slotMinutes: number;
+  hoursMeasure: 'active' | 'presence';
+  presenceGapMin: number;
 }>;
 export function listWorkPolicies(
   signal?: AbortSignal,
