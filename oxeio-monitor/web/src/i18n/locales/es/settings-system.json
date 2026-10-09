@@ -167,6 +167,7 @@
   "Save": "Guardar",
   "Save first": "Guarda primero",
   "Saved: {{hint}} — leave both empty to keep it": "Guardada: {{hint}} — deja ambos vacíos para conservarla",
+  "Saving here replaces the .env settings: type the password too.": "Guardar aquí reemplaza la configuración del .env: escribe también la contraseña.",
   "Saving…": "Guardando…",
   "Screenshot viewed": "Captura de pantalla vista",
   "Screenshots": "Capturas de pantalla",

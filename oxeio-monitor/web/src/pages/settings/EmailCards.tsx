@@ -137,7 +137,16 @@ export function SmtpCard() {
           onChange={set('pass')}
           mono
           placeholder={
-            current?.passwordSet ? t('leave empty to keep the current one') : ''
+            current?.source === 'database' && current.passwordSet
+              ? t('leave empty to keep the current one')
+              : ''
+          }
+          hint={
+            current?.source === 'env'
+              ? t(
+                  'Saving here replaces the .env settings: type the password too.',
+                )
+              : undefined
           }
         />
         <TextField
