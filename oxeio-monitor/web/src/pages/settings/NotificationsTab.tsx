@@ -13,6 +13,7 @@ import {
   useMutation,
 } from '../../components/ui';
 import { BackToEnv } from './BackToEnv';
+import { RecipientsCard, SmtpCard } from './EmailCards';
 import { useT } from '../../i18n';
 
 /**
@@ -46,6 +47,8 @@ export function NotificationsTab() {
 
   return (
     <div className="space-y-3">
+      <SmtpCard />
+      <RecipientsCard />
       <Card
         title="Telegram"
         hint={t('Where the weekly summary and alerts are sent')}

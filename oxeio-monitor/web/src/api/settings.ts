@@ -206,11 +206,56 @@ export type EnvSubject =
   | 'offsite'
   | 'notifications'
   | 'errorReporting'
-  | 'updateKey';
+  | 'updateKey'
+  | 'smtp'
+  | 'recipients';
 
 /** Forgets what was saved on screen for one card — `DELETE /settings/env/:subject` */
 export function backToEnvironment(
   subject: EnvSubject,
 ): Promise<{ subject: EnvSubject; removed: boolean; restartNeeded: boolean }> {
   return api(`/settings/env/${subject}`, { method: 'DELETE' });
+}
+
+/** SMTP — server `mail/smtp.controller.ts`. The password never comes back, only whether one is set. */
+export interface SmtpView {
+  configured: boolean;
+  source: 'database' | 'env' | 'none';
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  passwordSet: boolean;
+  from: string;
+}
+export interface SmtpInput {
+  host: string;
+  port: number;
+  secure: boolean | null;
+  user: string;
+  /** empty = keep the stored password */
+  pass: string;
+  from: string;
+}
+export function getSmtpSettings(signal?: AbortSignal): Promise<SmtpView> {
+  return api<SmtpView>('/settings/smtp', { signal });
+}
+export function saveSmtpSettings(body: SmtpInput): Promise<SmtpView> {
+  return api<SmtpView>('/settings/smtp', { method: 'PATCH', body });
+}
+export function testSmtp(
+  to?: string,
+): Promise<{ outcome: 'sent' | 'not_configured' | 'failed'; error?: string; to: string }> {
+  return api('/settings/smtp/test', { method: 'POST', body: to ? { to } : {} });
+}
+
+export type MailKind = 'alerts' | 'dailyDigest' | 'weeklyDigest' | 'monthClosed';
+export interface RecipientsView {
+  kinds: { kind: MailKind; saved: string[]; effective: string[]; envVariable: string }[];
+}
+export function getMailRecipients(signal?: AbortSignal): Promise<RecipientsView> {
+  return api<RecipientsView>('/settings/mail-recipients', { signal });
+}
+export function saveMailRecipients(body: Partial<Record<MailKind, string[]>>): Promise<RecipientsView> {
+  return api<RecipientsView>('/settings/mail-recipients', { method: 'PUT', body });
 }

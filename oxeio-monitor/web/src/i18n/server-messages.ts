@@ -73,6 +73,8 @@ export const SERVER_MESSAGE_PATTERNS: readonly string[] = [
   'CURRENCY="{{value}}" is not an ISO 4217 code (example: USD, EUR, BRL)',
   'CURRENCY="{{value}}" has {{digits}} decimal places; amounts are stored in hundredths, so only currencies with 2 are supported',
   '"{{zone}}" is not a known IANA time zone (examples: America/Sao_Paulo, Europe/Lisbon, Asia/Kolkata)',
+  'Not an email address: {{email}}',
+  'Unknown kind of email: {{kind}}',
   'Request failed ({{status}})',
   "Couldn't build the file ({{status}})",
   'property {{property}} should not exist',
