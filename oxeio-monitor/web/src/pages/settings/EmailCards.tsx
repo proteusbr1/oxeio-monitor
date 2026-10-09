@@ -214,6 +214,7 @@ const KIND_LABEL: Record<MailKind, string> = {
   dailyDigest: 'Daily summary',
   weeklyDigest: 'Weekly summary',
   monthClosed: 'Month closed',
+  hoursStatement: 'Hours statement (besides finance logins)',
 };
 
 /** Who receives each kind of email. Empty = the old rule (the .env list, otherwise the owners). */

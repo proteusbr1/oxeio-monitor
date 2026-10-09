@@ -22,7 +22,8 @@ export type AlertType =
   | 'no_activity_today'
   | 'device_overlap'
   | 'synthetic_input'
-  | 'agent_capability';
+  | 'agent_capability'
+  | 'statement_delivery_failed';
 
 /** As a list; needed by the DTO's `@IsIn()` */
 export const ALERT_TYPE_VALUES: readonly AlertType[] = [
@@ -36,6 +37,7 @@ export const ALERT_TYPE_VALUES: readonly AlertType[] = [
   'device_overlap',
   'synthetic_input',
   'agent_capability',
+  'statement_delivery_failed',
 ];
 
 /**

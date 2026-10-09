@@ -91,6 +91,7 @@
   "Give the company a name.": "Dê um nome à empresa.",
   "Google Authenticator, Microsoft Authenticator, Authy — any TOTP app works. You get 10 recovery codes when you turn it on; those are what you sign in with if you lose your phone.": "Google Authenticator, Microsoft Authenticator, Authy — qualquer app TOTP funciona. Você recebe 10 códigos de recuperação ao ativar; é com eles que você entra se perder o celular.",
   "Hours per month (target)": "Horas por mês (meta)",
+  "Hours statement not sent": "Extrato de horas não enviado",
   "I have copied or written down the codes": "Copiei ou anotei os códigos",
   "I have copied or written down the {{label}}": "Copiei ou anotei: {{label}}",
   "Idle": "Ocioso",

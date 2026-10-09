@@ -15,6 +15,7 @@ const ALL_ON = {
   screenshots: true,
   appTracking: true,
   tasks: true,
+  hoursStatement: true,
 };
 
 describe('resolveFeatures', () => {
@@ -43,6 +44,16 @@ describe('resolveFeatures', () => {
       ...ALL_ON,
       payroll: false,
     });
+  });
+});
+
+describe('hoursStatement module', () => {
+  it('has no parent: it stays on while payroll is off', () => {
+    expect(
+      effectiveFeatures({ ...ALL_ON, payroll: false, deposits: false })
+        .hoursStatement,
+    ).toBe(true);
+    expect(resolveFeatures({ hoursStatement: false }).hoursStatement).toBe(false);
   });
 });
 

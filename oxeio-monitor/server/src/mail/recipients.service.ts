@@ -13,10 +13,15 @@ export class MailRecipients {
   ) {}
 
   async for(kind: MailKind): Promise<string[]> {
-    const [saved, owners] = await Promise.all([
+    const [saved, owners, finance] = await Promise.all([
       this.settings.recipients(),
       this.prisma.user.findMany({
         where: { role: 'owner', isActive: true },
+        select: { email: true },
+        orderBy: { id: 'asc' },
+      }),
+      this.prisma.user.findMany({
+        where: { role: 'finance', isActive: true },
         select: { email: true },
         orderBy: { id: 'asc' },
       }),
@@ -26,6 +31,7 @@ export class MailRecipients {
       saved,
       env: process.env,
       owners: owners.map((o) => o.email),
+      finance: finance.map((f) => f.email),
     });
   }
 }

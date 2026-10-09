@@ -14,20 +14,26 @@ export const MAIL_KINDS = [
   'dailyDigest',
   'weeklyDigest',
   'monthClosed',
+  'hoursStatement',
 ] as const;
 export type MailKind = (typeof MAIL_KINDS)[number];
 
 export type RecipientsSaved = Partial<Record<MailKind, string[]>>;
 
-/** The variable each kind read before this screen existed (alerts and digests never shared one) */
+/**
+ * The variable each kind read before this screen existed (alerts and digests
+ * never shared one). `null` = no environment fallback: the kind is newer than
+ * the variables.
+ */
 export const ENV_FALLBACK: Record<
   MailKind,
-  'ALERT_EMAIL_TO' | 'DIGEST_EMAIL_TO'
+  'ALERT_EMAIL_TO' | 'DIGEST_EMAIL_TO' | null
 > = {
   alerts: 'ALERT_EMAIL_TO',
   dailyDigest: 'DIGEST_EMAIL_TO',
   weeklyDigest: 'DIGEST_EMAIL_TO',
   monthClosed: 'DIGEST_EMAIL_TO',
+  hoursStatement: null,
 };
 
 const MAX_PER_KIND = 20;
@@ -64,6 +70,8 @@ export interface RecipientsInput {
   saved: RecipientsSaved | null;
   env: Record<string, string | undefined>;
   owners: readonly string[];
+  /** active finance logins (used by the hours statement only) */
+  finance?: readonly string[];
 }
 
 export function recipientsFor(input: RecipientsInput): string[] {
@@ -74,9 +82,16 @@ export function recipientsFor(input: RecipientsInput): string[] {
       ? stored.filter((e): e is string => typeof e === 'string')
       : [],
   );
+
+  // the hours statement is for finance: their logins plus any extra address, and nobody else
+  if (input.kind === 'hoursStatement') {
+    return cleanAddresses([...(input.finance ?? []), ...saved]);
+  }
+
   if (saved.length > 0) return saved;
 
-  const fromEnv = splitList(input.env[ENV_FALLBACK[input.kind]]);
+  const variable = ENV_FALLBACK[input.kind];
+  const fromEnv = variable ? splitList(input.env[variable]) : [];
   if (fromEnv.length > 0) return fromEnv;
 
   return cleanAddresses(input.owners);

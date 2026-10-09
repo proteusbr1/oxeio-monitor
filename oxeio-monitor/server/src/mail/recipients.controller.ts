@@ -28,7 +28,8 @@ export interface RecipientsView {
     kind: MailKind;
     saved: string[];
     effective: string[];
-    envVariable: string;
+    /** null = the kind has no environment fallback */
+    envVariable: string | null;
   }[];
 }
 

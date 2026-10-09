@@ -323,6 +323,7 @@ model Employee {
   alerts            Alert[]
   leaves            Leave[]
   deposits          SecurityDeposit[]
+  payPeriodLines    PayPeriodLine[]
   depositSettlement DepositSettlement?
 
   @@map("employees")
@@ -364,6 +365,7 @@ model User {
   enrollmentCodes    EnrollmentCode[]
   adjustmentsCreated TimeAdjustment[] @relation("AdjustmentCreatedBy")
   adjustmentsRevoked TimeAdjustment[] @relation("AdjustmentRevokedBy")
+  payLinesPosted     PayPeriodLine[]  @relation("PayLinePostedBy")
 
   @@map("users")
   /// Tasks this user added
@@ -1320,4 +1322,67 @@ model DepositSettlement {
   /// that decision belongs to that time, not to today
   @@unique([employeeId])
   @@map("deposit_settlements")
+}
+
+/// What happened to a pay period's statement email
+enum StatementDelivery {
+  pending
+  sent
+  failed
+  /// no finance login and no extra address
+  no_recipients
+  /// SMTP not set up
+  not_configured
+  /// nobody was paid by the hour in the period
+  no_staff
+}
+
+/// A pay period (src/hours-statement/). The newest row is the open period; a snapshot freezes
+/// its lines and the next period opens the day after its end.
+model PayPeriod {
+  id               Int                @id @default(autoincrement())
+  startDate        DateTime           @unique @map("start_date") @db.Date
+  endDate          DateTime           @map("end_date") @db.Date
+  /// when the lines were frozen; null = the open period
+  snapshotAt       DateTime?          @map("snapshot_at") @db.Timestamptz(3)
+  deliveryStatus   StatementDelivery? @map("delivery_status")
+  deliveryError    String?            @map("delivery_error")
+  deliveryAttempts Int                @default(0) @map("delivery_attempts")
+  sentAt           DateTime?          @map("sent_at") @db.Timestamptz(3)
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  lines PayPeriodLine[]
+
+  @@map("pay_periods")
+}
+
+/// One hourly person in a frozen pay period. Hours only — never money.
+model PayPeriodLine {
+  id          Int       @id @default(autoincrement())
+  periodId    Int       @map("period_id")
+  employeeId  Int       @map("employee_id")
+  /// the period cut at joining/leaving
+  fromDate    DateTime  @map("from_date") @db.Date
+  toDate      DateTime  @map("to_date") @db.Date
+  /// credited seconds inside the range when frozen
+  measuredSec Int       @map("measured_sec")
+  /// from the ledger: earlier real time − earlier posted (src/hours-statement/ledger.rules.ts)
+  carryInSec  Int       @map("carry_in_sec")
+  toPostMin   Int       @map("to_post_min")
+  leaveDays   Int       @default(0) @map("leave_days")
+  holidayDays Int       @default(0) @map("holiday_days")
+  noDataDays  Int       @default(0) @map("no_data_days")
+  /// what was actually posted, when different from to_post_min; null = as proposed
+  postedMin   Int?      @map("posted_min")
+  postedAt    DateTime? @map("posted_at") @db.Timestamptz(3)
+  postedById  Int?      @map("posted_by_id")
+  note        String?
+
+  period   PayPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  employee Employee  @relation(fields: [employeeId], references: [id])
+  postedBy User?     @relation("PayLinePostedBy", fields: [postedById], references: [id])
+
+  @@unique([periodId, employeeId])
+  @@index([employeeId])
+  @@map("pay_period_lines")
 }

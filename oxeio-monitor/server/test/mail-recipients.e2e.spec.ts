@@ -37,7 +37,16 @@ describe('recipients per kind of email', () => {
     const res = await owner.http
       .get('/api/v1/settings/mail-recipients')
       .expect(200);
-    for (const k of res.body.kinds) expect(k.effective).toEqual([OWNER_EMAIL]);
+    for (const k of res.body.kinds) {
+      // the hours statement is for finance only: nobody until a finance login exists
+      expect(k.effective).toEqual(
+        k.kind === 'hoursStatement' ? [] : [OWNER_EMAIL],
+      );
+    }
+    const statement = res.body.kinds.find(
+      (k: { kind: string }) => k.kind === 'hoursStatement',
+    );
+    expect(statement.envVariable).toBeNull();
   });
 
   it('a saved list replaces the owners for that kind only', async () => {

@@ -121,3 +121,27 @@ describe('recipientsSaveProblem', () => {
     ).toMatch(/20/);
   });
 });
+
+describe('recipientsFor — hours statement', () => {
+  it('finance logins plus the saved extras; never the owners, never an env list', () => {
+    expect(
+      recipientsFor({
+        kind: 'hoursStatement',
+        saved: { hoursStatement: ['books@x.test', 'FIN@x.test'] },
+        env: { DIGEST_EMAIL_TO: 'boss@x.test' },
+        owners: ['owner@x.test'],
+        finance: ['fin@x.test'],
+      }),
+    ).toEqual(['fin@x.test', 'books@x.test']);
+  });
+  it('nobody set up: nobody', () => {
+    expect(
+      recipientsFor({
+        kind: 'hoursStatement',
+        saved: null,
+        env: {},
+        owners: ['owner@x.test'],
+      }),
+    ).toEqual([]);
+  });
+});

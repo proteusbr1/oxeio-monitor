@@ -457,6 +457,7 @@ const TYPE_LABELS: Readonly<Record<string, string>> = {
   disk_warning: 'Server disk filling up',
   disk_critical: 'Server disk almost full',
   backup_failed: 'Backup failed',
+  statement_delivery_failed: 'Hours statement not sent',
   clock_drift: 'Agent clock has drifted',
   no_activity_today: 'Someone has no work all day',
   // This used to say "Multiple staff on one device", the exact **opposite**.

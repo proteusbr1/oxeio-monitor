@@ -87,6 +87,8 @@
   "Given to": "Entregada a",
   "Healthy": "Saludable",
   "Hide": "Ocultar",
+  "Hours statement (besides finance logins)": "Extracto de horas (además de los accesos de finanzas)",
+  "Hours statement not sent": "Extracto de horas no enviado",
   "How this server is labelled in Sentry — e.g. production or staging.": "Cómo se identifica este servidor en Sentry — p. ej., production o staging.",
   "Idle detection": "Detección de inactividad",
   "In Sentry, create a project (platform <b>Node.js</b>) and copy its DSN from <b>Project settings → Client Keys (DSN)</b>. A self-hosted <b>GlitchTip</b> works the same way, and keeps everything on your own server.": "En Sentry, crea un proyecto (plataforma <b>Node.js</b>) y copia su DSN desde <b>Project settings → Client Keys (DSN)</b>. Un <b>GlitchTip</b> autoalojado funciona igual y mantiene todo en tu propio servidor.",

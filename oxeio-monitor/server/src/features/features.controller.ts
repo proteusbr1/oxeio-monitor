@@ -28,6 +28,9 @@ class SaveFeaturesDto {
 
   @IsOptional() @IsBoolean()
   tasks?: boolean;
+
+  @IsOptional() @IsBoolean()
+  hoursStatement?: boolean;
 }
 
 /** What a module already holds — so the owner sees what a switch hides */
@@ -120,6 +123,7 @@ export class FeaturesController {
       screenshots: dto.screenshots ?? before.screenshots,
       appTracking: dto.appTracking ?? before.appTracking,
       tasks: dto.tasks ?? before.tasks,
+      hoursStatement: dto.hoursStatement ?? before.hoursStatement,
     };
 
     const changed = changedFeatures(before, after);

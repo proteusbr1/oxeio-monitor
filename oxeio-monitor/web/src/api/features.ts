@@ -22,6 +22,8 @@ export interface Features {
    * reads window titles from `appTracking`, but the tasks work without it.
    */
   tasks: boolean;
+  /** the pay-period hours statement for finance. No parent: finance must not need salaries. */
+  hoursStatement: boolean;
 }
 
 export type FeatureKey = keyof Features;
@@ -33,6 +35,7 @@ export const ALL_FEATURES_ON: Features = {
   screenshots: true,
   appTracking: true,
   tasks: true,
+  hoursStatement: true,
 };
 
 /**

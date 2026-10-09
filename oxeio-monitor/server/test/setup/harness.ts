@@ -88,7 +88,7 @@ export async function resetDatabase(
       daily_summary, schedule_days, monthly_summary, users, employees, work_policies,
       app_categories, holidays, agent_versions, settings,
       deposit_policy, security_deposits, deposit_settlements,
-      leaves, month_closures, summary_dirty
+      leaves, month_closures, summary_dirty, pay_period_lines, pay_periods
     RESTART IDENTITY CASCADE
   `);
 

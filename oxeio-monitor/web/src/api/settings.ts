@@ -247,9 +247,9 @@ export function testSmtp(): Promise<{ outcome: 'sent' | 'not_configured' | 'fail
   return api('/settings/smtp/test', { method: 'POST', body: {} });
 }
 
-export type MailKind = 'alerts' | 'dailyDigest' | 'weeklyDigest' | 'monthClosed';
+export type MailKind = 'alerts' | 'dailyDigest' | 'weeklyDigest' | 'monthClosed' | 'hoursStatement';
 export interface RecipientsView {
-  kinds: { kind: MailKind; saved: string[]; effective: string[]; envVariable: string }[];
+  kinds: { kind: MailKind; saved: string[]; effective: string[]; envVariable: string | null }[];
 }
 export function getMailRecipients(signal?: AbortSignal): Promise<RecipientsView> {
   return api<RecipientsView>('/settings/mail-recipients', { signal });

@@ -24,6 +24,7 @@ export const FEATURE_KEYS = [
   'screenshots',
   'appTracking',
   'tasks',
+  'hoursStatement',
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
@@ -35,6 +36,9 @@ export type Features = Record<FeatureKey, boolean>;
  * pay, so they need Payroll. While the parent is off the child is off too,
  * whatever its own switch says — and its own switch is kept, so turning the
  * parent back on restores it.
+ *
+ * The hours statement has no parent either: it does not need Payroll, and
+ * finance must not need to see salaries to get hours.
  *
  * Tasks has no parent: only its optional start detection reads window
  * titles, and that part simply goes inactive while Apps & websites is off

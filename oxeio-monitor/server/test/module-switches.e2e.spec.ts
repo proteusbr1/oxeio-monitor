@@ -74,6 +74,7 @@ describe('defaults', () => {
       screenshots: true,
       appTracking: true,
       tasks: true,
+      hoursStatement: true,
     });
   });
 
@@ -188,6 +189,7 @@ describe('switching off', () => {
       screenshots: true,
       appTracking: true,
       tasks: false,
+      hoursStatement: true,
     });
   });
 });
