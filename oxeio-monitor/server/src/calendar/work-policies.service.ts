@@ -210,9 +210,12 @@ export class WorkPoliciesService {
       include: { _count: { select: { employees: true } } },
     });
 
+    // a measure change always counts again; the gap only matters under presence
     const measureChanged =
       (dto.hoursMeasure !== undefined && dto.hoursMeasure !== before.hoursMeasure) ||
-      (dto.presenceGapMin !== undefined && dto.presenceGapMin !== before.presenceGapMin);
+      (dto.presenceGapMin !== undefined &&
+        dto.presenceGapMin !== before.presenceGapMin &&
+        (dto.hoursMeasure ?? before.hoursMeasure) === 'presence');
     if (measureChanged) {
       // credited time changes for everyone on this policy: count the open months again
       await this.prisma.summaryDirty.createMany({
