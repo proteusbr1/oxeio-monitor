@@ -93,6 +93,24 @@ export class CreateWorkPolicyDto {
   @IsOptional() @Matches(HHMM, { message: "officeTo must be in 'HH:MM' format" })
   officeTo?: string;
 
+  /** true = the schedule (working hours, break, tolerances) is checked day by day */
+  @IsOptional() @IsBoolean()
+  scheduleEnforced?: boolean;
+
+  @IsOptional() @ValidateIf((_, v) => v !== null) @Matches(HHMM, { message: "breakWindowFrom must be in 'HH:MM' format" })
+  breakWindowFrom?: string | null;
+
+  @IsOptional() @ValidateIf((_, v) => v !== null) @Matches(HHMM, { message: "breakWindowTo must be in 'HH:MM' format" })
+  breakWindowTo?: string | null;
+
+  /** minutes ignored at each end (arrival, leaving); 0 = every minute counts */
+  @IsOptional() @IsInt() @Min(0) @Max(60)
+  toleranceMarkMin?: number;
+
+  /** at most this many a day across both ends; above it, both ends are reported */
+  @IsOptional() @IsInt() @Min(0) @Max(60)
+  toleranceDayMin?: number;
+
   @IsOptional() @IsInt() @Min(10) @Max(3600)
   idleThresholdSec?: number;
 
@@ -172,6 +190,24 @@ export class UpdateWorkPolicyDto {
 
   @IsOptional() @Matches(HHMM)
   officeTo?: string;
+
+  /** true = the schedule (working hours, break, tolerances) is checked day by day */
+  @IsOptional() @IsBoolean()
+  scheduleEnforced?: boolean;
+
+  @IsOptional() @ValidateIf((_, v) => v !== null) @Matches(HHMM, { message: "breakWindowFrom must be in 'HH:MM' format" })
+  breakWindowFrom?: string | null;
+
+  @IsOptional() @ValidateIf((_, v) => v !== null) @Matches(HHMM, { message: "breakWindowTo must be in 'HH:MM' format" })
+  breakWindowTo?: string | null;
+
+  /** minutes ignored at each end (arrival, leaving); 0 = every minute counts */
+  @IsOptional() @IsInt() @Min(0) @Max(60)
+  toleranceMarkMin?: number;
+
+  /** at most this many a day across both ends; above it, both ends are reported */
+  @IsOptional() @IsInt() @Min(0) @Max(60)
+  toleranceDayMin?: number;
 
   @IsOptional() @IsInt() @Min(10) @Max(3600)
   idleThresholdSec?: number;

@@ -4,6 +4,7 @@ import {
   captureWindowProblem,
   DEFAULT_CAPTURE_WINDOW,
   hhmmToMinutes,
+  scheduleProblem,
 } from '../src/calendar/work-policy.rules';
 
 describe('capture window', () => {
@@ -58,5 +59,35 @@ describe('hhmmToMinutes', () => {
     expect(hhmmToMinutes('24:00')).toBeNull();
     expect(hhmmToMinutes('07:60')).toBeNull();
     expect(hhmmToMinutes('')).toBeNull();
+  });
+});
+
+describe('scheduleProblem', () => {
+  const ok = {
+    scheduleEnforced: true,
+    officeFrom: '08:00',
+    officeTo: '17:00',
+    breakMinutes: 60,
+    breakWindowFrom: '11:00',
+    breakWindowTo: '14:00',
+    toleranceMarkMin: 5,
+    toleranceDayMin: 10,
+  };
+  it('a complete schedule is fine; off needs nothing', () => {
+    expect(scheduleProblem(ok)).toBeNull();
+    expect(scheduleProblem({ ...ok, scheduleEnforced: false, officeFrom: null })).toBeNull();
+  });
+  it('enforced needs both working-hour ends', () => {
+    expect(scheduleProblem({ ...ok, officeTo: null })).toMatch(/working hours/);
+  });
+  it('the break window: both ends or neither, inside the day, in order', () => {
+    expect(scheduleProblem({ ...ok, breakWindowTo: null })).toMatch(/both/);
+    expect(scheduleProblem({ ...ok, breakWindowFrom: '07:00' })).toMatch(/inside/);
+    expect(scheduleProblem({ ...ok, breakWindowFrom: '14:00', breakWindowTo: '11:00' })).toMatch(/before/);
+  });
+  it('the break must be shorter than the day; tolerances 0–60', () => {
+    expect(scheduleProblem({ ...ok, breakMinutes: 540 })).toMatch(/shorter/);
+    expect(scheduleProblem({ ...ok, toleranceMarkMin: 61 })).toMatch(/0 and 60/);
+    expect(scheduleProblem({ ...ok, toleranceDayMin: -1 })).toMatch(/0 and 60/);
   });
 });

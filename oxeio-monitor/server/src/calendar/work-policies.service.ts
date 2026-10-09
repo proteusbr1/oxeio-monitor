@@ -15,6 +15,7 @@ import {
   captureWindowProblem,
   DEFAULT_CAPTURE_WINDOW,
   regimeData,
+  scheduleProblem,
   type RegimeInput,
 } from './work-policy.rules';
 import { workDateOf } from '../agent/util/work-time';
@@ -47,6 +48,12 @@ export interface WorkPolicyView {
   /** When the office is open: the window for the `agent_down` alert. null = open all day */
   officeFrom: string | null;
   officeTo: string | null;
+  /** true = the schedule is checked day by day (schedule/schedule.rules.ts) */
+  scheduleEnforced: boolean;
+  breakWindowFrom: string | null;
+  breakWindowTo: string | null;
+  toleranceMarkMin: number;
+  toleranceDayMin: number;
   idleThresholdSec: number;
   /** Tasks per day; applies only to people who receive tasks (0 = no target) */
   dailyTaskTarget: number;
@@ -99,6 +106,18 @@ export class WorkPoliciesService {
       dto.screenshotTo === undefined ? DEFAULT_CAPTURE_WINDOW.screenshotTo : dto.screenshotTo;
     this.assertWindow(screenshotFrom, screenshotTo);
     const regime = this.checkedRegime(dto);
+    const schedule = {
+      scheduleEnforced: dto.scheduleEnforced ?? false,
+      officeFrom: dto.officeFrom ?? null,
+      officeTo: dto.officeTo ?? null,
+      breakMinutes: dto.breakMinutes ?? null,
+      breakWindowFrom: dto.breakWindowFrom ?? null,
+      breakWindowTo: dto.breakWindowTo ?? null,
+      toleranceMarkMin: dto.toleranceMarkMin ?? 0,
+      toleranceDayMin: dto.toleranceDayMin ?? 0,
+    };
+    const scheduleError = scheduleProblem(schedule);
+    if (scheduleError) throw new BadRequestException(scheduleError);
 
     const row = await this.prisma.workPolicy.create({
       data: {
@@ -119,6 +138,11 @@ export class WorkPoliciesService {
         // behavior. More alerts is safer than alerts quietly turning off on a new policy.
         officeFrom: dto.officeFrom ?? null,
         officeTo: dto.officeTo ?? null,
+        scheduleEnforced: schedule.scheduleEnforced,
+        breakWindowFrom: schedule.breakWindowFrom,
+        breakWindowTo: schedule.breakWindowTo,
+        toleranceMarkMin: schedule.toleranceMarkMin,
+        toleranceDayMin: schedule.toleranceDayMin,
         ...(dto.idleThresholdSec === undefined
           ? {}
           : { idleThresholdSec: dto.idleThresholdSec }),
@@ -176,6 +200,20 @@ export class WorkPoliciesService {
 
     const regime = this.checkedRegime(dto, before);
 
+    // checked as it will be stored, like the office hours above
+    const schedule = {
+      scheduleEnforced: dto.scheduleEnforced ?? before.scheduleEnforced,
+      officeFrom,
+      officeTo,
+      breakMinutes: dto.breakMinutes !== undefined ? dto.breakMinutes : before.breakMinutes,
+      breakWindowFrom: dto.breakWindowFrom !== undefined ? dto.breakWindowFrom : before.breakWindowFrom,
+      breakWindowTo: dto.breakWindowTo !== undefined ? dto.breakWindowTo : before.breakWindowTo,
+      toleranceMarkMin: dto.toleranceMarkMin ?? before.toleranceMarkMin,
+      toleranceDayMin: dto.toleranceDayMin ?? before.toleranceDayMin,
+    };
+    const scheduleError = scheduleProblem(schedule);
+    if (scheduleError) throw new BadRequestException(scheduleError);
+
     const row = await this.prisma.workPolicy.update({
       where: { id },
       data: {
@@ -196,6 +234,11 @@ export class WorkPoliciesService {
         screenshotTo,
         officeFrom,
         officeTo,
+        scheduleEnforced: schedule.scheduleEnforced,
+        breakWindowFrom: schedule.breakWindowFrom,
+        breakWindowTo: schedule.breakWindowTo,
+        toleranceMarkMin: schedule.toleranceMarkMin,
+        toleranceDayMin: schedule.toleranceDayMin,
         ...(dto.idleThresholdSec === undefined
           ? {}
           : { idleThresholdSec: dto.idleThresholdSec }),
@@ -216,8 +259,13 @@ export class WorkPoliciesService {
       (dto.presenceGapMin !== undefined &&
         dto.presenceGapMin !== before.presenceGapMin &&
         (dto.hoursMeasure ?? before.hoursMeasure) === 'presence');
-    if (measureChanged) {
-      // credited time changes for everyone on this policy: count the open months again
+    // the schedule check is stored per day: a changed rule rewrites those rows
+    // (while it checks nothing, before and after, there are no rows to rewrite)
+    const scheduleChanged =
+      (before.scheduleEnforced || schedule.scheduleEnforced) &&
+      (Object.keys(schedule) as (keyof typeof schedule)[]).some((k) => schedule[k] !== before[k]);
+    if (measureChanged || scheduleChanged) {
+      // credited time or the schedule check changes for everyone on this policy: count the open months again
       await this.prisma.summaryDirty.createMany({
         data: datesToRecount(workDateOf(new Date())).map((workDate) => ({ workDate })),
         skipDuplicates: true,
@@ -394,6 +442,11 @@ function toView(policy: WorkPolicy, employeeCount: number): WorkPolicyView {
     screenshotsEnabled: policy.screenshotsEnabled,
     officeFrom: policy.officeFrom,
     officeTo: policy.officeTo,
+    scheduleEnforced: policy.scheduleEnforced,
+    breakWindowFrom: policy.breakWindowFrom,
+    breakWindowTo: policy.breakWindowTo,
+    toleranceMarkMin: policy.toleranceMarkMin,
+    toleranceDayMin: policy.toleranceDayMin,
     idleThresholdSec: policy.idleThresholdSec,
     dailyTaskTarget: policy.dailyTaskTarget,
     slotMinutes: policy.slotMinutes,

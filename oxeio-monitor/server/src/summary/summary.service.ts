@@ -4,6 +4,9 @@ import { SegmentState, type HoursMeasure, type Prisma } from '@prisma/client';
 import { workDateOf } from '../agent/util/work-time';
 import { MEASURE_SELECT, measureOf, REGIME_SELECT, targetSpreadOf } from '../calendar/work-regime';
 import { PrismaService } from '../prisma/prisma.service';
+import { SCHEDULE_SELECT, schedulePolicyOf } from '../schedule/schedule-policy';
+import type { SchedulePolicy } from '../schedule/schedule.rules';
+import { ScheduleService } from '../schedule/schedule.service';
 import { TasksSettingsService } from '../tasks/tasks-settings.service';
 import { TasksPersonService } from '../tasks/tasks.person.service';
 import { keepKnownLongNumbers, KNOWN_NUMBER_FROM, taskNumbersFirstSeenInDay } from './task-start.rules';
@@ -35,6 +38,8 @@ interface EmployeePolicy {
   /** what this person's policy credits: active time or presence */
   measure: HoursMeasure;
   presenceGapSec: number;
+  /** the schedule this person's policy checks; null = none */
+  schedule: SchedulePolicy | null;
 }
 
 /**
@@ -83,6 +88,8 @@ export class SummaryService {
     private readonly tasks: TasksPersonService,
     /** Which apps' titles start detection reads (none = off) */
     private readonly tasksSettings: TasksSettingsService,
+    /** Writes the day's schedule check from the same segments */
+    private readonly schedule: ScheduleService,
   ) {}
 
   /** The current work day: the entry point for K06. */
@@ -326,6 +333,28 @@ export class SummaryService {
     // One transaction: one round trip instead of 15 separate ones, and the
     // dashboard never sees "half the staff updated, the rest stale".
     await this.prisma.$transaction(ops);
+
+    // the schedule check reads the same segments; it never blocks the hours
+    try {
+      await this.schedule.writeDay(
+        workDate,
+        employees.map((e) => ({
+          employeeId: e.id,
+          schedule: e.schedule,
+          presenceGapSec: e.presenceGapSec,
+          checked:
+            isWorkday(workDate, e.weeklyOffDays, holidays) &&
+            (e.joinedOn === null || e.joinedOn <= workDate) &&
+            (e.leftOn === null || e.leftOn >= workDate),
+          active: (segmentsBy.get(e.id) ?? []).filter((s) => s.state === 'active'),
+        })),
+        now,
+      );
+    } catch (err) {
+      this.logger.error(
+        `Schedule check for ${workDate.toISOString().slice(0, 10)} failed: ${err instanceof Error ? err.message : err}`,
+      );
+    }
 
     await this.refreshMonth(workDate, employees, now);
 
@@ -723,7 +752,7 @@ export class SummaryService {
         id: true,
         joinedOn: true,
         leftOn: true,
-        policy: { select: { ...REGIME_SELECT, ...MEASURE_SELECT } },
+        policy: { select: { ...REGIME_SELECT, ...MEASURE_SELECT, ...SCHEDULE_SELECT } },
       },
       orderBy: { id: 'asc' },
     });
@@ -739,6 +768,7 @@ export class SummaryService {
       joinedOn: r.joinedOn,
       leftOn: r.leftOn,
       ...measureOf(r.policy),
+      schedule: schedulePolicyOf(r.policy),
       };
     });
   }

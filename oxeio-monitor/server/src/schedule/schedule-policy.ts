@@ -51,6 +51,19 @@ export function schedulePolicyOf(
   };
 }
 
+/** Whether two policies check the same schedule (none and none count as the same) */
+export function sameSchedule(
+  a: ScheduleRow | null | undefined,
+  b: ScheduleRow | null | undefined,
+): boolean {
+  const x = schedulePolicyOf(a);
+  const y = schedulePolicyOf(b);
+  if (x === null || y === null) return x === y;
+  return (Object.keys(x) as (keyof SchedulePolicy)[]).every(
+    (k) => x[k] === y[k],
+  );
+}
+
 /**
  * Minutes since the work zone's midnight on `workDate`, by the wall clock
  * (so 08:00 is 480 even on a daylight-saving day). The instant that ends the

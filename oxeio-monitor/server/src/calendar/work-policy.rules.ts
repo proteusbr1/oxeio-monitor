@@ -100,3 +100,41 @@ export function regimeData(
   }
   return out;
 }
+
+/** The schedule fields of a policy, as they will be stored */
+export interface ScheduleInput {
+  scheduleEnforced: boolean;
+  officeFrom: string | null;
+  officeTo: string | null;
+  breakMinutes: number | null;
+  breakWindowFrom: string | null;
+  breakWindowTo: string | null;
+  toleranceMarkMin: number;
+  toleranceDayMin: number;
+}
+
+/** `null` if the schedule can be saved, otherwise why not (checked as it will be stored) */
+export function scheduleProblem(s: ScheduleInput): string | null {
+  for (const v of [s.toleranceMarkMin, s.toleranceDayMin]) {
+    if (!Number.isInteger(v) || v < 0 || v > 60) return 'Tolerances must be whole minutes between 0 and 60';
+  }
+  if (!s.scheduleEnforced) return null;
+
+  const start = s.officeFrom ? hhmmToMinutes(s.officeFrom) : null;
+  const end = s.officeTo ? hhmmToMinutes(s.officeTo) : null;
+  if (start === null || end === null) return 'A checked schedule needs the working hours (from and until)';
+  if (start >= end) return 'The working hours must start before they end';
+  if ((s.breakMinutes ?? 0) >= end - start) return 'The break must be shorter than the working day';
+
+  if ((s.breakWindowFrom === null) !== (s.breakWindowTo === null)) {
+    return 'Give both ends of the break window, or neither';
+  }
+  if (s.breakWindowFrom !== null && s.breakWindowTo !== null) {
+    const from = hhmmToMinutes(s.breakWindowFrom);
+    const to = hhmmToMinutes(s.breakWindowTo);
+    if (from === null || to === null) return "The break window must be in 'HH:MM' format";
+    if (from >= to) return 'The break window must start before it ends';
+    if (from < start || to > end) return 'The break window must be inside the working hours';
+  }
+  return null;
+}

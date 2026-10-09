@@ -5,6 +5,7 @@ import { DayCloseJob } from './day-close.job';
 import { RetentionJob } from './retention.job';
 import { SCHEDULING_ENABLED } from './scheduling';
 import { SummaryRefreshJob } from './summary-refresh.job';
+import { ScheduleModule as ScheduleCheckModule } from '../schedule/schedule.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { SummaryService } from './summary.service';
 
@@ -35,6 +36,7 @@ import { SummaryService } from './summary.service';
   imports: [
     ...(SCHEDULING_ENABLED ? [ScheduleModule.forRoot()] : []),
     TasksModule,
+    ScheduleCheckModule,
   ],
   providers: [SummaryService, SummaryRefreshJob, DayCloseJob, RetentionJob],
   // Exported so that tests or a future admin endpoint can call `runOnce()`
