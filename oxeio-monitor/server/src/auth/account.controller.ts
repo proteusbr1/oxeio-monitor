@@ -3,7 +3,7 @@ import type { Response } from 'express';
 
 import { UpdateAccountDto } from './account.dto';
 import { AccountService, type AccountEvent, type AccountView } from './account.service';
-import { CurrentUser } from './decorators';
+import { CurrentUser, EveryRole } from './decorators';
 import { TokenService } from './token.service';
 import type { SessionUser } from './types';
 
@@ -12,6 +12,7 @@ import type { SessionUser } from './types';
  * activity, other devices. Open to every role; each route acts on the
  * session's own user. Password and 2FA keep their `/auth/...` routes.
  */
+@EveryRole()
 @Controller('account')
 export class AccountController {
   constructor(

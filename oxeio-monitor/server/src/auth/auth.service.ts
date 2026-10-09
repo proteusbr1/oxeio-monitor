@@ -251,6 +251,8 @@ export class AuthService {
   private async canSeeScreenshots(role: UserRole): Promise<boolean> {
     if (!(await this.features.isOn('screenshots'))) return false;
     if (role === UserRole.owner || role === UserRole.manager) return true;
+    // finance has no screenshot access at all, whatever the staff-view switch says
+    if (role === UserRole.finance) return false;
     return (await this.privacy.get()).staffSeeOwnScreenshots;
   }
 
@@ -383,7 +385,7 @@ export class AuthService {
      * to the enum tomorrow it **should not slip in here by itself** (the
      * controller's `@IsIn` has the same list).
      */
-    role: 'employee' | 'coordinator' | 'manager',
+    role: 'employee' | 'coordinator' | 'manager' | 'finance',
     ip: string,
   ): Promise<{ id: number; email: string; role: UserRole }> {
     const target = await this.prisma.user.findUnique({

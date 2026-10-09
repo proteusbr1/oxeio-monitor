@@ -47,6 +47,8 @@ enum UserRole {
   manager
   coordinator
   employee
+  /// Finance: the hours statement only (posting hours into the payroll system); nothing else
+  finance
 }
 
 /**

@@ -9,6 +9,7 @@ import type { AuthedRequest, SessionUser } from './types';
 
 export const IS_PUBLIC = 'oxeio:public';
 export const REQUIRED_ROLES = 'oxeio:roles';
+export const EVERY_ROLE = 'oxeio:everyRole';
 export const ALLOW_PW_CHANGE = 'oxeio:allowWhileMustChangePw';
 
 /** Reachable without logging in: health, login */
@@ -18,6 +19,14 @@ export const Public = (): MethodDecorator & ClassDecorator =>
 /** Cannot be entered without a specific role */
 export const Roles = (...roles: UserRole[]): MethodDecorator & ClassDecorator =>
   SetMetadata(REQUIRED_ROLES, roles);
+
+/**
+ * Open to every signed-in role, `finance` included. Finance is refused on any
+ * route that neither lists it in `@Roles` nor carries this: a new route stays
+ * closed to it by default.
+ */
+export const EveryRole = (): MethodDecorator & ClassDecorator =>
+  SetMetadata(EVERY_ROLE, true);
 
 /**
  * Routes that stay open even while `mustChangePw = true`;

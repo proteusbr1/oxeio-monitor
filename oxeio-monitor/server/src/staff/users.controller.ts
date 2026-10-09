@@ -31,8 +31,8 @@ class ChangeRoleDto {
    * slip in here by itself. Widening the role-assignment list is a decision,
    * not an accident.
    */
-  @IsIn(['employee', 'coordinator', 'manager'])
-  role!: 'employee' | 'coordinator' | 'manager';
+  @IsIn(['employee', 'coordinator', 'manager', 'finance'])
+  role!: 'employee' | 'coordinator' | 'manager' | 'finance';
 }
 
 class ChangeEmailDto {

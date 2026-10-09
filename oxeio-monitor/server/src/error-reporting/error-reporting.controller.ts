@@ -13,7 +13,7 @@ import { UserRole } from '@prisma/client';
 import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
 
 import { AuditService } from '../audit/audit.service';
-import { CurrentUser, Roles } from '../auth/decorators';
+import { CurrentUser, EveryRole, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
 import type { Source } from '../settings/app-settings.rules';
 import { AppSettingsService } from '../settings/app-settings.service';
@@ -146,6 +146,7 @@ export class ErrorReportingController {
    * anyone's screen. Answers 204 whether or not reporting is on, so the page
    * never needs to know.
    */
+  @EveryRole()
   @Post('error-reports')
   @HttpCode(HttpStatus.NO_CONTENT)
   browserReport(

@@ -3,7 +3,7 @@ import { UserRole } from '@prisma/client';
 import { IsBoolean, IsOptional } from 'class-validator';
 
 import { AuditService } from '../audit/audit.service';
-import { CurrentUser, Roles } from '../auth/decorators';
+import { CurrentUser, EveryRole, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -58,6 +58,7 @@ interface FeaturesSettingsView {
  * Which modules this install shows. Every signed-in user reads it — the
  * sidebar is built from it — but only the owner changes it.
  */
+@EveryRole()
 @Controller()
 export class FeaturesController {
   constructor(

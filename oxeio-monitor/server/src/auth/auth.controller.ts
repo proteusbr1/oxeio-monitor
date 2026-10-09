@@ -16,7 +16,12 @@ import { AppSettingsService } from '../settings/app-settings.service';
 import { IDLE_WARN_BEFORE_SEC, SESSION_TTL_MIN } from './auth.constants';
 import { AccountService } from './account.service';
 import { AuthService, type MeResult } from './auth.service';
-import { AllowWhileMustChangePw, CurrentUser, Public } from './decorators';
+import {
+  AllowWhileMustChangePw,
+  CurrentUser,
+  EveryRole,
+  Public,
+} from './decorators';
 import {
   ChangePasswordDto,
   LoginDto,
@@ -56,6 +61,7 @@ interface WorkTimeZone {
   utcOffsetMinutes: number;
 }
 
+@EveryRole()
 @Controller('auth')
 export class AuthController {
   constructor(
