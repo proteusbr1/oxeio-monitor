@@ -1,11 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { ProgressService } from '../src/agent/progress.service';
 import { ReportsService } from '../src/reports/reports.service';
+import { MeService } from '../src/me/me.service';
 import { SummaryService } from '../src/summary/summary.service';
 import {
   createEmployeeWithCode,
   createHarness,
   enrollDevice,
+  OWNER_EMAIL,
   resetDatabase,
   type Harness,
 } from './setup/harness';
@@ -83,6 +86,83 @@ describe('presence in the roll-up', () => {
   it('presence policy: credited = presence', async () => {
     const day = await personWithDay('presence');
     expect(day.creditedSec).toBe(2 * 3600 + 10 * 60 + 3600);
+  });
+});
+
+describe('the month roll-up counts by the policy measure', () => {
+  const monthOf = (employeeId: number) =>
+    h.prisma.monthlySummary.findUniqueOrThrow({
+      where: { employeeId_yearMonth: { employeeId, yearMonth: '2026-10' } },
+    });
+
+  it('presence policy: the month credits presence, and keeps counting the day', async () => {
+    const day = await personWithDay('presence');
+    const month = await monthOf(day.employeeId);
+    expect(month.creditedSec).toBe(11400);
+    expect(month.workedSec).toBe(11400);
+    expect(month.daysWithWork).toBe(1);
+  });
+
+  it('active policy: the month credits active time', async () => {
+    const day = await personWithDay('active');
+    const month = await monthOf(day.employeeId);
+    expect(month.creditedSec).toBe(10800);
+    expect(month.workedSec).toBe(10800);
+  });
+
+  it('an adjustment is added on top of the measured time, once', async () => {
+    const day = await personWithDay('presence');
+    await h.prisma.timeAdjustment.create({
+      data: {
+        employeeId: day.employeeId,
+        workDate: day.workDate,
+        deltaSec: 600,
+        cause: 'agent_down',
+        reason: 'test',
+        createdById: (
+          await h.prisma.user.findFirstOrThrow({
+            where: { email: OWNER_EMAIL },
+          })
+        ).id,
+      },
+    });
+    await h.app
+      .get(SummaryService)
+      .refreshDate(day.workDate, new Date('2026-10-05T12:00:00Z'));
+    const month = await monthOf(day.employeeId);
+    expect(month.adjustmentSec).toBe(600);
+    expect(month.creditedSec).toBe(11400 + 600);
+  });
+
+  it('the tray counts finished days by the measure too', async () => {
+    const day = await personWithDay('presence');
+    const progress = await h.app
+      .get(ProgressService)
+      .forEmployee(day.employeeId, new Date('2026-10-06T06:00:00Z'));
+    expect(progress.monthCreditedSec).toBe(11400);
+    // the agent's wire field stays active time
+    expect(progress.monthActiveSec).toBe(10800);
+  });
+});
+
+describe('My data credits by the measure', () => {
+  it('presence policy: the day row credits presence, worked stays active', async () => {
+    const day = await personWithDay('presence');
+    const [row] = await h.app.get(MeService).days(
+      {
+        userId: 0,
+        email: '',
+        role: 'employee',
+        employeeId: day.employeeId,
+        mustChangePw: false,
+        issuedAt: 0,
+      },
+      '2026-10-05',
+      '2026-10-05',
+      new Date('2026-10-06T06:00:00Z'),
+    );
+    expect(row.workedSec).toBe(10800);
+    expect(row.creditedSec).toBe(11400);
   });
 });
 

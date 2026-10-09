@@ -489,6 +489,8 @@ export class SummaryService {
           // row's date is the only source (`observedWorkdays`).
           workDate: true,
           workedSec: true,
+          // the day's time by the policy's measure, plus the adjustment
+          creditedSec: true,
           adjustmentSec: true,
         },
       }),
@@ -606,7 +608,9 @@ export class SummaryService {
        * function, `tracking-start.spec.ts` tests every edge without a database.
        */
       const numbers = rollupMonth({
-        workedSec: sum(rows.map((r) => r.workedSec)),
+        // Monthly worked_sec is time by the policy's measure (active time or
+        // presence): each day row stores measured + adjustment as credited.
+        workedSec: sum(rows.map((r) => r.creditedSec - r.adjustmentSec)),
         adjustmentSec: sum(rows.map((r) => r.adjustmentSec)),
         targetSec: p.targetSec,
         noTarget: e.targetSec === 0,

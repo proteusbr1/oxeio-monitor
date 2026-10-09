@@ -8,7 +8,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { parseWorkDate, toIsoDate } from '../reports/reports.range';
 import { FeaturesService } from '../features/features.service';
 import { PrivacyService } from '../privacy/privacy.service';
-import { isWorkday } from '../summary/summary.math';
+import { MEASURE_SELECT, measureOf } from '../calendar/work-regime';
+import { isWorkday, presenceSpans, unionSec } from '../summary/summary.math';
 import type { SessionUser } from '../auth/types';
 
 /** The top section of the employee's own page */
@@ -52,7 +53,7 @@ export interface MyDay {
   workedSec: number;
   /** The owner's correction, ± */
   adjustmentSec: number;
-  /** worked + adjustment; this is what goes toward the month's target */
+  /** time by the policy's measure (active time or presence) + adjustment; this goes toward the month's target */
   creditedSec: number;
   /** Weekly off day or calendar holiday */
   isOffDay: boolean;
@@ -248,7 +249,7 @@ export class MeService {
       }),
       this.prisma.employee.findUnique({
         where: { id: employeeId },
-        select: { policy: { select: { weeklyOffDays: true } } },
+        select: { policy: { select: { weeklyOffDays: true, ...MEASURE_SELECT } } },
       }),
       this.prisma.holiday.findMany({
         where: { holidayDate: { gte: first, lte: last } },
@@ -259,6 +260,33 @@ export class MeService {
     const workedBy = new Map(
       segments.map((s) => [s.workDate.getTime(), s._sum.durationSec ?? 0]),
     );
+
+    /**
+     * Credited counts time by the policy's measure. Under presence the day's
+     * stretches are joined across short pauses, so it needs the spans, not just the
+     * sum; with active time `workedBy` is already the answer.
+     */
+    const { measure, presenceGapSec } = measureOf(employee?.policy);
+    const measuredBy = new Map(workedBy);
+    if (measure === 'presence') {
+      const spans = await this.prisma.activitySegment.findMany({
+        where: {
+          employeeId,
+          countsAsWork: true,
+          workDate: { gte: first, lte: last },
+        },
+        select: { workDate: true, startedAt: true, endedAt: true },
+      });
+      const byDay = new Map<number, { startedAt: Date; endedAt: Date }[]>();
+      for (const sp of spans) {
+        const key = sp.workDate.getTime();
+        byDay.set(key, [...(byDay.get(key) ?? []), sp]);
+      }
+      measuredBy.clear();
+      for (const [key, list] of byDay) {
+        measuredBy.set(key, unionSec(presenceSpans(list, presenceGapSec)));
+      }
+    }
     const adjustBy = new Map(
       adjustments.map((a) => [a.workDate.getTime(), a._sum.deltaSec ?? 0]),
     );
@@ -275,6 +303,7 @@ export class MeService {
      */
     for (let t = first.getTime(); t <= last.getTime(); t += MS_PER_DAY) {
       const worked = workedBy.get(t) ?? 0;
+      const measured = measuredBy.get(t) ?? 0;
       const adjustment = adjustBy.get(t) ?? 0;
       const date = new Date(t);
 
@@ -282,7 +311,7 @@ export class MeService {
         workDate: toIsoDate(date),
         workedSec: worked,
         adjustmentSec: adjustment,
-        creditedSec: worked + adjustment,
+        creditedSec: measured + adjustment,
         // `isWorkday()` is the same function used to compute the month's target.
         // Writing a separate "is it the weekly day off?" check would skip the
         // `holidays` table, and public holidays would show up as ordinary work days.

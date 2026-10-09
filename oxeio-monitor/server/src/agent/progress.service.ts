@@ -6,9 +6,10 @@ import {
   countWorkdays,
   elapsedWorkdays,
   isObserved,
+  presenceSpans,
   unionSec,
 } from '../summary/summary.math';
-import { REGIME_SELECT, targetSpreadOf } from '../calendar/work-regime';
+import { MEASURE_SELECT, measureOf, REGIME_SELECT, targetSpreadOf } from '../calendar/work-regime';
 import { PrismaService } from '../prisma/prisma.service';
 import { trackedFromBy } from '../summary/tracking-start';
 import { paceSecOf } from './progress.math';
@@ -212,7 +213,8 @@ export class ProgressService {
          * segments, so the morning's work would count twice.
          */
         this.prisma.dailySummary.aggregate({
-          _sum: { workedSec: true },
+          // credited - adjustment = the days' time by the policy's measure
+          _sum: { workedSec: true, creditedSec: true, adjustmentSec: true },
           where: {
             employeeId,
             workDate: { gte: monthStart, lt: today },
@@ -233,7 +235,7 @@ export class ProgressService {
             leftOn: true,
             // Careful: `weeklyOffDay` is a column of the **work policy**, not of the
             //    employee; the weekly off day is part of policy, not a personal attribute.
-            policy: { select: REGIME_SELECT },
+            policy: { select: { ...REGIME_SELECT, ...MEASURE_SELECT } },
           },
         }),
         /**
@@ -298,8 +300,22 @@ export class ProgressService {
     // G112 - finished days from the rollup + today live.
     const monthActiveSec = (monthPastRow._sum.workedSec ?? 0) + todayActiveSec;
 
+    /**
+     * Credited counts time by the policy's measure (active time or presence), like the
+     * day rows it is summed from; `monthActiveSec` above stays active time (wire contract).
+     */
+    const { measure, presenceGapSec } = measureOf(employee?.policy);
+    const todayMeasuredSec =
+      measure === 'presence'
+        ? unionSec(presenceSpans(todaySpans, presenceGapSec))
+        : todayActiveSec;
+    const monthMeasuredSec =
+      (monthPastRow._sum.creditedSec ?? 0) -
+      (monthPastRow._sum.adjustmentSec ?? 0) +
+      todayMeasuredSec;
+
     // G162 - computed in one place, used in two (pace and the bottom row of My data).
-    const monthCreditedSec = monthActiveSec + (adjustmentRow._sum.deltaSec ?? 0);
+    const monthCreditedSec = monthMeasuredSec + (adjustmentRow._sum.deltaSec ?? 0);
     const week7ActiveSec = (week7PastRow._sum.workedSec ?? 0) + todayActiveSec;
     // per month, per week, per day or none — as seconds over workdays
     // (no policy: DEFAULT_SPREAD in work-regime.ts)

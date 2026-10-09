@@ -1044,7 +1044,7 @@ model MonthlySummary {
   employeeId       Int       @map("employee_id")
   /// '2026-08'
   yearMonth        String    @map("year_month") @db.Char(7)
-  /// Raw figures
+  /// Raw figures. worked is time by the policy's measure (active time or presence)
   workedSec        Int       @default(0) @map("worked_sec")
   adjustmentSec    Int       @default(0) @map("adjustment_sec")
   /// worked + adjustment: this is what is matched against the target

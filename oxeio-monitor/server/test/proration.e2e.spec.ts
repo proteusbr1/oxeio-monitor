@@ -310,9 +310,10 @@ describe('payroll: salary is prorated too', () => {
     });
 
     // 9 days x 8h = 72h; the other 4 days' 32h come from the owner's adjustment
+    // (a row's credited is always its measured time plus its adjustment)
     await h.prisma.dailySummary.update({
       where: { employeeId_workDate: { employeeId: id, workDate: utc(17) } },
-      data: { adjustmentSec: 32 * HOUR },
+      data: { adjustmentSec: 32 * HOUR, creditedSec: 40 * HOUR },
     });
 
     await rollup();
