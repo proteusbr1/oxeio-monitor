@@ -17,8 +17,8 @@ import { nextEmployeeCode } from './next-code';
 import { ADMIN_TARGET } from '../audit/admin-audit';
 import { parseCalendarDate } from '../calendar/calendar-date';
 import { MEASURE_SELECT, sameMeasure } from '../calendar/work-regime';
-import { SCHEDULE_SELECT, sameSchedule } from '../schedule/schedule-policy';
-import { datesToRecount } from '../summary/recount';
+import { SCHEDULE_SELECT, sameSchedule, schedulePolicyOf } from '../schedule/schedule-policy';
+import { datesToRecount, markDirty } from '../summary/recount';
 import type { CreateEmployeeDto, DeactivateEmployeeDto, EmployeeListQueryDto, UpdateEmployeeDto } from './staff.dto';
 import {
   canSeeSalary,
@@ -256,6 +256,7 @@ export class EmployeesService {
         monthlySalary: true,
         payBasis: true,
         hourlyRate: true,
+        joinedOn: true,
         policy: { select: { ...MEASURE_SELECT, ...SCHEDULE_SELECT } },
       },
     });
@@ -341,11 +342,16 @@ export class EmployeesService {
       // another schedule rewrites their checked days: count the open months
       // again, as a change on a policy does
       if (!sameMeasure(before.policy, after) || !sameSchedule(before.policy, after)) {
-        await this.prisma.summaryDirty.createMany({
-          data: datesToRecount(workDateOf(new Date())).map((workDate) => ({ workDate })),
-          skipDuplicates: true,
-        });
+        await this.recountOpenMonths();
       }
+    }
+    // days before the first day are not checked: a new first day adds or removes rows
+    if (
+      dto.joinedOn !== undefined &&
+      row.joinedOn?.getTime() !== before.joinedOn?.getTime() &&
+      schedulePolicyOf(before.policy) !== null
+    ) {
+      await this.recountOpenMonths();
     }
 
     return toEmployeeView(row, actor.role);
@@ -371,7 +377,7 @@ export class EmployeesService {
   ): Promise<EmployeeView> {
     const before = await this.prisma.employee.findUnique({
       where: { id },
-      select: { id: true, empCode: true, status: true },
+      select: { id: true, empCode: true, status: true, policy: { select: SCHEDULE_SELECT } },
     });
     if (!before) throw new NotFoundException('Staff member not found');
     if (before.status === 'inactive') {
@@ -440,6 +446,9 @@ export class EmployeesService {
       `${before.empCode} deactivated — ${devicesRevoked} devices revoked, ${codesExpired} codes cancelled`,
     );
 
+    // days after the last one are not checked: a last day in the past leaves rows to remove
+    if (schedulePolicyOf(before.policy) !== null) await this.recountOpenMonths();
+
     return toEmployeeView(row, actor.role);
   }
 
@@ -455,7 +464,7 @@ export class EmployeesService {
   ): Promise<EmployeeView> {
     const before = await this.prisma.employee.findUnique({
       where: { id },
-      select: { id: true, empCode: true, status: true },
+      select: { id: true, empCode: true, status: true, policy: { select: SCHEDULE_SELECT } },
     });
     if (!before) throw new NotFoundException('Staff member not found');
     if (before.status === 'active') {
@@ -507,6 +516,9 @@ export class EmployeesService {
         portalRestored: portal.count,
       },
     });
+
+    // the last day is cleared: the days after it are checked again
+    if (schedulePolicyOf(before.policy) !== null) await this.recountOpenMonths();
 
     return toEmployeeView(row, actor.role);
   }
@@ -670,6 +682,11 @@ export class EmployeesService {
       // safe, and without "from X to Y" half the audit would lose its meaning.
       meta: { op: 'update_salary', from: from === null ? null : { ...from }, to: { ...to } },
     });
+  }
+
+  /** Count the open months again: what this person's days were checked against changed */
+  private async recountOpenMonths(): Promise<void> {
+    await markDirty(this.prisma, datesToRecount(workDateOf(new Date())));
   }
 
   private async assertPolicyExists(policyId?: number): Promise<void> {

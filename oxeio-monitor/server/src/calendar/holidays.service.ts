@@ -10,6 +10,7 @@ import { AuditService } from '../audit/audit.service';
 import type { SessionUser } from '../auth/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { workDateOf } from '../agent/util/work-time';
+import { markDirty } from '../summary/recount';
 import { ADMIN_TARGET } from '../audit/admin-audit';
 import { parseHolidayFile, type ImportResult } from './holiday-import';
 import {
@@ -105,6 +106,8 @@ export class HolidaysService {
       .catch((err: unknown) => {
         throw this.translateDuplicate(err, dto.holidayDate);
       });
+    // a holiday is not a workday: that day's counts and schedule check change
+    await markDirty(this.prisma, [row.holidayDate]);
 
     await this.record(actor, ip, row.id, {
       op: 'create',
@@ -233,6 +236,11 @@ export class HolidaysService {
       skipDuplicates: true,
     });
     plan.created = count;
+    await markDirty(
+      this.prisma,
+      plan.add.map((h) => new Date(`${h.date}T00:00:00Z`)),
+      now,
+    );
 
     await this.record(actor, ip, 0, {
       op: 'import',
@@ -268,6 +276,9 @@ export class HolidaysService {
       .catch((err: unknown) => {
         throw this.translateDuplicate(err, dto.holidayDate ?? '');
       });
+    if (row.holidayDate.getTime() !== before.holidayDate.getTime()) {
+      await markDirty(this.prisma, [before.holidayDate, row.holidayDate]);
+    }
 
     await this.record(actor, ip, id, {
       op: 'update',
@@ -298,6 +309,7 @@ export class HolidaysService {
     if (!before) throw new NotFoundException('Holiday not found');
 
     await this.prisma.holiday.delete({ where: { id } });
+    await markDirty(this.prisma, [before.holidayDate]);
 
     await this.record(actor, ip, id, {
       op: 'delete',

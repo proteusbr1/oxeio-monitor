@@ -9,6 +9,7 @@ import {
 import { AuditService } from '../audit/audit.service';
 import type { SessionUser } from '../auth/types';
 import { PrismaService } from '../prisma/prisma.service';
+import { markDirty } from '../summary/recount';
 import { isWorkday } from '../summary/summary.math';
 
 export interface LeaveView {
@@ -201,6 +202,8 @@ export class LeaveService {
           createdBy: actor.email,
         })),
       });
+      // a day of leave is not checked against the schedule, and lowers the target
+      await markDirty(this.prisma, fresh);
     }
 
     await this.audit.record({
@@ -256,6 +259,7 @@ export class LeaveService {
     }
 
     await this.prisma.leave.delete({ where: { id } });
+    await markDirty(this.prisma, [row.leaveDate]);
 
     await this.audit.record({
       userId: actor.userId,

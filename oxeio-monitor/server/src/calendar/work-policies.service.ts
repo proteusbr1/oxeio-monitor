@@ -19,7 +19,7 @@ import {
   type RegimeInput,
 } from './work-policy.rules';
 import { workDateOf } from '../agent/util/work-time';
-import { datesToRecount } from '../summary/recount';
+import { datesToRecount, markDirty } from '../summary/recount';
 import { DEFAULT_PRESENCE_GAP_SEC } from '../summary/summary.math';
 import { normaliseOffDays } from '../summary/weekly-off';
 
@@ -272,13 +272,13 @@ export class WorkPoliciesService {
       (before.scheduleEnforced || schedule.scheduleEnforced) &&
       ((Object.keys(schedule) as (keyof typeof schedule)[]).some((k) => schedule[k] !== before[k]) ||
         // the check reads presence blocks (merged by the gap) whatever the measure
-        (dto.presenceGapMin !== undefined && dto.presenceGapMin !== before.presenceGapMin));
+        (dto.presenceGapMin !== undefined && dto.presenceGapMin !== before.presenceGapMin) ||
+        // a day off is not checked: other days off add or remove rows
+        (dto.weeklyOffDays !== undefined &&
+          normaliseOffDays(dto.weeklyOffDays).join() !== normaliseOffDays(before.weeklyOffDays).join()));
     if (measureChanged || scheduleChanged) {
       // credited time or the schedule check changes for everyone on this policy: count the open months again
-      await this.prisma.summaryDirty.createMany({
-        data: datesToRecount(workDateOf(new Date())).map((workDate) => ({ workDate })),
-        skipDuplicates: true,
-      });
+      await markDirty(this.prisma, datesToRecount(workDateOf(new Date())));
     }
 
     await this.audit.record({

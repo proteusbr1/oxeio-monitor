@@ -13,7 +13,7 @@ import {
   type SchedulePolicy,
 } from './schedule.rules';
 
-export interface ScheduleInput {
+export interface ScheduleDayInput {
   employeeId: number;
   /** null = this person's policy checks no schedule */
   schedule: SchedulePolicy | null;
@@ -26,8 +26,10 @@ export interface ScheduleInput {
 /**
  * Writes the schedule check of one work day, called by the day roll-up right
  * after it stores the day's hours. Rows exist only for checked days; a day
- * that stops being checked (schedule switched off, leave added) loses its row,
- * so the screen never shows a stale breach.
+ * that stops being checked (schedule switched off, leave or a holiday added,
+ * a day off, before the first or after the last day) loses its row, so the
+ * screen never shows a stale breach. What changes those inputs queues the
+ * day for a recount (summary/recount.ts › markDirty).
  */
 @Injectable()
 export class ScheduleService {
@@ -35,7 +37,7 @@ export class ScheduleService {
 
   async writeDay(
     workDate: Date,
-    people: readonly ScheduleInput[],
+    people: readonly ScheduleDayInput[],
     now: Date,
   ): Promise<void> {
     if (people.length === 0) return;
@@ -50,20 +52,17 @@ export class ScheduleService {
     );
 
     const nowMin = minuteOfWorkDay(now, workDate);
+    const unchecked: number[] = [];
     const ops: Prisma.PrismaPromise<unknown>[] = [];
 
     for (const p of people) {
+      if (!p.schedule || !p.checked || onLeave.has(p.employeeId)) {
+        unchecked.push(p.employeeId);
+        continue;
+      }
       const where = {
         employeeId_workDate: { employeeId: p.employeeId, workDate },
       };
-      if (!p.schedule || !p.checked || onLeave.has(p.employeeId)) {
-        ops.push(
-          this.prisma.scheduleDay.deleteMany({
-            where: { employeeId: p.employeeId, workDate },
-          }),
-        );
-        continue;
-      }
       const blocks = presenceSpans(p.active, p.presenceGapSec).map((s) => ({
         fromMin: minuteOfWorkDay(s.startedAt, workDate),
         toMin: minuteOfWorkDay(s.endedAt, workDate),
@@ -83,6 +82,27 @@ export class ScheduleService {
       );
     }
 
+    // one delete for every day that is no longer checked
+    ops.unshift(
+      this.prisma.scheduleDay.deleteMany({
+        where: {
+          workDate,
+          OR: [
+            { employeeId: { in: unchecked } },
+            // people outside this run (deactivated) whose employment does
+            // not cover the day: a last day moved back leaves rows behind
+            {
+              employee: {
+                OR: [
+                  { leftOn: { lt: workDate } },
+                  { joinedOn: { gt: workDate } },
+                ],
+              },
+            },
+          ],
+        },
+      }),
+    );
     await this.prisma.$transaction(ops);
   }
   /** Active staff whose policy checks a schedule — the Schedule screen's picker */

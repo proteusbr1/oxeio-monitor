@@ -325,3 +325,180 @@ describe('schedule endpoints', () => {
       .expect(400);
   });
 });
+
+describe('inputs that change after the day was counted', () => {
+  const dirtyDates = async () =>
+    (
+      await h.prisma.summaryDirty.findMany({ orderBy: { workDate: 'asc' } })
+    ).map((r) => r.workDate.toISOString().slice(0, 10));
+
+  /** a checked day with no activity at all, counted: one no_show row */
+  async function countedNoShow() {
+    await enforce(true);
+    const employeeId = await dayWith([]);
+    await h.app.get(SummaryService).refreshDate(workDate, DAY_OVER);
+    const row = await h.prisma.scheduleDay.findUniqueOrThrow({
+      where: { employeeId_workDate: { employeeId, workDate } },
+    });
+    expect(row.breaches).toEqual(['no_show']);
+    await h.prisma.summaryDirty.deleteMany();
+    return employeeId;
+  }
+
+  it('leave added afterwards removes the no_show row on the next drain', async () => {
+    const employeeId = await countedNoShow();
+    await owner.http
+      .post('/api/v1/leaves')
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ employeeId, from: '2026-10-05', to: '2026-10-05', type: 'sick' })
+      .expect(201);
+    expect(await dirtyDates()).toEqual(['2026-10-05']);
+
+    await h.app.get(SummaryService).drainDirty(DAY_OVER);
+    expect(await h.prisma.scheduleDay.count()).toBe(0);
+  });
+
+  it('removing that leave queues the day again', async () => {
+    const employeeId = await countedNoShow();
+    const leave = await h.prisma.leave.create({
+      data: { employeeId, leaveDate: workDate, createdBy: OWNER_EMAIL },
+    });
+    await owner.http
+      .delete(`/api/v1/leaves/${leave.id}`)
+      .set('X-CSRF-Token', owner.csrf)
+      .expect((res) => expect(res.status).toBeLessThan(300));
+    expect(await dirtyDates()).toEqual(['2026-10-05']);
+  });
+
+  it('leave for days still to come queues nothing', async () => {
+    const { employeeId } = await createEmployeeWithCode(h.prisma);
+    await owner.http
+      .post('/api/v1/leaves')
+      .set('X-CSRF-Token', owner.csrf)
+      .send({
+        employeeId,
+        from: '2099-01-05',
+        to: '2099-01-09',
+        type: 'annual',
+      })
+      .expect(201);
+    expect(await dirtyDates()).toEqual([]);
+  });
+
+  it('a holiday added afterwards removes the row; moving or removing it queues both dates', async () => {
+    await countedNoShow();
+    const created = await owner.http
+      .post('/api/v1/holidays')
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ holidayDate: '2026-10-05', name: 'Founders day' })
+      .expect(201);
+    expect(await dirtyDates()).toEqual(['2026-10-05']);
+    await h.app.get(SummaryService).drainDirty(DAY_OVER);
+    expect(await h.prisma.scheduleDay.count()).toBe(0);
+
+    await owner.http
+      .patch(`/api/v1/holidays/${created.body.id}`)
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ holidayDate: '2026-10-02' })
+      .expect(200);
+    expect(await dirtyDates()).toEqual(['2026-10-02', '2026-10-05']);
+
+    await h.prisma.summaryDirty.deleteMany();
+    await owner.http
+      .delete(`/api/v1/holidays/${created.body.id}`)
+      .set('X-CSRF-Token', owner.csrf)
+      .expect(200);
+    expect(await dirtyDates()).toEqual(['2026-10-02']);
+  });
+
+  it('a holiday renamed in place queues nothing', async () => {
+    const holiday = await h.prisma.holiday.create({
+      data: { holidayDate: workDate, name: 'Old name' },
+    });
+    await owner.http
+      .patch(`/api/v1/holidays/${holiday.id}`)
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ name: 'New name' })
+      .expect(200);
+    expect(await dirtyDates()).toEqual([]);
+  });
+
+  it('new weekly days off on a policy that checks a schedule queue the open months', async () => {
+    await enforce(true);
+    await h.prisma.summaryDirty.deleteMany();
+    const policy = await h.prisma.workPolicy.findFirstOrThrow();
+    const patch = (weeklyOffDays: number[]) =>
+      owner.http
+        .patch(`/api/v1/work-policies/${policy.id}`)
+        .set('X-CSRF-Token', owner.csrf)
+        .send({ weeklyOffDays })
+        .expect(200);
+
+    // the same days in another order are the same days
+    await patch([...policy.weeklyOffDays].reverse());
+    expect(await h.prisma.summaryDirty.count()).toBe(0);
+
+    await patch(policy.weeklyOffDays.includes(1) ? [6, 7] : [1, 6, 7]);
+    expect(await h.prisma.summaryDirty.count()).toBeGreaterThanOrEqual(28);
+  });
+
+  it('new weekly days off on a policy that checks nothing queue nothing', async () => {
+    const policy = await h.prisma.workPolicy.findFirstOrThrow();
+    await owner.http
+      .patch(`/api/v1/work-policies/${policy.id}`)
+      .set('X-CSRF-Token', owner.csrf)
+      .send({
+        weeklyOffDays: policy.weeklyOffDays.includes(1) ? [6, 7] : [1, 6, 7],
+      })
+      .expect(200);
+    expect(await h.prisma.summaryDirty.count()).toBe(0);
+  });
+
+  it('a person deactivated with an earlier last day loses the later rows on the next drain', async () => {
+    const employeeId = await countedNoShow();
+    // someone still active, so the day has a roll-up to run
+    await createEmployeeWithCode(h.prisma, 'OX-002');
+    await owner.http
+      .post(`/api/v1/employees/${employeeId}/deactivate`)
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ leftOn: '2026-10-02', reason: 'moved away' })
+      .expect((res) => expect(res.status).toBeLessThan(300));
+    expect(await h.prisma.summaryDirty.count()).toBeGreaterThanOrEqual(28);
+
+    await h.app.get(SummaryService).refreshDate(workDate, DAY_OVER);
+    expect(await h.prisma.scheduleDay.count({ where: { employeeId } })).toBe(0);
+  });
+
+  it('reactivating, or a new first day, queues the open months', async () => {
+    const employeeId = await countedNoShow();
+    await owner.http
+      .patch(`/api/v1/employees/${employeeId}`)
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ joinedOn: '2026-10-06' })
+      .expect(200);
+    expect(await h.prisma.summaryDirty.count()).toBeGreaterThanOrEqual(28);
+    await h.app.get(SummaryService).refreshDate(workDate, DAY_OVER);
+    expect(await h.prisma.scheduleDay.count()).toBe(0);
+
+    await h.prisma.summaryDirty.deleteMany();
+    await h.prisma.employee.update({
+      where: { id: employeeId },
+      data: { status: 'inactive', leftOn: workDate },
+    });
+    await owner.http
+      .post(`/api/v1/employees/${employeeId}/reactivate`)
+      .set('X-CSRF-Token', owner.csrf)
+      .expect((res) => expect(res.status).toBeLessThan(300));
+    expect(await h.prisma.summaryDirty.count()).toBeGreaterThanOrEqual(28);
+  });
+
+  it('on a policy that checks nothing, deactivating queues nothing', async () => {
+    const { employeeId } = await createEmployeeWithCode(h.prisma);
+    await owner.http
+      .post(`/api/v1/employees/${employeeId}/deactivate`)
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ reason: 'moved away' })
+      .expect((res) => expect(res.status).toBeLessThan(300));
+    expect(await h.prisma.summaryDirty.count()).toBe(0);
+  });
+});
