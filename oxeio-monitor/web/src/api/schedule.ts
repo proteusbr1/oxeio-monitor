@@ -30,7 +30,11 @@ export interface ScheduleMonthView {
     noShow: number;
     balanceMin: number;
   };
+  /** the checked schedule as it stands now; null when none is checked */
   requiredBreakMin: number | null;
+  /** 'HH:MM' */
+  officeFrom: string | null;
+  officeTo: string | null;
 }
 
 /** People whose policy checks a schedule */

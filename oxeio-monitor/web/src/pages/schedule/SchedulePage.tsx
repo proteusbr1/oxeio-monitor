@@ -18,7 +18,13 @@ import {
   formatMonth,
   todayInWorkZone,
 } from '../../lib/format';
-import { BREACH_LABEL, clockOf, signedDuration } from './schedule.format';
+import {
+  breachNotes,
+  clockOf,
+  minutesText,
+  scheduleLine,
+  signedDuration,
+} from './schedule.format';
 
 /**
  * Schedule compliance (`/schedule`) for people on a policy that checks a
@@ -89,7 +95,7 @@ function ScheduleBoard({
         <span className="num">
           {d.breakStartMin === null
             ? '—'
-            : `${clockOf(d.breakStartMin)} · ${d.breakMin} min`}
+            : `${clockOf(d.breakStartMin)} · ${minutesText(d.breakMin)}`}
         </span>
       ),
     },
@@ -113,7 +119,7 @@ function ScheduleBoard({
         <span
           className={d.breaches.length > 0 ? 'font-medium text-brand-ink' : ''}
         >
-          {d.breaches.map((b) => t(BREACH_LABEL[b])).join(' · ')}
+          {breachNotes(d)}
         </span>
       ),
     },
@@ -145,7 +151,7 @@ function ScheduleBoard({
       ) : (
         data && (
           <div className="space-y-3">
-            <Card title={t('This month')}>
+            <Card title={t('This month')} hint={scheduleLine(data)}>
               <div className="flex flex-wrap gap-x-5 gap-y-1 text-[13px]">
                 <Total label={t('Late')} value={String(data.totals.late)} />
                 <Total
