@@ -85,7 +85,7 @@ export async function resetDatabase(
     TRUNCATE TABLE
       time_adjustments, audit_log, alerts, screenshots, app_usage, events,
       activity_segments, work_sessions, enrollment_codes, devices,
-      daily_summary, monthly_summary, users, employees, work_policies,
+      daily_summary, schedule_days, monthly_summary, users, employees, work_policies,
       app_categories, holidays, agent_versions, settings,
       deposit_policy, security_deposits, deposit_settlements,
       leaves, month_closures, summary_dirty

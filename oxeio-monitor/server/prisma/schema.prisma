@@ -219,6 +219,15 @@ model WorkPolicy {
    */
   officeFrom         String? @map("office_from") @db.VarChar(5)
   officeTo           String? @map("office_to") @db.VarChar(5)
+  /// Check each workday against the schedule (officeFrom–officeTo, breakMinutes): late, early leave, break
+  scheduleEnforced   Boolean @default(false) @map("schedule_enforced")
+  /// 'HH:MM': the break must START inside this window; null = anywhere in the working day
+  breakWindowFrom    String? @map("break_window_from") @db.VarChar(5)
+  breakWindowTo      String? @map("break_window_to") @db.VarChar(5)
+  /// minutes ignored at each end (arrival, leaving); 0 = every minute counts
+  toleranceMarkMin   Int     @default(0) @map("tolerance_mark_min")
+  /// at most this many a day across both ends; above it, both ends are reported
+  toleranceDayMin    Int     @default(0) @map("tolerance_day_min")
   /**
    * **Tasks per day** for people who receive tasks (Tasks module).
    *
@@ -298,6 +307,7 @@ model Employee {
   devices           Device[]
   portalUsers       User[]
   workSessions      WorkSession[]
+  scheduleDays      ScheduleDay[]
   segments          ActivitySegment[]
   screenshots       Screenshot[]
   appUsage          AppUsage[]
@@ -986,6 +996,33 @@ model DailySummary {
 
   @@id([employeeId, workDate])
   @@map("daily_summary")
+}
+
+/// One checked workday of someone on a policy with `schedule_enforced` (src/schedule/).
+/// Times are minutes since the work zone's midnight (0–1440). Days off, holidays and
+/// leave have no row.
+model ScheduleDay {
+  employeeId    Int      @map("employee_id")
+  workDate      DateTime @map("work_date") @db.Date
+  arrivedMin    Int?     @map("arrived_min") @db.SmallInt
+  leftMin       Int?     @map("left_min") @db.SmallInt
+  breakStartMin Int?     @map("break_start_min") @db.SmallInt
+  breakMin      Int      @default(0) @map("break_min") @db.SmallInt
+  lateMin       Int      @default(0) @map("late_min") @db.SmallInt
+  earlyLeaveMin Int      @default(0) @map("early_leave_min") @db.SmallInt
+  /// presence − scheduled minutes; information only, never pay
+  balanceMin    Int      @default(0) @map("balance_min") @db.SmallInt
+  /// late | early_leave | break_short | break_missing | no_show
+  breaches      String[] @default([])
+  /// false while the day is still running
+  final         Boolean  @default(false)
+  computedAt    DateTime @default(now()) @map("computed_at") @db.Timestamptz(3)
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@id([employeeId, workDate])
+  @@index([workDate])
+  @@map("schedule_days")
 }
 
 /// The main reporting table: the only yardstick is here
