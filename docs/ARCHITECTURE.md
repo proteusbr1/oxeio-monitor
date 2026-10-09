@@ -57,6 +57,7 @@ built-in default. The screen shows where each value comes from.
 | Settings → Agent updates | `agent.updateKey` | `AGENT_UPDATE_PUBLIC_KEY` |
 | Settings → Modules | `features` | — (screen only) |
 | Settings → Privacy | `privacy` | — (screen only) |
+| Settings → Hours statement | `payPeriod` | — (screen only) |
 | Settings → Policies & holidays › Public holidays | `holidays.auto` | — (screen only) |
 
 Each card set on screen offers "Use the .env value", which forgets the saved
@@ -82,6 +83,7 @@ whenever the computer is in use (the default — no window), or only between
 two times. Either way only while someone is at the keyboard or mouse.
 | `appTracking` | apps & websites, productivity, Settings › Apps & sites | agents stop recording apps; counted hours do not change |
 | `designTargets` | design target pool, review, hand-out jobs — **needs appTracking** (design-app window titles show which jobs were started) | |
+| `hoursStatement` | pay periods and the hours statement for hourly staff, the finance role's screen | |
 
 A child module is off while its parent is, and keeps its own switch
 (`FEATURE_PARENT`, `effectiveFeatures`). `GET /features` answers what is
@@ -175,11 +177,51 @@ accounts without one rename themselves. The theme is saved on the user
 new password) sets `users.sessions_revoked_at`; older tokens end at their
 next refresh, at most 5 minutes later (`JwtAuthGuard`).
 
+## Hours statement
+
+Module `hoursStatement` (`server/src/hours-statement/`). It tells whoever does
+the pay how many whole hours each hourly person is owed for a pay period, and
+carries the leftover minutes into the next one. **No money appears anywhere**
+— not on the screen, in the email or in the spreadsheet; staff are chosen by
+their pay basis only.
+
+- **Periods** (`pay-period.rules.ts`). A period runs from the day after the
+  previous period's end through the next cutoff. The cutoff is a day 1–28 or
+  the end of the month (Settings → Hours statement, key `payPeriod`, with the
+  send time). The newest row is the *open* period and is the anchor of the
+  next one; the first run never backfills. A cutoff change moves only the open
+  period's end.
+- **The job** (`hours-statement.job.ts`) runs at minute 10 of every hour and
+  decides by the clock: a period is due on the day after its end at the send
+  time, or on any later day. It freezes the period once (a guarded
+  transaction), delivers it, and opens the next. Frozen periods that are
+  pending or failed are retried, up to 24 attempts, then an alert is raised.
+  Delivery is at-least-once: a duplicate email is possible after a database
+  error, a missing one is not. `no_recipients`, `not_configured` and
+  `no_staff` are not retried automatically — the owner resends from the screen.
+- **Who is in** (`statement.rules.ts`): people paid hourly in any month the
+  period touches, active or left on or after the period start, with the range
+  cut at joining and leaving.
+- **Ledger** (`ledger.rules.ts`). Carry-in = the real credited time now over the
+  person's earlier frozen lines − posted minutes × 60. To post =
+  `floor((measured + carry) / 60)` hours; the rest carries on.
+- **Posted marks.** The finance person marks a line as posted once it is
+  entered. A mark can be undone until the next snapshot is taken; after that
+  the answer is 409.
+- **Recipients.** Active `finance` logins plus extra addresses saved under
+  Settings → Notifications (mail kind `hoursStatement`). There is no
+  environment fallback and owners are never added by default.
+- **Email and sheet.** The email is in the company language, the spreadsheet in
+  English. The email links to the screen using `PUBLIC_URL` (or `CORS_ORIGIN`).
+- **Screen.** `/hours` (`web/src/pages/hours`); the `finance` role lands there
+  and its menu shows Hours statement and Account only.
+
 ## Roles
 
 `owner` (everything), `manager` (team, reports, screenshots — no money, no
 system settings), `researcher` (adds design targets; own data only),
-`employee` (own data only). Roles are checked on the server (`@Roles(...)`
+`employee` (own data only), `finance` (the hours statement only — refused on every
+route that does not name it; shell routes carry `@EveryRole()`). Roles are checked on the server (`@Roles(...)`
 and per-service scope rules); the dashboard only hides what a role cannot use.
 
 ## API — `oxeio-monitor/server/src`
@@ -193,6 +235,7 @@ and per-service scope rules); the dashboard only hides what a role cannot use.
 | `screenshots/` | the gallery and signed image links (who may see whose) |
 | `reports/` | attendance / summary / apps reports, Excel and PDF, the monthly report delivery. `reports.service.ts` is the front door; one file per report (`reports.attendance.service.ts`, `reports.summary.service.ts`, `reports.productivity.service.ts`), the shared range / employees / target / meta in `reports.context.service.ts`, download name and export audit in `reports.export.service.ts` |
 | `payroll/` | the pay sheet, currency |
+| `hours-statement/` | pay periods with a cutoff day, the hours statement of hourly staff (snapshot, carry-over ledger, email, spreadsheet), the hourly job, posted marks. Rules: `pay-period.rules.ts`, `ledger.rules.ts`, `statement.rules.ts` |
 | `deposits/` | security deposits ledger and settlements |
 | `tasks/` | tasks: the full list, stats and owner edits (`tasks.service.ts`), bulk add to the pool (`tasks.pool.service.ts`), hand-out / top-up / return jobs (`tasks.handout.service.ts`), the assignee's own list and actions (`tasks.person.service.ts`), check / fix / review / deliver / publish (`tasks.stage.service.ts`), file trace (`on-screen.service.ts`); shapes in `tasks.types.ts`, pure rules in `tasks.rules.ts` |
 | `schedule/` | schedule compliance: the day check written by the roll-up (`schedule.rules.ts` is the rule), the Schedule screen, the "Schedule today" digest block |
@@ -224,11 +267,11 @@ country's public holidays like the setup wizard does). Holiday file import:
 
 | Folder | What it holds |
 |---|---|
-| `api/` | typed calls to the API, one file per module: `staff`, `payroll`, `calendar` (holidays, work policies), `agent` (devices, agent builds), `settings`, `audit`, `reports`, `targets`, `screenshots`, `dashboard`, `activity`, `schedule`, `alerts`, `me`, `features`, `errorReporting`, `auth` |
+| `api/` | typed calls to the API, one file per module: `staff`, `payroll`, `calendar` (holidays, work policies), `agent` (devices, agent builds), `settings`, `audit`, `reports`, `targets`, `screenshots`, `dashboard`, `activity`, `schedule`, `alerts`, `me`, `features`, `hoursStatement`, `errorReporting`, `auth` |
 | `auth/`, `features/` | session and module-switch contexts |
 | `components/` | layout, tables, cards; `ui.tsx` has the shared form pieces (fields, modals, confirm dialogs, notices) |
 | `lib/` | formatting (time zone, currency, locale), downloads, crash reports |
-| `pages/<module>/` | one folder per menu item: `live`, `worklog`, `targets`, `me`, `staff` (Today + Directory tabs), `screenshots`, `monthly`, `schedule`, `reports`, `payroll`, `alerts`, `account` (login, password, 2FA), `settings` (grouped: Work · Company · Integrations · System · Records) |
+| `pages/<module>/` | one folder per menu item: `live`, `worklog`, `targets`, `me`, `staff` (Today + Directory tabs), `screenshots`, `monthly`, `schedule`, `reports`, `payroll`, `hours`, `alerts`, `account` (login, password, 2FA), `settings` (grouped: Work · Company · Integrations · System · Records) |
 
 The menu is built in `components/Layout.tsx` (roles and module switches per
 item); routes are in `App.tsx`.

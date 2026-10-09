@@ -239,6 +239,9 @@ Without `PUBLIC_URL` the line starts with `<this server>`: put your own
 address in front of `/setup?token=…`. To choose the token yourself instead of
 reading the log, set `SETUP_TOKEN` in `.env` (the VPS script does this).
 
+`PUBLIC_URL` also puts a link to the Hours statement screen in the statement
+email. Without it (and without `CORS_ORIGIN`) the email has no link.
+
 The token exists so that a stranger who finds a fresh install cannot claim
 it. Every other page shows the wizard until it is done, and the link stops
 working once the owner exists.
