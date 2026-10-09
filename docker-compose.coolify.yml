@@ -1,5 +1,5 @@
-# Deploy do oXeio no Coolify (app Git, branch pericialmed, auto-deploy).
-# So existe na branch pericialmed do fork; nao vai nos PRs para o ownCoder.
+# Deploy do oXeio no Coolify (app Git, branch main, auto-deploy: todo push no main vai para producao).
+# A branch pericialmed ficou congelada como registro em 2026-10-09 (ce1726a); nao vai nos PRs para o ownCoder.
 # Dados: banco no volume oxeio-pgdata (alias oxeio-postgres), capturas em /data/apps/oxeio/storage.
 services:
   postgres:
@@ -41,7 +41,7 @@ services:
     build:
       context: ./oxeio-monitor/server
       args:
-        APP_BUILD: ${APP_BUILD:-pericialmed}
+        APP_BUILD: ${APP_BUILD:-main}
         APP_COMMIT: ${SOURCE_COMMIT:-local}
     restart: unless-stopped
     depends_on:
@@ -92,7 +92,7 @@ services:
       context: .
       dockerfile: coolify/web.Dockerfile
       args:
-        APP_BUILD: ${APP_BUILD:-pericialmed}
+        APP_BUILD: ${APP_BUILD:-main}
         APP_COMMIT: ${SOURCE_COMMIT:-local}
     restart: unless-stopped
     depends_on:
