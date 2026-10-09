@@ -233,3 +233,30 @@ describe('moving a person to another policy', () => {
     expect(await h.prisma.summaryDirty.count()).toBeGreaterThanOrEqual(28);
   });
 });
+
+describe('schedule endpoints', () => {
+  it('the month view and its totals', async () => {
+    await enforce(true);
+    const employeeId = await dayWith([
+      ['08:20', '12:00'],
+      ['12:30', '17:00'],
+    ]);
+    await h.app.get(SummaryService).refreshDate(workDate, DAY_OVER);
+
+    const people = await owner.http.get('/api/v1/schedule/people').expect(200);
+    expect(people.body.map((p: { id: number }) => p.id)).toContain(employeeId);
+
+    const res = await owner.http
+      .get(`/api/v1/schedule?employeeId=${employeeId}&month=2026-10`)
+      .expect(200);
+    expect(res.body.days).toHaveLength(1);
+    expect(res.body.totals).toMatchObject({ late: 1, breakShort: 1 });
+    expect(res.body.requiredBreakMin).toBe(60);
+  });
+
+  it('a bad month is a 400', async () => {
+    await owner.http
+      .get('/api/v1/schedule?employeeId=1&month=2026-13')
+      .expect(400);
+  });
+});

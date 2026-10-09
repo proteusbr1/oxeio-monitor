@@ -10,6 +10,8 @@ import type { FeaturesService } from '../src/features/features.service';
 import { DigestService } from '../src/digest/digest.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
 import type { ReportsService } from '../src/reports/reports.service';
+import type { DigestBreach } from '../src/schedule/schedule.digest';
+import type { ScheduleService } from '../src/schedule/schedule.service';
 import type {
   AttendanceReport,
   ReportMeta,
@@ -121,6 +123,8 @@ function makeService(
     /** What `MailRecipients.for()` answers */
     recipients?: string[];
     reports?: Partial<ReportsService>;
+    /** What `ScheduleService.breachesOn()` answers */
+    breaches?: DigestBreach[];
   } = {},
 ): {
   service: DigestService;
@@ -192,6 +196,9 @@ function makeService(
           return over.recipients ?? ['owner@x.test'];
         },
       } as unknown as MailRecipients,
+      {
+        breachesOn: async () => over.breaches ?? [],
+      } as unknown as ScheduleService,
     ),
     sent,
     calls,
@@ -220,6 +227,33 @@ describe('DigestService — which range is requested', () => {
 
     expect(calls[0]).toEqual({ from: '2026-08-12', to: '2026-08-12' });
     expect(calls[1]).toEqual({ from: '2026-08-01', to: '2026-08-12' });
+  });
+});
+
+describe('DigestService — the schedule block', () => {
+  it('a breach today adds a "Schedule today" block to the email', async () => {
+    const { service, sent } = makeService({
+      breaches: [
+        {
+          fullName: 'Ana',
+          breaches: ['late'],
+          lateMin: 12,
+          earlyLeaveMin: 0,
+          breakMin: 60,
+          requiredBreakMin: 60,
+        },
+      ],
+    });
+    await service.runOnce(AT_6_30_PM);
+
+    expect(sent[0].body).toContain('Schedule today\n• Ana — late 12 min');
+  });
+
+  it('nobody broke the schedule: no block', async () => {
+    const { service, sent } = makeService();
+    await service.runOnce(AT_6_30_PM);
+
+    expect(sent[0].body).not.toContain('Schedule today');
   });
 });
 

@@ -4,9 +4,12 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { presenceSpans, type Span } from '../summary/summary.math';
 import { minuteOfWorkDay } from './schedule-policy';
+import type { DigestBreach } from './schedule.digest';
 import {
   checkDay,
   MINUTES_PER_DAY,
+  monthTotals,
+  type Breach,
   type SchedulePolicy,
 } from './schedule.rules';
 
@@ -81,5 +84,81 @@ export class ScheduleService {
     }
 
     await this.prisma.$transaction(ops);
+  }
+  /** Active staff whose policy checks a schedule — the Schedule screen's picker */
+  async people(): Promise<{ id: number; fullName: string }[]> {
+    return this.prisma.employee.findMany({
+      where: { status: 'active', policy: { scheduleEnforced: true } },
+      select: { id: true, fullName: true },
+      orderBy: { fullName: 'asc' },
+    });
+  }
+
+  async month(employeeId: number, yearMonth: string) {
+    const from = new Date(`${yearMonth}-01T00:00:00.000Z`);
+    const to = new Date(
+      Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + 1, 0),
+    );
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: {
+        id: true,
+        fullName: true,
+        policy: { select: { breakMinutes: true, scheduleEnforced: true } },
+      },
+    });
+    if (!employee) return null;
+    const rows = await this.prisma.scheduleDay.findMany({
+      where: { employeeId, workDate: { gte: from, lte: to } },
+      orderBy: { workDate: 'asc' },
+    });
+    const days = rows.map((r) => ({
+      date: r.workDate.toISOString().slice(0, 10),
+      arrivedMin: r.arrivedMin,
+      leftMin: r.leftMin,
+      breakStartMin: r.breakStartMin,
+      breakMin: r.breakMin,
+      lateMin: r.lateMin,
+      earlyLeaveMin: r.earlyLeaveMin,
+      balanceMin: r.balanceMin,
+      breaches: r.breaches as Breach[],
+      final: r.final,
+    }));
+    return {
+      employee: { id: employee.id, fullName: employee.fullName },
+      days,
+      totals: monthTotals(days),
+      requiredBreakMin: employee.policy?.scheduleEnforced
+        ? (employee.policy.breakMinutes ?? 0)
+        : null,
+    };
+  }
+
+  /** Breaches recorded for a day, for the 18:30 summary */
+  async breachesOn(workDate: Date): Promise<DigestBreach[]> {
+    const rows = await this.prisma.scheduleDay.findMany({
+      where: { workDate, NOT: { breaches: { isEmpty: true } } },
+      select: {
+        breaches: true,
+        lateMin: true,
+        earlyLeaveMin: true,
+        breakMin: true,
+        employee: {
+          select: {
+            fullName: true,
+            policy: { select: { breakMinutes: true } },
+          },
+        },
+      },
+      orderBy: { employee: { fullName: 'asc' } },
+    });
+    return rows.map((r) => ({
+      fullName: r.employee.fullName,
+      breaches: r.breaches as Breach[],
+      lateMin: r.lateMin,
+      earlyLeaveMin: r.earlyLeaveMin,
+      breakMin: r.breakMin,
+      requiredBreakMin: r.employee.policy?.breakMinutes ?? 0,
+    }));
   }
 }

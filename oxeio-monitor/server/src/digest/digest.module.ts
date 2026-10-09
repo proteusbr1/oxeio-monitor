@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { TelegramChannel } from '../alerts/telegram.channel';
 import { TeamsChannel } from '../alerts/teams.channel';
 import { ReportsModule } from '../reports/reports.module';
+import { ScheduleModule as ScheduleCheckModule } from '../schedule/schedule.module';
 import { DigestJob } from './digest.job';
 import { DigestService } from './digest.service';
 import { WeeklyDigestJob } from './weekly.job';
@@ -29,7 +30,7 @@ import { WeeklyDigestService } from './weekly.service';
 @Module({
   // Careful: `DashboardModule` was here only for the hourly snapshot; when that
   // was removed the dependency went too
-  imports: [ReportsModule],
+  imports: [ReportsModule, ScheduleCheckModule],
   providers: [
     DigestService,
     DigestJob,

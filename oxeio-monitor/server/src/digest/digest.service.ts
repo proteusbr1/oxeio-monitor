@@ -13,6 +13,8 @@ import { FeaturesService } from '../features/features.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { monthBoundsOf, toIsoDate } from '../reports/reports.range';
 import { ReportsService } from '../reports/reports.service';
+import { scheduleDigestLines } from '../schedule/schedule.digest';
+import { ScheduleService } from '../schedule/schedule.service';
 import { buildDigest, digestBody, digestSubject, type Digest } from './digest.math';
 import { taskTargetOf, taskView, type TaskView } from '../summary/task-start.rules';
 import { asPreBlock, telegramDigest } from './digest.telegram';
@@ -61,6 +63,7 @@ export class DigestService {
     config: ConfigService,
     private readonly features: FeaturesService,
     private readonly recipientsOf: MailRecipients,
+    private readonly schedule: ScheduleService,
     // the company name saved by the setup wizard / Settings wins over ORG_NAME
     @Optional() private readonly settings?: AppSettingsService,
   ) {
@@ -72,7 +75,15 @@ export class DigestService {
     const recipients = await this.recipients();
 
     const subject = digestSubject(digest);
-    const body = digestBody(digest, (await this.organizationName()));
+    // Who broke the schedule today — a block of its own, after the hours
+    const scheduleLines = scheduleDigestLines(
+      await this.schedule.breachesOn(new Date(digest.workDate)),
+    );
+    const scheduleBlock =
+      scheduleLines.length > 0
+        ? `\n\nSchedule today\n${scheduleLines.join('\n')}`
+        : '';
+    const body = digestBody(digest, await this.organizationName()) + scheduleBlock;
 
     const outcome = await this.mailer.send(recipients, subject, body);
 
@@ -99,11 +110,12 @@ export class DigestService {
      * media, two looks, but the numbers come from the same `Digest`, so the
      * two never say different things.
      */
-    const plain = telegramDigest(digest, (await this.organizationName()), {
-      silentPcs: await this.silentPcsToday(now),
-      atTime: workClock(now),
-      tasks: await this.tasksToday(digest.workDate),
-    });
+    const plain =
+      telegramDigest(digest, await this.organizationName(), {
+        silentPcs: await this.silentPcsToday(now),
+        atTime: workClock(now),
+        tasks: await this.tasksToday(digest.workDate),
+      }) + scheduleBlock;
 
     const telegramOutcome = await this.telegram.sendHtml(asPreBlock(plain), plain);
 
