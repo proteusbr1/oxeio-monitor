@@ -135,7 +135,7 @@ enum RolloutStage {
 
 // ══════════════════════════ reference / config ══════════════════════════
 
-/// Careful: this replaces a shifts table. There is no shift window, lunch window or fixed arrival time.
+/// Hours targets. A fixed schedule, when a policy wants one checked, is `schedule_enforced` + office hours + break (src/schedule/).
 /// How a work policy states the hours it expects (see src/calendar/work-regime.ts).
 /// Every basis becomes "hours per workday"; the month's target is that times
 /// the workdays in it (minus leave).

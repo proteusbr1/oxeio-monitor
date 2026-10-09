@@ -126,6 +126,8 @@ only, and a target of 0 does not read as a day off.
 
 **What counts as worked time** is also the policy's: `hoursMeasure` is `active` (keyboard/mouse time, the original measure) or `presence` (the day's active stretches joined across pauses up to `presenceGapMin`, default 15). The day roll-up stores both (`worked_sec`, `presence_sec`); `credited_sec` is the policy's measure plus adjustments, so everything that reads credited time follows. Changing the measure queues last month and this month for recount (`summary/recount.ts`); closed months stay. So does changing `presenceGapMin` on a presence policy, and moving a person to a policy that counts differently (another measure, or presence with another gap).
 
+**A fixed schedule can be checked**: with `scheduleEnforced`, the office hours, `breakMinutes`, the break window and two tolerances (per clock mark, per day) are checked every workday against the day's presence blocks. Results (`schedule_days`, minutes since local midnight) show on the Schedule screen and in the daily summary (the email names who and what; Telegram carries only the count); days off, holidays and leave are not checked; the balance is information, never pay. Changing the schedule (or the presence gap) of a policy that checks one, or moving a person to a policy with a different schedule, queues last month and this month for recount.
+
 Screens read finished days from the stored rows and count only today live, so a later policy change never rewrites a past day it has not recounted. The Live Board, My data's day list and the month roll-up count by the measure; the tray's pace and its month credited do too, but the tray's today and 7-day bars stay active time — the agent grows them locally between server updates, and it only sees active input. The attendance report (xlsx and PDF) shows presence beside active time for everyone.
 
 ## Time zone
@@ -193,6 +195,7 @@ and per-service scope rules); the dashboard only hides what a role cannot use.
 | `payroll/` | the pay sheet, currency |
 | `deposits/` | security deposits ledger and settlements |
 | `tasks/` | tasks: the full list, stats and owner edits (`tasks.service.ts`), bulk add to the pool (`tasks.pool.service.ts`), hand-out / top-up / return jobs (`tasks.handout.service.ts`), the assignee's own list and actions (`tasks.person.service.ts`), check / fix / review / deliver / publish (`tasks.stage.service.ts`), file trace (`on-screen.service.ts`); shapes in `tasks.types.ts`, pure rules in `tasks.rules.ts` |
+| `schedule/` | schedule compliance: the day check written by the roll-up (`schedule.rules.ts` is the rule), the Schedule screen, the "Schedule today" digest block |
 | `adjustments/` | hour corrections made by the owner |
 | `staff/` | the people, their portal logins and roles, staff codes |
 | `calendar/` | holidays (import from a file or from the public calendar — `public-holidays.ts`, date.nager.at, ~200 countries), work policies, agreed leave, closing a month |
@@ -221,11 +224,11 @@ country's public holidays like the setup wizard does). Holiday file import:
 
 | Folder | What it holds |
 |---|---|
-| `api/` | typed calls to the API, one file per module: `staff`, `payroll`, `calendar` (holidays, work policies), `agent` (devices, agent builds), `settings`, `audit`, `reports`, `targets`, `screenshots`, `dashboard`, `activity`, `alerts`, `me`, `features`, `errorReporting`, `auth` |
+| `api/` | typed calls to the API, one file per module: `staff`, `payroll`, `calendar` (holidays, work policies), `agent` (devices, agent builds), `settings`, `audit`, `reports`, `targets`, `screenshots`, `dashboard`, `activity`, `schedule`, `alerts`, `me`, `features`, `errorReporting`, `auth` |
 | `auth/`, `features/` | session and module-switch contexts |
 | `components/` | layout, tables, cards; `ui.tsx` has the shared form pieces (fields, modals, confirm dialogs, notices) |
 | `lib/` | formatting (time zone, currency, locale), downloads, crash reports |
-| `pages/<module>/` | one folder per menu item: `live`, `worklog`, `targets`, `me`, `staff` (Today + Directory tabs), `screenshots`, `monthly`, `reports`, `payroll`, `alerts`, `account` (login, password, 2FA), `settings` (grouped: Work · Company · Integrations · System · Records) |
+| `pages/<module>/` | one folder per menu item: `live`, `worklog`, `targets`, `me`, `staff` (Today + Directory tabs), `screenshots`, `monthly`, `schedule`, `reports`, `payroll`, `alerts`, `account` (login, password, 2FA), `settings` (grouped: Work · Company · Integrations · System · Records) |
 
 The menu is built in `components/Layout.tsx` (roles and module switches per
 item); routes are in `App.tsx`.
