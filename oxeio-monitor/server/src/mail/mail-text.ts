@@ -46,7 +46,7 @@ export const MAIL_CATALOG: Record<Language, Record<MailKey, string>> = {
       'Horas trabalhadas pelos horistas de {start} a {end}, prontas para lançar no sistema de folha.',
     'statement.line': '{name} ({code}): {hours} a lançar',
     'statement.carry': 'inclui {carry} de ajuste de períodos anteriores',
-    'statement.leave': 'dias de folga: {n}',
+    'statement.leave': 'dias de afastamento: {n}',
     'statement.holidays': 'feriados: {n}',
     'statement.warnings': 'Confira antes de lançar:',
     'statement.noData': '{name}: {n} dia(s) útil(eis) sem tempo registrado',

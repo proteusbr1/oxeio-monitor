@@ -42,6 +42,24 @@ export interface ComputedLine {
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const day = (s: string) => new Date(`${s}T00:00:00.000Z`);
 
+/** A line's posted mark as it was before a change, for the audit (`null`: not posted) */
+function previousMark(line: {
+  postedAt: Date | null;
+  postedMin: number | null;
+  toPostMin: number;
+  postedById: number | null;
+  note: string | null;
+}) {
+  return line.postedAt === null
+    ? null
+    : {
+        postedMin: line.postedMin ?? line.toPostMin,
+        postedAt: line.postedAt.toISOString(),
+        postedById: line.postedById,
+        note: line.note,
+      };
+}
+
 /**
  * The hours statement: who was paid by the hour in a period, their hours and
  * the carry-over, frozen once per period. Hours only — this service never
@@ -324,11 +342,17 @@ export class HoursStatementService {
     });
     await this.audit.record({
       userId: actor.userId,
-      action: 'change_setting',
+      action: 'hours_statement_posted',
       targetType: 'pay_period_line',
       targetId: lineId,
       ipAddress: ip,
-      meta: { op: 'posted', postedMin: postedMin ?? line.toPostMin },
+      meta: {
+        periodId: line.periodId,
+        postedMin: postedMin ?? line.toPostMin,
+        toPostMin: line.toPostMin,
+        note: note?.trim() || null,
+        previous: previousMark(line),
+      },
     });
   }
 
@@ -348,11 +372,11 @@ export class HoursStatementService {
     });
     await this.audit.record({
       userId: actor.userId,
-      action: 'change_setting',
+      action: 'hours_statement_unposted',
       targetType: 'pay_period_line',
       targetId: lineId,
       ipAddress: ip,
-      meta: { op: 'unposted' },
+      meta: { periodId: line.periodId, previous: previousMark(line) },
     });
   }
 

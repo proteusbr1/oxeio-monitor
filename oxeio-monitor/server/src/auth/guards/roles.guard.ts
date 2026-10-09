@@ -11,9 +11,9 @@ import { EVERY_ROLE, REQUIRED_ROLES } from '../decorators';
 import type { AuthedRequest } from '../types';
 
 /**
- * I05: owner / manager / employee (spec § 4.3). A route without `@Roles` stays
- * open to every role except `finance`, which needs `@EveryRole()` or an
- * explicit `@Roles(..., finance)`.
+ * I05: owner / manager / coordinator / employee / finance (spec § 4.3). A
+ * route without `@Roles` stays open to every role except `finance`, which
+ * needs `@EveryRole()` or an explicit `@Roles(..., finance)`.
  */
 @Injectable()
 export class RolesGuard implements CanActivate {

@@ -161,7 +161,17 @@ export type AuditAction =
    * Careful: `userId` is always `null` here: no person pressed anything, and
    * there is nothing to hide about that.
    */
-  | 'agent_version.rollout_auto';
+  | 'agent_version.rollout_auto'
+  /**
+   * The hours statement: a line marked as posted into the payroll system, the
+   * mark taken back, and the owner sending a frozen statement again. Separate
+   * from `change_setting`: "who said these hours were posted, and what was
+   * there before" is the question after a pay dispute. `meta` keeps the
+   * note and the previous mark (it is gone from the row once changed).
+   */
+  | 'hours_statement_posted'
+  | 'hours_statement_unposted'
+  | 'hours_statement_resent';
 
 export interface AuditEntry {
   userId?: number | null;

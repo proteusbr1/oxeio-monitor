@@ -16,7 +16,11 @@ const escapeHtml = (s: string) =>
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+/** Stands in for the address while the sentence around the link is translated */
+const URL_MARK = '\u0000';
 
 /**
  * The hours statement email: hours and days only — no rate, no money, the
@@ -76,6 +80,16 @@ export function statementMail(input: {
       : []),
     mailText(lang, 'statement.markPosted'),
   ];
+  // the html link is an anchor: the sentence is escaped around it, the address
+  // escaped once more as an attribute (escapeHtml covers both quotes)
+  const linkHtml = input.link
+    ? mailText(lang, 'statement.link', { url: URL_MARK })
+        .split(URL_MARK)
+        .map(escapeHtml)
+        .join(
+          `<a href="${escapeHtml(input.link)}">${escapeHtml(input.link)}</a>`,
+        )
+    : null;
 
   const text = [
     mailText(lang, 'statement.intro', { start, end }),
@@ -112,7 +126,8 @@ export function statementMail(input: {
           '</ul>',
         ]
       : []),
-    ...closing.map((c) => `<p>${escapeHtml(c)}</p>`),
+    ...(linkHtml ? [`<p>${linkHtml}</p>`] : []),
+    `<p>${escapeHtml(mailText(lang, 'statement.markPosted'))}</p>`,
   ].join('\n');
 
   return {

@@ -20,6 +20,7 @@ import {
   Min,
 } from 'class-validator';
 
+import { AuditService } from '../audit/audit.service';
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
 import { RequiresFeature } from '../features/requires-feature';
@@ -68,21 +69,25 @@ export class HoursStatementController {
     private readonly prisma: PrismaService,
     private readonly statements: HoursStatementService,
     private readonly delivery: StatementDeliveryService,
+    private readonly audit: AuditService,
   ) {}
 
   @Get('periods')
-  async periods() {
+  async periods(@CurrentUser() actor: SessionUser) {
     const rows = await this.prisma.payPeriod.findMany({
       orderBy: { startDate: 'desc' },
     });
-    return rows.map((p) => this.summaryOf(p));
+    return rows.map((p) => this.summaryOf(p, actor));
   }
 
   @Get('periods/:id')
-  async period(@Param('id', ParseIntPipe) id: number) {
+  async period(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() actor: SessionUser,
+  ) {
     const p = await this.periodOrThrow(id);
     return {
-      period: this.summaryOf(p),
+      period: this.summaryOf(p, actor),
       locked: p.snapshotAt ? await this.statements.isLocked(id) : false,
       lines: await this.linesOf(p),
     };
@@ -143,13 +148,26 @@ export class HoursStatementController {
   /** Sends the stored statement again — also the way out of no_recipients / not_configured after fixing the settings */
   @Roles(UserRole.owner)
   @Post('periods/:id/resend')
-  async resend(@Param('id', ParseIntPipe) id: number) {
+  async resend(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() actor: SessionUser,
+    @Ip() ip: string,
+  ) {
     const p = await this.periodOrThrow(id);
     if (!p.snapshotAt)
       throw new NotFoundException(
         'This period is still open — there is nothing to send yet',
       );
-    return { status: await this.delivery.deliver(id) };
+    const status = await this.delivery.deliver(id);
+    await this.audit.record({
+      userId: actor.userId,
+      action: 'hours_statement_resent',
+      targetType: 'pay_period',
+      targetId: id,
+      ipAddress: ip,
+      meta: { status, previousStatus: p.deliveryStatus },
+    });
+    return { status };
   }
 
   /** The open period answers live (computed) lines; a frozen one its stored lines */
@@ -203,7 +221,12 @@ export class HoursStatementController {
     return p;
   }
 
-  private summaryOf(p: PayPeriod) {
+  /**
+   * `deliveryError` is the mail server's raw answer (host names, accounts):
+   * the owner's to read and fix, so finance gets `null` and the screen says
+   * only that the email could not be sent.
+   */
+  private summaryOf(p: PayPeriod, actor: SessionUser) {
     return {
       id: p.id,
       start: iso(p.startDate),
@@ -212,7 +235,7 @@ export class HoursStatementController {
       snapshotAt: p.snapshotAt?.toISOString() ?? null,
       deliveryStatus: p.deliveryStatus,
       sentAt: p.sentAt?.toISOString() ?? null,
-      deliveryError: p.deliveryError,
+      deliveryError: actor.role === UserRole.owner ? p.deliveryError : null,
     };
   }
 }

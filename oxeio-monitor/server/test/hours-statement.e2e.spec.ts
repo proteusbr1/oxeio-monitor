@@ -527,6 +527,25 @@ describe('the hours statement cycle', () => {
       .expect(200);
     await post({ postedMin: 590 }).expect(201);
 
+    const audit = await h.prisma.auditLog.findMany({
+      where: { targetType: 'pay_period_line', targetId: String(line.id) },
+      orderBy: { id: 'asc' },
+    });
+    expect(audit.map((a) => a.action)).toEqual([
+      'hours_statement_posted',
+      'hours_statement_unposted',
+      'hours_statement_posted',
+    ]);
+    expect(audit[0].meta).toMatchObject({
+      postedMin: 590,
+      toPostMin: 600,
+      note: 'rounded by hand',
+      previous: null,
+    });
+    expect(audit[1].meta).toMatchObject({
+      previous: { postedMin: 590, note: 'rounded by hand' },
+    });
+
     await job.tick(local('2026-10-26T07:10'));
     await post({}).expect(409);
     const next = await h.prisma.payPeriodLine.findFirstOrThrow({
@@ -634,6 +653,52 @@ describe('hours statement endpoints', () => {
       .expect(201);
     expect(res.body.status).toBe('sent');
     expect(sent).toHaveLength(2);
+    const audit = await h.prisma.auditLog.findFirstOrThrow({
+      where: { action: 'hours_statement_resent' },
+    });
+    expect(audit).toMatchObject({
+      targetType: 'pay_period',
+      targetId: String(period.id),
+      meta: { status: 'sent', previousStatus: 'sent' },
+    });
+  });
+
+  it("the mail server's error is the owner's; finance is only told it failed", async () => {
+    vi.spyOn(h.app.get(Mailer), 'deliver').mockResolvedValue({
+      outcome: 'failed',
+      error: 'auth failed for smtp.internal.example',
+    });
+    const job = h.app.get(HoursStatementJob);
+    await job.tick(local('2026-09-10T06:00'));
+    await credited('2026-09-01', 3_600);
+    await job.tick(local('2026-09-26T07:10'));
+    const period = await h.prisma.payPeriod.findFirstOrThrow({
+      where: { snapshotAt: { not: null } },
+    });
+
+    const fin = await loginReady(h, 'fin@test.local', 'fin-password-123');
+    const finList = await fin.http
+      .get('/api/v1/hours-statement/periods')
+      .expect(200);
+    const finView = await fin.http
+      .get(`/api/v1/hours-statement/periods/${period.id}`)
+      .expect(200);
+    for (const p of [
+      finList.body.find((x: { id: number }) => x.id === period.id),
+      finView.body.period,
+    ]) {
+      expect(p).toMatchObject({
+        deliveryStatus: 'failed',
+        deliveryError: null,
+      });
+    }
+
+    const ownerView = await owner.http
+      .get(`/api/v1/hours-statement/periods/${period.id}`)
+      .expect(200);
+    expect(ownerView.body.period.deliveryError).toBe(
+      'auth failed for smtp.internal.example',
+    );
   });
 
   it('resend sends the stored statement after recipients were fixed, and refuses an open period', async () => {

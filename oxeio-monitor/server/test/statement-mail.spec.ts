@@ -48,12 +48,12 @@ describe('statementMail', () => {
     );
   });
 
-  it('one line per person in hours and minutes, carry and days off', () => {
+  it('one line per person in hours and minutes, carry and leave', () => {
     expect(mail.text).toContain('Ana <Lima> (A1): 173 h 25 min a lançar');
     expect(mail.text).toContain(
       'inclui 1 h 00 min de ajuste de períodos anteriores',
     );
-    expect(mail.text).toContain('dias de folga: 1');
+    expect(mail.text).toContain('dias de afastamento: 1');
     expect(mail.text).toContain('https://app.example/hours?period=3');
   });
 
@@ -66,6 +66,24 @@ describe('statementMail', () => {
     expect(mail.html).toContain('Ana &lt;Lima&gt;');
     expect(mail.html).not.toContain('<Lima>');
     expect(`${mail.text}${mail.html}`).not.toMatch(/rate|salary|R\$|\$/i);
+  });
+
+  it('the html link is clickable, its address attribute-escaped', () => {
+    expect(mail.html).toContain(
+      '<a href="https://app.example/hours?period=3">https://app.example/hours?period=3</a>',
+    );
+    const odd = statementMail({
+      lang: 'en',
+      org: 'Acme',
+      start: '2026-09-26',
+      end: '2026-10-25',
+      lines,
+      link: 'https://app.example/hours?period=3&x="y\'',
+    });
+    expect(odd.html).toContain(
+      'href="https://app.example/hours?period=3&amp;x=&quot;y&#39;"',
+    );
+    expect(odd.html).not.toContain('x="y');
   });
 
   it('no link configured: no link line', () => {
