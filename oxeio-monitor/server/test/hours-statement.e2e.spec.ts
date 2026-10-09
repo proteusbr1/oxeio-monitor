@@ -7,10 +7,17 @@ import {
   it,
   vi,
 } from 'vitest';
+import { Workbook } from 'exceljs';
 
 import { HoursStatementJob } from '../src/hours-statement/hours-statement.job';
-import { Mailer } from '../src/mail/mailer';
+import { HoursStatementService } from '../src/hours-statement/hours-statement.service';
+import {
+  MAX_DELIVERY_ATTEMPTS,
+  StatementDeliveryService,
+} from '../src/hours-statement/statement-delivery.service';
+import { Mailer, type MailMessage } from '../src/mail/mailer';
 import { AppSettingsService } from '../src/settings/app-settings.service';
+import { SummaryService } from '../src/summary/summary.service';
 import {
   createEmployeeWithCode,
   createHarness,
@@ -28,7 +35,7 @@ import {
  */
 let h: Harness;
 let employeeId: number;
-let sent: { to: readonly string[]; subject: string }[];
+let sent: ({ to: readonly string[] } & MailMessage)[];
 
 const local = (iso: string) =>
   new Date(Date.parse(`${iso}:00.000Z`) - 6 * 3600_000);
@@ -66,10 +73,23 @@ beforeEach(async () => {
   sent = [];
   const mailer = h.app.get(Mailer);
   vi.spyOn(mailer, 'deliver').mockImplementation(async (to, message) => {
-    sent.push({ to, subject: message.subject });
+    sent.push({ to, ...message });
     return { outcome: 'sent' };
   });
 });
+
+/** Every cell of every sheet, as text */
+async function workbookText(content: Buffer): Promise<string> {
+  const wb = new Workbook();
+  await wb.xlsx.load(content as unknown as ArrayBuffer);
+  const cells: string[] = [];
+  wb.eachSheet((sheet) =>
+    sheet.eachRow((row) =>
+      row.eachCell((cell) => cells.push(String(cell.text))),
+    ),
+  );
+  return cells.join('\n');
+}
 
 const credited = (date: string, sec: number) =>
   h.prisma.dailySummary.upsert({
@@ -184,6 +204,12 @@ describe('the hours statement cycle', () => {
     await credited('2026-09-01', 28_800);
     await job.tick(local('2026-09-26T07:10')); // nobody hourly: no lines
     expect(await h.prisma.payPeriodLine.count()).toBe(0);
+    expect(
+      await h.prisma.payPeriod.findFirstOrThrow({
+        where: { snapshotAt: { not: null } },
+      }),
+    ).toMatchObject({ deliveryStatus: 'no_staff' });
+    expect(sent).toHaveLength(0);
 
     await h.prisma.employee.update({
       where: { id: employeeId },
@@ -199,6 +225,195 @@ describe('the hours statement cycle', () => {
       carryInSec: 0,
       toPostMin: 60,
     });
+  });
+
+  it('a statement frozen but never sent (a restart in between) goes out at the next run, once', async () => {
+    const job = h.app.get(HoursStatementJob);
+    await job.tick(local('2026-09-10T06:00'));
+    await credited('2026-09-01', 28_800);
+    const open = await h.prisma.payPeriod.findFirstOrThrow();
+    await h.app
+      .get(HoursStatementService)
+      .snapshot(open.id, local('2026-09-26T07:05'));
+    expect(
+      await h.prisma.payPeriod.findUniqueOrThrow({ where: { id: open.id } }),
+    ).toMatchObject({ deliveryStatus: 'pending', deliveryAttempts: 0 });
+
+    await job.tick(local('2026-09-26T08:10'));
+    await job.tick(local('2026-09-26T09:10'));
+    expect(sent).toHaveLength(1);
+    expect(
+      await h.prisma.payPeriod.findUniqueOrThrow({ where: { id: open.id } }),
+    ).toMatchObject({ deliveryStatus: 'sent', deliveryAttempts: 1 });
+  });
+
+  it('a period at the attempt limit is not retried again', async () => {
+    const job = h.app.get(HoursStatementJob);
+    const deliver = vi
+      .spyOn(h.app.get(Mailer), 'deliver')
+      .mockResolvedValue({ outcome: 'failed', error: 'timeout' });
+    deliver.mockClear(); // the spy outlives each test: count this test's calls only
+    await job.tick(local('2026-09-10T06:00'));
+    await credited('2026-09-01', 28_800);
+    await job.tick(local('2026-09-26T07:10'));
+    expect(deliver).toHaveBeenCalledTimes(1);
+
+    const period = await h.prisma.payPeriod.findFirstOrThrow({
+      where: { snapshotAt: { not: null } },
+    });
+    await h.prisma.payPeriod.update({
+      where: { id: period.id },
+      data: { deliveryAttempts: MAX_DELIVERY_ATTEMPTS },
+    });
+    await job.tick(local('2026-09-26T08:10'));
+    expect(deliver).toHaveBeenCalledTimes(1);
+    expect(
+      await h.prisma.payPeriod.findUniqueOrThrow({ where: { id: period.id } }),
+    ).toMatchObject({ deliveryAttempts: MAX_DELIVERY_ATTEMPTS });
+  });
+
+  it('no finance login and no extra address: no_recipients, nothing sent', async () => {
+    await h.prisma.user.update({
+      where: { email: 'fin@test.local' },
+      data: { isActive: false },
+    });
+    const job = h.app.get(HoursStatementJob);
+    await job.tick(local('2026-09-10T06:00'));
+    await credited('2026-09-01', 28_800);
+    await job.tick(local('2026-09-26T07:10'));
+    expect(sent).toHaveLength(0);
+    expect(
+      await h.prisma.payPeriod.findFirstOrThrow({
+        where: { snapshotAt: { not: null } },
+      }),
+    ).toMatchObject({ deliveryStatus: 'no_recipients' });
+  });
+
+  it('inactive with no leaving date gets no line; someone who left is cut at the leaving day, days too', async () => {
+    const { employeeId: gone } = await createEmployeeWithCode(h.prisma, 'HR-2');
+    await h.prisma.employee.update({
+      where: { id: gone },
+      data: {
+        fullName: 'Bea Gone',
+        payBasis: 'hourly',
+        status: 'inactive',
+        leftOn: day('2026-09-05'),
+      },
+    });
+    await h.prisma.employee.update({
+      where: { id: employeeId },
+      data: { status: 'inactive' },
+    });
+    for (const [date, sec] of [
+      ['2026-09-01', 3_600],
+      ['2026-09-10', 7_200],
+    ] as const) {
+      await h.prisma.dailySummary.create({
+        data: {
+          employeeId: gone,
+          workDate: day(date),
+          workedSec: sec,
+          creditedSec: sec,
+        },
+      });
+    }
+    await credited('2026-09-01', 28_800);
+
+    const job = h.app.get(HoursStatementJob);
+    await job.tick(local('2026-09-10T06:00'));
+    await job.tick(local('2026-09-26T07:10'));
+
+    const lines = await h.prisma.payPeriodLine.findMany();
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ employeeId: gone, measuredSec: 3_600 });
+    expect(lines[0].toDate.toISOString().slice(0, 10)).toBe('2026-09-05');
+
+    const text = await workbookText(sent[0].attachments![0].content);
+    expect(text).toContain('2026-09-01');
+    expect(text).not.toContain('2026-09-10');
+  });
+
+  it('the email and the spreadsheet carry hours only, never an amount', async () => {
+    await h.prisma.employee.update({
+      where: { id: employeeId },
+      data: { hourlyRate: '987.65' },
+    });
+    const job = h.app.get(HoursStatementJob);
+    await job.tick(local('2026-09-10T06:00'));
+    await credited('2026-09-01', 28_800);
+    await job.tick(local('2026-09-26T07:10'));
+
+    expect(sent).toHaveLength(1);
+    const { text, html, attachments } = sent[0];
+    const sheet = await workbookText(attachments![0].content);
+    for (const body of [text, html ?? '', sheet]) {
+      expect(body).toContain('Alex Silva');
+      expect(body).not.toMatch(/987|hourly ?rate|USD|\$/i);
+    }
+  });
+
+  it('a cutoff change during a snapshot rolls it back; the next run freezes the new range', async () => {
+    const job = h.app.get(HoursStatementJob);
+    const statements = h.app.get(HoursStatementService);
+    await job.tick(local('2026-09-10T06:00'));
+    const open = await h.prisma.payPeriod.findFirstOrThrow();
+    vi.spyOn(h.app.get(SummaryService), 'refreshDate').mockImplementationOnce(
+      async () => {
+        await statements.reanchorOpen(20);
+        return undefined as never;
+      },
+    );
+
+    await expect(
+      statements.snapshot(open.id, local('2026-09-26T07:05')),
+    ).rejects.toThrow(/changed while it was being frozen/);
+    const after = await h.prisma.payPeriod.findUniqueOrThrow({
+      where: { id: open.id },
+    });
+    expect(after.snapshotAt).toBeNull();
+    expect(after.endDate.toISOString().slice(0, 10)).toBe('2026-09-20');
+    expect(await h.prisma.payPeriodLine.count()).toBe(0);
+
+    await job.tick(local('2026-09-26T07:10'));
+    const line = await h.prisma.payPeriodLine.findFirstOrThrow();
+    expect(line.toDate.toISOString().slice(0, 10)).toBe('2026-09-20');
+  });
+
+  it('one period that cannot be resent does not keep the others from going out', async () => {
+    const job = h.app.get(HoursStatementJob);
+    const mailer = h.app.get(Mailer);
+    vi.spyOn(mailer, 'deliver').mockResolvedValue({
+      outcome: 'failed',
+      error: 'timeout',
+    });
+    await job.tick(local('2026-09-10T06:00'));
+    await credited('2026-09-01', 28_800);
+    await job.tick(local('2026-09-26T07:10'));
+    await credited('2026-10-01', 3_600);
+    await job.tick(local('2026-10-26T07:10'));
+    const [first, second] = await h.prisma.payPeriod.findMany({
+      where: { deliveryStatus: 'failed' },
+      orderBy: { startDate: 'asc' },
+    });
+    expect(second).toBeDefined();
+
+    vi.spyOn(mailer, 'deliver').mockImplementation(async (to, message) => {
+      sent.push({ to, ...message });
+      return { outcome: 'sent' };
+    });
+    vi.spyOn(
+      h.app.get(StatementDeliveryService),
+      'deliver',
+    ).mockRejectedValueOnce(new Error('boom'));
+    await job.tick(local('2026-10-26T08:10'));
+
+    expect(
+      await h.prisma.payPeriod.findUniqueOrThrow({ where: { id: first.id } }),
+    ).toMatchObject({ deliveryStatus: 'failed' });
+    expect(
+      await h.prisma.payPeriod.findUniqueOrThrow({ where: { id: second.id } }),
+    ).toMatchObject({ deliveryStatus: 'sent' });
+    expect(sent).toHaveLength(1);
   });
 
   // needs Task 7's endpoints: switch back to `it` there

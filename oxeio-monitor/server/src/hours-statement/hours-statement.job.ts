@@ -70,15 +70,27 @@ export class HoursStatementJob {
       open = await this.statements.ensureOpen(today, config.cutoffDay);
     }
 
-    const failed = await this.prisma.payPeriod.findMany({
+    // `pending`: frozen but never sent — a restart between the snapshot and
+    // the email (every release restarts the server) must not leave it unsent
+    const unsent = await this.prisma.payPeriod.findMany({
       where: {
-        deliveryStatus: 'failed',
+        snapshotAt: { not: null },
+        deliveryStatus: { in: ['pending', 'failed'] },
         deliveryAttempts: { lt: MAX_DELIVERY_ATTEMPTS },
       },
       select: { id: true },
+      orderBy: { startDate: 'asc' },
     });
-    for (const p of failed) {
-      if (!justSent.has(p.id)) await this.delivery.deliver(p.id);
+    for (const p of unsent) {
+      if (justSent.has(p.id)) continue;
+      // one period's trouble never keeps the others from being sent
+      try {
+        await this.delivery.deliver(p.id);
+      } catch (err) {
+        this.logger.error(
+          `Hours statement ${p.id} could not be resent: ${err instanceof Error ? err.message : err}`,
+        );
+      }
     }
   }
 }

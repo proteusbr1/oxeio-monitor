@@ -31,6 +31,29 @@ export class StatementDeliveryService {
   ) {}
 
   async deliver(periodId: number): Promise<StatementDelivery> {
+    let outcome: { status: StatementDelivery; error: string | null };
+    try {
+      outcome = await this.attempt(periodId);
+    } catch (err) {
+      const error = err instanceof Error ? err.message : 'unknown error';
+      this.logger.error(
+        `Hours statement ${periodId} could not be built: ${error}`,
+      );
+      outcome = { status: 'failed', error };
+    }
+    try {
+      return await this.record(periodId, outcome.status, outcome.error);
+    } catch (err) {
+      this.logger.error(
+        `Hours statement ${periodId}: the outcome (${outcome.status}) could not be stored: ${err instanceof Error ? err.message : err}`,
+      );
+      return outcome.status;
+    }
+  }
+
+  private async attempt(
+    periodId: number,
+  ): Promise<{ status: StatementDelivery; error: string | null }> {
     const period = await this.prisma.payPeriod.findUniqueOrThrow({
       where: { id: periodId },
       include: {
@@ -40,80 +63,69 @@ export class StatementDeliveryService {
         },
       },
     });
-    if (period.lines.length === 0)
-      return this.record(periodId, 'no_staff', null);
+    if (period.lines.length === 0) return { status: 'no_staff', error: null };
 
     const to = await this.recipients.for('hoursStatement');
-    if (to.length === 0) return this.record(periodId, 'no_recipients', null);
+    if (to.length === 0) return { status: 'no_recipients', error: null };
 
-    try {
-      const lang = (await this.settings.region()).language.value;
-      const org = (await this.settings.organization()).name;
-      const start = iso(period.startDate);
-      const end = iso(period.endDate);
-      const lines = period.lines.map((l) => ({
-        fullName: l.employee.fullName,
-        empCode: l.employee.empCode,
-        toPostMin: l.toPostMin,
-        carryInSec: l.carryInSec,
-        leaveDays: l.leaveDays,
-        holidayDays: l.holidayDays,
-        noDataDays: l.noDataDays,
-        fromDate: iso(l.fromDate),
-        toDate: iso(l.toDate),
-        measuredSec: l.measuredSec,
-      }));
-      const base = (
-        process.env.PUBLIC_URL?.trim() ||
-        process.env.CORS_ORIGIN?.trim() ||
-        ''
-      ).replace(/\/$/, '');
-      const mail = statementMail({
-        lang,
-        org,
-        start,
-        end,
-        lines,
-        link: base ? `${base}/hours?period=${period.id}` : null,
-      });
-      const file = await statementWorkbook({
-        start,
-        end,
-        lines,
-        days: await this.statements.days(
-          { start, end },
-          period.lines.map((l) => l.employeeId),
-        ),
-      });
+    const lang = (await this.settings.region()).language.value;
+    const org = (await this.settings.organization()).name;
+    const start = iso(period.startDate);
+    const end = iso(period.endDate);
+    const lines = period.lines.map((l) => ({
+      employeeId: l.employeeId,
+      fullName: l.employee.fullName,
+      empCode: l.employee.empCode,
+      toPostMin: l.toPostMin,
+      carryInSec: l.carryInSec,
+      leaveDays: l.leaveDays,
+      holidayDays: l.holidayDays,
+      noDataDays: l.noDataDays,
+      fromDate: iso(l.fromDate),
+      toDate: iso(l.toDate),
+      measuredSec: l.measuredSec,
+    }));
+    const base = (
+      process.env.PUBLIC_URL?.trim() ||
+      process.env.CORS_ORIGIN?.trim() ||
+      ''
+    ).replace(/\/$/, '');
+    const mail = statementMail({
+      lang,
+      org,
+      start,
+      end,
+      lines,
+      link: base ? `${base}/hours?period=${period.id}` : null,
+    });
+    const file = await statementWorkbook({
+      start,
+      end,
+      lines,
+      days: await this.statements.days(lines),
+    });
 
-      const result = await this.mailer.deliver(to, {
-        subject: mail.subject,
-        text: mail.text,
-        html: mail.html,
-        attachments: [
-          {
-            filename: `oxeio-hours-${start}_${end}.xlsx`,
-            content: file,
-            contentType: XLSX_MIME,
-          },
-        ],
-      });
-      return this.record(
-        periodId,
+    const result = await this.mailer.deliver(to, {
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
+      attachments: [
+        {
+          filename: `oxeio-hours-${start}_${end}.xlsx`,
+          content: file,
+          contentType: XLSX_MIME,
+        },
+      ],
+    });
+    return {
+      status:
         result.outcome === 'sent'
           ? 'sent'
           : result.outcome === 'not_configured'
             ? 'not_configured'
             : 'failed',
-        result.error ?? null,
-      );
-    } catch (err) {
-      const error = err instanceof Error ? err.message : 'unknown error';
-      this.logger.error(
-        `Hours statement ${periodId} could not be built: ${error}`,
-      );
-      return this.record(periodId, 'failed', error);
-    }
+      error: result.error ?? null,
+    };
   }
 
   private async record(
@@ -134,14 +146,21 @@ export class StatementDeliveryService {
       status === 'failed' &&
       period.deliveryAttempts >= MAX_DELIVERY_ATTEMPTS
     ) {
-      await this.alerts.raise({
-        type: 'statement_delivery_failed',
-        severity: 'warning',
-        deviceId: null,
-        employeeId: null,
-        title: 'The hours statement email could not be sent',
-        detail: `Period ${iso(period.startDate)} to ${iso(period.endDate)}: ${error ?? 'unknown error'}. Check Settings → Notifications, then resend it from the Hours statement screen.`,
-      });
+      // the outcome is stored above whatever happens to the alert
+      try {
+        await this.alerts.raise({
+          type: 'statement_delivery_failed',
+          severity: 'warning',
+          deviceId: null,
+          employeeId: null,
+          title: 'The hours statement email could not be sent',
+          detail: `Period ${iso(period.startDate)} to ${iso(period.endDate)}: ${error ?? 'unknown error'}. Check Settings → Notifications, then resend it from the Hours statement screen.`,
+        });
+      } catch (err) {
+        this.logger.error(
+          `Hours statement ${periodId}: the alert could not be raised: ${err instanceof Error ? err.message : err}`,
+        );
+      }
     }
     return status;
   }

@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { PayPeriod } from '@prisma/client';
+import { EmployeeStatus, type PayPeriod } from '@prisma/client';
 
 import { workClock } from '../agent/util/work-time';
 import { AuditService } from '../audit/audit.service';
@@ -77,8 +77,9 @@ export class HoursStatementService {
       orderBy: { startDate: 'desc' },
     });
     if (!open) return;
-    await this.prisma.payPeriod.update({
-      where: { id: open.id },
+    // `snapshotAt: null` again: a snapshot committed since the read above keeps its end
+    await this.prisma.payPeriod.updateMany({
+      where: { id: open.id, snapshotAt: null },
       data: { endDate: day(cutoffOnOrAfter(iso(open.startDate), cutoff)) },
     });
   }
@@ -90,6 +91,14 @@ export class HoursStatementService {
   }): Promise<ComputedLine[]> {
     const months = monthsTouched({ start: period.start, end: period.end });
     const staff = await this.prisma.employee.findMany({
+      // as payroll: active, or left on or after the period's first day (an
+      // inactive person with no leaving date would otherwise get an empty line every period)
+      where: {
+        OR: [
+          { status: EmployeeStatus.active },
+          { leftOn: { gte: day(period.start) } },
+        ],
+      },
       select: {
         id: true,
         empCode: true,
@@ -224,8 +233,23 @@ export class HoursStatementService {
       start: iso(period.startDate),
       end: iso(period.endDate),
     });
-    await this.prisma.$transaction([
-      this.prisma.payPeriodLine.createMany({
+    await this.prisma.$transaction(async (tx) => {
+      // Freezes only the period as it was read: if the cutoff moved its end
+      // meanwhile (reanchorOpen), the lines were cut at the old end — roll
+      // back and freeze it at the next run instead.
+      const frozen = await tx.payPeriod.updateMany({
+        where: { id: period.id, snapshotAt: null, endDate: period.endDate },
+        data: {
+          snapshotAt: now,
+          deliveryStatus: lines.length === 0 ? 'no_staff' : 'pending',
+        },
+      });
+      if (frozen.count !== 1) {
+        throw new ConflictException(
+          'The pay period changed while it was being frozen; it is frozen at the next run',
+        );
+      }
+      await tx.payPeriodLine.createMany({
         data: lines.map((l) => ({
           periodId: period.id,
           employeeId: l.employeeId,
@@ -238,15 +262,8 @@ export class HoursStatementService {
           holidayDays: l.holidayDays,
           noDataDays: l.noDataDays,
         })),
-      }),
-      this.prisma.payPeriod.update({
-        where: { id: period.id },
-        data: {
-          snapshotAt: now,
-          deliveryStatus: lines.length === 0 ? 'no_staff' : 'pending',
-        },
-      }),
-    ]);
+      });
+    });
   }
 
   /** A frozen period is locked once a later period was frozen too (its posted values fed a carry-over) */
@@ -318,15 +335,22 @@ export class HoursStatementService {
     });
   }
 
-  /** One person's days in a period, for the screen and the spreadsheet */
+  /**
+   * The days behind several people's lines, for the screen and the
+   * spreadsheet. Each person's rows are cut to their own range: a frozen
+   * line's from/to, or the employed range of a live one (`computeLines`) —
+   * so a day before joining or after leaving never shows.
+   */
   async days(
-    range: { start: string; end: string },
-    employeeIds: readonly number[],
+    people: readonly { employeeId: number; fromDate: string; toDate: string }[],
   ): Promise<StatementDayRow[]> {
+    if (people.length === 0) return [];
     const rows = await this.prisma.dailySummary.findMany({
       where: {
-        employeeId: { in: [...employeeIds] },
-        workDate: { gte: day(range.start), lte: day(range.end) },
+        OR: people.map((p) => ({
+          employeeId: p.employeeId,
+          workDate: { gte: day(p.fromDate), lte: day(p.toDate) },
+        })),
       },
       select: {
         workDate: true,
