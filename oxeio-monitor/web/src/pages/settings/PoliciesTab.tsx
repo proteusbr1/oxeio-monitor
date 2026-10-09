@@ -19,6 +19,7 @@ import { useT } from '../../i18n';
 import { HolidaysSection } from './HolidaysSection';
 import { measureBody, targetPreview } from './policy.math';
 import { PolicyMeasureFields } from './PolicyMeasureFields';
+import { PolicyScheduleFields, type ScheduleFormState } from './PolicyScheduleFields';
 import {
   CheckboxField,
   Chip,
@@ -398,6 +399,13 @@ function PolicyForm({
   const [deductShortfall, setDeductShortfall] = useState(policy?.deductShortfall !== false);
   const [measure, setMeasure] = useState<'active' | 'presence'>(policy?.hoursMeasure ?? 'active');
   const [gapMin, setGapMin] = useState(String(policy?.presenceGapMin ?? 15));
+  const [schedule, setSchedule] = useState<ScheduleFormState>({
+    scheduleEnforced: policy?.scheduleEnforced === true,
+    breakWindowFrom: policy?.breakWindowFrom ?? '',
+    breakWindowTo: policy?.breakWindowTo ?? '',
+    toleranceMarkMin: String(policy?.toleranceMarkMin ?? 0),
+    toleranceDayMin: String(policy?.toleranceDayMin ?? 0),
+  });
   const { features } = useFeatures();
   const t = useT();
 
@@ -436,7 +444,10 @@ function PolicyForm({
         targetBasis: basis,
         weeklyTargetHours: basis === 'week' ? Number(form.weeklyTargetHours) : undefined,
         dailyTargetHours: basis === 'day' ? Number(form.dailyTargetHours) : undefined,
-        breakMinutes: basis === 'day' && form.breakMinutes !== '' ? Number(form.breakMinutes) : undefined,
+        breakMinutes:
+          (basis === 'day' || schedule.scheduleEnforced) && form.breakMinutes !== ''
+            ? Number(form.breakMinutes)
+            : undefined,
         overtimeMultiplier: form.overtimeMultiplier.trim() === '' ? null : Number(form.overtimeMultiplier),
         deductShortfall,
         monthlyTargetHours: Number(form.monthlyTargetHours),
@@ -453,6 +464,11 @@ function PolicyForm({
         idleThresholdSec: Number(form.idleThresholdSec),
         slotMinutes: Number(form.slotMinutes),
         ...measureBody(measure, gapMin, policy?.presenceGapMin),
+        scheduleEnforced: schedule.scheduleEnforced,
+        breakWindowFrom: schedule.breakWindowFrom || null,
+        breakWindowTo: schedule.breakWindowTo || null,
+        toleranceMarkMin: Number(schedule.toleranceMarkMin),
+        toleranceDayMin: Number(schedule.toleranceDayMin),
       };
 
       if (policy) {
@@ -568,15 +584,18 @@ function PolicyForm({
                 max={24}
                 step="0.25"
               />
-              <TextField
-                label={t('Break (minutes)')}
-                type="number"
-                value={form.breakMinutes}
-                onChange={set('breakMinutes')}
-                mono
-                min={0}
-                max={480}
-              />
+              {/* with the schedule on, the break field is the one in PolicyScheduleFields */}
+              {!schedule.scheduleEnforced && (
+                <TextField
+                  label={t('Break (minutes)')}
+                  type="number"
+                  value={form.breakMinutes}
+                  onChange={set('breakMinutes')}
+                  mono
+                  min={0}
+                  max={480}
+                />
+              )}
               <FullWidth>
                 {(() => {
                   const span = minutesBetween(form.officeFrom, form.officeTo) - Number(form.breakMinutes || 0);
@@ -684,6 +703,12 @@ function PolicyForm({
             onChange={set('officeTo')}
             mono
             hint={t('Outside these hours — and on the weekly off day and holidays — a quiet PC raises no alert. Hours worked outside them still count in full.')}
+          />
+          <PolicyScheduleFields
+            state={schedule}
+            onChange={setSchedule}
+            breakMinutes={form.breakMinutes}
+            onBreakMinutes={set('breakMinutes')}
           />
 
           <TextField

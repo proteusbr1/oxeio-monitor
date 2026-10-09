@@ -9,6 +9,7 @@ import { SetupPage } from './pages/setup/SetupPage';
 import { getSetupStatus } from './api/setup';
 import { useApi } from './api/useApi';
 import { WorklogPage } from './pages/worklog/WorklogPage';
+import { SchedulePage } from './pages/schedule/SchedulePage';
 import { ChangePasswordPage } from './pages/account/ChangePasswordPage';
 import { EmployeeDetailPage } from './pages/staff/EmployeeDetailPage';
 import { StaffPage } from './pages/staff/StaffPage';
@@ -244,6 +245,7 @@ function Router() {
           but gets "nothing here" when clicking.
         */}
         {mayOpenWorklog && <Route path="worklog" element={<WorklogPage />} />}
+        {mayOpenWorklog && <Route path="schedule" element={<SchedulePage />} />}
         {isOwner && <Route path="payroll" element={<PayrollPage />} />}
         {/* deposits are a tab of the Payroll page now */}
         {isOwner && features.deposits && (

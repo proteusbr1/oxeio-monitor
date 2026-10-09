@@ -45,6 +45,14 @@ export interface WorkPolicyView {
   hoursMeasure: 'active' | 'presence';
   /** with `presence`: the longest pause (minutes) that still counts */
   presenceGapMin: number;
+  /** the working hours above are checked every workday: arrival, leaving, the break */
+  scheduleEnforced: boolean;
+  /** `'HH:MM'` window the break must start in; both null = anywhere in the working day */
+  breakWindowFrom: string | null;
+  breakWindowTo: string | null;
+  /** minutes ignored at each clock mark, and in total per day */
+  toleranceMarkMin: number;
+  toleranceDayMin: number;
   timezone: string;
   isActive: boolean;
   /** Check this before deactivating: if anyone is still assigned, the server refuses. */
@@ -73,6 +81,11 @@ export type WorkPolicyBody = Partial<{
   slotMinutes: number;
   hoursMeasure: 'active' | 'presence';
   presenceGapMin: number;
+  scheduleEnforced: boolean;
+  breakWindowFrom: string | null;
+  breakWindowTo: string | null;
+  toleranceMarkMin: number;
+  toleranceDayMin: number;
 }>;
 export function listWorkPolicies(
   signal?: AbortSignal,

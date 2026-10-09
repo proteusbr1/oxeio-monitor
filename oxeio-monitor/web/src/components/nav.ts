@@ -85,6 +85,12 @@ export const NAV: NavItem[] = [
     label: 'Worklog',
     roles: ['owner', 'manager'],
   },
+  /** Schedule compliance: who arrived late, left early or skipped the break */
+  {
+    to: '/schedule',
+    label: 'Schedule',
+    roles: ['owner', 'manager'],
+  },
   /**
    * Tasks: the coordinator's daily pages.
    *

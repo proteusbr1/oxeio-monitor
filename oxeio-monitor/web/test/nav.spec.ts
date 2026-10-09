@@ -74,3 +74,11 @@ describe('navFor — other modules', () => {
     expect(staff).toContain('/me');
   });
 });
+
+describe('navFor — Schedule', () => {
+  it('owner and manager see it; staff do not', () => {
+    expect(paths(user())).toContain('/schedule');
+    expect(paths(user({ role: 'manager' }))).toContain('/schedule');
+    expect(paths(user({ role: 'employee' }))).not.toContain('/schedule');
+  });
+});
