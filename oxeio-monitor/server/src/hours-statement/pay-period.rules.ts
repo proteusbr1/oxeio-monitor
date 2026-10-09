@@ -5,7 +5,9 @@
  * with cutoff 25, 26 September – 25 October. "end" means the last day of the
  * month (the calendar month). A period always starts the day after the
  * previous one ended, so changing the cutoff never skips or repeats a day —
- * the period after the change is simply shorter or longer.
+ * the period after the change is simply shorter or longer. (Before anything
+ * was frozen, a new cutoff re-anchors the first period on today instead:
+ * nothing was stated yet, so nothing can be skipped or repeated.)
  *
  * The statement goes out the day after the cutoff at the send time, once that
  * day's hours are complete.
@@ -94,7 +96,7 @@ export function cutoffOnOrAfter(date: string, cutoff: CutoffDay): string {
     : cutoffIn(shiftMonth(date.slice(0, 7), 1), cutoff);
 }
 
-/** The period holding `date` — used only for the very first period */
+/** The period holding `date` — the very first period, and its re-anchoring on a new cutoff while nothing is frozen yet */
 export function periodHolding(date: string, cutoff: CutoffDay): PeriodRange {
   const end = cutoffOnOrAfter(date, cutoff);
   const previous = cutoffIn(shiftMonth(end.slice(0, 7), -1), cutoff);
@@ -107,6 +109,25 @@ export function periodAfter(lastEnd: string, cutoff: CutoffDay): PeriodRange {
   return { start, end: cutoffOnOrAfter(start, cutoff) };
 }
 
+/**
+ * Minutes from a period's send moment (the day after `end`, at `sendTime`)
+ * to now: negative before it. `today` and `nowMin` (minutes since midnight)
+ * are the work zone's.
+ */
+export function minutesPastSend(
+  end: string,
+  today: string,
+  nowMin: number,
+  sendTime: string,
+): number {
+  const days =
+    (Date.parse(`${today}T00:00:00.000Z`) -
+      Date.parse(`${addDays(end, 1)}T00:00:00.000Z`)) /
+    DAY_MS;
+  const [h, m] = sendTime.split(':').map(Number);
+  return days * 1440 + nowMin - (h * 60 + m);
+}
+
 /** `today` and `nowMin` (minutes since midnight) are the work zone's */
 export function isDue(
   end: string,
@@ -114,8 +135,5 @@ export function isDue(
   nowMin: number,
   sendTime: string,
 ): boolean {
-  const sendDay = addDays(end, 1);
-  if (today !== sendDay) return today > sendDay;
-  const [h, m] = sendTime.split(':').map(Number);
-  return nowMin >= h * 60 + m;
+  return minutesPastSend(end, today, nowMin, sendTime) >= 0;
 }

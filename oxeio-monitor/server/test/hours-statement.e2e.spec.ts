@@ -1,5 +1,6 @@
 import {
   afterAll,
+  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -48,6 +49,10 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   await h.close();
+});
+// a spy that throws must not outlive its test
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 beforeEach(async () => {
   await resetDatabase(h.prisma, h.app);
@@ -357,11 +362,16 @@ describe('the hours statement cycle', () => {
   it('a cutoff change during a snapshot rolls it back; the next run freezes the new range', async () => {
     const job = h.app.get(HoursStatementJob);
     const statements = h.app.get(HoursStatementService);
-    await job.tick(local('2026-09-10T06:00'));
-    const open = await h.prisma.payPeriod.findFirstOrThrow();
+    // one period frozen already: a cutoff change moves only the open end
+    await job.tick(local('2026-08-10T06:00'));
+    await job.tick(local('2026-08-26T07:10'));
+    const open = await h.prisma.payPeriod.findFirstOrThrow({
+      where: { snapshotAt: null },
+    });
+    expect(open.startDate.toISOString().slice(0, 10)).toBe('2026-08-26');
     vi.spyOn(h.app.get(SummaryService), 'refreshDate').mockImplementationOnce(
       async () => {
-        await statements.reanchorOpen(20);
+        await statements.reanchorOpen(20, '2026-09-26');
         return undefined as never;
       },
     );
@@ -374,11 +384,90 @@ describe('the hours statement cycle', () => {
     });
     expect(after.snapshotAt).toBeNull();
     expect(after.endDate.toISOString().slice(0, 10)).toBe('2026-09-20');
-    expect(await h.prisma.payPeriodLine.count()).toBe(0);
+    expect(
+      await h.prisma.payPeriodLine.count({ where: { periodId: open.id } }),
+    ).toBe(0);
 
     await job.tick(local('2026-09-26T07:10'));
-    const line = await h.prisma.payPeriodLine.findFirstOrThrow();
+    const line = await h.prisma.payPeriodLine.findFirstOrThrow({
+      where: { periodId: open.id },
+    });
     expect(line.toDate.toISOString().slice(0, 10)).toBe('2026-09-20');
+  });
+
+  it('a snapshot that throws does not keep a failed statement from being retried', async () => {
+    const job = h.app.get(HoursStatementJob);
+    const mailer = h.app.get(Mailer);
+    vi.spyOn(mailer, 'deliver').mockResolvedValue({
+      outcome: 'failed',
+      error: 'timeout',
+    });
+    await job.tick(local('2026-09-10T06:00'));
+    await credited('2026-09-01', 28_800);
+    await job.tick(local('2026-09-26T07:10'));
+    const first = await h.prisma.payPeriod.findFirstOrThrow({
+      where: { deliveryStatus: 'failed' },
+    });
+
+    vi.spyOn(mailer, 'deliver').mockImplementation(async (to, message) => {
+      sent.push({ to, ...message });
+      return { outcome: 'sent' };
+    });
+    vi.spyOn(h.app.get(HoursStatementService), 'snapshot').mockRejectedValue(
+      new Error('database gone'),
+    );
+    await expect(job.tick(local('2026-10-26T07:10'))).resolves.toBeUndefined();
+
+    expect(
+      await h.prisma.payPeriod.findUniqueOrThrow({ where: { id: first.id } }),
+    ).toMatchObject({ deliveryStatus: 'sent' });
+    expect(
+      await h.prisma.payPeriod.count({ where: { snapshotAt: null } }),
+    ).toBe(1);
+  });
+
+  it('a period still not frozen 3 hours after its send moment raises an alert', async () => {
+    const job = h.app.get(HoursStatementJob);
+    await job.tick(local('2026-09-10T06:00'));
+    vi.spyOn(h.app.get(HoursStatementService), 'snapshot').mockRejectedValue(
+      new Error('database gone'),
+    );
+    const alerts = () =>
+      h.prisma.alert.findMany({
+        where: { type: 'statement_delivery_failed' },
+      });
+
+    await job.tick(local('2026-09-26T07:10'));
+    await job.tick(local('2026-09-26T09:10'));
+    expect(await alerts()).toHaveLength(0);
+
+    await job.tick(local('2026-09-26T10:10'));
+    const raised = await alerts();
+    expect(raised).toHaveLength(1);
+    expect(raised[0].title).toBe('The hours statement could not be prepared');
+    expect(sent).toHaveLength(0);
+  });
+
+  it('a concurrent drain that already cleared a dirty mark does not abort the freeze', async () => {
+    const job = h.app.get(HoursStatementJob);
+    const summary = h.app.get(SummaryService);
+    await job.tick(local('2026-09-10T06:00'));
+    await credited('2026-09-01', 28_800);
+    await h.prisma.summaryDirty.create({
+      data: { workDate: day('2026-09-02') },
+    });
+    const refresh = summary.refreshDate.bind(summary);
+    vi.spyOn(summary, 'refreshDate').mockImplementation(async (date, now) => {
+      // another drain (the summary cron) counts the same day and clears it first
+      await h.prisma.summaryDirty.deleteMany({ where: { workDate: date } });
+      return refresh(date, now);
+    });
+
+    await job.tick(local('2026-09-26T07:10'));
+    expect(
+      await h.prisma.payPeriod.count({ where: { snapshotAt: { not: null } } }),
+    ).toBe(1);
+    expect(sent).toHaveLength(1);
   });
 
   it('one period that cannot be resent does not keep the others from going out', async () => {
@@ -581,8 +670,10 @@ describe('hours statement endpoints', () => {
     expect(sent).toHaveLength(1);
   });
 
-  it('changing the cutoff stretches the open period', async () => {
-    await h.app.get(HoursStatementJob).tick(local('2026-10-09T10:00'));
+  it('changing the cutoff after a period was frozen moves only the open end', async () => {
+    const job = h.app.get(HoursStatementJob);
+    await job.tick(local('2026-09-10T06:00'));
+    await job.tick(local('2026-09-26T07:10'));
     const res = await owner.http
       .put('/api/v1/settings/pay-period')
       .set('X-CSRF-Token', owner.csrf)
@@ -599,6 +690,16 @@ describe('hours statement endpoints', () => {
     await fin.http.get('/api/v1/settings/pay-period').expect(403);
   });
 
+  it('saving the same cutoff (only the send time changed) leaves the open period as it is', async () => {
+    await h.app.get(HoursStatementJob).tick(local('2026-10-09T10:00'));
+    const res = await owner.http
+      .put('/api/v1/settings/pay-period')
+      .set('X-CSRF-Token', owner.csrf)
+      .send({ cutoffDay: 25, sendTime: '08:00' })
+      .expect(200);
+    expect(res.body.open).toEqual({ start: '2026-09-26', end: '2026-10-25' });
+  });
+
   it('the file downloads', async () => {
     await h.app.get(HoursStatementJob).tick(local('2026-09-10T06:00'));
     await credited('2026-09-01', 3_600);
@@ -607,5 +708,44 @@ describe('hours statement endpoints', () => {
       .get(`/api/v1/hours-statement/periods/${period.id}/file`)
       .expect(200);
     expect(res.headers['content-type']).toContain('spreadsheetml');
+  });
+});
+
+describe('setting the cutoff before the first period is frozen', () => {
+  const ranges = async () =>
+    (await h.prisma.payPeriod.findMany({ orderBy: { startDate: 'asc' } })).map(
+      (p) => [
+        p.startDate.toISOString().slice(0, 10),
+        p.endDate.toISOString().slice(0, 10),
+        p.snapshotAt === null ? 'open' : 'frozen',
+      ],
+    );
+  const useCutoff = (cutoffDay: 25 | 'end') =>
+    h.app
+      .get(AppSettingsService)
+      .replace('payPeriod', { cutoffDay, sendTime: '07:00' }, 1);
+
+  it('first run with the default end of month, cutoff 25 set on 9 October: the period holding today', async () => {
+    await useCutoff('end');
+    await h.app.get(HoursStatementJob).tick(local('2026-10-09T10:00'));
+    expect(await ranges()).toEqual([['2026-10-01', '2026-10-31', 'open']]);
+
+    await useCutoff(25);
+    await h.app.get(HoursStatementService).reanchorOpen(25, '2026-10-09');
+    expect(await ranges()).toEqual([['2026-09-26', '2026-10-25', 'open']]);
+  });
+
+  it('cutoff 25 set on 28 October: 26 October – 25 November, nothing frozen or emailed', async () => {
+    await useCutoff('end');
+    const job = h.app.get(HoursStatementJob);
+    await job.tick(local('2026-10-28T10:00'));
+    await credited('2026-10-02', 3_600);
+
+    await useCutoff(25);
+    await h.app.get(HoursStatementService).reanchorOpen(25, '2026-10-28');
+    await job.tick(local('2026-10-28T11:10'));
+    expect(await ranges()).toEqual([['2026-10-26', '2026-11-25', 'open']]);
+    expect(await h.prisma.payPeriodLine.count()).toBe(0);
+    expect(sent).toHaveLength(0);
   });
 });

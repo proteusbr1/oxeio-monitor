@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 
+import { workDateOf } from '../agent/util/work-time';
 import { AuditService } from '../audit/audit.service';
 import { CurrentUser, Roles } from '../auth/decorators';
 import type { SessionUser } from '../auth/types';
@@ -65,12 +66,20 @@ export class PayPeriodController {
       cutoffDay: body.cutoffDay as PayPeriodConfig['cutoffDay'],
       sendTime: body.sendTime as string,
     };
+    const before = await this.settings.payPeriod();
     await this.settings.replace(
       PAY_PERIOD_SETTING_KEY,
       { ...next },
       actor.userId,
     );
-    await this.statements.reanchorOpen(next.cutoffDay);
+    // only a new cutoff moves the open period (saving the send time alone
+    // must not re-anchor a first period that ended and awaits its freeze)
+    if (before.cutoffDay !== next.cutoffDay) {
+      await this.statements.reanchorOpen(
+        next.cutoffDay,
+        workDateOf(new Date()).toISOString().slice(0, 10),
+      );
+    }
     await this.audit.record({
       userId: actor.userId,
       action: 'change_setting',

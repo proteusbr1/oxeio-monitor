@@ -19,7 +19,7 @@ import {
   type RegimeInput,
 } from './work-policy.rules';
 import { workDateOf } from '../agent/util/work-time';
-import { datesToRecount, markDirty } from '../summary/recount';
+import { markDirty, policyRecountDates } from '../summary/recount';
 import { DEFAULT_PRESENCE_GAP_SEC } from '../summary/summary.math';
 import { normaliseOffDays } from '../summary/weekly-off';
 
@@ -278,7 +278,7 @@ export class WorkPoliciesService {
           normaliseOffDays(dto.weeklyOffDays).join() !== normaliseOffDays(before.weeklyOffDays).join()));
     if (measureChanged || scheduleChanged) {
       // credited time or the schedule check changes for everyone on this policy: count the open months again
-      await markDirty(this.prisma, datesToRecount(workDateOf(new Date())));
+      await markDirty(this.prisma, await policyRecountDates(this.prisma, workDateOf(new Date())));
     }
 
     await this.audit.record({

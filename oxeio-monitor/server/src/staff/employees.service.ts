@@ -18,7 +18,7 @@ import { ADMIN_TARGET } from '../audit/admin-audit';
 import { parseCalendarDate } from '../calendar/calendar-date';
 import { MEASURE_SELECT, sameMeasure } from '../calendar/work-regime';
 import { SCHEDULE_SELECT, sameSchedule, schedulePolicyOf } from '../schedule/schedule-policy';
-import { datesToRecount, markDirty } from '../summary/recount';
+import { markDirty, policyRecountDates } from '../summary/recount';
 import type { CreateEmployeeDto, DeactivateEmployeeDto, EmployeeListQueryDto, UpdateEmployeeDto } from './staff.dto';
 import {
   canSeeSalary,
@@ -684,9 +684,9 @@ export class EmployeesService {
     });
   }
 
-  /** Count the open months again: what this person's days were checked against changed */
+  /** Count the open months again (never a frozen pay period's days): what this person's days were checked against changed */
   private async recountOpenMonths(): Promise<void> {
-    await markDirty(this.prisma, datesToRecount(workDateOf(new Date())));
+    await markDirty(this.prisma, await policyRecountDates(this.prisma, workDateOf(new Date())));
   }
 
   private async assertPolicyExists(policyId?: number): Promise<void> {

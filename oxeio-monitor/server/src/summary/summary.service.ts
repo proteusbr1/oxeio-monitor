@@ -146,8 +146,10 @@ export class SummaryService {
       }
 
       // Careful: the mark is cleared **after counting**, so if it stops midway
-      // the day comes again in the next tick.
-      await this.prisma.summaryDirty.delete({
+      // the day comes again in the next tick. `deleteMany`: another drain
+      // running at the same time (the hourly statement's freeze, the summary
+      // cron) may have cleared it already, and that must not abort this one.
+      await this.prisma.summaryDirty.deleteMany({
         where: { workDate: mark.workDate },
       });
     }

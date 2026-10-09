@@ -12,15 +12,24 @@ export function monthsTouched(range: PeriodRange): string[] {
   return out;
 }
 
+/** The last day of a 'YYYY-MM' month */
+function monthEnd(yearMonth: string): string {
+  const [y, m] = yearMonth.split('-').map(Number);
+  return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+}
+
 /**
- * Paid by the hour in any month the period touches. Reads the basis only:
- * this module never selects an amount.
+ * The days of `range` that fall in months this person was paid by the hour:
+ * from the first such day to the last (a period touches at most three
+ * months), or `null` when none is. A pay-basis change takes effect from a
+ * month, so a period across two months may count only one of them. Reads the
+ * basis only: this module never selects an amount.
  */
-export function hourlyInPeriod(
-  months: readonly string[],
+export function hourlyRange(
+  range: PeriodRange,
   currentBasis: PayBasisName,
   slices: readonly { throughMonth: string; payBasis: PayBasisName }[],
-): boolean {
+): PeriodRange | null {
   const current = {
     payBasis: currentBasis,
     monthlySalary: null,
@@ -31,9 +40,16 @@ export function hourlyInPeriod(
     monthlySalary: null,
     hourlyRate: null,
   }));
-  return months.some(
+  const hourly = monthsTouched(range).filter(
     (month) => payTermsForMonth(month, current, history).payBasis === 'hourly',
   );
+  if (hourly.length === 0) return null;
+  const first = `${hourly[0]}-01`;
+  const last = monthEnd(hourly[hourly.length - 1]);
+  return {
+    start: first > range.start ? first : range.start,
+    end: last < range.end ? last : range.end,
+  };
 }
 
 export function employedRange(

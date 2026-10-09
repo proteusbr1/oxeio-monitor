@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   countDays,
   employedRange,
-  hourlyInPeriod,
+  hourlyRange,
   monthsTouched,
 } from '../src/hours-statement/statement.rules';
 
@@ -19,23 +19,38 @@ describe('monthsTouched', () => {
   });
 });
 
-describe('hourlyInPeriod — from the pay terms history, basis only', () => {
-  it('hourly now and no history', () => {
-    expect(hourlyInPeriod(['2026-09', '2026-10'], 'hourly', [])).toBe(true);
+describe('hourlyRange — the days of the period in months paid by the hour, basis only', () => {
+  const period = { start: '2026-09-26', end: '2026-10-25' };
+  it('hourly now and no history: the whole period', () => {
+    expect(hourlyRange(period, 'hourly', [])).toEqual(period);
   });
-  it('monthly until September, hourly from October: in the 26/09–25/10 period', () => {
+  it('monthly until September, hourly from October: the line starts on 1 October', () => {
     expect(
-      hourlyInPeriod(['2026-09', '2026-10'], 'hourly', [
+      hourlyRange(period, 'hourly', [
         { throughMonth: '2026-09', payBasis: 'monthly' },
       ]),
-    ).toBe(true);
+    ).toEqual({ start: '2026-10-01', end: '2026-10-25' });
   });
-  it('hourly until August, monthly since: not in the September–October period', () => {
+  it('hourly until October, monthly from November: the line ends on 31 October', () => {
     expect(
-      hourlyInPeriod(['2026-09', '2026-10'], 'monthly', [
+      hourlyRange({ start: '2026-10-26', end: '2026-11-25' }, 'monthly', [
+        { throughMonth: '2026-10', payBasis: 'hourly' },
+      ]),
+    ).toEqual({ start: '2026-10-26', end: '2026-10-31' });
+  });
+  it('hourly until August, monthly since: no line in the September–October period', () => {
+    expect(
+      hourlyRange(period, 'monthly', [
         { throughMonth: '2026-08', payBasis: 'hourly' },
       ]),
-    ).toBe(false);
+    ).toBeNull();
+  });
+  it('a period inside one month follows that month', () => {
+    expect(
+      hourlyRange({ start: '2026-10-01', end: '2026-10-31' }, 'hourly', [
+        { throughMonth: '2026-10', payBasis: 'monthly' },
+      ]),
+    ).toBeNull();
   });
 });
 

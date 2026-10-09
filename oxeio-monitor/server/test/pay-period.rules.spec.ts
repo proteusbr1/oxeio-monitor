@@ -4,6 +4,7 @@ import {
   addDays,
   cutoffOnOrAfter,
   isDue,
+  minutesPastSend,
   payPeriodProblem,
   periodAfter,
   periodHolding,
@@ -106,5 +107,16 @@ describe('isDue — the day after the end, at the send time', () => {
     expect(isDue(end, '2026-10-26', 7 * 60, '07:00')).toBe(true);
     expect(isDue(end, '2026-10-26', 15 * 60 + 10, '07:00')).toBe(true);
     expect(isDue(end, '2026-11-02', 0, '07:00')).toBe(true);
+  });
+});
+
+describe('minutesPastSend — how late a period is against its send moment', () => {
+  const end = '2026-10-25';
+  it('negative before the send moment, 0 at it, counting across days', () => {
+    expect(minutesPastSend(end, '2026-10-26', 6 * 60, '07:00')).toBe(-60);
+    expect(minutesPastSend(end, '2026-10-26', 7 * 60, '07:00')).toBe(0);
+    expect(minutesPastSend(end, '2026-10-26', 10 * 60 + 10, '07:00')).toBe(190);
+    expect(minutesPastSend(end, '2026-10-27', 0, '23:00')).toBe(60);
+    expect(minutesPastSend(end, '2026-10-25', 23 * 60, '07:00')).toBe(-480);
   });
 });

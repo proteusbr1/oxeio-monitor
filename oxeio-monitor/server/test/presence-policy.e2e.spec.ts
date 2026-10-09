@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { SummaryService } from '../src/summary/summary.service';
+import { workNoon, workTodayIso } from './setup/clock';
 import {
   createEmployeeWithCode,
   createHarness,
@@ -30,6 +31,30 @@ beforeEach(async () => {
 const patch = (path: string, body: object) =>
   owner.http.patch(`/api/v1${path}`).set('X-CSRF-Token', owner.csrf).send(body);
 
+const DAY_MS = 86_400_000;
+
+/** A pay period frozen through three days ago (work zone): days up to then are stated */
+async function frozenThroughThreeDaysAgo(): Promise<Date> {
+  const end = new Date(
+    Date.parse(`${workTodayIso()}T00:00:00.000Z`) - 3 * DAY_MS,
+  );
+  await h.prisma.payPeriod.create({
+    data: {
+      startDate: new Date(end.getTime() - 20 * DAY_MS),
+      endDate: end,
+      snapshotAt: workNoon(-2),
+      deliveryStatus: 'sent',
+    },
+  });
+  return end;
+}
+
+/** The days queued for recount, oldest first */
+const queued = async () =>
+  (await h.prisma.summaryDirty.findMany({ orderBy: { workDate: 'asc' } })).map(
+    (d) => d.workDate.getTime(),
+  );
+
 describe('the measure on the policy', () => {
   it('defaults to active, 15 minutes', async () => {
     const res = await owner.http.get('/api/v1/work-policies').expect(200);
@@ -46,6 +71,17 @@ describe('the measure on the policy', () => {
       presenceGapMin: 20,
     }).expect(200);
     expect(await h.prisma.summaryDirty.count()).toBeGreaterThanOrEqual(28);
+  });
+
+  it('with a frozen pay period, a measure change counts again only the days after it', async () => {
+    const end = await frozenThroughThreeDaysAgo();
+    const policy = await h.prisma.workPolicy.findFirstOrThrow();
+    await patch(`/work-policies/${policy.id}`, {
+      hoursMeasure: 'presence',
+    }).expect(200);
+    const days = await queued();
+    expect(days[0]).toBe(end.getTime() + DAY_MS);
+    expect(days).toHaveLength(3);
   });
 
   it('a save that does not touch the measure queues nothing', async () => {
@@ -184,6 +220,18 @@ describe('moving a person to another policy', () => {
       200,
     );
     expect(await h.prisma.summaryDirty.count()).toBeGreaterThanOrEqual(28);
+  });
+
+  it('with a frozen pay period, moving a person counts again only the days after it', async () => {
+    const end = await frozenThroughThreeDaysAgo();
+    const { employeeId } = await createEmployeeWithCode(h.prisma);
+    const presence = await secondPolicy('presence');
+    await patch(`/employees/${employeeId}`, { policyId: presence.id }).expect(
+      200,
+    );
+    const days = await queued();
+    expect(days[0]).toBe(end.getTime() + DAY_MS);
+    expect(days).toHaveLength(3);
   });
 
   it('between two presence policies with different gaps queues the open months', async () => {

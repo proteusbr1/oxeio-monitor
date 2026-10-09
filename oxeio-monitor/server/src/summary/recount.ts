@@ -21,6 +21,29 @@ export function datesToRecount(today: Date): Date[] {
 }
 
 /**
+ * Which days a policy-driven recount (a measure, schedule or gap change, a
+ * person moved to another policy) counts again: the open months, but never a
+ * day inside a frozen pay period (`hours-statement/`). Those hours were
+ * stated to finance; re-crediting them would show up as a carry-over that
+ * nobody worked for. Leave and holiday corrections still mark their own days
+ * (`markDirty`): they are deliberate, dated corrections.
+ */
+export async function policyRecountDates(
+  prisma: { payPeriod: Pick<PrismaClient['payPeriod'], 'findFirst'> },
+  today: Date,
+): Promise<Date[]> {
+  const frozen = await prisma.payPeriod.findFirst({
+    where: { snapshotAt: { not: null } },
+    orderBy: { endDate: 'desc' },
+    select: { endDate: true },
+  });
+  const dates = datesToRecount(today);
+  if (!frozen) return dates;
+  const lastStated = frozen.endDate.getTime();
+  return dates.filter((d) => d.getTime() > lastStated);
+}
+
+/**
  * Queues days for the dirty drain (`SummaryService.drainDirty`) after
  * something they were counted from changed: a policy's measure or schedule,
  * leave, a holiday, a person's first or last day. The one place that writes

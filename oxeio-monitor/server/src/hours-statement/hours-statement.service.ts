@@ -20,8 +20,7 @@ import {
 import {
   countDays,
   employedRange,
-  hourlyInPeriod,
-  monthsTouched,
+  hourlyRange,
   type PayBasisName,
 } from './statement.rules';
 import type { StatementDayRow } from './statement-sheet';
@@ -70,17 +69,35 @@ export class HoursStatementService {
     });
   }
 
-  /** After the cutoff changes, the open period ends at the new cutoff (it never moves its start) */
-  async reanchorOpen(cutoff: CutoffDay): Promise<void> {
+  /**
+   * After the cutoff changes. Before any period was frozen, the open period
+   * becomes the one holding `today` under the new cutoff — start and end:
+   * the first period was cut by the default cutoff, nothing of it was stated
+   * yet, and keeping its start could leave it already ended (frozen and
+   * emailed at the next run) or skip the days before it. Once a period was
+   * frozen, only the open period's end moves (it always starts the day after
+   * the last frozen one). `today` is the work zone's date.
+   */
+  async reanchorOpen(cutoff: CutoffDay, today: string): Promise<void> {
     const open = await this.prisma.payPeriod.findFirst({
       where: { snapshotAt: null },
       orderBy: { startDate: 'desc' },
     });
     if (!open) return;
-    // `snapshotAt: null` again: a snapshot committed since the read above keeps its end
+    const frozen = await this.prisma.payPeriod.count({
+      where: { snapshotAt: { not: null } },
+    });
+    const range =
+      frozen === 0
+        ? periodHolding(today, cutoff)
+        : {
+            start: iso(open.startDate),
+            end: cutoffOnOrAfter(iso(open.startDate), cutoff),
+          };
+    // `snapshotAt: null` again: a snapshot committed since the read above keeps its range
     await this.prisma.payPeriod.updateMany({
       where: { id: open.id, snapshotAt: null },
-      data: { endDate: day(cutoffOnOrAfter(iso(open.startDate), cutoff)) },
+      data: { startDate: day(range.start), endDate: day(range.end) },
     });
   }
 
@@ -89,7 +106,6 @@ export class HoursStatementService {
     start: string;
     end: string;
   }): Promise<ComputedLine[]> {
-    const months = monthsTouched({ start: period.start, end: period.end });
     const staff = await this.prisma.employee.findMany({
       // as payroll: active, or left on or after the period's first day (an
       // inactive person with no leaving date would otherwise get an empty line every period)
@@ -120,19 +136,19 @@ export class HoursStatementService {
     const holidaySet = new Set(holidays.map((x) => iso(x.holidayDate)));
 
     for (const e of staff) {
-      if (
-        !hourlyInPeriod(
-          months,
-          e.payBasis as PayBasisName,
-          e.salaryPeriods as { throughMonth: string; payBasis: PayBasisName }[],
-        )
-      )
-        continue;
-      const range = employedRange(
+      // the days employed, within the months paid by the hour
+      const employed = employedRange(
         { start: period.start, end: period.end },
         e.joinedOn ? iso(e.joinedOn) : null,
         e.leftOn ? iso(e.leftOn) : null,
       );
+      const range =
+        employed &&
+        hourlyRange(
+          employed,
+          e.payBasis as PayBasisName,
+          e.salaryPeriods as { throughMonth: string; payBasis: PayBasisName }[],
+        );
       if (!range) continue;
 
       const [days, leaves, earlier] = await Promise.all([
@@ -234,11 +250,16 @@ export class HoursStatementService {
       end: iso(period.endDate),
     });
     await this.prisma.$transaction(async (tx) => {
-      // Freezes only the period as it was read: if the cutoff moved its end
-      // meanwhile (reanchorOpen), the lines were cut at the old end — roll
+      // Freezes only the period as it was read: if the cutoff moved it
+      // meanwhile (reanchorOpen), the lines were cut at the old range — roll
       // back and freeze it at the next run instead.
       const frozen = await tx.payPeriod.updateMany({
-        where: { id: period.id, snapshotAt: null, endDate: period.endDate },
+        where: {
+          id: period.id,
+          snapshotAt: null,
+          startDate: period.startDate,
+          endDate: period.endDate,
+        },
         data: {
           snapshotAt: now,
           deliveryStatus: lines.length === 0 ? 'no_staff' : 'pending',
