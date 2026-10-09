@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { ReportsService } from '../src/reports/reports.service';
 import { SummaryService } from '../src/summary/summary.service';
 import {
   createEmployeeWithCode,
@@ -82,5 +83,17 @@ describe('presence in the roll-up', () => {
   it('presence policy: credited = presence', async () => {
     const day = await personWithDay('presence');
     expect(day.creditedSec).toBe(2 * 3600 + 10 * 60 + 3600);
+  });
+});
+
+describe('attendance shows presence beside active time', () => {
+  it('both columns are filled', async () => {
+    await personWithDay('presence');
+    const report = await h.app
+      .get(ReportsService)
+      .attendance({ from: '2026-10-05', to: '2026-10-05' });
+    const row = report.rows.find((r) => r.status === 'worked');
+    expect(row?.workedHours).toBe(3);
+    expect(row?.presenceHours).toBeCloseTo(3.17, 2);
   });
 });

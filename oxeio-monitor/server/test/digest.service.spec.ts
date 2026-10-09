@@ -66,6 +66,7 @@ const attendance: AttendanceReport = {
       // Nobody in the sample is on leave — this fixture makes no claim about G130
       onLeave: false,
       workedHours: 7.5,
+      presenceHours: 7.5,
       idleHours: 0.5,
       adjustmentHours: 0,
     tasksDone: null,

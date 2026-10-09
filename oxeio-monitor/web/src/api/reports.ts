@@ -145,6 +145,7 @@ export interface AttendanceRow {
    */
   tasksDone: number | null;
   workedHours: number;
+  presenceHours: number;
   idleHours: number;
   adjustmentHours: number;
   creditedHours: number;

@@ -75,6 +75,7 @@ export function attendanceWorkbook(report: AttendanceReport): Promise<Buffer> {
     { header: 'On leave', width: 10, value: (r) => (r.onLeave ? 'Yes' : null) },
     { header: 'Status', width: 16, value: (r) => DAY_STATUS_LABEL[r.status] },
     hours('Worked (hours)', (r: AttendanceRow) => r.workedHours),
+    hours('Presence (hours)', (r: AttendanceRow) => r.presenceHours),
     hours('Adjustment (hours)', (r: AttendanceRow) => r.adjustmentHours),
     hours('Credited (hours)', (r: AttendanceRow) => r.creditedHours),
     hours('Target (hours)', (r: AttendanceRow) => r.targetHours),

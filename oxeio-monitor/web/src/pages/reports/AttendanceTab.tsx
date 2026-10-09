@@ -103,6 +103,12 @@ export function AttendanceTab({
       render: (row) => <Hours hours={row.workedHours} />,
     },
     {
+      key: 'presence',
+      header: t('Presence'),
+      align: 'right',
+      render: (row) => <Hours hours={row.presenceHours} />,
+    },
+    {
       // Careful: grey, because idle time is **not counted**. In black it would look
       //    as if it were added to the worked hours.
       key: 'idle',

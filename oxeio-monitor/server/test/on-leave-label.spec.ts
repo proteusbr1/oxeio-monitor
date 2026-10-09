@@ -52,6 +52,7 @@ function row(over: Partial<AttendanceRow> = {}): AttendanceRow {
     status: 'no_activity',
     onLeave: false,
     workedHours: 0,
+    presenceHours: 0,
     idleHours: 0,
     adjustmentHours: 0,
     creditedHours: 0,

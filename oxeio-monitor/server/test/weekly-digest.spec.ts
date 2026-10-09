@@ -88,6 +88,7 @@ function att(over: Partial<AttendanceRow> = {}): AttendanceRow {
     // Nobody in the sample is on leave — this fixture makes no claim about G130
     onLeave: false,
     workedHours: 8,
+    presenceHours: 8,
     idleHours: 0,
     adjustmentHours: 0,
     tasksDone: null,

@@ -45,6 +45,7 @@ export class ReportsAttendanceService {
         employeeId: true,
         workDate: true,
         workedSec: true,
+        presenceSec: true,
         idleSec: true,
         adjustmentSec: true,
         creditedSec: true,
@@ -139,6 +140,7 @@ export class ReportsAttendanceService {
           // report altogether, rather than show as "no data".
           status: worked > 0 ? 'worked' : 'no_activity',
           workedHours: secondsToHours(worked),
+          presenceHours: secondsToHours(summary?.presenceSec ?? 0),
           idleHours: secondsToHours(summary?.idleSec ?? 0),
           adjustmentHours: secondsToHours(summary?.adjustmentSec ?? 0),
           creditedHours: secondsToHours(credited),

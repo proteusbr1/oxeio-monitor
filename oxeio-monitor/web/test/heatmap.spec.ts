@@ -54,6 +54,7 @@ function row(over: Partial<AttendanceRow> & { date: string }): AttendanceRow {
     onLeave: false,
     tasksDone: null,
     workedHours: 0,
+    presenceHours: 0,
     idleHours: 0,
     adjustmentHours: 0,
     creditedHours: 0,

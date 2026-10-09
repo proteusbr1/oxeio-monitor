@@ -225,6 +225,8 @@ export interface AttendanceRow {
    */
   onLeave: boolean;
   workedHours: number;
+  /** Presence (first to last use, minus long pauses): what a presence policy credits */
+  presenceHours: number;
   idleHours: number;
   adjustmentHours: number;
   creditedHours: number;
