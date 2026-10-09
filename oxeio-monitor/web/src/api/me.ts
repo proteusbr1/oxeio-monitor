@@ -72,6 +72,13 @@ export interface MySummary {
    * `null` = nothing to show: no target and nothing finished.
    */
   tasks: TaskView | null;
+  /**
+   * What their policy counts as worked time. Under presence the page says so:
+   * "Counted" and pace use presence, while the tiles stay active time.
+   */
+  hoursMeasure: 'active' | 'presence';
+  /** presence: the longest pause, in minutes, still counted as work */
+  presenceGapMin: number;
 }
 
 /**

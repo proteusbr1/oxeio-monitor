@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  measureBody,
   measureSummary,
   targetPreview,
   workdaysInMonth,
@@ -80,5 +81,28 @@ describe('measureSummary', () => {
     expect(measureSummary('presence', 15)).toBe(
       'Presence (pauses up to 15 min count)',
     );
+  });
+});
+
+describe('measureBody', () => {
+  it('presence sends the gap typed in the form', () => {
+    expect(measureBody('presence', '20', 15)).toEqual({
+      hoursMeasure: 'presence',
+      presenceGapMin: 20,
+    });
+  });
+
+  it('active keeps the saved gap, whatever the hidden field holds', () => {
+    expect(measureBody('active', '', 25)).toEqual({
+      hoursMeasure: 'active',
+      presenceGapMin: 25,
+    });
+  });
+
+  it('active on a new policy sends the 15-minute default', () => {
+    expect(measureBody('active', 'abc', undefined)).toEqual({
+      hoursMeasure: 'active',
+      presenceGapMin: 15,
+    });
   });
 });

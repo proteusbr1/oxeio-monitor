@@ -17,7 +17,7 @@ import {
 } from '../../lib/format';
 import { useT } from '../../i18n';
 import { HolidaysSection } from './HolidaysSection';
-import { targetPreview } from './policy.math';
+import { measureBody, targetPreview } from './policy.math';
 import { PolicyMeasureFields } from './PolicyMeasureFields';
 import {
   CheckboxField,
@@ -452,8 +452,7 @@ function PolicyForm({
         officeTo: form.officeTo,
         idleThresholdSec: Number(form.idleThresholdSec),
         slotMinutes: Number(form.slotMinutes),
-        hoursMeasure: measure,
-        presenceGapMin: Number(gapMin),
+        ...measureBody(measure, gapMin, policy?.presenceGapMin),
       };
 
       if (policy) {

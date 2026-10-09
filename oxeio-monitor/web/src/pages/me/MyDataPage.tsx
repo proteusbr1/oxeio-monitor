@@ -167,6 +167,16 @@ export function MyDataPage() {
             )}
           </StatRow>
 
+          {/* the measure behind "Counted" and pace, when it is not plain active time */}
+          {summary.data.hoursMeasure === 'presence' && (
+            <p className="text-[13px] text-ink-2">
+              {t(
+                'Your policy counts presence: from your first to your last use, minus pauses over {{n}} min. The Counted column and your pace use it; the hours above are active time.',
+                { n: summary.data.presenceGapMin },
+              )}
+            </p>
+          )}
+
           {/*
             **Their own tasks**: near the top, because for someone who receives
                tasks the day's work starts here.

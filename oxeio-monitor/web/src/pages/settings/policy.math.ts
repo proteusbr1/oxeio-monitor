@@ -69,3 +69,20 @@ export function measureSummary(
     ? `Presence (pauses up to ${gapMin} min count)`
     : 'Active time';
 }
+
+/**
+ * The measure fields of a policy save. The gap field is hidden under active
+ * time, so an active save keeps the saved gap (or the 15-minute default) rather
+ * than whatever the hidden field holds — an empty field would send 0 and fail.
+ */
+export function measureBody(
+  measure: 'active' | 'presence',
+  gapMin: string,
+  savedGapMin: number | undefined,
+): { hoursMeasure: 'active' | 'presence'; presenceGapMin: number } {
+  return {
+    hoursMeasure: measure,
+    presenceGapMin:
+      measure === 'presence' ? Number(gapMin) : (savedGapMin ?? 15),
+  };
+}

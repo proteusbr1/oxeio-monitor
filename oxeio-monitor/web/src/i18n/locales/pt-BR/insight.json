@@ -113,6 +113,7 @@
   "The expired link was fetched again, but the file still wasn't there.": "O link expirado foi buscado de novo, mas o arquivo ainda não estava lá.",
   "The file is built on the server first — a long range takes a moment": "O arquivo é gerado primeiro no servidor — um período longo leva um instante",
   "The same numbers your tray icon shows": "Os mesmos números que o ícone da bandeja mostra",
+  "Your policy counts presence: from your first to your last use, minus pauses over {{n}} min. The Counted column and your pace use it; the hours above are active time.": "Sua política conta presença: do primeiro ao último uso, menos pausas acima de {{n}} min. A coluna Contabilizado e o seu ritmo usam essa medida; as horas acima são tempo ativo.",
   "Their work policy does not take screenshots (Settings → Policies). Hours, idle time and the jiggler check are counted as usual.": "A política de trabalho desta pessoa não faz capturas de tela (Configurações → Políticas). Horas, tempo ocioso e a verificação de jiggler são contados normalmente.",
   "These <n>{{count}}</n> could not be included (inactive, with no last working day on file): {{names}}_one": "<n>{{count}}</n> pessoa não pôde ser incluída (inativa, sem último dia de trabalho cadastrado): {{names}}",
   "These <n>{{count}}</n> could not be included (inactive, with no last working day on file): {{names}}_other": "Estas <n>{{count}}</n> pessoas não puderam ser incluídas (inativas, sem último dia de trabalho cadastrado): {{names}}",
