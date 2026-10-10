@@ -149,3 +149,20 @@ export function savePayPeriodSettings(body: {
     body,
   });
 }
+
+/**
+ * The open period with its live lines, and the newest frozen period (for how
+ * its email went) — the Live Board's card, owner only. `detail` is null
+ * before the first period starts.
+ */
+export async function openStatement(signal?: AbortSignal): Promise<{
+  detail: PeriodDetail | null;
+  lastFrozen: PeriodSummary | null;
+}> {
+  const periods = await listPeriods(signal);
+  const open = periods.find((p) => p.open);
+  return {
+    detail: open ? await getPeriod(open.id, signal) : null,
+    lastFrozen: periods.find((p) => !p.open) ?? null,
+  };
+}

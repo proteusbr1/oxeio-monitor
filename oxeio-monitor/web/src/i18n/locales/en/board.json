@@ -24,5 +24,7 @@
   "{{count}}th_ordinal_few": "{{count}}rd",
   "{{count}}th_ordinal_one": "{{count}}st",
   "{{count}}th_ordinal_other": "{{count}}th",
-  "{{count}}th_ordinal_two": "{{count}}nd"
+  "{{count}}th_ordinal_two": "{{count}}nd",
+  "{{period}} · cutoff in {{count}} days_one": "{{period}} · cutoff in {{count}} day",
+  "{{period}} · cutoff in {{count}} days_other": "{{period}} · cutoff in {{count}} days"
 }

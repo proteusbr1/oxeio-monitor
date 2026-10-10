@@ -53,3 +53,37 @@ export function scheduleMonth(
     signal,
   });
 }
+
+/** One person on the Live Board's schedule card; minutes since local midnight */
+export interface TodayPerson {
+  employeeId: number;
+  fullName: string;
+  startMin: number;
+  endMin: number;
+  requiredBreakMin: number;
+  breakFromMin: number;
+  breakToMin: number;
+  /** false on a day off, a holiday, leave or outside employment */
+  checkedToday: boolean;
+  /** today's check as the last roll-up left it; empty before the first one */
+  arrivedMin: number | null;
+  leftMin: number | null;
+  breakStartMin: number | null;
+  breakMin: number;
+  lateMin: number;
+  earlyLeaveMin: number;
+  breaches: Breach[];
+  final: boolean;
+}
+
+export interface ScheduleToday {
+  workDate: string;
+  /** minutes since the work zone's midnight, now */
+  nowMin: number;
+  people: TodayPerson[];
+}
+
+/** Everyone on a checked schedule, today (owner, manager) */
+export function scheduleToday(signal?: AbortSignal): Promise<ScheduleToday> {
+  return api<ScheduleToday>('/schedule/today', { signal });
+}

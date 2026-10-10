@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom';
 import { getTopUsage } from '../../api/activity';
 import { listAlerts } from '../../api/alerts';
 import { getLiveBoard, getTeamPulse, getTeamTrend, type TrendDay } from '../../api/dashboard';
-import { usePolling, type ApiResult } from '../../api/useApi';
+import { openStatement } from '../../api/hoursStatement';
+import { scheduleToday } from '../../api/schedule';
+import { usePolling } from '../../api/useApi';
 import { useAuth } from '../../auth/AuthContext';
 import { useFeatures } from '../../features/FeaturesContext';
 import { Card } from '../../components/Card';
@@ -11,7 +13,11 @@ import { Button, Page } from '../../components/Page';
 import { Empty, ErrorBox, Loading } from '../../components/States';
 import { Tabs } from '../../components/Tabs';
 import { workHourNow, formatDate, formatDateShort, formatDuration, formatTime, weekdayOf, workTimeZone, workTimeZoneLabel } from '../../lib/format';
+import { DataPanel } from './DataPanel';
 import { DayPulse } from './DayPulse';
+import { HoursStatementCard } from './HoursStatementCard';
+import { ScheduleTodayCard } from './ScheduleTodayCard';
+import { breachCount } from './scheduleToday';
 import { TopApps } from './TopApps';
 import { StatusStrip } from './TeamBars';
 import { TeamTable } from './TeamTable';
@@ -42,6 +48,15 @@ export function LiveBoardPage() {
   const tracksApps = features.appTracking;
   const apps = usePolling((signal) => canViewBoard && tracksApps && workDate ? getTopUsage({ from: workDate, to: workDate, limit: 6 }, signal) : Promise.resolve(null), CHART_REFRESH_MS, [canViewBoard, tracksApps, workDate]);
   const alerts = usePolling((signal) => isOwner ? listAlerts({ limit: 3 }, signal) : Promise.resolve(null), CHART_REFRESH_MS, [isOwner]);
+  // Fixed schedules and the hours statement: shown only when in use. The
+  // statement is the owner's (a manager would get 403), behind its module.
+  const schedule = usePolling((signal) => canViewBoard ? scheduleToday(signal) : Promise.resolve(null), CHART_REFRESH_MS, [canViewBoard]);
+  const readsHours = isOwner && features.hoursStatement;
+  const hours = usePolling((signal) => readsHours ? openStatement(signal) : Promise.resolve(null), CHART_REFRESH_MS, [readsHours]);
+  const scheduled = schedule.data?.people ?? [];
+  const scheduledToday = scheduled.filter((p) => p.checkedToday).length;
+  const offSchedule = breachCount(scheduled);
+  const showsHours = readsHours && (hours.data?.detail?.lines.length ?? 0) > 0;
   const [leaderWindow, setLeaderWindow] = useState<'30d' | 'all'>('30d');
   const cards = board.data?.cards ?? [];
   const active = cards.filter((card) => isWorking(card.status)).length;
@@ -64,7 +79,7 @@ export function LiveBoardPage() {
   const dailyTarget = targets.length && targets.every((card) => card.dailyTargetSec === targets[0].dailyTargetSec) ? targets[0].dailyTargetSec : null;
   const yesterday = trend.data?.days.at(-2);
   const delta = yesterday?.tracked ? yesterday.expectedStaff === 0 ? t('Yesterday was a day off') : Math.abs(todaySec - yesterday.workedSec) < 300 ? t('About the same as yesterday') : `${todaySec > yesterday.workedSec ? '▲' : '▼'} ${t('{{duration}} vs yesterday', { duration: formatDuration(Math.abs(todaySec - yesterday.workedSec)) })}` : null;
-  const refresh = () => { board.reload(); pulse.reload(); trend.reload(); if (tracksApps) apps.reload(); if (isOwner) alerts.reload(); };
+  const refresh = () => { board.reload(); pulse.reload(); trend.reload(); if (tracksApps) apps.reload(); if (isOwner) alerts.reload(); schedule.reload(); if (readsHours) hours.reload(); };
 
   let content: ReactNode;
   if (!canViewBoard) content = <Empty title={t("You don't have access")} hint={t('This board is available to owners and managers.')} />;
@@ -79,6 +94,7 @@ export function LiveBoardPage() {
       <StudioStat label={t('Average today')} value={worked ? formatDuration(todaySec / worked) : '—'} note={<>{t('Across {{count}} staff with time', { count: worked })}<br />{dailyTarget ? t('{{duration}} daily target', { duration: formatDuration(dailyTarget) }) : targets.length ? t('Individual targets shown below') : t('No daily target today')}</>} />
       {hasAssignees && <StudioStat label={t('Tasks done')} value={finished} note={t('Marked complete today')} />}
       <StudioStat label={!observed ? t('Monthly pace') : month!.paceSec < 0 ? t('Behind monthly pace') : t('Ahead of monthly pace')} value={observed ? formatDuration(Math.abs(month!.paceSec)) : '—'} tone={observed ? month!.paceSec < 0 ? 'warning' : 'ok' : undefined} note={trend.error ? t('Refresh failed · last update shown') : observed ? <>{t('Counted from {{date}}', { date: formatDate(month!.trackedFrom!) })}{month!.notObservedStaff > 0 && ` · ${t('{{count}} not counted yet', { count: month!.notObservedStaff })}`}</> : month && month.targetSec <= 0 ? t('Nobody has an hours target') : t('No finished day counted yet')} />
+      {scheduled.length > 0 && <StudioStat label={t('Schedule today')} value={offSchedule} unit={`/ ${scheduledToday}`} tone={offSchedule > 0 ? 'warning' : undefined} note={scheduledToday === 0 ? t('Nobody scheduled today') : offSchedule > 0 ? t('people outside their schedule') : t('everyone on schedule')} />}
       {isOwner && <StudioStat label={t('Open alerts')} value={alerts.data?.openCount ?? '—'} tone={alerts.data?.openCount ? 'warning' : undefined} note={<Link to="/alerts" className="underline underline-offset-4">{alerts.error ? t('Refresh failed · view alerts ↗') : alerts.data?.rows[0]?.title ?? t('View alerts ↗')}</Link>} />}
     </div>
     <div className="studio-overview">
@@ -89,6 +105,11 @@ export function LiveBoardPage() {
       </Card>
       <Card title={t('Hours · Last 7 Days')} hint={t('Solid line = usual target · dashed bars = not tracked')} padded={false}><DataPanel result={trend}>{trend.data && <WeekBars days={trend.data.days} />}</DataPanel></Card>
     </div>
+    {/* a lone card takes the full width: studio-pair would leave an empty half */}
+    {(scheduled.length > 0 || showsHours) && <div className={scheduled.length > 0 && showsHours ? 'studio-pair' : undefined}>
+      {scheduled.length > 0 && <ScheduleTodayCard result={schedule} />}
+      {showsHours && <HoursStatementCard result={hours} />}
+    </div>}
     <div className="studio-detail-grid">
       <Card title={t('Team Snapshot')} hint={withTarget ? t('Today’s hours, targets and task progress · furthest along first') : noTargetCount ? t('Today’s hours · no hours target set') : t('Day off · recorded hours still count')} actions={<Link className="tap text-xs underline underline-offset-4" to="/worklog">{t('View Worklog ↗')}</Link>} padded={false}>
         <TeamTable cards={cards} />
@@ -118,14 +139,6 @@ export function LiveBoardPage() {
 
 function StudioStat({ label, value, unit, note, tone }: { label: string; value: ReactNode; unit?: string; note: ReactNode; tone?: 'warning' | 'ok' }) {
   return <div className="studio-stat"><p className="studio-stat-label">{label}</p><div className={`studio-stat-value${tone === 'warning' ? ' text-idle-ink' : tone === 'ok' ? ' text-ok' : ''}`}>{value}{unit && <small>{unit}</small>}</div><p className="studio-stat-note">{note}</p></div>;
-}
-
-// Shows the failure of each independent data source; does not erase an older
-// successful answer.
-function DataPanel({ result, children }: { result: Pick<ApiResult<unknown>, 'data' | 'error' | 'reload'>; children: ReactNode }) {
-  const t = useT();
-  if (!result.data) return <div className="p-5">{result.error ? <ErrorBox error={result.error} retry={result.reload} /> : <Loading label={t('Loading summary…')} />}</div>;
-  return <>{result.error && <p role="status" className="px-5 pb-3 text-xs text-idle-ink">{t('Couldn’t refresh this summary. Showing its last successful update.')} <button type="button" onClick={result.reload} className="tap underline">{t('Retry')}</button></p>}{children}</>;
 }
 
 function StudioWeek({ days, metric }: { days: TrendDay[]; metric: 'tasks' | 'hours' }) {
