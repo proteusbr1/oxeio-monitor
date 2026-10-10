@@ -27,8 +27,9 @@ export type LiveSignal = Pick<LiveCard, 'status' | 'todayWorkedSec'>;
  *
  * Careful: the schedule row comes from the roll-up, up to 15 minutes old.
  * The live card is fresher, so it decides "not in yet" (no time today at all)
- * and "left" (not working right now); without it, nobody is called missing
- * just because the row has not caught up.
+ * and "left" (not working right now). Without a live card (the board not
+ * loaded yet, or its request failed) presence is unknown: nobody is called
+ * missing just because the row has not caught up.
  */
 export function todayStatus(
   p: TodayPerson,
@@ -49,11 +50,17 @@ export function todayStatus(
   const timeToday = workingNow || (live?.todayWorkedSec ?? 0) > 0;
 
   if (p.arrivedMin === null && !timeToday) {
-    const missing = nowMin > p.startMin + p.toleranceMarkMin;
+    const due = nowMin > p.startMin + p.toleranceMarkMin;
+    const known = live != null;
+    const missing = due && known;
     return {
-      arrival: missing
-        ? translate('Not in yet')
-        : translate('Expected at {{time}}', { time: clockOf(p.startMin) }),
+      arrival: !due
+        ? translate('Expected at {{time}}', { time: clockOf(p.startMin) })
+        : !known
+          ? translate('No live status yet')
+          : p.final || nowMin > p.endMin
+            ? translate('Not in today')
+            : translate('Not in yet'),
       breakState: p.requiredBreakMin > 0 ? 'pending' : 'none',
       breakText: null,
       leaving: null,
@@ -75,7 +82,8 @@ export function todayStatus(
 
   const pastEnd = p.final || nowMin > p.endMin;
   const end = clockOf(p.endMin);
-  let leaving: string;
+  // past the end with no leaving time known yet: nothing to say
+  let leaving: string | null = null;
   if (pastEnd && workingNow && !p.final) {
     leaving = translate('Working past {{time}}', { time: end });
   } else if (pastEnd && p.leftMin !== null) {
@@ -86,7 +94,7 @@ export function todayStatus(
             duration: minutesText(p.earlyLeaveMin),
           })
         : translate('Left {{time}}', { time: clockOf(p.leftMin) });
-  } else {
+  } else if (!pastEnd) {
     leaving = translate('Leaves at {{time}}', { time: end });
   }
 

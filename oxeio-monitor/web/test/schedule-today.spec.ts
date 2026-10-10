@@ -71,6 +71,35 @@ describe("today's schedule, one line each", () => {
     });
   });
 
+  it('before the live board loads, nobody is called missing', () => {
+    expect(todayStatus(person(), 480)).toMatchObject({
+      arrival: 'Expected at 08:00',
+      tone: 'ok',
+    });
+    expect(todayStatus(person(), 500)).toMatchObject({
+      arrival: 'No live status yet',
+      tone: 'ok',
+    });
+    expect(todayStatus(person(), 500, null).arrival).toBe('No live status yet');
+  });
+
+  it('past the end time with no time at all: not in today', () => {
+    expect(todayStatus(person(), 1030, idle)).toMatchObject({
+      arrival: 'Not in today',
+      tone: 'attention',
+    });
+  });
+
+  it('past the end time, never "leaves at"', () => {
+    // time on the live card, no row yet, not working any more
+    const s = todayStatus(person(), 1030, {
+      status: 'offline',
+      todayWorkedSec: 1800,
+    });
+    expect(s.arrival).toBe('At work');
+    expect(s.leaving).toBeNull();
+  });
+
   it('the row is older than the live board: at work, not missing', () => {
     // the roll-up runs every 15 minutes; the live card already shows time
     expect(todayStatus(person(), 500, working)).toMatchObject({
@@ -252,6 +281,7 @@ describe("today's schedule, one line each", () => {
       'Não tem jornada hoje',
     );
     expect(todayStatus(person(), 500, working).arrival).toBe('No trabalho');
+    expect(todayStatus(person(), 500).arrival).toBe('Sem status ao vivo ainda');
     await i18n.changeLanguage('es');
     expect(todayStatus(late, 600).arrival).toBe('Llegó 08:12 · 12m de retraso');
   });
