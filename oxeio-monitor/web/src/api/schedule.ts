@@ -63,6 +63,8 @@ export interface TodayPerson {
   requiredBreakMin: number;
   breakFromMin: number;
   breakToMin: number;
+  /** minutes off at either end that do not count as late / early */
+  toleranceMarkMin: number;
   /** false on a day off, a holiday, leave or outside employment */
   checkedToday: boolean;
   /** today's check as the last roll-up left it; empty before the first one */

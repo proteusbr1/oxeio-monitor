@@ -30,6 +30,8 @@ import { useT } from '../../i18n';
 // Images are not fetched here.
 const BOARD_REFRESH_MS = 15_000;
 const CHART_REFRESH_MS = 120_000;
+// the open pay period moves slowly: every ten minutes is plenty
+const HOURS_REFRESH_MS = 600_000;
 const LEADER_WINDOWS = [{ id: '30d', label: '30 days' }, { id: 'all', label: 'All time' }] as const;
 
 export function LiveBoardPage() {
@@ -52,7 +54,7 @@ export function LiveBoardPage() {
   // statement is the owner's (a manager would get 403), behind its module.
   const schedule = usePolling((signal) => canViewBoard ? scheduleToday(signal) : Promise.resolve(null), CHART_REFRESH_MS, [canViewBoard]);
   const readsHours = isOwner && features.hoursStatement;
-  const hours = usePolling((signal) => readsHours ? openStatement(signal) : Promise.resolve(null), CHART_REFRESH_MS, [readsHours]);
+  const hours = usePolling((signal) => readsHours ? openStatement(signal) : Promise.resolve(null), HOURS_REFRESH_MS, [readsHours]);
   const scheduled = schedule.data?.people ?? [];
   const scheduledToday = scheduled.filter((p) => p.checkedToday).length;
   const offSchedule = breachCount(scheduled);
@@ -107,7 +109,7 @@ export function LiveBoardPage() {
     </div>
     {/* a lone card takes the full width: studio-pair would leave an empty half */}
     {(scheduled.length > 0 || showsHours) && <div className={scheduled.length > 0 && showsHours ? 'studio-pair' : undefined}>
-      {scheduled.length > 0 && <ScheduleTodayCard result={schedule} />}
+      {scheduled.length > 0 && <ScheduleTodayCard result={schedule} live={cards} />}
       {showsHours && <HoursStatementCard result={hours} />}
     </div>}
     <div className="studio-detail-grid">

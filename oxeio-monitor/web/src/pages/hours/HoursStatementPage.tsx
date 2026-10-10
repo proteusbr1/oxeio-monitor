@@ -44,6 +44,7 @@ import {
   pickPeriod,
   type LineStatus,
 } from './hours.format';
+import { figureColumns } from './hours.columns';
 import { PostedDialog } from './PostedDialog';
 
 /**
@@ -149,37 +150,11 @@ function PeriodView({
         />
       ),
     },
-    {
-      key: 'measured',
-      header: t('Hours in the period'),
-      align: 'right',
-      render: (l) => (
-        <span className="num">{hm(Math.floor(l.measuredSec / 60))}</span>
-      ),
-    },
-    {
-      key: 'carry',
-      header: t('Carried over'),
-      align: 'right',
-      render: (l) =>
-        l.carryInSec === 0 ? (
-          <span className="num text-ink-3">—</span>
-        ) : (
-          <span className="num">{hm(Math.trunc(l.carryInSec / 60))}</span>
-        ),
-    },
-    {
-      key: 'toPost',
-      header: t('To post'),
-      align: 'right',
-      render: (l) => (
-        <span
-          className={`num font-semibold ${l.toPostMin < 0 ? 'text-brand-ink' : ''}`}
-        >
-          {hm(l.toPostMin)}
-        </span>
-      ),
-    },
+    ...figureColumns({
+      measured: t('Hours in the period'),
+      carry: t('Carried over'),
+      toPost: t('To post'),
+    }),
     {
       key: 'leave',
       header: t('Leave / holidays'),

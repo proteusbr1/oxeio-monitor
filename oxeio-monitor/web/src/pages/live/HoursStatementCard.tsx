@@ -10,7 +10,8 @@ import { Card } from '../../components/Card';
 import { Table, type Column } from '../../components/Table';
 import { useT } from '../../i18n';
 import { todayInWorkZone } from '../../lib/format';
-import { deliveryLine, hm, periodLabel } from '../hours/hours.format';
+import { figureColumns } from '../hours/hours.columns';
+import { deliveryLine, periodLabel } from '../hours/hours.format';
 import { DataPanel } from './DataPanel';
 import { cutoffHint } from './hoursToday';
 
@@ -42,41 +43,12 @@ export function HoursStatementCard({
       header: t('Person'),
       render: (l) => <span className="font-medium">{l.fullName}</span>,
     },
-    {
-      key: 'measured',
-      header: t('Hours so far'),
-      align: 'right',
-      render: (l) => (
-        <span className="num">{hm(Math.floor(l.measuredSec / 60))}</span>
-      ),
-    },
-    ...(carries
-      ? [
-          {
-            key: 'carry',
-            header: t('Carried over'),
-            align: 'right' as const,
-            render: (l: StatementLine) =>
-              l.carryInSec === 0 ? (
-                <span className="num text-ink-3">—</span>
-              ) : (
-                <span className="num">{hm(Math.trunc(l.carryInSec / 60))}</span>
-              ),
-          },
-        ]
-      : []),
-    {
-      key: 'toPost',
-      header: t('To post so far'),
-      align: 'right',
-      render: (l) => (
-        <span
-          className={`num font-semibold ${l.toPostMin < 0 ? 'text-brand-ink' : ''}`}
-        >
-          {hm(l.toPostMin)}
-        </span>
-      ),
-    },
+    // the carry column only when someone has one
+    ...figureColumns({
+      measured: t('Hours so far'),
+      carry: t('Carried over'),
+      toPost: t('To post so far'),
+    }).filter((c) => carries || c.key !== 'carry'),
   ];
 
   return (

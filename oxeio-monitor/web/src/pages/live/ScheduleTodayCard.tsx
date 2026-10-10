@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 
+import type { LiveCard } from '../../api/dashboard';
 import type { ScheduleToday } from '../../api/schedule';
 import type { ApiResult } from '../../api/useApi';
 import { Card } from '../../components/Card';
@@ -8,7 +9,7 @@ import { useT } from '../../i18n';
 import { workTimeZoneLabel } from '../../lib/format';
 import { BREACH_LABEL } from '../schedule/schedule.format';
 import { DataPanel } from './DataPanel';
-import { todayStatus, type TodayStatus } from './scheduleToday';
+import { liveNowMin, todayStatus, type TodayStatus } from './scheduleToday';
 
 const TONE_CLASS: Record<TodayStatus['tone'], string> = {
   ok: 'text-ink-2',
@@ -23,11 +24,16 @@ const TONE_CLASS: Record<TodayStatus['tone'], string> = {
  */
 export function ScheduleTodayCard({
   result,
+  live,
 }: {
   result: Pick<ApiResult<ScheduleToday | null>, 'data' | 'error' | 'reload'>;
+  /** the board's cards (every 15 s): fresher than the schedule rows */
+  live: readonly LiveCard[];
 }) {
   const t = useT();
   const today = result.data;
+  const liveBy = new Map(live.map((c) => [c.employeeId, c]));
+  const nowMin = today ? liveNowMin(today) : 0;
   return (
     <Card
       title={t('Schedule Today')}
@@ -46,9 +52,9 @@ export function ScheduleTodayCard({
     >
       <DataPanel result={result}>
         {today && (
-          <ul className="divide-y divide-line">
+          <ul className="max-h-[28rem] divide-y divide-line overflow-y-auto">
             {today.people.map((p) => {
-              const s = todayStatus(p, today.nowMin);
+              const s = todayStatus(p, nowMin, liveBy.get(p.employeeId));
               return (
                 <li
                   key={p.employeeId}

@@ -27,6 +27,8 @@ export interface TodayPerson {
   requiredBreakMin: number;
   breakFromMin: number;
   breakToMin: number;
+  /** minutes off at either end that do not count as late / early */
+  toleranceMarkMin: number;
   /** false on a day off, a holiday, recorded leave or outside employment */
   checkedToday: boolean;
   arrivedMin: number | null;
@@ -167,6 +169,11 @@ export class ScheduleService {
       const schedule = schedulePolicyOf(e.policy);
       return schedule ? [{ ...e, schedule }] : [];
     });
+    const nowMin = minuteOfWorkDay(now, workDate);
+    const day = workDate.toISOString().slice(0, 10);
+    // nobody on a schedule (most installs): one query, nothing else
+    if (scheduled.length === 0) return { workDate: day, nowMin, people: [] };
+
     const ids = scheduled.map((e) => e.id);
     const [rows, leave, holiday] = await Promise.all([
       this.prisma.scheduleDay.findMany({
@@ -198,6 +205,7 @@ export class ScheduleService {
         requiredBreakMin: e.schedule.breakMin,
         breakFromMin: e.schedule.breakFromMin,
         breakToMin: e.schedule.breakToMin,
+        toleranceMarkMin: e.schedule.toleranceMarkMin,
         checkedToday,
         arrivedMin: row?.arrivedMin ?? null,
         leftMin: row?.leftMin ?? null,
@@ -209,11 +217,7 @@ export class ScheduleService {
         final: row?.final ?? false,
       };
     });
-    return {
-      workDate: workDate.toISOString().slice(0, 10),
-      nowMin: minuteOfWorkDay(now, workDate),
-      people,
-    };
+    return { workDate: day, nowMin, people };
   }
 
   async month(employeeId: number, yearMonth: string) {

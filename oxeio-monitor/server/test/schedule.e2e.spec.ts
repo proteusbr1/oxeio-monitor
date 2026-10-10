@@ -594,6 +594,7 @@ describe("today's schedule for the Live Board", () => {
       requiredBreakMin: 60,
       breakFromMin: 660,
       breakToMin: 840,
+      toleranceMarkMin: 5,
       checkedToday: true,
       arrivedMin: 492,
       leftMin: 700,
