@@ -10,9 +10,14 @@ on:
   workflow_dispatch:
     inputs:
       server_url:
-        description: "Bake this server address into the MSI (e.g. https://monitor.example.com); empty = none"
+        description: "Bake this server address into the MSI (e.g. https://monitor.example.com); empty = the repository variable AGENT_SERVER_URL, or none"
         required: false
         default: ""
+      hide_latest_shot:
+        description: "Build the variant whose Today window does not preview the last screenshot (-nopreview)"
+        type: boolean
+        required: false
+        default: false
 
 # A new push to the same branch cancels the earlier run, so runners are not held up needlessly
 concurrency:
@@ -198,11 +203,21 @@ jobs:
         # A manual run may bake a server address in (installs on a double-click
         # and can be published as an update); otherwise no address, for
         # `msiexec /i … SERVERURL=https://…`. build.ps1 has no default.
+        #
+        # An empty input falls back to the repository variable AGENT_SERVER_URL
+        # (Settings → Secrets and variables → Actions): a run started without
+        # typing the address used to build, without any error, an MSI that
+        # stops on a double-click. The summary below says which one was built.
         env:
-          SERVER_URL: ${{ inputs.server_url }}
+          SERVER_URL: ${{ inputs.server_url || vars.AGENT_SERVER_URL }}
+          HIDE_LATEST_SHOT: ${{ inputs.hide_latest_shot }}
         run: |
-          if ($env:SERVER_URL) { ./installer/build.ps1 -ServerUrl $env:SERVER_URL }
-          else { ./installer/build.ps1 -NoServerUrl }
+          $options = @{}
+          if ($env:SERVER_URL) { $options.ServerUrl = $env:SERVER_URL } else { $options.NoServerUrl = $true }
+          if ($env:HIDE_LATEST_SHOT -eq 'true') { $options.HideLatestShot = $true }
+          ./installer/build.ps1 @options
+          $server = if ($env:SERVER_URL) { "server address baked in: $($env:SERVER_URL)" } else { "⚠️ NO server address — this MSI does not install on a double-click (msiexec needs SERVERURL=)" }
+          "### MSI — $server" >> $env:GITHUB_STEP_SUMMARY
 
       - uses: actions/upload-artifact@v4
         with:
