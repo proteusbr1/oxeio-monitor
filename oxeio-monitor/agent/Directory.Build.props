@@ -105,8 +105,15 @@
       0.5.1 (fork, 6 Oct 2026): a published update reaches the PC within about a minute
       (the heartbeat's `update_agent` now wakes the update check; before, it was parsed and
       ignored, so a build arrived only at the next 6-hourly check).
+
+      0.6.0 (fork, 26 Oct 2026): the DXGI chain is kept per output instead of rebuilt on
+      every capture (nvspcap64.dll from the NVIDIA overlay leaked a section, a mutex and
+      ~260 KB per chain: 7 GB and 217k handles in 12 days); resource telemetry in the
+      heartbeat and a clean self-restart above 20k handles / 1.5 GB; the staged MSI is
+      locked and re-verified right before msiexec; OXEIO_SERVER_URL only in Debug or with an
+      HKLM opt-in; update offers must be plain SemVer and newer; http needs ALLOWHTTP=1.
     -->
-    <Version>0.5.1</Version>
+    <Version>0.6.0</Version>
 
     <!--
       AssemblyVersion keeps only three numbers (no SemVer pre-release part): the Windows
