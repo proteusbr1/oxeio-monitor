@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { rm, stat } from 'node:fs/promises';
+import { join } from 'node:path';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -1034,6 +1036,52 @@ describe('screenshots', () => {
 
     expect(res.body).toMatchObject({ accepted: 0, duplicate: true });
     expect(await h.prisma.screenshot.count()).toBe(1);
+  });
+
+  /**
+   * L3: the duplicate lookup matched `client_uuid` across all devices, so a
+   * second PC sending the first PC's uuid "repaired" the first PC's missing
+   * file with its own bytes: a picture planted in another employee's gallery.
+   */
+  it("another device's client_uuid never touches that device's row or file", async () => {
+    const uuid = randomUUID();
+    const first = await asAgent(h.http().post('/api/v1/agent/screenshots'), device.token)
+      .field('meta', JSON.stringify(meta({ clientUuid: uuid })))
+      .attach('file', WEBP, { filename: 'shot.webp', contentType: 'image/webp' })
+      .expect(201);
+
+    // the row stays, the file is gone: exactly the state the repair path heals
+    const victimFile = join(process.env.STORAGE_ROOT as string, first.body.path);
+    await rm(victimFile, { force: true });
+
+    const { code: other } = await createEmployeeWithCode(h.prisma, 'OX-002');
+    const intruder = await enrollDevice(h, other, {
+      hostname: 'PC-08',
+      windowsUsername: 'sam',
+      machineGuid: 'guid-test-002',
+    });
+
+    const res = await asAgent(h.http().post('/api/v1/agent/screenshots'), intruder.token)
+      .field(
+        'meta',
+        JSON.stringify(
+          meta({
+            clientUuid: uuid,
+            slotStart: iso(minutesAgo(15)),
+            capturedAt: iso(minutesAgo(14)),
+          }),
+        ),
+      )
+      .attach('file', WEBP, { filename: 'shot.webp', contentType: 'image/webp' })
+      .expect(201);
+
+    // stored as the intruder's own picture, under its own employee folder
+    expect(res.body.accepted).toBe(1);
+    expect(res.body.path).not.toBe(first.body.path);
+    await expect(stat(victimFile)).rejects.toThrow();
+    expect(
+      await h.prisma.screenshot.count({ where: { clientUuid: uuid } }),
+    ).toBe(2);
   });
 });
 

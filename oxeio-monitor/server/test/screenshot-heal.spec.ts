@@ -258,6 +258,26 @@ describe('G81: the duplicate path: row exists, file does not', () => {
     expect(result.duplicate).toBe(true);
   });
 
+  /**
+   * L3: the lookup used to match `client_uuid` on any device, so another PC's
+   * uuid "healed" that PC's missing file with this agent's bytes.
+   */
+  it('the duplicate lookup only ever looks at this device', async () => {
+    const findFirst = vi.fn().mockResolvedValue(null);
+    const svc = makeService({
+      screenshot: {
+        create: vi.fn().mockRejectedValue(uniqueViolation()),
+        findFirst,
+      },
+    } as unknown as Partial<PrismaService>);
+
+    await svc.ingest(DEVICE, DRIFT, META, webp());
+
+    const where = findFirst.mock.calls[0][0].where;
+    expect(where.deviceId).toBe(DEVICE.id);
+    expect(where.OR).toContainEqual({ clientUuid: META.clientUuid });
+  });
+
   /** Errors other than P2002 must not be swallowed */
   it('any other DB error is not suppressed', async () => {
     const svc = makeService({

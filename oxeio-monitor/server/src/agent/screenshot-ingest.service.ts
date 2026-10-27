@@ -242,17 +242,20 @@ export class ScreenshotIngestService implements OnModuleInit {
   ): Promise<ScreenshotResult> {
     /**
      * Careful: either of the two UNIQUE constraints can trigger, so both are
-     * looked up: `client_uuid`, and `(device, slot, monitor)`.
+     * looked up: `(device, client_uuid)`, and `(device, slot, monitor)`.
+     *
+     * Careful: **both are scoped to this device** (L3). The `client_uuid`
+     * branch used to match across all devices, so an agent that sent another
+     * PC's uuid found *that* row, and when its file was missing the "repair"
+     * below wrote this agent's bytes into the other employee's screenshot.
+     * A retry only ever repairs its own device's rows.
      */
     const existing = await this.prisma.screenshot.findFirst({
       where: {
+        deviceId: device.id,
         OR: [
           { clientUuid: meta.clientUuid },
-          {
-            deviceId: device.id,
-            slotStart,
-            monitorIndex: meta.monitorIndex,
-          },
+          { slotStart, monitorIndex: meta.monitorIndex },
         ],
       },
       select: { id: true, filePath: true, thumbPath: true },
