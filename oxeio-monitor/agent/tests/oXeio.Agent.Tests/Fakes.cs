@@ -208,6 +208,9 @@ internal sealed class FakeSyncClient : ISyncClient
     public UpdateOffer? Offer { get; set; }
     public byte[]? UpdateBytes { get; set; }
 
+    /// <summary>How many times the MSI was asked for.</summary>
+    public int DownloadCalls { get; private set; }
+
     public Task<SyncResult<UpdateOffer>> CheckUpdateAsync(string v, CancellationToken ct = default) =>
         Offer is null
             ? throw new NotSupportedException()
@@ -217,6 +220,7 @@ internal sealed class FakeSyncClient : ISyncClient
         string v, string dest, CancellationToken ct = default)
     {
         if (UpdateBytes is null) throw new NotSupportedException();
+        DownloadCalls++;
         await File.WriteAllBytesAsync(dest, UpdateBytes, ct);
         return SyncResult<UpdateDownload>.Ok(new UpdateDownload
         {

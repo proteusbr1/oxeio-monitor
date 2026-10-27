@@ -18,4 +18,20 @@ internal static class BuildOptions
 #else
     public static readonly bool ShowLatestShot = true;
 #endif
+
+    /// <summary>
+    /// A Debug build (<c>dotnet run</c>, the IDE). Only there may the developer conveniences
+    /// that a monitored user must not have be on without an administrator: the
+    /// <c>OXEIO_SERVER_URL</c> override and plain <c>http://</c> to another machine
+    /// (<see cref="AgentSettings"/>).
+    ///
+    /// Careful: <c>build.ps1</c> publishes <c>-c Release</c>; an MSI built with
+    /// <c>-Configuration Debug</c> would hand both back to every staff member, and the script
+    /// refuses that unless asked twice.
+    /// </summary>
+#if DEBUG
+    public static readonly bool IsDebugBuild = true;
+#else
+    public static readonly bool IsDebugBuild = false;
+#endif
 }
