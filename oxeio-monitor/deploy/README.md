@@ -757,9 +757,13 @@ On a Windows machine with the .NET 8 SDK and WiX:
 
 ```powershell
 cd oxeio-monitor\agent\installer
-.\build.ps1 -ServerUrl https://monitor.example.com
+.\build.ps1 -ServerUrl https://monitor.example.com -UpdatePublicKey update-key.pub.pem
 ```
 
+- The update key (§ 13.7, "Signed agent updates") is **required**: without it
+  the agents trust any update the server vouches for. `-AllowUnsignedUpdates`
+  builds without one on purpose (test builds); the script then prints a
+  warning. PCs already installed without a key keep updating by checksum.
 - The server address is **baked into the MSI**, so every PC installs with a
   double-click. Always pass `-ServerUrl`: the script's built-in default is the
   original deployment's address. `-NoServerUrl` builds an MSI that needs
@@ -784,8 +788,12 @@ code-signing certificate is enough for your own PCs:
 powershell -ExecutionPolicy Bypass -File deploy\make-code-cert.ps1
 
 # every build
-.\agent\installer\build.ps1 -ServerUrl https://monitor.example.com -SignWith <thumbprint>
+.\agent\installer\build.ps1 -ServerUrl https://monitor.example.com -UpdatePublicKey update-key.pub.pem -SignWith <thumbprint>
 ```
+
+Sign every MSI you publish as an update too: the UAC prompt an administrator
+approves for an in-agent update shows the MSI's publisher, and an admin used
+to "Unknown publisher" will not notice a swapped one.
 
 Then **once on every PC**, as administrator (with `oxeio-code.cer` next to
 the script, or `-CerPath`):

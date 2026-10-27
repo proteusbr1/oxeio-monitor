@@ -198,11 +198,16 @@ jobs:
         # A manual run may bake a server address in (installs on a double-click
         # and can be published as an update); otherwise no address, for
         # `msiexec /i … SERVERURL=https://…`. build.ps1 has no default.
+        #
+        # Note: -AllowUnsignedUpdates. build.ps1 now refuses to build without an update key,
+        #    and the owner's public key is not in this repo. A CI MSI is therefore a test
+        #    artifact: its agents trust the server's sha256 alone. Release MSIs for the fleet
+        #    are built with -UpdatePublicKey (deploy/README.md › "Signed agent updates").
         env:
           SERVER_URL: ${{ inputs.server_url }}
         run: |
-          if ($env:SERVER_URL) { ./installer/build.ps1 -ServerUrl $env:SERVER_URL }
-          else { ./installer/build.ps1 -NoServerUrl }
+          if ($env:SERVER_URL) { ./installer/build.ps1 -ServerUrl $env:SERVER_URL -AllowUnsignedUpdates }
+          else { ./installer/build.ps1 -NoServerUrl -AllowUnsignedUpdates }
 
       - uses: actions/upload-artifact@v4
         with:

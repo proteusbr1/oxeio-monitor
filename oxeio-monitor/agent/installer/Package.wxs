@@ -104,7 +104,8 @@
       › "Signed agent updates".
 
       Baked in by `build.ps1 -UpdatePublicKey`, so every MSI the owner builds
-      carries it and an update can never drop it. Empty = sha256 only, as before.
+      carries it and an update can never drop it. Empty = sha256 only, as before;
+      build.ps1 refuses to build that unless -AllowUnsignedUpdates is passed.
     -->
 <?if $(var.UpdateKeyDefault) = "" ?>
     <Property Id="UPDATEKEY" Secure="yes" />

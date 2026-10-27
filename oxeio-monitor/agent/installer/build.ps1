@@ -11,9 +11,10 @@
   would install the .NET runtime twice (379 MB vs 199 MB).
 
 .EXAMPLE
-  powershell -File installer\build.ps1 -ServerUrl https://monitor.example.com
-  powershell -File installer\build.ps1 -ServerUrl https://monitor.example.com -Version 0.3.0
-  powershell -File installer\build.ps1 -NoServerUrl
+  powershell -File installer\build.ps1 -ServerUrl https://monitor.example.com -UpdatePublicKey update-key.pub.pem -SignWith <thumbprint>
+  powershell -File installer\build.ps1 -ServerUrl https://monitor.example.com -UpdatePublicKey update-key.pub.pem
+  powershell -File installer\build.ps1 -NoServerUrl -AllowUnsignedUpdates
+  powershell -File installer\build.ps1 -ServerUrl http://192.168.1.10:8080 -AllowHttp -AllowUnsignedUpdates   # LAN trial only
 
 .NOTES
   Careful: this file is saved WITH a UTF-8 BOM. Do not remove the BOM.
@@ -70,9 +71,19 @@ param(
 
     # The owner's public key for signed updates — a .pem file or its base64
     # body. Baked into the MSI (UPDATEKEY), so the agent installs only updates
-    # signed with the matching private key. Empty = sha256 only, as before.
-    # deploy/README.md › "Signed agent updates".
+    # signed with the matching private key. deploy/README.md › "Signed agent updates".
+    #
+    # Careful: REQUIRED unless -AllowUnsignedUpdates is passed. Without a key the
+    # agent checks an update only against the sha256 the server itself sends, so
+    # whoever controls the server can hand every PC an MSI that runs as SYSTEM.
+    # It used to be optional and silent, so MSIs went out without it by default.
     [string]$UpdatePublicKey,
+
+    # Build without an update key on purpose (dev builds, CI artifacts). Prints a
+    # warning. Careful: this is a build-time gate only; the agent itself still
+    # accepts sha256-only updates when it has no key, or PCs installed without one
+    # would never update again.
+    [switch]$AllowUnsignedUpdates,
 
     # A build whose Today window does not show the last screenshot — only
     # when it was taken — and keeps no copy of it on the PC. Pictures are
@@ -188,6 +199,21 @@ Use https (deploy/README.md › "TLS"), or, for a LAN trial, pass -AllowHttp as 
 
 if ($AllowHttp) {
     Write-Host '   ⚠️ -AllowHttp: plain http is allowed — passwords and device tokens cross the network unencrypted' -ForegroundColor Yellow
+}
+
+# Careful: checked here, before the publish, not after a 62 MB build.
+if ($UpdatePublicKey -and $AllowUnsignedUpdates) {
+    throw "Pass either -UpdatePublicKey or -AllowUnsignedUpdates, not both."
+}
+if (-not $UpdatePublicKey -and -not $AllowUnsignedUpdates) {
+    throw @"
+No update key. Pass -UpdatePublicKey update-key.pub.pem (deploy/README.md › "Signed agent updates"),
+or -AllowUnsignedUpdates to build an MSI whose agents trust the server's sha256 alone.
+"@
+}
+if ($AllowUnsignedUpdates) {
+    Write-Host '   update : ⚠️ NO update key (-AllowUnsignedUpdates) — agents installed from this MSI accept any' -ForegroundColor Yellow
+    Write-Host '            update whose sha256 the server vouches for; a compromised server = SYSTEM on every PC' -ForegroundColor Yellow
 }
 
 if ($Configuration -ne 'Release' -and -not $AllowNonRelease) {
@@ -431,6 +457,12 @@ if ($sig.SignerCertificate) {
 else {
     Write-Host '   ⚠️ Not signed — installing will show "Unknown publisher"' -ForegroundColor Yellow
     Write-Host '      (to sign: -SignWith <thumbprint>, see deploy/make-code-cert.ps1)' -ForegroundColor Yellow
+    # Careful: the Authenticode signature is what the admin sees in the UAC prompt of an
+    #    in-agent update ("Verified publisher: oXeio" vs "Unknown publisher"). The agent
+    #    itself does not check it (the update key does that job), but an unsigned MSI
+    #    trains admins to approve "Unknown publisher" prompts, which is exactly what a
+    #    swapped MSI would show.
+    Write-Host '      An unsigned update also shows "Unknown publisher" in the UAC prompt the admin approves.' -ForegroundColor Yellow
 }
 
 Write-Host ''
