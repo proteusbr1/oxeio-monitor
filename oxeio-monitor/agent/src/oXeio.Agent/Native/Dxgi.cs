@@ -127,6 +127,18 @@ internal static partial class Dxgi
     /// <summary>IDXGIFactory1, dxgi.h: past IDXGIFactory's 5 methods (7-11).</summary>
     internal const int Factory1_EnumAdapters1 = 12;
 
+    /// <summary>
+    /// IDXGIFactory1, dxgi.h: right after EnumAdapters1. Returns a <c>BOOL</c>, not an HRESULT:
+    /// <c>FALSE</c> means the adapter/output topology changed since this factory was created
+    /// (GPU added or removed, driver update, monitor plugged into another adapter), so everything
+    /// enumerated from it is out of date.
+    ///
+    /// Careful: it was not needed while the chain was rebuilt on every capture. Now that the chain
+    /// is kept (see <see cref="Platform.Capture.DuplicationCapturer"/>), it is the only way to
+    /// notice that a cached factory describes a machine that no longer exists.
+    /// </summary>
+    internal const int Factory1_IsCurrent = 13;
+
     /// <summary>IDXGIDevice — dxgi.h</summary>
     internal const int Device_GetAdapter = 7;
 
@@ -170,6 +182,15 @@ internal static partial class Dxgi
 
     /// <summary>The driver/adapter cannot do this: no point trying again on this machine.</summary>
     internal const int DXGI_ERROR_UNSUPPORTED = unchecked((int)0x887A0004);
+
+    /// <summary>
+    /// The GPU was physically removed, the driver was updated or crashed (TDR). Every object made
+    /// on that device is dead; only a new device helps.
+    /// </summary>
+    internal const int DXGI_ERROR_DEVICE_REMOVED = unchecked((int)0x887A0005);
+
+    /// <summary>The device was reset by a badly behaving command: same remedy as REMOVED.</summary>
+    internal const int DXGI_ERROR_DEVICE_RESET = unchecked((int)0x887A0007);
 
     internal const int DXGI_ERROR_NOT_FOUND = unchecked((int)0x887A0002);
     internal const int DXGI_ERROR_INVALID_CALL = unchecked((int)0x887A0001);

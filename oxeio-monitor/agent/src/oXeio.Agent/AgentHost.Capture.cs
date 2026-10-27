@@ -173,7 +173,8 @@ internal sealed partial class AgentHost
             _credentials?.IsEnrolled == true,
             _credentials?.IsRevoked == true,
             _window.Allows(_clock.Now),
-            _sessionSuspended);
+            _sessionSuspended,
+            _displayOff);
 
     private void SampleScreen(DateTimeOffset now)
     {
