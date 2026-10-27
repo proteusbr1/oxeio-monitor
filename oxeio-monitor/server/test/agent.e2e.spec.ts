@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { AppCategoryService } from '../src/activity/app-category.service';
+import { instantOfWorkWall, workDateOf } from '../src/agent/util/work-time';
 import {
   createEmployeeWithCode,
   createHarness,
@@ -18,6 +19,18 @@ import {
   workNoon,
   realNow,
 } from './setup/harness';
+
+/**
+ * A night that crosses midnight, a few days back: 23:50 to 00:10 in the work
+ * zone. Not a fixed date: these were pinned to 8 August, and ingest now drops
+ * anything older than 32 days (M1, `ingest-bounds.ts`).
+ */
+const NIGHT_DAY = workDateOf(workNoon(-3));
+const NIGHT_START = instantOfWorkWall(
+  new Date(NIGHT_DAY.getTime() + (23 * 60 + 50) * 60_000),
+);
+const NIGHT_END = new Date(NIGHT_START.getTime() + 20 * 60_000);
+const NIGHT_MIDNIGHT = instantOfWorkWall(new Date(NIGHT_DAY.getTime() + 86_400_000));
 
 let h: Harness;
 let code: string;
@@ -616,9 +629,9 @@ describe('split at midnight (section 2.1a)', () => {
           {
             clientUuid: randomUUID(),
             state: 'active',
-            // 17:50Z = 23:50 in the work zone (UTC+6), 18:10Z = 00:10 the next day
-            startedAt: '2026-08-08T17:50:00.000Z',
-            endedAt: '2026-08-08T18:10:00.000Z',
+            // 23:50 in the work zone to 00:10 the next day
+            startedAt: iso(NIGHT_START),
+            endedAt: iso(NIGHT_END),
             durationSec: 1200,
           },
         ],
@@ -630,9 +643,9 @@ describe('split at midnight (section 2.1a)', () => {
     const rows = await h.prisma.activitySegment.findMany({
       orderBy: { startedAt: 'asc' },
     });
-    expect(rows.map((r) => r.workDate.toISOString().slice(0, 10))).toEqual([
-      '2026-08-08',
-      '2026-08-09',
+    expect(rows.map((r) => r.workDate.getTime())).toEqual([
+      NIGHT_DAY.getTime(),
+      NIGHT_DAY.getTime() + 86_400_000,
     ]);
     // Even when split, the total time stays intact
     expect(rows[0].durationSec + rows[1].durationSec).toBe(1200);
@@ -651,8 +664,8 @@ describe('split at midnight (section 2.1a)', () => {
         {
           clientUuid: randomUUID(),
           state: 'active',
-          startedAt: '2026-08-08T17:50:00.000Z',
-          endedAt: '2026-08-08T18:10:00.000Z',
+          startedAt: iso(NIGHT_START),
+          endedAt: iso(NIGHT_END),
           durationSec: 1200,
         },
       ],
@@ -790,8 +803,8 @@ describe('work session', () => {
           {
             clientUuid: randomUUID(),
             state: 'active',
-            startedAt: '2026-08-08T17:50:00.000Z',
-            endedAt: '2026-08-08T18:10:00.000Z',
+            startedAt: iso(NIGHT_START),
+            endedAt: iso(NIGHT_END),
             durationSec: 1200,
           },
         ],
@@ -825,10 +838,10 @@ describe('work session', () => {
 
     // Yesterday's session closes at its own midnight, not by today's logoff
     const yesterday = sessions.find(
-      (s) => s.workDate.toISOString().slice(0, 10) === '2026-08-08',
+      (s) => s.workDate.getTime() === NIGHT_DAY.getTime(),
     )!;
     expect(yesterday.endReason).toBe('day_rollover');
-    expect(yesterday.endedAt!.toISOString()).toBe('2026-08-08T18:00:00.000Z');
+    expect(yesterday.endedAt!.getTime()).toBe(NIGHT_MIDNIGHT.getTime());
   });
 });
 

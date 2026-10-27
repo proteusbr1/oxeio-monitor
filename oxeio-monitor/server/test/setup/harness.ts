@@ -265,6 +265,18 @@ export async function enrollDevice(
     })
     .expect(201);
 
+  /**
+   * Careful: the device is moved to "enrolled 30 days ago". Ingest drops
+   * anything older than `enrolled_at` (M1, `src/agent/ingest-bounds.ts`), and
+   * fixtures here are dated days back (`workNoon(-3)`) on a device enrolled a
+   * second ago. 30 stays inside the 32-day backfill limit, so neither bound
+   * gets in a test's way unless the test sets `enrolledAt` itself.
+   */
+  await harness.prisma.device.update({
+    where: { id: res.body.deviceId },
+    data: { enrolledAt: new Date(Date.now() - 30 * 86_400_000) },
+  });
+
   return {
     token: res.body.deviceToken,
     deviceId: res.body.deviceId,

@@ -26,6 +26,7 @@ import {
 } from './agent.constants';
 import { ClockDriftService, type Drift } from './clock-drift.service';
 import type { ScreenshotMetaDto } from './dto';
+import { IngestBoundsService } from './ingest-bounds.service';
 import { workPathParts, workDateOf } from './util/work-time';
 
 export interface ScreenshotResult {
@@ -44,6 +45,7 @@ export class ScreenshotIngestService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly clock: ClockDriftService,
     @Inject(SCREENSHOT_STORAGE) private readonly storage: ScreenshotStorage,
+    private readonly bounds: IngestBoundsService,
   ) {}
 
   /**
@@ -113,6 +115,21 @@ export class ScreenshotIngestService implements OnModuleInit {
     const capturedAt = this.clock.correct(meta.capturedAt, drift);
     const slotStart = this.clock.correct(meta.slotStart, drift);
     const workDate = workDateOf(capturedAt);
+
+    /**
+     * M1: a screenshot is the owner's evidence on the timeline, so it gets
+     * the same window as segments. Dropped the way a switched-off module is
+     * (`agent.controller.ts`): a 201 with nothing stored, so the agent clears
+     * it from its queue instead of retrying it forever.
+     */
+    const { rejected } = this.bounds.partition(device, [capturedAt], (at) => ({
+      startedAt: at,
+      endedAt: at,
+    }));
+    if (rejected.total > 0) {
+      await this.bounds.report(device, 'screenshot', rejected);
+      return { accepted: 0, duplicate: false, path: '', thumbPath: null };
+    }
 
     // D:\oXeio\storage\screenshots\YYYY\MM\DD\emp-003\093147_m0.webp
     // Folders by date, so the 90-day retention is just deleting folders (ADR-006).

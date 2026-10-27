@@ -9,6 +9,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { ConfigService } from '@nestjs/config';
 import { Prisma, type Device } from '@prisma/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -17,7 +18,9 @@ import type {
   Drift,
 } from '../src/agent/clock-drift.service';
 import type { ScreenshotMetaDto } from '../src/agent/dto';
+import { IngestBoundsService } from '../src/agent/ingest-bounds.service';
 import { ScreenshotIngestService } from '../src/agent/screenshot-ingest.service';
+import type { AlertsService } from '../src/alerts/alerts.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
 import { LocalScreenshotStorage } from '../src/storage/local.storage';
 
@@ -81,7 +84,23 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-function makeService(prisma: Partial<PrismaService>): ScreenshotIngestService {
+/**
+ * The fixtures are dated August 2026 on a device with no `enrolledAt`: the
+ * time window (M1) is not what these tests are about, so it lets everything
+ * through. Its own test is at the bottom of this file.
+ */
+const ALL_IN_BOUNDS = {
+  partition: <T>(_device: Device, items: readonly T[]) => ({
+    kept: [...items],
+    rejected: { total: 0, byReason: {}, earliest: null, latest: null },
+  }),
+  report: async () => undefined,
+} as unknown as IngestBoundsService;
+
+function makeService(
+  prisma: Partial<PrismaService>,
+  bounds: IngestBoundsService = ALL_IN_BOUNDS,
+): ScreenshotIngestService {
   const storage = new LocalScreenshotStorage(root);
 
   // clock correction is irrelevant here: return whatever came in
@@ -89,7 +108,12 @@ function makeService(prisma: Partial<PrismaService>): ScreenshotIngestService {
     correct: (value: string) => new Date(value),
   } as unknown as ClockDriftService;
 
-  return new ScreenshotIngestService(prisma as PrismaService, clock, storage);
+  return new ScreenshotIngestService(
+    prisma as PrismaService,
+    clock,
+    storage,
+    bounds,
+  );
 }
 
 describe('G81: can storage be written at startup', () => {
@@ -105,6 +129,7 @@ describe('G81: can storage be written at startup', () => {
       {} as PrismaService,
       {} as ClockDriftService,
       storage,
+      ALL_IN_BOUNDS,
     );
 
     await expect(svc.onModuleInit()).resolves.toBeUndefined();
@@ -137,6 +162,7 @@ describe('G81: can storage be written at startup', () => {
         {} as PrismaService,
         {} as ClockDriftService,
         storage,
+        ALL_IN_BOUNDS,
       );
 
       await expect(svc.onModuleInit()).rejects.toThrow(
@@ -289,6 +315,39 @@ describe('G81: the duplicate path: row exists, file does not', () => {
 
     await expect(svc.ingest(DEVICE, DRIFT, META, webp())).rejects.toThrow(
       'connection lost',
+    );
+  });
+});
+
+describe('M1: a screenshot outside the time window', () => {
+  /**
+   * Dropped the way a switched-off module is: a 201 with nothing stored, so
+   * the agent clears it from its queue. No row and no file, and an alert.
+   */
+  it('is dropped before the DB or the disk is touched, and raises an alert', async () => {
+    const raise = vi.fn().mockResolvedValue(true);
+    const bounds = new IngestBoundsService(
+      { raise } as unknown as AlertsService,
+      { get: () => undefined } as unknown as ConfigService,
+    );
+    const create = vi.fn();
+    const svc = makeService(
+      { screenshot: { create } } as unknown as Partial<PrismaService>,
+      bounds,
+    );
+
+    // enrolled a month after the picture claims to have been taken
+    const device = {
+      ...DEVICE,
+      enrolledAt: new Date('2026-09-13T00:00:00.000Z'),
+    } as unknown as Device;
+
+    const result = await svc.ingest(device, DRIFT, META, webp());
+
+    expect(result).toEqual({ accepted: 0, duplicate: false, path: '', thumbPath: null });
+    expect(create).not.toHaveBeenCalled();
+    expect(raise).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'ingest_rejected', deviceId: DEVICE.id }),
     );
   });
 });

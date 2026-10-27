@@ -251,7 +251,7 @@ export class AgentController {
      * queued forever) and not stored. Not a 404 like the dashboard routes: an
      * agent would retry that for ever.
      */
-    if (!(await this.features.isOn('appTracking'))) return { accepted: 0, duplicates: 0, split: 0 };
+    if (!(await this.features.isOn('appTracking'))) return { accepted: 0, duplicates: 0, split: 0, rejected: 0 };
     return this.ingest.ingestAppUsage(device, drift, dto.items);
   }
 

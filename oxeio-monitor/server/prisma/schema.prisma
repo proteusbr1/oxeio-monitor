@@ -692,7 +692,7 @@ model Holiday {
 model Alert {
   id               BigInt        @id @default(autoincrement())
   /// agent_down | agent_killed | disk_warning | disk_critical | backup_failed
-  /// clock_drift | no_activity_today | device_overlap
+  /// clock_drift | no_activity_today | device_overlap | ingest_rejected
   type             String
   severity         AlertSeverity
   employeeId       Int?          @map("employee_id")

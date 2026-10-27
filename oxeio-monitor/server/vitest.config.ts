@@ -33,6 +33,13 @@ export default defineConfig({
        * a test about the default clears this variable itself.
        */
       WORK_TIMEZONE: 'Etc/GMT-6',
+      /**
+       * Fixtures sit at today's work-noon (`test/setup/clock.ts`), which in
+       * the morning is hours ahead of the real clock, and ingest drops records
+       * that end in the future (M1). A day of allowance keeps them in; the
+       * bounds' own spec checks the real 5-minute default.
+       */
+      INGEST_FUTURE_SKEW_SEC: '86400',
       // Keep screenshot tests from writing files into the real storage
       STORAGE_ROOT: resolve(import.meta.dirname, '.tmp-test-storage'),
       JWT_SECRET:
