@@ -14,6 +14,30 @@ internal struct LASTINPUTINFO
     internal uint dwTime;
 }
 
+/// <summary>
+/// For <see cref="Kernel32.GetProcessMemoryInfo"/>. Blittable (every field is a number), so it can
+/// go through source-generated marshalling as an <c>out</c> struct. Careful: the <c>SIZE_T</c>
+/// fields are <c>nuint</c>, not <c>uint</c>: on x64 they are 8 bytes, and the wrong width would
+/// shift <c>PrivateUsage</c> onto a neighbouring field.
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+internal struct PROCESS_MEMORY_COUNTERS_EX
+{
+    internal uint cb;
+    internal uint PageFaultCount;
+    internal nuint PeakWorkingSetSize;
+    internal nuint WorkingSetSize;
+    internal nuint QuotaPeakPagedPoolUsage;
+    internal nuint QuotaPagedPoolUsage;
+    internal nuint QuotaPeakNonPagedPoolUsage;
+    internal nuint QuotaNonPagedPoolUsage;
+    internal nuint PagefileUsage;
+    internal nuint PeakPagefileUsage;
+
+    /// <summary>Committed private memory: what "Private Bytes" shows in Process Explorer.</summary>
+    internal nuint PrivateUsage;
+}
+
 [StructLayout(LayoutKind.Sequential)]
 internal struct POWERBROADCAST_SETTING
 {

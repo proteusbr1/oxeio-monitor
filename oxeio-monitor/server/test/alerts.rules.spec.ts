@@ -638,6 +638,19 @@ describe('G02: whether agent_stop is normal or tampering', () => {
     expect(isTamperStop(stop(), context)).toBe(true);
   });
 
+  /**
+   * The agent restarting itself above its resource ceiling (a leaking
+   * third-party DLL) is a planned stop: it queues `agent_restart` before its
+   * `agent_stop`. Without the pair, every such restart would read as someone
+   * killing the agent.
+   */
+  it('normal when agent_restart is alongside: a planned restart is not tampering', () => {
+    const context = [
+      stop({ type: 'agent_restart', occurredAt: new Date(at.getTime() - 2_000) }),
+    ];
+    expect(isTamperStop(stop(), context)).toBe(false);
+  });
+
   /** Uninstall has no exemption, even with an update alongside */
   it('uninstall next to an update is still tampering', () => {
     const context = [stop({ type: 'agent_update' })];

@@ -16,6 +16,7 @@ import { RolloutAdvanceJob } from './rollout-advance.job';
 import { ScreenshotIngestService } from './screenshot-ingest.service';
 import { UpdateService } from './update.service';
 import { CapabilityHealthService } from './capability-health.service';
+import { ResourceHealthService } from './resource-health.service';
 
 @Module({
   // Careful: `AuthModule` is here only for `AuthService`, to enroll with a
@@ -28,6 +29,7 @@ import { CapabilityHealthService } from './capability-health.service';
     ProgressService,
     AgentConfigService,
     CapabilityHealthService,
+    ResourceHealthService,
     RolloutAdvanceJob,
     ClockDriftService,
     DeviceAuthGuard,

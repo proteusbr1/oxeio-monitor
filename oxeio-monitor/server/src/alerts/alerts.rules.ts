@@ -444,11 +444,20 @@ export interface StopEvent {
  * Careful: the exemption is narrow, by design. `agent_update` is sent only
  * when Windows itself is shutting us down. If someone kills the process it is
  * not sent, so real tampering is still caught as before.
+ *
+ * Careful: `agent_restart` (26 October 2026) is the same kind of exemption.
+ * Above its resource ceiling (a leaking third-party DLL, see
+ * `agent/resources.rules.ts`) the agent restarts **itself**: it queues
+ * `agent_restart`, then exits through the normal shutdown, which sends
+ * `agent_stop`, and the watchdog starts it again within ~30 s. Without the
+ * pair every such restart would be reported as someone killing the agent.
+ * Narrow in the same way: a process killed from outside never sends it.
  */
 export const CLEAN_STOP_CONTEXT: readonly string[] = [
   'logoff',
   'shutdown',
   'agent_update',
+  'agent_restart',
 ];
 
 /**

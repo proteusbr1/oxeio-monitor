@@ -169,6 +169,10 @@ internal sealed partial class AgentHost
             // exactly.
             if (_closingEventsSent.Contains(AgentEventTypes.AgentUpdate))
                 return AgentEventTypes.AgentUpdate;
+
+            // The resource ceiling (AgentHost.Resources): a restart the agent chose itself.
+            if (_closingEventsSent.Contains(AgentEventTypes.AgentRestart))
+                return AgentEventTypes.AgentRestart;
         }
 
         return "unknown";

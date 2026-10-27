@@ -35,6 +35,7 @@ internal sealed class AgentPaths
     internal string Alarm => Path.Combine(DataDirectory, AgentLiveness.AlarmFileName);
     internal string Log => Path.Combine(DataDirectory, AgentLiveness.WatchdogLogFileName);
     internal string StopFile => Path.Combine(DataDirectory, AgentLiveness.StopFileName);
+    internal string RestartMarker => Path.Combine(DataDirectory, PlannedRestartFiles.MarkerFileName);
 
     /// <summary>Creates the folder if it is missing. false if it cannot; the caller writes that to the log.</summary>
     internal bool EnsureDirectory()

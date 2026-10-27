@@ -66,6 +66,19 @@ public static class AgentEventTypes
     /// </summary>
     public const string AgentUpdate = "agent_update";
 
+    /// <summary>
+    /// <b>The agent is restarting itself on purpose</b>: today only above its resource ceiling
+    /// (<see cref="oXeio.Core.Watchdog.ResourceCeiling"/>). Queued just before the graceful exit, so
+    /// the <c>agent_stop</c> that follows carries <c>reason: agent_restart</c>.
+    ///
+    /// Careful: the same trap as <see cref="AgentUpdate"/>. An <c>agent_stop</c> with no
+    /// <c>logoff</c>/<c>shutdown</c> beside it is an "intervention" to the server's G02, so without
+    /// this every ceiling restart would raise <c>agent_killed</c>. The server lists it in
+    /// <c>CLEAN_STOP_CONTEXT</c> (<c>alerts.rules.ts</c>). Equally narrow: a process killed from
+    /// outside never sends it.
+    /// </summary>
+    public const string AgentRestart = "agent_restart";
+
     public const string Lock = "lock";
     public const string Unlock = "unlock";
     public const string Sleep = "sleep";

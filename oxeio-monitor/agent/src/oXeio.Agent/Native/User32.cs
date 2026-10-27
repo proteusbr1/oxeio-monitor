@@ -83,7 +83,10 @@ internal static partial class User32
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool SetWindowDisplayAffinity(nint hWnd, uint dwAffinity);
 
-    /// <summary>To check for GDI/USER handle leaks (0 = GDI, 1 = USER).</summary>
+    internal const uint GR_GDIOBJECTS = 0;
+    internal const uint GR_USEROBJECTS = 1;
+
+    /// <summary>To check for GDI/USER handle leaks (<see cref="GR_GDIOBJECTS"/>, <see cref="GR_USEROBJECTS"/>).</summary>
     [LibraryImport("user32.dll")]
     internal static partial uint GetGuiResources(nint hProcess, uint uiFlags);
 }

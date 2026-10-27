@@ -134,6 +134,19 @@ public sealed record HeartbeatRequest
     /// ignores it.
     /// </summary>
     public IReadOnlyDictionary<string, string>? Capabilities { get; init; }
+
+    /// <summary>
+    /// What the agent process holds (handles, private memory, GDI/USER objects, known injected
+    /// DLLs): see <see cref="oXeio.Core.Watchdog.ResourceSample"/>. <c>null</c> = not measured,
+    /// and the fields are left out of the JSON.
+    ///
+    /// Careful: <b>unlike <see cref="Capabilities"/>, a server older than these fields does not
+    /// ignore them</b>: its ValidationPipe runs with <c>forbidNonWhitelisted</c>, so it answers the
+    /// whole heartbeat with a 400 (and with it the commands, revoke among them). The server must be
+    /// deployed first; the agent also drops the fields for the rest of its life on the first 400
+    /// (<c>AgentHost.Resources</c>), so an agent that arrives early still gets its commands.
+    /// </summary>
+    public oXeio.Core.Watchdog.ResourceSample? Resources { get; init; }
 }
 
 public sealed record HeartbeatResponse

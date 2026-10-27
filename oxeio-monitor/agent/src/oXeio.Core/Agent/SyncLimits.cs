@@ -34,4 +34,21 @@ public static class SyncLimits
 
     /// <inheritdoc cref="RateLimitIngestPerMinute"/>
     public const int RateLimitScreenshotPerMinute = 20;
+
+    // ── heartbeat resource report: HEARTBEAT_MAX_* in agent.constants.ts ──
+    //
+    // Careful: these are Windows' own hard limits, not the ceiling. A value above them is garbage,
+    // and is clamped before sending: a 400 on the heartbeat would drop its commands too.
+
+    /// <summary>Windows' per-process handle limit, 2^24.</summary>
+    public const long HeartbeatMaxHandles = 16_777_216;
+
+    /// <summary>The x64 user-mode address space, 128 TiB.</summary>
+    public const long HeartbeatMaxPrivateBytes = 140_737_488_355_328;
+
+    /// <summary>GDI and USER objects, each: the quota's hard cap.</summary>
+    public const int HeartbeatMaxGuiObjects = 65_536;
+
+    public const int HeartbeatMaxModules = 8;
+    public const int HeartbeatMaxModuleName = 64;
 }

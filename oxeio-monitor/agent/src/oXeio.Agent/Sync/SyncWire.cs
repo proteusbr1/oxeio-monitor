@@ -227,6 +227,14 @@ internal static class SyncWire
         public string? ConfigVersion { get; init; }
         public string? AgentVersion { get; init; }
         public IReadOnlyDictionary<string, string>? Capabilities { get; init; }
+
+        // The resource report (HeartbeatDto in server/src/agent/dto.ts). All null when not
+        // measured, and then left out of the JSON (WhenWritingNull).
+        public long? HandleCount { get; init; }
+        public long? PrivateBytes { get; init; }
+        public int? GdiObjects { get; init; }
+        public int? UserObjects { get; init; }
+        public IReadOnlyList<string>? InjectedModules { get; init; }
     }
 
     internal static HeartbeatDto Heartbeat(HeartbeatRequest request) => new()
@@ -242,7 +250,42 @@ internal static class SyncWire
         ConfigVersion = request.ConfigVersion,
         AgentVersion = request.AgentVersion,
         Capabilities = request.Capabilities,
+
+        // Careful: clamped into the server's bounds for the same reason as ActiveSecToday: a 400
+        // on the heartbeat drops its commands. The bounds are Windows' hard limits, so a real
+        // leak (217k handles) passes untouched; only garbage is clamped.
+        HandleCount = request.Resources is { } r1
+            ? Math.Clamp(r1.HandleCount, 0, SyncLimits.HeartbeatMaxHandles)
+            : null,
+        PrivateBytes = request.Resources is { } r2
+            ? Math.Clamp(r2.PrivateBytes, 0, SyncLimits.HeartbeatMaxPrivateBytes)
+            : null,
+        GdiObjects = request.Resources is { } r3
+            ? Math.Clamp(r3.GdiObjects, 0, SyncLimits.HeartbeatMaxGuiObjects)
+            : null,
+        UserObjects = request.Resources is { } r4
+            ? Math.Clamp(r4.UserObjects, 0, SyncLimits.HeartbeatMaxGuiObjects)
+            : null,
+        InjectedModules = request.Resources is { } r5 ? WireModules(r5.InjectedModules) : null,
     };
+
+    /// <summary>
+    /// Only names the server's pattern accepts (<c>^[A-Za-z0-9][A-Za-z0-9._-]*$</c>), at most
+    /// <see cref="SyncLimits.HeartbeatMaxModules"/> of them. Careful: one bad name would 400 the
+    /// whole heartbeat, so a name that does not fit is dropped, never sent "to see".
+    /// </summary>
+    internal static IReadOnlyList<string> WireModules(IReadOnlyList<string>? modules)
+    {
+        if (modules is null || modules.Count == 0) return [];
+
+        return modules
+            .Where(m => m.Length is > 0 and <= SyncLimits.HeartbeatMaxModuleName
+                        && char.IsAsciiLetterOrDigit(m[0])
+                        && m.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-'))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(SyncLimits.HeartbeatMaxModules)
+            .ToList();
+    }
 
     internal sealed record EnrollDto
     {

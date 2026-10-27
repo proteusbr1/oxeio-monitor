@@ -415,7 +415,15 @@ model Device {
   capabilities    Json?
   /// When `capabilities` last changed (not every heartbeat — it rarely does)
   capabilitiesAt  DateTime?     @map("capabilities_at") @db.Timestamptz(3)
-  enrolledAt      DateTime      @default(now()) @map("enrolled_at") @db.Timestamptz(3)
+  /// The agent's own resource use from its last heartbeat — `{ handleCount,
+  /// privateBytes, gdiObjects, userObjects, injectedModules }`, see
+  /// `agent/resources.rules.ts`. JSONB, not columns: `privateBytes` passes 2^31,
+  /// and a BigInt column would not survive `JSON.stringify` on its way to the web.
+  /// null until an agent that sends it checks in.
+  resources       Json?
+  /// When `resources` was last written (every heartbeat that carries it)
+  resourcesAt     DateTime?     @map("resources_at") @db.Timestamptz(3)
+  enrolledAt     DateTime      @default(now()) @map("enrolled_at") @db.Timestamptz(3)
 
   employee        Employee?         @relation(fields: [employeeId], references: [id])
   workSessions    WorkSession[]

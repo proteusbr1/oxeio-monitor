@@ -57,6 +57,12 @@ public enum WatchdogReason
     ShuttingDown,
     SessionNotUsable,
     ProbeFailed,
+
+    /// <summary>
+    /// The agent left on purpose and asked to be started again (<see cref="PlannedRestart"/>):
+    /// started at once, and <b>not</b> counted as a failed launch.
+    /// </summary>
+    PlannedRestart,
 }
 
 /// <summary>What was learned from the outside world in one tick.</summary>
@@ -85,6 +91,12 @@ public sealed record AgentObservation
 
     /// <summary>Whether Windows is shutting down/logging off right now.</summary>
     public required bool ShuttingDown { get; init; }
+
+    /// <summary>
+    /// The unbiased ms stamped in <c>agent.restart</c>, if that file exists
+    /// (<see cref="PlannedRestartFiles"/>). <c>null</c> = no planned restart was requested.
+    /// </summary>
+    public long? PlannedRestartUnbiasedMs { get; init; }
 }
 
 public sealed record WatchdogDecision
@@ -98,6 +110,12 @@ public sealed record WatchdogDecision
 
     /// <summary>How much longer, when told to wait.</summary>
     public TimeSpan? RetryIn { get; init; }
+
+    /// <summary>
+    /// A <see cref="WatchdogAction.Start"/> for a planned restart: the caller records it with
+    /// <see cref="RestartLadder.RecordPlannedLaunch"/>, not <see cref="RestartLadder.RecordLaunch"/>.
+    /// </summary>
+    public bool Planned { get; init; }
 }
 
 /// <summary>
@@ -188,6 +206,37 @@ public static class WatchdogPolicy
                 Reason = WatchdogReason.Healthy,
                 Health = health,
             };
+
+        // ── Planned restart ───────────────────────────────────────────────────
+
+        // The agent exited cleanly and left agent.restart behind: it wants to be back now, and
+        // this is not a failure.
+        //
+        // Careful: only for NotRunning. While the agent is still inside its graceful exit (up to
+        // ~4 s) it holds the lock and its heartbeat is fresh, so it is Healthy and left alone;
+        // the very next tick after the lock is released lands here.
+        //
+        // Careful: it skips the backoff and the give-up check, and that is safe: the agent only
+        // asks after running ResourceCeiling.MinUptime (15 min), longer than the ladder's
+        // StabilityWindow (10 min), so the ladder has already been reset by its health. And the
+        // marker is one-shot (the caller deletes it on every start) and expires after
+        // PlannedRestartFiles.MaxAge, so it cannot carry a crash loop past the ladder: the
+        // second start in a row is an ordinary one again.
+        //
+        // Careful: the holds above (shutdown, Session 0, failed probe) still come first. A planned
+        // restart during a Windows shutdown is no reason to start anything.
+        if (health == AgentHealth.NotRunning
+            && observation.PlannedRestartUnbiasedMs is { } requested
+            && PlannedRestartFiles.IsFresh(requested, observation.NowUnbiasedMs))
+        {
+            return new WatchdogDecision
+            {
+                Action = WatchdogAction.Start,
+                Reason = WatchdogReason.PlannedRestart,
+                Health = health,
+                Planned = true,
+            };
+        }
 
         // We do not know who holds the lock: no killing and no starting.
         // A mistake costs 30 seconds; the opposite costs hours counted twice.
