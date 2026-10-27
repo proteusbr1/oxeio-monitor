@@ -311,13 +311,24 @@ internal static partial class Program
     /// Modify. The ACL rule lives in one place; written separately in WiX, the two definitions
     /// would drift apart one day.
     /// </summary>
+    /// <remarks>
+    /// M3: <see cref="AgentDataDirectory.Harden"/>, not <c>Ensure</c>. This is the one moment the
+    /// agent runs as SYSTEM, so it is the one chance to take back a folder a standard user
+    /// created first (or replaced with a junction). Careful: <c>Return="check"</c> in
+    /// Package.wxs, so a failure here stops the install, which is the point: installing into a
+    /// folder someone else controls is worse than not installing.
+    /// </remarks>
     private static int PrepareDataDir()
     {
         var path = AgentDataDirectory.Default;
 
-        if (!AgentDataDirectory.TryEnsure(path, out var error))
+        try
         {
-            Console.Error.WriteLine($"❌ Could not create {path}: {error}");
+            AgentDataDirectory.Harden(path, Console.WriteLine);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"❌ Could not prepare {path}: {ex.GetType().Name}: {ex.Message}");
             return 4;
         }
 
