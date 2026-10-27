@@ -372,6 +372,17 @@ model User {
   addedTasks Task[] @relation("addedTasks")
 }
 
+/// A session ended by logout: its token (any copy of it) is refused until
+/// `expiresAt`, when it would have expired by itself (auth/sessions.service.ts)
+model RevokedSession {
+  /// The token's `jti`; the sliding refresh keeps it, so it names the whole session
+  sessionId String   @id @map("session_id") @db.Uuid
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+
+  @@index([expiresAt])
+  @@map("revoked_sessions")
+}
+
 model Device {
   id              Int           @id @default(autoincrement())
   hostname        String
