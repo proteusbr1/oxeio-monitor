@@ -53,6 +53,19 @@ public sealed record UpdateStatus
 
     public bool Mandatory { get; init; }
 
+    /// <summary>
+    /// <b>H1:</b> the SHA-256 (hex) the MSI had when it was verified, as the offer stated it.
+    ///
+    /// Careful: kept so the file can be checked <b>again, right before msiexec runs</b>. The
+    /// updates folder is writable by every standard user (Users = Modify, inherited from
+    /// <c>%ProgramData%\oXeio</c>), so "it was verified when it was downloaded" says nothing about
+    /// the file that is on disk hours later, when an administrator approves the UAC prompt.
+    /// </summary>
+    public string? Sha256 { get; init; }
+
+    /// <summary>The owner's signature from the offer (base64), for the same re-check.</summary>
+    public string? Signature { get; init; }
+
     /// <summary>What went wrong, if it failed.</summary>
     public string? Detail { get; init; }
 

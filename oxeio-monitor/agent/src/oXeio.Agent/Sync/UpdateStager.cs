@@ -173,7 +173,13 @@ internal sealed class UpdateStager(
             return;
         }
 
-        _status = _status with { Stage = UpdateStage.Verified };
+        // H1: what was verified is remembered, so the install can check the file again
+        _status = _status with
+        {
+            Stage = UpdateStage.Verified,
+            Sha256 = file.Sha256,
+            Signature = offer.Signature,
+        };
         log.Info(
             $"✅ Update {offer.Version} verified" +
             (signature == SignatureCheck.Valid ? " (hash and owner's signature)" : "") +
@@ -181,6 +187,111 @@ internal sealed class UpdateStager(
 
         // Downloaded MSIs of older versions are no longer needed
         CleanOldMsi(file.SavedPath);
+    }
+
+    /// <summary>
+    /// <b>H1: the file msiexec is about to run, locked and verified again.</b> <c>null</c> (with
+    /// the reason logged, the file deleted and the status set to <see cref="UpdateStage.Corrupt"/>,
+    /// so the next check downloads it again) when it cannot be trusted.
+    ///
+    /// <b>The attack this closes:</b> the MSI waits in <c>%ProgramData%\oXeio\updates</c> for
+    /// hours or days, and every standard user may modify files there (Users = Modify, inherited;
+    /// <see cref="Security.AgentDataDirectory"/>). The monitored staff member could replace it with
+    /// their own MSI; an administrator then approves the UAC prompt for "the oXeio update", and the
+    /// replaced MSI runs as SYSTEM. The check at download time does not help: it describes the
+    /// file as it was then.
+    ///
+    /// Careful: <b>checking again by path is not enough either</b>: "hash the file, then start
+    /// msiexec on the path" leaves a gap between the two in which the file can be swapped again
+    /// (a classic time-of-check / time-of-use race, and easy to win: the UAC prompt alone keeps
+    /// the gap open for as long as the admin takes to read it). So the file is opened
+    /// <b>first</b>, with a handle that allows others to read but not to write, rename or delete
+    /// (<see cref="UpdateLock"/>); the hash is computed <b>through that handle</b>; and the handle
+    /// stays open until msiexec is done with the file. While it is open, the bytes that were hashed
+    /// are the bytes msiexec reads.
+    ///
+    /// The signature is checked again too, against what was recorded at verification time
+    /// (<see cref="UpdateStatus.Sha256"/>, <see cref="UpdateStatus.Signature"/>), not against the
+    /// server's current word.
+    ///
+    /// Careful: this hashes the whole MSI (~62 MB) on the caller's thread; a fraction of a second,
+    /// and only when the staff member clicks "Install update".
+    /// </summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    internal UpdateLock? LockForInstall()
+    {
+        var status = _status;
+        if (status.Stage != UpdateStage.Verified || string.IsNullOrWhiteSpace(status.MsiPath)) return null;
+
+        var msi = status.MsiPath;
+
+        if (!UpdateLock.TryAcquire(paths.Updates, msi, out var held, out var why))
+        {
+            RefuseAtInstall(status, msi, why);
+            return null;
+        }
+
+        string actual;
+        try
+        {
+            actual = held.ComputeSha256();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            held.Dispose();
+            RefuseAtInstall(status, msi, $"could not read it: {ex.Message}");
+            return null;
+        }
+
+        var problem = RecheckProblem(actual, status, _updateKey, KeyUnreadable);
+        if (problem is not null)
+        {
+            held.Dispose();
+            RefuseAtInstall(status, msi, problem);
+            return null;
+        }
+
+        log.Info($"Update {status.Version} checked again and locked for msiexec: {held.FinalPath}");
+        return held;
+    }
+
+    /// <summary>
+    /// The pure part of the install-time check: <c>null</c> if the file hashed now is the one
+    /// that was verified and (when this PC has the owner's key) still carries a valid owner
+    /// signature; otherwise why not.
+    /// </summary>
+    internal static string? RecheckProblem(string actualSha256, UpdateStatus verified, ECDsa? key, bool keyUnreadable)
+    {
+        if (string.IsNullOrWhiteSpace(verified.Sha256))
+            return "no hash was recorded when it was verified";
+
+        if (!string.Equals(actualSha256, verified.Sha256, StringComparison.OrdinalIgnoreCase))
+            return $"the file changed since it was verified (expected {verified.Sha256}, now {actualSha256})";
+
+        if (keyUnreadable) return "the UpdatePublicKey on this PC cannot be read";
+
+        return UpdateSignature.Verify(key, actualSha256, verified.Signature) switch
+        {
+            SignatureCheck.Missing => "the owner's signature is missing",
+            SignatureCheck.Invalid => "the owner's signature does not match",
+            _ => null,
+        };
+    }
+
+    private void RefuseAtInstall(UpdateStatus status, string msi, string why)
+    {
+        log.Error(
+            $"⛔ Update {status.Version} NOT started — {why}. msiexec was not run; " +
+            "the file is being deleted and will be downloaded again.");
+
+        TryDelete(msi);
+
+        // Careful: compared before overwriting. A check that finished meanwhile may already have
+        // staged something newer; that must not be marked corrupt by this old refusal.
+        Interlocked.CompareExchange(
+            ref _status,
+            status with { Stage = UpdateStage.Corrupt, MsiPath = null, Detail = "changed on disk" },
+            status);
     }
 
     /// <summary>
