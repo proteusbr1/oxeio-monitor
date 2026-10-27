@@ -335,7 +335,7 @@ internal static partial class Program
             // week later that there was no data at all from that PC.
             Complain(
                 "oXeio agent could not start",
-                $"Server address not found.\n\nLooked in: {source}\n\n" +
+                $"No usable server address.\n\nLooked in: {source}\n\n" +
                 $"The installer is supposed to write this. Please tell office IT.");
             return 2;
         }
@@ -356,6 +356,12 @@ internal static partial class Program
         var paths = OutboxPaths.Default;
         var log = new FileLog(paths.Logs);
         log.Startup(Version, settings.ServerUrl, paths.Root);
+        log.Info($"settings from {source}");
+
+        // H2 / L1: an override or a refused override must be visible in the log, not silent
+        if (settings.LoadWarning is { } loadWarning) log.Warn(loadWarning);
+        if (settings.AllowInsecureHttp && settings.ServerUrl.StartsWith("http:", StringComparison.OrdinalIgnoreCase))
+            log.Warn("⚠️ Plain http to the server (AllowInsecureHttp): the password and device token are not encrypted on the network.");
 
         _host = new AgentHost(settings, Version, log);
 

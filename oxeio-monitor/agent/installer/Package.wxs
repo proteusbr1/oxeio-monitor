@@ -112,6 +112,25 @@
     <Property Id="UPDATEKEY" Secure="yes" Value="$(var.UpdateKeyDefault)" />
 <?endif?>
 
+    <!--
+      L1: ALLOWHTTP=1 lets the agent talk plain http:// to a server that is not this
+      PC (the office-LAN trial, deploy/README.md › "Plain HTTP on the office LAN").
+      Without it the agent accepts only https:// (or http://localhost).
+
+      Careful: over plain http the sign-in password and the device token cross the
+      network unencrypted. It is an MSI property, written to HKLM, so only whoever
+      installs as administrator can turn it on; the agent ignores the same switch in
+      agent.json or the environment, which the monitored user can write.
+
+      Baked in by `build.ps1 -AllowHttp` (required there for an http:// -ServerUrl),
+      so an update built the same way keeps it.
+    -->
+<?if $(var.AllowHttpDefault) = "" ?>
+    <Property Id="ALLOWHTTP" Secure="yes" />
+<?else?>
+    <Property Id="ALLOWHTTP" Secure="yes" Value="$(var.AllowHttpDefault)" />
+<?endif?>
+
     <!-- Installing without a server address makes no sense: the agent would be
          installed, run, and send nothing. Better to stop right at the start. -->
     <!--
@@ -154,6 +173,7 @@
           <RegistryValue Name="PolicyUrl" Type="string" Value="[POLICYURL]" />
           <RegistryValue Name="ServerPin" Type="string" Value="[SERVERPIN]" />
           <RegistryValue Name="UpdatePublicKey" Type="string" Value="[UPDATEKEY]" />
+          <RegistryValue Name="AllowInsecureHttp" Type="string" Value="[ALLOWHTTP]" />
           <RegistryValue Name="InstallDir" Type="string" Value="[INSTALLFOLDER]" />
         </RegistryKey>
       </Component>
