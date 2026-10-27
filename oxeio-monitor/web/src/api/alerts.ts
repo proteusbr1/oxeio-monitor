@@ -24,7 +24,8 @@ export type AlertType =
   | 'synthetic_input'
   | 'agent_capability'
   | 'agent_resources'
-  | 'statement_delivery_failed';
+  | 'statement_delivery_failed'
+  | 'ingest_rejected';
 
 export type AlertSeverity = 'info' | 'warning' | 'critical';
 
@@ -58,6 +59,7 @@ export const ALERT_TYPE_LABEL: Record<AlertType, string> = {
   agent_capability: 'Agent part not working',
   agent_resources: 'Agent using too many resources',
   statement_delivery_failed: 'Hours statement not sent',
+  ingest_rejected: 'Agent data outside the time window dropped',
 };
 
 export const ALERT_SEVERITY_LABEL: Record<AlertSeverity, string> = {

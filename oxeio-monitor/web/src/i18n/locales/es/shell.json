@@ -19,6 +19,7 @@
   "Agent is running, but nothing recent": "El agente está en ejecución, pero sin actividad reciente",
   "Agent part not working": "Una parte del agente no funciona",
   "Agent using too many resources": "El agente usa demasiados recursos",
+  "Agent data outside the time window dropped": "Datos del agente fuera del intervalo descartados",
   "Agent was stopped": "El agente fue detenido",
   "Alerts": "Alertas",
   "All set": "Todo listo",
