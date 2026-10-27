@@ -276,12 +276,23 @@ export class EnrollmentService {
           },
         });
 
-        // Single use: closed right here.
+        /**
+         * Single use: closed right here.
+         *
+         * Careful: `usedAt: null` is part of the condition. `enroll()` read
+         * the code outside this transaction, so two requests with the same
+         * code could both pass that read; a plain `where: { id }` would let
+         * both bind a device. The conditional update lets exactly one win,
+         * and the loser's whole transaction (device row included) rolls back.
+         */
         if (codeId !== null) {
-          await tx.enrollmentCode.update({
-            where: { id: codeId },
+          const closed = await tx.enrollmentCode.updateMany({
+            where: { id: codeId, usedAt: null, expiresAt: { gt: now } },
             data: { usedAt: now, usedByDeviceId: device.id },
           });
+          if (closed.count === 0) {
+            throw new UnauthorizedException('Enrolment code is invalid or expired');
+          }
         }
 
         await tx.event.create({

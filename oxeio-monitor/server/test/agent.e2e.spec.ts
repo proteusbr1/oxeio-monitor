@@ -81,6 +81,32 @@ describe('enrollment (H05)', () => {
       .expect(401);
   });
 
+  /**
+   * L4: the code is read outside the binding transaction, so two requests
+   * racing with one fresh code both passed the read and both bound a device.
+   */
+  it('two enrolments racing with one code: exactly one wins', async () => {
+    const { code: fresh } = await createEmployeeWithCode(h.prisma, 'OX-002');
+    const attempt = (n: number) =>
+      h
+        .http()
+        .post('/api/v1/agent/enroll')
+        .send({
+          enrollmentCode: fresh,
+          hostname: `PC-RACE-${n}`,
+          windowsUsername: 'racer',
+          machineGuid: `guid-race-${n}`,
+        });
+
+    const results = await Promise.all([1, 2, 3, 4].map(attempt));
+    const statuses = results.map((r) => r.status).sort();
+
+    expect(statuses).toEqual([201, 401, 401, 401]);
+    expect(
+      await h.prisma.device.count({ where: { hostname: { startsWith: 'PC-RACE-' } } }),
+    ).toBe(1);
+  });
+
   it('the token is not stored as plaintext (I02)', async () => {
     const row = await h.prisma.device.findFirstOrThrow({
       where: { id: device.deviceId },
