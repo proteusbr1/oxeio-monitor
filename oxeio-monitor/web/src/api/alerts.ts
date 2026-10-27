@@ -23,6 +23,7 @@ export type AlertType =
   | 'device_overlap'
   | 'synthetic_input'
   | 'agent_capability'
+  | 'agent_resources'
   | 'statement_delivery_failed';
 
 export type AlertSeverity = 'info' | 'warning' | 'critical';
@@ -55,6 +56,7 @@ export const ALERT_TYPE_LABEL: Record<AlertType, string> = {
    */
   synthetic_input: 'Unbroken activity',
   agent_capability: 'Agent part not working',
+  agent_resources: 'Agent using too many resources',
   statement_delivery_failed: 'Hours statement not sent',
 };
 

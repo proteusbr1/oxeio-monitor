@@ -1,4 +1,4 @@
-import type { AgentVersionView, DeviceView } from '../../api/agent';
+import type { AgentVersionView, DeviceResources, DeviceView } from '../../api/agent';
 import { translate } from '../../i18n';
 
 /**
@@ -200,6 +200,70 @@ export function capabilityIssues(
   return [...pick('failed'), ...pick('degraded')];
 }
 
+/**
+ * **The agent's resource ceiling: an exact copy of the agent's**
+ * (`ResourceCeiling.cs`) and the server's (`agent/resources.rules.ts`).
+ *
+ * Careful: if the three drifted apart, this screen would call a PC "fine" that
+ * the agent is about to restart, or flag one the server never alerted on.
+ */
+export const RESOURCE_CEILING_HANDLES = 20_000;
+export const RESOURCE_CEILING_PRIVATE_BYTES = 1_610_612_736;
+
+/**
+ * What the agent's own resource report says, ready to show (same chips as
+ * `capabilityIssues`).
+ *
+ * Why: a DLL injected by an NVIDIA overlay (`nvspcap64.dll`) leaked ~217k
+ * handles and 7 GB of memory in one agent over twelve days, and the only
+ * symptom anyone saw was "that PC is slow".
+ *
+ * - over the ceiling → red: the agent restarts itself at a quiet moment, but a
+ *   PC that keeps landing here needs the overlay switched off;
+ * - a known-troublesome DLL loaded, under the ceiling → amber: nothing is wrong
+ *   **yet**, and this is the one thing a person can fix before it is.
+ *
+ * Careful: an unknown number (`null`, an older agent) is not over; a guess is
+ * never shown as a fault.
+ */
+export function resourceIssues(
+  resources: DeviceResources | null | undefined,
+): CapabilityIssue[] {
+  if (!resources) return [];
+  const issues: CapabilityIssue[] = [];
+
+  const over =
+    (resources.handleCount ?? 0) > RESOURCE_CEILING_HANDLES ||
+    (resources.privateBytes ?? 0) > RESOURCE_CEILING_PRIVATE_BYTES;
+
+  if (over) {
+    issues.push({
+      text: translate('Agent resources: too high'),
+      tone: 'attention',
+      hint: translate(
+        'The agent is holding {{handles}} handles and {{memory}} MB of memory. It restarts itself at a quiet moment; if this keeps coming back, something on this PC is leaking into it.',
+        {
+          handles: (resources.handleCount ?? 0).toLocaleString(),
+          memory: Math.round((resources.privateBytes ?? 0) / 1_048_576).toLocaleString(),
+        },
+      ),
+    });
+  }
+
+  if (resources.injectedModules.length > 0) {
+    issues.push({
+      text: translate('Overlay loaded in the agent'),
+      tone: over ? 'attention' : 'pending',
+      hint: translate(
+        '{{modules}} is loaded inside the agent. It belongs to the NVIDIA overlay (Instant Replay / ShadowPlay) and is known to leak. Turn off the in-game overlay in the NVIDIA app on this PC.',
+        { modules: resources.injectedModules.join(', ') },
+      ),
+    });
+  }
+
+  return issues;
+}
+
 export interface FleetGroup {
   /** `null` means the agent did not report its version */
   version: string | null;
@@ -244,7 +308,7 @@ export function fleetGroups(
       lastSeenAt: d.lastSeenAt,
       quiet: isQuiet(d.lastSeenAt, now),
       driftSec: d.lastDriftSec,
-      issues: capabilityIssues(d.capabilities),
+      issues: [...capabilityIssues(d.capabilities), ...resourceIssues(d.resources)],
     });
     byVersion.set(key, rows);
   }
