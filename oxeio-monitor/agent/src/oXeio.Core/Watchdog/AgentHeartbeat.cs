@@ -48,6 +48,20 @@ public sealed record AgentHeartbeat
     /// and the wall clock can go backwards.
     /// </summary>
     public required DateTimeOffset WrittenAtUtc { get; init; }
+
+    /// <summary>
+    /// Kernel handles the agent held at the last measurement (<see cref="ResourceSample"/>).
+    /// <b>For the watchdog's log only</b>: when it has to kill a wedged agent, "it was holding
+    /// 210,000 handles" is the clue that turns a mystery into a diagnosis. Never used to decide;
+    /// the agent itself owns that (<see cref="ResourceCeiling"/>).
+    ///
+    /// Careful: optional. An agent that has not measured yet (the first seconds) leaves it out,
+    /// and an old watchdog skips the unknown key (<see cref="AgentLiveness.TryParse"/>).
+    /// </summary>
+    public long? HandleCount { get; init; }
+
+    /// <summary>Private bytes at the last measurement; same rules as <see cref="HandleCount"/>.</summary>
+    public long? PrivateBytes { get; init; }
 }
 
 /// <summary>
@@ -102,9 +116,18 @@ public static class AgentLiveness
         // InvariantCulture is mandatory. If numbers were written in non-Latin digits (Arabic-Indic, say)
         // under a matching locale, the watchdog's parse would fail and a healthy agent would be killed
         // as having "no heartbeat".
-        return string.Create(
+        var line = string.Create(
             CultureInfo.InvariantCulture,
             $"v={beat.Version} pid={beat.ProcessId} session={beat.SessionId} unbiased={beat.UnbiasedMs} utc={beat.WrittenAtUtc.UtcDateTime:O}");
+
+        // Careful: appended at the end and only when known, so the line an old watchdog reads is
+        // the same line it always read, plus keys it skips.
+        if (beat.HandleCount is { } handles)
+            line += string.Create(CultureInfo.InvariantCulture, $" handles={handles}");
+        if (beat.PrivateBytes is { } priv)
+            line += string.Create(CultureInfo.InvariantCulture, $" private={priv}");
+
+        return line;
     }
 
     /// <summary>
@@ -123,6 +146,8 @@ public static class AgentLiveness
         uint? session = null;
         long? unbiased = null;
         DateTimeOffset? utc = null;
+        long? handles = null;
+        long? privateBytes = null;
 
         foreach (var token in line.Split(
                      ' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -160,6 +185,16 @@ public static class AgentLiveness
                             value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var t))
                         utc = t;
                     break;
+
+                case "handles":
+                    if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var h))
+                        handles = h;
+                    break;
+
+                case "private":
+                    if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var pb))
+                        privateBytes = pb;
+                    break;
             }
         }
 
@@ -174,6 +209,8 @@ public static class AgentLiveness
             SessionId = session ?? 0,
             UnbiasedMs = unbiased.Value,
             WrittenAtUtc = utc ?? DateTimeOffset.MinValue,
+            HandleCount = handles,
+            PrivateBytes = privateBytes,
         };
     }
 

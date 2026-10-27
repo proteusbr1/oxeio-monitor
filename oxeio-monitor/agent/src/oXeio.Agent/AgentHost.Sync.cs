@@ -165,6 +165,12 @@ internal sealed partial class AgentHost
         {
             try
             {
+                // Measure (and, at most once a minute, judge the ceiling) before sending, so the
+                // heartbeat carries this turn's numbers. Careful: before the enrolled check on
+                // purpose; see CheckResourcesAsync.
+                try { await CheckResourcesAsync(); }
+                catch (Exception ex) { _log.Error("Resource check failed", ex); }
+
                 if (_credentials?.IsEnrolled == true && _sync is not null)
                 {
                     // Keep exactly the number being sent: it is needed to compute the offset
@@ -172,7 +178,7 @@ internal sealed partial class AgentHost
                     var sentTodaySec = (int)Math.Clamp(
                         Interlocked.Read(ref _activeTodaySec), 0, 86_400);
 
-                    var result = await _sync.HeartbeatAsync(new HeartbeatRequest
+                    var result = await SendHeartbeatAsync(new HeartbeatRequest
                     {
                         State = _machine!.State,
                         ActiveSecToday = sentTodaySec,
@@ -181,6 +187,7 @@ internal sealed partial class AgentHost
                         AgentVersion = _version,
                         Capabilities = CapabilityReport.ToWire(
                             CapabilityReport.Build(CapabilityFactsNow())),
+                        Resources = ResourcesForHeartbeat(),
                     }, ct);
 
                     if (result.IsSuccess && result.Value is { } body)

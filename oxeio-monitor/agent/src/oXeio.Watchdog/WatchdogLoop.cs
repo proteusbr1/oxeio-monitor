@@ -46,6 +46,9 @@ internal sealed class WatchdogLoop
     private DateTimeOffset _lastLogAt = DateTimeOffset.MinValue;
     private bool _alarmOnDisk;
 
+    /// <summary>The <c>agent.restart</c> read on this tick (null if none): for the log line.</summary>
+    private PlannedRestart? _plannedRestart;
+
     public WatchdogLoop(AgentPaths paths, RollingLog log, string? agentExeOverride)
     {
         _paths = paths;
@@ -123,7 +126,7 @@ internal sealed class WatchdogLoop
                 break;
 
             case WatchdogAction.Start:
-                Start(now);
+                Start(now, decision.Planned);
                 break;
 
             case WatchdogAction.Hold:
@@ -143,6 +146,11 @@ internal sealed class WatchdogLoop
         var lockState = InstanceLock.Probe(_paths.AgentLock);
         var beat = _heartbeat.Read(_paths.Heartbeat);
 
+        // Careful: read only when the lock is free. While the agent is still inside its graceful
+        // exit the marker is already there; reading it every tick of a healthy agent would be a
+        // pointless disk access 2,880 times a day.
+        _plannedRestart = lockState == LockProbe.Free ? ReadPlannedRestart() : null;
+
         return new AgentObservation
         {
             ProbeSucceeded = lockState != LockProbe.Unknown,
@@ -153,7 +161,44 @@ internal sealed class WatchdogLoop
             NowUnbiasedMs = nowUnbiased,
             SessionUsable = session.CanSupervise,
             ShuttingDown = User32.IsShuttingDown(),
+            PlannedRestartUnbiasedMs = _plannedRestart?.UnbiasedMs,
         };
+    }
+
+    private PlannedRestart? ReadPlannedRestart()
+    {
+        try
+        {
+            if (!File.Exists(_paths.RestartMarker)) return null;
+
+            using var stream = new FileStream(
+                _paths.RestartMarker, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            return PlannedRestartFiles.TryParse(reader.ReadLine());
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            // Unreadable = no request: the agent is then started the ordinary way, on the ladder.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Careful: deleted on <b>every</b> start, planned or not. A marker is a one-shot request; one
+    /// that survived a start could excuse the next crash from the ladder, which is the storm the
+    /// ladder exists to stop.
+    /// </summary>
+    private void ConsumePlannedRestart()
+    {
+        _plannedRestart = null;
+
+        try { File.Delete(_paths.RestartMarker); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Not dangerous: it expires by itself after PlannedRestartFiles.MaxAge.
+            _log.Write($"⚠️ Could not delete agent.restart: {ex.Message}");
+        }
     }
 
     // ── actions ─────────────────────────────────────────────────────────────
@@ -166,7 +211,11 @@ internal sealed class WatchdogLoop
             return;
         }
 
-        _log.Write($"⛔ The agent is wedged (heartbeat older than {AgentLiveness.StaleAfter.TotalSeconds:F0} s) — killing it");
+        // The last counts the agent wrote: a wedge with 200,000 handles is a leak, not a bug in
+        // the loop, and this line is the only place that would ever say so.
+        var last = _heartbeat.LastGood;
+        _log.Write($"⛔ The agent is wedged (heartbeat older than {AgentLiveness.StaleAfter.TotalSeconds:F0} s)" +
+                   $"{Counts(last?.HandleCount, last?.PrivateBytes)} — killing it");
 
         if (!AgentProcess.TryKill(victim, KillGrace, out var killDetail))
         {
@@ -189,17 +238,31 @@ internal sealed class WatchdogLoop
             return;
         }
 
-        Start(now);
+        Start(now, planned: false);
     }
 
-    private void Start(DateTimeOffset now)
+    private void Start(DateTimeOffset now, bool planned)
     {
         var exe = AgentPaths.ResolveAgentExecutable(_agentExeOverride);
+        var request = _plannedRestart;
 
-        // Careful: the ladder advances <b>before</b> launching. If the exe is missing or
-        // antivirus blocked it, counting afterwards would never raise the count and the
-        // loop would retry every 30 seconds forever, exactly the storm this prevents.
-        _ladder.RecordLaunch(now);
+        if (planned)
+        {
+            // The agent left on purpose (resource ceiling): not a failure, so no step on the
+            // ladder. See RestartLadder.RecordPlannedLaunch.
+            _ladder.RecordPlannedLaunch(now);
+            _log.Write($"🔄 Planned restart requested by the agent (pid {request?.ProcessId}, " +
+                       $"{request?.Reason ?? "unknown"}{Counts(request?.HandleCount, request?.PrivateBytes)})");
+        }
+        else
+        {
+            // Careful: the ladder advances <b>before</b> launching. If the exe is missing or
+            // antivirus blocked it, counting afterwards would never raise the count and the
+            // loop would retry every 30 seconds forever, exactly the storm this prevents.
+            _ladder.RecordLaunch(now);
+        }
+
+        if (File.Exists(_paths.RestartMarker)) ConsumePlannedRestart();
 
         if (exe is null)
         {
@@ -263,6 +326,15 @@ internal sealed class WatchdogLoop
         _log.Write(message);
     }
 
+    /// <summary><c>, 24,310 handles, 1,950 MB private</c>, or nothing if unknown.</summary>
+    private static string Counts(long? handles, long? privateBytes) =>
+        handles is null && privateBytes is null
+            ? string.Empty
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $", {handles?.ToString("N0", CultureInfo.InvariantCulture) ?? "?"} handles, " +
+                $"{(privateBytes is { } p ? (p / 1_048_576).ToString("N0", CultureInfo.InvariantCulture) : "?")} MB private");
+
     private static string Describe(WatchdogDecision decision)
     {
         var retry = decision.RetryIn is { } left && left > TimeSpan.Zero
@@ -305,6 +377,7 @@ internal sealed class WatchdogLoop
         WatchdogReason.ShuttingDown => "Windows is shutting down",
         WatchdogReason.SessionNotUsable => "the agent cannot be started from this session",
         WatchdogReason.ProbeFailed => "the lock file could not be read at all",
+        WatchdogReason.PlannedRestart => "the agent asked to be restarted",
         _ => reason.ToString(),
     };
 }

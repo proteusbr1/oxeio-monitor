@@ -18,6 +18,9 @@ internal sealed class HeartbeatReader
 {
     private AgentHeartbeat? _lastGood;
 
+    /// <summary>The last beat that parsed, for the log (its resource counts survive the agent).</summary>
+    public AgentHeartbeat? LastGood => _lastGood;
+
     public AgentHeartbeat? Read(string path)
     {
         var line = TryReadFirstLine(path);
