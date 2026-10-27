@@ -135,3 +135,42 @@ function toNumber(value: string | number | null | undefined, fallback: number): 
 function clamp(n: number, min: number, max: number, fallback: number): number {
   return n >= min && n <= max ? n : fallback;
 }
+
+// ══════════════════ L1 — per account, across IPs ══════════════════
+
+/**
+ * The longest one account's backoff can grow to.
+ *
+ * Careful: a ceiling, deliberately low. The per-account counter is the one an
+ * attacker can fill **for someone else**: wrong passwords for the owner's
+ * email from anywhere in the world count against the owner. A hard lock
+ * would hand them a button that locks the owner out; a 15-minute ceiling,
+ * which does not apply to the owner's usual IPs at all (`TRUSTED_IP_DAYS`),
+ * only slows a distributed guesser down to about four tries an hour.
+ */
+export const EMAIL_BACKOFF_CAP_MS = 15 * 60 * 1000;
+
+/** With no new failure for this long, the account's count starts again from zero */
+export const EMAIL_FORGET_MS = 60 * 60 * 1000;
+
+/**
+ * An IP that signed in to an account successfully is exempt from that
+ * account's backoff for this long. The pair and per-IP locks still apply to
+ * it, so this gives an insider nothing they did not have.
+ */
+export const TRUSTED_IP_DAYS = 30;
+
+/**
+ * How long one account waits after `fails` wrong attempts **from all IPs
+ * together**: nothing for the first `freeFails` (the same allowance as the
+ * pair limit, so a person mistyping never meets it), then 1 s, 2 s, 4 s ...
+ * doubling up to `EMAIL_BACKOFF_CAP_MS`.
+ *
+ * Pure, so the curve can be tested on its own.
+ */
+export function emailBackoffMs(fails: number, freeFails: number): number {
+  const over = fails - freeFails;
+  if (over <= 0) return 0;
+  // 2^30 s is already far past the cap; this keeps the power finite
+  return Math.min(EMAIL_BACKOFF_CAP_MS, 1000 * 2 ** Math.min(over - 1, 30));
+}

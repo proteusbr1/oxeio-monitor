@@ -1,7 +1,15 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { resolveThrottle, type ThrottleLimits } from './login-throttle.config';
+import {
+  EMAIL_FORGET_MS,
+  emailBackoffMs,
+  resolveThrottle,
+  TRUSTED_IP_DAYS,
+  type ThrottleLimits,
+} from './login-throttle.config';
+
+const DAY_MS = 86_400_000;
 
 interface Attempt {
   fails: number;
@@ -68,6 +76,31 @@ export class LoginThrottleService {
     return `ip:${ip}`;
   }
 
+  /**
+   * **L1 — the third key: the account itself, whatever the IP.**
+   *
+   * Careful, the gap: both keys above contain the IP. A guesser spreading
+   *    attempts for **one** account over many IPs (a botnet, a rotating
+   *    proxy) stayed under both limits forever: ten tries per IP, and never
+   *    fifty from one.
+   *
+   * This key only **slows** (`emailBackoffMs`, capped at 15 minutes), never
+   * locks, and IPs the account has signed in from before are exempt
+   * (`trusted`). Otherwise anyone could keep the owner out of their own
+   * system by typing wrong passwords for the owner's email.
+   */
+  private emailKey(email: string): string {
+    return `email:${email.toLowerCase()}`;
+  }
+
+  /** email -> (ip -> last successful sign-in, epoch ms) */
+  private readonly trusted = new Map<string, Map<string, number>>();
+
+  private isTrusted(email: string, ip: string): boolean {
+    const seen = this.trusted.get(email.toLowerCase())?.get(ip);
+    return seen !== undefined && Date.now() - seen < TRUSTED_IP_DAYS * DAY_MS;
+  }
+
   /** Throws 429 if locked */
   assertNotLocked(email: string, ip: string): void {
     if (!this.limits.enabled) return;
@@ -76,13 +109,16 @@ export class LoginThrottleService {
     const now = Date.now();
 
     /**
-     * Careful: of the two, the one with **more lock time remaining** is shown.
+     * Careful: of the three, the one with **the most time remaining** is shown.
      * Otherwise when the pair lock ended the user would think "try now" and
      * try again while the IP lock was still on, and the message would be false.
      */
     const until = Math.max(
       this.attempts.get(this.pairKey(email, ip))?.lockedUntil ?? 0,
       this.attempts.get(this.ipKey(ip))?.lockedUntil ?? 0,
+      this.isTrusted(email, ip)
+        ? 0
+        : (this.attempts.get(this.emailKey(email))?.lockedUntil ?? 0),
     );
     if (until <= now) return;
 
@@ -101,6 +137,27 @@ export class LoginThrottleService {
   recordFailure(email: string, ip: string): void {
     this.bump(this.pairKey(email, ip), this.limits.maxFails);
     this.bump(this.ipKey(ip), this.limits.ipMaxFails);
+    this.slowDown(this.emailKey(email));
+  }
+
+  /**
+   * Counts one more failure for the account and sets its backoff.
+   *
+   * Careful: unlike `bump()` the count is **not** reset when the wait is set;
+   *    the next failure has to wait twice as long. It resets on a successful
+   *    sign-in, or after `EMAIL_FORGET_MS` with no failures (`prune()`).
+   */
+  private slowDown(key: string): void {
+    const now = Date.now();
+    const a = this.attempts.get(key) ?? { fails: 0, lockedUntil: 0, lastSeen: now };
+
+    a.fails += 1;
+    a.lastSeen = now;
+    if (this.limits.enabled) {
+      const wait = emailBackoffMs(a.fails, this.limits.maxFails);
+      if (wait > 0) a.lockedUntil = now + wait;
+    }
+    this.attempts.set(key, a);
   }
 
   /** Adds one to a key's count, and sets the lock when the limit is reached */
@@ -127,15 +184,33 @@ export class LoginThrottleService {
    */
   recordSuccess(email: string, ip: string): void {
     this.attempts.delete(this.pairKey(email, ip));
+
+    // the right password ends the account's backoff, and this IP is now a known one
+    this.attempts.delete(this.emailKey(email));
+    const lower = email.toLowerCase();
+    const ips = this.trusted.get(lower) ?? new Map<string, number>();
+    ips.set(ip, Date.now());
+    this.trusted.set(lower, ips);
   }
 
   /** Stale entries are not left to pile up, to prevent a memory leak */
   private prune(): void {
-    const cutoff = Date.now() - this.pruneMs * 2;
+    const now = Date.now();
+    const cutoff = now - this.pruneMs * 2;
     for (const [k, a] of this.attempts) {
-      if (a.lastSeen < cutoff && a.lockedUntil < Date.now()) {
+      // the account key lives longer: forgetting it after minutes would let a
+      // slow guesser restart the doubling every time
+      const idleSince = k.startsWith('email:') ? now - EMAIL_FORGET_MS : cutoff;
+      if (a.lastSeen < idleSince && a.lockedUntil < now) {
         this.attempts.delete(k);
       }
+    }
+
+    for (const [email, ips] of this.trusted) {
+      for (const [ip, at] of ips) {
+        if (now - at >= TRUSTED_IP_DAYS * DAY_MS) ips.delete(ip);
+      }
+      if (ips.size === 0) this.trusted.delete(email);
     }
   }
 }
