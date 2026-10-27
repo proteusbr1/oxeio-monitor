@@ -23,7 +23,10 @@ export type AlertType =
   | 'device_overlap'
   | 'synthetic_input'
   | 'agent_capability'
-  | 'statement_delivery_failed';
+  | 'agent_resources'
+  | 'statement_delivery_failed'
+  // M1: an upload carried times the device cannot honestly have (agent/ingest-bounds.ts)
+  | 'ingest_rejected';
 
 /** As a list; needed by the DTO's `@IsIn()` */
 export const ALERT_TYPE_VALUES: readonly AlertType[] = [
@@ -37,7 +40,9 @@ export const ALERT_TYPE_VALUES: readonly AlertType[] = [
   'device_overlap',
   'synthetic_input',
   'agent_capability',
+  'agent_resources',
   'statement_delivery_failed',
+  'ingest_rejected',
 ];
 
 /**

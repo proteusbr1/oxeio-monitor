@@ -465,6 +465,7 @@ const TYPE_LABELS: Readonly<Record<string, string>> = {
   // device. That label went to Telegram, and whoever read it looked at the
   // wrong PC.
   device_overlap: 'One person on two devices',
+  ingest_rejected: 'Agent data outside the time window dropped',
 };
 
 /**

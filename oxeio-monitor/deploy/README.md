@@ -215,9 +215,20 @@ Leave `PUBLIC_HOST` and `COMPOSE_FILE` unset. The dashboard is served on
 `http://<server>:8080` (`WEB_PORT` changes the port). Set
 `PUBLIC_URL=http://<server-ip>:8080` so the setup link in the log is complete.
 
-Agents can connect to `http://<server>:8080`, but device tokens and
-screenshots then cross the network unencrypted. Fine for a trial; for real use
-add TLS (§ 6.3) or use a domain.
+Agents can connect to `http://<server>:8080`, but sign-in passwords, device
+tokens and screenshots then cross the network unencrypted, and anyone on the
+LAN can pretend to be the server. Fine for a trial; for real use add TLS
+(§ 6.3) or use a domain.
+
+The agent refuses plain `http://` to another machine unless the MSI allows it
+(`http://localhost` always works). Build the trial MSI with `-AllowHttp`
+(`build.ps1 -ServerUrl http://<server-ip>:8080 -AllowHttp`; the build stops
+without it), or install an MSI built with `-NoServerUrl` with
+`msiexec … SERVERURL="http://<server-ip>:8080" ALLOWHTTP=1`. The switch is
+stored in `HKLM\SOFTWARE\oXeio\Agent\AllowInsecureHttp`, so only an
+administrator can turn it on. An agent installed for http before this switch
+existed stops with "No usable server address" after it is upgraded to an MSI
+built without `-AllowHttp`.
 
 ### 4.3· Behind another reverse proxy
 
@@ -746,9 +757,13 @@ On a Windows machine with the .NET 8 SDK and WiX:
 
 ```powershell
 cd oxeio-monitor\agent\installer
-.\build.ps1 -ServerUrl https://monitor.example.com
+.\build.ps1 -ServerUrl https://monitor.example.com -UpdatePublicKey update-key.pub.pem
 ```
 
+- The update key (§ 13.7, "Signed agent updates") is **required**: without it
+  the agents trust any update the server vouches for. `-AllowUnsignedUpdates`
+  builds without one on purpose (test builds); the script then prints a
+  warning. PCs already installed without a key keep updating by checksum.
 - The server address is **baked into the MSI**, so every PC installs with a
   double-click. Always pass `-ServerUrl`: the script's built-in default is the
   original deployment's address. `-NoServerUrl` builds an MSI that needs
@@ -773,8 +788,12 @@ code-signing certificate is enough for your own PCs:
 powershell -ExecutionPolicy Bypass -File deploy\make-code-cert.ps1
 
 # every build
-.\agent\installer\build.ps1 -ServerUrl https://monitor.example.com -SignWith <thumbprint>
+.\agent\installer\build.ps1 -ServerUrl https://monitor.example.com -UpdatePublicKey update-key.pub.pem -SignWith <thumbprint>
 ```
+
+Sign every MSI you publish as an update too: the UAC prompt an administrator
+approves for an in-agent update shows the MSI's publisher, and an admin used
+to "Unknown publisher" will not notice a swapped one.
 
 Then **once on every PC**, as administrator (with `oxeio-code.cer` next to
 the script, or `-CerPath`):
@@ -812,8 +831,27 @@ msiexec /i oXeioAgent-<version>.msi /qn `
 ```
 
 Other properties: `POLICYURL` (a link to your monitoring policy, shown to
-staff), `SERVERPIN` (§ 6.4), `UPDATEKEY` (§ 13.7). `SERVERURL=` on the
-command line overrides the address baked into the MSI.
+staff), `SERVERPIN` (§ 6.4), `UPDATEKEY` (§ 13.7), `ALLOWHTTP=1` (plain http
+to the server, § 4.2). `SERVERURL=` on the command line overrides the address
+baked into the MSI.
+
+#### Where the agent reads its settings
+
+1. `HKLM\SOFTWARE\oXeio\Agent`, written by the MSI. The pin (`ServerPin`), the
+   update key (`UpdatePublicKey`) and `AllowInsecureHttp` come **only** from
+   here: everything else on the PC is writable by the person being monitored.
+2. The environment variable `OXEIO_SERVER_URL` replaces the **address only**,
+   and only in a Debug build (`dotnet run`) or when an administrator sets
+   `AllowServerUrlOverride` (string `1`) under the same HKLM key. Otherwise it
+   is ignored and the agent log says so. The pin and the update key still
+   apply to the overridden address. The MSI rewrites that key on every
+   install and update, so the switch has to be set again after one.
+3. `%ProgramData%\oXeio\agent.json`, only when the HKLM key does not exist at
+   all (a hand-copied build that was never installed with the MSI). That folder
+   is writable by every user, so on an installed PC the file is never read; a
+   broken HKLM key stops the agent with "No usable server address" instead.
+
+The agent log's startup lines say which source was used (`settings from …`).
 
 An enrollment code ties one PC to one person. The dashboard has no button for
 it yet; an owner creates it through the API
@@ -1014,6 +1052,8 @@ window and whether screenshots are enabled for that policy.
   `-Hostname`/`-IpAddress`).
 - A pin is set and does not match (was the key changed without the two-pin
   order in § 6.3?).
+- "No usable server address … plain http": the address is `http://` and the
+  MSI was installed without `ALLOWHTTP=1` (§ 4.2).
 - A PC shown offline while it is on: check its clock, and whether its outbox
   is still draining.
 

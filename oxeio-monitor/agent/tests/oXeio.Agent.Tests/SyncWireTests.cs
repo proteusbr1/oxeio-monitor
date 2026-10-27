@@ -191,4 +191,91 @@ public class SyncWireTests
 
         Assert.DoesNotContain("capabilities", json);
     }
+
+    // ── resource report ─────────────────────────────────────────────────────
+
+    private static HeartbeatRequest WithResources(oXeio.Core.Watchdog.ResourceSample sample) => new()
+    {
+        State = SegmentState.Active,
+        ActiveSecToday = 60,
+        Resources = sample,
+    };
+
+    private static oXeio.Core.Watchdog.ResourceSample Leak(params string[] modules) => new()
+    {
+        HandleCount = 217_431,
+        PrivateBytes = 7_516_192_768,
+        GdiObjects = 310,
+        UserObjects = 92,
+        InjectedModules = modules,
+    };
+
+    /// <summary>The names must be exactly the server's (HeartbeatDto in dto.ts), or it 400s.</summary>
+    [Fact]
+    public void Heartbeat_carries_the_resource_report_under_the_server_names()
+    {
+        var json = SyncJson.Serialize(SyncWire.Heartbeat(WithResources(Leak("nvspcap64.dll"))));
+
+        Assert.Contains("\"handleCount\":217431", json);
+        Assert.Contains("\"privateBytes\":7516192768", json);
+        Assert.Contains("\"gdiObjects\":310", json);
+        Assert.Contains("\"userObjects\":92", json);
+        Assert.Contains("\"injectedModules\":[\"nvspcap64.dll\"]", json);
+    }
+
+    /// <summary>
+    /// Careful: under <c>forbidNonWhitelisted</c> an unknown field 400s the heartbeat on a server
+    /// older than the report, so with no measurement nothing at all may go out.
+    /// </summary>
+    [Fact]
+    public void Heartbeat_without_a_measurement_sends_none_of_the_fields()
+    {
+        var json = SyncJson.Serialize(SyncWire.Heartbeat(new HeartbeatRequest
+        {
+            State = SegmentState.Active,
+            ActiveSecToday = 60,
+        }));
+
+        Assert.DoesNotContain("handleCount", json);
+        Assert.DoesNotContain("privateBytes", json);
+        Assert.DoesNotContain("gdiObjects", json);
+        Assert.DoesNotContain("userObjects", json);
+        Assert.DoesNotContain("injectedModules", json);
+    }
+
+    /// <summary>Garbage is clamped into the server's bounds, never sent to earn a 400.</summary>
+    [Fact]
+    public void Resource_numbers_outside_the_server_bounds_are_clamped()
+    {
+        var dto = SyncWire.Heartbeat(WithResources(new oXeio.Core.Watchdog.ResourceSample
+        {
+            HandleCount = long.MaxValue,
+            PrivateBytes = -1,
+            GdiObjects = int.MaxValue,
+            UserObjects = -3,
+        }));
+
+        Assert.Equal(SyncLimits.HeartbeatMaxHandles, dto.HandleCount);
+        Assert.Equal(0, dto.PrivateBytes);
+        Assert.Equal(SyncLimits.HeartbeatMaxGuiObjects, dto.GdiObjects);
+        Assert.Equal(0, dto.UserObjects);
+    }
+
+    /// <summary>One bad module name would 400 the whole heartbeat: it is dropped instead.</summary>
+    [Fact]
+    public void Module_names_the_server_would_refuse_are_dropped()
+    {
+        var modules = SyncWire.WireModules(
+            ["nvspcap64.dll", @"C:\Users\x\evil.dll", "with space.dll", "", "NVSPCAP64.DLL", ".hidden"]);
+
+        Assert.Equal(["nvspcap64.dll"], modules);
+    }
+
+    [Fact]
+    public void At_most_eight_module_names_go_out()
+    {
+        var many = Enumerable.Range(0, 20).Select(i => $"m{i}.dll").ToArray();
+
+        Assert.Equal(SyncLimits.HeartbeatMaxModules, SyncWire.WireModules(many).Count);
+    }
 }

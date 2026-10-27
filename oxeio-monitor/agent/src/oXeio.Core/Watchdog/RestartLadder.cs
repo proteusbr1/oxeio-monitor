@@ -173,6 +173,24 @@ public sealed class RestartLadder
     }
 
     /// <summary>
+    /// The agent is being started because it <b>asked</b> to be (<see cref="PlannedRestart"/>),
+    /// not because it died.
+    ///
+    /// Careful: the failure count is deliberately <b>not</b> raised. Counting it would make a
+    /// planned restart cost a step of the ladder: a genuine crash shortly afterwards would then
+    /// wait 30 s more than it should, and after a few planned restarts within the stability window
+    /// the watchdog would "give up" on an agent that never failed once.
+    ///
+    /// The launch time is still recorded and the health streak restarted, so the new process has
+    /// to earn the stability window like any other.
+    /// </summary>
+    public void RecordPlannedLaunch(DateTimeOffset now)
+    {
+        _lastLaunchAt = now;
+        _healthySince = null;
+    }
+
+    /// <summary>
     /// Told on every tick whether the agent is healthy. After continuous
     /// <see cref="RestartPolicy.StabilityWindow"/> of health the ladder resets.
     /// </summary>

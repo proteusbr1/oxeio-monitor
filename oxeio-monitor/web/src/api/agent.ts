@@ -25,10 +25,26 @@ export interface DeviceView {
    */
   capabilities?: Record<string, string> | null;
   capabilitiesAt?: string | null;
+  /**
+   * The agent's own resource use from its last heartbeat (handles, private
+   * memory, GDI/USER objects, known injected DLLs such as `nvspcap64.dll`).
+   * `null`/missing until an agent that sends it checks in.
+   */
+  resources?: DeviceResources | null;
+  resourcesAt?: string | null;
   enrolledAt: string;
   /** `null` if not linked to any employee */
   employee: { id: number; empCode: string; fullName: string } | null;
 }
+/** Same shape as the server's `DeviceResources` (`agent/resources.rules.ts`) */
+export interface DeviceResources {
+  handleCount: number | null;
+  privateBytes: number | null;
+  gdiObjects: number | null;
+  userObjects: number | null;
+  injectedModules: string[];
+}
+
 /**
  * **This route existed on the server for a long time; the web never called it.**
  *

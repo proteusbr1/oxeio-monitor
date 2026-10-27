@@ -117,6 +117,40 @@
 	handle {
 		try_files {path} /index.html
 		file_server
+
+		# ── Security headers (L2) ─────────────────────────────────────────
+		# Only on the SPA, not on /api/*: the API sets its own with helmet
+		#    (app.setup.ts), and a header set here would be sent TWICE there
+		#    (reverse_proxy adds the upstream's copy).
+		#
+		# The CSP was written against what `npm run build` actually emits
+		#    (check `dist/index.html` after a change):
+		#    - scripts: one hashed module from /assets, no inline <script>
+		#    - styles: the hashed CSS, plus ONE inline `style=""` attribute on
+		#      the "Loading oXeio…" line in index.html; that is the only reason
+		#      for 'unsafe-inline' in style-src (React's `style={}` goes through
+		#      the CSSOM and needs nothing). No inline script is allowed.
+		#    - images: own files, `data:` (the 2FA QR code is a data: PNG) and
+		#      `blob:` (downloads built in the browser, lib/download.ts)
+		#    - no external origin anywhere: no CDN, no web fonts, no analytics
+		#    - the service worker (/sw.js) and the manifest are same-origin
+		#
+		# Careful: `frame-ancestors 'none'` + X-Frame-Options DENY: the dashboard
+		#    is never framed, so clickjacking a "Reset password" button is out.
+		header {
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+			X-Content-Type-Options "nosniff"
+			X-Frame-Options "DENY"
+			# task links open other sites; they learn nothing about this one
+			Referrer-Policy "same-origin"
+		}
+
+		# HSTS only when Caddy itself terminated TLS, i.e. CADDY_SITE is a
+		#    domain. On `:8080` (office LAN, dev) the request is plain HTTP and
+		#    this never matches, so a LAN install is never pinned to https.
+		#    Behind another proxy that terminates TLS, set HSTS there.
+		@tls protocol https
+		header @tls Strict-Transport-Security "max-age=31536000"
 	}
 
 	# Careful: images and reports can be large; the default limit would block them.

@@ -228,6 +228,18 @@ internal sealed partial class AgentHost : IAsyncDisposable
     private DateTimeOffset _lastBudgetSweep = DateTimeOffset.MinValue;
 
     private volatile bool _sessionSuspended;
+
+    /// <summary>
+    /// The monitors are asleep (<c>GUID_SESSION_DISPLAY_STATUS</c> said OFF). Written by the UI
+    /// thread in <see cref="OnPower"/>, read by the capture loop through
+    /// <see cref="ScreenSampling.Allowed"/>: no fingerprints while it is set.
+    ///
+    /// Careful: <b>a flag that is set and never cleared would switch the jiggler guard off for
+    /// good</b>, silently. So it is cleared by every sign that a person is back: DisplayOn, a
+    /// resume from sleep, and an unlock (see <see cref="OnSessionChange"/>).
+    /// </summary>
+    private volatile bool _displayOff;
+
     private long _activeTodaySec;
 
     /// <summary>Revocation is logged once, not on every slot.</summary>

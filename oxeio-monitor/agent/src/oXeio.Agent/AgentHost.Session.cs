@@ -34,7 +34,15 @@ internal sealed partial class AgentHost
         var change = SessionMonitor.Interpret(wtsCode);
 
         if (change == SessionChange.Suspend) _sessionSuspended = true;
-        else if (change == SessionChange.Resume) _sessionSuspended = false;
+        else if (change == SessionChange.Resume)
+        {
+            _sessionSuspended = false;
+
+            // Careful: a safety net, not the main path. Unlocking means someone is at the screen;
+            // if the DisplayOn notification was ever missed, this keeps _displayOff from holding
+            // the fingerprint off for the rest of the day.
+            _displayOff = false;
+        }
 
         if (SessionMonitor.ClosingEventType(wtsCode) is { } type)
         {
@@ -161,6 +169,10 @@ internal sealed partial class AgentHost
             // exactly.
             if (_closingEventsSent.Contains(AgentEventTypes.AgentUpdate))
                 return AgentEventTypes.AgentUpdate;
+
+            // The resource ceiling (AgentHost.Resources): a restart the agent chose itself.
+            if (_closingEventsSent.Contains(AgentEventTypes.AgentRestart))
+                return AgentEventTypes.AgentRestart;
         }
 
         return "unknown";
@@ -184,14 +196,32 @@ internal sealed partial class AgentHost
 
         if (signal is PowerSignal.Suspend or PowerSignal.DisplayOff)
         {
+            /**
+             * <b>No fingerprints while the monitors are asleep.</b> Closing the segment alone left
+             * the capture loop building DXGI chains every 5 seconds on an unlocked PC with dark
+             * monitors (frozen cadence: nothing changes on a sleeping screen), all night if
+             * nobody locked it. The flag goes into <see cref="ScreenSampling.Allowed"/>.
+             *
+             * Careful: set only for DisplayOff. On Suspend the whole machine stops, so there is no
+             * loop to hold back, and Resume clears it below anyway.
+             */
+            if (signal == PowerSignal.DisplayOff) _displayOff = true;
+
             // About 2 seconds are left before sleep: only close the segment, no network calls.
             lock (_machineGate) closed = _machine?.OnSuspend(_clock.Now);
             _sleep.Reset();
         }
         else if (signal == PowerSignal.Resume)
         {
+            _displayOff = false;
             lock (_machineGate) closed = _machine?.OnResume(_clock.Now);
             _sleep.Reset();
+        }
+        else if (signal == PowerSignal.DisplayOn)
+        {
+            // Careful: only the fingerprint flag. What display-on means for segments is left
+            // exactly as it was (this branch did not exist before; the tracker handled it).
+            _displayOff = false;
         }
 
         // Careful: **outside** the lock: this writes to SQLite (see `_machineGate` above)

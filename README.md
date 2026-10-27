@@ -153,8 +153,12 @@ Build the MSI on a Windows machine with the .NET 8 SDK and WiX:
 
 ```powershell
 cd oxeio-monitor\agent\installer
-.\build.ps1 -ServerUrl https://monitor.example.com
+.\build.ps1 -ServerUrl https://monitor.example.com -UpdatePublicKey update-key.pub.pem
 ```
+
+The update key makes the agents install only updates you signed; making one is
+two `openssl` commands (deploy guide, "Signed agent updates"). To build without
+one, pass `-AllowUnsignedUpdates` instead.
 
 Install it on each PC as an administrator. At the next logon, the person signs
 in with their own portal account, and their hours start showing up on the Live

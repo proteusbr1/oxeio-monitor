@@ -11,9 +11,10 @@
   would install the .NET runtime twice (379 MB vs 199 MB).
 
 .EXAMPLE
-  powershell -File installer\build.ps1 -ServerUrl https://monitor.example.com
-  powershell -File installer\build.ps1 -ServerUrl https://monitor.example.com -Version 0.3.0
-  powershell -File installer\build.ps1 -NoServerUrl
+  powershell -File installer\build.ps1 -ServerUrl https://monitor.example.com -UpdatePublicKey update-key.pub.pem -SignWith <thumbprint>
+  powershell -File installer\build.ps1 -ServerUrl https://monitor.example.com -UpdatePublicKey update-key.pub.pem
+  powershell -File installer\build.ps1 -NoServerUrl -AllowUnsignedUpdates
+  powershell -File installer\build.ps1 -ServerUrl http://192.168.1.10:8080 -AllowHttp -AllowUnsignedUpdates   # LAN trial only
 
 .NOTES
   Careful: this file is saved WITH a UTF-8 BOM. Do not remove the BOM.
@@ -57,6 +58,12 @@ param(
     # (`msiexec /qn SERVERURL=...`), e.g. several sites with different servers.
     [switch]$NoServerUrl,
 
+    # L1: required for an http:// -ServerUrl that is not localhost (the office-LAN
+    # trial). Bakes ALLOWHTTP=1 into the MSI; without it the agent accepts only
+    # https://. Careful: the sign-in password and device token then cross the LAN
+    # unencrypted. deploy/README.md › "Plain HTTP on the office LAN".
+    [switch]$AllowHttp,
+
     # ADR-014: thumbprint of the self-made signing certificate (make-code-cert.ps1
     # prints it). Without it the build runs as before, with no error; otherwise
     # building on a dev machine would be blocked.
@@ -64,9 +71,19 @@ param(
 
     # The owner's public key for signed updates — a .pem file or its base64
     # body. Baked into the MSI (UPDATEKEY), so the agent installs only updates
-    # signed with the matching private key. Empty = sha256 only, as before.
-    # deploy/README.md › "Signed agent updates".
+    # signed with the matching private key. deploy/README.md › "Signed agent updates".
+    #
+    # Careful: REQUIRED unless -AllowUnsignedUpdates is passed. Without a key the
+    # agent checks an update only against the sha256 the server itself sends, so
+    # whoever controls the server can hand every PC an MSI that runs as SYSTEM.
+    # It used to be optional and silent, so MSIs went out without it by default.
     [string]$UpdatePublicKey,
+
+    # Build without an update key on purpose (dev builds, CI artifacts). Prints a
+    # warning. Careful: this is a build-time gate only; the agent itself still
+    # accepts sha256-only updates when it has no key, or PCs installed without one
+    # would never update again.
+    [switch]$AllowUnsignedUpdates,
 
     # A build whose Today window does not show the last screenshot — only
     # when it was taken — and keeps no copy of it on the PC. Pictures are
@@ -79,7 +96,11 @@ param(
 
     [string]$TimestampUrl = 'http://timestamp.digicert.com',
 
+    # Careful: only Release goes to staff PCs. A Debug agent honours OXEIO_SERVER_URL from
+    # the user's own environment and plain http anywhere (BuildOptions.IsDebugBuild), so
+    # any other value needs -AllowNonRelease as well.
     [string]$Configuration = 'Release',
+    [switch]$AllowNonRelease,
     [string]$Runtime = 'win-x64'
 )
 
@@ -161,7 +182,45 @@ if ($ServerUrl) {
         throw "ServerUrl should look like https://monitor.example.com (scheme and host, no path) — got: $ServerUrl"
     }
     Write-Host "   server : $ServerUrl (baked into the MSI — installs on a double-click)" -ForegroundColor DarkGray
-} else {
+
+    # L1: the agent refuses plain http to another machine unless the MSI says ALLOWHTTP=1.
+    #    Failing here beats an MSI that installs fine and then says "no usable server
+    #    address" on every PC.
+    $plainHttp = $ServerUrl -match '^http://' -and
+                 $ServerUrl -notmatch '^http://(localhost|127\.\d+\.\d+\.\d+|\[::1\])(:\d+)?/?$'
+    if ($plainHttp -and -not $AllowHttp) {
+        throw @"
+$ServerUrl is plain http. The agent sends the staff member's password and its device
+token to it unencrypted, so it refuses http to another machine by default.
+Use https (deploy/README.md › "TLS"), or, for a LAN trial, pass -AllowHttp as well.
+"@
+    }
+}
+
+if ($AllowHttp) {
+    Write-Host '   ⚠️ -AllowHttp: plain http is allowed — passwords and device tokens cross the network unencrypted' -ForegroundColor Yellow
+}
+
+# Careful: checked here, before the publish, not after a 62 MB build.
+if ($UpdatePublicKey -and $AllowUnsignedUpdates) {
+    throw "Pass either -UpdatePublicKey or -AllowUnsignedUpdates, not both."
+}
+if (-not $UpdatePublicKey -and -not $AllowUnsignedUpdates) {
+    throw @"
+No update key. Pass -UpdatePublicKey update-key.pub.pem (deploy/README.md › "Signed agent updates"),
+or -AllowUnsignedUpdates to build an MSI whose agents trust the server's sha256 alone.
+"@
+}
+if ($AllowUnsignedUpdates) {
+    Write-Host '   update : ⚠️ NO update key (-AllowUnsignedUpdates) — agents installed from this MSI accept any' -ForegroundColor Yellow
+    Write-Host '            update whose sha256 the server vouches for; a compromised server = SYSTEM on every PC' -ForegroundColor Yellow
+}
+
+if ($Configuration -ne 'Release' -and -not $AllowNonRelease) {
+    throw "Configuration '$Configuration' is not Release. A Debug agent lets any staff member redirect it with OXEIO_SERVER_URL; pass -AllowNonRelease if this MSI will never reach a staff PC."
+}
+
+if (-not $ServerUrl) {
     # Careful: not DarkGray. This MSI will NOT work on double-click, and 0.3.2 came
     #    out wrong precisely because this one line was easy to miss.
     Write-Host "   server : ⚠️ not baked in (-NoServerUrl) — will NOT install on a double-click," -ForegroundColor Yellow
@@ -363,6 +422,7 @@ if ($UpdatePublicKey) {
     -d "Version=$Version" `
     -d "ServerUrlDefault=$($ServerUrl.TrimEnd('/'))" `
     -d "UpdateKeyDefault=$updateKeyLine" `
+    -d "AllowHttpDefault=$(if ($AllowHttp) { '1' } else { '' })" `
     -o $msi
 
 if ($LASTEXITCODE -ne 0) { throw 'wix build failed' }
@@ -397,6 +457,12 @@ if ($sig.SignerCertificate) {
 else {
     Write-Host '   ⚠️ Not signed — installing will show "Unknown publisher"' -ForegroundColor Yellow
     Write-Host '      (to sign: -SignWith <thumbprint>, see deploy/make-code-cert.ps1)' -ForegroundColor Yellow
+    # Careful: the Authenticode signature is what the admin sees in the UAC prompt of an
+    #    in-agent update ("Verified publisher: oXeio" vs "Unknown publisher"). The agent
+    #    itself does not check it (the update key does that job), but an unsigned MSI
+    #    trains admins to approve "Unknown publisher" prompts, which is exactly what a
+    #    swapped MSI would show.
+    Write-Host '      An unsigned update also shows "Unknown publisher" in the UAC prompt the admin approves.' -ForegroundColor Yellow
 }
 
 Write-Host ''

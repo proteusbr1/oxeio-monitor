@@ -111,6 +111,14 @@ internal static partial class D3D11
     /// </summary>
     internal const int Device_CreateTexture2D = 5;
 
+    /// <summary>
+    /// ID3D11Device: past IUnknown(0-2), the 31 Create*/Check* methods (3-33), then
+    /// GetPrivateData(34), SetPrivateData(35), SetPrivateDataInterface(36), GetFeatureLevel(37),
+    /// GetCreationFlags(38), then this one. Returns <c>S_OK</c> while the device is alive,
+    /// otherwise the DXGI_ERROR_DEVICE_* code that killed it. Cheap: it does not touch the GPU.
+    /// </summary>
+    internal const int Device_GetDeviceRemovedReason = 39;
+
     /// <summary>ID3D11DeviceContext. Careful: this derives from ID3D11DeviceChild (7
     /// slots).</summary>
     internal const int Context_Map = 14;

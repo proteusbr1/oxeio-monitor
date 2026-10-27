@@ -30,6 +30,22 @@ internal sealed class LivenessBeacon : IDisposable
     private readonly uint _sessionId;
     private readonly CancellationTokenSource _stopping = new();
 
+    /// <summary>
+    /// The latest <see cref="ResourceProbe"/> sample, written into every beat for the watchdog's log
+    /// (<see cref="AgentHeartbeat.HandleCount"/>). The heartbeat loop sets it; this class only reads.
+    ///
+    /// Careful: a reference swap, read with <see cref="Volatile"/>. The beat is written on its own
+    /// background task, and a lock here would let a slow measurement delay the one write that
+    /// proves the agent is not wedged.
+    /// </summary>
+    private ResourceSample? _resources;
+
+    public ResourceSample? Resources
+    {
+        get => Volatile.Read(ref _resources);
+        set => Volatile.Write(ref _resources, value);
+    }
+
     private LivenessBeacon(FileStream held, string heartbeatPath, uint sessionId)
     {
         _lock = held;
@@ -95,6 +111,8 @@ internal sealed class LivenessBeacon : IDisposable
         {
             Kernel32.QueryUnbiasedInterruptTime(out var unbiased);
 
+            var resources = Resources;
+
             var beat = new AgentHeartbeat
             {
                 Version = AgentLiveness.CurrentVersion,
@@ -107,6 +125,9 @@ internal sealed class LivenessBeacon : IDisposable
                 UnbiasedMs = (long)(unbiased / 10_000),
 
                 WrittenAtUtc = DateTimeOffset.UtcNow,
+
+                HandleCount = resources?.HandleCount,
+                PrivateBytes = resources?.PrivateBytes,
             };
 
             // Careful: write to temp first, then move. If the watchdog read a half-written line,

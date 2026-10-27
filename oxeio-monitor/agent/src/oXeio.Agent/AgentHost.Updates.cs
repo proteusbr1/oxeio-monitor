@@ -51,18 +51,37 @@ internal sealed partial class AgentHost
             return;
         }
 
+        // H1: lock the file, then hash it again through the lock. A plain File.Exists (all
+        // there was before) let any standard user swap the MSI that the admin is about to
+        // approve. UpdateStager.LockForInstall explains why it must be a lock, not a re-check.
+        var held = _updates!.LockForInstall();
+        if (held is null)
+        {
+            // already logged, deleted and marked; fetch a fresh copy now rather than in 6 hours
+            if (_updateCheckNow.CurrentCount == 0) _updateCheckNow.Release();
+            PublishStatus();
+            return;
+        }
+
         try
         {
             _log.Info($"Staff started the update to {update.Version}.");
 
             // Careful: UseShellExecute = true, otherwise the UAC elevation prompt would never
             // appear and the install would fail silently.
-            Process.Start(new ProcessStartInfo
+            //
+            // Careful: held.FinalPath, not the stored path. It is the location resolved from the
+            // open handle, so msiexec opens the very file that was just hashed.
+            var msiexec = Process.Start(new ProcessStartInfo
             {
                 FileName = "msiexec.exe",
-                Arguments = MsiArguments(msi, _settings.UpdatePublicKey),
+                Arguments = MsiArguments(held.FinalPath, _settings.UpdatePublicKey),
                 UseShellExecute = true,
             });
+
+            // the lock is now the background task's to release, when msiexec is done
+            held.ReleaseAfter(msiexec, UpdateLockHoldAtMost);
+            held = null;
         }
         catch (Exception ex)
         {
@@ -70,7 +89,20 @@ internal sealed partial class AgentHost
             // That is not an error, so it is only logged, not an Error.
             _log.Warn($"The update did not start: {ex.Message}");
         }
+        finally
+        {
+            held?.Dispose();
+        }
     }
+
+    /// <summary>
+    /// H1: how long the staged MSI stays locked after msiexec starts, at most. Normally the lock
+    /// goes when msiexec exits; this only bounds a hung install.
+    ///
+    /// Careful: generous on purpose. The UAC prompt can sit unanswered while the admin walks
+    /// over to the PC, and the lock must outlast that, or the gap it closes reopens.
+    /// </summary>
+    internal static readonly TimeSpan UpdateLockHoldAtMost = TimeSpan.FromHours(2);
 
     /// <summary>
     /// ⚠️ UPDATEKEY is passed on: msiexec rewrites the registry from the MSI's

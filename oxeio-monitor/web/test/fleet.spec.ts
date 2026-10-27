@@ -10,6 +10,9 @@ import {
   lagOf,
   newestOffered,
   QUIET_HOURS,
+  RESOURCE_CEILING_HANDLES,
+  RESOURCE_CEILING_PRIVATE_BYTES,
+  resourceIssues,
 } from '../src/pages/settings/fleet';
 
 /**
@@ -332,6 +335,72 @@ describe('capabilityIssues — what the agent says is not working', () => {
     );
     expect(group.rows[0].issues.map((i) => i.text)).toEqual([
       'Website domains: unreliable',
+    ]);
+  });
+});
+
+/**
+ * The agent's resource report. Why: `nvspcap64.dll` (NVIDIA overlay) leaked
+ * ~217k handles and 7 GB in one agent over twelve days, invisibly.
+ */
+describe('resourceIssues — the agent holding too much', () => {
+  const report = (over: Partial<NonNullable<DeviceView['resources']>> = {}) => ({
+    handleCount: 900,
+    privateBytes: 120_000_000,
+    gdiObjects: 40,
+    userObjects: 30,
+    injectedModules: [] as string[],
+    ...over,
+  });
+
+  it('an older agent without a report shows nothing', () => {
+    expect(resourceIssues(undefined)).toEqual([]);
+    expect(resourceIssues(null)).toEqual([]);
+  });
+
+  it('a healthy agent shows nothing', () => {
+    expect(resourceIssues(report())).toEqual([]);
+  });
+
+  it('at the ceiling is fine; one handle past it is red', () => {
+    expect(resourceIssues(report({ handleCount: RESOURCE_CEILING_HANDLES }))).toEqual([]);
+    const [issue] = resourceIssues(report({ handleCount: RESOURCE_CEILING_HANDLES + 1 }));
+    expect([issue.text, issue.tone]).toEqual(['Agent resources: too high', 'attention']);
+    expect(issue.hint.length).toBeGreaterThan(0);
+  });
+
+  it('private memory past the ceiling is red too', () => {
+    const issues = resourceIssues(
+      report({ privateBytes: RESOURCE_CEILING_PRIVATE_BYTES + 1 }),
+    );
+    expect(issues.map((i) => i.tone)).toEqual(['attention']);
+  });
+
+  it('a known DLL under the ceiling is amber, and names the DLL', () => {
+    const [issue] = resourceIssues(report({ injectedModules: ['nvspcap64.dll'] }));
+    expect([issue.text, issue.tone]).toEqual(['Overlay loaded in the agent', 'pending']);
+    expect(issue.hint).toContain('nvspcap64.dll');
+  });
+
+  it('unknown numbers are not a fault', () => {
+    expect(resourceIssues(report({ handleCount: null, privateBytes: null }))).toEqual([]);
+  });
+
+  it('fleetGroups carries them on the row, after the capability issues', () => {
+    const [group] = fleetGroups(
+      [
+        device({
+          capabilities: { browserDomain: 'degraded' },
+          resources: report({ handleCount: 217_431, injectedModules: ['nvspcap64.dll'] }),
+        }),
+      ],
+      '0.4.9',
+      NOW,
+    );
+    expect(group.rows[0].issues.map((i) => i.text)).toEqual([
+      'Website domains: unreliable',
+      'Agent resources: too high',
+      'Overlay loaded in the agent',
     ]);
   });
 });

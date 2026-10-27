@@ -129,4 +129,41 @@ public class AgentHeartbeatTests
     {
         Assert.True(AgentLiveness.StaleAfter >= AgentLiveness.HeartbeatInterval * 6);
     }
+
+    // ── resource counts (for the watchdog's log only) ───────────────────────
+
+    [Fact]
+    public void Resource_counts_round_trip()
+    {
+        var read = AgentLiveness.TryParse(AgentLiveness.Format(
+            Sample() with { HandleCount = 217_431, PrivateBytes = 7_516_192_768 }));
+
+        Assert.Equal(217_431, read?.HandleCount);
+        Assert.Equal(7_516_192_768, read?.PrivateBytes);
+    }
+
+    /// <summary>Not measured yet: the keys are left out, so the line is exactly the old one.</summary>
+    [Fact]
+    public void Without_counts_the_line_is_unchanged()
+    {
+        var line = AgentLiveness.Format(Sample());
+
+        Assert.DoesNotContain("handles=", line);
+        Assert.DoesNotContain("private=", line);
+        Assert.Null(AgentLiveness.TryParse(line)?.HandleCount);
+    }
+
+    /// <summary>
+    /// The update moment again: an old watchdog reading a new agent's line must still find the
+    /// fields it decides on. The counts are appended after them and are unknown keys to it.
+    /// </summary>
+    [Fact]
+    public void A_line_with_counts_still_parses_the_deciding_fields()
+    {
+        var read = AgentLiveness.TryParse(AgentLiveness.Format(
+            Sample(unbiasedMs: 9_000) with { HandleCount = 5, PrivateBytes = 6 }));
+
+        Assert.Equal(4242, read?.ProcessId);
+        Assert.Equal(9_000, read?.UnbiasedMs);
+    }
 }

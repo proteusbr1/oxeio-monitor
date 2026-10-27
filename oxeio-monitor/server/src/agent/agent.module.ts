@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { ActivityModule } from '../activity/activity.module';
+import { AlertsModule } from '../alerts/alerts.module';
 import { AuditModule } from '../audit/audit.module';
 import { AuthModule } from '../auth/auth.module';
 
@@ -10,29 +11,34 @@ import { ClockDriftService } from './clock-drift.service';
 import { DeviceAuthGuard } from './device-auth.guard';
 import { DeviceRateLimitService } from './device-rate-limit.service';
 import { EnrollmentService } from './enrollment.service';
+import { IngestBoundsService } from './ingest-bounds.service';
 import { IngestService } from './ingest.service';
 import { ProgressService } from './progress.service';
 import { RolloutAdvanceJob } from './rollout-advance.job';
 import { ScreenshotIngestService } from './screenshot-ingest.service';
 import { UpdateService } from './update.service';
 import { CapabilityHealthService } from './capability-health.service';
+import { ResourceHealthService } from './resource-health.service';
 
 @Module({
   // Careful: `AuthModule` is here only for `AuthService`, to enroll with a
   //    staff login (`/agent/enroll-login`). Password check, 2FA and brute-force
   //    throttling all live there; they were not copied.
   // `AuditModule`: when a rollout advances by itself, it must be written to the log.
-  imports: [ActivityModule, AuditModule, AuthModule],
+  // `AlertsModule`: uploads outside the allowed time window raise an alert (M1).
+  imports: [ActivityModule, AlertsModule, AuditModule, AuthModule],
   controllers: [AgentController],
   providers: [
     ProgressService,
     AgentConfigService,
     CapabilityHealthService,
+    ResourceHealthService,
     RolloutAdvanceJob,
     ClockDriftService,
     DeviceAuthGuard,
     DeviceRateLimitService,
     EnrollmentService,
+    IngestBoundsService,
     IngestService,
     ScreenshotIngestService,
     UpdateService,

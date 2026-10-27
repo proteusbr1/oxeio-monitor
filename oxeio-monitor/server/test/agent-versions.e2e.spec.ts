@@ -127,6 +127,44 @@ describe('POST /agent-versions: registering for rollout', () => {
   });
 
   /**
+   * M2: any enrolled PC can upload bytes into `screenshots/`, and an update
+   * runs as administrator everywhere. A file there must never become one,
+   * even though it really is on disk and inside storage.
+   */
+  it('400 for a file in the screenshots area, even though it exists', async () => {
+    const rel = `screenshots/2026/08/13/emp-003/${randomUUID()}.msi`;
+    await putMsi(rel);
+
+    const res = await publish({ version: '0.2.0', msiPath: rel });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/screenshots folder/);
+    expect(await h.prisma.agentVersion.count()).toBe(0);
+  });
+
+  it('the download refuses a row that points into screenshots/', async () => {
+    const rel = `screenshots/${randomUUID()}.msi`;
+    await putMsi(rel);
+    await h.prisma.agentVersion.create({
+      data: { version: '0.2.0', msiPath: rel, sha256: SHA, rolloutStage: 'all' },
+    });
+
+    await expect(h.app.get(UpdateService).openMsi('0.2.0')).rejects.toThrow(
+      /outside storage/,
+    );
+  });
+
+  it('an unsigned build says so in the API', async () => {
+    const rel = `updates/${randomUUID()}.msi`;
+    await putMsi(rel);
+
+    const res = await publish({ version: '0.2.0', msiPath: rel });
+
+    expect(res.status).toBe(201);
+    expect(res.body.signed).toBe(false);
+  });
+
+  /**
    * Rolling out an older or equal version would make `isNewer()` false, so
    * no agent would ever be offered it, and the owner would think it was
    * rolled out. A silent failure, so it is blocked here.

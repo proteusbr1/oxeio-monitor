@@ -40,6 +40,21 @@
 	handle {
 		try_files {path} /index.html
 		file_server
+
+		# Cabecalhos de seguranca so no SPA (a API ja manda os dela via helmet;
+		# aqui sairiam duplicados). CSP igual a de web/Caddyfile, onde esta o
+		# porque de cada item ('unsafe-inline' so pelo style="" do index.html).
+		header {
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+			X-Content-Type-Options "nosniff"
+			X-Frame-Options "DENY"
+			Referrer-Policy "same-origin"
+		}
+
+		# O TLS termina no Traefik, entao aqui tudo chega em http: HSTS so
+		# quando o Traefik diz que a conexao do navegador era https.
+		@https header X-Forwarded-Proto https
+		header @https Strict-Transport-Security "max-age=31536000"
 	}
 
 	request_body {

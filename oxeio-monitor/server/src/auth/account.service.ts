@@ -4,6 +4,7 @@ import type { Prisma, UserRole } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { UpdateAccountDto } from './account.dto';
+import { SessionsService } from './sessions.service';
 import { mergePreferences, preferencesOf, type UserPreferences } from './preferences';
 import { decodeEnvelope } from './totp';
 
@@ -60,6 +61,7 @@ export class AccountService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly sessions: SessionsService,
   ) {}
 
   async view(userId: number): Promise<AccountView> {
@@ -155,17 +157,12 @@ export class AccountService {
   }
 
   /**
-   * Every session issued before this second ends at its next refresh (at
-   * most `SESSION_REFRESH_AFTER_MIN` later — see JwtAuthGuard). The caller
-   * re-issues its own token right after, so this device stays signed in.
-   *
-   * Careful: whole seconds. A token's `iat` is in seconds; storing the
-   * milliseconds would make the token re-issued in this same second look
-   * older than the cut and sign this device out too.
+   * Every session issued before this second ends on its next request (see
+   * JwtAuthGuard and `SessionsService.revokeAll`). The caller re-issues its
+   * own token right after, so this device stays signed in.
    */
   async revokeSessions(userId: number, ip: string | null, action: 'sign_out_other_sessions' | null): Promise<void> {
-    const cut = new Date(Math.floor(Date.now() / 1000) * 1000);
-    await this.prisma.user.update({ where: { id: userId }, data: { sessionsRevokedAt: cut } });
+    await this.sessions.revokeAll(userId);
     if (action) await this.audit.record({ userId, action, ipAddress: ip });
   }
 }

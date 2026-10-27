@@ -50,6 +50,8 @@ import {
 } from './screenshot-ingest.service';
 import { UpdateService } from './update.service';
 import { CapabilityHealthService } from './capability-health.service';
+import { ResourceHealthService } from './resource-health.service';
+import { toResources, type DeviceResources } from './resources.rules';
 import { FeaturesService } from '../features/features.service';
 
 type AgentCommand =
@@ -78,6 +80,7 @@ export class AgentController {
     private readonly progress: ProgressService,
     private readonly prisma: PrismaService,
     private readonly capabilities: CapabilityHealthService,
+    private readonly resources: ResourceHealthService,
     // Settings → Modules: uploads of a switched-off capture module are dropped
     private readonly features: FeaturesService,
   ) {}
@@ -150,8 +153,13 @@ export class AgentController {
     // ([G59](../../../docs/history/08-Gap-Analysis.md)).
     const runningVersion = dto.agentVersion?.trim() || device.agentVersion;
 
-    await this.recordHeartbeatState(device, dto.state, runningVersion);
+    const resources = toResources(dto);
+
+    await this.recordHeartbeatState(device, dto.state, runningVersion, resources);
     await this.capabilities.record(device, dto.capabilities);
+    // Careful: `device` is the row from **before** the UPDATE above; that is
+    //    what lets the service see the under -> over transition.
+    await this.resources.record(device, resources);
 
     if (runningVersion) {
       const offer = await this.updates.offerFor(
@@ -195,8 +203,17 @@ export class AgentController {
     device: Device,
     state: SegmentState,
     runningVersion: string | null,
+    resources: DeviceResources | null,
   ): Promise<void> {
     const data: Prisma.DeviceUpdateInput = { lastStateAt: new Date() };
+
+    // The agent's resource report rides in the same UPDATE (the round-trip
+    //    lesson below). Careful: only when it was sent: an older agent sends
+    //    nothing, and writing null would wipe the last real numbers.
+    if (resources) {
+      data.resources = resources as unknown as Prisma.InputJsonValue;
+      data.resourcesAt = data.lastStateAt;
+    }
 
     if (state !== device.lastState) data.lastState = state;
 
@@ -251,7 +268,7 @@ export class AgentController {
      * queued forever) and not stored. Not a 404 like the dashboard routes: an
      * agent would retry that for ever.
      */
-    if (!(await this.features.isOn('appTracking'))) return { accepted: 0, duplicates: 0, split: 0 };
+    if (!(await this.features.isOn('appTracking'))) return { accepted: 0, duplicates: 0, split: 0, rejected: 0 };
     return this.ingest.ingestAppUsage(device, drift, dto.items);
   }
 

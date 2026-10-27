@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import { rm, stat } from 'node:fs/promises';
+import { join } from 'node:path';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { AppCategoryService } from '../src/activity/app-category.service';
+import { instantOfWorkWall, workDateOf } from '../src/agent/util/work-time';
 import {
   createEmployeeWithCode,
   createHarness,
@@ -16,6 +19,18 @@ import {
   workNoon,
   realNow,
 } from './setup/harness';
+
+/**
+ * A night that crosses midnight, a few days back: 23:50 to 00:10 in the work
+ * zone. Not a fixed date: these were pinned to 8 August, and ingest now drops
+ * anything older than 32 days (M1, `ingest-bounds.ts`).
+ */
+const NIGHT_DAY = workDateOf(workNoon(-3));
+const NIGHT_START = instantOfWorkWall(
+  new Date(NIGHT_DAY.getTime() + (23 * 60 + 50) * 60_000),
+);
+const NIGHT_END = new Date(NIGHT_START.getTime() + 20 * 60_000);
+const NIGHT_MIDNIGHT = instantOfWorkWall(new Date(NIGHT_DAY.getTime() + 86_400_000));
 
 let h: Harness;
 let code: string;
@@ -79,6 +94,32 @@ describe('enrollment (H05)', () => {
         machineGuid: 'guid-test-001',
       })
       .expect(401);
+  });
+
+  /**
+   * L4: the code is read outside the binding transaction, so two requests
+   * racing with one fresh code both passed the read and both bound a device.
+   */
+  it('two enrolments racing with one code: exactly one wins', async () => {
+    const { code: fresh } = await createEmployeeWithCode(h.prisma, 'OX-002');
+    const attempt = (n: number) =>
+      h
+        .http()
+        .post('/api/v1/agent/enroll')
+        .send({
+          enrollmentCode: fresh,
+          hostname: `PC-RACE-${n}`,
+          windowsUsername: 'racer',
+          machineGuid: `guid-race-${n}`,
+        });
+
+    const results = await Promise.all([1, 2, 3, 4].map(attempt));
+    const statuses = results.map((r) => r.status).sort();
+
+    expect(statuses).toEqual([201, 401, 401, 401]);
+    expect(
+      await h.prisma.device.count({ where: { hostname: { startsWith: 'PC-RACE-' } } }),
+    ).toBe(1);
   });
 
   it('the token is not stored as plaintext (I02)', async () => {
@@ -446,6 +487,108 @@ describe('heartbeat', () => {
   });
 });
 
+/**
+ * The agent's resource report (handles, private memory, GDI/USER objects,
+ * injected DLLs). Why: `nvspcap64.dll`, injected by an NVIDIA overlay, leaked
+ * ~217k handles and 7 GB in one agent over twelve days, invisibly.
+ */
+describe('heartbeat: resource report', () => {
+  const leak = {
+    state: 'active',
+    activeSecToday: 60,
+    handleCount: 217_431,
+    privateBytes: 7_516_192_768,
+    gdiObjects: 310,
+    userObjects: 92,
+    injectedModules: ['nvspcap64.dll'],
+  };
+
+  const alertsOf = () =>
+    h.prisma.alert.findMany({
+      where: { type: 'agent_resources', deviceId: device.deviceId },
+    });
+
+  it('the latest report is stored on the device', async () => {
+    await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
+      .send(leak)
+      .expect(200);
+
+    const row = await h.prisma.device.findUniqueOrThrow({
+      where: { id: device.deviceId },
+    });
+    expect(row.resources).toEqual({
+      handleCount: 217_431,
+      privateBytes: 7_516_192_768,
+      gdiObjects: 310,
+      userObjects: 92,
+      injectedModules: ['nvspcap64.dll'],
+    });
+    expect(row.resourcesAt).not.toBeNull();
+  });
+
+  /** Careful: an older agent sends nothing, and that must not wipe the report */
+  it('a heartbeat without the fields keeps the last report', async () => {
+    await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
+      .send(leak)
+      .expect(200);
+    await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
+      .send({ state: 'idle', activeSecToday: 61 })
+      .expect(200);
+
+    const row = await h.prisma.device.findUniqueOrThrow({
+      where: { id: device.deviceId },
+    });
+    expect((row.resources as { handleCount: number }).handleCount).toBe(217_431);
+  });
+
+  /**
+   * Careful: a 400 on the heartbeat drops its commands (revoke among them), so
+   * the refusal must be the narrow one the DTO defines, nothing more.
+   */
+  it('a module given as a path is a 400, and nothing is stored', async () => {
+    await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
+      .send({ ...leak, injectedModules: ['C:\\Users\\x\\nvspcap64.dll'] })
+      .expect(400);
+
+    const row = await h.prisma.device.findUniqueOrThrow({
+      where: { id: device.deviceId },
+    });
+    expect(row.resources).toBeNull();
+  });
+
+  it('over the ceiling raises one alert; back under resolves it', async () => {
+    await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
+      .send(leak)
+      .expect(200);
+    // a second heartbeat still over: no second alert
+    await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
+      .send(leak)
+      .expect(200);
+
+    let alerts = await alertsOf();
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].resolvedAt).toBeNull();
+    expect(alerts[0].detail).toContain('nvspcap64.dll');
+
+    // the agent restarted itself: a fresh process, well under the ceiling
+    await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
+      .send({ ...leak, handleCount: 900, privateBytes: 120_000_000 })
+      .expect(200);
+
+    alerts = await alertsOf();
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].resolvedAt).not.toBeNull();
+  });
+
+  it('under the ceiling, a loaded DLL alone raises nothing', async () => {
+    await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
+      .send({ ...leak, handleCount: 900, privateBytes: 120_000_000 })
+      .expect(200);
+
+    expect(await alertsOf()).toHaveLength(0);
+  });
+});
+
 describe('segments: dedupe and validation (section 2.1d)', () => {
   /**
    * Timestamps must always stay inside today's work day.
@@ -588,9 +731,9 @@ describe('split at midnight (section 2.1a)', () => {
           {
             clientUuid: randomUUID(),
             state: 'active',
-            // 17:50Z = 23:50 in the work zone (UTC+6), 18:10Z = 00:10 the next day
-            startedAt: '2026-08-08T17:50:00.000Z',
-            endedAt: '2026-08-08T18:10:00.000Z',
+            // 23:50 in the work zone to 00:10 the next day
+            startedAt: iso(NIGHT_START),
+            endedAt: iso(NIGHT_END),
             durationSec: 1200,
           },
         ],
@@ -602,9 +745,9 @@ describe('split at midnight (section 2.1a)', () => {
     const rows = await h.prisma.activitySegment.findMany({
       orderBy: { startedAt: 'asc' },
     });
-    expect(rows.map((r) => r.workDate.toISOString().slice(0, 10))).toEqual([
-      '2026-08-08',
-      '2026-08-09',
+    expect(rows.map((r) => r.workDate.getTime())).toEqual([
+      NIGHT_DAY.getTime(),
+      NIGHT_DAY.getTime() + 86_400_000,
     ]);
     // Even when split, the total time stays intact
     expect(rows[0].durationSec + rows[1].durationSec).toBe(1200);
@@ -623,8 +766,8 @@ describe('split at midnight (section 2.1a)', () => {
         {
           clientUuid: randomUUID(),
           state: 'active',
-          startedAt: '2026-08-08T17:50:00.000Z',
-          endedAt: '2026-08-08T18:10:00.000Z',
+          startedAt: iso(NIGHT_START),
+          endedAt: iso(NIGHT_END),
           durationSec: 1200,
         },
       ],
@@ -762,8 +905,8 @@ describe('work session', () => {
           {
             clientUuid: randomUUID(),
             state: 'active',
-            startedAt: '2026-08-08T17:50:00.000Z',
-            endedAt: '2026-08-08T18:10:00.000Z',
+            startedAt: iso(NIGHT_START),
+            endedAt: iso(NIGHT_END),
             durationSec: 1200,
           },
         ],
@@ -797,10 +940,10 @@ describe('work session', () => {
 
     // Yesterday's session closes at its own midnight, not by today's logoff
     const yesterday = sessions.find(
-      (s) => s.workDate.toISOString().slice(0, 10) === '2026-08-08',
+      (s) => s.workDate.getTime() === NIGHT_DAY.getTime(),
     )!;
     expect(yesterday.endReason).toBe('day_rollover');
-    expect(yesterday.endedAt!.toISOString()).toBe('2026-08-08T18:00:00.000Z');
+    expect(yesterday.endedAt!.getTime()).toBe(NIGHT_MIDNIGHT.getTime());
   });
 });
 
@@ -1008,6 +1151,52 @@ describe('screenshots', () => {
 
     expect(res.body).toMatchObject({ accepted: 0, duplicate: true });
     expect(await h.prisma.screenshot.count()).toBe(1);
+  });
+
+  /**
+   * L3: the duplicate lookup matched `client_uuid` across all devices, so a
+   * second PC sending the first PC's uuid "repaired" the first PC's missing
+   * file with its own bytes: a picture planted in another employee's gallery.
+   */
+  it("another device's client_uuid never touches that device's row or file", async () => {
+    const uuid = randomUUID();
+    const first = await asAgent(h.http().post('/api/v1/agent/screenshots'), device.token)
+      .field('meta', JSON.stringify(meta({ clientUuid: uuid })))
+      .attach('file', WEBP, { filename: 'shot.webp', contentType: 'image/webp' })
+      .expect(201);
+
+    // the row stays, the file is gone: exactly the state the repair path heals
+    const victimFile = join(process.env.STORAGE_ROOT as string, first.body.path);
+    await rm(victimFile, { force: true });
+
+    const { code: other } = await createEmployeeWithCode(h.prisma, 'OX-002');
+    const intruder = await enrollDevice(h, other, {
+      hostname: 'PC-08',
+      windowsUsername: 'sam',
+      machineGuid: 'guid-test-002',
+    });
+
+    const res = await asAgent(h.http().post('/api/v1/agent/screenshots'), intruder.token)
+      .field(
+        'meta',
+        JSON.stringify(
+          meta({
+            clientUuid: uuid,
+            slotStart: iso(minutesAgo(15)),
+            capturedAt: iso(minutesAgo(14)),
+          }),
+        ),
+      )
+      .attach('file', WEBP, { filename: 'shot.webp', contentType: 'image/webp' })
+      .expect(201);
+
+    // stored as the intruder's own picture, under its own employee folder
+    expect(res.body.accepted).toBe(1);
+    expect(res.body.path).not.toBe(first.body.path);
+    await expect(stat(victimFile)).rejects.toThrow();
+    expect(
+      await h.prisma.screenshot.count({ where: { clientUuid: uuid } }),
+    ).toBe(2);
   });
 });
 

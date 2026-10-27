@@ -76,21 +76,22 @@ public class ScreenSamplingTests
     public void Allowed_in_the_normal_case()
     {
         Assert.True(ScreenSampling.Allowed(
-            enrolled: true, revoked: false, insideWindow: true, locked: false));
+            enrolled: true, revoked: false, insideWindow: true, locked: false, displayOff: false));
     }
 
     [Fact]
     public void Not_allowed_before_sign_in_or_after_revoke()
     {
-        Assert.False(ScreenSampling.Allowed(false, false, true, false));
-        Assert.False(ScreenSampling.Allowed(true, true, true, false));
+        Assert.False(ScreenSampling.Allowed(false, false, true, false, false));
+        Assert.False(ScreenSampling.Allowed(true, true, true, false, false));
     }
 
     /// <summary>Careful: outside office hours the screen is not touched at all (§ 4.2)</summary>
     [Fact]
     public void Not_allowed_outside_the_window()
     {
-        Assert.False(ScreenSampling.Allowed(true, false, insideWindow: false, locked: false));
+        Assert.False(ScreenSampling.Allowed(
+            true, false, insideWindow: false, locked: false, displayOff: false));
     }
 
     /// <summary>
@@ -101,7 +102,53 @@ public class ScreenSamplingTests
     [Fact]
     public void Not_allowed_while_locked()
     {
-        Assert.False(ScreenSampling.Allowed(true, false, true, locked: true));
+        Assert.False(ScreenSampling.Allowed(true, false, true, locked: true, displayOff: false));
+    }
+
+    /// <summary>
+    /// Careful: with the monitors asleep nobody can be looking, and a dark screen never changes,
+    /// so it is the frozen case: without this rule every screen was captured every 5 seconds all
+    /// night on an unlocked PC.
+    /// </summary>
+    [Fact]
+    public void Not_allowed_while_the_display_is_off()
+    {
+        Assert.False(ScreenSampling.Allowed(
+            enrolled: true, revoked: false, insideWindow: true, locked: false, displayOff: true));
+    }
+
+    /// <summary>
+    /// <b>Skipping while dark must not punish the employee who comes back.</b> No samples while
+    /// dark → stale → "don't know", never frozen. After waking, the comparison is against the
+    /// last sample before the display went off, the same one uninterrupted sampling of a dark
+    /// screen would have kept, so the rule changes no verdict, it only delays it.
+    /// </summary>
+    [Fact]
+    public void Skipping_while_dark_goes_stale_and_does_not_freeze()
+    {
+        var screen = new ScreenActivity();
+        var still = new byte[256];
+
+        // working, then the screen stays still for a while before the monitors sleep
+        screen.Observe(still, At(0));
+        screen.Observe(still, At(60));
+
+        // dark from 60 s to 20 min: sampling skipped, nothing observed
+        Assert.False(ScreenSampling.Allowed(true, false, true, false, displayOff: true));
+
+        // the last sample is long stale: no accusation, even though nothing changed for 20 min
+        Assert.False(screen.IsFrozen(At(20 * 60)));
+
+        // woken; an unchanged first sample gives the same answer as if sampling had never stopped
+        Assert.True(ScreenSampling.Allowed(true, false, true, false, displayOff: false));
+        screen.Observe(still, At(20 * 60 + 30));
+        Assert.True(screen.IsFrozen(At(20 * 60 + 30)));
+
+        // and the first real change lifts it at once
+        var moved = new byte[256];
+        Array.Fill(moved, (byte)200);
+        screen.Observe(moved, At(20 * 60 + 35));
+        Assert.False(screen.IsFrozen(At(20 * 60 + 35)));
     }
 
     /// <summary>
@@ -128,7 +175,7 @@ public class ScreenSamplingTests
 
         // but the fingerprint is still taken
         Assert.True(ScreenSampling.Allowed(
-            enrolled: true, revoked: false, insideWindow: true, locked: false));
+            enrolled: true, revoked: false, insideWindow: true, locked: false, displayOff: false));
     }
 
     /// <summary>
@@ -145,6 +192,6 @@ public class ScreenSamplingTests
 
         // the sampling rule does not even take the flag — nothing to switch off
         Assert.True(ScreenSampling.Allowed(
-            enrolled: true, revoked: false, insideWindow: true, locked: false));
+            enrolled: true, revoked: false, insideWindow: true, locked: false, displayOff: false));
     }
 }

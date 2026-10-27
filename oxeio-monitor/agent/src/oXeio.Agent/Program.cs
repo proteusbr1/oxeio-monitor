@@ -311,13 +311,24 @@ internal static partial class Program
     /// Modify. The ACL rule lives in one place; written separately in WiX, the two definitions
     /// would drift apart one day.
     /// </summary>
+    /// <remarks>
+    /// M3: <see cref="AgentDataDirectory.Harden"/>, not <c>Ensure</c>. This is the one moment the
+    /// agent runs as SYSTEM, so it is the one chance to take back a folder a standard user
+    /// created first (or replaced with a junction). Careful: <c>Return="check"</c> in
+    /// Package.wxs, so a failure here stops the install, which is the point: installing into a
+    /// folder someone else controls is worse than not installing.
+    /// </remarks>
     private static int PrepareDataDir()
     {
         var path = AgentDataDirectory.Default;
 
-        if (!AgentDataDirectory.TryEnsure(path, out var error))
+        try
         {
-            Console.Error.WriteLine($"❌ Could not create {path}: {error}");
+            AgentDataDirectory.Harden(path, Console.WriteLine);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"❌ Could not prepare {path}: {ex.GetType().Name}: {ex.Message}");
             return 4;
         }
 
@@ -335,7 +346,7 @@ internal static partial class Program
             // week later that there was no data at all from that PC.
             Complain(
                 "oXeio agent could not start",
-                $"Server address not found.\n\nLooked in: {source}\n\n" +
+                $"No usable server address.\n\nLooked in: {source}\n\n" +
                 $"The installer is supposed to write this. Please tell office IT.");
             return 2;
         }
@@ -356,6 +367,12 @@ internal static partial class Program
         var paths = OutboxPaths.Default;
         var log = new FileLog(paths.Logs);
         log.Startup(Version, settings.ServerUrl, paths.Root);
+        log.Info($"settings from {source}");
+
+        // H2 / L1: an override or a refused override must be visible in the log, not silent
+        if (settings.LoadWarning is { } loadWarning) log.Warn(loadWarning);
+        if (settings.AllowInsecureHttp && settings.ServerUrl.StartsWith("http:", StringComparison.OrdinalIgnoreCase))
+            log.Warn("⚠️ Plain http to the server (AllowInsecureHttp): the password and device token are not encrypted on the network.");
 
         _host = new AgentHost(settings, Version, log);
 
