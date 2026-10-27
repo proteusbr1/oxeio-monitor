@@ -85,10 +85,14 @@ param(
     # would never update again.
     [switch]$AllowUnsignedUpdates,
 
-    # A build whose Today window does not show the last screenshot — only
+    # By default the Today window does not show the last screenshot — only
     # when it was taken — and keeps no copy of it on the PC. Pictures are
     # still taken and sent as before. Fixed in the build, so nobody at the PC
-    # can turn the preview back on. The MSI name ends in -nopreview.
+    # can turn the preview back on. -ShowLatestShot builds the variant with
+    # the preview; its MSI name ends in -preview.
+    [switch]$ShowLatestShot,
+
+    # Kept so older build commands still work: hiding is now the default.
     [switch]$HideLatestShot,
 
     # Sign without a timestamp. **Do not normally pass this**; see below for why.
@@ -145,12 +149,18 @@ The MSI will install as $Version, but the agent's assembly will report $propsVer
   and the wrong file cannot be handed out by mistake.
 #>
 # ⚠️ the variant is in the name too — same version, different behaviour
-$variant = if ($HideLatestShot) { '-nopreview' } else { '' }
+if ($ShowLatestShot -and $HideLatestShot) {
+    throw '-ShowLatestShot and -HideLatestShot contradict each other: pass one (hiding is the default).'
+}
+$hideShot = -not $ShowLatestShot
+$variant = if ($hideShot) { '' } else { '-preview' }
 $msi = Join-Path $outDir "oXeioAgent-$Version$variant.msi"
 
 Write-Host "   version: $Version" -ForegroundColor DarkGray
-if ($HideLatestShot) {
-    Write-Host '   last screenshot preview: hidden (-HideLatestShot)' -ForegroundColor DarkGray
+if ($hideShot) {
+    Write-Host '   last screenshot preview: hidden (default; -ShowLatestShot shows it)' -ForegroundColor DarkGray
+} else {
+    Write-Host '   last screenshot preview: shown (-ShowLatestShot)' -ForegroundColor DarkGray
 }
 
 # Careful: building the same version again means two different binaries under one
@@ -372,7 +382,7 @@ foreach ($project in 'oXeio.Agent', 'oXeio.Watchdog') {
     & dotnet publish (Join-Path $agentRoot "src\$project") `
         -c $Configuration -r $Runtime --self-contained true `
         -p:DebugType=none -p:DebugSymbols=false `
-        -p:HideLatestShot=$(if ($HideLatestShot) { 'true' } else { 'false' }) `
+        -p:HideLatestShot=$(if ($hideShot) { 'true' } else { 'false' }) `
         -o $publishDir --nologo -v quiet
     if ($LASTEXITCODE -ne 0) { throw "$project publish failed" }
 }
