@@ -446,6 +446,108 @@ describe('heartbeat', () => {
   });
 });
 
+/**
+ * The agent's resource report (handles, private memory, GDI/USER objects,
+ * injected DLLs). Why: `nvspcap64.dll`, injected by an NVIDIA overlay, leaked
+ * ~217k handles and 7 GB in one agent over twelve days, invisibly.
+ */
+describe('heartbeat: resource report', () => {
+  const leak = {
+    state: 'active',
+    activeSecToday: 60,
+    handleCount: 217_431,
+    privateBytes: 7_516_192_768,
+    gdiObjects: 310,
+    userObjects: 92,
+    injectedModules: ['nvspcap64.dll'],
+  };
+
+  const alertsOf = () =>
+    h.prisma.alert.findMany({
+      where: { type: 'agent_resources', deviceId: device.deviceId },
+    });
+
+  it('the latest report is stored on the device', async () => {
+    await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
+      .send(leak)
+      .expect(200);
+
+    const row = await h.prisma.device.findUniqueOrThrow({
+      where: { id: device.deviceId },
+    });
+    expect(row.resources).toEqual({
+      handleCount: 217_431,
+      privateBytes: 7_516_192_768,
+      gdiObjects: 310,
+      userObjects: 92,
+      injectedModules: ['nvspcap64.dll'],
+    });
+    expect(row.resourcesAt).not.toBeNull();
+  });
+
+  /** Careful: an older agent sends nothing, and that must not wipe the report */
+  it('a heartbeat without the fields keeps the last report', async () => {
+    await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
+      .send(leak)
+      .expect(200);
+    await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
+      .send({ state: 'idle', activeSecToday: 61 })
+      .expect(200);
+
+    const row = await h.prisma.device.findUniqueOrThrow({
+      where: { id: device.deviceId },
+    });
+    expect((row.resources as { handleCount: number }).handleCount).toBe(217_431);
+  });
+
+  /**
+   * Careful: a 400 on the heartbeat drops its commands (revoke among them), so
+   * the refusal must be the narrow one the DTO defines, nothing more.
+   */
+  it('a module given as a path is a 400, and nothing is stored', async () => {
+    await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
+      .send({ ...leak, injectedModules: ['C:\\Users\\x\\nvspcap64.dll'] })
+      .expect(400);
+
+    const row = await h.prisma.device.findUniqueOrThrow({
+      where: { id: device.deviceId },
+    });
+    expect(row.resources).toBeNull();
+  });
+
+  it('over the ceiling raises one alert; back under resolves it', async () => {
+    await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
+      .send(leak)
+      .expect(200);
+    // a second heartbeat still over: no second alert
+    await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
+      .send(leak)
+      .expect(200);
+
+    let alerts = await alertsOf();
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].resolvedAt).toBeNull();
+    expect(alerts[0].detail).toContain('nvspcap64.dll');
+
+    // the agent restarted itself: a fresh process, well under the ceiling
+    await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
+      .send({ ...leak, handleCount: 900, privateBytes: 120_000_000 })
+      .expect(200);
+
+    alerts = await alertsOf();
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].resolvedAt).not.toBeNull();
+  });
+
+  it('under the ceiling, a loaded DLL alone raises nothing', async () => {
+    await asAgent(h.http().post('/api/v1/agent/heartbeat'), device.token)
+      .send({ ...leak, handleCount: 900, privateBytes: 120_000_000 })
+      .expect(200);
+
+    expect(await alertsOf()).toHaveLength(0);
+  });
+});
+
 describe('segments: dedupe and validation (section 2.1d)', () => {
   /**
    * Timestamps must always stay inside today's work day.

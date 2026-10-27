@@ -42,6 +42,8 @@ const DEVICE_SELECT = {
   maxDriftSec: true,
   capabilities: true,
   capabilitiesAt: true,
+  resources: true,
+  resourcesAt: true,
   enrolledAt: true,
   employee: { select: { id: true, empCode: true, fullName: true } },
 } satisfies Prisma.DeviceSelect;

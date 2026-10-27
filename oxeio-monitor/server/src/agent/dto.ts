@@ -13,13 +13,22 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
 
-import { MAX_BATCH_SIZE } from './agent.constants';
+import {
+  HEARTBEAT_MAX_GUI_OBJECTS,
+  HEARTBEAT_MAX_HANDLES,
+  HEARTBEAT_MAX_MODULE_NAME,
+  HEARTBEAT_MAX_MODULES,
+  HEARTBEAT_MAX_PRIVATE_BYTES,
+  HEARTBEAT_MODULE_NAME_PATTERN,
+  MAX_BATCH_SIZE,
+} from './agent.constants';
 
 /**
  * Careful: `clientUuid` is deliberately `@IsOptional()`.
@@ -131,6 +140,42 @@ export class HeartbeatDto {
    */
   @IsOptional() @Allow()
   capabilities?: unknown;
+
+  /**
+   * **The agent's own resource use** (`resources.rules.ts`): how many kernel
+   * handles, how much private memory, how many GDI/USER objects it holds, and
+   * which known-troublesome third-party DLLs have been injected into it.
+   *
+   * Why it exists: a DLL that an NVIDIA overlay injects (`nvspcap64.dll`)
+   * leaked ~217k handles and 7 GB of private memory in one agent over twelve
+   * days, and nobody could see it from here.
+   *
+   * Careful: **all optional**. Older agents do not send these, and a required
+   * field would 400 every heartbeat from them, which drops the commands too
+   * (revoke among them). Careful: the `@Max` values are Windows' hard limits,
+   * **not** the ceiling, for the same reason (see `HEARTBEAT_MAX_HANDLES`):
+   * the agent that is leaking is the one whose report matters most.
+   */
+  @IsOptional() @IsInt() @Min(0) @Max(HEARTBEAT_MAX_HANDLES)
+  handleCount?: number;
+
+  @IsOptional() @IsInt() @Min(0) @Max(HEARTBEAT_MAX_PRIVATE_BYTES)
+  privateBytes?: number;
+
+  @IsOptional() @IsInt() @Min(0) @Max(HEARTBEAT_MAX_GUI_OBJECTS)
+  gdiObjects?: number;
+
+  @IsOptional() @IsInt() @Min(0) @Max(HEARTBEAT_MAX_GUI_OBJECTS)
+  userObjects?: number;
+
+  /** Bare DLL names only (`nvspcap64.dll`); the pattern refuses any path. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(HEARTBEAT_MAX_MODULES)
+  @IsString({ each: true })
+  @MaxLength(HEARTBEAT_MAX_MODULE_NAME, { each: true })
+  @Matches(HEARTBEAT_MODULE_NAME_PATTERN, { each: true })
+  injectedModules?: string[];
 }
 
 // ── segments ────────────────────────────────────────────────────────────────
