@@ -59,6 +59,26 @@ internal sealed class UpdateStager(
 
             if (string.IsNullOrWhiteSpace(offer.Version)) return;
 
+            // M2: the version becomes a file name and a URL parameter; only strict SemVer may.
+            // Careful: the previous state is left alone here too. A malformed offer is the
+            // server's (or an attacker's) problem, not a reason to forget a verified MSI.
+            if (!SemVer.IsValid(offer.Version))
+            {
+                log.Error(
+                    $"⛔ Update offer refused — the version is not a plain version number: " +
+                    $"\"{Printable(offer.Version)}\". Nothing was downloaded.");
+                return;
+            }
+
+            // L2: never the same or an older version (SemVer.IsNewer says why)
+            if (!SemVer.IsNewer(offer.Version, currentVersion))
+            {
+                log.Warn(
+                    $"Update offer {offer.Version} refused — this PC already runs {currentVersion}. " +
+                    "The server never offers that; a replayed or forged offer would.");
+                return;
+            }
+
             // This version is already verified and waiting; no point downloading again
             if (_status.Stage == UpdateStage.Verified && _status.Version == offer.Version)
                 return;
@@ -81,8 +101,17 @@ internal sealed class UpdateStager(
             Mandatory = offer.Mandatory,
         };
 
+        // M2: checked again where the path is made, not only where the offer arrived, so this
+        // method can never be called one day with an unchecked version.
+        var destination = UpdateFiles.MsiPathFor(paths.Updates, offer.Version);
+        if (destination is null)
+        {
+            log.Error($"⛔ Update {Printable(offer.Version)} refused — its file name would leave {paths.Updates}.");
+            _status = _status with { Stage = UpdateStage.Corrupt, Detail = "bad version" };
+            return;
+        }
+
         Directory.CreateDirectory(paths.Updates);
-        var destination = Path.Combine(paths.Updates, $"oXeioAgent-{offer.Version}.msi");
 
         var download = await sync.DownloadUpdateAsync(offer.Version, destination, ct)
                                  .ConfigureAwait(false);
@@ -152,6 +181,17 @@ internal sealed class UpdateStager(
 
         // Downloaded MSIs of older versions are no longer needed
         CleanOldMsi(file.SavedPath);
+    }
+
+    /// <summary>
+    /// A server-supplied string, safe for one log line: control characters (a forged
+    /// <c>\r\n</c> would fake a second log entry) are replaced and the length is capped.
+    /// </summary>
+    internal static string Printable(string? text)
+    {
+        if (text is null) return "";
+        var clipped = text.Length > 80 ? text[..80] + "…" : text;
+        return string.Concat(clipped.Select(c => char.IsControl(c) ? '?' : c));
     }
 
     private void TryDelete(string path)

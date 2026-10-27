@@ -70,3 +70,49 @@ public sealed record UpdateStatus
         _ => "Unknown",
     };
 }
+
+/// <summary>Where a staged MSI may live, and nowhere else.</summary>
+public static class UpdateFiles
+{
+    /// <summary>
+    /// <b>M2:</b> the MSI's path for <paramref name="version"/>, or <c>null</c> if that version
+    /// must not be turned into a file name.
+    ///
+    /// Two separate checks, on purpose:
+    /// <list type="number">
+    /// <item>the version must be strict SemVer (<see cref="SemVer.IsValid"/>), so it cannot carry
+    /// <c>\</c>, <c>/</c> or <c>:</c> at all;</item>
+    /// <item>the <b>resolved</b> full path must still be a direct child of
+    /// <paramref name="updatesDirectory"/>.</item>
+    /// </list>
+    ///
+    /// Careful: the second check is not redundant. The first one depends on a regex staying right
+    /// forever; if someone loosens it one day (for example to accept a build-metadata part), the
+    /// path check still holds the line. <c>Path.Combine</c> on its own is no protection: given a
+    /// rooted second argument it silently <b>drops the first</b>.
+    /// </summary>
+    public static string? MsiPathFor(string updatesDirectory, string? version)
+    {
+        if (!SemVer.IsValid(version)) return null;
+
+        var root = Path.GetFullPath(updatesDirectory);
+        var candidate = Path.GetFullPath(Path.Combine(root, $"oXeioAgent-{version}.msi"));
+
+        return IsDirectChild(root, candidate) ? candidate : null;
+    }
+
+    /// <summary>
+    /// Is <paramref name="path"/> a file directly inside <paramref name="directory"/> (both
+    /// already full paths)? Case-insensitive: on NTFS <c>C:\X</c> and <c>c:\x</c> are one folder.
+    /// </summary>
+    public static bool IsDirectChild(string directory, string path)
+    {
+        var parent = Path.GetDirectoryName(path);
+        if (string.IsNullOrEmpty(parent) || Path.GetFileName(path).Length == 0) return false;
+
+        return string.Equals(
+            Path.TrimEndingDirectorySeparator(parent),
+            Path.TrimEndingDirectorySeparator(directory),
+            StringComparison.OrdinalIgnoreCase);
+    }
+}
