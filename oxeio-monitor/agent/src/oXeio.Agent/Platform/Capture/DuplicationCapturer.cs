@@ -160,6 +160,15 @@ internal sealed unsafe class DuplicationCapturer : IScreenCapturer
                             return frame;
                         }
 
+                        // An image was taken but the set is no longer trustworthy (ReleaseFrame
+                        // failed): the image is good, so return it; the set goes in the finally
+                        // and the next capture builds a fresh one.
+                        if (frame is not null)
+                        {
+                            LastStep += " · chain dropped after this image";
+                            return frame;
+                        }
+
                         how = $"rebuilt (the kept one failed: {LastStep})";
                     }
                     else
