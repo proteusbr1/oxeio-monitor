@@ -29,4 +29,17 @@ describe('resolveMsiPath', () => {
   it('the root itself is not a file', () => {
     expect(resolveMsiPath(ROOT, '.')).toBeNull();
   });
+
+  // M2: agents upload into screenshots/, so nothing there is ever an update
+  it('the screenshots area is refused, relative or absolute', () => {
+    expect(resolveMsiPath(ROOT, 'screenshots/2026/08/13/emp-003/a.msi')).toBeNull();
+    expect(resolveMsiPath(ROOT, join(ROOT, 'screenshots', 'x.msi'))).toBeNull();
+    expect(resolveMsiPath(ROOT, 'updates/../screenshots/x.msi')).toBeNull();
+  });
+
+  it('a folder that only starts with "screenshots" is not the screenshots area', () => {
+    expect(resolveMsiPath(ROOT, 'screenshots-old/x.msi')).toBe(
+      join(ROOT, 'screenshots-old', 'x.msi'),
+    );
+  });
 });
