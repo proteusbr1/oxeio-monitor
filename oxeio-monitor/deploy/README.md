@@ -774,8 +774,11 @@ cd oxeio-monitor\agent\installer
   `-Version` (the MSI and the agent would report different versions).
 - The output is `agent\installer\bin\oXeioAgent-<version>.msi`. Old builds
   stay beside it, so you can always tell which file you are distributing.
-- `-HideLatestShot` builds a variant whose Today window does not preview the
-  last screenshot (file name ends in `-nopreview`).
+- By default the Today window does not preview the last screenshot (it shows
+  only when it was taken) and no copy is kept on the PC; pictures are still
+  taken and sent. `-ShowLatestShot` builds the variant with the preview (file
+  name ends in `-preview`). `-HideLatestShot` is still accepted and changes
+  nothing.
 
 ### 13.3· Code signing
 
