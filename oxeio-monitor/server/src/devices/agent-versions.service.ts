@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
-import { isAbsolute, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
 import {
   BadRequestException,
@@ -13,6 +13,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { RolloutStage } from '@prisma/client';
 
+import { resolveMsiPath } from '../agent/msi-path';
 import { isNewer, pilotNeededFor } from '../agent/rollout';
 import {
   parseUpdatePublicKey,
@@ -434,11 +435,8 @@ export class AgentVersionsService {
   private async statMsi(
     msiPath: string,
   ): Promise<{ abs: string; size: number } | null> {
-    const abs = isAbsolute(msiPath)
-      ? resolve(msiPath)
-      : resolve(this.root, msiPath);
-
-    if (!abs.startsWith(this.root)) return null;
+    const abs = resolveMsiPath(this.root, msiPath);
+    if (abs === null) return null;
 
     try {
       const info = await stat(abs);

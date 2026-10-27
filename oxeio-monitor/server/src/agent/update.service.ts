@@ -1,6 +1,6 @@
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { isAbsolute, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -8,6 +8,7 @@ import type { ReadStream } from 'node:fs';
 
 import { storageRoot } from '../common/storage.config';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveMsiPath } from './msi-path';
 import { isNewer, isOfferedTo } from './rollout';
 
 export interface UpdateOffer {
@@ -92,11 +93,8 @@ export class UpdateService {
 
     // msi_path must stay inside storage; this blocks downloading arbitrary
     // files from outside (path traversal)
-    const abs = isAbsolute(row.msiPath)
-      ? resolve(row.msiPath)
-      : resolve(this.root, row.msiPath);
-
-    if (!abs.startsWith(this.root)) {
+    const abs = resolveMsiPath(this.root, row.msiPath);
+    if (abs === null) {
       throw new NotFoundException('File path is outside storage');
     }
 
