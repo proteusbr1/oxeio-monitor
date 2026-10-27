@@ -11,6 +11,7 @@ import { MustChangePasswordGuard } from './guards/must-change-password.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { LoginThrottleService } from './login-throttle.service';
 import { PasswordService } from './password.service';
+import { SessionsService } from './sessions.service';
 import { TokenService } from './token.service';
 import { TwoFactorService } from './two-factor.service';
 
@@ -36,11 +37,13 @@ import { TwoFactorService } from './two-factor.service';
     TokenService,
     TwoFactorService,
     LoginThrottleService,
+    SessionsService,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: CsrfGuard },
     { provide: APP_GUARD, useClass: MustChangePasswordGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
-  exports: [AuthService, TokenService, PasswordService],
+  // `SessionsService`: staff deactivation ends the person's sessions through it
+  exports: [AuthService, TokenService, PasswordService, SessionsService],
 })
 export class AuthModule {}

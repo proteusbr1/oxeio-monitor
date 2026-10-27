@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
-import { isAbsolute, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
 import {
   BadRequestException,
@@ -13,6 +13,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { RolloutStage } from '@prisma/client';
 
+import { isInAgentUploads, resolveMsiPath } from '../agent/msi-path';
 import { isNewer, pilotNeededFor } from '../agent/rollout';
 import {
   parseUpdatePublicKey,
@@ -189,7 +190,10 @@ export class AgentVersionsService {
       },
     });
     this.logger.warn(
-      `agent ${row.version} published · ${row.rolloutStage} · ${file.size} bytes`,
+      `agent ${row.version} published · ${row.rolloutStage} · ${file.size} bytes` +
+        (signature === null
+          ? ' · UNSIGNED — PCs check only the sha256, which whoever controls this server can match'
+          : ' · signed'),
     );
 
     if (autoPilot !== null) {
@@ -250,6 +254,14 @@ export class AgentVersionsService {
     if (named !== null && named !== dto.version) {
       throw new BadRequestException(
         `The file is version ${named} (by its name) but the version given is ${dto.version}. Use ${named}, or the MSI built for ${dto.version}.`,
+      );
+    }
+
+    // Said in its own words: `statMsi()` would refuse it too, but "No MSI at"
+    // would send the owner looking for a file that is right there
+    if (isInAgentUploads(this.root, resolve(this.root, dto.msiPath))) {
+      throw new BadRequestException(
+        `"${dto.msiPath}" is in the screenshots folder, where staff PCs upload files. An update runs as administrator on every PC, so it is never taken from there — copy the MSI to updates/ and publish that path.`,
       );
     }
 
@@ -434,11 +446,8 @@ export class AgentVersionsService {
   private async statMsi(
     msiPath: string,
   ): Promise<{ abs: string; size: number } | null> {
-    const abs = isAbsolute(msiPath)
-      ? resolve(msiPath)
-      : resolve(this.root, msiPath);
-
-    if (!abs.startsWith(this.root)) return null;
+    const abs = resolveMsiPath(this.root, msiPath);
+    if (abs === null) return null;
 
     try {
       const info = await stat(abs);

@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LoginThrottleService } from './login-throttle.service';
 import { PasswordService } from './password.service';
 import { preferencesOf, type UserPreferences } from './preferences';
+import { SessionsService } from './sessions.service';
 import {
   decodeEnvelope,
   encodeEnvelope,
@@ -92,6 +93,7 @@ export class AuthService {
     private readonly audit: AuditService,
     private readonly features: FeaturesService,
     private readonly privacy: PrivacyService,
+    private readonly sessions: SessionsService,
   ) {}
 
   /**
@@ -344,6 +346,13 @@ export class AuthService {
       },
     });
 
+    /**
+     * M3: a reset ends every session the person had. A reset usually means
+     * "someone else may know the old password"; leaving a session that was
+     * opened with it running would leave that someone signed in.
+     */
+    await this.sessions.revokeAll(targetUserId);
+
     await this.audit.record({
       userId: actorId,
       action: 'reset_password',
@@ -373,8 +382,8 @@ export class AuthService {
    *     demoting yourself or the last owner would leave **nobody able to get
    *     in**, and the way back would be the `recover-owner` script on the server.
    *
-   * A role change also applies to a running session: when `JwtAuthGuard`
-   * re-issues the token it reads the role from the database (within 5 minutes).
+   * A role change ends the person's running sessions (M3): they sign in
+   * again and get the new role from the first request.
    */
   async changeRole(
     actorId: number,
@@ -411,6 +420,10 @@ export class AuthService {
       data: { role },
       select: { id: true, email: true, role: true },
     });
+
+    // M3: the person signs in again under the new role; a running tab never
+    // keeps the old one, not even for a request
+    await this.sessions.revokeAll(targetUserId);
 
     await this.audit.record({
       userId: actorId,
@@ -467,6 +480,8 @@ export class AuthService {
       where: { id: targetUserId },
       data: { email: next },
     });
+    // the email is a token claim: the next request re-issues it, no sign-out needed
+    this.sessions.invalidate(targetUserId);
 
     await this.audit.record({
       userId: actorId,

@@ -8,6 +8,7 @@ import { matchCategory } from '../activity/category-matcher';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClockDriftService, type Drift } from './clock-drift.service';
 import type { AppUsageDto, EventDto, SegmentDto } from './dto';
+import { IngestBoundsService } from './ingest-bounds.service';
 import { deriveUuid } from './util/derive-uuid';
 import { nextLocalMidnight, workDateOf } from './util/work-time';
 
@@ -16,6 +17,12 @@ export interface IngestResult {
   duplicates: number;
   /** How many records had to be split because they crossed midnight. */
   split: number;
+  /**
+   * How many records were dropped for lying outside the allowed time window
+   * (M1, `ingest-bounds.ts`). Still a 200: the agent acks the whole batch.
+   * Old agents ignore the field (unknown JSON fields are skipped).
+   */
+  rejected: number;
 }
 
 interface Span {
@@ -23,6 +30,9 @@ interface Span {
   endedAt: Date;
   durationSec: number;
 }
+
+/** An empty batch, or one where every record was dropped. */
+const NOTHING: IngestResult = { accepted: 0, duplicates: 0, split: 0, rejected: 0 };
 
 /** The events that close a session. */
 const SESSION_CLOSING = new Set(['logoff', 'shutdown', 'agent_stop']);
@@ -51,6 +61,7 @@ export class IngestService {
     private readonly prisma: PrismaService,
     private readonly clock: ClockDriftService,
     private readonly categories: AppCategoryService,
+    private readonly bounds: IngestBoundsService,
   ) {}
 
   /**
@@ -206,7 +217,7 @@ export class IngestService {
     segments: SegmentDto[],
   ): Promise<IngestResult> {
     this.assertClientUuids(segments);
-    if (segments.length === 0) return { accepted: 0, duplicates: 0, split: 0 };
+    if (segments.length === 0) return NOTHING;
 
     const employeeId = device.employeeId;
     if (employeeId === null) {
@@ -214,6 +225,14 @@ export class IngestService {
         'This device is not linked to any staff member',
       );
     }
+
+    // M1: measured on the corrected times, the same values that get stored
+    const { kept, rejected } = this.bounds.partition(device, segments, (s) => ({
+      startedAt: this.clock.correct(s.startedAt, drift),
+      endedAt: this.clock.correct(s.endedAt, drift),
+    }));
+    await this.bounds.report(device, 'segments', rejected);
+    if (kept.length === 0) return { ...NOTHING, rejected: rejected.total };
 
     let split = 0;
 
@@ -259,7 +278,7 @@ export class IngestService {
         { workDate: Date; startedAt: Date; endedAt: Date }
       >();
 
-      for (const seg of segments) {
+      for (const seg of kept) {
         const corrected: Span = {
           startedAt: this.clock.correct(seg.startedAt, drift),
           endedAt: this.clock.correct(seg.endedAt, drift),
@@ -381,7 +400,7 @@ export class IngestService {
       await this.logSplit(device, employeeId, split);
     }
 
-    return { accepted: count, duplicates: total - count, split };
+    return { accepted: count, duplicates: total - count, split, rejected: rejected.total };
   }
 
   private async logSplit(
@@ -413,7 +432,7 @@ export class IngestService {
     items: AppUsageDto[],
   ): Promise<IngestResult> {
     this.assertClientUuids(items);
-    if (items.length === 0) return { accepted: 0, duplicates: 0, split: 0 };
+    if (items.length === 0) return NOTHING;
 
     const employeeId = device.employeeId;
     if (employeeId === null) {
@@ -422,6 +441,14 @@ export class IngestService {
       );
     }
 
+    // M1: app usage shows on the timeline, so it gets the same window as segments
+    const { kept, rejected } = this.bounds.partition(device, items, (i) => ({
+      startedAt: this.clock.correct(i.startedAt, drift),
+      endedAt: this.clock.correct(i.endedAt, drift),
+    }));
+    await this.bounds.report(device, 'app usage', rejected);
+    if (kept.length === 0) return { ...NOTHING, rejected: rejected.total };
+
     // Careful: resolve the rules once. Awaiting per row would mean 500 cache
     //    checks for a 500-row batch, each one a microtask.
     const rules = await this.categories.rules();
@@ -429,7 +456,7 @@ export class IngestService {
     const rows: Prisma.AppUsageCreateManyInput[] = [];
     let split = 0;
 
-    for (const item of items) {
+    for (const item of kept) {
       const parts = this.splitAtMidnight({
         startedAt: this.clock.correct(item.startedAt, drift),
         endedAt: this.clock.correct(item.endedAt, drift),
@@ -478,7 +505,12 @@ export class IngestService {
 
     const count = await this.insertAppUsage(rows);
 
-    return { accepted: count, duplicates: rows.length - count, split };
+    return {
+      accepted: count,
+      duplicates: rows.length - count,
+      split,
+      rejected: rejected.total,
+    };
   }
 
   /**
@@ -535,9 +567,21 @@ export class IngestService {
     events: EventDto[],
   ): Promise<IngestResult> {
     this.assertClientUuids(events);
-    if (events.length === 0) return { accepted: 0, duplicates: 0, split: 0 };
+    if (events.length === 0) return NOTHING;
 
-    const rows: Prisma.EventCreateManyInput[] = events.map((e) => ({
+    /**
+     * M1: events close sessions and show on the timeline, so they get the
+     * same window. A dropped stop event is no loss: the 00:15 day-close
+     * closes the session at its own midnight.
+     */
+    const { kept, rejected } = this.bounds.partition(device, events, (e) => {
+      const at = this.clock.correct(e.occurredAt, drift);
+      return { startedAt: at, endedAt: at };
+    });
+    await this.bounds.report(device, 'events', rejected);
+    if (kept.length === 0) return { ...NOTHING, rejected: rejected.total };
+
+    const rows: Prisma.EventCreateManyInput[] = kept.map((e) => ({
       deviceId: device.id,
       employeeId: device.employeeId,
       clientUuid: e.clientUuid as string,
@@ -553,7 +597,12 @@ export class IngestService {
 
     await this.applySessionEffects(device, rows);
 
-    return { accepted: count, duplicates: rows.length - count, split: 0 };
+    return {
+      accepted: count,
+      duplicates: rows.length - count,
+      split: 0,
+      rejected: rejected.total,
+    };
   }
 
   /**

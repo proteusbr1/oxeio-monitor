@@ -7,6 +7,7 @@ import { PrismaClient, UserRole } from '@prisma/client';
 import request from 'supertest';
 
 import { AppCategoryService } from '../../src/activity/app-category.service';
+import { SessionsService } from '../../src/auth/sessions.service';
 import { FeaturesService } from '../../src/features/features.service';
 import { PrivacyService } from '../../src/privacy/privacy.service';
 import { AppSettingsService } from '../../src/settings/app-settings.service';
@@ -88,7 +89,8 @@ export async function resetDatabase(
       daily_summary, schedule_days, monthly_summary, users, employees, work_policies,
       app_categories, holidays, agent_versions, settings,
       deposit_policy, security_deposits, deposit_settlements,
-      leaves, month_closures, summary_dirty, pay_period_lines, pay_periods
+      leaves, month_closures, summary_dirty, pay_period_lines, pay_periods,
+      revoked_sessions
     RESTART IDENTITY CASCADE
   `);
 
@@ -100,6 +102,8 @@ export async function resetDatabase(
   app?.get(FeaturesService).forget();
   app?.get(AppSettingsService).forget();
   app?.get(PrivacyService).forget();
+  // the guard's per-user cache: ids restart, so user 3 is someone else now
+  app?.get(SessionsService).forget();
 
   const policy = await prisma.workPolicy.create({
     data: {
@@ -264,6 +268,18 @@ export async function enrollDevice(
       ...overrides,
     })
     .expect(201);
+
+  /**
+   * Careful: the device is moved to "enrolled 30 days ago". Ingest drops
+   * anything older than `enrolled_at` (M1, `src/agent/ingest-bounds.ts`), and
+   * fixtures here are dated days back (`workNoon(-3)`) on a device enrolled a
+   * second ago. 30 stays inside the 32-day backfill limit, so neither bound
+   * gets in a test's way unless the test sets `enrolledAt` itself.
+   */
+  await harness.prisma.device.update({
+    where: { id: res.body.deviceId },
+    data: { enrolledAt: new Date(Date.now() - 30 * 86_400_000) },
+  });
 
   return {
     token: res.body.deviceToken,

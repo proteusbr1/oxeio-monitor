@@ -28,6 +28,7 @@ import {
   PasswordConfirmDto,
   TotpCodeDto,
 } from './dto';
+import { SessionsService } from './sessions.service';
 import { TokenService } from './token.service';
 import type { SessionUser } from './types';
 import {
@@ -71,6 +72,7 @@ export class AuthController {
     // currency and date format, as saved on Settings → Region (or the .env)
     private readonly settings: AppSettingsService,
     private readonly accounts: AccountService,
+    private readonly sessions: SessionsService,
   ) {}
 
   @Public()
@@ -104,7 +106,17 @@ export class AuthController {
   @AllowWhileMustChangePw()
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
-  logout(@Res({ passthrough: true }) res: Response): void {
+  async logout(
+    @CurrentUser() user: SessionUser,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    /**
+     * M3: clearing the cookie alone left a copied token valid, and the
+     * sliding refresh kept it alive. Ending the session id refuses every copy;
+     * the person's other devices are separate sessions and stay signed in.
+     * (A token from before session ids existed has none; it simply expires.)
+     */
+    if (user.sessionId) await this.sessions.end(user.sessionId);
     this.tokens.clear(res);
   }
 

@@ -10,6 +10,7 @@ import { Prisma } from '@prisma/client';
 
 import { workDateOf } from '../agent/util/work-time';
 import { AuditService } from '../audit/audit.service';
+import { SessionsService } from '../auth/sessions.service';
 import type { SessionUser } from '../auth/types';
 import { supersededThrough } from '../payroll/payroll.math';
 import { PrismaService } from '../prisma/prisma.service';
@@ -137,6 +138,7 @@ export class EmployeesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly sessions: SessionsService,
   ) {}
 
   // -- Reads (owner + manager) ---------------------------------------------------
@@ -392,7 +394,7 @@ export class EmployeesService {
       ? this.calendarDate(dto.leftOn, 'leftOn')
       : workDateOf(now);
 
-    const { row, devicesRevoked, codesExpired, portalDisabled } =
+    const { row, devicesRevoked, codesExpired, portalDisabled, loginIds } =
       await this.prisma.$transaction(async (tx) => {
         const updated = await tx.employee.update({
           where: { id },
@@ -412,9 +414,22 @@ export class EmployeesService {
           data: { expiresAt: now },
         });
 
+        /**
+         * M3: `sessionsRevokedAt` too, not only `isActive`. The guard refuses
+         * an inactive account on its next request anyway, but without the
+         * cut a token from before the dismissal would come back to life if
+         * the person were reactivated within its 30 minutes.
+         */
         const portal = await tx.user.updateMany({
           where: { employeeId: id, isActive: true },
-          data: { isActive: false },
+          data: {
+            isActive: false,
+            sessionsRevokedAt: new Date(Math.floor(now.getTime() / 1000) * 1000),
+          },
+        });
+        const logins = await tx.user.findMany({
+          where: { employeeId: id },
+          select: { id: true },
         });
 
         return {
@@ -422,8 +437,12 @@ export class EmployeesService {
           devicesRevoked: devices.count,
           codesExpired: codes.count,
           portalDisabled: portal.count,
+          loginIds: logins.map((l) => l.id),
         };
       });
+
+    // the guard's few-second cache must not outlive the dismissal
+    for (const userId of loginIds) this.sessions.invalidate(userId);
 
     await this.audit.record({
       userId: actor.userId,

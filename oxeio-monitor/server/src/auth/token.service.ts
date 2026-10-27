@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -11,6 +11,9 @@ import {
   SESSION_TTL_MIN,
 } from './auth.constants';
 import type { SessionUser } from './types';
+
+/** `revoked_sessions.session_id` is a UUID column; anything else is not ours */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface Claims {
   email: string;
@@ -49,6 +52,8 @@ export class TokenService implements OnModuleInit {
     return new SignJWT({ ...claims })
       .setProtectedHeader({ alg: 'HS256' })
       .setSubject(String(user.userId))
+      // the same id on every refresh of one session; a new one on each login
+      .setJti(user.sessionId ?? randomUUID())
       .setIssuedAt()
       .setExpirationTime(`${SESSION_TTL_MIN}m`)
       .sign(this.key);
@@ -71,6 +76,9 @@ export class TokenService implements OnModuleInit {
           payload.employeeId === null ? null : Number(payload.employeeId),
         mustChangePw: payload.mustChangePw === true,
         issuedAt: Number(payload.iat ?? 0),
+        ...(typeof payload.jti === 'string' && UUID.test(payload.jti)
+          ? { sessionId: payload.jti }
+          : {}),
       };
     } catch {
       // Expired, wrong signature or malformed token: all mean "not logged in"

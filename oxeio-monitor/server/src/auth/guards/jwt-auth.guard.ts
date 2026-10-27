@@ -12,16 +12,32 @@ import {
   SESSION_REFRESH_AFTER_MIN,
 } from '../auth.constants';
 import { IS_PUBLIC } from '../decorators';
-import { PrismaService } from '../../prisma/prisma.service';
+import { SessionsService, type UserSessionState } from '../sessions.service';
 import { TokenService } from '../token.service';
-import type { AuthedRequest } from '../types';
+import type { AuthedRequest, SessionUser } from '../types';
+
+type Verdict = 'ok' | 'inactive' | 'revoked' | 'stale_claims';
+
+/** What the account row says about this token. Pure, so the rule reads in one place. */
+function judge(user: SessionUser, state: UserSessionState | null): Verdict {
+  if (!state || !state.isActive) return 'inactive';
+  if (state.sessionsRevokedAt && user.issuedAt * 1000 < state.sessionsRevokedAt.getTime()) {
+    return 'revoked';
+  }
+  const same =
+    state.role === user.role &&
+    state.email === user.email &&
+    state.employeeId === user.employeeId &&
+    state.mustChangePw === user.mustChangePw;
+  return same ? 'ok' : 'stale_claims';
+}
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly tokens: TokenService,
-    private readonly prisma: PrismaService,
+    private readonly sessions: SessionsService,
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
@@ -43,11 +59,52 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Session expired, please sign in again');
     }
 
+    // Logout of this one session (M3): every copy of its token is refused
+    if (this.sessions.isEnded(user.sessionId)) {
+      throw new UnauthorizedException('You were signed out — please sign in again');
+    }
+
+    /**
+     * **The account is checked on every request, not only at the refresh (M3).**
+     *
+     * Careful, the gap this closes: `is_active`, the role and
+     * `sessions_revoked_at` used to be read only when the token was
+     * re-issued, every 5 minutes. A dismissed employee, a demoted manager, or
+     * a session cut by "Sign out other devices" or a password reset kept full
+     * access until then. The read is cached for a few seconds
+     * (`SessionsService`), so a page's burst of API calls costs one query.
+     *
+     * Careful: a cached answer only ever **lets a request through unchanged**.
+     * Before refusing, or before re-issuing with different claims, the row is
+     * read again from the database, so a stale cache entry can neither sign
+     * someone out nor hand back an old role.
+     */
+    let fresh = await this.sessions.state(user.userId);
+    let verdict = judge(user, fresh);
+    if (verdict !== 'ok') {
+      fresh = await this.sessions.state(user.userId, true);
+      verdict = judge(user, fresh);
+    }
+
+    /**
+     * Careful: the session of a deleted or deactivated account ends here.
+     * This did not happen before: if someone who was dismissed left a tab
+     * open, the dashboard stayed open for them.
+     */
+    if (verdict === 'inactive' || !fresh) {
+      throw new UnauthorizedException('This account is no longer active');
+    }
+
+    // "Sign out other devices", a reset password, a new role: a token from before the cut ends here
+    if (verdict === 'revoked') {
+      throw new UnauthorizedException('You were signed out — please sign in again');
+    }
+
     req.user = user;
 
     // Sliding window: keep working and the session continues; sit idle and it ends in 30 minutes
     const ageSec = Math.floor(Date.now() / 1000) - user.issuedAt;
-    if (ageSec > SESSION_REFRESH_AFTER_MIN * 60) {
+    if (verdict === 'stale_claims' || ageSec > SESSION_REFRESH_AFTER_MIN * 60) {
       /**
        * **The new token's claims are read from the database, not copied from
        * the old token; that is the real decision here.**
@@ -62,36 +119,11 @@ export class JwtAuthGuard implements CanActivate {
        *   - A deactivated employee's running session would never die
        *   - `mustChangePw` from a password reset would not apply to a running session
        *
-       * The cost is negligible: this lookup happens **once per 5 minutes**,
-       * not on every request.
+       * Now claims that no longer match the row are re-issued at once, not
+       * at the next 5-minute mark. The session id is carried over, so a
+       * later logout still ends this session.
        */
-      const fresh = await this.prisma.user.findUnique({
-        where: { id: user.userId },
-        select: {
-          email: true,
-          role: true,
-          employeeId: true,
-          mustChangePw: true,
-          isActive: true,
-          sessionsRevokedAt: true,
-        },
-      });
-
-      /**
-       * Careful: the session of a deleted or deactivated account ends here.
-       * This did not happen before: if someone who was dismissed left a tab
-       * open, the dashboard stayed open for them.
-       */
-      if (!fresh || !fresh.isActive) {
-        throw new UnauthorizedException('This account is no longer active');
-      }
-
-      // "Sign out other devices" or a new password: a token from before the cut ends here
-      if (fresh.sessionsRevokedAt && user.issuedAt * 1000 < fresh.sessionsRevokedAt.getTime()) {
-        throw new UnauthorizedException('You were signed out — please sign in again');
-      }
-
-      const { sessionsRevokedAt: _cut, ...claims } = fresh;
+      const { sessionsRevokedAt: _cut, isActive: _active, ...claims } = fresh;
       const updated = { ...user, ...claims, userId: user.userId };
 
       // Careful: the new role applies on this very request; otherwise the change

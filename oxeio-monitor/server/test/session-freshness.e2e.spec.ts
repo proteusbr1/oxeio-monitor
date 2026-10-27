@@ -132,11 +132,16 @@ describe('role changes in a running session', () => {
       .send({ role: 'employee' })
       .expect(200);
 
-    await h.http().get(MANAGER_ONLY).set('Cookie', cookie).expect(403);
+    // M3: a role change now ends the running session outright (401, not just 403)
+    await h.http().get(MANAGER_ONLY).set('Cookie', cookie).expect(401);
   });
 
-  /** The reverse too: making someone a manager does not require a fresh login */
-  it('after being made a manager, the power arrives in the running session', async () => {
+  /**
+   * The reverse: the power arrives with the next sign-in. It used to arrive
+   * in the running session; M3 ends that session on any role change, so the
+   * old token never carries a role it was not issued with.
+   */
+  it('after being made a manager, the next sign-in has the power', async () => {
     const { user } = await staffWithLogin('SF-UP', 'employee');
     const cookie = await staleCookie(user);
 
@@ -148,7 +153,17 @@ describe('role changes in a running session', () => {
       .send({ role: 'manager' })
       .expect(200);
 
-    await h.http().get(MANAGER_ONLY).set('Cookie', cookie).expect(200);
+    await h.http().get(MANAGER_ONLY).set('Cookie', cookie).expect(401);
+
+    const again = await h
+      .http()
+      .post('/api/v1/auth/login')
+      .send({ email: user.email, password: PASSWORD })
+      .expect(200);
+    const fresh = (again.headers['set-cookie'] as unknown as string[])
+      .find((c) => c.startsWith('oxeio_session='))!
+      .split(';')[0];
+    await h.http().get(MANAGER_ONLY).set('Cookie', fresh).expect(200);
   });
 });
 
